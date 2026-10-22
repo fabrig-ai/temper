@@ -92,11 +92,17 @@ pub enum Agent {
     Check,
     B,
     Benchmark,
+    /// The director whose run crosses a worker restart.
+    Hang,
+    /// A's next phase, asking that director for its direction.
+    Phase,
 }
 impl Agent {
     #[must_use]
     pub fn cue(self) -> &'static [u8] {
         match self {
+            Self::Hang => b"@case_hang",
+            Self::Phase => b"@case_phase",
             Self::Check => b"@case_check",
             Self::B => b"@case_b ",
             Self::Benchmark => b"@case_benchmark",
@@ -256,5 +262,32 @@ pub fn fixture_check() -> forge::Fixture {
             landing::admit(value);
         },
         ..fixture_placed()
+    }
+}
+
+// The third chat and its new owner follow the opener and the two-hour check.
+pub const HANG: u64 = 9;
+pub const PHASE: u64 = 10;
+pub const HANG_PERSON: &str = "@case_hang Delegate A's next phase and answer it once after the workstation goes away.";
+pub const PHASE_SPEC: &str = "@case_phase Own Export's next phase and ask the director for its green light.";
+pub const PHASE_QUESTION: &str = "May Export's next phase begin?";
+pub const PHASE_ANSWER: &str = "Begin Export's next phase.";
+pub const PHASE_REPORT: &str = "Export's next phase has its direction.";
+pub const HANG_READ: &str = "A's next-phase question is read; its answer is still waiting.";
+pub const HANG_REPORT: &str = "The restarted director answered A and its next phase reported.";
+// The core allocates message numbers across the combined story.
+pub const PHASE_QUESTION_NUMBER: u64 = 16;
+
+/// The retry clock belongs to the case from its first preparation.
+#[must_use]
+pub fn fixture_4_6() -> forge::Fixture {
+    forge::Fixture {
+        configure: |value, agent, forge| {
+            (fixture_check().configure)(value, agent, forge);
+            // The retry path is the same, only its wait is short; the backoff is not what this story tests.
+            value["engine"]["limits"]["overrides"]["tasks.retries.agent.base_ms"] = 1.into();
+            landing::admit(value);
+        },
+        ..fixture_check()
     }
 }
