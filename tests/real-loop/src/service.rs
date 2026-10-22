@@ -4,7 +4,7 @@ mod hooks;
 mod watch;
 use crate::fixtures;
 pub use cue::Cue;
-use skein_io::kernel::{Complete, Fd, Submit};
+use skein_io::kernel::{Complete, Done, Fd, Op, Submit};
 use skein_lib::{Queue, Time, Wall};
 use skein_shell::Host;
 use std::{
@@ -12,7 +12,37 @@ use std::{
     path::PathBuf,
 };
 
+/// One fully settled service life, retained across a worker restart.
+pub struct Life {
+    pub drained: bool,
+    pub ran: Vec<u64>,
+    pub linked: usize,
+    pub began: Time,
+    pub ended: Time,
+    pub stop_requested: Option<Time>,
+    pub linked_at: Option<Time>,
+}
+
+const LIVES: usize = 2;
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LifeState {
+    First,
+    Stopping,
+    Restarting,
+    Second,
+}
+
 pub struct ServiceHost {
+    lives: Vec<Life>,
+    state: LifeState,
+    in_flight: usize,
+    local_completion: bool,
+    life_began: Option<Time>,
+    life_stop: Option<Time>,
+    life_linked: Option<Time>,
+    life_tasks: usize,
+    life_links: usize,
+
     pub(crate) cluster: Option<crate::cluster::Shape>,
     pub(crate) workers_address: Option<SocketAddr>,
     pub(crate) notes: Vec<temper_service::Note>,
@@ -83,6 +113,15 @@ impl ServiceHost {
             envelope.0 += 4;
         }
         Self {
+            lives: Vec::with_capacity(LIVES),
+            state: LifeState::First,
+            in_flight: 0,
+            local_completion: false,
+            life_began: None,
+            life_stop: None,
+            life_linked: None,
+            life_tasks: 0,
+            life_links: 0,
             cluster,
             workers_address: None,
             notes: Vec::new(),
@@ -104,8 +143,8 @@ impl ServiceHost {
             signals,
             forge,
             envelope,
-            completions: Queue::with_capacity(1),
-            submissions: Queue::with_capacity(1),
+            completions: Queue::with_capacity(envelope.1),
+            submissions: Queue::with_capacity(envelope.1),
         }
     }
 }
@@ -117,6 +156,39 @@ impl ServiceHost {
         fixture: Option<crate::forge::Fixture>,
     ) -> Self {
         Self::with_shape(path.join("data"), signals, fixture, false, Some(shape))
+    }
+    /// Settled lives in order; `ran()` and `linked()` retain their aggregate history.
+    #[must_use]
+    pub fn lives(&self) -> &[Life] {
+        &self.lives
+    }
+    pub(crate) fn stopping(&self) -> bool {
+        matches!(self.state, LifeState::Stopping | LifeState::Restarting)
+    }
+    pub(crate) fn stop_for_restart(&mut self, now: Time) {
+        assert!(self.state == LifeState::First && !self.is_empty(), "stop the first live worker service");
+        self.life_stop = Some(now);
+        self.state = LifeState::Stopping;
+    }
+    pub(crate) fn settled(&self) -> bool {
+        self.in_flight == 0
+            && self.completions.is_empty()
+            && self.submissions.is_empty()
+            && self.service.as_ref().is_some_and(temper_service::Service::is_empty)
+    }
+    pub(crate) fn restart(&mut self) {
+        assert!(self.state == LifeState::Stopping && self.settled(), "restart a settled worker");
+        // The referee requests only; dropping and preparing stay in this host's iteration.
+        self.state = LifeState::Restarting;
+    }
+    fn begin_next_life(&mut self) {
+        self.life_tasks = self.runs.tasks.len();
+        self.life_links = self.linked();
+        self.life_began = None;
+        self.life_stop = None;
+        self.life_linked = None;
+        self.service = None;
+        self.state = LifeState::Second;
     }
     fn directories(path: &std::path::Path, cluster: bool) -> temper::directories::Directories {
         if cluster {
@@ -183,6 +255,9 @@ impl ServiceHost {
 }
 impl Host for ServiceHost {
     fn iterate(&mut self, now: Time, wall: Wall) {
+        if self.state == LifeState::Restarting {
+            self.begin_next_life();
+        }
         if self.service.is_none()
             && self.ready()
             && let Some(address) = self.address
@@ -190,15 +265,17 @@ impl Host for ServiceHost {
             let forge = self
                 .forge_address
                 .unwrap_or_else(|| self.forge.as_ref().expect("held forge").local_addr().expect("forge address"));
-            fixtures::write(&self.path, address, forge).expect("bound standalone documents");
-            if self.direct_key {
-                fixtures::key_documents(&self.path).expect("standard key route");
-            }
-            if let Some(fixture) = self.fixture {
-                crate::forge::write(&self.path, forge, &fixture).expect("forge documents");
-            }
-            if let Some(shape) = &self.cluster {
-                shape.write(self.path.parent().expect("cluster scratch"));
+            if self.state != LifeState::Second {
+                fixtures::write(&self.path, address, forge).expect("bound standalone documents");
+                if self.direct_key {
+                    fixtures::key_documents(&self.path).expect("standard key route");
+                }
+                if let Some(fixture) = self.fixture {
+                    crate::forge::write(&self.path, forge, &fixture).expect("forge documents");
+                }
+                if let Some(shape) = &self.cluster {
+                    shape.write(self.path.parent().expect("cluster scratch"));
+                }
             }
             let mut service = temper::prepare_in(&Self::directories(&self.path, self.cluster.is_some()))
                 .expect("standalone preparation");
@@ -216,10 +293,16 @@ impl Host for ServiceHost {
                 );
             }
             service.adopt_signals(self.signals).expect("service signal pipe");
-            self.started_at = Some(now);
+            self.started_at.get_or_insert(now);
+            self.life_began = Some(now);
             self.service = Some(service);
         }
         if let Some(service) = &mut self.service {
+            self.local_completion = false;
+            while let Some(complete) = self.completions.pop() {
+                self.in_flight = self.in_flight.checked_sub(1).expect("a completion has a submitted operation");
+                service.completions().push(complete);
+            }
             for complete in service.completions().iter() {
                 if self.fixture.is_some() {
                     self.hook_wire.complete(complete, self.hooks, &mut self.seen.responses);
@@ -237,9 +320,15 @@ impl Host for ServiceHost {
                 if let temper_service::Note::Listening { listener: temper_service::Listening::Workers, addr } = note {
                     self.workers_address = Some(addr);
                 }
+                if matches!(note, temper_service::Note::Linked { .. }) {
+                    self.life_linked.get_or_insert(now);
+                }
                 self.notes.push(note);
             }
             while let Some(note) = service.notes().pop() {
+                if matches!(note, temper_service::Note::Linked { .. }) {
+                    self.life_linked.get_or_insert(now);
+                }
                 self.notes.push(note);
             }
             while let Some(link) = service.links().pop() {
@@ -254,21 +343,47 @@ impl Host for ServiceHost {
                 self.forge = None;
             }
         }
+        if self.settled() && self.lives.len() == usize::from(self.state == LifeState::Second) {
+            assert!(self.lives.len() < LIVES, "bounded service lives");
+            self.lives.push(Life {
+                drained: self.end() == Some(&crate::End::Drained),
+                ran: self.runs.tasks[self.life_tasks..].to_vec(),
+                linked: self.linked() - self.life_links,
+                began: self.life_began.expect("settled life began"),
+                ended: now,
+                stop_requested: self.life_stop,
+                linked_at: self.life_linked,
+            });
+        }
     }
     fn completions(&mut self) -> &mut Queue<Complete> {
-        match &mut self.service {
-            Some(service) => service.completions(),
-            None => &mut self.completions,
-        }
+        &mut self.completions
     }
     fn submissions(&mut self) -> &mut Queue<Submit> {
-        match &mut self.service {
-            Some(service) => service.submissions(),
-            None => &mut self.submissions,
+        if let Some(service) = &mut self.service {
+            while let Some(submit) = service.submissions().pop() {
+                if self.state == LifeState::Stopping && matches!(submit.kind, Op::Close { fd } if fd == self.signals) {
+                    self.local_completion = true;
+                    // The supervisor owns this pipe across both service lives.
+                    // Complete the inner close, retaining the registered reader.
+                    service.completions().push(Complete {
+                        op: submit.op,
+                        kind: submit.kind,
+                        result: Ok(Done::Nothing),
+                    });
+                } else {
+                    self.in_flight += 1;
+                    self.submissions.push(submit);
+                }
+            }
         }
+        &mut self.submissions
     }
     fn work_pending(&self, now: Time) -> bool {
-        self.service.as_ref().map_or(self.address.is_some() && self.ready(), |service| service.work_pending(now))
+        self.state == LifeState::Restarting
+            || self.local_completion
+            || !self.completions.is_empty()
+            || self.service.as_ref().map_or(self.address.is_some() && self.ready(), |service| service.work_pending(now))
     }
     fn next_deadline(&self) -> Option<Time> {
         self.service.as_ref().and_then(temper_service::Service::next_deadline)
@@ -277,11 +392,14 @@ impl Host for ServiceHost {
         self.service.as_ref().and_then(temper_service::Service::next_policy_deadline)
     }
     fn is_empty(&self) -> bool {
-        self.service.as_ref().is_some_and(temper_service::Service::is_empty)
+        !self.stopping() && self.settled()
     }
     fn worst_case(&self) -> u64 {
         self.envelope.0
-            + if self.cluster.is_some() { crate::cluster::Runs::MEMORY } else { 0 }
+            + Queue::<Complete>::worst_case(self.envelope.1).expect("host completions")
+            + Queue::<Submit>::worst_case(self.envelope.1).expect("host submissions")
+            + u64::try_from(LIVES * std::mem::size_of::<Life>()).expect("life records")
+            + if self.cluster.is_some() { 2 * crate::cluster::Runs::MEMORY } else { 0 }
             + watch::Watch::memory()
             + cue::CUES as u64 * Cue::memory()
             + if self.fixture.is_some() { hooks::Hooks::memory() } else { 0 }

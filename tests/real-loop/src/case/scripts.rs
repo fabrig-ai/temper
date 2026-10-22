@@ -299,3 +299,55 @@ pub fn step_4_1_4_3(forge: SocketAddr) -> Box<[Script]> {
     scripts.extend(step_4_3(forge));
     scripts.into_boxed_slice()
 }
+
+/// Commit the question read before waiting through a worker's ending.
+#[must_use]
+pub fn step_4_6(_forge: SocketAddr) -> Box<[Script]> {
+    use super::{
+        HANG, HANG_PERSON, HANG_READ, HANG_REPORT, PHASE, PHASE_ANSWER, PHASE_QUESTION, PHASE_QUESTION_NUMBER,
+        PHASE_REPORT, PHASE_SPEC,
+    };
+    Box::new([
+        Script {
+            cue: HANG_PERSON.as_bytes().into(),
+            turns: Box::new([
+                owner(PHASE_SPEC, false),
+                wait("A's next phase is delegated."),
+                // A wait call withholds its own turn. Read the project notes
+                // first: its completed tool turn durably records A's question.
+                {
+                    let mut consulted = call(
+                        b"recall",
+                        &json!({"kind":"search","scopes":[{"kind":"project","project":super::PROJECT}],"query":"Export's next phase"}),
+                    );
+                    let mut lines = vec![Line::Text { text: HANG_READ.as_bytes().into() }];
+                    lines.extend(consulted.lines);
+                    consulted.lines = lines.into();
+                    consulted
+                },
+                wait("The committed question waits for its answer."),
+                call(
+                    b"message",
+                    &json!({"target":PHASE,"form":"answer","question":PHASE_QUESTION_NUMBER,"words":PHASE_ANSWER}),
+                ),
+                wait("The next phase has its answer."),
+                report(HANG_REPORT),
+            ]),
+        },
+        Script {
+            cue: PHASE_SPEC.as_bytes().into(),
+            turns: Box::new([
+                call(b"message", &json!({"target":HANG,"form":"question","words":PHASE_QUESTION})),
+                wait("The next phase awaits its answer."),
+                report(PHASE_REPORT),
+            ]),
+        },
+    ])
+}
+
+#[must_use]
+pub fn step_4_1_4_3_4_6(forge: SocketAddr) -> Box<[Script]> {
+    let mut scripts = step_4_1_4_3(forge).into_vec();
+    scripts.extend(step_4_6(forge));
+    scripts.into_boxed_slice()
+}

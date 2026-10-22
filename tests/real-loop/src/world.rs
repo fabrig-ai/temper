@@ -99,6 +99,8 @@ pub(crate) fn run(
 ) -> CheckedOutcome<Proc> {
     let mut world = World::new_controlled_checked(|controls| Judge {
         controls,
+        llm_seen: 0,
+        llm_pending: 0,
         workers: Vec::new(),
         engine_stopping: false,
         stopping: false,
@@ -141,6 +143,8 @@ pub(crate) fn run_forge(
     let state = std::rc::Rc::new(std::cell::RefCell::new(None));
     let mut world = World::new_controlled(|controls| Judge {
         controls,
+        llm_seen: 0,
+        llm_pending: 0,
         workers: Vec::new(),
         engine_stopping: false,
         stopping: false,
@@ -209,6 +213,8 @@ fn host<R: Referee<Proc>>(
 #[expect(clippy::struct_excessive_bools, reason = "independent referee cues for placement and shutdown")]
 struct Judge {
     controls: Controls,
+    llm_seen: usize,
+    llm_pending: i64,
     workers: Vec<&'static str>,
     engine_stopping: bool,
     stopping: bool,
@@ -216,6 +222,27 @@ struct Judge {
     finished: bool,
     wake: Option<Time>,
     forge: Option<std::rc::Rc<std::cell::RefCell<Option<forge::State>>>>,
+}
+impl Judge {
+    fn worker_actions(&mut self, now: Time, caller_end: usize, caller: &Caller, workers: &mut [Proc]) {
+        if let Some(name) = caller.stopping_worker() {
+            let position = self.workers.iter().position(|worker| *worker == name).expect("configured worker");
+            let Proc::Service(worker) = &mut workers[position] else { panic!("worker root") };
+            if !worker.stopping() {
+                worker.stop_for_restart(now);
+                self.controls.signal(caller_end + position, ServiceSignal::Terminate);
+            }
+            caller.worker_ready.set(worker.settled());
+        }
+        if let Some(name) = caller.starting_worker() {
+            let position = self.workers.iter().position(|worker| *worker == name).expect("configured worker");
+            let Proc::Service(worker) = &mut workers[position] else { panic!("worker root") };
+            if worker.stopping() {
+                worker.restart();
+            }
+            caller.worker_ready.set(worker.linked() > worker.lives().iter().map(|life| life.linked).sum());
+        }
+    }
 }
 impl Referee<Proc> for Judge {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
@@ -238,7 +265,8 @@ impl Referee<Proc> for Judge {
                 }
             }
         }
-        if placed(workers) && !self.finished {
+        self.worker_actions(now, caller_end, caller, workers);
+        if placed(workers) && self.llm_pending > 0 && !self.finished {
             peer.cue = true;
         }
         if !self.armed {
@@ -272,6 +300,8 @@ impl Referee<Proc> for Judge {
                 && let Some(scripts) = peer.scripts.take()
             {
                 peer.peer = llm::peer(llm::scripted(scripts(address))).expect("bound forge scripts");
+                self.llm_seen = 0;
+                self.llm_pending = 0;
             }
             if let Some(hooks) = service.hooks
                 && !state.hooked
@@ -353,11 +383,23 @@ impl Referee<Proc> for Judge {
                     && !caller.advanced.get()
                     && (!forge.observations().is_empty() || !service.seen.responses().is_empty()))
         });
-        let pending = peer.observations().iter().fold(0_i64, |n, event| {
-            n + i64::from(matches!(event, Query { .. })) - i64::from(matches!(event, Answered { .. }))
+        // Observe each peer event once; rescanning the whole history per host
+        // makes a longer cluster story quadratic in its accumulated traffic.
+        for event in &peer.observations()[self.llm_seen..] {
+            self.llm_pending += i64::from(matches!(event, Query { .. })) - i64::from(matches!(event, Answered { .. }));
+        }
+        self.llm_seen = peer.observations().len();
+        let placing = placed(workers) && self.llm_pending > 0;
+        let worker_action = caller.stopping_worker().is_some_and(|name| {
+            workers.iter().any(|proc| matches!(proc, Proc::Service(worker)
+                if matches!(worker.cluster, Some(crate::cluster::Shape::Worker { name: worker_name, .. }) if worker_name == name)
+                && (!worker.stopping() || worker.settled() && !caller.worker_ready.get())))
+        }) || caller.starting_worker().is_some_and(|name| {
+            workers.iter().any(|proc| matches!(proc, Proc::Service(worker)
+                if matches!(worker.cluster, Some(crate::cluster::Shape::Worker { name: worker_name, .. }) if worker_name == name)
+                && (worker.stopping() || worker.linked() > worker.lives().iter().map(|life| life.linked).sum() && !caller.worker_ready.get())))
         });
-        let placing = placed(workers) && pending > 0;
-        if caller.adding_worker().is_some_and(|name| {
+        if worker_action || caller.adding_worker().is_some_and(|name| {
             workers.iter().any(|proc| matches!(proc, Proc::Service(worker)
                 if matches!(&worker.cluster, Some(crate::cluster::Shape::Worker { name: worker_name, .. }) if *worker_name == name)
                     && (!worker_started(worker) || worker.linked() > 0 && !caller.added.get())))
@@ -426,6 +468,8 @@ fn cluster_judge(
 ) -> Judge {
     Judge {
         controls,
+        llm_seen: 0,
+        llm_pending: 0,
         workers: workers.to_vec(),
         engine_stopping: false,
         stopping: false,
