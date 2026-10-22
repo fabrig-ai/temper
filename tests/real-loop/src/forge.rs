@@ -86,6 +86,11 @@ impl Seen {
     pub fn main(&self) -> &std::collections::BTreeMap<Vec<u8>, Vec<u8>> {
         &self.main
     }
+    /// The forge domain's records, in the order the story made them.
+    #[must_use]
+    pub fn observations(&self) -> &[domain::Observation] {
+        &self.observations
+    }
     pub(crate) fn collect(&mut self, peer: &Peer, handle: &Rc<RefCell<Forge>>) {
         self.deliveries = peer
             .observations()
