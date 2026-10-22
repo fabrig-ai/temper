@@ -3,7 +3,7 @@ use crate::Worker;
 use jig_domain_host as host;
 use jig_protocol_config::{Path, Problem, Segment, What};
 use skein_io::{self as io, kernel};
-use skein_lib::{Token, Wall};
+use skein_lib::{Time, Token, Wall};
 use temper_worker_domain::{
     self as root,
     checkout::{Ending, Fact, git},
@@ -200,7 +200,7 @@ fn an_undecodable_value_is_dropped_and_its_operation_fails_broken() {
         let mut stand = fixtures::started_worker();
         stand.worker.link(fixtures::NOW, fixtures::github_value(1, secret));
         assert_eq!(stand.worker.undecodable_values, 1);
-        assert_eq!(stand.worker.identities.newest(fixtures::IDENTITY), None);
+        assert_eq!(stand.worker.identities.newest(fixtures::IDENTITY, fixtures::NOW), None);
         stand.worker.link(fixtures::NOW, fixtures::github_assignment(Some(22)));
         for _ in 0_u16..1000 {
             if !stand.turn() {
@@ -210,6 +210,76 @@ fn an_undecodable_value_is_dropped_and_its_operation_fails_broken() {
         assert_eq!(stand.below.spawns, 1, "only the version check");
         assert_eq!(ended(&mut stand.worker), Some(Ending::Failed { fault: git::Fault::Broken }));
     }
+}
+
+#[test]
+fn a_lapsed_git_value_fails_broken_without_git() {
+    let mut stand = fixtures::started_worker();
+    // The older, unbounded value must never return when generation 2 lapses.
+    grant_github(&mut stand, 1, b"tok-old");
+    let value = temper_protocol_worker_wire::identity(&fixtures::github_record(b"x-access-token", b"tok-new"));
+    let mut grant = fixtures::github_value(2, value);
+    let jig_protocol_worker_link::Request::Value { expires, .. } = &mut grant else { panic!("grant") };
+    *expires = Time::from_nanos(10);
+    stand.worker.link(fixtures::NOW, grant);
+    stand.worker.iterate(Time::from_nanos(9), Wall::EPOCH);
+    stand.route_git(Token::new(92), fixtures::github_push());
+    let (owner, push) = stand.answer_until_spawn(b"push");
+    assert_header(&push, b"tok-new");
+    assert_eq!(stand.finish_git(owner, push, "push-fast-forward"), git::Done::Succeeded);
+
+    let spawns = stand.below.spawns;
+    for now in [10, 11] {
+        stand.worker.iterate(Time::from_nanos(now), Wall::EPOCH);
+        // Even a late older grant cannot restore the unbounded value.
+        grant_github(&mut stand, 1, b"tok-old");
+        assert_broken_without_git(&mut stand);
+        assert_eq!(stand.below.spawns, spawns);
+    }
+    stand.worker.link(fixtures::NOW, fixtures::application_value(fixtures::IDENTITY, 3, b"tok-forgejo"));
+    stand.worker.iterate(Time::from_nanos(u64::MAX - 1), Wall::EPOCH);
+    stand.route_git(Token::new(93), fixtures::github_push());
+    let (owner, push) = stand.answer_until_spawn(b"push");
+    let header = b"GIT_CONFIG_VALUE_0=Authorization: Basic dGVtcGVyLWJvdDp0b2stZm9yZ2Vqbw==";
+    assert!(push.env.contains(&Box::from(header.as_slice())), "Forgejo's unbounded grant stays valid");
+    assert_eq!(stand.finish_git(owner, push, "push-fast-forward"), git::Done::Succeeded);
+}
+
+#[test]
+fn a_newer_undecodable_value_pushes_out_the_older() {
+    let mut stand = fixtures::started_worker();
+    grant_github(&mut stand, 1, b"tok-old");
+    stand.route_git(Token::new(92), fixtures::github_push());
+    let (owner, push) = stand.answer_until_spawn(b"push");
+    assert_header(&push, b"tok-old");
+    // The component keeps its own copy across the undecodable replacement.
+    let value = temper_protocol_worker_wire::identity(&fixtures::github_record(b"x-access-token", b"tok-new"));
+    let truncated = skein_lib::Secret::new(value.expose()[..value.expose().len() - 1].into());
+    stand.worker.link(fixtures::NOW, fixtures::github_value(2, truncated));
+    assert_eq!(stand.worker.undecodable_values, 1);
+    assert_eq!(stand.finish_git(owner, push, "push-fast-forward"), git::Done::Succeeded);
+    grant_github(&mut stand, 1, b"late-old");
+    assert_broken_without_git(&mut stand);
+
+    grant_github(&mut stand, 3, b"tok-new");
+    stand.route_git(Token::new(93), fixtures::github_push());
+    let (owner, push) = stand.answer_until_spawn(b"push");
+    assert_header(&push, b"tok-new");
+    assert_eq!(stand.finish_git(owner, push, "push-fast-forward"), git::Done::Succeeded);
+    assert_eq!(stand.worker.undecodable_values, 1);
+}
+
+fn assert_broken_without_git(stand: &mut fixtures::WorkerStand) {
+    let owner = Token::new(94);
+    let spawns = stand.below.spawns;
+    stand.route_git(owner, fixtures::github_push());
+    let Some(root::Event::Done { owner: echoed, done }) = stand.worker.events.pop() else {
+        panic!("the operation answers without IO")
+    };
+    assert_eq!(echoed, owner);
+    assert_eq!(done, git::Done::Failed { fault: git::Fault::Broken });
+    stand.drain();
+    assert_eq!(stand.below.spawns, spawns, "no git invocation for a missing value");
 }
 
 #[test]

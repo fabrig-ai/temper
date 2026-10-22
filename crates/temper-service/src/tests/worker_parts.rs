@@ -194,17 +194,29 @@ fn a_late_older_generation_leaves_the_newest_in_place() {
         (1, b"late-1", b"tok-3"),
         (3, b"again-3", b"again-3"),
     ] {
-        table.granted(1, generation, crate::identities::Value::Forgejo(fixtures::identity(token))).unwrap();
+        table
+            .granted(
+                1,
+                generation,
+                Some(crate::identities::Value::Forgejo(fixtures::identity(token))),
+                skein_lib::Time::from_nanos(u64::MAX),
+            )
+            .unwrap();
         assert_eq!(
-            table.newest(1),
+            table.newest(1, fixtures::NOW),
             Some(&crate::identities::Value::Forgejo(fixtures::identity(newest))),
             "generation {generation}"
         );
     }
-    assert_eq!(table.newest(2), None);
+    assert_eq!(table.newest(2, fixtures::NOW), None);
     for number in [0, 3] {
         assert_eq!(
-            table.granted(number, 1, crate::identities::Value::Forgejo(fixtures::identity(b"bad"))),
+            table.granted(
+                number,
+                1,
+                Some(crate::identities::Value::Forgejo(fixtures::identity(b"bad"))),
+                skein_lib::Time::from_nanos(u64::MAX)
+            ),
             Err(Unfit),
             "number {number}"
         );
@@ -289,5 +301,5 @@ fn an_empty_github_identity_is_decoded_and_kept() {
         },
     );
     assert_eq!(worker.undecodable_values, 0);
-    assert_eq!(worker.identities.newest(1), Some(&expected));
+    assert_eq!(worker.identities.newest(1, fixtures::NOW), Some(&expected));
 }

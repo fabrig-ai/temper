@@ -790,6 +790,11 @@ fn programs_directories_are_checked_at_the_name_before_startup_effects() {
 // reserves no GitHub entry maps or announcement scratch.
 const GIT_GENERATIONS_GROWTH: u64 = (1 + 4 + 8 * (8 + 4 + 256 + 4 + 512) + 3 * (4 + 256)) + 11 * (40 - 16) + 32;
 
+// Each of three worker credential slots keeps two generations, each gaining
+// an 8-B Time. Option<Value> uses Value's existing enum niche for the empty
+// marker, so neither it nor the outer Option<Grant> adds a tag.
+const GIT_VALIDITY_GROWTH: u64 = 3 * 2 * 8;
+
 fn github_identity_growth() -> (u64, u64) {
     // Worker-wire v3: Identity's old token plus three text fields was
     // 4 + 4096 + 3*(4 + 256) = 4,880 B. GitHub's kind has a one-byte tag,
@@ -1088,7 +1093,10 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
     // Include v3's identity generations and assignment carriers; the original
     // admission cause stays separate.
     let grant_wire_growth = 4 * 32 + (4 + 3) * 32 + github_worker_growth + github_worker_pick_growth();
-    assert_eq!(required.worker_bytes, 2_343_551_746_598_u64 + worker_growth + admission_growth + grant_wire_growth);
+    assert_eq!(
+        required.worker_bytes,
+        2_343_551_746_598_u64 + worker_growth + admission_growth + grant_wire_growth + GIT_VALIDITY_GROWTH
+    );
 
     support::owned::check_memory("../../docs/examples/owned.json", required);
     eprintln!("owned requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
@@ -1140,6 +1148,7 @@ fn owned_memory_figures_for_init_match_its_own_document() {
     // Its worker has the same three credential slots and grows 13,116 B.
     // The decoded worker pick adds github_worker_pick_growth() = 1,056 B to
     // both examples and the worker-alone figure; the engine does not grow.
+    // Grant validity adds GIT_VALIDITY_GROWTH = 48 B to each worker figure.
     support::owned::check_memory("../temper-init/template/temper.json", required);
     eprintln!("init requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
     check_bounded_startup(&bounded, required);

@@ -1,6 +1,6 @@
 use crate::Worker;
 use skein_io::{self as io, kernel};
-use skein_lib::{Time, Token, Wall};
+use skein_lib::{Time, Token};
 use temper_worker_protocol_git_world::io::{Below, Input, Invocation, Script};
 pub const IDENTITY: u32 = 1;
 
@@ -19,7 +19,7 @@ impl WorkerStand {
         Self { worker: super::worker(), below, seed: 7 }
     }
     pub fn turn(&mut self) -> bool {
-        self.worker.iterate(Time::ZERO, Wall::EPOCH);
+        self.worker.iterate(self.worker.env.now, self.worker.env.wall);
         self.drain();
         self.input()
     }
@@ -38,15 +38,15 @@ impl WorkerStand {
     }
     pub fn input(&mut self) -> bool {
         match self.below.next(&mut self.seed) {
-            Some(Input::Io(event)) => self.worker.up(Time::ZERO, event),
-            Some(Input::Kernel(complete)) => self.worker.complete(Time::ZERO, complete).unwrap(),
+            Some(Input::Io(event)) => self.worker.up(self.worker.env.now, event),
+            Some(Input::Kernel(complete)) => self.worker.complete(self.worker.env.now, complete).unwrap(),
             None => return false,
         }
         true
     }
     pub fn answer_until_spawn(&mut self, command: &[u8]) -> (Token, kernel::Spawn) {
         for _ in 0_u16..1000 {
-            self.worker.iterate(Time::ZERO, Wall::EPOCH);
+            self.worker.iterate(self.worker.env.now, self.worker.env.wall);
             for _ in 0..self.worker.io().len() {
                 let request = self.worker.io().pop().unwrap();
                 if let io::Request::Spawn { owner, spawn } = request {

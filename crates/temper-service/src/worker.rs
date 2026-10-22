@@ -370,7 +370,7 @@ impl Worker {
                     }
                     // An application's grant is a configured git identity.
                     link::GrantValue::Application { secret } => {
-                        self.identity(account, generation, &secret);
+                        self.identity(account, generation, &secret, expires);
                         return;
                     }
                 };
@@ -428,14 +428,12 @@ impl Worker {
             }
         }
     }
-    fn identity(&mut self, account: u32, generation: u64, secret: &skein_lib::Secret) {
-        match worker_route::identity(secret, &self.payload) {
-            Some(identity) => {
-                if self.identities.granted(account, generation, identity).is_err() {
-                    self.undecodable_values = self.undecodable_values.saturating_add(1);
-                }
-            }
-            None => self.undecodable_values = self.undecodable_values.saturating_add(1),
+    fn identity(&mut self, account: u32, generation: u64, secret: &skein_lib::Secret, expires: Time) {
+        let value = worker_route::identity(secret, &self.payload);
+        let undecodable = value.is_none();
+        let unfit = self.identities.granted(account, generation, value, expires).is_err();
+        if undecodable || unfit {
+            self.undecodable_values = self.undecodable_values.saturating_add(1);
         }
     }
     pub(super) fn step(&mut self, event: root::Event) {
@@ -489,7 +487,7 @@ impl Worker {
             }
             root::Request::Io { owner, op, deadline } => {
                 let value = match crate::worker_git::identity(&op) {
-                    Some(number) => self.identities.newest(number),
+                    Some(number) => self.identities.newest(number, self.env.now),
                     None => None,
                 };
                 match crate::worker_git::pick(value, &op) {

@@ -1,6 +1,6 @@
 //! The two newest git identity generations by grant number (protocol/credentials.md, 4).
 use alloc::boxed::Box;
-use skein_lib::{List, Secret};
+use skein_lib::{List, Secret, Time};
 use temper_worker_protocol_git::Identity;
 
 /// A git identity's decoded value (protocol/channel.md, section 6).
@@ -22,20 +22,21 @@ pub struct IdentityTable {
 }
 #[derive(Debug)]
 struct Generations {
-    newest: Option<Generation>,
-    older: Option<Generation>,
+    newest: Option<Grant>,
+    older: Option<Grant>,
 }
 #[derive(Debug)]
-struct Generation {
+struct Grant {
     generation: u64,
-    value: Value,
+    value: Option<Value>,
+    expires: Time,
 }
 /// A grant's number outside the configured table.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Unfit;
 
 impl IdentityTable {
-    /// Room for numbers `1..=identities`; values have already passed decoding.
+    /// Room for numbers `1..=identities`, including undecodable generations.
     #[must_use]
     pub fn new(identities: u32) -> Self {
         let mut slots = List::with_capacity(identities);
@@ -45,10 +46,11 @@ impl IdentityTable {
         Self { identities: slots }
     }
     /// Keep the two newest generations, replacing a repeated generation.
-    pub fn granted(&mut self, number: u32, generation: u64, identity: Value) -> Result<(), Unfit> {
+    /// An undecodable grant takes its place with no value.
+    pub fn granted(&mut self, number: u32, generation: u64, value: Option<Value>, expires: Time) -> Result<(), Unfit> {
         let slot = number.checked_sub(1).ok_or(Unfit)?;
         let slots = self.identities.get_mut(slot).ok_or(Unfit)?;
-        let entry = Generation { generation, value: identity };
+        let entry = Grant { generation, value, expires };
         match &slots.newest {
             Some(newest) if generation < newest.generation => match &slots.older {
                 Some(older) if generation < older.generation => (),
@@ -62,11 +64,15 @@ impl IdentityTable {
         }
         Ok(())
     }
-    /// The value handed to every operation naming this identity.
+    /// Only the newest generation can supply a value, while its grant is valid.
     #[must_use]
-    pub fn newest(&self, number: u32) -> Option<&Value> {
+    pub fn newest(&self, number: u32, now: Time) -> Option<&Value> {
         let slot = number.checked_sub(1)?;
-        Some(&self.identities.get(slot)?.newest.as_ref()?.value)
+        let entry = self.identities.get(slot)?.newest.as_ref()?;
+        // The accounts' table uses the same holder clock and strict expiry edge
+        // (jig's protocol/channel.md, 8). Keep the generation after it lapses:
+        // neither expiry nor a failed decode can restore an older value.
+        if now < entry.expires { entry.value.as_ref() } else { None }
     }
 }
 /// Fixed slots and at most two decoded values within each grant's byte bound.
