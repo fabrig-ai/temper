@@ -192,10 +192,11 @@ impl State {
     }
 }
 
-// A whole story's frozen peer records: room for the largest story, about
-// 16 times Adopt's 65 recorded observations, at the skein peer fixture's 2 KiB per record.
-const STORY_OBSERVATIONS: u32 = 1_024;
-const STORY_OBSERVATION_BYTES: u32 = 2_097_152;
+// A whole story's frozen peer records: room for the largest story, the
+// first run's green light (up to ~1,020 records: polls record ~160 a second
+// once adopted), twice over, at the skein peer fixture's 2 KiB per record.
+const STORY_OBSERVATIONS: u32 = 2_048;
+const STORY_OBSERVATION_BYTES: u32 = 4_194_304;
 #[must_use]
 pub fn peer_limits() -> skein_fake_peers::Limits {
     skein_fake_peers::Limits {
