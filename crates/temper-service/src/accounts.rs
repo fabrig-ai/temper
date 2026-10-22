@@ -48,7 +48,6 @@ pub struct Accounts {
     component: Option<driver::Component>,
     phase: Phase,
     env: Env<driver::Limits>,
-    ids: Map<u32, Secret>,
     providers: Map<u32, driver::Account>,
     required: Map<u32, Box<[u8]>>,
     erasing: Map<u32, Erasing>,
@@ -208,7 +207,6 @@ impl Accounts {
             component: None,
             phase: Phase::Loading { crypto },
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
-            ids: Map::with_capacity(limits.accounts),
             providers,
             required: Map::with_capacity(limits.accounts),
             erasing: Map::with_capacity(limits.accounts),
@@ -337,7 +335,6 @@ impl Accounts {
                         return;
                     }
                     self.inventory.name(source);
-                    self.ids.insert(source, Secret::new(Box::default())).expect("driver admitted account");
                     self.required.insert(source, required).expect("driver admitted account");
                     self.records.admit(source).expect("driver admitted account");
                     self.down(driver::Request::SignIn { account: source, subject: None });
@@ -455,7 +452,7 @@ impl Accounts {
             };
             let event = match self.records.up(event, now, required) {
                 translate::Up::Granted { mut event, account, generation, value, expires } => {
-                    let granted_form = self.granted(account, generation, value, expires, values);
+                    let granted_form = Self::granted(account, generation, value, expires, values);
                     match &mut event {
                         domain::FromComponent::Granted { form, .. } => *form = granted_form,
                         domain::FromComponent::Expiring { .. }
@@ -487,7 +484,7 @@ impl Accounts {
                 translate::Up::SignInFailed { source, failure } => {
                     events.push(root::Event::Account(domain::Event::SignInFailed { source, failure }));
                     // Every failed account sign-in gives its driver place back.
-                    if self.ids.contains_key(&source) {
+                    if self.required.contains_key(&source) {
                         self.down(driver::Request::SignOut { account: source });
                     }
                     continue;
@@ -498,7 +495,6 @@ impl Accounts {
                 }
                 translate::Up::Removed { source } => {
                     let _erase = self.erasing.remove(&source);
-                    let _id = self.ids.remove(&source);
                     let _required = self.required.remove(&source);
                     self.records.remove(source);
                     self.inventory.forget(source);
@@ -550,19 +546,11 @@ impl Accounts {
         };
         let account =
             party::restore(unkept(template), source, value, &mut self.records, &self.env.limits.client.document);
-        let (required, id) = match &account {
-            driver::Account::SignIn { registration, keeper, .. } => {
-                let required = match &registration.terms {
-                    Some(terms) => terms.required_scopes.clone().unwrap_or_default(),
-                    None => Box::default(),
-                };
-                let id = match keeper {
-                    driver::Keeper::Owner { kept: Some(record) } => record.metadata.clone().unwrap_or_default(),
-                    driver::Keeper::Owner { kept: None } => Box::default(),
-                    driver::Keeper::Private { .. } => unreachable!("party sources have owner keepers"),
-                };
-                (required, id)
-            }
+        let required = match &account {
+            driver::Account::SignIn { registration, .. } => match &registration.terms {
+                Some(terms) => terms.required_scopes.clone().unwrap_or_default(),
+                None => Box::default(),
+            },
             driver::Account::HandedIn => unreachable!("party sources use provider registrations"),
         };
         let before = self.above.len();
@@ -570,7 +558,6 @@ impl Accounts {
         if self.above.len() != before {
             return;
         }
-        self.ids.insert(source, Secret::new(id)).expect("restored source fits driver");
         self.required.insert(source, required).expect("restored source fits driver");
     }
     fn sweep_loaded(&mut self, rows: Box<[store::SecretRow]>, next: Option<u64>) {
@@ -667,22 +654,7 @@ impl Accounts {
             events.push(root::Event::Account(domain::Event::Component(event)));
         }
     }
-    fn granted(
-        &self,
-        account: u32,
-        generation: u64,
-        value: table::Value,
-        expires: Time,
-        values: &mut Values,
-    ) -> domain::Form {
-        // An account with a provider account id is jig's live test's
-        // (D2): its bearer goes out beside the id until JP13.
-        let id = self.ids.get(&account).expect("admitted source identity");
-        let value = if id.expose().is_empty() {
-            value
-        } else {
-            table::Value { token: value.token, scheme: table::Scheme::Withdrawn { id: id.clone() } }
-        };
+    fn granted(account: u32, generation: u64, value: table::Value, expires: Time, values: &mut Values) -> domain::Form {
         let form = translate::form(&value.scheme);
         values
             .accounts
@@ -722,7 +694,7 @@ impl Accounts {
             Erasing::SignOut { confirmed } => {
                 self.records.erased(number);
                 events.push(root::Event::Account(domain::Event::SignedOut { source: number, confirmed }));
-                if self.ids.contains_key(&number) {
+                if self.required.contains_key(&number) {
                     self.erasing.insert(number, Erasing::Removing).expect("the removed erase's place");
                     self.down(driver::Request::Remove { account: number });
                 }
@@ -959,7 +931,7 @@ pub(crate) fn untag(mut event: io::Event) -> io::Event {
     }
     event
 }
-/// Bounded source records, restored identities, key flights and queues beside the driver.
+/// Bounded source records, required scopes, key flights and queues beside the driver.
 pub(crate) fn worst_case(limits: &driver::Limits, room: u32, page_rows: u32) -> Option<u64> {
     let record = u64::from(limits.client.document.record_bytes);
     driver::worst_case(limits)?
@@ -974,7 +946,6 @@ pub(crate) fn worst_case(limits: &driver::Limits, room: u32, page_rows: u32) -> 
         .checked_add(Queue::<keys::Next>::worst_case(room)?)?
         .checked_add(Queue::<domain::FromComponent>::worst_case(room)?)?
         .checked_add(Queue::<u32>::worst_case(room)?)?
-        .checked_add(Map::<u32, Secret>::worst_case(limits.accounts)?)?
         .checked_add(Map::<u32, Box<[u8]>>::worst_case(limits.accounts)?)?
         .checked_add(Map::<u32, Erasing>::worst_case(limits.accounts)?)?
         .checked_add(u64::from(limits.accounts).checked_mul(u64::from(limits.client.scope_bytes))?)?

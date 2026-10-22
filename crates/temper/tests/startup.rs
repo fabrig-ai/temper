@@ -850,6 +850,14 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
     let scratch = support::Scratch::startup("owned-memory-figures");
     let bounded = support::owned::bounded(scratch.path());
     let required = bounded.requirements();
+    // The metadata-id map is gone from Service's engine option and the
+    // separately counted Accounts host, plus its small-profile tree nodes.
+    // Account-id byte capacity stays reserved until jig's next repin.
+    let driver_accounts =
+        jig_protocol_config::profile::profile(jig_protocol_config::profile::Profile::Small).driver.accounts;
+    let metadata_ids_release = 2 * u64::try_from(size_of::<skein_lib::Map<u32, skein_lib::Secret>>())
+        .expect("map header")
+        + skein_lib::Map::<u32, skein_lib::Secret>::worst_case(driver_accounts).expect("small account map");
     // skein 9d34791e -> fc3e61ea changes terminal Job refusal only: zero owned-byte drift.
     // Both JSONs retain 85,508,807,222,521 B engine / 3,283,176,427,421 B worker.
     // Against main fcfd657f7 (79,659,997,210,050 B engine; 2,343,551,746,598 B worker).
@@ -1084,6 +1092,7 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
             + github_identity_growth
             + start_growth()
             + GIT_GENERATIONS_GROWTH
+            - metadata_ids_release
     );
     // Worker host payload stays 107,206,624 B. Program-source hub outputs grow
     // room 7,286 -> 10,198: 2,912 additional slots, three host payload queues.
@@ -1385,7 +1394,8 @@ fn owned_memory_figures_for_a_worker_alone_include_its_process_and_no_engine() {
         serde_json::json!({"workers":document["application"]["workers"], "limits":document["application"]["limits"]});
     let input = serde_json::to_vec(&document).expect("worker-alone fixture");
     // Service also carries an engine option here: removing the input-map
-    // header releases 32 B even though this service starts only a worker.
+    // header and metadata-id map releases 64 B even though this service
+    // starts only a worker.
     let required = temper_service::startup::memory_requirements(
         &input,
         &jig_protocol_config::Directories::working(),

@@ -96,7 +96,7 @@ fn a_revoked_record_waits_for_erased_and_coalesces_a_sign_out() {
             panic!("erasure retained the slot");
         };
         assert_eq!(after.replaces, None, "only the acknowledgement cleared the digest");
-        assert!(accounts.ids.contains_key(&old), "only Removed frees the driver's place");
+        assert!(accounts.required.contains_key(&old), "only Removed frees the driver's place");
         assert_eq!(accounts.erasing.contains_key(&old), removing);
         assert_eq!(accounts.above.is_empty(), !removing, "only sign-out asks the driver to remove its account");
         assert!(engine.values.accounts.value(fresh, 2, Time::from_nanos(1)).is_some());
@@ -331,7 +331,7 @@ fn dynamic_sources_use_provider_templates_and_restore_their_kept_records() {
     // Source numbers are independent of the provider and configured source.
     accounts.request(domain::Request::Signing(domain::Signing::SignIn { source: 9001, provider: 3 }));
     let _started = pump_accounts(&mut accounts, engine);
-    assert!(accounts.ids.contains_key(&9001));
+    assert!(accounts.required.contains_key(&9001));
     assert_eq!(&**accounts.required.get(&9001).expect("required scopes"), b"read".as_slice());
     let mut saved = record(9001, &config.limits.driver.client.document);
     saved.metadata = Some(b"provider-subject".as_slice().into());
@@ -349,7 +349,6 @@ fn dynamic_sources_use_provider_templates_and_restore_their_kept_records() {
     }));
     restored.request(domain::Request::Signing(domain::Signing::Restored));
     let _restored = pump_accounts(&mut restored, engine);
-    assert_eq!(restored.ids.get(&9001).expect("restored source").expose(), b"provider-subject");
     assert_eq!(&**restored.required.get(&9001).expect("restored scopes"), b"read".as_slice());
     assert!(!restored.inventory.active());
     restored.above.push(driver::Event::Failed {
@@ -389,7 +388,7 @@ fn missing_registration_runtime_is_refused_before_start() {
 }
 #[test]
 fn overflowing_account_bounds_are_refused_before_start() {
-    const LAST_ACCOUNT_COUNT: u32 = 536_848_040;
+    const LAST_ACCOUNT_COUNT: u32 = 536_848_041;
     let (config, _) = registered();
     let mut overflow = config.limits.driver;
     overflow.accounts = u32::MAX;
@@ -402,4 +401,50 @@ fn overflowing_account_bounds_are_refused_before_start() {
     assert_eq!(worst_case(&overflow, 64, config.limits.store.secrets.page.rows), None);
     overflow.accounts = u32::MAX;
     assert_eq!(worst_case(&overflow, u32::MAX, u32::MAX), None);
+}
+
+#[test]
+fn a_restored_sign_ins_metadata_leaves_its_grant_a_bearer() {
+    const SOURCE: u32 = 71;
+    let (config, runtime) = registered();
+    let mut saved = record(SOURCE, &config.limits.driver.client.document);
+    saved.metadata = Some(bytes::copy_of(b"private-account-id"));
+    saved.expires_at = Wall::from_nanos(Duration::from_secs(3_600).as_nanos());
+    saved.issued_client_id = Some(bytes::copy_of(b"issued-client"));
+    let mut service = fixtures::started();
+    fixtures::restart(&mut service);
+    let engine = service.engine.as_mut().expect("engine");
+    let _kept = engine.store.secrets(
+        Token::new(123),
+        store::Secrets::Replace {
+            owner: store::SecretOwner::Source,
+            number: u64::from(SOURCE),
+            value: Secret::new(
+                oauth::encode_record(&saved, &config.limits.driver.client.document).expect("record fits"),
+            ),
+            replaces: None,
+        },
+    );
+    while engine.store.above.pop().is_some() {}
+    let mut accounts = host(&config, runtime);
+    accounts.request(domain::Request::Signing(domain::Signing::Restore {
+        source: SOURCE,
+        provider: 3,
+        kind: domain::Kind::SignIn,
+    }));
+    accounts.request(domain::Request::Signing(domain::Signing::Restored));
+    accounts.request(domain::Request::Component(domain::ToComponent::Want { account: SOURCE }));
+    let heard = pump_accounts(&mut accounts, engine);
+    let mut granted = false;
+    for event in &heard {
+        if let domain::FromComponent::Granted { account: SOURCE, form, .. } = event {
+            assert_eq!(*form, domain::Form::Credential(domain::Scheme::Bearer));
+            granted = true;
+        }
+    }
+    assert!(granted, "the sign-in announces a bearer grant: {heard:?}");
+    let value =
+        engine.values.accounts.value(SOURCE, saved.generation, Time::from_nanos(1)).expect("restored sign-in lent");
+    let table::Scheme::Bearer = &value.scheme else { panic!("the sign-in lends a bearer") };
+    assert_eq!(value.token.expose(), saved.access_token.as_ref());
 }
