@@ -285,3 +285,49 @@ partial_pub_fields = "deny"           # a struct is plain data or opaque, not bo
 mod_module_files = "deny"
 tests_outside_test_module = "deny"
 iter_over_hash_type = "deny"
+
+# Temporary until temper repins to the bodyless GitHub response fix.
+[patch."https://github.com/fabrig-dev/skein.git"]
+skein-browser = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-browser" }
+skein-channel = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-channel" }
+skein-codec = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-codec" }
+skein-codegen = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-codegen" }
+skein-fake-channel = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-fake-channel" }
+skein-fake-checkout = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-checkout" }
+skein-fake-forge-domain = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-forge-domain" }
+skein-fake-forge-github = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-fake-forge-github" }
+skein-fake-forge-protocol = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-forge-protocol" }
+skein-fake-llm-domain = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-llm-domain" }
+skein-fake-llm-protocol = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-llm-protocol" }
+skein-fake-machine = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-fake-machine" }
+skein-fake-oauth = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-oauth" }
+skein-fake-peers = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-fake-peers" }
+skein-fake-person = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-fake-person" }
+skein-fake-person-browser = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-fake-person-browser" }
+skein-forge = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-forge" }
+skein-forge-client = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-forge-client" }
+skein-forge-connection = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-forge-connection" }
+skein-forge-machine-world = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/tests/forge/machine" }
+skein-forge-setup = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-forge-setup" }
+skein-heap = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-heap" }
+skein-http = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-http" }
+skein-io = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-io" }
+skein-json = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-json" }
+skein-kv = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-kv" }
+skein-lib = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-lib" }
+skein-llm = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-llm" }
+skein-llm-connection = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-llm-connection" }
+skein-llm-world = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/tests/llm" }
+skein-oauth = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-oauth" }
+skein-oauth-accounts = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-oauth-accounts" }
+skein-scratch = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-scratch" }
+skein-shell = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-shell" }
+skein-sim = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-sim" }
+skein-throwaway-forgejo = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-throwaway-forgejo" }
+skein-tls = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-tls" }
+skein-tls-world = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/tests/tls" }
+skein-ui = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-ui" }
+skein-ui-bundle = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-ui-bundle" }
+skein-ui-text = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-ui-text" }
+skein-ui-web = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/crates/skein-ui-web" }
+skein-world = { path = "/home/free/src/rust/tmp/owners/github-git-m4/wt-s1/testing/skein-world" }
