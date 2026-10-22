@@ -664,7 +664,6 @@ impl Bounded {
     pub fn accounts() -> temper_service::AccountsRuntime {
         temper_service::AccountsRuntime {
             providers: skein_lib::List::with_capacity(0),
-            d2: temper_service::D2::empty(),
             trust_roots: 0,
             trust_root_bytes: 0,
         }

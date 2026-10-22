@@ -878,7 +878,9 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
     // Beside those: 3 FileIo layers * 5 buffers grow by 230,037 B each; 6*256 raw read buffers each
     // grow 230,037 B; Store inline state +24 B; Service inline state +7,416 B;
     // worker-channel state +11,560 B; client documents +3,154,016 B;
-    // accounts driver drops 1,009,024 B; empty D2/runtime state adds 1,832 B.
+    // accounts driver drops 1,009,024 B. The removed empty input no longer
+    // reserves its 1,832-B record-map heap; its 32-B inline map also goes
+    // from both Service and the separately counted Accounts host.
     // skein 64e28b02 adds job-log origin state: configured Forge 136 -> 168 B
     // across 4 list slots; Connection 1,384 -> 1,392 B and Waiting 528 -> 536 B
     // (its origin route) across 2 slab slots each; the slots also grow 8 B each.
@@ -898,7 +900,7 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
         + 11_560
         + 3_154_016
         - 1_009_024
-        + 1_832
+        - 2 * u64::try_from(size_of::<skein_lib::Map<u32, skein_oauth::SavedToken>>()).expect("map header")
         + 4 * (168 - 136)
         + 2 * (1_392 - 1_384)
         + 2 * (536 - 528)
@@ -1382,6 +1384,8 @@ fn owned_memory_figures_for_a_worker_alone_include_its_process_and_no_engine() {
     document["application"] =
         serde_json::json!({"workers":document["application"]["workers"], "limits":document["application"]["limits"]});
     let input = serde_json::to_vec(&document).expect("worker-alone fixture");
+    // Service also carries an engine option here: removing the input-map
+    // header releases 32 B even though this service starts only a worker.
     let required = temper_service::startup::memory_requirements(
         &input,
         &jig_protocol_config::Directories::working(),

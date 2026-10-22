@@ -18,8 +18,6 @@ mod tests;
 pub mod tokens;
 
 pub mod accounts;
-mod d2;
-pub use d2::{D2, D2Preseed, d2_preseed};
 pub mod assignment;
 pub mod clients;
 pub mod family;

@@ -1,7 +1,6 @@
 //! Refusal cleanup through the service's actual handler and routed store answers.
 use super::*;
 use crate::tests::fixtures;
-use jig_protocol_accounts::handed_in;
 use skein_lib::{Duration, bytes};
 
 #[test]
@@ -111,15 +110,20 @@ fn a_revoked_record_waits_for_erased_and_coalesces_a_sign_out() {
 }
 
 fn record(source: u32, limits: &oauth::Limits) -> oauth::SavedToken {
-    let mut record = handed_in::record(
-        source,
-        Secret::new(bytes::copy_of(b"fresh-token")),
-        Wall::from_nanos(Duration::from_secs(60).as_nanos()),
-        None,
-        limits,
-    )
-    .expect("record fits");
-    record.generation = 2;
+    let record = oauth::SavedToken {
+        key: source,
+        generation: 2,
+        access_token: bytes::copy_of(b"fresh-token"),
+        refresh_token: Some(bytes::copy_of(b"fresh-refresh-token")),
+        metadata: None,
+        expires_at: Wall::from_nanos(Duration::from_secs(60).as_nanos()),
+        issued_client_id: None,
+        granted_scopes: Some(bytes::copy_of(b"openid read")),
+        subject: None,
+        id_token: None,
+        earliest_refresh_at: None,
+    };
+    assert!(oauth::encode_record(&record, limits).is_ok(), "record fits");
     record
 }
 fn signed_out(events: &mut Queue<root::Event>, old: u32) -> Option<bool> {
@@ -310,7 +314,7 @@ fn registered() -> (config::Engine, AccountsRuntime) {
     origins.push(driver::Origin { uri: b"http://127.0.0.1:7102".as_slice().into(), endpoint: endpoint() }).unwrap();
     let mut providers = List::with_capacity(1);
     providers.push((3, endpoint(), origins)).unwrap();
-    (config, AccountsRuntime { d2: crate::D2::empty(), providers, trust_roots: 0, trust_root_bytes: 0 })
+    (config, AccountsRuntime { providers, trust_roots: 0, trust_root_bytes: 0 })
 }
 fn host(config: &config::Engine, runtime: AccountsRuntime) -> Accounts {
     Accounts::new(config, &fixtures::seeds(), Some(runtime), 64, &config.limits.store.secrets)
@@ -398,107 +402,4 @@ fn overflowing_account_bounds_are_refused_before_start() {
     assert_eq!(worst_case(&overflow, 64, config.limits.store.secrets.page.rows), None);
     overflow.accounts = u32::MAX;
     assert_eq!(worst_case(&overflow, u32::MAX, u32::MAX), None);
-}
-
-#[test]
-fn a_d2_input_must_name_a_restored_source() {
-    // D2: removed by JP13. The explicit fixture must match a source restored by the child.
-    const ACCOUNT: u32 = 43;
-    const SOURCE: u32 = 71;
-    let (config, mut runtime) = registered();
-    runtime.d2 = crate::d2_preseed(
-        ACCOUNT,
-        SOURCE,
-        3,
-        domain::Holder::Deployment,
-        Secret::new(b"d2-only-token".as_slice().into()),
-        Wall::from_nanos(60_000_000_000),
-        None,
-        &config.limits.driver.client.document,
-    )
-    .expect("explicit fixture")
-    .input;
-    let mut accounts = host(&config, runtime);
-    let mut service = fixtures::started();
-    fixtures::restart(&mut service);
-    accounts.request(domain::Request::Signing(domain::Signing::Restored));
-    pump_accounts(&mut accounts, service.engine.as_mut().expect("engine"));
-    let found = accounts.startup_problem().expect("the explicit source was never restored");
-    assert_eq!(found.problems.get(0), Some(&config::Problem { path: Path::root().member(b"D2"), what: What::Refers }));
-}
-
-#[test]
-fn a_matching_d2_source_is_durable_before_its_withdrawn_value_is_lent() {
-    // D2: removed by JP13. Restore exactly the helper's named source and secret.
-    const SOURCE: u32 = 71;
-    const TOKEN: &[u8] = b"d2-only-token";
-    let (config, mut runtime) = registered();
-    let preseed = crate::d2_preseed(
-        43,
-        SOURCE,
-        3,
-        domain::Holder::Deployment,
-        Secret::new(TOKEN.into()),
-        Wall::from_nanos(Duration::from_secs(60).as_nanos()),
-        Some(b"private-account-id".as_slice().into()),
-        &config.limits.driver.client.document,
-    )
-    .expect("explicit fixture");
-    runtime.d2 = preseed.input;
-    let mut service = fixtures::started();
-    let mut rows = List::with_capacity(u32::try_from(preseed.rows.len()).expect("bounded fixture rows"));
-    for row in preseed.rows {
-        rows.push(root::Write::Save(root::Record::Core(jig_domain_core::Record::Accounts(row)))).unwrap();
-    }
-    fixtures::commit(&mut service.engine.as_mut().expect("engine").store, 1, rows.into_boxed());
-    let _kept = service.engine.as_mut().expect("engine").store.secrets(
-        Token::new(123),
-        store::Secrets::Replace {
-            owner: store::SecretOwner::Source,
-            number: u64::from(SOURCE),
-            value: preseed.value,
-            replaces: None,
-        },
-    );
-    while service.engine.as_mut().expect("engine").store.above.pop().is_some() {}
-    let mut accounts = host(&config, runtime);
-    accounts.request(domain::Request::Signing(domain::Signing::Restore {
-        source: SOURCE,
-        provider: 3,
-        kind: domain::Kind::SignIn,
-    }));
-    accounts.request(domain::Request::Signing(domain::Signing::Restored));
-    accounts.request(domain::Request::Component(domain::ToComponent::Want { account: SOURCE }));
-    let engine = service.engine.as_mut().expect("engine");
-    let mut events = Queue::with_capacity(64);
-    for _ in 0_u32..32 {
-        while let Some(event) = engine.store.above.pop() {
-            engine.store.sources.push(event);
-        }
-        accounts.iterate(Time::from_nanos(1), Wall::from_nanos(1), &mut engine.values, &mut events, &mut engine.store);
-        let Some(store::Event::Secret { value, .. }) = engine.store.secrets(
-            Token::new(123),
-            store::Secrets::Get { owner: store::SecretOwner::Source, number: u64::from(SOURCE) },
-        ) else {
-            panic!("source get answers immediately")
-        };
-        if engine.values.accounts.value(SOURCE, 1, Time::from_nanos(1)).is_some() {
-            assert!(value.is_some(), "the sign-in record is durable before lending");
-        }
-        while events.pop().is_some() {}
-    }
-    let value = engine.values.accounts.value(SOURCE, 1, Time::from_nanos(1)).expect("matched D2 source lent");
-    let table::Scheme::Withdrawn { id } = &value.scheme else { panic!("D2 lends the withdrawn scheme") };
-    assert_eq!((value.token.expose(), id.expose()), (TOKEN, b"private-account-id".as_slice()));
-    assert!(accounts.startup_problem().is_none());
-}
-
-#[test]
-fn overflowing_d2_memory_is_refused_without_allocating_sources() {
-    let (config, _) = registered();
-    let mut limits = config.limits.driver.client.document;
-    limits.record_bytes = u32::MAX;
-    // Map::with_capacity is lazy; no source or token is allocated here.
-    let input = crate::D2 { sources: Map::with_capacity(u32::MAX) };
-    assert_eq!(input.worst_case(&limits), None);
 }

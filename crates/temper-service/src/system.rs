@@ -832,9 +832,7 @@ fn memory(
     }
     bytes = bytes.checked_add(accounts::configured_bytes(&settings.jig)?)?;
     if let Some(runtime) = runtime {
-        bytes = bytes
-            .checked_add(skein_tls::roots_worst_case(runtime.trust_roots, runtime.trust_root_bytes)?)?
-            .checked_add(runtime.d2.worst_case(&settings.jig.limits.driver.client.document)?)?;
+        bytes = bytes.checked_add(skein_tls::roots_worst_case(runtime.trust_roots, runtime.trust_root_bytes)?)?;
     }
     bytes = bytes.checked_add(crate::forge::records::worst_case(settings)?)?;
     Some(bytes)
