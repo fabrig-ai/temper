@@ -272,6 +272,36 @@ impl LlmHistory {
         self.pending
     }
 }
+impl Judge {
+    fn worker_actions(&mut self, caller_end: usize, caller: &Caller, workers: &mut [Proc]) {
+        if let Some(name) = caller.adding_worker() {
+            let position = worker_position(workers, name).expect("configured worker");
+            let Proc::Service(worker) = &mut workers[position] else { panic!("worker root") };
+            let Some(crate::cluster::Shape::Worker { started, .. }) = &mut worker.cluster else {
+                panic!("worker shape")
+            };
+            *started = true;
+            caller.added.set(worker.linked() > 0);
+        }
+        if let Some(name) = caller.stopping_worker() {
+            let position = worker_position(workers, name).expect("configured worker");
+            let Proc::Service(worker) = &mut workers[position] else { panic!("worker root") };
+            if !worker.stopping() {
+                worker.stop_for_restart();
+                self.controls.signal(caller_end + position, ServiceSignal::Terminate);
+            }
+            caller.worker_ready.set(worker.settled());
+        }
+        if let Some(name) = caller.starting_worker() {
+            let position = worker_position(workers, name).expect("configured worker");
+            let Proc::Service(worker) = &mut workers[position] else { panic!("worker root") };
+            if worker.stopping() {
+                worker.restart();
+            }
+            caller.worker_ready.set(worker.linked() > worker.lives().iter().map(|life| life.linked).sum());
+        }
+    }
+}
 impl Referee<Proc> for Judge {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         self.wake = None;
@@ -285,14 +315,11 @@ impl Referee<Proc> for Judge {
         for proc in workers.iter_mut() {
             let Proc::Service(worker) = proc else { panic!("worker root") };
             worker.address = peer.address();
-            if let Some(crate::cluster::Shape::Worker { name, engine, started }) = &mut worker.cluster {
+            if let Some(crate::cluster::Shape::Worker { engine, .. }) = &mut worker.cluster {
                 *engine = service.workers_address;
-                if caller.adding_worker() == Some(*name) {
-                    *started = true;
-                    caller.added.set(worker.linked() > 0);
-                }
             }
         }
+        self.worker_actions(caller_end, caller, workers);
         if placed(workers) && !self.finished {
             peer.cue = true;
         }
@@ -419,10 +446,23 @@ impl Referee<Proc> for Judge {
         });
         let pending = self.llm_history.observe(peer.observations());
         let placing = placed(workers) && pending > 0;
-        if caller.adding_worker().is_some_and(|name| {
-            workers.iter().any(|proc| matches!(proc, Proc::Service(worker)
-                if matches!(&worker.cluster, Some(crate::cluster::Shape::Worker { name: worker_name, .. }) if *worker_name == name)
-                    && (!worker_started(worker) || worker.linked() > 0 && !caller.added.get())))
+        let named_worker = |name| {
+            worker_position(workers, name).map(|position| {
+                let Proc::Service(worker) = &workers[position] else { panic!("worker root") };
+                worker.as_ref()
+            })
+        };
+        let worker_action = caller
+            .stopping_worker()
+            .and_then(named_worker)
+            .is_some_and(|worker| !worker.stopping() || worker.settled() && !caller.worker_ready.get())
+            || caller.starting_worker().and_then(named_worker).is_some_and(|worker| {
+                worker.stopping()
+                    || worker.linked() > worker.lives().iter().map(|life| life.linked).sum()
+                        && !caller.worker_ready.get()
+            });
+        if worker_action || caller.adding_worker().and_then(named_worker).is_some_and(|worker| {
+            !worker_started(worker) || worker.linked() > 0 && !caller.added.get()
         })
             || placing
             || workers_changed
@@ -562,6 +602,11 @@ fn cluster_roots<R: Referee<Proc>>(
     let mut git = crate::git::program();
     git.instances = u32::try_from(workers.len()).expect("worker git count");
     world.host_roots(git, crate::git::roots);
+}
+
+fn worker_position(workers: &[Proc], name: &str) -> Option<usize> {
+    workers.iter().position(|proc| matches!(proc, Proc::Service(worker)
+        if matches!(worker.cluster, Some(crate::cluster::Shape::Worker { name: worker_name, .. }) if worker_name == name)))
 }
 
 fn worker_started(worker: &ServiceHost) -> bool {
