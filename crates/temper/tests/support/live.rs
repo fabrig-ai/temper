@@ -1,10 +1,7 @@
-//! The same native stories with fake or borrowed-provider completions.
-//! D2 fallback D: live startup is disabled until JP13 proves a real sign-in.
-//! A separate test-only host needs shell startup and store-preseed support;
-//! the production binary accepts no D2 input.
+//! The retained native stories with fake completions until live sign-in is available.
 use super::{Process, Seen, forgejo::Throwaway, person, write_private};
 use jig_protocol_store::{codec, transcripts};
-use serde_json::{Value, json};
+use serde_json::Value;
 use skein_io::kernel::Signal;
 use skein_lib::{Duration, Time};
 use skein_shell::{Clock, Host};
@@ -12,28 +9,12 @@ use skein_world::{Referee, end_to_end::Streams, real};
 use std::{
     cell::RefCell,
     fs,
-    net::SocketAddr,
     path::{Path, PathBuf},
     rc::Rc,
 };
 
-#[derive(Debug)]
-pub enum Mode {
-    Fake,
-    // Retained for JP13 only: accounts-2/later.md, fallback-D row 42: "Temper live stays disabled until JP13".
-    Live { model: String, address: SocketAddr },
-}
 #[must_use]
-pub fn mode() -> Mode {
-    let Some(directory) = std::env::var_os("TEMPER_RUN_LOGS") else { return Mode::Fake };
-    let directory = PathBuf::from(directory);
-    if !directory.join("live-account.json").exists() {
-        return Mode::Fake;
-    }
-    panic!("D2 fallback D: live tier off until JP13 proves live sign-in");
-}
-#[must_use]
-pub fn configure(directory: &Path, mode: &Mode, forge: &Throwaway) -> Option<skein_fake_peers::llm::Peer> {
+pub fn configure(directory: &Path, forge: &Throwaway) -> skein_fake_peers::llm::Peer {
     let path = directory.join("temper.json");
     let mut value: Value = serde_json::from_slice(&fs::read(&path).expect("configuration")).expect("JSON");
     value["engine"]["charters"][0]["turns"] = 5.into();
@@ -41,29 +22,6 @@ pub fn configure(directory: &Path, mode: &Mode, forge: &Throwaway) -> Option<ske
     let agent_path = directory.join("agent.json");
     let mut agent: Value = serde_json::from_slice(&fs::read(&agent_path).expect("agent")).expect("agent JSON");
     agent["profile"]["policy"]["max_turns"] = 5.into();
-    if let Mode::Live { model, address } = mode {
-        let engine = &mut value["engine"];
-        let endpoint = &mut engine["llm"]["endpoints"][0];
-        endpoint["provider"] = "codex".into();
-        endpoint["address"] = json!({"socket":address.to_string()});
-        endpoint["transport"] = "tls".into();
-        endpoint["server_name"] = "chatgpt.com".into();
-        engine["llm"]["models"][0]["name"] = model.clone().into();
-        engine["llm"]["models"][0]["output"] = 8192.into();
-        engine["charters"][0]["model"] = model.clone().into();
-        let endpoint = &mut agent["endpoints"][0];
-        endpoint["address"] = address.to_string().into();
-        endpoint["server_name"] = "chatgpt.com".into();
-        endpoint.as_object_mut().expect("endpoint").remove("trust_der");
-        endpoint["connect"] = 10_000.into();
-        endpoint["handshake"] = 10_000.into();
-        endpoint["reasoning_effort"] = "low".into();
-        endpoint["headers"] = json!(skein_llm::openai::identity::headers().iter().map(|header|
-            json!({"name":String::from_utf8_lossy(&header.name),"value":String::from_utf8_lossy(&header.value)})
-        ).collect::<Vec<_>>());
-        endpoint["models"][0]["name"] = model.clone().into();
-        endpoint["models"][0]["reasoning_item"] = 2048.into();
-    }
     let scripts = super::landing_scripts(super::ANSWER, forge);
     let skein_fake_llm_domain::api::Line::Call { arguments, .. } = &scripts[0].turns[0].lines[0] else {
         panic!("the process fixture delegates the coding procedure");
@@ -79,10 +37,7 @@ pub fn configure(directory: &Path, mode: &Mode, forge: &Throwaway) -> Option<ske
     write_private(&directory.join("charters/chat.txt"), instructions.as_bytes());
     write_private(&path, &serde_json::to_vec(&value).expect("live configuration JSON"));
     write_private(&agent_path, &serde_json::to_vec(&agent).expect("live agent JSON"));
-    match mode {
-        Mode::Fake => Some(super::fake_llm(scripts)),
-        Mode::Live { .. } => None,
-    }
+    super::fake_llm(scripts)
 }
 
 pub struct Pushed {
@@ -205,12 +160,7 @@ impl Referee<Process> for Judge<'_> {
     }
 }
 #[must_use]
-pub fn run(
-    directory: &Path,
-    forge: &Throwaway,
-    peer: Option<skein_fake_peers::llm::Peer>,
-    deadline: Duration,
-) -> Pushed {
+pub fn run(directory: &Path, forge: &Throwaway, peer: skein_fake_peers::llm::Peer, deadline: Duration) -> Pushed {
     let clock = Clock::new();
     let started = clock.now().now;
     let mut binary = super::serve(directory);
@@ -234,9 +184,7 @@ pub fn run(
     world.spawn_with_fds(fds, || {
         Process::Person(Box::new(person::Person::new(root, input, output, person::adopt_and_change(forge))))
     });
-    if let Some(peer) = peer {
-        world.spawn(|| Process::Peer(Box::new(peer)));
-    }
+    world.spawn(|| Process::Peer(Box::new(peer)));
     let outcome = world.run(&clock, deadline);
     assert!(outcome.procs.iter().all(Host::is_empty), "all real io settles");
     let Process::Binary(binary) = &outcome.procs[0] else { panic!("binary") };

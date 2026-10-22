@@ -7,7 +7,6 @@ members = [
     "crates/temper-protocol-records",
     "tests/real-loop",
     "crates/temper-box",
-    "tools/live-login",
     "tools/gallery",
     "tools/fake-claude",
     "tests/one-process",
