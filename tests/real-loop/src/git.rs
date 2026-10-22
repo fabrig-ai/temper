@@ -91,3 +91,18 @@ pub(crate) fn roots(spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
         path: format!("/proc/self/fd/{}", spawn.root.raw()).into_bytes().into(),
     }]
 }
+
+fn routed(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
+    match temper_fake_git::check(spawn) {
+        Ok(_) | Err(temper_fake_git::Refusal::Usage) => {}
+        Err(temper_fake_git::Refusal::Broken(rule)) => panic!("git's spawn broke {rule}"),
+    }
+    Proc::GitRoute(Box::new(temper_fake_git::Git::new(
+        spawn,
+        temper_fake_git_hosted::start(inherited),
+        temper_fake_git::Route::new(crate::forge::protocol_limits()),
+    )))
+}
+pub(crate) fn route_program() -> HostedProgram<Proc> {
+    HostedProgram { make: routed, ..program() }
+}

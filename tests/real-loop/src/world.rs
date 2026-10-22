@@ -17,6 +17,7 @@ pub(crate) enum Proc {
     Ctl(Box<crate::calls::Recorded>),
     Agent(Box<skein_world::PipeHost<smith_agent_shell::Agent>>),
     Git(Box<temper_fake_git_hosted::Git<temper_fake_git_hosted::Typed>>),
+    GitRoute(Box<temper_fake_git::Git<temper_fake_git::Route>>),
 }
 impl Proc {
     fn host(&self) -> &dyn Host {
@@ -28,6 +29,7 @@ impl Proc {
             Self::Ctl(h) => h.as_ref(),
             Self::Agent(h) => h.as_ref(),
             Self::Git(h) => h.as_ref(),
+            Self::GitRoute(h) => h.as_ref(),
         }
     }
     fn host_mut(&mut self) -> &mut dyn Host {
@@ -39,6 +41,7 @@ impl Proc {
             Self::Ctl(h) => h.as_mut(),
             Self::Agent(h) => h.as_mut(),
             Self::Git(h) => h.as_mut(),
+            Self::GitRoute(h) => h.as_mut(),
         }
     }
 }
@@ -106,6 +109,7 @@ pub(crate) fn run(
         armed: false,
         wake: None,
         forge: None,
+        github: None,
     });
     world.spawn(|| {
         Proc::Llm(Box::new(Llm { peer: llm::peer(recipe()).expect("independent LLM peer"), scripts: None, cue: false }))
@@ -148,6 +152,7 @@ pub(crate) fn run_forge(
         armed: false,
         wake: None,
         forge: Some(state.clone()),
+        github: None,
     });
     world.spawn(|| {
         Proc::Llm(Box::new(Llm {
@@ -169,6 +174,33 @@ pub(crate) fn run_forge(
     let outcome = world.run(&skein_shell::Clock::new(), crate::PATIENCE);
     crate::git::share(None);
     outcome
+}
+pub(crate) fn run_github(
+    scratch: &skein_scratch::Scratch,
+    fixture: crate::github::Fixture,
+    scripts: Scripts,
+    steps: impl FnOnce() -> Vec<crate::calls::Step>,
+) -> skein_world::real::Outcome<Proc> {
+    let (state, peer) = crate::github::State::new(fixture);
+    let mut world = World::new_controlled(|controls| {
+        let mut judge = cluster_judge(controls, &[], None);
+        judge.github = Some(state);
+        judge
+    });
+    world.spawn(|| {
+        Proc::Llm(Box::new(Llm {
+            peer: llm::peer(llm::scripted(Box::new([]))).expect("deferred peer"),
+            scripts: Some(scripts),
+            cue: false,
+        }))
+    });
+    world
+        .spawn_signals(|signals| Proc::Service(Box::new(ServiceHost::github(scratch.path().into(), signals, fixture))));
+    // This story provisions its account explicitly, retaining every ctl output.
+    host(&mut world, scratch.path(), steps, true, 1);
+    world.spawn(|| Proc::Forge(Box::new(peer)));
+    world.host_roots(crate::git::route_program(), crate::git::roots);
+    world.run(&skein_shell::Clock::new(), crate::PATIENCE)
 }
 fn host<R: Referee<Proc>>(
     world: &mut World<Proc, R>,
@@ -216,6 +248,7 @@ struct Judge {
     finished: bool,
     wake: Option<Time>,
     forge: Option<std::rc::Rc<std::cell::RefCell<Option<forge::State>>>>,
+    github: Option<crate::github::State>,
 }
 impl Referee<Proc> for Judge {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
@@ -289,6 +322,20 @@ impl Referee<Proc> for Judge {
                 forge.shutdown();
             }
         }
+        if let Some(state) = &self.github {
+            let Proc::Forge(forge) = &mut children[0] else { panic!("GitHub root") };
+            service.forge_address = forge.address();
+            if let Some(address) = forge.address()
+                && let Some(scripts) = peer.scripts.take()
+            {
+                peer.peer = llm::peer(llm::scripted(scripts(address))).expect("bound GitHub scripts");
+            }
+            service.github_seen.checkpoint(forge, &caller.calls);
+            if service.is_empty() {
+                service.github_seen.collect(forge, &state.handle);
+                forge.shutdown();
+            }
+        }
         service.address = peer.address();
         if service.links() != 0
             && workers
@@ -340,7 +387,13 @@ impl Referee<Proc> for Judge {
                     || caller.calls[recorded.call].locked != recorded.locked
                     || caller.calls[recorded.call].released != recorded.released
             }
-            Proc::Llm(_) | Proc::Forge(_) | Proc::Service(_) | Proc::Caller(_) | Proc::Agent(_) | Proc::Git(_) => false,
+            Proc::Llm(_)
+            | Proc::Forge(_)
+            | Proc::Service(_)
+            | Proc::Caller(_)
+            | Proc::Agent(_)
+            | Proc::Git(_)
+            | Proc::GitRoute(_) => false,
         });
         let forge_changed = self.forge.as_ref().is_some_and(|state| {
             let borrowed = state.borrow();
@@ -365,6 +418,8 @@ impl Referee<Proc> for Judge {
             || placing
             || workers_changed
             || (self.stopping && workers.iter().all(Host::is_empty) && !self.engine_stopping)
+            || (self.github.is_some() && children.first().is_some_and(|proc|
+                matches!(proc, Proc::Forge(forge) if forge.address().is_some() && service.forge_address.is_none())))
             || forge_changed
             || lock_changed
             || (peer.address().is_some() && service.address.is_none())
@@ -433,6 +488,7 @@ fn cluster_judge(
         armed: false,
         wake: None,
         forge,
+        github: None,
     }
 }
 

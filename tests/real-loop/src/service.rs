@@ -27,6 +27,9 @@ pub struct ServiceHost {
     pub(crate) forge_address: Option<SocketAddr>,
     pub(crate) fixture: Option<crate::forge::Fixture>,
     pub(crate) seen: crate::forge::Seen,
+    github: Option<crate::github::Fixture>,
+    clients: Option<SocketAddr>,
+    pub(crate) github_seen: crate::github::Seen,
     cues: Vec<Cue>,
     links: u32,
     direct_key: bool,
@@ -47,7 +50,7 @@ impl ServiceHost {
         fixture: Option<crate::forge::Fixture>,
         direct_key: bool,
     ) -> Self {
-        Self::with_shape(path, signals, fixture, direct_key, None)
+        Self::with_shape(path, signals, fixture, direct_key, None, None)
     }
     fn with_shape(
         path: PathBuf,
@@ -55,9 +58,13 @@ impl ServiceHost {
         fixture: Option<crate::forge::Fixture>,
         direct_key: bool,
         cluster: Option<crate::cluster::Shape>,
+        github: Option<crate::github::Fixture>,
     ) -> Self {
-        let forge = fixture
-            .is_none()
+        let clients = github.map(|_| {
+            let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("reserved clients listener");
+            listener.local_addr().expect("reserved clients address")
+        });
+        let forge = (fixture.is_none() && github.is_none())
             .then(|| TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("held forge listener"));
         let address = forge
             .as_ref()
@@ -69,6 +76,9 @@ impl ServiceHost {
         if let Some(fixture) = fixture {
             crate::forge::write(&path, address, &fixture).expect("forge documents");
         }
+        if let Some(fixture) = github {
+            crate::github::write(&path, address, clients.expect("fixed clients"), fixture).expect("GitHub documents");
+        }
         if let Some(shape) = &cluster {
             shape.write(path.parent().expect("cluster scratch"));
         }
@@ -77,7 +87,12 @@ impl ServiceHost {
         let mut envelope = temper::envelope_in(&roots, &config).expect("standalone admission envelope");
         // The deferred document names port 0 in its LLM, API and git addresses.
         // Each kernel-assigned port can add four decimal digits at preparation.
-        if fixture.is_some() {
+        if github.is_some() {
+            // Besides API/git/web, GitHub setup retains web in each run
+            // and its child plan (skein's forge-setup host admission).
+            let runs = temper_service::limits::profile(temper_service::limits::Profile::Small).setup.runs;
+            envelope.0 += (3 + 2 * u64::from(runs)) * 4;
+        } else if fixture.is_some() {
             envelope.0 += 3 * 4;
         } else if cluster.is_some() {
             envelope.0 += 4;
@@ -96,6 +111,9 @@ impl ServiceHost {
             hooks: None,
             forge_address: None,
             fixture,
+            github,
+            clients,
+            github_seen: crate::github::Seen::default(),
             seen: crate::forge::Seen::default(),
             cues: Vec::with_capacity(cue::CUES),
             links: 0,
@@ -116,7 +134,10 @@ impl ServiceHost {
         shape: crate::cluster::Shape,
         fixture: Option<crate::forge::Fixture>,
     ) -> Self {
-        Self::with_shape(path.join("data"), signals, fixture, false, Some(shape))
+        Self::with_shape(path.join("data"), signals, fixture, false, Some(shape), None)
+    }
+    pub(crate) fn github(path: PathBuf, signals: Fd, fixture: crate::github::Fixture) -> Self {
+        Self::with_shape(path, signals, None, false, None, Some(fixture))
     }
     fn directories(path: &std::path::Path, cluster: bool) -> temper::directories::Directories {
         if cluster {
@@ -128,7 +149,7 @@ impl ServiceHost {
     }
     fn ready(&self) -> bool {
         self.cluster.as_ref().is_none_or(crate::cluster::Shape::ready)
-            && self.fixture.is_none_or(|_| self.forge_address.is_some())
+            && ((self.fixture.is_none() && self.github.is_none()) || self.forge_address.is_some())
     }
     #[must_use]
     pub fn end(&self) -> Option<&crate::End> {
@@ -197,6 +218,15 @@ impl Host for ServiceHost {
             if let Some(fixture) = self.fixture {
                 crate::forge::write(&self.path, forge, &fixture).expect("forge documents");
             }
+            if let Some(fixture) = self.github {
+                crate::github::write(&self.path, forge, self.clients.expect("fixed clients"), fixture)
+                    .expect("GitHub documents");
+                temper_github_app::seed(
+                    &self.path.join("state"),
+                    &temper_github_app::records(&temper_github_app::APP, 1, &[crate::github::INSTALLATION], forge),
+                )
+                .expect("durable App seed");
+            }
             if let Some(shape) = &self.cluster {
                 shape.write(self.path.parent().expect("cluster scratch"));
             }
@@ -205,8 +235,13 @@ impl Host for ServiceHost {
             if self.cluster.is_some() {
                 assert!(service.worst_case() <= self.envelope.0, "cluster fits admission");
                 assert!(service.operations() <= self.envelope.1, "cluster operations fit admission");
-            } else if self.fixture.is_some() {
-                assert!(service.worst_case() <= self.envelope.0, "bound ports fit deferred admission");
+            } else if self.fixture.is_some() || self.github.is_some() {
+                assert!(
+                    service.worst_case() <= self.envelope.0,
+                    "bound ports fit deferred admission: {} <= {}",
+                    service.worst_case(),
+                    self.envelope.0
+                );
                 assert_eq!(service.operations(), self.envelope.1, "preparation preserves operations");
             } else {
                 assert_eq!(

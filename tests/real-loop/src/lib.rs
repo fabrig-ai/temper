@@ -7,6 +7,7 @@ pub use cluster::{Cluster, run_cluster, run_cluster_forge};
 pub mod fixtures;
 pub mod forge;
 pub mod git;
+pub mod github;
 pub mod landing;
 pub mod llm;
 pub mod scripts;
@@ -45,6 +46,10 @@ impl Ran {
     #[must_use]
     pub fn forge(&self) -> &forge::Seen {
         &self.service().seen
+    }
+    #[must_use]
+    pub fn github(&self) -> &github::Seen {
+        &self.service().github_seen
     }
     #[must_use]
     pub fn calls(&self) -> &[calls::Called] {
@@ -132,4 +137,16 @@ pub fn run_key_on(
 ) -> Ran {
     let outcome = world::run(&scratch, recipe, steps, true);
     checked(Ran { outcome: Outcome::Checked(outcome), scratch })
+}
+
+/// Run a GitHub story on the layer's authenticated HTTP git route.
+#[must_use]
+pub fn run_github(
+    fixture: github::Fixture,
+    scripts: fn(std::net::SocketAddr) -> Box<[skein_fake_llm_domain::api::Script]>,
+    steps: impl FnOnce() -> Vec<calls::Step>,
+) -> Ran {
+    let scratch = Scratch::new("real-github");
+    let outcome = world::run_github(&scratch, fixture, scripts, steps);
+    checked(Ran { outcome: Outcome::Forge(outcome), scratch })
 }
