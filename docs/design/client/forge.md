@@ -1166,11 +1166,15 @@ made by the forge connector from what it keeps of the change
   A panel whose watch the engine ended may be unknown before the forge
   registers its change. For the same live change task, or its ended
   document with a change result, the page reopens that panel once per
-  later task document delivered, with a fresh watch; an end alone never
-  reopens it. An unsolicited Closed follows SubjectEnded because jig
-  gives the client the same reason for both; a local unwatch's
-  acknowledgement is ignored. Malformed or mismatched deliveries,
-  another task, every other end reason, and an ended task without a
+  later task document delivered, with a fresh watch. A SubjectEnded
+  ending also reopens it immediately only if the page's document is
+  already Ended with a Done(Change) result, at most once per document's
+  activity; a second ending leaves it Unknown until a new document.
+  Every other document, including a live procedure without a change
+  record, waits for a later task document. An unsolicited Closed follows
+  SubjectEnded because jig gives the client the same reason for both;
+  a local unwatch's acknowledgement is ignored. Malformed or mismatched
+  deliveries, another task, every other end reason, and an ended task without a
   change result remain terminal. Between the procedure's start and the
   next task document the page may say "no change"; it recovers on that
   next document, at the latest at the landing.
