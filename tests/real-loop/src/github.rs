@@ -45,6 +45,12 @@ pub struct Fixture {
     pub unaccepted_after_install: bool,
     /// The person's App hook, which paste and reconcile may need to repair.
     pub pasted_hook: &'static [u8],
+    /// Repository contents, CI and notifications; the world supplies ids and names.
+    pub setup: fn() -> api::Setup,
+    /// Fake timings and history capacity, before the domain allocates them.
+    pub configure_domain: fn(&mut domain::Config),
+    /// Seed repository history before the peer starts; setup itself starts no CI.
+    pub prepare: fn(&mut domain::Domain, &skein_lib::Env<domain::Config>),
     pub config: fn() -> layer::Config,
     pub configure: fn(&mut Value, &mut Value, SocketAddr),
 }
@@ -56,9 +62,17 @@ pub fn fixture() -> Fixture {
         old_stray: false,
         unaccepted_after_install: false,
         pasted_hook: b"https://temper-test.invalid/",
+        setup,
+        configure_domain: |_| {},
+        prepare: |_, _| {},
         config,
         configure: |_, _, _| {},
     }
+}
+fn setup() -> api::Setup {
+    let mut setup = (forge::fixture().setup)();
+    setup.hooked = false;
+    setup
 }
 fn config() -> layer::Config {
     let mut accounts = List::with_capacity(2);
@@ -167,6 +181,7 @@ pub struct MadeApp {
 
 #[derive(Default)]
 pub struct Seen {
+    observations: Vec<domain::Observation>,
     pub app: Option<MadeApp>,
     pub git_calls: Vec<layer::GitCall>,
     /// Total successful mints; the pin exposes no per-installation mint counters.
@@ -183,6 +198,12 @@ pub struct Seen {
     pub pulls: Vec<domain::Observation>,
 }
 impl Seen {
+    /// Domain records in order, including CI reports at each pushed head.
+    #[must_use]
+    pub fn observations(&self) -> &[domain::Observation] {
+        &self.observations
+    }
+
     pub(crate) fn seed_unaccepted(&mut self, peer: &mut Peer) {
         if self.unaccepted.is_some() {
             return;
@@ -223,6 +244,7 @@ impl Seen {
             .collect();
         let mut forge = handle.borrow_mut();
         while let Some(observation) = forge.domain.pop_observation() {
+            self.observations.push(observation.clone());
             if matches!(&observation,
                 domain::Observation::Opened { repository, .. } | domain::Observation::Merged { repository, .. }
                 if repository.as_ref() == b"acme/app")
@@ -253,6 +275,7 @@ pub(crate) struct State {
 impl State {
     pub(crate) fn new(fixture: Fixture) -> (Self, Peer) {
         let mut config = temper_fake_git_hosted::fixtures::CONFIG;
+        (fixture.configure_domain)(&mut config);
         // These smoke repositories have two small files each. The GitHub
         // layer pads every API response to its admitted wire capacity, so
         // do not inherit the checkout sweep's 256 files of 64 KiB each.
@@ -268,14 +291,15 @@ impl State {
         ));
         let mut domain = domain::Domain::new(&config, fixtures::SEED);
         for (id, name) in [(REPOSITORY, b"acme/app".as_slice()), (2, b"umbra/tool".as_slice())] {
-            let mut setup = (forge::fixture().setup)();
+            let mut setup = (fixture.setup)();
             setup.id = id;
             setup.name = name.into();
-            setup.hooked = false;
             domain::repository(&mut domain, &config, setup);
         }
         domain::grant(&mut domain, b"acme/app", APP.bot, api::Permission::Admin);
-        let handle = Rc::new(RefCell::new(Forge::new(domain, config)));
+        let env = skein_lib::Env { now: clock.now, wall: clock.wall, limits: config };
+        (fixture.prepare)(&mut domain, &env);
+        let handle = Rc::new(RefCell::new(Forge::new(domain, env.limits)));
         let wire = protocol_limits();
         let limits = layer::Limits {
             deliveries: layer::delivery::Limits { entries: 64, payload_bytes: wire.documents.body_bytes },
