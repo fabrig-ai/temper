@@ -22,7 +22,7 @@ const OPENAI_ENDPOINT: &str = "openai";
 const ISSUER_URLS: usize = 5;
 // Each live story signs in, then reads accounts.
 const CTL_CALLS: usize = 2;
-const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const DIGEST: &str = "0123456789abcdef";
 const PUBLIC: [&str; 4] = ["temper.json", "agent.json", "charters/chat.txt", "charters/coding.txt"];
 const PRIVATE: [&str; 5] =
     ["worker.secret", "worker.digest", "demo/llm.key", "deployment/qa-source-record", "programs/qa-source-login"];
