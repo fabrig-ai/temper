@@ -462,7 +462,6 @@ fn picker_page_has_its_own_override_and_startup_bounds() {
     assert_eq!(limits::apply(&mut settings.limits, b"picker.page", u64::MAX), Err(limits::Refused::Range));
 }
 
-
 #[test]
 fn effective_core_limits_preserve_each_configured_policy_budget() {
     let own = limits::profile(limits::Profile::Small);

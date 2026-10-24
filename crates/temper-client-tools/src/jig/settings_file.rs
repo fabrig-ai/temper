@@ -443,7 +443,6 @@ pub(super) fn verdict_bound(
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{message, wire_error};
@@ -466,9 +465,6 @@ mod tests {
         )
         .expect_err("one request byte is beyond the zero-byte fixture limit");
         assert_eq!(problem.path, wire::Path::KeyedRequest);
-        assert_eq!(
-            message(None, wire_error(problem, &limits)).as_ref(),
-            b"settings file: value: wire value bound"
-        );
+        assert_eq!(message(None, wire_error(problem, &limits)).as_ref(), b"settings file: value: wire value bound");
     }
 }

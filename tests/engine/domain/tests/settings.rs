@@ -30,7 +30,7 @@ fn policy_limits(policy_bytes: u64) -> engine::Limits {
     limits.loads.bytes = POLICY_PAGE_BYTES;
     limits.loads.reply_bytes = POLICY_PAGE_BYTES;
     limits.loads.transcript_bytes = POLICY_PAGE_BYTES;
-    limits.loads.read_bytes = POLICY_PAGE_BYTES;
+    limits.loads.read_bytes = u64::from(POLICY_PAGE_BYTES);
     // Existing widest policy shapes allow a byte-heavy policy without
     // crossing an independent count, pattern or per-segment limit.
     let widest = temper_engine_domain_world::store::widest();
@@ -147,19 +147,15 @@ fn saved_policy(bytes: u64, project: bool) -> Driver {
             driver.delivered.iter().any(|delivery| matches!(
                 delivery,
                 Delivery::WebReply {
-                    reply: people::Reply::Outcome(people::Outcome::ProjectMade { project: MADE_PROJECT }), ..
+                    reply: people::Reply::Outcome(people::Outcome::ProjectMade { project: MADE_PROJECT }),
+                    ..
                 }
             )),
             "MakeProject committed its copy of the changed policy"
         );
         // Remove the source setting through another real decision: only the
         // project's retained copy must trigger the named narrowed restore.
-        change(
-            &mut driver,
-            2,
-            22,
-            s::Item { setting: s::Setting::Policy(POLICY_NUMBER), edit: s::Edit::Removed },
-        );
+        change(&mut driver, 2, 22, s::Item { setting: s::Setting::Policy(POLICY_NUMBER), edit: s::Edit::Removed });
         assert_eq!(head(&driver).number, 3);
     }
     driver
@@ -172,11 +168,7 @@ fn replay_policy(driver: Driver, limits: &engine::Limits) -> Driver {
         // Complete transactions include deployment counters, settings history,
         // keyed answers and project rows, just as the real root committed them.
         store.submit(number, writes.into_boxed_slice(), 0);
-        assert_eq!(
-            store.tick(false),
-            Ok(Some(number)),
-            "the narrower real codec admits the committed transaction"
-        );
+        assert_eq!(store.tick(false), Ok(Some(number)), "the narrower real codec admits the committed transaction");
     }
     store.crash(SEED);
     Driver::cold(store, policy_config(), limits)

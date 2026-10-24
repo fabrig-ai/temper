@@ -527,6 +527,9 @@ pub fn root_with_config_and_limits(
             jig_domain_core::RestartRequest::Settings { failure, changed } => {
                 panic!("fixture settings restore: {failure:?}, changed {changed}")
             }
+            jig_domain_core::RestartRequest::ProjectPolicy { project } => {
+                panic!("fixture project policy restore: {project}")
+            }
             jig_domain_core::RestartRequest::Refused { step } => panic!("fixture restore: {step:?}"),
         }
     }

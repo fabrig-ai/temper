@@ -730,7 +730,6 @@ fn settings_items_check_the_aggregate_wire_byte_bound_and_maximum_count() {
     );
 }
 
-
 #[test]
 fn non_charter_revision_hints_explicitly_read_the_current_value() {
     for (setting, name) in [
