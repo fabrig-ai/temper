@@ -143,13 +143,13 @@ fn selected(d: &Document, at: u32, key: &[u8], wanted: &[u8], number: bool, p: &
     }
     found.ok_or(read::why(p, b"target missing"))
 }
-fn socket(addr: SocketAddr, p: &Path) -> Result<Box<[u8]>, Refusal> {
+fn socket(addr: SocketAddr, at: &Path) -> Result<Box<[u8]>, Refusal> {
     if !addr.ip().is_loopback() || addr.port() == 0 || addr.port() == 1455 {
-        return Err(read::why(p, b"expected a nonzero loopback peer, distinct from callback 1455"));
+        return Err(read::why(at, b"expected a nonzero loopback peer, distinct from callback 1455"));
     }
     match addr {
         SocketAddr::V6(ip) if ip.scope_id() != 0 || ip.flowinfo() != 0 => {
-            return Err(read::why(p, b"scoped IPv6 peers are unsupported"));
+            return Err(read::why(at, b"scoped IPv6 peers are unsupported"));
         }
         SocketAddr::V4(_) | SocketAddr::V6(_) => {}
     }
