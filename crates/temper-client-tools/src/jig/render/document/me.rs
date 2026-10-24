@@ -16,9 +16,18 @@ pub(super) fn encode_live_delegate(
 pub(super) fn encode_malformed(value: jig_client::contract::Malformed, out: &mut Encoder, _budget: &mut super::Cut) {
     let value = &value;
     match value {
-        jig_client::contract::Malformed::Settings(_) | jig_client::contract::Malformed::SettingsUnchanged => {
-            unreachable!("the tools do not request settings")
+        jig_client::contract::Malformed::Settings(value) => {
+            out.object_start();
+            out.key(b"settings");
+            out.object_start();
+            out.key(b"setting");
+            super::settings::encode_setting(value.setting, out);
+            out.key(b"fault");
+            out.string(super::settings::fault_word(value.fault));
+            out.object_end();
+            out.object_end();
         }
+        jig_client::contract::Malformed::SettingsUnchanged => out.string(b"settings_unchanged"),
         jig_client::contract::Malformed::ProjectMismatch => out.string(b"project_mismatch"),
         jig_client::contract::Malformed::TwoAsAllowed => out.string(b"two_as_allowed"),
         jig_client::contract::Malformed::ConversationNotAgent => out.string(b"conversation_not_agent"),

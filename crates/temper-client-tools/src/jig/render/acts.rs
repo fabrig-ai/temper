@@ -251,6 +251,63 @@ pub fn party(number: u64, me: Option<&Me>, out: &mut Text) {
     out.number(number);
 }
 pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
+    match why {
+        Refusal::Stale(value) => {
+            out.put(b"stale; newest revision ");
+            out.number(u64::from(value.newest));
+            out.put(b"; read settings again");
+            return;
+        }
+        Refusal::Full(value) => {
+            out.put(b"full; oldest held revision ");
+            out.number(u64::from(value.revision));
+            out.put(b"; live tasks:");
+            for task in &value.tasks {
+                out.put(b" ");
+                out.number(*task);
+            }
+            if value.more != 0 {
+                out.put(b"; ");
+                out.number(u64::from(value.more));
+                out.put(b" more");
+            }
+            return;
+        }
+        Refusal::Malformed { at, why: jig_client::contract::Malformed::Settings(value) } => {
+            out.put(b"out of shape; item ");
+            out.number(u64::from(*at));
+            out.put(b"; ");
+            super::document::settings::setting_text(value.setting, out);
+            out.put(b": ");
+            out.put(super::document::settings::fault_word(value.fault));
+            return;
+        }
+        Refusal::Malformed { why: jig_client::contract::Malformed::SettingsUnchanged, .. } => {
+            out.put(b"settings unchanged");
+            return;
+        }
+        Refusal::AccountMove { .. }
+        | Refusal::Circle { .. }
+        | Refusal::Dependency { .. }
+        | Refusal::Kept { .. }
+        | Refusal::Account { .. }
+        | Refusal::NoEscalationHolder
+        | Refusal::Provider
+        | Refusal::Malformed { .. }
+        | Refusal::Role { .. }
+        | Refusal::Taken { .. }
+        | Refusal::NotWaiting
+        | Refusal::NoFurther
+        | Refusal::Authority { .. }
+        | Refusal::Limit { .. }
+        | Refusal::Moved { .. }
+        | Refusal::Ended { .. }
+        | Refusal::Unknown
+        | Refusal::NameTaken
+        | Refusal::NotOffered
+        | Refusal::KeyConflict
+        | Refusal::Llm { .. } => {}
+    }
     let word = Word::refusal(why);
     let text = match why {
         Refusal::Stale(_) | Refusal::Full(_) => {

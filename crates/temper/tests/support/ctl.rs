@@ -63,11 +63,14 @@ impl Call {
         Self { stdin: Stdin::Link, ..Self::new(&["sign-in", "-"]) }
     }
 }
+pub type NextCall = Box<dyn FnOnce(&[Ended]) -> Call>;
 pub enum Step {
     Mark(&'static str),
     /// Wait for bytes in the box's captured stderr; requires a box referee.
     Stderr(&'static [u8]),
     Run(Call),
+    /// Form a dependent call from the completed calls' documents.
+    Then(NextCall),
     Start(Call),
     Join,
     Until(Call, &'static [u8]),
@@ -645,6 +648,11 @@ impl Calls {
                 self.action = Some(Action::Run);
                 self.start(call, false);
             }
+            Some(Step::Then(next)) => {
+                let call = next(&self.ends);
+                self.action = Some(Action::Run);
+                self.start(call, false);
+            }
             Some(Step::Start(call)) => self.start(call, true),
             Some(Step::Join) => self.awaiting_started = self.started.is_some(),
             Some(Step::Until(call, bytes)) => {
@@ -875,4 +883,28 @@ pub fn json(ended: &Ended) -> serde_json::Value {
     serde_json::from_slice(&ended.stdout).unwrap_or_else(|error| {
         panic!("ctl JSON: {error}; exit {:?}; stderr: {}", ended.exit, String::from_utf8_lossy(&ended.stderr))
     })
+}
+
+/// Use the revision actually read by the owner, including on a stale retry.
+#[must_use]
+pub fn settings_change(inventory: &Ended, file: &Path, key: &str) -> Call {
+    let revision = json(inventory)["newest"].as_u64().expect("newest settings revision");
+    Call::new(&[
+        "change-settings",
+        file.to_str().expect("fixture FILE path"),
+        "--against",
+        &revision.to_string(),
+        "--key",
+        key,
+    ])
+}
+
+/// Edit the whole charter value returned by ctl and wrap it in FILE's items.
+pub fn charter_change_file(file: &Path, setting: &Ended, instructions: &str) {
+    let document = json(setting);
+    assert_eq!(document["setting"]["kind"], "charter");
+    let mut value = document["value"].clone();
+    value["instructions"] = instructions.into();
+    let file_value = serde_json::json!({"items":[{"setting":document["setting"],"set":value}]});
+    std::fs::write(file, serde_json::to_vec(&file_value).expect("settings FILE JSON")).expect("settings FILE");
 }

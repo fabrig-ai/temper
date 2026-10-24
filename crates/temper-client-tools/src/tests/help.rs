@@ -24,6 +24,11 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(38), "help_forge_install"),
     (Some(jig::rows::EXPORT_AT), "help_export"),
     (Some(jig::rows::IMPORT_AT), "help_import"),
+    (Some(jig::rows::SETTINGS_AT), "help_settings"),
+    (Some(jig::rows::SETTING_AT), "help_setting"),
+    (Some(jig::rows::REVISION_AT), "help_revision"),
+    (Some(jig::rows::REVISIONS_AT), "help_revisions"),
+    (Some(jig::rows::CHANGE_SETTINGS_AT), "help_change_settings"),
 ];
 #[test]
 fn the_help_prints_as_its_golden_files() {
@@ -82,6 +87,11 @@ const USAGES: &[&[u8]] = &[
     b"repositories F [--installation I] [--page N]\n",
     b"export ACCOUNT FILE\n",
     b"import FILE --key NAME\n",
+    b"settings\n",
+    b"setting charter|template|policy N [--revision R]\nsetting rules\n",
+    b"revision R\n",
+    b"revisions [--before R]\n",
+    b"change-settings FILE --against R [--running stays|moves] --key NAME\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {
@@ -94,7 +104,11 @@ fn a_tools_usage_reads_as_the_design_writes_it() {
 fn each_derivation_names_every_tool() {
     let mut forms = List::with_capacity(fixtures::TOOL_FORMS);
     for words in fixtures::EVERY_TOOL {
-        let call = fixtures::call(words);
+        let mut call = fixtures::call(words);
+        if call.tool == jig::rows::CHANGE_SETTINGS_AT {
+            *call.values.get_mut(0).expect("FILE") =
+                Some(jig::call::Values::One(jig::call::Value::Text(br#"{"items":[]}"#.as_slice().into())));
+        }
         forms.push((call.tool, call.form)).expect("all table forms");
         let json = jig::json::write_call(table::TOOLS, &call).expect("call JSON");
         assert_eq!(fixtures::from_json(&json), call, "{words:?}");

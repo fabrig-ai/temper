@@ -77,11 +77,14 @@ pub fn call(table: &[&Tool], bytes: &[u8], from: Source, limits: &Limits) -> Res
     Err(error)
 }
 fn document(bytes: &[u8]) -> Result<Document, Usage> {
+    document_depth(bytes, 3)
+}
+pub(crate) fn document_depth(bytes: &[u8], depth: u32) -> Result<Document, Usage> {
     let length = u32::try_from(bytes.len()).or(Err(Usage::Json))?;
     if length == u32::MAX {
         return Err(Usage::Json);
     }
-    let limits = tokenizer::Limits { depth: 3, string: length, number: 20, chunk: length.max(1), length };
+    let limits = tokenizer::Limits { depth, string: length, number: 20, chunk: length.max(1), length };
     let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits };
     let mut machine = tokenizer::Tokenizer::new(&limits);
     let mut intake = Intake::with_capacity(length.max(tokenizer::largest_demand(&limits)));
@@ -249,7 +252,7 @@ fn decode_value(table: &[&Tool], doc: &Document, at: u32, spec: &Argument, limit
     }
     let bytes = text(doc, at)?;
     // Amendment FILE arguments carry their loaded words in a JSON call.
-    if spec.kind == Kind::File && (spec.name == b"instructions" || spec.name == b"spec") {
+    if spec.kind == Kind::File && (spec.name == b"instructions" || spec.name == b"spec" || spec.name == b"items") {
         return Ok(Value::Text(Box::from(bytes)));
     }
     if spec.kind == Kind::Subject {

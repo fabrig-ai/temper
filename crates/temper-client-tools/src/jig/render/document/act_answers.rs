@@ -137,7 +137,15 @@ pub(super) fn encode_note_scope(value: &jig_client::contract::NoteScope, out: &m
 
 pub(super) fn encode_outcome(value: &jig_client::contract::Outcome, out: &mut Encoder, budget: &mut super::Cut) {
     match value {
-        jig_client::contract::Outcome::SettingsChanged(_) => unreachable!("the tools do not request settings"),
+        jig_client::contract::Outcome::SettingsChanged(value) => {
+            out.object_start();
+            out.key(b"settings_changed");
+            out.object_start();
+            out.key(b"revision");
+            out.unsigned(u64::from(value.revision));
+            out.object_end();
+            out.object_end();
+        }
         jig_client::contract::Outcome::Owner(field_0) => {
             out.object_start();
             out.key(b"owner");

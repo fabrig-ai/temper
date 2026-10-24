@@ -431,3 +431,91 @@ pub const IMPORT: Tool = Tool {
 /// after every row before them (tests/help.rs checks them).
 pub const EXPORT_AT: u8 = 40;
 pub const IMPORT_AT: u8 = 41;
+
+/// Settings append after account moves to preserve every published identity.
+pub const SETTINGS_AT: u8 = 42;
+pub const SETTING_AT: u8 = 43;
+pub const REVISION_AT: u8 = 44;
+pub const REVISIONS_AT: u8 = 45;
+pub const CHANGE_SETTINGS_AT: u8 = 46;
+pub const SETTINGS: Tool = Tool {
+    name: b"settings",
+    line: b"Read the settings, held revisions and pending proposals",
+    result: b"settings",
+    forms: &[&[]],
+    keyed: Keyed::Never,
+    area: 1,
+};
+pub const SETTING: Tool = Tool {
+    name: b"setting",
+    line: b"Read one setting's value whole; JSON values feed change-settings",
+    result: b"setting",
+    forms: &[
+        &[
+            positional(
+                b"kind",
+                b"charter|template|policy",
+                Kind::Word { set: &[b"charter", b"template", b"policy"] },
+                Required,
+                b"Setting kind",
+            ),
+            positional(b"number", b"N", Kind::NumberRange { min: 0, max: 4_294_967_295 }, Required, b"Setting number"),
+            flag(
+                b"revision",
+                b"R",
+                Kind::NumberRange { min: 0, max: 4_294_967_295 },
+                Optional,
+                b"Held charter revision; newest by default",
+            ),
+        ],
+        &[positional(b"kind", b"rules", Kind::Word { set: &[b"rules"] }, Required, b"Deployment rules")],
+    ],
+    keyed: Keyed::Never,
+    area: 1,
+};
+pub const REVISION: Tool = Tool {
+    name: b"revision",
+    line: b"Read a revision and its whole items, or the oldest kept if forgotten",
+    result: b"revision",
+    forms: &[&[positional(
+        b"revision",
+        b"R",
+        Kind::NumberRange { min: 0, max: 4_294_967_295 },
+        Required,
+        b"Revision number",
+    )]],
+    keyed: Keyed::Never,
+    area: 1,
+};
+pub const REVISIONS: Tool = Tool {
+    name: b"revisions",
+    line: b"Read history newest first, a page at a time",
+    result: b"revisions",
+    forms: &[&[flag(
+        b"before",
+        b"R",
+        Kind::NumberRange { min: 0, max: 4_294_967_295 },
+        Optional,
+        b"Read before this revision",
+    )]],
+    keyed: Keyed::Never,
+    area: 1,
+};
+pub const CHANGE_SETTINGS: Tool = Tool {
+    name: b"change-settings",
+    line: b"Change deployment settings in one keyed decision",
+    result: b"change_settings",
+    forms: &[&[
+        positional(b"items", b"FILE", Kind::File, Required, b"JSON items file, or - for stdin"),
+        flag(b"against", b"R", Kind::NumberRange { min: 0, max: 4_294_967_295 }, Required, b"Newest revision read"),
+        flag(
+            b"running",
+            b"stays|moves",
+            Kind::Word { set: &[b"stays", b"moves"] },
+            Optional,
+            b"Running work stays by default",
+        ),
+    ]],
+    keyed: Keyed::Required,
+    area: 1,
+};

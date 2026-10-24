@@ -1,0 +1,1 @@
+{"rows":[{"head":{"number":5,"against":4,"at":0,"by":"first_start","proposal":"p2/7","moved":false},"items":[{"setting":{"kind":"rules"},"edit":"set"}],"more":2}],"next":4,"forgotten":false}

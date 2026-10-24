@@ -160,7 +160,7 @@ fn changed(runner: &mut Runner, client: &Client, env: &Env<Limits>, number: u32,
         return;
     }
     let Some(document) = client.document(wait.handle) else { return };
-    if document.state != State::Live {
+    if document.state != State::Live && document.state != State::Ended {
         return;
     }
     let run = current_run(client, wait.handle);

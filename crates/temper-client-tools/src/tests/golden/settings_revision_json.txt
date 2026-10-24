@@ -1,0 +1,1 @@
+{"head":{"number":5,"against":4,"at":0,"by":"release","proposal":"p2/7","moved":false},"items":[{"setting":{"kind":"charter","number":3},"too_large":1000000},{"setting":{"kind":"rules"},"edit":"reset"}]}
