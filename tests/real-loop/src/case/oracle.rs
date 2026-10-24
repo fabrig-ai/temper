@@ -8730,7 +8730,8 @@ pub fn step_6_7(observed: &Observed) -> Vec<Miss> {
             batch_journal(observed, read, task),
             CAP_ATTEMPTS,
             &format!(
-                "task {task}'s complete journal must end every attempt, with only zero-spend uncommitted rechecks"
+                "task {task}'s complete journal must end every attempt, with only zero-spend uncommitted rechecks: {}",
+                document(observed, read)
             ),
         );
     }
@@ -8748,7 +8749,7 @@ pub fn step_6_7(observed: &Observed) -> Vec<Miss> {
             inbox["needs"]["cut"] == false
                 && inbox.pointer("/needs/rows").and_then(Value::as_array).is_some_and(Vec::is_empty),
             CAP_INBOX,
-            &format!("{read:?} must show the person's complete empty inbox"),
+            &format!("{read:?} must show the person's complete empty inbox: {inbox}"),
         );
     }
     misses
