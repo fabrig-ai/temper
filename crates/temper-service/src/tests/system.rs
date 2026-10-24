@@ -464,3 +464,52 @@ fn a_new_webhook_after_idle_gets_its_whole_delivery_period() {
         "the webhook starts its delivery period at accept"
     );
 }
+#[test]
+fn clients_claim_a_listener_adopted_before_the_first_down() {
+    use skein_io::kernel::{Fd, Op};
+    let mut stand = fixtures::one_process();
+    let jig_protocol_config::Address::Addr(addr) = fixtures::engine().clients.listener else { panic!("clients IP") };
+    let addr = addr.socket().unwrap();
+    let fd = Fd::new(8);
+    stand.service.adopt_listener(fd, addr).unwrap();
+    assert_eq!(stand.service.adopt_listener(Fd::new(7), addr), Err(Fd::new(7)), "duplicate stays the caller's");
+    let mut accepted = false;
+    for _ in 0_u16..256 {
+        crate::iterate(&mut stand.service, Time::ZERO, Wall::EPOCH);
+        for submit in &stand.service.submissions {
+            if let Op::Bind { addr: bound, .. } = &submit.kind {
+                assert_ne!(*bound, addr, "clients must not bind again");
+            }
+            if let Op::Listen { fd: listening, .. } = &submit.kind {
+                assert_ne!(*listening, fd, "already listening");
+            }
+            if let Op::Accept { fd: listening, .. } = &submit.kind {
+                accepted |= *listening == fd;
+            }
+        }
+        stand.kernel.answer(&mut stand.service);
+        if accepted {
+            break;
+        }
+    }
+    assert!(accepted, "clients accept on the inherited descriptor");
+    assert_eq!(
+        stand.service.listening().pop(),
+        Some(crate::Note::Listening { listener: crate::Listening::Clients, addr })
+    );
+    stand.service.shutdown();
+    for _ in 0_u16..256 {
+        stand.turn();
+        if stand.service.is_empty() {
+            break;
+        }
+    }
+    assert!(stand.service.is_empty());
+    let mut closed = 0_u32;
+    for descriptor in &stand.kernel.closed {
+        if *descriptor == fd {
+            closed = closed.checked_add(1).unwrap();
+        }
+    }
+    assert_eq!(closed, 1);
+}

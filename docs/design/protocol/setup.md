@@ -997,7 +997,12 @@ temper box
   (skein's `shell.md`, 6.6) and Forgejo reads as well (6.4). The step's
   own `Listen` for that address then takes the socket it was given
   (skein's `io.md`, 3.2), so nothing above io knows it was given one. A
-  step with no listener is given none, and no `LISTEN_FDS`.
+  step with no listener is given none, and no `LISTEN_FDS`. A listener
+  at port 0 is not held: its step binds it, as without the box, since a
+  port the kernel chooses can't collide. A held one could not be claimed
+  either, since the step's `Listen` names port 0, not the port chosen.
+  It changes at each restart, as it does without the box. `LISTEN_FDS`
+  counts only the sockets given.
 - **The pipe,** two of them, made again at each spawn of `temper
   serve`, at the two descriptors after its listeners: 3 + *n*, serve to
   box, and 4 + *n*, box to serve, *n* its listeners' count, so fds 5

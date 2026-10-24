@@ -185,3 +185,16 @@ pub fn version(which: Which, owned: &Owned, place: &Place) -> Spec {
     spec.directory.clone_from(&place.directory);
     spec
 }
+
+/// Marks the exec alone as receiving fd 3; version and preparation specs stay isolated.
+#[must_use]
+pub fn listening(mut spec: Spec) -> Spec {
+    let count = u32::try_from(spec.environment.len()).expect("bounded environment");
+    let mut environment = List::with_capacity(count.checked_add(1).expect("bounded environment"));
+    for entry in spec.environment {
+        environment.push(entry).expect("measured environment");
+    }
+    environment.push(b"LISTEN_FDS=1".as_slice().into()).expect("listener entry");
+    spec.environment = environment.into_boxed();
+    spec
+}

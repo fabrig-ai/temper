@@ -298,12 +298,10 @@ pub struct Fixture {
     pub file: PathBuf,
     _issuer: Issuer,
     scratch: Scratch,
-    _ports: super::DefaultPorts,
 }
 impl Fixture {
     #[must_use]
     pub fn new(name: &str) -> Self {
-        let ports = super::DefaultPorts::hold(name);
         let scratch = Scratch::new(&format!("{name}-{}", std::process::id()));
         let a = scratch.path().join("a");
         let b = scratch.path().join("b");
@@ -325,7 +323,7 @@ impl Fixture {
         };
         visit(sign_in::authorization_address(&ended).expect("authorization address"));
         let _ = a.account_state("granted");
-        Self { a: Some(a), b, file: scratch.path().join("account.move"), _issuer: issuer, scratch, _ports: ports }
+        Self { a: Some(a), b, file: scratch.path().join("account.move"), _issuer: issuer, scratch }
     }
     #[must_use]
     pub fn a(&self) -> &Engine {

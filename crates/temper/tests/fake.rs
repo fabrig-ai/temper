@@ -1,4 +1,6 @@
 //! The QA runner starts the shipped binary, then reads files and serves requests.
+#[path = "support/listeners.rs"]
+pub mod listeners;
 pub mod support;
 use serde_json::{Value, json};
 use std::{
@@ -1260,4 +1262,25 @@ fn llm_fails_a_credential_its_line_names_and_accepts_the_added_key() {
     assert_eq!(body(&exhausted)["error"]["resets_in_seconds"], 1);
     run.stop();
     scratch.remove();
+}
+
+#[test]
+fn fakes_claim_their_inherited_listeners_before_the_first_drive() {
+    for kind in ["llm", "forge"] {
+        let scratch = support::Scratch::startup(&format!("fake-inherited-{kind}"));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("listener");
+        let address = listener.local_addr().expect("address");
+        let mut value =
+            if kind == "llm" { llm_document(scratch.path(), false) } else { forge_document(scratch.path()) };
+        value["listen"] = json!({"socket":address.to_string()});
+        let path = scratch.path().join("fake.json");
+        document(&path, &value);
+        let mut command = listeners::command(listener, "exec \"$@\" 3<&0 0</dev/null");
+        command.args(["fake", kind, "--document"]).arg(path).args(["--ready", "inherited "]);
+        let ended = listeners::probe(command, address, "inherited ");
+        assert!(ended.ready.is_some(), "fake ready: {:?}", ended.stderr);
+        assert!(ended.reply.expect("fake answers").starts_with(b"HTTP/1.1 "));
+        assert!(ended.status.success(), "fake drains: {:?}", ended.stderr);
+        scratch.remove();
+    }
 }

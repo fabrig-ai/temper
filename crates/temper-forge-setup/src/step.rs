@@ -51,12 +51,31 @@ pub struct Step {
     arguments: Box<[Box<[u8]>]>,
     kind: Kind,
     ready: Option<core::net::SocketAddr>,
+    listeners: Box<[core::net::SocketAddr]>,
 }
 impl Step {
     /// Constructs a step from its display name, arguments and lifetime.
     #[must_use]
     pub fn new(name: Box<[u8]>, arguments: Box<[Box<[u8]>]>, kind: Kind) -> Self {
-        Self { name, arguments, kind, ready: None }
+        Self { name, arguments, kind, ready: None, listeners: Box::new([]) }
+    }
+    /// The listening sockets given to this step, in descriptor order from fd 3.
+    /// Port zero stays the step's own bind: its kernel-chosen address cannot
+    /// be claimed by a `Listen` naming port zero (protocol/setup.md, 7.1).
+    #[must_use]
+    pub fn listening(mut self, addrs: Box<[core::net::SocketAddr]>) -> Self {
+        let mut listeners = List::with_capacity(u32::try_from(addrs.len()).expect("bounded listeners"));
+        for address in addrs {
+            if address.port() != 0 {
+                listeners.push(address).expect("listener capacity");
+            }
+        }
+        self.listeners = listeners.into_boxed();
+        self
+    }
+    #[must_use]
+    pub fn listeners(&self) -> &[core::net::SocketAddr] {
+        &self.listeners
     }
     /// Wait for this owned process to answer its version route before continuing.
     #[must_use]
@@ -111,7 +130,7 @@ fn forge(action: &[u8], flags: &[Box<[u8]>], number: u16, run: Option<&[u8]>) ->
 /// Commands in setup order: owned processes, legacy reconciles, then serve;
 /// an asked forge's processes apart, in a group placed in that order.
 #[must_use]
-pub fn steps(setup: &Setup, flags: &[Box<[u8]>]) -> Steps {
+pub fn steps(setup: &Setup, flags: &[Box<[u8]>], listeners: Box<[core::net::SocketAddr]>) -> Steps {
     let count = u32::try_from(setup.entries.len()).expect("bounded entries");
     let mut out = List::with_capacity(
         count.checked_mul(5).expect("bounded step count").checked_add(1).expect("bounded step count"),
@@ -126,6 +145,7 @@ pub fn steps(setup: &Setup, flags: &[Box<[u8]>]) -> Steps {
                     group.push((Stage::Fetch, forge(b"fetch", flags, e.forge, None))).expect("fetch");
                 }
                 group.push((Stage::Prepare, forge(b"prepare", flags, e.forge, None))).expect("prepare");
+                // Forgejo's KillParent would stop the box (protocol/setup.md, 7.1).
                 group
                     .push((Stage::Run, forge(b"run", flags, e.forge, Some(b"forgejo")).with_ready(o.listen)))
                     .expect("forgejo");
@@ -162,6 +182,7 @@ pub fn steps(setup: &Setup, flags: &[Box<[u8]>]) -> Steps {
         serve.push(flag.clone()).expect("flags counted");
     }
     serve.push(bytes::copy_of(b"--box")).expect("box flag");
-    out.push(Step::new(bytes::copy_of(b"serve"), serve.into_boxed(), Kind::Long)).expect("serve capacity");
+    out.push(Step::new(bytes::copy_of(b"serve"), serve.into_boxed(), Kind::Long).listening(listeners))
+        .expect("serve capacity");
     Steps { always: out.into_boxed(), asked: asked.into_boxed() }
 }
