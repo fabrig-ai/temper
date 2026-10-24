@@ -218,7 +218,6 @@ pub fn to_root(
                 && let Some(reading) = wire::decode_reading(&record, limits)
                 && *reading.read() == w::Read::Demo
                 && let Some(demo) = demo
-                && demo.state != Some(forge::DemoState::Ended)
             {
                 let mut cues = List::with_capacity(u32::try_from(demo.cues.len()).expect("bounded demo cues"));
                 for cue in &demo.cues {
@@ -229,7 +228,8 @@ pub fn to_root(
                     w::DemoAnswerParts {
                         state: match demo.state {
                             Some(forge::DemoState::Running) => w::DemoState::Running,
-                            Some(forge::DemoState::Ended) | None => w::DemoState::NotStarted,
+                            Some(forge::DemoState::Ended) => w::DemoState::Ended,
+                            None => w::DemoState::NotStarted,
                         },
                         project: demo.project,
                         forge: demo.forge,

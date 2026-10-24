@@ -116,6 +116,11 @@ fn project_buttons(builder: &mut Builder, root: &Domain, words: &crate::words::W
         let mut projects = false;
         for selected in [true, false] {
             for row in &me.projects {
+                if let Some(demo) = root.forge().retired_demo()
+                    && demo.project == row.project
+                {
+                    continue;
+                }
                 if (Some(row.project) == root.pages().project()) == selected {
                     let name = crate::pages::project_name(Some(me), root.forge().demo(), row.project, words)
                         .expect("project from me has a name");

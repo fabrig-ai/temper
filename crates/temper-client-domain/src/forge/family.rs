@@ -163,6 +163,7 @@ pub fn demo(record: &[u8], limits: &w::Limits) -> Option<forge::Demo> {
         state: match answer.state {
             w::DemoState::NotStarted => forge::demo::DemoState::NotStarted,
             w::DemoState::Running => forge::demo::DemoState::Running,
+            w::DemoState::Ended => forge::demo::DemoState::Ended,
         },
         project: answer.project,
         forge: answer.forge,

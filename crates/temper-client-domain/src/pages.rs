@@ -29,6 +29,7 @@ pub struct Pages {
     accounts: accounts::Accounts,
     connect_model: Option<Box<connect_model::ConnectModel>>,
     pub(crate) demo_provider: Option<u32>,
+    pub(crate) retired_project: Option<u32>,
     pub(crate) demo_model: bool,
     pub(crate) choice: choice::Draft,
     accounts_open: bool,
@@ -159,6 +160,7 @@ impl Pages {
             accounts: accounts::Accounts::default(),
             connect_model: None,
             demo_provider: None,
+            retired_project: None,
             demo_model: false,
             choice: choice::Draft::default(),
             accounts_open: false,
@@ -847,13 +849,21 @@ fn me_changed(pages: &mut Pages, client: &Client, out: &mut Queue<Request>) {
             }
         }
     }
+    project_changed(pages, client);
+}
+
+pub(crate) fn project_changed(pages: &mut Pages, client: &Client) {
     if let Some(me) = pages.me(client)
-        && !contains(me, pages.project)
+        && (!contains(me, pages.project) || pages.project == pages.retired_project)
     {
-        pages.project = None;
-        if let Some(row) = me.projects.iter().next() {
-            pages.project = Some(row.project);
+        let mut project = None;
+        for row in &me.projects {
+            if Some(row.project) != pages.retired_project {
+                project = Some(row.project);
+                break;
+            }
         }
+        pages.project = project;
     }
 }
 // jig ends every pending read at a credential boundary and replays none

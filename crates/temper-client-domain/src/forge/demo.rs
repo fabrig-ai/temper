@@ -16,7 +16,7 @@ pub(super) struct State {
     pub failure: Option<StartFailure>,
     pub settled: bool,
     pub deployment: Option<(Handle, u32)>,
-    pub end_provider: Option<u32>,
+    pub ended: Option<RetiredDemo>,
     pub model_ended: bool,
     pub forge_ended: bool,
 }
@@ -24,13 +24,29 @@ pub(super) struct State {
 pub(super) struct Starting {
     pub request: Token,
 }
+/// Identity retained when the playground ends (client/README.md, 5.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RetiredDemo {
+    pub provider: u32,
+    pub project: u32,
+}
 impl Side {
+    /// The retired playground, including an end observed in this session.
+    #[must_use]
+    pub fn retired_demo(&self) -> Option<RetiredDemo> {
+        if self.demo.forge_ended { self.demo.ended } else { None }
+    }
+
     /// The playground's provider, retained after its end for account-offer policy.
     #[must_use]
+    #[expect(clippy::manual_map, reason = "step code reads retained identity without closures")]
     pub fn demo_provider(&self) -> Option<u32> {
         match self.demo.answer.as_ref() {
             Some(demo) => Some(demo.provider),
-            None => self.demo.end_provider,
+            None => match self.demo.ended {
+                Some(demo) => Some(demo.provider),
+                None => None,
+            },
         }
     }
 }
@@ -46,7 +62,7 @@ impl State {
             failure: None,
             settled: false,
             deployment: None,
-            end_provider: None,
+            ended: None,
             model_ended: false,
             forge_ended: false,
         }
@@ -67,7 +83,7 @@ pub(crate) fn told(side: &mut Side, told: &Told, limits: Limits, out: &mut Queue
         Told::Page { handle, page } if handle.asker == crate::owner::Owner::Forge.asker() => {
             if Some(*handle) == side.demo.pending {
                 side.demo.pending = None;
-                let answer = match page {
+                let mut answer = match page {
                     Readout::Family { family: number, record: Some(record) } if *number == wire::FORGE => {
                         match wire_limits(&limits) {
                             Some(limits) => family::demo(record, &limits),
@@ -76,9 +92,25 @@ pub(crate) fn told(side: &mut Side, told: &Told, limits: Limits, out: &mut Queue
                     }
                     Readout::Family { .. } | Readout::NotServed { .. } | Readout::Limit | Readout::Jig(_) => None,
                 };
+                let retired = match answer.as_ref() {
+                    Some(demo) if demo.state == DemoState::Ended => {
+                        Some(RetiredDemo { provider: demo.provider, project: demo.project })
+                    }
+                    _ => None,
+                };
+                let retirement_changed = retired.is_some() && side.retired_demo() != retired;
+                if let Some(retired) = retired {
+                    side.demo.ended = Some(retired);
+                    side.demo.model_ended = true;
+                    side.demo.forge_ended = true;
+                    side.demo.settled = true;
+                    side.demo.start = None;
+                    side.demo.failure = None;
+                    answer = None;
+                }
                 let first = !side.demo.answered;
                 side.demo.answered = true;
-                if first || side.demo.answer != answer {
+                if first || side.demo.answer != answer || retirement_changed {
                     side.demo.answer = answer;
                     side.changed();
                 }
@@ -136,6 +168,9 @@ pub fn halves(
 ) -> Halves {
     let mut halves = Halves { model: false, forge: false };
     let Some(answer) = answer else { return halves };
+    if answer.state == DemoState::Ended {
+        return halves;
+    }
     if let super::forges::State::Rows(rows) = forges {
         halves.forge = true;
         for row in rows {
@@ -282,8 +317,8 @@ fn observe_end(side: &mut Side, accounts: Option<&c::OwnerAccounts>, client: &Cl
     side.demo.model_ended |= model_ended;
     side.demo.forge_ended |= forge_ended;
     if model_ended || forge_ended {
-        // Retain the provider after the engine retires the demo or the owner watch closes.
-        side.demo.end_provider = Some(demo.provider);
+        // Retain the identity after the engine retires the demo or the owner watch closes.
+        side.demo.ended = Some(RetiredDemo { provider: demo.provider, project: demo.project });
     }
     if reread {
         read(side, out);
@@ -306,8 +341,8 @@ fn watch_deployment(side: &mut Side, client: &Client, out: &mut Queue<Request>) 
     }
     let provider = match side.demo.answer.as_ref() {
         Some(demo) => demo.provider,
-        None => match side.demo.end_provider {
-            Some(provider) => provider,
+        None => match side.demo.ended {
+            Some(demo) => demo.provider,
             None => return,
         },
     };
@@ -385,6 +420,7 @@ fn read(side: &mut Side, out: &mut Queue<Request>) {
 pub enum DemoState {
     NotStarted,
     Running,
+    Ended,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StartFailure {
@@ -466,7 +502,11 @@ fn start_key(side: &Side, key: jig_client::Key) -> bool {
     }
 }
 pub(crate) fn start(side: &mut Side, limits: Limits, out: &mut Queue<Request>) {
-    if side.party.is_none() || side.served == super::Served::OutOfDate || side.demo.start.is_some() {
+    if side.party.is_none()
+        || side.served == super::Served::OutOfDate
+        || side.demo.start.is_some()
+        || side.retired_demo().is_some()
+    {
         return;
     }
     let Some(demo) = side.demo.answer.as_ref() else { return };

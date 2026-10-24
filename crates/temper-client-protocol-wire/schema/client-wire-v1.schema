@@ -33,7 +33,7 @@ record StartRefused { why: StartRefusal }
 record GroupFailed { why: bytes 256 }
 enum StartFailure { group: GroupFailed, account, adoption, not_connected }
 record StartFailed { why: StartFailure }
-enum DemoState { not_started, running }
+enum DemoState { not_started, running, ended }
 
 
 # The deployment's forges, in number order (client/README.md, 4.6).

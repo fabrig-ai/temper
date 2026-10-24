@@ -330,3 +330,18 @@ fn a_full_group_failure_keeps_each_utf8_replacement_as_the_forge_failure_does() 
     let alert = view.tree().nodes().iter().find(|node| node.role == Role::Alert).unwrap();
     assert_eq!(core::str::from_utf8(alert.name.as_deref().unwrap()).unwrap().matches('�').count(), 256);
 }
+
+#[test]
+fn a_retired_reload_removes_the_welcome_playground_card() {
+    let root = f::demo_state_root(
+        Address::Welcome { step: temper_client_domain::Step::Welcome },
+        temper_client_protocol_wire::v1::DemoState::Ended,
+    );
+    for words in [f::words(), f::browser_words()] {
+        let mut view = f::view_of(words);
+        let tree = f::build(&mut view, &root);
+        assert!(f::find(tree, Role::Button, b"Try the playground").is_none());
+        assert!(f::find(tree, Role::Heading { level: 2 }, b"Try the playground").is_none());
+        assert!(f::find(tree, Role::Link, b"Set up temper").is_some());
+    }
+}

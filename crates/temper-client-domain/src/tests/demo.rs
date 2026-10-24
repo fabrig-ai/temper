@@ -31,7 +31,7 @@ pub(super) fn answer(cue: &[u8]) -> Box<[u8]> {
 fn page() -> Readout {
     Readout::Family { family: wire::FORGE, record: Some(answer(CUE)) }
 }
-fn page_with_state(state: w::DemoState) -> Readout {
+pub(super) fn page_with_state(state: w::DemoState) -> Readout {
     let mut parts = wire::decode_demo_answer(&answer(CUE), &w::CEILINGS).unwrap().into_parts();
     parts.state = state;
     Readout::Family {
@@ -301,6 +301,7 @@ fn the_first_demo_read_answer_counts_even_when_it_has_no_record() {
         assert!(side.demo_answered());
         assert!(side.demo().is_none());
         assert_eq!(side.demo_provider(), None);
+        assert_eq!(side.retired_demo(), None);
         assert!(forge::shown(&side) > before, "an answered absence redraws the welcome");
         demo::told(&mut side, &Told::Link { link: Link::Offline }, f::limits().forge, &mut Queue::with_capacity(1));
         assert!(side.demo_answered());
@@ -738,7 +739,7 @@ fn deliver_role(root: &mut crate::Domain, me: skein_lib::Token, role: Option<c::
     up(root, jig_client::Up::Watched { watch: me, event: c::WatchEvent::Delivered(c::Delivery::Me(Box::new(frame))) })
 }
 #[test]
-fn the_forge_end_rereads_once_settles_without_removal_and_none_clears_the_demo() {
+fn the_forge_end_rereads_once_and_ended_settles_without_removal() {
     // The deployment lists the demo model's account: the engine removes it at this end, not the client.
     let (mut root, account, forges, watch) = ending_root_with_deployment();
     assert_eq!(root.forge().demo_provider(), Some(PROVIDER));
@@ -747,16 +748,26 @@ fn the_forge_end_rereads_once_settles_without_removal_and_none_clears_the_demo()
     let mut out = forge_rows(&mut root, forges, true);
     let read = demo_reread(&mut out);
     assert_eq!(root.forge().demo_provider(), Some(PROVIDER), "the ended playground stays known");
+    let (reloaded, _, _, _) = ending_root_with_page(Some(c::HeldRole::Owner), page_with_state(w::DemoState::Ended));
+    assert_eq!(root.forge().retired_demo(), reloaded.forge().retired_demo());
+    assert_eq!(root.pages().project(), None);
     assert!(!closed(&out, watch), "the running answer still holds the watch");
     assert!(deployment_watch(&mut out).is_none());
     assert!(removed(&mut out).is_empty(), "forge end sends no Remove");
     assert!(forge_rows(&mut root, forges, true).is_empty(), "unchanged connected rows never repeat the read");
-    let mut out = answer_no_demo(&mut root, read);
+    let mut out = up(&mut root, jig_client::Up::ReadDone { read, result: page_with_state(w::DemoState::Ended) });
     assert!(closed(&out, watch), "settled removal drops the watch once running ends");
     assert!(removed(&mut out).is_empty());
     assert!(root.forge().demo().is_none());
-    assert_eq!(root.forge().demo_provider(), Some(PROVIDER), "rereading None retains the provider");
+    assert_eq!(root.forge().demo_provider(), Some(PROVIDER), "rereading Ended retains the provider");
     assert!(root.demo().is_none());
+    assert_eq!(root.forge().retired_demo(), reloaded.forge().retired_demo());
+    assert!(deliver_demo_read(&mut root, Readout::NotServed { family: Some(wire::FORGE), served: None }).is_empty());
+    assert_eq!(
+        root.forge().retired_demo(),
+        reloaded.forge().retired_demo(),
+        "an unavailable reread cannot erase retirement"
+    );
     assert!(removed(&mut deliver_deployment(&mut root, watch, deployment(&[DEMO_ACCOUNT]))).is_empty());
     assert!(removed(&mut deliver_accounts(&mut root, account, ending_accounts(true))).is_empty());
 }
@@ -1073,4 +1084,71 @@ fn an_unsettled_removal_reopens_for_a_returning_owner_after_none() {
     let mut out = deliver_role(&mut root, me, Some(c::HeldRole::Owner));
     assert!(deployment_watch(&mut out).is_none(), "settled end stays closed");
     assert!(removed(&mut out).is_empty());
+}
+
+#[test]
+fn a_retired_reload_is_independent_of_document_order() {
+    for ended_first in [true, false] {
+        let mut root = crate::unlinked(&f::limits(), f::SEED);
+        let (me, account) = f::start_accounts(&mut root, List::with_capacity(0));
+        if ended_first {
+            assert!(deliver_demo_read(&mut root, page_with_state(w::DemoState::Ended)).is_empty());
+        }
+        let mut out = deliver_role(&mut root, me, Some(c::HeldRole::Owner));
+        assert!(deployment_watch(&mut out).is_none());
+        let forges = family_watch(&out);
+        forge_rows(&mut root, forges, false);
+        deliver_accounts(&mut root, account, accounts(Some(PROVIDER), true, false));
+        if !ended_first {
+            assert!(deliver_demo_read(&mut root, page_with_state(w::DemoState::Ended)).is_empty());
+        }
+        assert_eq!(root.forge().retired_demo(), Some(demo::RetiredDemo { provider: PROVIDER, project: f::PROJECT }));
+        assert_eq!(root.forge().demo_provider(), Some(PROVIDER));
+        assert!(root.forge().demo().is_none());
+        assert!(root.demo().is_none());
+        assert_eq!(root.pages().project(), None);
+        assert_eq!(crate::pages::welcome::model_usable(&root), Some(false), "stale demo account is excluded");
+        for act in [Act::Playground, Act::RetryDemo] {
+            assert!(event(&mut root, crate::Event::Act { action: crate::Action::Pages(act) }).is_empty());
+        }
+        let mut out = deliver_accounts(&mut root, account, ending_accounts(true));
+        assert!(deployment_watch(&mut out).is_none());
+        assert!(removed(&mut out).is_empty());
+        assert!(forge_rows(&mut root, forges, true).is_empty(), "retired demo never rereads on forge connection");
+    }
+}
+fn family_watch(out: &Queue<crate::Request>) -> skein_lib::Token {
+    for request in out {
+        if let crate::Request::Client {
+            request:
+                jig_client::Request::Down {
+                    down: jig_client::Down::Open { watch, subject: jig_client::Watchable::Family { .. } },
+                },
+        } = request
+        {
+            return *watch;
+        }
+    }
+    panic!("forges watch")
+}
+#[test]
+fn a_retired_project_is_skipped_but_a_running_one_stays() {
+    const OTHER_PROJECT: u32 = 2;
+    for (state, expected) in [(w::DemoState::Ended, Some(OTHER_PROJECT)), (w::DemoState::Running, Some(f::PROJECT))] {
+        let mut root = crate::unlinked(&f::limits(), f::SEED);
+        let (watch, _) = f::start_accounts(&mut root, List::with_capacity(0));
+        deliver_demo_read(&mut root, page_with_state(state));
+        let mut me = f::chats::me();
+        let mut other = me.projects.get(0).unwrap().clone();
+        other.project = OTHER_PROJECT;
+        let mut projects = List::with_capacity(2);
+        projects.push(me.projects.get(0).unwrap().clone()).unwrap();
+        projects.push(other).unwrap();
+        me.projects = projects;
+        up(
+            &mut root,
+            jig_client::Up::Watched { watch, event: c::WatchEvent::Delivered(c::Delivery::Me(Box::new(me))) },
+        );
+        assert_eq!(root.pages().project(), expected);
+    }
 }

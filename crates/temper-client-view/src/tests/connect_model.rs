@@ -477,3 +477,46 @@ fn a_returned_source_draws_the_same_ending_words_as_an_own_sign_in() {
     assert!(words(&root).contains("You signed in without plan usage."));
     assert!(fixtures::find(fixtures::page_view(&root).tree(), Role::Button, b"Continue with ChatGPT").is_some());
 }
+
+#[test]
+fn a_retired_reload_offers_no_demo_key_or_card() {
+    use temper_client_protocol_wire::v1 as w;
+    for address in [d::Address::ConnectModel { way: None }, d::Address::Welcome { step: d::Step::Model { way: None } }]
+    {
+        let (mut root, watch, _, _, _, _) = fixtures::root_at_with_forges(
+            address,
+            &fixtures::domain_limits(),
+            b"Shop",
+            Some((fixtures::PROJECT, true, w::DemoState::Ended)),
+            None,
+            Some(List::with_capacity(0)),
+        );
+        let mut me = root.pages().me(root.client()).unwrap().clone();
+        me.providers = List::with_capacity(2);
+        me.providers.push(offer(PROVIDER, b"demo", true, true)).unwrap();
+        me.providers.push(offer(PROVIDER + 1, b"openai", true, false)).unwrap();
+        fixtures::root_event(
+            &mut root,
+            d::Event::Client {
+                event: jig_client::Event::Up {
+                    up: jig_client::Up::Watched {
+                        watch,
+                        event: c::WatchEvent::Delivered(c::Delivery::Me(Box::new(me))),
+                    },
+                },
+            },
+        );
+        for words in [fixtures::words(), fixtures::browser_words()] {
+            let mut view = fixtures::view_of(words);
+            let tree = fixtures::build(&mut view, &root);
+            assert!(fixtures::find(tree, Role::Button, b"Continue with ChatGPT").is_some());
+            assert!(fixtures::find(tree, Role::Button, b"Try the playground").is_none());
+            assert!(fixtures::find(tree, Role::Link, b"Use a demo API key").is_none());
+            for node in tree.nodes() {
+                if let Some(name) = &node.name {
+                    assert!(!name.windows(b"demo".len()).any(|part| part == b"demo"), "{name:?}");
+                }
+            }
+        }
+    }
+}

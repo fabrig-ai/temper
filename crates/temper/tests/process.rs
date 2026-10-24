@@ -1230,7 +1230,7 @@ fn a_second_forge_ends_the_playground_for_good_closing_its_chat_and_account() {
                 &client,
                 steps,
                 BOX_DEADLINE,
-                || (),
+                || support::playground::retired_reload(&paths[0], &client),
                 &[(7, 2), (8, 2)],
             )
         } else {
