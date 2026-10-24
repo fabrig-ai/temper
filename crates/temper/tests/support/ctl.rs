@@ -1,4 +1,5 @@
 //! Executable calls beside serve, with every descriptor on one real ring.
+mod member;
 use super::{Ended, Process, WITHIN};
 use skein_io::kernel::{Complete, Done, Error, Exit, Fd, Op, Pipe, Signal, Spawn, Submit, Target, Way};
 use skein_lib::{Duration, Queue, Time, Token, Wall};
@@ -12,6 +13,7 @@ use std::{
 
 // The service's output bound also holds the complete tools guide (4,698 bytes).
 const OUTPUT: usize = 65_536;
+const MEMBER: u64 = 1 << 63;
 const LINK: Token = Token::new(0);
 const SPAWN: Token = Token::new(2);
 const WRITE: Token = Token::new(3);
@@ -51,6 +53,11 @@ impl Call {
         }
     }
     #[must_use]
+    pub fn json(mut self) -> Self {
+        self.arguments.push(b"--json".as_slice().into());
+        self
+    }
+    #[must_use]
     pub fn bare(arguments: &[&str]) -> Self {
         Self { directory: false, ..Self::new(arguments) }
     }
@@ -78,6 +85,11 @@ pub enum Step {
     Pause,
     Resume,
     NextLink,
+    /// Provision a service with only a project member role through jig.
+    Member {
+        scratch: PathBuf,
+        directory: &'static str,
+    },
     Open {
         directory: &'static str,
         until: Option<&'static [u8]>,
@@ -323,6 +335,7 @@ pub struct Calls {
     mismatches: Vec<String>,
     steps: VecDeque<Step>,
     child: Option<Child>,
+    member: Option<member::Member>,
     action: Option<Action>,
     box_stderr: BoxStderr,
     started: Option<(Child, usize)>,
@@ -381,6 +394,9 @@ impl Calls {
     pub fn cancel(&mut self) {
         self.cancelling = true;
         self.steps.clear();
+        if let Some(member) = &mut self.member {
+            member.close();
+        }
         self.retry = None;
         self.awaiting_started = false;
         self.action = self.child.as_ref().map(|_| Action::Run);
@@ -431,6 +447,7 @@ impl Calls {
             mismatches: Vec::new(),
             steps: steps.into(),
             child: None,
+            member: None,
             action: None,
             box_stderr: BoxStderr::Absent,
             started: None,
@@ -458,7 +475,11 @@ impl Calls {
         });
     }
     fn done(&self) -> bool {
-        self.steps.is_empty() && self.child.is_none() && self.started.is_none() && self.action.is_none()
+        self.steps.is_empty()
+            && self.child.is_none()
+            && self.member.is_none()
+            && self.started.is_none()
+            && self.action.is_none()
     }
     fn spawn(&mut self, program: Box<[u8]>, args: Vec<Box<[u8]>>, input: Vec<u8>, started: bool) {
         let child = Child::new(input, if started { STARTED } else { 0 });
@@ -600,6 +621,7 @@ impl Calls {
         }
         if self.cancelling
             || self.child.is_some()
+            || self.member.is_some()
             || self.awaiting_started
             || matches!(self.action, Some(Action::Stderr(_) | Action::NextLink))
             || self.retry.is_some_and(|retry| retry > now)
@@ -637,6 +659,10 @@ impl Calls {
                 if self.action.is_none() {
                     self.advance(now);
                 }
+            }
+            Some(Step::Member { scratch, directory }) => {
+                let root = skein_shell::open_root(&scratch).expect("member fixture root");
+                self.member = Some(member::Member::new(root, &scratch, &scratch.join("client"), directory));
             }
             Some(Step::Open { directory, until }) => {
                 self.action = Some(Action::Run);
@@ -690,7 +716,9 @@ impl Host for Calls {
     fn iterate(&mut self, now: Time, wall: Wall) {
         self.wall = wall;
         while let Some(complete) = self.complete.pop() {
-            if complete.op == LINK {
+            if complete.op.raw() >= MEMBER {
+                self.member.as_mut().expect("member fixture owns completion").complete(complete);
+            } else if complete.op == LINK {
                 self.reading = false;
                 let Op::PipeRead { buf, .. } = complete.kind else { panic!("serve stdout") };
                 let Done::Count(count) = complete.result.expect("serve read") else { panic!("read count") };
@@ -707,6 +735,16 @@ impl Host for Calls {
                 self.started.as_mut().expect("started call").0.completed(complete, &mut self.submit, self.cancelling);
             } else {
                 self.child.as_mut().expect("running ctl").completed(complete, &mut self.submit, self.cancelling);
+            }
+        }
+        if let Some(member) = &mut self.member {
+            member.iterate(now, wall);
+            while self.submit.room() > 0 {
+                let Some(submit) = member.submission() else { break };
+                self.submit.push(submit);
+            }
+            if member.is_empty() {
+                self.member = None;
             }
         }
         self.finish(now);
@@ -740,22 +778,35 @@ impl Host for Calls {
         &mut self.submit
     }
     fn work_pending(&self, now: Time) -> bool {
-        !self.complete.is_empty() || !self.submit.is_empty() || self.retry.is_some_and(|retry| retry <= now)
+        !self.complete.is_empty()
+            || !self.submit.is_empty()
+            || self.retry.is_some_and(|retry| retry <= now)
+            || self.member.as_ref().is_some_and(|member| member.work_pending(now))
     }
     fn next_deadline(&self) -> Option<Time> {
-        self.retry.into_iter().chain(self.deadline).min()
+        self.retry
+            .into_iter()
+            .chain(self.deadline)
+            .chain(self.member.as_ref().and_then(member::Member::next_deadline))
+            .min()
     }
     fn next_policy_deadline(&self) -> Option<Time> {
-        self.retry.into_iter().chain(self.deadline).min()
+        self.retry
+            .into_iter()
+            .chain(self.deadline)
+            .chain(self.member.as_ref().and_then(member::Member::next_deadline))
+            .min()
     }
     fn is_empty(&self) -> bool {
         self.done() && self.root.is_none() && self.output.is_none() && self.closing == 0
     }
     fn worst_case(&self) -> u64 {
-        2_097_152
+        2_097_152 + self.member.as_ref().map_or(0, member::Member::worst_case)
     }
     fn operations(&self) -> u32 {
-        32
+        // The provisioning client uses the same shipped native transport as ctl.
+        let bounds = temper_client_shell_cli::limits::native();
+        32 + skein_io::operations(&bounds.io).expect("native operations") + 2
     }
 }
 
@@ -888,15 +939,15 @@ pub fn json(ended: &Ended) -> serde_json::Value {
 /// Use the revision actually read by the owner, including on a stale retry.
 #[must_use]
 pub fn settings_change(inventory: &Ended, file: &Path, key: &str) -> Call {
+    settings_call("change-settings", inventory, file, key)
+}
+#[must_use]
+pub fn settings_proposal(inventory: &Ended, file: &Path, key: &str) -> Call {
+    settings_call("propose-settings", inventory, file, key)
+}
+fn settings_call(verb: &str, inventory: &Ended, file: &Path, key: &str) -> Call {
     let revision = json(inventory)["newest"].as_u64().expect("newest settings revision");
-    Call::new(&[
-        "change-settings",
-        file.to_str().expect("fixture FILE path"),
-        "--against",
-        &revision.to_string(),
-        "--key",
-        key,
-    ])
+    Call::new(&[verb, file.to_str().expect("fixture FILE path"), "--against", &revision.to_string(), "--key", key])
 }
 
 /// Edit the whole charter value returned by ctl and wrap it in FILE's items.
@@ -907,4 +958,14 @@ pub fn charter_change_file(file: &Path, setting: &Ended, instructions: &str) {
     value["instructions"] = instructions.into();
     let file_value = serde_json::json!({"items":[{"setting":document["setting"],"set":value}]});
     std::fs::write(file, serde_json::to_vec(&file_value).expect("settings FILE JSON")).expect("settings FILE");
+}
+
+/// Use the typed party proposal identity actually returned by the engine.
+#[must_use]
+pub fn proposal_key(ended: &Ended) -> String {
+    let answer = json(ended);
+    let proposal = &answer["outcome"]["done"]["proposed"]["proposal"];
+    let party = proposal["proposer"]["party"].as_u64().expect("party proposal");
+    let number = proposal["number"].as_u64().expect("proposal number");
+    format!("p{party}/{number}")
 }

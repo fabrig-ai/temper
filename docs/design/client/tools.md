@@ -182,6 +182,7 @@ watch's subject, its digest (5.4). It needs no key.
 | `settings` | the settings: the newest revision's number; each setting, by kind and number with its name, following its default or a change and the revision that last changed it; each revision held, with who decided it, when, the proposal it came from and how many live tasks hold it; the pending proposals of settings | `settings` |
 | `setting charter\|template\|policy N [--revision R]`, `setting rules` | one setting's value whole, as the newest reads it, or a charter as held revision R reads it; with `--json`, the value in the form `change-settings` takes | `setting{kind, number, revision}` |
 | `revision R` | a revision: the revision it was made against, when, who decided it (a party, the release or the first start), the proposal it came from, whether it moved running work, and its items, each set with its value whole (or its size, too large, to read with `setting`), removed or reset; a revision forgotten past the history names the oldest kept | `revision{n}` |
+| `proposal P/K` | a proposal, with its review for settings | `proposal` |
 | `revisions [--before R]` | the history a page, newest first: each revision's record and its items without values, cut at the page's bound with how many more; the last page says whether older ones were forgotten | `revisions` |
 
 - **`tasks` reads one group a call.** jig answers a task query in two
@@ -252,13 +253,24 @@ agent must name.
 | `close N [--move D]... [--reason TEXT]` | closes a chat: its live delegates cancelled, or moved to the party where named; the reason empty unless given, as jig's reference UI sends it | `shapes::close_chat`, a compound request | yes |
 | `adopt --project P [--forge F] --owner O --name N [--ids R/U] --landing B [--role owned\|fork\|context] [--prefix X] [--no-home] [--no-ci] [--check G]...` | adopts a repository | the forge family's request (`README.md`, 4.4) | yes |
 | `answer N M TEXT` | answers question M of task N | `Answer` | |
-| `decide P/K accept\|reject\|pass-up [REASON]` | decides a proposal: P is `tN` for task N's, `pN` for party N's | `Decide` | |
+| `decide P/K accept\|reject\|pass-up [REASON] [--running stays\|moves]` | decides a proposal: P is `tN` for task N's, `pN` for party N's | `Decide` | |
 | `decide N --hold R release\|leave\|pass-up [REASON]` | decides an escalation | `Decide` | |
 | `change-settings FILE --against R [--running stays\|moves]` | changes the settings in one decision: FILE (or `-`) holds the items; R is the newest revision the caller read; running work stays unless `--running moves`; answered the new revision's number | `ChangeSettings` | yes |
+| `propose-settings FILE --against R` | proposes a change of deployment settings to its owners, using the same items FILE; acceptance chooses whether running work moves; answers the proposal P/K made | `Propose{Settings}` | yes |
 | `release N --hold R [--again]` | lifts a hold | `Release` | |
 | `stop N` | cancels a task's run, the task held | `Stop` | |
 | `cancel N [--grace D] REASON` | cancels a task and its tree | `Cancel` | |
 
+- **Settings proposals show their review** on `proposal P/K`: each item as
+  `<setting> · <edit> · now <value> (<origin>) · would be <value>`.
+  The edit is `set`, `removed` or `reset`; values use the settings renderers,
+  `too large, N bytes`, or `none`. Origins are `revision R`,
+  `default since revision R`, or `not offered`. The heading gives
+  `against revision R, newest R'`; an incomplete review says
+  `cut: more not shown`. JSON keeps wire 19's review field names.
+- **`decide`'s optional `--running`** sends the owner's choice only when
+  given. Running work stays by default. The engine answers a choice on a
+  rejection or a proposal about a person with `Malformed.running`.
 - **Settings FILE is JSON:** `{"items": [ITEM, ...]}`, at most one item per
   setting, each `{"setting": SETTING, "set": VALUE}`,
   `{"setting": SETTING, "edit": "removed"}` or

@@ -53,6 +53,7 @@ skein-fake-forge-domain.workspace = true
 skein-kv.workspace = true
 
 [dev-dependencies]
+jig-client.workspace = true
 jig-client-protocol-wire.workspace = true
 skein-fake-oauth.workspace = true
 skein-http.workspace = true

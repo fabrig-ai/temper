@@ -41,7 +41,7 @@ pub(super) fn encode_value(value: &c::SettingValue, out: &mut Encoder) {
         c::SettingValue::Rules(v) => values::encode_rules(v, out),
     }
 }
-fn value_text(value: &c::SettingValue, limits: &Limits, out: &mut Text) {
+pub(super) fn value_inline(value: &c::SettingValue, limits: &Limits, out: &mut Text) {
     let bounds =
         skein_json::writer::Limits { depth: 32, length: u32::try_from(limits.result_bytes).expect("result bound") };
     let mut measured = Encoder::measure(&bounds);
@@ -51,9 +51,12 @@ fn value_text(value: &c::SettingValue, limits: &Limits, out: &mut Text) {
     let mut write = Encoder::write(length, &bounds);
     encode_value(value, &mut write);
     out.put(&write.finish());
+}
+fn value_text(value: &c::SettingValue, limits: &Limits, out: &mut Text) {
+    value_inline(value, limits, out);
     out.put(b"\n");
 }
-fn proposal_text(proposal: c::ProposalKey, out: &mut Text) {
+pub(crate) fn proposal_text(proposal: c::ProposalKey, out: &mut Text) {
     let bytes = crate::jig::argv::value::encode(
         &[],
         crate::jig::table::Kind::Proposal,
@@ -187,7 +190,7 @@ pub(super) fn text(value: &c::ReadValue, requested: Option<u64>, limits: &Limits
         | c::ReadValue::OwnerDeployment(_) => unreachable!("selected settings read"),
     }
 }
-fn edit_word(edit: &c::RevisionItemEdit) -> &'static [u8] {
+pub(super) fn edit_word(edit: &c::RevisionItemEdit) -> &'static [u8] {
     match edit {
         c::RevisionItemEdit::Set => b"set",
         c::RevisionItemEdit::Removed => b"removed",

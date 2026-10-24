@@ -100,6 +100,20 @@ pub(crate) fn read_task(value: &ReadValue) -> Option<(&contract::Task, Option<&c
     }
     None
 }
+pub(crate) fn historical_settings(
+    value: &contract::OwnerHistorical,
+) -> Option<(&contract::OwnerProposalHistory, &contract::OwnerRetainedActionSettings)> {
+    if let contract::OwnerHistoricalValue::Proposal(history) = &value.value
+        && let contract::OwnerRetainedAction::Settings(settings) = &history.action
+        && value.matches(contract::ObjectKey::Proposal(contract::ProposalKey {
+            proposer: contract::Proposer::Party(history.proposer),
+            number: history.number,
+        }))
+    {
+        return Some((history, settings));
+    }
+    None
+}
 pub(crate) fn historical_task(value: &contract::OwnerHistorical) -> Option<(&contract::Task, &contract::Result)> {
     if let contract::OwnerHistoricalValue::Task { document, result } = &value.value
         && value.matches(contract::ObjectKey::Task(document.chip.task))
@@ -436,8 +450,12 @@ fn check_selected(tool: u8, local: u32, value: &ReadValue) -> Result<(), ()> {
         | (crate::jig::rows::SETTINGS_AT, 1, ReadValue::Settings(_))
         | (crate::jig::rows::SETTING_AT, 1, ReadValue::Setting(_))
         | (crate::jig::rows::REVISION_AT, 1, ReadValue::Revision(_))
-        | (crate::jig::rows::REVISIONS_AT, 1, ReadValue::Revisions(_)) => Ok(()),
+        | (crate::jig::rows::REVISIONS_AT, 1, ReadValue::Revisions(_))
+        | (crate::jig::rows::PROPOSAL_AT, 1, ReadValue::Proposal(_) | ReadValue::OwnerProposal(_)) => Ok(()),
         (3, 1, ReadValue::Historical(value)) if historical_task(value).is_some() => Ok(()),
+        (crate::jig::rows::PROPOSAL_AT, 1, ReadValue::Historical(value)) if historical_settings(value).is_some() => {
+            Ok(())
+        }
         _ => Err(()),
     }
 }

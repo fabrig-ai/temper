@@ -29,6 +29,8 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::REVISION_AT), "help_revision"),
     (Some(jig::rows::REVISIONS_AT), "help_revisions"),
     (Some(jig::rows::CHANGE_SETTINGS_AT), "help_change_settings"),
+    (Some(jig::rows::PROPOSE_SETTINGS_AT), "help_propose_settings"),
+    (Some(jig::rows::PROPOSAL_AT), "help_proposal"),
 ];
 #[test]
 fn the_help_prints_as_its_golden_files() {
@@ -57,7 +59,7 @@ const USAGES: &[&[u8]] = &[
     b"message N TEXT --key NAME\n",
     b"close N [--move D]... [--reason TEXT] --key NAME\n",
     b"answer N M TEXT [--key NAME]\n",
-    b"decide tN/K|pN/K accept|reject|pass-up [REASON] [--key NAME]\ndecide N --hold R release|leave|pass-up [REASON] [--key NAME]\n",
+    b"decide tN/K|pN/K accept|reject|pass-up [REASON] [--running stays|moves] [--key NAME]\ndecide N --hold R release|leave|pass-up [REASON] [--key NAME]\n",
     b"release N --hold R [--again] [--key NAME]\n",
     b"stop N [--key NAME]\n",
     b"cancel N [--grace D] REASON [--key NAME]\n",
@@ -92,6 +94,8 @@ const USAGES: &[&[u8]] = &[
     b"revision R\n",
     b"revisions [--before R]\n",
     b"change-settings FILE --against R [--running stays|moves] --key NAME\n",
+    b"propose-settings FILE --against R --key NAME\n",
+    b"proposal tN/K|pN/K\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {
@@ -105,7 +109,7 @@ fn each_derivation_names_every_tool() {
     let mut forms = List::with_capacity(fixtures::TOOL_FORMS);
     for words in fixtures::EVERY_TOOL {
         let mut call = fixtures::call(words);
-        if call.tool == jig::rows::CHANGE_SETTINGS_AT {
+        if call.tool == jig::rows::CHANGE_SETTINGS_AT || call.tool == jig::rows::PROPOSE_SETTINGS_AT {
             *call.values.get_mut(0).expect("FILE") =
                 Some(jig::call::Values::One(jig::call::Value::Text(br#"{"items":[]}"#.as_slice().into())));
         }

@@ -30,9 +30,7 @@ fn an_ended_tree_delivery_waits_for_the_tasks_read() {
         let argv = fixtures::extended(&["task", "41", "--tree"], if json { &["--json"] } else { &[] });
         let (mut root, call) = fixtures::read_call(argv.as_slice());
         let task = fixtures::ended_task(c::Phase::Done);
-        let client::Latest::Jig(delivery) = fixtures::owner_tree_at(task.chip.clone()) else {
-            panic!("owner tree")
-        };
+        let client::Latest::Jig(delivery) = fixtures::owner_tree_at(task.chip.clone()) else { panic!("owner tree") };
         retained_delivery(&mut root, fixtures::tree_watch(), delivery);
         assert!(root.answer(call).is_none(), "task read is still pending");
         root.serve(call, fixtures::historical_task_result(task, c::Ending::Done));

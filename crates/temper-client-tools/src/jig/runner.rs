@@ -162,11 +162,21 @@ fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, call
                 render::me(me, called.json, &env.limits, runner.parts.expect("host supplies part vocabulary"));
             finish(called, printed, out);
         }
-        1..=7 | 22 | 23 | 25 | 27..=30 | 33 | rows::EXPORT_AT | rows::SETTINGS_AT..=rows::REVISIONS_AT => {
+        1..=7
+        | 22
+        | 23
+        | 25
+        | 27..=30
+        | 33
+        | rows::EXPORT_AT
+        | rows::SETTINGS_AT..=rows::REVISIONS_AT
+        | rows::PROPOSAL_AT => {
             reads::start(runner, client, env, called, out);
         }
         24 | 26 | 32 | rows::IMPORT_AT => accounts::start(runner, client, env, called, out),
-        8..=15 | 31 | rows::CHANGE_SETTINGS_AT => acts::start(runner, client, env, called, out),
+        8..=15 | 31 | rows::CHANGE_SETTINGS_AT | rows::PROPOSE_SETTINGS_AT => {
+            acts::start(runner, client, env, called, out);
+        }
         16 => wait::start(runner, client, env, called, out),
         _ => {
             let printed = render::failure(b"call not supported", called.json, 1);

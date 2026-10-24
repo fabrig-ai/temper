@@ -729,3 +729,225 @@ fn settings_items_check_the_aggregate_wire_byte_bound_and_maximum_count() {
         1024
     );
 }
+
+#[test]
+fn settings_proposals_and_decision_choices_parse_round_trip_and_preserve_identities() {
+    for argv in [
+        vec!["propose-settings", "-", "--against", "5", "--key", "proposal-5"],
+        vec!["proposal", "p73/7"],
+        vec!["decide", "p73/7", "accept", "--running", "moves"],
+        vec!["decide", "t41/3", "reject", "reason", "--running", "stays"],
+    ] {
+        let mut call = fixtures::call(&argv);
+        assert_eq!(fixtures::back(&call), fixtures::owned(&argv));
+        if call.tool == rows::PROPOSE_SETTINGS_AT {
+            *call.values.get_mut(0).expect("loaded FILE") =
+                Some(Values::One(Value::Text(br#"{"items":[]}"#.as_slice().into())));
+        }
+        assert_eq!(fixtures::from_json(&jig::json::write_call(crate::table::TOOLS, &call).expect("JSON")), call);
+    }
+    assert_eq!((rows::PROPOSE_SETTINGS_AT, rows::PROPOSAL_AT), (47, 48));
+    for argv in [
+        vec!["propose-settings", "FILE", "--against", "5"],
+        vec!["propose-settings", "FILE", "--against", "5", "--running", "moves", "--key", "proposal-5"],
+        vec!["proposal", "p73/7", "--key", "read"],
+        vec!["decide", "p73/7", "accept", "--running", "other"],
+        vec!["decide", "41", "--hold", "2", "release", "--running", "moves"],
+    ] {
+        assert!(fixtures::parse(&argv).is_err(), "{argv:?}");
+    }
+}
+fn proposed(bytes: &[u8], json: bool) -> (fixtures::Harness, u32) {
+    let mut root = fixtures::signed_in(fixtures::PARTY);
+    let mut call = fixtures::call(&["propose-settings", "FILE", "--against", "5", "--key", "proposal-5"]);
+    *call.values.get_mut(0).expect("FILE") = Some(Values::One(Value::Text(bytes.into())));
+    let number = root.submit_prepared(call, json, None);
+    (root, number)
+}
+#[test]
+fn propose_settings_uses_the_same_whole_items_and_names_its_durable_proposal() {
+    for (setting, value) in values() {
+        let file = file_from_setting(&setting_json(setting, value));
+        for json in [false, true] {
+            let (mut root, number) = proposed(&file, json);
+            assert_eq!(root.sent_name(number), Some(fixtures::named("proposal-5")));
+            let (_, _, jig_client::Ask::Jig(ask)) = root.sends.get(&number).expect("sent") else { panic!("jig ask") };
+            let c::Ask::Propose { project, action: c::ProposeAction::Settings(s), .. } = ask.as_ref() else {
+                panic!("settings proposal")
+            };
+            assert_eq!(*project, 0);
+            assert_eq!(s.against, 5);
+            assert_eq!(s.items, settings_file::decode(&file, &crate::limits::tools()).expect("same decoder"));
+            root.done(
+                number,
+                c::Outcome::Proposed { proposal: c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 } },
+            );
+            let answer = root.answer(number).expect("durable proposal");
+            assert_eq!(answer.status, 0);
+            golden(if json { "settings_proposed_json" } else { "settings_proposed" }, &answer.stdout);
+        }
+    }
+    let (mut root, number) = proposed(br#"{"items":[],"unknown":1}"#, false);
+    assert!(root.sends.is_empty());
+    assert_eq!(root.answer(number).expect("local refusal").status, 1);
+}
+fn review_proposal(review: Option<c::SettingsReview>) -> c::ReadValue {
+    let c::ReadValue::OwnerProposal(mut p) = fixtures::proposal(c::Proposer::Party(73), &[c::ActKind::Accept]) else {
+        panic!("owner proposal")
+    };
+    p.key.number = 7;
+    p.action = c::OwnerProposalAction::Settings(Box::new(c::OwnerProposalActionSettings {
+        against: 5,
+        items: list([c::RevisionItemHead { setting: c::Setting::Rules, edit: c::RevisionItemEdit::Reset }]),
+        review,
+        made: None,
+    }));
+    c::ReadValue::OwnerProposal(p)
+}
+#[test]
+fn settings_review_goldens_keep_every_edit_value_origin_and_head_fact() {
+    for (index, (setting, value)) in values().into_iter().enumerate() {
+        let set = c::ReviewValue::Value(c::SettingSet { value });
+        let review = c::SettingsReview {
+            newest: 6,
+            cut: true,
+            items: list([
+                c::ReviewItem {
+                    setting,
+                    edit: c::RevisionItemEdit::Set,
+                    now: set.clone(),
+                    origin: c::SettingOrigin::Change(c::OriginRevision { revision: 4 }),
+                    would_be: set.clone(),
+                },
+                c::ReviewItem {
+                    setting,
+                    edit: c::RevisionItemEdit::Removed,
+                    now: set.clone(),
+                    origin: c::SettingOrigin::Default(c::OriginRevision { revision: 2 }),
+                    would_be: c::ReviewValue::None,
+                },
+                c::ReviewItem {
+                    setting,
+                    edit: c::RevisionItemEdit::Reset,
+                    now: c::ReviewValue::None,
+                    origin: c::SettingOrigin::NotOffered,
+                    would_be: set.clone(),
+                },
+                c::ReviewItem {
+                    setting,
+                    edit: c::RevisionItemEdit::Reset,
+                    now: set.clone(),
+                    origin: c::SettingOrigin::Default(c::OriginRevision { revision: 2 }),
+                    would_be: set.clone(),
+                },
+                c::ReviewItem {
+                    setting,
+                    edit: c::RevisionItemEdit::Set,
+                    now: c::ReviewValue::TooLarge(c::Size { bytes: 4096 }),
+                    origin: c::SettingOrigin::Change(c::OriginRevision { revision: 3 }),
+                    would_be: set.clone(),
+                },
+                c::ReviewItem {
+                    setting,
+                    edit: c::RevisionItemEdit::Set,
+                    now: set,
+                    origin: c::SettingOrigin::Default(c::OriginRevision { revision: 0 }),
+                    would_be: c::ReviewValue::TooLarge(c::Size { bytes: 8192 }),
+                },
+            ]),
+        };
+        for json in [false, true] {
+            let mut argv = vec!["proposal", "p73/7"];
+            if json {
+                argv.push("--json");
+            }
+            let answer = read(&argv, review_proposal(Some(review.clone())));
+            assert_eq!(answer.status, 0);
+            golden(&format!("settings_review_{index}_{}", if json { "json" } else { "text" }), &answer.stdout);
+        }
+    }
+    for review in [None, Some(c::SettingsReview { newest: 5, items: list([]), cut: false })] {
+        let answer = read(&["proposal", "p73/7"], review_proposal(review));
+        assert_eq!(answer.status, 0);
+        assert!(!core::str::from_utf8(&answer.stdout).expect("text").contains("cut:"));
+    }
+}
+#[test]
+fn proposal_reads_use_one_exact_read_and_keep_not_served_and_role_statuses() {
+    let (root, call) = fixtures::read_call(&["proposal", "p73/7"]);
+    assert_eq!(
+        root.reads.get(&call).expect("exact read").1,
+        c::Read::Proposal { proposal: c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 } }
+    );
+    assert_eq!(root.watches.len(), 1);
+    for (page, status) in [
+        (jig_client::Readout::NotServed { family: None, served: None }, 1),
+        (jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::Refused)), 2),
+    ] {
+        let (mut root, call) = fixtures::read_call(&["proposal", "p73/7"]);
+        root.serve_readout(call, page);
+        assert_eq!(root.answer(call).expect("terminal read").status, status);
+    }
+}
+#[test]
+fn decide_sends_only_the_given_running_choice_and_leaves_malformed_to_the_engine() {
+    for proposer in ["t41/17", "p73/17"] {
+        for (choice, running) in
+            [(None, None), (Some("stays"), Some(c::Running::Stays)), (Some("moves"), Some(c::Running::Moves))]
+        {
+            for decision in ["accept", "reject"] {
+                let mut argv = vec!["decide", proposer, decision];
+                if decision == "reject" {
+                    argv.push("because");
+                }
+                if let Some(choice) = choice {
+                    argv.extend(["--running", choice]);
+                }
+                let (mut root, call) = fixtures::send_act(&argv, fixtures::SEED, fixtures::EMPTY.into());
+                let c::Ask::Decide { on: c::DecideOn::Proposal { running: sent, .. }, .. } =
+                    fixtures::act_ask(&root, call)
+                else {
+                    panic!("proposal decision")
+                };
+                assert_eq!(*sent, running);
+                root.answered(
+                    call,
+                    c::Answer::Refused {
+                        refusal: c::Refusal::Malformed { at: 0, why: c::Malformed::Running },
+                        at: None,
+                    },
+                );
+                let answer = root.answer(call).expect("malformed running");
+                assert_eq!(answer.status, 2);
+                assert!(core::str::from_utf8(&answer.stderr).expect("text").contains("running"));
+            }
+        }
+    }
+}
+
+#[test]
+fn a_withdrawn_settings_proposal_is_read_as_its_retained_state() {
+    let key = c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 };
+    let history = c::ReadValue::Historical(Box::new(c::OwnerHistorical {
+        key: c::ObjectKey::Proposal(key),
+        value: c::OwnerHistoricalValue::Proposal(c::OwnerProposalHistory {
+            action: c::OwnerRetainedAction::Settings(c::OwnerRetainedActionSettings {
+                against: 5,
+                items: list([c::RevisionItemHead { setting: c::Setting::Rules, edit: c::RevisionItemEdit::Reset }]),
+                made: None,
+            }),
+            number: key.number,
+            proposer: 73,
+            as_holder: false,
+            state: c::OwnerProposalHistoryState::Withdrawn,
+        }),
+        at: None,
+        by: None,
+    }));
+    let text = read(&["proposal", "p73/7"], history.clone());
+    assert_eq!(text.status, 0);
+    assert_eq!(text.stdout.as_ref(), b"proposal p73/7 \xc2\xb7 settings \xc2\xb7 withdrawn\nagainst revision 5\n");
+    let json = read(&["proposal", "p73/7", "--json"], history);
+    assert_eq!(json.status, 0);
+    assert_eq!(json.stdout.as_ref(), br#"{"key":{"proposer":{"party":73},"number":7},"action":{"settings":{"against":5,"items":[{"setting":{"kind":"rules"},"edit":"reset"}],"review":null,"made":null}},"state":{"withdrawn":{}}}"#);
+}

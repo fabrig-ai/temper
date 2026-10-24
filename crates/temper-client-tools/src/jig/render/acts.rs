@@ -282,6 +282,10 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
             out.put(super::document::settings::fault_word(value.fault));
             return;
         }
+        Refusal::Malformed { why: jig_client::contract::Malformed::Running, .. } => {
+            out.put(b"out of shape; running");
+            return;
+        }
         Refusal::Malformed { why: jig_client::contract::Malformed::SettingsUnchanged, .. } => {
             out.put(b"settings unchanged");
             return;

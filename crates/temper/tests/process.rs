@@ -287,6 +287,130 @@ fn temper_ctl_an_owner_changes_settings_and_a_stale_change_names_the_newest_revi
 }
 
 #[test]
+fn temper_ctl_a_project_member_proposes_settings_and_an_owner_decides_them() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_propose_settings");
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let first = scratch.path().join("proposed.json");
+    let second = scratch.path().join("stale.json");
+    let direct = scratch.path().join("direct.json");
+    let accepted_words = "Use the settings proposed by the project member.";
+    let seen = support::ctl::run(Story::new(
+        scratch.path(),
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["me", "--json"])),
+            Step::Member { scratch: scratch.path().into(), directory: "member" },
+            Step::Run(Call::new(&["me", "--json"]).in_directory("member")),
+            Step::Run(Call::new(&["settings", "--json"])),
+            Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+            Step::Then(Box::new(move |calls| {
+                support::ctl::charter_change_file(&first, &calls[4], accepted_words);
+                let mut call = support::ctl::settings_proposal(&calls[3], &first, "member-settings");
+                call = call.in_directory("member");
+                // Request the same stable JSON outcome as the following proposal's.
+                call.json()
+            })),
+            Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5])]))),
+            Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]))),
+            Step::Then(Box::new(|calls| {
+                Call::new(&[
+                    "decide",
+                    &support::ctl::proposal_key(&calls[5]),
+                    "accept",
+                    "--running",
+                    "moves",
+                    "--key",
+                    "accept-settings",
+                ])
+            })),
+            Step::Run(Call::new(&["settings", "--json"])),
+            Step::Then(Box::new(|calls| {
+                let newest = support::ctl::json(&calls[9])["newest"].as_u64().expect("newest settings revision");
+                Call::new(&["revision", &newest.to_string(), "--json"])
+            })),
+            Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+            Step::Then(Box::new(move |calls| {
+                support::ctl::charter_change_file(&second, &calls[11], "A second member proposal.");
+                support::ctl::settings_proposal(&calls[9], &second, "stale-member-settings")
+                    .in_directory("member")
+                    .json()
+            })),
+            Step::Then(Box::new(move |calls| {
+                support::ctl::charter_change_file(
+                    &direct,
+                    &calls[11],
+                    "The owner's direct change supersedes the proposal.",
+                );
+                support::ctl::settings_change(&calls[9], &direct, "supersede-member-settings")
+            })),
+            Step::Then(Box::new(|calls| {
+                Call::new(&["proposal", &support::ctl::proposal_key(&calls[12])]).in_directory("member")
+            })),
+            Step::Then(Box::new(|calls| {
+                Call::new(&["proposal", &support::ctl::proposal_key(&calls[12]), "--json"]).in_directory("member")
+            })),
+        ],
+    ));
+    for (index, call) in seen.calls.iter().enumerate() {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "call {index}: {}", String::from_utf8_lossy(&call.stderr));
+        assert!(call.stderr.is_empty());
+    }
+    let [
+        _,
+        owner,
+        member,
+        before,
+        _,
+        proposed,
+        review_text,
+        review_json,
+        _,
+        current,
+        revision,
+        setting,
+        stale,
+        _,
+        withdrawn,
+        withdrawn_json,
+    ] = seen.calls.as_slice()
+    else {
+        panic!("member proposal, owner review/acceptance and stale withdrawal reads")
+    };
+    assert_eq!(support::ctl::json(owner)["deployment_role"], "owner");
+    let member = support::ctl::json(member);
+    assert!(member["deployment_role"].is_null(), "{member}");
+    assert_eq!(member["projects"][0]["role"], "member");
+    let previous = support::ctl::json(before)["newest"].as_u64().expect("previous revision");
+    let newest = support::ctl::json(current)["newest"].as_u64().expect("accepted revision");
+    assert_eq!(newest, previous + 1);
+    let review = support::ctl::json(review_json);
+    assert_eq!(review["action"]["settings"]["against"], previous);
+    assert_eq!(review["action"]["settings"]["review"]["newest"], previous);
+    assert_eq!(
+        review["action"]["settings"]["review"]["items"][0]["setting"],
+        serde_json::json!({"kind":"charter","number":1})
+    );
+    let review_text = String::from_utf8_lossy(&review_text.stdout);
+    assert!(review_text.contains("charter 1 · set · now ") && review_text.contains(" · would be "), "{review_text}");
+    let head = support::ctl::json(revision);
+    assert_eq!(head["head"]["number"], newest);
+    assert_eq!(head["head"]["proposal"], support::ctl::proposal_key(proposed));
+    assert_eq!(head["head"]["moved"], true);
+    assert_eq!(head["head"]["by"]["party"], support::ctl::json(owner)["party"]["number"]);
+    assert_eq!(support::ctl::json(setting)["value"]["instructions"], accepted_words);
+    let withdrawn = String::from_utf8_lossy(&withdrawn.stdout);
+    assert!(
+        withdrawn.starts_with(&format!("proposal {} · settings · withdrawn\n", support::ctl::proposal_key(stale))),
+        "{withdrawn}"
+    );
+    assert_eq!(support::ctl::json(withdrawn_json)["state"], serde_json::json!({"withdrawn":{}}));
+    eprintln!("ctl settings proposal story: {:?}", clock.now().now.saturating_since(began));
+    scratch.remove();
+}
+
+#[test]
 fn a_fresh_link_keeps_the_sign_in_held() {
     use support::ctl::{Call, Step, Story};
     let scratch = ctl_scratch("fresh_link_keeps_sign_in");
