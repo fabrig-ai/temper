@@ -3,7 +3,7 @@
 mod steps;
 
 use std::ffi::OsStr;
-use steps::Choice;
+use steps::{Choice, Variant};
 
 #[test]
 fn temper_bundle_is_embed_unset_or_embed_none_for_none_and_fails_otherwise() {
@@ -16,6 +16,21 @@ fn temper_bundle_is_embed_unset_or_embed_none_for_none_and_fails_otherwise() {
             Err(format!("temper-client-bundle: TEMPER_BUNDLE must be embed or none, not {value}")),
             "{value:?}"
         );
+    }
+}
+
+#[test]
+fn choice_and_feature_plan_only_the_requested_bundles() {
+    for (value, feature, expected) in [
+        (None, false, &[Variant::Ordinary][..]),
+        (None, true, &[Variant::Ordinary, Variant::Loopback][..]),
+        (Some("embed"), false, &[Variant::Ordinary][..]),
+        (Some("embed"), true, &[Variant::Ordinary, Variant::Loopback][..]),
+        (Some("none"), false, &[][..]),
+        (Some("none"), true, &[][..]),
+    ] {
+        let choice = steps::choice(value.map(OsStr::new)).expect("valid bundle choice");
+        assert_eq!(steps::plan(choice, feature), expected, "{value:?}, feature={feature}");
     }
 }
 
@@ -91,51 +106,47 @@ fn absent_wasm_target_explains_both_ways_out() {
     fs::remove_dir_all(root).expect("sample operation succeeds");
 }
 
+const MODULE_BUILD_ARGS: &[&str] =
+    &["build", "--locked", "--target", "wasm32-unknown-unknown", "--profile", "web", "-p", "temper-client-shell-web"];
+const BUNDLER_INPUT_ARGS: &[&str] = &[
+    "--module",
+    "/target/bundle/wasm32-unknown-unknown/web/temper_client_shell_web.wasm",
+    "--name",
+    "temper_client_shell_web",
+    "--prefix",
+    "/bundle/",
+    "--stylesheet",
+    "/work/crates/temper-client-shell-web/temper.css",
+    "--stylesheet",
+    "/work/crates/temper-client-shell-web/task-pages.css",
+    "--files",
+    "/work/crates/temper-client-shell-web/files",
+    "--noscript",
+    "temper needs WebAssembly and scripts.",
+    "--out",
+];
+
+fn sample_commands(variant: Variant) -> Vec<steps::Command> {
+    let cargo = OsStr::new("/tool/cargo");
+    let root = Path::new("/work");
+    let target = Path::new("/target");
+    let out = Path::new("/out");
+    let profile = ("web", "web");
+    match variant {
+        Variant::Ordinary => steps::commands(cargo, root, target, out, profile).into(),
+        Variant::Loopback => steps::loopback_commands(cargo, root, target, out, profile).into(),
+    }
+}
+
 #[test]
 fn commands_keep_jobserver_and_remove_outer_flags() {
-    let commands = steps::commands(
-        OsStr::new("/tool/cargo"),
-        Path::new("/work"),
-        Path::new("/target"),
-        Path::new("/out"),
-        ("web", "web"),
-    );
+    let commands = sample_commands(Variant::Ordinary);
+    let mut bundler_args = BUNDLER_INPUT_ARGS.to_vec();
+    bundler_args.push("/out/bundle");
     let expected = [
-        (
-            "/tool/cargo",
-            vec![
-                "build",
-                "--locked",
-                "--target",
-                "wasm32-unknown-unknown",
-                "--profile",
-                "web",
-                "-p",
-                "temper-client-shell-web",
-            ],
-        ),
+        ("/tool/cargo", MODULE_BUILD_ARGS.to_vec()),
         ("/tool/cargo", vec!["build", "--locked", "--release", "-p", "skein-ui-bundle"]),
-        (
-            "/target/bundle/release/skein-ui-bundle",
-            vec![
-                "--module",
-                "/target/bundle/wasm32-unknown-unknown/web/temper_client_shell_web.wasm",
-                "--name",
-                "temper_client_shell_web",
-                "--prefix",
-                "/bundle/",
-                "--stylesheet",
-                "/work/crates/temper-client-shell-web/temper.css",
-                "--stylesheet",
-                "/work/crates/temper-client-shell-web/task-pages.css",
-                "--files",
-                "/work/crates/temper-client-shell-web/files",
-                "--noscript",
-                "temper needs WebAssembly and scripts.",
-                "--out",
-                "/out/bundle",
-            ],
-        ),
+        ("/target/bundle/release/skein-ui-bundle", bundler_args),
     ];
     for (command, (program, args)) in commands.iter().zip(expected) {
         assert_eq!(command.program, program);
@@ -148,6 +159,27 @@ fn commands_keep_jobserver_and_remove_outer_flags() {
     }
     assert!(commands[2].remove.is_empty());
     assert!(commands[2].set.is_empty());
+}
+
+#[test]
+fn loopback_rebuilds_module_and_bundles_to_its_own_directory() {
+    let commands = sample_commands(Variant::Loopback);
+    let module = &commands[0];
+    let bundler = &commands[1];
+    let mut module_args = MODULE_BUILD_ARGS.to_vec();
+    module_args.extend(["--features", "loopback-navigation"]);
+    let mut bundler_args = BUNDLER_INPUT_ARGS.to_vec();
+    bundler_args.push("/out/bundle-loopback");
+    assert_eq!(module.program, "/tool/cargo");
+    assert_eq!(module.args, module_args);
+    assert_eq!(module.directory, Path::new("/work"));
+    assert_eq!(module.remove, ["CARGO_ENCODED_RUSTFLAGS", "RUSTFLAGS", "RUSTC_WORKSPACE_WRAPPER", "CLIPPY_ARGS"]);
+    assert_eq!(module.set, [("CARGO_TARGET_DIR", "/target/bundle".into())]);
+    assert_eq!(bundler.program, "/target/bundle/release/skein-ui-bundle");
+    assert_eq!(bundler.args, bundler_args);
+    assert_eq!(bundler.directory, Path::new("/work"));
+    assert!(bundler.remove.is_empty());
+    assert!(bundler.set.is_empty());
 }
 
 #[test]
@@ -250,4 +282,47 @@ fn source_quotes_paths_and_embeds_two_sample_files() {
 #[test]
 fn none_source_has_no_files_or_digest() {
     assert_eq!(steps::NO_BUNDLE, "pub const FILES: &[(&str, &[u8])] = &[];\npub const DIGEST: Option<&str> = None;\n");
+    assert_eq!(
+        steps::sources(None, None),
+        (
+            "pub const FILES: &[(&str, &[u8])] = &[];\npub const DIGEST: Option<&str> = None;\n".into(),
+            "pub const FILES: &[(&str, &[u8])] = &[];\npub const DIGEST: Option<&str> = None;\n".into(),
+        )
+    );
+}
+
+#[test]
+fn separate_sources_keep_their_own_paths_and_digests() {
+    let ordinary = steps::Bundle {
+        digest: "0123456789abcdef".into(),
+        files: vec![("index.html".into(), "/out/bundle/index.html".into())],
+    };
+    let loopback = steps::Bundle {
+        digest: "fedcba9876543210".into(),
+        files: vec![("index.html".into(), "/out/bundle-loopback/index.html".into())],
+    };
+    for (loopback, expected) in [
+        (None, "pub const FILES: &[(&str, &[u8])] = &[];\npub const DIGEST: Option<&str> = None;\n"),
+        (
+            Some(&loopback),
+            "pub const FILES: &[(&str, &[u8])] = &[\n    (\"index.html\", include_bytes!(\"/out/bundle-loopback/index.html\")),\n];\npub const DIGEST: Option<&str> = Some(\"fedcba9876543210\");\n",
+        ),
+    ] {
+        let (ordinary, loopback) = steps::sources(Some(&ordinary), loopback);
+        assert_eq!(
+            ordinary,
+            "pub const FILES: &[(&str, &[u8])] = &[\n    (\"index.html\", include_bytes!(\"/out/bundle/index.html\")),\n];\npub const DIGEST: Option<&str> = Some(\"0123456789abcdef\");\n"
+        );
+        assert_eq!(loopback, expected);
+    }
+}
+
+#[test]
+fn loopback_exports_exist_and_are_empty_when_not_packaged() {
+    let files: &[(&str, &[u8])] = temper_client_bundle::loopback::FILES;
+    let digest: Option<&str> = temper_client_bundle::loopback::DIGEST;
+    if option_env!("TEMPER_BUNDLE") == Some("none") || !cfg!(feature = "loopback-navigation") {
+        assert!(files.is_empty());
+        assert_eq!(digest, None);
+    }
 }

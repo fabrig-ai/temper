@@ -22,6 +22,31 @@ pub fn choice(value: Option<&OsStr>) -> Result<Choice, String> {
 /// The list of a build without the bundle.
 pub const NO_BUNDLE: &str = "pub const FILES: &[(&str, &[u8])] = &[];\npub const DIGEST: Option<&str> = None;\n";
 
+/// Which bundles the build packages, in execution order; an empty plan does no nested work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Variant {
+    Ordinary,
+    Loopback,
+}
+
+pub fn plan(choice: Choice, loopback: bool) -> &'static [Variant] {
+    match choice {
+        Choice::None => &[],
+        Choice::Embed => {
+            if loopback {
+                &[Variant::Ordinary, Variant::Loopback]
+            } else {
+                &[Variant::Ordinary]
+            }
+        }
+    }
+}
+
+/// Keep the two include lists independent; an absent bundle always exports the empty API.
+pub fn sources(ordinary: Option<&Bundle>, loopback: Option<&Bundle>) -> (String, String) {
+    (ordinary.map_or_else(|| NO_BUNDLE.into(), source), loopback.map_or_else(|| NO_BUNDLE.into(), source))
+}
+
 use std::{
     collections::BTreeSet,
     ffi::OsString,
@@ -69,6 +94,30 @@ pub struct Command {
 
 /// The nested cargo builds and bundler, in execution order (client/browser.md, 2.6).
 pub fn commands(cargo: &OsStr, root: &Path, target: &Path, out: &Path, profile: (&str, &str)) -> [Command; 3] {
+    variant_commands(cargo, root, target, out, profile, Variant::Ordinary)
+}
+
+/// Reuse the built bundler, rebuilding the module with loopback navigation into a separate bundle.
+pub fn loopback_commands(cargo: &OsStr, root: &Path, target: &Path, out: &Path, profile: (&str, &str)) -> [Command; 2] {
+    let [module, _, bundler] = variant_commands(cargo, root, target, out, profile, Variant::Loopback);
+    [module, bundler]
+}
+
+pub fn bundle_directory(out: &Path, variant: Variant) -> PathBuf {
+    out.join(match variant {
+        Variant::Ordinary => "bundle",
+        Variant::Loopback => "bundle-loopback",
+    })
+}
+
+fn variant_commands(
+    cargo: &OsStr,
+    root: &Path,
+    target: &Path,
+    out: &Path,
+    profile: (&str, &str),
+    variant: Variant,
+) -> [Command; 3] {
     let nested = target.join("bundle");
     let build = |args: &[&str]| Command {
         program: cargo.to_owned(),
@@ -79,17 +128,22 @@ pub fn commands(cargo: &OsStr, root: &Path, target: &Path, out: &Path, profile: 
     };
     let shell = root.join("crates/temper-client-shell-web");
     let module = nested.join("wasm32-unknown-unknown").join(profile.1).join("temper_client_shell_web.wasm");
+    let mut module_build = build(&[
+        "build",
+        "--locked",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--profile",
+        profile.0,
+        "-p",
+        "temper-client-shell-web",
+    ]);
+    match variant {
+        Variant::Ordinary => {}
+        Variant::Loopback => module_build.args.extend(["--features".into(), "loopback-navigation".into()]),
+    }
     [
-        build(&[
-            "build",
-            "--locked",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--profile",
-            profile.0,
-            "-p",
-            "temper-client-shell-web",
-        ]),
+        module_build,
         build(&["build", "--locked", "--release", "-p", "skein-ui-bundle"]),
         Command {
             program: nested.join("release/skein-ui-bundle").into_os_string(),
@@ -109,7 +163,7 @@ pub fn commands(cargo: &OsStr, root: &Path, target: &Path, out: &Path, profile: 
                 "--noscript".into(),
                 "temper needs WebAssembly and scripts.".into(),
                 "--out".into(),
-                out.join("bundle").into_os_string(),
+                bundle_directory(out, variant).into_os_string(),
             ],
             remove: vec![],
             set: vec![],
