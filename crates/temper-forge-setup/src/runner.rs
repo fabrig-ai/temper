@@ -32,7 +32,7 @@ pub fn configuration(runner: &Runner, owned: &Owned, place: &Place, uuid: &[u8])
     joined(&[
         b"runner:\n  capacity: ",
         capacity.as_bytes(),
-        b"\n  timeout: 3h\n  shutdown_timeout: 0s\ncache:\n  enabled: false\nhost:\n  workdir_parent: ",
+        b"\n  timeout: 3h\n  shutdown_timeout: 0s\n  fetch_interval: 1s\ncache:\n  enabled: false\nhost:\n  workdir_parent: ",
         &quoted(&joined(&[&place.directory, b"/runner/jobs"])),
         b"\nserver:\n  connections:\n    forgejo:\n      url: ",
         &quoted(&joined(&[b"http://", &socket(owned.listen)])),

@@ -674,7 +674,9 @@ files: at a first preparation, and for a runner older than its pin
   skein's shell offers both (section 15).
 - **The runner's spec:** its configuration file (its connection,
   capacity, labels, timeouts, its jobs' directory, no cache), its `PATH`
-  from the setup. Its jobs run as the user that runs it (section 15).
+  from the setup. It fetches jobs every second (`fetch_interval: 1s`);
+  reporting keeps the pinned runner's default interval. Its jobs run as
+  the user that runs it (section 15).
 
 ### 6.5 Then the engine's start, and the person
 
