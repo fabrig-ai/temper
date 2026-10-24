@@ -203,7 +203,7 @@ impl Typist {
     pub(crate) fn complete(&mut self, complete: Complete, out: &mut Queue<Submit>) {
         self.pending -= 1;
         match (complete.kind, complete.result.expect("typist operation")) {
-            (Op::Spawn { spawn }, Done::Spawned { pidfd }) => {
+            (Op::Spawn { spawn }, Done::Spawned { pidfd, .. }) => {
                 for pipe in spawn.pipes {
                     let fd = pipe.parent.expect("terminal parent pipe");
                     match pipe.child {

@@ -26,10 +26,10 @@ fn a_drain_closes_accounts_then_the_store() {
 #[test]
 fn signals_routed_from_io_drain_then_abort() {
     let mut service = fixtures::ready();
-    service.told.push(skein_io::Event::Shutdown { signal: skein_io::kernel::ServiceSignal::Terminate });
+    service.told.push(skein_io::Event::Shutdown { signal: skein_io::kernel::ServiceSignal::Terminate, from: None });
     fixtures::turn(&mut service);
     assert_eq!(service.end(), None);
-    service.told.push(skein_io::Event::Shutdown { signal: skein_io::kernel::ServiceSignal::Terminate });
+    service.told.push(skein_io::Event::Shutdown { signal: skein_io::kernel::ServiceSignal::Terminate, from: None });
     fixtures::turn(&mut service);
     assert_eq!(service.end(), Some(&End::Aborted));
     for _ in 0_u32..16 {

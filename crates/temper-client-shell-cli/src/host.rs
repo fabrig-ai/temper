@@ -583,7 +583,7 @@ impl OneShot {
                 continue;
             }
             match event {
-                io::Event::Shutdown { signal } => self.finish(
+                io::Event::Shutdown { signal, .. } => self.finish(
                     match signal {
                         ServiceSignal::Interrupt => limits::INTERRUPTED,
                         ServiceSignal::Terminate => limits::TERMINATED,

@@ -1351,11 +1351,11 @@ fn a_worker_stopped_unlinked_has_ended_past_its_grace() {
 #[test]
 fn signals_route_to_a_worker_alone_then_abort() {
     let mut service = alone_service();
-    service.told.push(io::Event::Shutdown { signal: io::kernel::ServiceSignal::Terminate });
+    service.told.push(io::Event::Shutdown { signal: io::kernel::ServiceSignal::Terminate, from: None });
     crate::iterate(&mut service, fixtures::NOW, Wall::EPOCH);
     assert!(service.worker.as_ref().unwrap().stopping());
     assert_eq!(service.end(), None, "its root is still closing");
-    service.told.push(io::Event::Shutdown { signal: io::kernel::ServiceSignal::Terminate });
+    service.told.push(io::Event::Shutdown { signal: io::kernel::ServiceSignal::Terminate, from: None });
     crate::iterate(&mut service, fixtures::NOW, Wall::EPOCH);
     assert_eq!(service.end(), Some(&crate::End::Aborted));
 }
