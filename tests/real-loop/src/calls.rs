@@ -578,7 +578,7 @@ impl Caller {
         }
         self.running[index].as_mut().expect("running command").pending -= 1;
         match (complete.kind, complete.result.expect("caller operation")) {
-            (Op::Spawn { spawn }, Done::Spawned { pidfd }) => {
+            (Op::Spawn { spawn }, Done::Spawned { pidfd, .. }) => {
                 let running = self.running[index].as_mut().expect("running command");
                 running.pidfd = Some(pidfd);
                 running.started = true;

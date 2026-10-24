@@ -181,7 +181,7 @@ impl Child {
         let done = complete.result.expect("ctl operation succeeds");
         match Token::new(complete.op.raw() - self.base) {
             SPAWN => {
-                let (Done::Spawned { pidfd }, Op::Spawn { spawn }) = (done, complete.kind) else {
+                let (Done::Spawned { pidfd, .. }, Op::Spawn { spawn }) = (done, complete.kind) else {
                     panic!("spawned ctl")
                 };
                 self.pidfd = Some(pidfd);

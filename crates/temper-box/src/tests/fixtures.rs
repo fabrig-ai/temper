@@ -280,7 +280,7 @@ impl Harness {
     fn bind(&mut self) {
         for complete in self.service.completions().iter() {
             if self.pending.as_slice().contains(&complete.op)
-                && let Ok(Done::Spawned { pidfd }) = complete.result
+                && let Ok(Done::Spawned { pidfd, .. }) = complete.result
             {
                 let (pid, inherited) = self.sim.bind_service(self.pid, pidfd);
                 let Op::Spawn { spawn } = &complete.kind else { panic!("hosted spawn") };
@@ -494,7 +494,7 @@ impl Harness {
         got.into_boxed()
     }
     pub fn terminate(&mut self) {
-        self.sim.deliver_service_signal(self.pid, self.signals, ServiceSignal::Terminate);
+        self.sim.deliver_service_signal(self.pid, self.signals, ServiceSignal::Terminate, None);
     }
     pub fn spawn_times(&self, name: &[u8]) -> Box<[Time]> {
         let mut times = List::with_capacity(128);

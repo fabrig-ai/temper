@@ -65,7 +65,7 @@ fn a_stop_signals_each_long_step_twice_last_first() {
     let mut signals = List::with_capacity(6);
     for entry in harness.sim.trace() {
         if entry.pid == harness.pid {
-            if let Event::Complete { result: Ok(Done::Spawned { pidfd }), .. } = &entry.event {
+            if let Event::Complete { result: Ok(Done::Spawned { pidfd, .. }), .. } = &entry.event {
                 children.push(*pidfd).expect("three children");
             }
             if let Event::Submit { kind: Summary::Signal { pidfd, signal: 15, to: Target::Child }, .. } = &entry.event {

@@ -113,7 +113,9 @@ impl Kernel {
                 };
                 self.pipes.insert(fd, (bytes.into(), 0));
             }
-            Ok(Done::Spawned { pidfd: self.descriptor() })
+            let pidfd = self.descriptor();
+            let sender = skein_io::kernel::Sender::new(u64::try_from(self.next).unwrap());
+            Ok(Done::Spawned { pidfd, sender })
         }
     }
     fn box_read(&mut self, buf: &mut [u8]) -> Done {

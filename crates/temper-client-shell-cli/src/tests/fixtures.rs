@@ -273,7 +273,7 @@ impl Frame {
         self.host.completions().push(Complete {
             op,
             kind,
-            result: Ok(Done::Signalled(Signalled::Termination(signal))),
+            result: Ok(Done::Signalled(Signalled::Termination { signal, sender: None })),
         });
         self.run();
     }
