@@ -7,6 +7,15 @@ use temper_box::host::{Service, Settings};
 /// Checks the document before starting its steps; refusals contain unprefixed lines.
 pub fn run(directories: &super::Directories) -> Result<Exit, String> {
     let (bytes, held) = configuration(directories)?;
+    run_configuration(directories, bytes, held)
+}
+
+/// Runs a document already retained in its effective directories. Owns all supplied listeners.
+pub(crate) fn run_configuration(
+    directories: &super::Directories,
+    bytes: Box<[u8]>,
+    held: Vec<(Fd, std::num::NonZeroU16)>,
+) -> Result<Exit, String> {
     let mut owned = held.iter().map(|(fd, _)| *fd).collect::<Vec<_>>();
     let opened = (|| {
         let super::setup::Deployment { named, checked, demo, limits } =
