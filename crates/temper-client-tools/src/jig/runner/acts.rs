@@ -28,6 +28,14 @@ pub(crate) fn me<'a>(runner: &Runner, client: &'a Client) -> Option<&'a c::Me> {
     }
 }
 pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
+    if called.call.tool == crate::jig::rows::CHANGE_SETTINGS_AT {
+        let request = match crate::jig::settings_file::request(&called.call, &env.limits) {
+            Ok(ask) => Ok((Request::Ask(c::Ask::ChangeSettings(ask)), None)),
+            Err(why) => Err(Failed::Detail(why)),
+        };
+        prepared(runner, client, env, called, request, out);
+        return;
+    }
     if called.call.tool == 8 {
         let Some(me) = me(runner, client) else { return };
         let ask = chat(&called.call, me, &env.limits);
@@ -489,7 +497,7 @@ fn send(
         operation.file = Some(file.clone());
     }
     operation.account = account;
-    if called.call.tool != crate::jig::rows::EXPORT_AT {
+    if called.call.tool != crate::jig::rows::EXPORT_AT && called.call.tool != crate::jig::rows::CHANGE_SETTINGS_AT {
         operation.retry = Some(render::outcome::retry(&called.call));
     }
     if called.call.tool == 26 || called.call.tool == 27 || called.call.tool == crate::jig::rows::IMPORT_AT {

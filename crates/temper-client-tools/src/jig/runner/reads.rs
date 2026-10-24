@@ -3,7 +3,7 @@ use super::{Called, Out, Runner, finish};
 use crate::jig::{
     Limits,
     call::{Call, Project, Value, cursor, number, value},
-    render,
+    render, rows,
 };
 use alloc::collections::BTreeMap;
 use jig_client::{
@@ -104,7 +104,7 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
             let what = c::Read::Turn { task, attempt: name.attempt, turn: name.number };
             read(runner, &mut reading, 1, what, out);
         }
-        22 | 23 | 25 | 27..=30 | 33 | crate::jig::rows::EXPORT_AT => {
+        22 | 23 | 25 | 27..=30 | 33 | rows::EXPORT_AT => {
             let Some(document) = client.document(runner.me()) else { return };
             let Some(Latest::Jig(c::Delivery::Me(me))) = document.latest else { return };
             if reading.called.call.tool == 23 && model_project(&reading.called.call, me).is_err() {
@@ -117,6 +117,7 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
                 watch(runner, &mut reading, 4, c::Subject::Deployment, out);
             }
         }
+        rows::SETTINGS_AT..=rows::REVISIONS_AT => settings_start(runner, &mut reading, out),
         7 => watch(runner, &mut reading, 4, c::Subject::Run { task, turn: None, offset: 0 }, out),
         _ => unreachable!("read tool"),
     }
@@ -148,6 +149,18 @@ pub(super) fn page(
     let local = u32::try_from(handle.number & u64::from(u32::MAX)).expect("low half");
     let Some(mut reading) = runner.active.remove(&prefix) else { return };
     reading.pending &= !1u8.checked_shl(local).expect("fixed read slot");
+    // The setting read requires a concrete revision; omission in ctl means
+    // the newest revision named by the authorized inventory read.
+    if reading.called.call.tool == rows::SETTING_AT
+        && local == 6
+        && let Readout::Jig(c::ReadResult::Value(c::ReadValue::Settings(settings))) = &page
+    {
+        let setting = super::super::settings_file::selector(&reading.called.call);
+        let what = c::Read::Setting(c::ReadSetting { setting, revision: settings.newest });
+        read(runner, &mut reading, 1, what, out);
+        complete(runner, client, env, reading, out);
+        return;
+    }
     if let Some(thread) = &mut reading.thread
         && let Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(page))) = &page
         && let Some(next) = thread.accept(*page.clone())
@@ -236,7 +249,11 @@ fn complete(runner: &mut Runner, client: &Client, env: &Env<Limits>, mut reading
     {
         thread.run(run, reading.text.as_ref());
     }
-    if reading.called.call.tool >= 24 {
+    if reading.called.call.tool == 25
+        || (27..=30).contains(&reading.called.call.tool)
+        || reading.called.call.tool == 33
+        || reading.called.call.tool == rows::EXPORT_AT
+    {
         super::accounts::resolved(runner, client, env, reading, out);
         return;
     }
@@ -326,4 +343,35 @@ pub(crate) fn model_project(call: &Call, me: &c::Me) -> Result<Option<u32>, ()> 
         }
     }
     Err(())
+}
+
+#[expect(clippy::manual_map, reason = "step code matches optional revision numbers without closures")]
+fn settings_start(runner: &Runner, reading: &mut Reading, out: &mut Queue<Out>) {
+    let task = number(&reading.called.call, 0).unwrap_or(0);
+    match reading.called.call.tool {
+        rows::SETTINGS_AT => read(runner, reading, 1, c::Read::Settings, out),
+        rows::SETTING_AT => {
+            let call = &reading.called.call;
+            let setting = super::super::settings_file::selector(call);
+            match number(call, 2) {
+                Some(n) => {
+                    let revision = u32::try_from(n).expect("parsed revision");
+                    read(runner, reading, 1, c::Read::Setting(c::ReadSetting { setting, revision }), out);
+                }
+                None => read(runner, reading, 6, c::Read::Settings, out),
+            }
+        }
+        rows::REVISION_AT => {
+            let number = u32::try_from(task).expect("parsed revision");
+            read(runner, reading, 1, c::Read::Revision(c::ReadRevision { number }), out);
+        }
+        rows::REVISIONS_AT => {
+            let before = match number(&reading.called.call, 0) {
+                Some(n) => Some(u32::try_from(n).expect("parsed revision")),
+                None => None,
+            };
+            read(runner, reading, 1, c::Read::Revisions(c::ReadRevisions { before }), out);
+        }
+        _ => unreachable!("settings read tool"),
+    }
 }

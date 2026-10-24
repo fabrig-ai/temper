@@ -41,20 +41,7 @@ pub(super) fn valid(
         }
         Kind::Literal if *value == Value::Stdin => false,
         Kind::Literal | Kind::Text => return valid_text(value, argument, limits),
-        Kind::File => {
-            if let Value::Text(_) = value
-                && (spec.name == b"instructions" || spec.name == b"spec")
-            {
-                return valid_text(value, argument, limits);
-            }
-            if *value == Value::Stdin {
-                return Ok(());
-            }
-            let Value::File(_) = value else {
-                return Err(Usage::Kind { argument });
-            };
-            true
-        }
+        Kind::File => return valid_file(spec, value, argument, limits),
         Kind::Project { empty } => return valid_project(value, argument, empty),
         Kind::Turn => {
             let Value::Turn(_) = value else {
@@ -433,4 +420,27 @@ fn bounded_number(word: &[u8], min: u64, max: u64) -> Option<u64> {
 }
 fn named_text(word: &[u8], words: &[&[u8]], prefixes: &[&[u8]], min: u64, max: u64) -> Option<Box<[u8]>> {
     if named_number(word, words, prefixes, min, max) { Some(Box::from(word)) } else { None }
+}
+
+fn valid_file(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> Result<(), Usage> {
+    if let Value::Text(bytes) = value
+        && spec.name == b"items"
+    {
+        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limits.ask_bytes {
+            return Err(Usage::Long { argument });
+        }
+        return Ok(());
+    }
+    if let Value::Text(_) = value
+        && (spec.name == b"instructions" || spec.name == b"spec")
+    {
+        return valid_text(value, argument, limits);
+    }
+    if *value == Value::Stdin {
+        return Ok(());
+    }
+    let Value::File(_) = value else {
+        return Err(Usage::Kind { argument });
+    };
+    Ok(())
 }

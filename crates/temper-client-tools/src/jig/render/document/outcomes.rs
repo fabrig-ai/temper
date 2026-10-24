@@ -63,8 +63,31 @@ pub(super) fn encode_recipient(value: &jig_client::contract::Recipient, out: &mu
 #[expect(clippy::too_many_lines, reason = "one exhaustive encoding of jig's refusal vocabulary")]
 pub(super) fn encode_refusal(value: &jig_client::contract::Refusal, out: &mut Encoder, budget: &mut super::Cut) {
     match value {
-        jig_client::contract::Refusal::Stale(_) | jig_client::contract::Refusal::Full(_) => {
-            unreachable!("the tools do not request settings")
+        jig_client::contract::Refusal::Stale(value) => {
+            out.object_start();
+            out.key(b"stale");
+            out.object_start();
+            out.key(b"newest");
+            out.unsigned(u64::from(value.newest));
+            out.object_end();
+            out.object_end();
+        }
+        jig_client::contract::Refusal::Full(value) => {
+            out.object_start();
+            out.key(b"full");
+            out.object_start();
+            out.key(b"revision");
+            out.unsigned(u64::from(value.revision));
+            out.key(b"tasks");
+            out.array_start();
+            for task in &value.tasks {
+                out.unsigned(*task);
+            }
+            out.array_end();
+            out.key(b"more");
+            out.unsigned(u64::from(value.more));
+            out.object_end();
+            out.object_end();
         }
         jig_client::contract::Refusal::AccountMove { why } => {
             use jig_client::contract::AccountMoveWhy;

@@ -1,0 +1,8 @@
+setting charter|template|policy N [--revision R]
+setting rules
+Read one setting's value whole; JSON values feed change-settings
+Result: setting
+  kind: Setting kind
+  number: Setting number
+  revision: Held charter revision; newest by default
+  kind: Deployment rules

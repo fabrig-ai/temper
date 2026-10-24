@@ -1,0 +1,4 @@
+revision R
+Read a revision and its whole items, or the oldest kept if forgotten
+Result: revision
+  revision: Revision number

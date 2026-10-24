@@ -1,0 +1,4 @@
+revisions [--before R]
+Read history newest first, a page at a time
+Result: revisions
+  before: Read before this revision

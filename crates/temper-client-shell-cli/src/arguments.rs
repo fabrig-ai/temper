@@ -37,7 +37,8 @@ pub fn file_root(parsed: &Parsed) -> Option<Box<[u8]>> {
         Parsed::File { file: Source::Path(path), .. } => path.as_ref(),
         Parsed::File { file: Source::Stdin, .. } => return None,
         Parsed::Call { call, .. } => {
-            if class(call) == Class::Help || TOOLS[usize::from(call.tool)].name == b"amend" {
+            if class(call) == Class::Help || matches!(TOOLS[usize::from(call.tool)].name, b"amend" | b"change-settings")
+            {
                 return None;
             }
             call.values.iter().find_map(|values| {
@@ -102,7 +103,7 @@ pub(crate) fn key_file(call: &Call) -> Option<&[u8]> {
 pub fn text_files(parsed: &Parsed) -> Vec<(u8, Box<[u8]>)> {
     let mut files = Vec::new();
     let Parsed::Call { call, .. } = parsed else { return files };
-    if TOOLS[usize::from(call.tool)].name != b"amend" {
+    if !matches!(TOOLS[usize::from(call.tool)].name, b"amend" | b"change-settings") {
         return files;
     }
     for (index, slot) in call.values.iter().enumerate() {
