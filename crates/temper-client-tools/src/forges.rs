@@ -382,7 +382,8 @@ pub(crate) fn told(state: &mut Forges, client: &Client, env: &Env<Limits>, told:
                     let mut operation = render::outcome::Operation::of(
                         &starting.value.ask(&env.limits.domain.forge).expect("admitted project name"),
                     );
-                    operation.word = b"forge-setup";
+                    operation.word =
+                        if connection::owns(&starting.called.call) { b"forge-connect" } else { b"forge-setup" };
                     let printed =
                         render::outcome::print(&operation, outcome, starting.called.json, None, &env.limits.tools);
                     finish(starting.called, printed, out);
@@ -407,25 +408,7 @@ pub(crate) fn told(state: &mut Forges, client: &Client, env: &Env<Limits>, told:
                     out.push(Out::Progress {
                         line: if called.json { render::outcome::newline(&printed.stdout) } else { printed.stdout },
                     });
-                    let handle = Handle { asker: Owner::Forge.asker(), number: key.number };
-                    state.watches.insert(
-                        handle,
-                        Watching {
-                            called,
-                            setup: pending.intent,
-                            since: None,
-                            first: None,
-                            deadline: Some(
-                                env.now.checked_add(env.limits.tools.wait).unwrap_or(Time::from_nanos(u64::MAX)),
-                            ),
-                        },
-                    );
-                    out.push(Out::Client {
-                        event: Event::Watch {
-                            handle,
-                            subject: domain::watch(&env.limits.domain.forge).expect("checked forge limits"),
-                        },
-                    });
+                    watch_first(state, env, *key, called, pending.intent.expect("setup intent"), out);
                 }
                 Some(called) => finish(called, printed, out),
                 None => out.push(Out::Kept { line: if printed.status == 0 { printed.stdout } else { printed.stderr } }),
@@ -503,8 +486,28 @@ fn adopted(state: &mut Forges, env: &Env<Limits>, mut adopting: Adopting, outcom
         state.adopting.insert(key, adopting);
         out.push(Out::Client { event: Event::Send { key, name: Some(name), request } });
     } else {
-        let printed = crate::forge::print(&adopting.adoption, outcome, adopting.called.json, false, &env.limits);
+        let mut printed = crate::forge::print(&adopting.adoption, outcome, adopting.called.json, false, &env.limits);
+        if printed.status == 0 && connection::owns(&adopting.called.call) {
+            let project = u64::from(adopting.adoption.project);
+            let mut measure = Text::measure();
+            project_answer(&mut measure, adopting.called.json, project, &printed.stdout);
+            let mut text = Text::writing_exact(measure);
+            project_answer(&mut text, adopting.called.json, project, &printed.stdout);
+            printed.stdout = text.finish();
+            if printed.stdout.len() > usize::try_from(env.limits.tools.text).expect("text fits") {
+                printed = render::failure(b"result limit", adopting.called.json, 1);
+            }
+        }
         finish(adopting.called, printed, out);
+    }
+}
+fn project_answer(out: &mut Text, json: bool, project: u64, bytes: &[u8]) {
+    out.put(if json { b"{\"project\":" } else { b"project " });
+    out.number(project);
+    out.put(if json { b",\"outcome\":" } else { b"\n" });
+    out.put(bytes);
+    if json {
+        out.put(b"}");
     }
 }
 fn adoption_refused(outcome: &Outcome, limits: &Limits) -> bool {
@@ -1015,6 +1018,47 @@ fn intent(forge: u16, call: &jig::call::Call, client: &Client) -> Intent {
     };
     Intent { forge, org, repository, project }
 }
+// Both ways of making a first repository finish through the same watch and Adopt.
+fn watch_first(state: &mut Forges, env: &Env<Limits>, key: Key, called: Called, intent: Intent, out: &mut Queue<Out>) {
+    let handle = Handle { asker: Owner::Forge.asker(), number: key.number };
+    state.watches.insert(
+        handle,
+        Watching {
+            called,
+            setup: Some(intent),
+            since: None,
+            first: None,
+            deadline: Some(env.now.checked_add(env.limits.tools.wait).unwrap_or(Time::from_nanos(u64::MAX))),
+        },
+    );
+    out.push(Out::Client {
+        event: Event::Watch { handle, subject: domain::watch(&env.limits.domain.forge).expect("checked forge limits") },
+    });
+}
+fn admin_stop(stop: domain::AdminStop, out: &mut Text) {
+    use domain::{AdminStop, SetupStage};
+    match stop {
+        AdminStop::NotAdmin => out.put(b"not a site admin"),
+        AdminStop::Unmarked => out.put(b"unmarked bot login"),
+        AdminStop::Other => out.put(b"admin connection stopped"),
+        AdminStop::Refused { status, stage } => {
+            out.put(b"admin request refused: ");
+            out.number(u64::from(status));
+            out.put(b" at ");
+            out.put(match stage {
+                SetupStage::Admin => b"admin",
+                SetupStage::Bot => b"bot",
+                SetupStage::Token => b"token",
+                SetupStage::Org => b"organization",
+                SetupStage::Repository => b"repository",
+                SetupStage::File => b"starter workflow",
+                SetupStage::App => b"app",
+                SetupStage::Installation => b"installation",
+                SetupStage::State => b"state",
+            });
+        }
+    }
+}
 fn setup_changed(state: &mut Forges, env: &Env<Limits>, handle: Handle, rows: &[Row], out: &mut Queue<Out>) {
     let watch = state.watches.get(&handle).expect("active setup watch");
     let intent = watch.setup.as_ref().expect("setup intent");
@@ -1031,14 +1075,22 @@ fn setup_changed(state: &mut Forges, env: &Env<Limits>, handle: Handle, rows: &[
         };
         if failed.is_none() {
             failed = match &row.connection {
-                Connection::SetUpFailed { .. } => Some(words::forge_connection(row)),
+                Connection::SetUpFailed { .. } | Connection::Stopped { .. } => Some(words::forge_connection(row)),
                 Connection::NotConnected
                 | Connection::NotSetUp
                 | Connection::SettingUp { .. }
                 | Connection::Connecting
-                | Connection::Connected { .. }
-                | Connection::Stopped { .. } => None,
+                | Connection::Connected { .. } => None,
             };
+        }
+        if failed.is_none()
+            && let Some(stop) = row.ended_stop
+        {
+            let mut measure = Text::measure();
+            admin_stop(stop, &mut measure);
+            let mut text = Text::writing_exact(measure);
+            admin_stop(stop, &mut text);
+            failed = Some(text.finish());
         }
         if let Some(why) = failed {
             let printed = render::failure(&why, watch.called.json, 1);
@@ -1078,8 +1130,9 @@ fn setup_changed(state: &mut Forges, env: &Env<Limits>, handle: Handle, rows: &[
                         return;
                     };
                     let name = temper_client_domain::forge::start_project_key(intent.forge, 0);
+                    // Slot 5 belongs to the pasted Connect; project creation gets its own key.
                     let key =
-                        Key { asker: Owner::Forge.asker(), number: (u64::from(watch.called.call_number) << 32u32) | 5 };
+                        Key { asker: Owner::Forge.asker(), number: (u64::from(watch.called.call_number) << 32u32) | 6 };
                     state.starting.insert(key, Starting { called: watch.called, value });
                     out.push(Out::Client { event: Event::Send { key, name: Some(name), request } });
                 }

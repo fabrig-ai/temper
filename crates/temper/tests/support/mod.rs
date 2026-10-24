@@ -18,6 +18,7 @@ pub const WITHIN: skein_lib::Duration = skein_lib::Duration::from_secs(60);
 pub mod forge_land;
 pub mod forge_sign_in;
 pub mod forgejo;
+pub mod forgejo_elsewhere;
 pub mod forgejo_sign_in;
 pub mod live;
 pub mod live_github;
