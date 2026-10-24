@@ -145,6 +145,22 @@ pub enum Read {
     RedRootsEnded,
     RedRootsPending,
     RedUpdatedReviewEnded,
+    // Act 3, step 6.7 (domain/testing.md, 5.3)
+    CapParked,
+    CapHeld,
+    CapA5Writing,
+    CapOwnerWaiting,
+    CapInboxHeld,
+    CapPassed,
+    CapReleased,
+    CapA5Ended,
+    CapSubownerEnded,
+    CapOwnerEnded,
+    CapDirectorEnded,
+    CapInboxEnded,
+    CapSubownerFirst,
+    CapOwnerFirst,
+    CapDirectorFirst,
 }
 // Provisioning's key call does not count as a story act. The director's
 // ended wait starts first; its delegates' ended documents are read before
@@ -1119,5 +1135,67 @@ pub fn step_6_4() -> Vec<calls::Step> {
         steps.push(call(D1, argv!["task", number(task), "--activity", "32", "--json"]));
     }
     steps.push(call(D1, argv!["tasks", "--project", number(PROJECT), "--ended", "--json"]));
+    steps
+}
+
+// Act 3, step 6.7 (domain/testing.md, 5.3)
+pub const READS_6_7: &[(Read, usize)] = &[
+    (Read::CapParked, 7),
+    (Read::CapHeld, 8),
+    (Read::CapA5Writing, 9),
+    (Read::CapOwnerWaiting, 10),
+    (Read::CapInboxHeld, 11),
+    (Read::CapPassed, 14),
+    (Read::CapReleased, 16),
+    (Read::CapA5Ended, 17),
+    (Read::CapSubownerEnded, 18),
+    (Read::CapOwnerEnded, 19),
+    (Read::CapDirectorEnded, 20),
+    (Read::CapInboxEnded, 21),
+];
+
+#[must_use]
+pub fn step_6_7() -> Vec<calls::Step> {
+    use super::*;
+    let mut steps = vec![
+        sign_in(D1),
+        call(D1, argv!["chat", "--project", number(PROJECT), "--key", "cap", CAP_PERSON]),
+        start(D1, argv!["wait", "task", number(CAP_DIRECTOR), "--until", "ended", "--json"]),
+        call(D1, argv!["wait", "task", number(CAP_DIRECTOR), "--until", "replied"]),
+        call(D1, argv!["wait", "task", number(CAP_OWNER), "--until", "replied"]),
+        calls::until(D1, argv!["task", number(CAP_SUBOWNER), "--json"], Agent::CapImplementer.cue(), b"\"task\""),
+        calls::until(D1, argv!["task", number(CAP_A5), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        call(D1, argv!["wait", "task", number(CAP_SUBOWNER), "--until", "phase:idle", "--json"]),
+        calls::until(
+            D1,
+            argv!["task", number(CAP_SUBOWNER), "--activity", "32", "--json"],
+            b"\"reason\":\"deadline\"",
+            b"\"task\"",
+        ),
+        call(D1, argv!["task", number(CAP_A5), "--activity", "32", "--json"]),
+        calls::until(
+            D1,
+            argv!["task", number(CAP_OWNER), "--activity", "32", "--json"],
+            b"\"work\":\"writing\"",
+            b"\"task\"",
+        ),
+        call(D1, argv!["inbox", "--json"]),
+        calls::release_hold(CAP_PASS_HOLD),
+        // The director's document includes A's observation too. Once A parks
+        // after its pass, only the director can satisfy the writing checkpoint.
+        call(D1, argv!["wait", "task", number(CAP_OWNER), "--until", "phase:idle"]),
+        calls::until(D1, argv!["task", number(CAP_DIRECTOR), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        call(D1, argv!["task", number(CAP_SUBOWNER), "--activity", "32", "--json"]),
+        calls::release_hold(CAP_SPLIT_HOLD),
+        call(D1, argv!["wait", "task", number(CAP_SUBOWNER), "--until", "phase:idle"]),
+        call(D1, argv!["task", number(CAP_SUBOWNER), "--activity", "32", "--json"]),
+        calls::release_hold(CAP_A5_HOLD),
+        join(2),
+    ];
+    for task in [CAP_A5, CAP_SUBOWNER, CAP_OWNER, CAP_DIRECTOR] {
+        steps.push(call(D1, argv!["task", number(task), "--activity", "32", "--json"]));
+    }
+    steps.push(call(D1, argv!["inbox", "--json"]));
+
     steps
 }

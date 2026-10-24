@@ -1499,3 +1499,106 @@ fn red_finish_change(mut work: Turn, title: &str, body: &str) -> Turn {
     work.lines = lines.into();
     work
 }
+
+// Act 3, step 6.7 (domain/testing.md, 5.3)
+#[must_use]
+pub fn step_6_7(_forge: SocketAddr) -> Box<[Script]> {
+    use super::*;
+    let built = skein_shell::Clock::new().now().wall.as_nanos();
+    let deadline = built + CAP_SPAN;
+    let mut owner = batch_member(Agent::CapOwner, 33, 2, 2, A_DEADLINE);
+    // A delegates, controls and decides; A1 delegates and subscribes.
+    owner["authority"]["tools"] = 45.into();
+    owner["tracked"] = json!({"priority":1});
+    let mut subowner = batch_member(Agent::CapSubowner, 22, 1, 1, deadline);
+    subowner["authority"]["tools"] = 33.into();
+    let mut later = subowner["authority"].clone();
+    later["budget"]["deadline"] = A1_DEADLINE.into();
+    let a5 = batch_member(Agent::CapImplementer, 10, 0, 0, deadline);
+    Box::new([
+        Script {
+            cue: Agent::CapDirector.cue().into(),
+            turns: Box::new([
+                then_wait(call(b"delegate", &json!({"batch":[owner]})), "A owns M1."),
+                batch_held(
+                    CAP_SPLIT_HOLD,
+                    call(
+                        b"amend",
+                        &json!({"target":CAP_SUBOWNER,"revision":CAP_REVISION-1,
+                "amendment":{"authority":later,"instructions":CAP_SPLIT,"reason":CAP_REASON}}),
+                    ),
+                ),
+                then_wait(
+                    call(b"release", &json!({"target":CAP_SUBOWNER,"revision":CAP_HOLD_REVISION})),
+                    "A1 is released after the split.",
+                ),
+                report(CAP_DIRECTOR_REPORT),
+                wait("A is still working."),
+            ]),
+        },
+        Script {
+            cue: Agent::CapOwner.cue().into(),
+            turns: Box::new([
+                then_wait(call(b"delegate", &json!({"batch":[subowner]})), "A1 owns M1 until its cap."),
+                batch_held(
+                    CAP_PASS_HOLD,
+                    then_wait(
+                        call(
+                            b"decide_escalation",
+                            &json!({"task":CAP_SUBOWNER,"revision":CAP_HOLD_REVISION,"decision":"pass"}),
+                        ),
+                        "The director must decide M1's cap.",
+                    ),
+                ),
+                report(CAP_OWNER_REPORT),
+                wait("A1 is still working."),
+            ]),
+        },
+        Script {
+            cue: Agent::CapSubowner.cue().into(),
+            turns: Box::new([
+                call(b"delegate", &json!({"batch":[a5]})),
+                then_wait(
+                    call(b"subscribe", &json!({"kind":"timer","at":deadline+CAP_TIMER_MARGIN})),
+                    "A1 parks until its cap or a5's result.",
+                ),
+                report(CAP_SUBOWNER_REPORT),
+                wait("A1 awaits a5's ending after the split."),
+            ]),
+        },
+        Script {
+            cue: Agent::CapImplementer.cue().into(),
+            turns: Box::new([batch_held(CAP_A5_HOLD, report(CAP_A5_REPORT))]),
+        },
+    ])
+}
+
+#[must_use]
+pub fn step_6_7_rules() -> Box<[Box<[Rule]>]> {
+    use super::*;
+    let table = |entries: &[(&str, u32)]| -> Box<[Rule]> {
+        entries.iter().map(|(cue, turn)| Rule { cue: cue.as_bytes().into(), turn: *turn }).collect()
+    };
+    Box::new([
+        table(&[
+            (CAP_OWNER_REPORT, 3),
+            (CROSSED, 3),
+            ("changed: authority, instructions", 2),
+            ("Done: task", 4),
+            ("Held task needs a decision", 1),
+            (DELEGATED, 4),
+            (BEGIN, 0),
+            ("", 4),
+        ]),
+        table(&[
+            (CAP_SUBOWNER_REPORT, 2),
+            (CROSSED, 2),
+            ("Held task needs a decision", 1),
+            (DELEGATED, 3),
+            (BEGIN, 0),
+            ("", 3),
+        ]),
+        table(&[(CAP_A5_REPORT, 2), (CROSSED, 2), (CAP_SPLIT, 3), (DELEGATED, 1), (BEGIN, 0), ("", 3)]),
+        Box::new([]),
+    ])
+}
