@@ -1286,6 +1286,10 @@ sandbox of configuration.md, 12.1. Every child reads the effective
 temper.json and agent.json through its effective directory flags; changing
 only the parent's parsed bytes is insufficient.
 
+Before first preparation, run ordinary init if C is empty, build
+scripts/bundle.sh --loopback OUT, and name OUT in application.clients.bundle.
+The missing-bundle refusal says how; box startup performs no build or fetch.
+
 The preparation prints its effective paths and the peer commands.
 GitHub has one fixed person and repository. Its App id and matching fixture
 key, the dummy model key and the elsewhere Forgejo's admin token are the
