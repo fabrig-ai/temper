@@ -333,8 +333,14 @@ fn a_panel_falling_behind_before_its_first_record_retries_and_shows_the_landed_c
         let (mut root, task_watch) = before_document();
         let mut task = change_task();
         let first = family_open(&mut task_document(&mut root, task_watch, &task), TASK).expect("panel watch");
+        let handle = root.forge().panel().unwrap().handle.expect("opening panel handle");
         // Jig reports Behind without a latest record while it backs off this opening.
-        assert!(up(&mut root, Up::WatchEnded { watch: first, end }).is_empty());
+        assert!(up(&mut root, Up::WatchEnded { watch: first, end }).is_empty(), "{end:?}");
+        assert_eq!(root.forge().panel().unwrap().state, State::Loading, "{end:?}");
+        assert_eq!(root.forge().panel().unwrap().handle, Some(handle), "{end:?}");
+        let document = root.client().document(handle).expect("jig retains the handle");
+        assert_eq!(document.state, jig_client::State::Behind, "{end:?}");
+        assert!(document.latest.is_none(), "{end:?}");
         finish_change(&mut task);
         assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none());
         let limits = f::limits();

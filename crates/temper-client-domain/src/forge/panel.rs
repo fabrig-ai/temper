@@ -24,9 +24,10 @@ pub struct Panel {
     pub state: State,
     pub handle: Option<Handle>,
 }
-/// A delivery needs an unwatch on invalid bytes; a watch jig ended does not.
+/// Progress keeps jig's retry; an invalid delivery needs an unwatch, an ending does not.
 #[derive(Debug)]
 pub enum Watched {
+    Waiting,
     Delivered(Option<Box<w::ChangePanel>>),
     Ended(Why),
 }
@@ -110,10 +111,19 @@ pub(super) fn subject(side: &mut Side, limits: Limits, subject: Option<Subject>,
     side.changed();
 }
 pub(super) fn decode(client: &Client, handle: Handle, limits: Limits) -> Watched {
-    Watched::Delivered(record(client, handle, limits))
+    let Some(document) = client.document(handle) else { return Watched::Delivered(None) };
+    // Changed also reports progress before the first record (jig's client/domain/client.md, 8.1).
+    let waiting = match document.state {
+        jig_client::State::Opening | jig_client::State::Behind => document.latest.is_none(),
+        jig_client::State::Live | jig_client::State::Ended => false,
+    };
+    if waiting {
+        return Watched::Waiting;
+    }
+    Watched::Delivered(record(document.latest, limits))
 }
-fn record(client: &Client, handle: Handle, limits: Limits) -> Option<Box<w::ChangePanel>> {
-    let Latest::Family(record) = client.document(handle)?.latest? else { return None };
+fn record(latest: Option<&Latest>, limits: Limits) -> Option<Box<w::ChangePanel>> {
+    let Latest::Family(record) = latest? else { return None };
     if record.family != wire::FORGE || record.version != wire::CLIENT_VERSION {
         return None;
     }
@@ -124,31 +134,28 @@ pub(super) fn watched(side: &mut Side, handle: Handle, watched: Watched, out: &m
     if panel.handle != Some(handle) {
         return;
     }
-    side.panel_retry = match &watched {
-        Watched::Ended(Why::SubjectEnded) => true,
-        Watched::Delivered(_)
-        | Watched::Ended(Why::NotServed | Why::Unknown | Why::NotAllowed | Why::SignedOut | Why::Limit) => false,
-    };
-    if side.panel_retry {
-        out.push(Request::PanelEnded { subject: panel.subject });
-    }
-    let state = match watched {
-        Watched::Delivered(Some(record)) if record.task() == panel.subject.task => State::Shown(record),
+    let (state, retry) = match watched {
+        Watched::Waiting => return,
+        Watched::Delivered(Some(record)) if record.task() == panel.subject.task => (State::Shown(record), false),
         Watched::Delivered(_) => {
             panel.handle = None;
             out.push(Request::Client { asked: jig_client::Event::Unwatch { handle } });
-            State::Unknown
-        }
-        // Only SubjectEnded may be refreshed by the root (client/forge.md, 9.2).
-        Watched::Ended(Why::Unknown | Why::SubjectEnded) => {
-            panel.handle = None;
-            State::Unknown
+            (State::Unknown, false)
         }
         Watched::Ended(why) => {
             panel.handle = None;
-            State::Ended(why)
+            // Only SubjectEnded may be refreshed by the root (client/forge.md, 9.2).
+            match why {
+                Why::SubjectEnded => (State::Unknown, true),
+                Why::Unknown => (State::Unknown, false),
+                Why::NotServed | Why::NotAllowed | Why::SignedOut | Why::Limit => (State::Ended(why), false),
+            }
         }
     };
+    side.panel_retry = retry;
+    if side.panel_retry {
+        out.push(Request::PanelEnded { subject: panel.subject });
+    }
     if panel.state != state {
         panel.state = state;
         side.changed();

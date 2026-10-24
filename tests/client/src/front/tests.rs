@@ -202,3 +202,95 @@ fn an_unconfigured_model_is_answered_immediately() {
         )
     );
 }
+
+// The application route's raw drop reaches temper's own client, not jig's test application.
+#[test]
+fn qa_a_panel_dropped_before_its_first_record_keeps_loading_until_jig_reopens_it() {
+    use client::forge::panel::State;
+    use jig_client_test_domain::family::Kind;
+    use jig_client_world::harness::{Settings, Until, World};
+
+    let limits = fixtures::domain_limits();
+    let mut front = Joint::with_change_landing(fixtures::SEED, &limits);
+    front.engine.forge =
+        Some(temper_engine_domain_world::forge_stand::ForgeStand::with_checks(fixtures::REPOSITORIES, &[b"build"]));
+    fixtures::adopt_change_repository(&mut front);
+    front.engine.forge.as_mut().expect("fake forge").push_branch(7, b"temper/qa");
+    let task = fixtures::goal_with_pushed_change(&mut front, b"temper/qa");
+    let mut world = World::<Temper, Joint>::new(
+        Settings {
+            seed: fixtures::SEED,
+            words: temper_client_view::words::jig_language(),
+            heap_bytes_per_client: 64 * 1024 * 1024,
+            ..Settings::default()
+        },
+        front,
+    );
+    let client = world.client(fixtures::PARTY, fixtures::task_page(task));
+    let mut opening = None;
+    for _ in 0..100 {
+        let outcome = world.run(Until::Steps(2));
+        assert!(
+            matches!(outcome.verdict, skein_world::domain::Verdict::Passed | skein_world::domain::Verdict::Open { .. }),
+            "{outcome:?}"
+        );
+        if let Some(panel) = world.root(client).person().forge().panel() {
+            assert_eq!(panel.state, State::Loading);
+            let handle = panel.handle.expect("opening panel handle");
+            assert!(
+                world
+                    .root(client)
+                    .person()
+                    .client()
+                    .document(handle)
+                    .expect("retained panel document")
+                    .latest
+                    .is_none()
+            );
+            opening = Some(handle);
+            break;
+        }
+    }
+    let handle = opening.expect("the task document opens its panel before its first delivery");
+    let front = world.front();
+    let watcher = front
+        .transport
+        .watches()
+        .into_iter()
+        .find(|watcher| {
+            let route = front.transport.watch(*watcher).expect("live transport route");
+            route.client == client
+                && matches!(route.subject, Watched::Application { subject, .. } if subject.kind == Kind::Panel(task))
+        })
+        .expect("the panel's application route");
+    let route = front.transport.end_watch(watcher).expect("dropped panel route");
+    front.send(translate::party(jig_domain_core::Event::Unwatch { watcher }));
+    world.event(
+        client,
+        RootEvent::Client {
+            event: jig_client::Event::Up {
+                up: jig_client::Up::WatchEnded { watch: route.native, end: jig_client::contract::WatchEnd::Dropped },
+            },
+        }
+        .into(),
+    );
+    let panel = world.root(client).person().forge().panel().expect("task page panel");
+    assert_eq!(panel.handle, Some(handle));
+    assert_eq!(panel.state, State::Loading);
+    let document = world.root(client).person().client().document(handle).expect("retained panel document");
+    assert_eq!(document.state, jig_client::State::Behind);
+    assert!(document.latest.is_none());
+    for _ in 0..100 {
+        let until = world.now().saturating_add(Duration::from_millis(100));
+        let outcome = world.run(Until::Time(until));
+        assert!(matches!(outcome.verdict, skein_world::domain::Verdict::Passed), "{outcome:?}");
+        let panel = world.root(client).person().forge().panel().expect("task page panel");
+        assert_eq!(panel.handle, Some(handle));
+        if let State::Shown(record) = &panel.state {
+            assert_eq!(record.task(), task);
+            assert!(world.front().watching_change(client, task));
+            return;
+        }
+    }
+    panic!("jig's retry must deliver the known change panel");
+}
