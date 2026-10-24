@@ -85,6 +85,11 @@ pub(crate) fn kind(p: &Path, what: What) -> Refusal {
         | What::Memory { .. }
         | What::Override
         | What::ProviderKey { .. }
+        | What::PolicyEnvelope { .. }
+        | What::AmendmentEnvelope { .. }
+        | What::CodecCeiling { .. }
+        | What::CodecArithmetic
+        | What::StoreCodec
         | What::Unreadable => b"invalid form",
     };
     why(p, words)

@@ -112,7 +112,13 @@ fn words(what: What) -> &'static [u8] {
             config::What::Duplicate => b"duplicate",
             config::What::Kind => b"wrong value kind",
             config::What::Bound => b"past its bound",
-            config::What::Form | config::What::ProviderKey { .. } => b"invalid form",
+            config::What::Form
+            | config::What::ProviderKey { .. }
+            | config::What::PolicyEnvelope { .. }
+            | config::What::AmendmentEnvelope { .. }
+            | config::What::CodecCeiling { .. }
+            | config::What::CodecArithmetic
+            | config::What::StoreCodec => b"invalid form",
             config::What::Unique => b"must be unique",
             config::What::Refers => b"unknown reference",
             config::What::Plaintext => b"plaintext requires loopback or in-process",
@@ -282,6 +288,11 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
                 | config::What::Kind
                 | config::What::Bound
                 | config::What::Form
+                | config::What::PolicyEnvelope { .. }
+                | config::What::AmendmentEnvelope { .. }
+                | config::What::CodecCeiling { .. }
+                | config::What::CodecArithmetic
+                | config::What::StoreCodec
                 | config::What::Unique
                 | config::What::Refers
                 | config::What::Plaintext
