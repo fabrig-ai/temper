@@ -191,7 +191,7 @@ fn input_byte_bound_is_checked_before_any_output() {
     let bound = usize::try_from(crate::DOCUMENT_BYTES).expect("document bound");
     source.resize(bound, b' ');
     let agent = serde_json::to_vec(&agent).expect("agent bytes");
-    assert!(rewrite(&source, &agent, &paths, &peers).is_ok());
+    rewrite(&source, &agent, &paths, &peers).expect("document exactly at its byte bound");
     source.push(b' ');
     assert_eq!(rewrite(&source, &agent, &paths, &peers).expect_err("past document bound").words, b"past its bound");
 }
@@ -211,5 +211,5 @@ fn peer_and_effective_path_bounds_refuse_before_rewriting() {
     }
     let mut input = paths;
     input.data = vec![b'/'; 4097].into();
-    assert!(write(&temper, &agent, &input, &peers).is_err());
+    write(&temper, &agent, &input, &peers).expect_err("effective data path past its byte bound");
 }
