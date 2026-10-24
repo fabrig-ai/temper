@@ -4,7 +4,7 @@ use crate::address::PlanFilter;
 use crate::{Address, Limits, owner::Owner};
 use alloc::boxed::Box;
 use jig_client::{Client, Handle, Key, Latest, Readable, Readout, Told, Watchable, contract as c};
-use skein_lib::{Env, List, Queue, Wall};
+use skein_lib::{Duration, Env, List, Queue, Time, Wall};
 /// A task's state as a goal's page says it (client/README.md, 5.8).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum State {
@@ -274,10 +274,54 @@ pub struct Ended {
     pub stale: bool,
 }
 
+// A document attempt belongs to this page, including its next ask (client/README.md, 3.5).
+const READ_FIRST: Duration = Duration::from_secs(1);
+const READ_MOST: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadEnd {
+    Busy,
+    Unreachable,
+    Limit,
+    /// Jig ends old reads when a successful sign-in installs its credential.
+    SignIn,
+    SignedOut,
+    Unknown,
+    NotAllowed,
+    NotServed,
+    Gone,
+    TooLarge,
+    Malformed,
+}
+impl ReadEnd {
+    #[must_use]
+    pub const fn transient(self) -> bool {
+        match self {
+            Self::Busy | Self::Unreachable | Self::Limit | Self::SignIn => true,
+            Self::SignedOut
+            | Self::Unknown
+            | Self::NotAllowed
+            | Self::NotServed
+            | Self::Gone
+            | Self::TooLarge
+            | Self::Malformed => false,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DocumentRead {
+    Reading,
+    Ready,
+    Ended { why: ReadEnd, retry_at: Option<Time> },
+}
+
 #[derive(Debug)]
+#[expect(clippy::partial_pub_fields, reason = "the view reads document state while backoff stays private")]
 pub struct Task {
     pub number: u64,
     pub document: Handle,
+    pub document_read: DocumentRead,
+    read_wait: Duration,
     pub tree: Handle,
     pub activity: Handle,
     pub run: Option<Handle>,
@@ -312,6 +356,8 @@ impl Task {
         Self {
             number,
             document,
+            document_read: DocumentRead::Reading,
+            read_wait: READ_FIRST,
             tree,
             activity,
             run: None,
@@ -641,7 +687,7 @@ impl Task {
         }
         self.pending = kept;
     }
-    pub(crate) fn told(&mut self, client: &Client, told: Told, out: &mut Queue<Request>) -> bool {
+    pub(crate) fn told(&mut self, now: Time, client: &Client, told: Told, out: &mut Queue<Request>) -> bool {
         if let Told::Page { handle, page: Readout::Jig(c::ReadResult::Value(value)) } = &told {
             for index in 0..self.cards.len() {
                 let card = self.cards.get_mut(index).expect("bounded held card");
@@ -665,19 +711,15 @@ impl Task {
 
             Told::Changed { handle } if handle == self.document => {
                 if let Some(Latest::Jig(c::Delivery::Task(task))) = latest(client, handle) {
+                    self.document_read = DocumentRead::Ready;
                     self.changed(task, out);
                 }
             }
-            Told::Ended { handle, why: jig_client::Why::SubjectEnded | jig_client::Why::Unknown }
-                if handle == self.document =>
-            {
-                read(handle, c::Read::Task { task: self.number }, out);
+            Told::Ended { handle, why } if handle == self.document => {
+                self.document_ended(now, client, why, out);
             }
             Told::Page { handle, page } if handle == self.document => {
-                if let Some(task) = super::chat::page_task(page, self.number) {
-                    self.changed(&task, out);
-                    self.final_task = Some(task);
-                }
+                self.document_page(now, client, page, out);
             }
             Told::Page { handle, page } if Some(handle) == self.ended_handle() => {
                 let ended = self.ended.as_mut().expect("ended children handle");
@@ -732,6 +774,74 @@ impl Task {
             self.thread.end_run();
         }
         true
+    }
+    fn document_ended(&mut self, now: Time, client: &Client, why: jig_client::Why, out: &mut Queue<Request>) {
+        let why = match why {
+            jig_client::Why::SubjectEnded | jig_client::Why::Unknown => {
+                self.document_read = DocumentRead::Reading;
+                read(self.document, c::Read::Task { task: self.number }, out);
+                return;
+            }
+            jig_client::Why::NotAllowed => ReadEnd::NotAllowed,
+            jig_client::Why::SignedOut => signed_out(client),
+            jig_client::Why::NotServed => ReadEnd::NotServed,
+            jig_client::Why::Limit => ReadEnd::Limit,
+        };
+        self.read_ended_at(now, why);
+    }
+    fn document_page(&mut self, now: Time, client: &Client, page: Readout, out: &mut Queue<Request>) {
+        let why = match &page {
+            Readout::Limit => ReadEnd::Limit,
+            Readout::NotServed { .. } => ReadEnd::NotServed,
+            Readout::Jig(c::ReadResult::None(why)) => match why {
+                c::ReadNone::Busy => ReadEnd::Busy,
+                c::ReadNone::Unreachable => ReadEnd::Unreachable,
+                c::ReadNone::SignedOut => signed_out(client),
+                c::ReadNone::Unknown => ReadEnd::Unknown,
+                c::ReadNone::Refused => ReadEnd::NotAllowed,
+                c::ReadNone::Gone => ReadEnd::Gone,
+                c::ReadNone::TooLarge { .. } => ReadEnd::TooLarge,
+                c::ReadNone::Malformed => ReadEnd::Malformed,
+            },
+            Readout::Jig(c::ReadResult::Value(_)) | Readout::Family { .. } => ReadEnd::Malformed,
+        };
+        if let Some(task) = super::chat::page_task(page, self.number) {
+            self.document_read = DocumentRead::Ready;
+            self.changed(&task, out);
+            self.final_task = Some(task);
+        } else {
+            self.read_ended_at(now, why);
+        }
+    }
+    fn read_ended_at(&mut self, now: Time, why: ReadEnd) {
+        let retry_at = if why.transient() { Some(now.saturating_add(self.read_wait)) } else { None };
+        self.document_read = DocumentRead::Ended { why, retry_at };
+        if retry_at.is_some() {
+            self.read_wait = self.read_wait.saturating_mul(2).min(READ_MOST);
+        }
+    }
+    pub(crate) fn link(&mut self, link: jig_client::Link) {
+        let why = match link {
+            jig_client::Link::SignedOut => ReadEnd::SignedOut,
+            jig_client::Link::OutOfDate => ReadEnd::NotServed,
+            jig_client::Link::Starting | jig_client::Link::Live | jig_client::Link::Offline => return,
+        };
+        self.document_read = DocumentRead::Ended { why, retry_at: None };
+    }
+    pub(crate) fn fire(&mut self, now: Time, out: &mut Queue<Request>) {
+        if let Some(at) = self.next_deadline()
+            && at <= now
+        {
+            self.document_read = DocumentRead::Reading;
+            read(self.document, c::Read::Task { task: self.number }, out);
+        }
+    }
+    #[must_use]
+    pub(crate) const fn next_deadline(&self) -> Option<Time> {
+        match self.document_read {
+            DocumentRead::Ended { retry_at, .. } => retry_at,
+            DocumentRead::Reading | DocumentRead::Ready => None,
+        }
     }
     fn activity_page(&mut self, client: &Client, page: Readout, out: &mut Queue<Request>) {
         if let Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(page))) = page {
@@ -909,6 +1019,13 @@ impl Task {
         let task = self.document(client)?;
         let template = jig_client::shapes::template(me?, task.project, jig_client::shapes::CHAT)?;
         if task.label == template.label { Some(Address::Chat { task: self.number }) } else { None }
+    }
+}
+fn signed_out(client: &Client) -> ReadEnd {
+    match client.link().state {
+        jig_client::Link::SignedOut => ReadEnd::SignedOut,
+        jig_client::Link::Starting | jig_client::Link::Live | jig_client::Link::Offline => ReadEnd::SignIn,
+        jig_client::Link::OutOfDate => ReadEnd::NotServed,
     }
 }
 fn handle(number: u64) -> Handle {

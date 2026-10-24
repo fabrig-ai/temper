@@ -604,3 +604,42 @@ fn a_goals_specification_amended_from_its_page_reaches_the_engine() {
             .done
     );
 }
+
+#[test]
+fn a_busy_ended_task_read_shows_progress_then_its_document() {
+    // The shipped first backoff is one second, followed by the usual one-second response allowance.
+    const AFTER_RETRY: skein_lib::Duration = skein_lib::Duration::from_secs(2);
+    let mut world = fixtures::world(fixtures::SEED);
+    let goal = fixtures::finished_goal(world.front());
+    world.front().task_read_ends.push_back(jig_client::contract::ReadNone::Busy);
+    let person = world.client(fixtures::PARTY, fixtures::task_page(goal));
+    world.person(
+        person,
+        vec![
+            Step::See {
+                find: Find::named(Role::Status, format!("Reading task {goal}…").as_bytes()),
+                within: fixtures::WITHIN,
+            },
+            Step::See { find: Find::text(b"The repository is ready"), within: AFTER_RETRY },
+            Step::Gone {
+                find: Find::named(Role::Status, format!("Reading task {goal}…").as_bytes()),
+                within: fixtures::WITHIN,
+            },
+        ],
+    );
+    let outcome = world.run(Until::Done);
+    assert_eq!(outcome.verdict, Verdict::Passed, "{outcome:?}");
+}
+
+#[test]
+fn an_unknown_task_address_explains_its_missing_document() {
+    const UNKNOWN_TASK: u64 = 999;
+    let mut world = fixtures::world(fixtures::SEED);
+    let person = world.client(fixtures::PARTY, fixtures::task_page(UNKNOWN_TASK));
+    world.person(
+        person,
+        vec![Step::See { find: Find::named(Role::Status, b"This task could not be found."), within: fixtures::WITHIN }],
+    );
+    let outcome = world.run(Until::Done);
+    assert_eq!(outcome.verdict, Verdict::Passed, "{outcome:?}");
+}
