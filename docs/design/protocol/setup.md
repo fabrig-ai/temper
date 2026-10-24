@@ -642,7 +642,11 @@ files: at a first preparation, and for a runner older than its pin
   spec's environment. Forgejo then takes the socket whose address its
   `app.ini` names, in place of binding it (its `modules/graceful`, which
   reads no `LISTEN_PID`). Given none, as under every other arrangement
-  (7.4), Forgejo binds its address itself.
+  (7.4), Forgejo binds its address itself. Until forge run stays
+  Forgejo's parent (section 15), the box gives Forgejo's step none:
+  Forgejo 17 sends its parent `SIGTERM` once when `LISTEN_FDS` is set
+  (its `KillParent`, which no setting turns off), and forge run execs
+  it, so the box would be the parent it ends.
 - **Replaces itself** (`execve`) by `forgejo web` or `forgejo-runner
   daemon`, with the spec's arguments and the spec's environment alone:
   cleared, then `HOME` in the forge's directory, `PATH`, and git's
@@ -1006,8 +1010,10 @@ temper box
   (skein's `shell.md`, 6.6) and Forgejo reads as well (6.4). The step's
   own `Listen` for that address then takes the socket it was given
   (skein's `io.md`, 3.2), so nothing above io knows it was given one. A
-  step with no listener is given none, and no `LISTEN_FDS`. A listener
-  at port 0 is not held: its step binds it, as without the box, since a
+  step with no listener is given none, and no `LISTEN_FDS`. Forgejo's
+  step is given none for now (6.4), and a fresh box closes the
+  reservation `temper init` made for its port, so Forgejo binds it
+  itself. A listener at port 0 is not held: its step binds it, as without the box, since a
   port the kernel chooses can't collide. A held one could not be claimed
   either, since the step's `Listen` names port 0, not the port chosen.
   It changes at each restart, as it does without the box. `LISTEN_FDS`
@@ -2939,6 +2945,19 @@ Each is intended; what it needs is named with it.
   become simply the open chats of that project, read from it at the
   end in place of the end's selection by the moment (8.4, step 5),
   with `make_project` in the document's grant (8.3).
+- **forge run as Forgejo's parent,** so that Forgejo's port is held by
+  the box like every other step's (6.4, 7.1). Given descriptor 3, forge
+  run keeps it and Forgejo's lock and runs an io loop instead of
+  exec'ing. It spawns `temper forge child --parent <its pid> --
+  forgejo …` with the listener at the child's descriptor 3 and
+  `LISTEN_FDS=1`, and relays its output. It ignores a `Shutdown` that
+  Forgejo sent (skein's `io.md`, section 7), forwards any
+  other, and exits with Forgejo's status. `forge child` execs Forgejo
+  through skein's `exec_dying_with_parent` (skein's `shell.md`, 3), so
+  a forge run the box kills takes Forgejo with it. The exec belongs in
+  6.4's module. On Linux only: on macOS, where the shutdown names no
+  sender and no parent-death signal exists, Forgejo keeps binding its
+  own port. It needs temper's skein repin past skein 7608695c.
 - **A lock and an exec in skein's shell,** onto which 6.4's module
   moves once skein's shell offers an exec and a lock held across it,
   which skein's `Lock` is not (skein's `io.md`, section 5). A second
