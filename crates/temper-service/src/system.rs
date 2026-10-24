@@ -110,7 +110,7 @@ impl Service {
         settings.jig.limits.clients.wire.keyed_value_some =
             limits::client_value_bytes(&settings.jig.limits, &settings.limits);
         read_charters(&mut settings)?;
-        let store_limits = store::limits(&limits, &settings.jig.limits.core, &limits.forge, &settings.jig.limits.store)
+        let store_limits = store::limits(&limits, &limits.forge, &settings.jig.limits.store)
             .ok_or(start_problem(b"limits", What::Bound))?;
         let max = temper_engine_domain::max_out(&limits);
         let queue = max.checked_mul(2).ok_or(start_problem(b"limits", What::Bound))?;

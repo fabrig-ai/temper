@@ -543,7 +543,6 @@ pub fn widest() -> engine::Limits {
 }
 fn component_limits(limits: &engine::Limits) -> Limits {
     let profile = jig_protocol_config::profile(jig_protocol_config::Profile::Small);
-    let core = core_limits(limits);
     let mut profile = profile.store;
     profile.store.budget = 4 * 1024 * 1024;
     profile.store.key = u32::MAX;
@@ -553,23 +552,5 @@ fn component_limits(limits: &engine::Limits) -> Limits {
     profile.store.queued_bytes = u64::MAX;
     profile.store.page.bytes = u32::MAX;
     profile.store.page.rows = 8;
-    temper_service::store::limits(limits, &core, &limits.forge, &profile).expect("world sizes fit real store")
-}
-
-pub(crate) fn core_limits(limits: &engine::Limits) -> jig_domain_core::Limits {
-    let mut core = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core;
-    core.tasks = limits.tasks;
-    core.settings = limits.settings;
-    core.authority = limits.authority;
-    core.people = limits.people;
-    core.fleet = limits.fleet;
-    core.accounts = limits.accounts;
-    core.notes = limits.notes;
-    core.load_slots = limits.loads.loads;
-    core.call_records = limits.call_records;
-    core.resume_bytes = limits.journal.transcript_bytes;
-    core.run_bytes = limits.journal.run_bytes;
-    core.policy_bytes = core.policy_bytes.min(u64::from(limits.journal.transcript_bytes));
-    core.call_answer_bytes = limits.journal.transcript_bytes;
-    core
+    temper_service::store::limits(limits, &limits.forge, &profile).expect("world sizes fit real store")
 }

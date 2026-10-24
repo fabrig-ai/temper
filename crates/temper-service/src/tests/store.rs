@@ -16,11 +16,11 @@ fn the_store_opens_over_memory_and_answers_a_commit() {
 
 #[test]
 fn sizes_past_skein_kvs_limits_refuse_the_store() {
-    let (root, core, profile) = fixtures::store_limits();
-    let checked = store::limits(&root, &core, &root.forge, &profile).expect("small fits");
+    let (root, _, profile) = fixtures::store_limits();
+    let checked = store::limits(&root, &root.forge, &profile).expect("small fits");
     assert!(checked.store.is_usable());
     assert_eq!(checked.store, checked.secrets);
-    assert_eq!(checked.core, core);
+    assert_eq!(checked.core, engine::core_limits(&root));
     assert_eq!(checked.journal, engine::journal_limits(&root.journal));
     for field in ["key", "value", "ops", "commit", "page", "queue", "queued bytes"] {
         let mut short = profile;
@@ -40,7 +40,7 @@ fn sizes_past_skein_kvs_limits_refuse_the_store() {
             }
             _ => panic!("named row"),
         }
-        assert!(store::limits(&root, &core, &root.forge, &short).is_none(), "{field}");
+        assert!(store::limits(&root, &root.forge, &short).is_none(), "{field}");
     }
 }
 
@@ -156,4 +156,59 @@ fn a_writer_committed_is_reloaded_through_the_real_store() {
         fixtures::load(&mut store, engine::Range::Forge).as_ref(),
         [engine::Record::Forge { row: Box::new(row) }]
     );
+}
+
+#[test]
+fn the_store_uses_the_roots_effective_core_limits() {
+    let (root, parsed, profile) = fixtures::store_limits();
+    let effective = engine::core_limits(&root);
+    assert_ne!(parsed.policy_bytes, effective.policy_bytes);
+    let checked = store::limits(&root, &root.forge, &profile).unwrap();
+    assert_eq!(checked.core, effective);
+}
+
+#[test]
+fn settings_history_loads_with_the_roots_effective_envelope() {
+    use jig_domain_core::{CoreRecord, Record, reads, settings};
+    use skein_lib::{Token, Wall};
+    let (root, _, _) = fixtures::store_limits();
+    let effective = engine::core_limits(&root);
+    let mut store = fixtures::memory_store();
+    let revision = settings::Revision {
+        head: settings::Head {
+            number: 1,
+            against: 0,
+            at: Wall::EPOCH,
+            by: settings::Decider::FirstStart,
+            proposal: None,
+            moved: false,
+        },
+        items: Box::new([]),
+    };
+    fixtures::commit(
+        &mut store,
+        1,
+        Box::new([engine::Write::Save(engine::Record::Core(Record::Core(CoreRecord::Settings(
+            settings::Record::Revision { history: false, revision: revision.clone() },
+        ))))]),
+    );
+    assert!(matches!(store.above.pop(), Some(jig_protocol_store::Event::Committed { .. })));
+    store.ask(jig_protocol_store::Request::Read {
+        owner: Token::new(42),
+        range: reads::Range {
+            party: 1,
+            scope: reads::Scope::SettingsHistory { first: 1, last: 1, newest: 1, whole: true },
+            after: None,
+            backwards: false,
+            rows: 1,
+            bytes: reads::settings::load_bytes(&effective, 1).unwrap(),
+        },
+    });
+    let Some(jig_protocol_store::Event::Read { result: reads::Loaded::Page { rows, next: None }, .. }) =
+        store.above.pop()
+    else {
+        panic!("settings history must answer a value, not Busy")
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(reads::settings::record_revision(&rows[0].value), Some(&revision));
 }
