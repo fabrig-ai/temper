@@ -286,22 +286,17 @@ fn temper_ctl_an_owner_changes_settings_and_a_stale_change_names_the_newest_revi
     scratch.remove();
 }
 
-#[test]
-fn temper_ctl_a_project_member_proposes_settings_and_an_owner_decides_them() {
+fn settings_proposal_story(scratch: &std::path::Path, accepted_words: &'static str) -> support::ctl::Seen {
     use support::ctl::{Call, Step, Story};
-    let scratch = ctl_scratch("ctl_propose_settings");
-    let clock = skein_shell::Clock::new();
-    let began = clock.now().now;
-    let first = scratch.path().join("proposed.json");
-    let second = scratch.path().join("stale.json");
-    let direct = scratch.path().join("direct.json");
-    let accepted_words = "Use the settings proposed by the project member.";
-    let seen = support::ctl::run(Story::new(
-        scratch.path(),
+    let first = scratch.join("proposed.json");
+    let second = scratch.join("stale.json");
+    let direct = scratch.join("direct.json");
+    support::ctl::run(Story::new(
+        scratch,
         vec![
             Step::Run(Call::sign_in()),
             Step::Run(Call::new(&["me", "--json"])),
-            Step::Member { scratch: scratch.path().into(), directory: "member" },
+            Step::Member { scratch: scratch.into(), directory: "member" },
             Step::Run(Call::new(&["me", "--json"]).in_directory("member")),
             Step::Run(Call::new(&["settings", "--json"])),
             Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
@@ -352,7 +347,16 @@ fn temper_ctl_a_project_member_proposes_settings_and_an_owner_decides_them() {
                 Call::new(&["proposal", &support::ctl::proposal_key(&calls[12]), "--json"]).in_directory("member")
             })),
         ],
-    ));
+    ))
+}
+
+#[test]
+fn temper_ctl_a_project_member_proposes_settings_and_an_owner_decides_them() {
+    let scratch = ctl_scratch("ctl_propose_settings");
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let accepted_words = "Use the settings proposed by the project member.";
+    let seen = settings_proposal_story(scratch.path(), accepted_words);
     for (index, call) in seen.calls.iter().enumerate() {
         assert_eq!(call.exit, Some(Exit::Code(0)), "call {index}: {}", String::from_utf8_lossy(&call.stderr));
         assert!(call.stderr.is_empty());

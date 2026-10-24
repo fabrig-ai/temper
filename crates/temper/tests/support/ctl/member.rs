@@ -9,15 +9,21 @@ const KEY: client::Key = client::Key { asker: client::Asker::JIG, number: 1 };
 const PROJECT: u32 = 1;
 const SEED: u64 = 713;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Creating,
+    Ready,
+    Signing,
+    Keeping,
+}
+
 pub struct Member {
     shell: Shell,
     client: client::Client,
     out: Queue<client::Request>,
     owner: Option<Secret>,
     made: Option<(u64, Secret)>,
-    answered: bool,
-    signing: bool,
-    keeping: bool,
+    phase: Phase,
     closing: bool,
     sequence: u64,
     operations: std::collections::BTreeMap<Token, (Token, Option<Token>)>,
@@ -45,9 +51,7 @@ impl Member {
             out: Queue::with_capacity(client::max_out(&bounds.root.domain.client)),
             owner: Some(token),
             made: None,
-            answered: false,
-            signing: false,
-            keeping: false,
+            phase: Phase::Creating,
             closing: false,
             sequence: super::MEMBER,
             operations: std::collections::BTreeMap::new(),
@@ -61,10 +65,17 @@ impl Member {
                 client::Request::ServiceCredential { party, credential } => self.made = Some((party, credential)),
                 client::Request::Told { told: client::Told::Answered { key: KEY, outcome } } => {
                     assert!(matches!(outcome, client::Outcome::Answered(_)), "member creation answered: {outcome:?}");
-                    self.answered = true;
+                    self.phase = Phase::Ready;
                 }
                 client::Request::Told { .. } => {}
-                request => self.shell.down(request),
+                request @ (client::Request::Exchange { .. }
+                | client::Request::OpenStream { .. }
+                | client::Request::CloseStream
+                | client::Request::Save { .. }
+                | client::Request::Erase { .. }
+                | client::Request::Down { .. }
+                | client::Request::SignOut
+                | client::Request::Authorized(_)) => self.shell.down(request),
             }
         }
     }
@@ -99,21 +110,21 @@ impl Member {
         while let Some(event) = self.shell.events().pop() {
             self.event(now, wall, event);
         }
-        if self.answered && !self.signing {
+        if self.phase == Phase::Ready {
             let (_, credential) = self.made.as_ref().expect("member credential");
             let credential = credential.clone();
-            self.signing = true;
+            self.phase = Phase::Signing;
             self.event(now, wall, client::Event::SignIn { with: client::With::Service(credential) });
         }
-        if self.signing && !self.keeping && self.client.link().state == client::Link::Live {
+        if self.phase == Phase::Signing && self.client.link().state == client::Link::Live {
             let (party, _) = self.made.as_ref().expect("made member");
             if self.client.link().party == Some(*party) {
                 let credential = self.client.link().credential.expect("member held credential").clone();
                 self.shell.keep(Some(credential));
-                self.keeping = true;
+                self.phase = Phase::Keeping;
             }
         }
-        if self.keeping
+        if self.phase == Phase::Keeping
             && let Some(kept) = self.shell.kept()
         {
             assert!(kept, "member token is durable");
