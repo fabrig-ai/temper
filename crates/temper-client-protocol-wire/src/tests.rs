@@ -161,35 +161,37 @@ fn the_demo_read_and_answer_round_trip_with_nonempty_cues() {
 
 #[test]
 fn demo_cues_obey_their_count_and_text_bounds() {
-    for (row, count, bytes, accepted) in [
-        ("no cues", 0, b"x".as_slice(), true),
-        ("one byte", 1, b"x".as_slice(), true),
-        ("at count", crate::CUES, b"x".as_slice(), true),
-        ("past count", crate::CUES + 1, b"x".as_slice(), false),
-        ("at bytes", 1, &[b'a'; 256], true),
-        ("past bytes", 1, &[b'a'; 257], false),
-        ("not UTF-8", 1, &[255], false),
-    ] {
-        let limits = fixtures::limits();
-        let mut cues = List::with_capacity(count);
-        for _ in 0..count {
-            cues.push(bytes.into()).expect("row's cue capacity");
-        }
-        let answer = v1::DemoAnswer::new(
-            &limits,
-            v1::DemoAnswerParts {
-                state: v1::DemoState::Running,
-                project: 7,
-                forge: crate::FORGE,
-                provider: 3,
-                owner: b"acme".as_slice().into(),
-                name: b"shop".as_slice().into(),
-                cues,
-            },
-        );
-        assert_eq!(answer.is_ok(), accepted, "{row}");
-        if let Ok(answer) = answer {
-            assert_eq!(crate::decode_demo_answer(&crate::demo_answer(&answer), &limits), Some(answer), "{row}");
+    for state in [v1::DemoState::Running, v1::DemoState::Ended] {
+        for (row, count, bytes, accepted) in [
+            ("no cues", 0, b"x".as_slice(), true),
+            ("one byte", 1, b"x".as_slice(), true),
+            ("at count", crate::CUES, b"x".as_slice(), true),
+            ("past count", crate::CUES + 1, b"x".as_slice(), false),
+            ("at bytes", 1, &[b'a'; 256], true),
+            ("past bytes", 1, &[b'a'; 257], false),
+            ("not UTF-8", 1, &[255], false),
+        ] {
+            let limits = fixtures::limits();
+            let mut cues = List::with_capacity(count);
+            for _ in 0..count {
+                cues.push(bytes.into()).expect("row's cue capacity");
+            }
+            let answer = v1::DemoAnswer::new(
+                &limits,
+                v1::DemoAnswerParts {
+                    state: state.clone(),
+                    project: 7,
+                    forge: crate::FORGE,
+                    provider: 3,
+                    owner: b"acme".as_slice().into(),
+                    name: b"shop".as_slice().into(),
+                    cues,
+                },
+            );
+            assert_eq!(answer.is_ok(), accepted, "{row}");
+            if let Ok(answer) = answer {
+                assert_eq!(crate::decode_demo_answer(&crate::demo_answer(&answer), &limits), Some(answer), "{row}");
+            }
         }
     }
 }
@@ -642,7 +644,7 @@ fn demo_start_outcomes_round_trip_at_each_boundary() {
 fn demo_states_round_trip_at_smallest_and_ceiling() {
     use skein_lib::List;
     let limits = v1::CEILINGS;
-    for state in [v1::DemoState::NotStarted, v1::DemoState::Running] {
+    for state in [v1::DemoState::NotStarted, v1::DemoState::Running, v1::DemoState::Ended] {
         for full in [false, true] {
             let mut cues = List::with_capacity(limits.demo_answer_cues);
             if full {

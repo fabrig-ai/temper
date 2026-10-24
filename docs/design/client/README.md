@@ -1351,11 +1351,11 @@ for its kind, its user's login and its installations. Its nodes:
   fields, and no subject: what it answers changes with the
   configuration, at a restart, and with the demo's state, which moves
   to running only by a start (4.8). Its answer is none, for a
-  deployment without the demo or whose demo ended, or the demo: its
+  deployment without the demo, or the demo: its
   project (u32), once its start has made it, else none
   (`../protocol/setup.md`, 8.4); its forge's number (u16); its model's LLM provider
   (u32); its repository's owner and name (byte strings, bounded as
-  `Adopt`'s); its state, `DemoState`, not started or running
+  `Adopt`'s); its state, `DemoState`, not started, running or ended
   (`../protocol/setup.md`, 8.4); and its cues, at most 8, each 1 to
   256 bytes of text, in the configuration's order (section 8). On the wire it is `Reading`'s
   `demo`, `Reading` naming which of the family's reads a read is, and
@@ -2061,7 +2061,12 @@ The words for each offered source are:
 temper's phrasebook words the demo (4.8; the mockups' first run) as
 the playground, the person's name for it (with the user, 2026-10-23;
 `../draft/first-run.md`, 2.3); OWNER/NAME is the demo's repository, and
-the cues the demo's, copied in:
+the cues the demo's, copied in. An ended demo read retains its provider
+and project after a reload: the Model step excludes that provider, even
+if its account cleanup is still pending, and the navigation and default
+project pick skip that project. With no other project, none is selected
+and the navigation says "No project yet". An unavailable read supplies
+no retirement fact; a running playground keeps its project and words:
 
 - **The banner:** "This is the playground: a scripted model and a
   playground forge." while both halves hold, "This is the playground: a

@@ -1222,14 +1222,18 @@ fn demo_start_reaches_the_root_with_its_admission_envelope() {
 }
 
 #[test]
-#[expect(clippy::manual_map, reason = "the strict subset uses explicit matches")]
 fn demo_read_tracks_not_started_running_and_ended() {
+    let Err(answer) = family::to_root(demo_read(people::ApplicationScope::Deployment), &[], None, &w::CEILINGS) else {
+        panic!("read")
+    };
+    let kit::Event::Application(kit::FromApplication::Read { record, .. }) = *answer else { panic!("demo read") };
+    assert!(record.is_none());
     let mut service = fixtures::demo_service();
     let demo = service.engine.as_mut().unwrap().demo.as_mut().unwrap();
     for (state, expected) in [
         (None, Some(w::DemoState::NotStarted)),
         (Some(forge::DemoState::Running), Some(w::DemoState::Running)),
-        (Some(forge::DemoState::Ended), None),
+        (Some(forge::DemoState::Ended), Some(w::DemoState::Ended)),
     ] {
         demo.state = state;
         let Err(answer) =
@@ -1239,7 +1243,14 @@ fn demo_read_tracks_not_started_running_and_ended() {
         };
         let kit::Event::Application(kit::FromApplication::Read { record, .. }) = *answer else { panic!("demo read") };
         let got = match record {
-            Some(record) => Some(wire::decode_demo_answer(&record, &w::CEILINGS).unwrap().state().clone()),
+            Some(record) => {
+                let answer = wire::decode_demo_answer(&record, &w::CEILINGS).unwrap();
+                assert_eq!(
+                    (answer.provider(), answer.project(), answer.forge()),
+                    (demo.provider, demo.project, demo.forge)
+                );
+                Some(answer.state().clone())
+            }
             None => None,
         };
         assert_eq!(got, expected);

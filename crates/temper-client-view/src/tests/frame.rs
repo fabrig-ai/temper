@@ -966,3 +966,49 @@ fn signing_out_explains_each_forges_independent_sign_in() {
         .is_some()
     );
 }
+
+#[test]
+fn retired_navigation_omits_the_playground_project_after_reload() {
+    use jig_client::contract as c;
+    use temper_client_domain::{Address, Event};
+    use temper_client_protocol_wire::v1 as w;
+    for another in [false, true] {
+        let (mut root, watch, _, _, _, _) = fixtures::root_at_with_forges(
+            Address::Chats { filter: ChatsFilter::All, start: false },
+            &fixtures::domain_limits(),
+            b"Shop",
+            Some((fixtures::PROJECT, true, w::DemoState::Ended)),
+            None,
+            None,
+        );
+        let mut me = root.pages().me(root.client()).unwrap().clone();
+        let first = me.projects.get(0).unwrap().clone();
+        let mut other = first.clone();
+        other.project = fixtures::SECOND_PROJECT;
+        other.name = c::DocumentText::complete(c::Text::new(b"Other".as_slice().into(), 64).unwrap());
+        me.projects = skein_lib::List::with_capacity(2);
+        me.projects.push(first).unwrap();
+        if another {
+            me.projects.push(other).unwrap();
+        }
+        fixtures::root_event(
+            &mut root,
+            Event::Client {
+                event: jig_client::Event::Up {
+                    up: jig_client::Up::Watched {
+                        watch,
+                        event: c::WatchEvent::Delivered(c::Delivery::Me(Box::new(me))),
+                    },
+                },
+            },
+        );
+        for words in [fixtures::words(), fixtures::browser_words()] {
+            let mut view = fixtures::view_of(words);
+            let tree = fixtures::build(&mut view, &root);
+            assert!(fixtures::find(tree, Role::Button, b"Playground").is_none());
+            assert!(fixtures::find(tree, Role::Button, b"Shop").is_none());
+            assert_eq!(fixtures::find(tree, Role::Button, b"Other").is_some(), another);
+            assert_eq!(fixtures::find(tree, Role::Paragraph, b"No project yet").is_some(), !another);
+        }
+    }
+}

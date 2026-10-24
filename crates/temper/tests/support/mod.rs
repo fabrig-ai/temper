@@ -24,6 +24,7 @@ pub mod live;
 pub mod live_github;
 pub mod llm;
 pub mod person;
+pub mod playground;
 pub mod program_login;
 pub mod relay;
 pub mod sign_in;

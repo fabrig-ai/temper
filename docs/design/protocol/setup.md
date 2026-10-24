@@ -2139,7 +2139,11 @@ them as it does any Forgejo.
   (`../draft/first-run.md`, 2.3), written by the demo's end (below).
   Nothing else holds it: the box keeps no record of the
   demo's group (7.1), and the client reads it with the demo
-  (`../client/README.md`, 4.8). Each start of the engine reads it, so a
+  (`../client/README.md`, 4.8). The client's `DemoAnswer` carries
+  `DemoState::Ended` with the configured provider, forge and project when
+  retired; an empty answer means the deployment has no demo. A reload
+  retains that identity without offering or starting the playground.
+  Each start of the engine reads it, so a
   restart and the moment of the choice look alike: running, the box
   link asks for the demo's group at serve's first link, as the start
   below does, and the group's `started` takes the handover and

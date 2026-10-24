@@ -279,12 +279,14 @@ fn forge_forges(root: &mut Domain, env: &Env<Limits>, told: &jig_client::Told, o
     consumed
 }
 
-#[expect(clippy::manual_map, reason = "the programming model reads optional demo facts without closures")]
+#[expect(clippy::manual_map, reason = "step code reads retained identity without closures")]
 fn demo_facts(root: &mut Domain) {
-    root.pages.demo_provider = match root.forge.demo() {
-        Some(demo) => Some(demo.provider),
+    root.pages.demo_provider = root.forge.demo_provider();
+    root.pages.retired_project = match root.forge.retired_demo() {
+        Some(demo) => Some(demo.project),
         None => None,
     };
+    crate::pages::project_changed(&mut root.pages, &root.client);
     root.pages.demo_model = match root.demo() {
         Some((_, halves)) => halves.model,
         None => false,

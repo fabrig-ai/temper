@@ -62,10 +62,7 @@ pub fn model_usable(root: &Domain) -> Option<bool> {
         return None;
     };
     let Some(accounts) = accounts else { return Some(false) };
-    let provider = match root.forge().demo() {
-        Some(demo) => demo.provider,
-        None => return Some(accounts.usable),
-    };
+    let Some(provider) = root.forge().demo_provider() else { return Some(accounts.usable) };
     Some(forge::demo::other_model_usable(
         accounts,
         forge::demo::owner_deployment(root.forge(), root.client()),
