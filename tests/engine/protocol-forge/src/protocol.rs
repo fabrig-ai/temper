@@ -243,7 +243,7 @@ impl Protocol {
                 context: Box::from(&b"build"[..]),
                 state: check,
             }),
-            1,
+            self.fixture.writer,
         );
     }
     pub fn open_pull(&mut self, head: &[u8], base: &[u8]) -> u64 {
@@ -279,7 +279,7 @@ impl Protocol {
         assert_eq!(
             self.external(
                 raw::Op::Git(raw::Git::Push { branch: Box::from(branch), commit: merged, expected: Some(head) }),
-                1,
+                self.fixture.writer,
             ),
             raw::Answer::Pushed(raw::Pushed::Pushed)
         );
