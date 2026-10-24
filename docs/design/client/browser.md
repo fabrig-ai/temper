@@ -543,11 +543,13 @@ without it.
   change. `temper-service` adopts a bundle, wherever the binary got it.
   A directory configured is read as before, and the binary's is unused.
 - **The fake-backend bundle is provisioned separately.** Build it with
-  scripts/bundle.sh --loopback OUT and name OUT in application.clients.bundle
-  before starting the fake-backend box (../protocol/configuration.md, 12.1).
+  scripts/bundle.sh --loopback DIR, then start temper box --fake-backends
+  --bundle DIR even with an empty configuration (../protocol/configuration.md,
+  12.1). An explicit --bundle overrides source application.clients.bundle;
+  otherwise that configured directory is used.
   The ordinary embedded bundle remains loopback-free and is not used for
-  that box. Missing provision is a startup refusal explaining the command
-  and configuration member. Startup never builds or downloads the bundle.
+  that box. Missing provision is a startup refusal explaining the bundle
+  command and --bundle. Startup never builds or downloads the bundle.
   The second-embed prototype added 8,974,112 bytes in the measured dev build,
   exceeding its 5 MB limit; the provisioned path keeps that cost outside
   ordinary builds. TEMPER_BUNDLE=none runs no nested browser build.
