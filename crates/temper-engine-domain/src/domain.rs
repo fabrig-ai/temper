@@ -348,10 +348,10 @@ impl Domain {
         })
     }
 
-    /// A settings refusal retains the named value, fault and provenance for startup diagnostics.
+    /// A restore refusal retains its named settings value or project for startup diagnostics.
     #[must_use]
-    pub fn settings_failure(&self) -> Option<jig_domain_core::RestartRequest> {
-        self.core.settings_failure()
+    pub fn restore_failure(&self) -> Option<jig_domain_core::RestartRequest> {
+        self.core.restore_failure()
     }
 
     /// Identify the core's refused restart step, including a live range that

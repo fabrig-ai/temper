@@ -784,7 +784,7 @@ fn a_bad_release_template_stops_before_a_demo_end_is_replayed() {
     reopen(&mut d, configuration);
     assert!(d.stopped);
     assert_eq!(
-        d.root.settings_failure(),
+        d.root.restore_failure(),
         Some(core::RestartRequest::Settings {
             failure: core::settings::Failure {
                 setting: core::settings::Setting::Template(1),

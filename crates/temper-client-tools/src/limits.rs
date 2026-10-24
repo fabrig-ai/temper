@@ -72,10 +72,11 @@ pub fn client() -> client::Limits {
 /// Bounds consumed by the generic tools.
 #[must_use]
 pub fn tools() -> crate::jig::Limits {
-    let client = client().client.domain;
+    let preset = client().client;
+    let client = preset.domain;
     crate::jig::Limits {
         rows: client.rows,
-        settings: jig_client_protocol_link::Limits::new(client, 8).expect("checked host client limits").wire,
+        settings: jig_client_protocol_link::Limits::new(client, preset.exchanges).expect("checked host client limits").wire,
         program_login: b"temper program-login",
         application: b"temper",
         ask_bytes: client.ask_bytes,

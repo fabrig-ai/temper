@@ -461,3 +461,15 @@ fn picker_page_has_its_own_override_and_startup_bounds() {
     }
     assert_eq!(limits::apply(&mut settings.limits, b"picker.page", u64::MAX), Err(limits::Refused::Range));
 }
+
+
+#[test]
+fn effective_core_limits_preserve_each_configured_policy_budget() {
+    let own = limits::profile(limits::Profile::Small);
+    for configured in [16_384, 512, 4096] {
+        let mut jig = jig_protocol_config::profile(jig_protocol_config::Profile::Small);
+        jig.core.policy_bytes = configured;
+        let root = limits::engine(&jig, &own).expect("configured policy budget fits the root");
+        assert_eq!(temper_engine_domain::core_limits(&root).policy_bytes, configured);
+    }
+}

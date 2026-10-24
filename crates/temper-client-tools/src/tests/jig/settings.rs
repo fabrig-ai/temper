@@ -729,3 +729,26 @@ fn settings_items_check_the_aggregate_wire_byte_bound_and_maximum_count() {
         1024
     );
 }
+
+
+#[test]
+fn non_charter_revision_hints_explicitly_read_the_current_value() {
+    for (setting, name) in [
+        (c::Setting::Template(c::SettingNumber { number: 4 }), "template 4"),
+        (c::Setting::Policy(c::SettingNumber { number: 5 }), "policy 5"),
+        (c::Setting::Rules, "rules"),
+    ] {
+        let answer = read(
+            &["revision", "5"],
+            c::ReadValue::Revision(Box::new(c::RevisionAnswer::Revision(c::RevisionDocument {
+                head: head(c::RevisionDecider::Release),
+                items: list([c::RevisionItem {
+                    setting,
+                    edit: c::RevisionEdit::TooLarge(c::Size { bytes: 1_000_000 }),
+                }]),
+            }))),
+        );
+        let line = format!("  {name}: too large, 1000000 bytes; read current value with setting {name}\n");
+        assert!(answer.stdout.ends_with(line.as_bytes()), "{}", String::from_utf8_lossy(&answer.stdout));
+    }
+}

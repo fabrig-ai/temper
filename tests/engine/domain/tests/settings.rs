@@ -209,7 +209,7 @@ fn a_stored_change_that_no_longer_checks_refuses_the_start() {
     restarted.pump();
     assert!(restarted.stopped);
     assert_eq!(
-        restarted.root.settings_failure(),
+        restarted.root.restore_failure(),
         Some(core::RestartRequest::Settings {
             failure: s::Failure { setting: s::Setting::Template(1), fault: s::Fault::Grace },
             changed: true

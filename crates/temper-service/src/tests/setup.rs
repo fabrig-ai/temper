@@ -964,7 +964,7 @@ fn restore_local(service: &mut crate::Service) {
         "root restore completes: end={:?}, step={:?}, settings={:?}, header={:?}",
         service.end(),
         engine.domain.restart_failure(),
-        engine.domain.settings_failure(),
+        engine.domain.restore_failure(),
         engine.domain.deployment(),
     );
 }

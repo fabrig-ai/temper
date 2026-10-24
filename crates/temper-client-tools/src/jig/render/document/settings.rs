@@ -339,7 +339,12 @@ fn revision_text(answer: &c::RevisionAnswer, requested: u64, limits: &Limits, ou
                     c::RevisionEdit::TooLarge(size) => {
                         out.put(b"too large, ");
                         out.number(size.bytes);
-                        out.put(b" bytes; read with setting ");
+                        match item.setting {
+                            c::Setting::Charter(_) => out.put(b" bytes; read with setting "),
+                            c::Setting::Template(_) | c::Setting::Policy(_) | c::Setting::Rules => {
+                                out.put(b" bytes; read current value with setting ");
+                            }
+                        }
                         setting_text(item.setting, out);
                         if let c::Setting::Charter(_) = item.setting {
                             out.put(b" --revision ");

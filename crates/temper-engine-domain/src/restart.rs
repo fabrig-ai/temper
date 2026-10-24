@@ -308,7 +308,9 @@ pub(crate) fn restart_request(
 ) {
     match request {
         jig_domain_core::RestartRequest::Idle => {}
-        jig_domain_core::RestartRequest::Settings { .. } | jig_domain_core::RestartRequest::Refused { .. } => {
+        jig_domain_core::RestartRequest::Settings { .. }
+        | jig_domain_core::RestartRequest::ProjectPolicy { .. }
+        | jig_domain_core::RestartRequest::Refused { .. } => {
             domain.stop_pending = true;
         }
         jig_domain_core::RestartRequest::Step(step) => match step {

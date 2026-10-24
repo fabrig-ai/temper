@@ -162,8 +162,7 @@ fn a_writer_committed_is_reloaded_through_the_real_store() {
 fn the_store_uses_the_roots_effective_core_limits() {
     let (root, parsed, profile) = fixtures::store_limits();
     let effective = engine::core_limits(&root);
-    eprintln!("configured policy_bytes={}, effective policy_bytes={}", parsed.policy_bytes, effective.policy_bytes);
-    assert_ne!(parsed.policy_bytes, effective.policy_bytes);
+    assert_ne!(parsed.load_slots, effective.load_slots);
     let checked = store::limits(&root, &root.forge, &profile).unwrap();
     assert_eq!(checked.core, effective);
 }

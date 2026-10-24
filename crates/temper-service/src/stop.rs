@@ -101,11 +101,26 @@ pub(crate) fn hooks(engine: &mut Engine) {
 
 /// Preserve jig's named settings failure in the ordinary startup diagnostics.
 pub(crate) fn root(engine: &mut Engine) {
-    let Some(jig_domain_core::RestartRequest::Settings { failure, changed }) = engine.domain.settings_failure() else {
-        unavailable(engine, b"deployment");
-        return;
+    use jig_domain_core::RestartRequest;
+    let problems = match engine.domain.restore_failure() {
+        Some(RestartRequest::Settings { failure, changed }) => settings_problem(failure, changed),
+        Some(RestartRequest::ProjectPolicy { project }) => project_policy_problem(project),
+        Some(RestartRequest::Step(_) | RestartRequest::Idle | RestartRequest::Refused { .. }) | None => {
+            unavailable(engine, b"deployment");
+            return;
+        }
     };
-    engine.end = Some(End::Stopped(Stop::Start(settings_problem(failure, changed))));
+    engine.end = Some(End::Stopped(Stop::Start(problems)));
+}
+fn project_policy_problem(project: u32) -> Problems {
+    let path = Path::root()
+        .member(b"projects")
+        .child(jig_protocol_config::Segment::Index(project))
+        .member(b"policy")
+        .member(b"bytes");
+    let mut problems = Problems::empty();
+    problems.push(path, What::Bound);
+    problems
 }
 fn settings_problem(failure: jig_domain_core::settings::Failure, changed: bool) -> Problems {
     use jig_domain_core::settings::{Fault, Setting};
@@ -134,6 +149,12 @@ fn settings_problem(failure: jig_domain_core::settings::Failure, changed: bool) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_oversized_stored_project_policy_names_its_project_and_byte_bound() {
+        let problems = crate::startup::Problems::jig(project_policy_problem(7), &Path::root());
+        assert_eq!(crate::startup::lines(&problems).as_ref(), b"projects[7].policy.bytes: past its bound\n");
+    }
 
     #[test]
     fn settings_start_refusals_name_the_setting_fault_and_source() {
