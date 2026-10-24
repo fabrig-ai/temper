@@ -151,6 +151,7 @@ pub enum Read {
     CapA5Writing,
     CapOwnerWaiting,
     CapInboxHeld,
+    CapInboxHeldAfter,
     CapPassed,
     CapReleased,
     CapA5Ended,
@@ -158,6 +159,7 @@ pub enum Read {
     CapOwnerEnded,
     CapDirectorEnded,
     CapInboxEnded,
+    CapInboxEndedAfter,
     CapSubownerFirst,
     CapOwnerFirst,
     CapDirectorFirst,
@@ -1145,15 +1147,17 @@ pub const READS_6_7: &[(Read, usize)] = &[
     (Read::CapA5Writing, 9),
     (Read::CapOwnerWaiting, 10),
     (Read::CapInboxHeld, 11),
-    (Read::CapPassed, 14),
-    (Read::CapReleased, 16),
-    (Read::CapA5Ended, 17),
-    (Read::CapSubownerEnded, 18),
-    (Read::CapOwnerEnded, 19),
-    (Read::CapDirectorEnded, 20),
-    (Read::CapInboxEnded, 21),
-    (Read::CapSubownerFirst, 22),
-    (Read::CapDirectorFirst, 23),
+    (Read::CapInboxHeldAfter, 12),
+    (Read::CapPassed, 15),
+    (Read::CapReleased, 17),
+    (Read::CapA5Ended, 18),
+    (Read::CapSubownerEnded, 19),
+    (Read::CapOwnerEnded, 20),
+    (Read::CapDirectorEnded, 21),
+    (Read::CapInboxEnded, 22),
+    (Read::CapInboxEndedAfter, 23),
+    (Read::CapSubownerFirst, 24),
+    (Read::CapDirectorFirst, 25),
 ];
 
 #[must_use]
@@ -1181,7 +1185,9 @@ pub fn step_6_7() -> Vec<calls::Step> {
             b"\"work\":\"writing\"",
             b"\"task\"",
         ),
+        // The needs-group tag starts an unfiltered page, then its stored continuation.
         call(D1, argv!["inbox", "--after", "00", "--json"]),
+        call(D1, argv!["inbox", "--after", calls::inbox_after(11), "--json"]),
         calls::release_hold(CAP_PASS_HOLD),
         // The director's document includes A's observation too. Once A parks
         // after its pass, only the director can satisfy the writing checkpoint.
@@ -1198,11 +1204,10 @@ pub fn step_6_7() -> Vec<calls::Step> {
         steps.push(call(D1, argv!["task", number(task), "--activity", "32", "--json"]));
     }
     steps.push(call(D1, argv!["inbox", "--after", "00", "--json"]));
+    steps.push(call(D1, argv!["inbox", "--after", calls::inbox_after(22), "--json"]));
 
-    // The tagged cursor with no inner cursor starts needs, unfiltered;
-    // it keeps the raw needs page separate from the combined inbox digest.
     // The latest activity windows omit the starts of A1 and the director.
-    for (task, latest) in [(CAP_SUBOWNER, 18), (CAP_DIRECTOR, 20)] {
+    for (task, latest) in [(CAP_SUBOWNER, 19), (CAP_DIRECTOR, 21)] {
         steps.push(call(D1, argv!["activity", number(task), "--before", calls::activity_before(latest), "--json"]));
     }
     steps

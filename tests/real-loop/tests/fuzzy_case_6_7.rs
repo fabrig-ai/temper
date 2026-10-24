@@ -41,5 +41,6 @@ fn a_sub_owner_past_its_deadline_is_held_at_its_next_run_and_escalated_through_i
         );
     }
     let observed = Observed::from_ran(&ran, case::acts::READS_6_7);
+    eprintln!("CAP opening {:?} ns", case::oracle::cap_opening_nanos(&observed));
     case::oracle::assert_met(&case::oracle::step_6_7(&observed));
 }

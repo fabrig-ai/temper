@@ -8751,16 +8751,21 @@ pub fn step_6_7(observed: &Observed) -> Vec<Miss> {
     cap_amendment(observed, &mut misses);
     cap_release(observed, &mut misses);
     cap_running(observed, &mut misses);
-    for read in [Read::CapInboxHeld, Read::CapInboxEnded] {
+    for (read, after) in
+        [(Read::CapInboxHeld, Read::CapInboxHeldAfter), (Read::CapInboxEnded, Read::CapInboxEndedAfter)]
+    {
         let inbox = document(observed, read);
+        let continuation = document(observed, after);
         step_check(
             &mut misses,
             "6.7",
             inbox["needs"]["cut"] == false
-                && inbox["needs"]["after"] == Value::Null
-                && inbox.pointer("/needs/rows").and_then(Value::as_array).is_some_and(Vec::is_empty),
+                && inbox.pointer("/needs/rows").and_then(Value::as_array).is_some_and(Vec::is_empty)
+                && continuation["needs"]["cut"] == false
+                && continuation.pointer("/needs/after").is_some_and(Value::is_null)
+                && continuation.pointer("/needs/rows").and_then(Value::as_array).is_some_and(Vec::is_empty),
             CAP_INBOX,
-            &format!("{read:?} must show the person's complete empty inbox: {inbox}"),
+            &format!("{read:?} and {after:?} must show the person's complete empty inbox: {inbox}; {continuation}"),
         );
     }
     misses
@@ -9130,8 +9135,11 @@ mod cap_tests {
             "hold":null,"authority":{"authority":{"deadline":deadline()}}},
             "activity":source(CAP_A5,&a5_lines[..1],&[BUILT+1_000_000])}));
         observed.documents.insert(Read::CapOwnerWaiting, json!({"task":{"chip":{"task":CAP_OWNER}}}));
-        for read in [Read::CapInboxHeld, Read::CapInboxEnded] {
-            observed.documents.insert(read, json!({"needs":{"cut":false,"after":null,"rows":[]}}));
+        for (read, after) in
+            [(Read::CapInboxHeld, Read::CapInboxHeldAfter), (Read::CapInboxEnded, Read::CapInboxEndedAfter)]
+        {
+            observed.documents.insert(read, json!({"needs":{"cut":false,"after":{"value":"stored"},"rows":[]}}));
+            observed.documents.insert(after, json!({"needs":{"cut":false,"after":null,"rows":[]}}));
         }
     }
     fn queries(observed: &mut Observed) {
@@ -9330,12 +9338,17 @@ mod cap_tests {
     }
     #[test]
     fn both_inbox_reads_are_complete_and_empty() {
-        for read in [Read::CapInboxHeld, Read::CapInboxEnded] {
+        for read in [Read::CapInboxHeld, Read::CapInboxHeldAfter, Read::CapInboxEnded, Read::CapInboxEndedAfter] {
             field(read, "/needs/cut", CAP_INBOX);
-            field(read, "/needs/after", CAP_INBOX);
             let mut bad = met();
             bad.documents.get_mut(&read).expect("inbox")["needs"]["rows"] = json!([{"question":1}]);
             rejects(&bad, CAP_INBOX);
+        }
+    }
+    #[test]
+    fn both_inbox_continuations_must_be_exhausted() {
+        for read in [Read::CapInboxHeldAfter, Read::CapInboxEndedAfter] {
+            field(read, "/needs/after", CAP_INBOX);
         }
     }
     #[test]

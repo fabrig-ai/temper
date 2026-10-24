@@ -18,6 +18,7 @@ pub enum Arg {
     Delegate(usize),
     Digest(usize),
     ActivityBefore(usize),
+    InboxAfter(usize),
     Number(u64),
     GithubApp,
     File(&'static str),
@@ -220,6 +221,11 @@ pub fn digest(call: usize) -> Arg {
 #[must_use]
 pub fn activity_before(call: usize) -> Arg {
     Arg::ActivityBefore(call)
+}
+/// The needs continuation supplied by an earlier inbox page.
+#[must_use]
+pub fn inbox_after(call: usize) -> Arg {
+    Arg::InboxAfter(call)
 }
 fn delegate_number(stdout: &[u8]) -> u64 {
     let value: serde_json::Value = serde_json::from_slice(stdout).expect("task tree JSON");
@@ -489,6 +495,15 @@ impl Caller {
                         .expect("previous activity page")
                         .as_bytes()
                         .into()
+                }
+                Arg::InboxAfter(call) => {
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&self.calls[*call].stdout).expect("inbox JSON");
+                    let cursor = value
+                        .pointer("/needs/after/value")
+                        .and_then(serde_json::Value::as_str)
+                        .expect("next needs page");
+                    format!("00{cursor}").into_bytes().into()
                 }
                 Arg::GithubApp => self.github_app.expect("person made the App").to_string().into_bytes().into(),
                 Arg::Number(number) => number.to_string().into_bytes().into(),
