@@ -542,15 +542,15 @@ without it.
   case already counts for the bundle, so the memory account does not
   change. `temper-service` adopts a bundle, wherever the binary got it.
   A directory configured is read as before, and the binary's is unused.
-- **The fake-backend bundle is separate.** An embed build can package a
-  second bundle with the existing loopback-navigation feature. The box's
-  fake-backend configuration writer materializes it into its scratch
-  configuration and names that directory (../protocol/configuration.md,
-  12.1). The ordinary embedded bundle remains loopback-free. A build with
-  TEMPER_BUNDLE=none packages neither bundle and runs no nested build.
-  A separately provisioned loopback bundle can instead be named in
-  application.clients.bundle; missing provision is a startup refusal with
-  the scripts/bundle.sh --loopback command, never a runtime build.
+- **The fake-backend bundle is provisioned separately.** Build it with
+  scripts/bundle.sh --loopback OUT and name OUT in application.clients.bundle
+  before starting the fake-backend box (../protocol/configuration.md, 12.1).
+  The ordinary embedded bundle remains loopback-free and is not used for
+  that box. Missing provision is a startup refusal explaining the command
+  and configuration member. Startup never builds or downloads the bundle.
+  The second-embed prototype added 8,974,112 bytes in the measured dev build,
+  exceeding its 5 MB limit; the provisioned path keeps that cost outside
+  ordinary builds. TEMPER_BUNDLE=none runs no nested browser build.
 - **`scripts/bundle.sh` stays,** for a bundle built apart: the browser
   tier's, which turns on `loopback-navigation` (4.3), and a
   developer's. The ordinary binary bundle never enables it. `scripts/install.sh PREFIX`

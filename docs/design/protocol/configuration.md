@@ -1280,14 +1280,16 @@ given the original deployment's data. Original configuration and records
 are never overwritten; no credential, account, worker secret or program
 login is imported.
 
-- **First preparation:** absent or empty C runs ordinary init in C'/D'/K,
-  keeping its listeners until their steps claim them. A nonempty C is
-  accepted only for the current init-shaped standalone configuration,
-  its public agent document and its two public charters. Unsupported
-  shapes are refused with the member named, before any child starts.
-  Fresh worker/deployment secrets are made in D'. Configuration paths
-  resolve against C before public assets are copied; init's data paths
-  are rebased to D', never followed into the source store.
+- **First preparation:** C names a current init-shaped standalone
+  configuration with an explicit loopback bundle. Starting from empty C,
+  first run ordinary temper init and name the separately built bundle in
+  application.clients.bundle. Missing provision refuses before sandbox
+  mutation and explains both steps. The public agent document and two
+  public charters are imported; unsupported shapes are refused with the
+  member named before any child starts. Ordinary init creates fresh
+  worker/deployment resources in C'/D'/K'. Source paths resolve against C
+  before public assets are copied; data paths are rebased to D', never
+  followed into the source store.
 - **Lifetime:** the box holds an exclusive nonblocking file lock on
   E/lock. It publishes E/prepared last, after effective documents and
   resources pass the ordinary deployment and agent checks. The marker
@@ -1306,12 +1308,11 @@ login is imported.
   the same plaintext fake model, with stale TLS members removed. The
   pure transformation is temper-fake's, with bounded bytes and explicit
   paths/sockets as inputs; files and listeners belong to temper's shell.
-- **Browser:** application.clients.bundle names a loopback-navigation
-  bundle (../client/browser.md, 2.6). The box materializes the separately
-  packaged bundle, or uses an explicitly configured provisioned bundle.
-  With neither available it refuses, explaining
-  scripts/bundle.sh --loopback and the configuration member. Startup
-  neither builds a bundle nor accesses a remote service.
+- **Browser:** application.clients.bundle explicitly names a provisioned
+  loopback-navigation bundle (../client/browser.md, 2.6), built once with
+  scripts/bundle.sh --loopback OUT. The ordinary embedded bundle cannot
+  replace it. Startup neither builds a bundle nor accesses a remote service.
+
 
 Forgejo here keeps the ordinary owned steps and cache (setup.md, 6.6);
 an empty cache may need its ordinary one-time pinned download, while a
