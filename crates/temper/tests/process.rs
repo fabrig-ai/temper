@@ -3298,3 +3298,6 @@ fn a_story_box_and_its_steps_die_when_the_test_process_is_killed() {
     guard.pids.clear();
     scratch.remove();
 }
+
+#[path = "fake_backends/mod.rs"]
+mod fake_backends;
