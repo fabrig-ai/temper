@@ -1,7 +1,7 @@
 //! Skein's forge peer shares its domain with hosted git (domain/testing.md, 2.4).
 use crate::fixtures;
 use skein_fake_forge_domain::{self as domain, api};
-use skein_fake_peers::forge::{Delivery, Forge, Observation, Peer};
+use skein_fake_peers::forge::{Delivery, Forge, Kept, Observation, Peer};
 use skein_lib::{Duration, Env, Secret, Time, Wall};
 use std::{cell::RefCell, net::SocketAddr, path::Path, rc::Rc};
 
@@ -199,7 +199,11 @@ impl State {
             handle.clone(),
             fixtures::SEED,
         )
-        .expect("configured forge peer");
+        .expect("configured forge peer")
+        // The harness reads the deliveries alone, and whether any record exists:
+        // the first is a connection's opening or a delivery, so heads and calls,
+        // a pair for each of the clients' polls, are never kept.
+        .keeping(Kept { connections: true, deliveries: true, ..Kept::NONE });
         (Self { handle, moved: false, hooked: false }, peer)
     }
     pub(crate) fn hand_hooks(&mut self, address: SocketAddr) {
@@ -222,9 +226,11 @@ impl State {
     }
 }
 
-// A whole story's frozen peer records: room for the largest story, the
-// first run's green light (up to ~1,110 records: polls record ~160 a second
-// once adopted), nearly twice over, at the skein peer fixture's 2 KiB per record.
+// A whole story's frozen peer records, its connections and deliveries alone
+// (`State::new`): room for the largest stories, 5.4's and the green light's
+// (~160 records idle, up to ~240 under eight busy loops, which stretch a
+// story's wall and its connections' lives), eight times over, at the skein
+// peer fixture's 2 KiB per record.
 const STORY_OBSERVATIONS: u32 = 2_048;
 const STORY_OBSERVATION_BYTES: u32 = 4_194_304;
 #[must_use]
