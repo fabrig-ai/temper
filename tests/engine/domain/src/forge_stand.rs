@@ -38,46 +38,58 @@ impl ForgeStand {
     /// Repositories with the named required CI contexts, all passing.
     #[must_use]
     pub fn with_checks(repositories: &[(&[u8], &[u8], u32)], contexts: &[&[u8]]) -> ForgeStand {
+        Self::with_setup(
+            repositories
+                .iter()
+                .map(|(owner, repository, id)| {
+                    let mut name = owner.to_vec();
+                    name.push(b'/');
+                    name.extend_from_slice(repository);
+                    raw::Setup {
+                        id: *id,
+                        name: name.into(),
+                        default: b"main".as_slice().into(),
+                        tree: Box::new([]),
+                        labels: Box::new([]),
+                        checks: raw::Checks {
+                            contexts: contexts.iter().map(|context| Box::from(*context)).collect(),
+                            latency_min: skein_lib::Duration::ZERO,
+                            latency_max: skein_lib::Duration::ZERO,
+                            silent: 0,
+                            passes: 1000,
+                            reruns: 0,
+                            cue: None,
+                        },
+                        protection: None,
+                        hooked: false,
+                    }
+                })
+                .collect(),
+        )
+    }
+
+    /// Repository contents and CI supplied by the story, including silent CI.
+    /// Calls remain synchronous; delayed required reads use the forge route world.
+    #[must_use]
+    pub fn with_setup(setups: Box<[raw::Setup]>) -> ForgeStand {
         let mut config = temper_engine_forge_world::fake_config();
-        config.limits.repositories = u32::try_from(repositories.len()).expect("bounded repositories");
+        config.limits.repositories = u32::try_from(setups.len()).expect("bounded repositories");
         config.latency_min = skein_lib::Duration::ZERO;
         config.latency_max = skein_lib::Duration::ZERO;
         let mut domain = fake::Domain::new(&config, 71);
         let mut names = std::collections::BTreeMap::new();
-        for (owner, repository, id) in repositories {
-            let mut name = owner.to_vec();
-            name.push(b'/');
-            name.extend_from_slice(repository);
-            fake::repository(
-                &mut domain,
-                &config,
-                raw::Setup {
-                    id: *id,
-                    name: name.clone().into(),
-                    default: b"main".as_slice().into(),
-                    tree: Box::new([]),
-                    labels: Box::new([]),
-                    checks: raw::Checks {
-                        contexts: contexts.iter().map(|context| Box::from(*context)).collect(),
-                        latency_min: skein_lib::Duration::ZERO,
-                        latency_max: skein_lib::Duration::ZERO,
-                        silent: 0,
-                        passes: 1000,
-                        reruns: 0,
-                        cue: None,
-                    },
-                    protection: None,
-                    hooked: false,
-                },
-            );
-            if name != b"org/private" {
+        for setup in setups {
+            let id = setup.id;
+            let name = setup.name.clone();
+            fake::repository(&mut domain, &config, setup);
+            if name.as_ref() != b"org/private" {
                 for (user, permission) in
                     [(1, raw::Permission::Admin), (2, raw::Permission::Write), (7, raw::Permission::Read)]
                 {
                     fake::grant(&mut domain, &name, user, permission);
                 }
             }
-            assert!(names.insert(*id, name.into_boxed_slice()).is_none());
+            assert!(names.insert(id, name).is_none());
         }
         ForgeStand {
             domain,

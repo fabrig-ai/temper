@@ -15,29 +15,6 @@ const READER_SUBJECT: u64 = 8;
 const PROCESS_LINES: u32 = 2;
 const LINES: &[(&str, u32)] = &[("jig's small profile", 4), ("the process tier's override", PROCESS_LINES)];
 
-#[derive(Clone, Copy, Default)]
-pub(super) struct Gate {
-    pub approval: Option<engine::Freshness>,
-    pub agent: bool,
-    pub owner: bool,
-}
-
-#[derive(Clone, Copy, Default)]
-pub(super) struct Change {
-    pub no_ci: bool,
-    pub owner_gate: bool,
-    pub tracked: bool,
-}
-
-pub(super) fn add_reader(policy: &mut authority::Policy) {
-    let mut reader = policy.roles[0].clone();
-    reader.number = people::Role::Observer.number();
-    reader.authority.grants = Box::new([]);
-    reader.requests = authority::Requests(0);
-    reader.decides = authority::Proposals(0);
-    policy.roles = Box::new([policy.roles[0].clone(), reader]);
-}
-
 fn sign_in_reader(world: &mut World) {
     let owner = world.signed_in.take().expect("owner session");
     world.send(engine::Event::Party(engine::PartyInput::SignedIn {
@@ -73,30 +50,6 @@ fn sign_in_reader(world: &mut World) {
         Some(&Record::Core(jig_domain_core::Record::People(people::Stored::Roles { project: 1, holdings }))),
         "the reader is a party of the producer's project"
     );
-}
-
-impl World {
-    pub(super) fn stored_read(&mut self, request: engine::Request) -> Option<engine::Request> {
-        if let engine::Request::Store(engine::StoreRequest::Read { load, range }) = request {
-            let result = self.store.read(range);
-            self.immediate.push_back(engine::Event::Store(engine::StoreInput::ReadLoaded { load, result }));
-            None
-        } else {
-            Some(request)
-        }
-    }
-}
-
-pub(super) fn document_limits(
-    mut documents: documents::DocumentLimits,
-    limits: &engine::Limits,
-) -> documents::DocumentLimits {
-    // jig-protocol-config's overrides::read derives this after all name overrides.
-    documents.segments = limits.authority.segments.max(limits.tasks.hold_segments).max(limits.tasks.authority_segments);
-    documents.grants = limits.authority.grants.max(limits.tasks.authority_grants);
-    documents.executors = limits.authority.executors.max(limits.tasks.executor_kinds);
-    documents.implications = limits.authority.implications;
-    documents
 }
 
 fn change_world_with_lines(lines: u32) -> (World, engine::Assignment, engine::Assignment, Box<[u8]>) {
