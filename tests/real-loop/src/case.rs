@@ -1109,8 +1109,10 @@ pub const CAP_REVISION: u64 = 1;
 pub const CAP_HOLD_REVISION: u64 = 1;
 pub const CAP_TIMER: u64 = 1;
 pub const CAP_RELEASE_DECISION: u64 = 2;
-// Provisional measurement span; replace with busy8 maximum plus margin.
-pub const CAP_SPAN: u64 = 5_000_000_000;
+// Idle max 0.740629983 s (t4), busy8 max 1.016853605 s (b1).
+// Busy8 maximum plus half again, rounded up to a quarter second: 1.75 s.
+// Trials: /home/free/src/rust/tmp/owners/case-4/measure/6-7/{t4,b1}.
+pub const CAP_SPAN: u64 = 1_750_000_000;
 pub const CAP_TIMER_MARGIN: u64 = 1_000_000;
 pub const CAP_PERSON: &str = "@case_cap_director Delegate A to own M1 and decide its cap without asking me.";
 pub const CAP_SPLIT: &str = "What has landed is M1; a5's fix opens M2. Report the split once a5 has ended.";
