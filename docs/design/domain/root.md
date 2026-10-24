@@ -603,6 +603,14 @@ adds:
 
 ## 10. Limits and worst cases
 
+The root carries configured core.policy_bytes unchanged and derives one
+effective core envelope for runtime, store opening and sizing. Startup
+checks that envelope against the codec and checks that a policy at its
+configured bound plus its owned row carrier fits the journal. Transcript
+capacity never enlarges the configured policy budget. Restore refuses an
+over-bound stored settings policy by setting number and source, and an
+over-bound project policy by project number.
+
 - **The core's children's limits** are `engine.limits`, jig's part:
   tasks, authority, people, the fleet, accounts, notes, documents,
   templates and call records (jig's `protocol/configuration.md`, section

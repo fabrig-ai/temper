@@ -157,6 +157,21 @@ pub fn core_limits(limits: &Limits) -> jig_domain_core::Limits {
     }
 }
 
+/// One policy at its configured bound, including its largest owned row carrier.
+/// `store::owned_bytes(Write::Save)` excludes the outer Record slot: project
+/// policies add their name, while settings values add ConfiguredPolicy and a
+/// single-item revision adds Item (store/settings_bytes.rs). Whole changes
+/// still pass the existing request and per-write admission separately.
+#[must_use]
+pub fn policy_row_bound(limits: &Limits) -> Option<u64> {
+    let project = limits.policy_bytes.checked_add(u64::try_from(people::NAME_BYTES).ok()?)?;
+    let setting = limits
+        .policy_bytes
+        .checked_add(u64::try_from(size_of::<jig_domain_core::ConfiguredPolicy>()).ok()?)?
+        .checked_add(u64::try_from(size_of::<jig_domain_core::settings::Item>()).ok()?)?;
+    Some(project.max(setting))
+}
+
 pub(crate) fn brief_limits(limits: &BriefLimits) -> brief::Limits {
     brief::Limits {
         briefs: limits.briefs,

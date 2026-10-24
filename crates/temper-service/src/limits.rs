@@ -351,7 +351,14 @@ pub fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), Refused
 /// Build the root's limits from jig's children and temper's own room.
 #[must_use]
 pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engine::Limits> {
-    let root = engine::Limits {
+    let root = engine_candidate(jig, limits);
+    engine::worst_case(&root)?;
+    Some(root)
+}
+
+/// The same effective projection, before sizing can refuse it anonymously.
+pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limits) -> engine::Limits {
+    engine::Limits {
         journal: limits.root.journal,
         loads: limits.root.loads,
         brief: limits.root.brief,
@@ -367,9 +374,7 @@ pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engi
         settings: jig.core.settings,
         call_records: jig.core.call_records,
         forge: limits.forge,
-    };
-    engine::worst_case(&root)?;
-    Some(root)
+    }
 }
 
 const GIT: temper_worker_protocol_git::Limits = temper_worker_protocol_git::Limits {

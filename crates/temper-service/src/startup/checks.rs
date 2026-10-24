@@ -19,6 +19,27 @@ fn own(name: &[u8]) -> Path {
 fn against(problems: &mut Problems, name: &[u8], other: &'static [u8]) {
     problems.push(own(name), What::Against { other });
 }
+/// Named compatibility checks on the envelope runtime and store actually use.
+pub fn engine_envelope(root: &domain::Limits, problems: &mut Problems) {
+    if let Err(found) = config::check_effective_limits(&domain::core_limits(root)) {
+        let mut path = Path::root().member(b"engine");
+        for segment in &found.path.segments {
+            path = path.child(segment.clone());
+        }
+        problems.push(path, What::Jig(found.what));
+    }
+    let fits = match domain::policy_row_bound(root) {
+        Some(bytes) => bytes <= u64::from(root.journal.transcript_bytes),
+        None => false,
+    };
+    if !fits {
+        against(
+            problems,
+            b"root.journal.transcript_bytes",
+            b"engine.limits.core.policy_bytes plus its policy row carrier",
+        );
+    }
+}
 fn in_process(address: &config::Address) -> bool {
     match address {
         config::Address::Addr(Addr::InProcess(name)) => name.as_bytes() == b"workers",

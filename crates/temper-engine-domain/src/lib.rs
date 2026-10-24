@@ -38,7 +38,7 @@ pub use domain::{Domain, Refused, fire, max_out, refused, release, step};
 pub use jig_domain_core::{Charter, Delegate, Dependency, Model, ProcedureStep, RunCharter, RunPolicy, StepEnd};
 pub use limits::{
     BriefBudgets, BriefLimits, FACTS, Limits, TRANSCRIPT_TAIL_BYTES, VIEWS, WATCHES_PER_STREAM, core_limits,
-    payload_worst_case, worst_case,
+    payload_worst_case, policy_row_bound, worst_case,
 };
 pub use link::{hello_bounds, inbox_words};
 pub use route::{Approval, Freshness, Gate, HostDelivery, HostRequest, LandingRule, adopt_repository_ask};

@@ -1,4 +1,5 @@
 //! Settings cross the root's journal and real store, including cold restoration.
+use jig_domain_authority as authority;
 use jig_domain_core::{self as core, settings as s};
 use jig_domain_people as people;
 use skein_lib::{Duration, ReplyTo, Token};
@@ -11,6 +12,223 @@ const HISTORY: u32 = 2;
 const PRUNED_HISTORY: u32 = 1;
 const OWNER_PERSON: u64 = 1;
 const OTHER: u64 = 8;
+const POLICY_CAP: u64 = 16_384;
+const PRIOR_POLICY_CAP: u64 = POLICY_CAP + 1;
+const POLICY_NUMBER: u32 = 1;
+const MADE_PROJECT: u32 = 2;
+const POLICY_ROLES: u32 = 2;
+// Production Small's journal/page byte authority; two >16 KiB policy rows
+// still fit a loaded page. Counts stay the direct world's, except the stated
+// policy shape capacities and room for the second project below.
+const POLICY_PAGE_BYTES: u32 = 65_536;
+
+fn policy_limits(policy_bytes: u64) -> engine::Limits {
+    let mut limits = walking::limits();
+    limits.policy_bytes = policy_bytes;
+    limits.settings.history = HISTORY;
+    limits.journal.transcript_bytes = POLICY_PAGE_BYTES;
+    limits.loads.bytes = POLICY_PAGE_BYTES;
+    limits.loads.reply_bytes = POLICY_PAGE_BYTES;
+    limits.loads.transcript_bytes = POLICY_PAGE_BYTES;
+    limits.loads.read_bytes = POLICY_PAGE_BYTES;
+    // Existing widest policy shapes allow a byte-heavy policy without
+    // crossing an independent count, pattern or per-segment limit.
+    let widest = temper_engine_domain_world::store::widest();
+    limits.authority.grants = widest.authority.grants;
+    limits.authority.roles = POLICY_ROLES;
+    limits.authority.segments = widest.authority.segments;
+    limits.authority.segment_bytes = widest.authority.segment_bytes;
+    // Served policy documents must retain those same grant/role shapes.
+    limits.documents.grants = limits.documents.grants.max(limits.authority.grants);
+    limits.documents.roles = limits.documents.roles.max(limits.authority.roles);
+    // Core admission requires the three scalar note scopes plus each grant.
+    limits.notes.scopes = 3 + limits.authority.grants;
+    limits.authority.projects = MADE_PROJECT;
+    limits.people.projects = MADE_PROJECT + 1; // Includes the deployment roster.
+    limits.journal.writes = walking::writes(&limits);
+    limits
+}
+
+fn all_resources() -> authority::Grant {
+    authority::Grant {
+        connector: 0,
+        kind: 1,
+        pattern: authority::Pattern { segments: Box::new([]), last: authority::Last::Open(Box::new([])) },
+    }
+}
+
+fn policy_config() -> engine::Config {
+    let mut config = walking::config(SEED);
+    // A broad existing connector grant lets the test vary only owned bytes
+    // in narrower project grants, rather than fail the rules' authority check.
+    config.core.defaults.rules.ceiling.grants = Box::new([all_resources()]);
+    config
+}
+
+fn sized_policy(bytes: u64) -> core::ConfiguredPolicy {
+    let limits = policy_limits(PRIOR_POLICY_CAP);
+    let mut configured = policy_config().core.seed_projects[0].policy.clone();
+    configured.permissions = Box::new([]);
+    configured.policy.ceiling.grants = Box::new([all_resources()]);
+    let mut role = configured.policy.roles[0].clone();
+    role.number = 1;
+    configured.policy.roles = Box::new([configured.policy.roles[0].clone(), role]);
+    let empty_grant = authority::Grant {
+        connector: 0,
+        kind: 1,
+        pattern: authority::Pattern {
+            segments: vec![Box::<[u8]>::default(); usize::try_from(limits.authority.segments).unwrap()]
+                .into_boxed_slice(),
+            last: authority::Last::Exact(Box::new([])),
+        },
+    };
+    let grants = vec![empty_grant; usize::try_from(limits.authority.grants).unwrap()].into_boxed_slice();
+    configured.policy.projections = grants.clone();
+    for role in &mut configured.policy.roles {
+        role.authority.grants = grants.clone();
+    }
+    let snapshot = core::policy_snapshot(&configured.policy, &configured.permissions, &configured.templates)
+        .expect("representable policy");
+    let base = people::policy_bytes(&snapshot).expect("policy carrier bytes");
+    let mut remaining = usize::try_from(bytes.checked_sub(base).expect("carrier is below the byte fixture")).unwrap();
+    // Fill existing bounded segments, then their terminal words. The last
+    // segment can contribute one byte, so cap and cap+1 are both representable.
+    for grant in configured
+        .policy
+        .projections
+        .iter_mut()
+        .chain(configured.policy.roles.iter_mut().flat_map(|role| role.authority.grants.iter_mut()))
+    {
+        let authority::Last::Exact(last) = &mut grant.pattern.last else { unreachable!("exact fixture") };
+        for word in grant.pattern.segments.iter_mut().chain(std::iter::once(last)) {
+            let count = remaining.min(usize::try_from(limits.authority.segment_bytes).unwrap());
+            *word = vec![b'x'; count].into_boxed_slice();
+            remaining -= count;
+        }
+    }
+    assert_eq!(remaining, 0, "existing shape capacities reach the named policy byte bound");
+    let snapshot = core::policy_snapshot(&configured.policy, &configured.permissions, &configured.templates).unwrap();
+    assert_eq!(people::policy_bytes(&snapshot), Some(bytes));
+    configured
+}
+
+fn saved_policy(bytes: u64, project: bool) -> Driver {
+    let limits = policy_limits(bytes);
+    let mut driver = Driver::cold(Store::with_limits(&limits), policy_config(), &limits);
+    driver.settle();
+    driver.sign_in();
+    driver.settle();
+    change(
+        &mut driver,
+        1,
+        20,
+        s::Item {
+            setting: s::Setting::Policy(POLICY_NUMBER),
+            edit: s::Edit::Set(s::Value::Policy(Box::new(sized_policy(bytes)))),
+        },
+    );
+    assert!(
+        driver.delivered.iter().any(|delivery| matches!(
+            delivery,
+            Delivery::WebReply { reply: people::Reply::Outcome(people::Outcome::SettingsChanged { revision: 2 }), .. }
+        )),
+        "the byte-heavy setting was committed through ChangeSettings"
+    );
+    if project {
+        driver.send(Event::Party(PartyInput::Ask {
+            reply_to: ReplyTo::new(Token::new(21)),
+            sign_in: driver.session(),
+            key: [21; 16],
+            models: Box::new([]),
+            ask: people::Ask::MakeProject { name: "Saved policy".into(), policy: POLICY_NUMBER },
+        }));
+        driver.settle();
+        assert!(
+            driver.delivered.iter().any(|delivery| matches!(
+                delivery,
+                Delivery::WebReply {
+                    reply: people::Reply::Outcome(people::Outcome::ProjectMade { project: MADE_PROJECT }), ..
+                }
+            )),
+            "MakeProject committed its copy of the changed policy"
+        );
+        // Remove the source setting through another real decision: only the
+        // project's retained copy must trigger the named narrowed restore.
+        change(
+            &mut driver,
+            2,
+            22,
+            s::Item { setting: s::Setting::Policy(POLICY_NUMBER), edit: s::Edit::Removed },
+        );
+        assert_eq!(head(&driver).number, 3);
+    }
+    driver
+}
+
+fn replay_policy(driver: Driver, limits: &engine::Limits) -> Driver {
+    let mut store = Store::with_limits(limits);
+    for (index, writes) in driver.transactions.into_iter().enumerate() {
+        let number = u64::try_from(index).unwrap() + 1;
+        // Complete transactions include deployment counters, settings history,
+        // keyed answers and project rows, just as the real root committed them.
+        store.submit(number, writes.into_boxed_slice(), 0);
+        assert_eq!(
+            store.tick(false),
+            Ok(Some(number)),
+            "the narrower real codec admits the committed transaction"
+        );
+    }
+    store.crash(SEED);
+    Driver::cold(store, policy_config(), limits)
+}
+
+#[test]
+fn a_stored_settings_policy_one_byte_over_the_new_bound_refuses_by_setting_and_source() {
+    let driver = saved_policy(PRIOR_POLICY_CAP, false);
+    let mut restarted = replay_policy(driver, &policy_limits(POLICY_CAP));
+    restarted.pump();
+    assert!(restarted.stopped);
+    assert!(!restarted.root.ready());
+    assert_eq!(
+        restarted.root.restore_failure(),
+        Some(core::RestartRequest::Settings {
+            failure: s::Failure { setting: s::Setting::Policy(POLICY_NUMBER), fault: s::Fault::Shape },
+            changed: true,
+        })
+    );
+    assert!(restarted.transactions.is_empty(), "a refused start commits no release revision");
+}
+
+#[test]
+fn a_stored_project_policy_one_byte_over_the_new_bound_refuses_by_project() {
+    let driver = saved_policy(PRIOR_POLICY_CAP, true);
+    let mut restarted = replay_policy(driver, &policy_limits(POLICY_CAP));
+    restarted.pump();
+    assert!(restarted.stopped);
+    assert!(!restarted.root.ready());
+    assert_eq!(restarted.root.restore_failure(), Some(core::RestartRequest::ProjectPolicy { project: MADE_PROJECT }));
+    assert!(restarted.transactions.is_empty(), "a refused start commits no release revision");
+}
+
+#[test]
+fn a_stored_settings_policy_at_the_byte_bound_is_admitted() {
+    let driver = saved_policy(POLICY_CAP, false);
+    let mut restarted = replay_policy(driver, &policy_limits(POLICY_CAP));
+    restarted.settle();
+    assert!(restarted.root.ready());
+    assert!(!restarted.stopped);
+    assert_eq!(restarted.root.restore_failure(), None);
+}
+
+#[test]
+fn a_stored_project_policy_at_the_byte_bound_is_admitted() {
+    let driver = saved_policy(POLICY_CAP, true);
+    let mut restarted = replay_policy(driver, &policy_limits(POLICY_CAP));
+    restarted.settle();
+    assert!(restarted.root.ready());
+    assert!(!restarted.stopped);
+    assert_eq!(restarted.root.restore_failure(), None);
+}
 
 fn started(history: u32) -> Driver {
     let mut limits = walking::limits();

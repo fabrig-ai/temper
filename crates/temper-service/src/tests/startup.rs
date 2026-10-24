@@ -10,6 +10,73 @@ use skein_lib::List;
 const REFUSED_TEMPLATE: u32 = 7;
 
 #[test]
+fn startup_checks_the_effective_codec_envelope_before_generic_sizing() {
+    let jig = config::profile(config::Profile::Small);
+    let mut own = crate::limits::profile(crate::limits::Profile::Small);
+    // Parsed core limits remain valid; the root derives resume_bytes from this
+    // journal override, so checking the parsed profile alone misses the refusal.
+    own.root.journal.transcript_bytes = u32::MAX;
+    let root = crate::limits::engine_candidate(&jig, &own);
+    let expected = config::check_effective_limits(&temper_engine_domain::core_limits(&root))
+        .expect_err("effective resume exceeds the codec");
+    let mut problems = Problems::empty();
+    crate::startup::checks::engine_envelope(&root, &mut problems);
+    assert_eq!(problems.problems.len(), 1);
+    let mut expected_line = Vec::from(b"engine.".as_slice());
+    expected_line.extend_from_slice(&expected.codec_message().expect("named codec diagnostic"));
+    expected_line.push(b'\n');
+    assert_eq!(lines(&problems).as_ref(), expected_line);
+}
+
+#[test]
+fn startup_checks_a_single_policy_row_at_its_bound_and_one_byte_past_it() {
+    let jig = config::profile(config::Profile::Small);
+    let own = crate::limits::profile(crate::limits::Profile::Small);
+    let mut root = crate::limits::engine_candidate(&jig, &own);
+    let bound = temper_engine_domain::policy_row_bound(&root).expect("policy row bound");
+    for (capacity, expected) in [
+        (bound, b"".as_slice()),
+        (
+            bound - 1,
+            b"application.limits.overrides.root.journal.transcript_bytes: must agree with engine.limits.core.policy_bytes plus its policy row carrier\n",
+        ),
+    ] {
+        root.journal.transcript_bytes = u32::try_from(capacity).unwrap();
+        let mut problems = Problems::empty();
+        crate::startup::checks::engine_envelope(&root, &mut problems);
+        assert_eq!(lines(&problems).as_ref(), expected);
+    }
+}
+
+#[test]
+fn startup_refuses_policy_row_arithmetic_overflow_by_name() {
+    let jig = config::profile(config::Profile::Small);
+    let own = crate::limits::profile(crate::limits::Profile::Small);
+    let mut root = crate::limits::engine_candidate(&jig, &own);
+    root.policy_bytes = u64::MAX;
+    assert_eq!(temper_engine_domain::policy_row_bound(&root), None);
+    let mut problems = Problems::empty();
+    crate::startup::checks::engine_envelope(&root, &mut problems);
+    assert!(lines(&problems).ends_with(
+        b"application.limits.overrides.root.journal.transcript_bytes: must agree with engine.limits.core.policy_bytes plus its policy row carrier\n"
+    ));
+}
+
+#[test]
+fn startup_names_the_policy_row_before_generic_worst_case_refusal() {
+    let document = fixtures::with(
+        &fixtures::document(),
+        b"application.limits.overrides",
+        br#"{"root.journal.transcript_bytes":1}"#,
+    );
+    let found = crate::store_limits(&document, &config::Directories::working()).expect_err("short policy row");
+    assert_eq!(
+        lines(&found).as_ref(),
+        b"application.limits.overrides.root.journal.transcript_bytes: must agree with engine.limits.core.policy_bytes plus its policy row carrier\n"
+    );
+}
+
+#[test]
 fn the_template_shaped_demo_reads_into_its_public_fields() {
     let (members, problems) = application(&fixtures::demo_application(), &fixtures::engine().jig);
     assert_eq!(&*lines(&problems), b"");

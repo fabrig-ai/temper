@@ -101,6 +101,8 @@ still open is listed in section 15.
 temper-client-tools          the table, a call, the runner, digests and conditions, the rendering (text,
 │                            JSON), the argv parser and help, the guide, the limits; the tools' root
 ├── jig-client               jig's client and its helpers (shapes, facts, thread, words)
+├── jig-client-protocol-link the configured settings wire limits
+├── jig-client-protocol-wire bounded whole settings values
 ├── temper-client-domain     the forge's client side and its words (README.md, 3.1, section 4, 4.1 and 4.7)
 ├── temper-client-protocol-wire  the forge family's records (README.md, 4.6)
 ├── skein-ui                 phrases: jig's words and the tools' own, rendered as text
@@ -179,7 +181,16 @@ watch's subject, its digest (5.4). It needs no key.
 | `activity N [--before C] [--limit K]` | a task's activity, a page from its end | `activity{n}` |
 | `turn N A.T [--part K] [--from B]` | one turn of task N, attempt A, turn T, whole: its text, each call and its result | `turn{n, attempt, turn}` (jig's `client/domain/contract.md`, section 6) |
 | `run N` | a task's live run: its attempt, its provisional text where its host gives it, its current call | `run{n}` |
+| `settings` | the settings: the newest revision's number; each setting, by kind and number with its name, following its default or a change and the revision that last changed it; each revision held, with who decided it, when, the proposal it came from and how many live tasks hold it; the pending proposals of settings | `settings` |
+| `setting charter N [--revision R]`, `setting template\|policy N`, `setting rules` | one setting's value whole, as the newest reads it, or a charter as held revision R reads it; with `--json`, the value in the form `change-settings` takes | `setting{kind, number, revision}` |
+| `revision R` | a revision: the revision it was made against, when, who decided it (a party, the release or the first start), the proposal it came from, whether it moved running work, and its items, each set with its value whole (or its size, too large, to read with `setting`), removed or reset; a revision forgotten past the history names the oldest kept | `revision{n}` |
+| `revisions [--before R]` | the history a page, newest first: each revision's record and its items without values, cut at the page's bound with how many more; the last page says whether older ones were forgotten | `revisions` |
 
+- **A revision's value too large to print** says `too large, N bytes; read
+  with setting charter N --revision R` for a charter, and `too large, N
+  bytes; read current value with setting KIND [N]` for a template, policy
+  or rules. Only a charter takes `--revision`; the other reads serve the
+  current value, including when the hint appears in a historical revision.
 - **`tasks` reads one group a call.** jig answers a task query in two
   groups, live then ended, each with its own cursor (jig's
   `client/domain/contract.md`, 6.1), and a printed cursor is one
@@ -250,10 +261,22 @@ agent must name.
 | `answer N M TEXT` | answers question M of task N | `Answer` | |
 | `decide P/K accept\|reject\|pass-up [REASON]` | decides a proposal: P is `tN` for task N's, `pN` for party N's | `Decide` | |
 | `decide N --hold R release\|leave\|pass-up [REASON]` | decides an escalation | `Decide` | |
+| `change-settings FILE --against R [--running stays\|moves]` | changes the settings in one decision: FILE (or `-`) holds the items; R is the newest revision the caller read; running work stays unless `--running moves`; answered the new revision's number | `ChangeSettings` | yes |
 | `release N --hold R [--again]` | lifts a hold | `Release` | |
 | `stop N` | cancels a task's run, the task held | `Stop` | |
 | `cancel N [--grace D] REASON` | cancels a task and its tree | `Cancel` | |
 
+- **Settings FILE is JSON:** `{"items": [ITEM, ...]}`, at most one item per
+  setting, each `{"setting": SETTING, "set": VALUE}`,
+  `{"setting": SETTING, "edit": "removed"}` or
+  `{"setting": SETTING, "edit": "reset"}`. SETTING is
+  `{"kind": "charter"|"template"|"policy", "number": N}` or
+  `{"kind": "rules"}`; VALUE is exactly the `value` member `setting … --json`
+  prints. Decoded bounded (6.4): the file's size, the item count and every
+  value's bounds are jig's (`ChangeSettings`' own, and the limits the engine's
+  `me` gives where it gives them). Past a bound it is refused before anything
+  is sent, naming the item and the bound. Unknown members are refused,
+  naming them. These tools select deployment settings only.
 - **The arguments are jig's,** named as its operations name them, with
   the revisions they need (jig's `client/domain/contract.md`, 5.2): a
   proposal by its proposer and number, `t41/3` for task 41's third,
@@ -1465,6 +1488,11 @@ others' fixtures raise.
 
 ### 11.4 The process tier
 
+Settings inventory, a setting, a revision and revision history each have
+one named ctl process story in text and JSON. An owner's change has one
+story: read the current revision, change a charter, read its full value
+and revision back, and refuse a stale request naming the newest revision.
+
 `temper serve` and `temper ctl` as processes over skein's fake LLM peer
 (`../domain/testing.md`, 2.6), on a scratch directory of their own, for
 what needs the executable: argv through `main`, printed output, the OS's
@@ -1514,6 +1542,9 @@ the lowest tier that shows it, before its fix lands: a domain world,
 agent's history of `temper ctl` commands transcribes into one.
 
 ## 12. The bounds
+
+settings FILE (or stdin):1MiB, tools.ask_bytes; item/member/value
+bounds are checked before the request is sent.
 
 Four bounds decide how much of a document a call prints:
 

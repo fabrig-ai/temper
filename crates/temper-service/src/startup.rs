@@ -243,8 +243,15 @@ fn engine_limits(
     own: &crate::limits::Limits,
 ) -> Result<temper_engine_domain::Limits, Problems> {
     jig.clients.wire.keyed_value_some = crate::limits::client_value_bytes(jig, own);
-    crate::limits::engine(jig, own)
-        .ok_or(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)))
+    let root = crate::limits::engine_candidate(jig, own);
+    let mut problems = Problems::empty();
+    checks::engine_envelope(&root, &mut problems);
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+    temper_engine_domain::worst_case(&root)
+        .ok_or(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)))?;
+    Ok(root)
 }
 #[derive(Debug)]
 struct Parsed {
