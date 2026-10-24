@@ -12,6 +12,16 @@ fn arguments() {
     for (words, environment, kind, document, ready, seed, observations) in [
         (vec!["fake", "llm", "--document", "llm.json"], vec![], Kind::Llm, "llm.json", None, 0, None),
         (vec!["fake", "forge", "--document", "forge.json"], vec![], Kind::Forge, "forge.json", None, 0, None),
+        (vec!["fake", "oauth", "--document", "oauth.json"], vec![], Kind::Oauth, "oauth.json", None, 0, None),
+        (
+            vec!["fake", "oauth", "--document", "oauth.json", "--ready", "", "--seed", "23"],
+            vec![],
+            Kind::Oauth,
+            "oauth.json",
+            Some(""),
+            23,
+            None,
+        ),
         (
             vec!["fake", "llm", "--document", "doc", "--observations", "seen"],
             vec![],
@@ -78,7 +88,23 @@ fn arguments() {
         );
     }
     for (words, expected) in [
-        (vec!["fake"], "temper fake: expected llm, forge or git\n"),
+        (vec!["fake"], "temper fake: expected llm, forge, oauth or git\n"),
+        (
+            vec!["fake", "oauth"],
+            "temper fake oauth: usage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
+        ),
+        (
+            vec!["fake", "oauth", "1"],
+            "temper fake oauth: usage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
+        ),
+        (
+            vec!["fake", "oauth", "--document", "doc", "--seed", "no"],
+            "temper fake oauth: --seed N (TEMPER_SEED): expected a decimal u64\n",
+        ),
+        (
+            vec!["fake", "oauth", "--document", "doc", "--observations", "seen"],
+            "temper fake oauth: unexpected argument --observations\n",
+        ),
         (vec!["fake", "other"], "temper fake: unknown fake other\n"),
         (
             vec!["fake", "llm"],

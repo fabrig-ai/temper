@@ -2,7 +2,7 @@
 pub(crate) mod check;
 mod control;
 pub mod git;
-use skein_fake_peers::{forge as forge_peer, llm as llm_peer};
+use skein_fake_peers::{forge as forge_peer, llm as llm_peer, oauth as oauth_peer};
 use skein_io::kernel::{Complete, Done, Exit, Fd, Op, Submit};
 use skein_lib::{List, Queue, Time, Token, Wall};
 use skein_shell::{Fallback, Host as _, Origin, Setting, Settings};
@@ -16,7 +16,7 @@ use std::{
 };
 use temper_fake::{
     credential::{self, credential},
-    demo, forge, limits, llm,
+    demo, forge, limits, llm, oauth,
 };
 
 pub const LLM_SETTINGS: Settings = Settings {
@@ -77,16 +77,41 @@ pub const FORGE_SETTINGS: Settings = Settings {
         },
     ],
 };
+pub const OAUTH_SETTINGS: Settings = Settings {
+    tool: "temper",
+    table: &[
+        Setting {
+            name: "document",
+            value: "FILE",
+            about: "The fake OAuth issuer's JSON document.",
+            fallback: Fallback::Text(""),
+        },
+        Setting {
+            name: "ready",
+            value: "PREFIX",
+            about: "Print PREFIX and the bound address once.",
+            fallback: Fallback::Text(""),
+        },
+        Setting {
+            name: "seed",
+            value: "N",
+            about: "The signed-in model credential seed, a decimal u64.",
+            fallback: Fallback::Text("0"),
+        },
+    ],
+};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Llm,
     Forge,
+    Oauth,
 }
 impl Kind {
     fn command(self) -> &'static str {
         match self {
             Self::Llm => "temper fake llm",
             Self::Forge => "temper fake forge",
+            Self::Oauth => "temper fake oauth",
         }
     }
 }
@@ -118,7 +143,7 @@ pub fn configure(
     working: &[u8],
 ) -> Result<super::Command, String> {
     let Some((verb, arguments)) = arguments.split_first() else {
-        return Err("temper fake: expected llm, forge or git\n".into());
+        return Err("temper fake: expected llm, forge, oauth or git\n".into());
     };
     if verb.as_ref() == b"git" {
         return Ok(super::Command::FakeGit { arguments: arguments.into() });
@@ -132,11 +157,15 @@ pub fn configure(
     let (kind, table) = match verb.as_ref() {
         b"llm" => (Kind::Llm, &LLM_SETTINGS),
         b"forge" => (Kind::Forge, &FORGE_SETTINGS),
+        b"oauth" => (Kind::Oauth, &OAUTH_SETTINGS),
         _ => return Err(format!("temper fake: unknown fake {}\n", String::from_utf8_lossy(verb))),
     };
     let resolved = skein_shell::resolve(table, arguments, environment)
         .map_err(|why| super::prefixed(kind.command(), &why.to_string()))?;
     let source = if resolved.value(0).origin == Origin::Default {
+        if kind == Kind::Oauth {
+            return Err(super::prefixed(kind.command(), OAUTH_USAGE));
+        }
         let (directories, rest) = super::directories::resolve(resolved.rest(), environment, working)
             .map_err(|why| super::prefixed(kind.command(), &why.to_string()))?;
         match kind {
@@ -153,6 +182,7 @@ pub fn configure(
                 }
                 Source::Demo { directories }
             }
+            Kind::Oauth => unreachable!("OAuth requires a document before resolving directories"),
         }
     } else {
         if let Some(word) = resolved.rest().first() {
@@ -174,7 +204,7 @@ pub fn configure(
     // shell.md 6.5 has no absent setting; Default alone means absent.
     // In particular --ready "" is a present, empty prefix.
     let ready = if resolved.value(1).origin == Origin::Default { None } else { Some(resolved.value(1).bytes.clone()) };
-    let observations = if resolved.value(3).origin == Origin::Default {
+    let observations = if kind == Kind::Oauth || resolved.value(3).origin == Origin::Default {
         None
     } else {
         Some(super::path(&resolved.value(3).bytes).to_path_buf())
@@ -184,6 +214,7 @@ pub fn configure(
 
 const LLM_USAGE: &str = "usage: temper fake llm [DIRECTORIES] [--ready PREFIX] [--seed N] [--observations FILE] | temper fake llm --document FILE [--ready PREFIX] [--seed N] [--observations FILE]";
 const FORGE_USAGE: &str = "usage: temper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]";
+const OAUTH_USAGE: &str = "usage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]";
 fn forge_number(number: &[u8]) -> Result<u16, &'static str> {
     std::str::from_utf8(number)
         .ok()
@@ -340,6 +371,10 @@ fn llm_configuration(source: &Source, seed: u64, created: &mut Created) -> Resul
 
 fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_shell::Kernel), String> {
     let listeners = skein_shell::inherited_listeners().map_err(super::listeners_refusal)?;
+    if arguments.kind == Kind::Oauth && !listeners.is_empty() {
+        super::close(listeners.into_iter().map(|(fd, _)| fd).collect());
+        return Err("inherited listeners are not supported by the standalone OAuth issuer".into());
+    }
     let mut control_address = None;
     let (mut peer, shared, observations, writer, buffer) = match arguments.kind {
         Kind::Llm => {
@@ -378,11 +413,20 @@ fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_sh
             };
             (Peer::Forge(peer), Some(shared), observations, writer, buffer)
         }
+        Kind::Oauth => {
+            let Source::Document(path) = &arguments.source else { return Err(OAUTH_USAGE.into()) };
+            let bytes = read_document(path, oauth::DOCUMENT_BYTES)?;
+            let document =
+                oauth::Document::decode(&bytes).map_err(|why| String::from_utf8_lossy(&why.line()).into_owned())?;
+            let peer = document.peer(arguments.seed).map_err(|why| format!("peer: {why:?}"))?;
+            (Peer::Oauth(peer), None, None, None, List::with_capacity(0))
+        }
     };
     for (fd, addr) in listeners {
         let adopted = match &mut peer {
             Peer::Llm(peer) => peer.adopt_listener(fd, addr),
             Peer::Forge(peer) => peer.adopt_listener(fd, addr),
+            Peer::Oauth(_) => unreachable!("OAuth refused inherited listeners before construction"),
         };
         adopted.map_err(|fd| format!("listener: fd {} at {addr} refused", fd.raw()))?;
     }
@@ -411,6 +455,7 @@ fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_sh
         checkpoint: false,
         failed: false,
         command: arguments.kind.command(),
+        seed: arguments.seed,
     };
     let kernel = match skein_shell::Kernel::open(skein_shell::Config { operations: host.operations() }) {
         Ok(kernel) => kernel,
@@ -421,37 +466,39 @@ fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_sh
     };
     Ok((host, kernel))
 }
-#[expect(
-    clippy::large_enum_variant,
-    reason = "one peer lives on the host stack; the 384-byte difference needs no heap indirection"
-)]
+#[expect(clippy::large_enum_variant, reason = "one peer lives on the host stack; only one variant is constructed")]
 enum Peer {
     Llm(llm_peer::Peer),
     Forge(forge_peer::Peer),
+    Oauth(oauth_peer::Peer),
 }
 impl Peer {
     fn host(&self) -> &dyn skein_shell::Host {
         match self {
             Self::Llm(p) => p,
             Self::Forge(p) => p,
+            Self::Oauth(p) => p,
         }
     }
     fn host_mut(&mut self) -> &mut dyn skein_shell::Host {
         match self {
             Self::Llm(p) => p,
             Self::Forge(p) => p,
+            Self::Oauth(p) => p,
         }
     }
     fn address(&self) -> Option<std::net::SocketAddr> {
         match self {
             Self::Llm(p) => p.address(),
             Self::Forge(p) => p.address(),
+            Self::Oauth(p) => p.address(),
         }
     }
     fn shutdown(&mut self) {
         match self {
             Self::Llm(p) => p.shutdown(),
             Self::Forge(p) => p.shutdown(),
+            Self::Oauth(p) => p.shutdown(),
         }
     }
 }
@@ -502,6 +549,7 @@ struct Host {
     checkpoint: bool,
     failed: bool,
     command: &'static str,
+    seed: u64,
 }
 impl Host {
     fn checkpoint_or_llm(&self) -> bool {
@@ -726,6 +774,12 @@ impl skein_shell::Host for Host {
             if control.failed && !self.failed {
                 self.fail("control", &"listener failed");
             }
+        }
+        if !self.stopped
+            && let Peer::Oauth(peer) = &mut self.peer
+            && let Err(why) = oauth::refill(peer, self.seed)
+        {
+            self.fail("token plans", &format_args!("{why:?}"));
         }
         self.peer.host_mut().iterate(now, wall);
         while self.submissions.room() > 0 {

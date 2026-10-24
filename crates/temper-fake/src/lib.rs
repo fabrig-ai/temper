@@ -10,6 +10,7 @@ pub mod demo;
 pub mod forge;
 pub mod limits;
 pub mod llm;
+pub mod oauth;
 mod read;
 pub mod steps;
 pub mod turn;
