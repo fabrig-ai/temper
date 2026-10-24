@@ -679,6 +679,13 @@ pub fn root(
                     None => What::Jig(config::What::Bound),
                 },
             ),
+            domain::Refused::Policy { project, bytes } => (
+                at(index_of(&numbers, project), engine_path.member(b"projects")).member(b"policy").member(b"bytes"),
+                match bytes {
+                    Some(bytes) => What::Within { bytes, limit: b"core.policy_bytes", bound: limits.policy_bytes },
+                    None => What::Jig(config::What::Bound),
+                },
+            ),
             domain::Refused::Landing { project: None } => {
                 (landing_path.member(b"deployment"), What::Against { other: LANDING })
             }

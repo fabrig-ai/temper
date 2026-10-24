@@ -730,3 +730,88 @@ fn admin_connect_role_refusals_deliver_the_carried_value_unused() {
         assert!(!requests.iter().any(|r| if let Request::Connect { .. } = r { true } else { false }));
     }
 }
+
+// Include permission mappings and a real template override in the admission
+// fixture: pricing only authority or only appended requirements undercounts it.
+fn seed_with_landing() -> crate::Config {
+    use jig_domain_authority as authority;
+    use jig_domain_tasks as tasks;
+    let mut configured = config(1);
+    configured.core.defaults.templates = Box::new([jig_domain_core::Template {
+        number: 1,
+        name: b"goal".as_slice().into(),
+        executor: people::TemplateExecutor::Chosen,
+        contract: tasks::Contract::Report { words: 32 },
+        shallower: 1,
+        budget: people::TemplateBudget::Given,
+        deadline: people::TemplateDeadline::Given,
+        tracked: Some(1),
+        flags: tasks::Flags {
+            ended_by: tasks::EndedBy::Result,
+            conversation: false,
+            listed: true,
+            retention: tasks::Retention::Kept,
+        },
+        label: 1,
+        grace: None,
+        llm: None,
+    }]);
+    configured.core.seed_projects[0].policy.templates = Box::new([people::TemplateOverride {
+        template: 1,
+        executor: None,
+        budget: None,
+        deadline: None,
+        priority: Some(2),
+    }]);
+    configured.landing.projects.insert(1, Box::new([crate::LandingRule {
+        connector: 0,
+        kind: 4,
+        pattern: authority::Pattern {
+            segments: Box::new([b"branch".as_slice().into()]),
+            last: authority::Last::Exact(b"main".as_slice().into()),
+        },
+        enforce: true,
+        ci: false,
+        up_to_date: true,
+        gates: Box::new([]),
+        approvals: Box::new([]),
+    }])).unwrap();
+    configured
+}
+
+fn seed_bytes(policy: &jig_domain_core::ConfiguredPolicy) -> u64 {
+    people::policy_bytes(
+        &jig_domain_core::policy_snapshot(&policy.policy, &policy.permissions, &policy.templates).unwrap(),
+    ).unwrap()
+}
+
+fn joined_seed_bytes(configured: &crate::Config, limits: &Limits) -> u64 {
+    let mut policy = configured.core.seed_projects[0].policy.clone();
+    let built = crate::route::policy_translate::build_landing(
+        configured.landing.projects.get(&1).unwrap(), true, limits.authority.requirements, 0,
+    ).unwrap();
+    policy.policy.requirements = crate::route::policy_translate::combine_requirements(
+        &policy.policy.requirements, &built.requirements, limits.authority.requirements,
+    ).unwrap();
+    seed_bytes(&policy)
+}
+
+#[test]
+fn a_parsed_fit_seed_policy_refuses_its_joined_bytes_before_core_construction() {
+    let configured = seed_with_landing();
+    let mut limits = super::resume_fixture::limits();
+    let joined = joined_seed_bytes(&configured, &limits);
+    limits.policy_bytes = joined.checked_sub(1).unwrap();
+    assert!(seed_bytes(&configured.core.seed_projects[0].policy) <= limits.policy_bytes);
+    assert!(!configured.core.seed_projects[0].policy.permissions.is_empty());
+    assert!(!configured.core.seed_projects[0].policy.templates.is_empty());
+    assert_eq!(crate::refused(configured, &limits).as_ref(), [crate::Refused::Policy { project: 1, bytes: Some(joined) }]);
+}
+
+#[test]
+fn a_seed_policy_at_its_actual_joined_byte_bound_is_admitted() {
+    let mut limits = super::resume_fixture::limits();
+    limits.policy_bytes = joined_seed_bytes(&seed_with_landing(), &limits);
+    assert!(crate::refused(seed_with_landing(), &limits).is_empty());
+    assert!(Domain::new(seed_with_landing(), &limits).is_ok());
+}

@@ -610,6 +610,7 @@ configured bound plus its owned row carrier fits the journal. Transcript
 capacity never enlarges the configured policy budget. Restore refuses an
 over-bound stored settings policy by setting number and source, and an
 over-bound project policy by project number.
+Startup also checks the seed policy after enforced landing requirements are joined, before constructing the core.
 
 - **The core's children's limits** are `engine.limits`, jig's part:
   tasks, authority, people, the fleet, accounts, notes, documents,

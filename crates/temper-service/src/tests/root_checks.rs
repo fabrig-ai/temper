@@ -231,3 +231,29 @@ fn configured_worker_name_past_membership_names_its_startup_path() {
     limits.fleet.worker_name_bytes = 1;
     assert_eq!(&*root(&limits), b"engine.hosts.workers[0].name: past its bound\n");
 }
+
+#[test]
+fn a_joined_policy_past_its_bytes_returns_problems_before_construction() {
+    // Project 7 is document entry 0. The parsed policy (272 bytes) still fits
+    // 512; joining all three enforced requirements is the admission failure.
+    let document = fixtures::with(&fixtures::document(), b"engine.projects[0].number", b"7");
+    let document = fixtures::with(&document, b"application.landing.projects[0].project", b"7");
+    let document = fixtures::with(&document, b"application.landing.projects[0].rules[0].gates",
+        br#"[{"number":3,"blocking":true,"freshness":"exact"}]"#);
+    let document = fixtures::with(&document, b"application.landing.projects[0].rules[0].approvals",
+        br#"[{"role":0,"people":1,"freshness":"clean"}]"#);
+    assert_eq!(started(&document).as_ref(),
+        b"engine.projects[0].policy.bytes: 761 bytes, past core.policy_bytes of 512\n");
+}
+
+#[test]
+fn unaccountable_policy_bytes_use_the_existing_bound_formatter() {
+    let mut found = Problems::empty();
+    found.push(
+        jig_protocol_config::Path::root().member(b"engine")
+            .member(b"projects")
+            .child(jig_protocol_config::Segment::Index(0)).member(b"policy").member(b"bytes"),
+        crate::startup::What::Jig(jig_protocol_config::What::Bound),
+    );
+    assert_eq!(lines(&found).as_ref(), b"engine.projects[0].policy.bytes: past its bound\n");
+}

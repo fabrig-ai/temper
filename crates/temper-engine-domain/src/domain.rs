@@ -934,6 +934,9 @@ pub enum Refused {
     /// A project's permission mappings, `None` past `u64`, beyond
     /// `journal.transcript_bytes`.
     Permissions { project: u32, bytes: Option<u64> },
+    /// The full seed policy after joining landing requirements, `None` past
+    /// accounting bounds, beyond `policy_bytes`.
+    Policy { project: u32, bytes: Option<u64> },
     /// The forges' writers or git identities beyond the forge's repositories,
     /// or the namespace and writers beyond the forge client's `op_bytes`.
     Forges,
@@ -946,7 +949,9 @@ pub enum Refused {
 pub fn refused(mut config: Config, limits: &Limits) -> Box<[Refused]> {
     let room = u32::try_from(config.core.defaults.charters.len().saturating_add(config.core.owners.len()))
         .expect("bounded configuration")
-        .saturating_add(u32::try_from(config.core.seed_projects.len()).expect("bounded projects"))
+        .saturating_add(
+            u32::try_from(config.core.seed_projects.len()).expect("bounded projects").saturating_mul(2),
+        )
         .saturating_add(config.landing.projects.len())
         .saturating_add(7);
     let mut refused = List::with_capacity(room);
@@ -1074,6 +1079,23 @@ pub fn refused(mut config: Config, limits: &Limits) -> Box<[Refused]> {
     };
     if !gates && refused.is_empty() {
         refused.push(Refused::Landing { project: None }).expect("counted refusals");
+    }
+    for seed in &config.core.seed_projects {
+        let bytes = match jig_domain_core::policy_snapshot(
+            &seed.policy.policy,
+            &seed.policy.permissions,
+            &seed.policy.templates,
+        ) {
+            Some(snapshot) => people::policy_bytes(&snapshot),
+            None => None,
+        };
+        let fits = match bytes {
+            Some(bytes) => bytes <= limits.policy_bytes,
+            None => false,
+        };
+        if !fits {
+            refused.push(Refused::Policy { project: seed.number, bytes }).expect("counted refusals");
+        }
     }
     refused.into_boxed()
 }
