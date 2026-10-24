@@ -78,13 +78,7 @@ pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::E
         | crate::pages::Event::Link { .. } => false,
     };
     crate::pages::step(&mut root.pages, env, &root.client, event, &mut child);
-    for _ in 0..child.len() {
-        match child.pop().expect("counted pages output") {
-            crate::pages::Request::Client(event) => client(root, env, event, out),
-            crate::pages::Request::Replace { address } => out.push(Request::Show { address, replace: true }),
-            crate::pages::Request::Show { address } => out.push(Request::Show { address, replace: false }),
-        }
-    }
+    route_pages(root, env, &mut child, out);
     let subject = match root.pages.task() {
         Some(task) => task.panel(&root.client, root.forge_number()),
         None => None,
@@ -104,6 +98,27 @@ pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::E
         && forge::panel::refreshable(task, root.forge_number())
     {
         forge(root, env, forge::Event::RefreshPanel { subject }, out);
+    }
+}
+
+pub(crate) fn fire_pages(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    let mut child = Queue::with_capacity(crate::pages::max_out(&env.limits));
+    crate::pages::fire(&mut root.pages, env, &root.client, &mut child);
+    route_pages(root, env, &mut child, out);
+}
+
+fn route_pages(
+    root: &mut Domain,
+    env: &Env<Limits>,
+    child: &mut Queue<crate::pages::Request>,
+    out: &mut Queue<Request>,
+) {
+    for _ in 0..child.len() {
+        match child.pop().expect("counted pages output") {
+            crate::pages::Request::Client(event) => client(root, env, event, out),
+            crate::pages::Request::Replace { address } => out.push(Request::Show { address, replace: true }),
+            crate::pages::Request::Show { address } => out.push(Request::Show { address, replace: false }),
+        }
     }
 }
 

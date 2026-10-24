@@ -29,6 +29,8 @@ pub struct Joint {
     pub demo_starts: Vec<skein_lib::RequestKey>,
     pub demo_removals: Vec<skein_lib::RequestKey>,
     pub demo_reads: usize,
+    /// Terminal replies for successive task-document attempts, before the real engine serves one.
+    pub task_read_ends: VecDeque<jig_client::contract::ReadNone>,
     pub reachable_reads: Vec<(u16, Option<u64>, u32)>,
     pub reachable_empty: bool,
     pub installs: Vec<(u16, Token)>,
@@ -654,6 +656,7 @@ impl Joint {
             demo_starts: Vec::new(),
             demo_removals: Vec::new(),
             demo_reads: 0,
+            task_read_ends: VecDeque::new(),
             reachable_reads: Vec::new(),
             reachable_empty: false,
             installs: Vec::new(),
@@ -882,6 +885,64 @@ impl Joint {
         }
         false
     }
+    fn task_read_end(&mut self, who: ClientId, request: &Request) -> bool {
+        if let Request::Client {
+            request:
+                jig_client::Request::Down {
+                    down:
+                        jig_client::Down::Read {
+                            read,
+                            what: jig_client::Readable::Jig(jig_client::contract::Read::Task { .. }),
+                        },
+                },
+        } = request
+            && let Some(why) = self.task_read_ends.pop_front()
+        {
+            self.callbacks.push((
+                who,
+                RootEvent::Client {
+                    event: jig_client::Event::Up {
+                        up: jig_client::Up::ReadDone {
+                            read: *read,
+                            result: jig_client::Readout::Jig(jig_client::contract::ReadResult::None(why)),
+                        },
+                    },
+                }
+                .into(),
+            ));
+            return true;
+        }
+        false
+    }
+    fn demo_read(&mut self, who: ClientId, request: &Request) -> bool {
+        if let Request::Client {
+            request:
+                jig_client::Request::Down {
+                    down: jig_client::Down::Read { read, what: jig_client::Readable::Family { record, .. } },
+                },
+        } = request
+        {
+            // This front supplies the demo read independently of the engine.
+            self.demo_reads += 1;
+            self.callbacks.push((
+                who,
+                RootEvent::Client {
+                    event: jig_client::Event::Up {
+                        up: jig_client::Up::ReadDone {
+                            read: *read,
+                            result: jig_client::Readout::Family {
+                                family: record.family,
+                                record: self.demo.as_ref().map(temper_client_protocol_wire::demo_answer),
+                            },
+                        },
+                    },
+                }
+                .into(),
+            ));
+            return true;
+        }
+        false
+    }
     fn request(&mut self, who: ClientId, mut request: Request) {
         if self.refused_return(who, &request) {
             return;
@@ -950,30 +1011,7 @@ impl Joint {
         if self.reachable(who, &request) || self.start_demo(who, &request) {
             return;
         }
-        if let Request::Client {
-            request:
-                jig_client::Request::Down {
-                    down: jig_client::Down::Read { read, what: jig_client::Readable::Family { record, .. } },
-                },
-        } = &request
-        {
-            // This front supplies the demo read independently of the engine.
-            self.demo_reads += 1;
-            self.callbacks.push((
-                who,
-                RootEvent::Client {
-                    event: jig_client::Event::Up {
-                        up: jig_client::Up::ReadDone {
-                            read: *read,
-                            result: jig_client::Readout::Family {
-                                family: record.family,
-                                record: self.demo.as_ref().map(temper_client_protocol_wire::demo_answer),
-                            },
-                        },
-                    },
-                }
-                .into(),
-            ));
+        if self.demo_read(who, &request) || self.task_read_end(who, &request) {
             return;
         }
         let (events, refusal) =

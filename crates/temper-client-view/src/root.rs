@@ -157,6 +157,11 @@ pub fn build(view: &mut View, root: &Domain, wall: Wall, out: &mut Queue<Patch>)
         builder.style(crate::look::UNAVAILABLE);
         crate::frame::unavailable_main(&mut builder, root, &view.forge_words);
         builder.close();
+        if let Some(page) = root.pages().task()
+            && page.document(root.client()).is_none()
+        {
+            crate::pages::task::reading(&mut builder, page, &view.forge_words);
+        }
         builder.close();
     } else if let temper_client_domain::Address::Welcome { step } = root.pages().address() {
         crate::pages::welcome::main(
