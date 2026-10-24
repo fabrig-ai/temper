@@ -9200,7 +9200,8 @@ mod cap_tests {
     }
     fn field(read: Read, path: &str, promise: Promise) {
         let mut bad = met();
-        *bad.documents.get_mut(&read).expect("doc").pointer_mut(path).expect(path) = Value::Null;
+        let value = bad.documents.get_mut(&read).expect("doc").pointer_mut(path).expect(path);
+        *value = if value.is_null() { json!("unexpected") } else { Value::Null };
         rejects(&bad, promise);
     }
     #[test]
