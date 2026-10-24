@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 extern crate alloc;
 
+pub mod backends;
 pub mod check;
 pub mod credential;
 pub mod demo;
