@@ -9095,7 +9095,8 @@ mod cap_tests {
         ended["task"]["instructions"] = json!({"bytes":CAP_SPLIT,"cut":false});
     }
     fn implementer_documents(observed: &mut Observed) {
-        observed.documents.get_mut(&Read::CapA5Ended).expect("a5")["task"]["authority"]["authority"]["deadline"] = json!(deadline());
+        observed.documents.get_mut(&Read::CapA5Ended).expect("a5")["task"]["authority"]["authority"]["deadline"] =
+            json!(deadline());
         let a5_lines = [
             json!({"run_began":{"attempt":1}}),
             json!({"turn":{"attempt":1}}),
