@@ -77,26 +77,33 @@ impl Io {
     }
     fn port(&mut self, preferred: u16) -> Result<(Fd, NonZeroU16), String> {
         let fd = self.socket()?;
-        let result = (|| {
-            let preferred = ([127, 0, 0, 1], preferred).into();
-            let bound = match self.perform(Op::Bind { fd, addr: preferred }) {
-                Ok(bound) => bound,
-                Err(_) => self.perform(Op::Bind { fd, addr: ([127, 0, 0, 1], 0).into() }).map_err(io_error)?,
-            };
-            let Done::Bound(address) = bound else { unreachable!("bind answers an address") };
-            // skein sets SO_REUSEADDR on bind: two merely bound sockets can
-            // share a port. Listening makes this reservation exclusive.
-            self.perform(Op::Listen {
-                fd,
-                backlog: jig_protocol_config::profile(jig_protocol_config::Profile::Small).io.backlog,
-            })
-            .map_err(io_error)?;
-            Ok((fd, NonZeroU16::new(address.port()).expect("bound port")))
-        })();
-        if result.is_err() {
-            self.close(fd);
+        let preferred = ([127, 0, 0, 1], preferred).into();
+        let (bound, taken) = match self.perform(Op::Bind { fd, addr: preferred }) {
+            Ok(bound) => (Ok(bound), false),
+            Err(_) => (self.perform(Op::Bind { fd, addr: ([127, 0, 0, 1], 0).into() }).map_err(io_error), true),
+        };
+        match bound {
+            Ok(Done::Bound(address)) => self.listened(fd, address, !taken && preferred.port() != 0),
+            Ok(_) => unreachable!("bind answers an address"),
+            Err(why) => {
+                self.close(fd);
+                Err(why)
+            }
         }
-        result
+    }
+    /// skein sets `SO_REUSEADDR` on bind: two merely bound sockets can share a
+    /// port, and listening makes a reservation exclusive. Another init that
+    /// listened first between this one's bind and listen leaves it a
+    /// kernel-chosen port, as a taken port does.
+    fn listened(&mut self, fd: Fd, address: std::net::SocketAddr, preferred: bool) -> Result<(Fd, NonZeroU16), String> {
+        let backlog = jig_protocol_config::profile(jig_protocol_config::Profile::Small).io.backlog;
+        match self.perform(Op::Listen { fd, backlog }) {
+            Ok(_) => Ok((fd, NonZeroU16::new(address.port()).expect("bound port"))),
+            Err(why) => {
+                self.close(fd);
+                if preferred { self.port(0) } else { Err(io_error(why)) }
+            }
+        }
     }
     fn ports(&mut self, preferred: [u16; 5]) -> Result<Vec<(Fd, NonZeroU16)>, String> {
         let mut held = Vec::with_capacity(preferred.len());
