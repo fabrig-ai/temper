@@ -192,7 +192,9 @@ fn settings_history_loads_with_the_roots_effective_envelope() {
             settings::Record::Revision { history: false, revision: revision.clone() },
         ))))]),
     );
-    assert!(matches!(store.above.pop(), Some(jig_protocol_store::Event::Committed { .. })));
+    let Some(jig_protocol_store::Event::Committed { .. }) = store.above.pop() else {
+        panic!("settings history commit")
+    };
     store.ask(jig_protocol_store::Request::Read {
         owner: Token::new(42),
         range: reads::Range {
