@@ -39,7 +39,7 @@ pub(super) fn text(
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value)))
                 if super::super::historical_settings(value).is_some() =>
             {
-                super::proposal::history_text(value, out)
+                super::proposal::history_text(value, out);
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value))) => {
                 let (task, result) = super::super::historical_task(value).expect("validated historical task");
@@ -135,7 +135,7 @@ pub(super) fn encode(reading: &Reading, limits: &Limits, out: &mut Encoder, budg
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value)))
                 if super::super::historical_settings(value).is_some() =>
             {
-                super::proposal::encode_history(value, out, budget)
+                super::proposal::encode_history(value, out, budget);
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value))) => {
                 let (task, result) = super::super::historical_task(value).expect("validated historical task");
