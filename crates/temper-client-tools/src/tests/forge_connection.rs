@@ -336,9 +336,8 @@ fn admin_first_repository_uses_default_and_custom_project_and_label() {
         let w::SetUpProject::New(new) = first.project() else { panic!("new project") };
         assert_eq!(new.name(), project);
         root.adoption_answer(call, w::Outcome::Connecting);
-        let printed = root.answer(call).expect("connecting");
-        assert_eq!(printed.stdout.as_ref(), b"connecting\ntemper ctl DIRECTORY wait forges --until connected:3\ntemper ctl DIRECTORY wait forges --until made:3\n");
-        no_token(&printed);
+        assert!(root.answer(call).is_none(), "waits for creation and adoption");
+        assert_eq!(root.progress.as_slice(), &[Box::<[u8]>::from(b"connecting\n".as_slice())]);
     }
 }
 #[test]
@@ -409,4 +408,203 @@ fn an_admin_connect_is_not_recovered_as_a_durable_request() {
     );
     assert_eq!(restored.calls(), 0);
     assert!(out.is_empty());
+}
+
+fn first_page(root: &mut f::Harness, connection: w::Connection, state: w::FirstState, stop: Option<w::AdminStop>) {
+    let l = temper_client_domain::forge::wire_limits(&root.limits.domain.forge).unwrap();
+    let first = w::FirstRepository::new(
+        &l,
+        w::FirstRepositoryParts {
+            org: b"work".as_slice().into(),
+            repository: b"hello".as_slice().into(),
+            project: w::SetUpProject::New(
+                w::NewProject::new(&l, w::NewProjectParts { name: b"hello".as_slice().into() }).unwrap(),
+            ),
+            label: b"docker".as_slice().into(),
+            state,
+        },
+    )
+    .unwrap();
+    let mut rows = skein_lib::List::with_capacity(1);
+    rows.push(
+        w::ForgeRow::new(
+            &l,
+            w::ForgeRowParts {
+                number: 3,
+                kind: w::Kind::Forgejo,
+                mode: w::Mode::Managed,
+                connection,
+                offer: w::Offer::NotOffered,
+                first: Some(first),
+                installations: skein_lib::List::with_capacity(0),
+                ended: None,
+                app: None,
+                web: None,
+                repositories: skein_lib::List::with_capacity(0),
+                owned: None,
+                admin: true,
+                ended_stop: stop,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let subject = temper_client_domain::forge::forges::watch(&root.limits.domain.forge).unwrap();
+    let watch = root.watch_token(&subject);
+    root.client(client::Event::Up {
+        up: client::Up::FamilyDelivered {
+            watch,
+            record: client::Family {
+                family: wire::FORGE,
+                version: wire::CLIENT_VERSION,
+                bytes: wire::forges(&w::Forges::new(&l, w::ForgesParts { forges: rows }).unwrap()),
+            },
+        },
+    });
+}
+fn made() -> w::FirstState {
+    w::FirstState::Made(w::Made::new(&w::CEILINGS, w::MadeParts { id: 42 }).unwrap())
+}
+fn connected() -> w::Connection {
+    w::Connection::Connected(
+        w::Connected::new(&w::CEILINGS, w::ConnectedParts { id: 5, login: b"elsewhere-bot".as_slice().into() })
+            .unwrap(),
+    )
+}
+#[test]
+fn admin_first_makes_a_new_project_or_uses_its_number_or_name_then_prints_the_adoption() {
+    for project in [None, Some("Next"), Some("1"), Some("shop")] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let mut words = f::extended(ADMIN, &["--first", "work/hello"]);
+            if let Some(project) = project {
+                words.push("--project").unwrap();
+                words.push(project).unwrap();
+            }
+            let call = root.submit_prepared(f::call(words.as_slice()), json, Some(Secret::new(TOKEN.into())));
+            root.adoption_answer(call, w::Outcome::Connecting);
+            assert!(root.answer(call).is_none());
+            first_page(&mut root, w::Connection::Connecting, made(), None);
+            assert!(root.answer(call).is_none(), "waits for Connected too");
+            first_page(&mut root, connected(), made(), None);
+            let expected = if project == Some("1") || project == Some("shop") {
+                f::PROJECT
+            } else {
+                let client::Ask::Jig(ask) = root.adoption_bytes(call) else { panic!("MakeProject") };
+                let c::Ask::MakeProject { name, .. } = ask.as_ref() else { panic!("MakeProject") };
+                assert_eq!(name.bytes(), if project.is_none() { b"hello".as_slice() } else { b"Next" });
+                let attempt = root.sends[&call].0;
+                root.client(client::Event::Up {
+                    up: client::Up::Answer {
+                        attempt,
+                        envelope: RequestEnvelope::Final,
+                        answer: Some(client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
+                            c::OwnerOutcome::ProjectMade { project: 8 },
+                        )))),
+                        why: None,
+                    },
+                });
+                8
+            };
+            let adoption = root.sent_adoption(call);
+            assert_eq!(adoption.project, expected);
+            assert!(adoption.home);
+            assert!(adoption.ci);
+            assert_eq!(adoption.role, w::Role::Owned);
+            assert_eq!(root.sent_name(call), Some(temper_client_domain::forge::first_repository_key(3, false)));
+            root.adoption_answer(call, f::adopted_with_unknown_protection());
+            let printed = root.answer(call).unwrap();
+            assert_eq!(printed.status, 0);
+            no_token(&printed);
+            assert!(
+                skein_lib::bytes::find(&printed.stdout, if json { b"\"project\":" } else { b"project " }).is_some()
+            );
+        }
+    }
+}
+#[test]
+fn admin_first_reruns_use_the_same_project_and_adoption_keys_and_keep_an_existing_home() {
+    for project in [None, Some("shop")] {
+        let mut root = f::signed_in(f::PARTY);
+        let mut words = f::extended(ADMIN, &["--first", "work/hello"]);
+        if let Some(project) = project {
+            words.push("--project").unwrap();
+            words.push(project).unwrap();
+        }
+        let mut previous = None;
+        let mut previous_project = None;
+        for _ in 0u8..2 {
+            let call = root.submit_value(words.as_slice(), Some(Secret::new(TOKEN.into())));
+            root.adoption_answer(call, w::Outcome::Connecting);
+            first_page(&mut root, connected(), made(), None);
+            if project.is_none() {
+                let client::Ask::Jig(_) = root.adoption_bytes(call) else { panic!("MakeProject") };
+                let key = root.sent_name(call).unwrap();
+                if let Some(previous) = previous_project {
+                    assert_eq!(key, previous, "same MakeProject key on rerun");
+                }
+                previous_project = Some(key);
+                let attempt = root.sends[&call].0;
+                root.client(client::Event::Up {
+                    up: client::Up::Answer {
+                        attempt,
+                        envelope: RequestEnvelope::Final,
+                        answer: Some(client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
+                            c::OwnerOutcome::ProjectMade { project: 8 },
+                        )))),
+                        why: None,
+                    },
+                });
+            }
+            let key = root.sent_name(call).unwrap();
+            if let Some(previous) = previous {
+                assert_eq!(key, previous, "engine deduplicates the adoption");
+            }
+            previous = Some(key);
+            root.adoption_answer(call, f::forge_refused(w::ForgeReason::Refused));
+            assert!(!root.sent_adoption(call).home);
+            assert_eq!(root.sent_name(call), Some(temper_client_domain::forge::first_repository_key(3, true)));
+            root.adoption_answer(call, f::adopted_with_unknown_protection());
+            let printed = root.answer(call).unwrap();
+            assert_eq!(printed.status, 0);
+            no_token(&printed);
+        }
+    }
+}
+#[test]
+fn admin_first_stop_and_failed_create_exit_one_without_the_token() {
+    for json in [false, true] {
+        for (state, stop, words) in [
+            (made(), Some(w::AdminStop::NotAdmin), b"not a site admin".as_slice()),
+            (made(), Some(w::AdminStop::Unmarked), b"unmarked bot login"),
+            (made(), Some(w::AdminStop::Other), b"admin connection stopped"),
+            (
+                made(),
+                Some(w::AdminStop::Refused(
+                    w::AdminRefused::new(&w::CEILINGS, w::AdminRefusedParts { status: 403, stage: w::SetupStage::Org })
+                        .unwrap(),
+                )),
+                b"403 at organization",
+            ),
+            (
+                w::FirstState::Failed(
+                    w::CreateFailed::new(&w::CEILINGS, w::CreateFailedParts { step: w::CreateStep::Repository })
+                        .unwrap(),
+                ),
+                None,
+                b"making the repository",
+            ),
+        ] {
+            let mut root = f::signed_in(f::PARTY);
+            let words_call = f::extended(ADMIN, &["--first", "work/hello"]);
+            let call = root.submit_prepared(f::call(words_call.as_slice()), json, Some(Secret::new(TOKEN.into())));
+            root.adoption_answer(call, w::Outcome::Connecting);
+            first_page(&mut root, w::Connection::Connecting, state, stop);
+            let printed = root.answer(call).unwrap();
+            assert_eq!(printed.status, 1);
+            assert!(skein_lib::bytes::find(&printed.stderr, words).is_some());
+            no_token(&printed);
+            assert!(crate::root::next_deadline(&root.root).is_none());
+        }
+    }
 }

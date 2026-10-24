@@ -22,7 +22,7 @@ pub(super) struct Pending {
     forge: u16,
     install: bool,
     manifest: bool,
-    first: bool,
+    first: Option<super::Intent>,
     called: Option<Called>,
 }
 pub(super) fn owns(call: &jig::call::Call) -> bool {
@@ -209,6 +209,16 @@ pub(super) fn send(
     } else {
         None
     };
+    let first = if first {
+        let first = admin_how.as_ref().expect("admin request").first().as_ref().expect("first repository");
+        let project = match first.project() {
+            w::SetUpProject::Existing(project) => domain::SetUpProject::Existing(project.project()),
+            w::SetUpProject::New(project) => domain::SetUpProject::New(project.name().into()),
+        };
+        Some(super::Intent { forge, org: first.org().into(), repository: first.repository().into(), project })
+    } else {
+        None
+    };
     let value = called.value.take();
     if value.is_some() != (!install && !manifest) {
         let printed =
@@ -262,16 +272,26 @@ pub(super) fn told(state: &mut Forges, env: &Env<Limits>, told: &Told, out: &mut
                     return false;
                 }
             };
-            state.connections.insert(*key, Pending { forge, install, manifest, first: false, called: None });
+            state.connections.insert(*key, Pending { forge, install, manifest, first: None, called: None });
             true
         }
         Told::Answered { key, outcome } => {
-            let Some(pending) = state.connections.remove(key) else { return false };
+            let Some(mut pending) = state.connections.remove(key) else { return false };
             let json = match &pending.called {
                 Some(called) => called.json,
                 None => state.json,
             };
             let printed = print(&pending, outcome, json, &env.limits);
+            if printed.status == 0
+                && let Some(intent) = pending.first.take()
+            {
+                let called = pending.called.take().expect("one-shot connection");
+                out.push(Out::Progress {
+                    line: if called.json { render::outcome::newline(&printed.stdout) } else { printed.stdout },
+                });
+                super::watch_first(state, env, *key, called, intent, out);
+                return true;
+            }
             match pending.called {
                 Some(called) => finish(called, printed, out),
                 None => out.push(Out::Kept { line: if printed.status == 0 { printed.stdout } else { printed.stderr } }),
@@ -340,15 +360,10 @@ fn text(pending: &Pending, answer: &Answer, kept: bool, limits: &Limits, out: &m
     match answer {
         Answer::Connecting => {
             out.put(b"connecting\n");
-            if !install && !manifest {
+            if !install && !manifest && pending.first.is_none() {
                 out.put(b"temper ctl DIRECTORY wait forges --until connected:");
                 out.number(u64::from(forge));
                 out.put(b"\n");
-                if pending.first {
-                    out.put(b"temper ctl DIRECTORY wait forges --until made:");
-                    out.number(u64::from(forge));
-                    out.put(b"\n");
-                }
             }
         }
         Answer::Link(address) => {
