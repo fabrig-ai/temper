@@ -1281,14 +1281,19 @@ running its commands, and the client names them (6.5).
 
 ### 7.5 The welcome's fake backends
 
-temper box --fake-backends [DIRECTORIES] prepares the retained isolated
+temper box --fake-backends [--bundle DIR] [DIRECTORIES] prepares the retained isolated
 sandbox of configuration.md, 12.1. Every child reads the effective
 temper.json and agent.json through its effective directory flags; changing
 only the parent's parsed bytes is insufficient.
 
-Before first preparation, run ordinary init if C is empty, build
-scripts/bundle.sh --loopback OUT, and name OUT in application.clients.bundle.
-The missing-bundle refusal says how; box startup performs no build or fetch.
+Build the loopback bundle once, then start even with empty configuration:
+
+    scripts/bundle.sh --loopback DIR && temper box --fake-backends --bundle DIR
+
+The flag overrides an init-shaped source's application.clients.bundle;
+without it, that configured bundle is used. Missing both refuses with the
+bundle command and --bundle. Empty C stays untouched: init writes directly
+into the effective sandbox. Box startup performs no build or fetch.
 
 The preparation prints its effective paths and the peer commands.
 GitHub has one fixed person and repository. Its App id and matching fixture
