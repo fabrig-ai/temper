@@ -1299,8 +1299,11 @@ login is imported.
 - **Restart:** effective configuration and data survive box shutdown.
   Reuse keeps edits to C' and the state in D', so an ordinary managed
   Forgejo configuration/restart uses the same mechanism as elsewhere.
-  The box prints these effective directories. Removing E resets this
-  scratch deployment; a normal start never reads it as the real one.
+  An explicit --bundle changes only the retained effective bundle selection,
+  after validating it; other effective edits and data remain. Without that
+  override, the retained bundle is authoritative. The box prints these
+  effective directories. Removing E resets this scratch deployment; a
+  normal start never reads it as the real one.
 - **Roots:** GitHub forge 2's API, web, git and transport name one
   plaintext loopback fake. Provider 1 keeps its shipped client, scopes,
   must-grant, resource and callback; its five sign-in origins name the
