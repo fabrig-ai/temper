@@ -106,14 +106,14 @@ fn a_once_step_that_fails_ends_the_box_with_exit_one() {
     assert_eq!(harness.spawn_times(b"forgejo").len(), 0, "failure never starts the next step");
 }
 #[test]
-fn every_step_is_spawned_with_the_environment_the_box_was_given() {
+fn every_step_keeps_the_environment_except_inherited_activation_variables() {
     let steps = [once(b"prepare", &[b"exit", b"0"]), long(b"serve", &[b"never"])];
     let mut harness = Harness::new(&steps);
     harness.run_until_idle();
     let expected: Box<[Box<[u8]>]> = Box::new([bytes::copy_of(b"HOME=/box"), bytes::copy_of(b"TOKEN=whole=value")]);
     assert_eq!(harness.launches.len(), 2, "both steps ran");
     for launch in &harness.launches {
-        assert_eq!(launch.environment, expected, "every step gets the whole environment");
+        assert_eq!(launch.environment, expected, "activation variables are removed and other entries stay whole");
     }
     harness.terminate();
     assert_eq!(harness.run_to_end(), Exit::Code(0));
@@ -609,4 +609,143 @@ fn a_group_stop_is_reported_on_stderr_after_the_control_pipe_closes() {
     assert_eq!(harness.run_to_end(), Exit::Code(0));
     harness.sim.assert_quiescent(harness.pid);
     harness.sim.assert_no_open_fds(harness.pid);
+}
+
+#[test]
+fn each_child_gets_only_its_listeners_and_serve_pipes_follow_them() {
+    use skein_io::kernel::Way;
+    let forge = ([127, 0, 0, 1], 8100).into();
+    let clients = ([127, 0, 0, 1], 8101).into();
+    let webhooks = ([127, 0, 0, 1], 8102).into();
+    let steps = [
+        once(b"prepare", &[b"exit", b"0"]),
+        long(b"fake forge", &[b"never"]).listening(Box::new([forge])),
+        long(b"serve", &[b"never"]).listening(Box::new([([127, 0, 0, 1], 0).into(), clients, webhooks])),
+    ];
+    let mut harness = Harness::with_stubborn(&steps, true);
+    harness.run_until_idle();
+    assert_eq!(harness.launches.len(), 3);
+    for (launch, count) in harness.launches.iter().zip([0, 1, 2]) {
+        let mut given = 0_u32;
+        for pipe in &launch.pipes {
+            match pipe.way {
+                Way::Given(_) => {
+                    assert_eq!(pipe.child, given.checked_add(3).unwrap());
+                    given = given.checked_add(1).unwrap();
+                }
+                Way::In | Way::Out => {}
+            }
+        }
+        assert_eq!(given, count);
+        let expected = match count {
+            0 => None,
+            1 => Some(b"LISTEN_FDS=1".as_slice()),
+            _ => Some(b"LISTEN_FDS=2".as_slice()),
+        };
+        let mut activation = None;
+        for entry in &launch.environment {
+            if entry.starts_with(b"LISTEN_") {
+                assert!(activation.is_none(), "at most one activation variable");
+                activation = Some(entry.as_ref());
+            }
+        }
+        assert_eq!(activation, expected);
+    }
+    let serve = harness.launches.get(2).unwrap();
+    assert_eq!((serve.pipes[4].child, serve.pipes[4].way), (5, Way::Out));
+    assert_eq!((serve.pipes[5].child, serve.pipes[5].way), (6, Way::In));
+    // Receiving a control answer also proves Spawned.pipes still indexes real pipes only.
+    harness.ask(b"start 99\n");
+    harness.run_until_idle();
+    assert_eq!(harness.reply_bytes().as_ref(), b"failed 99 not asked\n");
+    harness.terminate();
+    assert_eq!(harness.run_to_end(), Exit::Code(0));
+    harness.sim.assert_quiescent(harness.pid);
+    harness.sim.assert_no_open_fds(harness.pid);
+}
+
+#[test]
+fn a_document_port_zero_step_is_given_no_listener_or_activation_environment() {
+    use skein_io::kernel::Way;
+    let steps = [long(b"serve", &[b"never"]).listening(Box::new([([127, 0, 0, 1], 0).into()]))];
+    let mut harness = Harness::with_stubborn(&steps, true);
+    harness.run_until_idle();
+    let launch = harness.launches.get(0).unwrap();
+    for pipe in &launch.pipes {
+        match pipe.way {
+            Way::Given(_) => panic!("port zero is not held or given"),
+            Way::In | Way::Out => {}
+        }
+    }
+    for entry in &launch.environment {
+        assert!(!entry.starts_with(b"LISTEN_"));
+    }
+    assert_eq!((launch.pipes[2].child, launch.pipes[3].child), (3, 4));
+    assert!(harness.hosted.get(0).unwrap().listeners.is_empty());
+    harness.terminate();
+    assert_eq!(harness.run_to_end(), Exit::Code(0));
+    harness.sim.assert_quiescent(harness.pid);
+    harness.sim.assert_no_open_fds(harness.pid);
+}
+
+#[test]
+fn a_dormant_listener_queues_connections_and_is_given_again_after_restart() {
+    use super::fixtures::{call, socket};
+    use skein_io::kernel::{Fd, Op, Way};
+    let address = ([127, 0, 0, 1], 8200).into();
+    let mut steps = grouped_steps();
+    steps.asked[0].steps[1].1 = long(b"fake forge 3", &[b"never"]).listening(Box::new([address]));
+    let mut harness = Harness::grouped(steps, &[], true);
+    harness.run_until_idle();
+    assert_eq!(harness.launches.len(), 1, "forge remains dormant");
+    let client = harness.sim.spawn_process();
+    let connection = socket(&mut harness.sim, client);
+    assert_eq!(call(&mut harness.sim, client, Op::Connect { fd: connection, addr: address }).result, Ok(Done::Nothing));
+    harness.ask(b"start 3\n");
+    harness.run_until_idle();
+    let index = harness.child_index(b"fake forge 3");
+    let child = harness.hosted.get(index).unwrap();
+    let pid = child.pid;
+    assert_eq!(child.listeners.as_ref(), &[Fd::new(3)]);
+    let accepted = call(&mut harness.sim, pid, Op::Accept { fd: Fd::new(3) });
+    let Ok(Done::Accepted { fd, .. }) = accepted.result else { panic!("connection queued before ask is accepted") };
+    assert_eq!(call(&mut harness.sim, pid, Op::Close { fd }).result, Ok(Done::Nothing));
+    assert_eq!(call(&mut harness.sim, client, Op::Close { fd: connection }).result, Ok(Done::Nothing));
+    let mut first = None;
+    for launch in &harness.launches {
+        if launch.name.as_ref() == b"fake forge 3" {
+            assert!(first.is_none(), "one launch before restart");
+            first = Some(launch.pipes[2]);
+        }
+    }
+    let first = first.expect("forge was launched");
+    let Way::Given(_) = first.way else { panic!("forge is given its listener") };
+    harness.sim.finish_service(pid, Exit::Code(1));
+    harness.run_until_idle();
+    // The parent still holds the socket between children, so this new connection queues too.
+    let connection = socket(&mut harness.sim, client);
+    assert_eq!(call(&mut harness.sim, client, Op::Connect { fd: connection, addr: address }).result, Ok(Done::Nothing));
+    harness.sim.advance_to(harness.sim.now().saturating_add(Duration::from_millis(500)));
+    harness.run_until_idle();
+    let mut launches = List::with_capacity(2);
+    for launch in &harness.launches {
+        if launch.name.as_ref() == b"fake forge 3" {
+            launches.push(launch).unwrap();
+        }
+    }
+    assert_eq!(launches.len(), 2);
+    assert_eq!(launches.get(1).unwrap().pipes[2], first, "restart gets the parent's same held listener");
+    let child = harness.hosted.get(harness.child_index(b"fake forge 3")).unwrap();
+    assert_ne!(child.pid, pid);
+    let pid = child.pid;
+    let Ok(Done::Accepted { fd, .. }) = call(&mut harness.sim, pid, Op::Accept { fd: Fd::new(3) }).result else {
+        panic!("restart accepts the connection queued between children")
+    };
+    call(&mut harness.sim, pid, Op::Close { fd });
+    call(&mut harness.sim, client, Op::Close { fd: connection });
+    harness.terminate();
+    assert_eq!(harness.run_to_end(), Exit::Code(0));
+    harness.sim.assert_quiescent(harness.pid);
+    harness.sim.assert_no_open_fds(harness.pid);
+    harness.sim.assert_no_open_fds(client);
 }

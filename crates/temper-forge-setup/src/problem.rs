@@ -1,4 +1,4 @@
-//! Bounded configuration problems; no input values enter diagnostic text.
+//! Bounded configuration problems and run refusals; no credentials enter diagnostic text.
 use alloc::boxed::Box;
 use jig_protocol_config::{self as config, Path};
 use skein_lib::{Decimal, List, Writer};
@@ -124,4 +124,24 @@ pub fn lines(problems: &Problems) -> Box<[u8]> {
     let mut w = Writer::new(n);
     assert_eq!(render(problems, &mut w, false), n, "same measure");
     w.finish()
+}
+
+/// A run's inherited listener differs from the owned setup (protocol/setup.md, 6.4).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Problem {
+    Listener { found: core::net::SocketAddr, expected: core::net::SocketAddr },
+}
+impl Problem {
+    /// Diagnostic words after the forge command's prefix.
+    #[must_use]
+    pub fn words(&self) -> Box<[u8]> {
+        match self {
+            Self::Listener { found, expected } => crate::check::joined(&[
+                b"fd 3 listens at ",
+                &crate::ini::socket(*found),
+                b", expected owned.listen ",
+                &crate::ini::socket(*expected),
+            ]),
+        }
+    }
 }

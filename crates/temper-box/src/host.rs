@@ -25,6 +25,7 @@ pub struct Settings {
     pub program: Box<[u8]>,
     pub environment: Box<[Box<[u8]>]>,
     pub serve: Box<[u8]>,
+    pub listeners: Box<[(Fd, core::net::SocketAddr)]>,
     pub root: Fd,
     pub signals: Fd,
     pub stdout: Fd,
@@ -118,6 +119,8 @@ pub struct Service {
     settings: Settings,
     children: Box<[Child]>,
     sinks: [Sink; 2],
+    listeners: Box<[(core::net::SocketAddr, Token)]>,
+    listeners_closing: usize,
     signals: Token,
     phase: Phase,
     failed: bool,
@@ -143,6 +146,10 @@ impl Service {
         let records = Records::new(&steps);
         let count = u32::try_from(steps.len()).expect("steps fit u32");
         let mut bounds = io_limits(count);
+        bounds.sockets = bounds
+            .sockets
+            .checked_add(u32::try_from(settings.listeners.len()).expect("bounded listeners"))
+            .expect("listener slots");
         bounds.intake = bounds.intake.max(limits.line_bytes);
         bounds.output = bounds.output.max(limits.line_bytes);
         let mut children = List::with_capacity(count);
@@ -157,6 +164,7 @@ impl Service {
                     .expect("prefix"),
             );
             children.push(Child::new(&settings.serve, step)).expect("one child per step");
+            inputs = inputs.saturating_add(u64::try_from(size_of_val(step.listeners())).expect("listener addresses"));
             inputs = inputs.saturating_add(u64::try_from(step.name().len()).expect("name length"));
             inputs = inputs.saturating_add(u64::try_from(size_of_val(step.arguments())).expect("argument slots"));
             for argument in step.arguments() {
@@ -168,13 +176,16 @@ impl Service {
         let signals = io.adopt_signals(settings.signals).expect("three adopted slots");
         let stdout = io.adopt_write_pipe(settings.stdout, None).expect("stdout slot");
         let stderr = io.adopt_write_pipe(settings.stderr, None).expect("stderr slot");
+        let listeners = adopt_listeners(&mut io, &settings.listeners);
         let capacity = io::operations(&bounds).expect("bounded operations").saturating_mul(4).max(64);
         let entries = count.saturating_mul(2).saturating_add(1);
         // Each queued record can own a launch or a chunk. Count even the impossible
         // case where every slot holds the largest launch and the largest chunk.
-        let payload = inputs
-            .saturating_add(u64::from(bounds.output))
-            .saturating_add(u64::try_from(size_of::<[kernel::Pipe; 4]>()).expect("pipe specs"));
+        let payload = inputs.saturating_add(u64::from(bounds.output)).saturating_add(
+            u64::try_from(size_of::<kernel::Pipe>())
+                .expect("pipe spec")
+                .saturating_mul(u64::try_from(settings.listeners.len()).expect("listener count").saturating_add(4)),
+        );
         let queues = Queue::<Complete>::worst_case(capacity)
             .expect("completion queue")
             .saturating_add(Queue::<Submit>::worst_case(capacity).expect("submission queue"))
@@ -185,6 +196,8 @@ impl Service {
             .expect("io memory")
             .saturating_add(crate::limits::worst_case(limits, count).expect("policy memory"))
             .saturating_add(inputs.saturating_mul(3))
+            .saturating_add(listener_memory(&settings.listeners))
+            .saturating_add(u64::from(count).saturating_mul(64))
             .saturating_add(queues)
             .saturating_add(payload.saturating_mul(u64::from(capacity).saturating_mul(4)))
             .saturating_add(List::<Child>::worst_case(count).expect("child states"))
@@ -209,6 +222,8 @@ impl Service {
             settings,
             children: children.into_boxed(),
             sinks: [Sink::new(stdout, entries), Sink::new(stderr, entries)],
+            listeners: listeners.into_boxed(),
+            listeners_closing: 0,
             signals,
             phase: Phase::New,
             failed: false,
@@ -332,8 +347,8 @@ impl Service {
                 }
                 if self.steps.get(step).expect("step").step.name() == self.settings.serve.as_ref() {
                     self.control = Some(Control {
-                        read: *pipes.get(2).expect("serve fd 3"),
-                        sink: Sink::new(*pipes.get(3).expect("serve fd 4"), self.reply_entries),
+                        read: *pipes.get(2).expect("serve requests pipe"),
+                        sink: Sink::new(*pipes.get(3).expect("serve answers pipe"), self.reply_entries),
                         reader: Reader::new(self.line_bytes),
                         reading: false,
                         ended: false,
@@ -571,28 +586,10 @@ impl Service {
                     spawn: kernel::Spawn {
                         program: self.settings.program.clone(),
                         args: Box::from(description.arguments()),
-                        env: self.settings.environment.clone(),
+                        env: spawn_environment(&self.settings.environment, description.listeners().len()),
                         root: self.settings.root,
                         dir: Box::new([]),
-                        pipes: if description.name() == self.settings.serve.as_ref() {
-                            Box::new([
-                                kernel::Pipe { child: 1, way: kernel::Way::Out, parent: None },
-                                kernel::Pipe { child: 2, way: kernel::Way::Out, parent: None },
-                                kernel::Pipe { child: 3, way: kernel::Way::Out, parent: None },
-                                kernel::Pipe { child: 4, way: kernel::Way::In, parent: None },
-                            ])
-                        } else if description.kind() == Kind::Link {
-                            Box::new([
-                                kernel::Pipe { child: 1, way: kernel::Way::Out, parent: None },
-                                kernel::Pipe { child: 2, way: kernel::Way::Out, parent: None },
-                                kernel::Pipe { child: 0, way: kernel::Way::In, parent: None },
-                            ])
-                        } else {
-                            Box::new([
-                                kernel::Pipe { child: 1, way: kernel::Way::Out, parent: None },
-                                kernel::Pipe { child: 2, way: kernel::Way::Out, parent: None },
-                            ])
-                        },
+                        pipes: spawn_pipes(description, &self.settings.serve, &self.listeners),
                     },
                 });
             }
@@ -722,11 +719,71 @@ impl Service {
             self.requests.push(Request::Close { entity: self.signals });
             self.phase = Phase::Closing;
         }
+        while self.listeners_closing < self.listeners.len() && self.requests.room() > 0 {
+            let (_, token) = self.listeners.get(self.listeners_closing).expect("held listener");
+            self.requests.push(Request::Close { entity: *token });
+            self.listeners_closing = self.listeners_closing.saturating_add(1);
+        }
         if self.root == Root::Open && self.submissions.room() > 0 {
             self.submissions.push(Submit { op: ROOT_CLOSE, kind: kernel::Op::Close { fd: self.settings.root } });
             self.root = Root::Closing;
         }
     }
+}
+fn listener_memory(held: &[(Fd, core::net::SocketAddr)]) -> u64 {
+    let count = u32::try_from(held.len()).expect("bounded listeners");
+    u64::try_from(size_of_val(held))
+        .expect("held listener slots")
+        .saturating_add(List::<(core::net::SocketAddr, Token)>::worst_case(count).expect("listener tokens"))
+}
+fn adopt_listeners(io: &mut Io, held: &[(Fd, core::net::SocketAddr)]) -> List<(core::net::SocketAddr, Token)> {
+    let mut listeners = List::with_capacity(u32::try_from(held.len()).expect("bounded listeners"));
+    for (fd, address) in held {
+        let token = io.adopt_listener(*fd, *address).expect("unique listeners and counted slots");
+        listeners.push((*address, token)).expect("counted listener tokens");
+    }
+    listeners
+}
+fn spawn_environment(environment: &[Box<[u8]>], listeners: usize) -> Box<[Box<[u8]>]> {
+    let mut out = List::with_capacity(u32::try_from(environment.len()).expect("bounded environment").saturating_add(1));
+    for entry in environment {
+        if !entry.starts_with(b"LISTEN_FDS=") && !entry.starts_with(b"LISTEN_PID=") {
+            out.push(entry.clone()).expect("environment counted");
+        }
+    }
+    if listeners > 0 {
+        let count = Decimal::of(u64::try_from(listeners).expect("bounded listeners"));
+        out.push(lines::joined(&[b"LISTEN_FDS=", count.as_bytes()])).expect("count slot");
+    }
+    out.into_boxed()
+}
+fn spawn_pipes(step: &Step, serve: &[u8], listeners: &[(core::net::SocketAddr, Token)]) -> Box<[kernel::Pipe]> {
+    let n = u32::try_from(step.listeners().len()).expect("bounded listeners");
+    let mut pipes = List::with_capacity(n.checked_add(4).expect("bounded spawn table"));
+    for child in [1, 2] {
+        pipes.push(kernel::Pipe { child, way: kernel::Way::Out, parent: None }).expect("stdio");
+    }
+    for (i, address) in step.listeners().iter().enumerate() {
+        let mut found = None;
+        for (addr, token) in listeners {
+            if addr == address {
+                found = Some(*token);
+                break;
+            }
+        }
+        let token = found.expect("binary opened every step listener");
+        let child = 3_u32.checked_add(u32::try_from(i).expect("bounded listener index")).expect("bounded child fd");
+        pipes.push(kernel::Pipe { child, way: kernel::Way::Given(token), parent: None }).expect("listener slot");
+    }
+    if step.name() == serve {
+        let requests = n.checked_add(3).expect("bounded child fd");
+        let answers = n.checked_add(4).expect("bounded child fd");
+        pipes.push(kernel::Pipe { child: requests, way: kernel::Way::Out, parent: None }).expect("serve requests");
+        pipes.push(kernel::Pipe { child: answers, way: kernel::Way::In, parent: None }).expect("serve answers");
+    } else if step.kind() == Kind::Link {
+        pipes.push(kernel::Pipe { child: 0, way: kernel::Way::In, parent: None }).expect("link stdin");
+    }
+    pipes.into_boxed()
 }
 fn link_memory(steps: &[Placed]) -> u64 {
     let mut memory = 0_u64;

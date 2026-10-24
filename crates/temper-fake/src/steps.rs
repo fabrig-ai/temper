@@ -17,8 +17,13 @@ use temper_forge_setup::{
 /// place, unasked.
 #[must_use]
 #[expect(clippy::manual_map, reason = "step code uses explicit matches, never closures")]
-pub fn steps(setup: &Setup, demo: Option<&Demo>, flags: &[Box<[u8]>]) -> Steps {
-    let given = temper_forge_setup::steps(setup, flags);
+pub fn steps(
+    setup: &Setup,
+    demo: Option<&Demo>,
+    flags: &[Box<[u8]>],
+    listeners: Box<[core::net::SocketAddr]>,
+) -> Steps {
+    let given = temper_forge_setup::steps(setup, flags, listeners);
     let demo_forge = match demo {
         Some(demo) => Some(demo.forge()),
         None => None,
@@ -35,14 +40,17 @@ pub fn steps(setup: &Setup, demo: Option<&Demo>, flags: &[Box<[u8]>]) -> Steps {
         u32::try_from(given.always.len()).expect("bounded steps").checked_add(prefix).expect("bounded prefix");
     let mut always = List::with_capacity(capacity);
     for entry in &setup.entries {
-        if let Mode::Fake(_) = &entry.mode
+        if let Mode::Fake(fake) = &entry.mode
             && demo_forge != Some(entry.forge)
         {
             always
                 .push(command(b"prepare", &[b"forge", b"prepare"], flags, Some(entry.forge), Kind::Once))
                 .expect("fake preparation");
             always
-                .push(command(b"fake forge", &[b"fake", b"forge"], flags, Some(entry.forge), Kind::Long))
+                .push(
+                    command(b"fake forge", &[b"fake", b"forge"], flags, Some(entry.forge), Kind::Long)
+                        .listening(Box::new([fake.listen])),
+                )
                 .expect("fake forge");
         }
     }
@@ -56,18 +64,29 @@ pub fn steps(setup: &Setup, demo: Option<&Demo>, flags: &[Box<[u8]>]) -> Steps {
             .expect("demo group"),
     );
     if let Some(demo) = demo {
+        let Mode::Fake(fake) = &setup.entry(demo.forge()).expect("checked demo forge").mode else {
+            unreachable!("demo has a fake forge")
+        };
         asked
             .push(Group {
                 forge: demo.forge(),
                 recorded: false,
                 before: 0,
                 steps: Box::new([
-                    (Stage::Run, command(b"fake llm", &[b"fake", b"llm"], flags, None, Kind::Long)),
+                    (
+                        Stage::Run,
+                        command(b"fake llm", &[b"fake", b"llm"], flags, None, Kind::Long)
+                            .listening(Box::new([demo.llm().listen()])),
+                    ),
                     (
                         Stage::Prepare,
                         command(b"prepare", &[b"forge", b"prepare"], flags, Some(demo.forge()), Kind::Once),
                     ),
-                    (Stage::Run, command(b"fake forge", &[b"fake", b"forge"], flags, Some(demo.forge()), Kind::Long)),
+                    (
+                        Stage::Run,
+                        command(b"fake forge", &[b"fake", b"forge"], flags, Some(demo.forge()), Kind::Long)
+                            .listening(Box::new([fake.listen])),
+                    ),
                 ]),
             })
             .expect("demo group counted");

@@ -120,53 +120,6 @@ impl Scratch {
     }
 }
 
-/// Init's default ports, held for a first-run case's whole life, from
-/// before its first box's init until its last box has stopped. A first run
-/// takes 8367 to 8371 when each binds, then frees them until serve binds,
-/// so two first runs at once on one machine both take 8367 and the second
-/// serve cannot bind (`protocol/setup.md`, 13). This lock is test-side
-/// only: it serializes every first-run case on the machine, across runs
-/// and worktrees, at a fixed path since a run's own TMPDIR may be private.
-/// The product's race between init's probe and serve's bind stays (STATUS).
-pub struct DefaultPorts {
-    _lock: fs::File,
-}
-impl DefaultPorts {
-    #[must_use]
-    pub fn hold(case: &str) -> Self {
-        use std::os::unix::fs::OpenOptionsExt;
-        let lock = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .mode(0o600)
-            .open("/tmp/temper-first-run-ports.lock")
-            .expect("first-run ports lock");
-        match lock.try_lock() {
-            Ok(()) => {}
-            Err(fs::TryLockError::WouldBlock) => {
-                let clock = Clock::new();
-                let began = clock.now();
-                eprintln!("{case}: waits for init's default ports from {}", utc(began.wall));
-                lock.lock().expect("first-run ports lock");
-                let ended = clock.now();
-                eprintln!(
-                    "{case}: holds init's default ports from {}, after {} ms",
-                    utc(ended.wall),
-                    ended.now.saturating_since(began.now).as_nanos() / 1_000_000
-                );
-            }
-            Err(fs::TryLockError::Error(why)) => panic!("first-run ports lock: {why}"),
-        }
-        Self { _lock: lock }
-    }
-}
-fn utc(wall: Wall) -> String {
-    let millis = wall.as_nanos() / 1_000_000;
-    let day = millis / 1000 % 86_400;
-    format!("{:02}:{:02}:{:02}.{:03}Z", day / 3600, day % 3600 / 60, day % 60, millis % 1000)
-}
-
 use skein_io::kernel::{Complete, Done, Exit, Fd, Op, Signal, Submit};
 use skein_lib::{Duration, Queue, Time, Token, Wall};
 use skein_shell::{Clock, Host};

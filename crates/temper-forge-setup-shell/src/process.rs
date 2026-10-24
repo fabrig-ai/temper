@@ -49,6 +49,9 @@ pub fn command(spec: &Spec, lock: Lock) -> Command {
     command
 }
 /// Replaces this process; only an unsuccessful exec returns.
+/// An inherited listener at fd 3 remains open: `listener_at` leaves its flags
+/// unchanged, the parent's dup2 cleared CLOEXEC, and `CommandExt::exec` does
+/// not close descriptors without CLOEXEC (protocol/setup.md, 6.4).
 #[must_use]
 pub fn exec(spec: &Spec, lock: Lock) -> io::Error {
     command(spec, lock).exec()

@@ -135,6 +135,7 @@ pub struct Hosted {
     pub stdio: [Option<Fd>; 3],
     pub pid: Pid,
     pub descriptors: Box<[Fd]>,
+    pub listeners: Box<[Fd]>,
     pub closed: bool,
     pub input: Option<Fd>,
     pub output: Option<Fd>,
@@ -194,10 +195,25 @@ impl Harness {
         let mut machine = FakeMachine::new();
         let opened = machine.lay(items);
         let root = sim.root(pid, Handle::new(opened.raw()));
+        let mut listeners = List::with_capacity(32);
+        for step in &steps.always {
+            open_step_listeners(&mut sim, pid, step, &mut listeners);
+        }
+        for group in &steps.asked {
+            for (_, step) in &group.steps {
+                open_step_listeners(&mut sim, pid, step, &mut listeners);
+            }
+        }
         let settings = Settings {
             program: bytes::copy_of(b"process_fixture"),
-            environment: Box::new([bytes::copy_of(b"HOME=/box"), bytes::copy_of(b"TOKEN=whole=value")]),
+            environment: Box::new([
+                bytes::copy_of(b"HOME=/box"),
+                bytes::copy_of(b"TOKEN=whole=value"),
+                bytes::copy_of(b"LISTEN_FDS=99"),
+                bytes::copy_of(b"LISTEN_PID=42"),
+            ]),
             serve: bytes::copy_of(b"serve"),
+            listeners: listeners.into_boxed(),
             root,
             signals,
             stdout,
@@ -267,7 +283,20 @@ impl Harness {
                 && let Ok(Done::Spawned { pidfd }) = complete.result
             {
                 let (pid, inherited) = self.sim.bind_service(self.pid, pidfd);
-                let mut descriptors = List::with_capacity(5);
+                let Op::Spawn { spawn } = &complete.kind else { panic!("hosted spawn") };
+                let mut n = 0_u32;
+                for pipe in &spawn.pipes {
+                    match pipe.way {
+                        skein_io::kernel::Way::Given(_) => n = n.checked_add(1).unwrap(),
+                        skein_io::kernel::Way::In | skein_io::kernel::Way::Out => {}
+                    }
+                }
+                let control = n.checked_add(3).unwrap();
+                let answer = control.checked_add(1).unwrap();
+                let serve = spawn.args.last().unwrap().as_ref() == b"serve";
+                let mut descriptors =
+                    List::with_capacity(u32::try_from(inherited.len()).unwrap().checked_add(1).unwrap());
+                let mut listeners = List::with_capacity(n);
                 let mut input = None;
                 let mut output = None;
                 let mut stdio = [None; 3];
@@ -275,17 +304,20 @@ impl Harness {
                     if let Some(slot) = stdio.get_mut(usize::try_from(number).unwrap()) {
                         *slot = Some(fd);
                     }
-                    if number == 3 {
+                    if number >= 3 && number < control {
+                        listeners.push(fd).unwrap();
+                    }
+                    if serve && number == control {
                         output = Some(fd);
                     }
-                    if number == 4 {
+                    if serve && number == answer {
                         input = Some(fd);
                     }
                     descriptors.push(fd).expect("four inherited pipes");
                 }
                 if let Op::Spawn { spawn } = &complete.kind {
                     for pipe in &spawn.pipes {
-                        if pipe.child == 4 {
+                        if serve && pipe.child == answer {
                             self.control_fds.push(pipe.parent.expect("parent pipe")).unwrap();
                         }
                     }
@@ -298,6 +330,7 @@ impl Harness {
                         stdio,
                         pid,
                         descriptors: descriptors.into_boxed(),
+                        listeners: listeners.into_boxed(),
                         closed: false,
                         input,
                         output,
@@ -310,7 +343,7 @@ impl Harness {
         for index in 0..self.hosted.len() {
             let child = self.hosted.get_mut(index).expect("hosted index");
             if !child.closed && !self.sim.service_running(child.pid) {
-                let mut submissions = Queue::with_capacity(5);
+                let mut submissions = Queue::with_capacity(u32::try_from(child.descriptors.len()).unwrap());
                 for (index, fd) in child.descriptors.iter().enumerate() {
                     submissions.push(Submit {
                         op: Token::new(u64::try_from(index).expect("bounded descriptors")),
@@ -318,7 +351,7 @@ impl Harness {
                     });
                 }
                 self.sim.submit(child.pid, &mut submissions);
-                let mut completions = Queue::<Complete>::with_capacity(5);
+                let mut completions = Queue::<Complete>::with_capacity(u32::try_from(child.descriptors.len()).unwrap());
                 self.sim.reap(child.pid, &mut completions);
                 self.sim.assert_hosted_settled(child.pid);
                 child.closed = true;
@@ -392,7 +425,11 @@ impl Harness {
         let mut submits = Queue::with_capacity(1);
         submits.push(Submit {
             op: Token::new(100),
-            kind: Op::PipeWrite { fd: child.output.expect("fd 3"), bytes: bytes::copy_of(line), from: 0 },
+            kind: Op::PipeWrite {
+                fd: child.output.expect("serve requests pipe"),
+                bytes: bytes::copy_of(line),
+                from: 0,
+            },
         });
         self.sim.submit(child.pid, &mut submits);
         let mut completes = Queue::with_capacity(1);
@@ -482,4 +519,31 @@ impl Harness {
         }
         false
     }
+}
+
+pub fn call(sim: &mut Sim, pid: Pid, op: Op) -> Complete {
+    let mut submissions = Queue::with_capacity(1);
+    submissions.push(Submit { op: Token::new(100), kind: op });
+    sim.submit(pid, &mut submissions);
+    let mut completions = Queue::with_capacity(1);
+    sim.reap(pid, &mut completions);
+    completions.pop().expect("calm operation completes")
+}
+pub fn socket(sim: &mut Sim, pid: Pid) -> Fd {
+    let Ok(Done::Fd(fd)) = call(sim, pid, Op::Socket { family: skein_io::kernel::Family::Ipv4 }).result else {
+        panic!("calm socket succeeds")
+    };
+    fd
+}
+fn open_step_listeners(sim: &mut Sim, pid: Pid, step: &Step, held: &mut List<(Fd, core::net::SocketAddr)>) {
+    for address in step.listeners() {
+        let fd = open_listener(sim, pid, *address);
+        held.push((fd, *address)).unwrap();
+    }
+}
+fn open_listener(sim: &mut Sim, pid: Pid, address: core::net::SocketAddr) -> Fd {
+    let fd = socket(sim, pid);
+    assert_eq!(call(sim, pid, Op::Bind { fd, addr: address }).result, Ok(Done::Bound(address)));
+    assert_eq!(call(sim, pid, Op::Listen { fd, backlog: 4 }).result, Ok(Done::Nothing));
+    fd
 }

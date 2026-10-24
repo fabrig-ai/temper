@@ -520,6 +520,7 @@ fn groups_fetch_before_preparation() {
         args.extend_from_slice(&flags);
         args.push(b"--box".as_slice().into());
         crate::Step::new(b"serve".as_slice().into(), args.into_boxed_slice(), crate::Kind::Long)
+            .listening(Box::new([([127, 0, 0, 1], 8367).into(), ([127, 0, 0, 1], 8371).into()]))
     };
     for (forgejo, runner, asked, preceding, expected) in [
         (
@@ -613,6 +614,10 @@ fn groups_fetch_before_preparation() {
             vec![entry]
         };
         let setup = Setup { entries: entries.into_boxed_slice() };
-        assert_eq!(crate::steps(&setup, &flags), expected, "{forgejo} {runner} {asked}");
+        assert_eq!(
+            crate::steps(&setup, &flags, Box::new([([127, 0, 0, 1], 8367).into(), ([127, 0, 0, 1], 8371).into()])),
+            expected,
+            "{forgejo} {runner} {asked}"
+        );
     }
 }

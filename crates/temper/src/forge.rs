@@ -131,6 +131,17 @@ fn run_failure(why: host::Failed, launch: &run::Launch, number: u16, directories
         host::Failed::Exec(why) => format!("{}: {why}", text(&launch.program)),
     }
 }
+fn inherited_listener(which: Which) -> Result<Option<std::net::SocketAddr>, String> {
+    let Some(count) = std::env::var_os("LISTEN_FDS") else { return Ok(None) };
+    if which == Which::Runner {
+        return Err("LISTEN_FDS: runner takes no listeners (fd 3)".into());
+    }
+    if count.as_bytes() != b"1" {
+        return Err("LISTEN_FDS: forgejo requires exactly 1 listener at fd 3".into());
+    }
+    // Unlike inherited_listeners, listener_at preserves fd 3's exec flags.
+    skein_shell::listener_at(skein_io::kernel::Fd::new(3)).map(Some).map_err(super::listeners_refusal)
+}
 pub(crate) fn start(
     directories: &super::Directories,
     arguments: &[OsString],
@@ -160,6 +171,8 @@ pub(crate) fn start(
     };
     let number = number.to_str().and_then(|n| n.parse::<u16>().ok()).ok_or_else(usage)?;
     let refused = |why| Refused { verb, number: Some(number), why };
+    // Inspect before reading the document or opening the lock: neither may occupy fd 3.
+    let listener = which.map(inherited_listener).transpose().map_err(refused)?.flatten();
     let bytes = directories.read().map_err(refused)?;
     let super::setup::Deployment { named, checked, .. } =
         super::setup::check(&bytes, &directories.jig()).map_err(refused)?;
@@ -219,8 +232,7 @@ pub(crate) fn start(
         Place { directory: directory.as_os_str().as_bytes().into(), user: super::login(user).map_err(refused)? };
     let limits = jig_protocol_config::profile(jig_protocol_config::Profile::Small).io;
     if let Some(which) = which {
-        let launch = run::launch(owned, &place, which).map_err(|_| refused("the setup has no runner".into()))?;
-        return Err(refused(run_failure(host::run(&limits, &launch), &launch, number, directories)));
+        return Err(refused(run_process(owned, &place, which, listener, (number, directories), &limits)));
     }
     prepare::run(
         &limits,
@@ -236,6 +248,24 @@ pub(crate) fn start(
     )
     .map_err(|why| refused(failure(why, &place)))?;
     Ok(0)
+}
+/// Admits fd 3 and runs the process, returning only why it did not start.
+fn run_process(
+    owned: &temper_forge_setup::setup::Owned,
+    place: &Place,
+    which: Which,
+    listener: Option<std::net::SocketAddr>,
+    (number, directories): (u16, &super::Directories),
+    limits: &skein_io::Limits,
+) -> String {
+    if let Err(why) = run::admit_listener(owned, listener) {
+        return text(&why.words());
+    }
+    let Ok(mut launch) = run::launch(owned, place, which) else { return "the setup has no runner".into() };
+    if listener.is_some() {
+        launch.exec = temper_forge_setup::spec::listening(launch.exec);
+    }
+    run_failure(host::run(limits, &launch), &launch, number, directories)
 }
 /// The fake shares only the private directory and token with an owned forge (protocol/setup.md, 8.4).
 fn prepare_fake(path: &std::path::Path) -> Result<(), String> {
