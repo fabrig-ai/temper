@@ -46,7 +46,7 @@ fn write_json(path: &Path, value: &Value) {
 }
 
 fn bundle(path: &Path) {
-    write(&path.join("index.html"), b"<!doctype html><html><body>STEP1 QA fixture</body></html>");
+    write(&path.join("index.html"), b"<!doctype html><html><head></head><body>STEP1 QA fixture</body></html>");
     write(&path.join(DIGEST).join("qa.js"), b"// inert fixture; never executed\n");
     write(&path.join("robots.txt"), b"User-agent: *\nDisallow: /\n");
 }
@@ -79,9 +79,9 @@ fn command(root: &Path, verb: &str, arguments: Vec<String>) -> boxed::Outcome {
     )
 }
 
-fn drained(exit: Option<Exit>, left: &Option<Vec<u32>>, stderr: &[u8]) {
+fn drained(exit: Option<Exit>, left: Option<&[u32]>, stderr: &[u8]) {
     assert_eq!(exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(stderr));
-    assert_eq!(left.as_deref(), Some([].as_slice()), "no child outlives its box");
+    assert_eq!(left, Some([].as_slice()), "no child outlives its box");
 }
 
 fn refused(outcome: &boxed::Outcome, member: &str) {
@@ -110,7 +110,7 @@ impl Fixture {
         let data = scratch.path().join("source data");
         let cache = scratch.path().join("shared cache");
         let initialized = command(scratch.path(), "init", flags(&config, &data, &cache));
-        drained(initialized.exit, &initialized.left, &initialized.stderr);
+        drained(initialized.exit, initialized.left.as_deref(), &initialized.stderr);
 
         // The ordinary gate embeds no bundle. Supply only the bounded file shape,
         // not WASM or a policy detector: runtime does not inspect navigation policy.
@@ -193,7 +193,7 @@ fn untouched(snapshot: &[(PathBuf, Vec<u8>)]) {
 }
 
 fn successful<T>(outcome: &boxed::CtlOutcome<T>) {
-    drained(outcome.exit, &outcome.left, &outcome.stderr);
+    drained(outcome.exit, outcome.left.as_deref(), &outcome.stderr);
     assert!(outcome.checked.is_some(), "live check reached: {}", String::from_utf8_lossy(&outcome.stderr));
     assert_eq!(outcome.calls.len(), CTL_CALLS, "sign-in and accounts completed");
     for call in &outcome.calls {
@@ -234,7 +234,7 @@ fn rebase_issuer(value: &mut Value, origin: &str) -> usize {
             }
             values.values_mut().map(|value| rebase_issuer(value, origin)).sum()
         }
-        _ => 0,
+        Value::Null | Value::Bool(_) | Value::Number(_) => 0,
     }
 }
 
@@ -248,7 +248,7 @@ fn issuer_origin<'a>(source: &Value, effective: &'a Value) -> Option<&'a str> {
             .iter()
             .enumerate()
             .find_map(|(index, source)| effective.get(index).and_then(|effective| issuer_origin(source, effective))),
-        _ => None,
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => None,
     }
 }
 
@@ -364,7 +364,7 @@ fn qa_changed_source_document_requires_explicit_reset_without_rewriting_scratch(
     for name in ["temper.json", "agent.json"] {
         let fixture = Fixture::new(&format!("qa-fake-backends-source-{name}"));
         let first = fixture.start();
-        drained(first.exit, &first.left, &first.stderr);
+        drained(first.exit, first.left.as_deref(), &first.stderr);
         let effective = fixture.effective();
         let marker = fs::read(effective.join("prepared")).expect("prepared marker");
         let document = fs::read(effective.join("config/temper.json")).expect("effective document");
@@ -384,7 +384,7 @@ fn qa_changed_source_document_requires_explicit_reset_without_rewriting_scratch(
 fn qa_same_public_bytes_from_a_different_source_directory_require_reset() {
     let fixture = Fixture::new("qa-fake-backends-source-identity");
     let first = fixture.start();
-    drained(first.exit, &first.left, &first.stderr);
+    drained(first.exit, first.left.as_deref(), &first.stderr);
     let other = fixture.scratch.path().join("different config");
     directory(&other);
     for name in PUBLIC {
@@ -433,7 +433,7 @@ fn qa_second_box_refuses_and_first_survives_until_stop() {
     assert_eq!(before, after, "contender cannot rewrite a live sandbox");
     assert_eq!(*still_serving, Some(200), "first box remains alive after contention");
     let after_stop = fixture.start();
-    drained(after_stop.exit, &after_stop.left, &after_stop.stderr);
+    drained(after_stop.exit, after_stop.left.as_deref(), &after_stop.stderr);
 }
 
 fn unsupported(case: &str, member: &str, change: impl FnOnce(&mut Value)) {
