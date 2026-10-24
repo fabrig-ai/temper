@@ -171,3 +171,85 @@ fn arriving_at_chats_or_a_task_sets_its_address_filter() {
         }
     }
 }
+
+#[test]
+fn an_ended_task_opened_before_me_retries_a_busy_document_read() {
+    use jig_client::{Down, Readable, Up, Watchable, contract as c};
+    use skein_lib::{Duration, List, Time};
+    const TASK: u64 = 2;
+    let limits = fixtures::limits();
+    let mut root = crate::unlinked(&limits, fixtures::SEED);
+    let me = fixtures::start(&mut root, List::with_capacity(0));
+    let address = Address::Task { task: TASK, filter: crate::PlanFilter::All };
+    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    crate::step(
+        &mut root,
+        &fixtures::env(&limits),
+        crate::Event::Went { place: crate::Place::Address(Address::Inbox { filter: crate::address::Filter::ALL }) },
+        &mut out,
+    );
+    while out.pop().is_some() {}
+    assert_eq!(root.client().link().state, Link::Starting);
+    assert!(root.pages().me(root.client()).is_none(), "navigation precedes the first signed-in documents");
+    crate::step(
+        &mut root,
+        &fixtures::env(&limits),
+        crate::Event::Went { place: crate::Place::Address(address.clone()) },
+        &mut out,
+    );
+    let mut task_watch = None;
+    while let Some(request) = out.pop() {
+        if let crate::Request::Client { request: jig_client::Request::Down { down: Down::Open { watch, subject } } } =
+            request
+            && subject == Watchable::Jig(c::Subject::Task { task: TASK })
+        {
+            task_watch = Some(watch);
+        }
+    }
+    crate::step(
+        &mut root,
+        &fixtures::env(&limits),
+        crate::Event::Client {
+            event: jig_client::Event::Up {
+                up: Up::WatchEnded { watch: task_watch.expect("task watch"), end: c::WatchEnd::SubjectEnded },
+            },
+        },
+        &mut out,
+    );
+    let mut document_read = None;
+    while let Some(request) = out.pop() {
+        if let crate::Request::Client { request: jig_client::Request::Down { down: Down::Read { read, what } } } =
+            request
+            && what == Readable::Jig(c::Read::Task { task: TASK })
+        {
+            document_read = Some(read);
+        }
+    }
+    crate::step(
+        &mut root,
+        &fixtures::env(&limits),
+        crate::Event::Client {
+            event: jig_client::Event::Up {
+                up: Up::ReadDone {
+                    read: document_read.expect("ended task read"),
+                    result: jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::Busy)),
+                },
+            },
+        },
+        &mut out,
+    );
+    fixtures::confirm(&mut root, me, fixtures::PARTY, &mut out);
+    let mut env = fixtures::env(&limits);
+    env.now = Time::ZERO.saturating_add(Duration::from_secs(10));
+    crate::fire(&mut root, &env, &mut out);
+    assert_eq!(root.pages().address(), &address, "the person's navigation stays at the task");
+    let mut retried = false;
+    while let Some(request) = out.pop() {
+        if let crate::Request::Client { request: jig_client::Request::Down { down: Down::Read { what, .. } } } = request
+            && what == Readable::Jig(c::Read::Task { task: TASK })
+        {
+            retried = true;
+        }
+    }
+    assert!(retried, "an ended task's busy document read must not leave its page empty forever");
+}
