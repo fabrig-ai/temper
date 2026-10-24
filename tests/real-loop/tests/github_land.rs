@@ -76,7 +76,6 @@ fn repair_fixture() -> github::Fixture {
 
 // GitHub compare uses per_page=1, so a two-commit change is refused.
 #[test]
-#[ignore = "skein compare per_page=1 (o/github-land-2 M2)"]
 fn a_chats_failed_github_check_is_repaired_at_a_new_head_and_lands_once() {
     let ran = run_github(repair_fixture(), repair_scripts, repair_acts);
     let records = ran.github().observations();

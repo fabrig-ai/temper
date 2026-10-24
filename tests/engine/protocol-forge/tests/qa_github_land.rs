@@ -397,7 +397,6 @@ fn conflicting_update_requests_resolution_without_merge() {
 
 // The resolved head is two commits ahead; skein refuses compare with per_page=1.
 #[test]
-#[ignore = "qa round 3: skein compare per_page=1 refuses the resolved two-commit change"]
 fn update_conflict_resolved_then_merged() {
     // QA: domain/forge.md 8.2, 8.4, 10; Q3. Resolve as the fixture writer.
     let mut world = Protocol::github(744);
