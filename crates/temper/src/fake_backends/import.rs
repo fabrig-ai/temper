@@ -6,6 +6,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+type Documents = (Box<[u8]>, Box<[u8]>);
+
 pub(super) struct Source {
     pub marker: Box<[u8]>,
     pub documents: Option<(Json, Json)>,
@@ -129,7 +131,7 @@ impl Source {
     }
     /// Rebase only public paths whose init-equivalence was checked above. Relative data paths
     /// keep their spelling and resolve against D'; absolute spellings are made relative first.
-    pub(super) fn rebase(&self, effective: &Directories) -> Result<Option<(Box<[u8]>, Box<[u8]>)>, String> {
+    pub(super) fn rebase(&self, effective: &Directories) -> Result<Option<Documents>, String> {
         let Some((mut temper, mut agent)) = self.documents.clone() else { return Ok(None) };
         let agent_name = bytes(&crate::path(&effective.config).join("agent.json"));
         temper.set("workers/0/agent/configuration", Json::String(agent_name.clone()))?;
