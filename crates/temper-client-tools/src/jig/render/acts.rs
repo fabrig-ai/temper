@@ -287,6 +287,7 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
             return;
         }
         Refusal::AccountMove { .. }
+        | Refusal::SignInRedirect { .. }
         | Refusal::Circle { .. }
         | Refusal::Dependency { .. }
         | Refusal::Kept { .. }
