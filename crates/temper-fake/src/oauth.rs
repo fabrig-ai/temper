@@ -93,9 +93,8 @@ impl Document {
     pub fn peer(&self, seed: u64) -> Result<Peer, skein_fake_peers::Error> {
         let profile = config::profile::profile(config::profile::Profile::Small);
         let limits = limits();
-        let response = match skein_fake_peers::oauth::least_response(&limits) {
-            Some(response) => response,
-            None => return Err(skein_fake_peers::Error::Limits),
+        let Some(response) = skein_fake_peers::oauth::least_response(&limits) else {
+            return Err(skein_fake_peers::Error::Limits);
         };
         let mut peer = Peer::new(
             self.listen,

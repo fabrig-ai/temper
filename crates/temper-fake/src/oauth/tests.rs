@@ -181,10 +181,10 @@ fn code_retention_admits_exactly_sixty_four_sign_ins() {
     let mut issuer = issuer::Issuer::new(config, limits()).unwrap();
     for _ in 0..CODE_SLOTS {
         let grant = authorize(&mut issuer, &authorization);
-        assert!(matches!(grant, issuer::Request::Redirect { .. }), "admitted within the code cap");
+        let issuer::Request::Redirect { .. } = grant else { panic!("admitted within the code cap") };
     }
     let refused = authorize(&mut issuer, &authorization);
-    assert!(matches!(refused, issuer::Request::Refused), "restart required past the code cap");
+    let issuer::Request::Refused = refused else { panic!("restart required past the code cap") };
 }
 
 fn token_part(encoded: &str) -> Value {
