@@ -129,6 +129,9 @@ pub(super) fn watched(side: &mut Side, handle: Handle, watched: Watched, out: &m
         Watched::Delivered(_)
         | Watched::Ended(Why::NotServed | Why::Unknown | Why::NotAllowed | Why::SignedOut | Why::Limit) => false,
     };
+    if side.panel_retry {
+        out.push(Request::PanelEnded { subject: panel.subject });
+    }
     let state = match watched {
         Watched::Delivered(Some(record)) if record.task() == panel.subject.task => State::Shown(record),
         Watched::Delivered(_) => {
@@ -136,7 +139,7 @@ pub(super) fn watched(side: &mut Side, handle: Handle, watched: Watched, out: &m
             out.push(Request::Client { asked: jig_client::Event::Unwatch { handle } });
             State::Unknown
         }
-        // Only SubjectEnded may be refreshed by a later task document (client/forge.md, 9.2).
+        // Only SubjectEnded may be refreshed by the root (client/forge.md, 9.2).
         Watched::Ended(Why::Unknown | Why::SubjectEnded) => {
             panel.handle = None;
             State::Unknown

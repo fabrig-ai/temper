@@ -255,6 +255,9 @@ impl Pages {
     pub const fn task(&self) -> Option<&task::Task> {
         self.task.as_ref()
     }
+    pub(crate) fn task_mut(&mut self) -> Option<&mut task::Task> {
+        self.task.as_mut()
+    }
     #[must_use]
     pub fn cards(&self) -> Option<&skein_lib::List<inbox::Card>> {
         if let Some(task) = &self.task {

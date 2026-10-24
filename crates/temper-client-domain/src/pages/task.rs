@@ -322,6 +322,8 @@ pub struct Task {
     pub document: Handle,
     pub document_read: DocumentRead,
     read_wait: Duration,
+    /// The document that already permitted an ending-triggered panel reopen (client/forge.md, 9.2).
+    pub(crate) panel_reopened_at: Option<u64>,
     pub tree: Handle,
     pub activity: Handle,
     pub run: Option<Handle>,
@@ -358,6 +360,7 @@ impl Task {
             document,
             document_read: DocumentRead::Reading,
             read_wait: READ_FIRST,
+            panel_reopened_at: None,
             tree,
             activity,
             run: None,
