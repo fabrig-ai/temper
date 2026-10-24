@@ -150,24 +150,25 @@ fn replace_bundle(dirs: &Directories, content: Box<[u8]>, bundle: Option<&Path>)
     }
     // Check the entire candidate, including its bundle, before touching retained bytes.
     validate(dirs, &updated)?;
-    if updated != content {
-        let path = dirs.document();
-        let staging = crate::path(&dirs.config).join("temper.json.bundle-staging");
-        let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(&staging).map_err(|why| {
-            format!(
-                "{}: {why}; an existing staging file must be removed explicitly before another bundle replacement",
-                staging.display()
-            )
-        })?;
-        let result = (|| {
-            file.write_all(&updated)?;
-            file.sync_all()?;
-            fs::rename(&staging, &path)
-        })();
-        if let Err(why) = result {
-            let _removed = fs::remove_file(&staging);
-            return Err(format!("{}: bundle replacement: {why}", path.display()));
-        }
+    if updated == content {
+        return Ok(content);
+    }
+    let path = dirs.document();
+    let staging = crate::path(&dirs.config).join("temper.json.bundle-staging");
+    let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(&staging).map_err(|why| {
+        format!(
+            "{}: {why}; an existing staging file must be removed explicitly before another bundle replacement",
+            staging.display()
+        )
+    })?;
+    let result = (|| {
+        file.write_all(&updated)?;
+        file.sync_all()?;
+        fs::rename(&staging, &path)
+    })();
+    if let Err(why) = result {
+        let _removed = fs::remove_file(&staging);
+        return Err(format!("{}: bundle replacement: {why}", path.display()));
     }
     Ok(updated)
 }
