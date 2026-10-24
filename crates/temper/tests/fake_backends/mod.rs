@@ -36,8 +36,8 @@ fn value(path: &Path) -> serde_json::Value {
 fn store(path: &Path, value: &serde_json::Value) {
     write(path, &serde_json::to_vec(value).expect("fixture JSON bytes"));
 }
-fn flags(config: &Path, data: &Path, cache: &Path) -> Vec<String> {
-    vec![
+fn flags(config: &Path, data: &Path, cache: &Path, bundle: Option<&Path>) -> Vec<String> {
+    let mut flags = vec![
         "--config".into(),
         config.display().to_string(),
         "--data".into(),
@@ -45,7 +45,11 @@ fn flags(config: &Path, data: &Path, cache: &Path) -> Vec<String> {
         "--cache".into(),
         cache.display().to_string(),
         "--fake-backends".into(),
-    ]
+    ];
+    if let Some(bundle) = bundle {
+        flags.extend(["--bundle".into(), bundle.display().to_string()]);
+    }
+    flags
 }
 fn get_root(config: &Path) -> Vec<u8> {
     let document = value(&config.join("temper.json"));
@@ -64,13 +68,13 @@ fn get_root(config: &Path) -> Vec<u8> {
     assert!(bytes.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&bytes));
     bytes
 }
-fn life(root: &Path, paths: &[PathBuf; 3], effective: &Path, client: &str) -> Vec<u8> {
+fn life(root: &Path, paths: &[PathBuf; 3], effective: &Path, client: &str, bundle: Option<&Path>) -> Vec<u8> {
     use support::ctl::{Call, Step};
     let client = root.join(client);
     private(&client);
     let outcome = support::boxed::run_ctl(
         root,
-        flags(&paths[0], &paths[1], &paths[2]),
+        flags(&paths[0], &paths[1], &paths[2], bundle),
         &client,
         vec![Step::Run(Call::sign_in())],
         DEADLINE,
@@ -89,28 +93,15 @@ fn the_serve_child_reads_retained_effective_documents_across_restart() {
     for path in &paths {
         private(path);
     }
-    // No PATH discovery or owned click: the default demo/owned groups stay dormant.
-    let init = std::process::Command::new(env!("CARGO_BIN_EXE_temper"))
-        .arg("init")
-        .args(flags(&paths[0], &paths[1], &paths[2]).into_iter().filter(|word| word != "--fake-backends"))
-        .env_clear()
-        .current_dir(scratch.path())
-        .output()
-        .expect("public init fixture");
-    assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
+    // C is truly empty; the box runs ordinary init only in its effective directories.
+    // The default demo/owned groups stay dormant throughout this story.
+    let source_mode = fs::metadata(&paths[0]).expect("empty source directory").mode();
     let supplied = scratch.path().join("provisioned-loopback");
     bundle(&supplied, SOURCE_PAGE);
-    let mut document = value(&paths[0].join("temper.json"));
-    document["application"]["clients"]["bundle"] = supplied.to_str().expect("bundle path").into();
-    store(&paths[0].join("temper.json"), &document);
     write(&paths[1].join("source-only-fixture"), b"never imported into effective data");
-    let originals = ["temper.json", "agent.json", "charters/chat.txt", "charters/coding.txt"].map(|name| {
-        let path = paths[0].join(name);
-        (name, fs::read(&path).expect("source public bytes"), fs::metadata(path).expect("source mode").mode())
-    });
     let sandbox = paths[1].join("box/fake-backends");
     let effective = sandbox.join("config");
-    let first = life(scratch.path(), &paths, &effective, "client-first");
+    let first = life(scratch.path(), &paths, &effective, "client-first", Some(&supplied));
     assert!(first.windows(b"source provisioned fixture".len()).any(|part| part == b"source provisioned fixture"));
     assert!(!sandbox.join("data/source-only-fixture").exists());
     let generated = value(&effective.join("temper.json"));
@@ -125,25 +116,25 @@ fn the_serve_child_reads_retained_effective_documents_across_restart() {
     let peer = fs::read(effective.join("oauth.json")).expect("retained peer address");
     let secret = fs::read(sandbox.join("data/worker.secret")).expect("generated sandbox fixture secret");
     write(&sandbox.join("data/retained-fixture"), b"retained data");
-    // Only the effective document names this second bundle. Its body proves that the child
-    // reopened C' on restart, while the original configuration keeps its first bundle.
+    // The restart's CLI selection must replace the retained bundle while keeping other edits.
+    // Its body proves that the child reopened the updated effective document.
     let retained_bundle = effective.join("fixture-loopback");
     bundle(&retained_bundle, EFFECTIVE_PAGE);
     let mut edited = generated;
-    edited["application"]["clients"]["bundle"] = retained_bundle.to_str().expect("bundle path").into();
+    edited["engine"]["deployment"]["seed"] = 42.into();
     store(&effective.join("temper.json"), &edited);
-    let second = life(scratch.path(), &paths, &effective, "client-second");
+    fs::remove_dir_all(&supplied).expect("first provisioned bundle no longer available");
+    let second = life(scratch.path(), &paths, &effective, "client-second", Some(&retained_bundle));
     assert!(
         second.windows(b"retained effective fixture only".len()).any(|part| part == b"retained effective fixture only")
     );
     assert_eq!(fs::read(effective.join("oauth.json")).expect("retained peer"), peer);
     assert_eq!(fs::read(sandbox.join("data/worker.secret")).expect("retained sandbox secret"), secret);
     assert_eq!(fs::read(sandbox.join("data/retained-fixture")).expect("retained data"), b"retained data");
-    for (name, bytes, mode) in originals {
-        let path = paths[0].join(name);
-        assert_eq!(fs::read(&path).expect("source unchanged"), bytes, "{name}");
-        assert_eq!(fs::metadata(path).expect("source mode unchanged").mode(), mode, "{name}");
-    }
+    edited["application"]["clients"]["bundle"] = retained_bundle.to_str().expect("bundle path").into();
+    assert_eq!(value(&effective.join("temper.json")), edited);
+    assert!(fs::read_dir(&paths[0]).expect("source configuration still empty").next().is_none());
+    assert_eq!(fs::metadata(&paths[0]).expect("source mode unchanged").mode(), source_mode);
     assert_eq!(
         fs::read(paths[1].join("source-only-fixture")).expect("source fixture unchanged"),
         b"never imported into effective data"

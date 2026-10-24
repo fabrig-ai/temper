@@ -31,8 +31,36 @@ struct Prepared {
     // Held through drive; closing the descriptor releases the OS lock even after a crash.
     _lock: File,
 }
-pub(crate) fn run(source: &Directories) -> Result<Exit, String> {
-    let Prepared { directories, bytes, mut listeners, _lock: lock } = prepare(source)?;
+pub(crate) fn configure(rest: &[std::ffi::OsString], working: &[u8]) -> Result<Option<PathBuf>, String> {
+    let mut fake = false;
+    let mut bundle = None;
+    let mut words = rest.iter();
+    while let Some(word) = words.next() {
+        match word.as_bytes() {
+            b"--fake-backends" if !fake => fake = true,
+            b"--bundle" if bundle.is_none() => {
+                let value = words.next().ok_or("--bundle DIR: missing directory")?;
+                let value = value.as_bytes();
+                if value.is_empty() || value.contains(&0) || value.starts_with(b"--") {
+                    return Err("--bundle DIR: expected a nonempty path without NUL".into());
+                }
+                let path = crate::path(working).join(crate::path(value));
+                let name = path.as_os_str().as_bytes();
+                if !path.is_absolute() || name.contains(&0) || name.len() > 4096 {
+                    return Err("--bundle DIR: expected an absolute path of at most 4096 bytes without NUL".into());
+                }
+                bundle = Some(path);
+            }
+            _ => return Err("invalid box arguments: expected --fake-backends [--bundle DIR]".into()),
+        }
+    }
+    if !fake {
+        return Err("--bundle DIR requires --fake-backends".into());
+    }
+    Ok(bundle)
+}
+pub(crate) fn run(source: &Directories, bundle: Option<&Path>) -> Result<Exit, String> {
+    let Prepared { directories, bytes, mut listeners, _lock: lock } = prepare(source, bundle)?;
     let result = crate::box_command::run_configuration(&directories, &bytes, std::mem::take(&mut listeners.0));
     drop(lock);
     result
@@ -109,6 +137,39 @@ fn write(path: &Path, content: &[u8], replace: bool) -> Result<(), String> {
     file.set_permissions(fs::Permissions::from_mode(0o600)).map_err(|why| why.to_string())?;
     file.write_all(content).map_err(|why| format!("{}: {why}", path.display()))?;
     file.sync_all().map_err(|why| format!("{}: {why}", path.display()))
+}
+fn replace_bundle(dirs: &Directories, content: Box<[u8]>, bundle: Option<&Path>) -> Result<Box<[u8]>, String> {
+    let mut updated = content.clone();
+    if let Some(bundle) = bundle {
+        let mut document = Json::decode(&content)?;
+        let selection = Json::String(bytes(bundle));
+        if document.at("application/clients/bundle")? != &selection {
+            document.set("application/clients/bundle", selection)?;
+            updated = document.encode()?;
+        }
+    }
+    // Check the entire candidate, including its bundle, before touching retained bytes.
+    validate(dirs, &updated)?;
+    if updated != content {
+        let path = dirs.document();
+        let staging = crate::path(&dirs.config).join("temper.json.bundle-staging");
+        let mut file = OpenOptions::new().write(true).create_new(true).mode(0o600).open(&staging).map_err(|why| {
+            format!(
+                "{}: {why}; an existing staging file must be removed explicitly before another bundle replacement",
+                staging.display()
+            )
+        })?;
+        let result = (|| {
+            file.write_all(&updated)?;
+            file.sync_all()?;
+            fs::rename(&staging, &path)
+        })();
+        if let Err(why) = result {
+            let _removed = fs::remove_file(&staging);
+            return Err(format!("{}: bundle replacement: {why}", path.display()));
+        }
+    }
+    Ok(updated)
 }
 fn lock(root: &Path) -> Result<File, String> {
     let path = root.join("lock");
@@ -227,23 +288,21 @@ fn validate(dirs: &Directories, bytes: &[u8]) -> Result<(), String> {
     }
     match &named.bundle {
         Some(bundle) => {
-            public_path(&crate::path(bundle).join("index.html"))?;
-            let _checked = crate::bundle::read(bundle, named.bundle_limits)?;
+            let _checked = provisioned_bundle(Some(crate::path(bundle)), named.bundle_limits)?;
         }
         None => return Err("application.clients.bundle: effective document must name its loopback bundle".into()),
     }
     Ok(())
 }
-fn bundle(source: &Source, limits: temper_service::limits::Clients) -> Result<PathBuf, String> {
-    let instructions = "build with scripts/bundle.sh --loopback OUT and set application.clients.bundle to OUT; if configuration is empty, first run ordinary temper init";
-    let path = source
-        .bundle
-        .as_ref()
-        .ok_or_else(|| format!("application.clients.bundle: no provisioned loopback bundle; {instructions}"))?;
+fn provisioned_bundle(path: Option<&Path>, limits: temper_service::limits::Clients) -> Result<PathBuf, String> {
+    let instructions =
+        "run scripts/bundle.sh --loopback DIR && temper box --fake-backends --bundle DIR (directory flags as usual)";
+    let path =
+        path.ok_or_else(|| format!("application.clients.bundle: no provisioned loopback bundle; {instructions}"))?;
     public_path(&path.join("index.html")).map_err(|why| format!("{why}; {instructions}"))?;
     let _checked =
         crate::bundle::read(path.as_os_str().as_bytes(), limits).map_err(|why| format!("{why}; {instructions}"))?;
-    Ok(path.clone())
+    Ok(path.to_path_buf())
 }
 fn print(dirs: &Directories) {
     eprintln!("box: effective configuration {}", crate::path(&dirs.config).display());
@@ -260,7 +319,7 @@ fn print(dirs: &Directories) {
     clippy::too_many_lines,
     reason = "startup owns its lock and listeners through validation and publishes the prepared marker last"
 )]
-fn prepare(source_dirs: &Directories) -> Result<Prepared, String> {
+fn prepare(source_dirs: &Directories, bundle: Option<&Path>) -> Result<Prepared, String> {
     let (root, effective) = directories(source_dirs)?;
     let source_config = resolved(Path::new("/"), &source_dirs.config)?;
     if source_config.starts_with(&root) {
@@ -285,7 +344,7 @@ fn prepare(source_dirs: &Directories) -> Result<Prepared, String> {
         } else {
             temper_service::limits::profile(temper_service::limits::Profile::Small).clients
         };
-        Some(bundle(&source, limits)?)
+        Some(provisioned_bundle(bundle.or(source.bundle.as_deref()), limits)?)
     };
     let user = skein_shell::effective_user();
     make_private(crate::path(&source_dirs.data), user)?;
@@ -312,8 +371,7 @@ fn prepare(source_dirs: &Directories) -> Result<Prepared, String> {
         let _model = temper_fake::llm::Document::decode(&public(&crate::path(&effective.config).join("llm.json"))?)
             .map_err(|why| String::from_utf8_lossy(&why.line()).into_owned())?;
         let _oauth = Json::decode(&public(&crate::path(&effective.config).join("oauth.json"))?)?;
-        let bytes = public(&effective.document())?;
-        validate(&effective, &bytes)?;
+        let bytes = replace_bundle(&effective, public(&effective.document())?, bundle)?;
         print(&effective);
         return Ok(Prepared { directories: effective, bytes, listeners: Listeners(Vec::new()), _lock: lock });
     }
