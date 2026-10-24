@@ -1,3 +1,5 @@
+#[path = "support/listeners.rs"]
+pub mod listeners;
 pub mod support;
 use std::{
     fmt::Write,
@@ -1253,14 +1255,16 @@ fn box_initializes_only_absent_or_empty_configuration_directories() {
             assert!(!data.exists());
             assert!(!cache.exists());
         } else {
-            let first = result.expect("initialization");
+            let (first, held) = result.expect("initialization");
+            assert_eq!(held.len(), 5, "init retains its five listeners");
             assert!(data.join("worker.secret").exists());
             assert!(cache.is_dir());
-            assert_eq!(
-                temper::box_command::configuration(&dirs).expect("second read"),
-                first,
-                "existing configuration is kept"
-            );
+            let (second, reopened) = temper::box_command::configuration(&dirs).expect("second read");
+            assert_eq!(second, first, "existing configuration is kept");
+            assert!(reopened.is_empty(), "reading an existing configuration reserves no listeners");
+            for (fd, _) in held {
+                skein_shell::close_keeper_fd(fd);
+            }
         }
         scratch.remove();
     }
@@ -1327,21 +1331,61 @@ fn owned_memory_figures_for_a_worker_alone_include_its_process_and_no_engine() {
 
 #[test]
 fn serve_box_refuses_closed_or_non_pipe_descriptors_before_starting() {
-    for (redirections, fd) in [("3>&- 4>&-", 3_u8), ("3>/dev/null 4>&-", 3), ("3>&0 4>&-", 4)] {
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("exec \"$1\" serve --box {redirections}"))
-            .arg("serve-box-test")
-            .arg(env!("CARGO_BIN_EXE_temper"))
-            .stdin(std::process::Stdio::piped())
-            .output()
-            .expect("serve child");
-        assert_eq!(output.status.code(), Some(1));
-        assert!(output.stdout.is_empty());
-        assert_eq!(
-            String::from_utf8(output.stderr).expect("UTF-8 diagnostic"),
-            format!("temper serve: --box: fd {fd} is not an open pipe\n")
-        );
+    for inherited in [false, true] {
+        for (redirections, offset) in [("{r}>&- {a}>&-", 0), ("{r}>/dev/null {a}>&-", 0), ("{r}>&1 {a}>&-", 1)] {
+            let requests = if inherited { 4 } else { 3 };
+            let answers = requests + 1;
+            let redirections = redirections.replace("{r}", &requests.to_string()).replace("{a}", &answers.to_string());
+            let script = format!(
+                "exec \"$1\" serve --config /unused --data /unused --cache /unused --box {} {redirections}",
+                if inherited { "3<&0" } else { "" }
+            );
+            let mut command = if inherited {
+                listeners::command(std::net::TcpListener::bind("127.0.0.1:0").expect("listener"), &script)
+            } else {
+                let mut command = std::process::Command::new("/bin/sh");
+                command
+                    .args(["-c", &script, "serve-box-test", env!("CARGO_BIN_EXE_temper")])
+                    .env_clear()
+                    .stdin(std::process::Stdio::piped());
+                command
+            };
+            let output = command.output().expect("serve child");
+            let fd = requests + offset;
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(
+                String::from_utf8(output.stderr).expect("UTF-8 diagnostic"),
+                format!("temper serve: --box: fd {fd} is not an open pipe\n")
+            );
+        }
+    }
+}
+
+#[test]
+fn serve_claims_its_clients_listener_and_box_pipes_follow_it() {
+    for boxed in [false, true] {
+        let scratch = support::Scratch::startup(if boxed { "inherited-boxed" } else { "inherited-serve" });
+        support::configuration(scratch.path(), &support::Forge::Unreached);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("held listener");
+        let address = listener.local_addr().expect("address");
+        let path = scratch.path().join("temper.json");
+        let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("config")).expect("JSON");
+        value["application"]["clients"]["listener"] = serde_json::json!({"socket":address.to_string()});
+        support::write_private(&path, &serde_json::to_vec(&value).expect("JSON"));
+        let script = if boxed { "exec \"$@\" 3<&0 4>&1 5<&2 0</dev/null 2>&1" } else { "exec \"$@\" 3<&0 0</dev/null" };
+        let mut command = listeners::command(listener, script);
+        command.arg("serve").args(support::configuration::flags(scratch.path()));
+        let (answers, keep_answers_open) = std::io::pipe().expect("box answers");
+        if boxed {
+            command.arg("--box").stderr(std::process::Stdio::from(answers));
+        }
+        let ended = listeners::probe(command, address, "secret=");
+        drop(keep_answers_open);
+        assert!(ended.ready.is_some(), "serve ready: {:?} {:?}", ended.stdout, ended.stderr);
+        assert!(ended.reply.expect("clients answer").starts_with(b"HTTP/1.1 "));
+        assert!(ended.status.success(), "serve drains: {:?} {:?}", ended.stdout, ended.stderr);
+        scratch.remove();
     }
 }
 
@@ -1600,4 +1644,109 @@ fn the_template_agent_refuses_jigs_small_hub_turn_bound_before_serving() {
         "temper serve: engine.limits.overrides.hub.turn_bytes: 65536 bytes, short of the agent's largest turn, {turn} bytes"
     )), "{}", String::from_utf8_lossy(&output.stderr));
     scratch.remove();
+}
+
+#[test]
+fn forge_run_refuses_a_listener_at_the_wrong_address_before_taking_the_lock() {
+    let scratch = support::Scratch::startup("forge-wrong-listener");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("listener");
+    let found = listener.local_addr().expect("address");
+    support::owned::configuration(
+        scratch.path(),
+        &support::owned::Names {
+            forgejo: std::path::Path::new("/not-run/forgejo"),
+            runner: None,
+            port: 9,
+            bot: "temper",
+            person: "ada",
+        },
+    );
+    let mut command = listeners::command(listener, "exec \"$@\" 3<&0 0</dev/null");
+    command.args(["forge", "run"]).args(support::configuration::flags(scratch.path())).args(["1", "forgejo"]);
+    let ended = command.output().expect("run");
+    assert_eq!(ended.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(ended.stderr).expect("diagnostic"),
+        format!("temper forge run: forge 1: fd 3 listens at {found}, expected owned.listen 127.0.0.1:9\n")
+    );
+    assert!(!scratch.path().join("forge-1/forgejo.lock").exists());
+    scratch.remove();
+}
+
+#[test]
+fn forge_run_keeps_fd_three_through_the_version_spawn_and_exec() {
+    use skein_forge::forgejo::pin::VERSION;
+    let scratch = support::Scratch::startup("forge-listener-exec");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("listener");
+    let address = listener.local_addr().expect("address");
+    let binary = scratch.path().join("forgejo");
+    fs::write(
+        &binary,
+        format!(
+            r#"#!/bin/sh
+if [ "$1" = --version ]; then
+    test -z "${{LISTEN_FDS+x}}" || exit 20
+    test ! -S /proc/self/fd/3 || exit 21
+    printf 'forgejo version {VERSION}\n'
+    exit 0
+fi
+test "$LISTEN_FDS" = 1 || exit 22
+test -S /proc/self/fd/3 || exit 23
+printf 'inherited fd 3 after exec\n'
+"#
+        ),
+    )
+    .expect("fake Forgejo");
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).expect("executable");
+    support::owned::configuration(
+        scratch.path(),
+        &support::owned::Names { forgejo: &binary, runner: None, port: address.port(), bot: "temper", person: "ada" },
+    );
+    support::owned::finished(scratch.path());
+    let state_path = scratch.path().join("forge-1/state");
+    let mut state = temper_forge_setup::state::decode(&fs::read(&state_path).expect("state")).expect("prepared");
+    state.runner = None;
+    support::write_private(&state_path, temper_forge_setup::state::encode(&state).expose());
+    let mut command = listeners::command(listener, "exec \"$@\" 3<&0 0</dev/null");
+    command.args(["forge", "run"]).args(support::configuration::flags(scratch.path())).args(["1", "forgejo"]);
+    let ended = command.output().expect("run");
+    assert!(ended.status.success(), "{} {:?}", ended.status, String::from_utf8_lossy(&ended.stderr));
+    assert_eq!(ended.stdout, b"inherited fd 3 after exec\n");
+    scratch.remove();
+}
+
+#[test]
+fn forge_run_refuses_other_listener_counts_and_any_for_the_runner_before_opening_files() {
+    for (which, count) in [("forgejo", "0"), ("forgejo", "2"), ("forgejo", "many"), ("runner", "1"), ("runner", "0")] {
+        let ended = std::process::Command::new(env!("CARGO_BIN_EXE_temper"))
+            .args(["forge", "run", "--config", "/no-document", "--data", "/unused", "--cache", "/unused", "1", which])
+            .env_clear()
+            .env("LISTEN_FDS", count)
+            .output()
+            .expect("run");
+        assert_eq!(ended.status.code(), Some(1));
+        let diagnostic = String::from_utf8(ended.stderr).expect("diagnostic");
+        assert!(diagnostic.contains("LISTEN_FDS") && diagnostic.contains("fd 3"), "{diagnostic}");
+        assert!(!diagnostic.contains("no-document"), "refuses before document read");
+    }
+}
+
+#[test]
+fn listener_refusals_name_the_fd_before_serve_or_a_fake_opens_files() {
+    for args in [
+        &["serve", "--config", "/no-document", "--data", "/unused", "--cache", "/unused"][..],
+        &["fake", "llm", "--document", "/no-document"],
+        &["fake", "forge", "--document", "/no-document"],
+    ] {
+        let ended = std::process::Command::new("/bin/sh")
+            .args(["-c", "exec \"$@\" 3>/dev/null", "bad-listener", env!("CARGO_BIN_EXE_temper")])
+            .args(args)
+            .env_clear()
+            .env("LISTEN_FDS", "1")
+            .output()
+            .expect("run");
+        assert_eq!(ended.status.code(), Some(1));
+        let diagnostic = String::from_utf8(ended.stderr).expect("diagnostic");
+        assert!(diagnostic.contains("fd 3 is not a socket"), "{diagnostic}");
+    }
 }

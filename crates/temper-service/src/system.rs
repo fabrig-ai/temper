@@ -384,6 +384,14 @@ impl Service {
             None => true,
         }
     }
+    /// Adopt a held listener before the first down pass (protocol/setup.md, 7.1).
+    /// A Listen for its address claims it; refusal leaves the descriptor with the caller.
+    pub fn adopt_listener(&mut self, fd: Fd, addr: core::net::SocketAddr) -> Result<(), Fd> {
+        match self.io.adopt_listener(fd, addr) {
+            Ok(_) => Ok(()),
+            Err(fd) => Err(fd),
+        }
+    }
     /// Adopt the box's lines and requests (protocol/setup.md, 7.1).
     /// io may keep a bounded read pending until close cancels it.
     /// On refusal the caller retains both descriptors.

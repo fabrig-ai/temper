@@ -1,4 +1,6 @@
 //! Design-only QA of protocol/setup.md, 6.5, 7.1 and 8.2–8.3, through the shipped binary.
+#[path = "support/listeners.rs"]
+pub mod listeners;
 pub mod support;
 
 use std::{collections::BTreeSet, fs, net::TcpListener, path::Path, process::Command};
@@ -248,17 +250,14 @@ fn serve_with_box_refuses_without_the_boxs_pipes() {
     boxed(scratch.path());
     let mut arguments = vec!["serve".into(), "--box".into()];
     arguments.extend(support::configuration::flags(scratch.path()));
-    let command = skein_world::end_to_end::Command {
-        program: env!("CARGO_BIN_EXE_temper").into(),
-        arguments,
-        directory: scratch.path().into(),
-        environment: Vec::new(),
-    };
-    let ended = support::boxed::run_command(command, None, support::boxed::Plan::Stop, WITHIN);
-    assert_eq!(ended.exit, Some(Exit::Code(1)));
+    let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+    let mut command = listeners::command(listener, "exec \"$@\" 3<&0 4>&- 5>&- 0</dev/null");
+    command.args(arguments);
+    let ended = command.output().expect("serve");
+    assert_eq!(ended.status.code(), Some(1));
     assert!(support::printed_link(&ended.stdout).is_none());
     let stderr = String::from_utf8_lossy(&ended.stderr);
-    assert!(stderr.contains("fd 3") || stderr.contains("fd 4"), "refusal names the missing pipe fd: {stderr}");
+    assert!(stderr.contains("fd 4"), "refusal names the pipe after the listener: {stderr}");
     scratch.remove();
 }
 

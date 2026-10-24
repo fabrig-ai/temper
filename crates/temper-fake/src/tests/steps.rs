@@ -40,14 +40,22 @@ fn documents_give_the_box_its_whole_ordered_steps() {
     managed["mode"] = json!({"managed":{"admin_token":"admin_token"}});
 
     let llm = command("fake llm", &["fake", "llm", "--config", "C", "--data", "D", "--cache", "K"], Kind::Long);
+    let llm = llm.listening(Box::new([demo::fixture()["application"]["demo"]["llm"]["listen"]["socket"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()]));
     let prepare1 =
         command("prepare 1", &["forge", "prepare", "--config", "C", "--data", "D", "--cache", "K", "1"], Kind::Once);
     let fake1 =
         command("fake forge 1", &["fake", "forge", "--config", "C", "--data", "D", "--cache", "K", "1"], Kind::Long);
+    let fake1 =
+        fake1.listening(Box::new([fake["mode"]["fake"]["listen"]["socket"].as_str().unwrap().parse().unwrap()]));
     let prepare2 =
         command("prepare 2", &["forge", "prepare", "--config", "C", "--data", "D", "--cache", "K", "2"], Kind::Once);
     let fake2 =
         command("fake forge 2", &["fake", "forge", "--config", "C", "--data", "D", "--cache", "K", "2"], Kind::Long);
+    let fake2 = fake2.listening(Box::new(["127.0.0.1:3002".parse().unwrap()]));
     let forgejo2 = command(
         "forgejo 2",
         &["forge", "run", "--config", "C", "--data", "D", "--cache", "K", "2", "forgejo"],
@@ -65,6 +73,8 @@ fn documents_give_the_box_its_whole_ordered_steps() {
         Kind::Once,
     );
     let serve = command("serve", &["serve", "--config", "C", "--data", "D", "--cache", "K", "--box"], Kind::Long);
+    let serve_listeners = ["127.0.0.1:8367".parse().unwrap(), "127.0.0.1:8371".parse().unwrap()];
+    let serve = serve.listening(Box::new(serve_listeners));
     let demo_group = Group {
         forge: 1,
         recorded: false,
@@ -168,6 +178,6 @@ fn documents_give_the_box_its_whole_ordered_steps() {
         let setup = Setup::read(&d, at, &temper_forge_setup::limits::small(), &directories, &mut ps)
             .unwrap_or_else(|| panic!("{name}: {}", String::from_utf8_lossy(&problem::lines(&ps))));
         let demo = demo::read(&value).unwrap();
-        assert_eq!(steps(&setup, demo.as_ref(), &flags), expected, "{name}");
+        assert_eq!(steps(&setup, demo.as_ref(), &flags, Box::new(serve_listeners)), expected, "{name}");
     }
 }

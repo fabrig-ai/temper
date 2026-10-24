@@ -59,11 +59,14 @@ fn taken_default_owned_and_webhooks_ports_get_distinct_kernel_ports() {
         let mut io = Io::open().expect("startup io");
         let mut preferred = [0; 5];
         preferred[at] = preferred_port;
-        let ports = io.ports(preferred).expect("reserved ports");
-        let chosen = [ports.clients, ports.owned, ports.forge, ports.llm, ports.webhooks];
+        let held = io.ports(preferred).expect("reserved ports");
+        let chosen = held.iter().map(|(_, port)| *port).collect::<Vec<_>>();
         assert_ne!(chosen[at].get(), preferred_port);
         for (index, port) in chosen.iter().enumerate() {
             assert!(!chosen[..index].contains(port), "five distinct ports");
+        }
+        for (fd, _) in held {
+            io.close(fd);
         }
         drop(holder);
     }
@@ -115,7 +118,7 @@ fn init_finds_ports_and_programs_and_writes_exact_modes_in_order() {
             .parse()
             .expect("socket");
         assert_eq!(address.port() == preferred[0], !held, "{row}");
-        assert!(TcpListener::bind(address).is_ok(), "{row}: reservation released");
+        assert!(TcpListener::bind(address).is_err(), "{row}: clients reservation held");
         assert!(document["application"]["clients"]["bundle"].is_null());
         assert!(document["application"]["clients"].as_object().expect("clients object").contains_key("public"));
         assert!(document["application"]["clients"]["public"].is_null());
@@ -137,7 +140,7 @@ fn init_finds_ports_and_programs_and_writes_exact_modes_in_order() {
         for other in [address, forge, llm] {
             assert_ne!(webhooks.port(), other.port(), "{row}: webhooks reservation differs");
         }
-        assert!(TcpListener::bind(webhooks).is_ok(), "{row}: webhooks reservation released");
+        assert!(TcpListener::bind(webhooks).is_err(), "{row}: webhooks reservation held");
         assert_eq!(document["application"]["forges"][0]["git"], format!("http://{forge}"), "{row}");
         assert_eq!(
             document["application"]["setup"][0]["mode"]["fake"]["listen"],
@@ -162,7 +165,7 @@ fn init_finds_ports_and_programs_and_writes_exact_modes_in_order() {
             assert!(!ports[..index].contains(port), "{row}: five distinct reservations");
         }
         assert_eq!(owned.port() == preferred[1], !held && !same, "{row}");
-        assert!(TcpListener::bind(owned).is_ok(), "{row}: owned reservation released");
+        assert!(TcpListener::bind(owned).is_err(), "{row}: owned reservation held");
         assert_eq!(document["application"]["forges"][2]["git"], format!("http://{owned}"), "{row}");
         assert_eq!(
             document["application"]["setup"][1]["mode"]["owned"]["listen"],
@@ -170,19 +173,26 @@ fn init_finds_ports_and_programs_and_writes_exact_modes_in_order() {
             "{row}"
         );
         assert_eq!(forge.port() == preferred[2], !held && !same, "{row}");
-        assert!(TcpListener::bind(forge).is_ok(), "{row}: forge reservation released");
+        assert!(TcpListener::bind(forge).is_err(), "{row}: forge reservation held");
         assert_eq!(
             document["engine"]["llm"]["endpoints"][1]["address"],
             serde_json::json!({"socket": llm.to_string()}),
             "{row}"
         );
         assert_eq!(llm.port() == preferred[3], !held, "{row}");
-        assert!(TcpListener::bind(llm).is_ok(), "{row}: LLM reservation released");
+        assert!(TcpListener::bind(llm).is_err(), "{row}: llm reservation held");
+        for (fd, port) in &written.listeners {
+            let address = skein_shell::listener_at(*fd).expect("held descriptor is listening");
+            assert_eq!(address.port(), port.get(), "{row}: descriptor matches written port");
+            assert!(ports.contains(&port.get()), "{row}: descriptor's port is in the document");
+        }
+
         assert_eq!(agent["programs"].as_object().expect("programs").contains_key("claude_code"), claude);
         assert_eq!(written.missing_git, !git);
         assert_eq!(document["application"]["workers"][0]["git"].is_null(), !git);
         check_agent(&dirs, agent);
         drop(holder);
+        crate::close(written.listeners.into_iter().map(|(fd, _)| fd).collect());
         fs::remove_dir_all(root).expect("cleanup");
     }
 }
@@ -289,7 +299,7 @@ fn generated_configuration_passes_the_same_checks_as_serve() {
     let root = scratch("acceptance");
     let dirs = directories(&root);
     let env = environment(&root, true);
-    write(&dirs, &env, &root.join("bin/temper"), [0, 0, 0, 0, 0]).expect("init");
+    let written = write(&dirs, &env, &root.join("bin/temper"), [0, 0, 0, 0, 0]).expect("init");
     let bytes = fs::read(dirs.document()).expect("document");
     let deployment = crate::setup::check(&bytes, &dirs.jig()).expect("init document passes setup and named");
     let owned = deployment.checked.setup.entry(3).expect("init declares the owned forge");
@@ -299,6 +309,7 @@ fn generated_configuration_passes_the_same_checks_as_serve() {
     assert_eq!(demo.provider(), 3);
     assert_eq!(demo.forge(), 1);
     assert_eq!(demo.project(), 1);
+    crate::close(written.listeners.into_iter().map(|(fd, _)| fd).collect());
     fs::remove_dir_all(root).expect("cleanup");
 }
 

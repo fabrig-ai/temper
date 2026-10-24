@@ -77,3 +77,13 @@ pub fn admit_binary(launch: &Launch, printed: &str) -> Result<(), Refusal> {
     };
     if accepted { Ok(()) } else { Err(Refusal::Binary { printed: printed.into() }) }
 }
+
+/// Checks the inherited fd 3 address; absent means Forgejo binds as usual.
+pub fn admit_listener(owned: &Owned, found: Option<core::net::SocketAddr>) -> Result<(), crate::problem::Problem> {
+    match found {
+        Some(found) if found != owned.listen => {
+            Err(crate::problem::Problem::Listener { found, expected: owned.listen })
+        }
+        Some(_) | None => Ok(()),
+    }
+}

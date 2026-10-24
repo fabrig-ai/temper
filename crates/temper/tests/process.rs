@@ -910,7 +910,6 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
     use std::{fs, os::unix::fs::PermissionsExt};
     use support::ctl::Step;
 
-    let _ports = support::DefaultPorts::hold("forgejo-from-client");
     let scratch = support::Scratch::new("forgejo-from-client");
     let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
     for path in &paths {
@@ -1158,6 +1157,74 @@ fn a_change_whose_coder_fails_holds_and_its_chat_answers() {
 fn a_first_run_answers_on_the_demo_and_a_second_finds_it_running() {
     first_run(true);
 }
+#[test]
+fn two_first_runs_one_after_the_other_choose_their_own_ports() {
+    fn ports(config: &std::path::Path) -> [u16; 4] {
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(config.join("temper.json")).expect("written configuration"))
+                .expect("configuration JSON");
+        let application = &document["application"];
+        let setup = application["setup"].as_array().expect("forge setup");
+        let fake = setup.iter().find(|entry| entry["forge"] == 1).expect("fake forge 1");
+        // Forge 3's owned port can match: the box leaves it free for Forgejo to bind (M3a).
+        [
+            &application["clients"]["listener"]["socket"],
+            &fake["mode"]["fake"]["listen"]["socket"],
+            &application["demo"]["llm"]["listen"]["socket"],
+            &application["webhooks"]["listener"]["socket"],
+        ]
+        .map(|value| {
+            value.as_str().expect("listener socket").parse::<std::net::SocketAddr>().expect("socket address").port()
+        })
+    }
+    fn assert_finished<T>(name: &str, config: &std::path::Path, ended: &support::boxed::StoryOutcome<T>) {
+        let stderr = String::from_utf8_lossy(&ended.stderr);
+        assert_eq!(ended.exit, Some(Exit::Code(0)), "{name}: {stderr}");
+        assert!(ended.finished, "{name}: {stderr}");
+        assert_eq!(ended.left, Some(Vec::new()), "{name}: no process outlived the box: {stderr}");
+        let wrote = format!("box: wrote the configuration, {}\n", config.join("temper.json").display());
+        assert!(stderr.contains(&wrote), "{name}: {stderr}");
+        assert_demo_streams(&ended.stdout, &ended.stderr);
+        assert!(ended.dormant_checked, "{name}: the welcome precedes any fake start");
+    }
+    let a = support::Scratch::new("two-first-runs-a");
+    let b = support::Scratch::new("two-first-runs-b");
+    let (a_paths, a_flags) = first_run_directories(&a);
+    let (b_paths, b_flags) = first_run_directories(&b);
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let phase = |name| {
+        eprintln!("two first runs: {name}: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
+    };
+    phase("A started");
+    let ended =
+        support::boxed::run_story(a.path(), a_flags, a.path(), support::person::welcome_open(), BOX_DEADLINE, || {
+            phase("A's person finished (A up)");
+            phase("B started");
+            let ended = support::boxed::run_story(
+                b.path(),
+                b_flags,
+                b.path(),
+                support::person::demo_start_answered(),
+                BOX_DEADLINE,
+                || {
+                    let a_ports = ports(&a_paths[0]);
+                    let b_ports = ports(&b_paths[0]);
+                    for ((name, a), b) in
+                        ["clients", "fake forge", "fake LLM", "webhooks"].into_iter().zip(a_ports).zip(b_ports)
+                    {
+                        assert_ne!(a, b, "{name}: the second first run chooses its own port");
+                    }
+                },
+            );
+            phase("B finished");
+            assert_finished("B", &b_paths[0], &ended);
+        });
+    phase("A stopped");
+    assert_finished("A", &a_paths[0], &ended);
+    b.remove();
+    a.remove();
+}
 fn first_run_directories(scratch: &support::Scratch) -> ([std::path::PathBuf; 3], Vec<String>) {
     use std::{fs, os::unix::fs::PermissionsExt};
     let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
@@ -1176,7 +1243,6 @@ fn first_run_directories(scratch: &support::Scratch) -> ([std::path::PathBuf; 3]
 #[test]
 fn a_first_run_ctl_demo_start_answers_running_twice() {
     use support::ctl::{Call, Step};
-    let _ports = support::DefaultPorts::hold("first-run-ctl");
     let scratch = support::Scratch::new("first-run-ctl");
     let (_, flags) = first_run_directories(&scratch);
     let seen = support::boxed::run_ctl(
@@ -1210,7 +1276,6 @@ fn a_first_run_ctl_demo_start_answers_running_twice() {
 fn a_second_forge_ends_the_playground_for_good_closing_its_chat_and_account() {
     use std::{fs, os::unix::fs::PermissionsExt};
 
-    let _ports = support::DefaultPorts::hold("playground-end");
     let scratch = support::Scratch::new("playground-end");
     let (paths, flags) = first_run_directories(&scratch);
     let mut account = None;
@@ -1413,7 +1478,6 @@ fn playground_end_second_forge(config: &std::path::Path) {
 
 fn first_run(restart: bool) {
     use std::{fs, os::unix::fs::PermissionsExt};
-    let _ports = support::DefaultPorts::hold("first-run");
     let scratch = support::Scratch::new("first-run");
     let (paths, flags) = first_run_directories(&scratch);
     let mut bot = None;
@@ -2754,7 +2818,6 @@ impl skein_world::Referee<support::cluster::Root> for ClusterChatJudge {
 #[ignore = "backlog: a start without DNS fails while sign-in endpoints resolve at start (director 554)"]
 fn a_default_box_with_a_sign_in_registration_starts_without_dns() {
     use std::{ffi::OsString, fs, os::unix::fs::PermissionsExt};
-    let _ports = support::DefaultPorts::hold("first-run-no-dns");
     let scratch = support::Scratch::new("first-run-no-dns");
     let hosts = scratch.path().join("hosts");
     let nsswitch = scratch.path().join("nsswitch.conf");
