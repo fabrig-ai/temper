@@ -574,6 +574,7 @@ fn a_members_wider_amendment_waits_for_a_maintainer_to_accept() {
             proposer: people::Proposer::Party(member),
             proposal,
             decision: people::ProposalDecision::Accept,
+            running: None,
         },
     }));
     driver.settle();
@@ -616,6 +617,7 @@ fn a_members_goal_past_their_allotment_becomes_a_proposal_a_maintainer_accepts()
             proposer: people::Proposer::Party(member),
             proposal,
             decision: people::ProposalDecision::Accept,
+            running: None,
         },
     }));
     driver.settle();
@@ -673,7 +675,7 @@ fn two_maintainers_decide_one_proposal_and_the_second_is_told_by_whom_and_how() 
         (2023, first_session, 205, people::ProposalDecision::Accept),
         (2024, second_session, 206, people::ProposalDecision::Reject { reason: b"too late".as_slice().into() }),
     ] {
-        let ask = people::Ask::DecideProposal { project: 1, proposer, proposal, decision };
+        let ask = people::Ask::DecideProposal { project: 1, proposer, proposal, decision, running: None };
         let to = ReplyTo::new(Token::new(reply));
         driver.send(engine::Event::Party(engine::PartyInput::Ask {
             models: Box::new([]),
@@ -1670,6 +1672,7 @@ fn a_chats_goal_accepted_as_its_persons_outlives_the_chat() {
             proposer: people::Proposer::Task(child),
             proposal,
             decision: people::ProposalDecision::Accept,
+            running: None,
         },
     }));
     driver.settle();
@@ -1754,6 +1757,7 @@ fn a_proposal_routed_past_a_procedure_to_a_person_is_accepted() {
             proposer: people::Proposer::Task(child),
             proposal,
             decision: people::ProposalDecision::Accept,
+            running: None,
         },
     }));
     driver.settle();

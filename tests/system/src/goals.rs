@@ -219,6 +219,7 @@ fn a_smith_goal_is_proposed_accepted_planned_and_done() {
             proposer: people::Proposer::Party(member),
             proposal,
             decision: people::ProposalDecision::Accept,
+            running: None,
         },
     }));
     driver.settle();
