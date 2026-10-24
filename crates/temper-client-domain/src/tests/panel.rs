@@ -328,6 +328,45 @@ fn finish_change(task: &mut c::Task) {
     task.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Done(value))));
 }
 #[test]
+fn a_panel_falling_behind_before_its_first_record_retries_and_shows_the_landed_change() {
+    for end in [c::WatchEnd::Busy, c::WatchEnd::Dropped, c::WatchEnd::Stopping] {
+        let (mut root, task_watch) = before_document();
+        let mut task = change_task();
+        let first = family_open(&mut task_document(&mut root, task_watch, &task), TASK).expect("panel watch");
+        // Jig reports Behind without a latest record while it backs off this opening.
+        assert!(up(&mut root, Up::WatchEnded { watch: first, end }).is_empty());
+        finish_change(&mut task);
+        assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none());
+        let limits = f::limits();
+        let mut env = f::env(&limits);
+        env.now = env.now.saturating_add(skein_lib::Duration::from_secs(10));
+        let mut out = Queue::with_capacity(crate::max_out(&limits));
+        crate::fire(&mut root, &env, &mut out);
+        let fresh = family_open(&mut out, TASK)
+            .expect("a panel without its first record must retain jig's retry after falling behind");
+        assert_ne!(fresh, first);
+        let landed = p::panel(
+            TASK,
+            w::Step::Landed(w::Landed::new(&w::CEILINGS, w::LandedParts { merge: [0x47; 32] }).unwrap()),
+        );
+        for up in [
+            Up::Watched { watch: fresh, event: c::WatchEvent::Opened },
+            Up::FamilyDelivered {
+                watch: fresh,
+                record: jig_client::Family {
+                    family: wire::FORGE,
+                    version: wire::CLIENT_VERSION,
+                    bytes: wire::change_panel(&landed),
+                },
+            },
+        ] {
+            crate::step(&mut root, &env, Event::Client { event: jig_client::Event::Up { up } }, &mut out);
+            assert!(out.is_empty());
+        }
+        assert_eq!(root.forge().panel().unwrap().state, State::Shown(Box::new(landed)), "{end:?}");
+    }
+}
+#[test]
 fn a_late_panel_ending_after_the_last_task_document_reopens_the_panel() {
     let (mut root, task_watch, panel_watch, mut task) = change_opened();
     finish_change(&mut task);
