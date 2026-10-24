@@ -87,6 +87,10 @@ fn arguments() {
             }
         );
     }
+}
+
+#[test]
+fn argument_refusals() {
     for (words, expected) in [
         (vec!["fake"], "temper fake: expected llm, forge, oauth or git\n"),
         (
