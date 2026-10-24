@@ -1,6 +1,6 @@
 # temper's client
 
-Provisional, 2026-10-14, revised 2026-10-23. temper's client: temper's own
+Provisional, 2026-10-14, revised 2026-10-24. temper's client: temper's own
 presentation on jig's client, `jig-client`. Its crates; its client root,
 which holds `jig-client` and temper's pages, the LLM accounts' and the
 forges' among them; the forge's client family, its words, its one form
@@ -568,7 +568,7 @@ keeps (`../protocol/configuration.md`, section 2).
     "Continue with ChatGPT" in a row is a sign-in for the account's
     provider, held by the account's holder: its address, then its end,
     are drawn in the row (5.5, A sign-in), as `ConnectModel`'s Signing
-    in draws them. "Use the API key first" moves the account's first
+    in draws them, its paste among them (`ConnectModel`, The paste). "Use the API key first" moves the account's first
     key after its deciding source to that source's place. "Check
     again" checks the program's login of the source it names. "Sign
     out", "Remove" and "Remove account" ask to confirm first (3.6).
@@ -605,9 +605,47 @@ keeps (`../protocol/configuration.md`, section 2).
     the engine's listener, which sends it on to the page it left, and
     the page shows the sign-in's end, read on the `accounts` watch:
     Ready, or the ending's words and acts (5.5, A sign-in). The
-    terminal prints the address and opens no browser (6.5). It assumes
-    a browser on the engine's machine and detects none elsewhere
-    (section 11, A browser on another machine).
+    terminal prints the address and opens no browser (6.5). temper
+    detects no browser elsewhere (section 11, A browser on another
+    machine): the person says so, below.
+  - *From another computer,* for a browser not on the engine's
+    machine, whose provider sends it to a loopback address where
+    nothing answers. The sign-in's card on Choose offers, beside its
+    button, "This browser isn't on temper's computer ›", which sends
+    the same sign-in with no departure (no `Return`, no
+    `Request::Leave`) and keeps the page at Signing in: once answered,
+    it draws "Open ChatGPT's sign-in ›", the sign-in's address as an
+    external link, a tab of its own (the person's own click, which no
+    browser blocks as a pop-up), and *The paste* (below) under it. A
+    sign-in under way that the page draws offers the paste too, folded
+    under "Signed in, but the page couldn't be reached?"; unfolded,
+    with "Go forward to that page, or find it in your history, and
+    copy its address." first, at a departed sign-in's address come
+    back to by hand, not by the listener's return, while it still
+    waits. The tunnel still works, and needs neither.
+  - *The paste:* "When ChatGPT is done, its tab shows a page that
+    can't be reached. Copy that page's whole address from the address
+    bar, come back here, and paste it. If a page opens instead, such
+    as another program's sign-in, close that program's sign-in and
+    start again." A field, "Address of the page that couldn't be
+    reached", and "Finish connecting", which sends jig's `FinishSignIn`
+    for the sign-in's source, carrying the address, its surrounding
+    spaces and line breaks trimmed, as its value (jig's
+    `client/domain/contract.md`, 3.1 and 3.2). The
+    address is held as a key's value is: the page's state alone, never
+    in its address, the small store or a draft, dropped once sent, or
+    when the page or the way is left; its field asks the browser to
+    keep nothing (`autocomplete="off"`, no spelling check), and is
+    disabled while empty or past the bytes `me` states. While the
+    request is out, the button reads "Finishing…"; answered
+    *finishing*, the field goes and the card reads "Finishing your
+    sign-in…" until the `accounts` watch shows the end, Ready or the
+    ending's words (5.5, A sign-in). Refused, the field stays empty
+    with the refusal's words above it (5.5, The paste), and the sign-in
+    still waits; refused *not waiting*, the card follows the watch: an
+    end it shows, or, with the sign-in gone, "This sign-in has ended.",
+    and the way's button again. *Lost* or *unsent* asks for the paste
+    again: the client never sends it twice by itself.
   - *The tab's departure,* in a browser, in this order. The sign-in's
     answer, `AccountSignInStarted`, names its source S and the address.
     The page then sends `Return { source: S, path }` (4.6), `path` the
@@ -1835,8 +1873,9 @@ The words for each offered source are:
   `AddKey` joining no account; a program's, its declaration. On
   Choose, each way is a card: a plan's sign-in, the plan's name,
   "Your ChatGPT plan. Sign in with your ChatGPT account, and temper’s
-  agents use your plan’s included usage." and "In a browser on the
-  engine’s machine · about a minute"; a key, "An OpenAI API key", "A
+  agents use your plan’s included usage." and "In a browser · about a
+  minute", and, beside its button, "This browser isn't on temper's
+  computer ›" (3.5, `ConnectModel`, From another computer); a key, "An OpenAI API key", "A
   key from OpenAI’s platform. What temper’s agents use is billed to the
   key’s organization." and "Pasted here · at once"; then the way's
   button.
@@ -1958,7 +1997,7 @@ The words for each offered source are:
   (`../draft/temper-on-temper.md`, 6.3).
 - **A sign-in:** no words while it waits in a browser, which is at the
   provider (3.5, `ConnectModel`); in the terminal, "Open this address in
-  a browser on the engine's machine:" and the address, as an external
+  a browser:" and the address, then the paste (below), as an external
   link (6.5). Then "Signed in to ChatGPT as alice@example.com", or
   "Signed in to ChatGPT" while the account has no display (jig carries
   none yet: its card's heading then drops that part), "temper’s agents
@@ -1985,7 +2024,19 @@ The words for each offered source are:
   usage declined"'s words and acts, the account made all the same;
   another holder's subject, `Refused` `Held`; misconfigured, unloaded
   and signed out, `Failed` `Misconfigured`, `Unloaded` and
-  `SignInAgain`; any other refusal or failure in jig's words. Four have
+  `SignInAgain`; any other refusal or failure in jig's words.
+- **The paste's refusals,** above its field, the sign-in still
+  waiting (3.5, `ConnectModel`, The paste): *address*, "That isn't
+  this sign-in's address. Copy the whole address of the page that
+  couldn't be reached, from the address bar."; *too many*, "That's
+  too many addresses from other sign-ins. Continue with ChatGPT to
+  start again." and its button; *state*,
+  "That address is from an earlier sign-in. Paste the one from this
+  sign-in's tab, or start again."; a value past the bytes `me` states,
+  before sending, "That's longer than a sign-in's address. Copy the
+  address bar alone."; *not waiting* with the sign-in gone, "This
+  sign-in has ended." and "Continue with ChatGPT"; a sign-in that
+  refused too many ends as a misconfigured one does, in its words. Four have
   no fact of jig's yet, and are not drawn until jig gives one: the
   listener's port another program holds, "not eligible", plan usage
   declined at the provider rather than at its consent, and a missing
@@ -3115,8 +3166,10 @@ command.
   `ui-text.md`, section 5), and never opens: it starts no browser and
   no program. The person opens the address in a browser on the
   engine's machine, where the provider's redirect reaches the engine
-  (`../protocol/credentials.md`, section 3); the page shows the sign-in's
-  end when the `accounts` watch tells it. A browser goes to the address
+  (`../protocol/credentials.md`, section 3), or in one elsewhere, and
+  pastes the address it ends at into the page's field, which the
+  terminal draws as the browser does (3.5, `ConnectModel`, The paste);
+  the page shows the sign-in's end when the `accounts` watch tells it. A browser goes to the address
   in its own tab instead (3.5, `ConnectModel`).
 - **A forge's connect or install link** is printed the same way, as
   `TEXT <URL>` with no number, and never opened; the terminal names no
@@ -3913,22 +3966,19 @@ own tests:
   for the calendar's days and the hours 5.12's forms say, which name no
   zone, as the mockups' do; the browser's zone, an input of the shell's,
   is the candidate.
-- **A browser on another machine.** A sign-in's redirect reaches the
-  engine on loopback, so temper assumes the browser is on the engine's
-  machine, and detects none elsewhere (with the user, 2026-10-23):
-  there, the provider's redirect lands on the browser's own error page,
-  as one after the sign-in's deadline does, and the sign-in waits out
-  its deadline. A person who reaches temper through a tunnel forwards
-  the listener's port too (`../../guide/box.md`, step 4). Candidates:
-  before the browser leaves, the page asks the listener for a one-time
-  code the engine gave it for this sign-in, and only a browser that gets
-  it goes on to the provider, the others shown the fix first, while a
-  connection from an address not the engine's machine's skips the ask;
-  the fix a tunnel, or the failed redirect's address pasted into temper,
-  which checks it against the sign-in's redirect and state; later, an
-  account moved in (jig's `domain/accounts.md`, section 6), or a client
-  relaying the redirect (jig's `protocol/llm.md`, section 10). Default:
-  the engine's machine, undetected.
+- **A browser on another machine, detected.** A sign-in's redirect
+  reaches the engine on loopback; a browser elsewhere lands on its own
+  error page, and its person finishes by pasting that page's address
+  (3.5, `ConnectModel`, From another computer), or through a tunnel
+  (`../../guide/box.md`, step 4). The person says which (with the
+  user, 2026-10-23, and decision 971). Candidates for telling by
+  itself: before the browser leaves, the page asks the listener for a
+  one-time code the engine gave it for this sign-in, and only a browser
+  that gets it goes on in its own tab, the others in a tab of their own
+  with the paste; or a connection from an address not the engine's
+  machine's goes so at once. Later: a client relaying the redirect
+  (jig's `protocol/llm.md`, section 10). Default: undetected, the
+  person's choice.
 - **The first use of a plan,** in the terminal: a card in the
   conversation, or a card that waits to be dismissed, which needs a
   dismissal kept by the engine, as jig's seen is. Default: a card in

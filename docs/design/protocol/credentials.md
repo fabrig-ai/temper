@@ -1,6 +1,6 @@
 # Credentials
 
-Provisional, 2026-10-03, revised 2026-10-23. temper's credentials: which
+Provisional, 2026-10-03, revised 2026-10-24. temper's credentials: which
 secrets temper's processes hold, where each comes from, who may use it,
 and how it reaches the process that does. LLM accounts, workers' secrets
 and people's sign-ins are jig's (jig's `protocol/README.md`, section 8;
@@ -294,15 +294,28 @@ sources in its holder's order. temper configures the LLM providers
     from the client. The engine binds a loopback listener for each
     sign-in, on an ephemeral port unless the LLM provider's
     configuration fixes one (jig's `protocol/llm.md`, section 5; skein's
-    `oauth.md`, 6.5), so the browser that approves must run on the
-    engine's machine. A browser's page goes to the address in its own
+    `oauth.md`, 6.5), so the browser that approves returns there: on
+    the engine's machine, through a tunnel to it, or by the address it
+    was sent to, pasted (below). A browser's page goes to the address in its own
     tab, and the listener sends it back to that page; the terminal
     prints the address and opens no browser (`../client/README.md`, 3.5
     and 6.5). temper detects no browser on another machine
     (`../client/README.md`, section 11).
     ChatGPT's registration fixes `127.0.0.1:1455` (setup.md, 8.1): a
-    person whose browser is on another machine forwards that port to
-    the engine's (`ssh -L 1455:127.0.0.1:1455 HOST`) for the sign-in. A
+    person whose browser is on another machine finishes the sign-in by
+    pasting the address that browser was sent to, where nothing
+    answers, into the page it started from, which hands it to the
+    engine as jig's `FinishSignIn` (jig's `protocol/llm.md`, 5.4;
+    `../client/README.md`, 3.5): the engine checks it against the
+    sign-in's redirect and state and finishes the sign-in as its
+    listener would. The address is a secret in transit, never kept by
+    the page or the engine. Only the person who started the sign-in
+    may paste, but nothing tells whose browser approved it: a person
+    who handed the sign-in's address to another and pasted back where
+    that browser landed would hold the other's ChatGPT account. Ready
+    names the account signed in, and it is the paster's alone (jig's
+    `domain/accounts.md`, 3.2). Or the person forwards that port to the
+    engine's (`ssh -L 1455:127.0.0.1:1455 HOST`) for the sign-in. A
     plan's sign-in is the person's own, never the deployment's (jig's
     `domain/accounts.md`, 3.2);
   - **a key:** pasted on the accounts page, or read by `temper ctl` from
