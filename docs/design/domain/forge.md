@@ -1121,7 +1121,9 @@ What the connector makes of a change for the client's panel
   One past that bound shows its new place at its own next mark.
 - **In its project's scope:** a change into a repository the project
   holds. Any other task, or a scope that is not that project, is
-  unknown.
+  unknown. Before the change's record exists, the engine still answers
+  Gone; the client's bounded reopen and its limit are in
+  `../client/forge.md`, 9.2, **Its subject**.
 - **Kept as long as its record:** the record outlives the task's end, so
   a landed or cancelled change still has its panel.
 - **Designed, not built:** what the landing rules wait on at its head,

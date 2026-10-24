@@ -1154,6 +1154,18 @@ made by the forge connector from what it keeps of the change
   project holds, and the page's slot says the panel is unknown (jig's
   `client/domain/root.md`, section 6). The watch's window is unused:
   the document is whole within its bounds.
+
+  A panel whose watch the engine ended may be unknown before the forge
+  registers its change. For the same live change task, or its ended
+  document with a change result, the page reopens that panel once per
+  later task document delivered, with a fresh watch; an end alone never
+  reopens it. An unsolicited Closed follows SubjectEnded because jig
+  gives the client the same reason for both; a local unwatch's
+  acknowledgement is ignored. Malformed or mismatched deliveries,
+  another task, every other end reason, and an ended task without a
+  change result remain terminal. Between the procedure's start and the
+  next task document the page may say "no change"; it recovers on that
+  next document, at the latest at the landing.
 - **Level-triggered,** as every watch: each delivery is the whole panel
   as it is when made, and a slow client sees fewer of them. The
   connector marks the subject when the change's record changes (its

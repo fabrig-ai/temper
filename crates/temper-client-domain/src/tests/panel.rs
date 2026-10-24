@@ -228,7 +228,7 @@ fn invalid_records_end_unknown_and_unwatch_once() {
         ("trailing", wire::FORGE, wire::CLIENT_VERSION, trailing),
         ("other task", wire::FORGE, wire::CLIENT_VERSION, wire::change_panel(&p::panel(NEXT, w::Step::Opening))),
     ] {
-        let (mut root, watch, _) = opened();
+        let (mut root, task_watch, watch, mut task) = change_opened();
         let out =
             &mut up(&mut root, Up::FamilyDelivered { watch, record: jig_client::Family { family, version, bytes } });
         assert_eq!(closes(out).as_slice(), &[watch], "{row}");
@@ -243,7 +243,15 @@ fn invalid_records_end_unknown_and_unwatch_once() {
             )
             .is_none()
         );
-        up(&mut root, Up::WatchEnded { watch, end: c::WatchEnd::Closed });
+        assert!(
+            up(&mut root, Up::WatchEnded { watch, end: c::WatchEnd::Closed }).is_empty(),
+            "local unwatch acknowledgement"
+        );
+        task.activity += 1;
+        assert!(
+            family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none(),
+            "{row}: terminal after a later task document"
+        );
         let closed =
             closes(&mut went(&mut root, Place::Address(Address::Chats { filter: ChatsFilter::All, start: false })));
         assert!(!closed.as_slice().contains(&watch), "already unwatched");
@@ -265,7 +273,7 @@ fn jig_endings_keep_unknown_and_other_reasons_apart_from_loading() {
         (c::WatchEnd::SubjectEnded, State::Unknown),
         (c::WatchEnd::NotServed, State::Ended(Why::NotServed)),
     ] {
-        let (mut root, watch, _) = opened();
+        let (mut root, task_watch, watch, mut task) = change_opened();
         let shown = forge::shown(root.forge());
         assert!(up(&mut root, Up::WatchEnded { watch, end }).is_empty());
         assert_eq!(root.forge().panel().unwrap().state, expected);
@@ -278,6 +286,12 @@ fn jig_endings_keep_unknown_and_other_reasons_apart_from_loading() {
             )
             .is_none()
         );
+        if end != c::WatchEnd::SubjectEnded {
+            task.activity += 1;
+            assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none(), "{end:?}");
+            assert_eq!(root.forge().panel().unwrap().state, expected);
+            assert_eq!(root.forge().panel().unwrap().handle, None);
+        }
         let closed =
             closes(&mut went(&mut root, Place::Address(Address::Chats { filter: ChatsFilter::All, start: false })));
         assert!(!closed.as_slice().contains(&watch), "jig already ended it");
@@ -288,6 +302,139 @@ fn jig_endings_keep_unknown_and_other_reasons_apart_from_loading() {
         let task = task_page(&mut root, TASK);
         assert!(family_open(&mut document(&mut root, task, TASK, PROCEDURE), TASK).is_some(), "opened afresh");
         assert_eq!(root.forge().panel().unwrap().state, State::Loading);
+    }
+}
+fn change_task() -> c::Task {
+    let mut task = p::task(TASK, PROJECT, c::Executor::Procedure { connector: f::FORGE, kind: 2 });
+    task.result_contract = c::TaskContractDocument::Change { connector: f::FORGE, kind: 1, words: 64 };
+    task
+}
+fn task_document(root: &mut Domain, watch: Token, task: &c::Task) -> Queue<Request> {
+    up(root, Up::Watched { watch, event: c::WatchEvent::Delivered(c::Delivery::Task(Box::new(task.clone()))) })
+}
+fn change_opened() -> (Domain, Token, Token, c::Task) {
+    let (mut root, task_watch) = before_document();
+    let task = change_task();
+    let panel_watch = family_open(&mut task_document(&mut root, task_watch, &task), TASK).expect("panel watch");
+    up(&mut root, Up::Watched { watch: panel_watch, event: c::WatchEvent::Opened });
+    (root, task_watch, panel_watch, task)
+}
+#[test]
+fn a_task_page_recovers_its_ended_panel_when_the_change_is_made_and_landed() {
+    for end in [c::WatchEnd::SubjectEnded, c::WatchEnd::Closed] {
+        let (mut root, task_watch, mut panel_watch, mut task) = change_opened();
+        let mut handle = root.forge().panel().unwrap().handle.unwrap();
+        for landed in [false, true] {
+            assert!(up(&mut root, Up::WatchEnded { watch: panel_watch, end }).is_empty());
+            assert_eq!(root.forge().panel().unwrap().state, State::Unknown);
+            assert_eq!(root.forge().panel().unwrap().handle, None);
+            // Neither a repeated end nor revisiting this address is a new task document.
+            assert!(up(&mut root, Up::WatchEnded { watch: panel_watch, end }).is_empty());
+            assert!(
+                family_open(
+                    &mut went(&mut root, Place::Address(Address::Task { task: TASK, filter: PlanFilter::All })),
+                    TASK
+                )
+                .is_none()
+            );
+            task.activity = task.activity.checked_add(1).expect("two task updates");
+            if landed {
+                f::chat::phase(&mut task, c::OwnerChipPhase::Ended);
+                let mut value = f::chat::change_value(b"abcdef0123456789abcdef0123456789abcdef0123");
+                let c::ResultValue::Change { part, .. } = &mut value else { panic!("change result") };
+                part.key = c::OwnerPartKey::Number(TASK);
+                task.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Done(value))));
+            }
+            let next = family_open(&mut task_document(&mut root, task_watch, &task), TASK)
+                .expect("one fresh watch per later task document");
+            assert_ne!(next, panel_watch);
+            let panel = root.forge().panel().unwrap();
+            assert_eq!(panel.subject, SUBJECT);
+            assert_eq!(panel.state, State::Loading);
+            assert_ne!(panel.handle, Some(handle));
+            handle = panel.handle.unwrap();
+            panel_watch = next;
+            up(&mut root, Up::Watched { watch: panel_watch, event: c::WatchEvent::Opened });
+        }
+        let page = root.pages().task().expect("same task page");
+        let document = page.document(root.client()).expect("landed task document");
+        assert_eq!(document.chip.phase, c::Phase::Ended);
+        assert_eq!(crate::pages::delegation::facts(document).state, crate::pages::delegation::State::Landed);
+        let landed = p::panel(
+            TASK,
+            w::Step::Landed(w::Landed::new(&w::CEILINGS, w::LandedParts { merge: [0x47; 32] }).unwrap()),
+        );
+        assert!(deliver(&mut root, panel_watch, &landed).is_empty());
+        assert_eq!(root.forge().panel().unwrap().state, State::Shown(Box::new(landed)));
+        assert!(
+            family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none(),
+            "a live watch needs no replacement"
+        );
+    }
+}
+#[test]
+fn an_ended_panel_reopens_only_for_its_live_change_task_or_change_result() {
+    for row in [
+        "another task",
+        "another procedure",
+        "another connector",
+        "another contract",
+        "ended without result",
+        "failed",
+        "cancelled",
+    ] {
+        let (mut root, task_watch, panel_watch, mut task) = change_opened();
+        up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded });
+        task.activity += 1;
+        match row {
+            "another task" => {
+                // A delivery on a different task's watch is not this page's document.
+                let other = Handle { asker: root.pages().task().unwrap().document.asker, number: 9999 };
+                let mut out = event(
+                    &mut root,
+                    Event::Client {
+                        event: jig_client::Event::Watch {
+                            handle: other,
+                            subject: Watchable::Jig(c::Subject::Task { task: NEXT }),
+                        },
+                    },
+                );
+                let mut other_watch = None;
+                while let Some(request) = out.pop() {
+                    if let Request::Client {
+                        request:
+                            jig_client::Request::Down {
+                                down: Down::Open { watch, subject: Watchable::Jig(c::Subject::Task { task: NEXT }) },
+                            },
+                    } = request
+                    {
+                        other_watch = Some(watch);
+                    }
+                }
+                task.chip.task = NEXT;
+                assert!(
+                    family_open(&mut task_document(&mut root, other_watch.expect("another task watch"), &task), TASK)
+                        .is_none()
+                );
+                assert_eq!(root.forge().panel().unwrap().state, State::Unknown);
+                assert_eq!(root.forge().panel().unwrap().handle, None);
+                continue;
+            }
+            "another procedure" => task.chip.executor = PROCEDURE,
+            "another connector" => {
+                task.result_contract = c::TaskContractDocument::Change { connector: f::FORGE + 1, kind: 1, words: 64 }
+            }
+            "another contract" => task.result_contract = p::task(TASK, PROJECT, PROCEDURE).result_contract,
+            "ended without result" => f::chat::phase(&mut task, c::OwnerChipPhase::Ended),
+            "failed" | "cancelled" => {
+                f::chat::phase(&mut task, c::OwnerChipPhase::Ended);
+                task.chip.phase = if row == "failed" { c::Phase::Failed } else { c::Phase::Cancelled };
+            }
+            _ => unreachable!(),
+        }
+        assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none(), "{row}");
+        assert_eq!(root.forge().panel().unwrap().state, State::Unknown, "{row}");
+        assert_eq!(root.forge().panel().unwrap().handle, None, "{row}");
     }
 }
 #[test]

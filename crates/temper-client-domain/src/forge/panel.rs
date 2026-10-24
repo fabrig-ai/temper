@@ -30,6 +30,43 @@ pub enum Watched {
     Delivered(Option<Box<w::ChangePanel>>),
     Ended(Why),
 }
+/// A later document can recover a live change, or its landed result (client/forge.md, 9.2).
+pub(crate) fn refreshable(task: &c::Task, forge: u16) -> bool {
+    let procedure = match task.chip.executor {
+        c::Executor::Procedure { connector, kind } => connector == forge && kind == 2,
+        c::Executor::Agent { .. } | c::Executor::Party { .. } | c::Executor::Role { .. } => false,
+    };
+    let change = match task.result_contract {
+        c::TaskContractDocument::Change { connector, .. } => connector == forge,
+        c::TaskContractDocument::Report { .. }
+        | c::TaskContractDocument::Verdict { .. }
+        | c::TaskContractDocument::Approval { .. } => false,
+    };
+    let live = match task.chip.phase {
+        c::Phase::Ended | c::Phase::Done | c::Phase::Failed | c::Phase::Cancelled => false,
+        c::Phase::Waiting
+        | c::Phase::Idle
+        | c::Phase::Due
+        | c::Phase::Preparing
+        | c::Phase::Claimed
+        | c::Phase::Running
+        | c::Phase::Active
+        | c::Phase::BackingOff
+        | c::Phase::Closing
+        | c::Phase::Held => true,
+    };
+    procedure
+        && change
+        && (live || crate::pages::delegation::facts(task).state == crate::pages::delegation::State::Landed)
+}
+pub(super) fn refresh(side: &mut Side, limits: Limits, subject: Subject, out: &mut Queue<Request>) {
+    let Some(panel) = &side.panel else { return };
+    if !side.panel_retry || panel.subject != subject {
+        return;
+    }
+    side.panel = None;
+    self::subject(side, limits, Some(subject), out);
+}
 pub(super) fn subject(side: &mut Side, limits: Limits, subject: Option<Subject>, out: &mut Queue<Request>) {
     #[expect(clippy::manual_map, reason = "the client's domain matches without a closure")]
     let current = match &side.panel {
@@ -39,6 +76,7 @@ pub(super) fn subject(side: &mut Side, limits: Limits, subject: Option<Subject>,
     if current == subject {
         return;
     }
+    side.panel_retry = false;
     if let Some(panel) = side.panel.take()
         && let Some(handle) = panel.handle
     {
@@ -86,6 +124,11 @@ pub(super) fn watched(side: &mut Side, handle: Handle, watched: Watched, out: &m
     if panel.handle != Some(handle) {
         return;
     }
+    side.panel_retry = match &watched {
+        Watched::Ended(Why::SubjectEnded) => true,
+        Watched::Delivered(_)
+        | Watched::Ended(Why::NotServed | Why::Unknown | Why::NotAllowed | Why::SignedOut | Why::Limit) => false,
+    };
     let state = match watched {
         Watched::Delivered(Some(record)) if record.task() == panel.subject.task => State::Shown(record),
         Watched::Delivered(_) => {
@@ -93,7 +136,7 @@ pub(super) fn watched(side: &mut Side, handle: Handle, watched: Watched, out: &m
             out.push(Request::Client { asked: jig_client::Event::Unwatch { handle } });
             State::Unknown
         }
-        // A subject that left the engine is a part its owner no longer knows (jig's root.md, 6).
+        // Only SubjectEnded may be refreshed by a later task document (client/forge.md, 9.2).
         Watched::Ended(Why::Unknown | Why::SubjectEnded) => {
             panel.handle = None;
             State::Unknown

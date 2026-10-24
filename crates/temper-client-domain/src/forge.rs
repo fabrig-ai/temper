@@ -30,6 +30,7 @@ pub enum Event {
     AdminToken { value: skein_lib::Secret },
     AppKey { value: skein_lib::Secret },
     Panel { subject: Option<panel::Subject> },
+    RefreshPanel { subject: panel::Subject },
     Watched { handle: jig_client::Handle, watched: panel::Watched },
     Progress { request: skein_lib::Token, progress: skein_lib::RequestProgress },
     Answered { request: skein_lib::Token, answer: Answer },
@@ -57,6 +58,7 @@ pub struct Side {
     app_form: github::Draft,
     app: Option<github::Pending>,
     panel: Option<panel::Panel>,
+    panel_retry: bool,
     address: Option<Address>,
     served: Served,
     form: Option<Form>,
@@ -82,6 +84,7 @@ impl Side {
             app_form: github::Draft::new(),
             app: None,
             panel: None,
+            panel_retry: false,
             address: None,
             served: Served::Unknown,
             form: None,
@@ -175,6 +178,7 @@ pub fn step(side: &mut Side, env: &Env<Limits>, event: Event, out: &mut Queue<Re
         Event::AdminToken { value } => admin::token(side, value),
         Event::AppKey { value } => github::key(side, value),
         Event::Panel { subject } => panel::subject(side, env.limits, subject, out),
+        Event::RefreshPanel { subject } => panel::refresh(side, env.limits, subject, out),
         Event::Watched { handle, watched } => panel::watched(side, handle, watched, out),
         Event::Went { address } => {
             side.address = Some(address);

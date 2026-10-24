@@ -62,6 +62,21 @@ fn went(root: &mut Domain, env: &Env<Limits>, place: Place, out: &mut Queue<Requ
 pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::Event, out: &mut Queue<Request>) {
     let mut child = Queue::with_capacity(crate::pages::max_out(&env.limits));
     demo_facts(root);
+    let task_document = match &event {
+        crate::pages::Event::Told {
+            told: jig_client::Told::Changed { handle } | jig_client::Told::Page { handle, .. },
+        } => match root.pages.task() {
+            Some(task) => *handle == task.document,
+            None => false,
+        },
+        crate::pages::Event::Started
+        | crate::pages::Event::Left
+        | crate::pages::Event::AccountKey { .. }
+        | crate::pages::Event::Went { .. }
+        | crate::pages::Event::Act { .. }
+        | crate::pages::Event::Told { .. }
+        | crate::pages::Event::Link { .. } => false,
+    };
     crate::pages::step(&mut root.pages, env, &root.client, event, &mut child);
     for _ in 0..child.len() {
         match child.pop().expect("counted pages output") {
@@ -81,6 +96,14 @@ pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::E
     };
     if watched != subject {
         forge(root, env, forge::Event::Panel { subject }, out);
+    } else if task_document
+        && let Some(subject) = subject
+        && let Some(page) = root.pages.task()
+        && let Some(task) = page.document(&root.client)
+        && task.chip.task == page.number
+        && forge::panel::refreshable(task, root.forge_number())
+    {
+        forge(root, env, forge::Event::RefreshPanel { subject }, out);
     }
 }
 
