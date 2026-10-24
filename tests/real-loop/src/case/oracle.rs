@@ -5160,8 +5160,11 @@ fn batch_writing(observed: &Observed, read: Read, task: u64, ended: Read) -> boo
         })
 }
 fn batch_journal(observed: &Observed, read: Read, task: u64) -> bool {
-    let rows = check_activity(observed, read);
-    plan_attempts(observed, &[read], task, 1)
+    batch_journal_pages(observed, &[read], task)
+}
+fn batch_journal_pages(observed: &Observed, reads: &[Read], task: u64) -> bool {
+    let rows: Vec<_> = reads.iter().flat_map(|read| check_activity(observed, *read)).collect();
+    plan_attempts(observed, reads, task, 1)
         && rows.last().is_some_and(|row| number(row, "/position") == Some(1))
         && rows.windows(2).all(|pair| {
             number(pair[0], "/position")
@@ -8692,6 +8695,13 @@ fn cap_parked_turn(observed: &Observed) -> Option<&Value> {
     let attempt = number(parked, "/line/run_ended/attempt")?;
     rows.into_iter().find(|r| number(r, "/line/turn/attempt") == Some(attempt))
 }
+fn cap_pages(read: Read) -> Vec<Read> {
+    match read {
+        Read::CapSubownerEnded => vec![read, Read::CapSubownerFirst],
+        Read::CapDirectorEnded => vec![read, Read::CapDirectorFirst],
+        _ => vec![read],
+    }
+}
 /// Script construction through both a5's admission and A1's committed timer.
 /// Wall arithmetic belongs here because the deadline itself is an absolute wall.
 #[must_use]
@@ -8727,7 +8737,7 @@ pub fn step_6_7(observed: &Observed) -> Vec<Miss> {
         step_check(
             &mut misses,
             "6.7",
-            batch_journal(observed, read, task),
+            batch_journal_pages(observed, &cap_pages(read), task),
             CAP_ATTEMPTS,
             &format!(
                 "task {task}'s complete journal must end every attempt, with only zero-spend uncommitted rechecks: {}",
@@ -8747,6 +8757,7 @@ pub fn step_6_7(observed: &Observed) -> Vec<Miss> {
             &mut misses,
             "6.7",
             inbox["needs"]["cut"] == false
+                && inbox["needs"]["after"] == Value::Null
                 && inbox.pointer("/needs/rows").and_then(Value::as_array).is_some_and(Vec::is_empty),
             CAP_INBOX,
             &format!("{read:?} must show the person's complete empty inbox: {inbox}"),
@@ -9036,6 +9047,15 @@ mod cap_tests {
         let held = opening_documents(&mut observed);
         released_documents(&mut observed, held);
         implementer_documents(&mut observed);
+        for (latest, first) in
+            [(Read::CapSubownerEnded, Read::CapSubownerFirst), (Read::CapDirectorEnded, Read::CapDirectorFirst)]
+        {
+            let page = &mut observed.documents.get_mut(&latest).expect("latest")["activity"];
+            let rows = page["rows"].as_array_mut().expect("rows");
+            let older = rows.split_off(rows.len() - 2);
+            page["before"] = json!({"value":"older"});
+            observed.documents.insert(first, json!({"rows":older,"cut":false,"before":null,"after":{"value":"newer"}}));
+        }
         queries(&mut observed);
         observed
     }
@@ -9111,7 +9131,7 @@ mod cap_tests {
             "activity":source(CAP_A5,&a5_lines[..1],&[BUILT+1_000_000])}));
         observed.documents.insert(Read::CapOwnerWaiting, json!({"task":{"chip":{"task":CAP_OWNER}}}));
         for read in [Read::CapInboxHeld, Read::CapInboxEnded] {
-            observed.documents.insert(read, json!({"needs":{"cut":false,"rows":[]}}));
+            observed.documents.insert(read, json!({"needs":{"cut":false,"after":null,"rows":[]}}));
         }
     }
     fn queries(observed: &mut Observed) {
@@ -9311,6 +9331,7 @@ mod cap_tests {
     fn both_inbox_reads_are_complete_and_empty() {
         for read in [Read::CapInboxHeld, Read::CapInboxEnded] {
             field(read, "/needs/cut", CAP_INBOX);
+            field(read, "/needs/after", CAP_INBOX);
             let mut bad = met();
             bad.documents.get_mut(&read).expect("inbox")["needs"]["rows"] = json!([{"question":1}]);
             rejects(&bad, CAP_INBOX);
@@ -9352,6 +9373,16 @@ mod cap_tests {
                 }
             }
             rejects(&bad, promise);
+        }
+    }
+    #[test]
+    fn older_pages_must_be_complete_and_preserve_the_first_attempt() {
+        for read in [Read::CapSubownerFirst, Read::CapDirectorFirst] {
+            field(read, "/cut", CAP_ATTEMPTS);
+            field(read, "/before", CAP_ATTEMPTS);
+            let mut bad = met();
+            bad.documents.get_mut(&read).expect("first")["rows"].as_array_mut().expect("rows").pop();
+            rejects(&bad, CAP_ATTEMPTS);
         }
     }
     #[test]

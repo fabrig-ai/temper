@@ -1152,6 +1152,8 @@ pub const READS_6_7: &[(Read, usize)] = &[
     (Read::CapOwnerEnded, 19),
     (Read::CapDirectorEnded, 20),
     (Read::CapInboxEnded, 21),
+    (Read::CapSubownerFirst, 22),
+    (Read::CapDirectorFirst, 23),
 ];
 
 #[must_use]
@@ -1179,7 +1181,7 @@ pub fn step_6_7() -> Vec<calls::Step> {
             b"\"work\":\"writing\"",
             b"\"task\"",
         ),
-        call(D1, argv!["inbox", "--json"]),
+        call(D1, argv!["inbox", "--after", "00", "--json"]),
         calls::release_hold(CAP_PASS_HOLD),
         // The director's document includes A's observation too. Once A parks
         // after its pass, only the director can satisfy the writing checkpoint.
@@ -1195,7 +1197,13 @@ pub fn step_6_7() -> Vec<calls::Step> {
     for task in [CAP_A5, CAP_SUBOWNER, CAP_OWNER, CAP_DIRECTOR] {
         steps.push(call(D1, argv!["task", number(task), "--activity", "32", "--json"]));
     }
-    steps.push(call(D1, argv!["inbox", "--json"]));
+    steps.push(call(D1, argv!["inbox", "--after", "00", "--json"]));
 
+    // The tagged cursor with no inner cursor starts needs, unfiltered;
+    // it keeps the raw needs page separate from the combined inbox digest.
+    // The latest activity windows omit the starts of A1 and the director.
+    for (task, latest) in [(CAP_SUBOWNER, 18), (CAP_DIRECTOR, 20)] {
+        steps.push(call(D1, argv!["activity", number(task), "--before", calls::activity_before(latest), "--json"]));
+    }
     steps
 }
