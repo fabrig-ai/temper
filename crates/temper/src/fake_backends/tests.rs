@@ -34,6 +34,7 @@ fn store_json(path: &Path, value: &serde_json::Value) {
 
 #[test]
 fn fake_backends_is_an_additive_box_only_switch() {
+    let environment = [(Box::<[u8]>::from(b"HOME".as_slice()), Box::<[u8]>::from(b"/fixture/home".as_slice()))];
     for (words, expected) in [
         (vec!["box", "--fake-backends"], true),
         (vec!["box", "--fake-backends", "--config", "/c", "--data", "/d", "--cache", "/k"], true),
@@ -43,11 +44,11 @@ fn fake_backends_is_an_additive_box_only_switch() {
         (vec!["init", "--fake-backends"], false),
     ] {
         let args = words.iter().map(|s| Box::<[u8]>::from(s.as_bytes())).collect::<Vec<_>>();
-        let result = crate::configure_with(&args, &[], b"/fixture");
-        assert_eq!(matches!(result, Ok(crate::Command::BoxFakeBackends { .. })), expected, "{words:?}");
+        let result = crate::configure_with(&args, &environment, b"/fixture");
+        assert_eq!(matches!(result, Ok(crate::Command::BoxFakeBackends { .. })), expected, "{words:?}: {result:?}");
     }
     let args = [Box::<[u8]>::from(b"box".as_slice())];
-    assert!(matches!(crate::configure_with(&args, &[], b"/fixture"), Ok(crate::Command::Box { .. })));
+    assert!(matches!(crate::configure_with(&args, &environment, b"/fixture"), Ok(crate::Command::Box { .. })));
 }
 
 #[test]
