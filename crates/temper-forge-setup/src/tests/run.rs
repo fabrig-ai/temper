@@ -100,3 +100,39 @@ fn the_run_names_prepare_for_a_runner_removed() {
     launch.runner = false;
     assert_eq!(run::admit_state(&launch, Some(&fixtures::prepared())), Err(Refusal::Runner { recorded: true }));
 }
+
+#[test]
+fn the_inherited_listener_must_match_owned_listen_or_be_absent() {
+    let owned = fixtures::owned();
+    assert_eq!(run::admit_listener(&owned, None), Ok(()));
+    assert_eq!(run::admit_listener(&owned, Some(owned.listen)), Ok(()));
+    for (found, words) in [
+        (
+            core::net::SocketAddr::from(([127, 0, 0, 1], 3001)),
+            b"fd 3 listens at 127.0.0.1:3001, expected owned.listen 127.0.0.1:3000".as_slice(),
+        ),
+        (
+            core::net::SocketAddr::from((core::net::Ipv6Addr::LOCALHOST, 3000)),
+            b"fd 3 listens at [0000:0000:0000:0000:0000:0000:0000:0001]:3000, expected owned.listen 127.0.0.1:3000"
+                .as_slice(),
+        ),
+    ] {
+        let problem = run::admit_listener(&owned, Some(found)).unwrap_err();
+        assert_eq!(problem, crate::problem::Problem::Listener { found, expected: owned.listen });
+        assert_eq!(problem.words().as_ref(), words);
+    }
+}
+
+#[test]
+fn only_the_exec_spec_receives_the_inherited_listener_environment() {
+    let mut launch = fixtures::launch(Which::Forgejo);
+    let previous = launch.exec.environment.clone();
+    launch.exec = crate::spec::listening(launch.exec);
+    assert_eq!(&launch.exec.environment[..previous.len()], previous.as_ref());
+    assert_eq!(launch.exec.environment.last().unwrap().as_ref(), b"LISTEN_FDS=1");
+    for spec in [&launch.version, &fixtures::launch(Which::Forgejo).exec, &fixtures::launch(Which::Runner).exec] {
+        for entry in &spec.environment {
+            assert!(!entry.starts_with(b"LISTEN_"));
+        }
+    }
+}

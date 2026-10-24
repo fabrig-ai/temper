@@ -86,7 +86,11 @@ impl Io {
             let Done::Bound(address) = bound else { unreachable!("bind answers an address") };
             // skein sets SO_REUSEADDR on bind: two merely bound sockets can
             // share a port. Listening makes this reservation exclusive.
-            self.perform(Op::Listen { fd, backlog: 1 }).map_err(io_error)?;
+            self.perform(Op::Listen {
+                fd,
+                backlog: jig_protocol_config::profile(jig_protocol_config::Profile::Small).io.backlog,
+            })
+            .map_err(io_error)?;
             Ok((fd, NonZeroU16::new(address.port()).expect("bound port")))
         })();
         if result.is_err() {
@@ -94,24 +98,20 @@ impl Io {
         }
         result
     }
-    fn ports(&mut self, preferred: [u16; 5]) -> Result<temper_init::Ports, String> {
+    fn ports(&mut self, preferred: [u16; 5]) -> Result<Vec<(Fd, NonZeroU16)>, String> {
         let mut held = Vec::with_capacity(preferred.len());
-        let result = (|| {
-            for port in preferred {
-                held.push(self.port(port)?);
+        for port in preferred {
+            match self.port(port) {
+                Ok(pair) => held.push(pair),
+                Err(why) => {
+                    for (fd, _) in held {
+                        self.close(fd);
+                    }
+                    return Err(why);
+                }
             }
-            Ok(temper_init::Ports {
-                clients: held[0].1,
-                owned: held[1].1,
-                forge: held[2].1,
-                llm: held[3].1,
-                webhooks: held[4].1,
-            })
-        })();
-        for (fd, _) in held {
-            self.close(fd);
         }
-        result
+        Ok(held)
     }
     fn close(&mut self, fd: Fd) {
         let result = self.perform(Op::Close { fd });
@@ -155,12 +155,13 @@ fn io_error(why: Error) -> String {
 #[derive(Debug)]
 pub(crate) struct Written {
     pub paths: Vec<PathBuf>,
+    pub listeners: Vec<(Fd, NonZeroU16)>,
     pub missing_git: bool,
     pub person: temper_init::Person,
     pub login: Option<Box<[u8]>>,
 }
 /// Refusals are checked before directories or files are created. The held
-/// listeners reserve all five ports until they have all been chosen, then close.
+/// listeners stay open for the caller to close or hand to the box.
 pub(crate) fn write(
     directories: &Directories,
     environment: &[EnvironmentEntry],
@@ -184,53 +185,71 @@ pub(crate) fn write(
     let git = find(environment, b"git");
     let claude = find(environment, b"claude");
     let mut io = Io::open()?;
-    let ports = io.ports(preferred)?;
-    let secret = skein_shell::crypto_seed().map_err(|errno| format!("random secret: errno {errno}"))?;
-    let demo_key = skein_shell::crypto_seed().map_err(|errno| format!("random demo key: errno {errno}"))?;
-    let login = crate::login(skein_shell::effective_user()).ok();
-    let answer = temper_init::files(
-        &temper_init::Facts {
-            binary: binary.as_os_str().as_bytes(),
-            git: git.as_ref().map(|path| path.as_os_str().as_bytes()),
-            claude: claude.as_ref().map(|path| path.as_os_str().as_bytes()),
-            ports,
-            login: login.as_deref(),
-        },
-        &temper_init::Directories { config: &directories.config, data: &directories.data },
-        secret.expose().try_into().expect("32-byte seed"),
-        demo_key.expose().try_into().expect("32-byte seed"),
-    )
-    .map_err(|why| format!("{:?}: {:?}", why.fact, why.reason))?;
-    directories.open(skein_shell::effective_user())?;
-    let data = path(&directories.data);
-    make_private(&data.join("demo"), skein_shell::effective_user())?;
-    make_private(&data.join("demo/bin"), skein_shell::effective_user())?;
-    let config = path(&directories.config);
-    if !config.exists() {
-        make_private(config, skein_shell::effective_user())?;
-    }
-    make_private(&config.join("charters"), skein_shell::effective_user())?;
-    let mut paths = Vec::with_capacity(answer.files.len());
-    for file in answer.files {
-        let root = match file.directory {
-            temper_init::Directory::Config => config,
-            temper_init::Directory::Data => path(&directories.data),
+    let listeners = io.ports(preferred)?;
+    let result = (|| {
+        let ports = temper_init::Ports {
+            clients: listeners[0].1,
+            owned: listeners[1].1,
+            forge: listeners[2].1,
+            llm: listeners[3].1,
+            webhooks: listeners[4].1,
         };
-        let destination = root.join(path(file.name));
-        let result = match file.content {
-            temper_init::Content::Bytes { bytes, private } => {
-                io.write(&destination, bytes, if private { 0o600 } else { 0o644 })
+        let secret = skein_shell::crypto_seed().map_err(|errno| format!("random secret: errno {errno}"))?;
+        let demo_key = skein_shell::crypto_seed().map_err(|errno| format!("random demo key: errno {errno}"))?;
+        let login = crate::login(skein_shell::effective_user()).ok();
+        let answer = temper_init::files(
+            &temper_init::Facts {
+                binary: binary.as_os_str().as_bytes(),
+                git: git.as_ref().map(|path| path.as_os_str().as_bytes()),
+                claude: claude.as_ref().map(|path| path.as_os_str().as_bytes()),
+                ports,
+                login: login.as_deref(),
+            },
+            &temper_init::Directories { config: &directories.config, data: &directories.data },
+            secret.expose().try_into().expect("32-byte seed"),
+            demo_key.expose().try_into().expect("32-byte seed"),
+        )
+        .map_err(|why| format!("{:?}: {:?}", why.fact, why.reason))?;
+        directories.open(skein_shell::effective_user())?;
+        let data = path(&directories.data);
+        make_private(&data.join("demo"), skein_shell::effective_user())?;
+        make_private(&data.join("demo/bin"), skein_shell::effective_user())?;
+        let config = path(&directories.config);
+        if !config.exists() {
+            make_private(config, skein_shell::effective_user())?;
+        }
+        make_private(&config.join("charters"), skein_shell::effective_user())?;
+        let mut paths = Vec::with_capacity(answer.files.len());
+        for file in answer.files {
+            let root = match file.directory {
+                temper_init::Directory::Config => config,
+                temper_init::Directory::Data => path(&directories.data),
+            };
+            let destination = root.join(path(file.name));
+            let result = match file.content {
+                temper_init::Content::Bytes { bytes, private } => {
+                    io.write(&destination, bytes, if private { 0o600 } else { 0o644 })
+                }
+                // skein-io at the pin has no symlink operation; like exact modes above,
+                // creating the link stays in this startup shell (setup.md, 8.2).
+                temper_init::Content::Link { target } => {
+                    std::os::unix::fs::symlink(path(&target), &destination).map_err(|why| why.to_string())
+                }
+            };
+            result.map_err(|why| format!("{}: {why}", destination.display()))?;
+            paths.push(destination);
+        }
+        Ok((paths, git.is_none(), answer.person, login))
+    })();
+    match result {
+        Ok((paths, missing_git, person, login)) => Ok(Written { paths, listeners, missing_git, person, login }),
+        Err(why) => {
+            for (fd, _) in listeners {
+                io.close(fd);
             }
-            // skein-io at the pin has no symlink operation; like exact modes above,
-            // creating the link stays in this startup shell (setup.md, 8.2).
-            temper_init::Content::Link { target } => {
-                std::os::unix::fs::symlink(path(&target), &destination).map_err(|why| why.to_string())
-            }
-        };
-        result.map_err(|why| format!("{}: {why}", destination.display()))?;
-        paths.push(destination);
+            Err(why)
+        }
     }
-    Ok(Written { paths, missing_git: git.is_none(), person: answer.person, login })
 }
 pub(crate) fn core(directories: &Directories) -> Result<Written, String> {
     let binary = std::env::current_exe().map_err(|why| why.to_string())?;
@@ -261,6 +280,7 @@ pub(crate) fn run(directories: &Directories) -> Result<u8, String> {
         }
     }
     eprintln!("{line}");
+    crate::close(written.listeners.into_iter().map(|(fd, _)| fd).collect());
     Ok(0)
 }
 fn person_line(person: temper_init::Person, login: Option<&[u8]>, user: u32) -> Option<String> {

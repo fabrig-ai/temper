@@ -214,23 +214,7 @@ pub fn demo_change() -> Script {
     };
     Script {
         begin: Begin::Playground,
-        steps: Box::new([
-            Step::Go { address: Address::Welcome { step: temper_client_domain::Step::Welcome } },
-            Step::See { find: Find::exactly_named(Role::Button, b"Try the playground"), within: START_WITHIN },
-            Step::Press { find: Find::exactly_named(Role::Button, b"Try the playground") },
-            Step::See { find: Find::exactly_named(Role::Status, b"Starting"), within: START_WITHIN },
-            Step::See { find: Find::exactly_named(Role::Status, b"Ready"), within: START_WITHIN },
-            Step::See { find: Find::exactly_named(Role::Paragraph, "Using Scripted model · Default".as_bytes()), within: START_WITHIN },
-            Step::See { find: Find::exactly_named(Role::Disclosure, b"Change model"), within: START_WITHIN },
-            // client/README.md, 4.8: a suggested request starts and opens its chat.
-            Step::See { find: Find::named(Role::Button, b"Add CSV export to widget"), within: START_WITHIN },
-            Step::Press { find: Find::named(Role::Button, b"Add CSV export to widget") },
-            Step::See { find: Find::exactly_named(Role::Paragraph, b"You").within(conversation()), within: START_WITHIN },
-            Step::See { find: Find::exactly_named(Role::Paragraph, b"Add CSV export to widget").within(conversation()), within: START_WITHIN },
-            Step::See {
-                find: Find::text("I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge.".as_bytes()).within(conversation()),
-                within: START_WITHIN,
-            },
+        steps: playground_opening(conversation).into_iter().chain([
             Step::See {
                 find: Find::text("CSV export is available from widget’s table. The change landed on Playground forge. This was a scripted change.".as_bytes()).within(conversation()),
                 within: DEMO_LANDS_WITHIN,
@@ -252,9 +236,53 @@ pub fn demo_change() -> Script {
             // Completed, not held: a change that fails to land is held; the clone check reads the merge.
             // client/README.md, 5.8: the header words an ended task by its owner's ending.
             Step::See { find: Find::exactly_named(Role::Status, b"Completed").within(details()), within: START_WITHIN },
+        ]).collect(),
+    }
+}
+
+fn playground_opening(conversation: impl Fn() -> Box<[Target; 1]>) -> [Step<Address>; 12] {
+    use skein_ui::Role;
+    [
+        Step::Go { address: Address::Welcome { step: temper_client_domain::Step::Welcome } },
+        Step::See { find: Find::exactly_named(Role::Button, b"Try the playground"), within: START_WITHIN },
+        Step::Press { find: Find::exactly_named(Role::Button, b"Try the playground") },
+        Step::See { find: Find::exactly_named(Role::Status, b"Starting"), within: START_WITHIN },
+        Step::See { find: Find::exactly_named(Role::Status, b"Ready"), within: START_WITHIN },
+        Step::See { find: Find::exactly_named(Role::Paragraph, "Using Scripted model · Default".as_bytes()), within: START_WITHIN },
+        Step::See { find: Find::exactly_named(Role::Disclosure, b"Change model"), within: START_WITHIN },
+        // client/README.md, 4.8: a suggested request starts and opens its chat.
+        Step::See { find: Find::named(Role::Button, b"Add CSV export to widget"), within: START_WITHIN },
+        Step::Press { find: Find::named(Role::Button, b"Add CSV export to widget") },
+        Step::See { find: Find::exactly_named(Role::Paragraph, b"You").within(conversation()), within: START_WITHIN },
+        Step::See { find: Find::exactly_named(Role::Paragraph, b"Add CSV export to widget").within(conversation()), within: START_WITHIN },
+        Step::See {
+            find: Find::text("I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge.".as_bytes()).within(conversation()),
+            within: START_WITHIN,
+        },
+    ]
+}
+/// Signs in to the first run and sees the welcome without starting the playground.
+#[must_use]
+pub fn welcome_open() -> Script {
+    Script {
+        begin: Begin::Playground,
+        steps: Box::new([
+            Step::Go { address: Address::Welcome { step: temper_client_domain::Step::Welcome } },
+            Step::See {
+                find: Find::exactly_named(skein_ui::Role::Button, b"Try the playground"),
+                within: START_WITHIN,
+            },
         ]),
     }
 }
+/// Starts the first run's playground and sees Ready and its chat's first answer.
+#[must_use]
+pub fn demo_start_answered() -> Script {
+    let conversation =
+        || Box::new([Target::Role { role: skein_ui::Role::Log, name: b"Conversation".as_slice().into() }]);
+    Script { begin: Begin::Playground, steps: Box::new(playground_opening(conversation)) }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ProjectSelection {
     Pending,

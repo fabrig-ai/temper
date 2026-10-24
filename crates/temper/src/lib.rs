@@ -465,16 +465,32 @@ pub fn prepare_in(directories: &Directories) -> Result<service::Service, String>
     }
     result.map_err(|why| prefixed("temper serve", &why))
 }
+fn listeners_refusal(why: skein_shell::ListenersRefusal) -> String {
+    use skein_shell::ListenersRefusal as Why;
+    match why {
+        Why::BadCount => "LISTEN_FDS: expected a decimal listener count".into(),
+        Why::TooMany { bound } => format!("LISTEN_FDS: listener count exceeds {bound}"),
+        Why::NotOpen { fd } => format!("LISTEN_FDS: fd {} is not open", fd.raw()),
+        Why::NotSocket { fd, .. } => format!("LISTEN_FDS: fd {} is not a socket", fd.raw()),
+        Why::NotStream { fd, .. } => format!("LISTEN_FDS: fd {} is not a stream socket", fd.raw()),
+        Why::NotListening { fd } => format!("LISTEN_FDS: fd {} is not listening", fd.raw()),
+        Why::NotIp { fd } => format!("LISTEN_FDS: fd {} is not an IP listener", fd.raw()),
+        Why::Kernel { fd, errno } => format!("LISTEN_FDS: fd {}: errno {errno}", fd.raw()),
+    }
+}
 fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
+    let listeners = skein_shell::inherited_listeners().map_err(listeners_refusal)?;
+    let requests = 3 + i32::try_from(listeners.len()).expect("bounded inherited listeners");
+    let answers = requests + 1;
     if boxed {
-        for fd in [3, 4] {
+        for fd in [requests, answers] {
             if !std::fs::metadata(format!("/proc/self/fd/{fd}")).is_ok_and(|m| m.file_type().is_fifo()) {
                 return Err(format!("--box: fd {fd} is not an open pipe"));
             }
         }
     }
     let bytes = directories.read()?;
-    let mut owned = Vec::new();
+    let mut owned = listeners.iter().map(|(fd, _)| *fd).collect::<Vec<_>>();
     let prepared = prepare_with_limits(directories, &bytes, &mut owned, boxed);
     let (mut service, store, line_bytes) = match prepared {
         Ok(prepared) => prepared,
@@ -483,9 +499,15 @@ fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
             return Err(why);
         }
     };
+    for (fd, addr) in listeners {
+        if let Err(fd) = service.adopt_listener(fd, addr) {
+            close(owned);
+            return Err(format!("listener: fd {} at {addr} refused", fd.raw()));
+        }
+    }
     if boxed {
-        owned.extend([Fd::new(3), Fd::new(4)]);
-        if let Err(fd) = service.adopt_box(Fd::new(3), Fd::new(4), line_bytes) {
+        owned.extend([Fd::new(requests), Fd::new(answers)]);
+        if let Err(fd) = service.adopt_box(Fd::new(requests), Fd::new(answers), line_bytes) {
             close(owned);
             return Err(format!("--box: fd {} refused", fd.raw()));
         }

@@ -98,7 +98,7 @@ fn managed_string_accepts_tls() {
 #[test]
 fn managed_string_starts_serve_without_legacy_reconcile() {
     let checked = checked(SETUP, &members()).unwrap();
-    let steps = crate::step::steps(&checked.setup, &[]);
+    let steps = crate::step::steps(&checked.setup, &[], Box::new([]));
     assert_eq!(steps.always.len(), 1);
     assert_eq!(steps.always[0].arguments()[0].as_ref(), b"serve");
 }

@@ -339,8 +339,9 @@ fn llm_configuration(source: &Source, seed: u64, created: &mut Created) -> Resul
 }
 
 fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_shell::Kernel), String> {
+    let listeners = skein_shell::inherited_listeners().map_err(super::listeners_refusal)?;
     let mut control_address = None;
-    let (peer, shared, observations, writer, buffer) = match arguments.kind {
+    let (mut peer, shared, observations, writer, buffer) = match arguments.kind {
         Kind::Llm => {
             let configuration = llm_configuration(&arguments.source, arguments.seed, created)?;
             control_address = configuration.control;
@@ -378,6 +379,13 @@ fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_sh
             (Peer::Forge(peer), Some(shared), observations, writer, buffer)
         }
     };
+    for (fd, addr) in listeners {
+        let adopted = match &mut peer {
+            Peer::Llm(peer) => peer.adopt_listener(fd, addr),
+            Peer::Forge(peer) => peer.adopt_listener(fd, addr),
+        };
+        adopted.map_err(|fd| format!("listener: fd {} at {addr} refused", fd.raw()))?;
+    }
     let signals = skein_shell::open_termination_signals().map_err(|why| format!("signals: errno {why}"))?;
     let control = control_address.map(control::Control::new);
     let operations = host_operations(&peer, control.as_ref());
