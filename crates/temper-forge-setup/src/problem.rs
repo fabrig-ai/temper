@@ -58,6 +58,11 @@ impl Problems {
                 | config::What::Message
                 | config::What::Silence
                 | config::What::StopBound
+                | config::What::PolicyEnvelope { .. }
+                | config::What::AmendmentEnvelope { .. }
+                | config::What::CodecCeiling { .. }
+                | config::What::CodecArithmetic
+                | config::What::StoreCodec
                 | config::What::Memory { .. }
                 | config::What::Override
                 | config::What::Confidential
