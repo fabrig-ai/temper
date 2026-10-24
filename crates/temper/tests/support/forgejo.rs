@@ -313,3 +313,105 @@ jobs:
           git -c "http.extraHeader=Authorization: basic $auth" clone "${{ github.server_url }}/${{ github.repository }}.git" .
           git checkout "${{ github.sha }}" && sh check.sh
 "#;
+
+// E4 observes a distinct managed deployment beside this owned fixture.
+impl Throwaway {
+    /// Mint a disposable admin paste, keeping its bytes out of argv and the environment.
+    pub fn admin_token(&self, path: &Path) {
+        let output = std::process::Command::new(&self.forgejo)
+            .args([
+                "--work-path",
+                self.directory.join("forge-1/forgejo").to_str().expect("work path"),
+                "--config",
+                self.directory.join("forge-1/forgejo/app.ini").to_str().expect("config path"),
+                "admin",
+                "user",
+                "generate-access-token",
+                "--username",
+                "temper-admin",
+                "--token-name",
+                "elsewhere-disposable",
+                "--raw",
+                "--scopes",
+                "write:admin,read:user,write:organization,write:repository",
+            ])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("TZ", "UTC")
+            .env("HOME", self.directory.join("forge-1/home"))
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", self.directory.join("forge-1/home/gitconfig"))
+            .current_dir(self.directory.join("forge-1/forgejo"))
+            .output()
+            .expect("mint disposable admin token");
+        assert!(output.status.success(), "disposable token command failed (output redacted)");
+        let token = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+        assert!(!token.is_empty(), "nonempty disposable token");
+        assert!(!output.stderr.windows(token.len()).any(|part| part == token), "token in CLI stderr (redacted)");
+        write_private(path, token);
+    }
+
+    /// The fixture's original admin credential survives Reconcile, never `TakeOver`.
+    pub fn witness_authenticates(&self) {
+        let response = self
+            .instance
+            .exchange(&Outgoing::get("/api/v1/user", Some(&self.instance.admin().token)))
+            .expect("witness API answer");
+        assert_eq!(response.status, 200, "original admin still authenticates");
+    }
+
+    #[must_use]
+    pub fn repository_observation(&self, org: &str, name: &str, suffix: &str) -> Value {
+        let response = self
+            .instance
+            .exchange(&Outgoing::get(
+                &format!("/api/v1/repos/{org}/{name}/{suffix}"),
+                Some(&self.instance.admin().token),
+            ))
+            .expect("elsewhere repository answer");
+        assert_eq!(response.status, 200, "elsewhere observation");
+        serde_json::from_slice(&response.body).expect("elsewhere JSON")
+    }
+
+    #[must_use]
+    pub fn merged_pull_in(&self, org: &str, name: &str) -> Option<u64> {
+        self.repository_observation(org, name, "pulls?state=closed&limit=50")
+            .as_array()
+            .expect("pull list")
+            .iter()
+            .find_map(|pull| (pull["merged"] == true).then(|| pull["number"].as_u64().expect("merged pull number")))
+    }
+
+    #[must_use]
+    pub fn job_state_in(&self, org: &str, name: &str, pull: u64) -> String {
+        let pull = self.repository_observation(org, name, &format!("pulls/{pull}"));
+        let head = pull["head"]["sha"].as_str().expect("pull head");
+        self.repository_observation(org, name, &format!("commits/{head}/status"))["state"]
+            .as_str()
+            .expect("job state")
+            .into()
+    }
+
+    #[must_use]
+    pub fn main_readme_in(&self, org: &str, name: &str) -> Vec<u8> {
+        let response = self
+            .instance
+            .exchange(&Outgoing::get(
+                &format!("/api/v1/repos/{org}/{name}/raw/README.md?ref=main"),
+                Some(&self.instance.admin().token),
+            ))
+            .expect("elsewhere README answer");
+        assert_eq!(response.status, 200, "elsewhere main README");
+        response.body
+    }
+
+    #[must_use]
+    pub fn repositories_in(&self, org: &str) -> Value {
+        let response = self
+            .instance
+            .exchange(&Outgoing::get(&format!("/api/v1/orgs/{org}/repos?limit=50"), Some(&self.instance.admin().token)))
+            .expect("elsewhere repositories answer");
+        assert_eq!(response.status, 200, "elsewhere repository list");
+        serde_json::from_slice(&response.body).expect("repositories JSON")
+    }
+}

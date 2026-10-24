@@ -1354,7 +1354,7 @@ for its kind, its user's login and its installations. Its nodes:
 - **The deployment's forges, the subject `forges`** (`forge.md`, 5.4
   and section 9): of the deployment's scope, with no fields, its window
   unused; on the wire `Watching`'s `forges`. Its document, `Forges`, a
-  row for each configured forge, at most `FORGES` (16), in number
+  `ForgeRow` for each configured forge, at most `FORGES` (16), in number
   order: its number (u16); its kind (Forgejo or GitHub); its mode
   (connected, managed, owned or fake); and its connection: not
   connected; not set up; setting up, with its step when the box has
@@ -3385,8 +3385,7 @@ does for the client:
   |---|---|---|---|
   | `Connect { forge, how: GitHubManifest { back? } }` | none | the setup's host's `Manifest` run, for the person's own account, always (`forge.md`, 9.1), ending `Done(Manifest { state, target, manifest })`, from which temper renders the manifest's page (`forge.md`, 9.1); the page and `back` held with the state | a link, the manifest's page on the clients' listener for a fresh state (the routes, above) |
   | `Connect { forge, how: GitHubApp { id, key } }` | `key`, the App's private key, PEM as GitHub gives it; `id` rides in the request | `Paste`: the key decoded and matched to the App `id` names, the App's user found, its hook pointed at `https://SLUG.invalid/` (no webhook secret on GitHub: changes are heard from the App's delivery log), its permissions and events checked | connecting |
-  | `Connect { forge, how: ForgejoTokens { api, git, webhook_secret? } }` | one bundle: the API token, the git token and, where the person made hooks to temper's listener, their secret | `Check`: both tokens answer as one user | connecting |
-  | `Connect { forge, how: ForgejoAdmin { first? } }` | the site admin's token, item 1 of the carried bundle (at most 4 KiB including its six-byte header) | `Reconcile`, then `Create` of `first` when given; the configured string-managed form (`ForgeRow.admin`) offers the client's admin Details, with `first`'s org, repository, new project and runner label | connecting; then the watched row, its typed `ended_stop` on a stop, or `first` made and its adoption on Ready |
+  | `Connect { forge, how: ForgejoAdmin { first? } }` | the site admin's token, item 1 of the carried bundle (at most 4 KiB including its six-byte header) | `Reconcile` with the paste, its `AdminOrigin` write kept, then `Create` of `first` when given; only after Done is `AdminToken` kept, then the forge connects; every end erases the carried value; never `TakeOver` (`../protocol/setup.md`, 5.5); the configured string-managed form (`ForgeRow.admin`) offers the client's admin Details, with `first`'s org, repository, new project and runner label | connecting; then the watched row, its typed `ended_stop` on a stop, or `first` made and its adoption on Ready |
   | `Install { forge, back? }` | none | `Install`, GitHub alone; `back` held with the state | a link, the install page for a fresh state |
   | `Replace { forge, value }` | a new App key, or a new API token, git token or both | `Paste` with the kept App id, or `Check` against the kept user: it must answer as the forge's user; the old is erased once the new is kept | connecting |
   | `Forget { forge }` | none | the admin's token erased; a managed forge becomes connected (`../protocol/credentials.md`) | forgotten |
@@ -3396,8 +3395,8 @@ does for the client:
 
   `first` is a `FirstAsk { org, repository, project, label }`: the
   first repository's fields, as `SetUp`'s, and `label`, the runner label
-  its starter workflow runs on (1 to 64 of letters, digits, `.`, `_` and
-  `-`).
+  its starter workflow runs on (default `docker` in the client and ctl;
+  1 to 64 of letters, digits, `.`, `_` and `-`).
 
   Names in a carried value's braces are its bundle's items
   (`../protocol/credentials.md`, pasted values), never fields of the

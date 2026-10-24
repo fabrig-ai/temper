@@ -436,23 +436,25 @@ otherwise nothing but the setup host runs it or writes what it makes.
 ### 5.5 Connecting as its admin, and forgetting
 
 - **"Connect as its admin"** (`Connect` with `ForgejoAdmin`;
-  `../client/forge.md`, the deployment's page), on a Forgejo not owned
-  and not connecting, whose `setup` entry is the string `"managed"`
+  `../client/forge.md`, the deployment's page), on a Forgejo neither owned,
+  connected nor connecting, whose `setup` entry is the string `"managed"`
   (section 8): the site admin's token, with the preparation's scopes
   (6.3), pasted, kept by jig until its run ends. One run holds the paste:
   `Reconcile` reads it, never an older `AdminToken` record; its writes
-  are kept, then the forge's `Origin`. With `first`, `Create` (6.7) runs
-  with the same paste. Only after both plans are Done is the token kept
-  as the forge's `AdminToken` record, and the forge connects, managed.
-  Without `first`, Create is skipped. Every end erases the carried value
-  and drops the held token; a stop keeps no admin token. Each later start
+  are kept, then the forge's `Origin` under `AdminOrigin`. With `first`,
+  `Create` (6.7) runs with the same paste. Only after both plans are Done
+  is the token kept as the forge's `AdminToken` record, and the forge
+  connects, managed.
+  Without `first`, Create is skipped. This connect never runs `TakeOver`.
+  Every end erases the carried value and drops the held token; a stop
+  keeps no admin token. Each later start
   reconciles from that record and connects, with no Create or `TakeOver`;
   without the record it offers Connect, not connected. This form serves
   no organizations or organization owner and no listener: it polls.
 - **Its bot:** on a forge with no records, the setup's `bot.login`, made
-  when missing; on a forge connected before, the connected user's login,
-  taken over when its full name carries `temper:bot`, or the run stops
-  `Unmarked`, named, and the forge stays connected.
+  when missing; on a forge with records, the recorded user's login.
+  Reconcile uses it only when its full name carries `temper:bot`, or stops `Unmarked`,
+  named, and restores the connection's previous state.
 - **A Forgejo with no `setup` entry** refuses it, naming
   `application.setup` (section 16).
 - **"Forget the admin's token"** (`Forget`): the `AdminToken` record is
@@ -820,11 +822,18 @@ its own for any other host.
   alone, replaced by the next `SetUp` it admits, and kept until the
   repository is made or the set up has failed.
 - **Asked at a managed connect.** `ForgejoAdmin.first` carries the same
-  organization, repository and project, and the person's runner label.
-  After Reconcile and its Origin are kept, Create makes the repository
+  organization, repository and project, and the person's runner label
+  (default `docker` in the client and ctl). After Reconcile and its
+  `AdminOrigin` write are kept, Create makes the repository
   before the admin token is kept and the forge connects (5.5). A missing
   organization is owned by the admin Create has verified. No listener is
   supplied, so Create adds no hook.
+  The forge's row carries `admin`, the string form's admin-connect offer;
+  `first.label`, the runner label; and `ended_stop`, an optional
+  `AdminStop`: `NotAdmin`, `Refused { status, stage: SetupStage }`,
+  `Unmarked` or `Other`. `SetupStage` names admin, bot, token, org,
+  repository, file, app, installation or state. `ended` is the separate
+  diagnostic; the client chooses its stop's words from `ended_stop`.
 - **Made after reconcile.** At the box's `started FORGE`, once
   `TakeOver` and `Reconcile` are done (6.5), the setup host runs
   `Create { forge, org, repository, files }` (skein's `forge-setup.md`,
@@ -1277,8 +1286,9 @@ running its commands, and the client names them (6.5).
 
   `"mode": "managed"` takes no `directory`, `start` or `orgs`, and its
   forge in `forges[]` names no token files: its records are made when the
-  person connects as its admin (5.5). The object form `{"managed": {"admin_token": PATH}}`
-  stays until `temper forge reconcile` goes (`../draft/github.md`, 16.6).
+  person connects as its admin (5.5). Its admin token name is `admin`,
+  not the owned forge's `temper-admin`. The object form
+  `{"managed": {"admin_token": PATH}}` stays until `temper forge reconcile` goes (`../draft/github.md`, 16.6).
 
   An owned entry names no org: its org is its first repository's,
   made by `Create` (6.7). An owned entry that still gives
@@ -1293,7 +1303,7 @@ running its commands, and the client names them (6.5).
   (`../domain/forge.md`, 4.1), including "Connect as its admin": a
   Forgejo elsewhere needs a managed setup entry with its forge number
   and bot, as above, for that action (5.5). An address alone offers
-  connected's token paste. The client cannot infer these offers from the
+  no admin connect. The client cannot infer these offers from the
   configuration.
 - **The owned card's configuration** gives its data directory, Forgejo's
   and its runner's versions and the person CI jobs run as; the card says
@@ -2929,9 +2939,12 @@ Each is intended; what it needs is named with it.
   moves once skein's shell offers an exec and a lock held across it,
   which skein's `Lock` is not (skein's `io.md`, section 5). A second
   service that execs is what would ask skein for them.
-- **Reconcile over TLS,** managed mode against a forge on another host,
-  for a deployment whose managed forge is not on loopback (skein's
-  `forge-setup.md`, section 9).
+- **A story of Reconcile over TLS.** The managed string form takes a
+  forge on another host over TLS and the service hands that transport to
+  skein (5.6), but every test of the admin connect, the process story
+  among them, reaches its Forgejo over loopback plaintext: a TLS story
+  waits for a fake forge that serves TLS (skein's `forge-setup.md`,
+  section 9).
 - **Webhooks from another host,** over TLS (skein's
   `forge-connection.md`, section 6), once skein has TLS's server side.
 - **CI's isolation.** An owned runner's jobs in host mode run as the
@@ -3011,7 +3024,9 @@ Each is intended; what it needs is named with it.
 
 ## 17. Connecting GitHub
 
-GitHub is managed or connected, never owned. Both modes end in the same
+GitHub is managed or connected, never owned. Its managed mode means an App
+made through the manifest, not Forgejo's string-managed admin connect (5.5).
+Both GitHub modes end in the same
 records (section 3), and the engine runs both alike after; they differ
 in who made the App. The plans are skein's (`forge-setup.md`, section
 5), run by the setup host (5.1); the browser's routes are the clients'

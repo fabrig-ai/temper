@@ -607,7 +607,8 @@ and `connect-forge.html`.
 - **Connecting, as a Forgejo's admin,** says "Connecting forge F as its
   admin." and "Making its bot, then ORG/NAME." The welcome keeps Forge
   highlighted. A stop returns to Details with its token empty and the
-  other fields kept. `ended_stop` selects the words; `ended` is a
+  other fields kept. `ended_stop`, the row's optional `AdminStop`, selects
+  the words; a refused stop carries its status and `SetupStage`. `ended` is a
   diagnostic, never parsed to decide the stop:
   - `NotAdmin`: "The token you gave is not a site admin’s. Paste one a
     site admin made.";
@@ -834,13 +835,13 @@ Its actions, each a request of the forge's family (`README.md`, section
 every offer; the client reads it (`../domain/forge.md`, 4.1). "A Forgejo
 elsewhere" names the managed setup entry needed for "Connect as its
 admin", with its forge number and bot (`../protocol/setup.md`, section
-8); an address alone offers connected's token paste:
+8). The bot-token paste is not offered by the current client:
 
 | Action | Offered | What it does |
 |---|---|---|
 | Connect | GitHub, not connected or stopped | "Connect GitHub", with `back`, the page's address to come back to: the answer is a link to the manifest's page on the clients' listener (9.1), and the browser goes to it in its own tab; the page posts temper's manifest to GitHub, the person creates the App under their own account and installs it on an account GitHub offers, and the setup route sends the tab back to `back`. Or "Connect an App of your own": its id, and its private key pasted as GitHub gives it; no webhook secret is asked, since temper points the App's hook at `https://SLUG.invalid/` and hears changes from its delivery log |
-| Connect | Forgejo not owned, not connected; a Forgejo of the connected mode, stopped | its bot's API token, its git token and, where the person made hooks to temper's listener, their secret, pasted together; both tokens must answer as one user |
-| Connect | Forgejo not owned, not connecting, with a managed setup entry | "Connect as its admin": a site admin's token pasted; temper makes its bot (or takes over the connected one, 5.5) and the forge becomes managed |
+| Connect (not offered) | Forgejo through its bot's tokens | its bot's API token, its git token and, where the person made hooks to temper's listener, their secret, pasted together; both tokens must answer as one user |
+| Connect | Forgejo with `admin` true, not connected or connecting | "Connect as its admin": a site admin's token pasted, with the first repository, project and runner label (default `docker`); Reconcile makes or finds the marked bot, then Create makes the repository; only after Done is the admin token kept and the forge connected; never `TakeOver` (`../protocol/setup.md`, 5.5) |
 | Replace | GitHub, connected or stopped; a Forgejo of the connected mode, connected or stopped | a new App key, or a new API token, git token or both, pasted, which must answer as the forge's user (on GitHub, the same App); the old is erased once the new is kept |
 | Install the App; Install on another account | GitHub, connected: "Install on GitHub" before any accepted installation (Connecting), "Install on another account" after one, and Ready's "Choose its repositories on GitHub" | a fresh link to temper's App's install page, with `back`, where the browser goes in its own tab; the person picks the account and its repositories on GitHub, keeping GitHub's default, all of them, or choosing some, and the setup route sends the tab back to `back` |
 | New repository | Forgejo owned or managed, connected | the set up's same fields: organization (default `work`), repository (default `hello`) and a project, one of the person's or a new one; the general form of the first repository (`../protocol/setup.md`, section 15) |
