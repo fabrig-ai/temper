@@ -106,6 +106,11 @@ fn words(what: What) -> &'static [u8] {
         What::Handover => b"admin_token must be exactly 40 lowercase hexadecimal digits",
         What::Provider => b"the deployment's provider must not be 0, the forge's sign-in provider",
         What::Jig(what) => match what {
+            config::What::PolicyEnvelope { .. } => b"",
+            config::What::AmendmentEnvelope { .. } => b"",
+            config::What::CodecCeiling { .. } => b"",
+            config::What::CodecArithmetic => b"",
+            config::What::StoreCodec => b"",
             config::What::Json => b"invalid JSON",
             config::What::Unknown => b"unknown member",
             config::What::Missing => b"missing",
@@ -114,11 +119,7 @@ fn words(what: What) -> &'static [u8] {
             config::What::Bound => b"past its bound",
             config::What::Form
             | config::What::ProviderKey { .. }
-            | config::What::PolicyEnvelope { .. }
-            | config::What::AmendmentEnvelope { .. }
-            | config::What::CodecCeiling { .. }
-            | config::What::CodecArithmetic
-            | config::What::StoreCodec => b"invalid form",
+            => b"invalid form",
             config::What::Unique => b"must be unique",
             config::What::Refers => b"unknown reference",
             config::What::Plaintext => b"plaintext requires loopback or in-process",
@@ -225,6 +226,12 @@ fn render_path(path: &config::Path, writer: &mut Writer, length: &mut usize, mea
         }
     }
 }
+fn codec_words(what: config::What, writer: &mut Writer, length: &mut usize, measuring: bool) {
+    let problem = config::Problem { path: config::Path::root(), what };
+    let line = problem.codec_message().expect("codec-envelope diagnostic variant");
+    let words = line.strip_prefix(b": ").expect("root codec diagnostic prefix");
+    put(writer, length, measuring, words);
+}
 #[expect(clippy::too_many_lines, reason = "one exhaustive diagnostic vocabulary shared by both rendering passes")]
 fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
     let mut length = 0_usize;
@@ -237,6 +244,13 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
         }
         put(writer, &mut length, measuring, words(problem.what));
         match problem.what {
+            What::Jig(what @ config::What::PolicyEnvelope { .. }) => codec_words(what, writer, &mut length, measuring),
+            What::Jig(what @ config::What::AmendmentEnvelope { .. }) => {
+                codec_words(what, writer, &mut length, measuring)
+            }
+            What::Jig(what @ config::What::CodecCeiling { .. }) => codec_words(what, writer, &mut length, measuring),
+            What::Jig(what @ config::What::CodecArithmetic) => codec_words(what, writer, &mut length, measuring),
+            What::Jig(what @ config::What::StoreCodec) => codec_words(what, writer, &mut length, measuring),
             What::Admission { why, offered, required } => {
                 admission(why, offered, required, writer, &mut length, measuring);
             }
@@ -288,11 +302,6 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
                 | config::What::Kind
                 | config::What::Bound
                 | config::What::Form
-                | config::What::PolicyEnvelope { .. }
-                | config::What::AmendmentEnvelope { .. }
-                | config::What::CodecCeiling { .. }
-                | config::What::CodecArithmetic
-                | config::What::StoreCodec
                 | config::What::Unique
                 | config::What::Refers
                 | config::What::Plaintext
