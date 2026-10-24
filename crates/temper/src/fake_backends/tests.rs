@@ -221,7 +221,7 @@ fn package_paths_and_file_types_refuse_before_sandbox_mutation() {
     for files in [
         vec![("index.html", PAGE), ("/escape/main.js", b"script".as_slice())],
         vec![("index.html", PAGE), ("0000000000000001/../escape.js", b"script".as_slice())],
-        vec![("index.html", PAGE), ("0000000000000001/secret.txt", b"not a bundle type".as_slice())],
+        vec![("index.html", PAGE), ("0000000000000001/unsupported.exe", b"not a bundle type".as_slice())],
         vec![("index.html", PAGE), ("index.html", PAGE), ("0000000000000001/main.js", b"script".as_slice())],
     ] {
         let error = prepare(&source, &files).err().expect("bad package refused");
