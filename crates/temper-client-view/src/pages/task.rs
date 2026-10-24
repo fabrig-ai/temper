@@ -38,6 +38,7 @@ pub(crate) fn main(
 ) {
     if let Some(page) = root.pages().task()
         && page.shape == Shape::Agent
+        && page.document(root.client()).is_some()
     {
         super::agent::main(b, root, words, bindings, rows, times);
         return;
@@ -45,6 +46,11 @@ pub(crate) fn main(
     b.open(Role::Main);
     b.style(look::MAIN);
     b.style(look::PAGE);
+    if let Some(page) = root.pages().task()
+        && page.document(root.client()).is_none()
+    {
+        reading(b, page, words);
+    }
     if let Some(page) = root.pages().task()
         && let Some(task) = page.document(root.client())
     {
@@ -114,6 +120,25 @@ pub(crate) fn main(
     }
     crate::confirm::main(b, root, words, bindings, rows);
     b.close();
+}
+pub(crate) fn reading(b: &mut Builder, page: &task::Task, words: &Words) {
+    use task::{DocumentRead, ReadEnd};
+    let word = match page.document_read {
+        DocumentRead::Ended { why: ReadEnd::Unknown, .. } => Word::TaskUnknown,
+        DocumentRead::Ended { why: ReadEnd::NotAllowed, .. } => Word::TaskNotAllowed,
+        DocumentRead::Ended { why: ReadEnd::SignedOut, .. } => Word::TaskSignedOut,
+        DocumentRead::Ended { why: ReadEnd::NotServed, .. } => Word::TaskNotServed,
+        DocumentRead::Ended { why: ReadEnd::Gone, .. } => Word::TaskGone,
+        DocumentRead::Ended { why: ReadEnd::TooLarge, .. } => Word::TaskTooLarge,
+        DocumentRead::Ended { why: ReadEnd::Malformed, .. } => Word::TaskMalformed,
+        DocumentRead::Reading
+        | DocumentRead::Ready
+        | DocumentRead::Ended {
+            why: ReadEnd::Busy | ReadEnd::Unreachable | ReadEnd::Limit | ReadEnd::SignIn, ..
+        } => Word::ReadingTask,
+    };
+    let holes = if word == Word::ReadingTask { &[Hole::Number(page.number)][..] } else { &[] };
+    text(b, Role::Status, &words.say(word, holes));
 }
 /// An offered act by its admission (client/README.md, 5.11).
 pub(crate) fn act(

@@ -590,6 +590,15 @@ pub enum Word {
     LivePlan,
     PlanCounts,
     PlanMoreCounts,
+    ReadingTask,
+    TaskUnknown,
+    TaskNotAllowed,
+    TaskSignedOut,
+    TaskNotServed,
+    TaskGone,
+    TaskTooLarge,
+    TaskMalformed,
+
     MessageOnceRuns,
 }
 // Room for temper, jig, account, card and forge phrases.
@@ -624,9 +633,10 @@ pub enum Word {
 // The owned row's Runs and first-password lines add two words and three phrases.
 // A failed setup's step adds five phrases.
 // Ready's refused read and exhausted busy rereads add three phrases.
-const PHRASES: u32 = 1118;
-const SEGMENTS: u32 = 1967;
-const ALL: [Word; 565] = [
+// A task document's reading line and seven lasting read ends (client/README.md, 3.5).
+const PHRASES: u32 = 1126;
+const SEGMENTS: u32 = 1977;
+const ALL: [Word; 573] = [
     Word::NoProjectYet,
     Word::AdminTitle,
     Word::AdminDescription,
@@ -1191,6 +1201,14 @@ const ALL: [Word; 565] = [
     Word::LivePlan,
     Word::PlanCounts,
     Word::PlanMoreCounts,
+    Word::ReadingTask,
+    Word::TaskUnknown,
+    Word::TaskNotAllowed,
+    Word::TaskSignedOut,
+    Word::TaskNotServed,
+    Word::TaskGone,
+    Word::TaskTooLarge,
+    Word::TaskMalformed,
     Word::MessageOnceRuns,
 ];
 impl Word {
@@ -1774,6 +1792,14 @@ impl Word {
             Self::LivePlan => 1255,
             Self::PlanCounts => 1256,
             Self::PlanMoreCounts => 1257,
+            Self::ReadingTask => 2012,
+            Self::TaskUnknown => 2013,
+            Self::TaskNotAllowed => 2014,
+            Self::TaskSignedOut => 2015,
+            Self::TaskNotServed => 2016,
+            Self::TaskGone => 2017,
+            Self::TaskTooLarge => 2018,
+            Self::TaskMalformed => 2019,
         };
         let owner =
             if number >= 100 { crate::frame::owner() } else { temper_client_domain::forge::words::owner(connector) };
@@ -2506,6 +2532,15 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::Held => (&[b"Held"], &[]),
         Word::PersonTask => (&[b"Person task"], &[]),
         Word::Task => (&[b"Task ", b""], &[Number]),
+        Word::ReadingTask => (&[b"Reading task ", b"\xe2\x80\xa6"], &[Number]),
+        Word::TaskUnknown => (&[b"This task could not be found."], &[]),
+        Word::TaskNotAllowed => (&[b"You are not allowed to read this task."], &[]),
+        Word::TaskSignedOut => (&[b"Sign in to read this task."], &[]),
+        Word::TaskNotServed => (&[b"This version of temper cannot read this task."], &[]),
+        Word::TaskGone => (&[b"This task is no longer available."], &[]),
+        Word::TaskTooLarge => (&[b"This task is too large to read."], &[]),
+        Word::TaskMalformed => (&[b"This task could not be read."], &[]),
+
         Word::Project => (&[b"Project ", b""], &[Number]),
         Word::Reply => (&[b"Reply"], &[]),
 

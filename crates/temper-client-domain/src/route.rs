@@ -78,13 +78,7 @@ pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::E
         | crate::pages::Event::Link { .. } => false,
     };
     crate::pages::step(&mut root.pages, env, &root.client, event, &mut child);
-    for _ in 0..child.len() {
-        match child.pop().expect("counted pages output") {
-            crate::pages::Request::Client(event) => client(root, env, event, out),
-            crate::pages::Request::Replace { address } => out.push(Request::Show { address, replace: true }),
-            crate::pages::Request::Show { address } => out.push(Request::Show { address, replace: false }),
-        }
-    }
+    route_pages(root, env, &mut child, out);
     let subject = match root.pages.task() {
         Some(task) => task.panel(&root.client, root.forge_number()),
         None => None,
@@ -96,14 +90,56 @@ pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::E
     };
     if watched != subject {
         forge(root, env, forge::Event::Panel { subject }, out);
-    } else if task_document
-        && let Some(subject) = subject
-        && let Some(page) = root.pages.task()
+    } else if task_document && let Some(subject) = subject {
+        refresh_panel(root, env, subject, false, out);
+    }
+}
+
+fn refresh_panel(
+    root: &mut Domain,
+    env: &Env<Limits>,
+    subject: forge::panel::Subject,
+    from_ending: bool,
+    out: &mut Queue<Request>,
+) {
+    let forge_number = root.forge_number();
+    if let Some(page) = root.pages.task_mut()
+        && page.panel(&root.client, forge_number) == Some(subject)
         && let Some(task) = page.document(&root.client)
         && task.chip.task == page.number
-        && forge::panel::refreshable(task, root.forge_number())
+        && forge::panel::refreshable(task, forge_number)
+        && page.panel_reopened_at != Some(task.activity)
     {
+        if from_ending {
+            // Only a finished Change can recover without a later document; bound
+            // missing-record replies to one immediate reopen per document.
+            if task.chip.phase != jig_client::contract::Phase::Ended {
+                return;
+            }
+            page.panel_reopened_at = Some(task.activity);
+        }
         forge(root, env, forge::Event::RefreshPanel { subject }, out);
+    }
+}
+
+pub(crate) fn fire_pages(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    let mut child = Queue::with_capacity(crate::pages::max_out(&env.limits));
+    crate::pages::fire(&mut root.pages, env, &root.client, &mut child);
+    route_pages(root, env, &mut child, out);
+}
+
+fn route_pages(
+    root: &mut Domain,
+    env: &Env<Limits>,
+    child: &mut Queue<crate::pages::Request>,
+    out: &mut Queue<Request>,
+) {
+    for _ in 0..child.len() {
+        match child.pop().expect("counted pages output") {
+            crate::pages::Request::Client(event) => client(root, env, event, out),
+            crate::pages::Request::Replace { address } => out.push(Request::Show { address, replace: true }),
+            crate::pages::Request::Show { address } => out.push(Request::Show { address, replace: false }),
+        }
     }
 }
 
@@ -115,6 +151,7 @@ pub(crate) fn route_forge(
 ) {
     for _ in 0..child.len() {
         match child.pop().expect("counted forge output") {
+            forge::Request::PanelEnded { subject } => refresh_panel(root, env, subject, true, out),
             forge::Request::Client { asked } => client(root, env, asked, out),
             forge::Request::Leave { to } => out.push(Request::Leave { to, replace: false }),
             forge::Request::Show { address } => {

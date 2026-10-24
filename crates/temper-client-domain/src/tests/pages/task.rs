@@ -4,7 +4,7 @@ use crate::pages::{
     task::{Shape, Task},
 };
 use jig_client::{Event, Readable, Told, Watchable, contract as c};
-use skein_lib::Queue;
+use skein_lib::{Queue, Time};
 const OUTPUTS: u32 = 16;
 const WINDOW: u32 = 2;
 const EMPTY_OFFSET: u32 = 0;
@@ -14,7 +14,7 @@ fn opened() -> (Task, f::Fixture) {
     let mut fixture = f::opened();
     let mut page = Task::new(f::TASK, FIRST, &fixtures::limits(), &mut Queue::with_capacity(OUTPUTS));
     while fixture.out.pop().is_some() {}
-    page.told(&fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
+    page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
     (page, fixture)
 }
 #[test]
@@ -63,7 +63,7 @@ fn a_tasks_live_run_is_unwatched_when_it_ends() {
     let mut task = f::task();
     f::phase(&mut task, c::OwnerChipPhase::Active(c::RunStage::Idle));
     f::deliver(&mut f.client, f.watch, task);
-    page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+    page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
     assert_eq!(page.run, None);
     assert_eq!(f::handles(&mut f.out).as_ref(), [run]);
 }
@@ -94,7 +94,7 @@ fn an_agents_task_without_a_priority_has_the_agent_shape() {
         task.priority = *priority;
         task.chip.executor = *executor;
         f::deliver(&mut f.client, f.watch, task);
-        page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+        page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
         assert_eq!(page.shape, *expected, "{priority:?}, {executor:?}");
     }
 }
@@ -416,16 +416,22 @@ fn an_agents_task_reads_its_thread_as_a_chat() {
         while f.out.pop().is_some() {}
         if first_page_before_document {
             assert!(page.told(
+                Time::ZERO,
                 &f.client,
                 Told::Page { handle: page.activity, page: activity_page(f::POSITION) },
                 &mut f.out,
             ));
             assert!(page.latest.is_some());
         }
-        page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+        page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
         while f.out.pop().is_some() {}
         if !first_page_before_document {
-            page.told(&f.client, Told::Page { handle: page.activity, page: activity_page(f::POSITION) }, &mut f.out);
+            page.told(
+                Time::ZERO,
+                &f.client,
+                Told::Page { handle: page.activity, page: activity_page(f::POSITION) },
+                &mut f.out,
+            );
         }
         assert!(page.latest.is_none());
         assert_eq!(page.thread.loaded, f::POSITION);
@@ -433,12 +439,17 @@ fn an_agents_task_reads_its_thread_as_a_chat() {
         assert!(page.thread.reading.is_none());
         task.activity = NEXT;
         f::deliver(&mut f.client, f.watch, task.clone());
-        page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+        page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
         assert_eq!(f.out.pop(), Some(activity_read(&page)));
         assert!(f.out.is_empty());
-        page.told(&f.client, Told::Page { handle: page.activity, page: jig_client::Readout::Limit }, &mut f.out);
+        page.told(
+            Time::ZERO,
+            &f.client,
+            Told::Page { handle: page.activity, page: jig_client::Readout::Limit },
+            &mut f.out,
+        );
         assert!(page.thread.reading.is_none(), "failed page frees the read");
-        page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+        page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
         assert_eq!(f.out.pop(), Some(activity_read(&page)));
         page.thread.run(
             &c::RunState { task: f::TASK, attempt: Some(ATTEMPT), committed_turn: 0, writing: None, call: None },
@@ -455,9 +466,9 @@ fn an_agents_task_reads_its_thread_as_a_chat() {
         );
         f::phase(&mut task, c::OwnerChipPhase::Active(c::RunStage::Idle));
         f::deliver(&mut f.client, f.watch, task);
-        page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+        page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
         assert!(!page.thread.live.is_empty(), "unread committed activity keeps the run's text");
-        page.told(&f.client, Told::Page { handle: page.activity, page: activity_page(NEXT) }, &mut f.out);
+        page.told(Time::ZERO, &f.client, Told::Page { handle: page.activity, page: activity_page(NEXT) }, &mut f.out);
         assert_eq!(page.thread.loaded, NEXT);
         assert!(page.thread.live.is_empty(), "no provisional text remains once its activity is loaded");
     }
@@ -466,12 +477,17 @@ fn an_agents_task_reads_its_thread_as_a_chat() {
 fn a_failed_first_page_frees_an_unknown_tasks_thread() {
     let mut f = f::opened();
     let mut page = Task::new(f::TASK, FIRST, &fixtures::limits(), &mut Queue::with_capacity(OUTPUTS));
-    page.told(&f.client, Told::Page { handle: page.activity, page: jig_client::Readout::Limit }, &mut f.out);
+    page.told(
+        Time::ZERO,
+        &f.client,
+        Told::Page { handle: page.activity, page: jig_client::Readout::Limit },
+        &mut f.out,
+    );
     assert_eq!(page.shape, Shape::Unknown);
     assert!(page.thread.reading.is_none());
     f::deliver(&mut f.client, f.watch, agent_document());
     while f.out.pop().is_some() {}
-    page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+    page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
     assert_eq!(f.out.pop(), Some(activity_read(&page)));
 }
 #[test]
@@ -479,7 +495,7 @@ fn an_agents_live_run_text_reaches_its_thread() {
     use skein_lib::Time;
     let (mut page, mut f) = opened();
     f::deliver(&mut f.client, f.watch, agent_document());
-    page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+    page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
     let handle = page.run.expect("live run");
     let mut emitted = Queue::with_capacity(OUTPUTS);
     f.client.step(
@@ -521,7 +537,7 @@ fn an_agents_live_run_text_reaches_its_thread() {
         &mut emitted,
     );
     for told in [Told::Changed { handle }, Told::Text { handle }] {
-        assert!(page.told(&f.client, told, &mut f.out));
+        assert!(page.told(Time::ZERO, &f.client, told, &mut f.out));
         assert_eq!(page.thread.live.get(0).expect("provisional turn").text.bytes(), b"Hello");
     }
     f.client.step(
@@ -550,7 +566,7 @@ fn an_agents_live_run_text_reaches_its_thread() {
         },
         &mut emitted,
     );
-    assert!(page.told(&f.client, Told::Text { handle }, &mut f.out));
+    assert!(page.told(Time::ZERO, &f.client, Told::Text { handle }, &mut f.out));
     assert_eq!(page.thread.live.get(0).expect("provisional turn").text.bytes(), b"Hello again");
 }
 #[test]
@@ -613,6 +629,7 @@ fn an_ended_tasks_historical_document_keeps_its_result() {
     task.result = None;
     let result = f::result(&task, c::Ending::Done, Some(c::ResultValue::Report(f::document_text(b"Finished"))));
     page.told(
+        Time::ZERO,
         &f.client,
         Told::Page {
             handle: page.document,
@@ -634,12 +651,22 @@ fn an_ended_tasks_historical_document_keeps_its_result() {
 fn an_agents_thread_reads_on_until_the_announced_tail() {
     let (mut page, mut f) = opened();
     f::deliver(&mut f.client, f.watch, agent_document());
-    page.told(&f.client, Told::Changed { handle: page.document }, &mut f.out);
+    page.told(Time::ZERO, &f.client, Told::Changed { handle: page.document }, &mut f.out);
     while f.out.pop().is_some() {}
-    page.told(&f.client, Told::Page { handle: page.activity, page: activity_page(f::POSITION - 1) }, &mut f.out);
+    page.told(
+        Time::ZERO,
+        &f.client,
+        Told::Page { handle: page.activity, page: activity_page(f::POSITION - 1) },
+        &mut f.out,
+    );
     assert_eq!(f.out.pop(), Some(activity_read(&page)));
     assert!(f.out.is_empty());
-    page.told(&f.client, Told::Page { handle: page.activity, page: activity_page(f::POSITION) }, &mut f.out);
+    page.told(
+        Time::ZERO,
+        &f.client,
+        Told::Page { handle: page.activity, page: activity_page(f::POSITION) },
+        &mut f.out,
+    );
     assert!(page.thread.reading.is_none());
     assert_eq!(page.thread.loaded, f::POSITION);
     assert!(f.out.is_empty());
@@ -1035,7 +1062,7 @@ fn procedure() -> (Task, f::Fixture) {
     let mut task = f::task();
     task.chip.executor = c::Executor::Procedure { connector: fixtures::FORGE, kind: 2 };
     f::deliver(&mut fixture.client, fixture.watch, task);
-    page.told(&fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
+    page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
     (page, fixture)
 }
 fn ended_read(page: &Task) -> Request {
@@ -1068,6 +1095,7 @@ fn ended_page(cut: bool) -> c::TaskPage {
 fn answer_ended(page: &mut Task, fixture: &mut f::Fixture, reply: c::TaskPage) {
     let handle = page.ended.as_ref().expect("ended children").handle;
     assert!(page.told(
+        Time::ZERO,
         &fixture.client,
         Told::Page {
             handle,
@@ -1085,7 +1113,7 @@ fn every_procedure_reads_its_ended_children_on_its_own_handle() {
         let mut task = f::task();
         task.chip.executor = c::Executor::Procedure { connector, kind: 2 };
         f::deliver(&mut fixture.client, fixture.watch, task);
-        page.told(&fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
+        page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
         assert_eq!(page.ended.as_ref().unwrap().handle.number, next);
         assert_eq!(page.next, next + 1);
         assert_eq!(fixture.out.pop(), Some(ended_read(&page)));
@@ -1108,7 +1136,7 @@ fn agent_and_person_tasks_do_not_read_ended_children() {
         task.priority = None;
         f::deliver(&mut fixture.client, fixture.watch, task);
         for handle in [page.document, page.tree] {
-            page.told(&fixture.client, Told::Changed { handle }, &mut fixture.out);
+            page.told(Time::ZERO, &fixture.client, Told::Changed { handle }, &mut fixture.out);
         }
         assert!(page.ended.is_none());
         assert!(fixture.out.is_empty());
@@ -1121,7 +1149,7 @@ fn tree_and_document_changes_read_ended_children_again() {
     for handle in [page.tree, page.document] {
         answer_ended(&mut page, &mut fixture, ended_page(false));
         assert!(fixture.out.is_empty());
-        page.told(&fixture.client, Told::Changed { handle }, &mut fixture.out);
+        page.told(Time::ZERO, &fixture.client, Told::Changed { handle }, &mut fixture.out);
         assert_eq!(fixture.out.pop(), Some(ended_read(&page)));
         assert!(fixture.out.is_empty());
     }
@@ -1131,7 +1159,7 @@ fn changes_during_an_ended_read_coalesce_into_one_more_read() {
     let (mut page, mut fixture) = procedure();
     assert_eq!(fixture.out.pop(), Some(ended_read(&page)));
     for handle in [page.tree, page.document, page.tree] {
-        page.told(&fixture.client, Told::Changed { handle }, &mut fixture.out);
+        page.told(Time::ZERO, &fixture.client, Told::Changed { handle }, &mut fixture.out);
         assert!(fixture.out.is_empty());
     }
     assert!(page.ended.as_ref().unwrap().stale);
@@ -1150,7 +1178,7 @@ fn an_ended_reply_replaces_the_kept_page() {
     while fixture.out.pop().is_some() {}
     for cut in [false, true] {
         if cut {
-            page.told(&fixture.client, Told::Changed { handle: page.tree }, &mut fixture.out);
+            page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.tree }, &mut fixture.out);
             assert_eq!(fixture.out.pop(), Some(ended_read(&page)));
         }
         let reply = ended_page(cut);
@@ -1168,12 +1196,13 @@ fn another_reply_keeps_the_ended_page_and_frees_the_next_read() {
     answer_ended(&mut page, &mut fixture, kept.clone());
     let handle = page.ended.as_ref().unwrap().handle;
     for stale in [false, true] {
-        page.told(&fixture.client, Told::Changed { handle: page.tree }, &mut fixture.out);
+        page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.tree }, &mut fixture.out);
         assert_eq!(fixture.out.pop(), Some(ended_read(&page)));
         if stale {
-            page.told(&fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
+            page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
         }
         page.told(
+            Time::ZERO,
             &fixture.client,
             Told::Page {
                 handle,
@@ -1208,7 +1237,7 @@ fn goal() -> (Task, f::Fixture) {
     task.chip.executor = c::Executor::Agent { charter: 1 };
     task.priority = Some(PRIORITY);
     f::deliver(&mut fixture.client, fixture.watch, task);
-    page.told(&fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
+    page.told(Time::ZERO, &fixture.client, Told::Changed { handle: page.document }, &mut fixture.out);
     (page, fixture)
 }
 #[test]
@@ -1234,10 +1263,10 @@ fn a_goals_tree_and_document_changes_reread_one_page_at_a_time() {
         let kept = ended_page(false);
         answer_ended(&mut page, &mut fixture, kept.clone());
         assert!(fixture.out.is_empty());
-        page.told(&fixture.client, Told::Changed { handle }, &mut fixture.out);
+        page.told(Time::ZERO, &fixture.client, Told::Changed { handle }, &mut fixture.out);
         assert_eq!(fixture.out.pop(), Some(ended_read(&page)));
         for handle in [page.document, page.tree, handle] {
-            page.told(&fixture.client, Told::Changed { handle }, &mut fixture.out);
+            page.told(Time::ZERO, &fixture.client, Told::Changed { handle }, &mut fixture.out);
             assert!(fixture.out.is_empty());
         }
         let ended = page.ended.as_ref().unwrap();

@@ -114,6 +114,7 @@ pub fn fire(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     let mut client = Queue::with_capacity(jig_client::max_out(&env.limits.client));
     root.client.fire(env.now, env.wall, &mut client);
     route::route_client(root, env, &mut client, out);
+    route::fire_pages(root, env, out);
     route::picker_progress(root, env, out);
     route::demo_progress(root, env, out);
     crate::authorize::progress(root, env, out);
@@ -121,7 +122,10 @@ pub fn fire(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 }
 #[must_use]
 pub fn next_deadline(root: &Domain) -> Option<Time> {
-    [forge::next_deadline(&root.forge), root.client.next_deadline()].into_iter().flatten().min()
+    [crate::pages::next_deadline(&root.pages), forge::next_deadline(&root.forge), root.client.next_deadline()]
+        .into_iter()
+        .flatten()
+        .min()
 }
 /// Reclaim only after every child's tells have been routed.
 pub fn take(root: &mut Domain, _env: &Env<Limits>, _out: &mut Queue<Request>) {

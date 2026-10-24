@@ -40,6 +40,7 @@ pub enum Event {
 }
 #[derive(Debug)]
 pub enum Request {
+    PanelEnded { subject: panel::Subject },
     Show { address: Address },
     Leave { to: Box<[u8]> },
     Client { asked: jig_client::Event },

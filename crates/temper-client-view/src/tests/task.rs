@@ -3105,3 +3105,107 @@ fn a_goals_folds_and_held_counts_keep_an_empty_live_filter_from_saying_no_live_t
         }
     }
 }
+
+fn unread_task() -> (Domain, skein_lib::Token) {
+    let (root, _, watch) = fixtures::root_at(
+        temper_client_domain::Address::Task { task: TASK, filter: PlanFilter::All },
+        &fixtures::domain_limits(),
+    );
+    (root, watch.expect("task watch"))
+}
+fn end_task_read(root: &mut Domain, watch: skein_lib::Token, result: jig_client::Readout) {
+    use jig_client::{Down, Readable, Up};
+    use skein_lib::{Env, Queue, Time};
+    let limits = fixtures::domain_limits();
+    let env = Env { now: Time::ZERO, wall: fixtures::NOW, limits };
+    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    temper_client_domain::step(
+        root,
+        &env,
+        Event::Client { event: jig_client::Event::Up { up: Up::WatchEnded { watch, end: c::WatchEnd::SubjectEnded } } },
+        &mut out,
+    );
+    let mut token = None;
+    while let Some(request) = out.pop() {
+        if let temper_client_domain::Request::Client {
+            request: jig_client::Request::Down { down: Down::Read { read, what } },
+        } = request
+            && what == Readable::Jig(c::Read::Task { task: TASK })
+        {
+            token = Some(read);
+        }
+    }
+    fixtures::root_event(
+        root,
+        Event::Client { event: jig_client::Event::Up { up: Up::ReadDone { read: token.expect("task read"), result } } },
+    );
+}
+#[test]
+fn a_task_without_its_document_says_it_is_reading() {
+    let (root, _) = unread_task();
+    for words in [fixtures::words(), fixtures::browser_words()] {
+        let mut view = fixtures::view_of(words);
+        let tree = fixtures::build(&mut view, &root);
+        assert!(fixtures::find(tree, Role::Status, "Reading task 9…".as_bytes()).is_some());
+        assert!(skein_lib::bytes::find(&fixtures::text(tree), "Reading task 9…".as_bytes()).is_some());
+    }
+}
+#[test]
+fn a_task_waiting_to_read_again_keeps_its_reading_status() {
+    let (mut root, watch) = unread_task();
+    end_task_read(&mut root, watch, jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::Busy)));
+    let mut view = fixtures::view();
+    let tree = fixtures::build(&mut view, &root);
+    assert!(fixtures::find(tree, Role::Status, "Reading task 9…".as_bytes()).is_some());
+}
+#[test]
+fn lasting_task_read_ends_say_why() {
+    use jig_client::Readout;
+    for (result, text) in [
+        (Readout::Jig(c::ReadResult::None(c::ReadNone::Unknown)), b"This task could not be found.".as_slice()),
+        (Readout::Jig(c::ReadResult::None(c::ReadNone::Refused)), b"You are not allowed to read this task.".as_slice()),
+        (Readout::Jig(c::ReadResult::None(c::ReadNone::Gone)), b"This task is no longer available.".as_slice()),
+        (
+            Readout::Jig(c::ReadResult::None(c::ReadNone::TooLarge { bytes: 1 })),
+            b"This task is too large to read.".as_slice(),
+        ),
+        (Readout::Jig(c::ReadResult::None(c::ReadNone::Malformed)), b"This task could not be read.".as_slice()),
+        (
+            Readout::NotServed { family: None, served: None },
+            b"This version of temper cannot read this task.".as_slice(),
+        ),
+    ] {
+        let (mut root, watch) = unread_task();
+        end_task_read(&mut root, watch, result);
+        for words in [fixtures::words(), fixtures::browser_words()] {
+            let mut view = fixtures::view_of(words);
+            let tree = fixtures::build(&mut view, &root);
+            assert!(fixtures::find(tree, Role::Status, text).is_some());
+            assert!(skein_lib::bytes::find(&fixtures::text(tree), text).is_some());
+        }
+    }
+}
+#[test]
+fn a_task_read_ended_at_sign_out_says_to_sign_in() {
+    let (mut root, _) = unread_task();
+    fixtures::root_event(&mut root, Event::SignedOut);
+    let mut view = fixtures::view();
+    let tree = fixtures::build(&mut view, &root);
+    assert!(fixtures::find(tree, Role::Status, b"Sign in to read this task.").is_some());
+}
+#[test]
+fn a_task_document_replaces_its_reading_status() {
+    let (mut root, watch) = unread_task();
+    let mut document = f::document();
+    document.chip.task = TASK;
+    document.priority = Some(PRIORITY);
+    end_task_read(
+        &mut root,
+        watch,
+        jig_client::Readout::Jig(c::ReadResult::Value(c::ReadValue::Task(Box::new(document)))),
+    );
+    let mut view = fixtures::view();
+    let tree = fixtures::build(&mut view, &root);
+    assert!(fixtures::find(tree, Role::Status, "Reading task 9…".as_bytes()).is_none());
+    assert!(fixtures::find(tree, Role::Heading { level: 2 }, b"Task details").is_some());
+}

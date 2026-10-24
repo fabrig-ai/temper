@@ -295,6 +295,10 @@ credential.
 
 ### 3.5 Its pages
 
+Before its document arrives, a task page says “Reading task N…”, or one
+sentence explaining a lasting refusal; after a transient read end it asks
+again while open, waiting one second, doubling to at most thirty seconds.
+
 Each page has an address, and watches what it shows while it is open;
 leaving it closes its handles. Its mockup gives its look and the order
 of its parts (reference material, not contract). Lists of tasks are
@@ -3306,8 +3310,10 @@ filter, so that `/?kind=question` opens the inbox filtered. Of that
 open, the path and its load are the browser's; the rest is the client
 root's, the same under both shells: a root started at a page's address,
 its pages opening that page, asking its reads and drawing it once they
-answer. The client's joint world, `tests/client`, starts its clients
-so, with no shell (`fixtures::task_page`), and proves the root's part:
+answer. A task address shows its reading status before the document, and
+the page asks again after a transient end, as in 3.5. The client's joint
+world, `tests/client`, starts its clients so, with no shell
+(`fixtures::task_page`), and proves the root's part:
 in roadmap B2's story a fresh client started at a delegate's address
 draws its heading and its "Task brief", as the browser tier's task
 pages story does at `/tasks/3` (section 10).

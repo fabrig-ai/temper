@@ -255,6 +255,9 @@ impl Pages {
     pub const fn task(&self) -> Option<&task::Task> {
         self.task.as_ref()
     }
+    pub(crate) fn task_mut(&mut self) -> Option<&mut task::Task> {
+        self.task.as_mut()
+    }
     #[must_use]
     pub fn cards(&self) -> Option<&skein_lib::List<inbox::Card>> {
         if let Some(task) = &self.task {
@@ -393,9 +396,17 @@ pub fn step(pages: &mut Pages, env: &Env<Limits>, client: &Client, event: Event,
         Event::Act { act: Act::SignOut } => out.push(Request::Client(jig_client::Event::SignOut)),
         Event::Act { act: Act::Go { address } } => out.push(Request::Show { address }),
         Event::Told { told: Told::Changed { handle } } if handle == me_handle() => me_changed(pages, client, out),
-        Event::Link { link } => link_changed(pages, link, out),
+        Event::Link { link } => {
+            if let Some(task) = &mut pages.task {
+                // Successful sign-in can tell SignedOut then Starting in one step.
+                // The installed credential, rather than that intermediate tell,
+                // decides whether a cancelled read may be asked again.
+                task.link(client.link().state);
+            }
+            link_changed(pages, link, out);
+        }
         Event::Told { told: event } => {
-            if !told(pages, client, event, out) {
+            if !told(pages, env, client, event, out) {
                 return;
             }
         }
@@ -415,7 +426,7 @@ pub fn step(pages: &mut Pages, env: &Env<Limits>, client: &Client, event: Event,
     redirect_chat(pages, client, out);
     pages.shown = pages.shown.checked_add(1).expect("pages shown count fits");
 }
-fn told(pages: &mut Pages, client: &Client, told: Told, out: &mut Queue<Request>) -> bool {
+fn told(pages: &mut Pages, env: &Env<Limits>, client: &Client, told: Told, out: &mut Queue<Request>) -> bool {
     if let Told::Answered { key, outcome } = &told
         && let Some((through, pending)) = pages.seeing
         && *key == pending
@@ -430,7 +441,7 @@ fn told(pages: &mut Pages, client: &Client, told: Told, out: &mut Queue<Request>
         pages.shown = pages.shown.checked_add(1).expect("pages shown fits");
         return false;
     }
-    page_told(pages, client, told, out)
+    page_told(pages, env, client, told, out)
 }
 
 fn started(pages: &mut Pages, out: &mut Queue<Request>) {
@@ -454,10 +465,17 @@ fn started(pages: &mut Pages, out: &mut Queue<Request>) {
         }));
     }
 }
-pub fn fire(_pages: &mut Pages, _env: &Env<Limits>, _client: &Client, _out: &mut Queue<Request>) {}
+pub fn fire(pages: &mut Pages, env: &Env<Limits>, _client: &Client, out: &mut Queue<Request>) {
+    if let Some(task) = &mut pages.task {
+        task.fire(env.now, out);
+    }
+}
 #[must_use]
-pub const fn next_deadline(_pages: &Pages) -> Option<Time> {
-    None
+pub const fn next_deadline(pages: &Pages) -> Option<Time> {
+    match &pages.task {
+        Some(task) => task.next_deadline(),
+        None => None,
+    }
 }
 #[must_use]
 pub const fn shown(pages: &Pages) -> u64 {
@@ -614,7 +632,7 @@ fn open_result(pages: &mut Pages, task: u64, through: u64, out: &mut Queue<Reque
     out.push(Request::Show { address: Address::Task { task, filter: PlanFilter::All } });
 }
 
-fn page_told(pages: &mut Pages, client: &Client, told: Told, out: &mut Queue<Request>) -> bool {
+fn page_told(pages: &mut Pages, env: &Env<Limits>, client: &Client, told: Told, out: &mut Queue<Request>) -> bool {
     if let Some(page) = &mut pages.connect_model {
         let claim = match &told {
             Told::Kept { key, request: jig_client::Ask::Jig(ask) } => {
@@ -651,7 +669,7 @@ fn page_told(pages: &mut Pages, client: &Client, told: Told, out: &mut Queue<Req
         return true;
     }
     if let Some(task) = &mut pages.task {
-        return task.told(client, told, out);
+        return task.told(env.now, client, told, out);
     }
     if let Some(chat) = &mut pages.chat {
         let moved = match &told {

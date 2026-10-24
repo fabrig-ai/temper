@@ -319,6 +319,119 @@ fn change_opened() -> (Domain, Token, Token, c::Task) {
     up(&mut root, Up::Watched { watch: panel_watch, event: c::WatchEvent::Opened });
     (root, task_watch, panel_watch, task)
 }
+fn finish_change(task: &mut c::Task) {
+    task.activity = task.activity.checked_add(1).expect("one finished task update");
+    f::chat::phase(task, c::OwnerChipPhase::Ended);
+    let mut value = f::chat::change_value(b"abcdef0123456789abcdef0123456789abcdef0123");
+    let c::ResultValue::Change { part, .. } = &mut value else { panic!("change result") };
+    part.key = c::OwnerPartKey::Number(TASK);
+    task.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Done(value))));
+}
+#[test]
+fn a_late_panel_ending_after_the_last_task_document_reopens_the_panel() {
+    let (mut root, task_watch, panel_watch, mut task) = change_opened();
+    finish_change(&mut task);
+    assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none(), "watch still open");
+    up(&mut root, Up::WatchEnded { watch: task_watch, end: c::WatchEnd::SubjectEnded });
+    let fresh =
+        family_open(&mut up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }), TASK)
+            .expect("a finished task cannot await another document after its late panel ending");
+    assert_ne!(fresh, panel_watch);
+    assert!(up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }).is_empty());
+    assert!(up(&mut root, Up::Watched { watch: fresh, event: c::WatchEvent::Opened }).is_empty());
+    assert_eq!(root.forge().panel().unwrap().state, State::Loading);
+    assert!(root.forge().panel().unwrap().handle.is_some());
+    let landed =
+        p::panel(TASK, w::Step::Landed(w::Landed::new(&w::CEILINGS, w::LandedParts { merge: [0x47; 32] }).unwrap()));
+    assert!(deliver(&mut root, fresh, &landed).is_empty());
+    assert_eq!(root.forge().panel().unwrap().state, State::Shown(Box::new(landed)));
+}
+#[test]
+fn only_a_finished_change_reopens_its_panel_on_the_ending() {
+    for row in ["live", "done phase", "failed phase", "cancelled phase", "no result", "report", "failed result"] {
+        let (mut root, task_watch, panel_watch, mut task) = change_opened();
+        finish_change(&mut task);
+        match row {
+            "live" => task.chip.phase = c::Phase::Active,
+            "done phase" => task.chip.phase = c::Phase::Done,
+            "failed phase" => task.chip.phase = c::Phase::Failed,
+            "cancelled phase" => task.chip.phase = c::Phase::Cancelled,
+            "no result" => task.result = None,
+            "report" => {
+                task.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Done(c::ResultValue::Report(
+                    task.chip.title.clone(),
+                )))));
+            }
+            "failed result" => {
+                task.result =
+                    Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Failed(task.chip.title.clone()))));
+            }
+            _ => unreachable!(),
+        }
+        assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none());
+        assert!(
+            up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }).is_empty(),
+            "{row}"
+        );
+        assert_eq!(root.forge().panel().unwrap().state, State::Unknown, "{row}");
+        assert_eq!(root.forge().panel().unwrap().handle, None, "{row}");
+    }
+}
+#[test]
+fn two_panel_endings_on_the_same_finished_document_reopen_only_once() {
+    let (mut root, task_watch, panel_watch, mut task) = change_opened();
+    finish_change(&mut task);
+    assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none());
+    let fresh =
+        family_open(&mut up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }), TASK)
+            .expect("one immediate reopen on the finished document");
+    assert!(up(&mut root, Up::Watched { watch: fresh, event: c::WatchEvent::Opened }).is_empty());
+    assert!(up(&mut root, Up::WatchEnded { watch: fresh, end: c::WatchEnd::SubjectEnded }).is_empty());
+    assert_eq!(root.forge().panel().unwrap().state, State::Unknown);
+    assert_eq!(root.forge().panel().unwrap().handle, None);
+    assert!(family_open(&mut task_document(&mut root, task_watch, &task), TASK).is_none(), "same document");
+    task.activity += 1;
+    let next = family_open(&mut task_document(&mut root, task_watch, &task), TASK)
+        .expect("a new document can recover the unknown panel");
+    assert_ne!(next, fresh);
+    assert!(up(&mut root, Up::Watched { watch: next, event: c::WatchEvent::Opened }).is_empty());
+    assert_eq!(root.forge().panel().unwrap().state, State::Loading);
+    assert!(root.forge().panel().unwrap().handle.is_some());
+}
+#[test]
+fn a_panel_ending_before_the_last_task_document_reopens_exactly_once() {
+    let (mut root, task_watch, panel_watch, mut task) = change_opened();
+    let mut out = up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded });
+    finish_change(&mut task);
+    let mut final_delivery = task_document(&mut root, task_watch, &task);
+    let before = family_open(&mut out, TASK);
+    let after = family_open(&mut final_delivery, TASK);
+    assert!(before.is_none(), "a live task waits for its later document");
+    let fresh = after.expect("one reopening when the finished document arrives");
+    assert_ne!(fresh, panel_watch);
+    assert!(up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }).is_empty());
+    assert!(up(&mut root, Up::Watched { watch: fresh, event: c::WatchEvent::Opened }).is_empty());
+    assert_eq!(root.forge().panel().unwrap().state, State::Loading);
+}
+#[test]
+fn leaving_before_a_late_panel_ending_asks_nothing() {
+    for address in [
+        Address::Chats { filter: ChatsFilter::All, start: false },
+        Address::Task { task: NEXT, filter: PlanFilter::All },
+    ] {
+        let (mut root, task_watch, panel_watch, mut task) = change_opened();
+        finish_change(&mut task);
+        task_document(&mut root, task_watch, &task);
+        let handle = root.forge().panel().unwrap().handle.unwrap();
+        let mut out = went(&mut root, Place::Address(address));
+        assert!(closes(&mut out).as_slice().contains(&panel_watch));
+        assert!(up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }).is_empty());
+        let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+        crate::route::told(&mut root, &f::env(&f::limits()), Told::Ended { handle, why: Why::SubjectEnded }, &mut out);
+        assert!(out.is_empty(), "a stale child ending cannot reopen a panel after leaving");
+        assert!(root.forge().panel().is_none());
+    }
+}
 #[test]
 fn a_task_page_recovers_its_ended_panel_when_the_change_is_made_and_landed() {
     for end in [c::WatchEnd::SubjectEnded, c::WatchEnd::Closed] {
