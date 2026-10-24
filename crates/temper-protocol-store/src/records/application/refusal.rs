@@ -219,6 +219,7 @@ pub(super) fn decode_lack(value: w::Lack) -> p::Lack {
 }
 pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::LimitKind {
     match value {
+        p::LimitKind::SettingsProposals => unreachable!("forge applications cannot propose settings"),
         p::LimitKind::Projects => w::LimitKind::Projects,
         p::LimitKind::Words => w::LimitKind::Words,
         p::LimitKind::Identity => w::LimitKind::Identity,
@@ -346,7 +347,8 @@ pub(super) fn encode_refusal(value: &p::Refusal, l: &w::Limits) -> Result<w::Ref
                     // Forge application values contain no settings for the core to check.
                     p::Malformed::Settings { .. }
                     // Only a settings change can leave the effective settings unchanged.
-                    | p::Malformed::SettingsUnchanged => {
+                    | p::Malformed::SettingsUnchanged
+                    | p::Malformed::Running => {
                         return Err(w::Problem { path: w::Path::MalformedTag, reason: skein_codec::Reason::Bound });
                     }
                     p::Malformed::ProposedAsAllowed => w::Malformed::ProposedAsAllowed,

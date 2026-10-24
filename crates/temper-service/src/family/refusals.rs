@@ -40,6 +40,7 @@ pub(crate) fn refusal(value: p::Refusal, limits: &w::Limits) -> Result<w::Refusa
                     | p::Malformed::SettingsUnchanged => {
                         return Err(w::Problem { path: w::Path::MalformedTag, reason: skein_codec::Reason::Bound });
                     }
+                    p::Malformed::Running => w::Malformed::Running,
                     p::Malformed::AsAllowedTwice => w::Malformed::TwoAsAllowed,
                     p::Malformed::Conversation => w::Malformed::ConversationNotAgent,
                     p::Malformed::Name(rule) => w::Malformed::Name(w::MalformedName::new(
@@ -198,6 +199,7 @@ fn lack(value: p::Lack, limits: &w::Limits) -> Result<w::Lacking, w::Problem> {
 }
 pub(super) fn limit(value: p::LimitKind) -> w::AdmissionLimit {
     match value {
+        p::LimitKind::SettingsProposals => w::AdmissionLimit::SettingsProposals,
         p::LimitKind::Words => w::AdmissionLimit::Words,
         p::LimitKind::Identity => w::AdmissionLimit::Identity,
         p::LimitKind::Roles => w::AdmissionLimit::Roles,
