@@ -3,7 +3,7 @@
 use std::ffi::OsStr;
 
 /// What `TEMPER_BUNDLE` asks for.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Choice {
     Embed,
     None,
