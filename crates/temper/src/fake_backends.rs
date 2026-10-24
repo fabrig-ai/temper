@@ -32,8 +32,7 @@ struct Prepared {
     _lock: File,
 }
 pub(crate) fn run(source: &Directories) -> Result<Exit, String> {
-    let Prepared { directories, bytes, mut listeners, _lock: lock } =
-        prepare(source, temper_client_bundle::loopback::FILES)?;
+    let Prepared { directories, bytes, mut listeners, _lock: lock } = prepare(source)?;
     let result = crate::box_command::run_configuration(&directories, &bytes, std::mem::take(&mut listeners.0));
     drop(lock);
     result
@@ -235,39 +234,16 @@ fn validate(dirs: &Directories, bytes: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
-fn bundle(
-    source: &Source,
-    files: &[(&str, &[u8])],
-    limits: temper_service::limits::Clients,
-) -> Result<Option<PathBuf>, String> {
-    if let Some(path) = &source.bundle {
-        public_path(&path.join("index.html"))?;
-        let _checked = crate::bundle::read(path.as_os_str().as_bytes(), limits)?;
-        Ok(Some(path.clone()))
-    } else if files.is_empty() {
-        Err("application.clients.bundle: no loopback bundle; build with scripts/bundle.sh --loopback and set application.clients.bundle, or use a temper that packages the loopback bundle".into())
-    } else {
-        if files.len() > usize::try_from(limits.bundle_files).expect("bundle count fits") {
-            return Err("packaged loopback bundle: past clients.bundle_files".into());
-        }
-        for (index, (name, _)) in files.iter().enumerate() {
-            if (*name != "index.html" && !name.contains('/')) || files[..index].iter().any(|(prior, _)| prior == name) {
-                return Err("packaged loopback bundle: duplicate or unexpected root file".into());
-            }
-        }
-        // The ordinary bundle checker validates digest, file types, byte and count bounds first.
-        let _checked = crate::bundle::embedded(files, limits)?;
-        for (name, _) in files {
-            let path = Path::new(name);
-            if path.is_absolute()
-                || path.components().any(|part| !matches!(part, Component::Normal(_)))
-                || name.contains('\0')
-            {
-                return Err("packaged loopback bundle: paths must be plain relative names".into());
-            }
-        }
-        Ok(None)
-    }
+fn bundle(source: &Source, limits: temper_service::limits::Clients) -> Result<PathBuf, String> {
+    let instructions = "build with scripts/bundle.sh --loopback OUT and set application.clients.bundle to OUT; if configuration is empty, first run ordinary temper init";
+    let path = source
+        .bundle
+        .as_ref()
+        .ok_or_else(|| format!("application.clients.bundle: no provisioned loopback bundle; {instructions}"))?;
+    public_path(&path.join("index.html")).map_err(|why| format!("{why}; {instructions}"))?;
+    let _checked =
+        crate::bundle::read(path.as_os_str().as_bytes(), limits).map_err(|why| format!("{why}; {instructions}"))?;
+    Ok(path.clone())
 }
 fn print(dirs: &Directories) {
     eprintln!("box: effective configuration {}", crate::path(&dirs.config).display());
@@ -284,7 +260,7 @@ fn print(dirs: &Directories) {
     clippy::too_many_lines,
     reason = "startup owns its lock and listeners through validation and publishes the prepared marker last"
 )]
-fn prepare(source_dirs: &Directories, files: &[(&str, &[u8])]) -> Result<Prepared, String> {
+fn prepare(source_dirs: &Directories) -> Result<Prepared, String> {
     let (root, effective) = directories(source_dirs)?;
     let source_config = resolved(Path::new("/"), &source_dirs.config)?;
     if source_config.starts_with(&root) {
@@ -300,7 +276,7 @@ fn prepare(source_dirs: &Directories, files: &[(&str, &[u8])]) -> Result<Prepare
         Err(why) => return Err(format!("{}: {why}", root.display())),
     };
     let source = Source::read(source_dirs).map_err(|why| if exists { reset(&root, &why) } else { why })?;
-    // Reuse is independent of the current binary's packaged bundle: retained effective edits win.
+    // Reuse checks the retained effective bundle, which may differ from the source's directory.
     let provisioned = if exists {
         None
     } else {
@@ -309,7 +285,7 @@ fn prepare(source_dirs: &Directories, files: &[(&str, &[u8])]) -> Result<Prepare
         } else {
             temper_service::limits::profile(temper_service::limits::Profile::Small).clients
         };
-        Some(bundle(&source, files, limits)?)
+        Some(bundle(&source, limits)?)
     };
     let user = skein_shell::effective_user();
     make_private(crate::path(&source_dirs.data), user)?;
@@ -380,18 +356,7 @@ fn prepare(source_dirs: &Directories, files: &[(&str, &[u8])]) -> Result<Prepare
     excluded.push(addr(&oauth)?.port());
     let llm = reserve(&excluded)?;
     let peers = Peers { github: addr(&github)?, oauth: addr(&oauth)?, llm: addr(&llm)? };
-    let bundle = if let Some(path) = provisioned.expect("new preparation checked the bundle") {
-        path
-    } else {
-        let directory = crate::path(&effective.config).join("bundle-loopback");
-        make_private(&directory, user)?;
-        for (name, content) in files {
-            let destination = directory.join(name);
-            make_private(destination.parent().expect("packaged path parent"), user)?;
-            write(&destination, content, false)?;
-        }
-        directory
-    };
+    let bundle = provisioned.expect("new preparation checked the bundle");
     let paths = Paths {
         config: effective.config.clone(),
         data: effective.data.clone(),

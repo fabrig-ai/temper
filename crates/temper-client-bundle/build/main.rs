@@ -8,7 +8,7 @@ use std::{
 
 mod steps;
 
-fn embed(out: &std::path::Path, variants: &[steps::Variant]) -> Result<(String, String), String> {
+fn embed(out: &std::path::Path) -> Result<String, String> {
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -26,71 +26,44 @@ fn embed(out: &std::path::Path, variants: &[steps::Variant]) -> Result<(String, 
         Err(_) => return Err(steps::NEED_WASM.into()),
     }
     let cargo = env::var_os("CARGO").expect("cargo sets CARGO");
-    let mut ordinary = None;
-    let mut loopback = None;
-    for &variant in variants {
-        let directory = steps::bundle_directory(out, variant);
-        let commands: Vec<_> = match variant {
-            steps::Variant::Ordinary => ["browser module", "bundler build", "bundling"]
-                .into_iter()
-                .zip(steps::commands(&cargo, &root, &target, out, profile))
-                .collect(),
-            steps::Variant::Loopback => ["loopback browser module", "bundling"]
-                .into_iter()
-                .zip(steps::loopback_commands(&cargo, &root, &target, out, profile))
-                .collect(),
-        };
-        for (step, description) in commands {
-            if step == "bundling" && directory.exists() {
-                fs::remove_dir_all(&directory)
-                    .map_err(|why| format!("temper-client-bundle: removing previous bundle: {why}"))?;
-            }
-            let mut command = Command::new(description.program);
-            command.args(description.args).current_dir(description.directory).stdout(Stdio::from(std::io::stderr()));
-            for name in description.remove {
-                command.env_remove(name);
-            }
-            for (name, value) in description.set {
-                command.env(name, value);
-            }
-            let status = command.status().map_err(|why| format!("temper-client-bundle: {step} failed: {why}"))?;
-            if !status.success() {
-                return Err(format!("temper-client-bundle: {step} failed: {status}"));
-            }
+    let commands = steps::commands(&cargo, &root, &target, out, profile);
+    for (step, description) in ["browser module", "bundler build", "bundling"].into_iter().zip(commands) {
+        if step == "bundling" && out.join("bundle").exists() {
+            fs::remove_dir_all(out.join("bundle"))
+                .map_err(|why| format!("temper-client-bundle: removing previous bundle: {why}"))?;
         }
-        // The second module build overwrites the wasm and dep-info. Bundle and record the inputs
-        // before that build; include_bytes! points only into the distinct bundled directories.
-        let dep = target.join("bundle/wasm32-unknown-unknown").join(profile.1).join("temper_client_shell_web.d");
-        let dep =
-            fs::read_to_string(dep).map_err(|why| format!("temper-client-bundle: reading module dep-info: {why}"))?;
-        for path in steps::rerun_paths(&root, &steps::dep_info(&dep)?) {
-            println!("cargo:rerun-if-changed={}", path.display());
+        let mut command = Command::new(description.program);
+        command.args(description.args).current_dir(description.directory).stdout(Stdio::from(std::io::stderr()));
+        for name in description.remove {
+            command.env_remove(name);
         }
-        let bundle = steps::bundle(&directory)?;
-        match variant {
-            steps::Variant::Ordinary => ordinary = Some(bundle),
-            steps::Variant::Loopback => loopback = Some(bundle),
+        for (name, value) in description.set {
+            command.env(name, value);
+        }
+        let status = command.status().map_err(|why| format!("temper-client-bundle: {step} failed: {why}"))?;
+        if !status.success() {
+            return Err(format!("temper-client-bundle: {step} failed: {status}"));
         }
     }
-    Ok(steps::sources(ordinary.as_ref(), loopback.as_ref()))
+    let dep = target.join("bundle/wasm32-unknown-unknown").join(profile.1).join("temper_client_shell_web.d");
+    let dep = fs::read_to_string(dep).map_err(|why| format!("temper-client-bundle: reading module dep-info: {why}"))?;
+    for path in steps::rerun_paths(&root, &steps::dep_info(&dep)?) {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    Ok(steps::source(&steps::bundle(&out.join("bundle"))?))
 }
 
 fn main() -> ExitCode {
     println!("cargo:rerun-if-env-changed=TEMPER_BUNDLE");
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
     let list = match steps::choice(env::var_os("TEMPER_BUNDLE").as_deref()) {
-        Ok(choice) => {
-            let variants = steps::plan(choice, cfg!(feature = "loopback-navigation"));
-            if variants.is_empty() { Ok(steps::sources(None, None)) } else { embed(&out, variants) }
-        }
+        Ok(steps::Choice::None) => Ok(steps::NO_BUNDLE.into()),
+        Ok(steps::Choice::Embed) => embed(&out),
         Err(why) => Err(why),
     };
-    match list.and_then(|(ordinary, loopback)| {
-        for (name, source) in [("bundle.rs", ordinary), ("loopback.rs", loopback)] {
-            fs::write(out.join(name), source)
-                .map_err(|why| format!("temper-client-bundle: writing {name} list: {why}"))?;
-        }
-        Ok(())
+    match list.and_then(|list| {
+        fs::write(out.join("bundle.rs"), list)
+            .map_err(|why| format!("temper-client-bundle: writing bundle list: {why}"))
     }) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
