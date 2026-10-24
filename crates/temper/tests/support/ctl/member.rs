@@ -41,8 +41,8 @@ impl Member {
         shell.adopt(root, skein_shell::effective_user(), SEED);
         Self {
             shell,
-            client: client::Client::new(&bounds.root.domain, SEED).expect("native client bounds"),
-            out: Queue::with_capacity(client::max_out(&bounds.root.domain)),
+            client: client::Client::new(&bounds.root.domain.client, SEED).expect("native client bounds"),
+            out: Queue::with_capacity(client::max_out(&bounds.root.domain.client)),
             owner: Some(token),
             made: None,
             answered: false,
@@ -80,11 +80,8 @@ impl Member {
                 kept.push(record).expect("record room");
             }
             self.event(now, wall, client::Event::Start { kept });
-            self.event(
-                now,
-                wall,
-                client::Event::SignIn { with: client::With::Held(self.owner.take().expect("owner token")) },
-            );
+            let owner = self.owner.take().expect("owner token");
+            self.event(now, wall, client::Event::SignIn { with: client::With::Held(owner) });
             self.event(
                 now,
                 wall,
@@ -168,6 +165,7 @@ impl Member {
     }
     pub fn worst_case(&self) -> u64 {
         self.shell.worst_case()
-            + client::worst_case(&temper_client_shell_cli::limits::native().root.domain).expect("native client memory")
+            + client::worst_case(&temper_client_shell_cli::limits::native().root.domain.client)
+                .expect("native client memory")
     }
 }
