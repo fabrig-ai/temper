@@ -10,6 +10,9 @@ build = "build/main.rs"
 
 # No build dependencies: the script runs cargo for the module and the bundler (client/browser.md, 2.6).
 
+[features]
+loopback-navigation = []
+
 [lints.rust]
 unsafe_code = "forbid"
 elided_lifetimes_in_paths = "deny"

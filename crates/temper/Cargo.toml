@@ -18,7 +18,7 @@ temper-fake.workspace = true
 skein-fake-forge-protocol.workspace = true
 skein-fake-peers.workspace = true
 temper-init.workspace = true
-temper-client-bundle.workspace = true
+temper-client-bundle = { workspace = true, features = ["loopback-navigation"] }
 temper-client-shell-cli.workspace = true
 temper-client-tools.workspace = true
 skein-forge.workspace = true
