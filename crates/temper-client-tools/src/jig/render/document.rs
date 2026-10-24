@@ -1,6 +1,8 @@
 //! Step-local document rendering; no borrowed document survives a step.
 mod account_lines;
 mod account_programs;
+pub(crate) mod settings;
+mod settings_values;
 use super::{Text, acts};
 use crate::jig::{Limits, runner::Printed};
 use alloc::boxed::Box;
@@ -36,6 +38,29 @@ pub(crate) fn print(
         | Document::Wait(_)
         | Document::SizedTurn { .. } => false,
     };
+    let settings = match &document {
+        Document::ReadSet(reading, _) => {
+            reading.called.call.tool >= crate::jig::rows::SETTINGS_AT
+                && reading.called.call.tool <= crate::jig::rows::REVISIONS_AT
+        }
+        Document::Me(_)
+        | Document::Accounts(_)
+        | Document::Task(..)
+        | Document::HistoricalTask(..)
+        | Document::Wait(_)
+        | Document::SizedTurn { .. } => false,
+    };
+    if settings {
+        let bounds = skein_json::writer::Limits {
+            depth: 32,
+            length: u32::try_from(limits.result_bytes).expect("output bound fits"),
+        };
+        let mut measured = Encoder::measure(&bounds);
+        encode(&document, limits, &mut measured);
+        if measured.measured().is_err() {
+            return super::failure(b"result limit", json, 1);
+        }
+    }
     let stdout = if json {
         let bounds = skein_json::writer::Limits {
             depth: 32,
@@ -52,6 +77,9 @@ pub(crate) fn print(
         let mut measure = Text::measure();
         text(&document, &book, limits, vocabulary, &mut measure);
         let structural = measure.structural();
+        if settings && u64::try_from(structural).unwrap_or(u64::MAX) > limits.result_bytes {
+            return super::failure(b"result limit", false, 1);
+        }
         if accounts && structural > usize::try_from(limits.text).expect("text fits") {
             return super::failure(b"result limit", false, 1);
         }

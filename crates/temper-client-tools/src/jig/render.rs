@@ -354,6 +354,12 @@ pub(crate) fn reads(
     };
     for (local, page) in &reading.pages {
         match page {
+            Readout::Jig(ReadResult::Value(ReadValue::Revision(answer)))
+                if reading.called.call.tool == crate::jig::rows::REVISION_AT
+                    && *answer.as_ref() == contract::RevisionAnswer::Unknown =>
+            {
+                return failure(b"unknown revision", reading.called.json, 2);
+            }
             Readout::Jig(ReadResult::Value(value)) => {
                 if check_selected(reading.called.call.tool, *local, value).is_err() {
                     return failure(b"tools' bug; unexpected document; report it as a finding", reading.called.json, 1);
@@ -426,7 +432,11 @@ fn check_selected(tool: u8, local: u32, value: &ReadValue) -> Result<(), ()> {
         | (3, 1, ReadValue::Task(_))
         | (3, 2, ReadValue::Activity(_))
         | (4 | 5, 1, ReadValue::Activity(_))
-        | (6, 1, ReadValue::Turn(_)) => Ok(()),
+        | (6, 1, ReadValue::Turn(_))
+        | (crate::jig::rows::SETTINGS_AT, 1, ReadValue::Settings(_))
+        | (crate::jig::rows::SETTING_AT, 1, ReadValue::Setting(_))
+        | (crate::jig::rows::REVISION_AT, 1, ReadValue::Revision(_))
+        | (crate::jig::rows::REVISIONS_AT, 1, ReadValue::Revisions(_)) => Ok(()),
         (3, 1, ReadValue::Historical(value)) if historical_task(value).is_some() => Ok(()),
         _ => Err(()),
     }

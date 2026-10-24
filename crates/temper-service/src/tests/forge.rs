@@ -793,8 +793,8 @@ fn a_refused_or_corrupt_records_load_stops_the_engine_named() {
                 .above
                 .push(jig_protocol_store::Event::Corrupt { owner: forge::records::LOAD });
         } else {
-            let (root, core, profile) = fixtures::store_limits();
-            let limits = crate::store::limits(&root, &core, &root.forge, &profile).unwrap();
+            let (root, _, profile) = fixtures::store_limits();
+            let limits = crate::store::limits(&root, &root.forge, &profile).unwrap();
             service.engine.as_mut().expect("engine").store =
                 crate::store::Store::new(&root, &limits, &[], fixtures::seeds().installation);
             service.engine.as_mut().expect("engine").store.opened = true; // The closed store refuses the loader's synchronous read.

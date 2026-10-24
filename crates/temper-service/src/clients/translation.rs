@@ -9,6 +9,9 @@ use temper_engine_domain as root;
 /// event on this boundary aborts the component instead of deciding root work.
 pub fn to_root(event: core::Event) -> Result<root::PartyInput, Box<kit::Event>> {
     let value = match event {
+        core::Event::ProposeSettings { reply_to, sign_in, key, digest, change } => {
+            root::PartyInput::ProposeSettings { reply_to, sign_in, key, digest, change }
+        }
         core::Event::ChangeSettings { reply_to, sign_in, key, digest, change } => {
             root::PartyInput::ChangeSettings { reply_to, sign_in, key, digest, change }
         }
@@ -160,6 +163,7 @@ pub fn not_ready(input: root::PartyInput) -> Option<kit::Event> {
         root::PartyInput::SignedIn { reply_to, .. }
         | root::PartyInput::SignOut { reply_to, .. }
         | root::PartyInput::Ask { reply_to, .. }
+        | root::PartyInput::ProposeSettings { reply_to, .. }
         | root::PartyInput::ChangeSettings { reply_to, .. }
         | root::PartyInput::Key { reply_to, .. }
         | root::PartyInput::Application { reply_to, .. } => {

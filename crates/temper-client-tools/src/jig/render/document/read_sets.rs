@@ -23,6 +23,12 @@ pub(super) fn text(
     }
     for page in reading.pages.values() {
         match page {
+            Readout::Jig(c::ReadResult::Value(
+                value @ (c::ReadValue::Settings(_)
+                | c::ReadValue::Setting(_)
+                | c::ReadValue::Revision(_)
+                | c::ReadValue::Revisions(_)),
+            )) => super::settings::text(value, crate::jig::call::number(call, 0), limits, out),
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Task(task))) => {
                 super::task_text(task, me, book, vocabulary, out);
                 super::subjects::text_digest(b"task", &super::super::Part::Task(task), limits, out);
@@ -103,6 +109,12 @@ pub(super) fn encode(reading: &Reading, limits: &Limits, out: &mut Encoder, budg
             out.key(if *local == 1 { b"needs" } else { b"updates" });
         }
         match page {
+            Readout::Jig(c::ReadResult::Value(
+                value @ (c::ReadValue::Settings(_)
+                | c::ReadValue::Setting(_)
+                | c::ReadValue::Revision(_)
+                | c::ReadValue::Revisions(_)),
+            )) => super::settings::encode(value, out),
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Task(task))) => {
                 if compound {
                     out.key(b"task");

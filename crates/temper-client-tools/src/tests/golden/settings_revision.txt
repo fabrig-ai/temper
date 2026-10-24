@@ -1,0 +1,3 @@
+revision 5, against revision 4, at 00:00 UTC, by the release, from p2/7, running work stays
+  charter 3: too large, 1000000 bytes; read with setting charter 3 --revision 5
+  rules: reset

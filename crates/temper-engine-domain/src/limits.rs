@@ -55,6 +55,8 @@ pub struct Limits {
     pub documents: jig_domain_core::documents::DocumentLimits,
     /// Maximum configured templates accepted by the core.
     pub templates: u32,
+    /// Configured policy byte budget, copied unchanged into the core.
+    pub policy_bytes: u64,
     /// Settings history and value bounds parsed by jig.
     pub settings: jig_domain_core::settings::Limits,
     /// Forge connector subtree and its bounded outbox.
@@ -114,7 +116,9 @@ pub const VIEWS: views::Limits = views::Limits {
     facts: 32,
 };
 
-pub(crate) fn core_limits(limits: &Limits) -> jig_domain_core::Limits {
+/// The effective core bounds shared by the root and its store.
+#[must_use]
+pub fn core_limits(limits: &Limits) -> jig_domain_core::Limits {
     jig_domain_core::Limits {
         fill_mark: FILL_MARK,
         load_bytes: limits.loads.read_bytes,
@@ -124,7 +128,7 @@ pub(crate) fn core_limits(limits: &Limits) -> jig_domain_core::Limits {
         connectors: 1,
         resume_bytes: limits.journal.transcript_bytes,
         run_bytes: limits.journal.run_bytes,
-        policy_bytes: u64::from(limits.journal.transcript_bytes).min(row_bound(limits).expect("validated row bound")),
+        policy_bytes: limits.policy_bytes,
         escalation_reason_bytes: limits
             .tasks
             .result_bytes

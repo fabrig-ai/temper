@@ -234,7 +234,7 @@ pub fn store_limits(document: &[u8], directories: &config::Directories) -> Resul
     let mut parsed =
         load(document, directories, false)?.1.ok_or(problem(Path::root().member(b"engine"), What::Standalone))?;
     let root = engine_limits(&mut parsed.engine.limits, &parsed.application.limits)?;
-    let store = crate::store::limits(&root, &parsed.engine.limits.core, &root.forge, &parsed.engine.limits.store)
+    let store = crate::store::limits(&root, &root.forge, &parsed.engine.limits.store)
         .ok_or(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)))?;
     Ok(StoreLimits { store, forge: root.forge })
 }
@@ -554,9 +554,7 @@ pub fn memory_terms(
     }
     let mut checked = checked_start(document, directories, files, Some(agent), seeds, accounts, forges, setup)?;
     let root = engine_limits(&mut checked.engine.jig.limits, &checked.engine.limits)?;
-    let store =
-        crate::store::limits(&root, &checked.engine.jig.limits.core, &root.forge, &checked.engine.jig.limits.store)
-            .ok_or(memory_bound())?;
+    let store = crate::store::limits(&root, &root.forge, &checked.engine.jig.limits.store).ok_or(memory_bound())?;
     let worker = checked.worker.as_ref().expect("checked embedded worker");
     let operations = crate::worker_settings::operations(&checked.engine.limits.git_component).ok_or(memory_bound())?;
     let engine = match crate::system::startup_memory_terms(
@@ -758,7 +756,7 @@ fn checked_start(
     if !problems.is_empty() {
         return Err(problems);
     }
-    let store = crate::store::limits(&root, &engine.jig.limits.core, &root.forge, &engine.jig.limits.store)
+    let store = crate::store::limits(&root, &root.forge, &engine.jig.limits.store)
         .ok_or(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)))?;
     let io = match &worker {
         Some(worker) => checks::process_io(&engine.jig.limits.io, Some(&worker.jig.limits.io)),

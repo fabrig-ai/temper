@@ -4,6 +4,7 @@ use skein_lib::Duration;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     pub rows: u32,
+    pub settings: jig_client_protocol_wire::Limits,
     pub program_login: &'static [u8],
     pub application: &'static [u8],
     pub ask_bytes: u64,

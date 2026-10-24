@@ -1,0 +1,1 @@
+{"newest":5,"settings":[{"setting":{"kind":"charter","number":3},"name":{"bytes":"worker","cut":false},"follows":"change","last":5},{"setting":{"kind":"rules"},"name":null,"follows":"default","last":0}],"held":[{"head":{"number":5,"against":4,"at":0,"by":{"party":2},"proposal":"p2/7","moved":false},"holders":3}],"pending":[{"proposal":"p2/7"}]}

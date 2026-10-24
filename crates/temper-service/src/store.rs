@@ -50,15 +50,11 @@ pub struct Store {
 
 /// Admit the core, journal and temper families, then copy checked sizes to KV.
 #[must_use]
-pub fn limits(
-    root: &root::Limits,
-    core: &jig_domain_core::Limits,
-    forge: &forge::Limits,
-    profile: &protocol::Limits,
-) -> Option<protocol::Limits> {
+pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Limits) -> Option<protocol::Limits> {
+    let core = root::core_limits(root);
     let mut kv = profile.store;
     let sizes = protocol::sizes::check(
-        core,
+        &core,
         &temper_protocol_store::application(forge)?,
         &root::journal_limits(&root.journal),
         &kv,
@@ -75,7 +71,7 @@ pub fn limits(
     kv.chunk = sizes.key.checked_add(sizes.value)?.checked_add(20)?;
     kv.page.bytes = sizes.key.checked_add(sizes.value)?;
     Some(protocol::Limits {
-        core: *core,
+        core,
         store: kv,
         secrets: kv,
         held: profile.held,

@@ -379,6 +379,7 @@ impl ScenarioApplication for Temper {
                         proposer: people::Proposer::Task(world.peers.assignments[0].task),
                         proposal,
                         decision: people::ProposalDecision::Accept,
+                        running: None,
                     },
                 );
             }

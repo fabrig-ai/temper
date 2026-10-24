@@ -61,6 +61,11 @@ pub fn why(p: &Path, words: &'static [u8]) -> Refusal {
 }
 pub(crate) fn kind(p: &Path, what: What) -> Refusal {
     let words: &[u8] = match what {
+        What::PolicyEnvelope { .. } => b"policy bytes exceed the people-v13 codec envelope",
+        What::AmendmentEnvelope { .. } => b"amendment bytes exceed the people-v13 codec envelope",
+        What::CodecCeiling { .. } => b"required bound exceeds the people-v13 codec ceiling",
+        What::CodecArithmetic => b"people-v13 codec bound arithmetic overflows",
+        What::StoreCodec => b"effective limits exceed the combined store codec envelope",
         What::Json => b"invalid JSON",
         What::Unknown => b"unknown member",
         What::Missing => b"missing",

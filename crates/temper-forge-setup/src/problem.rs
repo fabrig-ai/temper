@@ -38,6 +38,13 @@ impl Problems {
     pub(crate) fn append(&mut self, found: config::Problems) {
         for p in &found.problems {
             let words = match p.what {
+                config::What::PolicyEnvelope { .. } => b"policy bytes exceed the people-v13 codec envelope".as_slice(),
+                config::What::AmendmentEnvelope { .. } => {
+                    b"amendment bytes exceed the people-v13 codec envelope".as_slice()
+                }
+                config::What::CodecCeiling { .. } => b"required bound exceeds the people-v13 codec ceiling".as_slice(),
+                config::What::CodecArithmetic => b"people-v13 codec bound arithmetic overflows".as_slice(),
+                config::What::StoreCodec => b"effective limits exceed the combined store codec envelope".as_slice(),
                 config::What::Unknown => b"unknown member".as_slice(),
                 config::What::Missing => b"missing",
                 config::What::Duplicate => b"duplicate",

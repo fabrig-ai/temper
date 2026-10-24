@@ -1,0 +1,3 @@
+settings
+Read the settings, held revisions and pending proposals
+Result: settings

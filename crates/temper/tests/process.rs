@@ -168,6 +168,125 @@ fn temper_ctl_signs_in_by_the_link_read_on_stdin() {
 }
 
 #[test]
+fn temper_ctl_reads_the_deployments_settings_as_text_and_json() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_settings_reads");
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let mut steps = vec![
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["settings"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["setting", "charter", "1"])),
+        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+    ];
+    for json in [false, true] {
+        steps.push(Step::Then(Box::new(move |calls| {
+            let revision = support::ctl::json(&calls[2])["newest"].as_u64().expect("newest revision");
+            let revision = revision.to_string();
+            let mut arguments = vec!["revision", &revision];
+            if json {
+                arguments.push("--json");
+            }
+            Call::new(&arguments)
+        })));
+    }
+    steps.extend([Step::Run(Call::new(&["revisions"])), Step::Run(Call::new(&["revisions", "--json"]))]);
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    let [signed, settings, settings_json, setting, setting_json, revision, revision_json, history_text, history_json] =
+        seen.calls.as_slice()
+    else {
+        panic!("sign-in and eight settings reads")
+    };
+    for (index, call) in seen.calls.iter().enumerate() {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "call {index}: {}", String::from_utf8_lossy(&call.stderr));
+        assert!(call.stderr.is_empty());
+    }
+    assert!(!signed.stdout.is_empty());
+    let inventory = support::ctl::json(settings_json);
+    let newest = inventory["newest"].as_u64().expect("newest revision");
+    assert!(!inventory["settings"].as_array().expect("settings").is_empty());
+    let settings_text = String::from_utf8_lossy(&settings.stdout);
+    assert!(settings_text.starts_with(&format!("newest revision {newest}\n")), "{settings_text}");
+    assert!(settings_text.contains("charter 1 "), "{settings_text}");
+    let whole = support::ctl::json(setting_json);
+    assert_eq!(whole["setting"], serde_json::json!({"kind":"charter","number":1}));
+    assert_eq!(whole["revision"], newest);
+    assert!(whole["value"]["instructions"].is_string(), "{whole}");
+    assert!(String::from_utf8_lossy(&setting.stdout).starts_with(&format!("charter 1, revision {newest}\n")));
+    let revision_text = String::from_utf8_lossy(&revision.stdout);
+    assert!(revision_text.starts_with(&format!("revision {newest}, against revision ")), "{revision_text}");
+    assert!(revision_text.contains(" UTC, by the first start"), "{revision_text}");
+    assert_eq!(support::ctl::json(revision_json)["head"]["number"], newest);
+    let history = support::ctl::json(history_json);
+    assert_eq!(history["rows"][0]["head"]["number"], newest);
+    assert!(String::from_utf8_lossy(&history_text.stdout).starts_with(&format!("revision {newest},")));
+    eprintln!("ctl settings reads story: {:?}", clock.now().now.saturating_since(began));
+    scratch.remove();
+}
+
+#[test]
+fn temper_ctl_an_owner_changes_settings_and_a_stale_change_names_the_newest_revision() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_change_settings");
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let file = scratch.path().join("settings.json");
+    let change_file = file.clone();
+    let stale_file = file.clone();
+    let instructions = "Follow the owner's revised instructions.";
+    let seen = support::ctl::run(Story::new(
+        scratch.path(),
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["me", "--json"])),
+            Step::Run(Call::new(&["settings", "--json"])),
+            Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+            Step::Then(Box::new(move |calls| {
+                support::ctl::charter_change_file(&change_file, &calls[3], instructions);
+                support::ctl::settings_change(&calls[2], &change_file, "owner-settings")
+            })),
+            Step::Then(Box::new(move |calls| support::ctl::settings_change(&calls[2], &stale_file, "stale-settings"))),
+            Step::Run(Call::new(&["settings"])),
+            Step::Run(Call::new(&["settings", "--json"])),
+            Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        ],
+    ));
+    let [signed, me, before, original, changed, stale, settings, settings_json, setting] = seen.calls.as_slice() else {
+        panic!("owner read, change, stale refusal and read back")
+    };
+    for call in [signed, me, before, original, changed, settings, settings_json, setting] {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
+        assert!(call.stderr.is_empty());
+    }
+    assert_eq!(support::ctl::json(me)["deployment_role"], "owner");
+    let previous = support::ctl::json(before)["newest"].as_u64().expect("read revision");
+    let newest = support::ctl::json(settings_json)["newest"].as_u64().expect("new revision");
+    assert_eq!(newest, previous + 1);
+    assert_eq!(changed.stdout, format!("revision {newest}\n").as_bytes());
+    assert_eq!(stale.exit, Some(Exit::Code(2)));
+    assert!(stale.stdout.is_empty());
+    assert_eq!(
+        stale.stderr,
+        format!("change-settings: stale; newest revision {newest}; read settings again\n").as_bytes()
+    );
+    let settings_text = String::from_utf8_lossy(&settings.stdout);
+    assert!(settings_text.contains(&format!("changed in revision {newest}")), "{settings_text}");
+    let inventory = support::ctl::json(settings_json);
+    let charter = inventory["settings"]
+        .as_array()
+        .expect("settings inventory")
+        .iter()
+        .find(|line| line["setting"] == serde_json::json!({"kind":"charter","number":1}))
+        .expect("changed charter");
+    assert_eq!(charter["follows"], "change");
+    assert_eq!(charter["last"], newest);
+    assert_eq!(support::ctl::json(setting)["value"]["instructions"], instructions);
+    eprintln!("ctl settings change story: {:?}", clock.now().now.saturating_since(began));
+    scratch.remove();
+}
+
+#[test]
 fn a_fresh_link_keeps_the_sign_in_held() {
     use support::ctl::{Call, Step, Story};
     let scratch = ctl_scratch("fresh_link_keeps_sign_in");

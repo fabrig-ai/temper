@@ -102,6 +102,12 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["wait", "forges"],
     &["export", "43", "record"],
     &["import", "record", "--key", "move-in"],
+    &["settings"],
+    &["setting", "charter", "3"],
+    &["setting", "rules"],
+    &["revision", "5"],
+    &["revisions"],
+    &["change-settings", "FILE", "--against", "5", "--key", "settings-5"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -468,7 +474,7 @@ impl Harness {
     ) -> u32 {
         self.next = self.next.checked_add(1).expect("fixture calls fit");
         let count = match call.tool {
-            1 | 2 | 4 | 5 | 6 | 9..=15 | 31 => SINGLE_READ,
+            1 | 2 | 4 | 5 | 6 | 9..=15 | 31 | 42..=45 => SINGLE_READ,
             3 => {
                 if crate::jig::call::number(&call, 2).is_some() {
                     COMPOSITE_READS
@@ -616,11 +622,11 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 /// A stable stored request's engine key, unrelated to its client call prefix.
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot for each guide call, including the model-choice seam.
-pub(super) const GUIDE_CALLS: u32 = 24;
+pub(super) const GUIDE_CALLS: u32 = 27;
 /// One slot per guide line, including the final line; fewer loses that line.
 const GUIDE_LINES: u32 = 123;
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 47;
+pub(super) const TOOL_FORMS: u32 = 53;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

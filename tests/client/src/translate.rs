@@ -21,6 +21,9 @@ pub fn party(event: core::Event) -> engine::Event {
         core::Event::ChangeSettings { reply_to, sign_in, key, digest, change } => {
             PartyInput::ChangeSettings { reply_to, sign_in, key, digest, change }
         }
+        core::Event::ProposeSettings { reply_to, sign_in, key, digest, change } => {
+            PartyInput::ProposeSettings { reply_to, sign_in, key, digest, change }
+        }
         core::Event::SettingsCommit { .. } => panic!("the client kit does not make SettingsCommit"),
         core::Event::SignIn { reply_to, identity, held } => PartyInput::SignedIn { reply_to, identity, held },
         core::Event::People(people::Event::Ask { reply_to, sign_in, key, ask, models }) => {

@@ -626,6 +626,11 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                         action: jig_domain_people::Action::Batch(batch), reason, ..
                     } => people_bytes::batch(batch)?.checked_add(u64::try_from(reason.len()).ok()?),
                     jig_domain_people::Ask::Propose {
+                        action: jig_domain_people::Action::Settings { .. },
+                        reason,
+                        ..
+                    } => u64::try_from(reason.len()).ok(),
+                    jig_domain_people::Ask::Propose {
                         action: jig_domain_people::Action::Amend { amendment, .. },
                         reason,
                         ..

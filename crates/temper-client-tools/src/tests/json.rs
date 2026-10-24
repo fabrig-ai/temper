@@ -6,7 +6,11 @@ use crate::{
 #[test]
 fn every_call_goes_from_argv_to_json_and_back_unchanged() {
     for words in fixtures::EVERY_TOOL {
-        let call = fixtures::call(words);
+        let mut call = fixtures::call(words);
+        if call.tool == jig::rows::CHANGE_SETTINGS_AT {
+            *call.values.get_mut(0).expect("FILE") =
+                Some(jig::call::Values::One(jig::call::Value::Text(br#"{"items":[]}"#.as_slice().into())));
+        }
         let json = jig::json::write_call(table::TOOLS, &call).expect("a call's JSON within its bound");
         assert_eq!(fixtures::from_json(&json), call, "{words:?}");
     }

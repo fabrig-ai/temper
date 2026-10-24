@@ -75,6 +75,7 @@ pub fn tools() -> crate::jig::Limits {
     let client = client().client.domain;
     crate::jig::Limits {
         rows: client.rows,
+        settings: jig_client_protocol_link::Limits::new(client, 8).expect("checked host client limits").wire,
         program_login: b"temper program-login",
         application: b"temper",
         ask_bytes: client.ask_bytes,

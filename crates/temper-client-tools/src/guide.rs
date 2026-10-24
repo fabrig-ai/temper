@@ -14,6 +14,15 @@ Loop by waiting again; use the matching read's digest with --since to wait for a
 With --since and --until, both must hold. Read acts and their effects before sending.
 A stopping engine's wait continues through reconnect and fails only past the link deadline.
 
+Read deployment settings, then read a whole value as JSON, put its value member
+in an items FILE, and edit it before one keyed decision:
+  temper ctl DIRECTORY settings
+  temper ctl DIRECTORY setting charter 3 --json
+  temper ctl DIRECTORY change-settings FILE --against 5 --key settings-5
+Use setting ... --json > FILE to save a value; FILE for change-settings is
+{"items":[{"setting":{"kind":"charter","number":3},"set":VALUE}]}.
+Running work stays unless --running moves. On stale, read settings again and retry.
+
 Read accounts without values; model names and limits are supplied facts:
   temper ctl DIRECTORY accounts
   temper ctl DIRECTORY models --project shop
@@ -72,7 +81,7 @@ Without these flags the template's choice or engine default is sent unchanged.
 A model change preserves the supplied account and sub-agent choices; there is no --account flag.
 Unknown model or effort names fail locally (exit 1), without sending.
 
-Name keys for chat, message, close, adopt, connect, add-key, declare, import and forge-connect; export takes no --key and other acts accept an optional --key NAME.
+Name keys for chat, message, close, adopt, connect, add-key, declare, import, change-settings and forge-connect; export takes no --key and other acts accept an optional --key NAME.
 Names are one to 64 lower-case letters, digits or hyphens.
 Give each agent a distinct prefix, such as investigate-41; reads and waits need no key.
 A repeat keeps its name, party and ask within retention. A changed template or bound in me

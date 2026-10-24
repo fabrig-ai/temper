@@ -50,6 +50,7 @@ pub(crate) struct Directory {
     closing: bool,
     link_path: Option<Box<[u8]>>,
     link_max: u32,
+    settings_input: Option<()>,
     key: Option<Token>,
     record: Option<Token>,
     record_path: Option<Box<[u8]>>,
@@ -111,6 +112,7 @@ impl Directory {
             closing: false,
             link_path: None,
             link_max: limits::LINK,
+            settings_input: None,
             key: None,
             record: None,
             record_path: None,
@@ -227,6 +229,9 @@ impl Directory {
             (Stage::Link, file::Event::Loaded { bytes, .. }) => {
                 self.link = Some(bytes);
                 self.stage = Stage::Ready;
+            }
+            (Stage::Link, file::Event::TooLarge { .. }) if self.settings_input.is_some() => {
+                self.fail(format!("settings file: file bytes: bound {}", self.link_max).as_bytes());
             }
             (Stage::Store, file::Event::Stored { .. }) => {
                 self.stored = true;
@@ -554,7 +559,8 @@ impl Directory {
         let (_, root) = self.text_roots.pop()?;
         Some(root)
     }
-    pub(crate) fn load_text(&mut self, index: u8, path: &[u8]) {
+    pub(crate) fn load_text(&mut self, index: u8, path: &[u8], settings_input: bool) {
+        self.settings_input = if settings_input { Some(()) } else { None };
         self.text_root = None;
         for (argument, root) in &self.text_roots {
             if *argument == index {

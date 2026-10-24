@@ -219,6 +219,7 @@ pub(super) fn decode_lack(value: w::Lack) -> p::Lack {
 }
 pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::LimitKind {
     match value {
+        p::LimitKind::SettingsProposals => unreachable!("forge applications cannot propose settings"),
         p::LimitKind::Projects => w::LimitKind::Projects,
         p::LimitKind::Words => w::LimitKind::Words,
         p::LimitKind::Identity => w::LimitKind::Identity,
@@ -266,6 +267,7 @@ pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::Limit
 }
 pub(super) fn decode_limit_kind(value: w::LimitKind) -> p::LimitKind {
     match value {
+        w::LimitKind::SettingsProposals => unreachable!("forge applications cannot store a settings proposal limit"),
         w::LimitKind::Projects => p::LimitKind::Projects,
         w::LimitKind::Words => p::LimitKind::Words,
         w::LimitKind::Identity => p::LimitKind::Identity,
@@ -346,7 +348,8 @@ pub(super) fn encode_refusal(value: &p::Refusal, l: &w::Limits) -> Result<w::Ref
                     // Forge application values contain no settings for the core to check.
                     p::Malformed::Settings { .. }
                     // Only a settings change can leave the effective settings unchanged.
-                    | p::Malformed::SettingsUnchanged => {
+                    | p::Malformed::SettingsUnchanged
+                    | p::Malformed::Running => {
                         return Err(w::Problem { path: w::Path::MalformedTag, reason: skein_codec::Reason::Bound });
                     }
                     p::Malformed::ProposedAsAllowed => w::Malformed::ProposedAsAllowed,
@@ -471,6 +474,7 @@ pub(super) fn decode_refusal(value: w::Refusal) -> p::Refusal {
                 w::Malformed::Settings(_) => unreachable!("forge applications cannot store malformed settings"),
                 // An application request cannot be an unchanged settings change.
                 w::Malformed::SettingsUnchanged => unreachable!("forge applications cannot store unchanged settings"),
+                w::Malformed::Running => unreachable!("forge applications cannot store a settings running choice"),
                 w::Malformed::ProposedAsAllowed => p::Malformed::ProposedAsAllowed,
                 w::Malformed::Name(value) => p::Malformed::Name(match value.rule() {
                     w::NameRule::Empty => p::NameRule::Empty,
