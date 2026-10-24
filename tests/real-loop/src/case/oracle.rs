@@ -183,6 +183,10 @@ fn cued(system: &[u8]) -> Option<Agent> {
     ] {
         for (at, word) in system.windows(agent.cue().len()).enumerate() {
             if word == agent.cue() {
+                // No later cue can precede zero; equal positions keep this agent's priority.
+                if at == 0 {
+                    return Some(agent);
+                }
                 if at < first_at {
                     first_at = at;
                     first = Some(agent);
@@ -226,14 +230,14 @@ fn check(misses: &mut Vec<Miss>, met: bool, promise: Promise, what: String) {
         misses.push(Miss { step: "4.1", promise, what });
     }
 }
-fn text(value: &Value, path: &str) -> String {
-    value.pointer(path).and_then(Value::as_str).unwrap_or_default().into()
+fn text<'a>(value: &'a Value, path: &str) -> &'a str {
+    value.pointer(path).and_then(Value::as_str).unwrap_or_default()
 }
 fn number(value: &Value, path: &str) -> Option<u64> {
     value.pointer(path).and_then(Value::as_u64)
 }
 fn contains(words: &[u8], needle: &str) -> bool {
-    crate::calls::occurrences(words, needle.as_bytes()) != 0
+    words.windows(needle.len()).any(|part| part == needle.as_bytes())
 }
 
 #[must_use]
@@ -863,8 +867,9 @@ mod account_tests {
     #[test]
     fn limited_checkpoint_checks_both_account_and_source() {
         const MISSES: usize = 1;
+        let passing = limited_met();
         for path in ["/state/until", "/sources/0/state/until", "/sources/0/number", "/usable", "/sources/0/usable"] {
-            let mut observed = limited_met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&Read::Limited).expect("limited")["accounts"]["deployment"][0]
                 .pointer_mut(path)
                 .expect("account field") = Value::Null;
@@ -1899,6 +1904,7 @@ mod rules_tests {
     }
     #[test]
     fn the_wait_and_both_hold_reads_are_checked() {
+        let passing = met();
         for (read, path, promise, what) in [
             (Read::RulesWaiting, "/chip/task", RULES_CONTROL, "wait in its run"),
             (Read::RulesWaiting, "/chip/details/owner/details/observation/work", RULES_CONTROL, "wait in its run"),
@@ -1910,15 +1916,16 @@ mod rules_tests {
             (Read::RulesQuestionWaiting, "/task/chip/phase", RULES_INBOX, "still-held"),
             (Read::RulesQuestionWaiting, "/task/hold/owner/revision", RULES_INBOX, "same hold"),
         ] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&read).expect("document").pointer_mut(path).expect("field") = Value::Null;
             rejects(&observed, promise, what);
         }
     }
     #[test]
     fn the_waiting_question_has_its_recipient_sender_number_and_words() {
+        let passing = met();
         for path in ["/task", "/line/words/message", "/line/words/by/task", "/line/words/kind", "/line/words/words"] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&Read::RulesQuestionWaiting).expect("question")["activity"]["rows"][0]
                 ["event"]["owner"]["source"].pointer_mut(path).expect("question field") = Value::Null;
             rejects(&observed, RULES_INBOX, "numbered question");
@@ -1926,11 +1933,12 @@ mod rules_tests {
     }
     #[test]
     fn main_and_every_relevant_query_must_have_the_right_system_guide() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         observed.kit.main.clear();
         rejects(&observed, RULES_CONVENTIONS, "kit's main");
         for at in [OPENING, FRESH, LATER, A_OPENING, A_ANSWERED] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told[at].system = Box::new([]);
             let (promise, what) = match at {
                 OPENING => (RULES_CONVENTIONS, "opening run"),
@@ -1941,7 +1949,7 @@ mod rules_tests {
             rejects(&observed, promise, what);
         }
         for at in [FRESH, LATER, A_ANSWERED] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             let mut system = observed.told[at].system.to_vec();
             system.extend_from_slice(DROPPED_RULE.as_bytes());
             observed.told[at].system = system.into();
@@ -1954,57 +1962,61 @@ mod rules_tests {
     }
     #[test]
     fn the_directors_history_must_be_fresh_then_grow_in_one_run() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         let mut history = observed.told[FRESH].history.to_vec();
         history.push(assistant("Delegate A."));
         observed.told[FRESH].history = history.into();
         rejects(&observed, RULES_FRESH, "earlier assistant turns");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[LATER].system = OLD_RULES.as_bytes().into();
         rejects(&observed, RULES_INBOX, "one director run");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[LATER].history = Box::new([user("Another run"), user(SCOPE_QUESTION)]);
         rejects(&observed, RULES_INBOX, "one director run");
         for replacement in ["No question", &format!("{SCOPE_QUESTION} {SCOPE_QUESTION}")] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told[FRESH].history = Box::new([user(replacement)]);
             rejects(&observed, RULES_INBOX, "delivered once");
         }
     }
     #[test]
     fn the_opening_queries_must_also_belong_to_one_run() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         observed.told[OPENING_FOLLOWUP].system = format!("{OLD_RULES}another run").into_bytes().into();
         rejects(&observed, RULES_CONVENTIONS, "opening run");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[OPENING_FOLLOWUP].history = Box::new([user("Another opening")]);
         rejects(&observed, RULES_CONVENTIONS, "opening run");
     }
 
     #[test]
     fn a_must_receive_the_answer_once() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         observed.told[A_ANSWERED].history = Box::new([]);
         rejects(&observed, RULES_DROPPED, "hear the answer once");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.push(observed.told[A_ANSWERED].clone());
         rejects(&observed, RULES_DROPPED, "hear the answer once");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[A_ANSWERED].history = Box::new([user(&format!("{SCOPE_ANSWER} {SCOPE_ANSWER}"))]);
         rejects(&observed, RULES_DROPPED, "hear the answer once");
     }
     #[test]
     fn messages_cannot_supply_rules_or_reread_notices() {
+        let passing = met();
         for words in NEW_RULES
             .lines()
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
             .chain(["Please re-read the guide", "Please reread the guide"])
         {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told[A_ANSWERED].history = Box::new([user(words), user(SCOPE_ANSWER)]);
             rejects(&observed, RULES_NO_NOTICE, "no query's messages");
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[A_ANSWERED].history = Box::new([user(DROPPED_RULE), user(SCOPE_ANSWER)]);
         rejects(&observed, RULES_DROPPED, "no message");
     }
@@ -2031,8 +2043,9 @@ mod rules_tests {
 
     #[test]
     fn no_run_may_start_invalid_and_hide_behind_its_retry() {
+        let passing = met();
         for read in [Read::RulesActivity, Read::ScopeActivity] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             let rows =
                 observed.documents.get_mut(&read).expect("activity")["activity"]["rows"].as_array_mut().expect("rows");
             rows.insert(
@@ -2040,16 +2053,17 @@ mod rules_tests {
                 json!({"event":{"owner":{"source":{"line":{"run_ended":{"end":{"failed":{"class":"invalid"}}}}}}}}),
             );
             rejects(&observed, RULES_CONTROL, "start invalid");
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.remove(&read);
             rejects(&observed, RULES_CONTROL, "start invalid");
         }
     }
     #[test]
     fn both_original_tasks_must_end_with_their_reports() {
+        let passing = met();
         for read in [Read::RulesEnded, Read::ScopeEnded] {
             for path in ["/task/chip/task", "/task/chip/phase", "/task/result/value/report/bytes"] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("ended").pointer_mut(path).expect("field") = Value::Null;
                 rejects(&observed, RULES_CONTROL, "original director and A");
             }
@@ -2215,8 +2229,9 @@ mod shape_tests {
     }
     #[test]
     fn the_current_instructions_and_their_revision_are_checked() {
+        let passing = met();
         for path in ["/instructions/bytes", "/instructions/cut", "/spec_revision/value"] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed
                 .documents
                 .get_mut(&Read::MoverEnded)
@@ -2228,17 +2243,19 @@ mod shape_tests {
     }
     #[test]
     fn the_opening_system_must_have_only_the_old_brief() {
+        let passing = met();
         for brief in [String::new(), NEW_BRIEF.into(), format!("{OLD_BRIEF}\n{NEW_BRIEF}")] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told[0].system = brief.into_bytes().into();
             rejects(&observed, SHAPE_HISTORY, "first query");
         }
     }
     #[test]
     fn every_system_after_the_amendment_must_have_only_the_new_brief() {
+        let passing = met();
         for at in [3, 4] {
             for brief in [String::new(), OLD_BRIEF.into(), format!("{OLD_BRIEF}\n{NEW_BRIEF}")] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 observed.told[at].system = brief.into_bytes().into();
                 rejects(&observed, SHAPE_INSTRUCTIONS, "every A query");
             }
@@ -2246,50 +2263,54 @@ mod shape_tests {
     }
     #[test]
     fn the_amendment_message_must_arrive_once() {
+        let passing = met();
         for at in [3, 4] {
             for messages in [vec![], vec![user(NEW_BRIEF), user(NEW_BRIEF)]] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 observed.told[at].history = messages.into();
                 rejects(&observed, SHAPE_INSTRUCTIONS, "whole message once");
             }
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.truncate(3);
         rejects(&observed, SHAPE_INSTRUCTIONS, "every A query");
     }
     #[test]
     fn the_chat_never_inherits_either_brief() {
+        let passing = met();
         for brief in [OLD_BRIEF, NEW_BRIEF] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told[2].system = brief.as_bytes().into();
             rejects(&observed, SHAPE_INSTRUCTIONS, "chat's charter");
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.retain(|told| told.agent != Agent::Shape);
         rejects(&observed, SHAPE_INSTRUCTIONS, "chat's charter");
     }
     #[test]
     fn the_numbered_question_and_its_delivery_are_checked() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         observed.told[1] = told(Agent::Mover, OLD_BRIEF, &[]);
         rejects(&observed, SHAPE_INSTRUCTIONS, "numbered question");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[2].history = Box::new([]);
         rejects(&observed, SHAPE_INSTRUCTIONS, "numbered question");
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.swap(2, 3);
         rejects(&observed, SHAPE_INSTRUCTIONS, "numbered question");
     }
     #[test]
     fn both_numbered_tasks_must_report_in_the_project() {
+        let passing = met();
         for read in [Read::MoverEnded, Read::ShapeEnded] {
             for path in ["/chip/task", "/project", "/chip/phase", "/result/value/report/bytes"] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("ended document").pointer_mut(path).expect("mutated field") =
                     Value::Null;
                 rejects(&observed, SHAPE_ENDINGS, "original chat and A");
             }
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.remove(&read);
             rejects(&observed, SHAPE_ENDINGS, "original chat and A");
         }
@@ -2670,6 +2691,7 @@ mod pause_tests {
 
     #[test]
     fn every_required_document_field_rejects_a_mutation() {
+        let passing = met();
         let required = [
             (Read::BHeld, "/task/chip/task"),
             (Read::BHeld, "/task/project"),
@@ -2711,7 +2733,7 @@ mod pause_tests {
             (Read::PauseEnded, "/task/chip/task"),
         ];
         for (read, path) in required {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = Value::Null;
             assert!(!step_5_2(&observed).is_empty(), "{read:?}{path}");
         }
@@ -2725,37 +2747,38 @@ mod pause_tests {
                 "/task/chip/details/owner/details/attempt",
                 "/task/chip/details/owner/details/observation/work",
             ] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("running").pointer_mut(path).expect("field") = Value::Null;
                 assert!(!step_5_2(&observed).is_empty(), "{read:?}{path}");
             }
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.get_mut(&read).expect("running")["task"]["result"] = json!({"done":{}});
             assert!(!step_5_2(&observed).is_empty(), "{read:?} already ended");
         }
         for &(read, _) in crate::case::acts::READS_5_2 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.remove(&read);
             assert!(!step_5_2(&observed).is_empty(), "missing {read:?}");
         }
     }
     #[test]
     fn news_cannot_arrive_early_twice_or_without_both_endings() {
-        let mut early = met();
+        let passing = met();
+        let mut early = passing.clone();
         early.told[0].words = early.told[1].words.clone();
-        let mut missing_h1 = met();
+        let mut missing_h1 = passing.clone();
         missing_h1.told[1].words = IMPLEMENTER_RESULT.as_bytes().into();
-        let mut twice = met();
+        let mut twice = passing.clone();
         twice.told[1].words =
             format!("{} {IMPLEMENTER_RESULT}", String::from_utf8_lossy(&twice.told[1].words)).into_bytes().into();
-        let mut twice_h1 = met();
+        let mut twice_h1 = passing.clone();
         twice_h1.told[1].words =
             format!("{} Result from task {H1}:\n", String::from_utf8_lossy(&twice_h1.told[1].words))
                 .into_bytes()
                 .into();
-        let mut no_chat_delivery = met();
+        let mut no_chat_delivery = passing.clone();
         no_chat_delivery.told[2].words = Box::new([]);
-        let mut no_queries = met();
+        let mut no_queries = passing.clone();
         no_queries.told.clear();
         for (label, observed) in [
             ("early", early),
@@ -2770,28 +2793,29 @@ mod pause_tests {
     }
     #[test]
     fn stop_order_a_hold_and_the_merge_are_checked() {
-        let mut red = met();
+        let passing = met();
+        let mut red = passing.clone();
         red.kit.merged_green = false;
-        let mut missing_file = met();
+        let mut missing_file = passing.clone();
         missing_file.kit.main.clear();
-        let mut early = met();
+        let mut early = passing.clone();
         early.documents.get_mut(&Read::BHeld).expect("held")["task"]["activity"] = 10.into();
-        let mut a_held = met();
+        let mut a_held = passing.clone();
         a_held.documents.get_mut(&Read::OwnerEnded).expect("A")["task"]["hold"] = json!({"owner":{}});
-        let mut a_released = met();
+        let mut a_released = passing.clone();
         a_released.documents.get_mut(&Read::OwnerEnded).expect("A")["activity"]["rows"]
             .as_array_mut()
             .expect("rows")
             .push(json!({"event":{"owner":{"source":{"line":{"milestone":{"position":3}}}}}}));
-        let mut a_retried = met();
+        let mut a_retried = passing.clone();
         a_retried.documents.get_mut(&Read::OwnerEnded).expect("A")["activity"]["rows"]
             .as_array_mut()
             .expect("rows")
             .push(json!({"event":{"owner":{"source":{"line":{"run_began":{"attempt":3}}}}}}));
-        let mut incomplete = met();
+        let mut incomplete = passing.clone();
         incomplete.documents.get_mut(&Read::BEndedEarlier).expect("earlier")["activity"]["before"] =
             json!({"value":"older"});
-        let mut unordered = met();
+        let mut unordered = passing.clone();
         unordered.documents.get_mut(&Read::BEndedEarlier).expect("earlier")["activity"]["rows"][0]["event"]["owner"]
             ["source"]["position"] = 13.into();
         for (label, observed) in [
@@ -3006,7 +3030,8 @@ fn plan_tool_results(observed: &Observed, agent: Agent, tool: &[u8]) -> Vec<(usi
                         calls.insert(id.as_ref(), arguments);
                     }
                     Part::ToolOutput { id, output, .. } if message.role == Role::User => {
-                        if let Some(arguments) = calls.get(id.as_ref())
+                        if !seen.contains(id.as_ref())
+                            && let Some(arguments) = calls.get(id.as_ref())
                             && let Ok(args) = serde_json::from_slice(arguments)
                             && seen.insert(id.to_vec())
                         {
@@ -3204,6 +3229,7 @@ mod plan_tests {
     }
     #[test]
     fn every_required_document_field_rejects_a_mutation() {
+        let passing = met();
         for (read, paths) in [
             (
                 Read::PlanEnded,
@@ -3253,39 +3279,40 @@ mod plan_tests {
             (Read::PlanAnswerPending, vec!["/task", "/writing/text", "/writing/cut"]),
         ] {
             for path in paths {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let value = observed.documents.get_mut(&read).expect("read").pointer_mut(path).expect("field");
                 *value = if value.is_null() { json!("unexpected cursor") } else { Value::Null };
                 assert!(!step_5_5(&observed).is_empty(), "{read:?}{path}");
             }
         }
         for &(read, _) in acts::READS_5_5 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.remove(&read);
             assert!(!step_5_5(&observed).is_empty(), "missing {read:?}");
         }
     }
     #[test]
     fn missing_duplicate_reordered_or_resumed_messages_fail() {
-        for at in 0..met().told.len() {
-            let mut observed = met();
+        let passing = met();
+        for at in 0..passing.clone().told.len() {
+            let mut observed = passing.clone();
             observed.told.remove(at);
             // The first note result also appears in the opening's growing prefix.
             if at != 0 {
                 assert!(!step_5_5(&observed).is_empty(), "missing query {at}");
             }
         }
-        let mut duplicate = met();
+        let mut duplicate = passing.clone();
         duplicate.told[2].history = [duplicate.told[2].history.to_vec(), vec![input(PLAN_WORDS)]].concat().into();
-        let mut duplicate_answer = met();
+        let mut duplicate_answer = passing.clone();
         duplicate_answer.told[3].history =
             [duplicate_answer.told[3].history.to_vec(), vec![input(PLAN_ANSWER)]].concat().into();
-        let mut early = met();
+        let mut early = passing.clone();
         early.told.swap(2, 3);
-        let mut resumed = met();
+        let mut resumed = passing.clone();
         resumed.told[3].history = resumed.told[1].history.clone();
         resumed.told[3].history = [resumed.told[3].history.to_vec(), vec![input(PLAN_ANSWER)]].concat().into();
-        let mut wrong_number = met();
+        let mut wrong_number = passing.clone();
         if let Part::ToolCall { arguments, .. } = &mut wrong_number.told[2].history[1].parts[0] {
             *arguments =
                 serde_json::to_vec(&json!({"target":PLANNER,"form":"answer","question":99,"words":PLAN_ANSWER}))
@@ -3298,18 +3325,19 @@ mod plan_tests {
     }
     #[test]
     fn refusal_must_be_tool_output_and_no_child_may_be_made() {
-        let mut prose = met();
+        let passing = met();
+        let mut prose = passing.clone();
         prose.told[5].history = vec![input(SUBOWNER_REFUSAL)].into();
-        let mut child = met();
+        let mut child = passing.clone();
         child.documents.get_mut(&Read::SubownerEnded).expect("A1")["task"]["delegates"] = json!([{"chip":{"task":4}}]);
-        let mut wrong_parent = met();
+        let mut wrong_parent = passing.clone();
         wrong_parent.documents.get_mut(&Read::PlanEnded).expect("director")["task"]["requester"] =
             json!({"task":SUBOWNER});
-        let mut forged_output = met();
+        let mut forged_output = passing.clone();
         if let Part::ToolOutput { id, .. } = &mut forged_output.told[5].history[1].parts[0] {
             *id = b"unmatched".as_slice().into();
         }
-        let mut spend = met();
+        let mut spend = passing.clone();
         if let Part::ToolOutput { output, .. } = &mut spend.told[5].history[1].parts[0] {
             *output = format!("{SUBOWNER_REFUSAL}spend allowance; ").into_bytes().into();
         }
@@ -3319,19 +3347,20 @@ mod plan_tests {
     }
     #[test]
     fn plan_recall_must_follow_its_write_and_attempts_cannot_overlap() {
-        let mut early = met();
+        let passing = met();
+        let mut early = passing.clone();
         early.told.swap(0, 4);
         early.told[1].history = Box::new([]);
-        let mut overlap = met();
+        let mut overlap = passing.clone();
         overlap.documents.get_mut(&Read::PlannerEarlier).expect("older")["rows"][0]["event"]["owner"]["source"]["line"] =
             json!({"run_began":{"attempt":2}});
-        let mut unordered = met();
+        let mut unordered = passing.clone();
         unordered.documents.get_mut(&Read::PlannerEarlier).expect("older")["rows"][0]["event"]["owner"]["source"]["position"] =
             json!(99);
-        let mut unended = met();
+        let mut unended = passing.clone();
         unended.documents.get_mut(&Read::PlannerEnded).expect("A")["activity"]["rows"][0]["event"]["owner"]["source"]
             ["line"] = json!({});
-        let mut failed = met();
+        let mut failed = passing.clone();
         let rows = failed.documents.get_mut(&Read::PlannerEnded).expect("A")["activity"]["rows"]
             .as_array_mut()
             .expect("A's rows");
@@ -3729,13 +3758,15 @@ mod misread_tests {
     }
     #[test]
     fn informative_direction_meets_the_checkpoint() {
-        assert_met(&step_5_6(&met()));
-        let mut replayed = met();
+        let passing = met();
+        assert_met(&step_5_6(&passing.clone()));
+        let mut replayed = passing.clone();
         replayed.told.insert(2, replayed.told[1].clone());
         assert_met(&step_5_6(&replayed));
     }
     #[test]
     fn every_required_field_and_missing_document_rejects_a_mutation() {
+        let passing = met();
         for (read, paths) in [
             (
                 Read::MisreadParked,
@@ -3794,32 +3825,33 @@ mod misread_tests {
             (Read::MisreadRulePending, vec!["/task", "/writing/text", "/writing/cut"]),
         ] {
             for path in paths {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let value = observed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field");
                 *value = if value.is_null() { json!("unexpected cursor") } else { Value::Null };
                 assert!(!step_5_6(&observed).is_empty(), "{read:?}{path}");
             }
         }
         for &(read, _) in acts::READS_5_6 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.remove(&read);
             assert!(!step_5_6(&observed).is_empty(), "missing {read:?}");
         }
     }
     #[test]
     fn the_timer_identity_deadline_and_period_must_survive_both_reads() {
+        let passing = met();
         for read in [Read::MisreadParked, Read::MisreadFresh] {
             for path in [
                 "/task/subscriptions/entries/0/number",
                 "/task/subscriptions/entries/0/kind/timer/at",
                 "/task/subscriptions/entries/0/kind/timer/period",
             ] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("timer").pointer_mut(path).expect("field") = json!(99);
                 assert!(!step_5_6(&observed).is_empty(), "{read:?}{path}");
             }
         }
-        let mut extra = met();
+        let mut extra = passing.clone();
         extra.documents.get_mut(&Read::MisreadFresh).expect("fresh")["task"]["subscriptions"]["entries"]
             .as_array_mut()
             .expect("timers")
@@ -3828,22 +3860,23 @@ mod misread_tests {
     }
     #[test]
     fn correction_order_and_the_fresh_conversation_are_checked() {
+        let passing = met();
         for row in 0..3 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.get_mut(&Read::MisreadFresh).expect("fresh")["activity"]["rows"][row]["event"]["owner"]
                 ["source"]["position"] = json!(0);
             assert!(!step_5_6(&observed).is_empty(), "position {row}");
         }
-        let mut resumed = met();
+        let mut resumed = passing.clone();
         resumed.told[2].history = [resumed.told[0].history.to_vec(), resumed.told[2].history.to_vec()].concat().into();
-        let mut duplicate = met();
+        let mut duplicate = passing.clone();
         duplicate.told[2].history = vec![input(MISREAD_CORRECTION), input(MISREAD_CORRECTION)].into();
-        let mut same = met();
+        let mut same = passing.clone();
         same.documents.get_mut(&Read::MisreadFresh).expect("fresh")["task"]["chip"]["details"]["owner"]["details"]["attempt"] =
             json!(1);
-        let mut late_helper = met();
+        let mut late_helper = passing.clone();
         late_helper.told.swap(1, 2);
-        let mut completed_helper = met();
+        let mut completed_helper = passing.clone();
         completed_helper.told[1].history = vec![Message {
             role: Role::Assistant,
             parts: Box::new([Part::Text { text: b"already worked".as_slice().into() }]),
@@ -3855,12 +3888,13 @@ mod misread_tests {
     }
     #[test]
     fn cancellation_and_notes_must_be_actual_ordered_tool_results() {
+        let passing = met();
         for at in 0..7 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told.remove(at);
             assert!(!step_5_6(&observed).is_empty(), "query {at}");
         }
-        let mut wrong_body = met();
+        let mut wrong_body = passing.clone();
         for told in &mut wrong_body.told {
             for part in told.history.iter_mut().flat_map(|message| &mut message.parts) {
                 if let Part::ToolCall { name, arguments, .. } = part
@@ -3871,19 +3905,20 @@ mod misread_tests {
             }
         }
         assert!(!step_5_6(&wrong_body).is_empty());
-        let mut wrote_after = met();
+        let mut wrote_after = passing.clone();
         wrote_after.told.swap(4, 5);
         assert!(!step_5_6(&wrote_after).is_empty());
     }
     #[test]
     fn an_open_subtree_or_any_change_to_main_fails() {
-        let mut open = met();
+        let passing = met();
+        let mut open = passing.clone();
         open.documents.get_mut(&Read::MisreadHelperEnded).expect("helper")["activity"]["rows"][0]["event"]["owner"]["source"]
             ["line"] = json!({});
-        let mut child = met();
+        let mut child = passing.clone();
         child.documents.get_mut(&Read::MisreadHelperEnded).expect("helper")["task"]["delegates"] =
             json!([{"chip":{"task":3}}]);
-        let mut landed = met();
+        let mut landed = passing.clone();
         for part in landed.told.last_mut().expect("head read").history.iter_mut().flat_map(|message| &mut message.parts)
         {
             if let Part::ToolOutput { id, output, .. } = part
@@ -4237,7 +4272,7 @@ fn direction_news(observed: &Observed, misses: &mut Vec<Miss>) {
                     && number(row, "/line/heard/kind/news/subscription") == Some(OVERLAP_SUBSCRIPTION)
                     && suffix.is_some_and(|suffix| words.ends_with(&suffix))
                     && number(row, "/position").zip(stopped).is_some_and(|(at, stop)| at > stop)
-                    && plan_deliveries(observed, Agent::OverlapOwner, &words) == 1
+                    && plan_deliveries(observed, Agent::OverlapOwner, words) == 1
             }),
         DIRECTION_NEWS,
         "a1's overlapping landing must wait in B's held inbox and be told to B exactly once after Release",
@@ -4600,6 +4635,7 @@ mod direction_tests {
 
     #[test]
     fn every_required_document_field_rejects_a_mutation() {
+        let passing = met();
         for (read, paths) in [
             (
                 Read::StoryOwnerEnded,
@@ -4676,7 +4712,7 @@ mod direction_tests {
             (Read::DirectionBFirst, vec!["/cut", "/before"]),
         ] {
             for path in paths {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let value = observed.documents.get_mut(&read).expect("document").pointer_mut(path).expect("field");
                 *value = if value.is_null() { json!("unexpected") } else { Value::Null };
                 assert!(!step_5_4(&observed).is_empty(), "{read:?}{path}");
@@ -4685,6 +4721,7 @@ mod direction_tests {
     }
     #[test]
     fn identities_and_reports_reject_a_mutation() {
+        let passing = met();
         for (read, _, _) in [
             (Read::X3Open, X3, STORY_OWNER),
             (Read::X3Ended, X3, STORY_OWNER),
@@ -4698,14 +4735,14 @@ mod direction_tests {
             (Read::DirectionNoteWritten, STORY_OWNER, DIRECTION),
         ] {
             for path in ["/task/chip/task", "/task/project", "/task/requester/task"] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("read").pointer_mut(path).expect("field") = Value::Null;
                 assert!(!step_5_4(&observed).is_empty(), "{read:?}{path}");
             }
         }
         for read in [Read::StoryOwnerEnded, Read::DirectionBEnded, Read::DirectionEnded] {
             for path in ["/task/chip/task", "/task/project", "/task/chip/phase", "/task/result/value/report/bytes"] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("read").pointer_mut(path).expect("field") = Value::Null;
                 assert!(!step_5_4(&observed).is_empty(), "{read:?}{path}");
             }
@@ -4713,8 +4750,9 @@ mod direction_tests {
     }
     #[test]
     fn the_closed_pull_must_keep_the_pushed_head_and_h1_must_open_nothing() {
+        let passing = met();
         for mutation in 0..8 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             match mutation {
                 0 => {
                     observed.kit.pulls.remove(0);
@@ -4740,11 +4778,11 @@ mod direction_tests {
             }
             assert!(!step_5_4(&observed).is_empty(), "mutation {mutation}");
         }
-        let mut red = met();
+        let mut red = passing.clone();
         red.kit.merged_green = false;
-        let mut absent = met();
+        let mut absent = passing.clone();
         absent.kit.main.clear();
-        let mut old = met();
+        let mut old = passing.clone();
         old.kit.main.insert(X3_FILE.as_bytes().to_vec(), X3_WORDS.as_bytes().to_vec());
         for observed in [red, absent, old] {
             assert!(!step_5_4(&observed).is_empty());
@@ -4752,15 +4790,16 @@ mod direction_tests {
     }
     #[test]
     fn news_cannot_be_doubled_or_lost_and_a_run_cannot_start_during_the_hold() {
-        let mut doubled = met();
+        let passing = met();
+        let mut doubled = passing.clone();
         let extra = doubled.told[4].history[1].clone();
         doubled.told[4].history = [doubled.told[4].history.to_vec(), vec![extra]].concat().into();
-        let mut lost = met();
+        let mut lost = passing.clone();
         lost.told.pop();
-        let mut during = met();
+        let mut during = passing.clone();
         during.documents.get_mut(&Read::DirectionBFirst).expect("older")["rows"][0]["event"]["owner"]["source"]["line"] =
             json!({"run_began":{"attempt":2}});
-        let mut early = met();
+        let mut early = passing.clone();
         early.documents.get_mut(&Read::DirectionBEnded).expect("B")["activity"]["rows"][2]["event"]["owner"]["source"]
             ["position"] = json!(2);
         for observed in [doubled, lost, during, early] {
@@ -4769,17 +4808,18 @@ mod direction_tests {
     }
     #[test]
     fn amendment_and_note_must_be_real_completed_tools() {
+        let passing = met();
         for at in [0, 2] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told.remove(at);
             assert!(!step_5_4(&observed).is_empty());
         }
-        let mut missing = met();
+        let mut missing = passing.clone();
         missing.told[1].history = Box::new([]);
         missing.told[2].history = Box::new([]);
-        let mut duplicate = met();
+        let mut duplicate = passing.clone();
         duplicate.told[2].history = [duplicate.told[2].history.to_vec(), vec![input(DIRECTION_BRIEF)]].concat().into();
-        let mut prose = met();
+        let mut prose = passing.clone();
         prose.told[0].history = vec![input(DIRECTION_BRIEF)].into();
         for observed in [missing, duplicate, prose] {
             assert!(!step_5_4(&observed).is_empty());
@@ -4874,6 +4914,7 @@ mod direction_tests {
 
     #[test]
     fn every_counted_journal_must_be_complete_and_ordered() {
+        let passing = met();
         for read in [
             Read::X3Ended,
             Read::X3Produced,
@@ -4887,11 +4928,11 @@ mod direction_tests {
             Read::DirectionEnded,
             Read::DirectionFirst,
         ] {
-            let mut missing = met();
+            let mut missing = passing.clone();
             missing.documents.remove(&read);
             assert!(!step_5_4(&missing).is_empty(), "missing {read:?}");
             for mutation in 0..3 {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let doc = observed.documents.get_mut(&read).expect("journal");
                 let page = if doc.get("activity").is_some() { &mut doc["activity"] } else { doc };
                 match mutation {
@@ -4910,6 +4951,7 @@ mod direction_tests {
 
     #[test]
     fn fresh_message_numbers_senders_and_amendment_revision_are_checked() {
+        let passing = met();
         for (read, paths) in [
             (
                 Read::StoryOwnerFirst,
@@ -4939,7 +4981,7 @@ mod direction_tests {
             ),
         ] {
             for path in paths {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = Value::Null;
                 assert!(!step_5_4(&observed).is_empty(), "{read:?}{path}");
             }
@@ -4948,9 +4990,10 @@ mod direction_tests {
 
     #[test]
     fn both_pull_heads_and_the_merge_commit_come_from_forge_records() {
+        let passing = met();
         for pull in 0..2 {
             for mutation in 0..5 {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let pull = &mut observed.kit.pulls[pull];
                 match mutation {
                     0 => pull.number = 99,
@@ -4963,7 +5006,7 @@ mod direction_tests {
                 assert!(!step_5_4(&observed).is_empty());
             }
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.documents.get_mut(&Read::X3Produced).expect("coder")["task"]["result"]["value"]["change"]["words"] =
             json!({"bytes":"arbitrary result prose"});
         assert_met(&step_5_4(&observed));
@@ -5023,6 +5066,7 @@ mod direction_tests {
     #[test]
     fn missing_reordered_or_changed_forge_observations_fail_the_checkpoint() {
         use skein_fake_forge_domain::Observation;
+        let passing = met();
         for mutation in 0..9 {
             let mut records = forge_records();
             match mutation {
@@ -5065,7 +5109,7 @@ mod direction_tests {
                 }
                 _ => unreachable!(),
             }
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.kit.pulls = pull_digest(&records);
             assert!(!step_5_4(&observed).is_empty(), "record mutation {mutation}");
         }
@@ -5498,8 +5542,9 @@ mod batch_tests {
     }
     #[test]
     fn message_acknowledgements_and_the_recorded_answer_must_identify_the_exchange() {
+        let passing = met();
         for id in [b"question".as_slice(), b"answer", b"batch"] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             for told in &mut changed.told {
                 for message in &mut told.history {
                     for part in &mut message.parts {
@@ -5514,7 +5559,7 @@ mod batch_tests {
             rejects(&changed, if id == b"batch" { BATCH_DEPENDENCIES } else { BATCH_MESSAGES });
         }
         for field in ["message", "by", "kind", "words"] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             let rows = changed.documents.get_mut(&Read::BatchSubownerEnded).expect("A1")["activity"]["rows"]
                 .as_array_mut()
                 .expect("rows");
@@ -5530,7 +5575,7 @@ mod batch_tests {
             json!([{"number":BATCH_ONE},{"number":BATCH_THREE}]),
             json!([{"number":BATCH_ONE},{"number":BATCH_TWO},{"number":BATCH_THREE}]),
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             changed.documents.get_mut(&Read::BatchStoryEnded).expect("a4")["task"]["dependency_facts"] = facts;
             rejects(&changed, BATCH_DEPENDENCIES);
         }
@@ -5601,12 +5646,13 @@ mod batch_tests {
     }
     #[test]
     fn a4_must_still_be_waiting_and_a3_cannot_have_ended_in_its_writing_read() {
+        let passing = met();
         for (read, phase) in [
             (Read::BatchStoryWaiting, "running"),
             (Read::BatchStoryAfterOne, "running"),
             (Read::BatchThreeStillWriting, "ended"),
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             changed.documents.get_mut(&read).expect("task")["task"]["chip"]["phase"] = json!(phase);
             rejects(&changed, BATCH_PARALLEL);
         }
@@ -5614,6 +5660,7 @@ mod batch_tests {
     #[test]
     fn only_zero_spend_uncommitted_rechecks_with_a_later_finished_attempt_are_allowed() {
         use serde_json::json;
+        let passing = met();
         for (read, task, _) in batch_tasks() {
             let lines = vec![
                 json!({"run_began":{"attempt":8}}),
@@ -5621,7 +5668,7 @@ mod batch_tests {
                 json!({"run_began":{"attempt":1}}),
                 json!({"run_ended":{"attempt":1,"end":"finished","spent":1}}),
             ];
-            let mut accepted = met();
+            let mut accepted = passing.clone();
             // Keep message evidence in A1's journal while exercising its attempts.
             let mut journal_lines = lines.clone();
             if task == BATCH_SUBOWNER {
@@ -5645,9 +5692,10 @@ mod batch_tests {
     }
     #[test]
     fn journals_cannot_hide_an_attempt_in_a_gap_or_a_missing_page() {
+        let passing = met();
         for (read, task, _) in batch_tasks() {
             for mutation in 0..7 {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 let activity = &mut changed.documents.get_mut(&read).expect("task")["activity"];
                 match mutation {
                     0 => activity["before"] = json!(1),
@@ -6271,6 +6319,7 @@ mod blocker_tests {
 
     #[test]
     fn each_task_identity_and_ending_is_required() {
+        let passing = met();
         for (read, _, parent) in blocker_tasks() {
             for path in [
                 "/task/chip/task",
@@ -6282,7 +6331,7 @@ mod blocker_tests {
                 if parent == 0 && path == "/task/requester/task" {
                     continue;
                 }
-                let mut changed = met();
+                let mut changed = passing.clone();
                 *changed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = Value::Null;
                 rejects(&changed, BLOCKER_DEPENDENCY);
             }
@@ -6295,7 +6344,7 @@ mod blocker_tests {
             (Read::BlockerSubownerEnded, "/task/authority/authority/delegation/depth"),
             (Read::BlockerA3Ended, "/task/authority/authority/delegation/depth"),
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             *changed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = Value::Null;
             rejects(&changed, BLOCKER_DEPENDENCY);
         }
@@ -6325,20 +6374,21 @@ mod blocker_tests {
     }
     #[test]
     fn every_exchange_requires_its_numbered_call_and_unique_ordered_delivery() {
+        let passing = met();
         for exchange in blocker_exchanges() {
             let id = format!("message{}", exchange.message);
             for field in [Some("target"), Some("form"), Some("words"), None] {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 mutate_tool(&mut changed, id.as_bytes(), field);
                 rejects(&changed, BLOCKER_MESSAGES);
             }
             if exchange.question.is_some() {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 mutate_tool(&mut changed, id.as_bytes(), Some("question"));
                 rejects(&changed, BLOCKER_MESSAGES);
             }
             for field in ["message", "by", "kind", "words"] {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 for row in changed.documents.get_mut(&exchange.read).expect("doc")["activity"]["rows"]
                     .as_array_mut()
                     .expect("rows")
@@ -6349,27 +6399,28 @@ mod blocker_tests {
                 }
                 rejects(&changed, BLOCKER_MESSAGES);
             }
-            let mut duplicate = met();
+            let mut duplicate = passing.clone();
             duplicate.told.push(told(exchange.receiver, &[input(exchange.words)]));
             rejects(&duplicate, BLOCKER_MESSAGES);
-            let mut missing = met();
+            let mut missing = passing.clone();
             missing
                 .told
                 .retain(|t| !(t.agent == exchange.receiver && user_words(t).any(|w| contains(w, exchange.words))));
             rejects(&missing, BLOCKER_MESSAGES);
         }
-        let mut reversed = met();
+        let mut reversed = passing.clone();
         reversed.told.reverse();
         rejects(&reversed, BLOCKER_MESSAGES);
     }
     #[test]
     fn e1_requires_the_answer_checkpoint() {
+        let passing = met();
         for field in [Some("batch"), None] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             mutate_tool(&mut changed, b"e1", field);
             rejects(&changed, BLOCKER_CHECKPOINT);
         }
-        let mut early = met();
+        let mut early = passing.clone();
         let at = early
             .told
             .iter()
@@ -6383,14 +6434,15 @@ mod blocker_tests {
         let query = early.told.remove(at);
         early.told.insert(0, query);
         rejects(&early, BLOCKER_CHECKPOINT);
-        let mut wrong = met();
+        let mut wrong = passing.clone();
         wrong.documents.get_mut(&Read::BlockerE1Ended).expect("e1")["task"]["spec"] = Value::Null;
         rejects(&wrong, BLOCKER_CHECKPOINT);
     }
     #[test]
     fn live_amendment_and_its_visible_dependency_are_required() {
+        let passing = met();
         for field in [Some("target"), Some("revision"), Some("amendment"), None] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             mutate_tool(&mut changed, b"amend", field);
             rejects(&changed, BLOCKER_DEPENDENCY);
         }
@@ -6402,22 +6454,22 @@ mod blocker_tests {
                 "/task/dependency_facts/0/added/at",
                 "/task/spec_revision/value",
             ] {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 *changed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = Value::Null;
                 rejects(&changed, BLOCKER_DEPENDENCY);
             }
-            let mut extra = met();
+            let mut extra = passing.clone();
             extra.documents.get_mut(&read).expect("doc")["task"]["dependency_facts"]
                 .as_array_mut()
                 .expect("facts")
                 .push(json!({"number":BLOCKER_OWNER}));
             rejects(&extra, BLOCKER_DEPENDENCY);
         }
-        let mut changed = met();
+        let mut changed = passing.clone();
         changed.documents.get_mut(&Read::BlockerKept).expect("kept")["task"]["dependency_facts"][0]["keeps"] =
             json!(false);
         rejects(&changed, BLOCKER_DEPENDENCY);
-        let mut changed = met();
+        let mut changed = passing.clone();
         changed
             .told
             .retain(|t| !(t.agent == Agent::BlockerImplementer && user_words(t).any(|w| contains(w, BLOCKER_REASON))));
@@ -6425,6 +6477,7 @@ mod blocker_tests {
     }
     #[test]
     fn kept_read_requires_the_saved_attempt_pending_review_and_later_met() {
+        let passing = met();
         for (read, path, value) in [
             (Read::BlockerKept, "/task/chip/task", Value::Null),
             (Read::BlockerKept, "/task/chip/phase", json!("ended")),
@@ -6442,23 +6495,24 @@ mod blocker_tests {
             (Read::BlockerKept, "/activity/rows/0/event/owner/source/line/kept/attempt", json!(99)),
             (Read::BlockerKept, "/activity/rows/1/event/owner/source/line/run_ended/end", json!("finished")),
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             *changed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = value;
             rejects(&changed, BLOCKER_KEPT);
         }
         let met_words = format!("T{BLOCKER_E1} is done; the task can go on");
-        let mut missing = met();
+        let mut missing = passing.clone();
         missing.told.pop();
         rejects(&missing, BLOCKER_KEPT);
-        let mut duplicate = met();
+        let mut duplicate = passing.clone();
         duplicate.told.push(told(Agent::BlockerImplementer, &[input(&met_words)]));
         rejects(&duplicate, BLOCKER_KEPT);
-        let mut no_resume = met();
+        let mut no_resume = passing.clone();
         no_resume.documents.get_mut(&Read::BlockerA3Ended).expect("a3")["activity"] = journal(BLOCKER_A3, &[]);
         rejects(&no_resume, BLOCKER_KEPT);
     }
     #[test]
     fn amendment_must_reach_the_kept_attempt_and_met_must_start_a_later_saved_run() {
+        let passing = met();
         for path in [
             "/activity/rows/3/event/owner/source/line/heard/number",
             "/activity/rows/3/event/owner/source/line/heard/from/task",
@@ -6469,7 +6523,7 @@ mod blocker_tests {
             "/activity/rows/2/event/owner/source/line/turn/read",
             "/activity/rows/4/event/owner/source/line/run_began/attempt",
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             *changed.documents.get_mut(&Read::BlockerKept).expect("kept").pointer_mut(path).expect("field") =
                 Value::Null;
             rejects(&changed, BLOCKER_DEPENDENCY);
@@ -6484,31 +6538,32 @@ mod blocker_tests {
             "/activity/rows/1/event/owner/source/line/run_began/why/message/message",
             "/activity/rows/1/event/owner/source/position",
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             *changed.documents.get_mut(&Read::BlockerA3Ended).expect("a3").pointer_mut(path).expect("field") =
                 Value::Null;
             rejects(&changed, BLOCKER_KEPT);
         }
-        let mut removed = met();
+        let mut removed = passing.clone();
         removed.documents.get_mut(&Read::BlockerA3Ended).expect("a3")["activity"]["rows"][2]["event"]["owner"]["source"]
             ["line"]["heard"]["kind"]["met"]["removed"] = json!(true);
         rejects(&removed, BLOCKER_KEPT);
-        let mut duplicate = met();
+        let mut duplicate = passing.clone();
         let rows = duplicate.documents.get_mut(&Read::BlockerA3Ended).expect("a3")["activity"]["rows"]
             .as_array_mut()
             .expect("rows");
         rows.push(rows[2].clone());
         rejects(&duplicate, BLOCKER_KEPT);
         for field in ["form", "text"] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             mutate_tool(&mut changed, b"kept", Some(field));
             rejects(&changed, BLOCKER_KEPT);
         }
     }
     #[test]
     fn landing_requires_the_fixed_file_and_green_merge_at_the_pushed_head() {
+        let passing = met();
         for mutation in 0..10 {
-            let mut changed = met();
+            let mut changed = passing.clone();
             match mutation {
                 0 => changed.kit.merged_green = false,
                 1 => {
@@ -6531,7 +6586,7 @@ mod blocker_tests {
             "/task/result/value/change/part/kind",
             "/task/result/value/change/words/bytes",
         ] {
-            let mut changed = met();
+            let mut changed = passing.clone();
             *changed.documents.get_mut(&Read::BlockerE1Ended).expect("e1").pointer_mut(path).expect("field") =
                 Value::Null;
             rejects(&changed, BLOCKER_LANDING);
@@ -6539,26 +6594,29 @@ mod blocker_tests {
     }
     #[test]
     fn every_agents_attempts_must_end_and_rechecks_must_be_unspent_and_uncommitted() {
+        let passing = met();
         for (read, task, _) in blocker_tasks() {
             if task == BLOCKER_E1 {
                 continue;
             }
             for end in [json!("refused"), json!({"failed":{}}), Value::Null] {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 changed.documents.get_mut(&read).expect("doc")["activity"] = journal(
                     task,
                     &[json!({"run_began":{"attempt":1}}), json!({"run_ended":{"attempt":1,"end":end,"spent":1}})],
                 );
                 rejects(&changed, BLOCKER_ATTEMPTS);
             }
-            let mut accepted = met();
+            let mut accepted = passing.clone();
             let mut lines =
                 vec![json!({"run_began":{"attempt":8}}), json!({"run_ended":{"attempt":8,"end":"refused","spent":0}})];
             lines.extend(check_activity(&accepted, read).iter().rev().map(|row| row["line"].clone()));
             accepted.documents.get_mut(&read).expect("doc")["activity"] = journal(task, &lines);
             if task == BLOCKER_A3 {
                 let mut before = lines[..2].to_vec();
-                before.extend(check_activity(&met(), Read::BlockerKept).iter().rev().map(|r| r["line"].clone()));
+                before.extend(
+                    check_activity(&passing.clone(), Read::BlockerKept).iter().rev().map(|r| r["line"].clone()),
+                );
                 accepted.documents.get_mut(&Read::BlockerKept).expect("kept")["activity"] = journal(task, &before);
             }
             assert_met(&step_6_2(&accepted));
@@ -6577,11 +6635,11 @@ mod blocker_tests {
                 rejects(&changed, BLOCKER_ATTEMPTS);
             }
             for field in ["cut", "before", "after"] {
-                let mut changed = met();
+                let mut changed = passing.clone();
                 changed.documents.get_mut(&read).expect("doc")["activity"][field] = json!(true);
                 rejects(&changed, BLOCKER_ATTEMPTS);
             }
-            let mut gap = met();
+            let mut gap = passing.clone();
             gap.documents.get_mut(&read).expect("doc")["activity"]["rows"][0]["event"]["owner"]["source"]["position"] =
                 json!(99);
             rejects(&gap, BLOCKER_ATTEMPTS);
@@ -7286,6 +7344,7 @@ mod budget_tests {
 
     #[test]
     fn each_task_identity_parent_project_and_ending_is_required() {
+        let passing = met();
         for (read, _, parent) in budget_tasks() {
             let mut paths =
                 vec!["/task/chip/task", "/task/project", "/task/chip/phase", "/task/result/ending/task/done"];
@@ -7293,7 +7352,7 @@ mod budget_tests {
                 paths.push("/task/requester/task");
             }
             for path in paths {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("task").pointer_mut(path).expect("field") = Value::Null;
                 rejects(&observed, BUDGET_CHECKPOINT);
             }
@@ -7304,7 +7363,7 @@ mod budget_tests {
             (Read::BudgetSubownerEnded, "/task/authority/authority/deadline"),
             (Read::BudgetSubownerEnded, "/task/authority/authority/delegation/depth"),
         ] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&read).expect("doc").pointer_mut(path).expect("field") = Value::Null;
             rejects(&observed, BUDGET_CHECKPOINT);
         }
@@ -7312,11 +7371,12 @@ mod budget_tests {
 
     #[test]
     fn every_chain_message_must_be_delivered_once_and_in_order() {
+        let passing = met();
         for at in [1, 3, 4, 5, 7] {
-            let mut missing = met();
+            let mut missing = passing.clone();
             missing.told.remove(at);
             rejects(&missing, BUDGET_MESSAGES);
-            let mut duplicated = met();
+            let mut duplicated = passing.clone();
             let more = duplicated.told[at].history[0].clone();
             let mut history = duplicated.told[at].history.to_vec();
             history.push(more);
@@ -7324,7 +7384,7 @@ mod budget_tests {
             rejects(&duplicated, BUDGET_MESSAGES);
         }
         for (left, right) in [(1, 3), (3, 4), (4, 5), (5, 7)] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told.swap(left, right);
             rejects(&observed, BUDGET_MESSAGES);
         }
@@ -7334,23 +7394,23 @@ mod budget_tests {
             (6, vec!["/target", "/form", "/question", "/words"]),
         ] {
             for path in paths {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 changed_tool(&mut observed, at, path);
                 rejects(&observed, BUDGET_MESSAGES);
             }
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.told[at].history = observed.told[at].history[..1].into();
             rejects(&observed, BUDGET_MESSAGES);
         }
         for read in [Read::BudgetOwnerEnded, Read::BudgetDirectorEnded, Read::BudgetSubownerEnded] {
-            let rows = budget_rows(&met(), read)
+            let rows = budget_rows(&passing.clone(), read)
                 .into_iter()
                 .filter(|r| number(r, "/line/words/message").is_some_and(|message| message <= BUDGET_ANSWER_NUMBER))
                 .cloned()
                 .collect::<Vec<_>>();
             for row in rows {
                 for field in ["message", "by", "kind", "words"] {
-                    let mut observed = met();
+                    let mut observed = passing.clone();
                     for page in budget_pages(read) {
                         let doc = observed.documents.get_mut(&page).expect("doc");
                         let page = if doc.get("activity").is_some() { &mut doc["activity"] } else { doc };
@@ -7371,14 +7431,15 @@ mod budget_tests {
 
     #[test]
     fn inbox_question_must_survive_until_the_read_before_the_answer() {
+        let passing = met();
         for path in ["/needs/rows/0/task/live/task", "/needs/rows/0/project", "/needs/rows/0/object/question/message"] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&Read::BudgetAsked).expect("inbox").pointer_mut(path).expect("field") =
                 Value::Null;
             rejects(&observed, BUDGET_INBOX);
         }
         for mutation in 0..7 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             match mutation {
                 0 => observed.documents.get_mut(&Read::BudgetAsked).expect("inbox")["needs"]["rows"] = json!([]),
                 1 => {
@@ -7404,26 +7465,28 @@ mod budget_tests {
 
     #[test]
     fn a5_cannot_be_made_before_a1s_answer_or_on_another_choice() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         observed.told.swap(7, 8);
         rejects(&observed, BUDGET_CHECKPOINT);
         for path in ["/batch/0/llm/main/model", "/batch/0/llm/main/effort"] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             changed_tool(&mut observed, 8, path);
             rejects(&observed, BUDGET_CHECKPOINT);
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.remove(8);
         rejects(&observed, BUDGET_CHECKPOINT);
     }
 
     #[test]
     fn medium_high_and_the_successful_amendment_revision_are_required() {
+        let passing = met();
         for read in [Read::BudgetMedium, Read::BudgetHigh, Read::BudgetA5Ended] {
             for path in
                 ["/task/chip/task", "/task/llm/main/model", "/task/llm/main/effort", "/task/spec_revision/value"]
             {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 *observed.documents.get_mut(&read).expect("a5").pointer_mut(path).expect("field") = Value::Null;
                 rejects(&observed, BUDGET_EFFORT);
             }
@@ -7431,17 +7494,18 @@ mod budget_tests {
         for path in
             ["/target", "/revision", "/amendment/llm/main/model", "/amendment/llm/main/effort", "/amendment/reason"]
         {
-            let mut observed = met();
+            let mut observed = passing.clone();
             changed_tool(&mut observed, 9, path);
             rejects(&observed, BUDGET_EFFORT);
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.remove(9);
         rejects(&observed, BUDGET_EFFORT);
     }
 
     #[test]
     fn the_next_run_must_follow_the_amendment_and_hear_the_reason_once() {
+        let passing = met();
         for path in [
             "/task/chip/phase",
             "/activity/rows/1/event/owner/source/line/decided/revision",
@@ -7452,17 +7516,17 @@ mod budget_tests {
             "/activity/rows/2/event/owner/source/line/heard/kind/amendment/revision",
             "/activity/rows/2/event/owner/source/line/heard/words",
         ] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed.documents.get_mut(&Read::BudgetHigh).expect("a5").pointer_mut(path).expect("field") = Value::Null;
             rejects(&observed, BUDGET_EFFORT);
         }
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.remove(10);
         rejects(&observed, BUDGET_EFFORT);
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[10].history = vec![input(BUDGET_REASON), input(BUDGET_REASON)].into();
         rejects(&observed, BUDGET_EFFORT);
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.documents.get_mut(&Read::BudgetHigh).expect("a5")["activity"]["rows"]
             .as_array_mut()
             .expect("rows")
@@ -7472,14 +7536,15 @@ mod budget_tests {
 
     #[test]
     fn advisor_requires_the_ended_investigations_evidence_owner_model_and_one_attempt() {
+        let passing = met();
         for path in ["/batch/0/spec/words", "/batch/0/llm/main/model", "/batch/0/llm/main/effort"] {
-            let mut observed = met();
+            let mut observed = passing.clone();
             changed_tool(&mut observed, 12, path);
             rejects(&observed, BUDGET_ONESHOT);
         }
         for path in ["/task/spec/specification/words/bytes", "/task/llm/main/model", "/task/result/value/report/bytes"]
         {
-            let mut observed = met();
+            let mut observed = passing.clone();
             *observed
                 .documents
                 .get_mut(&Read::BudgetAdvisorEnded)
@@ -7489,7 +7554,7 @@ mod budget_tests {
             rejects(&observed, BUDGET_ONESHOT);
         }
         for mutation in 0..6 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             match mutation {
                 0 => observed.told.swap(11, 12),
                 1 => observed.told[13].model = DEFAULT_MODEL.as_bytes().into(),
@@ -7520,22 +7585,24 @@ mod budget_tests {
 
     #[test]
     fn advisor_report_must_be_delivered_once_after_the_investigations_report() {
-        let mut observed = met();
+        let passing = met();
+        let mut observed = passing.clone();
         observed.told.remove(14);
         rejects(&observed, BUDGET_RESULT);
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told[14].history = vec![input(BUDGET_ADVISOR_REPORT), input(BUDGET_ADVISOR_REPORT)].into();
         rejects(&observed, BUDGET_RESULT);
-        let mut observed = met();
+        let mut observed = passing.clone();
         observed.told.swap(11, 14);
         rejects(&observed, BUDGET_RESULT);
     }
 
     #[test]
     fn no_failed_unended_or_spent_refused_attempt_or_incomplete_journal_is_hidden() {
+        let passing = met();
         for (read, task, _) in budget_tasks() {
             for mutation in 0..7 {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let page = &mut observed.documents.get_mut(&read).expect("doc")["activity"];
                 match mutation {
                     0 => {
@@ -7562,19 +7629,21 @@ mod budget_tests {
 
     #[test]
     fn every_identified_read_is_required() {
+        let passing = met();
         for (read, _) in crate::case::acts::READS_6_5 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             observed.documents.remove(read);
             assert!(!step_6_5(&observed).is_empty(), "{read:?}");
         }
     }
     #[test]
     fn result_messages_require_their_number_sender_kind_and_words() {
+        let passing = met();
         for (message, promise) in
             [(BUDGET_A5_REPORT_NUMBER, BUDGET_ONESHOT), (BUDGET_ADVISOR_REPORT_NUMBER, BUDGET_RESULT)]
         {
             for field in ["number", "from", "kind", "words"] {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 for read in budget_pages(Read::BudgetSubownerEnded) {
                     let doc = observed.documents.get_mut(&read).expect("page");
                     let page = if doc.get("activity").is_some() { &mut doc["activity"] } else { doc };
@@ -7592,9 +7661,10 @@ mod budget_tests {
 
     #[test]
     fn earlier_pages_cannot_hide_gaps_missing_starts_or_failed_attempts() {
+        let passing = met();
         for read in [Read::BudgetDirectorFirst, Read::BudgetOwnerFirst, Read::BudgetSubownerFirst] {
             for mutation in 0..4 {
-                let mut observed = met();
+                let mut observed = passing.clone();
                 let page = observed.documents.get_mut(&read).expect("page");
                 match mutation {
                     0 => page["cut"] = json!(true),
@@ -7612,8 +7682,9 @@ mod budget_tests {
 
     #[test]
     fn only_unspent_uncommitted_rechecks_followed_by_a_finished_attempt_are_allowed() {
+        let passing = met();
         for (read, task, _) in budget_tasks() {
-            let mut accepted = met();
+            let mut accepted = passing.clone();
             let mut lines = vec![
                 json!({"run_began":{"attempt":99}}),
                 json!({"run_ended":{"attempt":99,"end":"refused","spent":0}}),
@@ -7655,8 +7726,9 @@ mod budget_tests {
     }
     #[test]
     fn the_first_finding_requires_its_number_sender_words_and_unique_delivery() {
+        let passing = met();
         for mutation in 0..5 {
-            let mut observed = met();
+            let mut observed = passing.clone();
             if mutation == 4 {
                 observed.told[9].history = observed.told[9].history[1..].into();
             } else {

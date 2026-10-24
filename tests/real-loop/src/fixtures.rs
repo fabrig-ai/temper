@@ -88,6 +88,57 @@ pub fn write(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> std::io::R
     private(&directory.join("agent.json"), &serde_json::to_vec(&agent)?)?;
     private(&directory.join("temper.json"), &serde_json::to_vec(&config)?)
 }
+/// Keep the configured documents and their derived bounds; only assigned endpoints change.
+pub(crate) fn bind(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> std::io::Result<()> {
+    let mut agent: serde_json::Value = serde_json::from_slice(&std::fs::read(directory.join("agent.json"))?)?;
+    let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(directory.join("temper.json"))?)?;
+    bind_documents(&mut agent, &mut config, llm, forge);
+    private(&directory.join("agent.json"), &serde_json::to_vec(&agent)?)?;
+    private(&directory.join("temper.json"), &serde_json::to_vec(&config)?)
+}
+
+fn bind_documents(agent: &mut serde_json::Value, config: &mut serde_json::Value, llm: SocketAddr, forge: SocketAddr) {
+    let previous = config["application"]["forges"][0]["api"]["socket"].as_str().expect("fixture forge").to_owned();
+    let address = forge.to_string();
+    let previous_http = format!("http://{previous}");
+    let http = format!("http://{address}");
+    // These records carry forge destinations and authority patterns. Listeners
+    // and the independent LLM destination never participate in this rebinding.
+    for path in ["/application/forges", "/application/landing", "/engine/rules", "/engine/projects", "/engine/policies"]
+    {
+        if let Some(value) = config.pointer_mut(path) {
+            bind_forge(value, [(&previous, &address), (&previous_http, &http)]);
+        }
+    }
+    agent["endpoints"][0]["address"] = llm.to_string().into();
+    config["engine"]["llm"]["endpoints"][0]["address"] = serde_json::json!({"socket":llm.to_string()});
+}
+
+fn bind_forge(value: &mut serde_json::Value, addresses: [(&str, &str); 2]) {
+    use serde_json::Value;
+    match value {
+        Value::String(value) => {
+            for (previous, address) in addresses {
+                if value == previous {
+                    *value = address.into();
+                    break;
+                }
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                bind_forge(value, addresses);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values_mut() {
+                bind_forge(value, addresses);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 pub(crate) fn private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?.write_all(bytes)
 }
@@ -197,4 +248,34 @@ pub(crate) fn key_documents(directory: &Path) -> std::io::Result<()> {
     config["engine"]["limits"]["overrides"]["tasks.funders"] = 4.into();
     private(&config_path, &serde_json::to_vec(&config)?)?;
     private(&path, &serde_json::to_vec(&agent)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn configured(
+        fixture: crate::forge::Fixture,
+        llm: SocketAddr,
+        forge: SocketAddr,
+    ) -> (serde_json::Value, serde_json::Value) {
+        let (mut agent, mut config) = documents(Path::new("/fixture"), llm, forge);
+        (fixture.configure)(&mut config, &mut agent, forge);
+        turn_bounds::apply(&mut config, turn_bounds::turn_body(&agent));
+        (agent, config)
+    }
+
+    #[test]
+    fn rebinding_preserves_the_whole_configured_documents() {
+        const LLM_PORT: u16 = 42_001;
+        const FORGE_PORT: u16 = 42_002;
+        let deferred = ([127, 0, 0, 1], 0).into();
+        let llm = ([127, 0, 0, 1], LLM_PORT).into();
+        let forge = ([127, 0, 0, 1], FORGE_PORT).into();
+        for fixture in [crate::forge::fixture(), crate::landing::fixture(), crate::case::fixture_6_5()] {
+            let (mut agent, mut config) = configured(fixture, deferred, deferred);
+            bind_documents(&mut agent, &mut config, llm, forge);
+            assert_eq!((agent, config), configured(fixture, llm, forge));
+        }
+    }
 }
