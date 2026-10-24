@@ -2925,9 +2925,12 @@ Each is intended; what it needs is named with it.
   moves once skein's shell offers an exec and a lock held across it,
   which skein's `Lock` is not (skein's `io.md`, section 5). A second
   service that execs is what would ask skein for them.
-- **Reconcile over TLS,** managed mode against a forge on another host,
-  for a deployment whose managed forge is not on loopback (skein's
-  `forge-setup.md`, section 9).
+- **A story of Reconcile over TLS.** The managed string form takes a
+  forge on another host over TLS and the service hands that transport to
+  skein (5.6), but every test of the admin connect, the process story
+  among them, reaches its Forgejo over loopback plaintext: a TLS story
+  waits for a fake forge that serves TLS (skein's `forge-setup.md`,
+  section 9).
 - **Webhooks from another host,** over TLS (skein's
   `forge-connection.md`, section 6), once skein has TLS's server side.
 - **CI's isolation.** An owned runner's jobs in host mode run as the
