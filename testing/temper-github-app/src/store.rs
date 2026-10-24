@@ -22,8 +22,7 @@ pub(super) fn run(data: &Path, records: &[(u64, Box<[u8]>)], load: bool) -> Resu
     let jig = jig_protocol_config::profile(jig_protocol_config::Profile::Small);
     let own = temper_service::limits::profile(temper_service::limits::Profile::Small);
     let root = temper_service::limits::engine(&jig, &own).ok_or("fixture engine limits")?;
-    let limits =
-        temper_service::store::limits(&root, &jig.core, &root.forge, &jig.store).ok_or("fixture store limits")?;
+    let limits = temper_service::store::limits(&root, &root.forge, &jig.store).ok_or("fixture store limits")?;
     if records.iter().any(|(_, value)| value.len() > usize::try_from(limits.secrets.value).expect("store value bound"))
     {
         return Err("fixture record exceeds the secrets store value bound".into());

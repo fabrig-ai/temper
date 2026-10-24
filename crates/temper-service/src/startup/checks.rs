@@ -1054,7 +1054,7 @@ pub fn records(
 
 pub(crate) fn secret_value_bound(jig: &config::Engine, own: &limits::Limits) -> Option<u32> {
     let root = limits::engine(&jig.limits, own)?;
-    Some(crate::store::limits(&root, &jig.limits.core, &root.forge, &jig.limits.store)?.secrets.value)
+    Some(crate::store::limits(&root, &root.forge, &jig.limits.store)?.secrets.value)
 }
 
 /// Translate the kit's configured membership refusal into its startup path.

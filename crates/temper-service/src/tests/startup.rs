@@ -1168,7 +1168,7 @@ fn startup_maps_refused_setup_and_total_overflow_to_memory_bound() {
     let mut engine = fixtures::engine();
     let (endpoints, _) = crate::forge::prepare(&engine, fixtures::forge_runtime()).unwrap();
     let root = crate::limits::engine(&engine.jig.limits, &engine.limits).unwrap();
-    let store = crate::store::limits(&root, &engine.jig.limits.core, &root.forge, &engine.jig.limits.store).unwrap();
+    let store = crate::store::limits(&root, &root.forge, &engine.jig.limits.store).unwrap();
     let io = engine.jig.limits.io;
     // u32::MAX runs overflows setup's writes = runs + forges, after the host bound fits.
     for (runs, roots) in [(0, 0), (u32::MAX, 0), (8, u64::MAX)] {
@@ -1219,6 +1219,10 @@ fn a_store_reader_derives_serves_limits_or_their_problem_path() {
         fixtures::forge_runtime(),
     )
     .unwrap();
+    assert_eq!(
+        service.engine.as_ref().unwrap().store.opening_limits().core,
+        temper_engine_domain::core_limits(&service.engine.as_ref().unwrap().env.limits),
+    );
     let refused = core::str::from_utf8(&document).unwrap().replacen(
         "\"overrides\":{\"checkout.name_bytes\"",
         "\"overrides\":{\"root.loads.rows\":0,\"checkout.name_bytes\"",

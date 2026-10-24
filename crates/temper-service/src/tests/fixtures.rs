@@ -236,23 +236,22 @@ pub fn store_limits() -> (temper_engine_domain::Limits, jig_domain_core::Limits,
 }
 
 pub fn memory_store() -> crate::store::Store {
-    let (root, core, profile) = store_limits();
+    let (root, _, profile) = store_limits();
     let models = jig_protocol_config::core(&engine().jig, [7; 16], 7).settings.models;
-    memory_store_for(&root, &core, &profile, &models)
+    memory_store_for(&root, &profile, &models)
 }
 pub fn records_store() -> crate::store::Store {
-    let (root, core, mut profile) = store_limits();
+    let (root, _, mut profile) = store_limits();
     profile.store.page.rows = 32;
     let models = jig_protocol_config::core(&engine().jig, [7; 16], 7).settings.models;
-    memory_store_for(&root, &core, &profile, &models)
+    memory_store_for(&root, &profile, &models)
 }
 fn memory_store_for(
     root: &temper_engine_domain::Limits,
-    core: &jig_domain_core::Limits,
     profile: &jig_protocol_store::Limits,
     models: &[jig_domain_core::Model],
 ) -> crate::store::Store {
-    let limits = crate::store::limits(root, core, &root.forge, profile).expect("checked store limits");
+    let limits = crate::store::limits(root, &root.forge, profile).expect("checked store limits");
     let mut store = crate::store::Store::new(root, &limits, models, seeds().installation);
     store.component = jig_protocol_store::Store::over(
         &limits,
@@ -491,7 +490,7 @@ fn start_with_worker(
         Some(store) => store,
         None => {
             let models = jig_protocol_config::core(&settings.jig, [7; 16], 7).settings.models;
-            memory_store_for(&root, &settings.jig.limits.core, &settings.jig.limits.store, &models)
+            memory_store_for(&root, &settings.jig.limits.store, &models)
         }
     };
     let worker_io = if worker.is_some() { Some(worker_settings().jig.limits.io) } else { None };

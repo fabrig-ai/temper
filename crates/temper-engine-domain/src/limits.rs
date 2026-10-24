@@ -114,7 +114,9 @@ pub const VIEWS: views::Limits = views::Limits {
     facts: 32,
 };
 
-pub(crate) fn core_limits(limits: &Limits) -> jig_domain_core::Limits {
+/// The effective core bounds shared by the root and its store.
+#[must_use]
+pub fn core_limits(limits: &Limits) -> jig_domain_core::Limits {
     jig_domain_core::Limits {
         fill_mark: FILL_MARK,
         load_bytes: limits.loads.read_bytes,
