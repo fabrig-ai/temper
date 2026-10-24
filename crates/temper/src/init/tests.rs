@@ -73,6 +73,26 @@ fn taken_default_owned_and_webhooks_ports_get_distinct_kernel_ports() {
 }
 
 #[test]
+fn a_port_another_init_listens_on_between_bind_and_listen_gets_a_kernel_port() {
+    let mut io = Io::open().expect("startup io");
+    let bind = |io: &mut Io, port: u16| {
+        let fd = io.socket().expect("socket");
+        let Ok(Done::Bound(address)) = io.perform(Op::Bind { fd, addr: ([127, 0, 0, 1], port).into() }) else {
+            panic!("bound at {port}")
+        };
+        (fd, address)
+    };
+    // Both bind the port under skein's SO_REUSEADDR; the other listens first.
+    let (other, address) = bind(&mut io, 0);
+    let (late, _) = bind(&mut io, address.port());
+    io.perform(Op::Listen { fd: other, backlog: 1 }).expect("the other reservation listens");
+    let (fd, port) = io.listened(late, address, true).expect("a kernel-chosen reservation");
+    assert_ne!(port.get(), address.port(), "the lost port is not reported");
+    assert!(TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port.get())).is_err(), "the chosen port is held");
+    io.close(fd);
+    io.close(other);
+}
+#[test]
 #[expect(clippy::too_many_lines, reason = "one facts table checks reservations, file modes and optional programs")]
 fn init_finds_ports_and_programs_and_writes_exact_modes_in_order() {
     let mut rows = Vec::new();
