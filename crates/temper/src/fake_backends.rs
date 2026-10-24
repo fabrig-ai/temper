@@ -34,7 +34,7 @@ struct Prepared {
 pub(crate) fn run(source: &Directories) -> Result<Exit, String> {
     let Prepared { directories, bytes, mut listeners, _lock: lock } =
         prepare(source, temper_client_bundle::loopback::FILES)?;
-    let result = crate::box_command::run_configuration(&directories, bytes, std::mem::take(&mut listeners.0));
+    let result = crate::box_command::run_configuration(&directories, &bytes, std::mem::take(&mut listeners.0));
     drop(lock);
     result
 }
@@ -380,18 +380,17 @@ fn prepare(source_dirs: &Directories, files: &[(&str, &[u8])]) -> Result<Prepare
     excluded.push(addr(&oauth)?.port());
     let llm = reserve(&excluded)?;
     let peers = Peers { github: addr(&github)?, oauth: addr(&oauth)?, llm: addr(&llm)? };
-    let bundle = match provisioned.expect("new preparation checked the bundle") {
-        Some(path) => path,
-        None => {
-            let directory = crate::path(&effective.config).join("bundle-loopback");
-            make_private(&directory, user)?;
-            for (name, content) in files {
-                let destination = directory.join(name);
-                make_private(destination.parent().expect("packaged path parent"), user)?;
-                write(&destination, content, false)?;
-            }
-            directory
+    let bundle = if let Some(path) = provisioned.expect("new preparation checked the bundle") {
+        path
+    } else {
+        let directory = crate::path(&effective.config).join("bundle-loopback");
+        make_private(&directory, user)?;
+        for (name, content) in files {
+            let destination = directory.join(name);
+            make_private(destination.parent().expect("packaged path parent"), user)?;
+            write(&destination, content, false)?;
         }
+        directory
     };
     let paths = Paths {
         config: effective.config.clone(),
