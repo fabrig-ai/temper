@@ -299,7 +299,9 @@ fn provisioned_bundle(path: Option<&Path>, limits: temper_service::limits::Clien
         "run scripts/bundle.sh --loopback DIR && temper box --fake-backends --bundle DIR (directory flags as usual)";
     let path =
         path.ok_or_else(|| format!("application.clients.bundle: no provisioned loopback bundle; {instructions}"))?;
-    public_path(&path.join("index.html")).map_err(|why| format!("{why}; {instructions}"))?;
+    let page = path.join("index.html");
+    public_path(&page)
+        .map_err(|why| format!("application.clients.bundle: {}: {why}; {instructions}", page.display()))?;
     let _checked =
         crate::bundle::read(path.as_os_str().as_bytes(), limits).map_err(|why| format!("{why}; {instructions}"))?;
     Ok(path.to_path_buf())
