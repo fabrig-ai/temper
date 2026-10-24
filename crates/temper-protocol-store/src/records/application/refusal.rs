@@ -267,6 +267,7 @@ pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::Limit
 }
 pub(super) fn decode_limit_kind(value: w::LimitKind) -> p::LimitKind {
     match value {
+        w::LimitKind::SettingsProposals => unreachable!("forge applications cannot store a settings proposal limit"),
         w::LimitKind::Projects => p::LimitKind::Projects,
         w::LimitKind::Words => p::LimitKind::Words,
         w::LimitKind::Identity => p::LimitKind::Identity,
@@ -473,6 +474,7 @@ pub(super) fn decode_refusal(value: w::Refusal) -> p::Refusal {
                 w::Malformed::Settings(_) => unreachable!("forge applications cannot store malformed settings"),
                 // An application request cannot be an unchanged settings change.
                 w::Malformed::SettingsUnchanged => unreachable!("forge applications cannot store unchanged settings"),
+                w::Malformed::Running => unreachable!("forge applications cannot store a settings running choice"),
                 w::Malformed::ProposedAsAllowed => p::Malformed::ProposedAsAllowed,
                 w::Malformed::Name(value) => p::Malformed::Name(match value.rule() {
                     w::NameRule::Empty => p::NameRule::Empty,
