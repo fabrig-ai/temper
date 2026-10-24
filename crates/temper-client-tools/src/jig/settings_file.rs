@@ -357,53 +357,49 @@ pub(crate) fn request(call: &Call, limits: &Limits) -> Result<c::ChangeSettings,
     })
 }
 
+#[expect(clippy::wildcard_enum_match_arm, reason = "other wire paths are not settings value bounds")]
 fn wire_error(problem: jig_client_protocol_wire::Problem, limits: &jig_client_protocol_wire::Limits) -> Error {
     use jig_client_protocol_wire::Path;
-    let bounds: &[(Path, &[u8], u32)] = &[
-        (Path::CharterAlternatives, b"charter_alternatives", limits.charter_alternatives),
-        (Path::CharterInstructions, b"charter_instructions", limits.charter_instructions),
-        (Path::FieldRuleName, b"field_rule_name", limits.field_rule_name),
-        (Path::LlmChoiceSubagents, b"llm_choice_subagents", limits.llm_choice_subagents),
-        (Path::ModelEffortEffort, b"model_effort_effort_some", limits.model_effort_effort_some),
-        (Path::ModelEffortModel, b"model_effort_model", limits.model_effort_model),
-        (Path::ModelSetNamesNames, b"model_set_names_names", limits.model_set_names_names),
-        (Path::OwnedRecord, b"owned_record", limits.owned_record),
-        (Path::OwnerAuthorityGrants, b"owner_authority_grants", limits.owner_authority_grants),
-        (Path::OwnerAuthorityNoteResources, b"owner_authority_note_resources", limits.owner_authority_note_resources),
-        (Path::OwnerDelegationKinds, b"owner_delegation_kinds", limits.owner_delegation_kinds),
-        (Path::OwnerPartKeyPathValue, b"owner_part_key_path_value", limits.owner_part_key_path_value),
-        (Path::OwnerPatternEndExactValue, b"owner_pattern_end_exact_value", limits.owner_pattern_end_exact_value),
-        (Path::OwnerPatternEndOpenValue, b"owner_pattern_end_open_value", limits.owner_pattern_end_open_value),
-        (Path::OwnerPatternSegments, b"owner_pattern_segments", limits.owner_pattern_segments),
-        (Path::RulesImplies, b"rules_implies", limits.rules_implies),
-        (Path::RulesRequirements, b"rules_requirements", limits.rules_requirements),
-        (Path::SettingModelEffort, b"setting_model_effort_some", limits.setting_model_effort_some),
-        (Path::SettingModelEfforts, b"setting_model_efforts", limits.setting_model_efforts),
-        (Path::SettingModelName, b"setting_model_name", limits.setting_model_name),
-        (Path::SettingModelProgram, b"setting_model_program_some", limits.setting_model_program_some),
-        (Path::SettingPolicyPermissions, b"setting_policy_permissions", limits.setting_policy_permissions),
-        (Path::SettingPolicyProjections, b"setting_policy_projections", limits.setting_policy_projections),
-        (Path::SettingPolicyRequirements, b"setting_policy_requirements", limits.setting_policy_requirements),
-        (Path::SettingPolicyRoles, b"setting_policy_roles", limits.setting_policy_roles),
-        (Path::SettingPolicyTemplates, b"setting_policy_templates", limits.setting_policy_templates),
-        (
-            Path::TaskContractDocumentApprovalState,
-            b"task_contract_document_approval_state",
-            limits.task_contract_document_approval_state,
-        ),
-        (
-            Path::TaskContractDocumentVerdictChoices,
-            b"task_contract_document_verdict_choices",
-            limits.task_contract_document_verdict_choices,
-        ),
-        (Path::VerdictChoiceFields, b"verdict_choice_fields", limits.verdict_choice_fields),
-    ];
-    for (path, member, maximum) in bounds {
-        if problem.path == *path {
-            return bound(member, *maximum);
+    match problem.path {
+        Path::CharterAlternatives => bound(b"charter_alternatives", limits.charter_alternatives),
+        Path::CharterInstructions => bound(b"charter_instructions", limits.charter_instructions),
+        Path::FieldRuleName => bound(b"field_rule_name", limits.field_rule_name),
+        Path::LlmChoiceSubagents => bound(b"llm_choice_subagents", limits.llm_choice_subagents),
+        Path::ModelEffortEffort => bound(b"model_effort_effort_some", limits.model_effort_effort_some),
+        Path::ModelEffortModel => bound(b"model_effort_model", limits.model_effort_model),
+        Path::ModelSetNamesNames => bound(b"model_set_names_names", limits.model_set_names_names),
+        Path::OwnedRecord => bound(b"owned_record", limits.owned_record),
+        Path::OwnerAuthorityGrants => bound(b"owner_authority_grants", limits.owner_authority_grants),
+        Path::OwnerAuthorityNoteResources => {
+            bound(b"owner_authority_note_resources", limits.owner_authority_note_resources)
         }
+        Path::OwnerDelegationKinds => bound(b"owner_delegation_kinds", limits.owner_delegation_kinds),
+        Path::OwnerPartKeyPathValue => bound(b"owner_part_key_path_value", limits.owner_part_key_path_value),
+        Path::OwnerPatternEndExactValue => {
+            bound(b"owner_pattern_end_exact_value", limits.owner_pattern_end_exact_value)
+        }
+        Path::OwnerPatternEndOpenValue => bound(b"owner_pattern_end_open_value", limits.owner_pattern_end_open_value),
+        Path::OwnerPatternSegments => bound(b"owner_pattern_segments", limits.owner_pattern_segments),
+        Path::RulesImplies => bound(b"rules_implies", limits.rules_implies),
+        Path::RulesRequirements => bound(b"rules_requirements", limits.rules_requirements),
+        Path::SettingModelEffort => bound(b"setting_model_effort_some", limits.setting_model_effort_some),
+        Path::SettingModelEfforts => bound(b"setting_model_efforts", limits.setting_model_efforts),
+        Path::SettingModelName => bound(b"setting_model_name", limits.setting_model_name),
+        Path::SettingModelProgram => bound(b"setting_model_program_some", limits.setting_model_program_some),
+        Path::SettingPolicyPermissions => bound(b"setting_policy_permissions", limits.setting_policy_permissions),
+        Path::SettingPolicyProjections => bound(b"setting_policy_projections", limits.setting_policy_projections),
+        Path::SettingPolicyRequirements => bound(b"setting_policy_requirements", limits.setting_policy_requirements),
+        Path::SettingPolicyRoles => bound(b"setting_policy_roles", limits.setting_policy_roles),
+        Path::SettingPolicyTemplates => bound(b"setting_policy_templates", limits.setting_policy_templates),
+        Path::TaskContractDocumentApprovalState => {
+            bound(b"task_contract_document_approval_state", limits.task_contract_document_approval_state)
+        }
+        Path::TaskContractDocumentVerdictChoices => {
+            bound(b"task_contract_document_verdict_choices", limits.task_contract_document_verdict_choices)
+        }
+        Path::VerdictChoiceFields => bound(b"verdict_choice_fields", limits.verdict_choice_fields),
+        _ => error(b"value", b"wire value bound"),
     }
-    error(b"value", b"wire value bound")
 }
 
 /// Verdict choices, like authority grants and settings items, are sized wire
@@ -445,4 +441,34 @@ pub(super) fn verdict_bound(
         }
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{message, wire_error};
+    use alloc::boxed::Box;
+    use jig_client_protocol_wire as wire;
+
+    #[test]
+    fn an_unlisted_wire_path_keeps_the_generic_diagnostic_words() {
+        let mut limits = wire::CEILINGS;
+        limits.keyed_request = 0;
+        let problem = wire::Keyed::new(
+            &limits,
+            wire::KeyedParts {
+                key: [0; 16],
+                owner: wire::Owner::Jig,
+                version: 1,
+                request: Box::from(b"x".as_slice()),
+                value: None,
+            },
+        )
+        .expect_err("one request byte is beyond the zero-byte fixture limit");
+        assert_eq!(problem.path, wire::Path::KeyedRequest);
+        assert_eq!(
+            message(None, wire_error(problem, &limits)).as_ref(),
+            b"settings file: value: wire value bound"
+        );
+    }
 }
