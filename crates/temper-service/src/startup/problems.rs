@@ -82,6 +82,7 @@ fn put(writer: &mut Writer, length: &mut usize, measuring: bool, bytes: &[u8]) {
         writer.put(bytes).expect("diagnostic was measured");
     }
 }
+#[expect(clippy::match_same_arms, reason = "owner 18:32: each new codec diagnostic has its own explicit arm")]
 fn words(what: What) -> &'static [u8] {
     match what {
         What::MissingNull => b"missing: null for none",
@@ -233,6 +234,7 @@ fn codec_words(what: config::What, writer: &mut Writer, length: &mut usize, meas
     put(writer, length, measuring, words);
 }
 #[expect(clippy::too_many_lines, reason = "one exhaustive diagnostic vocabulary shared by both rendering passes")]
+#[expect(clippy::match_same_arms, reason = "owner 18:32: each new codec diagnostic has its own explicit arm")]
 fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
     let mut length = 0_usize;
     for problem in &problems.problems {
@@ -246,7 +248,7 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
         match problem.what {
             What::Jig(what @ config::What::PolicyEnvelope { .. }) => codec_words(what, writer, &mut length, measuring),
             What::Jig(what @ config::What::AmendmentEnvelope { .. }) => {
-                codec_words(what, writer, &mut length, measuring)
+                codec_words(what, writer, &mut length, measuring);
             }
             What::Jig(what @ config::What::CodecCeiling { .. }) => codec_words(what, writer, &mut length, measuring),
             What::Jig(what @ config::What::CodecArithmetic) => codec_words(what, writer, &mut length, measuring),
