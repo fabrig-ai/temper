@@ -215,3 +215,23 @@ fn settings_history_loads_with_the_roots_effective_envelope() {
     assert_eq!(rows.len(), 1);
     assert_eq!(reads::settings::record_revision(&rows[0].value), Some(&revision));
 }
+
+#[test]
+fn independent_secrets_admission_preserves_patching_and_refuses_short_carriers() {
+    let (root, _, profile) = fixtures::store_limits();
+    let checked = store::limits(&root, &root.forge, &profile).unwrap();
+    assert_eq!(checked.secrets.ops, profile.secrets.ops);
+    assert_eq!(checked.secrets.commit, profile.secrets.commit);
+    assert_eq!(checked.secrets.queued_bytes, profile.secrets.queued_bytes);
+    assert_eq!(checked.secrets.budget, profile.secrets.budget);
+    for field in ["key", "value", "queued bytes"] {
+        let mut short = profile;
+        match field {
+            "key" => short.secrets.key = checked.store.key - 1,
+            "value" => short.secrets.value = checked.store.value - 1,
+            "queued bytes" => short.secrets.queued_bytes = 0,
+            _ => unreachable!(),
+        }
+        assert!(store::limits(&root, &root.forge, &short).is_none(), "{field}");
+    }
+}

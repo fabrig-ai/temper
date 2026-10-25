@@ -2944,6 +2944,13 @@ fn a_final_feed_saves_desired_and_generation_in_its_core_commit_before_a_root_cr
     assert!(world.store.rows.values().any(
         |record| matches!(record, Record::Forge { row } if row.as_ref() == &forge_top::Stored::Issue(accepted.clone()))
     ));
+    assert!(
+        world.store.rows.values().any(|record| matches!(record,
+        Record::Core(jig_domain_core::Record::Core(CoreRecord::Deployment(row))) if row.commits == generation)),
+        "durable deployment covers the final generation"
+    );
+    assert!(world.store.rows.values().any(|record| matches!(record,
+        Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))) if row.number == goal && row.tracked.is_none())), "the same commit durably untracks the task");
     // Lose the root before its durable acknowledgement releases any effects.
     assert_eq!(world.forge_calls, calls_before_durability);
     world.restart(true, false);

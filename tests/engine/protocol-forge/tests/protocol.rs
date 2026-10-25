@@ -502,8 +502,6 @@ fn land_change(world: &mut Protocol) -> bool {
                 | top::Request::Refused { .. }
                 | top::Request::Outcome { .. }
                 | top::Request::ProjectionOutbox { .. }
-                | top::Request::ProjectionRecover { .. }
-                | top::Request::ProjectionRecoverBusy { .. }
                 | top::Request::NotMade { .. }
                 | top::Request::ContinueRelease { .. }
                 | top::Request::EffectsSettled { .. }

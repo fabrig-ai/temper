@@ -1639,6 +1639,42 @@ fn checked_in_deployment_profiles_pass_startup_admission() {
                     "{relative}: engine required={} declared={engine}; worker required={} declared={worker}; T={turn}, Record={record}",
                     required.engine_bytes, required.worker_bytes
                 );
+                if engine != 0 {
+                    let checked = temper_service::startup::store_limits(
+                        &profile.document,
+                        &jig_protocol_config::Directories::working(),
+                    )
+                    .expect("checked store/core");
+                    let mut own = temper_service::limits::profile(temper_service::limits::Profile::Small);
+                    if let Some(overrides) = document["application"]["limits"]["overrides"].as_object() {
+                        for (name, value) in overrides {
+                            if name.starts_with("root.") {
+                                temper_service::limits::apply(
+                                    &mut own,
+                                    name.as_bytes(),
+                                    value.as_u64().expect("numeric bound"),
+                                )
+                                .expect("root bound");
+                            }
+                        }
+                    }
+                    let core = checked.store.core;
+                    let news = core.tasks.tasks * 4 + 8;
+                    let ordinary = (news + core.people.pending * core.people.waiters)
+                        .max(core.fleet.workers * jig_domain_fleet::max_out(&core.fleet) + 1)
+                        .max(own.root.brief.sections)
+                        .max(core.tasks.saved_resources);
+                    let minimum = ordinary + news;
+                    eprintln!(
+                        "{relative}: deliveries minimum={minimum} actual={} held minimum={} actual={}; writes={}",
+                        own.root.journal.deliveries,
+                        minimum * 3,
+                        own.root.journal.held,
+                        own.root.journal.writes
+                    );
+                    assert!(own.root.journal.deliveries >= minimum);
+                    assert!(own.root.journal.held >= own.root.journal.deliveries * 3);
+                }
                 if engine < required.engine_bytes || worker < required.worker_bytes {
                     writeln!(failures, "{relative}: unchanged memory declaration is below the checked requirement")
                         .expect("diagnostic");

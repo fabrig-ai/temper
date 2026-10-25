@@ -479,3 +479,101 @@ fn a_change_unnamed_after_its_pull_swap_was_queued_stays_unnamed() {
     assert_eq!(domain.forge.names(7), None, "the swap revives no watch");
     assert!(out.is_empty());
 }
+
+#[test]
+fn final_desired_survives_full_projection_handoff_and_retries_at_the_normal_interval() {
+    use super::{Work, forge};
+    use skein_lib::{Env, Queue, Wall};
+    use temper_engine_domain_forge_issues::{GoalView, Phase};
+    let (mut domain, mut env) = two_forges();
+    // The route needs the ordinary forge resource path, wider than the unrelated resume fixture.
+    env.limits.authority.segments = 8;
+    let goal = 7;
+    let generation = 77;
+    let view = GoalView {
+        phase: Phase::Done,
+        goal,
+        repository: 1,
+        title: "done".into(),
+        goal_text: "done".into(),
+        plan: Box::new([]),
+        milestones: Box::new([]),
+        finished: Some("done".into()),
+    };
+    let mut decision = crate::Decision::new(&env.limits.journal);
+    let mut out = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let provider = adopted(1).provider;
+    let forge_env = Env { now: env.now, wall: env.wall, limits: env.limits.forge };
+    for _ in 0..domain.forge_effects.capacity() {
+        forge::step(
+            &mut domain.forge,
+            &forge_env,
+            forge::Event::Project {
+                entry: 11,
+                repository: provider,
+                view: view.clone(),
+                closing_generation: Some(generation),
+            },
+            &mut out,
+        );
+        super::outputs(&mut domain, &env, &mut decision, &mut out);
+        assert!(matches!(domain.work.pop(), Some(Work::Core(jig_domain_core::Event::EffectStart { .. }))));
+        assert!(domain.work.is_empty());
+    }
+    assert_eq!(domain.forge_effects.len(), domain.forge_effects.capacity());
+    forge::step(&mut domain.forge, &forge_env, forge::Event::ProjectDesired { entry: 11, goal }, &mut out);
+    super::outputs(&mut domain, &env, &mut decision, &mut out);
+    assert!(domain.work.is_empty(), "full admission schedules a timer without a same-decision retry");
+    let accepted = domain.forge.issue(goal).unwrap().clone();
+    assert_eq!(accepted.desired, Some(view));
+    assert_eq!(accepted.closing_generation, Some(generation));
+    assert_eq!(accepted.pending, None, "unkept candidate owns no writer or outbox entry");
+    assert!(!accepted.failed, "transient full admission creates no failure debt");
+    let due = Wall::from_nanos(env.wall.as_nanos() + env.limits.forge.issue_policy.interval.as_nanos());
+    assert_eq!(domain.forge.next_wall_deadline(), Some(due));
+    let owner = *domain.forge_effects.iter().next().unwrap().0;
+    domain.forge_effects.remove(&owner);
+    for _ in 0..goal {
+        crate::fresh(&mut domain.core.counters, crate::Family::Task).unwrap();
+    }
+    assert_eq!(
+        domain.core.restore_core(
+            jig_domain_core::CoreRecord::Projection(jig_domain_core::ProjectionRecord::Goal {
+                goal: jig_domain_core::ProjectionGoal {
+                    number: goal,
+                    project: 1,
+                    priority: 1,
+                    words: b"done".as_slice().into(),
+                    phase: jig_domain_tasks::Phase::Waiting
+                },
+                pending: Box::new([]),
+                changed: false,
+                fed_at: None,
+                closing_at: None,
+            }),
+            &crate::core_limits(&env.limits)
+        ),
+        jig_domain_core::Restored::Live
+    );
+    env.wall = due;
+    forge::fire(&mut domain.forge, &Env { now: env.now, wall: env.wall, limits: env.limits.forge }, &mut out);
+    assert!(out.iter().any(|request| matches!(request, forge::Request::ProjectAfter { goal: 7, when: None })));
+    super::outputs(&mut domain, &env, &mut decision, &mut out);
+    let Some(Work::Forge(forge::Event::ProjectDesired { entry, goal: retried })) = domain.work.pop() else {
+        panic!("normal timer performs Begin before retrying accepted desired")
+    };
+    assert_eq!(retried, goal);
+    assert!(entry > 0);
+    assert_eq!(entry, domain.deployment().connector_rows);
+    forge::step(
+        &mut domain.forge,
+        &Env { now: env.now, wall: env.wall, limits: env.limits.forge },
+        forge::Event::ProjectDesired { entry, goal },
+        &mut out,
+    );
+    super::outputs(&mut domain, &env, &mut decision, &mut out);
+    assert!(matches!(domain.work.pop(), Some(Work::Core(jig_domain_core::Event::EffectStart {
+        origin: jig_domain_core::EffectOrigin::Projection { goal: 7, source, entry: Some(kept) }, ..
+    })) if source == entry && kept == entry));
+    assert_eq!(domain.forge.issue(goal), Some(&accepted));
+}
