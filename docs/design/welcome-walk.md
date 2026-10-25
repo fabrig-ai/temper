@@ -73,7 +73,9 @@ the owned stories' allowance.
 The proof that the clicks work is skein's lab: hand drives Chromium
 (skein's `lab-browser.md`, 8) against an ordinary box. hand reaches
 temper's origin and the fakes the box names as its peers (`--peer`,
-8.5), and every other destination stays refused. Four experiments cover
+8.5). The ChatGPT walk also names the app-owned fixed callback origin,
+`http://127.0.0.1:1455`, which its shipped registration preserves. Every
+other destination stays refused. Four experiments cover
 the seven paths, all in the browser:
 
 | Experiment | Forge | Model |
