@@ -87,8 +87,9 @@ the seven paths, all in the browser:
 
 After opening the printed link, the hand waits for the visible Sign out
 button before navigating: the link's page must finish signing in. Each
-walks `/welcome` to Ready and opens the project. It sends a first
-chat, waits for the reply, and finds it again after a reload. Its
+walks `/welcome` to Ready and opens the project. It types a first chat
+and presses Start chat, waits for the reply, and finds it again after a
+reload. Its
 checks require hand's trouble to be empty, and ctl's chat to hold the
 expected reply as its first committed assistant message. Each welcome
 step is its own phase of the walk, so the look's live scenes
