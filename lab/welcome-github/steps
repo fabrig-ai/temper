@@ -51,9 +51,19 @@ model() {
     call press button 'Add key' --exact
 }
 ready() {
-    call wait heading 'fake-person/widget is ready' --exact --timeout 120
-    call press link 'Open widget' --exact
+    # client/README.md, The welcome: “an account made there ConnectModel's Ready”.
+    call wait region Ready --exact --timeout 120
+    call wait status 'Added your OpenAI API key' --in region Ready --exact --timeout 120
+    call press link 'Start a chat' --in region Ready --exact
+    call wait heading Chats --exact --timeout 120
     call wait 'text area' 'Start a chat' --exact --timeout 120
+    # The selected project is also the new chat composer's project.
+    outline=$(call outline)
+    printf '%s\n' "$outline"
+    case "$outline" in
+        *'button "widget" [pressed]'*) ;;
+        *) echo 'steps: expected the composer in project widget' >&2; exit 1 ;;
+    esac
 }
 chat() {
     call wait 'text area' 'Start a chat' --exact --timeout 120

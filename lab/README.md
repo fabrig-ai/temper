@@ -77,8 +77,9 @@ reload through hand and ctl. It has two processes and no driver.
 its create/install/return pages and adopts `fake-person/widget`.
 [welcome-forgejo-here/](welcome-forgejo-here/README.md) sets up a real local
 Forgejo and its first repository from staged pinned cache binaries.
-Both paste the box's fake model key in the browser, reach Ready, then
-check the first chat's reply before and after reload. Each welcome step
+Both paste the box's fake model key in the browser, require its embedded
+Ready card, and follow “Start a chat” into the adopted project before
+checking the first chat's reply and reload. Each welcome step
 is a separate action, and each experiment has two processes and no driver.
 
 # The look experiment

@@ -11,11 +11,13 @@ KEY = 'fake key with spaces\nand another line\n'
 
 
 class KeyWalks(unittest.TestCase):
-    def run_phase(self, name, phase, fail=None, address='http://localhost:8000/chats/7', key=True, previous='expected'):
+    def run_phase(self, name, phase, fail=None, address='http://localhost:8000/chats/7', key=True, previous='expected', project='expected'):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             log = root / 'calls.jsonl'
             log.write_text('')
+            if project == 'expected':
+                project = 'widget' if name == 'welcome-github' else 'hello'
             if previous == 'expected':
                 previous = {'forge': 'welcome', 'model': 'forge', 'ready': 'model', 'chat': 'ready'}.get(phase)
             if previous is not None:
@@ -34,9 +36,11 @@ with Path(%r).open('a') as output:
     output.write(json.dumps([args, stdin]) + '\\n')
 if args[0] == 'address':
     print(%r)
+if args[0] == 'outline':
+    print('button \"%%s\" [pressed]' %% %r)
 if args[:len(%r)] == %r:
     sys.exit(3)
-''' % (str(log), address, fail or ['never'], fail or ['never']))
+''' % (str(log), address, project, fail or ['never'], fail or ['never']))
             browse.chmod(0o700)
             result = subprocess.run(['/bin/sh', str(LAB / name / 'steps'), phase,
                                      str(browse), '127.0.0.1:9100', str(root), str(key_path)],
@@ -54,6 +58,12 @@ if args[:len(%r)] == %r:
                 self.assertEqual(calls[0], [['wait', 'button', 'Sign out', '--exact', '--timeout', '120'], ''])
                 self.assertIn([['type', 'text field', 'Key (pasted once)'], KEY], calls)
                 self.assertIn([['press', 'button', 'Start chat', '--exact'], ''], calls)
+                ready = [['wait', 'region', 'Ready', '--exact', '--timeout', '120'], '']
+                kept = [['wait', 'status', 'Added your OpenAI API key', '--in', 'region', 'Ready', '--exact', '--timeout', '120'], '']
+                start = [['press', 'link', 'Start a chat', '--in', 'region', 'Ready', '--exact'], '']
+                self.assertLess(calls.index(ready), calls.index(kept))
+                self.assertLess(calls.index(kept), calls.index(start))
+                self.assertLess(calls.index(start), calls.index([['press', 'button', 'Start chat', '--exact'], '']))
                 self.assertEqual(chat, '7\n')
                 verbs = [args[0] for args, _ in calls]
                 self.assertEqual(verbs.count('go'), 1, 'no navigation shortcuts after /welcome')
@@ -123,6 +133,15 @@ if args[:len(%r)] == %r:
                 result, calls, _, _ = self.run_phase(name, phase, previous=state)
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(calls, [])
+
+    def test_wrong_or_absent_composer_project_prevents_chat(self):
+        for name in NAMES:
+            for project in ('wrong', ''):
+                result, calls, chat, state = self.run_phase(name, 'walk', project=project)
+                self.assertEqual(result.returncode, 1)
+                self.assertIsNone(chat)
+                self.assertEqual(state, 'running walk')
+                self.assertFalse(any(args[:3] == ['type', 'text area', 'Start a chat'] for args, _ in calls))
 
     def test_unknown_phase(self):
         for name in NAMES:

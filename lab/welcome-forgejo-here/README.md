@@ -3,8 +3,10 @@
 A fresh ordinary `temper box --fake-backends`, driven by skein's hand.
 The browser walks Forgejo here: Choose, Set up a Forgejo here, and its first repository,
 then “Use an API key”, pastes the exact bytes of the file captured from
-`box: model key FILE`, and reaches “work/hello is ready”. It opens
-“Open hello”, sends a first chat, sees `Hello from the local fake model.`,
+`box: model key FILE`, and requires the Model step’s embedded “Ready” card and
+“Added your OpenAI API key” status. It presses “Start a chat”, checks
+that `hello` is the selected composer project, sends a first chat,
+sees `Hello from the local fake model.`,
 and reloads to see the reply again. hand needs no peer: the walk stays on temper's pages and opens no Forgejo page.
 
 The actions `welcome`, `forge`, `model`, `ready`, and `chat` invoke separate

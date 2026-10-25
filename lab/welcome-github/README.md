@@ -3,8 +3,10 @@
 A fresh ordinary `temper box --fake-backends`, driven by skein's hand.
 The browser walks GitHub one-click: Connect GitHub, Create GitHub App, and GitHub's unaided create/install/return chain,
 then “Use an API key”, pastes the exact bytes of the file captured from
-`box: model key FILE`, and reaches “fake-person/widget is ready”. It opens
-“Open widget”, sends a first chat, sees `Hello from the local fake model.`,
+`box: model key FILE`, and requires the Model step’s embedded “Ready” card and
+“Added your OpenAI API key” status. It presses “Start a chat”, checks
+that `widget` is the selected composer project, sends a first chat,
+sees `Hello from the local fake model.`,
 and reloads to see the reply again. hand admits only temper's origin and the fake GitHub origin captured from `box: fake github http://`.
 
 The actions `welcome`, `forge`, `model`, `ready`, and `chat` invoke separate
