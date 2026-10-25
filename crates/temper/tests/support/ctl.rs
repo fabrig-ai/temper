@@ -890,7 +890,12 @@ impl Referee<Process> for Judge {
                         child.ended.stderr.len()
                     ))
                 ),
-                _ => "other host".into(),
+                Process::Binary(_)
+                | Process::Stdout(_)
+                | Process::Person(_)
+                | Process::Peer(_)
+                | Process::Issuer(_)
+                | Process::Visitor(_) => "other host".into(),
             }
         );
     }
@@ -999,6 +1004,16 @@ pub fn charter_change_file(file: &Path, setting: &Ended, instructions: &str) {
     std::fs::write(file, serde_json::to_vec(&file_value).expect("settings FILE JSON")).expect("settings FILE");
 }
 
+/// Use the typed party proposal identity actually returned by the engine.
+#[must_use]
+pub fn proposal_key(ended: &Ended) -> String {
+    let answer = json(ended);
+    let proposal = &answer["outcome"]["done"]["proposed"]["proposal"];
+    let party = proposal["proposer"]["party"].as_u64().expect("party proposal");
+    let number = proposal["number"].as_u64().expect("proposal number");
+    format!("p{party}/{number}")
+}
+
 #[cfg(test)]
 mod read_condition_tests {
     use super::*;
@@ -1032,14 +1047,4 @@ mod read_condition_tests {
         calls.finish(Time::from_nanos(3));
         assert_eq!(calls.observed_at(), &[Some(Wall::from_nanos(20)), Some(Wall::from_nanos(40))]);
     }
-}
-
-/// Use the typed party proposal identity actually returned by the engine.
-#[must_use]
-pub fn proposal_key(ended: &Ended) -> String {
-    let answer = json(ended);
-    let proposal = &answer["outcome"]["done"]["proposed"]["proposal"];
-    let party = proposal["proposer"]["party"].as_u64().expect("party proposal");
-    let number = proposal["number"].as_u64().expect("proposal number");
-    format!("p{party}/{number}")
 }

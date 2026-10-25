@@ -108,13 +108,7 @@ impl Operation {
             party: None,
             retry: None,
             value_name: None,
-            proposal_project: match ask {
-                Ask::Jig(ask) => match ask.as_ref() {
-                    c::Ask::Propose { project, .. } => Some(*project),
-                    _ => None,
-                },
-                Ask::Family { .. } => None,
-            },
+            proposal_project: proposal_project(ask),
         }
     }
 }
@@ -603,5 +597,40 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
             Some(call) => out.put(call),
             None => out.put(operation.word),
         }
+    }
+}
+
+fn proposal_project(ask: &Ask) -> Option<u32> {
+    match ask {
+        Ask::Jig(ask) => match ask.as_ref() {
+            c::Ask::Propose { project, .. } => Some(*project),
+            c::Ask::ChangeSettings(_)
+            | c::Ask::Create { .. }
+            | c::Ask::Withdraw { .. }
+            | c::Ask::Message { .. }
+            | c::Ask::Compound { .. }
+            | c::Ask::Answer { .. }
+            | c::Ask::Take { .. }
+            | c::Ask::HandBack { .. }
+            | c::Ask::Decide { .. }
+            | c::Ask::Release { .. }
+            | c::Ask::Amend { .. }
+            | c::Ask::Stop { .. }
+            | c::Ask::Cancel { .. }
+            | c::Ask::Move { .. }
+            | c::Ask::Seen { .. }
+            | c::Ask::EditNote { .. }
+            | c::Ask::DeleteNote { .. }
+            | c::Ask::ChangePolicy { .. }
+            | c::Ask::SetRoles { .. }
+            | c::Ask::MakeService { .. }
+            | c::Ask::Rename { .. }
+            | c::Ask::MakeProject { .. }
+            | c::Ask::SetPool { .. }
+            | c::Ask::SignIn { .. }
+            | c::Ask::AccountChange { .. }
+            | c::Ask::SignOut { .. } => None,
+        },
+        Ask::Family { .. } => None,
     }
 }

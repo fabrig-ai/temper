@@ -447,27 +447,34 @@ fn an_owner_proposal_uses_the_returned_role_in_the_original_request_project() {
 }
 
 #[test]
+#[expect(clippy::disallowed_methods, reason = "ordinary test checks rendered bytes; testing-strategy.md, step tests")]
 fn a_restored_owner_proposals_kept_output_retains_identity_and_omits_original_recipient() {
     for json in [false, true] {
         let mut root = fixtures::started_with(fixtures::restored_chat(), fixtures::SEED, json);
         root.deliver(c::Delivery::Me(Box::new(fixtures::me(fixtures::PARTY))));
         root.done(fixtures::EMPTY, c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal: 17, to: 9 }));
-        let line = core::str::from_utf8(root.kept_lines.get(0).expect("kept line")).expect("UTF8");
+        let line = root.kept_lines.get(0).expect("kept line");
         if json {
-            assert!(line.contains("\"number\":17"));
-            assert!(!line.contains("\"to\""));
+            assert!(line.windows(b"\"number\":17".len()).any(|piece| piece == b"\"number\":17"));
+            assert!(!line.windows(b"\"to\"".len()).any(|piece| piece == b"\"to\""));
         } else {
-            assert_eq!(line, "kept: chat, proposed: p73/17\n");
+            assert_eq!(line.as_ref(), b"kept: chat, proposed: p73/17\n");
         }
     }
 }
 
 #[test]
+#[expect(clippy::disallowed_methods, reason = "ordinary test checks rendered bytes; testing-strategy.md, step tests")]
 fn a_proposal_answer_without_original_request_scope_reports_the_tools_invariant() {
     let (mut root, call) = fixtures::message();
     root.done(call, c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal: 17, to: 9 }));
     let printed = root.answer(call).expect("terminal invariant report");
     assert_eq!(printed.status, 1);
     assert!(printed.stdout.is_empty());
-    assert!(core::str::from_utf8(&printed.stderr).expect("diagnostic").contains("proposal answer lacks request scope"));
+    assert!(
+        printed
+            .stderr
+            .windows(b"proposal answer lacks request scope".len())
+            .any(|piece| piece == b"proposal answer lacks request scope")
+    );
 }
