@@ -21,12 +21,14 @@ from pathlib import Path
 import sys
 args = sys.argv[2:]
 value = sys.stdin.read() if args[0] == 'type' else None
+if args[:3] == ['press', 'button', 'Use your ChatGPT subscription']:
+    value = (Path(%r).parent / 'login-args').exists()
 with Path(%r).open('a') as output:
     output.write(json.dumps([args, value]) + '\\n')
 if args == ['outline']:
     print('code "On each host, run: temper program-login claude-person"')
 sys.exit(1 if args[:3] == %r else 0)
-''' % (str(log), fail))
+''' % (str(log), str(log), fail))
             browse.chmod(0o700)
             key = root / 'key'
             pem = '-----BEGIN RSA PRIVATE KEY-----\nbytes\n-----END RSA PRIVATE KEY-----\n'
@@ -48,7 +50,7 @@ sys.exit(1 if args[:3] == %r else 0)
         pasted = [value for args, value in calls if args[:3] == ['type', 'text field', 'Private key']]
         self.assertEqual(pasted, [pem])
         acts = [args[:3] for args, _ in calls if args[0] == 'press']
-        self.assertLess(acts.index(['press', 'link', 'Install on GitHub']), acts.index(['press', 'button', 'Adopt fake-person/widget']))
+        self.assertLess(acts.index(['press', 'button', 'Install on GitHub']), acts.index(['press', 'button', 'Adopt fake-person/widget']))
 
     def test_missed_connect_stops_before_install_and_adoption(self):
         result, calls, args, _ = self.run_phase('forge', ['press', 'button', 'Connect the App'])
@@ -62,9 +64,10 @@ sys.exit(1 if args[:3] == %r else 0)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(args, ['program-login', '--config', '/c', '--data', '/d', '--cache', '/cache with space', 'claude-person'])
         self.assertEqual(calls[-1][0][:3], ['wait', 'heading', 'fake-person/widget is ready'])
+        self.assertEqual([value for args, value in calls if args[:3] == ['press', 'button', 'Use your ChatGPT subscription']], [True])
 
-    def test_missed_model_declaration_does_not_run_terminal_login(self):
-        result, _, args, _ = self.run_phase('model', ['press', 'button', 'Use your Claude subscription'])
+    def test_missing_program_name_does_not_run_terminal_login(self):
+        result, _, args, _ = self.run_phase('model', ['wait', 'text field', 'Name'])
         self.assertEqual(result.returncode, 1)
         self.assertIsNone(args)
 
