@@ -87,6 +87,7 @@ impl Routes {
 pub enum Up {
     Root(Box<engine::Event>),
     Ask(store::Request),
+    FrameTooLarge { number: u64, task: u64, bytes: u32, limit: u32 },
 }
 
 /// Route one root request; table saturation refuses before issuing a load.
@@ -134,6 +135,9 @@ pub fn up(routes: &mut Routes, event: store::Event, into: &mut Queue<Up>) {
     match event {
         store::Event::Committed { number, fill } => root(into, engine::StoreInput::Committed { number, fill }),
         store::Event::Failed { number } => root(into, engine::StoreInput::Uncommitted { number }),
+        store::Event::FrameTooLarge { number, task, bytes, limit } => {
+            into.push(Up::FrameTooLarge { number, task, bytes, limit });
+        }
         store::Event::Restored { owner, rows, next } | store::Event::Loaded { owner, rows, next } => {
             page(routes, owner, rows, next, None, into);
         }

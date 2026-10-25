@@ -225,14 +225,26 @@ section 7).
   encoding with a copy of the existing codec limits, changing only its
   transcript field bound to `A`, plus the actual 12-byte frame wrapper.
   Out-of-codec `A`, arithmetic overflow, or a page beyond the profile's
-  ceiling refuses admission rather than clamping. The service currently
-  keeps this sizing bridge private pending jig's canonical helper.
+  ceiling refuses admission rather than clamping. Jig's canonical
+  `jig_protocol_store::sizes::frame` owns this current full-frame sizing.
   Page bytes are an admission counter, not an allocated page pool: this
   changes the priced bound and may admit more data-dependent occupancy,
   while page rows, chunk and frame decoder capacities, queues and read
   slots stay the same. Existing request byte budgets still apply.
-  Named refusal of an oversized write before data IO is separate pending
-  work; this sizing change does not implement that guard.
+  Before any commit data IO, jig checks each actual encoded frame against
+  `P`, admitting equality and refusing the entire batch if any frame is
+  larger, even a later turn after other prepared writes. Its in-process
+  `FrameTooLarge { number, task, bytes, limit }` is the rejected commit's
+  only terminal. Temper feeds that number through the existing root
+  `Uncommitted` policy and stops with the named service cause. The host
+  prints, with its normal newline:
+
+  ```text
+  temper serve: commit {number} refused: task {task}'s transcript frame, {bytes} bytes, past the store's page of {limit} bytes
+  ```
+
+  Other commit failures retain their existing diagnostic. Earlier durable
+  data is recoverable; the refusal changes no stored or wire format.
 
 ## 5. The restart
 

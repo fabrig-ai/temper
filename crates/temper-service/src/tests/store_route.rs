@@ -10,6 +10,17 @@ use temper_engine_domain_forge as forge;
 fn load(range: engine::Range, after: Option<engine::Key>, most: u32, bytes: u32) -> engine::StoreRequest {
     engine::StoreRequest::Load { owner: fixtures::OWNER, range, after, most, bytes }
 }
+
+#[test]
+fn a_frame_refusal_routes_one_named_terminal_with_all_bounds() {
+    let mut routes = fixtures::routes();
+    let mut out = Queue::with_capacity(2);
+    route::up(&mut routes, store::Event::FrameTooLarge { number: 7, task: 11, bytes: 79, limit: 78 }, &mut out);
+    let Some(Up::FrameTooLarge { number: 7, task: 11, bytes: 79, limit: 78 }) = out.pop() else {
+        panic!("named terminal preserves commit, task and full-frame bounds");
+    };
+    assert!(out.is_empty(), "no duplicate generic uncommitted terminal");
+}
 fn forge_row(commit: u8) -> store::Row {
     let row = forge::Stored::Landed { commit: [commit; 32], task: 3 };
     store::Row::Application {
