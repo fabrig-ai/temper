@@ -1701,6 +1701,13 @@ fn checked_in_deployment_profiles_pass_startup_admission() {
             }
         }
         if relative.starts_with("lab/live-0") {
+            let required = profile.admission().expect("live profile derivation");
+            let terms = profile.memory_terms();
+            eprintln!(
+                "F10 {relative} current: engine_total={} worker_total={} engine_terms={:?} worker_terms={:?}",
+                required.engine_bytes, required.worker_bytes, terms.engine, terms.worker
+            );
+            profile_memory_budget(relative, "current", &profile.document, &required, false);
             let document: serde_json::Value = serde_json::from_slice(&profile.document).expect("profile JSON");
             let required = u64::from(turn) + u64::try_from(record).expect("Record size");
             for field in ["root.loads.bytes", "root.loads.reply_bytes"] {
@@ -2026,6 +2033,7 @@ fn f10_profile_totals(relative: &str, profile: &mut support::owned::Bounded) {
         assert_eq!(terms.engine.iter().map(|(_, bytes)| bytes).sum::<u64>(), required.engine_bytes);
         assert_eq!(terms.worker.iter().map(|(_, bytes)| bytes).sum::<u64>(), required.worker_bytes);
         let variant = if baseline { "baseline" } else { "candidate" };
+        profile_memory_budget(relative, variant, &profile.document, &required, true);
         eprintln!(
             "F10 {relative} {variant}: engine_total={} worker_total={} engine_terms={:?} worker_terms={:?}",
             required.engine_bytes, required.worker_bytes, terms.engine, terms.worker
@@ -2037,4 +2045,33 @@ fn f10_profile_totals(relative: &str, profile: &mut support::owned::Bounded) {
         }
     }
     profile.document = candidate;
+}
+
+// Requirements derive structure without checking declarations. Touched labs must fit;
+// the separately owned live-profile deficit is measured for comparison before landing.
+fn profile_memory_budget(
+    relative: &str,
+    variant: &str,
+    bytes: &[u8],
+    required: &temper_service::startup::Requirements,
+    enforce: bool,
+) {
+    let document: serde_json::Value = serde_json::from_slice(bytes).expect("profile JSON");
+    let engine =
+        document.get("engine").map_or(0, |engine| engine["memory_bytes"].as_u64().expect("engine declaration"));
+    let worker = document.get("workers").and_then(serde_json::Value::as_array).map_or(0, |workers| {
+        workers.first().map_or(0, |worker| worker["memory_bytes"].as_u64().expect("worker declaration"))
+    });
+    for (component, required, declared) in
+        [("engine", required.engine_bytes, engine), ("worker", required.worker_bytes, worker)]
+    {
+        let slack = i128::from(declared) - i128::from(required);
+        eprintln!("F10 budget {relative} {variant} {component}: required={required} declared={declared} slack={slack}");
+        if enforce {
+            assert!(
+                required <= declared,
+                "{relative} {variant} {component}: required {required} exceeds declared {declared}"
+            );
+        }
+    }
 }
