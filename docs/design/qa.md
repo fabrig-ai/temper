@@ -702,3 +702,7 @@ the pins. Both checks reject all hand trouble and require ctl's first
 committed assistant message to equal the fake model's reply. These are
 on-demand browser experiments, with pure manifest/proof tests and POSIX
 shell process tests under `lab/tests/`.
+
+The fake GitHub serves the browser’s optional favicon request without API
+credentials as a bodyless 204. Its console errors remain part of the
+empty-trouble requirement; no resource failure is filtered out.
