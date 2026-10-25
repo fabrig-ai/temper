@@ -37,7 +37,7 @@ pub(super) fn text(
                 super::subjects::text_digest(b"task", &super::super::Part::Task(task), limits, out);
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value)))
-                if super::super::historical_settings(value).is_some() =>
+                if super::super::historical_proposal(value).is_some() =>
             {
                 super::proposal::history_text(value, out);
             }
@@ -133,7 +133,7 @@ pub(super) fn encode(reading: &Reading, limits: &Limits, out: &mut Encoder, budg
                 super::subjects::encode(&super::super::Part::Task(task), limits, true, out);
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value)))
-                if super::super::historical_settings(value).is_some() =>
+                if super::super::historical_proposal(value).is_some() =>
             {
                 super::proposal::encode_history(value, out, budget);
             }

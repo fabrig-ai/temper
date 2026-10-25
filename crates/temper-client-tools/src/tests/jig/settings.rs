@@ -988,3 +988,133 @@ fn propose_settings_forwards_optional_reason_and_prints_the_original_returned_ro
     assert!(json.contains("\"to\":{\"role\":{\"project\":0,\"role\":9}}"));
     assert!(json.contains("\"proposer\":{\"party\":73}"));
 }
+
+fn retained_proposal(key: c::ProposalKey, action: c::OwnerRetainedAction) -> c::ReadValue {
+    let proposer = match key.proposer {
+        c::Proposer::Task(n) | c::Proposer::Party(n) => n,
+    };
+    c::ReadValue::Historical(Box::new(c::OwnerHistorical {
+        key: c::ObjectKey::Proposal(key),
+        value: c::OwnerHistoricalValue::Proposal(c::OwnerProposalHistory {
+            action,
+            number: key.number,
+            proposer,
+            as_holder: false,
+            state: c::OwnerProposalHistoryState::Accepted { by: c::OwnerRequester::Person(19) },
+        }),
+        at: None,
+        by: None,
+    }))
+}
+#[test]
+fn retained_task_release_keeps_its_typed_identity_kind_and_decision_in_text_and_json() {
+    let key = c::ProposalKey { proposer: c::Proposer::Task(73), number: 7 };
+    let history = retained_proposal(key, c::OwnerRetainedAction::Release { task: 41 });
+    let text = read(&["proposal", "t73/7"], history.clone());
+    assert_eq!(text.status, 0);
+    assert_eq!(text.stdout.as_ref(), b"proposal t73/7 \xc2\xb7 release \xc2\xb7 accepted\n");
+    let json = read(&["proposal", "t73/7", "--json"], history);
+    assert_eq!(json.status, 0);
+    assert_eq!(
+        json.stdout.as_ref(),
+        br#"{"key":{"proposer":{"task":73},"number":7},"action":"release","state":{"accepted":{"by":{"person":19}}}}"#
+    );
+}
+#[test]
+fn retained_settings_preserves_task_or_party_keys_and_its_revision_details() {
+    for (proposer, name) in [(c::Proposer::Task(73), "t73/7"), (c::Proposer::Party(73), "p73/7")] {
+        let key = c::ProposalKey { proposer, number: 7 };
+        let history = retained_proposal(
+            key,
+            c::OwnerRetainedAction::Settings(c::OwnerRetainedActionSettings {
+                against: 5,
+                items: list([]),
+                made: Some(6),
+            }),
+        );
+        for json in [false, true] {
+            let argv = if json { vec!["proposal", name, "--json"] } else { vec!["proposal", name] };
+            let answer = read(&argv, history.clone());
+            assert_eq!(answer.status, 0);
+            let text = core::str::from_utf8(&answer.stdout).expect("text");
+            if json {
+                let expected = match proposer {
+                    c::Proposer::Task(_) => r#""task":73"#,
+                    c::Proposer::Party(_) => r#""party":73"#,
+                };
+                assert!(text.contains(expected));
+                assert!(text.contains(r#""against":5"#));
+                assert!(text.contains(r#""made":6"#));
+            } else {
+                assert!(text.contains(name));
+                assert!(text.contains("against revision 5, made revision 6"));
+            }
+        }
+    }
+}
+#[test]
+fn retained_proposals_refuse_mismatched_inner_outer_and_requested_identity() {
+    let key = c::ProposalKey { proposer: c::Proposer::Task(73), number: 7 };
+    let good = retained_proposal(key, c::OwnerRetainedAction::Release { task: 41 });
+    let c::ReadValue::Historical(original) = good else { panic!("historical") };
+    for (name, key, proposer, number) in [
+        ("t73/7", c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 }, 73, 7),
+        ("t73/7", key, 74, 7),
+        ("t73/7", key, 73, 8),
+        ("t74/7", key, 73, 7),
+    ] {
+        let mut broken = original.clone();
+        broken.key = c::ObjectKey::Proposal(key);
+        let c::OwnerHistoricalValue::Proposal(h) = &mut broken.value else { panic!("history") };
+        h.proposer = proposer;
+        h.number = number;
+        for json in [false, true] {
+            let argv = if json { vec!["proposal", name, "--json"] } else { vec!["proposal", name] };
+            assert_eq!(read(&argv, c::ReadValue::Historical(broken.clone())).status, 1);
+        }
+    }
+}
+fn retained_party_batch() -> c::ReadValue {
+    let (_, _, task) = fixtures::task_read();
+    c::ReadValue::Historical(Box::new(c::OwnerHistorical {
+        key: c::ObjectKey::Proposal(c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 }),
+        value: c::OwnerHistoricalValue::PersonProposal {
+            proposal: Box::new(c::OwnerPersonProposal {
+                number: 7,
+                proposer: 73,
+                project: 0,
+                goal: c::OwnerPersonProposalGoal {
+                    number: 41,
+                    project: 0,
+                    executor: c::OwnerExecutor::Agent { charter: 3 },
+                    spec: c::Specification { words: words("goal"), parameters: list([]), inputs: list([]) },
+                    contract: c::TaskContractDocument::Report { words: 1024 },
+                    authority: authority(),
+                    numbers: c::OwnerNumbers { budget: 1, spent: 0, spent_below: 0, reserved: 0 },
+                    funder: c::Funder::Task(41),
+                    dependencies: list([]),
+                    holdings: list([]),
+                    wake: task.wake,
+                    tracked: None,
+                },
+                state: c::OwnerPersonProposalState::Pending { since: Wall::from_nanos(17) },
+            }),
+            decision: None,
+        },
+        at: None,
+        by: None,
+    }))
+}
+#[test]
+fn retained_party_single_goal_batch_keeps_its_actual_kind_key_and_pending_state() {
+    let history = retained_party_batch();
+    let text = read(&["proposal", "p73/7"], history.clone());
+    assert_eq!(text.status, 0);
+    assert_eq!(text.stdout.as_ref(), b"proposal p73/7 \xc2\xb7 batch \xc2\xb7 pending\n");
+    let json = read(&["proposal", "p73/7", "--json"], history);
+    assert_eq!(json.status, 0);
+    assert_eq!(
+        json.stdout.as_ref(),
+        br#"{"key":{"proposer":{"party":73},"number":7},"action":"batch","state":{"pending":{"since":17}}}"#
+    );
+}

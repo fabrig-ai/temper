@@ -351,39 +351,116 @@ fn history_state(state: &c::OwnerProposalHistoryState) -> &'static [u8] {
         c::OwnerProposalHistoryState::Withdrawn => b"withdrawn",
     }
 }
-pub(super) fn history_text(value: &c::OwnerHistorical, out: &mut Text) {
-    let (history, settings) = super::super::historical_settings(value).expect("validated settings history");
-    out.put(b"proposal ");
-    settings::proposal_text(
-        c::ProposalKey { proposer: c::Proposer::Party(history.proposer), number: history.number },
-        out,
-    );
-    out.put(b" \xc2\xb7 settings \xc2\xb7 ");
-    out.put(history_state(&history.state));
-    out.put(b"\nagainst revision ");
-    out.number(u64::from(settings.against));
-    if let Some(made) = settings.made {
-        out.put(b", made revision ");
-        out.number(u64::from(made));
+fn retained_kind(action: &c::OwnerRetainedAction) -> &'static [u8] {
+    match action {
+        c::OwnerRetainedAction::Settings(_) => b"settings",
+        c::OwnerRetainedAction::Batch(_) => b"batch",
+        c::OwnerRetainedAction::Effect { .. } => b"effect",
+        c::OwnerRetainedAction::ProcedureEffect { .. } => b"procedure_effect",
+        c::OwnerRetainedAction::Amend { .. } => b"amend",
+        c::OwnerRetainedAction::Widen { .. } => b"widen",
+        c::OwnerRetainedAction::Release { .. } => b"release",
     }
-    out.put(b"\n");
+}
+fn person_state(state: &c::OwnerPersonProposalState) -> &'static [u8] {
+    match state {
+        c::OwnerPersonProposalState::Pending { .. } => b"pending",
+        c::OwnerPersonProposalState::Accepted { .. } => b"accepted",
+        c::OwnerPersonProposalState::Rejected { .. } => b"rejected",
+    }
+}
+pub(super) fn history_text(value: &c::OwnerHistorical, out: &mut Text) {
+    let key = super::super::historical_proposal(value).expect("validated proposal history");
+    out.put(b"proposal ");
+    settings::proposal_text(key, out);
+    out.put(b" \xc2\xb7 ");
+    match &value.value {
+        c::OwnerHistoricalValue::Proposal(history) => {
+            out.put(retained_kind(&history.action));
+            out.put(b" \xc2\xb7 ");
+            out.put(history_state(&history.state));
+            out.put(b"\n");
+            if let c::OwnerRetainedAction::Settings(settings) = &history.action {
+                out.put(b"against revision ");
+                out.number(u64::from(settings.against));
+                if let Some(made) = settings.made {
+                    out.put(b", made revision ");
+                    out.number(u64::from(made));
+                }
+                out.put(b"\n");
+            }
+        }
+        c::OwnerHistoricalValue::PersonProposal { proposal, .. } => {
+            out.put(b"batch \xc2\xb7 ");
+            out.put(person_state(&proposal.state));
+            out.put(b"\n");
+        }
+        c::OwnerHistoricalValue::Task { .. }
+        | c::OwnerHistoricalValue::Escalation { .. }
+        | c::OwnerHistoricalValue::Question { .. }
+        | c::OwnerHistoricalValue::PersonTask { .. } => unreachable!("validated proposal history"),
+    }
 }
 pub(super) fn encode_history(value: &c::OwnerHistorical, out: &mut Encoder, budget: &mut Cut) {
-    let (history, settings) = super::super::historical_settings(value).expect("validated settings history");
+    let key = super::super::historical_proposal(value).expect("validated proposal history");
     out.object_start();
     out.key(b"key");
-    super::encode_proposal_key(
-        &c::ProposalKey { proposer: c::Proposer::Party(history.proposer), number: history.number },
-        out,
-        budget,
-    );
+    super::encode_proposal_key(&key, out, budget);
     out.key(b"action");
-    encode_settings_fields(settings.against, &settings.items, None, settings.made, out);
-    out.key(b"state");
+    match &value.value {
+        c::OwnerHistoricalValue::Proposal(history) => {
+            match &history.action {
+                c::OwnerRetainedAction::Settings(s) => encode_settings_fields(s.against, &s.items, None, s.made, out),
+                other @ (c::OwnerRetainedAction::Batch(_)
+                | c::OwnerRetainedAction::Effect { .. }
+                | c::OwnerRetainedAction::ProcedureEffect { .. }
+                | c::OwnerRetainedAction::Amend { .. }
+                | c::OwnerRetainedAction::Widen { .. }
+                | c::OwnerRetainedAction::Release { .. }) => out.string(retained_kind(other)),
+            }
+            out.key(b"state");
+            encode_history_state(&history.state, out, budget);
+        }
+        c::OwnerHistoricalValue::PersonProposal { proposal, .. } => {
+            out.string(b"batch");
+            out.key(b"state");
+            encode_person_state(&proposal.state, out, budget);
+        }
+        c::OwnerHistoricalValue::Task { .. }
+        | c::OwnerHistoricalValue::Escalation { .. }
+        | c::OwnerHistoricalValue::Question { .. }
+        | c::OwnerHistoricalValue::PersonTask { .. } => unreachable!("validated proposal history"),
+    }
+    out.object_end();
+}
+fn encode_person_state(state: &c::OwnerPersonProposalState, out: &mut Encoder, budget: &mut Cut) {
     out.object_start();
-    out.key(history_state(&history.state));
+    out.key(person_state(state));
     out.object_start();
-    match &history.state {
+    match state {
+        c::OwnerPersonProposalState::Pending { since } => {
+            out.key(b"since");
+            out.unsigned(since.as_nanos());
+        }
+        c::OwnerPersonProposalState::Accepted { by } => {
+            out.key(b"by");
+            super::encode_owner_requester(by, out, budget);
+        }
+        c::OwnerPersonProposalState::Rejected { by, reason, .. } => {
+            out.key(b"by");
+            super::encode_owner_requester(by, out, budget);
+            out.key(b"reason");
+            budget.words(reason.bytes(), out);
+        }
+    }
+    out.object_end();
+    out.object_end();
+}
+fn encode_history_state(state: &c::OwnerProposalHistoryState, out: &mut Encoder, budget: &mut Cut) {
+    out.object_start();
+    out.key(history_state(state));
+    out.object_start();
+    match state {
         c::OwnerProposalHistoryState::Pending { holder: held, since } => {
             out.key(b"holder");
             holder(*held, out, budget);
@@ -402,7 +479,6 @@ pub(super) fn encode_history(value: &c::OwnerHistorical, out: &mut Encoder, budg
         }
         c::OwnerProposalHistoryState::Withdrawn => {}
     }
-    out.object_end();
     out.object_end();
     out.object_end();
 }

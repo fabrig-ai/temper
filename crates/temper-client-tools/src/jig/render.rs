@@ -100,19 +100,26 @@ pub(crate) fn read_task(value: &ReadValue) -> Option<(&contract::Task, Option<&c
     }
     None
 }
-pub(crate) fn historical_settings(
-    value: &contract::OwnerHistorical,
-) -> Option<(&contract::OwnerProposalHistory, &contract::OwnerRetainedActionSettings)> {
-    if let contract::OwnerHistoricalValue::Proposal(history) = &value.value
-        && let contract::OwnerRetainedAction::Settings(settings) = &history.action
-        && value.matches(contract::ObjectKey::Proposal(contract::ProposalKey {
-            proposer: contract::Proposer::Party(history.proposer),
-            number: history.number,
-        }))
+pub(crate) fn historical_proposal(value: &contract::OwnerHistorical) -> Option<contract::ProposalKey> {
+    match &value.value {
+        contract::OwnerHistoricalValue::Proposal(_) | contract::OwnerHistoricalValue::PersonProposal { .. } => {}
+        contract::OwnerHistoricalValue::Task { .. }
+        | contract::OwnerHistoricalValue::Escalation { .. }
+        | contract::OwnerHistoricalValue::Question { .. }
+        | contract::OwnerHistoricalValue::PersonTask { .. } => return None,
+    }
+    if let contract::ObjectKey::Proposal(key) = value.key
+        && value.matches(value.key)
     {
-        return Some((history, settings));
+        return Some(key);
     }
     None
+}
+fn proposal_matches_call(value: &contract::OwnerHistorical, call: &crate::jig::call::Call) -> bool {
+    if let Some(crate::jig::call::Value::Proposal(key)) = crate::jig::call::value(call, 0) {
+        return value.matches(contract::ObjectKey::Proposal(*key));
+    }
+    false
 }
 pub(crate) fn historical_task(value: &contract::OwnerHistorical) -> Option<(&contract::Task, &contract::Result)> {
     if let contract::OwnerHistoricalValue::Task { document, result } = &value.value
@@ -375,7 +382,7 @@ pub(crate) fn reads(
                 return failure(b"unknown revision", reading.called.json, 2);
             }
             Readout::Jig(ReadResult::Value(value)) => {
-                if check_selected(reading.called.call.tool, *local, value).is_err() {
+                if check_selected(&reading.called.call, *local, value).is_err() {
                     return failure(b"tools' bug; unexpected document; report it as a finding", reading.called.json, 1);
                 }
             }
@@ -439,8 +446,8 @@ pub(crate) fn reads(
     document::print(document::Document::ReadSet(reading, party), reading.called.json, limits, vocabulary)
 }
 
-fn check_selected(tool: u8, local: u32, value: &ReadValue) -> Result<(), ()> {
-    match (tool, local, value) {
+fn check_selected(call: &crate::jig::call::Call, local: u32, value: &ReadValue) -> Result<(), ()> {
+    match (call.tool, local, value) {
         (1, _, ReadValue::Inbox(_) | ReadValue::OwnerInbox(_))
         | (2, 1, ReadValue::Tasks(_))
         | (3, 1, ReadValue::Task(_))
@@ -453,7 +460,9 @@ fn check_selected(tool: u8, local: u32, value: &ReadValue) -> Result<(), ()> {
         | (crate::jig::rows::REVISIONS_AT, 1, ReadValue::Revisions(_))
         | (crate::jig::rows::PROPOSAL_AT, 1, ReadValue::Proposal(_) | ReadValue::OwnerProposal(_)) => Ok(()),
         (3, 1, ReadValue::Historical(value)) if historical_task(value).is_some() => Ok(()),
-        (crate::jig::rows::PROPOSAL_AT, 1, ReadValue::Historical(value)) if historical_settings(value).is_some() => {
+        (crate::jig::rows::PROPOSAL_AT, 1, ReadValue::Historical(value))
+            if historical_proposal(value).is_some() && proposal_matches_call(value, call) =>
+        {
             Ok(())
         }
         _ => Err(()),
