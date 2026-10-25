@@ -131,6 +131,17 @@ section 7).
 
 ## 4. Records and the store version
 
+An issue row saves `closing_generation: Option<u64>` immediately after
+`desired`, in the same write that accepts the desired view
+(`../domain/forge.md`, 12.1). It restores that generation with desired
+and clears it when desired becomes non-final. This field changes v10 in
+place, coupled to jig's changed core-v6 projection layout in one repin.
+The combined opener refuses an old C0 Core layout by name as
+`OlderBuild { why: Layout(Core) }`, before application decode and without
+mutating the store. The application has no layout fingerprint of its
+own; this refusal relies on the coupled Core layout change. A new Core
+with the old issue-row schema is never a supported pair.
+
 - **One schema,** in `temper-protocol-store`, with a record for each
   family and for every value those records carry (the client's entries,
   effects, writes, live rows and cached answers; the change's and the

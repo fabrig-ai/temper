@@ -36,3 +36,7 @@ Open fake scripts use final text; Finite finish calls and chat bounds hold.
 | `qa.md` | S, H and planted-failure P experiments on the lab's runner; 10.2: calibrated campaign, H passes and P fails its planted stop. | Triage of P's first failure. |
 | `../guide/github.md`, `../guide/forgejo.md` | unknown (the previous rows gave no implemented guide coverage). | Remaining guide-to-product coverage unknown; the previous guide rows still described the whole scope as unbuilt. |
 | `../guide/server.md` | 10: account carried across redeploy by ctl export/import. Other implemented detail unknown. | unknown |
+
+| Plan | State | Takes the design to | Where |
+|---|---|---|---|
+| forge-domain-2 M1 | active; paired implementation and pricing, not landed | `domain/forge.md` 12.1–12.2 and `protocol/store.md` 4: accepted desired generation saved with IssueRow, whole-current-desired settlement and coupled core-v6/v10 open refusal; full projection recovery apart from task settlement remains M3 | `records/missions/forge-domain-2/m1.md` |
