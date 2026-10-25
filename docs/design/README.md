@@ -184,6 +184,9 @@ forge, temper adds:
 - **`qa.md`:** temper's binding to skein's lab (skein's `lab.md`): its
   experiments in `lab/`, their charter, tool and checks, and M1's
   campaign.
+- **`welcome-walk.md`:** the welcome's every path walked on `temper box
+  --fake-backends`: the fake box, its process stories, its lab
+  experiments and what the walk found, under `draft/fake-backends.md`.
 - **`draft/`:** drafts, not contract.
 - **`STATUS.md`:** how far the code is from this design, and which plans
   take it there.

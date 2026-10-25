@@ -126,3 +126,82 @@ The paste’s gallery is below [Connect a model](connect-model.html?world=first-
 | `done` | `#paste-done` | Ready, “Signed in to ChatGPT”, using the existing return’s drawing |
 
 The earlier first-run mockup, a story of its own, also drew "Reset demo", a turn's "Just now", the composer's placeholder, "Landed into main" and the pull request's link on the card. The client leaves each out (client README, section 11), and so does this world.
+
+
+### 2.5 Chats, a chat, Accounts and the inbox
+
+`chats.html`, `chat.html`, `inbox.html` and `accounts.html`, surveyed
+2026-10-25 at temper ff1dac865c (the branch's base), then compared
+with the gallery at 390 and 1440 px. The branch builds their composer,
+chat rows and ended bars, inbox menus and cards, and account rows.
+The two additional gallery states are the first plan's Chats at step 5
+and the retired playground's T1 at step 7. This group remains here:
+its drawings still include the future pieces and missing facts below,
+unmarked in their main drawing.
+
+Where the client's recorded picks stand against the drawing:
+
+- **Accept**, not “Accept goal”. The chatbar carries status and own
+  spend, “N spent · of B”, and no model, template, charter, host or
+  budget mode; the composer's line names the next run. Its chooser
+  stays behind the folded “Change model”.
+- **Closed** for every ended chat's bar and list row, with the end's
+  clock in the bar when supplied. The conversation's Failed and
+  Cancelled words and reasons stay. Chats is one list, newest first;
+  a row's spend is its own, with live delegates counted separately.
+- **Acts beside each account and source**, including the move
+  controls. A person's own account shows neither Used by nor Waiting
+  for it; the deployment's accounts can show both. No Tasks or
+  Workers in the navigation.
+- **Mixed key and program offers** do not establish MODEL's endpoint.
+  The composer's line keeps “Using MODEL” rather than naming an
+  account from its login. Known provider and plan names elsewhere
+  use OpenAI/ChatGPT and Anthropic/Claude.
+
+What is not built here, though the main drawings show it:
+
+- A chats row's or update's reply preview; a question's choice
+  buttons; a chats row's ended delegates; fractional spend.
+- A program's usage windows (6.3); an account's email display; the
+  composer's account where the provider offers both key and program
+  endpoints.
+- A proposal's template and charter names (`me` has no charter names,
+  and a proposed task names no template); a card's lineage beyond
+  its own task (the inbox's `Card` carries no ancestry).
+- **Board and Changes** in the navigation are not built.
+
+Other facts the comparison found absent:
+
+- **A timer's next clock or interval.** The chat's wake policy says
+  timers can wake it, but carries neither “until 09:10” nor “every
+  2 h”. The client keeps its existing news-wait words.
+- **The request's own timestamp.** The task gives its specification
+  but no separate request clock. The conversation uses its first
+  activity line's clock for the request, as client README 3.5 says;
+  that differs from mockups which timestamp the request separately.
+- **An update's title before its task document arrives.** The entry
+  has its task number and kind but no title. Its heading-link says
+  “Task N” until the task document supplies the title, preserving
+  the same OpenResult/Go act and seen behavior.
+- **A plan's first-use card.** No delivered account or task fact says
+  whether the person has seen that explanation; the mockup-only
+  sample below Chats is not drawn as part of the client's page.
+- **Older transcript and calls beyond the receiving bounds.** The
+  reference T1 drawing has 142 older turns and nine calls; the fake
+  client's delivered window has no such total and carries three
+  calls. The gallery keeps the browser's shipped bounds (browser.md
+  7.2), reports omitted text, and offers the existing older-page act
+  where supplied, rather than inventing history or widening limits.
+
+Where a word or shape was otherwise open, the client keeps its
+existing pattern: jig's executor and specification words and resource
+and grant words in proposals (numeric charters until names arrive);
+Kind's folded disclosure for all inbox menus; the folded rejection
+editor for “Answer in words”; the forge row's native disclosure and
+summary for account rows; the existing dashed empty block for “No
+model of yours yet.”. Confirmation keeps each supplied funding fact
+in its Budget row, as the existing decision referee reads it. After
+retirement the banner selects the surviving project, hello, as client
+README 4.8 requires; the history remains the retired task's. Other-state
+galleries below mockup pages remain
+examples of separate states, not extra content appended to a page.

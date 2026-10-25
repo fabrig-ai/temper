@@ -158,9 +158,25 @@ fn a_client_shows_a_third_account_at_two_rows() {
         fixtures::NOW,
         &mut skein_lib::Queue::with_capacity(bounds.tree.patches),
     );
-    let text: Vec<u8> =
-        view.tree().nodes().iter().flat_map(|node| node.text.iter().flat_map(|run| run.text.iter().copied())).collect();
-    assert!(String::from_utf8(text).expect("view text").contains(&format!("Account {third}")));
+    // The row is named by its provider and holder, rather than “Account N”.
+    // Its remove act still identifies the independently keyed third account.
+    let removes: Vec<_> = view
+        .tree()
+        .nodes()
+        .iter()
+        .filter_map(|node| {
+            (node.role == skein_ui::Role::Button && node.name.as_deref() == Some(b"Remove account")).then_some(node.id)
+        })
+        .collect();
+    let shown = removes.into_iter().any(|node| {
+        matches!(
+            temper_client_view::act(&mut view, node, skein_ui::Act::Press),
+            Some(d::Action::Pages(d::pages::Act::Accounts(d::pages::accounts::Act::Submit {
+            row, operation: d::pages::accounts::Operation::RemoveAccount, ..
+        }))) if row.account == third
+        )
+    });
+    assert!(shown, "third account has its own row and remove act");
 }
 
 #[test]

@@ -90,7 +90,12 @@ impl Clients {
             http::Request::Respond(http::Response {
                 status,
                 headers: headers.into_boxed(),
-                body: http::Body::Length(u64::try_from(body.len()).expect("bounded page")),
+                // An empty redirect has no body stream to Finish before keep-alive reuse.
+                body: if body.is_empty() {
+                    http::Body::None
+                } else {
+                    http::Body::Length(u64::try_from(body.len()).expect("bounded page"))
+                },
                 close: false,
             }),
             &mut self.server_out,

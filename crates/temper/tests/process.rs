@@ -949,7 +949,7 @@ fn temper_box_prints_its_link_and_stops_its_processes() {
     let scratch = support::Scratch::new("box_stop");
     let owned = boxed_example(&scratch);
     let forgejo = owned.forgejo;
-    let ended = support::boxed::run(scratch.path(), Some(forgejo), support::boxed::Plan::Stop, BOX_DEADLINE);
+    let ended = support::boxed::run_echo_steps(scratch.path(), Some(forgejo), support::boxed::Plan::Stop, BOX_DEADLINE);
     assert_box_streams(&ended);
     assert_eq!(ended.forgejo_at_link, Some(200), "Forgejo answered its version when the link came");
     assert_eq!(ended.exit, Some(Exit::Code(0)), "stopped as asked: {}", String::from_utf8_lossy(&ended.stderr));
@@ -1012,6 +1012,8 @@ fn box_terminal_line(line: &str, starting: &[&str], group_notices: &[&str]) -> b
         ]
         .contains(&line)
         || words.starts_with("box: ")
+        || words.starts_with("First run: wrote the configuration, ")
+        || words.strip_prefix("Logs: ").is_some_and(|path| path.starts_with('/') && path.ends_with("/box/logs/"))
         || ["Stopping", "Stopped"].contains(&words)
         || group_notices.contains(&words)
         || (words != line && words == "A fresh sign-in link:")
@@ -1156,7 +1158,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
         fs::create_dir(path).expect("empty first-run directory");
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).expect("private first-run directory");
     }
-    let flags = deployment_flags(&paths);
+    let flags = support::boxed::echo_steps(deployment_flags(&paths));
     let (cached, sources) = cache_forgejo_binaries(&paths[2]);
     let mut bot = None;
     for run in ["first", "second"] {
@@ -1216,7 +1218,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
                 "no partial download"
             );
         }
-        let wrote = format!("box: wrote the configuration, {}\n", paths[0].join("temper.json").display());
+        let wrote = format!("First run: wrote the configuration, {}\n", paths[0].join("temper.json").display());
         assert_eq!(stderr.contains(&wrote), run == "first", "only the first box writes configuration");
     }
     scratch.remove();
@@ -1277,6 +1279,7 @@ fn a_first_run_plays_the_demo_then_sets_up_a_forgejo_here_with_no_restart() {
     const ALL_CALLS: usize = END_READS_END + 7;
     let scratch = support::Scratch::new("demo-then-forgejo");
     let (paths, flags) = first_run_directories(&scratch);
+    let flags = support::boxed::echo_steps(flags);
     let (cached, sources) = cache_forgejo_binaries(&paths[2]);
     let steps = demo_then_forgejo_steps(scratch.path(), HELLO);
     let mut llm = first_repository::llm(&paths[0]);
@@ -1406,7 +1409,7 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
     let scratch = support::Scratch::new("forgejo-plan-change");
     let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
     let mut issuer = Some(forge_land::fake_deployment(&paths));
-    let flags = deployment_flags(&paths);
+    let flags = support::boxed::echo_steps(deployment_flags(&paths));
     let (cached, sources) = cache_forgejo_binaries(&paths[2]);
     let clock = skein_shell::Clock::new();
     let addition = format!("Plan change at {}-{}", std::process::id(), clock.now().now.as_nanos());
@@ -1494,10 +1497,8 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
             evidence.version.expect("live Forgejo")["version"].as_str().expect("version").split('+').next(),
             Some(skein_forge::forgejo::pin::VERSION)
         );
-        assert!(
-            !stderr.contains(&format!("box: wrote the configuration, {}\n", paths[0].join("temper.json").display())),
-            "init wrote configuration before either box"
-        );
+        let wrote = format!("First run: wrote the configuration, {}\n", paths[0].join("temper.json").display());
+        assert!(!stderr.contains(&wrote), "init wrote configuration before either box");
         for (path, source) in cached.iter().zip(&sources) {
             assert_cached_binary_unchanged(path, source);
             assert!(
@@ -1519,7 +1520,7 @@ fn a_change_whose_coder_fails_holds_and_its_chat_answers() {
     let scratch = support::Scratch::new("forgejo-held-change");
     let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
     let issuer = forge_land::fake_deployment(&paths);
-    let flags = deployment_flags(&paths);
+    let flags = support::boxed::echo_steps(deployment_flags(&paths));
     let _cached = cache_forgejo_binaries(&paths[2]);
     let clock = skein_shell::Clock::new();
     let addition = format!("Held change at {}-{}", std::process::id(), clock.now().now.as_nanos());
@@ -1598,7 +1599,7 @@ fn two_first_runs_one_after_the_other_choose_their_own_ports() {
         assert_eq!(ended.exit, Some(Exit::Code(0)), "{name}: {stderr}");
         assert!(ended.finished, "{name}: {stderr}");
         assert_eq!(ended.left, Some(Vec::new()), "{name}: no process outlived the box: {stderr}");
-        let wrote = format!("box: wrote the configuration, {}\n", config.join("temper.json").display());
+        let wrote = format!("First run: wrote the configuration, {}\n", config.join("temper.json").display());
         assert!(stderr.contains(&wrote), "{name}: {stderr}");
         assert_demo_streams(&ended.stdout, &ended.stderr);
         assert!(ended.dormant_checked, "{name}: the welcome precedes any fake start");
@@ -1606,7 +1607,9 @@ fn two_first_runs_one_after_the_other_choose_their_own_ports() {
     let a = support::Scratch::new("two-first-runs-a");
     let b = support::Scratch::new("two-first-runs-b");
     let (a_paths, a_flags) = first_run_directories(&a);
+    let a_flags = support::boxed::echo_steps(a_flags);
     let (b_paths, b_flags) = first_run_directories(&b);
+    let b_flags = support::boxed::echo_steps(b_flags);
     let clock = skein_shell::Clock::new();
     let began = clock.now().now;
     let phase = |name| {
@@ -1696,6 +1699,7 @@ fn a_second_forge_ends_the_playground_for_good_closing_its_chat_and_account() {
 
     let scratch = support::Scratch::new("playground-end");
     let (paths, flags) = first_run_directories(&scratch);
+    let flags = support::boxed::echo_steps(flags);
     let mut account = None;
     for run in ["first", "second", "third"] {
         let first = run == "first";
@@ -1900,6 +1904,7 @@ fn first_run(restart: bool) {
     use std::{fs, os::unix::fs::PermissionsExt};
     let scratch = support::Scratch::new("first-run");
     let (paths, flags) = first_run_directories(&scratch);
+    let flags = if restart { support::boxed::echo_steps(flags) } else { flags };
     let mut bot = None;
     for (run, person) in [
         (
@@ -1940,9 +1945,10 @@ fn first_run(restart: bool) {
         assert_eq!(ended.exit, Some(Exit::Code(0)), "{run}: {stderr}");
         assert!(ended.finished, "{run}: {stderr}");
         assert_eq!(ended.left, Some(Vec::new()), "{run}: no process outlived the box: {stderr}");
-        let wrote = format!("box: wrote the configuration, {}\n", paths[0].join("temper.json").display());
+        let wrote = format!("First run: wrote the configuration, {}\n", paths[0].join("temper.json").display());
         assert_eq!(stderr.contains(&wrote), run == "first", "{run}: {stderr}");
         assert_demo_streams(&ended.stdout, &ended.stderr);
+        if !restart { assert_quiet_logs(&paths[1], &ended.stderr); }
         assert_eq!(ended.dormant_checked, run == "first", "the welcome precedes any fake start");
         if let Some(previous) = bot {
             assert_eq!(ended.checked, previous, "the restarted fake connects as the same bot");
@@ -1954,6 +1960,41 @@ fn first_run(restart: bool) {
     }
     scratch.remove();
 }
+fn assert_quiet_logs(data: &std::path::Path, stderr: &[u8]) {
+    let stderr = std::str::from_utf8(stderr).expect("box lines");
+    let steps = ["fake llm", "fake forge 1", "prepare 1", "serve", "fetch 3", "prepare 3", "forgejo 3", "runner 3"];
+    for step in steps {
+        assert!(!stderr.lines().any(|line| line.starts_with(&format!("{step}: "))), "quiet default: {stderr}");
+    }
+    assert!(stderr.lines().any(|line| line == format!("Logs: {}/box/logs/", data.display())), "{stderr}");
+    assert!(stderr.lines().any(|line| line == "Starting serve"));
+    let logs = data.join("box/logs");
+    let serve = std::fs::read(logs.join("serve.log")).expect("serve's private log");
+    assert!(!serve.is_empty(), "serve's diagnostic lines were logged");
+    for line in serve.split(|byte| *byte == b'\n').filter(|line| !line.is_empty()) {
+        assert!(
+            line.len() >= 21
+                && [4, 7].iter().all(|at| line[*at] == b'-')
+                && line[10] == b'T'
+                && line[13] == b':'
+                && line[16] == b':'
+                && &line[19..21] == b"Z "
+                && [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18].iter().all(|at| line[*at].is_ascii_digit()),
+            "timestamped record: {line:?}"
+        );
+    }
+    for entry in std::fs::read_dir(logs).expect("private logs directory") {
+        let entry = entry.expect("log entry");
+        assert!(entry.file_type().expect("log file type").is_file());
+        let bytes = std::fs::read(entry.path()).expect("log bytes");
+        assert!(
+            !bytes.windows(b"/sign-in/link".len()).any(|piece| piece == b"/sign-in/link"),
+            "sign-in links stay out of {}",
+            entry.path().display()
+        );
+    }
+}
+
 fn assert_demo_streams(stdout: &[u8], stderr: &[u8]) {
     let link = support::printed_link(stdout).expect("the person's sign-in link");
     assert!(skein_lib::bytes::find(link, b"/jig/v1/sign-in/link?secret=").is_some());

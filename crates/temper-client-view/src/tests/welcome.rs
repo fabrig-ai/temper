@@ -745,6 +745,33 @@ fn model_ticks_githubs_durable_adoption_with_its_named_project() {
     );
     each_step(view.tree(), false);
 }
+fn ready_root(rows: skein_lib::List<w::ForgeRow>) -> d::Domain {
+    let (mut root, account) = f::forge_root_accounts(Address::Welcome { step: Step::Ready }, rows);
+    f::welcome_account(&mut root, account);
+    root
+}
+#[test]
+fn managed_forgejo_ready_names_its_adopted_repository_and_opens_its_project() {
+    // Forge 4 is Forgejo elsewhere in the standalone configuration.
+    const ELSEWHERE: u16 = 4;
+    let mut rows = owned_adopted_rows();
+    let mut parts = rows.get(0).unwrap().clone().into_parts();
+    parts.number = ELSEWHERE;
+    parts.mode = w::Mode::Managed;
+    parts.admin = true;
+    *rows.get_mut(0).unwrap() = w::ForgeRow::new(&w::CEILINGS, parts).unwrap();
+    let root = ready_root(rows);
+    let view = f::page_view(&root);
+    node(view.tree(), Role::Heading { level: 1 }, "work/hello is ready");
+    forge::words_in_order(
+        view.tree(),
+        &["Forge: Forgejo, connected as temper", "Model:", "Project Shop, with work/hello", "Open Shop"],
+    );
+    assert_eq!(
+        press(&root, Role::Link, "Open Shop"),
+        d::Action::Pages(pages::Act::OpenProject { project: f::PROJECT })
+    );
+}
 #[test]
 fn github_ready_has_the_same_checklist_and_project_control_as_owned_forgejo() {
     for (rows, heading, forge_line, project_line) in [
@@ -761,8 +788,7 @@ fn github_ready_has_the_same_checklist_and_project_control_as_owned_forgejo() {
             "Project Shop, with work/hello",
         ),
     ] {
-        let (mut root, account) = f::forge_root_accounts(Address::Welcome { step: Step::Ready }, rows);
-        f::welcome_account(&mut root, account);
+        let root = ready_root(rows);
         let view = f::page_view(&root);
         node(view.tree(), Role::Heading { level: 1 }, heading);
         forge::words_in_order(view.tree(), &[forge_line, "Model:", project_line, "Open Shop"]);

@@ -1,0 +1,52 @@
+#!/usr/bin/python3
+"""Judge committed assistant text and every hand trouble entry, including sign-in."""
+import json
+from pathlib import Path
+import sys
+
+ANSWER = 'Hello from the local fake model.'
+
+
+def reply(document):
+    # oauth.rs's committed turn path excludes a title and the optimistic user turn.
+    rows = document['activity']['rows']
+    if type(rows) is not list:
+        raise ValueError('conversation rows')
+    for row in rows:
+        decoded = row['event'].get('owner', {}).get('decoded') or {}
+        turn = (decoded.get('turn') or {}).get('decoded') or {}
+        for message in turn.get('messages', []):
+            if message.get('speaker') == 'assistant':
+                text = ''.join(block['text']['text'] for block in message['blocks'] if 'text' in block)
+                if text == ANSWER:
+                    return 0, []
+                return 1, [{'fail': 'reply/first-assistant', 'summary': 'The first committed assistant message differs from the fake reply.'}]
+    return 1, [{'fail': 'reply/missing', 'summary': 'No committed assistant message.'}]
+
+
+def trouble(lines):
+    entries = [json.loads(line) for line in lines]
+    if any(type(entry) is not dict or type(entry.get('kind')) is not str for entry in entries):
+        raise ValueError('trouble entry')
+    if entries:
+        return 1, [{'fail': 'browser/trouble', 'summary': f'{len(entries)} trouble entries: ' + ', '.join(sorted({entry['kind'] for entry in entries}))}]
+    return 0, []
+
+
+def main():
+    if len(sys.argv) != 3 or sys.argv[1] not in {'reply', 'trouble'}:
+        print('usage: proof reply|trouble FILE', file=sys.stderr)
+        return 2
+    kind, path = sys.argv[1:]
+    try:
+        text = Path(path).read_text(encoding='utf-8')
+        status, records = reply(json.loads(text)) if kind == 'reply' else trouble(text.splitlines())
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError, AttributeError):
+        status, records = 2, [{'undecided': f'{kind} evidence missing or unreadable'}]
+    for record in records:
+        print(json.dumps(record, sort_keys=True, separators=(',', ':')))
+    return status
+
+
+if __name__ == '__main__':
+    sys.exit(main())

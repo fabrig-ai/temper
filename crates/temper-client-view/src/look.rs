@@ -2,7 +2,7 @@
 use crate::frame::owner;
 use skein_ui::{Style, look::Names};
 /// A folded account.
-pub const ACCOUNT_ROW: Style = Style { owner: owner(), token: 123 };
+pub const ACCOUNT_ROW: Style = Style { owner: owner(), token: 124 };
 /// The frame's banner.
 pub const BANNER: Style = Style { owner: owner(), token: 0 };
 /// The frame's navigation.

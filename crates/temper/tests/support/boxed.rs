@@ -136,6 +136,23 @@ impl Referee<Process> for Judge {
         self.settled
     }
 }
+/// Opt in only for a story whose assertions read a step's diagnostic bytes.
+#[must_use]
+pub fn echo_steps(mut flags: Vec<String>) -> Vec<String> {
+    flags.extend(["--echo".into(), "steps".into()]);
+    flags
+}
+#[must_use]
+pub fn run_echo_steps(directory: &Path, forgejo: Option<SocketAddr>, plan: Plan, deadline: Duration) -> Outcome {
+    let mut command = Command {
+        program: skein_scratch::paths::binary("temper"),
+        arguments: std::iter::once("box".into()).chain(super::configuration::flags(directory)).collect(),
+        directory: directory.into(),
+        environment: Vec::new(),
+    };
+    command.arguments.extend(["--echo".into(), "steps".into()]);
+    run_command(command, forgejo, plan, deadline)
+}
 /// Starts the shipped box and drives its referee within the supplied deadline.
 #[must_use]
 pub fn run(directory: &Path, forgejo: Option<SocketAddr>, plan: Plan, deadline: Duration) -> Outcome {
@@ -227,6 +244,7 @@ struct StoryJudge<'a, F, T> {
     check: Option<F>,
     checked: &'a Cell<Option<T>>,
     dormant_checked: &'a Cell<bool>,
+    logs: PathBuf,
     stopping: bool,
     cleanup: bool,
     settled: bool,
@@ -254,12 +272,14 @@ impl<F: FnOnce() -> T, T> Referee<Process> for StoryJudge<'_, F, T> {
         let Process::Person(person) = &procs[1] else { panic!("native person") };
         let stderr = String::from_utf8_lossy(binary.stderr());
         if person.choosing_playground() {
-            assert!(
-                !stderr.lines().any(|line| line.starts_with("fake llm: ")
-                    || line.starts_with("fake forge ")
-                    || line.starts_with("prepare 1: ")),
-                "the demo's fakes stay dormant at the welcome: {stderr}"
-            );
+            for name in ["fake-llm.log", "fake-forge-1.log", "prepare-1.log"] {
+                let path = self.logs.join(name);
+                assert!(
+                    std::fs::read(&path).expect("private step log exists").is_empty(),
+                    "the demo's fakes stay dormant at the welcome: {}",
+                    path.display()
+                );
+            }
             self.dormant_checked.set(true);
         }
         if person.failed.is_some() {
@@ -299,6 +319,8 @@ pub fn run_story<T>(
     deadline: Duration,
     check: impl FnOnce() -> T,
 ) -> StoryOutcome<T> {
+    let data = flags.windows(2).find(|pair| pair[0] == "--data").expect("explicit data directory");
+    let logs = Path::new(&data[1]).join("box/logs");
     let clock = Clock::new();
     let mut binary = Binary::start_with_tree(
         dying_with_test(Command {
@@ -326,6 +348,7 @@ pub fn run_story<T>(
         check: Some(check),
         checked: &checked,
         dormant_checked: &dormant_checked,
+        logs,
         stopping: false,
         cleanup: false,
         settled: false,

@@ -12,15 +12,15 @@ fn cap() -> Box<[u8]> {
 fn diagnostics_are_named_and_every_cap_or_eof_piece_gets_lf() {
     let mut lines = Lines::new(false);
     lines.push(bytes::copy_of(b"first\nsecond\n"), READ);
-    assert_eq!(lines.take(b"forgejo"), Some(line(b"forgejo: first\n", READ)));
-    assert_eq!(lines.take(b"forgejo"), Some(line(b"forgejo: second\n", READ)));
+    assert_eq!(lines.take(b"forgejo"), Some(Output::Piece { bytes: bytes::copy_of(b"first\n"), wall: READ }));
+    assert_eq!(lines.take(b"forgejo"), Some(Output::Piece { bytes: bytes::copy_of(b"second\n"), wall: READ }));
     lines.push(cap(), READ);
-    let expected = crate::lines::joined(&[b"runner: ", &cap(), b"\n"]);
-    assert_eq!(lines.take(b"runner"), Some(line(&expected, READ)));
+    let expected = cap();
+    assert_eq!(lines.take(b"runner"), Some(Output::Piece { bytes: expected, wall: READ }));
     lines.push(bytes::copy_of(b"tail"), READ);
     assert_eq!(lines.take(b"runner"), None);
     lines.end(EOF);
-    assert_eq!(lines.take(b"runner"), Some(line(b"runner: tail\n", EOF)));
+    assert_eq!(lines.take(b"runner"), Some(Output::Piece { bytes: bytes::copy_of(b"tail"), wall: EOF }));
     assert_eq!(lines.take(b"runner"), None);
 }
 #[test]

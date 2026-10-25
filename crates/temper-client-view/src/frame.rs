@@ -15,13 +15,18 @@ pub fn link_region() -> Region {
 pub(crate) struct Bindings {
     entries: List<(Token, Act)>,
     next: u64,
+    submissions: bool,
 }
 impl Bindings {
     pub fn new(capacity: u32) -> Self {
-        Self { entries: List::with_capacity(capacity), next: 0 }
+        Self { entries: List::with_capacity(capacity), next: 0, submissions: true }
     }
     pub fn begin(&mut self) {
         self.entries.clear();
+        self.submissions = true;
+    }
+    pub(crate) fn block_submissions(&mut self) {
+        self.submissions = false;
     }
     pub(crate) fn insert(&mut self, act: Act) -> Binding {
         self.next = self.next.checked_add(1).expect("pages binding tokens fit");
@@ -32,6 +37,12 @@ impl Bindings {
     pub fn decode(&self, token: Token, act: skein_ui::Act) -> Option<temper_client_domain::Action> {
         for (key, meaning) in &self.entries {
             if *key == token {
+                if !self.submissions
+                    && let (Act::StartChat | Act::Send, skein_ui::Act::Press)
+                    | (Act::ChatWords { .. } | Act::MessageWords { .. }, skein_ui::Act::Submit) = (meaning, &act)
+                {
+                    return None;
+                }
                 let meaning = match (meaning, act) {
                     (Act::Filter { filter }, skein_ui::Act::Input { value }) => {
                         let mut filter = *filter;

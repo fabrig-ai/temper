@@ -3,6 +3,7 @@ mod fixtures;
 mod host;
 mod limits;
 mod lines;
+mod logs;
 mod machine;
 mod pipe;
 mod ready;

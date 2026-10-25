@@ -10,6 +10,8 @@ fn the_small_profile_has_the_values_of_the_plan() {
             restarts: 5,
             window: Duration::from_secs(300),
             line_bytes: 256,
+            log_bytes: 4_194_304,
+            tail_lines: 10,
             grace: Duration::from_secs(10)
         }
     );
@@ -49,6 +51,8 @@ fn a_value_past_u32_is_out_of_range() {
         b"box.window_ms",
         b"box.grace_ms",
         b"box.line_bytes",
+        b"box.log_bytes",
+        b"box.tail_lines",
     ] {
         assert_eq!(limits::apply(&mut limits::small(), name, 4_294_967_296), Err(Refused::Range), "{name:?}");
         assert_eq!(limits::apply(&mut limits::small(), name, 0), Ok(()), "zero fits {name:?}");
@@ -65,4 +69,24 @@ fn pipe_lines_need_at_least_sixty_four_bytes_after_other_checks() {
     assert_eq!(Unfit::LineBytes.names(), &[b"box.line_bytes".as_slice()]);
     let limits = limits::Limits { line_bytes: 0, restarts: 65, ..limits::small() };
     assert_eq!(limits::check(&limits), Err(Unfit::Restarts));
+}
+
+#[test]
+fn logs_hold_a_whole_record_and_tails_hold_one_to_a_hundred_lines() {
+    use limits::{MAX_TAIL_LINES, RECORD_BYTES};
+    assert_eq!(RECORD_BYTES, 4118);
+    for (value, expected) in [(RECORD_BYTES - 1, Err(Unfit::LogBytes)), (RECORD_BYTES, Ok(()))] {
+        let mut limits = limits::small();
+        limits::apply(&mut limits, b"box.log_bytes", u64::from(value)).unwrap();
+        assert_eq!(limits::check(&limits), expected);
+    }
+    assert_eq!(Unfit::LogBytes.names(), &[b"box.log_bytes".as_slice()]);
+    for (value, expected) in
+        [(0, Err(Unfit::TailLines)), (1, Ok(())), (MAX_TAIL_LINES, Ok(())), (101, Err(Unfit::TailLines))]
+    {
+        let mut limits = limits::small();
+        limits::apply(&mut limits, b"box.tail_lines", u64::from(value)).unwrap();
+        assert_eq!(limits::check(&limits), expected);
+    }
+    assert_eq!(Unfit::TailLines.names(), &[b"box.tail_lines".as_slice()]);
 }

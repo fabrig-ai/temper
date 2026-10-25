@@ -148,3 +148,30 @@ fn lifecycle_output_bound_covers_long_labels_and_signal_numbers() {
     }
     assert!(max_bytes(&[]) >= crate::terminal::FIXED_BYTES);
 }
+
+#[test]
+fn the_largest_tail_fits_one_output_item_and_reset_releases_every_line() {
+    use crate::limits::MAX_TAIL_LINES;
+    use crate::terminal::{Tail, failure_bytes};
+    let steps = labelled(b"Forge with a long label", b"last step");
+    let name = steps.first().unwrap().step.name();
+    let piece = super::fixtures::line_cap();
+    let line = crate::lines::joined(&[name, b": ", &piece, b"\n"]);
+    let mut tail = Tail::new(MAX_TAIL_LINES);
+    for _ in 0..MAX_TAIL_LINES {
+        tail.push(line.clone());
+    }
+    let fact = Fact::GroupFailed {
+        forge: 37,
+        why: crate::machine::Why::Exited { step: 0, exit: skein_io::kernel::Exit::Code(1) },
+    };
+    let formatter = Formatter::new();
+    let mut block = formatter.fact(fact, &steps, Wall::EPOCH);
+    tail.append(&mut block, b"/data/box/logs/last-step.log");
+    assert!(block.bytes.len() > 409_600);
+    assert!(block.bytes.len() <= usize::try_from(failure_bytes(&steps, b"/data")).unwrap());
+    tail.reset();
+    let mut empty = formatter.fact(fact, &steps, Wall::EPOCH);
+    tail.append(&mut empty, b"/data/box/logs/last-step.log");
+    assert_eq!(empty, formatter.fact(fact, &steps, Wall::EPOCH));
+}

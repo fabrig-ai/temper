@@ -98,7 +98,7 @@ fn a_held_chatbar_names_only_its_exceeded_bound() {
 #[test]
 fn a_chats_header_says_its_spend_including_delegates() {
     let tree = chat_header();
-    assert!(fixtures::find(&tree, Role::Paragraph, "7 spent · of 7 · delegates spent 2".as_bytes()).is_some());
+    assert!(fixtures::find(&tree, Role::Paragraph, "7 spent · of 7".as_bytes()).is_some());
 }
 
 #[test]
@@ -499,7 +499,7 @@ fn the_chat_bar_contains_identity_spend_and_acts() {
     );
     for (role, name) in [
         (Role::Heading { level: 1 }, heading.as_ref()),
-        (Role::Paragraph, "7 spent · of 7 · delegates spent 2".as_bytes()),
+        (Role::Paragraph, "7 spent · of 7".as_bytes()),
         (Role::Status, b"Parked"),
         (Role::Button, b"Stop"),
         (Role::Button, b"Close"),
@@ -1398,6 +1398,7 @@ fn a_chats_end_and_its_phase_keep_the_supplied_clock() {
     ] {
         let view = result_view_at(c::TaskResult::Ending(Box::new(ending)), Some(fixtures::NOW));
         assert!(skein_lib::bytes::find(&fixtures::text(view.tree()), expected.as_bytes()).is_some());
+        assert!(fixtures::find(view.tree(), Role::Status, b"Closed 00:00").is_some());
         assert_eq!(view.next_change(), Some(Wall::from_nanos(86_400_000_000_000)));
     }
 }
@@ -1718,9 +1719,7 @@ fn the_chatbar_and_chats_line_share_every_status_phrase() {
 #[test]
 fn the_chatbar_draws_the_supplied_budget_including_zero() {
     use temper_client_domain::{Address, Event};
-    for (budget, phrase) in
-        [(0, "7 spent · of 0 · delegates spent 2".as_bytes()), (100, "7 spent · of 100 · delegates spent 2".as_bytes())]
-    {
+    for (budget, phrase) in [(0, "7 spent · of 0".as_bytes()), (100, "7 spent · of 100".as_bytes())] {
         let (mut root, _, watch) = fixtures::root_at(Address::Chat { task: TASK }, &fixtures::domain_limits());
         let mut task = fixtures::task::document();
         task.chip.task = TASK;
@@ -1850,5 +1849,18 @@ fn the_demo_chats_bar_has_no_model_word() {
     let bar = styled(view.tree(), crate::look::CHATBAR);
     for node in subtree(view.tree(), bar) {
         assert_ne!(node.name.as_deref(), Some(b"Scripted model".as_slice()));
+    }
+}
+
+#[test]
+fn unavailable_models_block_send_and_enter_in_the_view() {
+    let root = super::choice::no_model_root(true);
+    let mut view = fixtures::page_view(&root);
+    for (role, name, event) in [
+        (Role::Button, b"Send".as_slice(), skein_ui::Act::Press),
+        (Role::TextArea, b"Message".as_slice(), skein_ui::Act::Submit),
+    ] {
+        let node = fixtures::find(view.tree(), role, name).expect("composer control");
+        assert_eq!(crate::act(&mut view, node, event), None);
     }
 }

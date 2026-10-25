@@ -9,9 +9,19 @@ pub struct Limits {
     pub window: Duration,
     pub grace: Duration,
     pub line_bytes: u32,
+    pub log_bytes: u32,
+    pub tail_lines: u32,
 }
 /// The most restarts whose exit times can be retained.
 pub const MAX_RESTARTS: u32 = 64;
+/// One timestamp, the longest diagnostic piece, and its added LF.
+pub const RECORD_BYTES: u32 = 21_u32
+    .checked_add(crate::host::LINE_BYTES)
+    .expect("record piece fits u32")
+    .checked_add(1)
+    .expect("record LF fits u32");
+/// The largest failure tail retained per step.
+pub const MAX_TAIL_LINES: u32 = 100;
 /// The failed cross-check or restart bound.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Unfit {
@@ -19,6 +29,8 @@ pub enum Unfit {
     Window,
     Restarts,
     LineBytes,
+    LogBytes,
+    TailLines,
 }
 /// An unknown name or a value beyond u32.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -35,6 +47,8 @@ impl Unfit {
             Self::Window => &[b"box.backoff_max_ms", b"box.window_ms"],
             Self::Restarts => &[b"box.restarts"],
             Self::LineBytes => &[b"box.line_bytes"],
+            Self::LogBytes => &[b"box.log_bytes"],
+            Self::TailLines => &[b"box.tail_lines"],
         }
     }
 }
@@ -48,6 +62,8 @@ pub fn small() -> Limits {
         window: Duration::from_secs(300),
         grace: Duration::from_secs(10),
         line_bytes: 256,
+        log_bytes: 4_194_304,
+        tail_lines: 10,
     }
 }
 /// Applies one whole dotted name.
@@ -59,6 +75,8 @@ pub fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), Refused
         b"box.window_ms",
         b"box.grace_ms",
         b"box.line_bytes",
+        b"box.log_bytes",
+        b"box.tail_lines",
     ]
     .contains(&name)
     {
@@ -73,6 +91,8 @@ pub fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), Refused
         b"box.window_ms" => limits.window = duration,
         b"box.grace_ms" => limits.grace = duration,
         b"box.line_bytes" => limits.line_bytes = value,
+        b"box.log_bytes" => limits.log_bytes = value,
+        b"box.tail_lines" => limits.tail_lines = value,
         _ => return Err(Refused::Unknown),
     }
     Ok(())
@@ -90,6 +110,12 @@ pub fn check(limits: &Limits) -> Result<(), Unfit> {
     }
     if limits.line_bytes < 64 {
         return Err(Unfit::LineBytes);
+    }
+    if limits.log_bytes < RECORD_BYTES {
+        return Err(Unfit::LogBytes);
+    }
+    if limits.tail_lines == 0 || limits.tail_lines > MAX_TAIL_LINES {
+        return Err(Unfit::TailLines);
     }
     Ok(())
 }
