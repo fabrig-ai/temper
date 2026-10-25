@@ -1,8 +1,10 @@
 # The welcome's ChatGPT sign-in
 
 A fresh ordinary `temper box --fake-backends` and skein's hand, no driver.
-The box supervises its four fake peers. ctl signs in and connects forge 4,
-the fake Forgejo elsewhere, making and adopting `work/hello` in `hello`.
+The box supervises its four fake peers. ctl signs in only to obtain a
+fresh browser link. The browser chooses the Forgejo at HOST card,
+Connect as its admin, pastes the token from the file the box names and
+keeps the first repository's defaults, `work/hello` in `hello`.
 The spent-link relink sequence is `cluster-web`'s. Before navigating, the
 walk waits for the visible Sign out button so the printed link's page
 has finished signing in. hand names the issuer origin
@@ -11,9 +13,11 @@ captured from the box's stderr and the app's shipped OAuth callback,
 checked by `temper-fake/src/backends.rs`; every other destination stays
 refused.
 
-The `welcome` function in `steps walk` opens `/welcome`, the Model step and Continue with ChatGPT,
-then requires `work/hello is ready` and opens `hello`. Its `chat` function sends a
-first message, waits for the fake reply, and reloads to see it again.
+Each welcome step is a separate phase of `steps`: `welcome` opens
+`/welcome` and presses Set up temper; `forge` connects Forgejo elsewhere;
+`model` presses Continue with ChatGPT; `ready` requires
+`work/hello is ready` and opens `hello`. `chat` sends a first message,
+waits for the fake reply, and reloads to see it again.
 A missed step records the outline and a shot and stops the story. There
 are no sleeps. All waits use the existing lab allowances.
 

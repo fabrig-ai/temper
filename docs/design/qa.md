@@ -674,3 +674,17 @@ through the director.
 - **Cost:** 245's ready, command, stop and triage values stay. Only
   the driver's three measured bounds rescale by about 1.5 times the
   calibration's use, reported with the run's spend before use.
+
+## Welcome experiments on the fake box
+
+`lab/welcome-chatgpt` connects Forgejo elsewhere in the browser, pasting
+the box's named admin-token file, then signs in with ChatGPT, opens the
+project and checks the first committed reply before and after reload.
+`lab/welcome-own-app` pastes the box's named App 1 key, installs on the
+fake GitHub, chooses `fake-person/widget`, and declares the Model step's
+program login. Its terminal step runs the box's printed command through
+`--cache DIR` with the page's name appended. It ends at Ready, since jig
+cannot keep a chat open through a program yet, and checks the program
+source and its connected worker both usable. Both experiments check the
+whole hand trouble log and expose each welcome step as a separate action
+and `steps` phase for live captures (`draft/qa-web.md`, 3.3).

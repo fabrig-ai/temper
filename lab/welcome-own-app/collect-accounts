@@ -1,0 +1,9 @@
+#!/bin/sh
+# Read the account and its configured worker's program state while the box is live.
+set -eu
+if [ "$#" -ne 4 ]; then
+    echo 'usage: collect-accounts TEMPER CLIENT GROUND OUT' >&2
+    exit 2
+fi
+"$1" ctl "$2" accounts --json > "$4/accounts.json"
+cp -- "$3/program-name" "$4/program-name"

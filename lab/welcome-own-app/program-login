@@ -1,0 +1,42 @@
+#!/usr/bin/python3
+"""Run the box's printed command with the login name the Model step shows."""
+import json
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+
+
+def command(printed, outline):
+    names = set(re.findall(r'temper program-login ([a-zA-Z0-9_-]+)', outline))
+    if len(names) != 1:
+        raise ValueError('expected one program-login name on the Model step')
+    name = names.pop()
+    words = shlex.split(printed)
+    # The printed placeholder changed from source to NAME; neither is the person's name.
+    if len(words) < 8 or words[1:3] != ['program-login', '--config'] or words[4] != '--data' or words[6] != '--cache':
+        raise ValueError('expected the box program-login command through --cache DIR')
+    return words[:8] + [name]
+
+
+def main():
+    if len(sys.argv) != 3:
+        print('usage: program-login PRINTED-COMMAND GROUND', file=sys.stderr)
+        return 2
+    try:
+        ground = Path(sys.argv[2])
+        argv = command(sys.argv[1], (ground / 'model-outline').read_text())
+        print('+ ' + shlex.join(argv), flush=True)
+        result = subprocess.run(argv, check=False)
+        if result.returncode:
+            return result.returncode
+        (ground / 'program-name').write_text(argv[-1] + '\n')
+    except (OSError, ValueError) as error:
+        print('program-login: ' + str(error), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
