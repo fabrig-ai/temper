@@ -1382,16 +1382,12 @@ fn named(bytes: &[u8], limits: &Limits) -> bool {
 
 /// Ineligible supplied comparisons are ignored; they can never grant a write.
 fn landing_branch(repository: &Repository) -> Option<&[u8]> {
-    match (&repository.start, &repository.push) {
-        (Start::Branch { branch }, Some(push)) if branch == push => repository.landing.as_deref(),
-        (
-            Start::Base { .. }
-            | Start::Branch { .. }
-            | Start::Saved { .. }
-            | Start::Commit { .. }
-            | Start::Merge { .. },
-            _,
-        ) => None,
+    match &repository.start {
+        Start::Branch { branch } => match &repository.push {
+            Some(push) if branch == push => repository.landing.as_deref(),
+            Some(_) | None => None,
+        },
+        Start::Base { .. } | Start::Saved { .. } | Start::Commit { .. } | Start::Merge { .. } => None,
     }
 }
 

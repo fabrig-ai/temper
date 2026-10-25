@@ -107,9 +107,12 @@ impl Domain {
             push = None;
         }
         let landing = match inherited {
-            Some((row, change::Delegate::Produce)) => match (&start, &push) {
-                (Start::Branch(branch), Some(push)) if branch == push => Some(row.base.clone()),
-                (Start::Base(_) | Start::Branch(_) | Start::Saved(_) | Start::Merge { .. }, _) => None,
+            Some((row, change::Delegate::Produce)) => match &start {
+                Start::Branch(branch) => match &push {
+                    Some(push) if branch == push => Some(row.base.clone()),
+                    Some(_) | None => None,
+                },
+                Start::Base(_) | Start::Saved(_) | Start::Merge { .. } => None,
             },
             Some((
                 _,
