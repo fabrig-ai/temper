@@ -1366,6 +1366,19 @@ fn an_engine_alone_admits_its_own_worst_case_and_names_an_insufficient_memory_de
     .unwrap();
     assert_eq!(requirements.worker_bytes, 0);
     assert!(requirements.engine_bytes > 0);
+    let terms = crate::startup::memory_terms(
+        &input,
+        &config::Directories::working(),
+        &fixtures::files(),
+        &fixtures::startup_agent(),
+        &fixtures::seeds(),
+        None,
+        fixtures::forge_runtime(),
+        None,
+    )
+    .unwrap();
+    assert!(terms.worker.is_empty());
+    assert_eq!(crate::startup::memory_sum(&terms.engine), Some(requirements.engine_bytes));
     for (memory, accepted) in
         [(requirements.engine_bytes, true), (requirements.engine_bytes.checked_sub(1).unwrap(), false)]
     {

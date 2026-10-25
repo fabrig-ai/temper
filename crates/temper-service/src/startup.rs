@@ -565,8 +565,11 @@ pub fn memory_terms(
     let mut checked = checked_start(document, directories, files, Some(agent), seeds, accounts, forges, setup)?;
     let root = engine_limits(&mut checked.engine.jig.limits, &checked.engine.limits)?;
     let store = crate::store::limits(&root, &root.forge, &checked.engine.jig.limits.store).ok_or(memory_bound())?;
-    let worker = checked.worker.as_ref().expect("checked embedded worker");
-    let operations = crate::worker_settings::operations(&checked.engine.limits.git_component).ok_or(memory_bound())?;
+    let worker = checked.worker.as_ref();
+    let operations = match worker {
+        Some(_) => crate::worker_settings::operations(&checked.engine.limits.git_component).ok_or(memory_bound())?,
+        None => 0,
+    };
     let engine = match crate::system::startup_memory_terms(
         &checked.engine,
         &root,
@@ -579,8 +582,12 @@ pub fn memory_terms(
         Ok(terms) => Box::new(terms),
         Err(found) => return Err(Problems::jig(found, &Path::root())),
     };
-    let worker =
-        Box::new(crate::worker_settings::memory_terms(worker, agent, &checked.engine.limits).ok_or(memory_bound())?);
+    let worker: Box<[MemoryTerm]> = match worker {
+        Some(worker) => {
+            Box::new(crate::worker_settings::memory_terms(worker, agent, &checked.engine.limits).ok_or(memory_bound())?)
+        }
+        None => Box::new([]),
+    };
     Ok(MemoryTerms { engine, worker })
 }
 struct CheckedStart {

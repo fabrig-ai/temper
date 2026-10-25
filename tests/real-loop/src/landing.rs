@@ -90,7 +90,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
         ("tasks.message_bytes", 4094),
         ("people.words", 512),
         ("tasks.authority_bytes", 512),
-        ("core.call_answer_bytes", 2048),
+        ("core.call_answer_bytes", 4096),
         ("tasks.spec_bytes", 512),
         ("tasks.result_bytes", 128),
         ("tasks.delegates", 4),
@@ -120,6 +120,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     value["workers"][0]["slots"] = 1.into();
     let limits = &mut value["workers"][0]["limits"]["overrides"];
     limits["hub.slots"] = 1.into();
+    limits["core.call_answer_bytes"] = 4096.into();
     limits["hub.event_bytes"] = 4094.into();
     limits["tasks.message_bytes"] = 4096.into();
     let charter = &mut value["engine"]["charters"][0];

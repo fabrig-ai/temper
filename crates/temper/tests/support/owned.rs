@@ -730,15 +730,17 @@ impl Bounded {
 
     #[must_use]
     pub fn memory_terms(&self) -> temper_service::startup::MemoryTerms {
+        let value: serde_json::Value = serde_json::from_slice(&self.document).expect("profile JSON");
+        let accounts = value.get("engine").map(|_| self.accounts());
         temper_service::startup::memory_terms(
             &self.document,
             &jig_protocol_config::Directories::working(),
             &self.files,
             &self.agent,
             &self.seeds,
-            Some(&self.accounts()),
+            accounts.as_ref(),
             self.forges(),
-            Some(&self.setup),
+            value.get("engine").map(|_| &self.setup),
         )
         .unwrap_or_else(|why| panic!("{}", String::from_utf8_lossy(&temper_service::startup::lines(&why))))
     }

@@ -191,3 +191,70 @@ fn each_settled_delivery_becomes_the_hubs_answer() {
         assert_eq!(answer, host::Relayed::Answer { error, text: text.into() }, "{outcome:?}");
     }
 }
+
+#[test]
+#[expect(clippy::wildcard_enum_match_arm, reason = "unexpected test outputs fail immediately")]
+fn owned_capacity_refusal_preserves_the_opaque_address_without_a_tool_effect() {
+    let (mut service, run) = fixtures::claimed_chat();
+    let engine = service.engine.as_mut().expect("engine");
+    let commits = engine.domain.deployment().commits;
+    let mut decoded = 0_u32;
+    let mut busy = 0_u32;
+    for (channel, name) in [(7, b"first".as_slice()), (7, b"second"), (8, b"foreign"), (7, b"opaque capacity name")] {
+        engine.step(root::Event::Worker(root::WorkerInput::Link {
+            channel: Token::new(channel),
+            link: root::Link::Up {
+                parts: root::Parts::none(),
+                up: host::LinkUp::Call {
+                    run: Token::new(run.task),
+                    attempt: Token::new(run.attempt),
+                    call: name.into(),
+                    tool: b"no_such_tool".as_slice().into(),
+                    input: b"{}".as_slice().into(),
+                    writes: true,
+                    deadline: skein_lib::Duration::from_secs(1),
+                },
+            },
+        }));
+        assert!(engine.pending.is_none(), "inputs enter only after the preceding route settles");
+        let mut observed = false;
+        for _ in 0_u32..256 {
+            root::release(&mut engine.domain, &engine.env, &mut engine.requests);
+            if engine.requests.is_empty() {
+                engine.step(root::Event::Resume);
+                root::release(&mut engine.domain, &engine.env, &mut engine.requests);
+            }
+            while let Some(request) = engine.requests.pop() {
+                if let root::Request::Worker(worker) = request {
+                    observed = true;
+                    match worker {
+                        root::WorkerRequest::Host(host) => {
+                            if let root::HostRequest::Decode { .. } = *host {
+                                decoded += 1;
+                            }
+                        }
+                        root::WorkerRequest::Deliver(root::Delivery::Link {
+                            channel,
+                            down: host::LinkDown::Relayed { run: task, attempt, call, answer },
+                        }) => {
+                            assert_eq!(
+                                (channel, task, attempt),
+                                (Token::new(7), Token::new(run.task), Token::new(run.attempt))
+                            );
+                            assert_eq!(call.as_ref(), b"opaque capacity name");
+                            assert_eq!(answer, host::Relayed::Busy);
+                            busy += 1;
+                        }
+                        _ => panic!("unexpected worker output: {worker:?}"),
+                    }
+                }
+            }
+            if observed {
+                break;
+            }
+        }
+        assert!(observed, "every input produces its own bounded route output");
+    }
+    assert_eq!((decoded, busy), (2, 1), "foreign calls stay discarded; capacity cannot decode a tool");
+    assert_eq!(engine.domain.deployment().commits, commits, "no effect or commit from refusal");
+}

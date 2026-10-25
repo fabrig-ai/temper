@@ -27,7 +27,7 @@
       "limits": {{
         "profile": "small",
         "overrides": {{
-          "core.call_answer_bytes": 2048,
+          "core.call_answer_bytes": 4096,
           "hub.accounts": 4,
           "hub.event_bytes": 4094,
           "hub.held": 1,
