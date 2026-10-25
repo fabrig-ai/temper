@@ -1448,6 +1448,13 @@ rearms at the current connector counter. Retained entries covered by the
 new fence are abandoned or obtain a new Begin. Recovery of projection
 work and ordinary task-effect settlement have separate ownership.
 
+The synchronous connector hand-off is
+`Event::CommitProjectionRecovery { goal, after }`. The core's keyed held
+answer becomes the root's internal
+`Delivery::ProjectionRecovery { connector, owner, result }` after commit.
+The root routes it to its owner, preserving all three fields; it neither
+discards the result nor translates it to an unavailable service response.
+
 ## 13. Participating objects
 
 Not needed first, and kept possible with one mechanism (jig's
