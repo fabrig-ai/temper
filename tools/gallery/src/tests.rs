@@ -448,6 +448,19 @@ const HOLDS: [Holds; samples::N] = [
             Part::Absent { role: Role::Disclosure, name: "1 tool call" },
         ],
     },
+    Holds {
+        name: "chat-first-run-7-T1",
+        heading: "T1 · Add CSV export to widget",
+        parts: &[Part::Absent { role: Role::TextArea, name: "Message" }],
+    },
+    Holds {
+        name: "chats-first-run-5",
+        heading: "Chats",
+        parts: &[
+            Part::Named { role: Role::Paragraph, name: "Using openai plan · gpt-6-luna" },
+            Part::Chats { live: 2, closed: 0 },
+        ],
+    },
     Holds { name: "inbox-reference", heading: "Inbox", parts: &[Part::Named { role: Role::Link, name: "Task 1" }] },
     Holds {
         name: "accounts-reference",
@@ -631,7 +644,8 @@ const HOLDS: [Holds; samples::N] = [
         ],
     },
 ];
-const SPENDS: [(&str, Role, &str); 10] = [
+const SPENDS: [(&str, Role, &str); 11] = [
+    ("chat-first-run-7-T1", Role::Paragraph, "0 spent · of 20 · delegates spent 0"),
     ("chat-solo-T10", Role::Paragraph, "0 spent · of 40 · delegates spent 0"),
     ("chat-reference-T1", Role::Paragraph, "6 spent · of 100 · delegates spent 0"),
     ("chat-solo-T6", Role::Paragraph, "1 spent · of 40 · delegates spent 0"),
@@ -917,7 +931,13 @@ fn times_read_against_each_mockup_worlds_fixed_now() {
 
 #[test]
 fn gallery_chat_clocks_are_separate_leaves_under_the_speakers() {
-    for (name, clock) in [("chat-reference-T1", "06:56"), ("chat-solo-T10", "09:16")] {
+    for (name, speaker, clock) in [
+        ("chat-reference-T1", "You", "06:56"),
+        ("chat-solo-T10", "You", "09:16"),
+        ("chat-solo-T10", "Temper", "09:18"),
+        ("chat-solo-T6", "You", "07:20"),
+        ("chat-solo-T6", "Temper", "07:32"),
+    ] {
         let sample = samples::samples().into_iter().find(|sample| sample.name == name).expect("sample");
         let view = view(&sample);
         let tree = view.tree();
@@ -925,10 +945,13 @@ fn gallery_chat_clocks_are_separate_leaves_under_the_speakers() {
             .nodes()
             .iter()
             .enumerate()
-            .find(|(_, node)| node.styles.as_slice().contains(&temper_client_view::look::WHO))
+            .find(|(at, node)| {
+                node.styles.as_slice().contains(&temper_client_view::look::WHO)
+                    && tree.nodes().get(at + 1).is_some_and(|label| label.name.as_deref() == Some(speaker.as_bytes()))
+            })
             .expect("speaker")
             .0;
-        assert_eq!(tree.nodes()[who + 1].name.as_deref(), Some(b"You".as_slice()));
+        assert_eq!(tree.nodes()[who + 1].name.as_deref(), Some(speaker.as_bytes()));
         let clock_at = who + 1 + usize::try_from(tree.nodes()[who + 1].size).expect("speaker size");
         assert_eq!(tree.nodes()[clock_at].role, Role::Time);
         assert_eq!(tree.nodes()[clock_at].name.as_deref(), Some(clock.as_bytes()));
@@ -1014,4 +1037,23 @@ fn connection_samples_assign_priority_and_progress_to_the_bundled_nodes() {
     assert!(items[1].states.as_slice().contains(&skein_ui::State::Current));
     assert!(items[2].styles.is_empty());
     assert!(items[2].states.is_empty());
+}
+
+#[test]
+fn established_worlds_have_a_personal_forge() {
+    for name in ["chats-solo", "chats-reference"] {
+        let sample = samples::samples().into_iter().find(|sample| sample.name == name).expect("sample");
+        let view = view(&sample);
+        assert!(!view.tree().nodes().iter().any(|node| node.name.as_deref() == Some(b"temper has no forge yet.")));
+    }
+}
+#[test]
+fn new_chat_samples_link_their_mockup_states() {
+    for (name, address) in [
+        ("chat-first-run-7-T1", "chat.html?world=first-run&step=7&task=T1&bare"),
+        ("chats-first-run-5", "chats.html?world=first-run&step=5&bare"),
+    ] {
+        let sample = samples::samples().into_iter().find(|sample| sample.name == name).expect("sample");
+        assert_eq!(samples::mockup(&sample).as_deref(), Some(address));
+    }
 }
