@@ -330,10 +330,10 @@ fn populate_page(
     }
 }
 
-/// A chat's spend as its chatbar and its chats row say it, at a fixture's budget.
-pub fn spend(spent: u64, budget: u64, below: u64) -> Box<[u8]> {
+/// A chatbar's own spend and allotted budget.
+pub fn spend(spent: u64, budget: u64, _below: u64) -> Box<[u8]> {
     use skein_ui::phrases::Hole::Number;
-    page_words().say(temper_client_view::words::Word::ChatbarSpend, &[Number(spent), Number(budget), Number(below)])
+    page_words().say(temper_client_view::words::Word::ChatbarSpend, &[Number(spent), Number(budget)])
 }
 pub fn page_words() -> temper_client_view::words::Words {
     static WORDS: std::sync::OnceLock<temper_client_view::words::Words> = std::sync::OnceLock::new();
@@ -823,26 +823,37 @@ pub fn chats_page() -> skein_ui::Tree {
             b"T9".as_slice(),
             b"Hello".as_slice(),
             b"Writing".as_slice(),
-            spend(7, 100, 2),
+            page_words().say(temper_client_view::words::Word::RowSpent, &[skein_ui::phrases::Hole::Number(7)]),
             Some(b"1 delegate".as_slice()),
         ),
-        (b"T8".as_slice(), b"Earlier".as_slice(), b"Closed".as_slice(), spend(4, 50, 0), None),
+        (
+            b"T8".as_slice(),
+            b"Earlier".as_slice(),
+            b"Closed".as_slice(),
+            page_words().say(temper_client_view::words::Word::RowSpent, &[skein_ui::phrases::Hole::Number(4)]),
+            None,
+        ),
     ] {
         b.open(Role::Item);
+        b.open(Role::Slot);
+        b.text(Run::Plain, "Shop · ".as_bytes());
         b.open(Role::Link);
         b.name(number);
         b.bind(binding());
         b.close();
-        for (role, value) in [(Role::Paragraph, title), (Role::Status, status), (Role::Paragraph, &*spent)] {
+        b.close();
+        for (role, value) in [(Role::Paragraph, title), (Role::Status, status)] {
             b.open(role);
             b.text(Run::Plain, value);
             b.close();
         }
+        b.open(Role::Paragraph);
+        b.text(Run::Plain, &spent);
         if let Some(delegates) = delegates {
-            b.open(Role::Paragraph);
+            b.text(Run::Plain, " · ".as_bytes());
             b.text(Run::Plain, delegates);
-            b.close();
         }
+        b.close();
         b.open(Role::Paragraph);
         b.text(Run::Plain, &page_words().time(temper_client_view::words::TimeForm::Ago, NOW, NOW).0);
         b.close();

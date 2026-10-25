@@ -16,7 +16,7 @@ Playground:
   [10] Connect a forge
 T1 · Add CSV export to widget:
   * waiting on your words
-  0 spent · of 1 · delegates spent 0
+  0 spent · of 1
 Playground · playground/widget on Playground forge
 Signed in as the deployment’s owner
 Conversation:

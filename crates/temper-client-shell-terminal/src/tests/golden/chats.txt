@@ -14,14 +14,15 @@ Menu:
 [9] Live
 [10] Closed
 Your chats:
-  - [11] T9
+  - Shop · 
+    [11] T9
     Hello
     * Writing
-    7 spent · of 100 · delegates spent 2
-    1 delegate
+    7 spent · 1 delegate
     just now
-  - [12] T8
+  - Shop · 
+    [12] T8
     Earlier
     * Closed
-    4 spent · of 50 · delegates spent 0
+    4 spent
     just now

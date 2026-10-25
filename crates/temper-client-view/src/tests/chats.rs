@@ -135,8 +135,7 @@ fn a_held_chats_row_names_only_its_exceeded_bound() {
 #[test]
 fn a_chats_row_says_its_spend_and_delegates() {
     let (tree, _) = tree(&line());
-    assert!(fixtures::find(&tree, Role::Paragraph, "7 spent · of 100 · delegates spent 2".as_bytes()).is_some());
-    assert!(fixtures::find(&tree, Role::Paragraph, b"3 delegates").is_some());
+    assert!(fixtures::find(&tree, Role::Paragraph, "7 spent · 3 delegates".as_bytes()).is_some());
 }
 #[test]
 fn a_chats_row_links_to_its_chat_by_number() {
@@ -672,22 +671,13 @@ fn more_closed_chats_is_bound_only_under_all_or_closed_with_an_older_page() {
 }
 #[test]
 fn delegate_counts_are_plural_and_absent_at_zero() {
-    for (count, expected) in [(0, None), (1, Some(b"1 delegate".as_slice())), (2, Some(b"2 delegates".as_slice()))] {
+    for (count, expected) in [(0, "7 spent"), (1, "7 spent · 1 delegate"), (2, "7 spent · 2 delegates")] {
         let mut line = line();
         let ChipPhase::Owner { details, .. } = line.chip.details.as_mut() else { panic!("owner") };
         details.live_delegates = count;
         let (tree, _) = tree(&line);
-        if let Some(words) = expected {
-            assert!(fixtures::find(&tree, Role::Paragraph, words).is_some());
-        } else {
-            let mut paragraphs = 0_u32;
-            for node in tree.nodes() {
-                if node.role == Role::Paragraph {
-                    paragraphs += 1;
-                }
-            }
-            assert_eq!(paragraphs, 3, "title, spend and time");
-        }
+        assert!(fixtures::find(&tree, Role::Paragraph, expected.as_bytes()).is_some());
+        assert!(skein_lib::bytes::find(&fixtures::text(&tree), b"of 100").is_none());
     }
 }
 
@@ -890,4 +880,51 @@ fn only_the_starts_address_focuses_its_composer_including_the_demo() {
             assert_eq!(focused, usize::from(start), "demo={demo}, start={start}");
         }
     }
+}
+
+#[test]
+fn a_chats_rows_meta_names_its_project_then_its_number() {
+    let (tree, _) = tree(&line());
+    let mut found = false;
+    for (index, node) in tree.nodes().iter().enumerate() {
+        if node.styles.as_slice().contains(&crate::look::META) {
+            assert_eq!(fixtures::node_text(&tree, index).as_ref(), "Shop · T9".as_bytes());
+            found = true;
+        }
+    }
+    assert!(found);
+}
+#[test]
+fn closed_transcripts_are_called_kept_only_when_the_line_says_so() {
+    for retention in [Retention::Kept, Retention::ForgottenOnceRead] {
+        let mut line = line();
+        line.ended_at = Some(Wall::EPOCH);
+        line.flags.retention = retention;
+        let (tree, _) = tree(&line);
+        assert_eq!(
+            skein_lib::bytes::find(&fixtures::text(&tree), b"Closed. Its transcript is kept.").is_some(),
+            retention == Retention::Kept
+        );
+    }
+}
+
+#[test]
+fn no_usable_account_gives_chats_a_connect_model_line_and_disables_start() {
+    let root = fixtures::no_model_root(temper_client_domain::Address::Chats { filter: ChatsFilter::All, start: false });
+    let mut view = fixtures::page_view(&root);
+    fixtures::assert_no_model_composer(&mut view, b"Start chat");
+}
+#[test]
+fn the_running_demos_chats_composer_keeps_its_scripted_model_line() {
+    let root = fixtures::demo_root(
+        temper_client_domain::Address::Chats { filter: ChatsFilter::All, start: false },
+        fixtures::PROJECT,
+        true,
+    );
+    let view = fixtures::page_view(&root);
+    assert!(
+        skein_lib::bytes::find(&fixtures::text(view.tree()), "Using Scripted model · Default".as_bytes()).is_some()
+    );
+    let start = fixtures::find(view.tree(), Role::Button, b"Start chat").expect("start");
+    assert!(!view.tree().find(start).expect("button").states.as_slice().contains(&skein_ui::State::Disabled));
 }

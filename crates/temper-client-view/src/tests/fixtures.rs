@@ -1594,3 +1594,60 @@ pub fn pair(
     roots.push(second).expect("second root");
     roots.into_boxed()
 }
+
+pub fn no_model_root(address: temper_client_domain::Address) -> temper_client_domain::Domain {
+    let (mut root, _, page, _, accounts) = root_at_full(address, &domain_limits(), b"Shop");
+    if let Some(watch) = page {
+        let source = chat::messaging_root();
+        let task = source.pages().chat().expect("chat").task(source.client()).expect("task").clone();
+        root_event(
+            &mut root,
+            temper_client_domain::Event::Client {
+                event: jig_client::Event::Up {
+                    up: jig_client::Up::Watched {
+                        watch,
+                        event: c::WatchEvent::Delivered(c::Delivery::Task(Box::new(task))),
+                    },
+                },
+            },
+        );
+    }
+    root_event(
+        &mut root,
+        temper_client_domain::Event::Client {
+            event: jig_client::Event::Up {
+                up: jig_client::Up::Watched {
+                    watch: accounts.expect("accounts"),
+                    event: c::WatchEvent::Delivered(c::Delivery::OwnerAccounts(Box::new(c::OwnerAccounts {
+                        program_hosts: List::with_capacity(0),
+                        accounts: List::with_capacity(0),
+                        signing: List::with_capacity(0),
+                        last_end: None,
+                        usable: false,
+                        settled: true,
+                        cut: false,
+                        readiness: List::with_capacity(0),
+                        readiness_cut: false,
+                    }))),
+                },
+            },
+        },
+    );
+    root
+}
+pub fn assert_no_model_composer(view: &mut crate::View, button: &[u8]) {
+    let nodes = view.tree().nodes();
+    let mut found = false;
+    for (index, node) in nodes.iter().enumerate() {
+        if node.styles.as_slice().contains(&crate::look::ACCOUNT_LINE) {
+            assert_eq!(node_text(view.tree(), index).as_ref(), "No model yet · Connect a model".as_bytes());
+            found = true;
+        }
+    }
+    assert!(found);
+    assert!(find(view.tree(), skein_ui::Role::Disclosure, b"Change model").is_none());
+    let send = find(view.tree(), skein_ui::Role::Button, button).expect("send button");
+    assert!(view.tree().find(send).expect("button").states.as_slice().contains(&skein_ui::State::Disabled));
+    let link = find(view.tree(), skein_ui::Role::Link, b"Connect a model").expect("connect link");
+    assert_eq!(crate::href(view, link).as_deref(), Some(b"/accounts/connect".as_slice()));
+}
