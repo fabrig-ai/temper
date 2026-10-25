@@ -23,6 +23,8 @@ call() {
     fi
 }
 welcome() {
+    # Opening the link reports navigation; the page must finish its sign-in before leaving it.
+    call wait button 'Sign out' --exact --timeout 120
     call go /welcome
     call wait heading 'Welcome to temper' --exact --timeout 120
     call go '/welcome?at=model'

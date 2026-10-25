@@ -29,6 +29,8 @@ sys.exit(1 if args[:3] == ['wait', 'button', 'Continue with ChatGPT'] else 0)
                                     capture_output=True, text=True, env={})
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertEqual(result.returncode, 1)
+            self.assertEqual(calls[:2], [
+                ['wait', 'button', 'Sign out', '--exact', '--timeout', '120'], ['go', '/welcome']])
             self.assertEqual(calls[-3:], [
                 ['wait', 'button', 'Continue with ChatGPT', '--exact', '--timeout', '120'],
                 ['outline'], ['shot']])

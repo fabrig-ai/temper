@@ -3,7 +3,9 @@
 A fresh ordinary `temper box --fake-backends` and skein's hand, no driver.
 The box supervises its four fake peers. ctl signs in and connects forge 4,
 the fake Forgejo elsewhere, making and adopting `work/hello` in `hello`.
-The spent-link relink sequence is `cluster-web`'s. hand's sole peer is the
+The spent-link relink sequence is `cluster-web`'s. Before navigating, the
+walk waits for the visible Sign out button so the printed link's page
+has finished signing in. hand's sole peer is the
 issuer origin captured from the box's stderr; every other destination
 remains refused.
 

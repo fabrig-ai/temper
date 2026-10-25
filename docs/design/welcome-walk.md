@@ -83,7 +83,9 @@ the seven paths, all in the browser:
 | `lab/welcome-own-app` | GitHub, an App of the person's own | a program's login |
 | `lab/welcome-forgejo-here` | Forgejo here | a key |
 
-Each walks `/welcome` to Ready and opens the project. It sends a first
+After opening the printed link, the hand waits for the visible Sign out
+button before navigating: the link's page must finish signing in. Each
+walks `/welcome` to Ready and opens the project. It sends a first
 chat, waits for the reply, and finds it again after a reload. Its
 checks require hand's trouble to be empty, and ctl's chat to hold the
 expected reply as its first committed assistant message. Each welcome
