@@ -685,7 +685,9 @@ Each waits for visible sign-in before opening the welcome, then sends a
 first chat and requires the fake reply before and after reload. Welcome, Forge, Model, Ready and chat are separate seed actions,
 so a live scene can capture between them. All welcome experiments keep
 one byte-identical `call`, guarded by a unit test: failure keeps an
-outline and shot, then stops.
+outline and shot, then stops. Each later phase requires its predecessor’s
+completion marker, since the lab records failed actions and continues the
+seed; a failed phase therefore leaves every later phase without browser calls.
 
 The GitHub hand admits its box's captured fake GitHub origin as its sole
 peer. Forgejo here's hand has no peer: its walk never opens the forge's

@@ -9,7 +9,8 @@ and reloads to see the reply again. hand admits only temper's origin and the fak
 
 The actions `welcome`, `forge`, `model`, `ready`, and `chat` invoke separate
 `steps` phases so live scenes can capture between them. A missed call keeps
-an outline and shot and stops the run; `call` is byte for byte the
+an outline and shot and stops the walk; a completion marker prevents later
+actions from browsing after a failed phase; `call` is byte for byte the
 `welcome-chatgpt` function. No sleep or retry is added. ctl only signs in
 and collects the committed chat; all forge and model setup is clicked.
 The spent-link relink sequence is `welcome-chatgpt`'s.
