@@ -151,13 +151,39 @@ fn assert_ready(seen: &[Ended]) {
     assert!(usable(ready_model), "key account usable at Ready");
 }
 
+fn assert_reply(waited: &Ended, conversation: &Ended) {
+    assert_eq!(ctl::json(waited)["met"], true, "chat replied before the wait ended");
+    let page = ctl::json(conversation);
+    assert_eq!(page["activity"]["cut"], false, "whole conversation page");
+    let turns: Vec<_> = page["activity"]["rows"]
+        .as_array()
+        .expect("conversation rows")
+        .iter()
+        .filter(|row| row["event"]["owner"]["source"]["line"]["turn"].is_object())
+        .map(|row| {
+            let turn = &row["event"]["owner"]["decoded"]["turn"]["decoded"];
+            assert!(turn.is_object(), "committed turn loaded and decoded: {row}");
+            assert_eq!(turn["cut"], false, "whole committed turn");
+            turn
+        })
+        .collect();
+    assert_eq!(turns.len(), 1, "first reply committed once");
+    let replies: Vec<_> = turns
+        .iter()
+        .flat_map(|turn| turn["messages"].as_array().expect("turn messages"))
+        .filter(|message| message["speaker"] == "assistant")
+        .flat_map(|message| message["blocks"].as_array().expect("assistant blocks"))
+        .filter_map(|block| block["text"]["text"].as_str())
+        .collect();
+    assert_eq!(replies, ["Hello from the local fake model."]);
+}
+
 #[test]
 fn forgejo_elsewhere_and_a_key_reach_a_first_chat_on_the_fake_box() {
     let walk = Walk::new("walk-elsewhere-key");
     let key = walk.key();
     let admin = walk.sandbox().join("data/forgejo-admin.token");
-    // The remaining failure is the worker cloning the fake forge with real git.
-    let _seen = walk.run(vec![
+    let seen = walk.run(vec![
         Act::Now(Call::new(&["accounts", "--json"])),
         Act::Now(Call::new(&["forges", "--json"])),
         Act::Now(Call::new(&[
@@ -179,10 +205,14 @@ fn forgejo_elsewhere_and_a_key_reach_a_first_chat_on_the_fake_box() {
             assert_ready(seen);
             Call::new(&["chat", "--project", &adopted_project(seen), "--key", "walk-chat", "Say hello", "--json"])
         })),
-        Act::After(Box::new(|seen| Call::new(&["task", &chat_task(seen), "--json"]))),
         Act::After(Box::new(|seen| {
             Call::new(&["wait", "task", &chat_task(seen), "--until", "replied", "--timeout", "10s", "--json"])
         })),
+        Act::After(Box::new(|seen| Call::new(&["chat", &chat_task(seen), "--json"]))),
     ]);
+    let [_, _, _, _, _, _, _, _, replied, conversation] = seen.as_slice() else {
+        panic!("all welcome and first-chat answers")
+    };
+    assert_reply(replied, conversation);
     walk.scratch.remove();
 }
