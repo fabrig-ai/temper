@@ -69,7 +69,10 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
     kv.segment = u64::from(sizes.commit).checked_mul(2)?;
     kv.snapshot_after = u64::from(sizes.commit);
     kv.chunk = sizes.key.checked_add(sizes.value)?.checked_add(20)?;
-    kv.page.bytes = sizes.key.checked_add(sizes.value)?;
+    kv.page.bytes = page_bytes(&core, root.loads.transcript_bytes, sizes.key, sizes.value)?;
+    if kv.page.bytes > profile.store.page.bytes {
+        return None;
+    }
     Some(protocol::Limits {
         core,
         store: kv,
@@ -83,6 +86,22 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
         orphan_erases: profile.orphan_erases,
     })
 }
+
+// Private bridge until jig owns canonical full-frame sizing. Use the current
+// codec's other bounds unchanged; only the admitted ordinary turn bound varies.
+// protocol/store.md, 4; jig's protocol/store.md, 8.1 and 8.6.
+fn page_bytes(core: &jig_domain_core::Limits, transcript: u32, key: u32, value: u32) -> Option<u32> {
+    let mut codec = protocol::codec::limits(core)?.core;
+    if transcript > codec.turn_record_transcript {
+        return None;
+    }
+    codec.turn_record_transcript = transcript;
+    let body = protocol::core_v6::TurnRecord::worst_case_bytes(&codec)?;
+    // Leading length, CRC-32C and trailing length, each four bytes.
+    let frame = u32::try_from(body).ok()?.checked_add(12)?;
+    Some(key.checked_add(value)?.max(frame))
+}
+
 impl Store {
     #[cfg(test)]
     pub(crate) fn opening_limits(&self) -> protocol::Limits {
@@ -530,4 +549,28 @@ pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) 
         .checked_add(route::worst_case(application, limits.store.key, payload)?)?
         .checked_add(u64::from(max_read(limits)).checked_mul(u64::from(room))?.checked_mul(6)?)?
         .checked_add(payload.checked_mul(u64::from(room))?)
+}
+
+#[cfg(test)]
+mod sizing_tests {
+    use super::page_bytes;
+
+    #[test]
+    fn page_covers_map_or_full_current_frame() {
+        let (_, core, _) = crate::tests::fixtures::store_limits();
+        // Versioned TurnRecord: 52 bytes including Some(read), plus payload;
+        // two lengths and CRC add 12. No turn or frame buffer is allocated.
+        assert_eq!(page_bytes(&core, 8, 3, 4), Some(72));
+        assert_eq!(page_bytes(&core, 8, 80, 4), Some(84));
+    }
+
+    #[test]
+    fn page_refuses_codec_excess_and_checked_overflow() {
+        let (_, core, _) = crate::tests::fixtures::store_limits();
+        let ceiling = jig_protocol_store::core_v6::CEILINGS.turn_record_transcript;
+        assert_eq!(page_bytes(&core, ceiling, 3, 4), ceiling.checked_add(64));
+        assert_eq!(page_bytes(&core, ceiling.checked_add(1).unwrap(), 3, 4), None);
+        assert_eq!(page_bytes(&core, u32::MAX, 3, 4), None);
+        assert_eq!(page_bytes(&core, 8, u32::MAX, 1), None);
+    }
 }

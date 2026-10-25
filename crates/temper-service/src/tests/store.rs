@@ -45,6 +45,47 @@ fn sizes_past_skein_kvs_limits_refuse_the_store() {
 }
 
 #[test]
+fn page_floor_admits_exact_map_and_frame_bounds_and_refuses_one_short() {
+    let (mut root, _, mut profile) = fixtures::store_limits();
+    root.loads.transcript_bytes = 8;
+    let map = store::limits(&root, &root.forge, &profile).expect("map-dominant page");
+    let map_bytes = map.store.key.checked_add(map.store.value).unwrap();
+    assert_eq!(map.store.page.bytes, map_bytes);
+    // Sizing only: make the frame larger than the map without allocating it.
+    for (transcript, page) in [(8, map_bytes), (map_bytes, map_bytes.checked_add(64).unwrap())] {
+        root.loads.transcript_bytes = transcript;
+        profile.store.page.bytes = page;
+        let checked = store::limits(&root, &root.forge, &profile).expect("exact page ceiling");
+        assert_eq!(checked.store.page.bytes, page);
+        assert_eq!(checked.store, checked.secrets);
+        assert_eq!(checked.store.page.rows, profile.store.page.rows);
+        assert_eq!(checked.store.chunk, map.store.chunk);
+        assert_eq!(checked.store.key, map.store.key);
+        assert_eq!(checked.store.value, map.store.value);
+        assert_eq!(checked.reads, map.reads);
+        assert_eq!(checked.core, map.core);
+        assert_eq!(checked.queue, map.queue);
+        assert_eq!(checked.store.queued_bytes, map.store.queued_bytes);
+        assert_eq!(checked.store.commit, map.store.commit);
+        profile.store.page.bytes = page.checked_sub(1).unwrap();
+        assert!(store::limits(&root, &root.forge, &profile).is_none());
+    }
+}
+
+#[test]
+fn shipped_maximum_frame_fits_small_page_and_out_of_codec_admission_refuses() {
+    let (mut root, _, profile) = fixtures::store_limits();
+    root.loads.transcript_bytes = 1_590_046;
+    let checked = store::limits(&root, &root.forge, &profile).expect("shipped maximum fits Small");
+    assert_eq!(checked.store.page.bytes, 1_590_110);
+    assert_eq!(checked.store.page.bytes, profile.store.page.bytes);
+    for transcript in [jig_protocol_store::core_v6::CEILINGS.turn_record_transcript + 1, u32::MAX] {
+        root.loads.transcript_bytes = transcript;
+        assert!(store::limits(&root, &root.forge, &profile).is_none());
+    }
+}
+
+#[test]
 fn a_forge_row_committed_is_restored_by_the_forge_interval() {
     let mut store = fixtures::memory_store();
     let row = fixtures::landed_row();
