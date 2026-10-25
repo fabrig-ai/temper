@@ -162,6 +162,12 @@ section 7).
   existing tags and encoded rows keep their values and bytes. The store
   version stays 10. Golden bytes and roundtrips cover the new reason and
   preserve the previous cases.
+- **The CI-setup read's answer** is the appended `CiSetup` variant of
+  the stored `Answer`, with `actions: option bool` and `workflows:
+  option bool`, as skein's `forge.md`, 3.3 specifies. Its translation is
+  total in both directions, including unknown facts. The variant is
+  appended in place under the same pre-release rule, with old tags and
+  bytes preserved, new golden and roundtrip coverage, and version 10.
   Version 8 came with the `Binding` family, tag 18,
   `Key::Binding(address)` (section 2), its row `{ address, subject }`: the
   folded member address and its first Google subject (`sign-in.md`,
