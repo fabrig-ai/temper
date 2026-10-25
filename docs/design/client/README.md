@@ -335,7 +335,10 @@ keeps (`../protocol/configuration.md`, section 2).
   each card temper's own (section 1).
 - **A chat's chatbar** (`chat.html`): its level-1
   heading "TN · TITLE", the chat's task number and its title (a
-  chat's first message); its status; its spend; and its acts. Nothing
+  chat's first message); its status, an ended chat's with the clock
+  of its end ("Closed 21:19", the end line's word and time, below);
+  what it spent itself and its budget, "N spent · of B"; and its
+  acts. Nothing
   of the composer's line (5.5) is repeated there, neither its model nor
   its effort, nor the mockup's template, charter, host kind and budget:
   the composer's line says what the next run uses (the user's pick,
@@ -441,13 +444,14 @@ keeps (`../protocol/configuration.md`, section 2).
   "Closed", while an older page of ended chats remains, "More closed
   chats" reads it, in place of the last. With no line to show it says
   "No chats yet.", or under a filter "No live chats." or "No closed
-  chats.". A line is the chat's number, "TN", a link to its page, then
-  its title, its status (the chatbar's: one word for one state in
-  both places, and "Closed" for every ended chat, as the filter says
-  it; the user's pick, 10-23), its
-  spend as its chatbar says it, and "1
-  delegate" or "N delegates" while it has live ones, and when it
-  ended or was last active, as 5.12's ago ("1 h 28 min ago").
+  chats.". A line is its project's name and the chat's number,
+  "PROJECT · TN", the number a link to its page, then its title, its
+  status (the chatbar's: one word for one state in both places, and
+  "Closed" for every ended chat, as the filter says it; the user's
+  pick, 10-23), what it spent itself, "N spent", then " · 1 delegate"
+  or " · N delegates" while it has live ones, "Closed. Its transcript
+  is kept." for an ended chat its engine keeps, and when it ended or
+  was last active, as 5.12's ago ("1 h 28 min ago").
 - **The inbox** (`inbox.html`) shows what needs the person, then the
   updates, each entry its card (section 1), under two headings, each
   with how many entries it lists beside it, the updates' as new ones
