@@ -333,10 +333,10 @@ fn the_forges_git_program_reaches_startup_without_fake_setup() {
 fn startup_refuses_both_sources_of_a_forges_git_program() {
     let input = with_forge_git_program(&fixtures::document(), r#""/opt/custom/git""#);
     let problems = start_with_git_program(&input, Some(&checked_fake_setup())).err().expect("two sources refused");
-    let paths: Vec<_> = problems.problems.iter().map(|problem| problem.path.clone()).collect();
+    let paths: Box<[_]> = problems.problems.iter().map(|problem| problem.path.clone()).collect();
     assert_eq!(
-        paths,
-        [
+        paths.as_ref(),
+        &[
             Path::root().member(b"application").member(b"forges").child(Segment::Index(0)).member(b"git_program"),
             Path::root()
                 .member(b"application")
