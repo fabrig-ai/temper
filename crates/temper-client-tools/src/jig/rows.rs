@@ -194,6 +194,13 @@ pub const DECIDE: Tool = Tool {
                 b"Decision",
             ),
             positional(b"reason", b"REASON", Kind::Text, Optional, b"Reason"),
+            flag(
+                b"running",
+                b"stays|moves",
+                Kind::Word { set: &[b"stays", b"moves"] },
+                Optional,
+                b"Running work stays by default",
+            ),
         ],
         &[
             positional(b"task", b"N", Kind::Number, Required, b"Task number"),
@@ -518,4 +525,28 @@ pub const CHANGE_SETTINGS: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 1,
+};
+
+/// New rows append to preserve every earlier durable call identity.
+pub const PROPOSE_SETTINGS_AT: u8 = 47;
+pub const PROPOSAL_AT: u8 = 48;
+pub const PROPOSE_SETTINGS: Tool = Tool {
+    name: b"propose-settings",
+    line: b"Propose a change of deployment settings to its owners",
+    result: b"propose_settings",
+    forms: &[&[
+        positional(b"items", b"FILE", Kind::File, Required, b"JSON items file, or - for stdin"),
+        positional(b"reason", b"REASON", Kind::Text, Optional, b"Reason"),
+        flag(b"against", b"R", Kind::NumberRange { min: 0, max: 4_294_967_295 }, Required, b"Newest revision read"),
+    ]],
+    keyed: Keyed::Required,
+    area: 1,
+};
+pub const PROPOSAL: Tool = Tool {
+    name: b"proposal",
+    line: b"Read a proposal, with its review for settings",
+    result: b"proposal",
+    forms: &[&[positional(b"proposal", b"P/K", Kind::Proposal, Required, b"Typed proposer and proposal number")]],
+    keyed: Keyed::Never,
+    area: 2,
 };

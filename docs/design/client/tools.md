@@ -184,6 +184,7 @@ watch's subject, its digest (5.4). It needs no key.
 | `settings` | the settings: the newest revision's number; each setting, by kind and number with its name, following its default or a change and the revision that last changed it; each revision held, with who decided it, when, the proposal it came from and how many live tasks hold it; the pending proposals of settings | `settings` |
 | `setting charter N [--revision R]`, `setting template\|policy N`, `setting rules` | one setting's value whole, as the newest reads it, or a charter as held revision R reads it; with `--json`, the value in the form `change-settings` takes | `setting{kind, number, revision}` |
 | `revision R` | a revision: the revision it was made against, when, who decided it (a party, the release or the first start), the proposal it came from, whether it moved running work, and its items, each set with its value whole (or its size, too large, to read with `setting`), removed or reset; a revision forgotten past the history names the oldest kept | `revision{n}` |
+| `proposal tN/K\|pN/K` | a proposal of any kind, including its settings review: current values, origins, proposed values and the newest revision; a decided or withdrawn proposal retains its state | `proposal{proposer, number}` |
 | `revisions [--before R]` | the history a page, newest first: each revision's record and its items without values, cut at the page's bound with how many more; the last page says whether older ones were forgotten | `revisions` |
 
 - **A revision's value too large to print** says `too large, N bytes; read
@@ -259,8 +260,9 @@ agent must name.
 | `close N [--move D]... [--reason TEXT]` | closes a chat: its live delegates cancelled, or moved to the party where named; the reason empty unless given, as jig's reference UI sends it | `shapes::close_chat`, a compound request | yes |
 | `adopt --project P [--forge F] --owner O --name N [--ids R/U] --landing B [--role owned\|fork\|context] [--prefix X] [--no-home] [--no-ci] [--check G]...` | adopts a repository | the forge family's request (`README.md`, 4.4) | yes |
 | `answer N M TEXT` | answers question M of task N | `Answer` | |
-| `decide P/K accept\|reject\|pass-up [REASON]` | decides a proposal: P is `tN` for task N's, `pN` for party N's | `Decide` | |
+| `decide tN/K\|pN/K accept\|reject\|pass-up [REASON] [--running stays\|moves]` | decides a proposal: P is `tN` for task N's, `pN` for party N's | `Decide` | |
 | `decide N --hold R release\|leave\|pass-up [REASON]` | decides an escalation | `Decide` | |
+| `propose-settings FILE [REASON] --against R` | proposes the whole settings set to the deployment owners; FILE or `-` shares the change-settings format and bounds; the optional reason is forwarded unchanged | `Propose` settings | yes |
 | `change-settings FILE --against R [--running stays\|moves]` | changes the settings in one decision: FILE (or `-`) holds the items; R is the newest revision the caller read; running work stays unless `--running moves`; answered the new revision's number | `ChangeSettings` | yes |
 | `release N --hold R [--again]` | lifts a hold | `Release` | |
 | `stop N` | cancels a task's run, the task held | `Stop` | |
@@ -456,11 +458,16 @@ area lands with its stories (section 11).
 
 1. **A chat to a landed change** (the first QA loop, the milestone's
    story, `../README.md`, section 2): the host's tools of 5.6; every read
-   of 5.2; `wait`; every act of 5.3.
+   of 5.2 other than the general proposal read of area 2; `wait`; every act of 5.3.
 2. **Goals and plans:** `goal --project P [--priority I] [--budget A |
    --as-allowed] [--deadline T] TEXT` (`shapes::set_goal`, keyed),
    `proposal P/K`, `amend N [--rev R] CHANGE... REASON`, `withdraw P/K`,
    `seen`.
+
+   The general `proposal tN/K|pN/K` reads every proposal kind. For settings it
+   prints the engine's current/origin/would-be review and its newest revision;
+   ended and withdrawn records retain their state. It uses the same read
+   vocabulary independently of the first area's settings proposal act.
 
    - **`amend`'s changes,** one or more, each a control of the task,
      the rest kept as the task's document shows them (jig's
@@ -788,6 +795,12 @@ area lands with its stories (section 11).
 ## 6. What a result looks like
 
 ### 6.1 Text
+
+A new owner proposal outcome prints the original returned role in the request's
+project. A restored kept line prints its identity alone; read the proposal for
+its present recipient. Replaying the same key retains the original outcome;
+`propose-settings` forwards an optional reason, and `decide --running` forwards
+only an explicitly supplied choice. The engine keeps its default when omitted.
 
 The default: plain UTF-8 lines, no colour, no wrapping. A document
 prints its header line, its fields, its acts and, for a watch's

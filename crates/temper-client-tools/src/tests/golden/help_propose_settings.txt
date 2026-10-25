@@ -1,0 +1,6 @@
+propose-settings FILE [REASON] --against R --key NAME
+Propose a change of deployment settings to its owners
+Result: propose_settings
+  items: JSON items file, or - for stdin
+  reason: Reason
+  against: Newest revision read

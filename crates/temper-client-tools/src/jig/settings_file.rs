@@ -348,7 +348,10 @@ pub(crate) fn request(call: &Call, limits: &Limits) -> Result<c::ChangeSettings,
         return Err(message(None, error(b"FILE", b"input not loaded")));
     };
     Ok(c::ChangeSettings {
-        against: u32::try_from(number(call, 1).expect("against")).expect("parsed u32"),
+        against: u32::try_from(
+            number(call, if call.tool == crate::jig::rows::PROPOSE_SETTINGS_AT { 2 } else { 1 }).expect("against"),
+        )
+        .expect("parsed u32"),
         items: decode(bytes, limits)?,
         running: match value(call, 2) {
             Some(Value::Word(1)) => c::Running::Moves,

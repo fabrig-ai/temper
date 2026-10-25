@@ -549,13 +549,17 @@ fn owner_amended(value: &jig_client::contract::OwnerOutcome, out: &mut Encoder, 
     out.object_end();
 }
 fn owner_proposed(value: &jig_client::contract::OwnerOutcome, out: &mut Encoder, _budget: &mut super::Cut) {
-    let jig_client::contract::OwnerOutcome::Proposed { proposal } = value else { unreachable!("dispatched outcome") };
+    let jig_client::contract::OwnerOutcome::Proposed { proposal, to } = value else {
+        unreachable!("dispatched outcome")
+    };
 
     out.object_start();
     out.key(b"proposed");
     out.object_start();
     out.key(b"proposal");
     out.unsigned(*(proposal));
+    out.key(b"to");
+    out.unsigned(u64::from(*to));
     out.object_end();
     out.object_end();
 }

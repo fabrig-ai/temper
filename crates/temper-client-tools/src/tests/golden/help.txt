@@ -18,6 +18,8 @@ in an items FILE, and edit it before one keyed decision:
   temper ctl DIRECTORY settings
   temper ctl DIRECTORY setting charter 3 --json
   temper ctl DIRECTORY change-settings FILE --against 5 --key settings-5
+  temper ctl DIRECTORY propose-settings FILE --against 5 --key proposal-5
+  temper ctl DIRECTORY proposal p3/7
 Use setting ... --json > FILE to save a value; FILE for change-settings is
 {"items":[{"setting":{"kind":"charter","number":3},"set":VALUE}]}.
 Running work stays unless --running moves. On stale, read settings again and retry.
@@ -143,7 +145,7 @@ close N [--move D]... [--reason TEXT] --key NAME
   Close a chat and cancel or move its delegates
 answer N M TEXT [--key NAME]
   Answer a task's question
-decide tN/K|pN/K accept|reject|pass-up [REASON] [--key NAME]
+decide tN/K|pN/K accept|reject|pass-up [REASON] [--running stays|moves] [--key NAME]
 decide N --hold R release|leave|pass-up [REASON] [--key NAME]
   Decide a proposal or an escalation
 release N --hold R [--again] [--key NAME]
@@ -219,3 +221,7 @@ revisions [--before R]
   Read history newest first, a page at a time
 change-settings FILE --against R [--running stays|moves] --key NAME
   Change deployment settings in one keyed decision
+propose-settings FILE [REASON] --against R --key NAME
+  Propose a change of deployment settings to its owners
+proposal tN/K|pN/K
+  Read a proposal, with its review for settings

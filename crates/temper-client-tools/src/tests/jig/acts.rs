@@ -432,3 +432,42 @@ fn an_account_finishing_outcome_keeps_its_source_in_json() {
     assert_eq!(printed.status, 0);
     assert!(skein_lib::bytes::find(&printed.stdout, br#""account_finishing":{"source":23}"#).is_some(), "{printed:?}");
 }
+
+#[test]
+#[expect(clippy::disallowed_macros, reason = "the ordinary test formats the actual request project")]
+fn an_owner_proposal_uses_the_returned_role_in_the_original_request_project() {
+    let (mut root, call) =
+        fixtures::send_chat(fixtures::CHAT_BUDGET + fixtures::OVER_BOUND, fixtures::SEED, fixtures::EMPTY.into());
+    let c::Ask::Propose { project, .. } = fixtures::act_ask(&root, call) else { panic!("actual proposal ask") };
+    let project = *project;
+    root.done(call, c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal: fixtures::PROPOSAL, to: 9 }));
+    let printed = root.answer(call).expect("actual owner result");
+    assert_eq!(printed.status, 0);
+    assert_eq!(printed.stdout.as_ref(), format!("proposed: p73/17, to role 9 in project {project}\n").as_bytes());
+}
+
+#[test]
+fn a_restored_owner_proposals_kept_output_retains_identity_and_omits_original_recipient() {
+    for json in [false, true] {
+        let mut root = fixtures::started_with(fixtures::restored_chat(), fixtures::SEED, json);
+        root.deliver(c::Delivery::Me(Box::new(fixtures::me(fixtures::PARTY))));
+        root.done(fixtures::EMPTY, c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal: 17, to: 9 }));
+        let line = core::str::from_utf8(root.kept_lines.get(0).expect("kept line")).expect("UTF8");
+        if json {
+            assert!(line.contains("\"number\":17"));
+            assert!(!line.contains("\"to\""));
+        } else {
+            assert_eq!(line, "kept: chat, proposed: p73/17\n");
+        }
+    }
+}
+
+#[test]
+fn a_proposal_answer_without_original_request_scope_reports_the_tools_invariant() {
+    let (mut root, call) = fixtures::message();
+    root.done(call, c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal: 17, to: 9 }));
+    let printed = root.answer(call).expect("terminal invariant report");
+    assert_eq!(printed.status, 1);
+    assert!(printed.stdout.is_empty());
+    assert!(core::str::from_utf8(&printed.stderr).expect("diagnostic").contains("proposal answer lacks request scope"));
+}

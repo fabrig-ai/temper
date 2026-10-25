@@ -3497,3 +3497,169 @@ fn a_story_box_and_its_steps_die_when_the_test_process_is_killed() {
     guard.pids.clear();
     scratch.remove();
 }
+
+fn ctl_settings_member_setup(scratch: &std::path::Path) -> Vec<support::ctl::Step> {
+    use support::ctl::{Call, Step};
+    // Public MakeService requires a real policy role. This role grants no requests or decisions.
+    let path = scratch.join("temper.json");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("fixture document")).expect("JSON");
+    // The shared channel fixture admits only its one owner. These member stories need two people/holdings.
+    document["engine"]["limits"]["overrides"]["people.people"] = 2.into();
+    document["engine"]["limits"]["overrides"]["people.holdings"] = 2.into();
+    for group in ["projects", "policies"] {
+        for project in document["engine"][group].as_array_mut().expect("configured projects/policies") {
+            project["policy"]["roles"].as_array_mut().expect("policy roles").push(serde_json::json!({
+                "number":2,"period_spend":100,"requests":0,"decides":0,
+                "authority":{"tools":0,"grants":[],"delegation":{"kinds":[],"tasks":1,"depth":1},
+                "budget":{"spend":1,"deadline_unix_seconds":null},"notes":0,"note_resources":[]}
+            }));
+        }
+    }
+    std::fs::write(&path, serde_json::to_vec(&document).expect("member policy fixture")).expect("fixture document");
+    let file = scratch.join("proposed.json");
+    vec![
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["me", "--json"])),
+        Step::Member { scratch: scratch.into(), directory: "member" },
+        Step::Run(Call::new(&["me", "--json"]).in_directory("member")),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        Step::Then(Box::new(move |calls| {
+            support::ctl::charter_change_file(&file, &calls[4], "Settings proposed by the member.");
+            ctl_member_proposal_call(&calls[3], &file, "member-settings")
+        })),
+    ]
+}
+fn ctl_member_proposal_call(inventory: &support::Ended, file: &std::path::Path, key: &str) -> support::ctl::Call {
+    let revision = support::ctl::json(inventory)["newest"].as_u64().expect("newest revision");
+    support::ctl::Call::new(&[
+        "propose-settings",
+        file.to_str().expect("FILE path"),
+        "Please review member settings",
+        "--against",
+        &revision.to_string(),
+        "--key",
+        key,
+    ])
+    .in_directory("member")
+    .json()
+}
+fn ctl_assert_success(calls: &[support::Ended]) {
+    for (index, call) in calls.iter().enumerate() {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "call {index}: {}", String::from_utf8_lossy(&call.stderr));
+        assert!(call.stderr.is_empty(), "call {index}: {}", String::from_utf8_lossy(&call.stderr));
+    }
+}
+
+#[test]
+fn temper_ctl_propose_settings() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_propose_settings_m2");
+    let mut steps = ctl_settings_member_setup(scratch.path());
+    let file = scratch.path().join("proposed.json");
+    steps.push(Step::Then(Box::new(move |calls| ctl_member_proposal_call(&calls[3], &file, "member-settings"))));
+    steps.push(Step::Run(Call::new(&["settings", "--json"])));
+    steps
+        .push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]))));
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    ctl_assert_success(&seen.calls);
+    let calls = &seen.calls;
+    assert_eq!(support::ctl::proposal_key(&calls[5]), support::ctl::proposal_key(&calls[6]));
+    assert_eq!(support::ctl::json(&calls[5]), support::ctl::json(&calls[6]), "replay keeps the original role");
+    let answer = support::ctl::json(&calls[5]);
+    assert_eq!(answer["to"]["role"]["project"], 0);
+    assert_eq!(answer["to"]["role"]["role"], 0);
+    assert_eq!(support::ctl::json(&calls[7])["newest"], support::ctl::json(&calls[3])["newest"]);
+    assert!(String::from_utf8_lossy(&calls[8].stdout).contains("Please review member settings"));
+    scratch.remove();
+}
+
+#[test]
+fn temper_ctl_proposal() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_proposal_m2");
+    let mut steps = ctl_settings_member_setup(scratch.path());
+    steps.push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5])]))));
+    steps
+        .push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]))));
+    let direct = scratch.path().join("direct.json");
+    steps.push(Step::Then(Box::new(move |calls| {
+        support::ctl::charter_change_file(&direct, &calls[4], "Owner supersedes the member proposal.");
+        support::ctl::settings_change(&calls[3], &direct, "supersede-settings")
+    })));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]).in_directory("member")
+    })));
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    ctl_assert_success(&seen.calls);
+    let calls = &seen.calls;
+    assert!(String::from_utf8_lossy(&calls[6].stdout).contains("would be"));
+    let review = support::ctl::json(&calls[7]);
+    assert_eq!(review["action"]["settings"]["against"], support::ctl::json(&calls[3])["newest"]);
+    let item = &review["action"]["settings"]["review"]["items"][0];
+    assert!(!item["origin"].is_null());
+    assert!(!item["now"].is_null());
+    assert!(!item["would_be"].is_null());
+    assert!(String::from_utf8_lossy(&calls[9].stdout).contains("withdrawn"));
+    scratch.remove();
+}
+
+#[test]
+fn temper_ctl_decide_settings() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_decide_settings_m2");
+    let mut steps = ctl_settings_member_setup(scratch.path());
+    let sibling = scratch.path().join("sibling.json");
+    steps.push(Step::Then(Box::new(move |calls| {
+        support::ctl::charter_change_file(&sibling, &calls[4], "A stale sibling proposal.");
+        // One pending proposal per proposer: the sibling is proposed by the owner, not the member.
+        ctl_member_proposal_call(&calls[3], &sibling, "sibling-settings").in_directory("client")
+    })));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["decide", &support::ctl::proposal_key(&calls[5]), "accept", "--key", "member-forbidden"])
+            .in_directory("member")
+    })));
+    steps.push(Step::Run(Call::new(&["settings", "--json"])));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&[
+            "decide",
+            &support::ctl::proposal_key(&calls[5]),
+            "accept",
+            "--running",
+            "moves",
+            "--key",
+            "owner-accept",
+        ])
+    })));
+    steps.push(Step::Run(Call::new(&["settings", "--json"])));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&[
+            "revision",
+            &support::ctl::json(&calls[10])["newest"].as_u64().expect("newest").to_string(),
+            "--json",
+        ])
+    })));
+    steps.push(Step::Run(Call::new(&["setting", "charter", "1", "--json"])));
+    steps
+        .push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[6]), "--json"]))));
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    for (index, call) in seen.calls.iter().enumerate() {
+        if index == 7 {
+            assert_ne!(call.exit, Some(Exit::Code(0)), "member cannot accept deployment settings");
+        } else {
+            ctl_assert_success(core::slice::from_ref(call));
+        }
+    }
+    let calls = &seen.calls;
+    let before = support::ctl::json(&calls[3])["newest"].as_u64().expect("before");
+    assert_eq!(support::ctl::json(&calls[8])["newest"], before, "forbidden acceptance changes no revision");
+    assert_eq!(support::ctl::json(&calls[10])["newest"], before + 1);
+    let revision = support::ctl::json(&calls[11]);
+    assert_eq!(revision["head"]["moved"], true);
+    assert!(!revision["head"]["proposal"].is_null());
+    assert!(!revision["head"]["by"].is_null());
+    assert!(String::from_utf8_lossy(&calls[12].stdout).contains("Settings proposed by the member."));
+    assert!(String::from_utf8_lossy(&calls[13].stdout).contains("withdrawn"));
+    scratch.remove();
+}

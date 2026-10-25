@@ -47,7 +47,11 @@ impl OneShot {
             }
             Parsed::Call { call, .. } => {
                 if let Some((index, path)) = text_file(call) {
-                    self.directory.load_text(index, path, call.tool == jig::rows::CHANGE_SETTINGS_AT);
+                    self.directory.load_text(
+                        index,
+                        path,
+                        matches!(call.tool, jig::rows::CHANGE_SETTINGS_AT | jig::rows::PROPOSE_SETTINGS_AT),
+                    );
                 } else if self.class != Class::SignIn && call.values.contains(&Some(Values::One(Value::Stdin))) {
                     self.input = Some(Vec::new());
                     self.read_input();
@@ -193,7 +197,7 @@ impl OneShot {
                 let input = self.input.as_mut().expect("reading input");
                 if input.len() + bytes.len() > limit {
                     if let Some(Parsed::Call { call, .. }) = &self.call
-                        && call.tool == jig::rows::CHANGE_SETTINGS_AT
+                        && matches!(call.tool, jig::rows::CHANGE_SETTINGS_AT | jig::rows::PROPOSE_SETTINGS_AT)
                     {
                         self.fail(format!("settings file: file bytes: bound {}", self.input_limit()).as_bytes());
                     } else {
@@ -217,7 +221,7 @@ fn text_file_index(call: &jig::call::Call) -> Option<usize> {
 }
 fn text_file(call: &jig::call::Call) -> Option<(u8, &[u8])> {
     let name = TOOLS[usize::from(call.tool)].name;
-    if name != b"amend" && name != b"change-settings" {
+    if name != b"amend" && name != b"change-settings" && name != b"propose-settings" {
         return None;
     }
     for (index, slot) in call.values.iter().enumerate() {
@@ -346,26 +350,33 @@ mod settings_input_tests {
         bytes
     }
     #[test]
-    fn change_settings_reads_its_file_before_directory() {
-        let mut frame = Frame::read(&["change-settings", "/settings/link-file", "--against", "5", "--key", "change"]);
-        frame.absent = true;
-        frame.link = ITEMS;
-        frame.drain();
-        assert_eq!(loaded(&frame), ITEMS);
+    fn settings_acts_read_their_file_before_directory() {
+        for tool in ["change-settings", "propose-settings"] {
+            let mut frame = Frame::read(&[tool, "/settings/link-file", "--against", "5", "--key", "change"]);
+            frame.absent = true;
+            frame.link = ITEMS;
+            frame.drain();
+            assert_eq!(loaded(&frame), ITEMS);
+        }
     }
     #[test]
-    fn change_settings_reads_its_items_from_stdin() {
-        let mut frame = Frame::read(&["change-settings", "-", "--against", "5", "--key", "change"]);
-        frame.absent = true;
-        frame.input = ITEMS;
-        frame.drain();
-        assert_eq!(loaded(&frame), ITEMS);
+    fn settings_acts_read_their_items_from_stdin() {
+        for tool in ["change-settings", "propose-settings"] {
+            let mut frame = Frame::read(&[tool, "-", "--against", "5", "--key", "change"]);
+            frame.absent = true;
+            frame.input = ITEMS;
+            frame.drain();
+            assert_eq!(loaded(&frame), ITEMS);
+        }
     }
     #[test]
-    fn change_settings_names_its_file_byte_bound_for_files_and_stdin() {
+    fn settings_acts_name_their_file_byte_bound_for_files_and_stdin() {
         static OVERSIZED: [u8; 1_048_577] = [b' '; 1_048_577];
-        for path in ["-", "/settings/link-file"] {
-            let mut frame = Frame::read(&["change-settings", path, "--against", "5", "--key", "change"]);
+        for (tool, path) in ["change-settings", "propose-settings"]
+            .into_iter()
+            .flat_map(|tool| ["-", "/settings/link-file"].map(|path| (tool, path)))
+        {
+            let mut frame = Frame::read(&[tool, path, "--against", "5", "--key", "change"]);
             frame.absent = true;
             frame.input = &OVERSIZED;
             frame.link = &OVERSIZED;

@@ -19,6 +19,8 @@ in an items FILE, and edit it before one keyed decision:
   temper ctl DIRECTORY settings
   temper ctl DIRECTORY setting charter 3 --json
   temper ctl DIRECTORY change-settings FILE --against 5 --key settings-5
+  temper ctl DIRECTORY propose-settings FILE --against 5 --key proposal-5
+  temper ctl DIRECTORY proposal p3/7
 Use setting ... --json > FILE to save a value; FILE for change-settings is
 {"items":[{"setting":{"kind":"charter","number":3},"set":VALUE}]}.
 Running work stays unless --running moves. On stale, read settings again and retry.

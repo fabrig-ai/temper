@@ -1,0 +1,1 @@
+{"operation":"propose_settings","outcome":{"done":{"proposed":{"proposal":{"proposer":{"party":73},"number":7}}}},"task":null,"to":{"role":{"project":0,"role":0}}}

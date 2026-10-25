@@ -2274,6 +2274,7 @@ name = "temper"
 version = "0.0.0"
 dependencies = [
  "jig-channel-world",
+ "jig-client",
  "jig-client-protocol-link",
  "jig-client-protocol-wire",
  "jig-client-shell-native",

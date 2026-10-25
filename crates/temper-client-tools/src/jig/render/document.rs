@@ -1,6 +1,7 @@
 //! Step-local document rendering; no borrowed document survives a step.
 mod account_lines;
 mod account_programs;
+mod proposal;
 pub(crate) mod settings;
 mod settings_values;
 use super::{Text, acts};
@@ -42,6 +43,7 @@ pub(crate) fn print(
         Document::ReadSet(reading, _) => {
             reading.called.call.tool >= crate::jig::rows::SETTINGS_AT
                 && reading.called.call.tool <= crate::jig::rows::REVISIONS_AT
+                || reading.called.call.tool == crate::jig::rows::PROPOSAL_AT
         }
         Document::Me(_)
         | Document::Accounts(_)

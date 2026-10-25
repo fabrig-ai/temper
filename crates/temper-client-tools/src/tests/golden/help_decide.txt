@@ -1,10 +1,11 @@
-decide tN/K|pN/K accept|reject|pass-up [REASON] [--key NAME]
+decide tN/K|pN/K accept|reject|pass-up [REASON] [--running stays|moves] [--key NAME]
 decide N --hold R release|leave|pass-up [REASON] [--key NAME]
 Decide a proposal or an escalation
 Result: decide
   proposal: Typed proposer and proposal number
   outcome: Decision
   reason: Reason
+  running: Running work stays by default
   task: Task number
   hold: Hold revision
   outcome: Decision

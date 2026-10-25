@@ -117,6 +117,11 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
                 watch(runner, &mut reading, 4, c::Subject::Deployment, out);
             }
         }
+        rows::PROPOSAL_AT => {
+            let Some(Value::Proposal(proposal)) = value(&reading.called.call, 0) else { unreachable!("proposal form") };
+            let what = c::Read::Proposal { proposal: *proposal };
+            read(runner, &mut reading, 1, what, out);
+        }
         rows::SETTINGS_AT..=rows::REVISIONS_AT => settings_start(runner, &mut reading, out),
         7 => watch(runner, &mut reading, 4, c::Subject::Run { task, turn: None, offset: 0 }, out),
         _ => unreachable!("read tool"),

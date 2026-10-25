@@ -15,6 +15,7 @@ pub(crate) struct Operation {
     pub party: Option<u64>,
     pub retry: Option<Box<[u8]>>,
     pub value_name: Option<crate::jig::key::Name>,
+    pub proposal_project: Option<u32>,
 }
 /// One in-flight source context; its name is bounded by the client's document text limit.
 #[derive(Clone, Debug)]
@@ -107,6 +108,13 @@ impl Operation {
             party: None,
             retry: None,
             value_name: None,
+            proposal_project: match ask {
+                Ask::Jig(ask) => match ask.as_ref() {
+                    c::Ask::Propose { project, .. } => Some(*project),
+                    _ => None,
+                },
+                Ask::Family { .. } => None,
+            },
         }
     }
 }
@@ -212,7 +220,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
             moved_in(*account, *renewed, out);
         }
         c::Answer::Done(c::Outcome::Proposed { proposal }) => proposed(*proposal, operation, me, out),
-        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal })) => proposed(
+        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal, .. })) => proposed(
             c::ProposalKey {
                 proposer: c::Proposer::Party(operation.party.expect("request party retained")),
                 number: *proposal,
@@ -339,6 +347,17 @@ fn encode(
             out.key(b"file");
             out.string(operation.file.as_deref().expect("export file"));
             out.object_end();
+        } else if (kept || operation.word == b"propose_settings")
+            && let c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Proposed { proposal, .. })) = answer
+        {
+            // A formatter projection of the actual original result; the client outcome stays intact.
+            let projected = c::Answer::Done(c::Outcome::Proposed {
+                proposal: c::ProposalKey {
+                    proposer: c::Proposer::Party(operation.party.expect("request party retained")),
+                    number: *proposal,
+                },
+            });
+            document::answer_json(&projected, out);
         } else {
             document::answer_json(answer, out);
         }

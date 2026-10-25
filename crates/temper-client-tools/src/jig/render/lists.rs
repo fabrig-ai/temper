@@ -304,7 +304,7 @@ pub(super) fn object(key: c::ObjectKey, out: &mut Text) {
             out.put(b" \xc2\xb7 task");
         }
         c::ObjectKey::Proposal(proposal) => {
-            out.number(proposal.number);
+            super::document::settings::proposal_text(proposal, out);
             out.put(b" \xc2\xb7 proposal");
         }
         c::ObjectKey::Escalation(task) => {
