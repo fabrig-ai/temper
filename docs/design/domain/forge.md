@@ -1392,6 +1392,45 @@ history they keep if temper is unplugged. Issues are projections (jig's
 - **Issues others open** in an adopted repository are participating
   objects, which may become intake later.
 
+### 12.1 Accepted desired generations
+
+The forge accepts a final core feed synchronously in the decision that
+marks it fed, saving the accepted desired view and its generation in the
+same IssueRow write as the core's final header. If it cannot accept the
+view within its bounds, it refuses within that decision. Acceptance is
+durable across restart; it does not depend on delivery after commit.
+
+`IssueRow.closing_generation: Option<u64>` follows `desired`. It is Some
+only for an accepted final desired view and is cleared when a non-final
+desired view replaces it. Restart restores it with desired. A late write
+completion rechecks the whole current desired: its body, milestones and
+closing write must all be complete, with no pending write. Every issue
+row for that goal and connector must agree on the same saved Some
+generation before `ProjectionSettled { goal, generation }` is emitted.
+The root echoes that saved generation; it never stamps a callback with
+the core's current generation. A refused newer desired view cannot make
+an old completed desired settle its cohort, including when a timer later
+asks the connector to project the old view again.
+
+### 12.2 Failure episodes and recovery
+
+Before admitting projection work or refusing it without a write, the
+connector obtains a source through jig's ProjectionBegin. That source
+survives the flight, entry and retries. Permanent projection refusal
+reaches jig's durable failure receipt; Busy and Wait remain transient.
+Projection outbox outcomes only settle the core's resource writer.
+The receipt delivers once-per-episode quiet news to the original goal,
+independently of task-effect holds (jig's `domain/connectors.md`, 8).
+
+Explicit recovery stages an infallible reset with reserved room. The
+root routes CommitProjectionRecovery synchronously, so the connector's
+reset and the core's source fence commit together. Pending receipts
+refuse recovery as Busy; missing or final state answers Missing. Armed
+recovery preserves its existing fence without writing; only Reported
+rearms at the current connector counter. Retained entries covered by the
+new fence are abandoned or obtain a new Begin. Recovery of projection
+work and ordinary task-effect settlement have separate ownership.
+
 ## 13. Participating objects
 
 Not needed first, and kept possible with one mechanism (jig's
