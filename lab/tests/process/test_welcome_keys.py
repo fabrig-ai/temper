@@ -45,6 +45,7 @@ if args[:len(%r)] == %r:
             with self.subTest(experiment=name):
                 result, calls, chat = self.run_phase(name, 'walk')
                 self.assertEqual((result.returncode, result.stderr), (0, ''))
+                self.assertEqual(calls[0], [['wait', 'button', 'Sign out', '--exact', '--timeout', '120'], ''])
                 self.assertIn([['type', 'text field', 'Key (pasted once)'], KEY], calls)
                 self.assertEqual(chat, '7\n')
                 verbs = [args[0] for args, _ in calls]

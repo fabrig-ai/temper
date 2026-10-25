@@ -24,6 +24,8 @@ call() {
     fi
 }
 welcome() {
+    # The link navigated; wait until the page has completed sign-in.
+    call wait button 'Sign out' --exact --timeout 120
     call go /welcome
     call wait heading 'Welcome to temper' --exact --timeout 120
     call press link 'Set up temper' --exact

@@ -681,8 +681,8 @@ through the director.
 and return, adopts `fake-person/widget`, pastes the box's named fake model
 key, reaches Ready, and opens `widget`. `lab/welcome-forgejo-here` clicks
 Forgejo here, makes `work/hello` in `hello`, and uses the same key path.
-Each then sends a first chat and requires the fake reply before and after
-reload. Welcome, Forge, Model, Ready and chat are separate seed actions,
+Each waits for visible sign-in before opening the welcome, then sends a
+first chat and requires the fake reply before and after reload. Welcome, Forge, Model, Ready and chat are separate seed actions,
 so a live scene can capture between them. All welcome experiments keep
 one byte-identical `call`, guarded by a unit test: failure keeps an
 outline and shot, then stops.
