@@ -569,3 +569,123 @@ fn component_limits(limits: &engine::Limits) -> Limits {
     profile.secrets.budget = profile.store.budget;
     temper_service::store::limits(limits, &limits.forge, &profile).expect("world sizes fit real store")
 }
+
+#[cfg(test)]
+mod coupled_layout {
+    use super::*;
+    use jig_protocol_store::{Family, Older, OpenRefusal, codec, format, keys};
+
+    fn kv_request(
+        store: &mut skein_kv::Store,
+        limits: skein_kv::Limits,
+        request: skein_kv::Request,
+    ) -> skein_kv::Event {
+        let mut above = Queue::with_capacity(skein_kv::MAX_OUT.above);
+        let mut below = Queue::with_capacity(skein_kv::MAX_OUT.below);
+        skein_kv::down(store, &Env { now: Time::ZERO, wall: Wall::EPOCH, limits }, request, &mut above, &mut below);
+        assert!(below.is_empty(), "memory KV issues no IO");
+        let event = above.pop().expect("one KV terminal");
+        assert!(above.is_empty());
+        event
+    }
+    fn rows(store: &mut skein_kv::Store, limits: skein_kv::Limits) -> Box<[skein_kv::Row]> {
+        let skein_kv::Event::Loaded { rows, next: None, .. } = kv_request(
+            store,
+            limits,
+            skein_kv::Request::Load {
+                owner: Token::new(1),
+                range: skein_kv::Range { start: Box::new([]), end: None },
+                max: skein_kv::Page { rows: 8, bytes: limits.page.bytes },
+            },
+        ) else {
+            panic!("whole bounded fixture page")
+        };
+        rows
+    }
+
+    #[test]
+    fn a_c0_core_with_an_old_v10_issue_is_refused_before_application_decode_without_mutation() {
+        let application_limits = crate::walking::limits();
+        let limits = component_limits(&application_limits);
+        let application = temper_protocol_store::application(&application_limits.forge).unwrap();
+        assert_eq!(application.version, 10);
+        let mut stores =
+            Stores { store: skein_kv::Store::memory(&limits.store), secrets: skein_kv::Store::memory(&limits.secrets) };
+        let mut old_layout = format::layouts();
+        // C0 core-v6 fingerprint, before Failure and closing_at. Other family
+        // digests stay current; the paired edit is refused by Core specifically.
+        old_layout.core = [
+            0x28, 0x27, 0x8c, 0x2a, 0x50, 0x62, 0xdc, 0x78, 0xde, 0x49, 0xd1, 0xe8, 0x54, 0x5f, 0x4f, 0x7b, 0x74, 0xfc,
+            0x04, 0x0d, 0x09, 0x85, 0x29, 0xc3, 0x33, 0x28, 0x44, 0x00, 0x80, 0x7e, 0xc6, 0x50,
+        ];
+        let mut old_issue = Vec::from(10_u16.to_be_bytes());
+        // Existing generated C0 Value::Issue golden from temper efe841b05a.
+        old_issue.extend_from_slice(include_bytes!("../fixtures/c0-issue-value-v10.bin"));
+        assert!(
+            temper_protocol_store::records::decode(
+                &old_issue,
+                &temper_protocol_store::bounds(&application_limits.forge).unwrap()
+            )
+            .is_err(),
+            "this old row cannot accidentally satisfy the new decoder"
+        );
+        let header =
+            jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(Deployment { commits: 1, ..HEADER }));
+        let ops = Box::new([
+            skein_kv::Op::Put {
+                key: keys::encode_own(&keys::Own::Format, limits.store.key).unwrap(),
+                value: format::current(10, HEADER.id).encode().unwrap(),
+            },
+            skein_kv::Op::Put {
+                key: keys::encode_own(&keys::Own::Layouts, limits.store.key).unwrap(),
+                value: old_layout.encode(),
+            },
+            skein_kv::Op::Put {
+                key: keys::encode(&header.key(), limits.store.key).unwrap(),
+                value: codec::encode(&header, &codec::limits(&limits.core).unwrap(), &[]).unwrap(),
+            },
+            skein_kv::Op::Put {
+                key: keys::application(
+                    &temper_protocol_store::keys::encode(&temper_engine_domain_forge::Key::Issue(0), limits.store.key)
+                        .unwrap(),
+                    limits.store.key,
+                )
+                .unwrap(),
+                value: old_issue.into_boxed_slice(),
+            },
+        ]);
+        assert!(matches!(
+            kv_request(&mut stores.store, limits.store, skein_kv::Request::Commit { owner: Token::new(1), ops }),
+            skein_kv::Event::Committed { number: 1, .. }
+        ));
+        let before = rows(&mut stores.store, limits.store);
+        let before_used = stores.store.used();
+        let before_last = stores.store.last();
+        let mut component = protocol::Store::over(&limits, application, &[], stores);
+        let mut files = Files::new();
+        let mut above = Queue::with_capacity(protocol::MAX_OUT_DOWN);
+        let mut below = Below {
+            store: Queue::with_capacity(skein_kv::MAX_OUT.below),
+            secrets: Queue::with_capacity(skein_kv::MAX_OUT.below),
+            transcripts: Queue::with_capacity(skein_kv::MAX_OUT.below),
+        };
+        protocol::down(
+            &mut component,
+            &Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
+            Request::Open { owner: Token::new(44), root: files.root(), installation: INSTALLATION },
+            &mut above,
+            &mut below,
+        );
+        assert!(
+            matches!(above.pop(), Some(Event::OpenRefused { owner, why: OpenRefusal::OlderBuild { why: Older::Layout(Family::Core) } }) if owner == Token::new(44))
+        );
+        assert!(above.is_empty(), "no application load or decoding is routed");
+        assert!(below.store.is_empty() && below.secrets.is_empty() && below.transcripts.is_empty());
+        let mut stores = component.into_stores();
+        assert_eq!(stores.store.last(), before_last);
+        assert_eq!(stores.store.used(), before_used);
+        assert_eq!(rows(&mut stores.store, limits.store), before);
+        assert_eq!(stores.secrets.last(), 0);
+        assert_eq!(stores.secrets.used(), 0);
+    }
+}

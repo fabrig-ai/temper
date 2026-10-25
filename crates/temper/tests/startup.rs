@@ -1631,7 +1631,19 @@ fn checked_in_deployment_profiles_pass_startup_admission() {
         let turn = profile.agent.limits.bodies.turn_body;
         let record = size_of::<temper_engine_domain::Record>();
         match profile.admission() {
-            Ok(_) => eprintln!("{relative}: startup admission passed; T={turn}, Record={record}"),
+            Ok(required) => {
+                let document: serde_json::Value = serde_json::from_slice(&profile.document).expect("profile JSON");
+                let engine = document["engine"]["memory_bytes"].as_u64().unwrap_or(0);
+                let worker = document["workers"][0]["memory_bytes"].as_u64().unwrap_or(0);
+                eprintln!(
+                    "{relative}: engine required={} declared={engine}; worker required={} declared={worker}; T={turn}, Record={record}",
+                    required.engine_bytes, required.worker_bytes
+                );
+                if engine < required.engine_bytes || worker < required.worker_bytes {
+                    writeln!(failures, "{relative}: unchanged memory declaration is below the checked requirement")
+                        .expect("diagnostic");
+                }
+            }
             Err(why) => {
                 writeln!(
                     failures,

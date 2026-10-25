@@ -2545,8 +2545,20 @@ pub(crate) fn outputs(
                 domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::EffectFailed }));
             }
             forge::Request::ProjectionEffect { row, entry, description } => {
-                let Some(adopted) = domain.forge.repository(entry.repository) else { continue };
+                let Some(adopted) = domain.forge.repository(entry.repository) else {
+                    domain.work.push(Work::Core(jig_domain_core::Event::ProjectionFailed {
+                        goal: row.goal,
+                        connector: domain.config.forge_connector,
+                        source: entry.number,
+                    }));
+                    continue;
+                };
                 let Some(name) = resource_name(adopted, &description.resource, env.limits.authority.segments) else {
+                    domain.work.push(Work::Core(jig_domain_core::Event::ProjectionFailed {
+                        goal: row.goal,
+                        connector: domain.config.forge_connector,
+                        source: entry.number,
+                    }));
                     continue;
                 };
                 let access = match description.access {
@@ -2945,7 +2957,17 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
                 }
             }
-            Some(EffectFlight::Call { .. } | EffectFlight::Projection { .. }) | None => {}
+            Some(EffectFlight::Projection { row, .. }) => {
+                if answer == authority::Answer::Wait {
+                    domain.forge.projection_after(
+                        row.goal,
+                        skein_lib::Wall::from_nanos(
+                            env.wall.as_nanos().saturating_add(env.limits.forge.issue_policy.interval.as_nanos()),
+                        ),
+                    );
+                }
+            }
+            Some(EffectFlight::Call { .. }) | None => {}
         },
         jig_domain_core::connector::Ask::Judge { owner, judge, state, resources: _ } => {
             let (verdict, guarded) = judge_effect(domain, env, owner, number, judge, state);

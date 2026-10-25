@@ -56,7 +56,10 @@ fn consume(domain: &mut Domain, env: &Env<Limits>) -> Vec<Write> {
     for _ in 0..32 {
         crate::release(domain, env, &mut out);
         if out.is_empty() {
-            return writes;
+            if domain.journal.idle() && !domain.door_pass {
+                return writes;
+            }
+            continue;
         }
         while let Some(request) = out.pop() {
             match request {
@@ -91,14 +94,14 @@ fn projection_recovery_returns_competing_ownership_and_consumes_each_real_termin
     assert!(consume(&mut domain, &env).is_empty(), "Armed returns its old fence without a reset or write");
     assert_eq!(domain.take_projection_recovery(Token::new(901)), Some(ProjectionRecovery::Recovered { after: 1 }));
     // Missing goals still reserve the same bounded slot for their keyed terminal.
-    for index in 0..env.limits.forge.issues {
+    for index in 1..env.limits.forge.issues {
         domain.recover_projection(&env, 100 + u64::from(index), Token::new(1000 + u64::from(index))).unwrap();
         assert!(consume(&mut domain, &env).is_empty());
     }
     let before_full = domain.deployment();
     assert_eq!(domain.recover_projection(&env, 999, Token::new(9999)), Err(Token::new(9999)));
     assert_eq!(domain.deployment(), before_full);
-    for index in 0..env.limits.forge.issues {
+    for index in 1..env.limits.forge.issues {
         let owner = Token::new(1000 + u64::from(index));
         assert_eq!(domain.take_projection_recovery(owner), Some(ProjectionRecovery::Missing));
         assert_eq!(domain.take_projection_recovery(owner), None);
