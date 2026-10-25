@@ -109,6 +109,19 @@ captured in readiness output or browser/lab evidence. Tests stay in their tiers.
 summed test execution by world and the new process stories against their
 two-second aim, excluding compilation, queue and gate elapsed time.
 
+The fake-box welcome stories share `fake_backends/walk.rs`'s `Walk` and
+explicit `add_key()` and `Visit` acts. `Visit` reuses the process tier's
+redirect visitor against the box's supervised peers, opens a connection
+per hop, submits the manifest form and records method, path and status.
+GitHub one-click with a key asserts `[200,200,302,302,200]`; an own App
+with a key asserts `[302,200]`; ChatGPT sign-in paired with GitHub one-click
+adds `[302,200]`. ctl sign-in supplies no return address, so its visit ends
+at callback 200; the lab browser walk proves the return to welcome. These
+three stories and Forgejo elsewhere with a key assert the initial offers,
+connected forge and adopted repository, usable account, successful reply
+wait and exactly one complete committed turn containing the fake model's
+assistant reply. Stories live beside the harness under `walk/`.
+
 ### 2.1 System worlds
 
 One runs the real engine driving the real worker: the composed system

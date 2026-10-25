@@ -191,13 +191,30 @@ fn first_chat() -> Vec<Act> {
     ]
 }
 fn assert_reply(seen: &Seen) {
-    let chat = ctl::json(seen.answers.last().expect("committed chat"));
-    let replies: Vec<_> = chat["activity"]["rows"]
+    let [.., waited, conversation] = seen.answers.as_slice() else { panic!("reply and conversation reads") };
+    assert_committed_reply(waited, conversation);
+}
+
+fn assert_committed_reply(waited: &Ended, conversation: &Ended) {
+    assert_eq!(ctl::json(waited)["met"], true, "chat replied before the wait ended");
+    let page = ctl::json(conversation);
+    assert_eq!(page["activity"]["cut"], false, "whole conversation page");
+    let turns: Vec<_> = page["activity"]["rows"]
         .as_array()
         .expect("conversation rows")
         .iter()
-        .filter_map(|row| row["event"]["owner"]["decoded"]["turn"]["decoded"]["messages"].as_array())
-        .flatten()
+        .filter(|row| row["event"]["owner"]["source"]["line"]["turn"].is_object())
+        .map(|row| {
+            let turn = &row["event"]["owner"]["decoded"]["turn"]["decoded"];
+            assert!(turn.is_object(), "committed turn loaded and decoded: {row}");
+            assert_eq!(turn["cut"], false, "whole committed turn");
+            turn
+        })
+        .collect();
+    assert_eq!(turns.len(), 1, "first reply committed once");
+    let replies: Vec<_> = turns
+        .iter()
+        .flat_map(|turn| turn["messages"].as_array().expect("turn messages"))
         .filter(|message| message["speaker"] == "assistant")
         .flat_map(|message| message["blocks"].as_array().expect("assistant blocks"))
         .filter_map(|block| block["text"]["text"].as_str())

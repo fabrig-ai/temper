@@ -1,8 +1,6 @@
 use super::*;
 
 pub(super) fn run() {
-    // T1 still stops before its first reply at the git adapter boundary. Pair
-    // this sign-in with the GitHub path whose installation and adoption work.
     let walk = Walk::new("walk-chatgpt-github");
     let mut acts = github::manifest_acts();
     acts.push(adopt_github());
@@ -29,7 +27,8 @@ pub(super) fn run() {
     assert_eq!(github.iter().map(|hop| hop.status).collect::<Vec<_>>(), [200, 200, 302, 302, 200]);
     assert_eq!(sign_in.iter().map(|hop| hop.status).collect::<Vec<_>>(), [302, 200]);
     assert!(sign_in.iter().all(|hop| hop.method == "GET"));
-    // ctl Connect supplies no browser return address: the callback is its landing.
+    // ctl Connect supplies no browser return address: this visit ends at the callback
+    // 200. The lab walk proves the browser returns to the welcome.
     let [authorize, callback] = sign_in.as_slice() else { panic!("issuer and callback landing") };
     assert!(authorize.path.starts_with("/api/accounts/authorize?"));
     assert!(callback.path.starts_with("/auth/callback?"));

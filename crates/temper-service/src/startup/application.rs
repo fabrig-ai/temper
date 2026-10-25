@@ -100,6 +100,7 @@ pub struct Forge {
     pub api: config::Address,
     pub transport: Transport,
     pub git: Box<[u8]>,
+    pub git_program: Option<Box<[u8]>>,
     pub web: Option<Box<[u8]>>,
     pub app_read_only: bool,
     pub api_token: Box<[u8]>,
@@ -368,6 +369,19 @@ fn forge(document: &Document, at: u32, path: &Path, problems: &mut Problems) -> 
         None => None,
     };
     let git = nullable_text(&mut object, document, b"git", path, problems, false);
+    let git_program = match object.member(document, b"git_program") {
+        Some(at) => match config::read::text(document, at, 4096) {
+            Ok(value) => {
+                read::form(!value.is_empty() && !value.contains(&0), path.member(b"git_program"), problems);
+                Some(value)
+            }
+            Err(what) => {
+                problems.push(path.member(b"git_program"), What::Jig(what));
+                None
+            }
+        },
+        None => None,
+    };
     read::form(github || git.is_some(), path.member(b"git"), problems);
     let git = match git {
         Some(git) => git,
@@ -437,6 +451,7 @@ fn forge(document: &Document, at: u32, path: &Path, problems: &mut Problems) -> 
         api,
         transport,
         git,
+        git_program,
         web,
         app_read_only,
         api_token: api_token?,
@@ -1005,13 +1020,28 @@ fn resolved_transport(
         }
     }
 }
-/// Join each fake program to its forge, after setup has resolved its data paths.
-pub fn git_programs(forges: &mut [settings::Forge], setup: &temper_forge_setup::setup::Setup) {
-    for entry in &setup.entries {
+/// Keep one source of the forge's program, after both readers resolve data paths.
+pub fn git_programs(forges: &mut [settings::Forge], setup: &temper_forge_setup::setup::Setup, problems: &mut Problems) {
+    let application = Path::root().member(b"application");
+    for (index, entry) in setup.entries.iter().enumerate() {
         if let temper_forge_setup::setup::Mode::Fake(fake) = &entry.mode {
-            for forge in forges.iter_mut() {
+            for (forge_index, forge) in forges.iter_mut().enumerate() {
                 if forge.number == entry.forge {
-                    forge.git_program = Some(fake.git.clone());
+                    if forge.git_program.is_some() {
+                        problems.push(
+                            read::index(&application.member(b"forges"), forge_index).member(b"git_program"),
+                            What::Jig(config::What::Form),
+                        );
+                        problems.push(
+                            read::index(&application.member(b"setup"), index)
+                                .member(b"mode")
+                                .member(b"fake")
+                                .member(b"git"),
+                            What::Jig(config::What::Form),
+                        );
+                    } else {
+                        forge.git_program = Some(fake.git.clone());
+                    }
                 }
             }
         }
@@ -1112,7 +1142,7 @@ pub fn resolve(members: &Members, files: &settings::Files, problems: &mut Proble
                     api: forge.api.clone(),
                     transport,
                     git: forge.git.clone(),
-                    git_program: None,
+                    git_program: forge.git_program.clone(),
                     web: forge.web.clone(),
                     app_read_only: forge.app_read_only,
                     api_token: token,
@@ -1187,6 +1217,12 @@ fn joined(
 }
 
 fn resolve_forge(directories: &config::Directories, forge: &mut Forge, fp: &Path, problems: &mut Problems) {
+    if let Some(program) = &mut forge.git_program
+        && let Some(resolved) =
+            joined(directories, config::Directory::Data, program, &fp.member(b"git_program"), problems)
+    {
+        *program = resolved;
+    }
     if let Transport::Tls { trust: Some(trust), .. } = &mut forge.transport
         && let Some(value) = joined(
             directories,

@@ -279,9 +279,15 @@ fn managed_four_and_adapter_are_ordinary_and_preserve_existing_entries() {
         for index in [0_usize, 2] {
             assert_eq!(effective["application"]["forges"][index], temper["application"]["forges"][index]);
         }
+        assert_eq!(effective["application"]["forges"][1]["git_program"], "/effective/data/demo/bin/git");
+        assert!(
+            effective["application"]["forges"][2].get("git_program").is_none(),
+            "Forgejo here keeps the machine git"
+        );
+        assert_eq!(effective["application"]["forges"][3]["git_program"], "/effective/data/demo/bin/git");
         assert_eq!(
             effective["application"]["forges"][3],
-            json!({"number":4,"kind":"forgejo","api":{"socket":"127.0.0.1:9104"},"git":"http://127.0.0.1:9104","web":null,"transport":"plaintext"})
+            json!({"number":4,"kind":"forgejo","api":{"socket":"127.0.0.1:9104"},"git":"http://127.0.0.1:9104","git_program":"/effective/data/demo/bin/git","web":null,"transport":"plaintext"})
         );
         assert_eq!(effective["application"]["setup"][2]["mode"], "managed");
         assert_eq!(

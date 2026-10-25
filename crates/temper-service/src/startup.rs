@@ -669,7 +669,10 @@ fn checked_start(
     }
     let mut resolved = resolved.expect("resolved files checked");
     if let Some(setup) = setup {
-        application::git_programs(&mut resolved.forges, &setup.setup);
+        application::git_programs(&mut resolved.forges, &setup.setup, &mut problems);
+    }
+    if !problems.is_empty() {
+        return Err(problems);
     }
     let own = &parsed.application.limits;
     checks::turns(Some(&parsed.engine.limits), &parsed.workers, own, agent, &mut problems);

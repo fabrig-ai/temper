@@ -45,8 +45,7 @@ fn assert_ready(seen: &[Ended]) {
 pub(super) fn run() {
     let walk = Walk::new("walk-elsewhere-key");
     let admin = walk.sandbox().join("data/forgejo-admin.token");
-    // The remaining failure is the worker cloning the fake forge with real git.
-    let _seen = walk.run(vec![
+    let seen = walk.run(vec![
         Act::Now(Call::new(&["accounts", "--json"])),
         Act::Now(Call::new(&["forges", "--json"])),
         Act::Now(Call::new(&[
@@ -68,10 +67,11 @@ pub(super) fn run() {
             assert_ready(seen);
             Call::new(&["chat", "--project", &adopted_project(seen), "--key", "walk-chat", "Say hello", "--json"])
         })),
-        Act::After(Box::new(|seen| Call::new(&["task", &chat_task(seen), "--json"]))),
         Act::After(Box::new(|seen| {
             Call::new(&["wait", "task", &chat_task(seen), "--until", "replied", "--timeout", "10s", "--json"])
         })),
+        Act::After(Box::new(|seen| Call::new(&["chat", &chat_task(seen), "--json"]))),
     ]);
+    assert_reply(&seen);
     walk.scratch.remove();
 }

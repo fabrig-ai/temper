@@ -1376,7 +1376,18 @@ The preparation prints its effective paths, supervised peers and dummy
 facts' paths. For a peer not yet supervised it prints the manual command;
 it never reports that peer as running.
 GitHub has one fixed person and repository. Its App id and matching fixture
-key and the dummy model key are the values a walk uses. The elsewhere
+key and the dummy model key are the values a walk uses. Preparation writes
+App 1's matching PEM to D'/github-app.pem, mode 0600, retains it on reuse,
+and appends `box: GitHub own App id 1, key file FILE` to its printed facts.
+The generated GitHub document sets the seeded App's optional `setup_url`
+to `http://CLIENTS/forges/2/github/setup`. An already installed App still
+offers Install while its installation is stray; visiting GitHub and its
+setup callback accepts that installation. Manifest conversion creates a
+new App with its own installations and tokens, without inheriting the seed
+App's installation or minted tokens. Forges 2 and 4 select the generated
+fake git adapter through `application.forges[].git_program`; owned Forgejo
+keeps real git (configuration.md, section 3).
+The elsewhere
 Forgejo's admin token is kept in its private file: instructions name only
 the path, and no log, report or record contains its contents. The fixed signed-in model bearer uses the first added
 credential stream with the same seed as the issuer, while the primary
@@ -1498,7 +1509,7 @@ not a reason to bind another port or regenerate the retained document.
   | `owned.listen` | an address, jig's format | a socket address on loopback; unique among the deployment's listeners and owned and fake forges |
   | `owned.person` | `{"login", "email"}` | a Forgejo login other than the bot's and `temper-admin` |
   | `fake.listen` | an address, jig's format | as `owned.listen` |
-  | `fake.git` | a data path | the demo's git, a link to `temper fake git` (8.2, 8.4): the program the engine names in each of the forge's repositories' records, for the worker to spawn in place of `workers[].git` (channel.md, section 4) |
+  | `fake.git` | a data path | the demo's git, a link to `temper fake git` (8.2, 8.4), mutually exclusive with the forge's `git_program` (configuration.md, section 3): the program the engine names in each of the forge's repositories' records, for the worker to spawn in place of `workers[].git` (channel.md, section 4) |
   | `fake.owner` | a Forgejo login | other than the bot's and `temper-admin`: the user who owns the fake's repositories |
   | `fake.repositories` | a list of `{"name", "landing"}` | at least 1, at most 8, each `name` a Forgejo repository name, unique ignoring ASCII case as Forgejo's are, and `landing` a branch name; their contents are `temper-fake`'s (8.4) |
 
