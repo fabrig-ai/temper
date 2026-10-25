@@ -110,7 +110,10 @@ summed test execution by world and the new process stories against their
 two-second aim, excluding compilation, queue and gate elapsed time.
 
 The fake-box welcome stories share `fake_backends/walk.rs`'s `Walk` and
-explicit `add_key()`, `Visit`, `ProgramLogin` and `Mark` acts. The shared
+explicit `add_key()`, `Visit`, `ProgramLogin` and `Mark` acts. The ctl
+referee stops new work ten seconds before the total allowance, then
+reserves those ten seconds for termination, pipe drain and reaping;
+forced cleanup uses the total cutoff, not the work cutoff. The shared
 key act copies the box's key only when the Model step asks for it. All
 key-backed paths use one committed-turn assertion and one forge-row
 lookup. The box harness supplies system git discovery for fake boxes,
@@ -127,6 +130,8 @@ wait and exactly one complete committed turn containing the fake model's
 assistant reply. Stories live beside the harness under `walk/`. The browser GitHub chain
 prints the fake's recorded request heads when its navigation fails, so the
 callback and repository-picker failure can be traced from the same run.
+The GitHub browser stories require a clean console: the fake serves its
+optional favicon without API credentials, so no resource error is exempted.
 
 ### 2.1 System worlds
 

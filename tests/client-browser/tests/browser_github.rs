@@ -10,11 +10,6 @@ fn the_manifest_page_posts_itself_to_the_configured_github_web() {
     let mut setup = tier.setup();
     // Hold the service's sign-in link for ctl; the tab first opens ctl's manifest link.
     setup.printed.sent = Sent::Command;
-    // Chromium also asks the fake for /favicon.ico, which its API rejects without
-    // a version header. Allow that resource error; CSP violations remain unexpected.
-    setup
-        .expected
-        .push(b"Failed to load resource: the server responded with a status of 400 (Bad Request)".as_slice().into());
     let mut steps = tier.github_connect();
     steps.push(Step::Person(PersonStep::See {
         find: Find::exactly_named(Role::Link, b"Create GitHub App"),
@@ -66,9 +61,6 @@ fn back_from_github_shows_the_manifest_without_posting_again_until_continue() {
     let (tier, mut github) = Tier::github("github-manifest-history");
     let mut setup = tier.setup();
     setup.printed.sent = Sent::Command;
-    setup
-        .expected
-        .push(b"Failed to load resource: the server responded with a status of 400 (Bad Request)".as_slice().into());
     let see =
         |role, name: &[u8]| Step::Person(PersonStep::See { find: Find::exactly_named(role, name), within: WITHIN });
     let mut steps = tier.github_connect();
@@ -103,11 +95,7 @@ fn connect_github_creates_installs_and_returns_to_the_welcome() {
     // Only request heads are needed; keep connection lifecycle and domain calls out of the record.
     let mut github =
         github.keeping(skein_fake_peers::forge::Kept { heads: true, ..skein_fake_peers::forge::Kept::NONE });
-    let mut setup = tier.setup();
-    // The fake rejects Chromium's unversioned favicon request, as in the manifest stories.
-    setup
-        .expected
-        .push(b"Failed to load resource: the server responded with a status of 400 (Bad Request)".as_slice().into());
+    let setup = tier.setup();
     let see =
         |role, name: &[u8]| Step::Person(PersonStep::See { find: Find::exactly_named(role, name), within: WITHIN });
     let press = |role, name: &[u8]| Step::Person(PersonStep::Press { find: Find::exactly_named(role, name) });

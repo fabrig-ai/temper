@@ -398,6 +398,7 @@ struct CtlJudge<'a, F, T> {
     cleanup: bool,
     settled: bool,
     deadline: Time,
+    cleanup_deadline: Time,
 }
 enum Visit {
     AwaitingAddress,
@@ -503,7 +504,7 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
             self.stopping = true;
         }
         let left = binary.tree_status().live_at_leader_exit.as_ref().is_some_and(|pids| !pids.is_empty());
-        if !self.cleanup && (left || expired) && !binary.is_empty() {
+        if !self.cleanup && (left || now >= self.cleanup_deadline) && !binary.is_empty() {
             binary.signal_tree(Signal::Kill);
             self.cleanup = true;
         }
@@ -515,7 +516,7 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         }
     }
     fn next_deadline(&self) -> Option<Time> {
-        (!self.stopping).then_some(self.deadline)
+        (!self.settled).then_some(if self.stopping { self.cleanup_deadline } else { self.deadline })
     }
     fn overdue(&self, _now: Time) -> Option<String> {
         None
@@ -685,6 +686,7 @@ fn run_ctl_peers<T>(
         deadline: clock.now().now.saturating_add(Duration::from_nanos(
             deadline.as_nanos().saturating_sub(Duration::from_secs(10).as_nanos()),
         )),
+        cleanup_deadline: clock.now().now.saturating_add(deadline),
     });
     world.spawn_with_fds(binary.descriptors(), || Process::Binary(Box::new(binary)));
     world.spawn_with_fds(fds, || {
