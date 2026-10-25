@@ -687,4 +687,6 @@ program login. Its terminal step runs the box's printed command through
 cannot keep a chat open through a program yet, and checks the program
 source and its connected worker both usable. Both experiments check the
 whole hand trouble log and expose each welcome step as a separate action
-and `steps` phase for live captures (`draft/qa-web.md`, 3.3).
+and `steps` phase for live captures (`draft/qa-web.md`, 3.3). A failed phase
+latches the walk closed in its ground directory: although the runner
+invokes later actions, they make no further browser calls.

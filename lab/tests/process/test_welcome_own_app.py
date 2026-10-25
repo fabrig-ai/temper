@@ -67,3 +67,21 @@ sys.exit(1 if args[:3] == %r else 0)
         result, _, args, _ = self.run_phase('model', ['press', 'button', 'Use your Claude subscription'])
         self.assertEqual(result.returncode, 1)
         self.assertIsNone(args)
+
+    def test_failed_phase_latches_both_walks_before_later_browser_calls(self):
+        for steps in [STEPS, STEPS.parent.parent / 'welcome-chatgpt/steps']:
+            with self.subTest(steps=steps), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                browse = root / 'browse'
+                log = root / 'calls'
+                browse.write_text('#!/bin/sh\necho called >> ' + shlex.quote(str(log)) + '\nexit 1\n')
+                browse.chmod(0o700)
+                argv = ['/bin/sh', str(steps), 'welcome', str(browse), '127.0.0.1:9100', str(root)]
+                first = subprocess.run(argv, capture_output=True, env={})
+                self.assertEqual(first.returncode, 1)
+                self.assertTrue((root / 'stopped').exists())
+                before = log.read_bytes()
+                argv[2] = 'model'
+                later = subprocess.run(argv, capture_output=True, env={})
+                self.assertEqual(later.returncode, 1)
+                self.assertEqual(log.read_bytes(), before)

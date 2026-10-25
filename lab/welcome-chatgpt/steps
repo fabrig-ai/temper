@@ -9,6 +9,13 @@ phase=$1
 browse=$2
 address=$3
 ground=$4
+# The runner invokes phases separately, even after a failed seed action.
+# A failed phase therefore latches the walk closed before any later browser call.
+if [ -e "$ground/stopped" ]; then
+    echo 'steps: an earlier welcome phase failed' >&2
+    exit 1
+fi
+trap 'status=$?; if [ "$status" -ne 0 ]; then : > "$ground/stopped"; fi' 0
 call() {
     printf '+ browse'
     printf ' %s' "$@"
