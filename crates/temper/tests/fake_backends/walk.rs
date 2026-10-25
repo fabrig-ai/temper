@@ -108,7 +108,7 @@ fn forge(call: &Ended) -> Value {
 fn forgejo_elsewhere_and_a_key_reach_a_first_chat_on_the_fake_box() {
     let walk = Walk::new("walk-elsewhere-key");
     let admin = walk.sandbox().join("data/forgejo-admin.token");
-    // Reduced to the first failing welcome act: Connect's adoption returns no_access.
+    // Reduced to Connect: a new first repository still returns no_access at adoption.
     let _seen = walk.run(vec![
         Act::Now(Call::new(&["accounts", "--json"])),
         Act::Now(Call::new(&["forges", "--json"])),
@@ -125,7 +125,7 @@ fn forgejo_elsewhere_and_a_key_reach_a_first_chat_on_the_fake_box() {
                 "forgejo-admin",
                 path(&admin),
                 "--first",
-                "fake-person/widget",
+                "fake-person/hello",
                 "--key",
                 "walk-forge",
                 "--json",
