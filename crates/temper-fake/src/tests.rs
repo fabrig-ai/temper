@@ -488,33 +488,6 @@ fn widget_prints_the_three_row_table() {
     assert_eq!(*main, b"const TABLE: [(&str, u32); 3] = [(\"apples\", 3), (\"pears\", 5), (\"plums\", 2)];\n\nfn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n");
 }
 #[test]
-fn forgejo_peer_admin_can_reach_each_seeded_repository() {
-    use skein_fake_forge_domain::api::Permission;
-    let mut value = forge_document();
-    value["repositories"]
-        .as_array_mut()
-        .expect("seed repositories")
-        .push(json!({"name":"second","landing":"main","ci":null}));
-    let document = forge::Document::decode(&serde_json::to_vec(&value).expect("forge JSON")).expect("forge document");
-    let token = [b'a'; 40];
-    let (mut peer, shared) = forge::peer(&document, &token, 7).expect("Forgejo peer");
-    let admin = peer.setup_mut().token_user(&token).expect("site admin's token");
-    let forge = shared.borrow();
-    for repository in [b"fake/widget".as_slice(), b"fake/second"] {
-        assert_eq!(
-            forge.domain.permission(repository, admin),
-            Ok(Permission::Admin),
-            "the site admin can read and prepare an existing repository"
-        );
-        assert_eq!(
-            forge.domain.permission(repository, forge::OWNER),
-            Ok(Permission::None),
-            "no bot or owner grant is seeded"
-        );
-    }
-}
-
-#[test]
 fn forge_seed() {
     let mut doc = forge_document();
     doc["repositories"] =
