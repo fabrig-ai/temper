@@ -408,28 +408,28 @@ fn print(dirs: &Directories, peers: &Peers, binary: &Path) {
     eprintln!("box: effective configuration {}", crate::path(&dirs.config).display());
     eprintln!("box: effective data {}", crate::path(&dirs.data).display());
     eprintln!("box: effective cache {}", crate::path(&dirs.cache).display());
-    for (name, kind, document) in [
-        ("fake github", "forge", "github.json"),
-        ("fake issuer", "oauth", "oauth.json"),
-        ("fake model", "llm", "llm.json"),
-        ("fake forgejo", "forge", "forgejo.json"),
-    ] {
-        let document = crate::path(&dirs.config).join(document);
-        let quoted = format!("'{}'", document.to_string_lossy().replace('\'', "'\\''"));
-        eprintln!("box: supervised {name}: temper fake {kind} --document {quoted} --seed {}", backends::SEED);
+    for (name, address) in
+        [("github", peers.github), ("issuer", peers.oauth), ("model", peers.llm), ("forgejo", peers.forgejo)]
+    {
+        eprintln!("box: fake {name} http://{address}");
     }
+    // Retained peer documents may select another key file under effective data.
+    let model = temper_fake::llm::Document::decode(
+        &peer_document(dirs, "llm.json", temper_fake::DOCUMENT_BYTES).expect("validated model document"),
+    )
+    .expect("validated model document");
+    eprintln!("box: model key {}", crate::path(model.key()).display());
     eprintln!(
         "box: Forgejo elsewhere admin token file {}",
         crate::path(&dirs.data).join("forgejo-admin.token").display()
     );
-    eprintln!("box: Forgejo elsewhere origin http://{}", peers.forgejo);
     let mut command = format!("'{}' program-login", binary.display().to_string().replace('\'', "'\\''"));
     for (flag, path) in [("config", &dirs.config), ("data", &dirs.data), ("cache", &dirs.cache)] {
         write!(command, " --{flag} '{}'", crate::path(path).display().to_string().replace('\'', "'\\''"))
             .expect("string");
     }
     command.push_str(" source");
-    eprintln!("box: {command}");
+    eprintln!("box: program login: {command}");
 }
 fn sibling(binary: &Path) -> Result<PathBuf, String> {
     if !binary.is_absolute() {

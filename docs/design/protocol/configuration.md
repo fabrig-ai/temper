@@ -1327,6 +1327,30 @@ login is imported.
   neither builds a bundle nor accesses a remote service.
 
 
+Before starting its supervised processes, the box prints these fixed
+prefixes on stderr, for people and lab readiness captures. Addresses are
+loopback IPs with ports; each origin belongs to a peer the box runs, so
+there are no per-peer commands to run:
+
+```text
+box: effective configuration C'
+box: effective data D'
+box: effective cache K
+box: fake github http://ADDR
+box: fake issuer http://ADDR
+box: fake model http://ADDR
+box: fake forgejo http://ADDR
+box: model key FILE
+box: Forgejo elsewhere admin token file FILE
+box: program login: COMMAND
+```
+
+The model key line names the effective `llm.json`'s `key` file, which a
+person pastes on the Model step's key way. Key and token lines print
+paths only. The program-login command names the effective directories
+and the configured source, as for the ordinary program way.
+
+
 The effective configuration keeps forge 1 as the playground, forge 2 as
 GitHub and forge 3 as the owned Forgejo. Forge 4 is the ordinary managed
 Forgejo elsewhere: its API and git roots name a separate loopback
