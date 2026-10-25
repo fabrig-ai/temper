@@ -186,15 +186,15 @@ box: fake model http://ADDR
 box: fake forgejo http://ADDR
 box: model key FILE
 box: Forgejo elsewhere admin token file FILE
-box: GitHub own App id 1, key file FILE
 box: program login: TEMPER program-login --config … --data … --cache … NAME (the name the Model step shows)
+box: GitHub own App id 1, key file FILE
 ```
 
 The effective directories are the running box's, including for commands
 in another terminal. The four addresses identify the local services;
 the `fake forgejo` address identifies the **Forgejo at HOST** card.
-The three files supply the values to paste below. The last line is the
-program's login command, already pointing at the sandbox.
+The three files supply the values to paste below. The program-login
+line gives the command already pointing at the sandbox.
 
 Open the box's printed sign-in link in your browser and choose **Set up
 temper**. On **Forge**, take one path:
@@ -216,7 +216,8 @@ On **Model**, take one path:
 - **Continue with ChatGPT**: the fake signs you in and returns you to
   temper without a real account.
 - **Use an API key**: paste the model key file's text.
-- **Use your Claude subscription**: keep or edit **Name**, submit it,
+- **Use your Claude subscription** (the local Claude Code adapter): keep
+  or edit **Name**, submit it,
   then run the printed program-login command in another terminal.
   Replace `NAME` with that name and omit the parenthesized reminder;
   keep the printed effective directory flags.

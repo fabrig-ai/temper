@@ -715,8 +715,8 @@ the box's named admin-token file, then signs in with ChatGPT, opens the
 project and checks the first committed reply before and after reload.
 `lab/welcome-own-app` pastes the box's named App 1 key, installs on the
 fake GitHub, chooses `fake-person/widget`, and declares the Model step's
-program login (the fake box offers this on provider 1, so the button says
-Use your ChatGPT subscription, backed by the Claude Code adapter). Its
+program login on the fake box’s Anthropic provider: “Use your Claude
+subscription”, backed by the Claude Code adapter. Its
 terminal step runs the box's printed command through
 `--cache DIR` with the page's name appended before submitting the program
 account. It ends at Ready, since jig

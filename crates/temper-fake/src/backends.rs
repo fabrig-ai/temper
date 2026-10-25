@@ -68,12 +68,12 @@ pub struct Documents {
     pub forgejo: Box<[u8]>,
 }
 const OUTPUT: Limits = Limits { depth: 32, length: crate::DOCUMENT_BYTES };
-// Init-shaped temper: forge roots/program (5), sign-in/program source (7),
+// Init-shaped temper: forge roots/program (5), sign-in (6),
 // model endpoint (2), program route (3), two charter alternatives (2), bundle
 // (1), worker argv/configuration (2), managed forge/limits (8). Each of the
 // forge, sign-in and endpoint may also remove all four stale TLS members.
 // The agent document needs only its endpoint (6), route (1) and adapter (1).
-const EDITS: u32 = 5 + 7 + 2 + 3 + 2 + 1 + 2 + 8 + 3 * 4;
+const EDITS: u32 = 5 + 6 + 2 + 3 + 2 + 1 + 2 + 8 + 3 * 4;
 #[derive(Debug)]
 struct Edit {
     first: u32,
@@ -317,7 +317,7 @@ fn program_endpoint(socket: &[u8], agent: bool) -> Result<Box<[u8]>, Refusal> {
         bytes::copy_of(br#""connect_ms":10000,"handshake_ms":10000"#)
     };
     Ok(read::joined(&[
-        br#"{"name":"fake-claude","number":2,"dialect":3,"provider":"openai","program":"claude_code","address":"#,
+        br#"{"name":"fake-claude","number":2,"dialect":3,"provider":"anthropic","program":"claude_code","address":"#,
         &if agent { text(socket)? } else { address(socket)? },
         br#", "transport":"plaintext","headers":[],"#,
         &tail,
@@ -330,8 +330,18 @@ fn program_route(d: &Document, llm: u32, socket: &[u8], edits: &mut Edits, p: &P
     append(d, endpoints, &program_endpoint(socket, false)?, edits)?;
     append(d, member(d, llm, b"models", p)?, &program_model(false)?, edits)?;
     let providers = member(d, llm, b"providers", p)?;
-    let provider = selected(d, providers, b"number", b"1", true, &p.member(b"providers"))?;
-    append(d, member(d, provider, b"models", p)?, &text(PROGRAM_MODEL.as_bytes())?, edits)
+    // Init ships OpenAI and demo, leaving provider 2 for Claude's program way.
+    // Keep the public provider/model/source declaration in the ordinary schema.
+    append(
+        d,
+        providers,
+        &read::joined(&[
+            br#"{"name":"anthropic","number":2,"signed_in_plan":true,"models":["#,
+            &text(PROGRAM_MODEL.as_bytes())?,
+            br#"],"sources":{"programs":["claude_code"]}}"#,
+        ]),
+        edits,
+    )
 }
 
 fn program_charters(d: &Document, engine: u32, edits: &mut Edits) -> Result<(), Refusal> {
@@ -536,7 +546,6 @@ fn sign_in(d: &Document, llm_at: u32, oauth: &[u8], edits: &mut Edits, ep: &Path
     let sp = pp.member(b"sources").member(b"sign_in");
     let sign_in = member(d, sources, b"sign_in", &pp.member(b"sources"))?;
     registration(d, sign_in, &sp)?;
-    object_member(d, sources, b"programs", br#"["claude_code"]"#, edits)?;
     let origin = read::joined(&[b"http://", oauth]);
     for (name, suffix) in [
         (b"issuer".as_slice(), b"".as_slice()),

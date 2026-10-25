@@ -18,6 +18,7 @@ fn program_account(call: &super::Ended) -> u64 {
                 .any(|source| source["name"] == NAME && source["kind"] == "program")
         })
         .expect("declared program account");
+    assert_eq!(account["provider"], 2, "Claude subscription belongs to Anthropic");
     account["number"].as_u64().expect("account number")
 }
 
@@ -54,7 +55,7 @@ fn a_program_and_forgejo_here_reach_ready_on_the_fake_box() {
             Act::Mark("owned forge adopted"),
             Act::After(Box::new(|seen| {
                 here_key::assert_adopted(seen.last().expect("setup adoption"));
-                Call::new(&["declare", "1", "claude_code", NAME, "--key", "walk-program"])
+                Call::new(&["declare", "2", "claude_code", NAME, "--key", "walk-program"])
             })),
             Act::Now(Call::new(&["accounts", "--json"])),
             Act::After(Box::new(|seen| {

@@ -21,7 +21,7 @@ from pathlib import Path
 import sys
 args = sys.argv[2:]
 value = sys.stdin.read() if args[0] == 'type' else None
-if args[:3] == ['press', 'button', 'Use your ChatGPT subscription']:
+if args[:3] == ['press', 'button', 'Use your Claude subscription']:
     value = (Path(%r).parent / 'login-args').exists()
 with Path(%r).open('a') as output:
     output.write(json.dumps([args, value]) + '\\n')
@@ -64,7 +64,7 @@ sys.exit(1 if args[:3] == %r else 0)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(args, ['program-login', '--config', '/c', '--data', '/d', '--cache', '/cache with space', 'claude-person'])
         self.assertEqual(calls[-1][0][:3], ['wait', 'heading', 'fake-person/widget is ready'])
-        self.assertEqual([value for args, value in calls if args[:3] == ['press', 'button', 'Use your ChatGPT subscription']], [True])
+        self.assertEqual([value for args, value in calls if args[:3] == ['press', 'button', 'Use your Claude subscription']], [True])
 
     def test_missing_program_name_does_not_run_terminal_login(self):
         result, _, args, _ = self.run_phase('model', ['wait', 'text field', 'Name'])

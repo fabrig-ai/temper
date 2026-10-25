@@ -779,7 +779,9 @@ keeps (`../protocol/configuration.md`, section 2).
     shows `ConnectForge`'s Connecting or Ready in the step, its `back`
     the welcome's Forge step, `/welcome?at=forge&forge=N`, so that the
     tab GitHub sends back finds its choice there. Once a repository is
-    adopted, the welcome moves on to Model. Once "Set up a Forgejo here"
+    adopted, the welcome moves on to Model, including a pending first
+    adoption from “Connect as its admin”. The standalone `ConnectForge`
+    stays on its Ready card. Once "Set up a Forgejo here"
     is accepted, the welcome moves on to Model, the set up running on.
     *Model* is `ConnectModel`'s Choose and Details, its state and acts
     (above), its way in the welcome's address (`browser.md`, 2.3).

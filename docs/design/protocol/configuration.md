@@ -1320,7 +1320,7 @@ login is imported.
   pure transformation is temper-fake's, with bounded bytes and explicit
   paths/sockets as inputs; files and listeners belong to temper's shell.
   Its rewrite table holds the init-shaped git/program edits plus all four
-  removable TLS members on each of forge, sign-in and model endpoint: 42
+  removable TLS members on each of forge, sign-in and model endpoint: 41
   slots. The agent document needs eight of the same bounded slots.
 - **Browser:** --bundle DIR, or source application.clients.bundle,
   names a provisioned loopback-navigation bundle (../client/browser.md,
@@ -1386,7 +1386,12 @@ private adapter directory D'/programs. Preparation supplies that path as
 init's program fact; source import checks an existing adapter's bounded
 absolute shape without looking for Claude on PATH. The pure rewrite writes
 the exact sibling and private directory even when the source has no adapter,
-and the ordinary provider configuration offers that adapter. No startup
+and an ordinary Anthropic provider (number 2, `signed_in_plan: true`)
+offers that adapter and the `fake-claude` model. Init ships no Claude
+provider, so the rewrite adds it with only the program source; both
+program endpoints name `anthropic`, while OpenAI keeps its key and
+ChatGPT sign-in sources. The view therefore shows “Use your Claude
+subscription” and “Declared your Claude subscription”. No startup
 path discovers or falls back to a real `claude` from PATH.
 
 Reuse requires agent.json/programs/claude_code/path to equal that sibling.

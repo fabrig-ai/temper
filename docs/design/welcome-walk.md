@@ -107,9 +107,16 @@ step is its own phase of the walk, so the look's live scenes
 | a manifest's new App inherited the seeded App's installation, so setup answered 410 | skein's fake GitHub kept the old App's installations and tokens when a conversion replaced the App | skein's fake: a conversion replaces the App whole |
 | the own App's installation stayed stray | a seeded installation isn't an accepted one, so the own App takes GitHub's install hop, and the fake's install page refused an App with no setup URL | skein's fake: a seeded App takes a setup URL; the box sets it, and leaves the App's private key in a file it names |
 | a program's account was usable but had no model | the box offered `claude_code` with no model endpoint behind it | the box's documents route model `fake-claude` to the program |
+| after "Connect as its admin" made and adopted the first repository, the welcome stayed on Forge | its advance knew only owned set-up's answer; the client README moves on to Model once any first repository is adopted | the advance follows the adoption, whatever the forge |
+| the own App's pasted key was refused as malformed | hand typed the key's line endings into the one-line field as spaces, past the parser's 1196-byte bound; a person's paste drops them | hand drops line endings typed into a one-line field |
+| a key walk never saw the welcome's Ready checklist | as designed: only a sign-in returns to it; an account made on the Model step shows `ConnectModel`'s Ready, whose "Start a chat" is the way on | none: the walks follow it |
 
-As of 10-25 21:30Z, the fixes past the GitHub chain are on their
-branches, landing with the walk's first set.
+On main since 10-25 22:33Z (set 1: skein `ab7b536c`, temper `3064e597`):
+the fake box's wiring, every process story, `lab/welcome-chatgpt`, and
+every fix above but these, which land with set 2: the welcome's advance
+to Model after any first adoption (a Forgejo elsewhere's stayed on
+Forge), and hand's typing into a one-line field, which turned a pasted
+key's line endings into spaces where a person's paste drops them.
 
 Open, for their owners:
 - **A program can't take a first chat.** jig refuses a program model for

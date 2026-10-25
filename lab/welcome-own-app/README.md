@@ -5,11 +5,11 @@ The Welcome phase opens `/welcome` and presses Set up temper. Forge
 chooses Use an App of your own ›, types App id 1 and the bytes from the
 key file the box names, connects, installs on the fake GitHub and chooses
 `fake-person/widget`. Model chooses the program way, labelled Use your
-ChatGPT subscription on the fake box’s provider 1 and backed by the Claude
-Code adapter,
+Claude subscription on the fake box’s Anthropic provider, backed by the
+Claude Code adapter,
 reads the name shown and runs the box's printed program-login command
 through `--cache DIR`, with that name appended, then submits the program
-account with Use your ChatGPT subscription. The page then observes
+account with Use your Claude subscription. The page then observes
 `fake-person/widget is ready`. Ready captures that end separately.
 
 This walk ends at Ready because jig cannot keep a chat open through a program yet (`jig-domain-core/src/run_choice.rs`).
