@@ -123,6 +123,9 @@ fn ending(end: Option<&End>, output_failed: bool, _directories: &Directories, st
                 let deployment = crate::path(store);
                 format!("temper serve: {}\n", why.words().join(&deployment.display().to_string()))
             }
+            Stop::FrameTooLarge { number, task, bytes, limit } => format!(
+                "temper serve: commit {number} refused: task {task}'s transcript frame, {bytes} bytes, past the store's page of {limit} bytes\n"
+            ),
             Stop::CommitFailed { number } => format!("temper serve: commit {number} failed\n"),
             Stop::Hooks => "temper serve: webhooks listener failed\n".into(),
             Stop::Listener => "temper serve: client listener failed\n".into(),
@@ -344,6 +347,12 @@ fn other_endings_keep_their_exit_behavior() {
     for (end, output_failed, expected, code) in [
         (Some(End::Stopped(Stop::Start(problems))), false, "temper serve: deployment: unknown reference\n", 1),
         (Some(End::Stopped(Stop::CommitFailed { number: 7 })), false, "temper serve: commit 7 failed\n", 1),
+        (
+            Some(End::Stopped(Stop::FrameTooLarge { number: 7, task: 11, bytes: 79, limit: 78 })),
+            false,
+            "temper serve: commit 7 refused: task 11's transcript frame, 79 bytes, past the store's page of 78 bytes\n",
+            1,
+        ),
         (Some(End::Stopped(Stop::Hooks)), false, "temper serve: webhooks listener failed\n", 1),
         (Some(End::Stopped(Stop::Listener)), false, "temper serve: client listener failed\n", 1),
         (Some(End::Drained), false, "", 0),

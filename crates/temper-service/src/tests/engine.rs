@@ -131,6 +131,25 @@ fn a_failed_commit_releases_nothing_after_it() {
 }
 
 #[test]
+fn a_frame_refusal_stops_with_its_details_and_releases_no_later_output() {
+    let mut service = fixtures::ready();
+    let engine = service.engine.as_mut().expect("engine");
+    let number = engine.domain.deployment().commits.checked_add(1).unwrap();
+    root::try_step(&mut engine.domain, &engine.env, fixtures::period(2)).unwrap();
+    root::try_step(&mut engine.domain, &engine.env, fixtures::period(3)).unwrap();
+    engine.store.above.push(jig_protocol_store::Event::FrameTooLarge { number, task: 11, bytes: 79, limit: 78 });
+    engine.store.above.push(jig_protocol_store::Event::Committed { number: number.checked_add(1).unwrap(), fill: 0 });
+    fixtures::turn(&mut service);
+    assert_eq!(
+        service.end(),
+        Some(&crate::End::Stopped(crate::Stop::FrameTooLarge { number, task: 11, bytes: 79, limit: 78 }))
+    );
+    let engine = service.engine.as_ref().expect("engine");
+    assert!(engine.requests.is_empty(), "later outputs stayed behind the existing Uncommitted barrier");
+    assert!(engine.store.above.is_empty());
+}
+
+#[test]
 fn an_engine_that_cannot_fit_its_memory_is_refused_before_start() {
     let mut settings = fixtures::engine();
     settings.jig.memory = 1;

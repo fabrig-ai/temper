@@ -756,6 +756,7 @@ impl Accounts {
             | store::Event::OpenRefused { .. }
             | store::Event::Committed { .. }
             | store::Event::Failed { .. }
+            | store::Event::FrameTooLarge { .. }
             | store::Event::Restored { .. }
             | store::Event::Loaded { .. }
             | store::Event::Read { .. }
@@ -995,6 +996,7 @@ impl Accounts {
                 | store::Event::OpenRefused { .. }
                 | store::Event::Committed { .. }
                 | store::Event::Failed { .. }
+                | store::Event::FrameTooLarge { .. }
                 | store::Event::Restored { .. }
                 | store::Event::Loaded { .. }
                 | store::Event::Read { .. }

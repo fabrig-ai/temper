@@ -74,6 +74,10 @@ pub(crate) fn advance(engine: &mut Engine) {
         }
     }
 }
+pub(crate) fn frame_too_large(engine: &mut Engine, number: u64, task: u64, bytes: u32, limit: u32) {
+    engine.step(root::Event::Store(root::StoreInput::Uncommitted { number }));
+    engine.end = Some(End::Stopped(Stop::FrameTooLarge { number, task, bytes, limit }));
+}
 pub(crate) fn failed(engine: &mut Engine, number: u64) {
     engine.step(root::Event::Store(root::StoreInput::Uncommitted { number }));
     engine.end = Some(End::Stopped(Stop::CommitFailed { number }));

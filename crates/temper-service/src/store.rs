@@ -87,19 +87,9 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
     })
 }
 
-// Private bridge until jig owns canonical full-frame sizing. Use the current
-// codec's other bounds unchanged; only the admitted ordinary turn bound varies.
-// protocol/store.md, 4; jig's protocol/store.md, 8.1 and 8.6.
+// protocol/store.md, 4; jig owns current full-frame sizing.
 fn page_bytes(core: &jig_domain_core::Limits, transcript: u32, key: u32, value: u32) -> Option<u32> {
-    let mut codec = protocol::codec::limits(core)?.core;
-    if transcript > codec.turn_record_transcript {
-        return None;
-    }
-    codec.turn_record_transcript = transcript;
-    let body = protocol::core_v6::TurnRecord::worst_case_bytes(&codec)?;
-    // Leading length, CRC-32C and trailing length, each four bytes.
-    let frame = u32::try_from(body).ok()?.checked_add(12)?;
-    Some(key.checked_add(value)?.max(frame))
+    Some(key.checked_add(value)?.max(protocol::sizes::frame(core, transcript)?))
 }
 
 impl Store {
