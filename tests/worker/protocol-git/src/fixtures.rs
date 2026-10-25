@@ -151,6 +151,15 @@ pub fn operations() -> Vec<(&'static str, Scenario)> {
         ("merging commit", commit(true)),
         ("push", push(false)),
         ("leased push", push(true)),
+        ("standalone-ancestry", {
+            let mut query = scenario(
+                git::Op::IsAncestor { at: at(), ancestor: TWO, commit: SIX },
+                &["push-ancestor-yes"],
+                Expected::done(git::Done::IsAncestor { contains: true }),
+            );
+            query.identity = false;
+            query
+        }),
     ]
 }
 #[must_use]

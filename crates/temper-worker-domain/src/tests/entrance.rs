@@ -153,3 +153,25 @@ fn a_delivery_with_an_empty_title_is_refused() {
     let empty = fields(&[(b"title", b""), (b"body", b"b")]);
     assert!(crate::smith_delivery::fields(empty, 512).is_none());
 }
+
+#[test]
+fn landing_branch_is_bounded_and_translated_to_checkout() {
+    for length in [0, 32, 33] {
+        let mut h = Harness::new();
+        let mut workspace = items(&[b"app"]);
+        workspace.repositories[0].access = crate::wire::Access::Writable {
+            push: Box::from(&b"topic"[..]),
+            expected: Some([1; 32]),
+            landing: Some(skein_lib::bytes::zeroed(length)),
+        };
+        if length == 32 {
+            assert_eq!(crate::assignment::check(&workspace, None, &h.env.limits), Ok(()));
+            let spec = translate::spec(7, workspace);
+            assert_eq!(spec.repositories[0].landing.as_ref().unwrap().len(), length);
+            assert_eq!(spec.repositories[0].expected.unwrap().raw(), [1; 32]);
+        } else {
+            let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(workspace), save: None };
+            assert_eq!(&*h.step(assign), [refused(b"landing branch")]);
+        }
+    }
+}

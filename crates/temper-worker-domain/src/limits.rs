@@ -214,7 +214,7 @@ fn workspace_memory(limits: &Limits) -> Option<u64> {
     let staged = slots.checked_add(1)?;
     let item = u64::try_from(size_of::<wire::Repository>())
         .ok()?
-        .checked_add(name.checked_mul(4)?)?
+        .checked_add(name.checked_mul(5)?)?
         .checked_add(u64::from(checkout::PROGRAM_BYTES))?;
     let feedback = u64::try_from(size_of::<wire::SavedRepository>()).ok()?.checked_add(conflicts)?;
     // Each retained item has a u64 tag and one from-saved flag beside its feedback.

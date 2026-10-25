@@ -184,6 +184,7 @@ pub fn run(seed: u64, case: Case, facts: u32) -> Report {
             account: None,
             push: Some(b"topic".as_slice().into()),
             expected: Some(translate::commit(world.ours)),
+            landing: None,
         }]),
     };
     world.forge.moves();
@@ -242,4 +243,80 @@ pub fn run(seed: u64, case: Case, facts: u32) -> Report {
     assert!(matches!(world.finish(Event::Release { hold }, false), Request::Released { .. }));
     assert_eq!(world.domain.holds(), 0);
     Report { trace: world.trace, tree: world.expected, parents: (world.ours, world.base) }
+}
+
+/// A separate activation starts from the pushed topic, without editing it.
+/// Move is applied after preparation: an advance or an ancestor rewind.
+pub fn retry_existing_change(movement: Option<bool>, ambiguous: bool) {
+    let mut world = World::new(91, Case::Unchanged, 64);
+    let base = world.forge.advance(b"forge/temper", b"main", b"README.md", b"# app\n");
+    let spec = |retry| Spec {
+        key: b"retry".as_slice().into(),
+        repositories: Box::new([Repository {
+            git: None,
+            name: b"temper".as_slice().into(),
+            remote: b"forge/temper".as_slice().into(),
+            start: Start::Branch { branch: if retry { b"topic".as_slice().into() } else { b"main".as_slice().into() } },
+            identity: 0,
+            account: None,
+            push: Some(b"topic".as_slice().into()),
+            expected: None,
+            landing: if retry { Some(b"main".as_slice().into()) } else { None },
+        }]),
+    };
+    let Request::Prepared { prepared: Prepared::Ready { workspace, .. }, .. } =
+        world.finish(Event::Prepare { client: Token::new(1), spec: spec(false) }, false)
+    else {
+        panic!("first ready")
+    };
+    let path = translate::path(&temper_worker_domain_checkout::git::Place {
+        git: None,
+        workspace,
+        repository: b"temper".as_slice().into(),
+    });
+    world.disk.write(&[path.as_slice(), b"/README.md"].concat(), b"# app\nChanged by temper.\n");
+    let first = world.push(false, false);
+    let Landing::Landed { commit: head } = first[0] else { panic!("first landed") };
+    let first_hold = world.hold.take().expect("first held");
+    world.finish(Event::Release { hold: first_hold }, false);
+    assert!(matches!(
+        world.finish(Event::Prepare { client: Token::new(2), spec: spec(true) }, false),
+        Request::Prepared { prepared: Prepared::Ready { .. }, .. }
+    ));
+    assert_ne!(world.hold, Some(first_hold));
+    let fake = translate::fake(head);
+    assert_eq!(world.forge.parent(fake), Some(base));
+    assert_eq!(world.forge.merge_parent(fake), None);
+    assert_eq!(
+        world.forge.tree(fake).get(b"README.md".as_slice()).expect("preserved README"),
+        b"# app\nChanged by temper.\n"
+    );
+    let remote = match movement {
+        Some(true) => world.forge.advance(b"forge/temper", b"topic", b"peer", b"advanced\n"),
+        Some(false) => {
+            use skein_fake_forge_domain::api as raw;
+            world
+                .forge
+                .api(
+                    b"forge/temper",
+                    2,
+                    raw::Op::Write(raw::Write::DeleteBranch { branch: b"topic".as_slice().into() }),
+                )
+                .expect("peer deletes topic");
+            world.forge.create_branch(b"forge/temper", b"topic", base).expect("peer rewinds topic");
+            base
+        }
+        None => fake,
+    };
+    let retry = world.push(false, ambiguous);
+    assert_eq!(&*retry, if movement.is_some() { &[Landing::Moved][..] } else { &*first });
+    assert_eq!(world.forge.branch(b"forge/temper", b"topic"), Some(remote));
+    if movement.is_none() {
+        assert_eq!(world.forge.parent(remote), Some(base), "retry created no extra commit");
+        assert_eq!(world.forge.merge_parent(remote), None);
+        assert_eq!(&*world.push(true, false), &[Landing::Unchanged], "save still compares actual start");
+    }
+    let hold = world.hold.take().expect("second held");
+    world.finish(Event::Release { hold }, false);
+    assert_eq!(world.domain.holds(), 0);
 }

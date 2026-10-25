@@ -130,7 +130,9 @@ impl Component {
             | git::Op::Create { .. }
             | git::Op::Commit { .. }
             | git::Op::Push { .. } => true,
-            git::Op::Make { .. } | git::Op::CheckOut { .. } | git::Op::Merge { .. } => false,
+            git::Op::Make { .. } | git::Op::CheckOut { .. } | git::Op::IsAncestor { .. } | git::Op::Merge { .. } => {
+                false
+            }
         };
         if self.start != Start::Started
             || self.shutting_down
@@ -282,6 +284,7 @@ impl Component {
                     | git::Op::Fetch { .. }
                     | git::Op::Create { .. }
                     | git::Op::CheckOut { .. }
+                    | git::Op::IsAncestor { .. }
                     | git::Op::Merge { .. }
                     | git::Op::Commit { .. }
                     | git::Op::Push { .. } => unreachable!("Make sequence"),
@@ -297,6 +300,7 @@ impl Component {
                     | git::Op::Fetch { .. }
                     | git::Op::Create { .. }
                     | git::Op::CheckOut { .. }
+                    | git::Op::IsAncestor { .. }
                     | git::Op::Merge { .. }
                     | git::Op::Push { .. } => unreachable!("scan sequence"),
                 };

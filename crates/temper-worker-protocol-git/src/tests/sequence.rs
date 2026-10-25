@@ -62,3 +62,23 @@ fn standard_rows() {
         assert_eq!(sequence::after(op, &ran, code, stdout, b"", 0, &fixtures::checkout()), next, "{ran:?}: {code}");
     }
 }
+
+#[test]
+fn standalone_ancestry_exits_are_booleans_and_faults_keep_their_diagnostic() {
+    let op = git::Op::IsAncestor { at: fixtures::at(), ancestor: fixtures::PARENT, commit: fixtures::COMMIT };
+    let command = Command::IsAncestor { expected: fixtures::PARENT, commit: fixtures::COMMIT };
+    assert_eq!(sequence::first(&op), Next::Run(command.clone()));
+    for (code, done) in [
+        (0, git::Done::IsAncestor { contains: true }),
+        (1, git::Done::IsAncestor { contains: false }),
+        (
+            128,
+            git::Done::FailedWithOutput {
+                fault: git::Fault::Broken,
+                diagnostic: git::PushDiagnostic::new(b"bad object", 3),
+            },
+        ),
+    ] {
+        assert_eq!(sequence::after(&op, &command, code, b"", b"bad object", 3, &fixtures::checkout()), Next::End(done));
+    }
+}

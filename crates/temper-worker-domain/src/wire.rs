@@ -78,6 +78,7 @@ pub enum Access {
     Writable {
         push: Box<[u8]>,
         expected: Option<[u8; 32]>,
+        landing: Option<Box<[u8]>>,
     },
     ReadOnly,
 }

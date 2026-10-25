@@ -529,6 +529,7 @@ fn check_gate_landing(no_ci: bool, owner_gate: bool) {
         gate.sections
     );
     assert_eq!(gate.workspace.repositories[0].start, engine::ForgeStart::Branch(branch));
+    assert_eq!(gate.workspace.repositories[0].landing, None);
     let event = world.protocol.answer(
         Token::new(7),
         gate.task,
@@ -1589,6 +1590,7 @@ fn a_worker_frozen_past_its_grace_resumes_with_a_push_in_hand_and_lands_nothing_
         "resumed worker sees its pushed branch: {:?}",
         resumed.workspace.repositories[0].start
     );
+    assert_eq!(resumed.workspace.repositories[0].landing.as_deref(), Some(b"main".as_slice()));
     assert_eq!(world.fake.branch(b"org/repo", &branch), Some(pushed));
     let event = world.protocol.answer(
         Token::new(8),
@@ -1902,6 +1904,7 @@ fn a_chat_made_before_its_home_was_adopted_reads_the_home_and_says_why() {
         let [home] = assignment.workspace.repositories.as_ref() else { panic!("one home checkout") };
         assert_eq!(home.provider, forge_world::REPO);
         assert_eq!(home.push, None);
+        assert_eq!(home.landing, None);
         assert_eq!(task_brief(&assignment), task_brief(chat), "the person's task text is unchanged");
         assert!(task_brief(&assignment).windows(128).any(|words| words == [b'x'; 128]), "the whole task text, uncut");
         let home_sections: Vec<_> = assignment

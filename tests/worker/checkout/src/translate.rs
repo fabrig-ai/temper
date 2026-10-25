@@ -48,6 +48,7 @@ pub fn workspace(op: &Op) -> Token {
         | Op::Fetch { at, .. }
         | Op::Create { at, .. }
         | Op::CheckOut { at, .. }
+        | Op::IsAncestor { at, .. }
         | Op::Merge { at, .. }
         | Op::Commit { at, .. }
         | Op::Push { at, .. } => at.workspace,
@@ -63,7 +64,7 @@ pub fn identity(op: &Op) -> Option<u32> {
         | Op::Create { identity, .. }
         | Op::Commit { identity, .. }
         | Op::Push { identity, .. } => Some(*identity),
-        Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } => None,
+        Op::Make { .. } | Op::CheckOut { .. } | Op::IsAncestor { .. } | Op::Merge { .. } => None,
     }
 }
 
@@ -74,7 +75,7 @@ pub fn remote(op: &Op) -> Option<&[u8]> {
         Op::Clone { remote, .. } | Op::Fetch { remote, .. } | Op::Create { remote, .. } | Op::Push { remote, .. } => {
             Some(remote)
         }
-        Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } | Op::Commit { .. } => None,
+        Op::Make { .. } | Op::CheckOut { .. } | Op::IsAncestor { .. } | Op::Merge { .. } | Op::Commit { .. } => None,
     }
 }
 
@@ -145,6 +146,11 @@ pub fn perform(forge: &mut impl Remote, disk: &mut Checkout, op: Op) -> Done {
                 }
             }
         }
+        Op::IsAncestor { at, ancestor, commit } => {
+            assert_cloned(disk, &at);
+            Done::IsAncestor { contains: contains(forge, fake(ancestor), fake(commit)) }
+        }
+
         Op::Merge { at, theirs } => {
             assert_cloned(disk, &at);
             let merged = git::merge(forge, disk, &path(&at), fake(theirs)).expect("merge parent is locally fetched");
@@ -189,4 +195,20 @@ fn failed(fault: git::Fault) -> Done {
 fn assert_cloned(disk: &Checkout, at: &Place) {
     let git = [path(at).as_slice(), b"/.git"].concat();
     assert!(disk.exists(&git), "an operation in a repository runs in a clone: {:?}", String::from_utf8_lossy(&git));
+}
+
+/// Local git ancestry, independent of the checkout's delivery decision.
+fn contains(forge: &impl Remote, ancestor: u64, commit: u64) -> bool {
+    let mut pending = vec![commit];
+    let mut seen = std::collections::BTreeSet::new();
+    while let Some(head) = pending.pop() {
+        if head == ancestor {
+            return true;
+        }
+        if seen.insert(head) {
+            pending.extend(forge.parent(head));
+            pending.extend(forge.merge_parent(head));
+        }
+    }
+    false
 }

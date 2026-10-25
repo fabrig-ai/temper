@@ -38,6 +38,7 @@ pub enum Fact {
 /// their boundary receiver and are never copied into the facts queue.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Ending {
+    IsAncestor { contains: bool },
     Succeeded,
     Fetched { commit: Commit },
     Committed { commit: Commit },

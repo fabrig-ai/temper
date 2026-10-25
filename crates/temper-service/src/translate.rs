@@ -64,9 +64,10 @@ fn repository_item(
         remote.put(segment).expect("measured remote");
     }
     let access = match &repository.push {
-        Some(push) => {
-            v1::Access::Writable(v1::Writable::new(limits, v1::WritableParts { push: push.clone(), expected: None })?)
-        }
+        Some(push) => v1::Access::Writable(v1::Writable::new(
+            limits,
+            v1::WritableParts { push: push.clone(), expected: None, landing: repository.landing.clone() },
+        )?),
         None => v1::Access::ReadOnly,
     };
     v1::Repository::new(
@@ -241,9 +242,11 @@ pub fn workspace(items: Option<&v1::Items>) -> Assigned {
             v1::Start::Saved(value) => worker::Start::Saved { branch: value.branch().into() },
         };
         let access = match repository.access() {
-            v1::Access::Writable(value) => {
-                worker::Access::Writable { push: value.push().into(), expected: *value.expected() }
-            }
+            v1::Access::Writable(value) => worker::Access::Writable {
+                push: value.push().into(),
+                expected: *value.expected(),
+                landing: value.landing().clone(),
+            },
             v1::Access::ReadOnly => worker::Access::ReadOnly,
         };
         repositories

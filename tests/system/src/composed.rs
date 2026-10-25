@@ -1008,7 +1008,7 @@ fn forge_operation(mut op: worker::checkout::git::Op) -> worker::checkout::git::
                 .expect("the world's configured git remote")
                 .into();
         }
-        Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } | Op::Commit { .. } => {}
+        Op::Make { .. } | Op::CheckOut { .. } | Op::IsAncestor { .. } | Op::Merge { .. } | Op::Commit { .. } => {}
     }
     op
 }

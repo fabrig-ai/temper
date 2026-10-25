@@ -17,7 +17,11 @@
 //! pushed only if it has a commit the branch has not had from this hold
 //! since the start. Otherwise it is `Unchanged`, unless this hold's last push
 //! landed its head there: then it is that landing again, so that a delivery
-//! followed by a finish with nothing new is still a delivery. A save does the
+//! followed by a finish with nothing new is still a delivery. An eligible
+//! producer retry also fetches its landing tip during preparation: unchanged
+//! existing work outside that tip is delivered by a fresh guarded push, after
+//! a local ancestry query. This snapshot never changes the actual start.
+//! A save does the
 //! same to the saved-work branch, for every repository changed since the
 //! start, and is `Unchanged` without a change since the start. Pushing
 //! is not atomic: each repository is pushed on its own, whatever came of the
@@ -124,6 +128,7 @@ pub(crate) struct Tips {
     pushed: Commit,
     merging: Option<Commit>,
     expected: Option<Commit>,
+    landing: Option<Commit>,
 }
 
 #[derive(Debug)]
@@ -169,6 +174,11 @@ enum PrepareStep {
     CheckOut {
         repository: u32,
         commit: Commit,
+        landing: Option<Commit>,
+    },
+    FetchLanding {
+        repository: u32,
+        ours: Commit,
     },
     FetchBase {
         repository: u32,
@@ -207,6 +217,9 @@ enum To {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 #[expect(clippy::large_enum_variant, reason = "bounded diagnostics stay inline and are included in worst_case")]
 enum PushStep {
+    CompareLanding {
+        repository: u32,
+    },
     Commit {
         repository: u32,
     },
@@ -409,6 +422,7 @@ fn pushed_fact(client: Token, to: Target, outcome: &Outcome) -> Fact {
 
 fn ending(done: &Done) -> Ending {
     match done {
+        Done::IsAncestor { contains } => Ending::IsAncestor { contains: *contains },
         Done::Succeeded => Ending::Succeeded,
         Done::Fetched { commit } => Ending::Fetched { commit: *commit },
         Done::Committed { commit } => Ending::Committed { commit: *commit },
@@ -476,6 +490,7 @@ fn bounded_done(done: Done, limits: &Limits) -> Done {
         | Done::Unchanged
         | Done::Exists
         | Done::Rejected
+        | Done::IsAncestor { .. }
         | Done::Merged
         | Done::Failed { .. }
         | Done::FailedWithOutput { .. }) => other,
@@ -515,6 +530,7 @@ fn prepared(holding: &mut Holding, cache: &mut Cache, step: PrepareStep, done: D
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a make with its own terminals")
@@ -532,16 +548,20 @@ fn prepared(holding: &mut Holding, cache: &mut Cache, step: PrepareStep, done: D
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a clone with its own terminals")
             }
         },
         PrepareStep::Fetch { repository } => match done {
+            Done::Fetched { commit } if landing_branch(nth(holding, repository)).is_some() => {
+                Next::Step(PrepareStep::FetchLanding { repository, ours: commit })
+            }
             Done::Fetched { commit } => match nth(holding, repository).start {
                 Start::Merge { base, .. } => Next::Step(PrepareStep::FetchBase { repository, ours: commit, base }),
                 Start::Base { .. } | Start::Branch { .. } | Start::Commit { .. } | Start::Saved { .. } => {
-                    Next::Step(PrepareStep::CheckOut { repository, commit })
+                    Next::Step(PrepareStep::CheckOut { repository, commit, landing: None })
                 }
             },
             Done::Failed { fault: Fault::Missing { missing: Missing::Branch } }
@@ -556,6 +576,7 @@ fn prepared(holding: &mut Holding, cache: &mut Cache, step: PrepareStep, done: D
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a fetch with its own terminals")
@@ -569,26 +590,28 @@ fn prepared(holding: &mut Holding, cache: &mut Cache, step: PrepareStep, done: D
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a fetch with its own terminals")
             }
         },
         PrepareStep::Create { repository, commit } => match done {
-            Done::Succeeded => Next::Step(PrepareStep::CheckOut { repository, commit }),
+            Done::Succeeded => Next::Step(PrepareStep::CheckOut { repository, commit, landing: None }),
             Done::Exists => Next::Step(PrepareStep::Refetch { repository }),
             Done::Failed { fault } | Done::FailedWithOutput { fault, .. } => Next::Failed(failure(repository, fault)),
             Done::Fetched { .. }
             | Done::Committed { .. }
             | Done::Unchanged
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a creation with its own terminals")
             }
         },
         PrepareStep::Refetch { repository } => match done {
-            Done::Fetched { commit } => Next::Step(PrepareStep::CheckOut { repository, commit }),
+            Done::Fetched { commit } => Next::Step(PrepareStep::CheckOut { repository, commit, landing: None }),
             // It was there a moment ago: whoever made it removed it since.
             Done::Failed { fault: Fault::Missing { .. } }
             | Done::FailedWithOutput { fault: Fault::Missing { .. }, .. } => Next::Failed(Failure::Transient),
@@ -598,18 +621,34 @@ fn prepared(holding: &mut Holding, cache: &mut Cache, step: PrepareStep, done: D
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a fetch with its own terminals")
             }
         },
-        PrepareStep::CheckOut { repository, commit } => match done {
+        PrepareStep::FetchLanding { repository, ours } => match done {
+            Done::Fetched { commit } => {
+                Next::Step(PrepareStep::CheckOut { repository, commit: ours, landing: Some(commit) })
+            }
+            Done::Failed { fault } | Done::FailedWithOutput { fault, .. } => Next::Failed(failure(repository, fault)),
+            Done::Succeeded
+            | Done::IsAncestor { .. }
+            | Done::Committed { .. }
+            | Done::Unchanged
+            | Done::Exists
+            | Done::Rejected
+            | Done::Merged
+            | Done::Conflicted { .. } => unreachable!("a landing fetch has fetch terminals"),
+        },
+        PrepareStep::CheckOut { repository, commit, landing } => match done {
             Done::Succeeded => {
                 let tips = Tips {
                     start: commit,
                     head: commit,
                     pushed: commit,
                     merging: None,
+                    landing,
                     expected: nth(holding, repository).expected,
                 };
                 holding.tips.push(tips).expect("room for each repository's tips");
@@ -625,6 +664,7 @@ fn prepared(holding: &mut Holding, cache: &mut Cache, step: PrepareStep, done: D
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {
                 unreachable!("io ends a checkout with its own terminals")
@@ -650,6 +690,7 @@ fn prepared_merge(holding: &mut Holding, step: PrepareStep, done: Done, limits: 
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => unreachable!("io ends a fetch with its own terminals"),
         },
@@ -660,6 +701,7 @@ fn prepared_merge(holding: &mut Holding, step: PrepareStep, done: Done, limits: 
                     head: ours,
                     pushed: ours,
                     merging: Some(base),
+                    landing: None,
                     expected: nth(holding, repository).expected,
                 };
                 holding.tips.push(tips).expect("room for each repository's tips");
@@ -671,6 +713,7 @@ fn prepared_merge(holding: &mut Holding, step: PrepareStep, done: Done, limits: 
             | Done::Unchanged
             | Done::Exists
             | Done::Rejected
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => unreachable!("io ends a checkout with its own terminals"),
         },
@@ -687,6 +730,7 @@ fn prepared_merge(holding: &mut Holding, step: PrepareStep, done: Done, limits: 
             | Done::Committed { .. }
             | Done::Unchanged
             | Done::Exists
+            | Done::IsAncestor { .. }
             | Done::Rejected => unreachable!("io ends a merge with its own terminals"),
         },
         PrepareStep::Make
@@ -695,6 +739,7 @@ fn prepared_merge(holding: &mut Holding, step: PrepareStep, done: Done, limits: 
         | PrepareStep::Default { .. }
         | PrepareStep::Create { .. }
         | PrepareStep::Refetch { .. }
+        | PrepareStep::FetchLanding { .. }
         | PrepareStep::CheckOut { .. } => unreachable!("merge preparation has only its own steps"),
     }
 }
@@ -792,7 +837,17 @@ fn prepare_step(
             let account = repository.account;
             Op::Create { at: place(workspace, repository), remote, branch, commit, identity, account }
         }
-        PrepareStep::CheckOut { repository, commit } => {
+        PrepareStep::FetchLanding { repository, .. } => {
+            let spec = nth(holding, repository);
+            Op::Fetch {
+                at: place(workspace, spec),
+                remote: copy_of(&spec.remote),
+                want: Want::Branch { branch: copy_of(landing_branch(spec).expect("eligible producer")) },
+                identity: spec.identity,
+                account: spec.account,
+            }
+        }
+        PrepareStep::CheckOut { repository, commit, .. } => {
             Op::CheckOut { at: place(workspace, nth(holding, repository)), commit }
         }
         PrepareStep::FetchBase { repository, base, .. } => {
@@ -880,7 +935,34 @@ fn pushed(
             Asked::Nothing => match committed(holding, repository, done) {
                 Ok(()) => match unpushed(holding, &push.to, repository) {
                     Some(commit) => return push_commit(holding, id, push, repository, commit, env, out),
-                    None => (repository, landed_before(holding, &push.to, repository)),
+                    None => {
+                        let prior = landed_before(holding, &push.to, repository);
+                        let comparison = match push.to {
+                            To::Branches => tips(holding, repository).landing,
+                            To::Saved { .. } => None,
+                        };
+                        if prior == Landing::Unchanged
+                            && let Some(landing) = comparison
+                        {
+                            let ancestor = tips(holding, repository).head;
+                            io(
+                                id,
+                                Op::IsAncestor {
+                                    at: place(holding.workspace.token(), nth(holding, repository)),
+                                    ancestor,
+                                    commit: landing,
+                                },
+                                env,
+                                out,
+                            );
+                            return State::Pushing {
+                                push,
+                                step: PushStep::CompareLanding { repository },
+                                asked: Asked::Nothing,
+                            };
+                        }
+                        (repository, prior)
+                    }
                 },
                 Err(failure) => (repository, failed_landing(failure)),
             },
@@ -893,6 +975,36 @@ fn pushed(
                 Err(failure) => (repository, failed_landing(failure)),
             },
         },
+        PushStep::CompareLanding { repository } => {
+            let landing = match done {
+                Done::IsAncestor { contains: false } if asked == Asked::Nothing => {
+                    let tips = tips_mut(holding, repository);
+                    // Freeze the fetched start as the lease only on this retry path.
+                    if tips.expected.is_none() {
+                        tips.expected = Some(tips.start);
+                    }
+                    let head = tips.head;
+                    return push_commit(holding, id, push, repository, head, env, out);
+                }
+                Done::IsAncestor { .. } => {
+                    if asked == Asked::Nothing {
+                        Landing::Unchanged
+                    } else {
+                        Landing::Aborted
+                    }
+                }
+                failure @ (Done::Failed { .. } | Done::FailedWithOutput { .. }) => failed_landing(failure),
+                Done::Succeeded
+                | Done::Fetched { .. }
+                | Done::Committed { .. }
+                | Done::Unchanged
+                | Done::Exists
+                | Done::Rejected
+                | Done::Merged
+                | Done::Conflicted { .. } => unreachable!("an ancestry query has its own terminals"),
+            };
+            (repository, landing)
+        }
         PushStep::Push { repository } => match pushed_to(holding, &push.to, repository, done) {
             Ok(landing) => (repository, landing),
             Err(failure) => return verify(holding, id, push, repository, asked, failure, env, out),
@@ -924,7 +1036,12 @@ fn committed(holding: &mut Holding, repository: u32, done: Done) -> Result<(), D
             Ok(())
         }
         failure @ (Done::Failed { .. } | Done::FailedWithOutput { .. } | Done::Conflicted { .. }) => Err(failure),
-        Done::Succeeded | Done::Fetched { .. } | Done::Exists | Done::Rejected | Done::Merged => {
+        Done::Succeeded
+        | Done::Fetched { .. }
+        | Done::Exists
+        | Done::Rejected
+        | Done::IsAncestor { .. }
+        | Done::Merged => {
             unreachable!("io ends a commit with its own terminals")
         }
     }
@@ -999,6 +1116,7 @@ fn pushed_to(holding: &mut Holding, to: &To, repository: u32, done: Done) -> Res
         | Done::Committed { .. }
         | Done::Unchanged
         | Done::Exists
+        | Done::IsAncestor { .. }
         | Done::Merged
         | Done::Conflicted { .. } => {
             unreachable!("io ends a push with its own terminals")
@@ -1040,6 +1158,7 @@ fn verified(holding: &mut Holding, to: &To, repository: u32, done: Done, failure
         | Done::Unchanged
         | Done::Exists
         | Done::Rejected
+        | Done::IsAncestor { .. }
         | Done::Merged
         | Done::Conflicted { .. } => {
             unreachable!("io ends a fetch with its own terminals")
@@ -1132,6 +1251,7 @@ const fn damages(done: &Done) -> bool {
         | Done::Unchanged
         | Done::Exists
         | Done::Rejected
+        | Done::IsAncestor { .. }
         | Done::Merged
         | Done::Conflicted { .. } => false,
     }
@@ -1159,6 +1279,7 @@ fn failed_landing(done: Done) -> Landing {
         | Done::Unchanged
         | Done::Exists
         | Done::Rejected
+        | Done::IsAncestor { .. }
         | Done::Merged => unreachable!("only a failed invocation is explained"),
     }
 }
@@ -1204,7 +1325,17 @@ fn fits(spec: &Spec, limits: &Limits) -> bool {
         };
         let directory = named(&repository.name, limits) && component(&repository.name);
         let reached = named(&repository.remote, limits);
-        if !directory || !reached || !start || !push || (repository.expected.is_some() && repository.push.is_none()) {
+        let landing = match &repository.landing {
+            Some(branch) => named(branch, limits),
+            None => true,
+        };
+        if !directory
+            || !reached
+            || !start
+            || !push
+            || !landing
+            || (repository.expected.is_some() && repository.push.is_none())
+        {
             return false;
         }
         for earlier in spec.repositories.iter().take(place) {
@@ -1251,6 +1382,21 @@ fn named(bytes: &[u8], limits: &Limits) -> bool {
 
 /// Whether the repository at `repository` starts from a base branch that is
 /// created if the forge does not have it: only for one that may be written.
+/// Ineligible supplied comparisons are ignored; they can never grant a write.
+fn landing_branch(repository: &Repository) -> Option<&[u8]> {
+    match (&repository.start, &repository.push) {
+        (Start::Branch { branch }, Some(push)) if branch == push => repository.landing.as_deref(),
+        (
+            Start::Base { .. }
+            | Start::Branch { .. }
+            | Start::Saved { .. }
+            | Start::Commit { .. }
+            | Start::Merge { .. },
+            _,
+        ) => None,
+    }
+}
+
 fn creates_base(holding: &Holding, repository: u32) -> bool {
     let spec = nth(holding, repository);
     let base = match spec.start {

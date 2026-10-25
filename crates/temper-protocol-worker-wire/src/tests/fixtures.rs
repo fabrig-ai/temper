@@ -21,9 +21,11 @@ pub fn limits() -> v1::Limits {
 pub fn repository_parts(tag: u64, remote: Box<[u8]>) -> v1::RepositoryParts {
     let limits = limits();
     let branch = v1::Branch::new(&limits, v1::BranchParts { branch: Box::from(&b"main"[..]) }).expect("base branch");
-    let writable =
-        v1::Writable::new(&limits, v1::WritableParts { push: Box::from(&b"temper/work"[..]), expected: None })
-            .expect("push branch");
+    let writable = v1::Writable::new(
+        &limits,
+        v1::WritableParts { push: Box::from(&b"temper/work"[..]), expected: None, landing: None },
+    )
+    .expect("push branch");
     v1::RepositoryParts {
         tag,
         name: Box::from(&b"shop"[..]),

@@ -84,7 +84,7 @@ pub(crate) fn identity(op: &git::Op) -> Option<u32> {
         | git::Op::Create { identity, .. }
         | git::Op::Commit { identity, .. }
         | git::Op::Push { identity, .. } => Some(*identity),
-        git::Op::Make { .. } | git::Op::CheckOut { .. } | git::Op::Merge { .. } => None,
+        git::Op::Make { .. } | git::Op::CheckOut { .. } | git::Op::IsAncestor { .. } | git::Op::Merge { .. } => None,
     }
 }
 /// Select only this operation's credential below the root (protocol/channel.md, 6).
@@ -112,7 +112,9 @@ pub(crate) fn pick(
                 email: email.clone(),
             }));
         }
-        git::Op::Make { .. } | git::Op::CheckOut { .. } | git::Op::Merge { .. } => return Ok(None),
+        git::Op::Make { .. } | git::Op::CheckOut { .. } | git::Op::IsAncestor { .. } | git::Op::Merge { .. } => {
+            return Ok(None);
+        }
     };
     for entry in entries {
         if Some(entry.account) == *account {

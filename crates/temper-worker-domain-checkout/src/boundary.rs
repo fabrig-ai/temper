@@ -117,6 +117,8 @@ pub struct Repository {
     /// Exact old head required for the push branch; None requests
     /// ordinary fast-forward. Successful pushes advance this condition.
     pub expected: Option<Commit>,
+    /// Landing branch comparison, used only by Branch starts on the push target.
+    pub landing: Option<Box<[u8]>>,
 }
 
 /// Where a repository starts. Whatever the workspace held, nothing local is

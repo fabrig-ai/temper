@@ -112,7 +112,7 @@ impl Harness {
                 Op::Make { .. } | Op::Clone { .. } | Op::Create { .. } | Op::CheckOut { .. } | Op::Push { .. } => {
                     Done::Succeeded
                 }
-                Op::Commit { .. } => panic!("a prepare commits nothing"),
+                Op::IsAncestor { .. } | Op::Commit { .. } => panic!("a prepare commits or compares nothing"),
             };
             match self.one(Event::Done { owner: hold, done }) {
                 Request::Io { owner, op: next, deadline: _ } => {
@@ -184,6 +184,7 @@ fn repository(name: &[u8], writable: bool) -> Repository {
         account: None,
         push,
         expected: None,
+        landing: None,
     }
 }
 
@@ -269,6 +270,7 @@ fn workspace_of(op: &Op) -> Token {
         | Op::Fetch { at, .. }
         | Op::Create { at, .. }
         | Op::CheckOut { at, .. }
+        | Op::IsAncestor { at, .. }
         | Op::Merge { at, .. }
         | Op::Commit { at, .. }
         | Op::Push { at, .. } => at.workspace,
@@ -590,6 +592,163 @@ fn a_push_builds_on_what_the_last_one_landed() {
     // followed by a finish needs.
     let end = h.one(Event::Done { owner: hold, done: Done::Unchanged });
     assert_eq!(&*landings(end), &[Landing::Landed { commit: commit(11) }]);
+}
+
+#[test]
+fn a_new_hold_delivers_the_existing_change_without_another_edit() {
+    let mut h = Harness::new(LIMITS);
+    let first = h.ready(1, one(b"w"));
+    h.one(Event::Push { hold: first, message: message() });
+    h.next(first, Done::Committed { commit: commit(11) });
+    assert_eq!(
+        &*landings(h.one(Event::Done { owner: first, done: Done::Succeeded })),
+        &[Landing::Landed { commit: commit(11) }]
+    );
+    h.one(Event::Release { hold: first });
+    let mut retry = repository(b"a", true);
+    retry.landing = Some(bytes(b"base"));
+    let (second, fetch) = h.prepare(2, spec(b"w", Box::new([retry])));
+    assert_ne!(first, second, "a distinct hold");
+    assert_eq!(fetch.kind(), Kind::Fetch);
+    let base = h.next(second, Done::Fetched { commit: commit(11) });
+    let Op::Fetch { want: Want::Branch { branch }, .. } = base else { panic!("landing fetch") };
+    assert_eq!(&*branch, b"base");
+    h.next(second, Done::Fetched { commit: commit(1) });
+    let Prepared::Ready { .. } = prepared(h.one(Event::Done { owner: second, done: Done::Succeeded })) else {
+        panic!("second hold ready")
+    };
+    h.one(Event::Push { hold: second, message: message() });
+    compares(h.next(second, Done::Unchanged), commit(11), commit(1));
+    retry_push(h.next(second, Done::IsAncestor { contains: false }), commit(11), commit(11));
+    assert_eq!(
+        &*landings(h.one(Event::Done { owner: second, done: Done::Succeeded })),
+        &[Landing::Landed { commit: commit(11) }]
+    );
+}
+
+fn compares(op: Op, expected_ancestor: Commit, expected_commit: Commit) {
+    let Op::IsAncestor { ancestor, commit, .. } = op else { panic!("ancestry query") };
+    assert_eq!((ancestor, commit), (expected_ancestor, expected_commit));
+}
+
+fn retry_push(op: Op, head: Commit, expected: Commit) {
+    let Op::Push { commit, expected: old, .. } = op else { panic!("guarded push") };
+    assert_eq!((commit, old), (head, Some(expected)));
+}
+
+fn retry_repository() -> Repository {
+    Repository { landing: Some(bytes(b"base")), ..repository(b"a", true) }
+}
+
+#[test]
+fn landing_comparison_is_frozen_per_hold_and_only_a_push_can_deliver_it() {
+    for (landing, contains) in [(1, true), (12, true), (7, false)] {
+        let mut h = Harness::new(LIMITS);
+        let (hold, _) = h.prepare(1, spec(b"w", Box::new([retry_repository()])));
+        h.next(hold, Done::Succeeded);
+        h.next(hold, Done::Succeeded);
+        h.next(hold, Done::Fetched { commit: commit(1) });
+        h.next(hold, Done::Fetched { commit: commit(landing) });
+        h.one(Event::Done { owner: hold, done: Done::Succeeded });
+        h.one(Event::Push { hold, message: message() });
+        compares(h.next(hold, Done::Unchanged), commit(1), commit(landing));
+        let end = h.one(Event::Done { owner: hold, done: Done::IsAncestor { contains } });
+        if contains {
+            assert_eq!(&*landings(end), &[Landing::Unchanged]);
+        } else {
+            retry_push(io(end, hold), commit(1), commit(1));
+            // Rejection is not promoted to a receipt, including a remote rewind.
+            assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Rejected })), &[Landing::Moved]);
+        }
+    }
+}
+
+#[test]
+fn a_retry_keeps_a_stronger_expected_and_verifies_an_ambiguous_push() {
+    let mut h = Harness::new(LIMITS);
+    let repo = Repository { expected: Some(commit(7)), ..retry_repository() };
+    let hold = h.ready(1, spec(b"w", Box::new([repo])));
+    h.one(Event::Push { hold, message: message() });
+    h.next(hold, Done::Unchanged);
+    retry_push(h.next(hold, Done::IsAncestor { contains: false }), commit(1), commit(7));
+    assert_eq!(h.next(hold, failed(Fault::TimedOut)).kind(), Kind::Fetch);
+    assert_eq!(
+        &*landings(h.one(Event::Done { owner: hold, done: Done::Fetched { commit: commit(1) } })),
+        &[Landing::Landed { commit: commit(1) }]
+    );
+    // Saving keeps the actual start baseline even after retry delivery.
+    h.one(Event::Save { hold, branch: bytes(b"saved"), message: message() });
+    assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })), &[Landing::Unchanged]);
+    // A later real edit follows the normal commit/push path, with no comparison.
+    h.one(Event::Push { hold, message: message() });
+    retry_push(h.next(hold, Done::Committed { commit: commit(11) }), commit(11), commit(1));
+}
+
+#[test]
+fn landing_fetch_failures_fail_preparation_and_never_fall_back() {
+    for fault in [Fault::Missing { missing: Missing::Branch }, Fault::Unreachable, Fault::Refused] {
+        let mut h = Harness::new(LIMITS);
+        let (hold, _) = h.prepare(1, spec(b"w", Box::new([retry_repository()])));
+        h.next(hold, Done::Succeeded);
+        h.next(hold, Done::Succeeded);
+        h.next(hold, Done::Fetched { commit: commit(1) });
+        let expected = match fault {
+            Fault::Missing { missing } => Failure::Missing { repository: 0, missing },
+            Fault::Refused => Failure::Refused { repository: 0 },
+            Fault::Unreachable | Fault::Broken | Fault::TimedOut | Fault::Cancelled => Failure::Transient,
+        };
+        assert_eq!(
+            prepared(h.one(Event::Done { owner: hold, done: failed(fault) })),
+            Prepared::Failed { failure: expected }
+        );
+    }
+}
+
+#[test]
+fn supplied_landing_cannot_invent_eligibility_or_change_saved_semantics() {
+    for start in [
+        Start::Base { branch: bytes(b"main") },
+        Start::Branch { branch: bytes(b"elsewhere") },
+        Start::Commit { commit: commit(1) },
+        Start::Saved { branch: bytes(b"saved") },
+        Start::Merge { branch: bytes(b"main"), base: commit(7) },
+    ] {
+        let mut h = Harness::new(MERGES);
+        let merging = match start {
+            Start::Merge { .. } => true,
+            Start::Base { .. } | Start::Branch { .. } | Start::Commit { .. } | Start::Saved { .. } => false,
+        };
+        let repo = Repository { start, ..retry_repository() };
+        let hold = h.ready(1, spec(b"w", Box::new([repo])));
+        h.one(Event::Push { hold, message: message() });
+        if merging {
+            assert_eq!(h.next(hold, Done::Committed { commit: commit(11) }).kind(), Kind::Push);
+        } else {
+            assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })), &[Landing::Unchanged]);
+            h.one(Event::Save { hold, branch: bytes(b"saved"), message: message() });
+            assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })), &[Landing::Unchanged]);
+        }
+        assert!(
+            !h.facts().as_slice().contains(&Fact::Started { client: Token::new(1), op: Kind::IsAncestor }),
+            "ineligible starts never compare"
+        );
+    }
+    let mut h = Harness::new(LIMITS);
+    let repo = Repository { push: None, ..retry_repository() };
+    let hold = h.ready(1, spec(b"w", Box::new([repo])));
+    assert_eq!(&*landings(h.one(Event::Push { hold, message: message() })), &[Landing::Unchanged]);
+}
+
+#[test]
+fn landing_branch_names_are_bounded_at_the_entrance() {
+    for branch in [b"".as_slice(), &[b'x'; 17]] {
+        let mut h = Harness::new(LIMITS);
+        let repo = Repository { landing: Some(bytes(branch)), ..retry_repository() };
+        assert_eq!(
+            prepared(h.one(Event::Prepare { client: Token::new(1), spec: spec(b"w", Box::new([repo])) })),
+            Prepared::Refused { refusal: Refusal::Invalid }
+        );
+    }
 }
 
 #[test]
@@ -1171,7 +1330,7 @@ fn assert_account(op: Op, expected: Option<u64>, kind: Kind) {
         | Op::Fetch { account, .. }
         | Op::Create { account, .. }
         | Op::Push { account, .. } => assert_eq!(account, expected),
-        Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } | Op::Commit { .. } => {
+        Op::IsAncestor { .. } | Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } | Op::Commit { .. } => {
             panic!("an operation that authenticates")
         }
     }

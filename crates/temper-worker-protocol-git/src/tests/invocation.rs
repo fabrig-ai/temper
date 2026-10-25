@@ -216,7 +216,9 @@ fn a_commit_is_authored_and_committed_as_the_identity() {
 #[test]
 fn an_operation_naming_no_identity_commits_as_the_placeholder() {
     let identity = fixtures::identity();
-    for kind in [None, Some(git::Kind::Make), Some(git::Kind::CheckOut), Some(git::Kind::Merge)] {
+    for kind in
+        [None, Some(git::Kind::Make), Some(git::Kind::CheckOut), Some(git::Kind::Merge), Some(git::Kind::IsAncestor)]
+    {
         let environment = invocation::environment(fixtures::HOME, kind, None);
         let expected = [
             b"HOME=/srv/worker/home".as_slice(),

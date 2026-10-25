@@ -12,6 +12,7 @@ fn limits_take_each_bound_from_its_source_field() {
             merge_branch: 16,
             branch_branch: 16,
             writable_push: 16,
+            writable_landing_some: 16,
             repository_name: 16,
             repository_remote: 48,
             repository_git_some: 4096,
@@ -97,7 +98,7 @@ fn largest_parts_are_the_generated_worst_cases() {
     assert_eq!(u64::from(sizes.saved), v1::Saved::worst_case_bytes(&limits).expect("saved"));
     assert_eq!(u64::from(sizes.resource), v1::Preparation::worst_case_bytes(&limits).expect("preparation"));
     assert_eq!(u64::from(sizes.grant), v1::Identity::worst_case_bytes(&limits).expect("identity"));
-    assert_eq!(sizes, crate::Largest { items: 8627, left: 84, saved: 1084, resource: 10, grant: 233 });
+    assert_eq!(sizes, crate::Largest { items: 8669, left: 84, saved: 1084, resource: 10, grant: 233 });
 }
 
 #[test]
@@ -207,4 +208,30 @@ fn an_entrys_token_and_login_stop_at_their_bounds() {
             }
         }
     }
+}
+
+#[test]
+fn landing_branch_uses_the_name_bound_and_largest_items_count_it() {
+    let limits = fixtures::limits();
+    for length in [16, 17] {
+        let parts = v1::WritableParts {
+            push: Box::from(&b"topic"[..]),
+            expected: None,
+            landing: Some(skein_lib::bytes::zeroed(length)),
+        };
+        let value = v1::Writable::new(&limits, parts);
+        if length == 16 {
+            let value = value.expect("at bound");
+            let mut bytes = skein_lib::Writer::new(usize::try_from(value.measure()).unwrap());
+            value.encode(&mut bytes).unwrap();
+            assert_eq!(v1::Writable::decode(&limits, &mut skein_lib::Reader::new(&bytes.finish())).unwrap(), value);
+        } else {
+            assert_eq!(value.expect_err("past bound").path, v1::Path::WritableLanding);
+        }
+    }
+    let without = v1::Limits { writable_landing_some: 0, ..limits };
+    assert_eq!(
+        crate::largest(&limits).unwrap().items - crate::largest(&without).unwrap().items,
+        limits.items_repositories * limits.writable_landing_some
+    );
 }

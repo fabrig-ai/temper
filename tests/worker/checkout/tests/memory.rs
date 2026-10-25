@@ -68,6 +68,7 @@ fn full_spec(limits: &Limits, n: u32) -> Spec {
         repositories.push(Repository {
             git: None,
             expected: None,
+            landing: Some(bytes(limits.name_bytes)),
             name: name(limits.name_bytes, place),
             remote: name(limits.name_bytes, place),
             start: Start::Base { branch: name(limits.name_bytes, place) },

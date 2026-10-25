@@ -77,6 +77,8 @@ pub enum Op {
     /// in it is removed, including untracked nested repositories. HEAD is
     /// detached at commit, and the merge state is cleared.
     CheckOut { at: Place, commit: Commit },
+    /// Whether fetched ancestor is contained in commit, including equality. Local and read-only.
+    IsAncestor { at: Place, ancestor: Commit, commit: Commit },
     /// Merge fetched `theirs` into the checked-out commit, without committing;
     /// leave conflict markers and merge state on disk. Ends Merged/Conflicted.
     Merge { at: Place, theirs: Commit },
@@ -117,6 +119,8 @@ pub enum Want {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 #[expect(clippy::large_enum_variant, reason = "bounded diagnostics stay inline and are included in worst_case")]
 pub enum Done {
+    /// The standalone local ancestry query.
+    IsAncestor { contains: bool },
     /// Merge has no unresolved paths; the next explicit merge commit still
     /// records both parents. No commit was made by the merge operation.
     Merged,
@@ -178,6 +182,7 @@ pub enum Kind {
     Create,
     CheckOut,
     Merge,
+    IsAncestor,
     Commit,
     Push,
 }
@@ -192,6 +197,7 @@ impl Op {
             Op::Create { .. } => Kind::Create,
             Op::CheckOut { .. } => Kind::CheckOut,
             Op::Merge { .. } => Kind::Merge,
+            Op::IsAncestor { .. } => Kind::IsAncestor,
             Op::Commit { .. } => Kind::Commit,
             Op::Push { .. } => Kind::Push,
         }
@@ -202,7 +208,9 @@ impl Op {
     pub const fn is_remote(&self) -> bool {
         match self {
             Op::Clone { .. } | Op::Fetch { .. } | Op::Create { .. } | Op::Push { .. } => true,
-            Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } | Op::Commit { .. } => false,
+            Op::IsAncestor { .. } | Op::Make { .. } | Op::CheckOut { .. } | Op::Merge { .. } | Op::Commit { .. } => {
+                false
+            }
         }
     }
 }

@@ -67,12 +67,13 @@ fn repository(repository: &Repository, limits: &Limits) -> Result<(), &'static [
     }
     match &repository.access {
         Access::ReadOnly => Ok(()),
-        Access::Writable { push, .. } => {
-            if name(push, limits) {
-                Ok(())
-            } else {
-                Err(b"push branch")
+        Access::Writable { push, landing, .. } => {
+            if let Some(branch) = landing
+                && !name(branch, limits)
+            {
+                return Err(b"landing branch");
             }
+            if name(push, limits) { Ok(()) } else { Err(b"push branch") }
         }
     }
 }

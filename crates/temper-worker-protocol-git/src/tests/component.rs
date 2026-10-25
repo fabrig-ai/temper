@@ -158,3 +158,26 @@ fn an_abort_during_commit_tree_spawn_settles_without_a_done() {
     }
     assert!(component.component.is_empty());
 }
+
+#[test]
+fn standalone_ancestry_needs_no_identity_and_cancels_after_its_child_closes() {
+    let mut component = fixtures::Started::new();
+    component.down(Request::Io {
+        owner: fixtures::OWNER,
+        op: git::Op::IsAncestor { at: fixtures::at(), ancestor: fixtures::PARENT, commit: fixtures::COMMIT },
+        deadline: fixtures::DEADLINE,
+        identity: None,
+    });
+    let (child, pipes) = component.spawned();
+    component.down(Request::CancelIo { owner: fixtures::OWNER });
+    assert_eq!(&*component.signals(), &[(child, kernel::Signal::Kill, kernel::Target::Group)]);
+    assert_eq!(component.done(), None);
+    component.closed(child, &pipes);
+    assert_eq!(
+        component.done(),
+        Some((
+            fixtures::OWNER,
+            git::Done::FailedWithOutput { fault: git::Fault::Cancelled, diagnostic: git::PushDiagnostic::empty() }
+        ))
+    );
+}

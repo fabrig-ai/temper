@@ -578,6 +578,7 @@ pub fn repository(repository: u32, owner: &[u8], name: &[u8]) -> temper_engine_d
         owner: owner.into(),
         start: temper_engine_domain::ForgeStart::Base(b"main".as_slice().into()),
         push: Some(b"temper/task-7".as_slice().into()),
+        landing: None,
         identity: 1,
     }
 }

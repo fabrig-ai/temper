@@ -102,6 +102,7 @@ pub struct ForgeRepository {
     pub owner: Box<[u8]>,
     pub start: ForgeStart,
     pub push: Option<Box<[u8]>>,
+    pub landing: Option<Box<[u8]>>,
     pub identity: u32,
 }
 

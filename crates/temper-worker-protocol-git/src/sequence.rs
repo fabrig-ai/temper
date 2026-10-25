@@ -35,6 +35,7 @@ pub fn first(op: &git::Op) -> Next {
             Command::Create { remote: remote.clone(), branch: branch.clone(), commit: *commit }
         }
         git::Op::CheckOut { commit, .. } => Command::CheckOut { commit: *commit },
+        git::Op::IsAncestor { ancestor, commit, .. } => Command::IsAncestor { expected: *ancestor, commit: *commit },
         git::Op::Merge { theirs, .. } => Command::Merge { theirs: *theirs },
         git::Op::Commit { merging, .. } => {
             if merging.is_some() {
@@ -106,6 +107,7 @@ pub fn after(
             | git::Op::Fetch { .. }
             | git::Op::Create { .. }
             | git::Op::CheckOut { .. }
+            | git::Op::IsAncestor { .. }
             | git::Op::Merge { .. }
             | git::Op::Push { .. } => {}
         },
@@ -124,10 +126,16 @@ pub fn after(
                 return Next::End(git::Done::Committed { commit });
             }
         }
-        Command::IsAncestor { .. } => match code {
-            1 => return Next::End(git::Done::Rejected),
-            0 => match op {
-                git::Op::Push { remote, commit, branch, expected, .. } => {
+        Command::IsAncestor { .. } => match op {
+            git::Op::IsAncestor { .. } => {
+                if code <= 1 {
+                    return Next::End(git::Done::IsAncestor { contains: code == 0 });
+                }
+                return failed(git::Fault::Broken, tail, cut);
+            }
+            git::Op::Push { remote, commit, branch, expected, .. } => match code {
+                1 => return Next::End(git::Done::Rejected),
+                0 => {
                     return Next::Run(Command::Push {
                         remote: remote.clone(),
                         commit: *commit,
@@ -135,15 +143,15 @@ pub fn after(
                         expected: *expected,
                     });
                 }
-                git::Op::Make { .. }
-                | git::Op::Clone { .. }
-                | git::Op::Fetch { .. }
-                | git::Op::Create { .. }
-                | git::Op::CheckOut { .. }
-                | git::Op::Merge { .. }
-                | git::Op::Commit { .. } => {}
+                _ => {}
             },
-            _ => {}
+            git::Op::Make { .. }
+            | git::Op::Clone { .. }
+            | git::Op::Fetch { .. }
+            | git::Op::Create { .. }
+            | git::Op::CheckOut { .. }
+            | git::Op::Merge { .. }
+            | git::Op::Commit { .. } => {}
         },
         Command::Version
         | Command::Clone { .. }
@@ -196,6 +204,7 @@ fn unmerged(op: &git::Op, stdout: &[u8], checkout: &checkout::Limits) -> Option<
         | git::Op::Fetch { .. }
         | git::Op::Create { .. }
         | git::Op::CheckOut { .. }
+        | git::Op::IsAncestor { .. }
         | git::Op::Merge { .. }
         | git::Op::Push { .. } => None,
     }
@@ -211,6 +220,7 @@ fn commit_tree(op: &git::Op, stdout: &[u8]) -> Option<Command> {
         | git::Op::Fetch { .. }
         | git::Op::Create { .. }
         | git::Op::CheckOut { .. }
+        | git::Op::IsAncestor { .. }
         | git::Op::Merge { .. }
         | git::Op::Push { .. } => None,
     }

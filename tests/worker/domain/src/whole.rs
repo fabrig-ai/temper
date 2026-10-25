@@ -303,6 +303,7 @@ impl World {
             access: wire::Access::Writable {
                 push: Box::from(&b"topic"[..]),
                 expected: Some(translate::commit(self.first).raw()),
+                landing: None,
             },
         };
         let assignment = host::Assignment {

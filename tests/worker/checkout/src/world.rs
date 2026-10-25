@@ -538,14 +538,14 @@ impl World {
                 }
             };
             let push = if writable { Some(base.clone().into()) } else { None };
-            let identity = IDENTITY;
             let spec = Repository {
                 git: None,
                 expected: None,
+                landing: None,
                 name: name.clone().into(),
                 remote: remote.clone().into(),
                 start,
-                identity,
+                identity: IDENTITY,
                 account: None,
                 push,
             };
@@ -571,6 +571,7 @@ impl World {
                 1 => repositories.push(Repository {
                     git: None,
                     expected: None,
+                    landing: None,
                     name: first.clone(),
                     remote: first,
                     start: Start::Branch { branch: b"main".as_slice().into() },
@@ -1004,6 +1005,7 @@ impl World {
             | Op::Clone { .. }
             | Op::Create { .. }
             | Op::CheckOut { .. }
+            | Op::IsAncestor { .. }
             | Op::Merge { .. } => {
                 panic!("a push or a save commits, pushes and verifies, nothing else: {op:?}")
             }
@@ -1062,6 +1064,7 @@ impl World {
                 | Done::Rejected
                 | Done::Failed { .. }
                 | Done::FailedWithOutput { .. }
+                | Done::IsAncestor { .. }
                 | Done::Merged
                 | Done::Conflicted { .. } => Verified::Failed,
             };
@@ -1101,6 +1104,7 @@ impl World {
             | Op::Create { .. }
             | Op::Commit { .. }
             | Op::Push { .. }
+            | Op::IsAncestor { .. }
             | Op::Merge { .. } => {}
         }
         let creates = op.kind() == Kind::Create;
@@ -1133,6 +1137,7 @@ impl World {
             | Done::Rejected
             | Done::Failed { .. }
             | Done::FailedWithOutput { .. }
+            | Done::IsAncestor { .. }
             | Done::Merged
             | Done::Conflicted { .. } => {}
         }

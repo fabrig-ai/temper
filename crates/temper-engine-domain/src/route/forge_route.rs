@@ -1341,6 +1341,7 @@ pub(crate) fn run_workspace(
                 host: item.host,
                 owner: item.owner,
                 start,
+                landing: if push.is_some() { item.landing } else { None },
                 push,
                 // The repository's git identity, from configuration (D10).
                 identity: item.credential?,

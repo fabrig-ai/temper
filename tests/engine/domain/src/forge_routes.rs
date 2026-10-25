@@ -998,6 +998,7 @@ pub fn change_world_in(
     world.until(Until::Delegated);
     world.until(Until::SecondAssignment);
     let producer = world.assigned[1].clone();
+    assert_eq!(producer.workspace.repositories[0].landing, None, "initial producer starts from Base");
     let change = world
         .answers
         .iter()

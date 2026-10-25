@@ -48,6 +48,7 @@ pub(crate) fn item_program(op: &git::Op) -> Option<&[u8]> {
         | git::Op::Fetch { at, .. }
         | git::Op::Create { at, .. }
         | git::Op::CheckOut { at, .. }
+        | git::Op::IsAncestor { at, .. }
         | git::Op::Merge { at, .. }
         | git::Op::Commit { at, .. }
         | git::Op::Push { at, .. } => at.git.as_deref(),
@@ -63,6 +64,7 @@ pub(crate) fn no_program(op: &git::Op, command: &Command) -> Box<[u8]> {
         | Command::Push { remote, .. } => Some(remote.as_ref()),
         Command::IsAncestor { .. } => match op {
             git::Op::Push { remote, .. } => Some(remote.as_ref()),
+            git::Op::IsAncestor { .. } => None,
             git::Op::Make { .. }
             | git::Op::Clone { .. }
             | git::Op::Fetch { .. }
@@ -204,7 +206,7 @@ pub fn arguments(command: &Command) -> Box<[Box<[u8]>]> {
 pub fn environment(home: &[u8], kind: Option<git::Kind>, identity: Option<&Identity>) -> Box<[Box<[u8]>]> {
     let identity = match kind {
         Some(git::Kind::Clone | git::Kind::Fetch | git::Kind::Create | git::Kind::Commit | git::Kind::Push) => identity,
-        None | Some(git::Kind::Make | git::Kind::CheckOut | git::Kind::Merge) => None,
+        None | Some(git::Kind::IsAncestor | git::Kind::Make | git::Kind::CheckOut | git::Kind::Merge) => None,
     };
     let mut out = List::with_capacity(14);
     let home = joined(&[b"HOME=", home]);
@@ -245,7 +247,7 @@ pub fn environment(home: &[u8], kind: Option<git::Kind>, identity: Option<&Ident
                 words(&mut out, &[b"GIT_CONFIG_COUNT=1", b"GIT_CONFIG_KEY_0=http.extraHeader", &header]);
             }
         }
-        None | Some(git::Kind::Make | git::Kind::CheckOut | git::Kind::Merge) => {}
+        None | Some(git::Kind::IsAncestor | git::Kind::Make | git::Kind::CheckOut | git::Kind::Merge) => {}
     }
     out.into_boxed()
 }

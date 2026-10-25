@@ -333,6 +333,7 @@ fn bounded(bounds: &payload::Bounds, engine: bool, problems: &mut Problems) -> O
                 .min(ceilings.merge_branch)
                 .min(ceilings.branch_branch)
                 .min(ceilings.writable_push)
+                .min(ceilings.writable_landing_some)
                 .min(ceilings.items_save_some),
         ),
         (b"checkout.name_bytes", bounds.remote_bytes, ceilings.repository_remote),

@@ -67,9 +67,9 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     let cache = u64::from(limits.workspaces).checked_mul(workspace)?;
     let hold_slots = holds(limits)?;
     let holds = Slab::<Hold>::worst_case(hold_slots)?;
-    // A repository's name, remote, identity, starting branch and push branch,
-    // and its program.
-    let repository = name.checked_mul(4)?.checked_add(u64::from(PROGRAM_BYTES))?;
+    // A repository's name, remote, starting branch, push branch and landing
+    // branch, plus its program. Inline fields are in List<Repository>.
+    let repository = name.checked_mul(5)?.checked_add(u64::from(PROGRAM_BYTES))?;
     let spec = List::<Repository>::worst_case(limits.repositories)?
         .checked_add(u64::from(limits.repositories).checked_mul(repository)?)?;
     let push = List::<Landing>::worst_case(limits.repositories)?

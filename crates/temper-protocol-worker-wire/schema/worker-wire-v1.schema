@@ -7,7 +7,7 @@ record Merge { branch: bytes 1024 base: fixed 32 }
 record Branch { branch: bytes 1024 }
 record Commit { commit: fixed 32 }
 enum Start { merge: Merge, base: Branch, branch: Branch, commit: Commit, saved: Branch }
-record Writable { push: bytes 1024 expected: option fixed 32 }
+record Writable { push: bytes 1024 expected: option fixed 32 landing: option bytes 1024 }
 enum Access { writable: Writable, read_only }
 record Repository { tag: u64 name: bytes 1024 remote: bytes 1024 git: option bytes 4096 start: Start access: Access identity: u32 account: option u64 }
 record Items { repositories: list 64 Repository save: option bytes 1024 }

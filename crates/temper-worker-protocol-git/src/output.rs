@@ -156,7 +156,9 @@ pub fn version(stdout: &[u8]) -> Option<Version> {
 #[must_use]
 pub fn classify(tail: &[u8], kind: git::Kind) -> git::Fault {
     match kind {
-        git::Kind::Make | git::Kind::CheckOut | git::Kind::Merge | git::Kind::Commit => return git::Fault::Broken,
+        git::Kind::IsAncestor | git::Kind::Make | git::Kind::CheckOut | git::Kind::Merge | git::Kind::Commit => {
+            return git::Fault::Broken;
+        }
         git::Kind::Clone | git::Kind::Fetch | git::Kind::Create | git::Kind::Push => {}
     }
     let mut end = tail.len();

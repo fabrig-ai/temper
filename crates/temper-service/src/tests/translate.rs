@@ -94,8 +94,11 @@ fn each_workspace_access_reaches_its_items() {
         (
             Some(Box::from(b"out".as_slice())),
             wire::Access::Writable(
-                wire::Writable::new(&limits, wire::WritableParts { push: b"out".as_slice().into(), expected: None })
-                    .unwrap(),
+                wire::Writable::new(
+                    &limits,
+                    wire::WritableParts { push: b"out".as_slice().into(), expected: None, landing: None },
+                )
+                .unwrap(),
             ),
         ),
     ] {
@@ -298,4 +301,31 @@ fn a_repositorys_account_reaches_the_workers_domain() {
     let bytes = temper_protocol_worker_wire::items(&items);
     let decoded = wire::Items::decode(&limits, &mut skein_lib::Reader::new(&bytes)).unwrap();
     assert_eq!(translate::workspace(Some(&decoded)), (expected, save));
+}
+
+#[test]
+fn landing_comparison_roundtrips_and_read_only_access_strips_it() {
+    let settings = fixtures::engine();
+    let limits = fixtures::wire_limits();
+    for writable in [false, true] {
+        let mut repository = fixtures::repository(7, b"acme", b"shop");
+        repository.landing = Some(b"main".as_slice().into());
+        if !writable {
+            repository.push = None;
+        }
+        let assignment = fixtures::assignment_with(repository);
+        let items = translate::items(&assignment, &settings.forges, &crate::forge::tokens::Tokens::empty(), &limits)
+            .unwrap()
+            .unwrap();
+        let encoded = temper_protocol_worker_wire::items(&items);
+        let decoded = wire::Items::decode(&limits, &mut skein_lib::Reader::new(&encoded)).expect("items roundtrip");
+        let (workspace, _) = translate::workspace(Some(&decoded));
+        match &workspace.repositories[0].access {
+            temper_worker_domain::wire::Access::Writable { landing, .. } => {
+                assert!(writable);
+                assert_eq!(landing.as_deref(), Some(b"main".as_slice()));
+            }
+            temper_worker_domain::wire::Access::ReadOnly => assert!(!writable),
+        }
+    }
 }

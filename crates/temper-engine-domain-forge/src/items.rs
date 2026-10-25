@@ -37,6 +37,7 @@ pub struct Item {
     pub owner: Box<[u8]>,
     pub start: Start,
     pub push: Option<Box<[u8]>>,
+    pub landing: Option<Box<[u8]>>,
     pub holder: Option<u64>,
     /// The repository's git identity, which the run's grants carry.
     pub credential: Option<u32>,
@@ -105,6 +106,17 @@ impl Domain {
         if repository.role == Role::Context || !repository.kinds.push {
             push = None;
         }
+        let landing = match inherited {
+            Some((row, change::Delegate::Produce)) => match (&start, &push) {
+                (Start::Branch(branch), Some(push)) if branch == push => Some(row.base.clone()),
+                (Start::Base(_) | Start::Branch(_) | Start::Saved(_) | Start::Merge { .. }, _) => None,
+            },
+            Some((
+                _,
+                change::Delegate::Repair(_) | change::Delegate::Resolve { .. } | change::Delegate::Gate { .. },
+            ))
+            | None => None,
+        };
         let mut bytes = u64::try_from(size_of::<Item>())
             .ok()?
             .checked_add(u64::try_from(repository.name.len()).ok()?)?
@@ -117,6 +129,9 @@ impl Domain {
         if let Some(push) = &push {
             bytes = bytes.checked_add(u64::try_from(push.len()).ok()?)?;
         }
+        if let Some(landing) = &landing {
+            bytes = bytes.checked_add(u64::try_from(landing.len()).ok()?)?;
+        }
         Some(Item {
             provider: repository.provider,
             name: repository.name.clone(),
@@ -124,6 +139,7 @@ impl Domain {
             owner: repository.owner.clone(),
             start,
             push,
+            landing,
             holder,
             credential: self.identities.get(&repository.provider.forge).copied(),
             bytes,

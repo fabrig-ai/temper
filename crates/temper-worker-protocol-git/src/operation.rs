@@ -92,6 +92,7 @@ impl Operation {
                     git::Op::Fetch { at, .. }
                     | git::Op::Create { at, .. }
                     | git::Op::CheckOut { at, .. }
+                    | git::Op::IsAncestor { at, .. }
                     | git::Op::Merge { at, .. }
                     | git::Op::Commit { at, .. }
                     | git::Op::Push { at, .. } => (invocation::place(at), Some(op.kind())),
@@ -256,6 +257,7 @@ impl Operation {
                         | git::Op::Fetch { .. }
                         | git::Op::Create { .. }
                         | git::Op::CheckOut { .. }
+                        | git::Op::IsAncestor { .. }
                         | git::Op::Merge { .. }
                         | git::Op::Commit { .. }
                         | git::Op::Push { .. },

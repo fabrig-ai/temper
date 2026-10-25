@@ -103,7 +103,9 @@ pub fn check(spawn: &Spawn) -> Result<Checked, Refusal> {
     {
         return Err(Refusal::Broken("commit author"));
     }
-    let credential = if remote(&command).is_some() || matches!(command, Command::IsAncestor { .. }) {
+    let credential = if remote(&command).is_some()
+        || (matches!(command, Command::IsAncestor { .. }) && env.contains_key(b"GIT_CONFIG_COUNT".as_slice()))
+    {
         Some(read_credential(&mut env, spawn)?)
     } else {
         None

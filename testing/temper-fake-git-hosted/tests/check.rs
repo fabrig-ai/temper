@@ -180,3 +180,20 @@ mod core {
         }
     }
 }
+
+#[test]
+fn standalone_ancestry_admits_the_local_environment_without_a_credential() {
+    let command = Command::IsAncestor {
+        expected: temper_worker_domain_checkout::git::Commit::new([1; 32]),
+        commit: temper_worker_domain_checkout::git::Commit::new([2; 32]),
+    };
+    let mut spawn = fixtures::spawn_of(&command);
+    spawn.env = temper_worker_protocol_git::invocation::environment(
+        b"/worker/home",
+        Some(temper_worker_domain_checkout::git::Kind::IsAncestor),
+        None,
+    );
+    let checked = check(&spawn).expect("local ancestry needs no credential");
+    assert_eq!(checked.command, command);
+    assert!(checked.credential.is_none());
+}

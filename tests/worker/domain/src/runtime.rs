@@ -395,6 +395,7 @@ impl World {
                 };
                 Done::Fetched { commit: Commit::new(commit) }
             }
+            Op::IsAncestor { .. } => panic!("this fixture has no producer retry"),
             Op::Merge { theirs, .. } => {
                 assert_eq!(theirs.raw(), BASE);
                 Done::Conflicted { files: Box::new([Box::from(PATH)]) }
@@ -472,7 +473,7 @@ impl World {
             } else {
                 wire::Start::Base { branch: Box::from(&b"main"[..]) }
             },
-            access: wire::Access::Writable { push: Box::from(&b"topic"[..]), expected: Some(HEAD) },
+            access: wire::Access::Writable { push: Box::from(&b"topic"[..]), expected: Some(HEAD), landing: None },
         };
         let assignment = host::Assignment {
             messages: Box::new([]),
