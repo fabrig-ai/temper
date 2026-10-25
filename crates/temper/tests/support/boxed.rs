@@ -487,6 +487,28 @@ pub fn run_ctl<T>(
 ) -> CtlOutcome<T> {
     run_ctl_with_exits(directory, flags, client_root, steps, deadline, check, &[])
 }
+/// Drives ctl while letting init discover the programs on the supplied PATH.
+#[must_use]
+pub fn run_ctl_with_environment<T>(
+    directory: &Path,
+    flags: Vec<String>,
+    client_root: &Path,
+    steps: Vec<super::ctl::Step>,
+    deadline: Duration,
+    check: impl FnOnce() -> T,
+    environment: Vec<(std::ffi::OsString, std::ffi::OsString)>,
+) -> CtlOutcome<T> {
+    run_ctl_peers(
+        directory,
+        flags,
+        client_root,
+        steps,
+        deadline,
+        check,
+        CtlPeers { expected_exits: Vec::new(), model: CtlModel::None, environment },
+    )
+    .0
+}
 /// Continues through the exact expected nonzero calls, keeping the normal early-stop rule otherwise.
 #[must_use]
 pub fn run_ctl_with_exits<T>(
@@ -505,7 +527,7 @@ pub fn run_ctl_with_exits<T>(
         steps,
         deadline,
         check,
-        CtlPeers { expected_exits: expected_exits.to_vec(), model: CtlModel::None },
+        CtlPeers { expected_exits: expected_exits.to_vec(), model: CtlModel::None, environment: Vec::new() },
     )
     .0
 }
@@ -518,6 +540,7 @@ pub struct CtlLlm {
 struct CtlPeers {
     expected_exits: Vec<(usize, u8)>,
     model: CtlModel,
+    environment: Vec<(std::ffi::OsString, std::ffi::OsString)>,
 }
 enum CtlModel {
     None,
@@ -542,7 +565,11 @@ pub fn run_ctl_with_llm<T>(
         steps,
         deadline,
         check,
-        CtlPeers { expected_exits: llm.expected_exits.clone(), model: CtlModel::Llm(Box::new(llm)) },
+        CtlPeers {
+            expected_exits: llm.expected_exits.clone(),
+            model: CtlModel::Llm(Box::new(llm)),
+            environment: vec![("PATH".into(), "/usr/bin:/bin".into())],
+        },
     )
     .0
 }
@@ -564,7 +591,11 @@ pub fn run_ctl_with_face<T>(
         steps,
         deadline,
         check,
-        CtlPeers { expected_exits: Vec::new(), model: CtlModel::Face(Box::new(face)) },
+        CtlPeers {
+            expected_exits: Vec::new(),
+            model: CtlModel::Face(Box::new(face)),
+            environment: vec![("PATH".into(), "/usr/bin:/bin".into())],
+        },
     );
     (outcome, seen.expect("face observations"))
 }
@@ -594,12 +625,7 @@ fn run_ctl_peers<T>(
             program: skein_scratch::paths::binary("temper"),
             arguments: std::iter::once("box".into()).chain(flags.into_iter().map(Into::into)).collect(),
             directory: directory.into(),
-            // The real repository story needs init to discover system git.
-            environment: if on_link.is_some() || face.is_some() {
-                vec![("PATH".into(), "/usr/bin:/bin".into())]
-            } else {
-                Vec::new()
-            },
+            environment: peers.environment,
         }),
         Mode::Pipes,
         262_144,
