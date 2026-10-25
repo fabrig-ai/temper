@@ -126,3 +126,37 @@ The paste’s gallery is below [Connect a model](connect-model.html?world=first-
 | `done` | `#paste-done` | Ready, “Signed in to ChatGPT”, using the existing return’s drawing |
 
 The earlier first-run mockup, a story of its own, also drew "Reset demo", a turn's "Just now", the composer's placeholder, "Landed into main" and the pull request's link on the card. The client leaves each out (client README, section 11), and so does this world.
+
+### 2.5 Chats, a chat, Accounts and the inbox
+
+Surveyed 2026-10-25 against today's drawings, at temper e8c764d3a
+(o/web-look-6), and brought nearer them since; not audited under
+section 1's rules yet. What the client still draws otherwise, or not
+at all, and why:
+
+- **The user's picks of 10-23 (the client README 3.5):** "Closed" for
+  every ended chat, in its list and in its bar with its end's clock
+  ("Closed 21:19"), where the chat page's bar draws "done 21:19" and
+  the list "Ended" for a chat that ended itself; a chat's bar without
+  the template, charter, model, effort, host kind and budget mode the
+  drawing gives it, nor its Notes or its delegates' link.
+- **The model chooser behind "Change model"** (the client README 5.5),
+  where no drawing shows a chooser: a folded disclosure after the
+  composer's line.
+- **The chats list's order:** one list, newest first by last activity
+  or end (the client README 3.5), where `world-solo.js` lists live
+  chats before ended ones, T6 before T10.
+- **Not in the engine yet, drawn unmarked:**
+  - a chats row's reply preview, the first line of the agent's last
+    reply;
+  - a chats row's delegates once ended ("1 delegate, ended"): the row
+    carries live delegates only;
+  - a spend's fraction ("0.8 spent"): jig's numbers are whole;
+  - the composer's account where the model's provider offers both a
+    key's and a program's endpoint ("Using your Claude subscription,
+    through Claude Code · Opus · high" in `world-solo.js` and
+    `world-reference.js`): the client names no account, "Using Opus ·
+    high", until it is told which endpoint the model takes (the client
+    README 5.5);
+- **Not built: the navigation's Board and Changes** (the client README
+  5.3): their pages wait for their own missions.
