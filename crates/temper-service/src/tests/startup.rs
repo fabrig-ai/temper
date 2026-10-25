@@ -73,7 +73,8 @@ fn startup_names_the_policy_row_before_generic_worst_case_refusal() {
         b"application.limits.overrides",
         br#"{"root.journal.transcript_bytes":1}"#,
     );
-    let found = crate::store_limits(&document, &config::Directories::working()).expect_err("short policy row");
+    let found = crate::store_limits(&document, &config::Directories::working(), Some(&fixtures::startup_agent()))
+        .expect_err("short policy row");
     assert_eq!(
         lines(&found).as_ref(),
         b"application.limits.overrides.root.journal.transcript_bytes: must agree with engine.limits.core.policy_bytes plus its policy row carrier\n"
@@ -1319,7 +1320,7 @@ fn a_store_reader_derives_serves_limits_or_their_problem_path() {
         ),
         ("limits", refused.as_bytes(), Err(b"engine.limits: past its bound\n".as_slice())),
     ] {
-        let found = crate::store_limits(input, &directories);
+        let found = crate::store_limits(input, &directories, Some(&fixtures::startup_agent()));
         let found = found.map(|limits| (limits.store, limits.forge)).map_err(|problems| lines(&problems));
         assert_eq!(found.as_ref().map_err(AsRef::as_ref), expected.as_ref().map_err(AsRef::as_ref), "{name}");
     }

@@ -768,12 +768,27 @@ have one, an engine alone none. Each:
   writes the same `application.limits` into every document (README,
   15.5), and at the link's opening by jig's hello and terms (jig's
   `protocol/channel.md`, 4.3).
+- **Call input derivation for a local agent:** when
+  `core.call_answer_bytes` is omitted from an engine's or worker's
+  `limits.overrides`, temper uses the larger of its selected jig profile's
+  allowance and the agent's `profile.declared.tool_payload`. An explicit
+  override stays unchanged, including an explicit profile-default value.
+  This composition precedes the core, store, worker wire and memory bounds;
+  offline store readers use the same checked agent metadata. Engine-only
+  processes retain their configured allowance. A cluster template must give
+  its engine and workers consistent explicit allowances; per-kind terms
+  reject a disagreement before hello.
+  Refusal of an explicit input allowance below `tool_payload` is pending a
+  follow-up after case 5 M2. The same temper follow-up owns checking that a
+  rendered answer fits both the wire answer allowance and Smith's
+  `host_reply_bytes`; it is not case 5's reply guard. Derivation alone does
+  not guarantee admission of every agent input or answer.
 - **jig's limits stay in jig's parts:** `engine.limits` and each worker's
   `limits` (jig's `protocol/configuration.md`, section 6).
 - **What the root takes of `engine.limits`:** its core children's
   (`tasks.`, `authority.`, `people.`, `fleet.`, `accounts.`, `notes.`
   and `documents.`), with `core.templates`, `core.call_records`, `core.policy_bytes` and
-  `core.call_answer_bytes`, each configured byte bound taken unchanged. The
+  `core.call_answer_bytes`, after the local-agent composition above. The
   rest of the core's it gives the core itself (`../domain/root.md`,
   section 10): from its own `root.` limits, in place of `brief.`,
   `core.brief_parts`, `core.brief_core_budgets.`, `core.resume_bytes`,

@@ -2052,6 +2052,16 @@ ceiling (6.1).
 
 ## 6. What the tiers check
 
+The service's startup world holds call-input composition at every entrance
+(`../protocol/configuration.md`, 7): omitted allowances below, at and above the
+agent's declared payload, explicit profile-default and short allowances kept,
+core/store/worker-wire parity, engine-only configuration, worker-only runtime
+and memory agreement, and per-kind call/reply Terms mismatches. Refusal of an
+explicit short input and checking rendered answers against both wire and Smith
+reply bounds remain a temper follow-up after case 5 M2; these are not proved by
+derivation. The binary's offline store reader supplies checked agent metadata;
+its init metadata regression holds the declared payload through that reader.
+
 Every world checks what the strategy lists (testing-strategy.md, section
 6). In temper:
 

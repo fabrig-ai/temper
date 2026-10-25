@@ -16,6 +16,7 @@ use skein_shell::Host as _;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Take, Write},
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
 use temper_fake::check::{self, Reason};
@@ -80,8 +81,13 @@ fn configuration(directories: &Directories, forge: u16) -> Result<temper_service
     let bytes = skein_shell::read_file(&document, crate::CONFIG_BYTES)
         .map_err(|why| format!("configuration {}: {}", document.display(), crate::unread(why)))?;
     let jig = directories.jig();
-    let crate::setup::Deployment { checked, .. } = crate::setup::check(&bytes, &jig)?;
-    let limits = temper_service::startup::store_limits(&bytes, &jig)
+    let crate::setup::Deployment { checked, named, .. } = crate::setup::check(&bytes, &jig)?;
+    let agent = named
+        .worker
+        .as_ref()
+        .map(|worker| crate::agent::read(Path::new(std::ffi::OsStr::from_bytes(&worker.agent))))
+        .transpose()?;
+    let limits = temper_service::startup::store_limits(&bytes, &jig, agent.as_ref())
         .map_err(|why| String::from_utf8_lossy(&temper_service::startup::lines(&why)).into_owned())?;
     let entry = checked.setup.entry(forge).ok_or_else(|| format!("forge {forge}: the setup has no entry for it"))?;
     match &entry.mode {

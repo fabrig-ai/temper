@@ -179,6 +179,7 @@ pub struct Program {
 /// (`lib.rs:36-41`); 09 builds the worker's host half from it.
 #[derive(Debug)]
 pub struct Agent {
+    pub tool_payload: u32,
     pub programs: Box<[Program]>,
     pub endpoints: smith_protocol_channel::Endpoints,
     pub limits: smith_host_protocol::Limits,

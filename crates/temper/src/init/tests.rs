@@ -226,7 +226,11 @@ fn check_agent(dirs: &Directories, mut document: serde_json::Value) {
     fs::write(config.join("root.der"), skein_tls_world::pki::ROOT).expect("fixture trust");
     let checked = config.join("agent-check.json");
     fs::write(&checked, serde_json::to_vec(&document).expect("agent JSON")).expect("metadata fixture");
-    crate::agent::read(&checked).expect("written agent configuration parses");
+    let agent = crate::agent::read(&checked).expect("written agent configuration parses");
+    assert_eq!(
+        u64::from(agent.tool_payload),
+        document["profile"]["declared"]["tool_payload"].as_u64().expect("declared tool payload")
+    );
 }
 
 fn check_files(dirs: &Directories, binary: &Path, written: &Written, row: &str) {

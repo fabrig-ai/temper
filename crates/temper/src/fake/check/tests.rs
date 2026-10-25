@@ -317,9 +317,16 @@ fn unreadable_store(path: &Path, errno: u8) -> Outcome {
         &[BOUNDARY, &diagnostic(&format!("opening {}: errno {errno}", path.display()))].concat(),
     )
 }
+fn agent_metadata_fixture(root: &Path) -> temper_service::settings::Agent {
+    let (agent, _) = crate::tests::configuration::documents(root, "/fixture/temper");
+    fs::write(root.join("root.der"), skein_tls_world::pki::ROOT).expect("fixture trust");
+    fs::write(root.join("agent.json"), agent).expect("checked agent metadata fixture");
+    crate::agent::read(&root.join("agent.json")).expect("agent metadata")
+}
 #[test]
 fn verb() {
     let root = scratch("fake-check-verb");
+    let agent = agent_metadata_fixture(&root);
     let document = crate::tests::configuration::check_document(&root);
     let mut no_entry = document.clone();
     no_entry["application"]["setup"] = serde_json::json!([]);
@@ -402,9 +409,12 @@ fn verb() {
         }
         match copy {
             Copy::Store { format, rows } => {
-                let limits =
-                    temper_service::startup::store_limits(bytes.as_ref().expect("seed document"), &directories.jig())
-                        .expect("store limits");
+                let limits = temper_service::startup::store_limits(
+                    bytes.as_ref().expect("seed document"),
+                    &directories.jig(),
+                    Some(&agent),
+                )
+                .expect("store limits");
                 seed(&check.store, &limits.store, format, rows);
             }
             Copy::Absent => {}

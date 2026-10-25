@@ -1535,8 +1535,12 @@ fn tls_is_refused_before_reading_the_handover() {
 fn the_store_page_holds_the_templates_largest_turn_frame() {
     let scratch = support::Scratch::startup("turn-store-page");
     let bounded = support::owned::bounded_template(scratch.path());
-    let store = temper_service::startup::store_limits(&bounded.document, &jig_protocol_config::Directories::working())
-        .expect("template store limits");
+    let store = temper_service::startup::store_limits(
+        &bounded.document,
+        &jig_protocol_config::Directories::working(),
+        Some(&bounded.agent),
+    )
+    .expect("template store limits");
     let turn = u64::from(bounded.agent.limits.bodies.turn_body);
     eprintln!("template T={turn}, kv.page.bytes={}, T+64={}", store.store.store.page.bytes, turn + 64);
     assert!(u64::from(store.store.store.page.bytes) >= turn + 64);

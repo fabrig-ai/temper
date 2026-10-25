@@ -312,6 +312,7 @@ pub fn owned_worker_agent() -> settings::Agent {
         .push(smith_protocol_channel::Endpoint { name: b"openai".as_slice().into(), number: 1, dialect: 3 })
         .unwrap();
     settings::Agent {
+        tool_payload: 4_098,
         programs: Box::new([settings::Program {
             adapter: settings::Adapter::ClaudeCode,
             path: b"/usr/local/bin/claude".as_slice().into(),

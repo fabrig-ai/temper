@@ -1,5 +1,7 @@
 //! The document's shape and its checked startup (protocol/configuration.md, 2).
 pub(crate) mod application;
+#[cfg(test)]
+mod calls_tests;
 pub(crate) mod checks;
 mod problems;
 use crate::{AccountsRuntime, Service, Worker, WorkerRuntime, settings};
@@ -230,9 +232,16 @@ pub struct StoreLimits {
     pub forge: temper_engine_domain_forge::Limits,
 }
 /// Derive the store's opening limits without reading named files or checking runtime facts.
-pub fn store_limits(document: &[u8], directories: &config::Directories) -> Result<StoreLimits, Problems> {
+pub fn store_limits(
+    document: &[u8],
+    directories: &config::Directories,
+    agent: Option<&settings::Agent>,
+) -> Result<StoreLimits, Problems> {
     let mut parsed =
         load(document, directories, false)?.1.ok_or(problem(Path::root().member(b"engine"), What::Standalone))?;
+    if !parsed.workers.is_empty() {
+        parsed.compose(agent.ok_or(problem(indexed(0).member(b"agent"), What::Agent))?);
+    }
     let root = engine_limits(&mut parsed.engine.limits, &parsed.application.limits)?;
     let store = crate::store::limits(&root, &root.forge, &parsed.engine.limits.store)
         .ok_or(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)))?;
@@ -258,6 +267,38 @@ struct Parsed {
     engine: config::Engine,
     workers: Box<[config::Worker]>,
     application: application::Members,
+    engine_call_answer: CallAnswer,
+    worker_call_answers: Box<[CallAnswer]>,
+}
+impl Parsed {
+    fn compose(&mut self, agent: &settings::Agent) {
+        self.engine_call_answer.compose(&mut self.engine.limits, agent);
+        for (index, worker) in self.workers.iter_mut().enumerate() {
+            self.worker_call_answers
+                .get(index)
+                .expect("one provenance per parsed worker")
+                .compose(&mut worker.limits, agent);
+        }
+    }
+}
+/// Raw membership preserves an explicit profile-default override (protocol/configuration.md, 7).
+#[derive(Clone, Copy, Debug)]
+enum CallAnswer {
+    Profile,
+    Explicit,
+}
+impl CallAnswer {
+    fn read(document: &skein_json::Document, at: u32) -> Self {
+        let Some(limits) = member(document, at, b"limits") else { return Self::Profile };
+        let Some(overrides) = member(document, limits, b"overrides") else { return Self::Profile };
+        if member(document, overrides, b"core.call_answer_bytes").is_some() { Self::Explicit } else { Self::Profile }
+    }
+    fn compose(self, limits: &mut config::Limits, agent: &settings::Agent) {
+        match self {
+            Self::Profile => limits.core.call_answer_bytes = limits.core.call_answer_bytes.max(agent.tool_payload),
+            Self::Explicit => {}
+        }
+    }
 }
 fn problem(path: Path, what: What) -> Problems {
     let mut problems = Problems::empty();
@@ -330,6 +371,7 @@ fn load(
         None => List::with_capacity(0),
     };
     let mut workers = List::with_capacity(ats.len());
+    let mut worker_call_answers = List::with_capacity(ats.len());
     for (index, at) in ats.iter().enumerate() {
         if shape == Shape::EngineAlone {
             continue;
@@ -338,7 +380,10 @@ fn load(
             checks::raw_worker(&document, *at, &indexed(index), &mut problems);
         }
         match config::worker(&document, *at, directories) {
-            Ok(worker) => workers.push(worker).expect("bounded workers"),
+            Ok(worker) => {
+                workers.push(worker).expect("bounded workers");
+                worker_call_answers.push(CallAnswer::read(&document, *at)).expect("bounded workers");
+            }
             Err(found) => problems.append(found, &indexed(index)),
         }
     }
@@ -368,8 +413,19 @@ fn load(
     }
     let application = application.expect("required application checked");
     let workers = workers.into_boxed();
+    let worker_call_answers = worker_call_answers.into_boxed();
+    let engine_call_answer = CallAnswer::read(&document, engine_at.expect("required engine checked"));
     if !check_start {
-        return Ok((shape, Some(Parsed { engine: engine.expect("required engine checked"), workers, application })));
+        return Ok((
+            shape,
+            Some(Parsed {
+                engine: engine.expect("required engine checked"),
+                workers,
+                application,
+                engine_call_answer,
+                worker_call_answers,
+            }),
+        ));
     }
     if shape == Shape::EngineAlone && !ats.is_empty() {
         problems.push(root.member(b"workers"), What::EngineAlone);
@@ -419,7 +475,16 @@ fn load(
     if !problems.is_empty() {
         return Err(problems);
     }
-    Ok((shape, Some(Parsed { engine: engine.expect("required engine checked"), workers, application })))
+    Ok((
+        shape,
+        Some(Parsed {
+            engine: engine.expect("required engine checked"),
+            workers,
+            application,
+            engine_call_answer,
+            worker_call_answers,
+        }),
+    ))
 }
 fn all_files(parsed: &Parsed) -> Box<[config::File]> {
     let engine = config::files(&parsed.engine);
@@ -543,8 +608,8 @@ pub fn memory_terms(
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<MemoryTerms, Problems> {
     if shape(document, directories)? == Shape::WorkerAlone {
-        let part = worker_part(document, directories)?;
-        check_worker_part(&part, files, agent)?;
+        let mut part = worker_part(document, directories)?;
+        check_worker_part(&mut part, files, agent)?;
         let worker = crate::worker_settings::memory_terms(&part.worker, agent, &part.limits).ok_or(memory_bound())?;
         let process =
             crate::system::worker_process_memory_terms(&part.worker, agent, &part.limits).ok_or(memory_bound())?;
@@ -602,8 +667,8 @@ pub fn memory_requirements(
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<Requirements, Problems> {
     if shape(document, directories)? == Shape::WorkerAlone {
-        let part = worker_part(document, directories)?;
-        check_worker_part(&part, files, agent)?;
+        let mut part = worker_part(document, directories)?;
+        check_worker_part(&mut part, files, agent)?;
         return Ok(Requirements {
             engine_bytes: 0,
             worker_bytes: crate::system::worker_alone_worst_case(&part.worker, agent, &part.limits)
@@ -627,11 +692,14 @@ fn checked_start(
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<CheckedStart, Problems> {
-    let parsed = parse(document, directories)?;
+    let mut parsed = parse(document, directories)?;
     let agent = match parsed.workers.first() {
         Some(_) => Some(agent.ok_or(problem(indexed(0).member(b"agent"), What::Agent))?),
         None => None,
     };
+    if let Some(agent) = agent {
+        parsed.compose(agent);
+    }
     // Only a checked local or client-managed entry enables a file-free Forgejo.
     for (index, forge) in parsed.application.forges.iter().enumerate() {
         let admitted = match setup {
@@ -885,7 +953,12 @@ fn prepare_forges(
 
 /// The worker-only document, with no deployment or engine declarations.
 #[derive(Debug)]
+#[expect(
+    clippy::partial_pub_fields,
+    reason = "the shell reads the worker handover; raw override provenance stays service-private"
+)]
 pub struct WorkerPart {
+    call_answer: CallAnswer,
     pub worker: settings::Worker,
     pub limits: crate::limits::Limits,
     pub named: NamedWorker,
@@ -925,6 +998,7 @@ pub fn worker_part(input: &[u8], directories: &config::Directories) -> Result<Wo
         file.at = path;
     }
     Ok(WorkerPart {
+        call_answer: CallAnswer::read(&document, *ats.get(0).expect("one worker")),
         named: NamedWorker { root: own.root.clone(), agent: jig.agent.configuration.clone() },
         worker: settings::Worker { jig, root: own.root, git: own.git },
         limits,
@@ -933,20 +1007,21 @@ pub fn worker_part(input: &[u8], directories: &config::Directories) -> Result<Wo
 }
 /// Construct a worker-only service; its complete envelope belongs to the worker.
 pub fn worker_alone(
-    part: WorkerPart,
+    mut part: WorkerPart,
     files: &settings::Files,
     agent: &settings::Agent,
     runtime: WorkerRuntime,
     seed: u64,
 ) -> Result<Service, Problems> {
-    check_worker_part(&part, files, agent)?;
+    check_worker_part(&mut part, files, agent)?;
     match Service::worker_alone(&part.worker, &part.limits, agent, files, runtime, seed) {
         Ok(service) => Ok(service),
         Err(found) => Err(Problems::jig(found, &Path::root())),
     }
 }
 
-fn check_worker_part(part: &WorkerPart, files: &settings::Files, agent: &settings::Agent) -> Result<(), Problems> {
+fn check_worker_part(part: &mut WorkerPart, files: &settings::Files, agent: &settings::Agent) -> Result<(), Problems> {
+    part.call_answer.compose(&mut part.worker.jig.limits, agent);
     let mut problems = Problems::empty();
     for file in &part.files {
         match files.contents(&file.path) {

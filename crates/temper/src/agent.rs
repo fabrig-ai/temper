@@ -49,6 +49,7 @@ pub(crate) fn read(configuration: &Path) -> Result<Agent, String> {
         })
         .collect();
     Ok(Agent {
+        tool_payload: configuration.profile.declared.tool_payload,
         programs,
         endpoints: configuration.service.channel_endpoints,
         limits: protocol,
