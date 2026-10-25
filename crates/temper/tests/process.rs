@@ -991,9 +991,9 @@ fn box_notice_words(line: &str) -> &str {
         && bytes[5] == b':'
         && &bytes[8..10] == b"Z "
         && [0, 1, 3, 4, 6, 7].iter().all(|index| bytes[*index].is_ascii_digit())
-        && &bytes[..2] < b"24"
-        && &bytes[3..5] < b"60"
-        && &bytes[6..8] < b"60"
+        && &bytes[..2] < b"24".as_slice()
+        && &bytes[3..5] < b"60".as_slice()
+        && &bytes[6..8] < b"60".as_slice()
     {
         &line[10..]
     } else {

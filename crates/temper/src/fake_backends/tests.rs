@@ -833,3 +833,21 @@ fn fake_backends_echo_takes_the_variable_and_refuses_the_flag() {
             .contains("TEMPER_ECHO: expected none or steps")
     );
 }
+
+#[test]
+fn own_app_key_is_the_seeded_apps_private_pem() {
+    let scratch = Scratch::new("own-app-key");
+    let (source, prepared) = prepared_source(&scratch);
+    let path = crate::path(&prepared.directories.data).join("github-app.pem");
+    let key = fs::read(&path).expect("own-App key left for the person");
+    let forge = temper_fake::forge::Document::decode(
+        &fs::read(crate::path(&prepared.directories.config).join("github.json")).expect("forge document"),
+    )
+    .expect("generated forge");
+    assert_eq!(key, forge.github_app_key().expect("seeded App").as_ref());
+    assert!(key.starts_with(b"-----BEGIN RSA PRIVATE KEY-----"));
+    assert_eq!(fs::metadata(&path).expect("key metadata").mode() & 0o777, 0o600);
+    drop(prepared);
+    let _again = start(&source, None).expect("reuse keeps the key");
+    assert_eq!(fs::read(&path).expect("retained key"), key);
+}

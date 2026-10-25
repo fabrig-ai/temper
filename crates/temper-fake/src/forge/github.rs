@@ -16,6 +16,7 @@ pub(super) struct Github {
     slug: Box<[u8]>,
     bot: u64,
     key: usize,
+    setup_url: Option<Box<[u8]>>,
     accounts: Box<[Account]>,
     token_life: Duration,
 }
@@ -68,6 +69,10 @@ pub(super) fn decode(d: &Json, at: u32, p: &Path) -> Result<Github, Refusal> {
     let key_at = read::required(&mut o, d, b"key", &app_path)?;
     let key = read::integer(d, key_at, 2, &app_path.member(b"key"))?;
     let key = usize::try_from(key).expect("three fixed keys");
+    let setup_url = match o.member(d, b"setup_url") {
+        Some(at) if !read::is_null(d, at) => Some(read::text(d, at, 1024, &app_path.member(b"setup_url"))?),
+        Some(_) | None => None,
+    };
     read::finish(o, d, &app_path)?;
     let p = p.member(b"accounts");
     let items = read::list(d, accounts, 1, &p)?;
@@ -97,7 +102,7 @@ pub(super) fn decode(d: &Json, at: u32, p: &Path) -> Result<Github, Refusal> {
         }
         accounts.push(account).expect("eight accounts");
     }
-    Ok(Github { id: app_id, slug, bot, key, accounts: accounts.into_boxed(), token_life })
+    Ok(Github { id: app_id, slug, bot, key, setup_url, accounts: accounts.into_boxed(), token_life })
 }
 fn account(d: &Json, at: u32, p: &Path) -> Result<Account, Refusal> {
     let mut o = read::object(d, at, p)?;
@@ -270,7 +275,9 @@ impl Github {
         let mut peer =
             skein_fake_peers::forge::Peer::github(document.listen, blob, peer_limits, config, limits(), forge, seed)?
                 .without_records();
-        let installations = peer.github_layer_mut().expect("GitHub peer").installations_mut();
+        let layer = peer.github_layer_mut().expect("GitHub peer");
+        layer.set_setup_url(self.setup_url.clone()).or(Err(skein_fake_peers::Error::Limits))?;
+        let installations = layer.installations_mut();
         // The pinned layer allocates from 1; accounts without an installation consume no id.
         for account in &self.accounts {
             let Some(installation) = &account.installation else { continue };
@@ -326,5 +333,11 @@ pub fn limits() -> layer::Limits {
         response: crate::limits::FORGE_BODY,
         blob_records: 16,
         git_records: 128,
+    }
+}
+
+impl Github {
+    pub(super) fn pem(&self) -> Box<[u8]> {
+        layer::keys::pem(layer::keys::KEYS.get(self.key).expect("checked key index")).expect("fixed fake App key")
     }
 }

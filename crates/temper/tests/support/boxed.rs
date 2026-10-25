@@ -381,11 +381,15 @@ pub struct CtlOutcome<T> {
     pub left: Option<Vec<u32>>,
     pub calls: Vec<super::Ended>,
     pub checked: Option<T>,
+    pub visits: Vec<Vec<super::sign_in_browser::Hop>>,
 }
 struct CtlJudge<'a, F, T> {
     expected_exits: Vec<(usize, u8)>,
     face: Option<super::forge_land::FaceProcs>,
     visit: Visit,
+    tab: Option<usize>,
+    tab_visit: Visit,
+    visits: &'a Cell<Vec<Vec<super::sign_in_browser::Hop>>>,
     reply: Option<super::forge_land::Reply>,
     on_link: Option<Box<dyn FnOnce()>>,
     check: Option<F>,
@@ -419,6 +423,29 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl") };
             if !failed {
                 self.reply.as_mut().expect("face reply reads").advance(calls, &mut self.expected_exits);
+            }
+        }
+        if let Some(index) = self.tab {
+            let (drivers, visitors) = procs.split_at_mut(index);
+            let Process::Calls(calls) = &mut drivers[1] else { panic!("ctl") };
+            let Process::Visitor(visitor) = &mut visitors[0] else { panic!("tab visitor") };
+            if calls.visiting() {
+                if matches!(self.tab_visit, Visit::Handed) && visitor.is_empty() {
+                    let hops = visitor.hops().to_vec();
+                    calls.visited(hops.last().expect("landing hop").status);
+                    let mut visits = self.visits.take();
+                    visits.push(hops);
+                    self.visits.set(visits);
+                    self.tab_visit = Visit::AwaitingAddress;
+                } else if matches!(self.tab_visit, Visit::AwaitingAddress) {
+                    let address = calls
+                        .ends()
+                        .last()
+                        .and_then(super::sign_in::authorization_address)
+                        .expect("last act printed a browser address");
+                    visitor.hand(address);
+                    self.tab_visit = Visit::Handed;
+                }
             }
         }
         let (drivers, peers) = procs.split_at_mut(2);
@@ -642,6 +669,8 @@ fn run_ctl_peers<T>(
         let config = flags.windows(2).find(|pair| pair[0] == "--config").expect("explicit config directory");
         peer.configure(Path::new(&config[1]));
     }
+    let tab = steps.iter().any(|step| matches!(step, super::ctl::Step::Visit));
+    assert!(!tab || face.is_none(), "box-owned peers or an independent face");
     let clock = Clock::new();
     let mut binary = Binary::start_with_tree(
         dying_with_test(Command {
@@ -661,10 +690,14 @@ fn run_ctl_peers<T>(
     let root = skein_shell::open_root(client_root).expect("client root");
     fds.push(root);
     let checked = Cell::new(None);
+    let visits = Cell::new(Vec::new());
     let mut world = real::World::new(CtlJudge {
         expected_exits: peers.expected_exits,
         face: face.as_ref().map(|_| super::forge_land::FaceProcs { issuer: 2, visitor: 3, peer: 4 }),
         visit: Visit::AwaitingAddress,
+        tab: tab.then_some(2),
+        tab_visit: Visit::AwaitingAddress,
+        visits: &visits,
         reply,
         on_link,
         check: Some(check),
@@ -685,6 +718,9 @@ fn run_ctl_peers<T>(
         }
         Process::Calls(Box::new(calls))
     });
+    if tab {
+        world.spawn(|| Process::Visitor(Box::default()));
+    }
     let face_procs = face.map(|face| face.spawn(&mut world));
 
     if let Some(peer) = peer {
@@ -705,6 +741,7 @@ fn run_ctl_peers<T>(
                 .map(|call| super::Ended { exit: call.exit, stdout: call.stdout.clone(), stderr: call.stderr.clone() })
                 .collect(),
             checked: checked.take(),
+            visits: visits.take(),
         },
         face_procs.as_ref().map(|at| super::forge_land::seen(&ended.procs, at)),
     )

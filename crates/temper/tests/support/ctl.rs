@@ -70,6 +70,8 @@ pub enum Step {
     /// Wait for bytes in the box's captured stderr; requires a box referee.
     Stderr(&'static [u8]),
     Run(Call),
+    /// Follow the previous call's printed address on the box referee's visitor.
+    Visit,
     /// Form a dependent call from the completed calls' documents.
     Then(NextCall),
     Start(Call),
@@ -292,6 +294,7 @@ impl Child {
 
 enum Action {
     Run,
+    Visit,
     Until(Call, ReadCondition),
     Stderr(&'static [u8]),
     Signal,
@@ -368,6 +371,19 @@ impl Calls {
     #[must_use]
     pub fn idle(&self) -> bool {
         self.done()
+    }
+    pub(super) fn visiting(&self) -> bool {
+        matches!(self.action, Some(Action::Visit))
+    }
+    pub(super) fn visited(&mut self, status: u16) {
+        assert!(self.visiting(), "visit requested");
+        self.ends.push(Ended {
+            exit: Some(Exit::Code(0)),
+            stdout: format!("HTTP/1.1 {status}\n").into_bytes(),
+            stderr: Vec::new(),
+        });
+        self.observed_at.push(Some(self.wall));
+        self.action = None;
     }
     /// Queue another step before this batch runs.
     pub fn push(&mut self, step: Step) {
@@ -544,6 +560,7 @@ impl Calls {
                     self.retry = Some(now.saturating_add(PACE));
                 }
             }
+            Action::Visit => panic!("a visit has no child"),
             Action::Stderr(_) => panic!("a stderr gate has no child"),
             Action::NextLink => unreachable!("link wait has no child"),
             Action::Signal => assert_eq!(
@@ -605,6 +622,13 @@ impl Calls {
             }
         }
     }
+    fn waiting(&self, now: Time) -> bool {
+        self.cancelling
+            || self.child.is_some()
+            || self.awaiting_started
+            || matches!(self.action, Some(Action::Stderr(_) | Action::NextLink | Action::Visit))
+            || self.retry.is_some_and(|retry| retry > now)
+    }
     fn advance(&mut self, now: Time) {
         // A box that exits before printing its link must be diagnosed by
         // its referee, rather than panicking while constructing sign-in stdin.
@@ -613,12 +637,7 @@ impl Calls {
         {
             return;
         }
-        if self.cancelling
-            || self.child.is_some()
-            || self.awaiting_started
-            || matches!(self.action, Some(Action::Stderr(_) | Action::NextLink))
-            || self.retry.is_some_and(|retry| retry > now)
-        {
+        if self.waiting(now) {
             return;
         }
         if let Some(Action::Until(call, _)) = &self.action {
@@ -664,6 +683,7 @@ impl Calls {
                 );
                 self.child.as_mut().expect("open child").typing = until.map_or(Input::Hold, Input::After);
             }
+            Some(Step::Visit) => self.action = Some(Action::Visit),
             Some(Step::Run(call)) => {
                 self.action = Some(Action::Run);
                 self.start(call, false);

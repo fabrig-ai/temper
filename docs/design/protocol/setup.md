@@ -1383,7 +1383,18 @@ The preparation prints its effective paths, supervised peers and dummy
 facts' paths. For a peer not yet supervised it prints the manual command;
 it never reports that peer as running.
 GitHub has one fixed person and repository. Its App id and matching fixture
-key and the dummy model key are the values a walk uses. The elsewhere
+key and the dummy model key are the values a walk uses. Preparation writes
+App 1's matching PEM to D'/github-app.pem, mode 0600, retains it on reuse,
+and appends `box: GitHub own App id 1, key file FILE` to its printed facts.
+The generated GitHub document sets the seeded App's optional `setup_url`
+to `http://CLIENTS/forges/2/github/setup`. An already installed App still
+offers Install while its installation is stray; visiting GitHub and its
+setup callback accepts that installation. Manifest conversion creates a
+new App with its own installations and tokens, without inheriting the seed
+App's installation or minted tokens. Forges 2 and 4 select the generated
+fake git adapter through `application.forges[].git_program`; owned Forgejo
+keeps real git (configuration.md, section 3).
+The elsewhere
 Forgejo's admin token is kept in its private file: instructions name only
 the path, and no log, report or record contains its contents. The fixed signed-in model bearer uses the first added
 credential stream with the same seed as the issuer, while the primary

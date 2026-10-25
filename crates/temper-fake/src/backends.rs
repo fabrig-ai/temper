@@ -345,7 +345,7 @@ pub fn rewrite(temper: &[u8], agent: &[u8], paths: &Paths, peers: &Peers) -> Res
     Ok(Documents {
         temper: edits.finish(&d)?,
         agent: agent_edits.finish(&a)?,
-        github: forge_document(&github, &paths.data)?,
+        github: forge_document(&github, &paths.data, &d, clients)?,
         oauth: read::joined(&[
             b"{\"listen\":",
             &address(&oauth)?,
@@ -533,9 +533,14 @@ fn worker(d: &Document, config: &[u8], edits: &mut Edits) -> Result<(), Refusal>
     edits.set(d, arguments, &read::joined(&[b"[\"agent\",", &text(&name)?, b"]"]), &wp)?;
     Ok(())
 }
-fn forge_document(socket: &[u8], data: &[u8]) -> Result<Box<[u8]>, Refusal> {
+fn forge_document(socket: &[u8], data: &[u8], d: &Document, clients: u32) -> Result<Box<[u8]>, Refusal> {
+    let p = Path::root().member(b"application").member(b"clients").member(b"listener");
+    let listener = member(d, clients, b"listener", &p)?;
+    let at = member(d, listener, b"socket", &p)?;
+    let clients = read::text(d, at, 128, &p.member(b"socket"))?;
+    let setup = text(&read::joined(&[b"http://", &clients, b"/forges/2/github/setup"]))?;
     Ok(read::joined(&[b"{\"listen\":", &address(socket)?, b",\"admin_token\":", &text(&path(data, b"github-admin.token"))?,
-        br#", "owner":"fake-person","repositories":[{"name":"widget","landing":"main","ci":null}],"github":{"app":{"id":1,"slug":"temper-fake","bot":2,"key":0},"accounts":[{"login":"fake-person","id":3,"kind":"user","installation":{"id":1,"repositories":"all"}}]}}"#]))
+        br#", "owner":"fake-person","repositories":[{"name":"widget","landing":"main","ci":null}],"github":{"app":{"id":1,"slug":"temper-fake","bot":2,"key":0,"setup_url":"#,&setup,br#"},"accounts":[{"login":"fake-person","id":3,"kind":"user","installation":{"id":1,"repositories":"all"}}]}}"#]))
 }
 fn model_document(socket: &[u8], data: &[u8]) -> Result<Box<[u8]>, Refusal> {
     Ok(read::joined(&[b"{\"listen\":", &address(socket)?, b",\"key\":", &text(&path(data, b"llm.key"))?,
