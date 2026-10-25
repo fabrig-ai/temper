@@ -212,6 +212,21 @@ pub(crate) fn route_bound(limits: &Limits) -> Option<u32> {
     Some(routes.max(jig_domain_core::settings::writes_worst_case(&core_limits(limits))?))
 }
 
+// Quiet news republishes one task in addition to the admitted event. An
+// unavailable destination may reroute each task's proposal and escalation;
+// reserve another full task delivery cohort (4N+8), including its keyed reply
+// and abandoned brief continuations. Historical people callbacks are drained
+// once and remain covered by the ordinary cohort's pending*waiters term.
+pub(crate) fn delivery_bound(limits: &Limits) -> Option<u32> {
+    let tasks = limits.tasks.tasks.checked_mul(4)?.checked_add(8)?;
+    let ordinary = tasks
+        .checked_add(limits.people.pending.checked_mul(limits.people.waiters)?)?
+        .max(limits.fleet.workers.checked_mul(fleet::max_out(&limits.fleet))?.checked_add(1)?)
+        .max(limits.brief.sections)
+        .max(limits.tasks.saved_resources);
+    ordinary.checked_add(tasks)
+}
+
 // The walking root drains its pending callbacks in the same decision as a newly
 // admitted event. Thus any event may reach the full child route. The bound sums
 // each child's maximum output cohort, the retained callbacks, call records and
@@ -277,13 +292,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         || limits.journal.writes < routes
         || limits.call_records == 0
         || limits.call_records > limits.journal.writes.checked_sub(routes)?
-        || limits.journal.deliveries
-            < limits
-                .tasks
-                .tasks
-                .checked_mul(4)?
-                .checked_add(8)?
-                .checked_add(limits.people.pending.checked_mul(limits.people.waiters)?)?
+        || limits.journal.deliveries < delivery_bound(limits)?
         || limits.loads.loads < 2
         || limits.loads.rows < 2
         || limits.journal.held < limits.journal.deliveries.checked_mul(3)?
@@ -640,4 +649,18 @@ pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
             .max(u64::from(limits.forge.client.answer_bytes))
             .max(u64::from(people.holdings).checked_mul(u64::try_from(size_of::<people::Holding>()).ok()?)?),
     )
+}
+
+#[cfg(test)]
+mod projection_delivery_tests {
+    #[test]
+    fn quiet_news_reserves_an_additional_task_cohort_at_the_admission_boundary() {
+        let mut limits = crate::tests::resume_fixture::limits();
+        let bound = super::delivery_bound(&limits).unwrap();
+        limits.journal.deliveries = bound;
+        limits.journal.held = bound * 3;
+        assert!(super::worst_case(&limits).is_some());
+        limits.journal.deliveries -= 1;
+        assert!(super::worst_case(&limits).is_none());
+    }
 }

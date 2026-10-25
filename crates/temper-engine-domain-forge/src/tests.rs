@@ -1983,3 +1983,89 @@ fn workspace_landing_is_only_for_an_existing_inherited_writable_producer() {
         }
     }
 }
+
+#[test]
+fn a_held_projection_keeps_its_rollback_until_late_not_made_after_restart() {
+    let mut d = held_restored();
+    let before = temper_engine_domain_forge_issues::Projected::default();
+    let mut accepted = before.clone();
+    accepted.opened = true;
+    let issue = IssueRow {
+        goal: 7,
+        repository: REPO,
+        state: accepted,
+        number: None,
+        pending: Some(11),
+        before: Some(before.clone()),
+        failed: true,
+        desired: None,
+        closing_generation: None,
+    };
+    outputs(&mut d, Event::Restore { record: Stored::Issue(issue.clone()) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    assert_eq!(d.issue(7), Some(&issue), "restart retains the held projection and its rollback");
+    let out = outputs(&mut d, Event::Resolve { entry: 11, again: false });
+    let mut rolled_back = issue;
+    rolled_back.state = before;
+    rolled_back.pending = None;
+    rolled_back.before = None;
+    assert_eq!(
+        out.as_ref(),
+        &[
+            Request::Erase { key: Key::Entry(11) },
+            Request::Save { read_afresh: None, release: None, record: Stored::Issue(rolled_back.clone()) },
+            Request::ProjectionFailed { goal: 7, source: 11 },
+            Request::ProjectionOutbox { entry: 11, outcome: skein_forge_client::Outcome::Withdrawn },
+        ],
+        "projection settlement never routes ordinary task NotMade"
+    );
+    assert_eq!(d.issue(7), Some(&rolled_back));
+    assert!(outputs(&mut d, Event::Resolve { entry: 11, again: false }).is_empty());
+    eprintln!(
+        "projection wait ABI: Wall={} ProjectionWait={} map capacity8={} prior={}",
+        size_of::<Wall>(),
+        size_of::<domain::ProjectionWait>(),
+        skein_lib::Map::<u64, domain::ProjectionWait>::worst_case(8).unwrap(),
+        skein_lib::Map::<u64, Wall>::worst_case(8).unwrap()
+    );
+}
+
+#[test]
+fn a_full_outbox_keeps_final_desired_and_defers_its_retry_instead_of_reentering() {
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    for number in 12..12 + u64::from(LIMITS.entries) {
+        outputs(&mut d, Event::Enqueue { entry: status(number, 8) });
+    }
+    let view = temper_engine_domain_forge_issues::GoalView {
+        phase: temper_engine_domain_forge_issues::Phase::Done,
+        goal: 7,
+        repository: u64::from(REPO.repository),
+        title: "done".into(),
+        goal_text: "done".into(),
+        plan: Box::new([]),
+        milestones: Box::new([]),
+        finished: Some("done".into()),
+    };
+    let out = outputs(
+        &mut d,
+        Event::Project { entry: 30, repository: REPO, view: view.clone(), closing_generation: Some(77) },
+    );
+    let row = d.issue(7).unwrap();
+    assert_eq!(row.desired, Some(view));
+    assert_eq!(row.closing_generation, Some(77));
+    assert_eq!(row.pending, None);
+    assert!(!row.failed);
+    assert_eq!(
+        out.as_ref(),
+        &[
+            Request::Save { read_afresh: None, release: None, record: Stored::Issue(row.clone()) },
+            Request::ProjectAfter {
+                goal: 7,
+                when: Some(Wall::from_nanos(env().wall.as_nanos() + LIMITS.issue_policy.interval.as_nanos()))
+            },
+        ]
+    );
+}

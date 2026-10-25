@@ -3588,7 +3588,15 @@ fn project(
         issues::Decision::Hold => emit(out, Request::ProjectionFailed { goal, source: number }),
         issues::Decision::Effect(effect) => {
             if d.entries.len() == env.limits.entries || d.entries.contains_key(&number) {
-                emit(out, Request::ProjectAfter { goal, when: None });
+                emit(
+                    out,
+                    Request::ProjectAfter {
+                        goal,
+                        when: Some(skein_lib::Wall::from_nanos(
+                            env.wall.as_nanos().saturating_add(env.limits.issue_policy.interval.as_nanos()),
+                        )),
+                    },
+                );
                 return;
             }
             let Some(write) = project_write(d, &prior, effect, &env.limits) else {
