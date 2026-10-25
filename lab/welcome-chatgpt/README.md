@@ -7,8 +7,8 @@ The spent-link relink sequence is `cluster-web`'s. hand's sole peer is the
 issuer origin captured from the box's stderr; every other destination
 remains refused.
 
-`steps welcome` opens `/welcome`, the Model step and Continue with ChatGPT,
-then requires `work/hello is ready` and opens `hello`. `steps chat` sends a
+The `welcome` function in `steps walk` opens `/welcome`, the Model step and Continue with ChatGPT,
+then requires `work/hello is ready` and opens `hello`. Its `chat` function sends a
 first message, waits for the fake reply, and reloads to see it again.
 A missed step records the outline and a shot and stops the story. There
 are no sleeps. All waits use the existing lab allowances.
