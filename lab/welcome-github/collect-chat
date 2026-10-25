@@ -1,0 +1,14 @@
+#!/bin/sh
+# Collect while the box still serves ctl; the check reads only this document.
+set -eu
+if [ "$#" -ne 4 ]; then
+    echo 'usage: collect-chat TEMPER CLIENT GROUND OUT' >&2
+    exit 2
+fi
+if [ ! -f "$3/chat" ]; then
+    echo 'collect-chat: the browser did not reach a chat' >&2
+    exit 2
+fi
+task=$(cat "$3/chat")
+case "$task" in ''|*[!0-9]*) echo 'collect-chat: invalid chat number' >&2; exit 2 ;; esac
+"$1" ctl "$2" chat "$task" --json > "$4/chat.json"

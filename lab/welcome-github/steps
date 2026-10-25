@@ -1,0 +1,125 @@
+#!/bin/sh
+# The welcome's browser phases, followed by a persisted first conversation.
+set -eu
+if [ "$#" -ne 5 ]; then
+    echo 'usage: steps PHASE BROWSE ADDRESS GROUND KEY' >&2
+    exit 2
+fi
+phase=$1
+browse=$2
+address=$3
+ground=$4
+key=$5
+call() {
+    printf '+ browse'
+    printf ' %s' "$@"
+    printf '\n'
+    status=0
+    "$browse" "$address" "$@" || status=$?
+    if [ "$status" -ne 0 ]; then
+        # Retain the failing page without continuing past a missed step.
+        "$browse" "$address" outline || :
+        "$browse" "$address" shot || :
+        exit "$status"
+    fi
+}
+welcome() {
+    # The link navigated; wait until the page has completed sign-in.
+    call wait button 'Sign out' --exact --timeout 120
+    call go /welcome
+    call wait heading 'Welcome to temper' --exact --timeout 120
+    call press link 'Set up temper' --exact
+    call wait heading 'Connect a forge' --exact --timeout 120
+}
+forge() {
+    call wait button 'Connect GitHub' --exact --timeout 120
+    call press button 'Connect GitHub' --exact
+    call wait link 'Create GitHub App' --exact --timeout 120
+    call press link 'Create GitHub App' --exact
+    # GitHub creates and installs the App, then returns the tab unaided.
+    call wait heading 'Choose a repository to start in' --exact --timeout 120
+    call press choice 'fake-person/widget' --exact
+    call wait button 'Adopt fake-person/widget' --exact --timeout 120
+    call press button 'Adopt fake-person/widget' --exact
+    call wait heading 'Connect a model' --exact --timeout 120
+}
+model() {
+    call wait heading 'Connect a model' --exact --timeout 120
+    call press link 'Use an API key' --exact
+    call wait 'text field' 'Key (pasted once)' --exact --timeout 120
+    call type 'text field' 'Key (pasted once)' < "$key"
+    call press button 'Add key' --exact
+}
+ready() {
+    # client/README.md, The welcome: “an account made there ConnectModel's Ready”.
+    call wait region Ready --exact --timeout 120
+    call wait status 'Added your OpenAI API key' --in region Ready --exact --timeout 120
+    call press link 'Start a chat' --in region Ready --exact
+    call wait heading Chats --exact --timeout 120
+    call wait 'text area' 'Start a chat' --exact --timeout 120
+    # The selected project is also the new chat composer's project.
+    outline=$(call outline)
+    printf '%s\n' "$outline"
+    # frame.rs emits the selected project before the other project buttons.
+    selected=
+    while read -r line; do
+        case "$line" in 'button "'*) selected=$line; break ;; esac
+    done <<OUTLINE
+$outline
+OUTLINE
+    case "$selected" in
+        'button "widget"'*) ;;
+        *) echo 'steps: expected the composer in project widget' >&2; exit 1 ;;
+    esac
+}
+chat() {
+    call wait 'text area' 'Start a chat' --exact --timeout 120
+    printf 'Hello from the welcome lab.\n' | call type 'text area' 'Start a chat'
+    call press button 'Start chat' --exact
+    call wait log Conversation --timeout 120
+    call wait text 'Hello from the local fake model.' --in log Conversation --timeout 180
+    # Derive the ordinary ctl chat read from the page the person reached.
+    current=$("$browse" "$address" address)
+    printf '%s\n' "$current"
+    case "$current" in
+        http://*/chats/*) task=${current##*/chats/} ;;
+        *) echo 'steps: expected a chat address' >&2; exit 1 ;;
+    esac
+    case "$task" in ''|*[!0-9]*) echo 'steps: expected a numeric chat' >&2; exit 1 ;; esac
+    printf '%s\n' "$task" > "$ground/chat"
+    call reload
+    call wait text 'Hello from the local fake model.' --in log Conversation --timeout 120
+    call shot
+}
+# The lab records an action failure and still invokes later actions. A phase
+# therefore runs only after its predecessor completed, even across processes.
+previous=
+case "$phase" in
+    welcome|walk) ;;
+    forge) previous=welcome ;;
+    model) previous=forge ;;
+    ready) previous=model ;;
+    chat) previous=ready ;;
+    *) echo 'steps: unknown phase' >&2; exit 2 ;;
+esac
+if [ -n "$previous" ]; then
+    completed=
+    if [ -f "$ground/phase" ]; then
+        IFS= read -r completed < "$ground/phase"
+    fi
+    if [ "$completed" != "$previous" ]; then
+        echo "steps: $previous did not complete; stopping before $phase" >&2
+        exit 1
+    fi
+fi
+printf 'running %s\n' "$phase" > "$ground/phase"
+case "$phase" in
+    welcome) welcome ;;
+    forge) forge ;;
+    model) model ;;
+    ready) ready ;;
+    chat) chat ;;
+    walk) welcome; forge; model; ready; chat ;;
+    *) echo 'steps: unknown phase' >&2; exit 2 ;;
+esac
+printf '%s\n' "$phase" > "$ground/phase"

@@ -674,3 +674,39 @@ through the director.
 - **Cost:** 245's ready, command, stop and triage values stay. Only
   the driver's three measured bounds rescale by about 1.5 times the
   calibration's use, reported with the run's spend before use.
+
+## 12. Welcome paths on the fake box
+
+`lab/welcome-github` clicks GitHub's one-click App creation, installation
+and return, adopts `fake-person/widget`, pastes the box's named fake model
+key, and follows the embedded Ready card’s “Start a chat” into `widget`.
+`lab/welcome-forgejo-here` clicks
+Forgejo here, makes `work/hello` in `hello`, and uses the same key path.
+Each waits for visible sign-in before opening the welcome, requires the
+Model step’s embedded Ready card and “Added your OpenAI API key” status,
+and presses “Start a chat”. Unlike sign-in, an added key stays on Model
+(`client/README.md`, The welcome). The walk checks the selected project,
+which is the new composer’s project, before pressing “Start chat” and
+requiring the fake reply before and after reload. Welcome, Forge, Model,
+Ready and chat are separate seed actions, so a live scene can capture
+between them. Forgejo here’s Ready phase waits
+for the Model step’s repository-adopted summary before following “Start a
+chat”, since its real setup continues in the background during Model.
+All welcome experiments keep
+one byte-identical `call`, guarded by a unit test: failure keeps an
+outline and shot, then stops. Each later phase requires its predecessor’s
+completion marker, since the lab records failed actions and continues the
+seed; a failed phase therefore leaves every later phase without browser calls.
+
+The GitHub hand admits its box's captured fake GitHub origin as its sole
+peer. Forgejo here's hand has no peer: its walk never opens the forge's
+pages. Its subject supplies a `forgejo-cache` USTAR tree at the box's
+cache paths for Forgejo 17.0.0 and runner 13.2.0; ordinary fetch verifies
+the pins. Both checks reject all hand trouble and require ctl's first
+committed assistant message to equal the fake model's reply. These are
+on-demand browser experiments, with pure manifest/proof tests and POSIX
+shell process tests under `lab/tests/`.
+
+The fake GitHub serves the browser’s optional favicon request without API
+credentials as a bodyless 204. Its console errors remain part of the
+empty-trouble requirement; no resource failure is filtered out.
