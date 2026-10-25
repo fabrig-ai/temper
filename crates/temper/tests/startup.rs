@@ -1623,11 +1623,14 @@ fn checked_in_deployment_profiles_pass_startup_admission() {
     let mut failures = String::new();
     for (index, relative) in profiles.iter().enumerate() {
         let scratch = support::Scratch::startup(&format!("deployment-profile-{index}"));
-        let profile = match relative.as_str() {
+        let mut profile = match relative.as_str() {
             "docs/examples/owned.json" => support::owned::bounded(scratch.path()),
             "crates/temper-init/template/temper.json" => support::owned::bounded_template(scratch.path()),
             _ => support::owned::deployment_profile(scratch.path(), relative),
         };
+        if relative.starts_with("lab/") && !relative.starts_with("lab/live-") {
+            f10_profile_totals(relative, &mut profile);
+        }
         let turn = profile.agent.limits.bodies.turn_body;
         let record = size_of::<temper_engine_domain::Record>();
         match profile.admission() {
@@ -1941,4 +1944,41 @@ fn forge_child_refuses_a_wrong_parent_or_missing_program_without_reading_a_docum
         assert_eq!(why.lines().count(), 1, "{why}");
         assert!(!why.contains("document"), "{why}");
     }
+}
+
+// Both variants use the owning startup/store derivations on the same final dependency pins.
+fn f10_profile_totals(relative: &str, profile: &mut support::owned::Bounded) {
+    let candidate = profile.document.clone();
+    for baseline in [true, false] {
+        let mut document: serde_json::Value = serde_json::from_slice(&candidate).expect("profile JSON");
+        if baseline {
+            if let Some(engine) = document.get_mut("engine") {
+                engine["limits"]["overrides"]["core.call_answer_bytes"] = 2048.into();
+                engine["limits"]["overrides"]["core.policy_bytes"] = 4096.into();
+            }
+            if let Some(workers) = document.get_mut("workers").and_then(serde_json::Value::as_array_mut) {
+                for worker in workers {
+                    worker["limits"]["overrides"]["core.call_answer_bytes"] = 2048.into();
+                }
+            }
+        }
+        profile.document = serde_json::to_vec(&document).expect("profile variant");
+        let required = profile.admission().unwrap_or_else(|why| {
+            panic!("{relative}: {}", String::from_utf8_lossy(&temper_service::startup::lines(&why)))
+        });
+        let terms = profile.memory_terms();
+        assert_eq!(terms.engine.iter().map(|(_, bytes)| bytes).sum::<u64>(), required.engine_bytes);
+        assert_eq!(terms.worker.iter().map(|(_, bytes)| bytes).sum::<u64>(), required.worker_bytes);
+        let variant = if baseline { "baseline" } else { "candidate" };
+        eprintln!(
+            "F10 {relative} {variant}: engine_total={} worker_total={} engine_terms={:?} worker_terms={:?}",
+            required.engine_bytes, required.worker_bytes, terms.engine, terms.worker
+        );
+        if document.get("engine").is_some() {
+            let store = temper_service::store_limits(&profile.document, &jig_protocol_config::Directories::working())
+                .expect("owning store admission");
+            eprintln!("F10 {relative} {variant}: store_limits={:?}", store.store);
+        }
+    }
+    profile.document = candidate;
 }

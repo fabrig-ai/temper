@@ -222,6 +222,7 @@ fn worker(engine: &mut Engine, request: root::WorkerRequest) {
                 engine.workers.assignment(engine.env.now, channel, assignment, &engine.values, &mut engine.events);
             }
             root::Delivery::Link { channel, down } => {
+                // Includes addressed retryable capacity refusals, without a retained call flight.
                 engine.workers.send(engine.env.now, channel, down, &engine.values, &mut engine.events);
             }
             root::Delivery::TurnBusy { channel, task, attempt, turn } => engine.workers.down(

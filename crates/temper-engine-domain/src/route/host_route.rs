@@ -225,6 +225,11 @@ pub(crate) fn settled(domain: &mut Domain, limits: &Limits, decision: &mut Decis
     emit(decision, limits, Delivery::Fleet(fleet::Event::Relayed { to, answer: id.token() }));
 }
 
+/// Capacity refusal already carries its validated original address; no flight is needed.
+pub(crate) fn busy(channel: Token, run: Token, attempt: Token, name: Box<[u8]>) -> Delivery {
+    Delivery::Link { channel, down: host::LinkDown::Relayed { run, attempt, call: name, answer: host::Relayed::Busy } }
+}
+
 /// Assemble the answer its owner kept; the core chooses its durability route.
 pub(crate) fn relayed(
     domain: &mut Domain,
