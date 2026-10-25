@@ -1,0 +1,16 @@
+#!/bin/sh
+# A spent link goes only to ctl's stdin.
+set -u
+if [ "$#" -ne 2 ]; then
+    echo 'usage: relink TEMPER DIRECTORY' >&2
+    exit 2
+fi
+status=0
+err=$("$1" ctl "$2" sign-in - 2>&1 >/dev/null) || status=$?
+if [ "$status" -eq 1 ]; then
+    case "$err" in
+        *'the sign-in link was refused'*) exit 0 ;;
+    esac
+fi
+printf 'relink: expected the spent link refused; ctl exited %s: %s\n' "$status" "$err" >&2
+exit 1

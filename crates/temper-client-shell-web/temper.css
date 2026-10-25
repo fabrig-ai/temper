@@ -1015,3 +1015,97 @@ body > noscript, #app:not(:empty):not(:has(*)) { margin-top: 213px; }
 .temper-main :is(.temper-flow-details, .temper-model-key) > .temper-model-description { color: #77756e; }
 .temper-main h2:has(+ .temper-flow-subtitle) { margin-bottom: 0; }
 .temper-main p.temper-flow-subtitle { margin: 0 0 11px; color: var(--temper-muted); font-size: 11px; line-height: 1.6; }
+
+/* Chats share the mockup's ruled block rows: metadata, title, then spend and age. */
+.temper-main > .temper-rows:has(> .temper-row > .temper-meta) { border-radius: 0; }
+.temper-main > .temper-rows > .temper-row:has(> .temper-meta) { display: block; border-radius: 0; padding: 12px 16px; }
+.temper-main > .temper-rows > .temper-row > .temper-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 0; margin: 0; font-size: 11px; font-weight: 400; }
+.temper-row > .temper-meta > p { margin: 0; }
+.temper-row > .temper-meta a { margin: 0; }
+.temper-row > .temper-meta a::before { content: none; }
+.temper-main > .temper-rows > .temper-row > p:first-of-type { margin: 6px 0 3px; font-size: 12px; font-weight: 700; text-align: left; }
+.temper-main > .temper-rows > .temper-row > p:not(:first-of-type):not(.temper-details):not(.temper-time) { margin: 3px 0; font-size: 11px; color: var(--temper-muted); text-align: left; }
+.temper-main > .temper-rows > .temper-row > :is(.temper-details, .temper-time) { display: inline-block; margin: 4px 12px 0 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--temper-muted); font-size: 11px; text-align: left; }
+/* .composer-line stays immediately above the editable field. */
+.temper-main.temper-page > .temper-choice { margin-top: 0; margin-bottom: 8px; }
+.temper-choice .temper-account-line a { margin-left: 0; color: var(--temper-accent-dark); font-weight: 600; text-decoration: none; }
+.temper-entry button:disabled { opacity: .45; cursor: default; }
+.temper-main:not(.temper-chat) > .temper-chatbar + .temper-context { padding-top: 18px; }
+/* The proposal's edge follows its turn's content column. */
+.temper-chat .temper-turn > .temper-kind-proposal { margin-left: 109px; }
+.temper-kind-proposal > button, .temper-kind-proposal > details { vertical-align: top; }
+.temper-kind-proposal > details > summary { display: inline-flex; align-items: center; height: 30px; }
+.temper-chat .temper-kind-proposal > a { font-weight: 600; }
+@media (max-width: 760px) { .temper-chat .temper-turn > .temper-kind-proposal { margin-left: 70px; } }
+@media (max-width: 430px) {
+  .temper-main:not(.temper-chat) > .temper-chatbar [role=status],
+  .temper-main:not(.temper-chat) > .temper-chatbar > div:last-child { display: none; }
+  .temper-chat .temper-turn > .temper-kind-proposal { margin-left: 0; }
+}
+
+/* Card lineage uses the same quiet path as the mockup, with one separator. */
+.temper-meta p > a { margin: 0; }
+.temper-meta p > a::before { content: none; }
+/* Answer in words takes rejection's folded-editor pattern. */
+.temper-kind-question > details { display: inline-block; margin: 10px 8px 0 0; vertical-align: baseline; }
+.temper-kind-question > details > summary { display: inline-block; cursor: pointer; list-style: none; min-height: 28px; padding: 5px 9px; border: 1px solid #dcd5ca; border-radius: 4px; font: 600 11px/1.35 var(--temper-mono); }
+.temper-kind-question > details > summary::-webkit-details-marker { display: none; }
+.temper-kind-question > a, .temper-page .temper-kind-proposal > a { display: inline-block; margin-top: 10px; color: var(--temper-accent-dark); font-size: 11px; font-weight: 600; }
+
+/* Account rows use the forge row's summary, with the supplied holder and state. */
+.temper-account-row > .temper-heading { margin: 0; border: 0; padding: 18px 20px 18px 38px; }
+.temper-account-row > .temper-heading h3 { margin: 0; font-size: 13px; }
+.temper-account-row > .temper-heading p { margin: 0; font-size: 10px; font-weight: 400; color: var(--temper-muted); }
+.temper-account-row > ul { list-style: none; }
+.temper-account-row > ul > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--temper-line); }
+.temper-account-row > ul > li > p { flex-basis: 100%; margin: 0; }
+.temper-account-row > .temper-details { display: grid; gap: 8px; border: 0; border-top: 1px solid var(--temper-line); border-radius: 0; background: transparent; }
+.temper-account-row .temper-details > section { display: flex; justify-content: space-between; gap: 18px; }
+.temper-account-row .temper-details [role=definition] { text-align: right; }
+/* As in the wide banner, visible summary parts share the native summary's grid
+   cell. Its own accessible name and description stay with its native control. */
+@supports selector(::details-content) {
+  .temper-account-row:has(> .temper-heading) { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .temper-account-row:has(> .temper-heading)::details-content { content-visibility: visible; display: contents; }
+  .temper-account-row:has(> .temper-heading) > summary { grid-area: 1 / 1; padding: 0; font-size: 0; color: transparent; }
+  .temper-account-row:has(> .temper-heading) > summary::before { color: var(--temper-muted); font-size: 13px; }
+  .temper-account-row:has(> .temper-heading) > summary > [id^=skein-ui-description-] { display: none; }
+  .temper-account-row:has(> .temper-heading) > .temper-heading { grid-area: 1 / 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; pointer-events: none; }
+  .temper-account-row:has(> .temper-heading) > .temper-heading > h3 { grid-column: 1; grid-row: 1; }
+  .temper-account-row:has(> .temper-heading) > .temper-heading > p:first-of-type { grid-column: 1; grid-row: 2; }
+  .temper-account-row:has(> .temper-heading) > .temper-heading > [role=status] { grid-column: 2; grid-row: 1; align-self: start; }
+  .temper-account-row:has(> .temper-heading) > .temper-heading > p:last-child { grid-column: 1 / -1; grid-row: 3; }
+  .temper-account-row:has(> .temper-heading) > :not(summary):not(.temper-heading) { grid-column: 1; }
+  .temper-account-row:has(> .temper-heading):not([open]) > :not(summary):not(.temper-heading) { display: none; }
+  .temper-account-row:has(> .temper-heading)[open] > .temper-heading + * { border-top: 1px solid var(--temper-line); }
+}
+/* The account lead stays under its heading; Connect wraps below it on phones. */
+.temper-accounts-page > .temper-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 12px; align-items: center; }
+.temper-accounts-page > .temper-heading > h2 { grid-column: 1; grid-row: 1; }
+.temper-accounts-page > .temper-heading > .temper-subtle-count { grid-column: 2; grid-row: 1; margin: 0; }
+.temper-accounts-page > .temper-heading > a { grid-column: 3; grid-row: 1 / 3; }
+.temper-accounts-page > .temper-heading > p:last-child { grid-column: 1 / 3; grid-row: 2; margin: 0; color: var(--temper-muted); font-size: 11px; }
+@media (max-width: 430px) {
+  .temper-accounts-page > .temper-heading > p:last-child { grid-column: 1 / -1; }
+  .temper-accounts-page > .temper-heading > a { grid-column: 1 / -1; grid-row: 3; justify-self: start; margin-top: 12px; }
+}
+
+.temper-accounts-page > .temper-empty { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-block: 10px 24px; }
+.temper-accounts-page > .temper-empty > p { margin: 0; }
+
+.temper-account-row:not(:has(> .temper-heading)) > summary { color: var(--temper-muted); font-size: 11px; font-weight: 400; }
+
+/* The mockup's wide rows put spend and activity beside the title. */
+@media (min-width: 761px) {
+  .temper-main > .temper-rows > .temper-row:has(> .temper-meta) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; }
+  .temper-main > .temper-rows > .temper-row > .temper-meta { grid-column: 1; grid-row: 1; }
+  .temper-main > .temper-rows > .temper-row > p:first-of-type { grid-column: 1; grid-row: 2; }
+  .temper-main > .temper-rows > .temper-row > p:not(:first-of-type):not(.temper-details):not(.temper-time) { grid-column: 1; grid-row: 3; }
+  .temper-main > .temper-rows > .temper-row > .temper-details { grid-column: 2; grid-row: 2; justify-self: end; margin-right: 0; }
+  .temper-main > .temper-rows > .temper-row > .temper-time { grid-column: 2; grid-row: 3; justify-self: end; margin-right: 0; }
+}
+@media (max-width: 430px) {
+  .temper-main.temper-page > h2:has(+ .temper-choice + .temper-entry) { display: none; }
+  .temper-main.temper-page > .temper-choice:has(+ .temper-entry) { margin-top: 36px; }
+}
+.temper-kind-proposal > a { display: inline-flex; align-items: center; min-height: 30px; vertical-align: top; }

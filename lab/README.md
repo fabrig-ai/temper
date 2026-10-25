@@ -69,6 +69,10 @@ cap, the charter's 280 units, is the stop while a turn runs. It was rehearsed
 without a model on the real stack (a fake LLM, a junk held record); its paid
 runs wait on the owner's go and a person's sign-in (2026-10-24).
 
+[welcome-chatgpt/](welcome-chatgpt/README.md) walks the welcome’s ChatGPT
+sign-in on the ordinary fake box, then checks a first conversation and
+reload through hand and ctl. It has two processes and no driver.
+
 # The look experiment
 
 `look/` holds temper's pages to the mockups (`docs/design/draft/qa-web.md`,

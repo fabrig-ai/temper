@@ -169,8 +169,11 @@ fn box_document(scratch: &support::Scratch) -> serde_json::Value {
 }
 fn refused_box(scratch: &support::Scratch, value: &serde_json::Value) -> String {
     support::write_private(&scratch.path().join("temper.json"), &serde_json::to_vec(value).expect("JSON"));
-    temper::run(temper::Command::Box { directories: support::configuration::directories(scratch.path()) })
-        .expect_err("box refused")
+    temper::run(temper::Command::Box {
+        directories: support::configuration::directories(scratch.path()),
+        echo: temper_box::host::Echo::None,
+    })
+    .expect_err("box refused")
 }
 #[test]
 fn a_box_on_a_fresh_init_reaches_serves_link_with_forge_3_dormant() {
@@ -292,7 +295,10 @@ fn a_nonempty_box_configuration_without_a_document_is_refused_naming_it() {
     let scratch = support::Scratch::startup("box-absent-document");
     fs::write(scratch.path().join("other"), b"kept").expect("nonempty configuration");
     assert_eq!(
-        temper::run(temper::Command::Box { directories: support::configuration::directories(scratch.path()) }),
+        temper::run(temper::Command::Box {
+            directories: support::configuration::directories(scratch.path()),
+            echo: temper_box::host::Echo::None
+        }),
         Err(format!(
             "temper box: configuration {}: absent; temper init writes one\n",
             scratch.path().join("temper.json").display()
@@ -637,8 +643,11 @@ fn every_command_checks_setup_before_reading_files() {
         ),
         (
             "box",
-            temper::run(temper::Command::Box { directories: support::configuration::directories(scratch.path()) })
-                .expect_err("box refused"),
+            temper::run(temper::Command::Box {
+                directories: support::configuration::directories(scratch.path()),
+                echo: temper_box::host::Echo::None,
+            })
+            .expect_err("box refused"),
         ),
     ] {
         assert_eq!(refused, format!("temper {command}: {line}"), "{command}");
@@ -2006,5 +2015,19 @@ fn forge_child_refuses_a_wrong_parent_or_missing_program_without_reading_a_docum
         assert!(why.starts_with("temper forge child: "), "{why}");
         assert_eq!(why.lines().count(), 1, "{why}");
         assert!(!why.contains("document"), "{why}");
+    }
+}
+
+#[test]
+fn box_logs_must_hold_one_whole_record_and_tails_at_least_one_line() {
+    for (name, value) in [("log_bytes", 4117), ("tail_lines", 0)] {
+        let scratch = support::Scratch::startup(&format!("box-{name}"));
+        let mut document = box_document(&scratch);
+        document["application"]["limits"]["overrides"][format!("box.{name}")] = value.into();
+        assert_eq!(
+            refused_box(&scratch, &document),
+            format!("temper box: application.limits.overrides.box.{name}: past its bound\n")
+        );
+        scratch.remove();
     }
 }

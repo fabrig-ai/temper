@@ -331,9 +331,9 @@ fn populate_page(
 }
 
 /// A chat's spend as its chatbar and its chats row say it, at a fixture's budget.
-pub fn spend(spent: u64, budget: u64, below: u64) -> Box<[u8]> {
+pub fn spend(spent: u64, budget: u64, _below: u64) -> Box<[u8]> {
     use skein_ui::phrases::Hole::Number;
-    page_words().say(temper_client_view::words::Word::ChatbarSpend, &[Number(spent), Number(budget), Number(below)])
+    page_words().say(temper_client_view::words::Word::ChatbarSpend, &[Number(spent), Number(budget)])
 }
 pub fn page_words() -> temper_client_view::words::Words {
     static WORDS: std::sync::OnceLock<temper_client_view::words::Words> = std::sync::OnceLock::new();

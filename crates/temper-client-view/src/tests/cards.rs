@@ -161,7 +161,7 @@ fn a_proposals_title_and_labelled_facts_follow_the_mockup() {
         (b"Why".as_slice(), b"Make a goal".as_slice()),
         (b"Goal", b"Agent charter 2"),
         (b"Landing", b"branch main of robin/tally on github.com"),
-        (b"Budget", b"Funding needed: 40"),
+        (b"Budget", b"Funds 40 from your pool"),
     ] {
         let at = super::chat::named_position(tree.nodes(), Role::Term, Some(label)).unwrap();
         let description = at + usize::try_from(tree.nodes()[at].size).unwrap();
@@ -239,18 +239,19 @@ fn proposal_titles_head_the_cards_and_funding_is_said_once_in_both_pages() {
                 )
                 .expect("proposal title heads the card");
                 assert!(title < budget);
-                for expected in [b"Funding needed: 40".as_slice(), b"Funding left: 120", b"Funding after: 80"] {
+                for expected in [b"Funds 40 from your pool".as_slice(), b"120 left", b"80 after"] {
                     assert!(skein_lib::bytes::find(&fixtures::node_text(tree, description), expected).is_some());
                     assert_eq!(occurrences(tree, expected), 1);
                 }
                 for expected in [b"May spend 6".as_slice(), b"May delegate 1 task, depth 1", b"Budget 6"] {
-                    assert_eq!(occurrences(tree, expected), 1);
+                    assert_eq!(occurrences(tree, expected), 0);
                 }
             } else {
                 let funding = b"Funds 40 from your pool \xc2\xb7 120 left, 80 after";
                 assert!(skein_lib::bytes::find(&fixtures::node_text(tree, description), funding).is_some());
-                for expected in [funding.as_slice(), b"May spend 40", b"May delegate 1 task, depth 1"] {
-                    assert_eq!(occurrences(tree, expected), 1);
+                assert_eq!(occurrences(tree, funding), 1);
+                for expected in [b"May spend 40".as_slice(), b"May delegate 1 task, depth 1"] {
+                    assert_eq!(occurrences(tree, expected), 0);
                 }
             }
         }
@@ -316,17 +317,9 @@ fn proposal_facts_are_labelled_joined_and_contained_in_their_rows() {
     task.authority.authority.delegation.tasks = 0;
     task.authority.authority.delegation.depth = 0;
     target.action = c::ProposalAction::Batch { tasks, own: true };
-    for (page, delegation, budget) in [
-        (
-            owner,
-            "1 task, depth 1",
-            "Funded by pool in project 1, person 73, period 1 · Funding needed: 40 · Funding left: 120 · Funding after: 80",
-        ),
-        (
-            document,
-            "0 tasks, depth 0",
-            "Funds 40 from your pool · 120 left, 80 after · May spend 40 · May delegate 1 task, depth 1",
-        ),
+    for (page, _delegation, budget) in [
+        (owner, "1 task, depth 1", "Funds 40 from your pool · 120 left, 80 after"),
+        (document, "0 tasks, depth 0", "Funds 40 from your pool · 120 left, 80 after"),
     ] {
         let mut builder = Builder::new(&fixtures::tree_limits());
         crate::cards::proposal(&mut builder, &page, &fixtures::words(), 4);
@@ -339,9 +332,7 @@ fn proposal_facts_are_labelled_joined_and_contained_in_their_rows() {
             }
         }
         let rows = rows.unwrap();
-        let goal = alloc::fmt::format(format_args!(
-            "Make task 1 yours · Agent charter 2 · May spend 6 · Tool permissions 7 · Note permissions 7 · May delegate {delegation} · Budget 6"
-        ));
+        let goal = alloc::fmt::format(format_args!("yours · Agent charter 2"));
         for (label, expected) in [
             (b"Goal".as_slice(), goal.as_str()),
             (b"Landing", "branch main of robin/tally on github.com · priority 2"),
@@ -358,4 +349,18 @@ fn proposal_facts_are_labelled_joined_and_contained_in_their_rows() {
             "no loose fact after the rows"
         );
     }
+}
+
+#[test]
+fn a_non_batch_proposal_keeps_its_deciding_facts() {
+    let mut page = batch_proposal();
+    let c::ReadValue::OwnerProposal(proposal) = &mut page else { panic!("owner proposal") };
+    proposal.action =
+        c::OwnerProposalAction::Release { task: c::OwnerTaskLink::Stored { number: 9, status: None }, hold: None };
+    let mut builder = Builder::new(&fixtures::tree_limits());
+    crate::cards::proposal(&mut builder, &page, &fixtures::words(), 4);
+    let tree = builder.finish();
+    assert!(skein_lib::bytes::find(&fixtures::text(&tree), b"Make a goal").is_some());
+    assert!(skein_lib::bytes::find(&fixtures::text(&tree), b"Make task 9 yours").is_some());
+    assert!(fixtures::find(&tree, skein_ui::Role::Term, b"Landing").is_none());
 }

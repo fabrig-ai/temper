@@ -117,12 +117,12 @@ fn why(b: &mut Builder, page: &c::ReadValue) {
 pub(super) fn facts(b: &mut Builder, page: &c::ReadValue, words: &Words, rows: u32, place: super::Place) {
     if let Some(tasks) = batch(page) {
         title(b, tasks, words, place);
-        batch_facts(b, page, tasks, words, rows);
+        batch_facts(b, page, tasks, words, rows, place);
         return;
     }
     match page {
         c::ReadValue::OwnerProposal(proposal) => match &proposal.action {
-            c::OwnerProposalAction::Batch(tasks) => proposed(b, tasks, words, rows),
+            c::OwnerProposalAction::Batch(tasks) => proposed(b, tasks, words, rows, false),
             c::OwnerProposalAction::Settings(_) => {}
             c::OwnerProposalAction::Effect { part, authority: value, .. }
             | c::OwnerProposalAction::ProcedureEffect { part, authority: value, .. } => {
@@ -147,7 +147,7 @@ pub(super) fn facts(b: &mut Builder, page: &c::ReadValue, words: &Words, rows: u
         },
         c::ReadValue::Proposal(proposal) => {
             match &proposal.action {
-                c::ProposalAction::Batch { tasks, .. } => proposed(b, tasks, words, rows),
+                c::ProposalAction::Batch { tasks, .. } => proposed(b, tasks, words, rows, false),
                 c::ProposalAction::Effect { part } => crate::forge::drawn(b, part, words),
                 c::ProposalAction::Amend { task, .. } => phrase(b, words, P::ProposalAmend, &[Hole::Number(*task)]),
                 c::ProposalAction::Widen { .. } => phrase(b, words, P::Authority, &[]),
@@ -202,18 +202,39 @@ fn batch_facts(
     tasks: &skein_lib::List<c::ProposedTask>,
     words: &Words,
     rows: u32,
+    place: super::Place,
 ) {
     b.open(Role::Slot);
     b.style(crate::look::PROPOSAL_FACTS);
     text(b, Role::Term, &words.say(Word::ProposalWhy, &[]));
     b.open(Role::Description);
-    why(b, page);
+    b.open(Role::Paragraph);
+    b.text(skein_ui::Run::Plain, "“".as_bytes());
+    if let c::ReadValue::OwnerProposal(proposal) = page {
+        b.text(skein_ui::Run::Plain, proposal.reason.bytes());
+    }
+    if let c::ReadValue::Proposal(proposal) = page {
+        b.text(skein_ui::Run::Plain, proposal.why.bytes());
+    }
+    b.text(skein_ui::Run::Plain, "”".as_bytes());
     b.close();
-    proposed(b, tasks, words, rows);
+    b.close();
+    proposed(b, tasks, words, rows, owns(page));
     text(b, Role::Term, &words.say(Word::ProposalBudget, &[]));
     b.open(Role::Description);
     b.open(Role::Paragraph);
-    let facts = jig_client::facts::decision(Some(page), c::ActKind::Accept);
+    let mut facts = jig_client::facts::decision(Some(page), c::ActKind::Accept);
+    // A confirmation retains each supplied funding fact for the deciding act.
+    if place != super::Place::Confirmation
+        && owns(page)
+        && facts.funds.is_none()
+        && facts.funding.len() == 1
+        && let Some(offer) = facts.funding.get(0)
+        && let (Some(left), Some(after)) = (offer.left, offer.after)
+    {
+        facts.funds = Some(jig_client::facts::Funds { needed: offer.needed, left, after });
+        facts.funding.clear();
+    }
     let mut first = true;
     for fact in &jig_client::words::decision(&facts, &words.book, words.language) {
         if !first {
@@ -222,26 +243,45 @@ fn batch_facts(
         b.text(skein_ui::Run::Plain, fact);
         first = false;
     }
-    if let c::ReadValue::Proposal(proposal) = page {
-        fact(b, words, P::Spend, &[Hole::Number(proposal.needs.budget)], true);
-        fact(
-            b,
-            words,
-            P::Delegation,
-            &[Hole::Number(u64::from(proposal.needs.tasks)), Hole::Number(u64::from(proposal.needs.depth))],
-            true,
-        );
-        for grant in window_facts(b, words, proposal.needs.grants.as_slice(), rows, true) {
-            separator(b);
-            crate::forge::drawn(b, &c::Part::Kind { connector: grant.connector, kind: grant.kind }, words);
-            pattern_facts(b, &grant.pattern, words, rows, true);
-        }
-    }
     b.close();
     b.close();
     b.close();
 }
 
+fn landing_pattern(b: &mut Builder, pattern: &c::OwnerPattern, words: &Words) {
+    let mut path = skein_lib::List::with_capacity(pattern.segments.len().checked_add(1).expect("bounded pattern"));
+    for segment in &pattern.segments {
+        path.push(segment.clone()).expect("pattern segment");
+    }
+    let (last, open) = match &pattern.last {
+        c::OwnerPatternEnd::Exact(last) => (last, false),
+        c::OwnerPatternEnd::Open(last) => (last, true),
+    };
+    path.push(last.clone()).expect("pattern end");
+    crate::forge::drawn(b, &c::Part::Resource { connector: words.connector, path }, words);
+    if open {
+        b.text(skein_ui::Run::Plain, "…".as_bytes());
+    }
+}
+fn owns(page: &c::ReadValue) -> bool {
+    if let c::ReadValue::Proposal(proposal) = page
+        && let c::ProposalAction::Batch { own, .. } = proposal.action
+    {
+        return own;
+    }
+    if let c::ReadValue::OwnerProposal(proposal) = page
+        && let c::OwnerHistoryHolder::Person(holder) = proposal.waiting.holder
+    {
+        for offer in &proposal.funding {
+            if let c::Funder::Pool { person, .. } = offer.source
+                && holder == person
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
 fn task_hold(b: &mut Builder, task: &c::Task, words: &Words, rows: u32) {
     match &task.hold {
         Some(c::TaskHold::Owner(hold)) => held(b, hold, words, rows),
@@ -253,27 +293,27 @@ fn held(b: &mut Builder, hold: &c::OwnerChipHold, words: &Words, _rows: u32) {
     super::hold(b, &hold.reason, words);
     phrase(b, words, P::HoldRevision, &[Hole::Number(hold.revision)]);
 }
-fn proposed(b: &mut Builder, tasks: &skein_lib::List<c::ProposedTask>, words: &Words, rows: u32) {
+fn proposed(b: &mut Builder, tasks: &skein_lib::List<c::ProposedTask>, words: &Words, rows: u32, own: bool) {
     for task in window(b, words, tasks.as_slice(), rows) {
         text(b, Role::Term, &words.say(Word::Goal, &[]));
         b.open(Role::Description);
         b.open(Role::Paragraph);
-        b.text(skein_ui::Run::Plain, &words.say_card(P::ProposalTask, &[Hole::Number(task.number)]));
-        specification_facts(b, &task.spec, words);
+        if own {
+            words.text(b, Word::ProposalOwn, &[]);
+        }
         match task.executor {
             c::OwnerExecutor::Agent { charter } => {
-                fact(b, words, P::Charter, &[Hole::Number(u64::from(charter))], true);
+                b.text(skein_ui::Run::Plain, &words.say_card(P::Charter, &[Hole::Number(u64::from(charter))]));
             }
             c::OwnerExecutor::Procedure { code, .. } => {
-                fact(b, words, P::ProcedureCode, &[Hole::Number(u64::from(code))], true);
+                b.text(skein_ui::Run::Plain, &words.say_card(P::ProcedureCode, &[Hole::Number(u64::from(code))]));
             }
             c::OwnerExecutor::Person(_) => {
-                separator(b);
                 b.text(skein_ui::Run::Plain, &words.say(Word::PersonTask, &[]));
             }
         }
-        authority_facts(b, &task.authority, words, rows, true);
-        fact(b, words, P::ProposalBudget, &[Hole::Number(task.budget)], true);
+
+        specification_facts(b, &task.spec, words);
         for dependency in &task.dependencies {
             fact(b, words, P::Input, &[Hole::Number(*dependency)], true);
         }
@@ -291,8 +331,18 @@ fn proposed(b: &mut Builder, tasks: &skein_lib::List<c::ProposedTask>, words: &W
             }
             crate::forge::owner_part(b, resource, words);
         }
+        for (at, grant) in
+            window_facts(b, words, task.authority.authority.grants.as_slice(), rows, true).iter().enumerate()
+        {
+            if !task.resources.is_empty() || at > 0 {
+                separator(b);
+            }
+            crate::forge::drawn(b, &c::Part::Kind { connector: grant.connector, kind: grant.kind }, words);
+            b.text(skein_ui::Run::Plain, b" ");
+            landing_pattern(b, &grant.pattern, words);
+        }
         if let Some(priority) = task.priority {
-            if !task.resources.is_empty() {
+            if !task.resources.is_empty() || !task.authority.authority.grants.is_empty() {
                 separator(b);
             }
             b.text(skein_ui::Run::Plain, &words.say(Word::Priority, &[Hole::Number(u64::from(priority))]));

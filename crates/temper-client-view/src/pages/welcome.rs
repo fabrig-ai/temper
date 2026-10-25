@@ -69,7 +69,7 @@ fn steps(b: &mut Builder, root: &Domain, w: &Words, current: Step) {
                 None => false,
             };
             let adopted = match crate::forge::connect::personal(root) {
-                Some(row) if ready_target(root, row).is_some() => {
+                Some(row) if crate::forge::connect::welcome_target(root, row).is_some() => {
                     crate::forge::connect::adopted_project(root, row).is_some()
                 }
                 Some(_) | None => connected,
@@ -330,20 +330,10 @@ fn real_forge_connected(root: &Domain) -> bool {
     }
     false
 }
-fn ready_target<'a>(
-    root: &'a Domain,
-    row: &'a temper_client_domain::forge::forges::Row,
-) -> Option<(&'a [u8], &'a [u8], temper_client_domain::forge::forges::SetUpProject)> {
-    use temper_client_domain::forge::forges::{Kind, Mode};
-    if row.kind != Kind::GitHub && (row.kind != Kind::Forgejo || row.mode != Mode::Owned) {
-        return None;
-    }
-    crate::forge::connect::welcome_target(root, row)
-}
 fn ready_heading(b: &mut Builder, root: &Domain, w: &Words) {
     if let Some(row) = crate::forge::connect::personal(root)
         && crate::forge::connect::adopted_project(root, row).is_some()
-        && let Some((org, repository, _)) = ready_target(root, row)
+        && let Some((org, repository, _)) = crate::forge::connect::welcome_target(root, row)
     {
         crate::cards::text(
             b,
@@ -371,7 +361,7 @@ fn ready(
         legacy_ready(b, root, w, bindings, accounts, forge, sign_in);
         return;
     };
-    let Some((org, repository, project)) = ready_target(root, row) else {
+    let Some((org, repository, project)) = connect::welcome_target(root, row) else {
         legacy_ready(b, root, w, bindings, accounts, forge, sign_in);
         return;
     };

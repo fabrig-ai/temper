@@ -616,7 +616,7 @@ have one, an engine alone none. Each:
   | `records.` | the engine's routing's: a forge's records and carried values in jig's secrets' store (credentials.md, 2.1) |
   | `forges.` | the engine's routing's, per forge: a GitHub forge's accepted installations and every forge's log origins (forge.md, section 7) |
   | `setup.` | `temper-forge-setup`'s `Limits`: reconcile's (setup.md, section 5), the fetch's (setup.md, 6.6), and the engine's setup host's states and runs (setup.md, the setup host in the engine) |
-  | `box.` | `temper-box`'s `Limits`: the box's restarts and stop, and its pipe's lines (setup.md, 7.1 and 7.2) |
+  | `box.` | `temper-box`'s `Limits`: the box's restarts and stop, its pipe's lines, its logs and tails (setup.md, 7.1 and 7.2) |
   | `clients.` | `temper-service`'s clients' server's `Limits`: the browser's bundle (`../client/browser.md`, 2.2) |
   | `routes.` | `temper-service`'s clients' listener's forge routes (`../client/README.md`, the routes) |
   | `sign_in.` | `temper-service`'s Google sign-ins on the clients' listener (`sign-in.md`, section 6) |
@@ -700,8 +700,9 @@ have one, an engine alone none. Each:
   - the setup's and the box's: each backoff at most its maximum;
     `setup.backoff_max_ms` below `setup.deadline_ms`; `box.backoff_max_ms`
     below `box.window_ms`; `setup.states`, `setup.state_life_ms`,
-    `setup.runs`, `setup.fetch_bytes`, `box.log_bytes` and
-    `box.tail_lines` above 0; `box.line_bytes` at
+    `setup.runs` and `setup.fetch_bytes` above 0; `box.log_bytes` at least
+    one whole record (the time, the box's longest piece and a line feed);
+    `box.tail_lines` above 0 and at most 100; `box.line_bytes` at
     least 64, which holds each line but a `failed` one's `WHY`, which
     the box cuts to fit (setup.md, 7.1);
   - the bundle's: `clients.bundle_files` and `clients.bundle_bytes`
@@ -1326,6 +1327,30 @@ login is imported.
   refusal names that bundle command and --bundle; no hand-edited setting
   is required. The ordinary embedded bundle cannot replace it. Startup
   neither builds a bundle nor accesses a remote service.
+
+
+Before starting its supervised processes, the box prints these fixed
+prefixes on stderr, for people and lab readiness captures. Addresses are
+loopback IPs with ports; each origin belongs to a peer the box runs, so
+there are no per-peer commands to run:
+
+```text
+box: effective configuration C'
+box: effective data D'
+box: effective cache K
+box: fake github http://ADDR
+box: fake issuer http://ADDR
+box: fake model http://ADDR
+box: fake forgejo http://ADDR
+box: model key FILE
+box: Forgejo elsewhere admin token file FILE
+box: program login: COMMAND
+```
+
+The model key line names the effective `llm.json`'s `key` file, which a
+person pastes on the Model step's key way. Key and token lines print
+paths only. The program-login command names the effective directories
+and the configured source, as for the ordinary program way.
 
 
 The effective configuration keeps forge 1 as the playground, forge 2 as

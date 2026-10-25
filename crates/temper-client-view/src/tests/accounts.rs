@@ -237,11 +237,11 @@ fn bounded_view(counts: d::limits::AccountLimits) -> crate::View {
 }
 #[test]
 fn the_accounts_page_keeps_accounts_beyond_rows() {
-    assert!(shown(document(3)).contains("Account 3"));
+    assert!(account_order(document(3)).contains(&3));
 }
 #[test]
 fn the_accounts_page_keeps_sources_beyond_rows() {
-    assert_eq!(shown(document(3)).matches("Source 3").count(), 3);
+    assert_eq!(shown(document(3)).matches("3. API key").count(), 3);
 }
 #[test]
 fn the_accounts_page_keeps_sign_ins_beyond_rows() {
@@ -285,8 +285,12 @@ fn a_sign_in_in_an_omitted_row_stays_visible_without_duplicating_drawn_rows() {
 }
 #[test]
 fn the_accounts_page_preserves_supplied_order() {
-    let text = shown(document(3));
-    assert!(text.find("Account 1").unwrap() < text.find("Account 3").unwrap());
+    let mut doc = document(3);
+    let first = doc.accounts.get(0).unwrap().clone();
+    let third = doc.accounts.get(2).unwrap().clone();
+    *doc.accounts.get_mut(0).unwrap() = third;
+    *doc.accounts.get_mut(2).unwrap() = first;
+    assert_eq!(account_order(doc), [3, 2, 1]);
 }
 #[test]
 fn the_accounts_page_names_cut_facts() {
@@ -864,14 +868,14 @@ fn empty_uses_have_no_label() {
     assert!(!shown(doc).contains("Uses:"));
 }
 #[test]
-fn an_empty_deployment_names_its_empty_list() {
+fn an_empty_deployment_leaves_out_its_section() {
     let (mut root, watch) = owner_root();
     let mut doc = root.pages().accounts().unwrap().deployment(root.client()).unwrap().clone();
     doc.accounts = List::with_capacity(0);
     deliver_deployment(&mut root, watch, doc);
     let mut view = fixtures::view();
     let text = String::from_utf8(fixtures::text(fixtures::build(&mut view, &root)).into_vec()).unwrap();
-    assert!(text.contains("Deployment accountsNo accounts shown."));
+    assert!(!text.contains("Deployment accounts"));
 }
 #[test]
 fn accounts_past_the_count_are_named() {
@@ -1347,5 +1351,70 @@ fn an_accounts_rows_sign_in_offers_the_paste() {
     assert_eq!(
         crate::act(&mut view, finish, Act::Press),
         Some(d::Action::Pages(d::pages::Act::Accounts(A::Finish { name: root.pages().account_name() })))
+    );
+}
+
+fn account_order(doc: c::OwnerAccounts) -> Vec<u32> {
+    let (mut root, watch) = fixtures::account_root();
+    deliver(&mut root, watch, doc);
+    let mut view = bounded_view(fixtures::limits().accounts);
+    fixtures::build(&mut view, &root);
+    let ids: Vec<_> = view
+        .tree()
+        .nodes()
+        .iter()
+        .filter(|node| node.role == Role::Button && node.name.as_deref() == Some(b"Remove account"))
+        .map(|node| node.id)
+        .collect();
+    let mut numbers = Vec::new();
+    for id in ids {
+        if let Some(d::Action::Pages(d::pages::Act::Accounts(A::Submit { row, .. }))) =
+            crate::act(&mut view, id, Act::Press)
+        {
+            numbers.push(row.account);
+        }
+    }
+    numbers
+}
+#[test]
+fn an_accounts_row_keeps_its_header_sources_facts_and_acts_in_order() {
+    let (mut root, me_watch, _, _, accounts_watch) =
+        fixtures::root_at_full(d::Address::Accounts, &fixtures::limits(), b"Shop");
+    let mut me = d::pages::accounts::current_me(root.client()).unwrap().clone();
+    me.projects.get_mut(0).unwrap().models = super::choice::line_models(true);
+    fixtures::root_event(
+        &mut root,
+        d::Event::Client {
+            event: jig_client::Event::Up {
+                up: jig_client::Up::Watched {
+                    watch: me_watch,
+                    event: c::WatchEvent::Delivered(c::Delivery::Me(Box::new(me))),
+                },
+            },
+        },
+    );
+    deliver(&mut root, accounts_watch.unwrap(), card_document(b"openai", b"Pat", c::OwnerAccountKind::SignIn));
+    let view = fixtures::page_view(&root);
+    let tree = view.tree();
+    assert!(fixtures::find(tree, Role::Paragraph, "The LLM accounts temper’s agents run on for you. A task keeps its account: while the account is limited, the task waits for it.".as_bytes()).is_some());
+    let row = super::inbox::styled(tree, crate::look::ACCOUNT_ROW);
+    let nodes = super::inbox::subtree(tree, row);
+    assert!(nodes[0].states.is_empty());
+    let mut previous = 0;
+    for (role, name) in [
+        (Role::Status, b"Ready".as_slice()),
+        (Role::Paragraph, b"Its sources in order: a run takes the first usable one.".as_slice()),
+        (Role::Region, b"Models".as_slice()),
+        (Role::Region, b"Pays for".as_slice()),
+        (Role::Button, b"Remove account".as_slice()),
+    ] {
+        let at = nodes.iter().position(|node| node.role == role && node.name.as_deref() == Some(name)).unwrap();
+        assert!(at > previous, "{name:?}");
+        previous = at;
+    }
+    assert!(
+        !nodes
+            .iter()
+            .any(|node| node.name.as_deref() == Some(b"Used by") || node.name.as_deref() == Some(b"Waiting for it"))
     );
 }

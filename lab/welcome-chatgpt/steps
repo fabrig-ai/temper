@@ -1,0 +1,57 @@
+#!/bin/sh
+# A person's welcome and first conversation; waits observe visible state.
+set -eu
+if [ "$#" -ne 4 ]; then
+    echo 'usage: steps walk BROWSE ADDRESS GROUND' >&2
+    exit 2
+fi
+phase=$1
+browse=$2
+address=$3
+ground=$4
+call() {
+    printf '+ browse'
+    printf ' %s' "$@"
+    printf '\n'
+    status=0
+    "$browse" "$address" "$@" || status=$?
+    if [ "$status" -ne 0 ]; then
+        # Retain the failing page without continuing past a missed step.
+        "$browse" "$address" outline || :
+        "$browse" "$address" shot || :
+        exit "$status"
+    fi
+}
+welcome() {
+    call go /welcome
+    call wait heading 'Welcome to temper' --exact --timeout 120
+    call go '/welcome?at=model'
+    call wait heading 'Connect a model' --exact --timeout 120
+    call wait button 'Continue with ChatGPT' --exact --timeout 120
+    call press button 'Continue with ChatGPT' --exact
+    call wait heading 'work/hello is ready' --exact --timeout 120
+    call press link 'Open hello' --exact
+}
+chat() {
+    call wait 'text area' 'Start a chat' --exact --timeout 120
+    printf 'Hello from the welcome lab.\n' | call type 'text area' 'Start a chat'
+    call press button Start --exact
+    call wait log Conversation --timeout 120
+    call wait text 'Hello from the local fake model.' --in log Conversation --timeout 180
+    # Derive the ordinary ctl chat read from the page the person reached.
+    current=$("$browse" "$address" address)
+    printf '%s\n' "$current"
+    case "$current" in
+        http://*/chats/*) task=${current##*/chats/} ;;
+        *) echo 'steps: expected a chat address' >&2; exit 1 ;;
+    esac
+    case "$task" in ''|*[!0-9]*) echo 'steps: expected a numeric chat' >&2; exit 1 ;; esac
+    printf '%s\n' "$task" > "$ground/chat"
+    call reload
+    call wait text 'Hello from the local fake model.' --in log Conversation --timeout 120
+    call shot
+}
+case "$phase" in
+    walk) welcome; chat ;;
+    *) echo 'steps: unknown phase' >&2; exit 2 ;;
+esac

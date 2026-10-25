@@ -493,6 +493,8 @@ fn a_split_sign_in_link_stays_whole_on_the_shared_terminal() {
                 &temper_box::limits::small(),
                 steps,
                 Settings {
+                    echo: temper_box::host::Echo::Steps,
+                    data: Box::from(b"/data".as_slice()),
                     program: PROGRAM.into(),
                     environment: Box::new([]),
                     serve: b"serve".as_slice().into(),

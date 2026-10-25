@@ -1274,18 +1274,25 @@ temper box
   read it, `2026-10-23T14:03:20Z `, but serve's stdout: no file holds a
   sign-in link. At its start the box moves the logs a box before it
   left to `<data>/box/logs.previous/`, replacing that one, so the last
-  two runs are kept. A file past `box.log_bytes` (configuration.md,
+  two runs are kept. A start cut short after the move keeps
+  `logs.previous/`; the box removes nothing else and follows no link.
+  A file that would pass `box.log_bytes` (configuration.md,
   section 7) moves to `<name>.log.1`, replacing that one, and starts
-  afresh, so a step's logs stay within twice the bound. A log the box
-  cannot write is named once on its terminal, and that step's lines
-  then go to the terminal as `--echo steps` writes them. Forgejo also
+  afresh, so a step's logs stay within twice the bound.
+  A record is never split: a file moves to `.log.1` before the record
+  that would take it past the bound, so the bound holds at least one.
+  A log the box cannot write is named once on its terminal, `box: cannot
+  write <path>: <error>; the step's lines follow here`, and that step's
+  lines then go to the terminal as `--echo steps` writes them. Forgejo also
   logs to its own files.
 - **A failure's tail:** under each terminal line of a step's failure,
   a long step's exit, a group's `failed` or a give up, the box writes
-  the last `box.tail_lines` lines it logged for that step, held in
-  memory, each indented four spaces and without its time, then `Log:
-  <path>`, indented the same. With `--echo steps` it writes no tail,
-  the lines already shown.
+  the last `box.tail_lines` lines it logged for that step since its last
+  start, held in memory, each as `--echo steps` writes it, indented four
+  spaces, without its time, then `Log: <path>`, indented the same.
+  With `--echo steps` it writes no tail, the lines already shown.
+  A failure that is neither a step's exit nor its readiness, a step
+  that logged nothing since its start, or a log not written has no tail.
 - **Its environment:** each step gets the box's; `temper forge run`
   clears it for Forgejo (6.4).
 - **Its children** are skein-io's (skein's `io.md`, section 6), each in a
@@ -3075,7 +3082,9 @@ it checks of this document:
   that follow it (section 10, "Checked"); and with no conflict resolved,
   since its changes never conflict. With no webhooks, the same story
   misses its budget.
-- **`temper box`,** a test of its own on a scratch directory: the sign-in
+- **`temper box`,** a test of its own on a scratch directory, with no
+  `--echo`, its terminal the box's lines alone and each step's lines in its
+  log; a story that reads a step's lines runs it with `--echo steps`: the sign-in
   link on its stdout, and whole on one pipe given as both its stdout and
   its stderr, as a terminal is (7.2); Forgejo killed and restarted, with the engine still
   serving; a stop leaving no process it started.
@@ -3145,8 +3154,8 @@ it checks of this document:
   `work/hello`; the call adopts it into the new project `hello`,
   project 2, after the demo's project 1 (6.7). The
   workflow's push has run on the owned runner: before the owner's first
-  task, the runner's output, which the box gives on its stderr as
-  `runner 3: ` lines, says it took a task on `work/hello`, main's
+  task, the runner's output, which the box, run with `--echo steps`,
+  gives on its stderr as `runner 3: ` lines, says it took a task on `work/hello`, main's
   push's, since no pull exists yet. It shows the run taken, not its
   verdict: no read of temper's says CI at a repository's `main`, and
   the story reads no credential. The owner's first task

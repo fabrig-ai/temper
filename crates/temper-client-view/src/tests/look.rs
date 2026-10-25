@@ -398,3 +398,10 @@ fn the_account_and_adoption_bars_keep_their_headings() {
 fn the_delegation_steps_keep_their_roles() {
     super::delegation::step_roles();
 }
+
+#[test]
+fn account_rows_and_sign_ins_have_distinct_style_names() {
+    assert_eq!(NAMES.style(ACCOUNT_ROW), Some(b"temper-account-row".as_slice()));
+    assert_eq!(NAMES.style(SIGN_IN), Some(b"temper-sign-in".as_slice()));
+    assert_ne!(ACCOUNT_ROW, SIGN_IN);
+}

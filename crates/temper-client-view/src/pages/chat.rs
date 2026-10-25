@@ -51,7 +51,9 @@ pub(crate) fn main(
         b.style(look::CHATBAR);
         b.open(Role::Slot);
         heading(b, &title, task.chip.title.bytes());
-        if let Some(me) = root.pages().me(root.client()) {
+        if task.result.is_some() || super::chats::ended(&task.chip) {
+            closed_status(b, task, words, times);
+        } else if let Some(me) = root.pages().me(root.client()) {
             super::chats::status(
                 b,
                 &task.chip,
@@ -123,6 +125,29 @@ pub(crate) fn main(
         composer(b, root, chat, task, words, bindings, times);
     }
     crate::confirm::main(b, root, words, bindings, rows);
+    b.close();
+}
+fn closed_status(b: &mut Builder, task: &c::Task, words: &Words, times: &mut Times) {
+    let clock = match &task.result {
+        Some(result) => end_clock(task, result, words, times),
+        None => {
+            if let c::ChipPhase::Owner { details, .. } = task.chip.details.as_ref()
+                && let Some(at) = details.ended_at
+            {
+                Some(times.say(words, TimeForm::Clock, at))
+            } else {
+                None
+            }
+        }
+    };
+    let name = match clock {
+        Some(clock) => words.say(Word::TimeClosed, &[Hole::Name(clock)]),
+        None => words.say(Word::ChatClosed, &[]),
+    };
+    b.open(Role::Status);
+    b.style(look::STATUS_QUIET);
+    b.name(&name);
+    b.text(Run::Plain, &name);
     b.close();
 }
 fn heading(b: &mut Builder, title: &[u8], suffix: &[u8]) {
@@ -423,11 +448,7 @@ fn spend(b: &mut Builder, task: &c::Task, words: &Words) {
         Role::Paragraph,
         &words.say(
             Word::ChatbarSpend,
-            &[
-                Hole::Number(task.budget.numbers.spent),
-                Hole::Number(task.budget.numbers.budget),
-                Hole::Number(task.budget.numbers.spent_below),
-            ],
+            &[Hole::Number(task.budget.numbers.spent), Hole::Number(task.budget.numbers.budget)],
         ),
     );
 }
@@ -455,7 +476,9 @@ fn composer(
         b.open(Role::TextArea);
         b.name(&words.say(Word::Message, &[]));
         b.placeholder(&words.say(Word::MessagePlaceholder, &[Hole::Number(task.chip.task)]));
-        b.state(State::SubmitsOnEnter);
+        if crate::choice::can_send(root) {
+            b.state(State::SubmitsOnEnter);
+        }
         b.style(look::COMPOSER);
         b.value(&chat.words, temper_client_domain::pages::shown(root.pages()));
         b.bind(bindings.insert(Act::MessageWords { words: Box::default() }));
@@ -464,7 +487,13 @@ fn composer(
         b.style(look::HINT);
         words.text(b, Word::ChatSendHint, &[]);
         b.close();
-        control(b, bindings, Role::Button, &words.say(Word::Send, &[]), Act::Send);
+        b.open(Role::Button);
+        b.name(&words.say(Word::Send, &[]));
+        if !crate::choice::can_send(root) {
+            b.state(State::Disabled);
+        }
+        b.bind(bindings.insert(Act::Send));
+        b.close();
         if chat.outcome_kind == Some(temper_client_domain::pages::chat::Sending::Message)
             && let Some(outcome) = &chat.outcome
             && !super::chats::accepted(outcome)

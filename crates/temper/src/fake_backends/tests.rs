@@ -111,7 +111,7 @@ fn bundle_and_fake_flags_allow_interleaved_directory_settings() {
     ];
     for words in cases {
         let command = configure(words).expect("interleaved bundle and directory settings");
-        let crate::Command::BoxFakeBackends { directories, bundle } = command else { panic!("fake box") };
+        let crate::Command::BoxFakeBackends { directories, bundle, .. } = command else { panic!("fake box") };
         assert_eq!(bundle, Some(PathBuf::from("/fixture/assets")));
         assert_eq!(directories.config.as_ref(), b"/c");
         assert_eq!(directories.data.as_ref(), b"/d");
@@ -797,4 +797,39 @@ fn source_adapter_is_a_bounded_fact_without_path_discovery() {
     let first = start(&source, None).expect("source adapter does not need to exist or match PATH");
     let effective = read_json(&crate::path(&first.directories.config).join("agent.json"));
     assert_ne!(effective["programs"]["claude_code"]["path"], agent["programs"]["claude_code"]["path"]);
+}
+
+#[test]
+fn fake_backends_echo_takes_the_variable_and_refuses_the_flag() {
+    use temper_box::host::Echo;
+    let args = ["box", "--fake-backends", "--config", "/c", "--data", "/d", "--cache", "/k"]
+        .map(|word| Box::from(word.as_bytes()));
+    for (value, expected) in [("steps", Echo::Steps), ("none", Echo::None)] {
+        let environment = [(Box::from(b"TEMPER_ECHO".as_slice()), Box::from(value.as_bytes()))];
+        let crate::Command::BoxFakeBackends { echo, .. } =
+            crate::configure_with(&args, &environment, b"/").expect("valid fake-backend echo")
+        else {
+            panic!("fake box")
+        };
+        assert_eq!(echo, expected);
+    }
+    let crate::Command::BoxFakeBackends { echo, .. } =
+        crate::configure_with(&args, &[], b"/").expect("valid fake-backend echo")
+    else {
+        panic!("fake box")
+    };
+    assert_eq!(echo, Echo::None);
+    let mut flagged = args.to_vec();
+    flagged.extend([Box::from(b"--echo".as_slice()), Box::from(b"steps".as_slice())]);
+    assert!(
+        crate::configure_with(&flagged, &[], b"/")
+            .expect_err("invalid fake-backend echo")
+            .contains("invalid box arguments")
+    );
+    let environment = [(Box::from(b"TEMPER_ECHO".as_slice()), Box::from(b"bad".as_slice()))];
+    assert!(
+        crate::configure_with(&args, &environment, b"/")
+            .expect_err("invalid fake-backend echo")
+            .contains("TEMPER_ECHO: expected none or steps")
+    );
 }

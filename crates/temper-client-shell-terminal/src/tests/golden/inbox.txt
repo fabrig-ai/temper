@@ -27,9 +27,9 @@ Kind:
   Waiting under 1 min
   ### Add OAuth login
   Why:
-    It touches sign-in.
+    “It touches sign-in.”
   Budget:
-    Funds 40 from your pool · 120 left, 80 after · May spend 40 · May delegate 1 task, depth 1
+    Funds 40 from your pool · 120 left, 80 after
 - Question
   Project 1
   [18] Task 9

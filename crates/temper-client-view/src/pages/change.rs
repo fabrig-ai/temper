@@ -64,6 +64,7 @@ pub(crate) fn start(b: &mut Builder, change: Change<'_>, words: &Words, bindings
         b.style(look::STEP);
         if index < usize::from(slots.done) {
             b.style(look::STEP_DONE);
+            b.state(skein_ui::State::Completed);
         }
         if slots.current == Some(u8::try_from(index).expect("six slots")) {
             b.style(look::STEP_CURRENT);

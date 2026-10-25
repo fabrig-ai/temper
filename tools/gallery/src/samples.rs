@@ -61,7 +61,7 @@ pub struct Sample {
     pub address: Address,
     pub then: Then,
 }
-pub const N: usize = 79;
+pub const N: usize = 81;
 const CHATS: Address = Address::Chats { filter: ChatsFilter::All, start: false };
 use World::{Bare, FirstRun, Reference, Solo};
 #[must_use]
@@ -70,6 +70,7 @@ fn task(task: u64) -> Address {
 }
 
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "one entry per named gallery state, in index order")]
 pub fn samples() -> [Sample; N] {
     [
         Sample { name: "chats-solo", world: Solo, address: CHATS, then: Shown },
@@ -131,6 +132,8 @@ pub fn samples() -> [Sample; N] {
         first_chat("chat-first-run-2-T1", 2, 1),
         first_chat("chat-first-run-3-T1", 3, 1),
         first_chat("chat-first-run-4-T4", 4, 4),
+        first_chat("chat-first-run-7-T1", 7, 1),
+        Sample { name: "chats-first-run-5", world: FirstRun { step: 5 }, address: CHATS, then: Shown },
         Sample {
             name: "inbox-reference",
             world: Reference,

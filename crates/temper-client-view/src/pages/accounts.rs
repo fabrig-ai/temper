@@ -355,11 +355,13 @@ pub(crate) fn main(b: &mut Builder, root: &Domain, w: &Words, bindings: &mut Bin
         b.close();
         connect(b, w, bindings, W::ConnectAdd);
     }
+    crate::cards::text(b, Role::Paragraph, &w.say(crate::words::Word::AccountLead, &[]));
     b.close();
     if let Some(doc) = accounts::document(root.client()) {
         if count == 0 {
             // A block of their own, so that the link keeps to the page's column.
             b.open(Role::Slot);
+            b.style(crate::look::EMPTY);
             text(b, w, Role::Paragraph, W::NoOwn);
             connect(b, w, bindings, W::Connect);
             b.close();
@@ -380,12 +382,11 @@ pub(crate) fn main(b: &mut Builder, root: &Domain, w: &Words, bindings: &mut Bin
     }
     if let Some(page) = root.pages().accounts()
         && is_owner(root)
+        && let Some(doc) = page.deployment(root.client())
+        && !doc.accounts.is_empty()
     {
         text(b, w, Role::Heading { level: 2 }, W::Deployment);
-        if let Some(doc) = page.deployment(root.client()) {
-            if doc.accounts.is_empty() {
-                text(b, w, Role::Paragraph, W::Empty);
-            }
+        {
             for row in doc.accounts.iter().take(usize::try_from(bindings.counts().accounts).expect("u32 fits")) {
                 rows::deployment(b, root, w, bindings, row, text_per_node);
             }
