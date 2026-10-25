@@ -1438,6 +1438,21 @@ answer becomes the root's internal
 The root routes it to its owner, preserving all three fields; it neither
 discards the result nor translates it to an unavailable service response.
 
+The initiating connector workflow reserves its keyed response in the
+existing issue-bounded projection-wait map before asking the core. Each
+goal's slot keeps its deadline and an optional recovery owner and state:
+staged, or terminal with the keyed result. Normal timer firing, settlement
+and deadline clearing preserve an occupied recovery; recovery preserves a
+still-needed deadline. A competing owner gets its own keyed Busy without
+overwriting a staged or unconsumed terminal. If cleanup cannot be reserved
+safely, admission answers Busy before asking the core and changes no core
+state. The requester retries on its existing turn or timer.
+
+The commit-held result returns through the root's internal ToChild/Released
+path to that same slot. The initiating workflow takes its terminal exactly
+once, releasing the recovery capacity and preserving any remaining timer.
+No separate response queue or retained-result allocation is introduced.
+
 ## 13. Participating objects
 
 Not needed first, and kept possible with one mechanism (jig's
