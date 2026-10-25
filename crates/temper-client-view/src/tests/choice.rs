@@ -199,7 +199,7 @@ fn line_fixture(
             accounts,
             signing: List::with_capacity(0),
             last_end: None,
-            usable: false,
+            usable: true,
             settled: true,
             cut: false,
             readiness,
@@ -713,7 +713,7 @@ fn every_hello_refusal_keeps_its_cause_and_numbers() {
 
 fn source(kind: c::OwnerAccountKind, usable: bool) -> c::OwnerAccountSource {
     c::OwnerAccountSource {
-        name: Some(Box::from(b"Claude Code".as_slice())),
+        name: Some(Box::from(b"claude-robin".as_slice())),
         place: 1,
         number: 1,
         kind,
@@ -801,7 +801,7 @@ fn a_plan_has_a_manage_usage_link_only_for_a_safe_address() {
     }
 }
 #[test]
-fn a_program_line_uses_its_first_usable_sources_name() {
+fn a_program_line_names_the_subscription_and_program() {
     let (mut root, me_watch, task_watch, _) = line_fixture(
         Some(readiness(c::Readiness::Usable)),
         accounts(&[account(3, c::OwnerAccountKind::Program, None)]),
@@ -812,7 +812,7 @@ fn a_program_line_uses_its_first_usable_sources_name() {
     );
     let mut me = d::pages::accounts::current_me(root.client()).unwrap().clone();
     let offer = me.providers.get_mut(0).unwrap();
-    offer.name = c::DocumentText::complete(c::Text::new(Box::from(b"Claude".as_slice()), 32).unwrap());
+    offer.name = c::DocumentText::complete(c::Text::new(Box::from(b"anthropic".as_slice()), 32).unwrap());
     offer.key = false;
     offer.sign_in = false;
     offer.programs = List::with_capacity(1);
@@ -862,7 +862,7 @@ fn a_new_chats_default_is_the_first_model_usable_for_its_payer() {
     ready.payer = c::OwnerAccountUse::Party(73);
     let root =
         line_facts(Some(ready), accounts(&[account(3, c::OwnerAccountKind::Key, None)]), None, None, None, false);
-    assert_eq!(using_text(&root), "Using your openai API key · gpt-6-luna");
+    assert_eq!(using_text(&root), "Using your OpenAI API key · gpt-6-luna");
 }
 #[test]
 fn the_three_unsettled_lines_name_only_known_facts() {
@@ -985,8 +985,8 @@ fn pending_choice_outcome_and_wait_are_siblings_after_the_chooser() {
 #[test]
 fn own_key_and_plan_of_openai_follow_place_order() {
     for (first, second, expected) in [
-        (c::OwnerAccountKind::Key, c::OwnerAccountKind::SignIn, "Using your openai API key · chosen"),
-        (c::OwnerAccountKind::SignIn, c::OwnerAccountKind::Key, "Using openai plan · chosen"),
+        (c::OwnerAccountKind::Key, c::OwnerAccountKind::SignIn, "Using your OpenAI API key · chosen"),
+        (c::OwnerAccountKind::SignIn, c::OwnerAccountKind::Key, "Using ChatGPT plan · chosen"),
     ] {
         let mut rows = accounts(&[account(9, first, None), account(3, second, None)]);
         rows.get_mut(0).unwrap().place = 1;
@@ -1190,7 +1190,7 @@ fn an_unusable_later_program_source_names_no_account_when_a_program_source_after
         let (mut root, me_watch, _, _) = line_fixture(Some(readiness(ready)), rows, pin, None, None, true);
         let mut me = d::pages::accounts::current_me(root.client()).unwrap().clone();
         let offer = me.providers.get_mut(0).unwrap();
-        offer.name = c::DocumentText::complete(c::Text::new(Box::from(b"Claude".as_slice()), 32).unwrap());
+        offer.name = c::DocumentText::complete(c::Text::new(Box::from(b"anthropic".as_slice()), 32).unwrap());
         offer.key = false;
         offer.sign_in = false;
         offer.programs = List::with_capacity(1);
@@ -1363,4 +1363,36 @@ fn forge_banners_exclude_the_playgrounds_provider_before_and_after_retirement() 
         let (root, _) = playground_offers_root(address, false);
         assert!(fixtures::find(fixtures::page_view(&root).tree(), Role::Link, b"Use a demo API key").is_some());
     }
+}
+
+#[test]
+fn a_configured_openai_key_names_openai_on_the_whole_line() {
+    let (mut root, me, _, _) = line_fixture(
+        Some(readiness(c::Readiness::Usable)),
+        accounts(&[account(3, c::OwnerAccountKind::Key, None)]),
+        Some(3),
+        None,
+        None,
+        true,
+    );
+    configured_provider(&mut root, me, b"openai");
+    assert_eq!(using_text(&root), "Using your OpenAI API key · chosen");
+}
+#[test]
+fn a_configured_openai_plan_names_chatgpt_and_manage_usage_on_the_whole_line() {
+    let (mut root, me, _, _) = line_fixture(
+        Some(readiness(c::Readiness::Usable)),
+        accounts(&[account(3, c::OwnerAccountKind::SignIn, Some(b"https://provider.example/usage"))]),
+        Some(3),
+        None,
+        None,
+        true,
+    );
+    configured_provider(&mut root, me, b"openai");
+    assert_eq!(using_text(&root), "Using ChatGPT plan · chosen · Manage usage");
+}
+fn configured_provider(root: &mut d::Domain, watch: Token, name: &[u8]) {
+    let mut me = d::pages::accounts::current_me(root.client()).unwrap().clone();
+    me.providers.get_mut(0).unwrap().name = c::DocumentText::complete(c::Text::new(Box::from(name), 32).unwrap());
+    delivered(root, watch, c::Delivery::Me(Box::new(me)));
 }

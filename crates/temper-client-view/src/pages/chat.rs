@@ -51,7 +51,9 @@ pub(crate) fn main(
         b.style(look::CHATBAR);
         b.open(Role::Slot);
         heading(b, &title, task.chip.title.bytes());
-        if let Some(me) = root.pages().me(root.client()) {
+        if let Some(result) = &task.result {
+            ended_status(b, task, result, words, times);
+        } else if let Some(me) = root.pages().me(root.client()) {
             super::chats::status(
                 b,
                 &task.chip,
@@ -305,6 +307,58 @@ fn end_clock(task: &c::Task, result: &c::TaskResult, words: &Words, times: &mut 
         None => None,
     }
 }
+fn ended_status(b: &mut Builder, task: &c::Task, result: &c::TaskResult, words: &Words, times: &mut Times) {
+    let ending = match result {
+        c::TaskResult::Ending(ending) => Some(ending.as_ref()),
+        c::TaskResult::Document(result) => match &result.ending {
+            c::Ending::Task(ending) => Some(ending.as_ref()),
+            c::Ending::Done
+            | c::Ending::Failed { .. }
+            | c::Ending::Cancelled { .. }
+            | c::Ending::Withdrawn { .. }
+            | c::Ending::Decided { .. }
+            | c::Ending::Deleted => None,
+        },
+    };
+    let phase = match ending {
+        Some(c::OwnerChipEnding::Failed(_)) => c::Phase::Failed,
+        Some(c::OwnerChipEnding::Cancelled { by, .. }) if !closed_by_requester(task.requester, *by) => {
+            c::Phase::Cancelled
+        }
+        Some(_) => c::Phase::Ended,
+        None => match result {
+            c::TaskResult::Document(result) => match &result.ending {
+                c::Ending::Failed { .. } => c::Phase::Failed,
+                c::Ending::Cancelled { by, .. } => {
+                    if actor_requester(*by) == Some(task.requester) {
+                        c::Phase::Ended
+                    } else {
+                        c::Phase::Cancelled
+                    }
+                }
+                c::Ending::Withdrawn { .. } => c::Phase::Cancelled,
+                c::Ending::Task(_) | c::Ending::Done | c::Ending::Decided { .. } | c::Ending::Deleted => {
+                    c::Phase::Ended
+                }
+            },
+            c::TaskResult::Ending(_) => unreachable!("owner ending handled above"),
+        },
+    };
+    let status = if phase == c::Phase::Ended {
+        words.say(Word::ChatClosed, &[])
+    } else {
+        words.say_word(jig_client::words::Word::Phase(phase), &[])
+    };
+    let name = match end_clock(task, result, words, times) {
+        Some(clock) => crate::accounts::words::join(&[&status, b" ", &clock]),
+        None => status,
+    };
+    b.open(Role::Status);
+    b.style(look::STATUS_QUIET);
+    b.name(&name);
+    b.text(Run::Plain, &name);
+    b.close();
+}
 fn reason_bytes(reason: Option<&c::Text>) -> Option<&[u8]> {
     match reason {
         Some(reason) => Some(reason.bytes()),
@@ -327,14 +381,7 @@ fn result_text(
                 end_reason(b, Word::ChatFailed, reason_bytes(reason.as_ref()), words, clock);
             }
             c::Ending::Cancelled { reason, by, .. } => {
-                let by = match by {
-                    c::Actor::Party(number) => Some(c::OwnerRequester::Person(*number)),
-                    c::Actor::Task(number) => Some(c::OwnerRequester::Task(*number)),
-                    c::Actor::ProjectDeployment { project } => {
-                        Some(c::OwnerRequester::Deployment { project: *project })
-                    }
-                    c::Actor::Deployment => None,
-                };
+                let by = actor_requester(*by);
                 if let Some(by) = by
                     && closed_by_requester(requester, by)
                 {
@@ -369,6 +416,14 @@ fn owner_end(
                 end_reason(b, Word::ChatCancelled, Some(reason.bytes()), words, clock);
             }
         }
+    }
+}
+fn actor_requester(by: c::Actor) -> Option<c::OwnerRequester> {
+    match by {
+        c::Actor::Party(number) => Some(c::OwnerRequester::Person(number)),
+        c::Actor::Task(number) => Some(c::OwnerRequester::Task(number)),
+        c::Actor::ProjectDeployment { project } => Some(c::OwnerRequester::Deployment { project }),
+        c::Actor::Deployment => None,
     }
 }
 pub(crate) fn closed_by_requester(requester: c::OwnerRequester, by: c::OwnerRequester) -> bool {
@@ -423,11 +478,7 @@ fn spend(b: &mut Builder, task: &c::Task, words: &Words) {
         Role::Paragraph,
         &words.say(
             Word::ChatbarSpend,
-            &[
-                Hole::Number(task.budget.numbers.spent),
-                Hole::Number(task.budget.numbers.budget),
-                Hole::Number(task.budget.numbers.spent_below),
-            ],
+            &[Hole::Number(task.budget.numbers.spent), Hole::Number(task.budget.numbers.budget)],
         ),
     );
 }
@@ -455,7 +506,9 @@ fn composer(
         b.open(Role::TextArea);
         b.name(&words.say(Word::Message, &[]));
         b.placeholder(&words.say(Word::MessagePlaceholder, &[Hole::Number(task.chip.task)]));
-        b.state(State::SubmitsOnEnter);
+        if crate::choice::model_usable(root) {
+            b.state(State::SubmitsOnEnter);
+        }
         b.style(look::COMPOSER);
         b.value(&chat.words, temper_client_domain::pages::shown(root.pages()));
         b.bind(bindings.insert(Act::MessageWords { words: Box::default() }));
@@ -464,7 +517,13 @@ fn composer(
         b.style(look::HINT);
         words.text(b, Word::ChatSendHint, &[]);
         b.close();
-        control(b, bindings, Role::Button, &words.say(Word::Send, &[]), Act::Send);
+        b.open(Role::Button);
+        b.name(&words.say(Word::Send, &[]));
+        if !crate::choice::model_usable(root) {
+            b.state(State::Disabled);
+        }
+        b.bind(bindings.insert(Act::Send));
+        b.close();
         if chat.outcome_kind == Some(temper_client_domain::pages::chat::Sending::Message)
             && let Some(outcome) = &chat.outcome
             && !super::chats::accepted(outcome)

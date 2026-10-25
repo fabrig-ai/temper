@@ -99,8 +99,26 @@ pub(crate) fn composer(
     let draft = root.pages().choice();
     b.open(Role::Slot);
     b.style(crate::look::CHOICE);
-    using(b, root, task, w);
-    if let Some(me) = temper_client_domain::pages::accounts::current_me(root.client())
+    let usable = model_usable(root);
+    if usable {
+        using(b, root, task, w);
+    } else {
+        b.open(Role::Paragraph);
+        b.style(crate::look::ACCOUNT_LINE);
+        b.text(skein_ui::Run::Plain, &w.say(W::NoModelYet, &[]));
+        b.text(skein_ui::Run::Plain, &w.say(W::ToolSeparator, &[]));
+        control(
+            b,
+            bindings,
+            Role::Link,
+            &w.say(W::ConnectModel, &[]),
+            Act::Go { address: Address::ConnectModel { way: None } },
+            false,
+        );
+        b.close();
+    }
+    if usable
+        && let Some(me) = temper_client_domain::pages::accounts::current_me(root.client())
         && let Some(project) = draft.project()
         && let Some(models) = choice::models(me, project)
         && !models.is_empty()
@@ -565,6 +583,10 @@ fn using_line(
         line(b, w, word, &[Hole::Name(name)]);
     }
 }
+/// The setup strip's model predicate, with the running playground's own model.
+pub(crate) fn model_usable(root: &Domain) -> bool {
+    root.forge().demo_running() || temper_client_domain::pages::welcome::model_usable(root) != Some(false)
+}
 fn using_account(
     b: &mut Builder,
     root: &Domain,
@@ -577,7 +599,12 @@ fn using_account(
     if let Some(me) = temper_client_domain::pages::accounts::current_me(root.client()) {
         for offer in &me.providers {
             if Some(offer.provider) == account.provider {
-                provider_name = Some(provider_shown(root, account.provider, offer.name.bytes(), w));
+                let (provider, plan) = crate::accounts::words::provider_words(offer.name.bytes());
+                provider_name = Some(skein_lib::bytes::copy_of(if source.kind == c::OwnerAccountKind::Key {
+                    provider
+                } else {
+                    plan
+                }));
                 break;
             }
         }
@@ -591,7 +618,11 @@ fn using_account(
         c::OwnerAccountKind::SignIn => w.say(W::UsingPlan, &[Hole::Name(provider_name), Hole::Name(name)]),
         c::OwnerAccountKind::Program => w.say(
             W::UsingProgram,
-            &[Hole::Name(provider_name), Hole::Name(source.name.clone().unwrap_or_default()), Hole::Name(name)],
+            &[
+                Hole::Name(provider_name),
+                Hole::Name(crate::accounts::words::say(w, crate::accounts::words::Word::ProgramName, &[])),
+                Hole::Name(name),
+            ],
         ),
         c::OwnerAccountKind::None => w.say(W::UsingModel, &[Hole::Name(name)]),
     };

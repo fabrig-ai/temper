@@ -397,6 +397,8 @@ pub enum Word {
     Chat,
     TaskWho,
     ChatbarSpend,
+    NoModelYet,
+    KeptTranscript,
     ProposalWhy,
     ProposalLanding,
     ProposalBudget,
@@ -659,9 +661,9 @@ pub enum Word {
 // A task document's reading line and seven lasting read ends (client/README.md, 3.5).
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
-const PHRASES: u32 = 1162;
-const SEGMENTS: u32 = 2041;
-const ALL: [Word; 594] = [
+const PHRASES: u32 = 1165;
+const SEGMENTS: u32 = 2042;
+const ALL: [Word; 596] = [
     Word::WelcomeYourModel,
     Word::BrandChats,
     Word::WelcomeModelPlan,
@@ -1038,6 +1040,8 @@ const ALL: [Word; 594] = [
     Word::Chat,
     Word::TaskWho,
     Word::ChatbarSpend,
+    Word::NoModelYet,
+    Word::KeptTranscript,
     Word::ProposalWhy,
     Word::ProposalLanding,
     Word::ProposalBudget,
@@ -1667,6 +1671,8 @@ impl Word {
             Self::Chat => 143,
             Self::TaskWho => 1075,
             Self::ChatbarSpend => 1400,
+            Self::NoModelYet => 2200,
+            Self::KeptTranscript => 2201,
             Self::ProposalWhy => 1401,
             Self::ProposalLanding => 1402,
             Self::ProposalBudget => 1403,
@@ -2533,9 +2539,9 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::LiveChats | Word::Live => (&[b"Live"], &[]),
         Word::MoreClosedChats => (&[b"More closed chats"], &[]),
         Word::Chat | Word::TaskWho => (&[b"T", b""], &[Number]),
-        Word::ChatbarSpend => {
-            (&[b"", b" spent \xc2\xb7 of ", b" \xc2\xb7 delegates spent ", b""], &[Number, Number, Number])
-        }
+        Word::ChatbarSpend => (&[b"", b" spent \xc2\xb7 of ", b""], &[Number, Number]),
+        Word::NoModelYet => (&[b"No model yet"], &[]),
+        Word::KeptTranscript => (&[b"Closed. Its transcript is kept."], &[]),
         Word::ProposalWhy => (&[b"Why"], &[]),
         Word::ProposalLanding => (&[b"Landing"], &[]),
         Word::ProposalBudget => (&[b"Budget"], &[]),
