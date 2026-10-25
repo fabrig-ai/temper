@@ -3224,3 +3224,139 @@ fn a_final_feed_saves_desired_and_generation_in_its_core_commit_before_a_root_cr
     );
     assert!(world.store.rows.values().all(|record| !matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Issue(row) if row.goal == goal))), "last settlement forgets connector state");
 }
+
+#[test]
+fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atomic_commit() {
+    use jig_domain_core::{
+        CoreKey, CoreRecord, ProjectionFailure, ProjectionFailureSource, ProjectionFailureState, ProjectionKey,
+        ProjectionRecord,
+    };
+    for durable in [false, true] {
+        let mut world = World::configured(true, false);
+        world.adopt();
+        world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+        world.send(engine::Event::Party(engine::PartyInput::Ask {
+            models: Box::new([]),
+            reply_to: ReplyTo::new(Token::new(950)),
+            sign_in: world.signed_in.unwrap(),
+            key: [150; 16],
+            ask: walking::goal_from(
+                world.chat(1, b"Recover projection"),
+                people::TaskExecutor::Agent { charter: 1 },
+                jig_core_world::fixtures::Goal { budget: 50, priority: 3, deadline: None },
+            ),
+        }));
+        world.until(Until::Assigned);
+        let goal = world.assigned[0].task;
+        for _ in 0..300 {
+            world.tick();
+            if world.pending.is_empty() && world.store.pending.is_empty() && world.store.rows.values().any(|record| matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Issue(row) if row.goal == goal && row.pending.is_none() && !row.failed && row.desired.as_ref().is_some_and(|desired| temper_engine_domain_forge_issues::project(desired, &row.state, world.env.wall, &world.env.limits.forge.issue_policy).decision == temper_engine_domain_forge_issues::Decision::None)))) { break; }
+        }
+        assert!(world.pending.is_empty() && world.store.pending.is_empty());
+        let issue_key = Key::Forge(forge_top::Key::Issue(goal));
+        let Some(Record::Forge { row }) = world.store.rows.get(&issue_key) else { panic!("accepted issue") };
+        let forge_top::Stored::Issue(mut retained) = row.as_ref().clone() else { panic!("issue row") };
+        let prior = retained.state.clone();
+        let mut header = world.store.header();
+        let source = header.connector_rows + 1;
+        header.connector_rows = source;
+        header.commits += 1;
+        retained.pending = Some(source);
+        retained.before = Some(prior.clone());
+        retained.state.closed = true;
+        retained.failed = true;
+        let entry = skein_forge_client::Entry {
+            number: source,
+            task: goal,
+            repository: retained.repository,
+            effect: skein_forge_client::Effect {
+                write: skein_forge::api::Write::Close { number: retained.number.unwrap() },
+                condition: skein_forge_client::Condition::None,
+            },
+            start: None,
+            attempt: None,
+            failures: 0,
+            queued: false,
+        };
+        let receipt_key =
+            Key::Core(jig_domain_core::Key::Core(CoreKey::Projection(ProjectionKey::Failure { goal, connector: 0 })));
+        let reported = ProjectionFailure {
+            goal,
+            connector: 0,
+            after: source - 1,
+            state: ProjectionFailureState::Reported(ProjectionFailureSource { source, at: world.env.wall }),
+        };
+        // The existing typed store creates a valid retained Held snapshot. The
+        // actual root then owns admission, reset, fencing, and both crash cuts.
+        world.store.submit(
+            header.commits,
+            Box::new([
+                engine::Write::Save(Record::Core(jig_domain_core::Record::Core(CoreRecord::Deployment(header)))),
+                engine::Write::Save(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(
+                    ProjectionRecord::Failure(reported),
+                )))),
+                engine::Write::Save(Record::Forge { row: Box::new(forge_top::Stored::Issue(retained.clone())) }),
+                engine::Write::Save(Record::Forge { row: Box::new(forge_top::Stored::Entry { entry, held: true }) }),
+            ]),
+            0,
+        );
+        world.store.apply();
+        world.restart(true, false);
+        for _ in 0..100 {
+            world.tick();
+            if world.root.ready() && world.events.is_empty() && world.store.pending.is_empty() {
+                break;
+            }
+        }
+        assert!(world.root.ready());
+        world.root.recover_projection(&world.env, goal, Token::new(951)).unwrap();
+        engine::release(&mut world.root, &world.env, &mut world.out);
+        world.collect();
+        let (_, writes) = world.store.pending.front().expect("one recovery commit");
+        assert!(writes.iter().any(|write| matches!(write, engine::Write::Save(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Failure(row))))) if row.after == source && row.state == ProjectionFailureState::Armed)));
+        assert!(writes.iter().any(|write| matches!(write, engine::Write::Erase(Key::Forge(forge_top::Key::Entry(number))) if *number == source)));
+        assert!(writes.iter().any(|write| matches!(write, engine::Write::Save(Record::Forge { row }) if matches!(row.as_ref(), forge_top::Stored::Issue(row) if row.pending.is_none() && row.before.is_none() && !row.failed && row.state == prior))));
+        if durable {
+            world.store.apply();
+        }
+        world.store.crash(952);
+        world.restart(true, false);
+        for _ in 0..100 {
+            world.tick();
+            if world.root.ready() && world.events.is_empty() && world.store.pending.is_empty() {
+                break;
+            }
+        }
+        assert!(world.root.ready());
+        let Some(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Failure(
+            receipt,
+        ))))) = world.store.rows.get(&receipt_key)
+        else {
+            panic!("durable receipt")
+        };
+        let Some(Record::Forge { row }) = world.store.rows.get(&issue_key) else { panic!("durable issue") };
+        let forge_top::Stored::Issue(issue) = row.as_ref() else { panic!("issue") };
+        if durable {
+            assert_eq!(receipt.after, source);
+            assert_eq!(receipt.state, ProjectionFailureState::Armed);
+            assert_eq!(issue.pending, None);
+            assert_eq!(issue.before, None);
+            assert!(!issue.failed);
+            assert_eq!(issue.state, prior);
+            assert!(!world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(source))));
+        } else {
+            assert_eq!(*receipt, reported);
+            assert_eq!(issue, &retained);
+            assert!(world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(source))));
+            world.root.recover_projection(&world.env, goal, Token::new(953)).unwrap();
+            for _ in 0..40 {
+                world.tick();
+                if world.root.take_projection_recovery(Token::new(953)).is_some() {
+                    break;
+                }
+            }
+            assert!(world.store.rows.values().all(|record| !matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Entry { entry, .. } if entry.number == source))));
+        }
+        assert!(world.store.rows.values().all(|record| !matches!(record, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Writer(slot))) if slot.writer == tasks::Writer::Effect { entry: source })), "covered projection has no writer debt after recovery");
+    }
+}

@@ -249,11 +249,11 @@ const ROOT: Root = Root {
         // Commits awaiting durability, from the root world.
         commits: 3,
         // At least deliveries * 3: the root's worst case.
-        held: 1536,
+        held: 768,
         // At least `route_bound` plus `call_records`: the root's worst case.
         writes: 21_261,
         // At least jig small fleet.workers * fleet.max_out + 1: the root's worst case.
-        deliveries: 512,
+        deliveries: 256,
         // At least row_bound, including forge.client.answer_bytes: the root's worst case.
         transcript_bytes: 65_536,
         // At least brief.brief_bytes and jig small people.words: the root's worst case.
