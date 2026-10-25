@@ -217,6 +217,22 @@ section 7).
   with `STORE_VERSION` to jig's component, which checks them with its own
   against skein-kv's limits, and the start is refused when they do not
   fit (jig's `protocol/store.md`, 5.4).
+  The service derives the shared store and secrets page byte bound as
+  `P = max(K + V, F(A))`, where `K` and `V` are the checked map sizes and
+  `A` is `root.loads.transcript_bytes`. Startup checks that `A` covers
+  the agent's largest ordinary turn; the hub's turn cap is not its value.
+  `F(A)` uses the current generated `core_v6::TurnRecord` worst-case
+  encoding with a copy of the existing codec limits, changing only its
+  transcript field bound to `A`, plus the actual 12-byte frame wrapper.
+  Out-of-codec `A`, arithmetic overflow, or a page beyond the profile's
+  ceiling refuses admission rather than clamping. The service currently
+  keeps this sizing bridge private pending jig's canonical helper.
+  Page bytes are an admission counter, not an allocated page pool: this
+  changes the priced bound and may admit more data-dependent occupancy,
+  while page rows, chunk and frame decoder capacities, queues and read
+  slots stay the same. Existing request byte budgets still apply.
+  Named refusal of an oversized write before data IO is separate pending
+  work; this sizing change does not implement that guard.
 
 ## 5. The restart
 
