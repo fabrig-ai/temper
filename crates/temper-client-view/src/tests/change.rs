@@ -224,6 +224,10 @@ fn each_step_draws_its_current_done_slots_and_its_sentence() {
         for (slot, index) in steps.iter().enumerate() {
             let node = &tree.nodes()[*index];
             assert_eq!(node.states.as_slice().contains(&skein_ui::State::Current), current == Some(slot));
+            assert_eq!(
+                node.states.as_slice().contains(&skein_ui::State::Completed),
+                node.styles.as_slice().contains(&look::STEP_DONE)
+            );
         }
         assert_eq!(f::node_text(&tree, steps[4]).as_ref(), queue_word.as_bytes());
         assert!(contains(&tree, sentence), "{sentence}");

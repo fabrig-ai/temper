@@ -6,6 +6,7 @@ pub mod host;
 pub mod layout;
 pub mod limits;
 pub mod lines;
+mod logs;
 pub mod machine;
 pub mod pipe;
 mod ready;

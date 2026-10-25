@@ -166,7 +166,15 @@ fn a_forge_only_banner_links_to_connect_without_a_model_link() {
     let root = f::demo_root(Address::Chats { filter: ChatsFilter::All, start: false }, f::PROJECT, false);
     let mut view = f::page_view(&root);
     assert!(f::find(view.tree(), Role::Paragraph, b"This is the playground: a playground forge.").is_some());
-    assert!(f::find(view.tree(), Role::Link, b"Connect a model").is_none());
+    let mut banner = None;
+    for (index, node) in view.tree().nodes().iter().enumerate() {
+        if node.role == Role::Region && node.name.as_deref() == Some(b"Playground") {
+            banner = Some(index);
+            break;
+        }
+    }
+    let banner = banner.unwrap();
+    assert!(skein_lib::bytes::find(&f::node_text(view.tree(), banner), b"Connect a model").is_none());
     let link = f::find(view.tree(), Role::Link, b"Connect a forge").unwrap();
     assert_eq!(
         crate::act(&mut view, link, skein_ui::Act::Press),
@@ -221,7 +229,7 @@ fn the_demo_account_always_names_default_whatever_the_model_or_project() {
         ("default", f::PROJECT, true, false, "Using Scripted model · Default"),
         ("requested", f::PROJECT, true, true, "Using Scripted model · Default"),
         ("another project", f::SECOND_PROJECT, true, false, "Using Scripted model · Default"),
-        ("forge alone", f::PROJECT, false, false, "Using Scripted model · Default"),
+        ("forge alone", f::PROJECT, false, false, "No model yet · Connect a model"),
     ] {
         let choice = if requested {
             Some(c::LlmChoice {
@@ -234,7 +242,7 @@ fn the_demo_account_always_names_default_whatever_the_model_or_project() {
         };
         let root = f::demo_choice_root(Address::Chat { task: 1 }, project, model, choice);
         let view = f::page_view(&root);
-        assert!(f::find(view.tree(), Role::Paragraph, expected.as_bytes()).is_some(), "{row}");
+        assert!(skein_lib::bytes::find(&f::text(view.tree()), expected.as_bytes()).is_some(), "{row}");
     }
     let root = f::demo_root(Address::Chats { filter: ChatsFilter::All, start: false }, f::PROJECT, true);
     assert!(

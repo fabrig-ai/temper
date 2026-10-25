@@ -216,6 +216,16 @@ fn qa_an_asked_groups_failure_is_named_by_its_label() {
         stderr.lines().any(|line| box_notice_words(line) == "Forge 3 (Forgejo): failed, fetch 3 exited 1"),
         "{stderr}"
     );
+    let lines = stderr.lines().collect::<Vec<_>>();
+    let failed = lines
+        .iter()
+        .position(|line| box_notice_words(line) == "Forge 3 (Forgejo): failed, fetch 3 exited 1")
+        .expect("labelled failure");
+    let tail = lines[failed + 1..].iter().take_while(|line| line.starts_with("    ")).collect::<Vec<_>>();
+    assert!(tail.len() >= 2, "diagnostics and log path directly under failure: {stderr}");
+    assert!(tail[..tail.len() - 1].iter().all(|line| line.starts_with("    fetch 3: ")), "{stderr}");
+    let log = tail.last().expect("log line");
+    assert!(log.starts_with("    Log: ") && log.ends_with("/box/logs/fetch-3.log"), "{stderr}");
 }
 
 // Match process.rs: strip only a validated UTC time-of-day prefix.

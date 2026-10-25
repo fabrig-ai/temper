@@ -1,134 +1,161 @@
 # The welcome on fake backends
 
-Draft, 2026-10-24, from a session with the user. `temper box
---fake-backends` starts temper with its GitHub, its ChatGPT sign-in and
-its model pointed at fakes on loopback, so that the user or a QA agent
-can click through the welcome (Welcome, Forge, Model, Ready) with no
-real backend and no one's account. It serves one purpose: validating the
-welcome's flow and its look against `client/mockups/welcome.html` and
-`connect-model.html`. Section 2 says what exists, section 3 the work,
-section 4 what stays real.
+Draft, 2026-10-24, from a session with the user; reshaped 10-25 as the
+walk is built. `temper box --fake-backends` starts temper with every
+backend the welcome needs pointed at fakes on loopback: a GitHub, the
+ChatGPT sign-in's issuer, the model and a Forgejo elsewhere. The user or
+a QA agent can then click through the welcome (Welcome, Forge, Model,
+Ready) and send a first chat, with no real backend and no one's account.
+It validates the welcome's flow and its look against
+`client/mockups/welcome.html` and `connect-model.html`. Section 2 says
+what is built, section 3 how the walk proves each path, section 4 what
+the walk found, section 5 what stays real, and section 6 what is open.
 
 ## 1. In one page
 
 - **Why.** The welcome's GitHub and ChatGPT steps reach real services,
-  so walking them takes the user. The mockup audits so far went around
-  them: gallery fixtures, hand-written issuers, split requests
-  (o/first-run-ux-3's walk, 10-23 and 10-24, 26 rows still differing).
-  Nobody has clicked one welcome from start to Ready against the shipped
-  configuration.
-- **The minimum, no more** (the user, 10-24). The goal is clicks that
-  work and a welcome that reaches its end. Pre-canned choices are fine:
-  one fake account, one repository, a sign-in that grants at once. No
-  login or consent pages, no device flow, no fidelity beyond what the
-  welcome's pages need. Looks of the fakes don't matter.
+  so walking them took the user, and audits went around them: gallery
+  fixtures, hand-written issuers, split requests. Nobody had clicked one
+  welcome from start to Ready against the shipped configuration.
+- **The minimum, no more** (the user, 10-24): "the clicks work and the
+  welcome reaches its end. Pre-canned choices are fine. No login
+  pages." One fake person, one seeded repository, a sign-in that grants
+  at once; no consent page, no fidelity beyond what the welcome's pages
+  need. The fakes' own looks don't matter.
 - **skein ships primitives, temper wires them** (the user, 10-24). The
-  protocol work is skein's and is already there; the flag, the
-  configuration, the processes and their supervision are temper's.
-  Predictable boilerplate in temper is fine. A piece moves to skein only
-  once proven generic and wanted by another consumer, such as the
-  factory's applications (`draft/factory.md`). `draft/qa-loop.md` 11.1
-  holds: skein ships no fake executables.
-- **No fake branches in product code.** The flag changes configuration
-  and the processes `temper box` supervises, nothing in the client,
-  service or engine. What the welcome does against the fakes is what it
-  does against the real services.
-- **Ready is the end.** The welcome completes on a connected forge and a
-  usable model account (`temper-client-domain`'s `pages/welcome.rs`); a
-  first chat's reply is outside this draft, though the fake model is
-  wired so that one works.
+  fakes are skein's libraries; the flag, the configuration, the
+  processes and their supervision are temper's. `draft/qa-loop.md` 11.1
+  holds: skein ships no fake executables. Where a fake answers unlike
+  the real service, its fix is skein's, as the primitive's fidelity.
+- **No fake branches in product code** (the user, 10-24). The flag
+  changes configuration and the processes `temper box` supervises,
+  nothing in the client, service or engine. What the product needs
+  to be pointed at a fake is a general setting a person could use too
+  (`git_program`, section 4).
+- **The end is a first chat.** Each path reaches Ready (a connected
+  forge with its first repository adopted, a usable model account),
+  then a first chat whose committed reply is the fake's.
 
-## 2. What exists
+## 2. What is built
 
-- **skein's fakes, as libraries** (`skein-fake-peers`): the OAuth issuer
-  (`skein-fake-oauth`: authorization code with PKCE, the issued client
-  id the shipped ChatGPT registration uses, OpenID ID tokens and keys;
-  its authorization answers with a redirect at once), the GitHub fake
-  (`skein-fake-forge-github`: App manifest, creation and install pages,
-  defaulting to the configured account and all repositories, and the API
-  the setup uses), Forgejo's dialect, and the model's (public OpenAI
-  Responses, which checks a bearer's bytes only).
-- **temper's process wrappers:** `temper fake forge` and `temper fake
-  llm` (`crates/temper-fake`, `crates/temper/src/fake.rs`), each run
-  from a deployment or a `--document`. `temper box` supervises them
-  today for the playground only (`temper-fake`'s `steps.rs`).
-- **The configuration seam is proven, not shipped.** Every root the
-  welcome reaches is a configuration value: a GitHub forge's `api`,
-  `transport`, `git` and `web`; the sign-in's issuer, authorization,
-  token, revocation and keys; the engine's and `agent.json`'s model
-  endpoints, which are separate. `crates/temper/tests/support/sign_in.rs`
-  rewrites the shipped ChatGPT registration onto a fake issuer and model
-  this way; it is the recipe.
-- **Missing:** the flag (`temper box` takes no arguments,
-  `crates/temper/src/lib.rs`), an issuer process (no `temper fake
-  oauth`), supervision of the fakes outside the playground, and one
-  browser click from GitHub's Create to its install: the walkers' run
-  timed out after Create while each request alone passed, undiagnosed
-  (o/first-run-ux-3's `shots-gh/report.md` and `reports/m4-walk.md`, on
-  hetzner5).
+Steps 1 to 3 of 10-24's plan are on main (`protocol/configuration.md`,
+12.1, the fake sandbox; `protocol/setup.md`, 7.3, 7.5 and 8.4):
 
-## 3. The work
+- **The flag.** `temper box --fake-backends [--bundle DIR]` keeps a
+  private sandbox, `DATA/box/fake-backends`, with effective `temper.json`
+  and `agent.json` rewritten onto the fakes, a source configuration left
+  untouched, and init run in the sandbox when the source is empty. It
+  names a bundle that allows loopback navigation (`scripts/bundle.sh
+  --loopback`).
+- **Four supervised fakes,** always running, ahead of the playground's
+  asked group, each on a listener the box holds before spawning it: a
+  GitHub (`temper fake forge`; App 1 seeded and installed on
+  `fake-person`, repository `widget`), the issuer (`temper fake oauth`;
+  grants every sign-in), the model (`temper fake llm`; accepts the key
+  the box leaves and the issuer's token, and answers "Hello from the
+  local fake model."), and a Forgejo elsewhere (forge 4, managed, its
+  admin token in a private file).
+- **A program,** Claude Code's, is the real mechanism: `agent.json`'s
+  `programs.claude_code.path` is the `fake-claude` sibling of the
+  `temper` binary.
+- **What the box tells the person,** on stderr at start, each line a
+  fixed prefix the lab captures: the effective directories, each
+  fake's origin (`box: fake github http://…`, `issuer`, `model`,
+  `forgejo`), the model key's file, Forgejo's admin token file, and the
+  program-login command with the effective directories. Being built:
+  the own App's id and key file (section 6).
 
-1. **The flag and its configuration.** `temper box --fake-backends`
-   writes an effective configuration, both `temper.json` and
-   `agent.json`, beside the deployment's, and runs every child on it:
-   children reopen their directory's documents, so rewriting the
-   parent's bytes alone is not enough. It points GitHub forge 2 at the
-   fake GitHub (plaintext, `git` and `web` on the same fake), the ChatGPT
-   sign-in's five addresses at the fake issuer (plaintext, the shipped
-   client, scopes, `must_grant`, resource and callback kept), and the
-   OpenAI endpoint, in both documents, at the fake model. It names a
-   bundle that allows loopback navigation (`scripts/bundle.sh`). With an
-   empty configuration it runs `init` first, as `box` does.
-2. **`temper fake oauth`.** A wrapper like its two siblings around
-   skein's issuer peer, taking `--document` and `--ready`, granting
-   every sign-in: the shipped registration's terms and scopes, an ID
-   token for one fixed person, a fixed access token. The fake model
-   accepts the same token bytes, so a chat after Ready works.
-3. **Supervision.** `box` runs the fake GitHub (`temper fake forge
-   --document`, seeded with one personal account and one repository,
-   and with its App's id and key printed for the own-App path), the
-   issuer and the model as always-running steps, not in the playground's
-   asked group, which the first connected forge retires. Their prefix
-   precedes every asked group's insertion point. The box holds each
-   listener before spawn and hands it over as for the playground's fakes;
-   the issuer requires the same held-listener support. Compatible retained
-   documents and exact private seed outputs survive restart; peer memory
-   lasts one launch. There is no second supervisor or self-bound readiness
-   substitute.
-4. **The walk.** Reproduce GitHub's Create, install and return as one
-   browser click chain against the separate processes, and fix what
-   breaks. Then walk each path to Ready in a browser: GitHub one-click,
-   GitHub's own App, Forgejo here, Forgejo elsewhere; ChatGPT sign-in,
-   a key, a program. The walk's proof is a lab experiment the look's
-   scenes can use (`draft/qa-web.md`), and a test in the lowest world
-   that owns each fix (`domain/testing.md`).
+## 3. The walk
 
-Each step lands alone; the first three are small, the fourth is the
-risk.
+Each welcome path is proved twice: once below the browser, where its
+wiring is cheapest to test, and once clicked, in the lab.
 
-## 4. What stays real
+### 3.1 Below the browser: process stories
+
+`crates/temper/tests/fake_backends/walk.rs`: a `Walk` is one fake box on
+an empty configuration, as a person starts it. Its `Act`s are what the
+welcome's buttons send, through `temper ctl`, and `Act::Visit` is the
+tab: it follows the address an act printed through redirects and a
+page's self-posting form, as a browser would, back to temper. Each
+story pairs one new path with one already proved, so that a failure
+names one thing:
+
+| Story | Forge | Model |
+|---|---|---|
+| `forgejo_elsewhere_and_a_key_…` | Forgejo elsewhere, by its admin token, its first repository made | a key |
+| `github_one_click_and_a_key_…` | GitHub, temper's App by manifest | a key |
+| `githubs_own_app_and_a_key_…` | GitHub, an App of the person's own | a key |
+| `chatgpt_sign_in_and_forgejo_elsewhere_…` | Forgejo elsewhere | ChatGPT sign-in |
+| `forgejo_here_and_a_key_…` | Forgejo here | a key |
+| `a_program_and_forgejo_here_…` | Forgejo here | a program's login |
+
+Each asserts what the welcome shows before its new path, then the end:
+the forge connected with its first repository adopted, the account
+usable, and the first chat's committed assistant reply. They run in the
+process tier. The owned stories take the owned stories' allowance, a real
+Forgejo's start (section 5).
+
+### 3.2 Clicked: lab experiments
+
+The proof that the clicks work is skein's lab, with hand driving
+Chromium (skein's `lab-browser.md`, 8) against an ordinary box. hand
+reaches temper's origin and the fakes the box names as its peers
+(`--peer`, 8.5); every other destination stays refused. Four
+experiments cover the seven paths, all in the browser:
+
+| Experiment | Forge | Model |
+|---|---|---|
+| `lab/welcome-chatgpt` | Forgejo elsewhere | ChatGPT sign-in |
+| `lab/welcome-github` | GitHub one-click | a key |
+| `lab/welcome-own-app` | GitHub, an App of the person's own | a program's login |
+| `lab/welcome-forgejo-here` | Forgejo here | a key |
+
+Each walks `/welcome` to Ready, opens the project, sends a first chat,
+waits for the reply and finds it again after a reload; its checks
+require hand's trouble to be empty and ctl's chat to hold the fake's
+reply as its first committed assistant message. Each welcome step is
+its own step of the walk, so the look's live scenes (`draft/qa-web.md`,
+3.3) can capture between them.
+
+## 4. What the walk found
+
+As of 10-25 21:30Z the fixes are on their branches, landing with the
+walk's first set.
+
+| Found | Cause | Fix |
+|---|---|---|
+| GitHub's Create → install → return never completed in Chromium (10-23, 10-24, 10-25) | the browser fixture's fake GitHub admitted two connections. The chain has three: Chromium's keep-alive, temper's forge client and temper's setup client. Setup waited on a refused connection, so the navigation never ended | the fixture's admission sized to the chain's clients; the box's fake GitHub checked for the same |
+| Forgejo elsewhere's first repository refused at adoption (`no_access`) | skein's fake Forgejo listed the setup admin among a new repository's collaborators; a real Forgejo 17 lists none until a grant | skein's fake, as Forgejo answers |
+| the first chat's worker never replied on a fake forge | workers ran the machine's git; skein's fake forges speak a fake git protocol | `application.forges[].git_program`, a forge's git, general; the box sets the fake git adapter for forges 2 and 4 |
+| the printed program-login line named a source `source` | the welcome declares `claude-` + the person's name, which the box can't know | the line ends `NAME (the name the Model step shows)` |
+| Ready on a Forgejo elsewhere said "Almost ready" after adoption | `ready_target` admitted GitHub and owned Forgejo only; the client README's Ready names no such limit | the guard removed |
+
+## 5. What stays real
 
 These need neither a remote service nor the user, so they keep their
-real mechanism rather than gaining fake modes:
+real mechanism rather than gaining fake modes (the user, 10-24):
 
 - **Forgejo here** runs a real Forgejo on the machine, fetched once from
-  Codeberg and cached. Faking it means replacing the owned forge's
-  steps while keeping its choice in the welcome; not worth it now.
+  Codeberg and cached at temper's pins. A walk with no network has the
+  pinned binaries in its cache already, as a person's has after a first
+  run; its start costs seconds, not the 2 s a process story aims at.
 - **Forgejo elsewhere** reaches a fake Forgejo through the generated
-  configuration: a managed forge on `temper fake forge --document`,
-  with its admin token printed. The welcome does what it does for a
-  forge configured by hand, restart included; any shortcut would be a
-  fake branch in product code.
-- **A program** (Claude Code) is the real mechanism: `agent.json`'s
-  `programs.claude_code.path` points at `tools/fake-claude`, and whoever
-  walks runs `temper program-login NAME` once, as a person would.
+  configuration: a managed forge on `temper fake forge --document`, its
+  admin token in a file the box names. The welcome does what it does
+  for a forge configured by hand.
+- **A program** (Claude Code) is the real mechanism: whoever walks runs
+  the printed `temper program-login` once, as a person would.
 
-## 5. Open
+## 6. Open
 
-- Whether the GitHub fake's pages need anything for the own-App path
-  beyond a seeded App with its setup callback (`skein-fake-forge-
-  github`'s `pages.rs` refuses an install without one). If they do, that
-  is skein's, and the one place this draft may touch it.
-- Whether QA's look adopts this box for its live scenes in place of the
-  gallery's welcome fixtures; `draft/qa-web.md` decides.
+- **The own App.** The fake's install page refuses an App with no setup
+  URL, and only a manifest sets one. If temper's own-App flow sends
+  the tab to GitHub's install page for an App already installed, the
+  seeded App needs its setup URL, as its owner set it on GitHub, a
+  skein primitive. Being settled.
+- **Setup waits on GitHub.** temper's setup response waits on a GitHub
+  API call through refused connections with backoff, so a person's tab
+  hangs with no answer while GitHub's API is unreachable. A finding for
+  the setup's owner, not this walk's.
+- **Whether QA's look adopts these experiments** for its live scenes in
+  place of the gallery's welcome fixtures: `draft/qa-web.md` decides.

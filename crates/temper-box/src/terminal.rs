@@ -164,3 +164,89 @@ fn pair(value: u64) -> [u8; 2] {
         b'0'.checked_add(u8::try_from(value.rem_euclid(10)).expect("one digit")).expect("ASCII digit"),
     ]
 }
+
+/// Last successfully logged diagnostic pieces, already in echo's spelling.
+#[derive(Debug)]
+pub(crate) struct Tail {
+    lines: skein_lib::Queue<Box<[u8]>>,
+}
+impl Tail {
+    pub fn new(lines: u32) -> Self {
+        Self { lines: skein_lib::Queue::with_capacity(lines) }
+    }
+    pub fn push(&mut self, line: Box<[u8]>) {
+        if self.lines.room() == 0 {
+            drop(self.lines.pop());
+        }
+        self.lines.push(line);
+    }
+    pub fn reset(&mut self) {
+        while let Some(line) = self.lines.pop() {
+            drop(line);
+        }
+    }
+    pub fn append(&self, item: &mut Item, path: &[u8]) {
+        if self.lines.is_empty() {
+            return;
+        }
+        let mut length =
+            item.bytes.len().checked_add(10).expect("Log words").checked_add(path.len()).expect("log path");
+        for line in &self.lines {
+            length = length.checked_add(4).expect("indent").checked_add(line.len()).expect("tail line");
+        }
+        let mut writer = skein_lib::Writer::new(length);
+        writer.put(&item.bytes).expect("failure line");
+        for line in &self.lines {
+            writer.put(b"    ").expect("indent");
+            writer.put(line).expect("tail line");
+        }
+        writer.put(b"    Log: ").expect("Log words");
+        writer.put(path).expect("log path");
+        writer.put(b"\n").expect("log LF");
+        item.bytes = writer.finish();
+    }
+    pub fn worst_case(lines: u32, name: usize) -> u64 {
+        let bytes = u64::try_from(name)
+            .expect("step name")
+            .checked_add(u64::from(crate::host::LINE_BYTES))
+            .expect("piece")
+            .checked_add(3)
+            .expect("prefix and LF");
+        skein_lib::Queue::<Box<[u8]>>::worst_case(lines)
+            .expect("tail table")
+            .checked_add(bytes.checked_mul(u64::from(lines)).expect("tail pieces"))
+            .expect("tail memory")
+    }
+}
+/// Only failures of an actual step's exit or readiness carry a tail.
+pub(crate) fn tail_step(fact: Fact) -> Option<usize> {
+    let why = match fact {
+        Fact::Restarting { why, .. } | Fact::GivingUp { why, .. } | Fact::GroupFailed { why, .. } => why,
+        Fact::Starting { .. }
+        | Fact::GroupStarting { .. }
+        | Fact::GroupStarted { .. }
+        | Fact::GroupStopped { .. }
+        | Fact::Stopping
+        | Fact::Stopped => return None,
+    };
+    match why {
+        Why::Exited { step, .. } | Why::NotReady { step } => Some(step),
+        Why::NotStarted { .. } | Why::NotWritten | Why::Busy | Why::NotAsked | Why::Stopping => None,
+    }
+}
+pub(crate) fn failure_bytes(steps: &[Placed], data: &[u8]) -> u32 {
+    let mut name = 0_u32;
+    for step in steps {
+        name = name.max(u32::try_from(step.step.name().len()).expect("step name"));
+    }
+    let line = name.checked_add(crate::host::LINE_BYTES).expect("piece").checked_add(7).expect("indent, prefix, LF");
+    max_bytes(steps)
+        .checked_add(line.checked_mul(crate::limits::MAX_TAIL_LINES).expect("tail lines"))
+        .expect("failure block")
+        .checked_add(u32::try_from(data.len()).expect("data path"))
+        .expect("log path")
+        .checked_add(name)
+        .expect("log filename")
+        .checked_add(32)
+        .expect("Log words and path suffix")
+}

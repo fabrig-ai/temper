@@ -313,7 +313,7 @@ keeps (`../protocol/configuration.md`, section 2).
 | Address | Mockup | Shows | Watches and reads | Acts |
 |---|---|---|---|---|
 | `Inbox` (home) | `inbox.html` | what needs the person, across projects, filtered by project, kind and goal (its root): proposals, questions, held tasks, person tasks; then updates (results, replies); "+ New chat", a link to the Chats page's start (`/chats?at=start`) | `inbox` with its filters; the `proposal` or `task` an entry's card needs | accept ("Accept"), reject with a reason, answer, release, leave held, take, hand back |
-| `Chats` | `chats.html`; the demo's start at the first run's first step, which `first-run.html` opens | a composer to start a chat, under the level-2 heading "Start a chat", its line and its chooser (5.5) above its text area "Start a chat" and its button "Start chat", with the hint "temper · Enter to start · Shift+Enter for newline"; in the demo's project while the demo's model half holds, the demo's start in a chat's frame, with its suggested requests (4.8, 5.6); the person's chats as one list, "Your chats", live and ended together, newest first, under All, Live or Closed (below), each with its number and title, its status, spend and live delegates | `tasks{query}`: requester the person, the chat label, its live group by last activity, its ended pages by when each ended; the demo, from the forge's side (4.8) | start a chat, from the composer or a suggested request; choose the list's filter; more closed chats |
+| `Chats` | `chats.html`; the demo's start at the first run's first step, which `first-run.html` opens | a composer to start a chat, under the level-2 heading "Start a chat", its line and its chooser (5.5) above its text area "Start a chat" and its button "Start chat", with the hint "temper · Enter to start · Shift+Enter for newline"; in the demo's project while the demo's model half holds, the demo's start in a chat's frame, with its suggested requests (4.8, 5.6); the person's chats as one list, "Your chats", live and ended together, newest first, under All, Live or Closed (below), each with its project and number, title, status, own spend and live delegates | `tasks{query}`: requester the person, the chat label, its live group by last activity, its ended pages by when each ended; the demo, from the forge's side (4.8) | start a chat, from the composer or a suggested request; choose the list's filter; more closed chats |
 | `Chat { task }` | `chat.html` | its chatbar: its number and title, its status, its spend and acts; after it, the context line, only in the demo's project while the demo is running (4.8, 5.6); the conversation (below): its request, the agent's words with its calls folded, the person's words, provisional text, and its end once it has ended; each task it delegated as that task's card, at the call that made it (a `delegate` or a `change`), or else at the result it sent back, or else after the conversation while it runs (5.7); the proposals waiting in its subtree, each at the call that made it where its turn names it, and after the conversation otherwise (jig's `client/domain/objects.md`, section 10); its status and spend; Stop and Close; the composer, while the chat lives: its line and its chooser (5.5), its text area "Message" with the placeholder "Message T6…", T6 the chat's number, shown while it is empty and never its name, and the hint "Enter to send · Shift+Enter for newline", and "Send", then a message's refusal or failure, if any: a message or the chat's start accepted draws no status of its own, neither at the conversation's end nor in the composer, since the conversation shows its words, "Being sent", then "Sent" (below); while Message is not offered, its line and chooser alone; an ended chat draws no composer and no composer's line | `task`, `activity` a page at a time, older pages while its window has room (5.4), `run` while one is live; each `proposal` its `task` names; each delegated `task` its calls, results and live delegates name, up to the domain's `reads` (5.7) | message, stop, close, accept or reject a proposal in place |
 | `Board { project }` | `board.html` | the project's goals in priority order, live, waiting and recently ended, with their progress, spend and deadlines; what needs the person; "Set a goal" | `tasks{query}`: the project, tracked, by priority; ended, by ended at | set a goal, reorder goals |
 | `Task { task }` | `task.html` | a goal: its header, what was asked and the result it gives, its result once ended, its plan as a tree of its delegates, live and ended, with their counts and its filter, each task's state, spend and dependencies, its latest activity and history, its budget and authority (5.8), with Amend, Stop and Cancel (5.11); a change: its header and "View on forge ↗", its steps, its step's line, its hold, its tasks live and ended, its gates at its head and its bounds (5.10); an agent's task: its lineage, its brief, its run's heading, its conversation as a chat's, its result once ended and its plan's held cards (5.9), with Amend, Stop and its composer (5.11); either's own held card while it is held | `task`, `tree`, `activity` a page at a time, older pages on an agent's task's "Older"; `run` while one is live; a change's panel, through the forge's side (`forge.md`, 9.2); a goal's or a procedure's ended delegates, a page read once and again on a change | a goal's plan's filter (5.8); as its document offers them (5.11): on a goal amend, stop, cancel; on an agent's task message, amend, stop; release its own held task or one of its plan |
@@ -335,7 +335,8 @@ keeps (`../protocol/configuration.md`, section 2).
   each card temper's own (section 1).
 - **A chat's chatbar** (`chat.html`): its level-1
   heading "TN · TITLE", the chat's task number and its title (a
-  chat's first message); its status; its spend; and its acts. Nothing
+  chat's first message); its status; its own spend, “N spent · of B”; and its acts. Every ended
+  chat says “Closed”, with its end’s clock when supplied (“Closed 21:19”). Nothing
   of the composer's line (5.5) is repeated there, neither its model nor
   its effort, nor the mockup's template, charter, host kind and budget:
   the composer's line says what the next run uses (the user's pick,
@@ -441,13 +442,14 @@ keeps (`../protocol/configuration.md`, section 2).
   "Closed", while an older page of ended chats remains, "More closed
   chats" reads it, in place of the last. With no line to show it says
   "No chats yet.", or under a filter "No live chats." or "No closed
-  chats.". A line is the chat's number, "TN", a link to its page, then
+  chats.". A line names its project as the banner does, then "TN", a link to its page, then
   its title, its status (the chatbar's: one word for one state in
   both places, and "Closed" for every ended chat, as the filter says
   it; the user's pick, 10-23), its
-  spend as its chatbar says it, and "1
-  delegate" or "N delegates" while it has live ones, and when it
-  ended or was last active, as 5.12's ago ("1 h 28 min ago").
+  own spend, "N spent", and "1 delegate" or "N delegates" while it has live ones, and when it
+  ended or was last active, as 5.12's ago ("1 h 28 min ago"). An ended line
+  whose retention is Kept adds “Closed. Its transcript is kept.”; no
+  other line claims that its transcript stays.
 - **The inbox** (`inbox.html`) shows what needs the person, then the
   updates, each entry its card (section 1), under two headings, each
   with how many entries it lists beside it, the updates' as new ones
@@ -458,55 +460,35 @@ keeps (`../protocol/configuration.md`, section 2).
   none, "Nothing needs you." or "No updates.". Its first heading's
   row holds "+ New chat", a link to the Chats page's start
   (`/chats?at=start`, its text area focused: no act of its own), then
-  its filters: the projects, each a button, while the person has two
-  projects or more (with one, the banner's project says it; the
-  user's pick, 10-23, until skein-ui has a menu and the three filters
-  become menus); the kinds in one
-  disclosure, folded until the person opens it, holding "All kinds"
-  and each kind, the chosen one pressed, and named "Kind" while every
-  kind is shown, "Kind · Question" once one is chosen, in the word its
-  pressed button says, so that the folded menu says what the list is
-  filtered by; then "All goals" and "Goal". The filter is in the
-  inbox's address (`browser.md`, 2.3), "/?kind=question": a filter
-  chosen is a move to the inbox at that address, as a link pressed is,
-  so that a reload, back and a shared link keep it, and back undoes
-  the choice. The move folds the Kind menu, as a menu closes on its
-  choice, and its name says what was chosen.
-- **A card that needs the person** begins with a line: its kind as a
-  tag, "Proposal", its project and the task's link, "Task N", and at
-  its right how long it waits, "Waiting 12 min" (5.12's span), from
-  its object's time: a proposal's wait, a question's, a hold's, a
-  person task's; on a chat's page too, a proposal's card says "waiting
-  12 min". Its title, where it has one, is its heading: a proposal's,
-  the goal it proposes; a question's, a held task's or a person
-  task's, the task's. A proposal's card is the chat's, its title, its
-  text, its rows and its acts, without the chat's "Open in inbox ↗".
-- **An update's card** begins with its project and the task's link,
-  "Task N", which opens it and so marks it seen (below). Its heading
-  says what came: "T10 Add a --json flag to tally report replied" for
-  a reply, "T10 … is done" for a result done, "T10 … ended" for
-  another, its ending in words after it. Then a result's first line;
-  and last, how many of the chat's turns are unread, where the inbox's
-  entry counts them, and when it came (5.12's ago), a result's time, a
-  reply's last activity: "1 new · 12 min ago", "5+ new · …" where the
-  count is limited, "12 min ago" alone for a result or a count not
-  given. A reply draws neither its request nor its words: no field
-  carries a reply's first line (mockups README, Where each value comes
-  from).
-- **A question** in the inbox is a delegate's, asked of a task the
-  person requested, their chat among them (jig's `domain/people.md`,
-  section 6). Its card, under "Needs you": "Question", its project, the
-  asked task's link, "Task N", whose conversation holds the question
-  (above), and the question's words as written. Its act is an answer in
-  words, "Answer words" and "Answer", one request (3.6): "Pending" while
-  it is sent, "Answered" once the engine has it. The answer goes to the
-  asked task, which relays it to its delegate as its own judgement. An
-  answered card keeps its outcome while the page stays open; the inbox
-  read again holds it no more, and the navigation's count no longer
-  counts it. A question carries words alone, so its answer is words
-  (choices, section 11), and temper has no hold of its own for one: the
-  person answers in words, or stops the asking task from its page,
-  which holds it until it is released (5.11).
+  its filters as folded menus, in order: projects (only with two or more),
+  goals, then Kind. Each menu names its choice: "All projects" or the
+  project's name; "All goals" or "Goal · TN"; "Kind" or "Kind · Question".
+  The project menu holds All projects and each project; the goal menu holds
+  All goals and the Goal field; Kind holds All kinds and each kind. A choice
+  moves to the filtered inbox's address and folds its menu (`browser.md`, 2.3).
+- **A card that needs the person** begins with its kind's tag, then
+  "PROJECT › TN TITLE", for its own task alone, and its wait at the right
+  (5.12). A proposal holds no proposing task's title, so its line stops at
+  TN; questions, held tasks and person tasks use their documents' titles.
+  A batch proposal keeps the mockup's Why, Goal, Landing and Budget rows:
+  its reason quoted, its executor and specification, its landing resources
+  and grants with priority, and its funding once. Template and charter
+  names are not supplied, so their existing numbered words remain. Its
+  acts are "Accept", "Reject with reason" and "Open TN ↗"; a chat's card
+  keeps "Open in inbox ↗".
+- **An update's card** has its heading as the link that opens it and marks
+  a result seen. It repeats no project line or task-number link. The heading
+  says "TN TITLE replied", "TN TITLE is done", or "TN TITLE ended";
+  while its document is unread, the existing "Task N" words are the heading's
+  link. Then the result's first line and the unread count and age (5.12).
+  A reply has no preview: its document carries no reply's first line.
+- **A question** in the inbox is a delegate's, asked of a task the person
+  requested, their chat among them. It has no heading of its own: its line,
+  then its words as written. "Answer in words" is folded until opened,
+  holding "Answer words" and "Answer"; "Open TN ↗" opens the asked task.
+  The answer goes to that task, which relays it to its delegate. "Pending"
+  and "Answered" keep today's request outcomes, and a refusal stays under
+  its card. Choices remain future work (section 11).
 - **Seen** is how far the person has read: jig's read positions (jig's
   `client/domain/pages.md`, section 3), one over their results and one
   over each chat's turns. An update is seen when it is opened, and no
@@ -593,6 +575,13 @@ keeps (`../protocol/configuration.md`, section 2).
     accounts" nor "Deployment accounts", nor in their counts.
   - *With none of the person's own,* "Your accounts" holds "No model
     of yours yet." and "Connect a model", to `ConnectModel`.
+  Under "Your accounts" its lead says "The LLM accounts temper’s agents run
+  on for you. A task keeps its account: while the account is limited, the task
+  waits for it." The connect link wraps below it on a phone. Each folded row
+  shows its name, holder, deciding source’s tag and summary. Opened, its state
+  precedes "Its sources in order: a run takes the first usable one.", its
+  numbered sources, the rule and labelled model and use facts, then its acts.
+  "Deployment accounts" appears only when the owner’s document holds accounts.
 - **`ConnectModel`** (`connect-model.html`) connects one more LLM
   account, in `ConnectForge`'s shape: Choose; then Signing in, for a
   sign-in, or Details, for a key or a program's login; then Ready.
@@ -1942,8 +1931,10 @@ The words for each offered source are:
 - **The banner:** "Agents need an LLM account to run." and "Continue
   with ChatGPT", "Use your Claude subscription", "Use an API key", one
   for each way the configured providers offer (The ways, above), each
-  a link to `ConnectModel` at its way. A chat may be started
-  meanwhile; its page says "Starting: waiting for an account".
+  a link to `ConnectModel` at its way. While no account is usable and the
+  demo's model half does not hold, the composer says "No model yet · Connect
+  a model", offers no chooser and keeps its draft editable; its button and
+  Enter cannot send. Unknown usability keeps the existing behaviour.
 - **Ready,** for a key: "Added your OpenAI API key", PROVIDER's
   configured name ("Added your PROVIDER API key"), and "temper’s
   agents now run on it."; for a program's login: "Declared your Claude
@@ -1979,8 +1970,14 @@ The words for each offered source are:
   only member"; a key's or a program's login's with no uses given,
   "Your own work" (jig's `domain/accounts.md`, 4.2).
 - **The composer's line** names the account and model the work's next
-  run takes, one line above the chooser (3.5), from what jig gives
-  every page: `me`, the accounts document and its readiness:
+  run takes, just above its field, with the folded chooser beside it
+  (3.5), from what jig gives every page: `me`, the accounts document
+  and its readiness. When the welcome's model usability is known false
+  and the demo's model half does not hold, it says “No model yet ·
+  Connect a model”, the link to `ConnectModel` with no way chosen.
+  There is no chooser, Start chat and Send are disabled, and Enter
+  sends nothing; the draft stays editable. Unknown usability keeps
+  today's behavior. Otherwise:
   - *MODEL* is the draft's model (a task's LLM choice; a new chat's,
     its template's), then " · EFFORT" where the choice names an effort.
     Where the template names none, it is the supplied
@@ -2010,7 +2007,7 @@ The words for each offered source are:
     source. Mixed provider offers do not establish a model's endpoint
     kind, so name no account. Another payer's work, or a cut document or
     account, names no account.
-    The source words the line, with the configured provider name from
+    The source words the line, with the provider and plan words above from
     `me`: "Using your OpenAI API key · MODEL" for a key; "Using ChatGPT
     plan · MODEL · Manage usage" for a signed-in plan, the last an
     external link where the document gives a safe manage-usage address;

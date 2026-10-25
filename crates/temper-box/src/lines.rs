@@ -11,6 +11,11 @@ pub fn route(plain: &[u8], step: &[u8], child_fd: u32) -> bool {
 /// of its LF/EOF (or diagnostic cap), even when admission delays extraction.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Output {
+    /// The raw diagnostic piece, before the terminal prefix and added LF.
+    Piece {
+        bytes: Box<[u8]>,
+        wall: Wall,
+    },
     Line {
         bytes: Box<[u8]>,
         wall: Wall,
@@ -105,7 +110,7 @@ impl Lines {
     }
     /// Reserve terminal room before calling: even an incomplete result advances
     /// bounded assembly/discard state. No result waits in an unpriced queue.
-    pub fn take(&mut self, name: &[u8]) -> Option<Output> {
+    pub fn take(&mut self, _name: &[u8]) -> Option<Output> {
         if self.handoff == Handoff::Waiting {
             return None;
         }
@@ -123,10 +128,9 @@ impl Lines {
             return None;
         }
         let wall = if complete { wall } else { self.end_wall };
-        let lf = if self.piece.as_slice().ends_with(b"\n") { b"".as_slice() } else { b"\n" };
-        let bytes = joined(&[name, b": ", self.piece.as_slice(), lf]);
+        let bytes = skein_lib::bytes::copy_of(self.piece.as_slice());
         self.piece.clear();
-        Some(Output::Line { bytes, wall })
+        Some(Output::Piece { bytes, wall })
     }
     fn url(&mut self) -> Option<Output> {
         let wall = self.chunk_wall;

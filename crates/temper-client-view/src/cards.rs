@@ -286,17 +286,18 @@ impl Words {
 pub enum Place {
     Chat,
     Inbox,
+    Confirmation,
 }
 impl Place {
     pub(crate) const fn level(self) -> u8 {
         match self {
-            Self::Chat => 2,
+            Self::Chat | Self::Confirmation => 2,
             Self::Inbox => 3,
         }
     }
     pub(crate) const fn kicker(self) -> bool {
         match self {
-            Self::Chat => true,
+            Self::Chat | Self::Confirmation => true,
             Self::Inbox => false,
         }
     }

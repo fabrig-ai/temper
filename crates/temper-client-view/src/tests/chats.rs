@@ -135,8 +135,8 @@ fn a_held_chats_row_names_only_its_exceeded_bound() {
 #[test]
 fn a_chats_row_says_its_spend_and_delegates() {
     let (tree, _) = tree(&line());
-    assert!(fixtures::find(&tree, Role::Paragraph, "7 spent · of 100 · delegates spent 2".as_bytes()).is_some());
-    assert!(fixtures::find(&tree, Role::Paragraph, b"3 delegates").is_some());
+    assert!(fixtures::find(&tree, Role::Paragraph, "7 spent".as_bytes()).is_some());
+    assert!(skein_lib::bytes::find(&fixtures::text(&tree), "7 spent · 3 delegates".as_bytes()).is_some());
 }
 #[test]
 fn a_chats_row_links_to_its_chat_by_number() {
@@ -678,7 +678,7 @@ fn delegate_counts_are_plural_and_absent_at_zero() {
         details.live_delegates = count;
         let (tree, _) = tree(&line);
         if let Some(words) = expected {
-            assert!(fixtures::find(&tree, Role::Paragraph, words).is_some());
+            assert!(skein_lib::bytes::find(&fixtures::text(&tree), words).is_some());
         } else {
             let mut paragraphs = 0_u32;
             for node in tree.nodes() {
@@ -686,7 +686,7 @@ fn delegate_counts_are_plural_and_absent_at_zero() {
                     paragraphs += 1;
                 }
             }
-            assert_eq!(paragraphs, 3, "title, spend and time");
+            assert_eq!(paragraphs, 4, "project/number, title, spend and time");
         }
     }
 }
@@ -890,4 +890,61 @@ fn only_the_starts_address_focuses_its_composer_including_the_demo() {
             assert_eq!(focused, usize::from(start), "demo={demo}, start={start}");
         }
     }
+}
+
+#[test]
+fn unavailable_models_leave_an_editable_draft_but_no_submission() {
+    let root = super::choice::no_model_root(false);
+    let mut view = fixtures::page_view(&root);
+    assert!(
+        skein_lib::bytes::find(&fixtures::text(view.tree()), "No model yet · Connect a model".as_bytes()).is_some()
+    );
+    assert!(fixtures::find(view.tree(), Role::Disclosure, b"Change model").is_none());
+    let connect = fixtures::find(view.tree(), Role::Link, b"Connect a model").expect("connect link");
+    assert_eq!(
+        crate::act(&mut view, connect, skein_ui::Act::Press),
+        Some(temper_client_domain::Action::Pages(temper_client_domain::pages::Act::Go {
+            address: temper_client_domain::Address::ConnectModel { way: None }
+        }))
+    );
+    for (role, name, event) in [
+        (Role::Button, b"Start chat".as_slice(), skein_ui::Act::Press),
+        (Role::TextArea, b"Start a chat".as_slice(), skein_ui::Act::Submit),
+    ] {
+        let node = fixtures::find(view.tree(), role, name).expect("composer control");
+        assert_eq!(crate::act(&mut view, node, event), None);
+    }
+    let field = fixtures::find(view.tree(), Role::TextArea, b"Start a chat").expect("draft field");
+    assert!(
+        crate::act(&mut view, field, skein_ui::Act::Input { value: Box::from(b"still editable".as_slice()) }).is_some()
+    );
+}
+#[test]
+fn rows_name_their_project_and_only_kept_ended_transcripts() {
+    for ended in [false, true] {
+        for kept in [false, true] {
+            let mut line = line();
+            if ended {
+                line.ended_at = Some(Wall::EPOCH);
+            }
+            line.flags.retention = if kept { Retention::Kept } else { Retention::ForgottenOnceRead };
+            let (tree, _) = tree(&line);
+            assert!(skein_lib::bytes::find(&fixtures::text(&tree), "Shop · T9".as_bytes()).is_some());
+            assert_eq!(
+                fixtures::find(&tree, Role::Paragraph, b"Closed. Its transcript is kept.").is_some(),
+                ended && kept
+            );
+        }
+    }
+}
+
+#[test]
+fn a_kept_ended_row_without_a_clock_is_closed_even_with_stale_wait_metadata() {
+    let mut line = line();
+    line.chip.phase = Phase::Ended;
+    line.waits_on = WaitsOn::Delegates;
+    let (tree, _) = tree(&line);
+    assert!(fixtures::find(&tree, Role::Status, b"Closed").is_some());
+    assert!(fixtures::find(&tree, Role::Paragraph, b"Closed. Its transcript is kept.").is_some());
+    assert!(skein_lib::bytes::find(&fixtures::text(&tree), b"3 delegates").is_none());
 }

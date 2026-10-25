@@ -49,6 +49,8 @@ chat-solo-T6
 chat-first-run-2-T1
 chat-first-run-3-T1
 chat-first-run-4-T4
+chat-first-run-7-T1
+chats-first-run-5
 inbox-reference
 accounts-reference
 accounts-first-run-1

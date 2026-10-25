@@ -135,29 +135,44 @@ fn filters(b: &mut Builder, root: &Domain, filter: Filter, words: &Words, bindin
         &words.say(Word::NewChatLink, &[]),
         Act::Go { address: Address::Chats { filter: temper_client_domain::ChatsFilter::All, start: true } },
     );
-    if let Some(me) = root.pages().me(root.client())
-        && me.projects.len() >= 2
-    {
-        b.open(Role::Slot);
-        filter_control(
-            b,
-            bindings,
-            &words.say(Word::AllProjects, &[]),
-            Filter { project: None, ..filter },
-            filter.project.is_none(),
-        );
-        for project in &me.projects {
-            let name = project.name.bytes();
-            filter_control(
-                b,
-                bindings,
-                name,
-                Filter { project: Some(project.project), ..filter },
-                filter.project == Some(project.project),
-            );
-        }
-        b.close();
-    }
+    project_filter(b, root, filter, words, bindings);
+    b.open(Role::Disclosure);
+    b.style(look::KIND_MENU);
+    let chosen = match filter.goal {
+        Some(goal) => words.say(
+            Word::ModelEffort,
+            &[Hole::Name(words.say(Word::Goal, &[])), Hole::Name(words.say(Word::TaskWho, &[Hole::Number(goal)]))],
+        ),
+        None => words.say(Word::AllGoals, &[]),
+    };
+    b.name(&chosen);
+    b.open(Role::Slot);
+    filter_control(
+        b,
+        bindings,
+        &words.say(Word::AllGoals, &[]),
+        Filter { goal: None, ..filter },
+        filter.goal.is_none(),
+    );
+    b.open(Role::Slot);
+    b.open(Role::TextField);
+    b.name(&words.say(Word::Goal, &[]));
+    let value = match filter.goal {
+        Some(goal) => Some(Decimal::of(goal)),
+        None => None,
+    };
+    b.value(
+        match &value {
+            Some(value) => value.as_bytes(),
+            None => b"",
+        },
+        temper_client_domain::pages::shown(root.pages()),
+    );
+    b.bind(bindings.insert(Act::Filter { filter }));
+    b.close();
+    b.close();
+    b.close();
+    b.close();
     b.open(Role::Disclosure);
     b.style(look::KIND_MENU);
     let chosen = match filter.kind {
@@ -188,33 +203,41 @@ fn filters(b: &mut Builder, root: &Domain, filter: Filter, words: &Words, bindin
     }
     b.close();
     b.close();
-    b.open(Role::Slot);
-    filter_control(
-        b,
-        bindings,
-        &words.say(Word::AllGoals, &[]),
-        Filter { goal: None, ..filter },
-        filter.goal.is_none(),
-    );
-    b.open(Role::Slot);
-    b.open(Role::TextField);
-    b.name(&words.say(Word::Goal, &[]));
-    let value = match filter.goal {
-        Some(goal) => Some(Decimal::of(goal)),
-        None => None,
-    };
-    b.value(
-        match &value {
-            Some(value) => value.as_bytes(),
-            None => b"",
-        },
-        temper_client_domain::pages::shown(root.pages()),
-    );
-    b.bind(bindings.insert(Act::Filter { filter }));
     b.close();
-    b.close();
-    b.close();
-    b.close();
+}
+fn project_filter(b: &mut Builder, root: &Domain, filter: Filter, words: &Words, bindings: &mut Bindings) {
+    if let Some(me) = root.pages().me(root.client())
+        && me.projects.len() >= 2
+    {
+        b.open(Role::Disclosure);
+        b.style(look::KIND_MENU);
+        let chosen = match filter.project {
+            Some(project) => super::project_name(Some(me), root.forge().demo(), project, words)
+                .unwrap_or(words.say(Word::Project, &[Hole::Number(u64::from(project))])),
+            None => words.say(Word::AllProjects, &[]),
+        };
+        b.name(&chosen);
+        b.open(Role::Slot);
+        filter_control(
+            b,
+            bindings,
+            &words.say(Word::AllProjects, &[]),
+            Filter { project: None, ..filter },
+            filter.project.is_none(),
+        );
+        for project in &me.projects {
+            let name = project.name.bytes();
+            filter_control(
+                b,
+                bindings,
+                name,
+                Filter { project: Some(project.project), ..filter },
+                filter.project == Some(project.project),
+            );
+        }
+        b.close();
+        b.close();
+    }
 }
 fn entry(
     b: &mut Builder,
@@ -238,55 +261,45 @@ fn entry(
     };
     b.name(&card_name(root, card.object, kind, words));
     b.style(style);
-    b.open(Role::Slot);
-    b.style(look::META);
-    let update = match card.group {
-        InboxGroup::Results | InboxGroup::Replies => true,
-        InboxGroup::Proposals | InboxGroup::Questions | InboxGroup::Escalations | InboxGroup::PersonTasks => false,
-    };
+    let update = card.group == InboxGroup::Results || card.group == InboxGroup::Replies;
     if !update {
+        b.open(Role::Slot);
+        b.style(look::META);
         b.open(Role::Paragraph);
         b.style(look::INBOX_TAG);
         let said = words.say(kind, &[]);
         b.name(&said);
         b.text(Run::Plain, &said);
         b.close();
-    }
-    if let Some(project) = card.project {
-        let name = match super::project_name(root.pages().me(root.client()), root.forge().demo(), project, words) {
-            Some(name) => name,
-            None => words.say(Word::Project, &[Hole::Number(u64::from(project))]),
-        };
-        text(b, Role::Paragraph, &name);
-    }
-    if let Some(task) = source_task(card.object) {
-        control(
-            b,
-            bindings,
-            Role::Link,
-            &words.say(Word::Task, &[Hole::Number(task)]),
-            match (card.object, card.position) {
-                (ObjectKey::Result(_), Some(through)) => Act::OpenResult { task, through },
-                (ObjectKey::Result(_), None)
-                | (
-                    ObjectKey::Task(_)
-                    | ObjectKey::Proposal(_)
-                    | ObjectKey::Escalation(_)
-                    | ObjectKey::Question { .. }
-                    | ObjectKey::PersonTask(_)
-                    | ObjectKey::Note { .. },
-                    _,
-                ) => Act::Go { address: Address::Task { task, filter: PlanFilter::All } },
-            },
-        );
-    }
-    if !update {
+        b.open(Role::Paragraph);
+        if let Some(project) = card.project {
+            let name = super::project_name(root.pages().me(root.client()), root.forge().demo(), project, words)
+                .unwrap_or(words.say(Word::Project, &[Hole::Number(u64::from(project))]));
+            b.text(Run::Plain, &name);
+            b.text(Run::Plain, " › ".as_bytes());
+        }
+        if let Some(task) = source_task(card.object) {
+            control(
+                b,
+                bindings,
+                Role::Link,
+                &words.say(Word::TaskWho, &[Hole::Number(task)]),
+                Act::Go { address: Address::Task { task, filter: PlanFilter::All } },
+            );
+        }
+        if let Some(page) = &card.page
+            && let Some(title) = task_title(page)
+        {
+            b.text(Run::Plain, b" ");
+            b.text(Run::Plain, title);
+        }
+        b.close();
         card_time(b, card, words, times);
+        b.close();
     }
-    b.close();
     if let Some(page) = &card.page {
         if update {
-            update_body(b, card, page, words);
+            update_body(b, card, page, words, bindings);
             card_time(b, card, words, times);
             b.close();
             return;
@@ -305,8 +318,61 @@ fn entry(
             }
         }
         crate::confirm::card_controls(b, root, card, words, bindings);
+        if (card.group == InboxGroup::Proposals || card.group == InboxGroup::Questions)
+            && let Some(task) = source_task(card.object)
+        {
+            let name = open_task_name(words, task);
+            control(
+                b,
+                bindings,
+                Role::Link,
+                &name,
+                Act::Go { address: Address::Task { task, filter: PlanFilter::All } },
+            );
+        }
+    } else if update && let Some(task) = source_task(card.object) {
+        b.open(Role::Heading { level: 3 });
+        b.style(look::TITLE);
+        let name = words.say(Word::Task, &[Hole::Number(task)]);
+        b.name(&name);
+        control(b, bindings, Role::Link, &name, update_act(card, task));
+        b.close();
     }
     b.close();
+}
+fn update_act(card: &Card, task: u64) -> Act {
+    if let ObjectKey::Result(_) = card.object
+        && let Some(through) = card.position
+    {
+        Act::OpenResult { task, through }
+    } else {
+        Act::Go { address: Address::Task { task, filter: PlanFilter::All } }
+    }
+}
+fn open_task_name(words: &Words, task: u64) -> Box<[u8]> {
+    let task = words.say(Word::TaskWho, &[Hole::Number(task)]);
+    words.say(Word::SetupOpen, &[Hole::Name(crate::accounts::words::join(&[&task, " ↗".as_bytes()]))])
+}
+fn task_title(page: &ReadValue) -> Option<&[u8]> {
+    if let ReadValue::Question(question) = page {
+        return Some(question.task.title.bytes());
+    }
+    if let ReadValue::Escalation(held) = page {
+        return Some(held.task.title.bytes());
+    }
+    if let ReadValue::OwnerEscalation(held) = page {
+        return Some(held.task.chip.title.bytes());
+    }
+    if let ReadValue::PersonTask(task) = page {
+        return Some(task.task.title.bytes());
+    }
+    if let ReadValue::OwnerPersonTask(task) = page {
+        return Some(task.task.title.bytes());
+    }
+    if let ReadValue::Task(task) = page {
+        return Some(task.chip.title.bytes());
+    }
+    None
 }
 fn source_task(object: ObjectKey) -> Option<u64> {
     match object {
@@ -392,7 +458,6 @@ fn title(b: &mut Builder, value: &[u8]) {
 fn body(b: &mut Builder, page: &ReadValue, words: &Words) {
     match page {
         ReadValue::Question(question) => {
-            title(b, question.task.title.bytes());
             text(b, Role::Paragraph, question.words.bytes());
         }
         ReadValue::Escalation(held) => title(b, held.task.title.bytes()),
@@ -600,7 +665,7 @@ fn count_words(words: &Words, count: u64, limited: bool, new: bool) -> Box<[u8]>
         &[Hole::Number(count)],
     )
 }
-fn update_body(b: &mut Builder, card: &Card, page: &ReadValue, words: &Words) {
+fn update_body(b: &mut Builder, card: &Card, page: &ReadValue, words: &Words, bindings: &mut Bindings) {
     let reply = card.group == InboxGroup::Replies;
     let (chip, result) = match page {
         ReadValue::Task(task) => (&task.chip, None),
@@ -652,7 +717,12 @@ fn update_body(b: &mut Builder, card: &Card, page: &ReadValue, words: &Words) {
         Word::UpdateEnded
     };
     let task = words.say(Word::TaskWho, &[Hole::Number(chip.task)]);
-    title(b, &words.say(word, &[Hole::Name(task), Hole::Name(skein_lib::bytes::copy_of(chip.title.bytes()))]));
+    b.open(Role::Heading { level: 3 });
+    b.style(look::TITLE);
+    let name = words.say(word, &[Hole::Name(task), Hole::Name(skein_lib::bytes::copy_of(chip.title.bytes()))]);
+    b.name(&name);
+    control(b, bindings, Role::Link, &name, update_act(card, chip.task));
+    b.close();
     if reply {
         return;
     }

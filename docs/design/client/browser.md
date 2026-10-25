@@ -980,7 +980,9 @@ view draws, never changing a view to suit a sample.
 | `chat-solo-T6` | the solo world's chat T6 |
 | `chat-first-run-2-T1` | the first run's chat T1 at step 2, its change running |
 | `chat-first-run-3-T1` | the first run's chat T1 at step 3, its change landed |
-| `chat-first-run-4-T4` | the first run's chat T4 at step 4, ended |
+| `chat-first-run-4-T4` | the first run's chat T4 at step 4, waiting at rest for the person’s words |
+| `chat-first-run-7-T1` | the retired playground’s chat T1, closed at 21:19 with its transcript |
+| `chats-first-run-5` | Chats after the first plan connects, its ChatGPT composer |
 | `inbox-reference` | the reference world's inbox |
 | `accounts-reference` | the reference world's accounts |
 | `accounts-first-run-1` | the first run's accounts at step 1: the demo's key |

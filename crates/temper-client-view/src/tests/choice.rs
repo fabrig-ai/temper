@@ -98,7 +98,7 @@ fn account_readiness(ready: Option<c::PayerReadiness>) -> d::Domain {
 fn account_facts(ready: Option<c::PayerReadiness>, accounts: List<c::OwnerAccountLine>) -> d::Domain {
     line_facts(ready, accounts, Some(3), Some(7), None, true)
 }
-fn line_models(task_page: bool) -> List<c::MeModel> {
+pub(super) fn line_models(task_page: bool) -> List<c::MeModel> {
     let mut models = List::with_capacity(3);
     models
         .push(c::MeModel {
@@ -199,7 +199,7 @@ fn line_fixture(
             accounts,
             signing: List::with_capacity(0),
             last_end: None,
-            usable: false,
+            usable: true,
             settled: true,
             cut: false,
             readiness,
@@ -862,7 +862,7 @@ fn a_new_chats_default_is_the_first_model_usable_for_its_payer() {
     ready.payer = c::OwnerAccountUse::Party(73);
     let root =
         line_facts(Some(ready), accounts(&[account(3, c::OwnerAccountKind::Key, None)]), None, None, None, false);
-    assert_eq!(using_text(&root), "Using your openai API key · gpt-6-luna");
+    assert_eq!(using_text(&root), "Using your OpenAI API key · gpt-6-luna");
 }
 #[test]
 fn the_three_unsettled_lines_name_only_known_facts() {
@@ -985,8 +985,8 @@ fn pending_choice_outcome_and_wait_are_siblings_after_the_chooser() {
 #[test]
 fn own_key_and_plan_of_openai_follow_place_order() {
     for (first, second, expected) in [
-        (c::OwnerAccountKind::Key, c::OwnerAccountKind::SignIn, "Using your openai API key · chosen"),
-        (c::OwnerAccountKind::SignIn, c::OwnerAccountKind::Key, "Using openai plan · chosen"),
+        (c::OwnerAccountKind::Key, c::OwnerAccountKind::SignIn, "Using your OpenAI API key · chosen"),
+        (c::OwnerAccountKind::SignIn, c::OwnerAccountKind::Key, "Using ChatGPT plan · chosen"),
     ] {
         let mut rows = accounts(&[account(9, first, None), account(3, second, None)]);
         rows.get_mut(0).unwrap().place = 1;
@@ -1363,4 +1363,93 @@ fn forge_banners_exclude_the_playgrounds_provider_before_and_after_retirement() 
         let (root, _) = playground_offers_root(address, false);
         assert!(fixtures::find(fixtures::page_view(&root).tree(), Role::Link, b"Use a demo API key").is_some());
     }
+}
+
+/// A complete unavailable slice, shared by both composers' event-path tests.
+pub(super) fn no_model_root(task_page: bool) -> d::Domain {
+    let (mut root, _, task_watch, watch) = line_fixture(None, List::with_capacity(0), None, None, None, task_page);
+    if let Some(task_watch) = task_watch {
+        let mut task = root.pages().chat().unwrap().task(root.client()).unwrap().clone();
+        task.run_wait = Some(c::TaskRunWait::Credential);
+        delivered(&mut root, task_watch, c::Delivery::Task(Box::new(task)));
+    }
+    delivered(
+        &mut root,
+        watch,
+        c::Delivery::OwnerAccounts(Box::new(c::OwnerAccounts {
+            program_hosts: List::with_capacity(0),
+            accounts: List::with_capacity(0),
+            signing: List::with_capacity(0),
+            last_end: None,
+            usable: false,
+            settled: true,
+            cut: false,
+            readiness: List::with_capacity(0),
+            readiness_cut: false,
+        })),
+    );
+    root
+}
+#[test]
+fn configured_provider_words_name_the_whole_composer_line() {
+    for (provider, kind, address, expected) in [
+        (b"openai".as_slice(), c::OwnerAccountKind::Key, None, "Using your OpenAI API key · chosen"),
+        (b"openai", c::OwnerAccountKind::SignIn, None, "Using ChatGPT plan · chosen"),
+        (
+            b"openai",
+            c::OwnerAccountKind::SignIn,
+            Some(b"https://provider.example/usage".as_slice()),
+            "Using ChatGPT plan · chosen · Manage usage",
+        ),
+        (
+            b"anthropic",
+            c::OwnerAccountKind::Program,
+            None,
+            "Using your Claude subscription, through Claude Code · chosen",
+        ),
+        (b"local", c::OwnerAccountKind::Key, None, "Using your local API key · chosen"),
+    ] {
+        let mut row = account(3, kind, address);
+        row.sources.clear();
+        let mut first = source(kind, true);
+        first.name = Some(Box::from(b"a-login-not-a-program-name".as_slice()));
+        row.sources.push(first).unwrap();
+        let (mut root, me_watch, _, _) =
+            line_fixture(Some(readiness(c::Readiness::Usable)), accounts(&[row]), Some(3), None, None, true);
+        let mut me = d::pages::accounts::current_me(root.client()).unwrap().clone();
+        let offer = me.providers.get_mut(0).unwrap();
+        offer.name = c::DocumentText::complete(c::Text::new(Box::from(provider), 32).unwrap());
+        if kind == c::OwnerAccountKind::Program {
+            offer.key = false;
+            offer.sign_in = false;
+            offer.programs = List::with_capacity(1);
+            offer.programs.push(c::Text::new(Box::from(b"claude_code".as_slice()), 32).unwrap()).unwrap();
+        }
+        delivered(&mut root, me_watch, c::Delivery::Me(Box::new(me)));
+        assert_eq!(using_text(&root), expected);
+    }
+}
+
+#[test]
+fn chooser_groups_use_the_providers_words() {
+    for (configured, shown) in [(b"openai".as_slice(), b"OpenAI".as_slice()), (b"anthropic", b"Anthropic")] {
+        let (mut root, me_watch, _, _) = line_fixture(
+            Some(readiness(c::Readiness::Usable)),
+            accounts(&[account(3, c::OwnerAccountKind::Key, None)]),
+            Some(3),
+            None,
+            None,
+            true,
+        );
+        let mut me = d::pages::accounts::current_me(root.client()).unwrap().clone();
+        me.providers.get_mut(0).unwrap().name =
+            c::DocumentText::complete(c::Text::new(Box::from(configured), 32).unwrap());
+        delivered(&mut root, me_watch, c::Delivery::Me(Box::new(me)));
+        assert!(fixtures::find(fixtures::page_view(&root).tree(), Role::Paragraph, shown).is_some());
+    }
+}
+
+#[test]
+fn the_no_model_line_keeps_the_tasks_wait_feedback() {
+    assert!(text(&no_model_root(true)).contains("Waiting for a credential"));
 }

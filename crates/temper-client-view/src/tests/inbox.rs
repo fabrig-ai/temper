@@ -60,13 +60,13 @@ fn entries_show_proposals_questions_held_and_person_tasks_then_updates() {
             headings.push(node.name.as_deref().expect("named heading")).expect("eight headings");
         }
     }
-    assert_eq!(headings.as_slice(), [b"Needs you".as_slice(), b"Updates"]);
+    assert_eq!(headings.as_slice(), [b"Needs you".as_slice(), b"Updates", b"Task 9", b"Task 10"]);
 }
 #[test]
 fn an_entry_naming_a_task_links_to_its_page_by_number() {
     let root = fixtures::inbox_root();
     let mut view = fixtures::view();
-    let node = fixtures::find(fixtures::build(&mut view, &root), Role::Link, b"Task 9").expect("numbered task link");
+    let node = fixtures::find(fixtures::build(&mut view, &root), Role::Link, b"T9").expect("numbered task link");
     assert_eq!(
         crate::act(&mut view, node, Act::Press),
         Some(temper_client_domain::Action::Pages(temper_client_domain::pages::Act::Go {
@@ -151,10 +151,10 @@ fn headings_hold_the_page_title_and_filters_without_mark_seen() {
 #[test]
 fn filters_press_exactly_the_current_project_kind_and_all_goals() {
     for (filter, expected) in [
-        (Filter::ALL, [b"All projects".as_slice(), b"All kinds", b"All goals"]),
+        (Filter::ALL, [b"All projects".as_slice(), b"All goals", b"All kinds"]),
         (
             Filter { project: Some(fixtures::PROJECT), kind: Some(Kind::Question), goal: None },
-            [b"Shop".as_slice(), b"Question", b"All goals"],
+            [b"Shop".as_slice(), b"All goals", b"Question"],
         ),
     ] {
         let root = fixtures::inbox_root_filtered(filter);
@@ -209,16 +209,15 @@ fn cards_are_grouped_in_lists_with_kinds_and_named_project_paths() {
         assert_eq!(node.styles.as_slice(), [look::CARD, token]);
         let list = lists.as_slice()[usize::from(i >= 4)];
         assert!(card > list && card < list.checked_add(subtree(tree, list).len()).expect("list end"));
-        let meta = subtree(tree, card.checked_add(1).expect("meta index"));
-        assert_eq!(meta[0].styles.as_slice(), [look::META]);
         if i < 4 {
-            assert_eq!(meta[1].role, Role::Paragraph);
+            let meta = subtree(tree, card.checked_add(1).expect("meta index"));
+            assert_eq!(meta[0].styles.as_slice(), [look::META]);
             assert_eq!(meta[1].styles.as_slice(), [look::INBOX_TAG]);
+            assert!(skein_lib::bytes::find(&fixtures::node_text(tree, card), "Shop › T9".as_bytes()).is_some());
+            assert_eq!(role_node(meta, Role::Link).name.as_deref(), Some(b"T9".as_slice()));
+        } else {
+            assert_eq!(style_count(subtree(tree, card), look::META), 0);
         }
-        let project = &meta[if i < 4 { 3 } else { 1 }];
-        assert_eq!(project.name.as_deref(), Some(b"Shop".as_slice()));
-        let link = role_node(meta, Role::Link);
-        assert_eq!(link.name.as_deref(), Some(if i == 5 { b"Task 10".as_slice() } else { b"Task 9".as_slice() }));
     }
 }
 #[test]
@@ -280,17 +279,20 @@ pub(super) fn question_root() -> Domain {
     )
 }
 #[test]
-fn a_title_is_the_heading_and_empty_facts_are_absent() {
+fn a_question_keeps_its_title_in_its_line_and_has_no_heading() {
     let root = question_root();
     let view = fixtures::page_view(&root);
     let tree = view.tree();
-    let title = styled(tree, look::TITLE);
-    assert_eq!(tree.nodes()[title].role, Role::Heading { level: 3 });
-    assert_eq!(tree.nodes()[title].name, Some(fixtures::task::document().chip.title.bytes().into()));
+    let question = styled(tree, look::KIND_QUESTION);
+    assert_eq!(style_count(subtree(tree, question), look::TITLE), 0);
+    assert!(
+        skein_lib::bytes::find(&fixtures::node_text(tree, question), fixtures::task::document().chip.title.bytes())
+            .is_some()
+    );
     assert_eq!(style_count(tree.nodes(), look::DETAILS), 0);
 }
 #[test]
-fn an_unknown_project_name_keeps_the_numbered_fallback() {
+fn an_update_omits_its_project_metadata_before_its_title_arrives() {
     let limits = fixtures::domain_limits();
     let (mut root, me_watch, inbox_watch) = fixtures::root_at(Address::Inbox { filter: Filter::ALL }, &limits);
     let mut me = root.pages().me(root.client()).expect("me").clone();
@@ -343,12 +345,11 @@ fn an_unknown_project_name_keeps_the_numbered_fallback() {
         },
     );
     let view = fixtures::page_view(&root);
-    let meta = subtree(view.tree(), styled(view.tree(), look::META));
-    assert_eq!(role_node(meta, Role::Paragraph).name.as_deref(), Some(b"Project 1".as_slice()));
+    assert_eq!(style_count(view.tree().nodes(), look::META), 0);
 }
 
 #[test]
-fn inbox_cards_name_the_demo_project_playground() {
+fn updates_do_not_repeat_the_demo_project() {
     let (mut root, _, watch, _, _) = fixtures::root_at_with_demo(
         Address::Inbox { filter: Filter::ALL },
         &fixtures::domain_limits(),
@@ -391,8 +392,7 @@ fn inbox_cards_name_the_demo_project_playground() {
     for words in [fixtures::words(), fixtures::browser_words()] {
         let mut view = fixtures::view_of(words);
         let tree = fixtures::build(&mut view, &root);
-        let meta = subtree(tree, styled(tree, look::META));
-        assert_eq!(role_node(meta, Role::Paragraph).name.as_deref(), Some(b"Playground".as_slice()));
+        assert_eq!(style_count(tree.nodes(), look::META), 0);
     }
 }
 
@@ -472,9 +472,15 @@ fn loaded_task_held_and_result_titles_keep_the_title_token() {
         }
         assert!(loaded, "{read:?}");
         let view = fixtures::page_view(&root);
-        let title = &view.tree().nodes()[styled(view.tree(), look::TITLE)];
-        assert_eq!(title.role, Role::Heading { level: 3 });
-        assert!(skein_lib::bytes::find(title.name.as_deref().unwrap(), task.chip.title.bytes()).is_some());
+        let mut found = false;
+        for title in view.tree().nodes() {
+            if title.role == (Role::Heading { level: 3 })
+                && let Some(name) = &title.name
+            {
+                found |= skein_lib::bytes::find(name, task.chip.title.bytes()).is_some();
+            }
+        }
+        assert!(found, "loaded title");
     }
 }
 
@@ -535,7 +541,14 @@ fn the_kind_disclosure_names_the_choice_and_keeps_the_five_buttons_folded() {
     ] {
         let view = fixtures::page_view(&fixtures::inbox_root_filtered(Filter { kind, ..Filter::ALL }));
         let tree = view.tree();
-        let menu = styled(tree, look::KIND_MENU);
+        let mut menu = None;
+        for (index, node) in tree.nodes().iter().enumerate() {
+            if node.role == Role::Disclosure && node.name.as_deref() == Some(name) {
+                menu = Some(index);
+                break;
+            }
+        }
+        let menu = menu.unwrap();
         assert_eq!(tree.nodes()[menu].role, Role::Disclosure);
         assert_eq!(tree.nodes()[menu].name.as_deref(), Some(name));
         assert!(tree.nodes()[menu].states.is_empty());
@@ -688,6 +701,7 @@ fn the_project_filter_row_appears_only_for_two_or_more_projects() {
         );
         let view = fixtures::page_view(&root);
         let filters = subtree(view.tree(), styled(view.tree(), look::FILTERS));
+        assert_eq!(has_named(filters, Role::Disclosure, b"All projects"), count >= 2);
         for name in [b"All projects".as_slice(), b"Shop", b"Second"] {
             let mut shown = false;
             for node in filters {
@@ -698,4 +712,80 @@ fn the_project_filter_row_appears_only_for_two_or_more_projects() {
         assert!(fixtures::find(view.tree(), Role::Disclosure, b"Kind").is_some());
         assert!(fixtures::find(view.tree(), Role::Button, b"All goals").is_some());
     }
+}
+
+#[test]
+fn project_and_goal_menus_follow_new_chat_and_precede_kind() {
+    for (filter, projects, goals) in [
+        (Filter::ALL, b"All projects".as_slice(), b"All goals".as_slice()),
+        (Filter { project: Some(fixtures::PROJECT), goal: Some(7), ..Filter::ALL }, b"Shop", "Goal · T7".as_bytes()),
+    ] {
+        let root = fixtures::inbox_root_filtered(filter);
+        let view = fixtures::page_view(&root);
+        let filters = subtree(view.tree(), styled(view.tree(), look::FILTERS));
+        assert_eq!(filters[1].name.as_deref(), Some(b"+ New chat".as_slice()));
+        let mut names = skein_lib::List::with_capacity(3);
+        for node in filters {
+            if node.role == Role::Disclosure {
+                names.push(node.name.as_deref().unwrap()).unwrap();
+            }
+        }
+        assert_eq!(names.as_slice(), [projects, goals, b"Kind"]);
+    }
+}
+#[test]
+fn questions_answer_inside_a_folded_disclosure_and_keep_refusals() {
+    let task = fixtures::task::document();
+    let mut acts = skein_lib::List::with_capacity(1);
+    acts.push(c::Offered { act: c::ActKind::Answer, admission: c::Admission::Allowed, effect: None }).unwrap();
+    let page = c::Question {
+        task: task.chip,
+        from: None,
+        message: fixtures::INBOX_QUESTION,
+        words: fixtures::first_run::text(b"Which path?"),
+        since: skein_lib::Wall::EPOCH,
+        acts,
+        ending: None,
+    };
+    let root = fixtures::inbox_with_document(
+        Filter::ALL,
+        Some((
+            c::Read::Question { task: fixtures::INBOX_TASK, message: fixtures::INBOX_QUESTION },
+            c::ReadValue::Question(Box::new(page)),
+        )),
+    );
+    let mut view = fixtures::page_view(&root);
+    let menu = fixtures::find(view.tree(), Role::Disclosure, b"Answer in words").expect("answer disclosure");
+    let mut at = 0;
+    for (index, node) in view.tree().nodes().iter().enumerate() {
+        if node.id == menu {
+            at = index;
+        }
+    }
+    let nodes = subtree(view.tree(), at);
+    assert!(nodes[0].states.is_empty());
+    let answer = role_node(nodes, Role::Button).id;
+    assert_eq!(
+        crate::act(&mut view, answer, Act::Press),
+        Some(temper_client_domain::Action::Pages(temper_client_domain::pages::Act::Decide {
+            object: c::ObjectKey::Question { task: fixtures::INBOX_TASK, message: fixtures::INBOX_QUESTION },
+            revision: None,
+            act: c::ActKind::Answer
+        }))
+    );
+    let card = root.pages().inbox().unwrap().cards.get(0).unwrap();
+    let mut card = card.clone();
+    card.outcome = Some(jig_client::Outcome::Answered(jig_client::Answered::Jig(c::Answer::Refused {
+        refusal: c::Refusal::NotOffered,
+        at: None,
+    })));
+    let mut builder = skein_ui::Builder::new(&fixtures::tree_limits());
+    crate::confirm::card_controls(
+        &mut builder,
+        &root,
+        &card,
+        &fixtures::words(),
+        &mut crate::frame::Bindings::new(128),
+    );
+    assert!(skein_lib::bytes::find(&fixtures::text(&builder.finish()), b"This act is not offered").is_some());
 }

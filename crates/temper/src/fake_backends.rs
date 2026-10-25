@@ -64,11 +64,12 @@ pub(crate) fn configure(rest: &[std::ffi::OsString], working: &[u8]) -> Result<O
     }
     Ok(bundle)
 }
-pub(crate) fn run(source: &Directories, bundle: Option<&Path>) -> Result<Exit, String> {
+pub(crate) fn run(source: &Directories, bundle: Option<&Path>, echo: temper_box::host::Echo) -> Result<Exit, String> {
     let adapter = sibling(&std::env::current_exe().map_err(|why| why.to_string())?)?;
     let Prepared { directories, bytes, mut listeners, peers, _lock: lock } = prepare(source, bundle, &adapter)?;
     let first = backends::steps(&directories.config, &peers);
-    let result = crate::box_command::run_configuration(&directories, &bytes, std::mem::take(&mut listeners.0), first);
+    let result =
+        crate::box_command::run_configuration(&directories, &bytes, std::mem::take(&mut listeners.0), first, echo);
     drop(lock);
     result
 }
