@@ -49,6 +49,13 @@ pub enum End {
 /// Why the service stopped; failed startup names its configuration paths.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Stop {
+    /// A full encoded transcript frame exceeded the page bound before data IO.
+    FrameTooLarge {
+        number: u64,
+        task: u64,
+        bytes: u32,
+        limit: u32,
+    },
     CommitFailed {
         number: u64,
     },
