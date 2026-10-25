@@ -862,7 +862,14 @@ producing ─► opening ─► checking ─► gating ─► queued ─► firs
    change alone), so the change cancels its producing task, whose work
    is done, and goes on to open it, in the same commit that frees the
    slot, before any retry could claim it. A change handed a pushed
-   branch starts at the next step.
+   branch starts at the next step. A producing delegate retried while it
+   still owns an existing change branch starts at that branch and carries
+   the change's landing branch beside its write destination. Only a
+   writable producer whose start is that destination gets this comparison;
+   saved starts, repairs, resolution, gates and ordinary runs do not. The
+   worker fetches the landing tip per hold and verifies an existing
+   unlanded head through a guarded push (worker.md, section 5). This does
+   not substitute a historical receipt for current ownership or drift checks.
 2. **Opening:** its pull request into its landing branch, keyed by its
    branches, its body naming its goal's issue ("Part of
    `ai/temper#12`").

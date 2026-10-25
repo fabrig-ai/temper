@@ -142,6 +142,9 @@ temper's workspace items beside it:
   - whether it may be written, and if so the branch a change is pushed
     to, and the head that branch must still be at, if the assignment
     names one (section 5);
+  - an optional landing branch for an inherited writable change producer
+    that starts on its push branch: the comparison for existing work,
+    separate from the checkout start and the push's expected head;
   - the identity for every git operation on it: one of temper's
     application credentials (jig's `domain/engine.md`, 12.1), granted
     with the assignment, which the protocol layer maps to a token and a
@@ -301,6 +304,12 @@ runs as contained processes and whose output it parses.
   creates no branch but by pushing a run's change, and branches temper
   needs before then are made by the engine, as effects (forge.md,
   section 11).
+- **An existing producer branch** also names its landing branch. After
+  fetching the start, prepare fetches that landing branch on the same
+  remote and freezes its tip for this hold; a missing landing branch fails
+  preparation. The next hold fetches it afresh, so the landing tip may move
+  between attempts. This comparison changes neither the checkout start nor
+  ownership, drift admission or the saved-work baseline.
 - **A merge in progress** fetches the branch and the base commit, checks
   out the branch, and merges the base into it as git does, leaving the
   files in conflict with their markers and the merge's state in the
@@ -326,8 +335,15 @@ runs as contained processes and whose output it parses.
   to push if none had a change. A repository whose head this hold's last
   push already landed is that landing again, not unchanged: a `finish`
   after a mid-run delivery, with nothing new, delivers what the run
-  delivered (a retried run's new hold has no such push, and finds nothing
-  to push). A push the forge refused (permissions, a
+  delivered. On a new hold of an inherited producer that starts on its
+  push branch, an unchanged head not contained in the fetched landing tip
+  is existing unlanded work. The worker pushes that head again, requiring
+  the remote to equal the assignment's expected head, or the fetched start
+  when none was supplied. Only successful or verified push returns its
+  landing. An equal or already-contained head is unchanged. Ordinary
+  runs, read-only items, saved starts, repairs and resolutions do not use
+  this comparison; saves still compare against the actual checkout start.
+  A push the forge refused (permissions, a
   protected branch, a hook) is a landing of its own, which a retry will
   not change.
 - **Pushes are never cancelled.** A push in flight runs to its end, which
@@ -460,7 +476,9 @@ among temper's tiers and keeps their fakes.
   saved work where a later run resumes; an abort ending a prepare under
   way; merges that conflict, keep their markers until resolved and
   commit both parents, a stale expected head refused, and a push that
-  lands but times out.
+  lands but times out; a first hold pushing, releasing, and a new hold
+  delivering the same existing diff without another edit; landing ancestry,
+  missing landing branches, moved remote heads and unchanged save semantics.
 - **The worker's world** (`tests/worker/domain`): jig's hub, smith's host
   domain and the checkout, against scripted engine and agent peers, the
   protocol layer's routing played with smith's codecs, and the fake

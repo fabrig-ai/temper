@@ -115,7 +115,7 @@ record Merge       { branch: bytes  base: fixed 32 }
 record Branch      { branch: bytes }
 record Commit      { commit: fixed 32 }
 enum   Access      { writable: Writable, read_only }
-record Writable    { push: bytes  expected: option fixed 32 }
+record Writable    { push: bytes  expected: option fixed 32  landing: option bytes }
 ```
 
 | Field | From the engine (`ForgeRepository`) | To the worker (`wire::Repository`) |
@@ -125,13 +125,19 @@ record Writable    { push: bytes  expected: option fixed 32 }
 | `remote` | made: the `git` of the configured forge whose number is `provider.forge`, `/`, `owner`, `/`, `name`, `.git` (configuration.md, section 3) | `remote`, never interpreted by the domain; the git component's URL (git.md, section 3) |
 | `git` | made by the routing: the `git` of the setup entry faking the forge whose number is `provider.forge`, resolved to an absolute path (setup.md, 8.2); none for every other forge | `git`, never interpreted by the domain; the program the git component runs for every operation on the repository, and `workers[].git` for none (git.md, section 3) |
 | `start` | `ForgeStart::Base`, `Branch`, `Saved`, `Merge { branch, base }`; the engine never asks for a commit | `Start`, all five |
-| `access` | `push: Some(branch)` is `writable { push: branch, expected: none }`; `None` is `read_only` | `Access` |
+| `access` | `push: Some(branch)` is `writable { push: branch, expected: none, landing }`; `landing` is the change's landing branch only for an inherited writable producer starting on its push branch; `None` push is `read_only` | `Access`; landing is bounded by the branch-name limit |
 | `identity` | `identity`: the number of the forge's git identity, the credential jig grants the attempt (credentials.md, section 4) | `identity`, the grant's number in the application's table |
 | `account` | made by the routing, on a GitHub forge: the `account` of the entry in the forge's identity value, as the routing last made it (section 6), whose `account_login` equals `owner`, compared ASCII case-insensitively; none when no entry matches, and none on Forgejo | `account`, by which the worker's routing picks the identity's entry for each git operation on the repository (section 6) |
 | `save` | the saved-work branch, when the root asks for a save | `save` beside `Event::Assign` |
 
 - **Ids** are the full object id in 32 bytes: a SHA-256 id as it is, a
   SHA-1 id followed by twelve zero bytes (git.md, section 3).
+- **Existing producer work.** `landing` is independent of `start` and
+  `expected`. The worker fetches its tip once per hold, and an unchanged
+  head not contained in it is delivered through an actual guarded push
+  (`../domain/worker.md`, section 5). A missing landing branch fails
+  preparation. This field changes only fresh assignments; stored heads,
+  receipts, delivery evidence and resumed conversations keep their encoding.
 - **Saving.** The engine's routing sets jig's `save` and temper's `save`
   together, both or neither; the worker's root saves only when both say
   so, and never for a workspace that starts a merge

@@ -201,6 +201,7 @@ pipes      stdin (written, then closed), stdout, stderr
 | `Merge` | 1 or 2 | `Merged`, `Conflicted { files }` |
 | `Commit` | 1 to 4, and a scan of files for a merge | `Committed { commit }`, `Unchanged`, `Conflicted { files }` |
 | `Push` | 1, or 2 with an expected head | `Succeeded`, `Rejected` |
+| `IsAncestor` | 1 | `IsAncestor { contains }` |
 
 Each may also end failed, with the fault of section 6. Below, `<url>` is
 the operation's `remote`, `<dir>` its repository's name, and ids are as
@@ -437,6 +438,22 @@ rejected]` line, its reason ending in `declined`, as
 
 A push that fails in a way that may have landed (`Unreachable`, `Broken`,
 `TimedOut`, `Cancelled`) is verified by the domain (section 4.3).
+
+### 4.9 IsAncestor
+
+`IsAncestor { at, ancestor, commit }` asks whether fetched `ancestor` is
+contained in fetched `commit`, including equality. It is local, changes no
+file or ref, and needs no forge credential:
+
+```
+git merge-base --is-ancestor <ancestor> <commit>
+```
+
+Exit 0 ends `IsAncestor { contains: true }`, exit 1 ends it with false,
+and other exits fail as `Broken`. The same command inside Push retains
+section 4.8's separate contract: exit 1 rejects that push. The checkout
+uses this operation to compare an existing producer head with the landing
+tip frozen by its prepare; the comparison alone is never a push receipt.
 
 ## 5. Credentials and environment
 
