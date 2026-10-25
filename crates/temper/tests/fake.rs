@@ -1118,6 +1118,9 @@ fn git_run() {
 fn check_run() {
     let scratch = support::Scratch::startup("fake-check-run");
     let directory = scratch.path();
+    let (agent, _) = support::configuration::documents(directory, env!("CARGO_BIN_EXE_temper"));
+    support::write_private(&directory.join("agent.json"), &agent);
+    support::write_private(&directory.join("root.der"), skein_tls_world::pki::ROOT);
     document(&directory.join("temper.json"), &support::configuration::check_document(directory));
     let observations = directory.join("observations");
     fs::write(&observations, b"{\"observations_lost\":0}\n").expect("checkpoint");
@@ -1137,12 +1140,12 @@ fn check_run() {
         .arg(&store)
         .output()
         .expect("check process");
-    assert_eq!(ended.status.code(), Some(2));
+    assert_eq!(ended.status.code(), Some(2), "{}", String::from_utf8_lossy(&ended.stderr));
     assert_eq!(ended.stdout, b"{\"undecided\":\"store unreadable\"}\n");
     assert_eq!(
         ended.stderr,
         format!(
-            "{{\"boundary\":{{\"lines\":1,\"lost\":0}}}}\ntemper fake forge check: opening {}: errno 2\n",
+            "smith: trust roots: 1 taken, 0 skipped, 0 malformed blocks, 0 other blocks\n{{\"boundary\":{{\"lines\":1,\"lost\":0}}}}\ntemper fake forge check: opening {}: errno 2\n",
             store.display()
         )
         .as_bytes()
