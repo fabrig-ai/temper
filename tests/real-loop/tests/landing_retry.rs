@@ -12,7 +12,6 @@ const RETRY: &[u8] = b"producer-retry-ready";
 const PARKED: usize = 4;
 const RESUMED: usize = 6;
 const CHANGE_HELD: usize = 7;
-const PRODUCED: usize = 9;
 
 fn fixture() -> forge::Fixture {
     forge::Fixture {
@@ -111,12 +110,15 @@ fn a_retried_producer_finishes_its_existing_change() {
     }
     let parked = document(&ran, PARKED);
     let resumed = document(&ran, RESUMED);
+    assert_eq!(parked["chip"]["task"], PRODUCER, "the parked producer: {parked}");
+    assert_eq!(resumed["chip"]["task"], PRODUCER, "the resumed producer: {resumed}");
     assert_eq!(parked["chip"]["phase"], "idle", "{parked}");
     let attempt =
         |value: &Value| value["chip"]["details"]["owner"]["details"]["attempt"].as_u64().expect("activation attempt");
     assert!(attempt(&resumed) > attempt(&parked), "a new activation after the parked one");
     assert_ne!(document(&ran, CHANGE_HELD)["chip"]["phase"], "ended", "finish barrier keeps the change unlanded");
-    let produced = document(&ran, PRODUCED);
+    let produced = document(&ran, ran.calls().len() - 1);
+    assert_eq!(produced["chip"]["task"], PRODUCER, "the finished producer: {produced}");
     assert!(
         produced["chip"]["details"]["owner"]["details"]["ending"]["done"]["change"].is_object(),
         "producer done(change): {produced}"
