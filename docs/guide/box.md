@@ -147,3 +147,80 @@ your ChatGPT plan.
 Stop the box with Ctrl-C in its terminal. Start it again with the same
 command, and reopen the client by its address as above. Your
 backups are yours: copy the forge directory and `state` with the box stopped.
+
+## Trying the welcome with nothing real
+
+Use `--fake-backends` to click through the welcome without anyone's
+accounts. GitHub, the ChatGPT sign-in, the model and a Forgejo elsewhere
+are fakes on loopback. Forgejo here runs a real Forgejo and runner; a
+program uses the real login mechanism with the local `fake-claude`
+adapter. Once Forgejo here's binaries are cached, nothing in the walk
+reaches the network.
+
+From the checkout, build temper and its sibling adapter, then a browser
+bundle that allows loopback navigation (the ordinary bundle does not).
+Use fresh directories, independent of the walk above:
+
+```sh
+cargo build -p temper -p temper-fake-claude
+scripts/bundle.sh --loopback "$PWD/welcome-bundle"
+target/debug/temper box --fake-backends --bundle "$PWD/welcome-bundle" \
+  --config "$PWD/welcome-config" --data "$PWD/welcome-data" \
+  --cache "$PWD/welcome-cache"
+```
+
+The usual `--config`, `--data` and `--cache` flags choose the source
+directories. The private sandbox lives at `DATA/box/fake-backends`, with
+its own `config` and `data`; the cache stays at the directory you gave.
+An empty configuration is initialized there. The source configuration
+is left untouched. Keep the box's terminal open: it prints these lines,
+with your paths and addresses in place of `DIR`, `FILE` and `ADDR`:
+
+```text
+box: effective configuration DIR
+box: effective data DIR
+box: effective cache DIR
+box: fake github http://ADDR
+box: fake issuer http://ADDR
+box: fake model http://ADDR
+box: fake forgejo http://ADDR
+box: model key FILE
+box: Forgejo elsewhere admin token file FILE
+box: GitHub own App id 1, key file FILE
+box: program login: TEMPER program-login --config … --data … --cache … NAME (the name the Model step shows)
+```
+
+The effective directories are the running box's, including for commands
+in another terminal. The four addresses identify the local services;
+the `fake forgejo` address identifies the **Forgejo at HOST** card.
+The three files supply the values to paste below. The last line is the
+program's login command, already pointing at the sandbox.
+
+Open the box's printed sign-in link in your browser and choose **Set up
+temper**. On **Forge**, take one path:
+
+- **Connect GitHub**: follow the fake's App creation and installation
+  pages back to temper, then choose `fake-person/widget` to start in.
+- **Use an App of your own ›**: give **App id** `1`, paste the key
+  file's text into **Private key**, then choose **Connect the App**.
+  Follow the installation link, then choose `fake-person/widget`.
+- **Forgejo on this machine**: choose **Choose**, fill in the first
+  repository's details, then **Set up a Forgejo here**. Its first use
+  downloads Forgejo and its runner if they are not cached.
+- **Forgejo at HOST**, matching the printed fake's address: choose
+  **Connect as its admin**, paste the admin token file's text, fill in
+  the first repository's details, and choose **Connect as its admin**.
+
+On **Model**, take one path:
+
+- **Continue with ChatGPT**: the fake signs you in and returns you to
+  temper without a real account.
+- **Use an API key**: paste the model key file's text.
+- **Use your Claude subscription**: keep or edit **Name**, submit it,
+  then run the printed program-login command in another terminal.
+  Replace `NAME` with that name and omit the parenthesized reminder;
+  keep the printed effective directory flags.
+
+A program's account reaches **Ready**, but temper currently refuses
+its first chat: “A chat can't stay open through a program yet.” This is
+temper's current behaviour, not a limit of the fake.
