@@ -53,6 +53,7 @@ if args[:len(%r)] == %r:
                 self.assertEqual((result.returncode, result.stderr), (0, ''))
                 self.assertEqual(calls[0], [['wait', 'button', 'Sign out', '--exact', '--timeout', '120'], ''])
                 self.assertIn([['type', 'text field', 'Key (pasted once)'], KEY], calls)
+                self.assertIn([['press', 'button', 'Start chat', '--exact'], ''], calls)
                 self.assertEqual(chat, '7\n')
                 verbs = [args[0] for args, _ in calls]
                 self.assertEqual(verbs.count('go'), 1, 'no navigation shortcuts after /welcome')

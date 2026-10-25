@@ -58,7 +58,7 @@ ready() {
 chat() {
     call wait 'text area' 'Start a chat' --exact --timeout 120
     printf 'Hello from the welcome lab.\n' | call type 'text area' 'Start a chat'
-    call press button Start --exact
+    call press button 'Start chat' --exact
     call wait log Conversation --timeout 120
     call wait text 'Hello from the local fake model.' --in log Conversation --timeout 180
     # Derive the ordinary ctl chat read from the page the person reached.
