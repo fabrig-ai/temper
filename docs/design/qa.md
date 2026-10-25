@@ -679,7 +679,8 @@ through the director.
 
 `lab/welcome-github` clicks GitHub's one-click App creation, installation
 and return, adopts `fake-person/widget`, pastes the box's named fake model
-key, and follows the embedded Ready card’s “Start a chat” into `widget`. `lab/welcome-forgejo-here` clicks
+key, and follows the embedded Ready card’s “Start a chat” into `widget`.
+`lab/welcome-forgejo-here` clicks
 Forgejo here, makes `work/hello` in `hello`, and uses the same key path.
 Each waits for visible sign-in before opening the welcome, requires the
 Model step’s embedded Ready card and “Added your OpenAI API key” status,
@@ -687,8 +688,11 @@ and presses “Start a chat”. Unlike sign-in, an added key stays on Model
 (`client/README.md`, The welcome). The walk checks the selected project,
 which is the new composer’s project, before pressing “Start chat” and
 requiring the fake reply before and after reload. Welcome, Forge, Model,
-Ready and chat are separate seed actions,
-so a live scene can capture between them. All welcome experiments keep
+Ready and chat are separate seed actions, so a live scene can capture
+between them. Forgejo here’s Ready phase waits
+for the Model step’s repository-adopted summary before following “Start a
+chat”, since its real setup continues in the background during Model.
+All welcome experiments keep
 one byte-identical `call`, guarded by a unit test: failure keeps an
 outline and shot, then stops. Each later phase requires its predecessor’s
 completion marker, since the lab records failed actions and continues the

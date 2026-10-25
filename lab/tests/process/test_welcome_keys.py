@@ -73,6 +73,8 @@ if args[:len(%r)] == %r:
                 if name == 'welcome-github':
                     self.assertIn([['press', 'choice', 'fake-person/widget', '--exact'], ''], calls)
                 else:
+                    adopted = [['wait', 'paragraph', 'Forgejo on this machine · work/hello, in the new project hello', '--exact', '--timeout', '120'], '']
+                    self.assertLess(calls.index(adopted), calls.index(start))
                     for field, text in [('Organization', 'work'), ('Repository', 'hello'),
                                         ('Into a new project, named', 'hello')]:
                         self.assertIn([['type', 'text field', field], text], calls)

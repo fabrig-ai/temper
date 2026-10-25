@@ -9,6 +9,9 @@ that `hello` is the selected composer project, sends a first chat,
 sees `Hello from the local fake model.`,
 and reloads to see the reply again. hand needs no peer: the walk stays on temper's pages and opens no Forgejo page.
 
+Owned setup continues during Model. Before following “Start a chat”, the
+walk waits for the Model step’s adopted `work/hello` summary in `hello`.
+
 The actions `welcome`, `forge`, `model`, `ready`, and `chat` invoke separate
 `steps` phases so live scenes can capture between them. A missed call keeps
 an outline and shot and stops the walk; a completion marker prevents later

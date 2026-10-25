@@ -52,6 +52,8 @@ ready() {
     # client/README.md, The welcome: “an account made there ConnectModel's Ready”.
     call wait region Ready --exact --timeout 120
     call wait status 'Added your OpenAI API key' --in region Ready --exact --timeout 120
+    # Owned setup continues during Model; wait until the first repository is adopted.
+    call wait paragraph 'Forgejo on this machine · work/hello, in the new project hello' --exact --timeout 120
     call press link 'Start a chat' --in region Ready --exact
     call wait heading Chats --exact --timeout 120
     call wait 'text area' 'Start a chat' --exact --timeout 120
