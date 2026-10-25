@@ -290,9 +290,77 @@ fn checked_local_setup(records: bool) -> temper_forge_setup::check::Checked {
     .unwrap()
 }
 
+fn with_forge_git_program(input: &[u8], value: &str) -> Box<[u8]> {
+    core::str::from_utf8(input)
+        .unwrap()
+        .replace("\"forges\":[{", &format!("\"forges\":[{{\"git_program\":{value},"))
+        .into_bytes()
+        .into_boxed_slice()
+}
+
+#[test]
+fn forge_git_program_reads_data_and_absolute_paths_and_refuses_bad_values() {
+    let jig = fixtures::engine().jig;
+    let directories = config::Directories::given(b"/config", b"/data", b"/cache").unwrap();
+    for (value, expected) in [(r#""bin/git""#, b"/data/bin/git".as_slice()), (r#""/opt/git""#, b"/opt/git".as_slice())]
+    {
+        let input = with_forge_git_program(fixtures::APPLICATION, value);
+        let document =
+            config::document(&input, &config::DocumentLimits { bytes: 65_536, tokens: 4096, depth: 32 }).unwrap();
+        let mut problems = Problems::empty();
+        let members = application::parse(&document, 0, &jig, &directories, &mut problems).unwrap();
+        assert_eq!(lines(&problems).as_ref(), b"");
+        assert_eq!(members.forges[0].git_program.as_deref(), Some(expected));
+    }
+    for value in ["null", "false", r#""""#, r#""../git""#, r#""bad\u0000path""#] {
+        let input = with_forge_git_program(fixtures::APPLICATION, value);
+        let (_, problems) = application(&input, &jig);
+        assert!(lines(&problems).starts_with(b"application.forges[0].git_program:"), "{value}: {:?}", lines(&problems));
+    }
+}
+
+#[test]
+fn the_forges_git_program_reaches_startup_without_fake_setup() {
+    let input = with_forge_git_program(&fixtures::document(), r#""/opt/custom/git""#);
+    let service = start_with_git_program(&input, None).unwrap();
+    assert_eq!(
+        service.engine.as_ref().unwrap().workers.forges[0].git_program.as_deref(),
+        Some(b"/opt/custom/git".as_slice())
+    );
+}
+
+#[test]
+fn startup_refuses_both_sources_of_a_forges_git_program() {
+    let input = with_forge_git_program(&fixtures::document(), r#""/opt/custom/git""#);
+    let problems = start_with_git_program(&input, Some(&checked_fake_setup())).err().expect("two sources refused");
+    let paths: Vec<_> = problems.problems.iter().map(|problem| problem.path.clone()).collect();
+    assert_eq!(
+        paths,
+        [
+            Path::root().member(b"application").member(b"forges").child(Segment::Index(0)).member(b"git_program"),
+            Path::root()
+                .member(b"application")
+                .member(b"setup")
+                .child(Segment::Index(0))
+                .member(b"mode")
+                .member(b"fake")
+                .member(b"git"),
+        ]
+    );
+}
+
 #[test]
 fn the_checked_fake_git_program_reaches_the_services_forge_settings() {
-    let checked = checked_fake_setup();
+    let service = start_with_git_program(&fixtures::document(), Some(&checked_fake_setup())).unwrap();
+    let forge = &service.engine.as_ref().expect("engine").workers.forges[0];
+    assert_eq!(forge.git_program.as_deref(), Some(b"/data/demo/bin/git".as_slice()));
+    assert_eq!(forge.git.as_ref(), b"http://127.0.0.1:9");
+}
+
+fn start_with_git_program(
+    input: &[u8],
+    checked: Option<&temper_forge_setup::check::Checked>,
+) -> Result<crate::Service, Problems> {
     let mut files = fixtures::files();
     let mut entries = List::with_capacity(files.entries.len().checked_add(1).unwrap());
     for entry in files.entries.into_boxed() {
@@ -306,8 +374,8 @@ fn the_checked_fake_git_program_reaches_the_services_forge_settings() {
             skein_lib::Secret::new(b"0123456789abcdef0123456789abcdef01234567".as_slice().into()),
         ))
         .unwrap();
-    let service = crate::startup::with_setup(
-        &fixtures::document(),
+    crate::startup::with_setup(
+        input,
         &config::Directories::working(),
         &files,
         Some(&fixtures::startup_agent()),
@@ -315,13 +383,9 @@ fn the_checked_fake_git_program_reaches_the_services_forge_settings() {
         None,
         Some(fixtures::worker_runtime()),
         fixtures::forge_runtime(),
-        Some(&checked),
+        checked,
         false,
     )
-    .unwrap();
-    let forge = &service.engine.as_ref().expect("engine").workers.forges[0];
-    assert_eq!(forge.git_program.as_deref(), Some(b"/data/demo/bin/git".as_slice()));
-    assert_eq!(forge.git.as_ref(), b"http://127.0.0.1:9");
 }
 
 #[test]
