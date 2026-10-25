@@ -851,7 +851,8 @@ keeps (`../protocol/configuration.md`, section 2).
     PROJECT, with ORG/NAME" once the forge's first repository is on its
     row. Until adopted, "Open PROJECT" is disabled, with "It opens once
     ORG/NAME is made." Once that repository is adopted (`forge.md`,
-    5.4, Ready), its heading is "ORG/NAME is ready", its checklist
+    5.4, Ready), including a managed Forgejo elsewhere, its heading is
+    "ORG/NAME is ready", its checklist
     forge first, then Model and Project, with "Open PROJECT", to the
     chats page in that project. On a connected owned Forgejo whose
     page facts offer sign-in through temper (`forge.md`, 5.4),
