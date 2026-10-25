@@ -182,31 +182,19 @@ fn real_init_policy_fits_with_two_long_github_repositories() {
     })));
     driver.settle();
     assert_eq!(policies(&driver), before, "connection and sign-in do not rewrite the seed policy");
+    ask(
+        &mut driver,
+        1,
+        people::Ask::MakeProject {
+            name: str::from_utf8(&first[..people::NAME_BYTES]).expect("ASCII project name").into(),
+            policy: 1,
+        },
+    );
+    assert_eq!(reply(&driver, 1), &people::Reply::Outcome(people::Outcome::ProjectMade { project: 2 }));
     for (key, name, repository) in [(1, &first, 7), (2, &second, 8)] {
-        ask(
-            &mut driver,
-            key,
-            people::Ask::MakeProject {
-                // Welcome permits editing the project name independently; jig caps it at 64.
-                name: str::from_utf8(&name[..people::NAME_BYTES]).expect("ASCII project name").into(),
-                policy: 1,
-            },
-        );
-        let project = if key == 1 {
-            assert_eq!(reply(&driver, key), &people::Reply::Outcome(people::Outcome::ProjectMade { project: 2 }));
-            2
-        } else {
-            assert_eq!(
-                reply(&driver, key),
-                &people::Reply::Outcome(people::Outcome::Refused(people::Refusal::Limit {
-                    which: people::LimitKind::Projects
-                })),
-                "second welcome selection exceeds the unchanged two-project capacity"
-            );
-            // Independently price two real adoptions using the already generated
-            // project. This is the ordinary adoption boundary, not a welcome fallback.
-            1
-        };
+        // The first repository is welcome's home; the ordinary adoption path
+        // adds another repository to the same project without making it home.
+        let project = 2;
         let adoption = forge::Adoption {
             project,
             forge: 2,
@@ -218,7 +206,7 @@ fn real_init_policy_fits_with_two_long_github_repositories() {
             landing: b"main".as_slice().into(),
             ci: true,
             checks: Box::new([]),
-            home: true,
+            home: key == 1,
         };
         // Welcome sends a typed application; its real route locates the
         // repository before producing the generic, core-admitted Adopt.
@@ -255,7 +243,7 @@ fn real_init_policy_fits_with_two_long_github_repositories() {
             panic!("committed adopted repository")
         };
         let forge::Stored::Repository(row) = row.as_ref() else { panic!("repository key names its row") };
-        assert_eq!((row.project, row.home), (project, true));
+        assert_eq!((row.project, row.home), (project, key == 1));
         let after = policies(&driver);
         assert_eq!(after.len(), 2);
         for (_, value) in &after {
@@ -265,7 +253,7 @@ fn real_init_policy_fits_with_two_long_github_repositories() {
     let bytes = people::policy_bytes(&snapshot).expect("exact joined snapshot bytes");
     assert_eq!(bytes, 2374);
     std::eprintln!(
-        "real init joined policy: {bytes}/4096 requested bytes, configured bound {}; projects 1 and 2; adopted=2; owner=39, repositories=64 bytes each; second welcome MakeProject refuses Projects",
+        "real init joined policy: {bytes}/4096 requested bytes, configured bound {}; projects 1 and 2; adopted=2 in project 2, second home=false; owner=39, repositories=64 bytes each",
         limits.policy_bytes
     );
     assert!(bytes <= 4096);
