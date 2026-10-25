@@ -1380,8 +1380,6 @@ fn named(bytes: &[u8], limits: &Limits) -> bool {
     within && !bytes.is_empty()
 }
 
-/// Whether the repository at `repository` starts from a base branch that is
-/// created if the forge does not have it: only for one that may be written.
 /// Ineligible supplied comparisons are ignored; they can never grant a write.
 fn landing_branch(repository: &Repository) -> Option<&[u8]> {
     match (&repository.start, &repository.push) {
@@ -1397,6 +1395,8 @@ fn landing_branch(repository: &Repository) -> Option<&[u8]> {
     }
 }
 
+/// Whether the repository at `repository` starts from a base branch that is
+/// created if the forge does not have it: only for one that may be written.
 fn creates_base(holding: &Holding, repository: u32) -> bool {
     let spec = nth(holding, repository);
     let base = match spec.start {
