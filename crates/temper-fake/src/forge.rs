@@ -189,7 +189,8 @@ impl Document {
     }
     /// The same seed order gives the same commit at every start: skein stores
     /// tree, message and parents, with no author or time; its id is a count.
-    /// No grant is seeded. Seed observations are drained, so a file holds the run alone.
+    /// No Forgejo grant is seeded here; peer setup grants its site admin access.
+    /// Seed observations are drained, so a file holds the run alone.
     #[must_use]
     pub fn seed(&self, seed: u64) -> (Forge, forgejo::Config) {
         let mut domain = domain::Domain::new(&LIMITS, seed);
@@ -379,5 +380,15 @@ pub fn peer(
     )?
     .without_records();
     setup(peer.setup_mut(), token);
+    let admin = peer.setup_mut().token_user(token).expect("setup installed the site admin token");
+    {
+        let mut forge = shared.borrow_mut();
+        // Setup's admin lives in the protocol store; pre-existing domain repositories
+        // need its grant too, before Create can read them and grant the bot access.
+        for repository in &document.repositories {
+            let full = read::joined(&[&repository.owner, b"/", &repository.name]);
+            domain::grant(&mut forge.domain, &full, admin, api::Permission::Admin);
+        }
+    }
     Ok((peer, shared))
 }

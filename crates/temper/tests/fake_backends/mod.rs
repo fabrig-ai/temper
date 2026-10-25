@@ -175,3 +175,4 @@ fn the_serve_child_reads_retained_effective_documents_across_restart() {
 
 mod oauth;
 mod qa;
+mod walk;
