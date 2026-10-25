@@ -1289,6 +1289,10 @@ for its kind, its user's login and its installations. Its nodes:
   picker's ids in `Adopt`, the forge's kind in the adopted outcome, the
   demo's read, a change's panel) changes its schema, generated code and
   one set of golden bytes in place. The version moves at a release.
+  `ForgeReason::NoCiChoice`, the refusal before adopting a GitHub
+  repository with an empty CI setup (`forge.md`, 5.1), is appended in
+  place with the old tags and bytes preserved; its golden and roundtrip
+  coverage accompany it. `CLIENT_VERSION` stays 11.
   The engine serves exactly one version (jig's `protocol/client.md`, section 9): a client of another
   is out of date for the forge (4.4), and its kept adoption is dropped
   as kept work at start (6.6; jig's `protocol/client.md`, section 10).

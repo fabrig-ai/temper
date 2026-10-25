@@ -286,7 +286,12 @@ found: Actions is on, but this repository has no workflow and no required
 checks." It offers **Land without CI**, which adopts with CI off and
 without replacement checks, or **Name the checks that stand for CI**,
 which gates changes on those checks. The choice does not waive required
-checks or other landing rules (`../domain/forge.md`, 8.7). The merge style is the forge's for
+checks or other landing rules (`../domain/forge.md`, 8.7). An adoption
+asking for CI in this case ends with `NoCiChoice` before any repository
+is adopted. The form keeps its words and choices; `ctl` names both ways
+to continue. Selecting either sends a new application with a fresh key:
+CI off without replacement checks, or CI off with the named checks. The
+kept refusal belongs to the earlier key. The merge style is the forge's for
 the repository, which the form shows before the adoption is confirmed:
 on GitHub the first the repository allows of merge, squash and rebase,
 on Forgejo its default (`../domain/forge.md`, what adoption says of the

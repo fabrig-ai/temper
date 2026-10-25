@@ -153,6 +153,15 @@ section 7).
 - **`STORE_VERSION` is 10,** with the demo end's durable acts, family 19
   (below). Version 9 came with people v12 refusal bytes embedded in
   application outcomes.
+- **The adoption's no-CI choice** is the appended `NoCiChoice` forge
+  refusal in a retained `Application` outcome (family 15). It says no
+  repository was adopted: the person must choose whether to land without
+  CI or name replacement checks (`../domain/forge.md`, 8.7). Either retry
+  uses a fresh application key, so the retained refusal cannot answer the
+  choice again. Its tag is appended in place under the pre-release rule;
+  existing tags and encoded rows keep their values and bytes. The store
+  version stays 10. Golden bytes and roundtrips cover the new reason and
+  preserve the previous cases.
   Version 8 came with the `Binding` family, tag 18,
   `Key::Binding(address)` (section 2), its row `{ address, subject }`: the
   folded member address and its first Google subject (`sign-in.md`,
