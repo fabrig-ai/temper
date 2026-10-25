@@ -3647,7 +3647,7 @@ fn temper_ctl_decide_settings() {
     for (index, call) in seen.calls.iter().enumerate() {
         if index == 7 {
             assert_eq!(call.exit, Some(Exit::Code(1)), "member must get a normal local refusal");
-            assert_eq!(call.stderr.as_slice(), b"act not offered\n", "existing member refusal diagnostic");
+            assert_eq!(call.stderr.as_slice(), b"temper ctl: act not offered\n", "existing member refusal diagnostic");
             assert!(call.stdout.is_empty(), "refusal has no successful answer");
         } else {
             ctl_assert_success(core::slice::from_ref(call));
