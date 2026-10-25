@@ -1699,3 +1699,16 @@ fn qa_install_again_after_an_abandoned_tab_offers_a_fresh_state_and_accepts() {
     status(&peer, b"303");
     assert!(contains(peer.received(), b"Location: /welcome?at=forge&forge=1\r\n"));
 }
+
+#[test]
+fn an_empty_github_redirect_releases_the_connection_for_its_next_visit() {
+    let mut service = service(8, Duration::from_secs(3600));
+    accepted(&mut service, &[22]);
+    // Chromium returns from GitHub on the connection that served its empty
+    // redirect. Pipeline the next visit so no new connection can hide a stuck response.
+    let requests = b"GET /forges/1/github/setup?installation_id=22&setup_action=update HTTP/1.1\r\nHost: temper.test\r\n\r\nGET /forges/no/github/setup HTTP/1.1\r\nHost: temper.test\r\nConnection: close\r\n\r\n";
+    let mut peer = fixtures::http::Peer::raw(service.engine.as_mut().expect("engine"), requests);
+    pump_visit(&mut service, &mut peer);
+    status(&peer, b"404");
+    assert!(contains(peer.received(), b"Forge not found"));
+}

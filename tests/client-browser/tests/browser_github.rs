@@ -96,3 +96,51 @@ fn back_from_github_shows_the_manifest_without_posting_again_until_continue() {
     }
     assert_eq!(posts, 2, "one automatic post, then one explicitly continued post");
 }
+
+#[test]
+fn connect_github_creates_installs_and_returns_to_the_welcome() {
+    let (tier, github) = Tier::github("github-chain");
+    // Only request heads are needed; keep connection lifecycle and domain calls out of the record.
+    let mut github =
+        github.keeping(skein_fake_peers::forge::Kept { heads: true, ..skein_fake_peers::forge::Kept::NONE });
+    let mut setup = tier.setup();
+    // The fake rejects Chromium's unversioned favicon request, as in the manifest stories.
+    setup
+        .expected
+        .push(b"Failed to load resource: the server responded with a status of 400 (Bad Request)".as_slice().into());
+    let see =
+        |role, name: &[u8]| Step::Person(PersonStep::See { find: Find::exactly_named(role, name), within: WITHIN });
+    let press = |role, name: &[u8]| Step::Person(PersonStep::Press { find: Find::exactly_named(role, name) });
+    let mut script = Script::new(Box::new([
+        see(Role::Link, b"Set up temper"),
+        Step::Person(PersonStep::Go { address: b"/welcome?at=forge".as_slice().into() }),
+        see(Role::Button, b"Connect GitHub"),
+        press(Role::Button, b"Connect GitHub"),
+        see(Role::Link, b"Create GitHub App"),
+        press(Role::Link, b"Create GitHub App"),
+        // Conversion, installation and the setup's 303 return the tab without further navigation.
+        see(Role::Heading { level: 2 }, b"Choose a repository to start in"),
+        Step::Address(b"/welcome?at=forge&forge=1".as_slice().into()),
+        see(Role::Choice, b"acme/app"),
+        press(Role::Choice, b"acme/app"),
+        see(Role::Button, b"Adopt acme/app"),
+        press(Role::Button, b"Adopt acme/app"),
+        see(Role::Heading { level: 1 }, b"Connect a model"),
+        Step::Address(b"/welcome?at=model".as_slice().into()),
+        // The Model step's forge summary is rendered from the adopted repository.
+        see(Role::Paragraph, "GitHub · acme/app, in the new project app".as_bytes()),
+    ]));
+    let outcome =
+        Harness::new(setup).run_lending(&mut [&mut script], &mut [Lent { name: b"github", peer: &mut github }]);
+    let posts = github
+        .observations()
+        .iter()
+        .filter(|record| {
+            matches!(record, skein_fake_peers::forge::Observation::Head { call, .. }
+            if call.method == skein_http::Method::Post && call.target.starts_with(b"/settings/apps/new?"))
+        })
+        .count();
+    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(posts, 1, "one manifest post through installation and adoption");
+    assert_eq!(github.github_layer().expect("GitHub layer").installations().iter().count(), 1, "one installation");
+}

@@ -190,6 +190,7 @@ impl Tier {
             "git":format!("http://{address}"), "web":format!("http://{address}")
         }]);
         value["application"]["identities"] = serde_json::json!([{"number":1,"forge":1,"login":null,"author":null}]);
+        github::project_creation(&mut value, address);
         configuration::private(&path, &serde_json::to_vec(&value).expect("GitHub deployment JSON"));
         (tier, github::peer(address))
     }
