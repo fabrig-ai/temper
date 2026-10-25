@@ -785,21 +785,75 @@ pub(crate) struct RunWorkspace {
     clippy::wildcard_enum_match_arm,
     reason = "projection converts already validated task text and selects current milestone kinds"
 )]
-pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_domain_core::ProjectionFeed) {
+pub(crate) fn project_goal(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    decision: &mut Decision,
+    feed: &jig_domain_core::ProjectionFeed,
+) {
     goal_topics(domain, env, feed);
     let goal = &feed.goal;
-    let Some(repository) = domain.forge.home(goal.project) else {
+    let Some(_) = domain.forge.home(goal.project) else {
         if feed.closing {
             domain.work.push(Work::Core(jig_domain_core::Event::ProjectionSettled {
                 goal: goal.number,
+                generation: feed.generation,
                 connector: domain.config.forge_connector,
             }));
         }
         return;
     };
+    if let Some(source) = begin_projection(domain, env, decision, goal.number) {
+        project_goal_begun(domain, env, feed, source);
+    }
+}
+
+// Begin is synchronous: its row writes enter this decision before translation
+// can refuse the feed. No staged feed competes with admitted ordinary effects.
+fn begin_projection(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decision, goal: u64) -> Option<u64> {
+    let owner = effect_owner(domain);
+    let requests = jig_domain_core::step(
+        &mut domain.core,
+        &super::environment_core(env),
+        jig_domain_core::Event::ProjectionBegin { goal, connector: domain.config.forge_connector, owner },
+    );
+    let jig_domain_core::Requests::Out(mut requests) = requests;
+    let mut source = None;
+    for _ in 0..requests.len() {
+        let request = requests.pop().expect("Begin outputs");
+        match request {
+            jig_domain_core::Request::Ask {
+                connector,
+                ask: jig_domain_core::Ask::ProjectionBegun { owner: got, source: reserved },
+            } => {
+                assert!(connector == domain.config.forge_connector && got == owner, "Begin reply correlation");
+                source = reserved;
+            }
+            request @ (jig_domain_core::Request::Ask { .. }
+            | jig_domain_core::Request::Write(_)
+            | jig_domain_core::Request::Held(_)
+            | jig_domain_core::Request::Now(_)
+            | jig_domain_core::Request::ProjectMade { .. }
+            | jig_domain_core::Request::Decided) => {
+                let mut one = Queue::with_capacity(1);
+                one.push(request);
+                super::route_core_requests(domain, env, decision, jig_domain_core::Requests::Out(one));
+            }
+        }
+    }
+    source
+}
+
+fn project_goal_begun(domain: &mut Domain, env: &Env<Limits>, feed: &jig_domain_core::ProjectionFeed, source: u64) {
+    let goal = &feed.goal;
+    let Some(repository) = domain.forge.home(goal.project) else { return };
     let provider = repository.provider;
     let Some(text) = core::str::from_utf8(&goal.words).ok() else {
-        domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal.number, why: tasks::Hold::Effects }));
+        domain.work.push(Work::Core(jig_domain_core::Event::ProjectionFailed {
+            goal: goal.number,
+            connector: domain.config.forge_connector,
+            source,
+        }));
         return;
     };
     let title = text.lines().next().unwrap_or(text);
@@ -811,7 +865,11 @@ pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_do
         let Some(words) = core::str::from_utf8(&child.words).ok() else { continue };
         if plan.push(forge_issues::PlanItem { text: Box::from(words), phase: projection_phase(&child.phase) }).is_err()
         {
-            domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal.number, why: tasks::Hold::Effects }));
+            domain.work.push(Work::Core(jig_domain_core::Event::ProjectionFailed {
+                goal: goal.number,
+                connector: domain.config.forge_connector,
+                source,
+            }));
             return;
         }
     }
@@ -835,13 +893,17 @@ pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_do
         let words = core::str::from_utf8(&milestone.words).unwrap_or("Task milestone");
         let words = if words.is_empty() { "Task milestone" } else { words };
         if milestones.push(forge_issues::Milestone { key, text: Box::from(words) }).is_err() {
-            domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal.number, why: tasks::Hold::Effects }));
+            domain.work.push(Work::Core(jig_domain_core::Event::ProjectionFailed {
+                goal: goal.number,
+                connector: domain.config.forge_connector,
+                source,
+            }));
             return;
         }
     }
-    let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return };
     domain.work.push(Work::Forge(forge::Event::Project {
-        entry,
+        entry: source,
+        closing_generation: if feed.closing { Some(feed.generation) } else { None },
         repository: provider,
         view: forge_issues::GoalView {
             phase: goal_phase(&goal.phase),
@@ -851,11 +913,15 @@ pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_do
             goal_text: Box::from(text),
             plan: plan.into_boxed(),
             milestones: milestones.into_boxed(),
-            finished: match goal.phase {
-                tasks::Phase::Closing(_)
-                | tasks::Phase::Ended(_)
-                | tasks::Phase::Held { was: tasks::Was::Closing(_), .. } => Some(Box::from("Goal finished")),
-                _ => None,
+            finished: if feed.closing {
+                Some(Box::from("Goal finished"))
+            } else {
+                match goal.phase {
+                    tasks::Phase::Closing(_)
+                    | tasks::Phase::Ended(_)
+                    | tasks::Phase::Held { was: tasks::Was::Closing(_), .. } => Some(Box::from("Goal finished")),
+                    _ => None,
+                }
             },
         },
     }));
@@ -2409,6 +2475,26 @@ pub(crate) fn outputs(
                     },
                 )));
             }
+            forge::Request::ProjectionOutbox { entry, outcome } => {
+                let result = match outcome {
+                    skein_forge_client::Outcome::Made { .. } => jig_domain_core::connector::OutboxOutcome::Made,
+                    skein_forge_client::Outcome::Failed(_) | skein_forge_client::Outcome::Raced { .. } => {
+                        jig_domain_core::connector::OutboxOutcome::Failed
+                    }
+                    skein_forge_client::Outcome::Withdrawn => jig_domain_core::connector::OutboxOutcome::Withdrawn,
+                    skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {
+                        jig_domain_core::connector::OutboxOutcome::Uncertain
+                    }
+                    skein_forge_client::Outcome::Held => jig_domain_core::connector::OutboxOutcome::Held { entry },
+                };
+                domain.work.push(Work::Core(jig_domain_core::Event::EffectConnector(
+                    jig_domain_core::connector::Event::ProjectionOutbox {
+                        connector: domain.config.forge_connector,
+                        entry,
+                        outcome: result,
+                    },
+                )));
+            }
             forge::Request::Outcome { entry, task, outcome } => {
                 if let Some(named) = domain.forge.named_effect(entry) {
                     save_connector_answer(domain, &env.limits, decision, core_call(named));
@@ -2497,6 +2583,15 @@ pub(crate) fn outputs(
                 };
                 let goal = row.goal;
                 let number = entry.number;
+                if domain.forge_effects.len() == domain.forge_effects.capacity() {
+                    domain.forge.projection_after(
+                        goal,
+                        skein_lib::Wall::from_nanos(
+                            env.wall.as_nanos().saturating_add(env.limits.forge.issue_policy.interval.as_nanos()),
+                        ),
+                    );
+                    continue;
+                }
                 let owner = effect_owner(domain);
                 domain
                     .forge_effects
@@ -2508,11 +2603,15 @@ pub(crate) fn outputs(
                 domain.work.push(Work::Core(jig_domain_core::Event::EffectStart {
                     owner,
                     connector: domain.config.forge_connector,
-                    origin: jig_domain_core::EffectOrigin::Projection { goal, entry: Some(number) },
+                    origin: jig_domain_core::EffectOrigin::Projection { goal, source: number, entry: Some(number) },
                 }));
             }
-            forge::Request::ProjectionFailed { goal } => {
-                domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal, why: tasks::Hold::Effects }));
+            forge::Request::ProjectionFailed { goal, source } => {
+                domain.work.push(Work::Core(jig_domain_core::Event::ProjectionFailed {
+                    goal,
+                    source,
+                    connector: domain.config.forge_connector,
+                }));
             }
             forge::Request::Drift { task, .. } => {
                 domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Drift }));
@@ -2572,14 +2671,13 @@ pub(crate) fn outputs(
                 | forge_change::Decision::Cancel
                 | forge_change::Decision::Hold(_) => change_decision(domain, env, task, choice),
             },
-            forge::Request::ProjectionSettled { goal } => {
-                if domain.core.tasks.task(goal).is_none() {
-                    domain.forge.projection_settled(goal);
-                    domain.work.push(Work::Core(jig_domain_core::Event::ProjectionSettled {
-                        goal,
-                        connector: domain.config.forge_connector,
-                    }));
-                }
+            forge::Request::ProjectionSettled { goal, generation } => {
+                domain.forge.projection_settled(goal);
+                domain.work.push(Work::Core(jig_domain_core::Event::ProjectionSettled {
+                    goal,
+                    generation,
+                    connector: domain.config.forge_connector,
+                }));
             }
             forge::Request::ProjectAfter { goal, when } => {
                 if let Some(when) = when {
@@ -2587,9 +2685,10 @@ pub(crate) fn outputs(
                 } else if match domain.forge.issue(goal) {
                     Some(row) => row.pending.is_none(),
                     None => false,
-                } && let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow)
-                {
-                    domain.work.push(Work::Forge(forge::Event::ProjectDesired { entry, goal }));
+                } {
+                    if let Some(entry) = begin_projection(domain, env, decision, goal) {
+                        domain.work.push(Work::Forge(forge::Event::ProjectDesired { entry, goal }));
+                    }
                 }
             }
         }

@@ -221,6 +221,10 @@ pub fn writes(limits: &engine::Limits) -> u32 {
         + limits.tasks.tasks
         + 4
         + limits.call_records
+        + tasks::max_out(&limits.tasks) * 8
+        + people::max_out(&limits.people) * 4
+        + 1
+        + limits.tasks.tasks
 }
 
 fn authority_limits() -> authority::Limits {
@@ -798,6 +802,7 @@ impl World {
     )]
     fn delivery(&mut self, delivery: Delivery) {
         match delivery {
+            Delivery::ProjectionRecovery { .. } => panic!("recovery is routed to its initiating connector"),
             Delivery::SourceSignedOut { .. } => panic!("this story issues no source sign-out"),
             Delivery::WebReply { reply: people::Reply::SignedIn { person, sign_in, .. }, .. } => {
                 self.referee.signed_in(&self.store.rows, person, sign_in).expect("durable sign-in");

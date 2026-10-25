@@ -212,11 +212,28 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             domain.work.push(Work::Core(core::Event::ProcedureHoldings { task, step, connector, holdings }));
             None
         }
+        core::Ask::CommitProjectionRecovery { goal, owner: _, after } => {
+            assert!(connector == domain.config.forge_connector, "staged recovery connector");
+            let mut out = Queue::with_capacity(forge::max_out(&env.limits.forge));
+            forge::step(
+                &mut domain.forge,
+                &super::environment_forge(env),
+                forge::Event::CommitProjectionRecovery { goal, after },
+                &mut out,
+            );
+            forge_route::outputs(domain, env, decision, &mut out);
+            None
+        }
+        core::Ask::ProjectionBegun { .. } => None,
         core::Ask::ProjectGoal { feed } => {
             if connector == domain.config.forge_connector {
                 domain.work.push(Work::ProjectGoal(feed));
             } else if feed.closing {
-                domain.work.push(Work::Core(core::Event::ProjectionSettled { goal: feed.goal.number, connector }));
+                domain.work.push(Work::Core(core::Event::ProjectionSettled {
+                    goal: feed.goal.number,
+                    generation: feed.generation,
+                    connector,
+                }));
             }
             None
         }

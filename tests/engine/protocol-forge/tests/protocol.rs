@@ -236,7 +236,7 @@ fn a_created_issue_with_its_answer_lost_is_found_after_restart() {
         milestones: Box::new([]),
         finished: None,
     };
-    world.event(top::Event::Project { entry: 1, repository: REPO, view });
+    world.event(top::Event::Project { closing_generation: None, entry: 1, repository: REPO, view });
     world.event(top::Event::Committed { entry: 1 });
     world.run_for(1);
     assert_eq!(world.writes(), 1);
@@ -425,7 +425,12 @@ fn a_busy_pass_lists_at_most_changed_items_over_the_page_plus_one() {
 fn the_api_token_reaches_no_record_request_or_fact() {
     let mut world = Protocol::new(11);
     world.adopt();
-    world.event(top::Event::Project { entry: 1, repository: REPO, view: fixtures::goal_view() });
+    world.event(top::Event::Project {
+        closing_generation: None,
+        entry: 1,
+        repository: REPO,
+        view: fixtures::goal_view(),
+    });
     world.event(top::Event::Committed { entry: 1 });
     world.run_for(60);
     assert_eq!(world.issues_made(), 1);
@@ -496,6 +501,9 @@ fn land_change(world: &mut Protocol) -> bool {
                 | top::Request::Taken { .. }
                 | top::Request::Refused { .. }
                 | top::Request::Outcome { .. }
+                | top::Request::ProjectionOutbox { .. }
+                | top::Request::ProjectionRecover { .. }
+                | top::Request::ProjectionRecoverBusy { .. }
                 | top::Request::NotMade { .. }
                 | top::Request::ContinueRelease { .. }
                 | top::Request::EffectsSettled { .. }

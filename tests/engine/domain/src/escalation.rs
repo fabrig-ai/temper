@@ -693,6 +693,7 @@ impl World {
     )]
     fn delivery(&mut self, delivery: Delivery) {
         match delivery {
+            Delivery::ProjectionRecovery { .. } => panic!("recovery is routed to its initiating connector"),
             Delivery::SourceSignedOut { .. } => panic!("this story issues no source sign-out"),
             Delivery::WebReply {
                 to,

@@ -19,7 +19,7 @@ fn sizes_past_skein_kvs_limits_refuse_the_store() {
     let (root, _, profile) = fixtures::store_limits();
     let checked = store::limits(&root, &root.forge, &profile).expect("small fits");
     assert!(checked.store.is_usable());
-    assert_eq!(checked.store, checked.secrets);
+    assert_eq!(checked.secrets, profile.secrets, "ordinary journal sizing preserves the independent secrets envelope");
     assert_eq!(checked.core, engine::core_limits(&root));
     assert_eq!(checked.journal, engine::journal_limits(&root.journal));
     for field in ["key", "value", "ops", "commit", "page", "queue", "queued bytes"] {

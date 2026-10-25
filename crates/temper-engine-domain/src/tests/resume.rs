@@ -225,6 +225,7 @@ fn a_projection_feed_then_committed_resume_delivers_the_watch() {
             pending: Box::new([]),
             changed: true,
             fed_at: None,
+            closing_at: None,
         }),
         &crate::limits::core_limits(&env.limits),
     );

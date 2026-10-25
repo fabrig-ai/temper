@@ -162,7 +162,8 @@ fn decode_view(value: w::GoalView) -> d::GoalView {
     }
 }
 pub(super) fn encode(value: &forge::IssueRow) -> w::IssueRow {
-    let forge::IssueRow { goal, repository, state, number, pending, before, failed, desired } = value;
+    let forge::IssueRow { goal, repository, state, number, pending, before, failed, desired, closing_generation } =
+        value;
     let before = match before {
         Some(value) => Some(encode_projected(value)),
         None => None,
@@ -182,12 +183,14 @@ pub(super) fn encode(value: &forge::IssueRow) -> w::IssueRow {
             before,
             failed: *failed,
             desired,
+            closing_generation: *closing_generation,
         },
     )
     .expect(FITS)
 }
 pub(super) fn decode(value: w::IssueRow) -> forge::IssueRow {
-    let w::IssueRowParts { goal, repository, state, number, pending, before, failed, desired } = value.into_parts();
+    let w::IssueRowParts { goal, repository, state, number, pending, before, failed, desired, closing_generation } =
+        value.into_parts();
     let before = match before {
         Some(value) => Some(decode_projected(value)),
         None => None,
@@ -205,6 +208,7 @@ pub(super) fn decode(value: w::IssueRow) -> forge::IssueRow {
         before,
         failed,
         desired,
+        closing_generation,
     }
 }
 #[expect(clippy::disallowed_methods, reason = "the generated protocol decoder already validated this text")]

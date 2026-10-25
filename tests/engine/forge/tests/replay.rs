@@ -6,6 +6,7 @@ fn run(seed: u64, facts: u32) -> Box<[top::Request]> {
     let mut world = World::with_facts(seed, facts);
     world.adopt();
     world.event(top::Event::Project {
+        closing_generation: None,
         entry: 1,
         repository: REPO,
         view: issues::GoalView {

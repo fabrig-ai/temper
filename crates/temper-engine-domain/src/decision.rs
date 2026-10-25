@@ -51,6 +51,11 @@ pub struct Limits {
 /// resumed by the root and never passed to the protocol as child events.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Delivery {
+    ProjectionRecovery {
+        connector: u16,
+        owner: Token,
+        result: jig_domain_core::ProjectionRecovery,
+    },
     /// The root hears a project made only after its decision commits.
     ProjectMade {
         project: u32,
@@ -483,7 +488,8 @@ impl Decision {
             }
             Delivery::Assigned { assignment, .. } => assignment_within(assignment, limits),
             Delivery::Host(host) => host_within(host, limits),
-            Delivery::SourceSignedOut { .. }
+            Delivery::ProjectionRecovery { .. }
+            | Delivery::SourceSignedOut { .. }
             | Delivery::Link { .. }
             | Delivery::ProjectMade { .. }
             | Delivery::ForgeCommitted { .. }

@@ -10,6 +10,7 @@ use skein_lib::{JournalRoom, List, Queue, Token, Wall};
 #[global_allocator]
 static HEAP: skein_world::domain::heap::Counting = skein_world::domain::heap::Counting;
 
+mod projection_recovery;
 mod result;
 mod resume;
 pub(super) mod resume_fixture;

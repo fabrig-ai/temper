@@ -103,6 +103,22 @@ enum Handoff {
 pub(crate) type ConnectionState = (crate::Connection, Option<(Token, crate::SetUpAnswer)>, Option<crate::FailedStep>);
 
 /// The bounded forge connector subtree.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProjectionWait {
+    when: Option<skein_lib::Wall>,
+    recovery: Option<RecoveryWait>,
+}
+#[derive(Clone, Copy, Debug)]
+struct RecoveryWait {
+    owner: Token,
+    state: RecoveryState,
+}
+#[derive(Clone, Copy, Debug)]
+enum RecoveryState {
+    Staged,
+    Terminal(jig_domain_core::ProjectionRecovery),
+}
+
 #[derive(Debug)]
 pub struct Domain {
     pub(crate) configured: Map<u16, crate::Configured>,
@@ -163,7 +179,7 @@ pub struct Domain {
     judges: crate::Judges,
     gate_policy: crate::GatePolicy,
     judge_criteria: u32,
-    projection_due: Map<u64, skein_lib::Wall>,
+    projection_due: Map<u64, ProjectionWait>,
     change_due: Map<u64, skein_lib::Wall>,
     procedure_wakes: Map<u64, bool>,
     pub(crate) settling: Map<u64, crate::settle::Settle>,
@@ -454,12 +470,99 @@ impl Domain {
 
     /// The issue procedure owns the interval reported by its policy child.
     pub fn projection_after(&mut self, goal: u64, when: skein_lib::Wall) {
-        self.projection_due.insert(goal, when).expect("one bounded projection deadline");
+        if let Some(wait) = self.projection_due.get_mut(&goal) {
+            wait.when = Some(when);
+        } else {
+            self.projection_due
+                .insert(goal, ProjectionWait { when: Some(when), recovery: None })
+                .expect("one bounded projection deadline");
+        }
     }
 
     /// The core has finished the closing projection handshake.
     pub fn projection_settled(&mut self, goal: u64) {
-        self.projection_due.remove(&goal);
+        if let Some(wait) = self.projection_due.get_mut(&goal) {
+            wait.when = None;
+            if wait.recovery.is_none() {
+                self.projection_due.remove(&goal);
+            }
+        }
+    }
+
+    /// The existing timer slot is the initiating workflow's only retention.
+    #[must_use]
+    pub fn projection_recovery_room(&self, goal: u64) -> bool {
+        match self.projection_due.get(&goal) {
+            Some(wait) => wait.recovery.is_none(),
+            None => self.projection_due.len() < self.projection_due.capacity(),
+        }
+    }
+
+    /// Reserve the existing timer slot before the root starts a recovery decision.
+    /// Returns whether the core must be called; refusal returns ownership directly.
+    pub fn stage_projection_recovery(&mut self, goal: u64, owner: Token) -> Result<bool, Token> {
+        let d = self;
+        for (number, wait) in &d.projection_due {
+            if let Some(recovery) = wait.recovery
+                && recovery.owner == owner
+            {
+                if *number != goal {
+                    return Err(owner);
+                }
+                return Ok(false);
+            }
+        }
+        if !d.projection_recovery_room(goal) {
+            return Err(owner);
+        }
+        let safe = match d.issues.get(&goal) {
+            Some(row) => match row.pending {
+                Some(entry) => match d.entries.get(&entry) {
+                    Some(entry) => entry.held,
+                    None => false,
+                },
+                None => true,
+            },
+            None => true,
+        };
+        let state = if safe {
+            RecoveryState::Staged
+        } else {
+            RecoveryState::Terminal(jig_domain_core::ProjectionRecovery::Busy)
+        };
+        if let Some(wait) = d.projection_due.get_mut(&goal) {
+            wait.recovery = Some(RecoveryWait { owner, state });
+        } else {
+            d.projection_due
+                .insert(goal, ProjectionWait { when: None, recovery: Some(RecoveryWait { owner, state }) })
+                .expect("recovery slot admitted");
+        }
+        Ok(safe)
+    }
+
+    /// Consume the initiating workflow's terminal exactly once, preserving its timer.
+    pub fn take_projection_recovery(&mut self, owner: Token) -> Option<jig_domain_core::ProjectionRecovery> {
+        let mut found = None;
+        for (goal, wait) in &self.projection_due {
+            if let Some(recovery) = wait.recovery
+                && recovery.owner == owner
+            {
+                match recovery.state {
+                    RecoveryState::Staged => {}
+                    RecoveryState::Terminal(result) => {
+                        found = Some((*goal, result));
+                        break;
+                    }
+                }
+            }
+        }
+        let (goal, result) = found?;
+        let wait = self.projection_due.get_mut(&goal).expect("selected recovery slot");
+        wait.recovery = None;
+        if wait.when.is_none() {
+            self.projection_due.remove(&goal);
+        }
+        Some(result)
     }
 
     /// Available outbox room including the root's staged descriptions.
@@ -651,13 +754,21 @@ impl Domain {
     #[must_use]
     pub fn next_wall_deadline(&self) -> Option<skein_lib::Wall> {
         let mut next: Option<skein_lib::Wall> = None;
-        for deadlines in [&self.projection_due, &self.change_due] {
-            for (_, deadline) in deadlines {
+        for (_, wait) in &self.projection_due {
+            if wait.recovery.is_none()
+                && let Some(deadline) = wait.when
+            {
                 next = Some(match next {
-                    Some(previous) => previous.min(*deadline),
-                    None => *deadline,
+                    Some(previous) => previous.min(deadline),
+                    None => deadline,
                 });
             }
+        }
+        for (_, deadline) in &self.change_due {
+            next = Some(match next {
+                Some(previous) => previous.min(*deadline),
+                None => *deadline,
+            });
         }
         next
     }
@@ -1260,12 +1371,14 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(row) });
             keep_entry(d, entry, None, out);
         }
-        Event::Project { entry, repository, view } => project(d, env, entry, repository, view, out),
+        Event::Project { entry, repository, view, closing_generation } => {
+            project(d, env, entry, repository, view, closing_generation, out)
+        }
         Event::ProjectDesired { entry, goal } => {
             if let Some(row) = d.issues.get(&goal)
                 && let Some(view) = &row.desired
             {
-                project(d, env, entry, row.repository, view.clone(), out);
+                project(d, env, entry, row.repository, view.clone(), row.closing_generation, out);
             }
         }
         Event::Change { row } => register_change(d, env, row, out),
@@ -1290,6 +1403,31 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         Event::SettleEffects { task, root, ending } => settle_effects(d, env, task, root, ending, out),
         Event::Release { task, root, ending, entry } => release(d, env, task, root, ending, entry, out),
         Event::ContinueRelease { task, entry } => continue_release(d, env, task, entry, out),
+        Event::CommitProjectionRecovery { goal, after } => commit_projection_recovery(d, goal, after, out),
+        Event::ProjectionRecoveryResult { owner, result } => {
+            let mut goal = None;
+            for (number, wait) in &d.projection_due {
+                if let Some(recovery) = wait.recovery
+                    && recovery.owner == owner
+                {
+                    goal = Some(*number);
+                    break;
+                }
+            }
+            if let Some(goal) = goal {
+                let recovery = d
+                    .projection_due
+                    .get_mut(&goal)
+                    .expect("matched workflow slot")
+                    .recovery
+                    .as_mut()
+                    .expect("matched owner");
+                match recovery.state {
+                    RecoveryState::Staged => recovery.state = RecoveryState::Terminal(result),
+                    RecoveryState::Terminal(_) => {}
+                }
+            }
+        }
         Event::ReleaseProjection { goal } => release_projection(d, goal, out),
         Event::Committed { entry } => committed(d, env, entry, out),
         Event::Resolve { entry, again } => resolve(d, env, entry, again, out),
@@ -1354,8 +1492,14 @@ pub fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     // in their owner's bounded tables for the next iteration.
     let room = out.room().saturating_sub(skein_forge_client::max_out(&env.limits.client));
     let mut goals = List::with_capacity(env.limits.issues.min(room));
-    for (goal, when) in &d.projection_due {
-        if *when <= env.wall && goals.room() > 0 {
+    for (goal, wait) in &d.projection_due {
+        if wait.recovery.is_none()
+            && match wait.when {
+                Some(when) => when <= env.wall,
+                None => false,
+            }
+            && goals.room() > 0
+        {
             goals.push(*goal).expect("bounded ready projection");
         }
     }
@@ -1415,6 +1559,7 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
             skein_forge_client::Request::Erase { key } => emit(out, Request::Erase { key: Key::Client(key) }),
             skein_forge_client::Request::Progress { entry } => keep_entry(d, entry, None, out),
             skein_forge_client::Request::Outcome { entry, task, outcome } => {
+                let projection = projection_entry(d, entry);
                 d.named_outcome(entry, outcome);
                 outcome_facts(d, env, entry, task, outcome, out);
                 match outcome {
@@ -1436,7 +1581,11 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                         emit(out, Request::Erase { key: Key::Entry(entry) });
                     }
                 }
-                emit(out, Request::Outcome { entry, task, outcome });
+                if projection {
+                    emit(out, Request::ProjectionOutbox { entry, outcome });
+                } else {
+                    emit(out, Request::Outcome { entry, task, outcome });
+                }
                 if outcome != skein_forge_client::Outcome::Uncertain
                     && outcome != skein_forge_client::Outcome::Queued
                     && match d.releases.get(&task) {
@@ -3295,11 +3444,12 @@ fn project(
     number: u64,
     repository: skein_forge::api::Repository,
     view: issues::GoalView,
+    closing_generation: Option<u64>,
     out: &mut Queue<Request>,
 ) {
     let goal = view.goal;
     let Some(adopted) = d.repositories.get(&repository) else {
-        emit(out, Request::ProjectionFailed { goal });
+        emit(out, Request::ProjectionFailed { goal, source: number });
         return;
     };
     if view.repository != u64::from(repository.repository)
@@ -3307,12 +3457,12 @@ fn project(
         || !adopted.kinds.issue
         || (!d.issues.contains_key(&goal) && d.issues.len() == env.limits.issues)
     {
-        emit(out, Request::ProjectionFailed { goal });
+        emit(out, Request::ProjectionFailed { goal, source: number });
         return;
     }
     let mut prior = match d.issues.get(&goal) {
         Some(row) if row.repository != repository => {
-            emit(out, Request::ProjectionFailed { goal });
+            emit(out, Request::ProjectionFailed { goal, source: number });
             return;
         }
         Some(row) => row.clone(),
@@ -3325,19 +3475,25 @@ fn project(
             before: None,
             failed: false,
             desired: None,
+            closing_generation: None,
         },
     };
     let Some(view) = issues::gather(prior.desired.as_ref(), view, &env.limits.issue_policy) else {
-        emit(out, Request::ProjectionFailed { goal });
+        emit(out, Request::ProjectionFailed { goal, source: number });
         return;
     };
-    if prior.desired.as_ref() != Some(&view) {
+    if closing_generation == Some(0) || (closing_generation.is_some() && view.finished.is_none()) {
+        emit(out, Request::ProjectionFailed { goal, source: number });
+        return;
+    }
+    if prior.desired.as_ref() != Some(&view) || prior.closing_generation != closing_generation {
         prior.desired = Some(view.clone());
+        prior.closing_generation = closing_generation;
         d.issues.insert(goal, prior.clone()).expect("projection room checked");
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(prior.clone()) });
     }
     if prior.failed {
-        emit(out, Request::ProjectionFailed { goal });
+        emit(out, Request::ProjectionFailed { goal, source: number });
         return;
     }
     if prior.pending.is_some() {
@@ -3348,17 +3504,17 @@ fn project(
     match projected.decision {
         issues::Decision::None | issues::Decision::Wait(_) => match projected.decision {
             issues::Decision::Wait(when) => emit(out, Request::ProjectAfter { goal, when: Some(when) }),
-            issues::Decision::None => settled_projection(d, goal, out),
+            issues::Decision::None => settled_projection(d, env, goal, out),
             issues::Decision::Hold | issues::Decision::Effect(_) => unreachable!("matched above"),
         },
-        issues::Decision::Hold => emit(out, Request::ProjectionFailed { goal }),
+        issues::Decision::Hold => emit(out, Request::ProjectionFailed { goal, source: number }),
         issues::Decision::Effect(effect) => {
             if d.entries.len() == env.limits.entries || d.entries.contains_key(&number) {
                 emit(out, Request::ProjectAfter { goal, when: None });
                 return;
             }
             let Some(write) = project_write(d, &prior, effect, &env.limits) else {
-                emit(out, Request::ProjectionFailed { goal });
+                emit(out, Request::ProjectionFailed { goal, source: number });
                 return;
             };
             let entry = skein_forge_client::Entry {
@@ -3380,9 +3536,10 @@ fn project(
                 before: Some(prior.state),
                 failed: false,
                 desired: Some(view),
+                closing_generation,
             };
             let Some(description) = crate::describe_projection_effect(adopted, &entry.effect.write) else {
-                emit(out, Request::ProjectionFailed { goal });
+                emit(out, Request::ProjectionFailed { goal, source: number });
                 return;
             };
             emit(out, Request::ProjectionEffect { row, entry, description });
@@ -3434,6 +3591,15 @@ fn projection_key(namespace: &[u8], goal: u64, key: issues::Key, l: &Limits) -> 
     crate::purpose::EffectPurpose::Projection { goal, part, number }.key(namespace, l.client.op_bytes)
 }
 
+fn projection_entry(d: &Domain, entry: u64) -> bool {
+    for (_, row) in &d.issues {
+        if row.pending == Some(entry) {
+            return true;
+        }
+    }
+    false
+}
+
 fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outcome, out: &mut Queue<Request>) {
     let mut goal = None;
     for (number, row) in &d.issues {
@@ -3446,6 +3612,7 @@ fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
     match outcome {
         skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => return,
         skein_forge_client::Outcome::Made { made, .. } => {
+            row.failed = false;
             if row.number.is_none() {
                 match made {
                     skein_forge_client::Made::Created(number) => row.number = Some(number),
@@ -3458,9 +3625,15 @@ fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
                 }
             }
         }
+        skein_forge_client::Outcome::Held => {
+            row.failed = true;
+            let saved = row.clone();
+            emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(saved) });
+            emit(out, Request::ProjectionFailed { goal, source: entry });
+            return;
+        }
         skein_forge_client::Outcome::Failed(_)
         | skein_forge_client::Outcome::Raced { .. }
-        | skein_forge_client::Outcome::Held
         | skein_forge_client::Outcome::Withdrawn => {
             if let Some(before) = row.before.take() {
                 row.state = before;
@@ -3473,7 +3646,7 @@ fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
     let saved = row.clone();
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(saved) });
     if row.failed {
-        emit(out, Request::ProjectionFailed { goal });
+        emit(out, Request::ProjectionFailed { goal, source: entry });
     } else {
         emit(out, Request::ProjectAfter { goal, when: None });
     }
@@ -3536,7 +3709,12 @@ fn resolve(d: &mut Domain, env: &Env<Limits>, number: u64, again: bool, out: &mu
 fn not_made(d: &mut Domain, number: u64, out: &mut Queue<Request>) {
     let row = d.entries.remove(&number).expect("a held entry lives");
     emit(out, Request::Erase { key: Key::Entry(number) });
-    emit(out, Request::NotMade { entry: number, task: row.entry.task });
+    if projection_entry(d, number) {
+        projection_outcome(d, number, skein_forge_client::Outcome::Withdrawn, out);
+        emit(out, Request::ProjectionOutbox { entry: number, outcome: skein_forge_client::Outcome::Withdrawn });
+    } else {
+        emit(out, Request::NotMade { entry: number, task: row.entry.task });
+    }
 }
 
 /// A closing task's held entries are settled not made, as many as the
@@ -4226,10 +4404,23 @@ fn restore(d: &mut Domain, env: &Env<Limits>, record: Stored) {
             d.changes.insert(row.task, row).expect("restored change within limits");
         }
         Stored::Issue(row) => {
-            if row.pending.is_none() && !row.failed && !row.state.closed && row.desired.is_some() {
+            assert!(
+                row.closing_generation != Some(0)
+                    && (row.closing_generation.is_none()
+                        || match &row.desired {
+                            Some(view) => view.finished.is_some(),
+                            None => false,
+                        }),
+                "restored issue cohort agrees with desired"
+            );
+            if row.pending.is_none()
+                && !row.failed
+                && (!row.state.closed || row.closing_generation.is_some())
+                && row.desired.is_some()
+            {
                 // A committed desired view may still await its body interval,
                 // milestone, or closing write when the transient timer is lost.
-                d.projection_due.insert(row.goal, env.wall).expect("projection timers are bounded by issues");
+                d.projection_after(row.goal, env.wall);
             }
             d.issues.insert(row.goal, row).expect("restored issue within limits");
         }
@@ -4375,19 +4566,35 @@ fn read_afresh_complete(d: &mut Domain, out: &mut Queue<Request>) {
     }
 }
 
-fn settled_projection(d: &Domain, goal: u64, out: &mut Queue<Request>) {
-    let settled = match d.issues.get(&goal) {
-        Some(row) => {
-            row.state.closed
-                && match &row.desired {
-                    Some(view) => view.finished.is_some(),
-                    None => false,
-                }
+fn settled_projection(d: &Domain, env: &Env<Limits>, goal: u64, out: &mut Queue<Request>) {
+    let mut generation = None;
+    let mut found = false;
+    for (_, row) in &d.issues {
+        if row.goal != goal {
+            continue;
         }
-        None => false,
-    };
-    if settled {
-        emit(out, Request::ProjectionSettled { goal });
+        found = true;
+        let Some(saved) = row.closing_generation else { return };
+        if saved == 0 || row.pending.is_some() || row.failed || !row.state.closed {
+            return;
+        }
+        if let Some(prior) = generation
+            && prior != saved
+        {
+            return;
+        }
+        let Some(desired) = &row.desired else { return };
+        if desired.finished.is_none() {
+            return;
+        }
+        match issues::project(desired, &row.state, env.wall, &env.limits.issue_policy).decision {
+            issues::Decision::None => {}
+            issues::Decision::Wait(_) | issues::Decision::Effect(_) | issues::Decision::Hold => return,
+        }
+        generation = Some(saved);
+    }
+    if found && let Some(generation) = generation {
+        emit(out, Request::ProjectionSettled { goal, generation });
     }
 }
 
@@ -4517,5 +4724,32 @@ fn failed_at(held: &crate::Connection, failed: Option<crate::FailedStep>) -> Opt
         | crate::Connection::SettingUp { step: None }
         | crate::Connection::Connected { .. }
         | crate::Connection::Stopped { .. } => None,
+    }
+}
+
+fn commit_projection_recovery(d: &mut Domain, goal: u64, after: u64, out: &mut Queue<Request>) {
+    let wait = d.projection_due.get(&goal).expect("recovery slot reserved before core reset");
+    assert!(wait.recovery.is_some(), "recovery owns existing timer slot");
+    let pending = match d.issues.get(&goal) {
+        Some(row) => row.pending,
+        None => None,
+    };
+    if let Some(entry) = pending
+        && entry <= after
+    {
+        // Only held entries passed staging. They have no client call left to
+        // cancel, and erasure releases the core writer without another source.
+        assert!(d.entries.get(&entry).expect("staged held entry").held, "infallible staged cleanup");
+        not_made(d, entry, out);
+    }
+    if let Some(row) = d.issues.get_mut(&goal) {
+        row.failed = false;
+        let row = row.clone();
+        emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(row) });
+    }
+    // Wait for the keyed terminal to be consumed before the normal timer can retry.
+    let wait = d.projection_due.get_mut(&goal).expect("recovery slot retained");
+    if wait.when.is_none() {
+        wait.when = Some(skein_lib::Wall::EPOCH);
     }
 }

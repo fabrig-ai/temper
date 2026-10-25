@@ -70,10 +70,17 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
     kv.snapshot_after = u64::from(sizes.commit);
     kv.chunk = sizes.key.checked_add(sizes.value)?.checked_add(20)?;
     kv.page.bytes = sizes.key.checked_add(sizes.value)?;
+    // Credentials have an independent queue and patching batch. Ordinary
+    // projection commits cannot enlarge that queue. Preserve its configured
+    // operation/commit admission while checking all carried value needs.
+    let secrets = profile.secrets;
+    if !secrets.is_usable() || secrets.key < sizes.key || secrets.value < sizes.value {
+        return None;
+    }
     Some(protocol::Limits {
         core,
         store: kv,
-        secrets: kv,
+        secrets,
         held: profile.held,
         journal: root::journal_limits(&root.journal),
         joins: profile.joins,

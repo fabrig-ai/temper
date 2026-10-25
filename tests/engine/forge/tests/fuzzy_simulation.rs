@@ -8,6 +8,7 @@ fn seeded_restarts_recover_one_keyed_issue_without_repeating_the_write() {
         let mut world = World::new(seed);
         world.adopt();
         world.event(top::Event::Project {
+            closing_generation: None,
             entry: 1,
             repository: REPO,
             view: issues::GoalView {

@@ -797,6 +797,9 @@ fn a_change_produced_opened_checked_queued_and_landed() {
                 | top::Request::Taken { .. }
                 | top::Request::Refused { .. }
                 | top::Request::Outcome { .. }
+                | top::Request::ProjectionOutbox { .. }
+                | top::Request::ProjectionRecover { .. }
+                | top::Request::ProjectionRecoverBusy { .. }
                 | top::Request::NotMade { .. }
                 | top::Request::ContinueRelease { .. }
                 | top::Request::EffectsSettled { .. }
@@ -846,7 +849,7 @@ fn a_goal_issue_is_created_only_after_its_outbox_commit() {
         milestones: Box::new([]),
         finished: None,
     };
-    world.event(top::Event::Project { entry: 1, repository: REPO, view });
+    world.event(top::Event::Project { closing_generation: None, entry: 1, repository: REPO, view });
     world.run_for(1);
     assert_eq!(world.writes(), 0);
     world.event(top::Event::Committed { entry: 1 });
@@ -854,7 +857,7 @@ fn a_goal_issue_is_created_only_after_its_outbox_commit() {
     assert_eq!(world.writes(), 1);
     let mut made = false;
     for event in world.seen() {
-        if let top::Request::Outcome { entry: 1, outcome: skein_forge_client::Outcome::Made { .. }, .. } = event {
+        if let top::Request::ProjectionOutbox { entry: 1, outcome: skein_forge_client::Outcome::Made { .. } } = event {
             made = true;
         }
     }
@@ -883,12 +886,12 @@ fn a_goals_issue_is_revised_and_closed_as_the_goal_finishes() {
         milestones: Box::new([]),
         finished: None,
     };
-    world.event(top::Event::Project { entry: 1, repository: REPO, view: view.clone() });
+    world.event(top::Event::Project { closing_generation: None, entry: 1, repository: REPO, view: view.clone() });
     world.event(top::Event::Committed { entry: 1 });
     world.run_for(2);
     view.goal_text = Box::from("Revised plan");
     world.run_for(6);
-    world.event(top::Event::Project { entry: 2, repository: REPO, view: view.clone() });
+    world.event(top::Event::Project { closing_generation: None, entry: 2, repository: REPO, view: view.clone() });
     world.event(top::Event::Committed { entry: 2 });
     world.run_for(2);
     assert_eq!(world.writes(), 2);
@@ -896,7 +899,7 @@ fn a_goals_issue_is_revised_and_closed_as_the_goal_finishes() {
     let mut closed = false;
     for entry in 3..10 {
         world.run_for(6);
-        world.event(top::Event::Project { entry, repository: REPO, view: view.clone() });
+        world.event(top::Event::Project { closing_generation: None, entry, repository: REPO, view: view.clone() });
         if world.stored().get(&top::Key::Entry(entry)).is_some() {
             world.event(top::Event::Committed { entry });
             world.run_for(2);
@@ -927,7 +930,7 @@ fn a_created_issue_with_its_answer_lost_is_found_after_restart() {
         milestones: Box::new([]),
         finished: None,
     };
-    world.event(top::Event::Project { entry: 1, repository: REPO, view });
+    world.event(top::Event::Project { closing_generation: None, entry: 1, repository: REPO, view });
     world.event(top::Event::Committed { entry: 1 });
     world.run_for(1);
     assert_eq!(world.writes(), 1);
@@ -1664,7 +1667,7 @@ fn new_projection_feeds_retain_unwritten_milestones_across_a_pending_write_and_r
         }]),
         finished: None,
     };
-    world.event(top::Event::Project { entry: 1, repository: REPO, view: view.clone() });
+    world.event(top::Event::Project { closing_generation: None, entry: 1, repository: REPO, view: view.clone() });
     let next = issues::GoalView {
         milestones: Box::new([issues::Milestone {
             key: issues::MilestoneKey::TaskRevision { task: 44, revision: 1 },
@@ -1672,7 +1675,7 @@ fn new_projection_feeds_retain_unwritten_milestones_across_a_pending_write_and_r
         }]),
         ..view
     };
-    world.event(top::Event::Project { entry: 2, repository: REPO, view: next });
+    world.event(top::Event::Project { closing_generation: None, entry: 2, repository: REPO, view: next });
     world.restart();
     world.run_for(3);
     for entry in 3..8 {
@@ -1695,7 +1698,7 @@ fn new_projection_feeds_retain_unwritten_milestones_across_a_pending_write_and_r
         milestones: Box::new([]),
         finished: None,
     };
-    world.event(top::Event::Project { entry: 9, repository: REPO, view: empty });
+    world.event(top::Event::Project { closing_generation: None, entry: 9, repository: REPO, view: empty });
     assert_eq!(world.writes(), 3);
     assert!(!world.seen().iter().any(|event| matches!(event, top::Request::ProjectionFailed { .. })));
 }
@@ -2018,4 +2021,150 @@ fn a_repository_with_222_branches_and_two_recorded_prefix_branches_is_adopted() 
         world.seen()
     );
     assert!(!world.seen().iter().any(|request| matches!(request, top::Request::Adopted { result: Err(_), .. })));
+}
+
+#[test]
+fn an_old_completed_desired_cannot_settle_a_refused_final_generation_after_its_timer_fires() {
+    let mut world = World::new(901);
+    world.adopt();
+    world.slow_calls(skein_lib::Duration::ZERO);
+    let mut old = issues::GoalView {
+        phase: issues::Phase::Settling,
+        goal: 42,
+        repository: u64::from(REPO.repository),
+        title: "Goal".into(),
+        goal_text: "Closing plan".into(),
+        plan: Box::new([]),
+        milestones: (1..8)
+            .map(|position| issues::Milestone {
+                key: issues::MilestoneKey::Lifecycle { task: 42, position },
+                text: "history".into(),
+            })
+            .collect(),
+        finished: None,
+    };
+    world.event(top::Event::Project { closing_generation: None, entry: 1, repository: REPO, view: old.clone() });
+    world.event(top::Event::Committed { entry: 1 });
+    world.inputs_before_fire();
+    for entry in 2..=8 {
+        world.event(top::Event::ProjectDesired { entry, goal: 42 });
+        if world.stored().contains_key(&top::Key::Entry(entry)) {
+            world.event(top::Event::Committed { entry });
+        }
+        world.inputs_before_fire();
+    }
+    old.finished = Some("Goal finished".into());
+    old.goal_text = "The current closing plan".into();
+    world.event(top::Event::Project { closing_generation: None, entry: 9, repository: REPO, view: old.clone() });
+    let due = world
+        .seen()
+        .iter()
+        .find_map(|request| match request {
+            top::Request::ProjectAfter { goal: 42, when: Some(when) } => Some(*when),
+            _ => None,
+        })
+        .expect("changed body waits for its interval");
+    world.projection_after(42, due);
+    // Input at the due wall wins over fire. The old desired completes while
+    // the earlier due remains armed, exactly as in the supplied source trace.
+    world.slow_calls(skein_lib::Duration::ZERO);
+    world.event_at(due, top::Event::ProjectDesired { entry: 10, goal: 42 });
+    for entry in 10..20 {
+        if world.stored().contains_key(&top::Key::Entry(entry)) {
+            world.event(top::Event::Committed { entry });
+        }
+        world.inputs_before_fire();
+        if matches!(world.stored().get(&top::Key::Issue(42)), Some(top::Stored::Issue(row)) if row.state.closed) {
+            break;
+        }
+        world.event(top::Event::ProjectDesired { entry: entry + 1, goal: 42 });
+    }
+    let Some(top::Stored::Issue(completed)) = world.stored().get(&top::Key::Issue(42)) else {
+        panic!("accepted desired")
+    };
+    assert!(completed.state.closed);
+    assert_eq!(completed.closing_generation, None, "Closing was not a final core feed");
+    let accepted = completed.clone();
+    let mut final_view = old.clone();
+    final_view.phase = issues::Phase::Done;
+    let mut milestones = final_view.milestones.into_vec();
+    milestones.push(issues::Milestone {
+        key: issues::MilestoneKey::Lifecycle { task: 42, position: 8 },
+        text: "Ended".into(),
+    });
+    final_view.milestones = milestones.into_boxed_slice();
+    world.take_seen();
+    world.event(top::Event::Project { closing_generation: Some(500), entry: 30, repository: REPO, view: final_view });
+    assert_eq!(
+        world.stored().get(&top::Key::Issue(42)),
+        Some(&top::Stored::Issue(accepted)),
+        "L+1 is refused before desired or cohort changes"
+    );
+    assert!(
+        world.seen().iter().any(|request| matches!(request, top::Request::ProjectionFailed { goal: 42, source: 30 }))
+    );
+    world.fire_top();
+    assert!(
+        world.seen().iter().any(|request| matches!(request, top::Request::ProjectAfter { goal: 42, when: None })),
+        "the old due creates new work after the refused final feed"
+    );
+    world.event(top::Event::ProjectDesired { entry: 31, goal: 42 });
+    assert!(
+        !world.seen().iter().any(|request| matches!(request, top::Request::ProjectionSettled { .. })),
+        "a newly generated callback cannot stamp the newer core generation"
+    );
+}
+
+#[test]
+fn accepted_final_desired_restores_and_settles_only_its_saved_generation() {
+    let mut world = World::new(902);
+    world.adopt();
+    let view = issues::GoalView {
+        phase: issues::Phase::Done,
+        goal: 42,
+        repository: u64::from(REPO.repository),
+        title: "Final goal".into(),
+        goal_text: "Whole desired".into(),
+        plan: Box::new([]),
+        milestones: Box::new([]),
+        finished: Some("Finished".into()),
+    };
+    world.event(top::Event::Project { closing_generation: Some(77), entry: 1, repository: REPO, view: view.clone() });
+    let Some(top::Stored::Issue(saved)) = world.stored().get(&top::Key::Issue(42)) else {
+        panic!("durably accepted final desired")
+    };
+    assert_eq!(saved.desired.as_ref(), Some(&view));
+    assert_eq!(saved.closing_generation, Some(77));
+    world.restart();
+    for entry in 1..8 {
+        if world.stored().contains_key(&top::Key::Entry(entry)) {
+            world.event(top::Event::Committed { entry });
+        }
+        world.run_for(1);
+        world.event(top::Event::ProjectDesired { entry: entry + 1, goal: 42 });
+    }
+    let Some(top::Stored::Issue(complete)) = world.stored().get(&top::Key::Issue(42)) else {
+        panic!("completed desired")
+    };
+    assert_eq!(complete.pending, None);
+    assert!(!complete.failed && complete.state.closed);
+    let current = complete.desired.as_ref().expect("current desired");
+    assert!(matches!(
+        issues::project(current, &complete.state, world.wall(), &temper_engine_forge_world::LIMITS.issue_policy)
+            .decision,
+        issues::Decision::None
+    ));
+    assert!(
+        world
+            .seen()
+            .iter()
+            .any(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 77 })),
+        "restart echoes accepted provenance"
+    );
+    assert!(
+        !world
+            .seen()
+            .iter()
+            .any(|request| matches!(request, top::Request::ProjectionSettled { generation, .. } if *generation != 77))
+    );
 }

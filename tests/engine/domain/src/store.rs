@@ -552,5 +552,20 @@ fn component_limits(limits: &engine::Limits) -> Limits {
     profile.store.queued_bytes = u64::MAX;
     profile.store.page.bytes = u32::MAX;
     profile.store.page.rows = 8;
+    // This shared world admits the widest task and application encodings. The
+    // secrets driver has its own batching, but must accept the same value bound.
+    let sizes = protocol::sizes::check(
+        &engine::core_limits(limits),
+        &temper_protocol_store::application(&limits.forge).expect("world family"),
+        &engine::journal_limits(&limits.journal),
+        &profile.store,
+        profile.orphan_erases,
+    )
+    .expect("world ordinary sizes");
+    profile.secrets.key = profile.secrets.key.max(sizes.key);
+    profile.secrets.value = profile.secrets.value.max(sizes.value);
+    profile.secrets.page.bytes = profile.secrets.key + profile.secrets.value;
+    profile.secrets.chunk = profile.secrets.page.bytes + 20;
+    profile.secrets.budget = profile.store.budget;
     temper_service::store::limits(limits, &limits.forge, &profile).expect("world sizes fit real store")
 }

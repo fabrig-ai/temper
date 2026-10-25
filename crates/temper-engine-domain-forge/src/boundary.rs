@@ -585,6 +585,7 @@ pub struct IssueRow {
     pub failed: bool,
     /// Latest root-authorized goal snapshot, including an ending while a write is pending.
     pub desired: Option<issues::GoalView>,
+    pub closing_generation: Option<u64>,
 }
 /// A change task's forge parameters and top-owned procedure state.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1018,6 +1019,7 @@ pub enum Event {
     },
     /// Describe the next write for a goal projection.
     Project {
+        closing_generation: Option<u64>,
         entry: u64,
         repository: skein_forge::api::Repository,
         view: issues::GoalView,
@@ -1085,7 +1087,14 @@ pub enum Event {
         task: u64,
         entry: u64,
     },
-    /// Lift a held projection after a person resolves its permanent failure.
+    CommitProjectionRecovery {
+        goal: u64,
+        after: u64,
+    },
+    ProjectionRecoveryResult {
+        owner: Token,
+        result: jig_domain_core::ProjectionRecovery,
+    },
     ReleaseProjection {
         goal: u64,
     },
@@ -1281,7 +1290,10 @@ pub enum Request {
     Refused {
         task: u64,
     },
-    /// An entry settled or remains uncertain; root routes the task's news.
+    ProjectionOutbox {
+        entry: u64,
+        outcome: skein_forge_client::Outcome,
+    },
     Outcome {
         entry: u64,
         task: u64,
@@ -1328,10 +1340,12 @@ pub enum Request {
     /// The closed projection has no remaining desired write.
     ProjectionSettled {
         goal: u64,
+        generation: u64,
     },
     /// A projection could not continue under current facts or limits.
     ProjectionFailed {
         goal: u64,
+        source: u64,
     },
     /// A change policy step and its checked effect entry, when any.
     ChangeDecision {

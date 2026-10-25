@@ -8,7 +8,12 @@ fn stories_through_cut_streams_answer_each_call_once() {
     for seed in 0..16 {
         let mut world = Protocol::cutting(seed, 100, faults);
         world.adopt();
-        world.event(top::Event::Project { entry: 1, repository: REPO, view: fixtures::goal_view() });
+        world.event(top::Event::Project {
+            closing_generation: None,
+            entry: 1,
+            repository: REPO,
+            view: fixtures::goal_view(),
+        });
         world.event(top::Event::Committed { entry: 1 });
         world.run_for(seed % 3);
         world.restart();

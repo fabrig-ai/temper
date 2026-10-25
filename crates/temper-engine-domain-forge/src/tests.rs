@@ -278,6 +278,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Taken { .. }
         | Request::Refused { .. }
         | Request::Outcome { .. }
+        | Request::ProjectionOutbox { .. }
         | Request::NotMade { .. }
         | Request::ContinueRelease { .. }
         | Request::Released { .. }
@@ -346,6 +347,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Taken { .. }
         | Request::Refused { .. }
         | Request::Outcome { .. }
+        | Request::ProjectionOutbox { .. }
         | Request::NotMade { .. }
         | Request::ContinueRelease { .. }
         | Request::Released { .. }
@@ -411,6 +413,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Taken { .. }
         | Request::Refused { .. }
         | Request::Outcome { .. }
+        | Request::ProjectionOutbox { .. }
         | Request::NotMade { .. }
         | Request::ContinueRelease { .. }
         | Request::Released { .. }
