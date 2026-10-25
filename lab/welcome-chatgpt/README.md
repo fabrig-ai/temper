@@ -5,9 +5,11 @@ The box supervises its four fake peers. ctl signs in and connects forge 4,
 the fake Forgejo elsewhere, making and adopting `work/hello` in `hello`.
 The spent-link relink sequence is `cluster-web`'s. Before navigating, the
 walk waits for the visible Sign out button so the printed link's page
-has finished signing in. hand's sole peer is the
-issuer origin captured from the box's stderr; every other destination
-remains refused.
+has finished signing in. hand names the issuer origin
+captured from the box's stderr and the app's shipped OAuth callback,
+`http://127.0.0.1:1455`, as peers. The callback port is preserved and
+checked by `temper-fake/src/backends.rs`; every other destination stays
+refused.
 
 The `welcome` function in `steps walk` opens `/welcome`, the Model step and Continue with ChatGPT,
 then requires `work/hello is ready` and opens `hello`. Its `chat` function sends a
