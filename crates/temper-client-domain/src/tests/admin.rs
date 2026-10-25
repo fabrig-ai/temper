@@ -284,3 +284,83 @@ fn create_stops_keep_the_fields_and_empty_the_token() {
         assert_eq!(root.forge().admin_form().fields[1].as_ref(), b"hello");
     }
 }
+
+#[test]
+fn an_admin_first_adoption_advances_only_the_welcome() {
+    for welcome in [true, false] {
+        let (mut root, watch) = opened();
+        let address = if welcome {
+            crate::Address::Welcome { step: crate::Step::Forge { forge: Some(Choice::Forge(FORGE)) } }
+        } else {
+            crate::Address::ConnectForge { forge: Some(Choice::Forge(FORGE)) }
+        };
+        event(&mut root, Event::Went { place: crate::Place::Address(address) });
+        token(&mut root, TOKEN);
+        send(&mut root);
+        let out = deliver(&mut root, watch, row(true, connected(), None, Some(first())));
+        let mut project_attempt = None;
+        for request in &out {
+            if let Request::Client {
+                request:
+                    jig_client::Request::Down { down: Down::Send { attempt, request: jig_client::Ask::Jig(ask), .. } },
+            } = request
+                && let c::Ask::MakeProject { .. } = ask.as_ref()
+            {
+                project_attempt = Some(*attempt);
+            }
+        }
+        let out = event(
+            &mut root,
+            Event::Client {
+                event: jig_client::Event::Up {
+                    up: Up::Answer {
+                        attempt: project_attempt.expect("the admin's first repository needs its project"),
+                        envelope: skein_lib::RequestEnvelope::Final,
+                        answer: Some(jig_client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
+                            c::OwnerOutcome::ProjectMade { project: 7 },
+                        )))),
+                        why: None,
+                    },
+                },
+            },
+        );
+        assert!(!out.is_empty(), "the project answer asks to adopt the first repository");
+        let pending = root.forge().set_up().unwrap().adoption.as_ref().expect("first adoption pending");
+        let request = pending.request;
+        let out = event(
+            &mut root,
+            Event::Forge(forge::Event::Answered {
+                request,
+                answer: forge::Answer::Adopted(forge::Adopted {
+                    forge: FORGE,
+                    repository: 42,
+                    owner: b"work".as_slice().into(),
+                    name: b"hello".as_slice().into(),
+                    role: forge::Role::Owned,
+                    home: true,
+                    kinds: forge::Kinds {
+                        read: true,
+                        push: true,
+                        open: true,
+                        land: true,
+                        review: true,
+                        status: true,
+                        comment: true,
+                        issue: true,
+                        branch: true,
+                    },
+                    protection: forge::Protection::Unknown,
+                }),
+            }),
+        );
+        let mut moves = 0;
+        for request in &out {
+            if let Request::Show { address, replace } = request {
+                assert_eq!(address, &crate::Address::Welcome { step: crate::Step::Model { way: None } });
+                assert!(!replace);
+                moves += 1;
+            }
+        }
+        assert_eq!(moves, u32::from(welcome));
+    }
+}

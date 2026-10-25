@@ -1,0 +1,76 @@
+#!/bin/sh
+# The own-App and program welcome ends at Ready; programs cannot chat yet.
+set -eu
+if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
+    echo 'usage: steps welcome|forge|model|ready BROWSE ADDRESS GROUND [KEY|COMMAND]' >&2
+    exit 2
+fi
+phase=$1
+browse=$2
+address=$3
+ground=$4
+# The runner invokes phases separately, even after a failed seed action.
+# A failed phase therefore latches the walk closed before any later browser call.
+if [ -e "$ground/stopped" ]; then
+    echo 'steps: an earlier welcome phase failed' >&2
+    exit 1
+fi
+trap 'status=$?; if [ "$status" -ne 0 ]; then : > "$ground/stopped"; fi' 0
+call() {
+    printf '+ browse'
+    printf ' %s' "$@"
+    printf '\n'
+    status=0
+    "$browse" "$address" "$@" || status=$?
+    if [ "$status" -ne 0 ]; then
+        # Retain the failing page without continuing past a missed step.
+        "$browse" "$address" outline || :
+        "$browse" "$address" shot || :
+        exit "$status"
+    fi
+}
+welcome() {
+    # Opening the link reports navigation; the page must finish its sign-in before leaving it.
+    call wait button 'Sign out' --exact --timeout 120
+    call go /welcome
+    call wait heading 'Welcome to temper' --exact --timeout 120
+    call press link 'Set up temper' --exact
+    call wait heading 'Connect a forge' --exact --timeout 120
+}
+forge() {
+    call wait link 'Use an App of your own ›' --exact --timeout 120
+    call press link 'Use an App of your own ›' --exact
+    call wait heading 'An App of your own' --exact --timeout 120
+    printf '1\n' | call type 'text field' 'App id' --exact
+    call type 'text field' 'Private key' --exact < "$5"
+    call press button 'Connect the App' --exact
+    call wait button 'Install on GitHub' --exact --timeout 120
+    call press button 'Install on GitHub' --exact
+    call wait choice 'fake-person/widget' --exact --timeout 120
+    call press choice 'fake-person/widget' --exact
+    call press button 'Adopt fake-person/widget' --exact
+    call wait heading 'Connect a model' --exact --timeout 120
+}
+model() {
+    call wait link 'Use your ChatGPT subscription' --exact --timeout 120
+    call press link 'Use your ChatGPT subscription' --exact
+    call wait 'text field' Name --exact --timeout 120
+    call outline > "$ground/model-outline"
+    cat "$ground/model-outline"
+    /usr/bin/python3 -I -B -S "${0%/*}/program-login" "$5" "$ground"
+    call press button 'Use your ChatGPT subscription' --exact
+    call wait status 'Declared your ChatGPT subscription' --timeout 120
+    call go '/welcome?at=ready'
+    call wait heading 'fake-person/widget is ready' --exact --timeout 120
+}
+ready() {
+    call wait heading 'fake-person/widget is ready' --exact --timeout 120
+    call shot
+}
+case "$phase" in
+    welcome) welcome ;;
+    forge) forge "$@" ;;
+    model) model "$@" ;;
+    ready) ready ;;
+    *) echo 'steps: unknown phase' >&2; exit 2 ;;
+esac

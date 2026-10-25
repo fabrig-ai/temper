@@ -710,3 +710,21 @@ shell process tests under `lab/tests/`.
 The fake GitHub serves the browser’s optional favicon request without API
 credentials as a bodyless 204. Its console errors remain part of the
 empty-trouble requirement; no resource failure is filtered out.
+`lab/welcome-chatgpt` connects Forgejo elsewhere in the browser, pasting
+the box's named admin-token file, then signs in with ChatGPT, opens the
+project and checks the first committed reply before and after reload.
+`lab/welcome-own-app` pastes the box's named App 1 key, installs on the
+fake GitHub, chooses `fake-person/widget`, and declares the Model step's
+program login (the fake box offers this on provider 1, so the button says
+Use your ChatGPT subscription, backed by the Claude Code adapter). Its
+terminal step runs the box's printed command through
+`--cache DIR` with the page's name appended before submitting the program
+account. It ends at Ready, since jig
+cannot keep a chat open through a program yet, and checks the program
+source and its connected worker both usable. The own App’s
+Install on GitHub button requests the departing install page, whose
+return leads to the repository picker. Both experiments check the
+whole hand trouble log and expose each welcome step as a separate action
+and `steps` phase for live captures (`draft/qa-web.md`, 3.3). A failed phase
+latches the walk closed in its ground directory: although the runner
+invokes later actions, they make no further browser calls.

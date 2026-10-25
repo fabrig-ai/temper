@@ -3,16 +3,25 @@ use crate::ChatsFilter;
 use crate::{Action, Address, Domain, Event, Fact, Limits, Place, Request, forge, owner::Owner};
 use skein_lib::{Env, Queue};
 pub(crate) fn forge(root: &mut Domain, env: &Env<Limits>, event: forge::Event, out: &mut Queue<Request>) {
-    // Like accepted owned setup, a successful picker adoption advances the shown welcome.
+    // Any first-repository adoption advances the welcome, whichever flow asked for it
+    // (client/README.md, The welcome). Standalone ConnectForge keeps its Ready card.
     let mut adopted_in_welcome = false;
     if let Address::Welcome { step: crate::Step::Forge { .. } } = root.pages.address()
         && let forge::Event::Answered { request, answer: forge::Answer::Adopted(adopted) } = &event
-        && let Some(picker) = root.forge.picker(adopted.forge)
-        && let Some(adoption) = &picker.adoption
-        && adoption.request == *request
-        && adoption.outcome.is_none()
     {
-        adopted_in_welcome = true;
+        let pending = match root.forge.picker(adopted.forge) {
+            Some(picker) => picker.adoption.as_ref(),
+            None => match root.forge.set_up() {
+                Some(last) if last.forge == adopted.forge => last.adoption.as_ref(),
+                Some(_) | None => None,
+            },
+        };
+        if let Some(adoption) = pending
+            && adoption.request == *request
+            && adoption.outcome.is_none()
+        {
+            adopted_in_welcome = true;
+        }
     }
     let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
     forge::step(&mut root.forge, &Env { now: env.now, wall: env.wall, limits: env.limits.forge }, event, &mut child);
