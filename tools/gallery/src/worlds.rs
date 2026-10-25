@@ -30,7 +30,7 @@ fn project(w: World) -> &'static str {
         Solo => "tally",
         World::Bare => "gallery",
         FirstRun { step: 22 } => "widget",
-        FirstRun { .. } => "Default",
+        FirstRun { .. } => "Playground",
     }
 }
 fn doc(s: &str) -> c::DocumentText {
@@ -46,7 +46,13 @@ fn model(w: World) -> c::LlmChoice {
     c::LlmChoice {
         account: Some(1),
         main: c::ModelEffort {
-            model: text(if matches_demo(w) { "Scripted model" } else { "Opus" }),
+            model: text(if matches!(w, FirstRun { step: 5..=9 }) {
+                "gpt-6-luna"
+            } else if matches_demo(w) {
+                "Scripted model"
+            } else {
+                "Opus"
+            }),
             effort: match w {
                 Reference => Some(text("xhigh")),
                 Solo | World::Bare => Some(text("high")),
@@ -64,6 +70,9 @@ fn frame(w: World, connecting: bool) -> c::Me {
         FirstRun { .. } => None,
         Reference | Solo | World::Bare => Some(model(w)),
     };
+    if matches!(w, FirstRun { step: 5..=9 }) {
+        template.llm = Some(model(w));
+    }
     member.models = List::with_capacity(1);
     let choice = model(w);
     let mut efforts = List::with_capacity(1);
@@ -74,7 +83,7 @@ fn frame(w: World, connecting: bool) -> c::Me {
         .models
         .push(c::MeModel {
             name: choice.main.model,
-            provider: Some(17),
+            provider: Some(if matches!(w, FirstRun { step: 5..=9 }) { 18 } else { 17 }),
             description: None,
             prices: c::ModelPrices { input: 0, cached: 0, cache_write: None, output: 0, unit: 1 },
             window: 200_000,
@@ -86,11 +95,8 @@ fn frame(w: World, connecting: bool) -> c::Me {
     if connecting {
         for index in 0..me.providers.len() {
             let provider = me.providers.get_mut(index).expect("provider index");
-            if provider.name.bytes() == b"OpenAI" {
-                provider.name = doc("openai");
+            if provider.name.bytes() == b"openai" {
                 provider.sign_in = true;
-            } else if provider.name.bytes() == b"Anthropic" {
-                provider.name = doc("anthropic");
             }
         }
     }
@@ -103,21 +109,21 @@ fn frame(w: World, connecting: bool) -> c::Me {
 fn providers(w: World) -> List<c::ProviderOffer> {
     let mut rows = List::with_capacity(2);
     let names: &[(u32, &str)] = match w {
-        Reference => &[(17, "Anthropic"), (18, "OpenAI")],
-        Solo => &[(17, "Anthropic")],
-        World::Bare => &[(18, "OpenAI")],
-        FirstRun { .. } => &[(17, "Playground"), (18, "OpenAI")],
+        Reference => &[(17, "anthropic"), (18, "openai")],
+        Solo => &[(17, "anthropic")],
+        World::Bare => &[(18, "openai")],
+        FirstRun { .. } => &[(17, "Playground"), (18, "openai")],
     };
     for (number, name) in names {
         let mut programs = List::with_capacity(1);
-        if *name == "Anthropic" {
+        if *name == "anthropic" {
             programs.push(text("Claude Code")).expect("program");
         }
         rows.push(c::ProviderOffer {
             provider: *number,
             name: doc(name),
             key_bytes: 4096,
-            sign_in: *name == "OpenAI" && w == Reference,
+            sign_in: *name == "openai" && w == Reference,
             key: true,
             programs,
             programs_cut: false,
@@ -259,14 +265,14 @@ fn forges(world: World) -> Box<[u8]> {
     }
     let limits = temper_client_domain::forge::wire_limits(&limits().forge).expect("wire limits");
     let mut rows = List::with_capacity(3);
-    if matches_demo(world) {
+    if matches_demo(world) || matches!(world, Solo | Reference) {
         rows.push(
             w::ForgeRow::new(
                 &limits,
                 w::ForgeRowParts {
                     number: FORGE,
                     kind: w::Kind::Forgejo,
-                    mode: w::Mode::Fake,
+                    mode: if matches!(world, Solo | Reference) { w::Mode::Connected } else { w::Mode::Fake },
                     connection: w::Connection::Connected(
                         w::Connected::new(&limits, w::ConnectedParts { id: 1, login: b"temper".as_slice().into() })
                             .expect("demo login"),
@@ -469,6 +475,8 @@ fn demo(root: &mut Domain, w: World, read: Token, out: &mut Queue<Request>) {
             v1::DemoAnswerParts {
                 state: if matches!(w, FirstRun { step: 0 }) {
                     v1::DemoState::NotStarted
+                } else if matches!(w, FirstRun { step: 7 | 8 }) {
+                    v1::DemoState::Ended
                 } else {
                     v1::DemoState::Running
                 },
@@ -584,6 +592,7 @@ fn chat_rows(w: World, ended: bool) -> List<c::TaskLine> {
         (Reference, false) | (Solo, true) => &[1],
         (Reference, true) => &[3, 2],
         (Solo, false) => &[6, 10],
+        (FirstRun { step: 5 }, false) => &[1, 4],
         (FirstRun { .. } | World::Bare, _) => &[],
     };
     let mut rows = List::with_capacity(u32::try_from(numbers.len()).expect("small chats"));
@@ -888,7 +897,9 @@ fn document(w: World, number: u64) -> c::Task {
         Some(parent) => c::OwnerRequester::Task(parent),
         None => c::OwnerRequester::Person(73),
     };
-    t.spec.specification.words = doc(f.brief);
+    // These chats begin with a timed words record, so their request's clock
+    // is independent of the first assistant turn's clock.
+    t.spec.specification.words = doc(if matches!((w, number), (Solo, 6 | 10)) { "" } else { f.brief });
     // Mockup amounts have decimals; the view prints integer deployment units.
     // Round to the nearest unit, and keep the missing below-ledger at zero.
     t.budget = budget(&f);
@@ -936,6 +947,14 @@ fn document(w: World, number: u64) -> c::Task {
             c::ResultValue::Report(doc(result))
         };
         t.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Done(value))));
+    }
+    if matches!((w, number), (FirstRun { step: 7 }, 1)) {
+        t.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Cancelled {
+            reason: doc("the playground ended when Forgejo on this machine connected"),
+            result: None,
+            by: t.requester,
+            at: t.last_activity,
+        })));
     }
     if f.phase == c::Phase::Done || f.phase == c::Phase::Ended {
         t.acts.clear();
@@ -1583,12 +1602,12 @@ fn facts(w: World, number: u64) -> TaskFacts {
             proposal: false,
             activity_at: 1_792_702_860_000_000_000,
         },
-        (FirstRun { step: 3 | 4 }, 1) => TaskFacts {
+        (FirstRun { step: 3..=7 }, 1) => TaskFacts {
             title: "Add CSV export to widget",
             brief: "Add CSV export to widget",
             charter: 1,
             parent: None,
-            phase: c::Phase::Idle,
+            phase: if matches!(w, FirstRun { step: 7 }) { c::Phase::Done } else { c::Phase::Idle },
             wait: 2,
             spent_tenths: 0,
             budget: 20,
@@ -1601,9 +1620,13 @@ fn facts(w: World, number: u64) -> TaskFacts {
             account: 1,
             children: &[2],
             proposal: false,
-            activity_at: 1_792_703_040_000_000_000,
+            activity_at: if matches!(w, FirstRun { step: 7 }) {
+                1_792_703_940_000_000_000
+            } else {
+                1_792_703_040_000_000_000
+            },
         },
-        (FirstRun { step: 3 | 4 }, 2) => TaskFacts {
+        (FirstRun { step: 3..=7 }, 2) => TaskFacts {
             title: "Export widget's table as CSV",
             brief: "",
             charter: 1,
@@ -1623,7 +1646,7 @@ fn facts(w: World, number: u64) -> TaskFacts {
             proposal: false,
             activity_at: 1_792_703_040_000_000_000,
         },
-        (FirstRun { step: 3 | 4 }, 3) => TaskFacts {
+        (FirstRun { step: 3..=7 }, 3) => TaskFacts {
             title: "Export widget's table as CSV",
             brief: "Export widget's table as CSV",
             charter: 2,
@@ -1645,7 +1668,7 @@ fn facts(w: World, number: u64) -> TaskFacts {
             proposal: false,
             activity_at: 1_792_702_980_000_000_000,
         },
-        (FirstRun { step: 4 }, 4) => TaskFacts {
+        (FirstRun { step: 4..=7 }, 4) => TaskFacts {
             title: "Add a dark theme to widget",
             brief: "Add a dark theme to widget",
             charter: 1,
@@ -1670,6 +1693,15 @@ fn facts(w: World, number: u64) -> TaskFacts {
 }
 fn activity(w: World, task: u64) -> c::ActivityPage {
     let mut events = List::with_capacity(16);
+    if matches!((w, task), (Solo, 6 | 10)) {
+        events
+            .push(c::Activity::Words {
+                by: c::Party { number: 73, kind: c::PartyKind::Person, name: text(person(w)) },
+                message: 1,
+                words: text(facts(w, task).brief),
+            })
+            .expect("timed opening words");
+    }
     match (w, task) {
         (Reference, 1) => {
             events
@@ -1707,26 +1739,26 @@ fn activity(w: World, task: u64) -> c::ActivityPage {
             events.push(tools_line(&[("delegate", 1)], &[2], false, 3)).expect("world activity");
             events.push(tools_line(&[("wait", 1)], &[], false, 4)).expect("world activity");
         }
-        (FirstRun { step: 3 | 4 }, 1) => {
+        (FirstRun { step: 3..=7 }, 1) => {
             events.push(agent_line("I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge.", 2, Some(1))).expect("world activity");
             events.push(tools_line(&[("delegate", 1)], &[2], false, 3)).expect("world activity");
             events.push(tools_line(&[("wait", 1)], &[], false, 4)).expect("world activity");
             events.push(agent_line("CSV export is available from widget’s table. The change landed on Playground forge. This was a scripted change.", 5, Some(1))).expect("world activity");
             events.push(tools_line(&[("wait", 1)], &[], false, 6)).expect("world activity");
         }
-        (FirstRun { step: 4 }, 4) => {
+        (FirstRun { step: 4..=7 }, 4) => {
             events.push(agent_line("I would give widget a dark theme that follows the system's preference, with its colours as variables in one place so both themes stay in step. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done.", 2, Some(1))).expect("world activity");
         }
         _ => {}
     }
     let minutes: &[i64] = match (w, task) {
         (Reference, 1) => &[-64, -50, -50],
-        (Solo, 6) => &[-118, -117, -88],
-        (Solo, 10) => &[-14, -12],
+        (Solo, 6) => &[-130, -118, -117, -88],
+        (Solo, 10) => &[-14, -12, -12],
         (Solo, 9) => &[-21, -15, -14],
         (FirstRun { step: 2 }, 1) => &[1, 1, 1],
-        (FirstRun { step: 3 | 4 }, 1) => &[1, 1, 1, 4, 4],
-        (FirstRun { step: 4 }, 4) => &[5],
+        (FirstRun { step: 3..=7 }, 1) => &[1, 1, 1, 4, 4],
+        (FirstRun { step: 4..=7 }, 4) => &[5],
         _ => &[],
     };
     let mut rows = List::with_capacity(events.len());
@@ -1776,9 +1808,9 @@ fn accounts(w: World, then: Then) -> c::OwnerAccounts {
                 number: 1,
                 place: 1,
                 uses: None,
-                plan: true,
+                plan: false,
                 provider: Some(17),
-                provider_name: Some(doc("Anthropic")),
+                provider_name: Some(doc("anthropic")),
                 manage_usage: None,
                 display: doc("Claude"),
                 holder: c::OwnerAccountHolder::Party(73),
@@ -1806,7 +1838,7 @@ fn accounts(w: World, then: Then) -> c::OwnerAccounts {
                 uses: None,
                 plan: then != Then::KeyReady,
                 provider: Some(18),
-                provider_name: Some(doc("OpenAI")),
+                provider_name: Some(doc("openai")),
                 manage_usage: None,
                 display: doc(if matches!(then, Then::SignInReady | Then::Declined | Then::Renewed) {
                     "pat@example.com"
@@ -1851,9 +1883,9 @@ fn accounts(w: World, then: Then) -> c::OwnerAccounts {
                 number: 1,
                 place: 1,
                 uses: None,
-                plan: true,
+                plan: false,
                 provider: Some(17),
-                provider_name: Some(doc("Anthropic")),
+                provider_name: Some(doc("anthropic")),
                 manage_usage: None,
                 display: doc("Claude"),
                 holder: c::OwnerAccountHolder::Party(73),
@@ -1866,10 +1898,16 @@ fn accounts(w: World, then: Then) -> c::OwnerAccounts {
             let mut sources = List::with_capacity(2);
             sources
                 .push(c::OwnerAccountSource {
-                    name: Some(Box::from("playground".as_bytes())),
+                    name: Some(Box::from(
+                        if matches!(w, FirstRun { step: 5..=9 }) { "sam@example.com" } else { "playground" }.as_bytes(),
+                    )),
                     place: 1,
                     number: 1,
-                    kind: c::OwnerAccountKind::Key,
+                    kind: if matches!(w, FirstRun { step: 5..=9 }) {
+                        c::OwnerAccountKind::SignIn
+                    } else {
+                        c::OwnerAccountKind::Key
+                    },
                     state: c::OwnerAccountState::Granted,
                     usable: true,
                     expiring: false,
@@ -1881,9 +1919,9 @@ fn accounts(w: World, then: Then) -> c::OwnerAccounts {
                 number: 1,
                 place: 1,
                 uses: None,
-                plan: false,
+                plan: matches!(w, FirstRun { step: 5..=9 }),
                 provider: Some(if matches!(w, FirstRun { step: 5..=9 }) { 18 } else { 17 }),
-                provider_name: Some(doc(if matches!(w, FirstRun { step: 5..=9 }) { "OpenAI" } else { "Playground" })),
+                provider_name: Some(doc(if matches!(w, FirstRun { step: 5..=9 }) { "openai" } else { "Playground" })),
                 manage_usage: None,
                 display: doc(if matches!(w, FirstRun { step: 5..=9 }) { "ChatGPT" } else { "Scripted model" }),
                 holder: c::OwnerAccountHolder::Party(73),
@@ -1932,7 +1970,7 @@ fn accounts(w: World, then: Then) -> c::OwnerAccounts {
             .push(c::PayerReadiness {
                 provider: provider.provider,
                 payer: c::OwnerAccountUse::Party(73),
-                readiness: if w == World::Bare || matches_demo(w) && provider.provider == 18 {
+                readiness: if w == World::Bare || matches!(w, FirstRun { step: 0..=4 }) && provider.provider == 18 {
                     c::Readiness::Unavailable
                 } else {
                     c::Readiness::Usable
