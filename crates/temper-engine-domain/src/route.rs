@@ -306,7 +306,7 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
                 forge_route::outputs(domain, env, decision, &mut out);
                 demo::progress(domain, env, decision);
             }
-            Work::ProjectGoal(goal) => forge_route::project_goal(domain, env, &goal),
+            Work::ProjectGoal(goal) => forge_route::project_goal(domain, env, decision, &goal),
             Work::GoalSubscribe(subscriber) => forge_route::goal_subscribed(domain, env, subscriber),
             Work::Activate(context) => {
                 if domain.settling.active() || domain.core.stopping() {

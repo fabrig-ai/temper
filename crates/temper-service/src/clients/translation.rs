@@ -48,6 +48,9 @@ pub fn to_root(event: core::Event) -> Result<root::PartyInput, Box<kit::Event>> 
         | core::Event::ApplicationPart { .. }
         | core::Event::ApplicationFinished { .. }
         | core::Event::ProjectionSettled { .. }
+        | core::Event::ProjectionBegin { .. }
+        | core::Event::ProjectionFailed { .. }
+        | core::Event::ProjectionRecover { .. }
         | core::Event::SettledCall { .. }
         | core::Event::EffectStart { .. }
         | core::Event::EffectConnector(..)
@@ -139,6 +142,7 @@ fn delivered(delivery: root::Delivery) -> Option<kit::Event> {
         | root::Delivery::Link { .. }
         | root::Delivery::ProjectMade { .. }
         | root::Delivery::ForgeCommitted { .. }
+        | root::Delivery::ProjectionRecovery { .. }
         | root::Delivery::ForgeCall { .. }
         | root::Delivery::Bound { .. }
         | root::Delivery::Procedure { .. }

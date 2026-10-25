@@ -138,10 +138,15 @@ pub(crate) fn layout(
         let frame = protocol::sizes::frame(&core, transcript).ok_or(arithmetic)?;
         return Err(Refusal::Page { transcript, frame, page: kv.page.bytes, ceiling: profile.store.page.bytes });
     }
+    // Credentials keep their independent queue and patching batch.
+    let secrets = profile.secrets;
+    if !secrets.is_usable() || secrets.key < sizes.key || secrets.value < sizes.value {
+        return Err(arithmetic);
+    }
     Ok(protocol::Limits {
         core,
         store: kv,
-        secrets: kv,
+        secrets,
         held: profile.held,
         journal: root::journal_limits(&root.journal),
         joins: profile.joins,

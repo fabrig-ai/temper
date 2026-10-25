@@ -412,8 +412,42 @@ impl Domain {
             && !self.forge.is_ready()
     }
 
-    /// Pure snapshot query for the latest allocated deployment counters; these may run ahead of
-    /// store durability. Exposes neither children nor owned handoff bodies and emits no effect.
+    /// Admit a connector recovery, returning ownership immediately when busy.
+    /// Staging and core reset share the normal route's admission and decision.
+    pub fn recover_projection(&mut self, env: &Env<Limits>, goal: u64, owner: Token) -> Result<(), Token> {
+        assert!(self.limits == env.limits, "configured recovery limits");
+        if !self.ready() || self.core.stopping() || !admits(self, &env.limits) {
+            return Err(owner);
+        }
+        if !self.forge.stage_projection_recovery(goal, owner)? {
+            self.settled = None;
+            return Ok(());
+        }
+        self.settled = None;
+        let mut decision = route_decision(self, &env.limits).expect("recovery route admitted");
+        let routed = jig_domain_core::step(
+            &mut self.core,
+            &environment_core(env),
+            jig_domain_core::Event::ProjectionRecover { goal, connector: self.config.forge_connector, owner },
+        );
+        route_core_requests(self, env, &mut decision, routed);
+        route_into(self, env, &mut decision);
+        let mut out = Queue::with_capacity(max_out(&env.limits));
+        close(self, env, decision, &mut out);
+        stage_now(self, &mut out);
+        Ok(())
+    }
+
+    /// Route one initiating connector workflow's keyed result exactly once.
+    pub fn take_projection_recovery(&mut self, owner: Token) -> Option<jig_domain_core::ProjectionRecovery> {
+        let result = self.forge.take_projection_recovery(owner);
+        if result.is_some() {
+            self.settled = None;
+        }
+        result
+    }
+
+    /// Latest counters, which can run ahead of durability.
     #[must_use]
     pub fn deployment(&self) -> crate::Deployment {
         self.core.counters.deployment()
@@ -846,6 +880,10 @@ fn released_into(
     out: &mut Queue<Request>,
 ) {
     match released.0 {
+        Delivery::ProjectionRecovery { connector, owner, result } => {
+            assert!(connector == domain.config.forge_connector, "recovery's numbered connector");
+            domain.work.push(Work::Forge(forge::Event::ProjectionRecoveryResult { owner, result }));
+        }
         Delivery::ProjectMade { project: _ } => {
             // jig's domain/engine.md, "a project made": the root hears it after commit.
             // LandingPolicy.projects, forge Judges.projects and GatePolicy.projects

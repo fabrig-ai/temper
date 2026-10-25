@@ -171,7 +171,7 @@ enum MilestoneKey { lifecycle: Lifecycle, task_revision: TaskRevision, plan_acce
 record Milestone { key: MilestoneKey text: text 65536 }
 record GoalView { phase: Phase goal: u64 repository: u64 title: text 65536 goal_text: text 65536 plan: list 1024 PlanItem milestones: list 1024 Milestone finished: option text 65536 }
 record Projected { opened: bool digest: option fixed 32 last_body: option u64 body_revision: u64 milestones: list 1024 MilestoneKey closed: bool }
-record IssueRow { goal: u64 repository: Repository state: Projected number: option u64 pending: option u64 before: option Projected failed: bool desired: option GoalView }
+record IssueRow { goal: u64 repository: Repository state: Projected number: option u64 pending: option u64 before: option Projected failed: bool desired: option GoalView closing_generation: option u64 }
 # 02.4: family 15, the retained application outcome.
 record ApplicationAdopted { repository: Repository owner: bytes 4096 name: bytes 4096 role: Role home: bool kinds: Kinds protection: RepositoryProtection }
 # Ceiling: jig-protocol-store people_v12::Refusal::worst_case_bytes(&people_v12::CEILINGS).

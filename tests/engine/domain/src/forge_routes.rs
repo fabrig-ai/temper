@@ -352,6 +352,7 @@ impl World {
                 limits.forge.change_policy.stall = stall;
             }
             limits.notes.scopes = 3 + limits.authority.grants;
+            limits.journal.writes = limits.journal.writes.max(walking::writes(&limits));
             (config, limits)
         });
         let mut fake_config = forge_world::fake_config();

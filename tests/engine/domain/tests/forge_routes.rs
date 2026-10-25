@@ -3134,3 +3134,93 @@ fn a_stop_waits_for_a_sent_merge_to_be_proved() {
     assert!(world.unsettled.is_empty());
     assert_eq!(world.merges, 1);
 }
+
+#[test]
+fn a_final_feed_saves_desired_and_generation_in_its_core_commit_before_a_root_crash() {
+    use jig_domain_core::{CoreKey, CoreRecord, ProjectionKey, ProjectionRecord};
+    let mut world = World::configured(true, false);
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(904)),
+        sign_in: world.signed_in.expect("owner"),
+        key: [104; 16],
+        ask: walking::goal_from(
+            world.chat(1, b"Durable final cohort"),
+            people::TaskExecutor::Agent { charter: 1 },
+            jig_core_world::fixtures::Goal { budget: 50, priority: 3, deadline: None },
+        ),
+    }));
+    world.until(Until::Assigned);
+    let goal = world.assigned[0].task;
+    for _ in 0..100 {
+        world.tick();
+        if world.store.pending.is_empty() && world.pending.is_empty()
+            && world.store.rows.values().any(|record| matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Issue(row) if row.goal == goal && row.pending.is_none()))) { break; }
+    }
+    assert!(world.pending.is_empty() && world.store.pending.is_empty());
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(905)),
+        sign_in: world.signed_in.expect("owner"),
+        key: [105; 16],
+        ask: people::Ask::Amend {
+            project: 1,
+            task: goal,
+            revision: spec_revision(&world, goal),
+            release: None,
+            amendment: people::Amendment {
+                tracked: Some(people::Tracking::Untracked),
+                ..jig_core_world::fixtures::person_unchanged(b"Final projection")
+            },
+        },
+    }));
+    let (commit, writes) = world.store.pending.front().expect("feedmark commit");
+    let mut core_generation = None;
+    let mut accepted = None;
+    for write in writes {
+        match write {
+            engine::Write::Save(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(
+                ProjectionRecord::Goal { goal: row, closing_at, .. },
+            )))) if row.number == goal => core_generation = *closing_at,
+            engine::Write::Save(Record::Forge { row }) => {
+                if let forge_top::Stored::Issue(row) = row.as_ref()
+                    && row.goal == goal
+                {
+                    accepted = Some(row.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    let generation = core_generation.expect("final core header");
+    assert_eq!(generation, *commit, "generation is the feedmark commit");
+    let accepted = accepted.expect("desired accepted synchronously in the SAME commit");
+    assert_eq!(accepted.closing_generation, Some(generation));
+    assert!(accepted.desired.as_ref().expect("accepted desired").finished.is_some());
+    let calls_before_durability = world.forge_calls;
+    world.store.apply();
+    assert!(world.store.pending.is_empty());
+    let projection_key = Key::Core(jig_domain_core::Key::Core(CoreKey::Projection(ProjectionKey::Goal(goal))));
+    assert!(
+        matches!(world.store.rows.get(&projection_key), Some(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Goal { closing_at: Some(saved), .. })))) if *saved == generation)
+    );
+    assert!(world.store.rows.values().any(
+        |record| matches!(record, Record::Forge { row } if row.as_ref() == &forge_top::Stored::Issue(accepted.clone()))
+    ));
+    // Lose the root before its durable acknowledgement releases any effects.
+    assert_eq!(world.forge_calls, calls_before_durability);
+    world.restart(true, false);
+    for _ in 0..300 {
+        world.tick();
+        if !world.store.rows.contains_key(&projection_key) {
+            break;
+        }
+    }
+    assert!(
+        !world.store.rows.contains_key(&projection_key),
+        "restored accepted desired settles its saved final cohort"
+    );
+    assert!(world.store.rows.values().all(|record| !matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Issue(row) if row.goal == goal))), "last settlement forgets connector state");
+}

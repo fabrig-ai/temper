@@ -202,7 +202,13 @@ pub(crate) fn route_bound(limits: &Limits) -> Option<u32> {
         .checked_add(fleet::max_out(&limits.fleet).checked_mul(4)?)?
         .checked_add(forge::max_out(&limits.forge))?
         // One serialized role cohort revisits each Waiting task, then answers.
-        .checked_add(limits.tasks.tasks.checked_add(4)?)?;
+        .checked_add(limits.tasks.tasks.checked_add(4)?)?
+        // One quiet projection receipt routes the full task/people publication
+        // beside the ordinary decision, and final forget erases one pair per task.
+        .checked_add(tasks::max_out(&limits.tasks).checked_mul(8)?)?
+        .checked_add(people::max_out(&limits.people).checked_mul(4)?)?
+        .checked_add(1)?
+        .checked_add(limits.tasks.tasks)?;
     Some(routes.max(jig_domain_core::settings::writes_worst_case(&core_limits(limits))?))
 }
 

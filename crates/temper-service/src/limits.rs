@@ -251,7 +251,7 @@ const ROOT: Root = Root {
         // At least deliveries * 3: the root's worst case.
         held: 1536,
         // At least `route_bound` plus `call_records`: the root's worst case.
-        writes: 12288,
+        writes: 21_261,
         // At least jig small fleet.workers * fleet.max_out + 1: the root's worst case.
         deliveries: 512,
         // At least row_bound, including forge.client.answer_bytes: the root's worst case.

@@ -811,6 +811,7 @@ pub fn issue_row() -> top::IssueRow {
         closed: true,
     };
     top::IssueRow {
+        closing_generation: Some(29),
         goal: 12,
         repository: REPO,
         state: state.clone(),

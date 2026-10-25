@@ -290,7 +290,7 @@ impl World {
             .now
             .saturating_add(Duration::from_nanos(until.as_nanos().saturating_sub(self.env.wall.as_nanos())));
         for _ in 0..20_000 {
-            if !self.iterate(end) {
+            if !self.iterate(end, true) {
                 return;
             }
         }
@@ -320,6 +320,21 @@ impl World {
             self.to_top.push((self.generation, top::Event::Hint { hint: hint.clone() }));
             self.hints.push(hint);
         }
+    }
+
+    /// Route the root's existing retry deadline into this connector.
+    pub fn projection_after(&mut self, goal: u64, wall: Wall) {
+        self.top.projection_after(goal, wall);
+    }
+
+    /// Deliver a domain input before firing a due timer at the same wall time.
+    pub fn event_at(&mut self, wall: Wall, event: top::Event) {
+        assert!(wall >= self.env.wall, "story time moves forward");
+        self.env.now =
+            self.env.now.saturating_add(Duration::from_nanos(wall.as_nanos().saturating_sub(self.env.wall.as_nanos())));
+        self.env.wall = wall;
+        self.forge_env.now = self.env.now;
+        self.event(event);
     }
 
     pub fn event(&mut self, event: top::Event) {
@@ -562,14 +577,32 @@ impl World {
     pub fn run_for(&mut self, seconds: u64) {
         let end = self.env.now.saturating_add(Duration::from_secs(seconds));
         for _ in 0..20_000 {
-            if !self.iterate(end) {
+            if !self.iterate(end, true) {
                 return;
             }
         }
         panic!("world did not reach horizon");
     }
 
-    fn iterate(&mut self, end: Time) -> bool {
+    /// Fire the root-owned wall timers at the current, fixed story wall.
+    pub fn fire_top(&mut self) {
+        top::fire(&mut self.top, &self.env, &mut self.top_out);
+        self.take_top();
+        self.top.reclaim();
+    }
+
+    /// Script completions before the separately invoked top-level fire.
+    pub fn inputs_before_fire(&mut self) {
+        let end = self.env.now;
+        for _ in 0..20_000 {
+            if !self.iterate(end, false) {
+                return;
+            }
+        }
+        panic!("world inputs did not reach horizon");
+    }
+
+    fn iterate(&mut self, end: Time, fire_top: bool) -> bool {
         if let Some((generation, event)) = self.to_top.pop() {
             if generation == self.generation {
                 self.event(event);
@@ -584,7 +617,7 @@ impl World {
         } else if self.forge.is_due(self.env.now) {
             forge::fire(&mut self.forge, &self.forge_env, &mut self.forge_out);
             self.take_forge();
-        } else if self.top.next_deadline().is_some_and(|time| time <= self.env.now) {
+        } else if fire_top && self.top.next_deadline().is_some_and(|time| time <= self.env.now) {
             top::fire(&mut self.top, &self.env, &mut self.top_out);
             self.take_top();
             self.top.reclaim();
@@ -592,7 +625,9 @@ impl World {
             if self.env.now >= end {
                 return false;
             }
-            let next = self.top.next_deadline().unwrap_or(end).min(self.forge.next_deadline().unwrap_or(end)).min(end);
+            let next = (if fire_top { self.top.next_deadline().unwrap_or(end) } else { end })
+                .min(self.forge.next_deadline().unwrap_or(end))
+                .min(end);
             self.env.now = next;
             self.env.wall = Wall::from_nanos(next.as_nanos());
             self.forge_env.now = next;
@@ -680,6 +715,7 @@ impl World {
                 | top::Request::Taken { .. }
                 | top::Request::Refused { .. }
                 | top::Request::Outcome { .. }
+                | top::Request::ProjectionOutbox { .. }
                 | top::Request::NotMade { .. }
                 | top::Request::ContinueRelease { .. }
                 | top::Request::EffectsSettled { .. }

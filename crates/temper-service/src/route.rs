@@ -274,6 +274,7 @@ fn worker(engine: &mut Engine, request: root::WorkerRequest) {
             | root::Delivery::Result { .. }
             | root::Delivery::ProjectMade { .. }
             | root::Delivery::ForgeCommitted { .. }
+            | root::Delivery::ProjectionRecovery { .. }
             | root::Delivery::ForgeCall { .. }
             | root::Delivery::Bound { .. }
             | root::Delivery::Relay { .. }

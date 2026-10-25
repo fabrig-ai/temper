@@ -190,7 +190,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         )?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingStep>::worst_case(l.changes)?)?
         .checked_add(Map::<u64, crate::IssueRow>::worst_case(l.issues)?)?
-        .checked_add(Map::<u64, skein_lib::Wall>::worst_case(l.issues)?)?
+        .checked_add(Map::<u64, crate::domain::ProjectionWait>::worst_case(l.issues)?)?
         .checked_add(Map::<u64, skein_lib::Wall>::worst_case(l.changes)?)?
         .checked_add(Map::<u64, bool>::worst_case(l.changes)?)?
         .checked_add(Map::<u64, crate::settle::Settle>::worst_case(l.changes)?)?
