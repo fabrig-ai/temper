@@ -430,6 +430,7 @@ fn print(dirs: &Directories, peers: &Peers, binary: &Path) {
     }
     command.push_str(" source");
     eprintln!("box: {command}");
+    eprintln!("box: GitHub own App id 1, key file {}", crate::path(&dirs.data).join("github-app.pem").display());
 }
 fn sibling(binary: &Path) -> Result<PathBuf, String> {
     if !binary.is_absolute() {
@@ -577,7 +578,7 @@ fn prepare(source_dirs: &Directories, bundle: Option<&Path>, adapter: &Path) -> 
         backends::rewrite(&initial, &public(&crate::path(&effective.config).join("agent.json"))?, &paths, &peers)
             .map_err(|why| String::from_utf8_lossy(&why.line()).into_owned())?;
     // Existing peer decoders check their generated documents before any marker is published.
-    let _forge = temper_fake::forge::Document::decode(&documents.github)
+    let forge = temper_fake::forge::Document::decode(&documents.github)
         .map_err(|why| String::from_utf8_lossy(&why.line()).into_owned())?;
     let _forgejo = temper_fake::forge::Document::decode(&documents.forgejo)
         .map_err(|why| String::from_utf8_lossy(&why.line()).into_owned())?;
@@ -593,6 +594,11 @@ fn prepare(source_dirs: &Directories, bundle: Option<&Path>, adapter: &Path) -> 
     ] {
         write(&crate::path(&effective.config).join(name), document, name == "temper.json" || name == "agent.json")?;
     }
+    write(
+        &crate::path(&effective.data).join("github-app.pem"),
+        &forge.github_app_key().expect("generated GitHub App"),
+        false,
+    )?;
     validate(&effective, &documents.temper, adapter)?;
     let peers = checked_peers(&effective, &documents.temper)?;
     // Last: a crash or refusal earlier is visibly partial and is never repaired by importing records.

@@ -17,6 +17,8 @@ struct Walk {
 enum Act {
     Now(Call),
     After(ctl::NextCall),
+    /// Follow the preceding act's printed address through the box's supervised peers.
+    Visit,
 }
 
 impl Walk {
@@ -32,34 +34,34 @@ impl Walk {
         Self { scratch, paths, bundle }
     }
 
-    /// The fake box's private sandbox, DATA/box/fake-backends.
     fn sandbox(&self) -> PathBuf {
         self.paths[1].join("box/fake-backends")
     }
 
-    /// The private paste of the generated model key, populated when the walk starts.
     fn key(&self) -> PathBuf {
         self.scratch.path().join("model-key-paste")
     }
 
-    fn run(&self, acts: Vec<Act>) -> Vec<Ended> {
-        let count = acts.len();
+    /// The Model step's key way: copy the key the box leaves for the person, and add it.
+    fn add_key(&self) -> Act {
         let source = self.sandbox().join("data/llm.key");
         let paste = self.key();
+        Act::After(Box::new(move |_| {
+            super::write(&paste, &std::fs::read(&source).expect("box's fake model key"));
+            Call::new(&["add-key", "1", path(&paste), "--deployment", "--key", "walk-model", "--json"])
+        }))
+    }
+
+    fn run(&self, acts: Vec<Act>) -> Seen {
+        let count = acts.len();
         let mut steps = vec![Step::Run(Call::sign_in())];
-        steps.extend(acts.into_iter().enumerate().map(|(index, act)| {
-            let source = source.clone();
-            let paste = paste.clone();
-            Step::Then(Box::new(move |seen| {
-                if index == 0 {
-                    super::write(&paste, &std::fs::read(&source).expect("box's fake model key"));
-                }
+        steps.extend(acts.into_iter().map(|act| match act {
+            Act::Now(call) => Step::Run(call),
+            Act::Visit => Step::Visit,
+            Act::After(next) => Step::Then(Box::new(move |seen| {
                 let (_, answers) = seen.split_first().expect("signed in before the welcome's acts");
-                match act {
-                    Act::Now(call) => call,
-                    Act::After(next) => next(answers),
-                }
-            }))
+                next(answers)
+            })),
         }));
         let outcome = boxed::run_ctl_with_environment(
             self.scratch.path(),
@@ -86,7 +88,7 @@ impl Walk {
         assert!(outcome.checked.is_some(), "live checkpoint reached; box: {diagnostic}");
         assert_eq!(outcome.exit, Some(Exit::Code(0)), "healthy box stop: {diagnostic}");
         assert_eq!(outcome.left, Some(Vec::new()), "no child outlives its box: {diagnostic}");
-        outcome.calls.into_iter().skip(1).collect()
+        Seen { answers: outcome.calls.into_iter().skip(1).collect(), visits: outcome.visits }
     }
 }
 
@@ -99,90 +101,119 @@ fn usable(call: &Ended) -> bool {
     document["accounts"]["usable"].as_bool().expect("account usability")
 }
 
-fn forge(call: &Ended) -> Value {
-    ctl::json(call)["forges"]
+fn forge_number(call: &Ended, number: u16) -> Value {
+    let document = ctl::json(call);
+    let document = if document.get("met").is_some() { &document["forges"] } else { &document };
+    document["forges"]
         .as_array()
         .expect("forge rows")
         .iter()
-        .find(|row| row["number"] == 4)
+        .find(|row| row["number"] == number)
         .cloned()
-        .expect("managed fake Forgejo offered")
-}
-
-fn adoption(call: &Ended) -> Value {
-    // Connect prints progress before the terminal project/adoption answer.
-    let answer = call.stdout.split(|byte| *byte == b'\n').rfind(|line| !line.is_empty()).expect("adoption answer");
-    serde_json::from_slice(answer).expect("adoption JSON")
-}
-
-fn adopted_project(seen: &[Ended]) -> String {
-    let [_, _, connected, ..] = seen else { panic!("connection answered") };
-    adoption(connected)["project"].as_u64().expect("adopted project number").to_string()
-}
-
-fn chat_task(seen: &[Ended]) -> String {
-    let [_, _, _, _, _, _, _, started, ..] = seen else { panic!("first chat started") };
-    ctl::json(started)["outcome"]["done"]["owner"]["created"]["first"].as_u64().expect("chat's task number").to_string()
-}
-
-fn assert_ready(seen: &[Ended]) {
-    let [before_model, before_forge, connected, _, _, ready_model, ready_forge] = seen else {
-        panic!("welcome ready reads completed")
-    };
-    assert!(!usable(before_model), "no model before the key: the welcome must offer its Model step");
-    let offered = forge(before_forge);
-    assert_eq!(offered["mode"], "managed");
-    assert_eq!(offered["state"], "not_connected");
-    assert!(offered["first"].is_null(), "no first repository adopted before Connect");
-    let connected = adoption(connected);
-    let adopted = &connected["outcome"]["adopted"];
-    assert_eq!(adopted["forge"], 4);
-    assert_eq!(adopted["owner"], "fake-person");
-    assert_eq!(adopted["name"], "hello");
-    assert_eq!(adopted["role"], "owned");
-    assert_eq!(adopted["home"], true);
-    assert!(connected["project"].as_u64().expect("adopted project") > 0, "repository adopted into a project");
-    let ready = forge(ready_forge);
-    assert_eq!(ready["state"], "connected");
-    assert_eq!(ready["first"]["state"], "made");
-    assert_eq!(ready["first"]["org"], "fake-person");
-    assert_eq!(ready["first"]["repository"], "hello");
-    assert_eq!(ready["first"]["id"], adopted["repository"]);
-    assert!(usable(ready_model), "key account usable at Ready");
+        .expect("configured forge offered")
 }
 
 #[test]
 fn forgejo_elsewhere_and_a_key_reach_a_first_chat_on_the_fake_box() {
-    let walk = Walk::new("walk-elsewhere-key");
-    let key = walk.key();
-    let admin = walk.sandbox().join("data/forgejo-admin.token");
-    // The remaining failure is the worker cloning the fake forge with real git.
-    let _seen = walk.run(vec![
-        Act::Now(Call::new(&["accounts", "--json"])),
-        Act::Now(Call::new(&["forges", "--json"])),
-        Act::Now(Call::new(&[
-            "forge-connect",
-            "4",
-            "forgejo-admin",
-            path(&admin),
-            "--first",
-            "fake-person/hello",
+    elsewhere::run();
+}
+
+struct Seen {
+    answers: Vec<Ended>,
+    visits: Vec<Vec<support::sign_in_browser::Hop>>,
+}
+
+mod chatgpt;
+mod elsewhere;
+mod github;
+
+#[test]
+fn chatgpt_sign_in_and_github_one_click_reach_a_first_chat_on_the_fake_box() {
+    chatgpt::run();
+}
+
+#[test]
+fn github_one_click_and_a_key_reach_a_first_chat_on_the_fake_box() {
+    github::one_click();
+}
+
+#[test]
+fn githubs_own_app_and_a_key_reach_a_first_chat_on_the_fake_box() {
+    github::own_app();
+}
+
+fn accounts() -> Act {
+    Act::Now(Call::new(&["accounts", "--json"]))
+}
+fn forges() -> Act {
+    Act::Now(Call::new(&["forges", "--json"]))
+}
+fn wait_forges() -> Act {
+    Act::Now(Call::new(&["wait", "forges", "--until", "settled", "--json"]))
+}
+fn adopt_github() -> Act {
+    Act::After(Box::new(|seen| {
+        let connected = forge_number(seen.last().expect("settled forges"), 2);
+        assert_eq!(connected["state"], "connected", "{connected}");
+        let [installation] = connected["installations"].as_array().expect("installations").as_slice() else {
+            panic!("one installation: {connected}")
+        };
+        assert_eq!(installation["account"]["login"], "fake-person", "{installation}");
+        assert_eq!(installation["stray"], false, "the come-back accepted the installation");
+        Call::new(&[
+            "adopt",
+            "--project",
+            "1",
+            "--forge",
+            "2",
+            "--owner",
+            "fake-person",
+            "--name",
+            "widget",
+            "--landing",
+            "main",
             "--key",
-            "walk-forge",
+            "walk-adopt",
             "--json",
-        ])),
-        Act::Now(Call::new(&["wait", "forges", "--until", "connected:4", "--timeout", "30s"])),
-        Act::Now(Call::new(&["add-key", "1", path(&key), "--key", "walk-key"])),
-        Act::Now(Call::new(&["wait", "accounts", "--until", "usable", "--timeout", "10s", "--json"])),
-        Act::Now(Call::new(&["forges", "--json"])),
+        ])
+    }))
+}
+fn first_chat() -> Vec<Act> {
+    vec![
+        Act::Now(Call::new(&["wait", "accounts", "--until", "usable", "--json"])),
         Act::After(Box::new(|seen| {
-            assert_ready(seen);
-            Call::new(&["chat", "--project", &adopted_project(seen), "--key", "walk-chat", "Say hello", "--json"])
+            assert!(usable(seen.last().expect("usable account read")), "Ready has a usable account");
+            Call::new(&["chat", "--project", "1", "--model", "gpt-6-luna", "--key", "walk-chat", "Hello", "--json"])
         })),
-        Act::After(Box::new(|seen| Call::new(&["task", &chat_task(seen), "--json"]))),
-        Act::After(Box::new(|seen| {
-            Call::new(&["wait", "task", &chat_task(seen), "--until", "replied", "--timeout", "10s", "--json"])
-        })),
-    ]);
-    walk.scratch.remove();
+        Act::Now(Call::new(&["task", "1", "--json"])),
+        Act::Now(Call::new(&["wait", "task", "1", "--until", "replied", "--json"])),
+        Act::Now(Call::new(&["chat", "1", "--json"])),
+    ]
+}
+fn assert_reply(seen: &Seen) {
+    let chat = ctl::json(seen.answers.last().expect("committed chat"));
+    let replies: Vec<_> = chat["activity"]["rows"]
+        .as_array()
+        .expect("conversation rows")
+        .iter()
+        .filter_map(|row| row["event"]["owner"]["decoded"]["turn"]["decoded"]["messages"].as_array())
+        .flatten()
+        .filter(|message| message["speaker"] == "assistant")
+        .flat_map(|message| message["blocks"].as_array().expect("assistant blocks"))
+        .filter_map(|block| block["text"]["text"].as_str())
+        .collect();
+    assert_eq!(replies, ["Hello from the local fake model."]);
+}
+
+fn assert_adopted(seen: &Seen, number: u16, name: &str) {
+    let adopted = seen
+        .answers
+        .iter()
+        .filter_map(|answer| serde_json::from_slice::<Value>(&answer.stdout).ok())
+        .find_map(|value| value.get("adopted").cloned())
+        .expect("first repository durably adopted");
+    assert_eq!(adopted["forge"], number);
+    assert_eq!(adopted["owner"], "fake-person");
+    assert_eq!(adopted["name"], name);
+    assert_eq!(adopted["home"], true);
 }

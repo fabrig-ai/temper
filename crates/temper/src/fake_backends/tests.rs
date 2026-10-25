@@ -798,3 +798,21 @@ fn source_adapter_is_a_bounded_fact_without_path_discovery() {
     let effective = read_json(&crate::path(&first.directories.config).join("agent.json"));
     assert_ne!(effective["programs"]["claude_code"]["path"], agent["programs"]["claude_code"]["path"]);
 }
+
+#[test]
+fn own_app_key_is_the_seeded_apps_private_pem() {
+    let scratch = Scratch::new("own-app-key");
+    let (source, prepared) = prepared_source(&scratch);
+    let path = crate::path(&prepared.directories.data).join("github-app.pem");
+    let key = fs::read(&path).expect("own-App key left for the person");
+    let forge = temper_fake::forge::Document::decode(
+        &fs::read(crate::path(&prepared.directories.config).join("github.json")).expect("forge document"),
+    )
+    .expect("generated forge");
+    assert_eq!(key, forge.github_app_key().expect("seeded App").as_ref());
+    assert!(key.starts_with(b"-----BEGIN RSA PRIVATE KEY-----"));
+    assert_eq!(fs::metadata(&path).expect("key metadata").mode() & 0o777, 0o600);
+    drop(prepared);
+    let _again = start(&source, None).expect("reuse keeps the key");
+    assert_eq!(fs::read(&path).expect("retained key"), key);
+}

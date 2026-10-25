@@ -1905,6 +1905,7 @@ pub fn run_live(
             .map(|call| super::Ended { exit: call.exit, stdout: call.stdout.clone(), stderr: call.stderr.clone() })
             .collect(),
         checked: evidence.take(),
+        visits: Vec::new(),
     })
 }
 

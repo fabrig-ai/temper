@@ -73,6 +73,12 @@ impl Document {
             github: None,
         }
     }
+    /// The seeded App's public test private key, for the fake box's own-App path.
+    #[must_use]
+    pub fn github_app_key(&self) -> Option<Box<[u8]>> {
+        let github = self.github.as_ref()?;
+        Some(github.pem())
+    }
     pub fn decode(bytes: &[u8]) -> Result<Self, Refusal> {
         let d = read::document(bytes)?;
         let p = Path::root();

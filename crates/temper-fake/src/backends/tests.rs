@@ -162,6 +162,7 @@ fn generated_peers_use_existing_formats_and_the_first_added_key() {
     let docs = write(&temper, &agent, &paths, &peers).expect("rewrite init");
     let forge = crate::forge::Document::decode(&docs.github).expect("existing forge format");
     let llm = crate::llm::Document::decode(&docs.llm).expect("existing model format");
+    assert_eq!(json(&docs.github)["github"]["app"]["setup_url"], "http://127.0.0.1:8367/forges/2/github/setup");
     assert_eq!(forge.listen(), peers.github);
     assert_eq!(llm.listen(), peers.llm);
     assert_eq!(llm.key(), b"/effective/data/llm.key");

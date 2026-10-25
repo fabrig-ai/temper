@@ -1,7 +1,5 @@
-//! The person's browser, cut down to what a sign-in's visit needs here: one
-//! GET of the URL the driver asks to be visited, its answer's status kept.
-//! It follows the issuer's 302 and listener's 303, ending at the returned page.
-//! The page itself needs no cookie; this visitor knows no OAuth or browser sign-in.
+//! The person's bounded browser: redirects, the manifest form and its Create
+//! link, on a fresh loopback connection per hop. The landing page needs no cookie.
 // Adapted from jig's protocol-accounts world's private browser at the pinned revision.
 const ROOM: u32 = 64;
 fn limits() -> skein_oauth_accounts::Limits {
@@ -12,11 +10,21 @@ use skein_io::{self as io, kernel};
 use skein_lib::stream::{Down, Read, Up};
 use skein_lib::{Env, Queue, Time, Token, Wall, bytes};
 use skein_world::Host;
-use std::net::SocketAddr;
+use std::{fmt::Write as _, net::SocketAddr};
 
 const WEB: Token = Token::new(1);
 /// Room for a response body; the issuer's redirect has none.
-const BODY: u32 = 256;
+const BODY: u32 = 4096;
+const PAGE_BYTES: usize = 65_536;
+// Manifest, create, conversion, installation and setup; OAuth needs three.
+const HOPS: usize = 5;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hop {
+    pub method: String,
+    pub path: String,
+    pub status: u16,
+}
 /// Room for the URL handed over, the driver's `url_bytes`.
 const URL: usize = 1024;
 
@@ -36,10 +44,15 @@ pub struct Visitor {
     /// copies it, so its heap is the visitor's.
     inbox: [u8; URL],
     inbox_len: usize,
-    handed: bool,
     status: Option<u16>,
     account_redirect: Option<Box<[u8]>>,
     last_redirect: Option<(u16, Box<[u8]>)>,
+    hops: Vec<Hop>,
+    target: String,
+    authority: String,
+    body: Vec<u8>,
+    form: Option<Box<[u8]>>,
+    posting: bool,
 }
 impl std::fmt::Debug for Visitor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -64,17 +77,25 @@ impl Visitor {
             connected: false,
             inbox: [0; URL],
             inbox_len: 0,
-            handed: false,
             status: None,
             account_redirect: None,
             last_redirect: None,
+            hops: Vec::new(),
+            target: String::new(),
+            authority: String::new(),
+            body: Vec::new(),
+            form: None,
+            posting: false,
         }
     }
     /// Hands over `url` to visit, once: a plain `http://` URL with a
     /// literal address.
     pub(crate) fn hand(&mut self, url: &[u8]) {
-        assert!(!self.handed, "one visit");
-        self.handed = true;
+        assert!(self.is_empty(), "previous visit drained");
+        self.http = http::Client::new(&limits().http);
+        self.last_redirect = None;
+        self.status = None;
+        self.hops.clear();
         self.inbox.get_mut(..url.len()).expect("the URL fits the inbox").copy_from_slice(url);
         self.inbox_len = url.len();
     }
@@ -83,24 +104,74 @@ impl Visitor {
         let at = rest.iter().position(|byte| *byte == b'/').expect("a path");
         let (authority, target) = rest.split_at(at);
         let address: SocketAddr = std::str::from_utf8(authority).expect("ascii").parse().expect("a literal address");
+        assert!(address.ip().is_loopback(), "visitor stays on the box's loopback peers");
+        std::str::from_utf8(target).expect("target text").clone_into(&mut self.target);
+        std::str::from_utf8(authority).expect("authority text").clone_into(&mut self.authority);
+        self.body.clear();
+        self.posting = self.form.is_some();
+        let mut headers = vec![Header { name: bytes::copy_of(b"host"), value: bytes::copy_of(authority) }];
+        if self.posting {
+            headers.push(Header {
+                name: bytes::copy_of(b"content-type"),
+                value: bytes::copy_of(b"application/x-www-form-urlencoded"),
+            });
+        }
         self.calls.push(http::Request::Call(http::Call {
-            method: Method::Get,
+            method: if self.posting { Method::Post } else { Method::Get },
             target: bytes::copy_of(target),
-            headers: Box::new([Header { name: bytes::copy_of(b"host"), value: bytes::copy_of(authority) }]),
-            body: http::Body::None,
+            headers: headers.into_boxed_slice(),
+            body: self
+                .form
+                .as_ref()
+                .map_or(http::Body::None, |form| http::Body::Length(u64::try_from(form.len()).expect("bounded form"))),
             close: true,
         }));
+        if let Some(form) = &self.form {
+            self.calls.push(http::Request::Upload(Down::Demand {
+                read: Read::Nothing,
+                room: u32::try_from(form.len()).expect("bounded form"),
+            }));
+        }
         self.requests.push(io::Request::Connect { owner: WEB, addr: io::Addr::Ip(address) });
     }
-    /// The visit's answer's status, once its exchange is done.
+    /// The first response's status, once its exchange is done.
     #[must_use]
     pub fn status(&self) -> Option<u16> {
-        self.status
+        self.hops.first().map(|hop| hop.status)
     }
     /// The last redirect's status and Location, retained after following it.
     #[must_use]
     pub fn last_redirect(&self) -> Option<(u16, &[u8])> {
         self.last_redirect.as_ref().map(|(status, location)| (*status, location.as_ref()))
+    }
+    #[must_use]
+    pub fn hops(&self) -> &[Hop] {
+        &self.hops
+    }
+    fn page(&mut self) {
+        if self.account_redirect.is_some() || self.status != Some(200) {
+            return;
+        }
+        let html = std::str::from_utf8(&self.body).expect("page UTF-8");
+        if self.target.contains("/github/manifest?") {
+            let form = html.split_once("<form ").expect("manifest form").1;
+            let action = attribute(form.split_once('>').expect("form tag").0, "action");
+            let input =
+                html.split("<input ").skip(1).find(|tag| tag.contains("name=\"manifest\"")).expect("manifest input");
+            let manifest = attribute(input.split_once('>').expect("input tag").0, "value");
+            let mut form = String::from("manifest=");
+            for byte in manifest.bytes() {
+                write!(form, "%{byte:02X}").expect("form byte");
+            }
+            assert!(form.len() <= PAGE_BYTES, "bounded manifest form");
+            self.form = Some(form.into_bytes().into_boxed_slice());
+            self.account_redirect = Some(action.into_bytes().into_boxed_slice());
+        } else if self.posting {
+            // The fake's Create link stands in for GitHub's confirmation button.
+            let link = html.split("<a ").skip(1).find(|tag| tag.contains("id=\"create\"")).expect("Create link");
+            self.account_redirect =
+                Some(attribute(link.split_once('>').expect("link tag").0, "href").into_bytes().into_boxed_slice());
+        }
     }
     fn progress(&mut self, now: Time, wall: Wall) {
         let env = Env { now, wall, limits: limits().http };
@@ -113,27 +184,51 @@ impl Visitor {
                         .iter()
                         .find(|header| header.name.eq_ignore_ascii_case(b"location"))
                         .map(|header| header.value.clone());
-                    if self.status.is_none() {
-                        self.status = Some(response.status);
-                    }
+                    self.status = Some(response.status);
+                    assert!(self.hops.len() < HOPS, "bounded visit chain");
+                    self.hops.push(Hop {
+                        method: if self.posting { "POST" } else { "GET" }.into(),
+                        path: self.target.clone(),
+                        status: response.status,
+                    });
+                    eprintln!("visit {} {} -> {}", self.hops.last().expect("hop").method, self.target, response.status);
                     if matches!(response.status, 302 | 303) {
-                        self.account_redirect = location;
+                        self.account_redirect = location.map(|url| {
+                            if url.starts_with(b"/") {
+                                format!(
+                                    "http://{}{}",
+                                    self.authority,
+                                    std::str::from_utf8(&url).expect("Location text")
+                                )
+                                .into_bytes()
+                                .into_boxed_slice()
+                            } else {
+                                url
+                            }
+                        });
                         assert!(self.account_redirect.is_some(), "account sign-in redirect");
                         self.last_redirect =
                             Some((response.status, self.account_redirect.as_ref().expect("redirect Location").clone()));
                     }
                     self.calls.push(http::Request::Body(Down::Demand { read: Read::Arrived { max: BODY }, room: 0 }));
                 }
-                http::Event::Body(Up::Bytes(_)) => {
+                http::Event::Body(Up::Bytes(bytes)) => {
+                    self.body.extend_from_slice(&bytes);
+                    assert!(self.body.len() <= PAGE_BYTES, "bounded page");
                     self.calls.push(http::Request::Body(Down::Demand { read: Read::Arrived { max: BODY }, room: 0 }));
                 }
                 http::Event::Body(Up::End) | http::Event::Closed => {}
+                http::Event::Upload(Up::Room) => {
+                    self.calls.push(http::Request::Upload(Down::Send(self.form.take().expect("posted form"))));
+                    self.calls.push(http::Request::Upload(Down::Finish));
+                }
                 http::Event::Done(_) => {
+                    self.page();
                     self.calls.push(http::Request::Close);
                     self.requests.push(io::Request::Close { entity: socket });
                 }
                 http::Event::Failed(_)
-                | http::Event::Upload(Up::Room | Up::Bytes(_) | Up::End | Up::Failed(_))
+                | http::Event::Upload(Up::Bytes(_) | Up::End | Up::Failed(_))
                 | http::Event::Body(Up::Room | Up::Failed(_)) => panic!("the visit failed: {event:?}"),
             }
         }
@@ -261,4 +356,10 @@ impl Host for Visitor {
     fn operations(&self) -> u32 {
         io::operations(&limits().io).expect("io operation bound")
     }
+}
+
+fn attribute(tag: &str, name: &str) -> String {
+    let marker = format!("{name}=\"");
+    let value = tag.split_once(&marker).expect("HTML attribute").1.split_once('"').expect("attribute end").0;
+    value.replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 }
