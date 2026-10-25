@@ -674,3 +674,24 @@ through the director.
 - **Cost:** 245's ready, command, stop and triage values stay. Only
   the driver's three measured bounds rescale by about 1.5 times the
   calibration's use, reported with the run's spend before use.
+
+## 12. Welcome paths on the fake box
+
+`lab/welcome-github` clicks GitHub's one-click App creation, installation
+and return, adopts `fake-person/widget`, pastes the box's named fake model
+key, reaches Ready, and opens `widget`. `lab/welcome-forgejo-here` clicks
+Forgejo here, makes `work/hello` in `hello`, and uses the same key path.
+Each then sends a first chat and requires the fake reply before and after
+reload. Welcome, Forge, Model, Ready and chat are separate seed actions,
+so a live scene can capture between them. All welcome experiments keep
+one byte-identical `call`, guarded by a unit test: failure keeps an
+outline and shot, then stops.
+
+The GitHub hand admits its box's captured fake GitHub origin as its sole
+peer. Forgejo here's hand has no peer: its walk never opens the forge's
+pages. Its subject supplies a `forgejo-cache` USTAR tree at the box's
+cache paths for Forgejo 17.0.0 and runner 13.2.0; ordinary fetch verifies
+the pins. Both checks reject all hand trouble and require ctl's first
+committed assistant message to equal the fake model's reply. These are
+on-demand browser experiments, with pure manifest/proof tests and POSIX
+shell process tests under `lab/tests/`.

@@ -1,0 +1,83 @@
+#!/bin/sh
+# The welcome's browser phases, followed by a persisted first conversation.
+set -eu
+if [ "$#" -ne 5 ]; then
+    echo 'usage: steps PHASE BROWSE ADDRESS GROUND KEY' >&2
+    exit 2
+fi
+phase=$1
+browse=$2
+address=$3
+ground=$4
+key=$5
+call() {
+    printf '+ browse'
+    printf ' %s' "$@"
+    printf '\n'
+    status=0
+    "$browse" "$address" "$@" || status=$?
+    if [ "$status" -ne 0 ]; then
+        # Retain the failing page without continuing past a missed step.
+        "$browse" "$address" outline || :
+        "$browse" "$address" shot || :
+        exit "$status"
+    fi
+}
+welcome() {
+    call go /welcome
+    call wait heading 'Welcome to temper' --exact --timeout 120
+    call press link 'Set up temper' --exact
+    call wait heading 'Connect a forge' --exact --timeout 120
+}
+forge() {
+    call wait button 'Connect GitHub' --exact --timeout 120
+    call press button 'Connect GitHub' --exact
+    call wait link 'Create GitHub App' --exact --timeout 120
+    call press link 'Create GitHub App' --exact
+    # GitHub creates and installs the App, then returns the tab unaided.
+    call wait heading 'Choose a repository to start in' --exact --timeout 120
+    call press choice 'fake-person/widget' --exact
+    call wait button 'Adopt fake-person/widget' --exact --timeout 120
+    call press button 'Adopt fake-person/widget' --exact
+    call wait heading 'Connect a model' --exact --timeout 120
+}
+model() {
+    call wait heading 'Connect a model' --exact --timeout 120
+    call press link 'Use an API key' --exact
+    call wait 'text field' 'Key (pasted once)' --exact --timeout 120
+    call type 'text field' 'Key (pasted once)' < "$key"
+    call press button 'Add key' --exact
+}
+ready() {
+    call wait heading 'fake-person/widget is ready' --exact --timeout 120
+    call press link 'Open widget' --exact
+    call wait 'text area' 'Start a chat' --exact --timeout 120
+}
+chat() {
+    call wait 'text area' 'Start a chat' --exact --timeout 120
+    printf 'Hello from the welcome lab.\n' | call type 'text area' 'Start a chat'
+    call press button Start --exact
+    call wait log Conversation --timeout 120
+    call wait text 'Hello from the local fake model.' --in log Conversation --timeout 180
+    # Derive the ordinary ctl chat read from the page the person reached.
+    current=$("$browse" "$address" address)
+    printf '%s\n' "$current"
+    case "$current" in
+        http://*/chats/*) task=${current##*/chats/} ;;
+        *) echo 'steps: expected a chat address' >&2; exit 1 ;;
+    esac
+    case "$task" in ''|*[!0-9]*) echo 'steps: expected a numeric chat' >&2; exit 1 ;; esac
+    printf '%s\n' "$task" > "$ground/chat"
+    call reload
+    call wait text 'Hello from the local fake model.' --in log Conversation --timeout 120
+    call shot
+}
+case "$phase" in
+    welcome) welcome ;;
+    forge) forge ;;
+    model) model ;;
+    ready) ready ;;
+    chat) chat ;;
+    walk) welcome; forge; model; ready; chat ;;
+    *) echo 'steps: unknown phase' >&2; exit 2 ;;
+esac
