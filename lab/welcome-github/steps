@@ -60,8 +60,15 @@ ready() {
     # The selected project is also the new chat composer's project.
     outline=$(call outline)
     printf '%s\n' "$outline"
-    case "$outline" in
-        *'button "widget" [pressed]'*) ;;
+    # frame.rs emits the selected project before the other project buttons.
+    selected=
+    while read -r line; do
+        case "$line" in 'button "'*) selected=$line; break ;; esac
+    done <<OUTLINE
+$outline
+OUTLINE
+    case "$selected" in
+        'button "widget"'*) ;;
         *) echo 'steps: expected the composer in project widget' >&2; exit 1 ;;
     esac
 }

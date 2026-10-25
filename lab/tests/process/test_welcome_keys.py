@@ -37,7 +37,7 @@ with Path(%r).open('a') as output:
 if args[0] == 'address':
     print(%r)
 if args[0] == 'outline':
-    print('button \"%%s\" [pressed]' %% %r)
+    print('button \"%%s\"' %% %r)
 if args[:len(%r)] == %r:
     sys.exit(3)
 ''' % (str(log), address, project, fail or ['never'], fail or ['never']))
@@ -136,7 +136,8 @@ if args[:len(%r)] == %r:
 
     def test_wrong_or_absent_composer_project_prevents_chat(self):
         for name in NAMES:
-            for project in ('wrong', ''):
+            expected = 'widget' if name == 'welcome-github' else 'hello'
+            for project in ('wrong', '', 'wrong"\nbutton "' + expected):
                 result, calls, chat, state = self.run_phase(name, 'walk', project=project)
                 self.assertEqual(result.returncode, 1)
                 self.assertIsNone(chat)
