@@ -60,7 +60,7 @@ pub struct Forge {
     pub transport: Transport,
     /// The base of each remote and the host of the forge's resource paths.
     pub git: Box<[u8]>,
-    /// The fake forge's resolved git program, in place of the worker's git.
+    /// The forge's resolved git program, in place of the worker's git.
     pub git_program: Option<Box<[u8]>>,
     pub web: Option<Box<[u8]>>,
     /// The pasted GitHub App, its hook and installations belong to another owner.

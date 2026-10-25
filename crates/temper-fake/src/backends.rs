@@ -314,7 +314,8 @@ pub fn rewrite(temper: &[u8], agent: &[u8], paths: &Paths, peers: &Peers) -> Res
     let mut edits = Edits::new();
     let application = member(&d, 0, b"application", &root)?;
     let ap = root.member(b"application");
-    forge(&d, application, &github, &mut edits, &ap)?;
+    let git_program = path(&paths.data, b"demo/bin/git");
+    forge(&d, application, &github, &git_program, &mut edits, &ap)?;
     let engine = member(&d, 0, b"engine", &root)?;
     let ep = root.member(b"engine").member(b"llm");
     let llm_at = member(&d, engine, b"llm", &root.member(b"engine"))?;
@@ -328,7 +329,7 @@ pub fn rewrite(temper: &[u8], agent: &[u8], paths: &Paths, peers: &Peers) -> Res
     }
     edits.text(&d, bundle, &paths.bundle, &ap.member(b"clients").member(b"bundle"))?;
     worker(&d, &paths.config, &mut edits)?;
-    managed(&d, application, &forgejo, &mut edits)?;
+    managed(&d, application, &forgejo, &git_program, &mut edits)?;
     let mut agent_edits = Edits::new();
     let endpoints = member(&a, 0, b"endpoints", &root)?;
     endpoint(&a, endpoints, &llm, true, &mut agent_edits, &root.member(b"endpoints"))?;
@@ -383,7 +384,13 @@ fn object_member(d: &Document, at: u32, name: &[u8], value: &[u8], edits: &mut E
         append(d, at, &read::joined(&[b"{", &text(name)?, b":", value, b"}"]), edits)
     }
 }
-fn managed(d: &Document, application: u32, socket: &[u8], edits: &mut Edits) -> Result<(), Refusal> {
+fn managed(
+    d: &Document,
+    application: u32,
+    socket: &[u8],
+    git_program: &[u8],
+    edits: &mut Edits,
+) -> Result<(), Refusal> {
     let p = Path::root().member(b"application");
     let origin = text(&read::joined(&[b"http://", socket]))?;
     let forge = read::joined(&[
@@ -391,6 +398,8 @@ fn managed(d: &Document, application: u32, socket: &[u8], edits: &mut Edits) -> 
         &address(socket)?,
         b",\"web\":null,\"git\":",
         &origin,
+        b",\"git_program\":",
+        &text(git_program)?,
         br#", "transport":"plaintext"}"#,
     ]);
     for (name, value) in [
@@ -421,7 +430,14 @@ fn managed(d: &Document, application: u32, socket: &[u8], edits: &mut Edits) -> 
     }
     Ok(())
 }
-fn forge(d: &Document, application: u32, github: &[u8], edits: &mut Edits, ap: &Path) -> Result<(), Refusal> {
+fn forge(
+    d: &Document,
+    application: u32,
+    github: &[u8],
+    git_program: &[u8],
+    edits: &mut Edits,
+    ap: &Path,
+) -> Result<(), Refusal> {
     let forges = member(d, application, b"forges", ap)?;
     let fp = ap.member(b"forges");
     let forge = selected(d, forges, b"number", b"2", true, &fp)?;
@@ -446,6 +462,7 @@ fn forge(d: &Document, application: u32, github: &[u8], edits: &mut Edits, ap: &
         };
         edits.set(d, at, &value, &fp.member(name))?;
     }
+    object_member(d, forge, b"git_program", &text(git_program)?, edits)?;
     tls(d, forge, edits, &fp)?;
     Ok(())
 }
