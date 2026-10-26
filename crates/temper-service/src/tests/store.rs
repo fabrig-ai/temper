@@ -54,6 +54,13 @@ fn page_floor_admits_exact_map_and_frame_bounds_and_refuses_one_short() {
     // Sizing only: make the frame larger than the map without allocating it.
     for (transcript, page) in [(8, map_bytes), (map_bytes, map_bytes.checked_add(64).unwrap())] {
         root.loads.transcript_bytes = transcript;
+        // Model startup's turn-plus-record and decoded read-row load bounds.
+        root.loads.bytes = transcript.checked_add(u32::try_from(size_of::<engine::Record>()).unwrap()).unwrap();
+        root.loads.read_bytes = u64::from(transcript)
+            .checked_add(u64::try_from(size_of::<jig_domain_core::reads::Row>()).unwrap())
+            .unwrap()
+            .checked_add(u64::try_from(size_of::<jig_domain_core::Record>()).unwrap())
+            .unwrap();
         profile.store.page.bytes = page;
         let checked = store::limits(&root, &root.forge, &profile).expect("exact page ceiling");
         assert_eq!(checked.store.page.bytes, page);
@@ -63,7 +70,7 @@ fn page_floor_admits_exact_map_and_frame_bounds_and_refuses_one_short() {
         assert_eq!(checked.store.key, map.store.key);
         assert_eq!(checked.store.value, map.store.value);
         assert_eq!(checked.reads, map.reads);
-        assert_eq!(checked.core, map.core);
+        assert_eq!(checked.core, engine::core_limits(&root));
         assert_eq!(checked.queue, map.queue);
         assert_eq!(checked.store.queued_bytes, map.store.queued_bytes);
         assert_eq!(checked.store.commit, map.store.commit);
@@ -76,6 +83,14 @@ fn page_floor_admits_exact_map_and_frame_bounds_and_refuses_one_short() {
 fn shipped_maximum_frame_fits_small_page_and_out_of_codec_admission_refuses() {
     let (mut root, _, profile) = fixtures::store_limits();
     root.loads.transcript_bytes = 1_590_046;
+    // Model startup's turn-plus-record and decoded read-row load bounds.
+    root.loads.bytes =
+        root.loads.transcript_bytes.checked_add(u32::try_from(size_of::<engine::Record>()).unwrap()).unwrap();
+    root.loads.read_bytes = u64::from(root.loads.transcript_bytes)
+        .checked_add(u64::try_from(size_of::<jig_domain_core::reads::Row>()).unwrap())
+        .unwrap()
+        .checked_add(u64::try_from(size_of::<jig_domain_core::Record>()).unwrap())
+        .unwrap();
     let checked = store::limits(&root, &root.forge, &profile).expect("shipped maximum fits Small");
     assert_eq!(checked.store.page.bytes, 1_590_110);
     assert_eq!(checked.store.page.bytes, profile.store.page.bytes);
