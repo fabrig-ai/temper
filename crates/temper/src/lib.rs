@@ -390,7 +390,8 @@ fn prepare_with_store(
     bytes: &[u8],
     owned: &mut Vec<Fd>,
 ) -> Result<(service::Service, Box<[u8]>), String> {
-    prepare_with_limits(directories, bytes, owned, false).map(|(service, store, _)| (service, store))
+    prepare_with_limits(directories, bytes, owned, false, &service::stock::Given::Stock)
+        .map(|(service, store, _)| (service, store))
 }
 #[expect(clippy::too_many_lines, reason = "startup opens checked resources in dependency order")]
 fn prepare_with_limits(
@@ -398,26 +399,28 @@ fn prepare_with_limits(
     bytes: &[u8],
     owned: &mut Vec<Fd>,
     under_box: bool,
+    given: &service::stock::Given,
 ) -> Result<(service::Service, Box<[u8]>, u32), String> {
-    if service::startup::shape(bytes, &directories.jig())
+    if service::startup::shape_with(bytes, &directories.jig(), given)
         .map_err(|why| String::from_utf8_lossy(&service::startup::lines(&why)).into_owned())?
         == service::startup::Shape::WorkerAlone
     {
         return worker_alone::prepare(directories, bytes, owned).map(|service| (service, Box::new([]) as Box<[u8]>, 0));
     }
-    let setup::Deployment { named, checked, limits, .. } = setup::check(bytes, &directories.jig())?;
+    let setup::Deployment { named, checked, limits, .. } = setup::check_with(bytes, &directories.jig(), given)?;
     let document =
         config::document(bytes, &config::DocumentLimits { bytes: CONFIG_BYTES, tokens: CONFIG_BYTES, depth: 32 })
             .expect("named checked document");
-    let engine = temper_service::startup::engine(&document, member(&document, 0, b"engine"), &directories.jig())
-        .expect("named checked engine");
+    let engine =
+        temper_service::startup::engine_with(&document, member(&document, 0, b"engine"), &directories.jig(), given)
+            .expect("named checked engine");
     let forges = forges(&named.forges, address)?;
     let agent = named.worker.as_ref().map(|_| agent::preflight(&named)).transpose()?;
     let user = skein_shell::effective_user();
     let mut named_files = named.files.into_vec();
     named_files.extend(service::startup::setup_files(&checked));
     let mut files = read_files_with_asked(named_files.into_boxed_slice(), named.asked_files, user)?;
-    let reads = service::startup::handover_reads(bytes, &directories.jig(), &checked)
+    let reads = service::startup::handover_reads_with(bytes, &directories.jig(), &checked, given)
         .map_err(|why| String::from_utf8_lossy(&service::startup::lines(&why)).into_owned())?;
     let mut entries = List::with_capacity(
         files.entries.len().checked_add(u32::try_from(reads.len()).expect("checked handovers")).expect("checked files"),
@@ -472,7 +475,7 @@ fn prepare_with_limits(
     let drawn = skein_shell::crypto_seed().map_err(|errno| format!("installation id: errno {errno}"))?;
     let mut installation = [0_u8; 16];
     installation.copy_from_slice(drawn.expose().get(..16).expect("32-byte seed"));
-    let mut service = service::startup::with_setup(
+    let mut service = service::startup::with_setup_given(
         bytes,
         &directories.jig(),
         &files,
@@ -483,6 +486,7 @@ fn prepare_with_limits(
         forges,
         Some(&checked),
         under_box,
+        given,
     )
     .map_err(|why| String::from_utf8_lossy(&service::startup::lines(&why)).into_owned())?;
     service
@@ -532,6 +536,29 @@ pub fn prepare_in(directories: &Directories) -> Result<service::Service, String>
     }
     result.map_err(|why| prefixed("temper serve", &why))
 }
+/// Prepare an in-process world's service with the supplied defaults.
+pub fn prepare_in_with(directories: &Directories, given: &service::stock::Given) -> Result<service::Service, String> {
+    let bytes = directories.read().map_err(|why| prefixed("temper serve", &why))?;
+    let mut owned = Vec::new();
+    let result = prepare_with_limits(directories, &bytes, &mut owned, false, given).map(|(service, _, _)| service);
+    if result.is_err() {
+        close(owned);
+    }
+    result.map_err(|why| prefixed("temper serve", &why))
+}
+/// Derive that same world's admission envelope without retaining its descriptors.
+pub fn envelope_in_with(
+    directories: &Directories,
+    config: &[u8],
+    given: &service::stock::Given,
+) -> Result<(u64, u32), String> {
+    directories.open(skein_shell::effective_user())?;
+    let mut owned = Vec::new();
+    let result = prepare_with_limits(directories, config, &mut owned, false, given)
+        .map(|(service, _, _)| (service.worst_case(), service.operations()));
+    close(owned);
+    result.map_err(|why| prefixed("temper serve", &why))
+}
 fn listeners_refusal(why: skein_shell::ListenersRefusal) -> String {
     use skein_shell::ListenersRefusal as Why;
     match why {
@@ -558,7 +585,7 @@ fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
     }
     let bytes = directories.read()?;
     let mut owned = listeners.iter().map(|(fd, _)| *fd).collect::<Vec<_>>();
-    let prepared = prepare_with_limits(directories, &bytes, &mut owned, boxed);
+    let prepared = prepare_with_limits(directories, &bytes, &mut owned, boxed, &service::stock::Given::Stock);
     let (mut service, store, line_bytes) = match prepared {
         Ok(prepared) => prepared,
         Err(why) => {

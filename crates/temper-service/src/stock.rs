@@ -10,6 +10,33 @@ use jig_domain_people::{TemplateBudget, TemplateDeadline, TemplateExecutor};
 use jig_domain_tasks::{Contract, EndedBy, Flags, Retention};
 use skein_lib::{Duration, List, Map, bytes};
 
+/// Settings defaults supplied at a start (protocol/configuration.md, 13.4).
+/// The binary uses Stock; an in-process test world may pass its own values.
+#[derive(Debug)]
+pub enum Given {
+    Stock,
+    Own(Box<Defaults>),
+}
+impl Given {
+    pub(crate) fn defaults(&self, llm: &jig_protocol_config::Llm) -> Defaults {
+        match self {
+            Self::Stock => defaults(llm),
+            Self::Own(own) => {
+                let mut policies = Map::with_capacity(own.policies.len());
+                for (number, policy) in &own.policies {
+                    policies.insert(*number, policy.clone()).expect("counted policies");
+                }
+                Defaults {
+                    charters: own.charters.clone(),
+                    templates: own.templates.clone(),
+                    policies,
+                    rules: own.rules.clone(),
+                }
+            }
+        }
+    }
+}
+
 const FORGE: u16 = 1;
 
 /// Delegate (a chat's `change` and `delegate`) and Read (the forge's reads), jig's families

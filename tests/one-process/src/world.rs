@@ -31,6 +31,7 @@ pub enum Story {
 pub struct Outcome {
     pub verdict: skein_world::domain::Verdict,
     pub signed_in: u32,
+    pub settings_revision: u32,
     pub chats_answered: u32,
     pub adopted: u32,
     pub pushed: Vec<Pushed>,
@@ -562,7 +563,7 @@ fn person_failed(step: u32, why: &skein_fake_person::Why, wire: &referee::client
 fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
     let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
-    let mut service = temper_service::startup::startup(
+    let mut service = temper_service::startup::startup_with(
         &fixtures::document(),
         // Simulated fixture paths stay relative to their inherited roots.
         &jig_protocol_config::Directories::working(),
@@ -572,6 +573,7 @@ fn service(inherited: &Inherited) -> Proc {
         None,
         temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() },
         fixtures::forges(),
+        &stories::given(&serde_json::from_slice(&fixtures::document()).expect("deployment JSON")),
     )
     .expect("one-process startup");
     service.adopt_store(root, 1000).expect("deployment store");
@@ -671,6 +673,8 @@ pub fn drain_mid_run(settings: Settings, restart: bool) -> Outcome {
     if restart {
         let (next, _, _) =
             run_phase(settings, Story::ChatReadThenWait { words: b"Hello" }, Phase::Restart, disk, store, run);
+        assert_eq!(outcome.settings_revision, 2, "one hosted ctl settings change before the signal");
+        assert_eq!(next.settings_revision, outcome.settings_revision, "the changed settings survive restart");
         outcome.restarts = next.restarts;
         outcome.claims_settled_at_restart = next.claims_settled_at_restart;
         outcome.drained &= next.drained;
@@ -872,6 +876,27 @@ fn write_settings(disk: &mut skein_fake_machine::Machine) {
     }
 }
 
+fn settings_revision(records: &Store) -> u32 {
+    records
+        .rows
+        .values()
+        .filter_map(|row| {
+            if let temper_engine_domain::Record::Core(jig_domain_core::Record::Core(
+                jig_domain_core::CoreRecord::Settings(jig_domain_core::settings::Record::Revision {
+                    history: false,
+                    revision,
+                }),
+            )) = row
+            {
+                Some(revision.head.number)
+            } else {
+                None
+            }
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 fn run_phase(
     settings: Settings,
     scenario: Story,
@@ -881,7 +906,7 @@ fn run_phase(
     run: Rc<RefCell<referee::Run>>,
 ) -> (Outcome, skein_fake_machine::Machine, Store) {
     stories::set(scenario);
-    stories::setup_settings(matches!(phase, Phase::Story | Phase::Drain));
+    stories::setup_settings(matches!(phase, Phase::Drain));
     write_settings(&mut disk);
     PROGRESS.with(|progress| *progress.borrow_mut() = Progress::default());
     let client = matches!(phase, Phase::Story | Phase::SignIn | Phase::Drain).then(|| disk.reopen_root(2));
@@ -967,6 +992,7 @@ fn run_phase(
     let result = Outcome {
         verdict: skein_world::domain::Verdict::Passed,
         signed_in,
+        settings_revision: settings_revision(&records),
         chats_answered,
         adopted,
         pushed,

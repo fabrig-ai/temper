@@ -418,16 +418,6 @@ pub(crate) struct Caller {
 fn is_settings(argv: &Argv) -> bool {
     matches!(argv.0.first(), Some(Arg::Lit("change-settings")))
 }
-// Only task-creating stories pay for the common timing/budget settings.
-fn reads_settings(step: &Step) -> bool {
-    if let Step::Call { argv, .. } | Step::Start { argv, .. } | Step::Until { argv, .. } = step {
-        return matches!(argv.0.first(), Some(Arg::Lit("chat" | "goal")));
-    }
-    if let Step::Terminal(crate::terminal::Act::TypeOn { label, .. }) = step {
-        return *label == b"Start a chat";
-    }
-    false
-}
 impl Caller {
     pub(crate) fn leftovers(&self) -> &'static [crate::ending::Leftover] {
         if let Some(Step::EndsLeaving(leftovers)) = self.steps.last() { leftovers } else { &[] }
@@ -500,41 +490,11 @@ impl Caller {
             position + 1,
             call(at, crate::argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "fixture-llm"]),
         );
-        let settings = steps.iter().any(reads_settings).then(|| fixtures::setup_items(&scratch)).flatten();
-        let calls = if let Some(items) = settings {
-            steps.insert(
-                position + 2,
-                fixtures::change_settings(at, "fixture-settings", items).pop().expect("one settings call"),
-            );
-            steps.insert(position + 3, Step::FixtureReady);
-            2
-        } else {
-            steps.insert(position + 2, Step::FixtureReady);
-            1
-        };
+        steps.insert(position + 2, Step::FixtureReady);
+        let calls = 1;
         let mut caller = Self::new(steps, scratch, root);
         caller.recording = Recording::Fixture;
         caller.fixture_calls = calls;
-        caller
-    }
-    pub(crate) fn with_settings(mut steps: Vec<Step>, scratch: PathBuf, root: Fd) -> Self {
-        let Some((position, at)) = steps.iter().enumerate().find_map(|(index, step)| {
-            if let Step::SignIn { at } | Step::SameParty { at } = step { Some((index, *at)) } else { None }
-        }) else {
-            return Self::new(steps, scratch, root);
-        };
-        if !steps.iter().any(reads_settings) {
-            return Self::new(steps, scratch, root);
-        }
-        let Some(items) = fixtures::setup_items(&scratch) else { return Self::new(steps, scratch, root) };
-        steps.insert(
-            position + 1,
-            fixtures::change_settings(at, "fixture-settings", items).pop().expect("one settings call"),
-        );
-        steps.insert(position + 2, Step::FixtureReady);
-        let mut caller = Self::new(steps, scratch, root);
-        caller.recording = Recording::Fixture;
-        caller.fixture_calls = 1;
         caller
     }
     pub(crate) fn new(steps: Vec<Step>, scratch: PathBuf, root: Fd) -> Self {

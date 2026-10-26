@@ -299,10 +299,14 @@ pub(crate) fn take_settings() -> SettingsFiles {
 }
 
 fn stock_document(value: &mut serde_json::Value) {
+    let value_own_policy = value["world_settings"]["own_policy"] == true;
     for member in ["charters", "templates", "policies", "rules"] {
         value["engine"].as_object_mut().expect("engine").remove(member);
     }
     for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        if value_own_policy {
+            continue;
+        }
         project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
         for role in project["policy"]["roles"].as_array_mut().expect("roles") {
             role["authority"]["delegation"]["depth"] = 4.into();
@@ -315,8 +319,8 @@ fn stock_document(value: &mut serde_json::Value) {
         value["engine"]["limits"]["overrides"][name] = held.max(count).into();
     }
 }
-/// Existing callbacks for blocked and reference-case fixtures still edit document defaults.
-/// Stage their original values; only those final projects exceeding stock keep them.
+/// Stage legacy values for callbacks; only reference cases retain the Document path.
+/// In-scope writers remove these members and pass their own typed defaults.
 pub(crate) fn document_defaults(value: &mut serde_json::Value) {
     if value["engine"].get("charters").is_some() {
         return;
@@ -351,7 +355,15 @@ pub fn listed(value: &mut serde_json::Value) {
 }
 pub(crate) fn finish_configuration(directory: &Path, value: &mut serde_json::Value) -> std::io::Result<()> {
     let flags = value.as_object_mut().expect("configuration").remove("world_settings").unwrap_or(serde_json::json!({}));
-    if beyond_stock(value) {
+    if flags["own_policy"] == true {
+        value["world_settings"] = flags.clone();
+        stock_document(value);
+        value.as_object_mut().expect("configuration").remove("world_settings");
+        if directory.join("charters").exists() {
+            std::fs::remove_dir(directory.join("charters"))?;
+        }
+        private(&directory.join("world-settings.json"), &serde_json::to_vec(&flags)?)?;
+    } else if beyond_stock(value) {
         std::fs::create_dir_all(directory.join("charters"))?;
         std::fs::set_permissions(directory.join("charters"), std::fs::Permissions::from_mode(0o700))?;
         for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
@@ -368,7 +380,8 @@ pub(crate) fn finish_configuration(directory: &Path, value: &mut serde_json::Val
     }
     private(&directory.join("temper.json"), &serde_json::to_vec(value)?)
 }
-pub(crate) fn setup_items(directory: &Path) -> Option<serde_json::Value> {
+#[must_use]
+pub fn setup_items(directory: &Path) -> Option<serde_json::Value> {
     let value: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("temper.json")).expect("deployment document"))
             .expect("deployment JSON");
@@ -397,6 +410,61 @@ pub(crate) fn setup_items(directory: &Path) -> Option<serde_json::Value> {
         crate::settings::item("charter", 1, charter),
         crate::settings::item("template", 1, template)
     ]))
+}
+
+/// The final document keeps the project's wide seed; these typed defaults admit it.
+pub fn own_policy(value: &mut serde_json::Value) {
+    value["world_settings"]["own_policy"] = true.into();
+}
+/// Build defaults after endpoint rebinding, from the deployment's actual models and seeds.
+#[must_use]
+pub fn given(directory: &Path) -> temper_service::stock::Given {
+    let deployment: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("temper.json")).expect("deployment document"))
+            .expect("deployment JSON");
+    if deployment["engine"].get("charters").is_some() {
+        return temper_service::stock::Given::Stock;
+    }
+    let flags = if directory.join("world-settings.json").exists() {
+        serde_json::from_slice(&std::fs::read(directory.join("world-settings.json")).expect("world flags"))
+            .expect("world flags JSON")
+    } else {
+        serde_json::json!({})
+    };
+    own_defaults(&deployment, &flags)
+}
+
+/// Common real-loop defaults, with a wider fixture's own seeded policy when requested.
+#[must_use]
+pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -> temper_service::stock::Given {
+    let engine = crate::settings::configuration(deployment);
+    let mut defaults = temper_service::stock::defaults(&engine.llm);
+    defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(1);
+    defaults.templates[0].grace = Some(skein_lib::Duration::from_millis(1));
+    defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(50) };
+    if flags["requester"] != true {
+        defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Result;
+    }
+    if flags["listed"] == true {
+        defaults.templates[0].flags.listed = true;
+    }
+    if flags["own_policy"] == true {
+        let seed = engine.projects.first().expect("wider project's seed");
+        defaults.rules.ceiling = seed.policy.ceiling.clone();
+        defaults.rules.period_spend = seed.policy.period_spend;
+        defaults
+            .policies
+            .insert(
+                1,
+                jig_domain_core::ConfiguredPolicy {
+                    policy: seed.policy.clone(),
+                    permissions: seed.roles.clone(),
+                    templates: seed.templates.clone(),
+                },
+            )
+            .expect("existing policy slot");
+    }
+    temper_service::stock::Given::Own(Box::new(defaults))
 }
 
 #[cfg(test)]
