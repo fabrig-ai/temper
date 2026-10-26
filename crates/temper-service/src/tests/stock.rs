@@ -64,19 +64,6 @@ fn stock_chats_can_delegate_and_read_the_forge() {
 }
 
 #[test]
-fn the_seeded_project_keeps_the_stocks_tool_families() {
-    // Interim: the seeded project will take its policy from the stock at configuring-stock's
-    // seed boundary. Then both the template's inline copy and this agreement test go.
-    let engine = engine(&generated());
-    let defaults = crate::stock::defaults(&engine.llm);
-    let stock_tools = defaults.rules.ceiling.tools; // The stock's ceiling().tools.
-    let core = config::core(&engine, [1; 16], 7);
-    let seed = &core.seed_projects[0].policy.policy;
-    assert_eq!(seed.ceiling.tools, stock_tools);
-    assert_eq!(seed.roles[0].authority.tools, stock_tools);
-}
-
-#[test]
 fn the_stock_passes_jigs_one_check() {
     let init = generated();
     let without_demo = fixtures::with(&init, b"application.demo", b"null");

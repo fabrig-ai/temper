@@ -122,10 +122,15 @@ A project's own policy includes role permissions, spend, resource
 grants, requirements, where escalations go and template overrides.
 It is separate from a reusable numbered policy setting.
 
-A numbered policy is copied when a later project is made. Changing
-that numbered policy does not change existing projects. In
-particular, policy 1 is not a way to read or change project 1's own
-policy. Read the reusable policy, if your deployment offers it:
+A numbered policy is copied when a later project is made. A seeded
+project can also name `"policy": 1` in `engine.projects`: its first
+start copies the stock's policy 1, including permission roles and
+template overrides. With a number, leave out the project's `roles`
+member. `temper init` seeds project 1 this way.
+
+Changing the numbered policy does not change existing projects. Policy
+1 is not a way to read or change project 1's own policy. Read the
+reusable policy, if your deployment offers it:
 
 ```sh
 temper ctl me setting policy 1 --json

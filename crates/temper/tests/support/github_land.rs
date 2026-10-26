@@ -787,7 +787,7 @@ pub(crate) fn configure_llm(path: &Path) {
 }
 fn configure_engine(value: &mut Value, forge: SocketAddr) {
     configure_landing(value, forge, "acme", "app");
-    // Use the stock defaults and exactly init's inline seed policy, with no story-specific
+    // Use the stock defaults and init's seed policy reference, with no story-specific
     // tool grants. Init's placeholders do not occur in the seed projects.
     let init: Value = serde_json::from_slice(include_bytes!("../../../temper-init/template/temper.json"))
         .expect("init template JSON");

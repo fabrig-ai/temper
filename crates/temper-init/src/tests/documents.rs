@@ -134,9 +134,8 @@ fn the_default_is_the_owned_example_so_edited() {
             }
         }
         assert_eq!(replace_org_patterns(&mut expected), 30, "{row}");
-        expected["engine"]["projects"][0]["policy"]["ceiling"]["tools"] = json!(513_u64);
-        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["tools"] = json!(513_u64);
-        expected["engine"]["policies"] = expected["engine"]["projects"].clone();
+        expected["engine"]["projects"][0]["policy"] = json!(1_u32);
+        expected["engine"]["projects"][0].as_object_mut().unwrap().remove("roles");
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.output"] = json!(82_u32);
@@ -505,6 +504,8 @@ fn the_template_keeps_project_one_without_settings_members() {
     let document = parse(template::TEMPER);
     assert_eq!(document["engine"]["projects"].as_array().unwrap().len(), 1);
     assert_eq!(document["engine"]["projects"][0]["number"], 1_u32);
+    assert_eq!(document["engine"]["projects"][0]["policy"], 1_u32);
+    assert!(document["engine"]["projects"][0].get("roles").is_none());
     for member in ["charters", "templates", "policies", "rules"] {
         assert!(document["engine"].get(member).is_none());
     }
