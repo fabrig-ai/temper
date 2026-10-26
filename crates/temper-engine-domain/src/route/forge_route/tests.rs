@@ -1,4 +1,4 @@
-use super::{commit_text, landing_words};
+use super::{commit_text, landing_words, news_words};
 use alloc::boxed::Box;
 
 const SHA1: [u8; 32] = [
@@ -15,6 +15,34 @@ const COMMITS: &[([u8; 32], &[u8])] = &[
 fn commit_text_uses_lowercase_digits_at_the_identifier_width() {
     for (commit, digits) in COMMITS {
         assert_eq!(commit_text(commit).as_ref(), *digits, "commit {commit:?}");
+    }
+}
+
+#[test]
+fn forge_news_prints_commit_ids_at_the_identifier_width_within_its_bound() {
+    use super::forge::News;
+    for (commit, digits) in COMMITS {
+        for (news, prefix, suffix) in [
+            (
+                News::Ci { head: *commit, status: skein_forge::api::Ci::Passed },
+                b"forge ci passed at ".as_slice(),
+                b"".as_slice(),
+            ),
+            (
+                News::Landing { before: *commit, after: SHA1, files: None },
+                b"forge landing ".as_slice(),
+                b" -> abcdef0123456789abcdef0123456789abcdef01".as_slice(),
+            ),
+        ] {
+            let mut expected = skein_lib::Writer::new(prefix.len() + digits.len() + suffix.len());
+            expected.put(prefix).unwrap();
+            expected.put(digits).unwrap();
+            expected.put(suffix).unwrap();
+            let expected = expected.finish();
+            let bound = u32::try_from(expected.len()).unwrap();
+            assert_eq!(news_words(&news, bound), expected);
+            assert_eq!(news_words(&news, bound - 1).as_ref(), &expected[..expected.len() - 1]);
+        }
     }
 }
 
