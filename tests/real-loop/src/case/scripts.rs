@@ -1508,20 +1508,21 @@ fn finish_change(mut work: Turn, title: &str, body: &str) -> Turn {
 pub fn step_6_7(_forge: SocketAddr) -> Box<[Script]> {
     use super::{
         A_DEADLINE, A1_DEADLINE, Agent, CAP_A5_HOLD, CAP_A5_REPORT, CAP_DIRECTOR_REPORT, CAP_HOLD_REVISION,
-        CAP_OWNER_REPORT, CAP_PASS_HOLD, CAP_REASON, CAP_REVISION, CAP_SPAN, CAP_SPLIT, CAP_SPLIT_HOLD, CAP_SUBOWNER,
-        CAP_SUBOWNER_REPORT, CAP_TIMER_MARGIN, json,
+        CAP_OWNER_REPORT, CAP_PASS_HOLD, CAP_REASON, CAP_REVISION, CAP_SECONDS, CAP_SPLIT, CAP_SPLIT_HOLD,
+        CAP_SUBOWNER, CAP_SUBOWNER_REPORT, json,
     };
-    let built = skein_shell::Clock::new().now().wall.as_nanos();
-    let deadline = built + CAP_SPAN;
     let mut owner = batch_member(Agent::CapOwner, 33, 2, 2, A_DEADLINE);
-    // A delegates, controls and decides; A1 delegates and subscribes.
+    // A delegates, controls and decides; A1 delegates, then parks on jig's rail.
     owner["authority"]["tools"] = 45.into();
     owner["tracked"] = json!({"priority":1});
-    let mut subowner = batch_member(Agent::CapSubowner, 22, 1, 1, deadline);
+    let mut subowner = batch_member(Agent::CapSubowner, 22, 1, 1, A1_DEADLINE);
+    subowner["authority"]["budget"].as_object_mut().expect("budget").remove("deadline");
+    subowner["deadline_seconds"] = CAP_SECONDS.into();
     subowner["authority"]["tools"] = 33.into();
     let mut later = subowner["authority"].clone();
     later["budget"]["deadline"] = A1_DEADLINE.into();
-    let a5 = batch_member(Agent::CapImplementer, 10, 0, 0, deadline);
+    let mut a5 = batch_member(Agent::CapImplementer, 10, 0, 0, A1_DEADLINE);
+    a5["authority"]["budget"].as_object_mut().expect("budget").remove("deadline");
     Box::new([
         Script {
             cue: Agent::CapDirector.cue().into(),
@@ -1564,11 +1565,7 @@ pub fn step_6_7(_forge: SocketAddr) -> Box<[Script]> {
         Script {
             cue: Agent::CapSubowner.cue().into(),
             turns: Box::new([
-                call(b"delegate", &json!({"batch":[a5]})),
-                then_wait(
-                    call(b"subscribe", &json!({"kind":"timer","at":deadline+CAP_TIMER_MARGIN})),
-                    "A1 parks until its cap or a5's result.",
-                ),
+                then_wait(call(b"delegate", &json!({"batch":[a5]})), "A1 parks until its cap or a5's result."),
                 report(CAP_SUBOWNER_REPORT),
                 wait("A1 awaits a5's ending after the split."),
             ]),
@@ -1605,7 +1602,7 @@ pub fn step_6_7_rules() -> Box<[Box<[Rule]>]> {
             (BEGIN, 0),
             ("", 3),
         ]),
-        table(&[(CAP_A5_REPORT, 2), (CROSSED, 2), (CAP_SPLIT, 3), (DELEGATED, 1), (BEGIN, 0), ("", 3)]),
+        table(&[(CAP_A5_REPORT, 1), (CROSSED, 1), (CAP_SPLIT, 2), (DELEGATED, 2), (BEGIN, 0), ("", 2)]),
         Box::new([]),
     ])
 }

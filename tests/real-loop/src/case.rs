@@ -1123,13 +1123,9 @@ pub const CAP_SUBOWNER: u64 = 3;
 pub const CAP_A5: u64 = 4;
 pub const CAP_REVISION: u64 = 1;
 pub const CAP_HOLD_REVISION: u64 = 1;
-pub const CAP_TIMER: u64 = 1;
 pub const CAP_RELEASE_DECISION: u64 = 2;
-// Busy8 opening maxima: b1 1.017 s, d20 1.244 s.
-// Twice d20's maximum, rounded up to a quarter second: 2.5 s.
-// Trials: /home/free/src/rust/tmp/owners/case-4/measure/6-7/{b1,d20}.
-pub const CAP_SPAN: u64 = 2_500_000_000;
-pub const CAP_TIMER_MARGIN: u64 = 1_000_000;
+// Provisional cap while measuring A1's making through a5's begin.
+pub const CAP_SECONDS: u64 = 3;
 pub const CAP_PERSON: &str = "@case_cap_director Delegate A to own M1 and decide its cap without asking me.";
 pub const CAP_SPLIT: &str = "What has landed is M1; a5's fix opens M2. Report the split once a5 has ended.";
 pub const CAP_REASON: &str = "Split M1 at its cap instead of granting a grace to its delegates.";
@@ -1152,7 +1148,7 @@ pub fn fixture_6_7() -> forge::Fixture {
             // 33 reserved + director run reserve 10 + A1's 20 unspent
             // funded anew by the director. A needs 33 = its delegation's
             // 1 spent + A1's 22 + run reserve 10. A1 needs 22 = a5's 10
-            // + two opening completions + next run reserve 10. No landing projects are used.
+            // + one opening completion + next run reserve 10, with one spare. No landing projects are used.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();

@@ -173,7 +173,6 @@ pub enum Read {
     CapDirectorEnded,
     CapInboxEnded,
     CapInboxEndedAfter,
-    CapSubownerFirst,
     CapOwnerFirst,
     CapDirectorFirst,
 }
@@ -1180,8 +1179,7 @@ pub const READS_6_7: &[(Read, usize)] = &[
     (Read::CapDirectorEnded, 21),
     (Read::CapInboxEnded, 22),
     (Read::CapInboxEndedAfter, 23),
-    (Read::CapSubownerFirst, 24),
-    (Read::CapDirectorFirst, 25),
+    (Read::CapDirectorFirst, 24),
 ];
 
 #[must_use]
@@ -1234,10 +1232,9 @@ pub fn step_6_7() -> Vec<calls::Step> {
     steps.push(call(D1, argv!["inbox", "--after", "00", "--json"]));
     steps.push(call(D1, argv!["inbox", "--after", calls::inbox_after(22), "--json"]));
 
-    // The latest activity windows omit the starts of A1 and the director.
-    for (task, latest) in [(CAP_SUBOWNER, 19), (CAP_DIRECTOR, 21)] {
-        steps.push(call(D1, argv!["activity", number(task), "--before", calls::activity_before(latest), "--json"]));
-    }
+    // Without the timer, A1's whole journal fits the latest window.
+    // The director still needs its earlier page.
+    steps.push(call(D1, argv!["activity", number(CAP_DIRECTOR), "--before", calls::activity_before(21), "--json"]));
     steps
 }
 

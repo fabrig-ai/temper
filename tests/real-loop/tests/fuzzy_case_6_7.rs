@@ -8,16 +8,13 @@ use temper_real_loop_world::{
 #[test]
 fn a_sub_owner_past_its_deadline_is_held_at_its_next_run_and_escalated_through_its_owner_to_the_director_who_splits_it_by_amendment_and_release_without_a_grace_for_its_delegates()
  {
-    // A1 parks before the cap; jig's B1 does not hold running tasks. a5
-    // finishes its one running attempt: a grace for later admissions is
-    // 6.8's conflict. A held A1 writes no escalation words; the split is
+    // Jig's rail wakes parked A1 just past its wall and admission holds it.
+    // A running a5 finishes its one attempt: a grace for later admissions
+    // is 6.8's conflict. A held A1 writes no escalation words; the split is
     // instructions amended by the director, not a new sub-owner (6.8).
-    // Four hours stand for CAP_SPAN from script construction. F11:
-    // delegate accepts only an absolute wall (temper-engine-smith/src/nested.rs,
-    // 206-209), while jig at 1d93fa987 has Deadline::Span (jig-domain-tasks/src/boundary.rs).
-    // The timer is deadline + 1 ms: jig's strict wall > deadline (1d93fa987,
-    // jig-domain-authority/src/check.rs:525). A's and a5's delegations
-    // carry the same constructed deadline; A's own deadline stays later.
+    // Four hours stand for CAP_SECONDS from the decision making A1.
+    // A gives A1 that span; a5 inherits A1's wall. A1 subscribes no timer.
+    // A's own deadline and the director's amendment wall stay later.
     // Singleton batches and input cue rules tolerate parked extra runs.
     // A's pass and the director's amendment are held for the checkpoint
     // reads; amendment then release are separate calls.
