@@ -233,6 +233,7 @@ struct SettingUp {
 }
 #[derive(Debug)]
 struct Adopting {
+    project_name: Box<[u8]>,
     called: Called,
     adoption: temper_client_domain::forge::Adoption,
 }
@@ -424,7 +425,7 @@ pub(crate) fn told(state: &mut Forges, client: &Client, env: &Env<Limits>, told:
         Told::Answered { key, outcome } => {
             if let Some(mut starting) = state.starting.remove(key) {
                 if let Some(adoption) = starting.value.answered(outcome) {
-                    send_adoption(state, env, starting.called, adoption, out);
+                    send_adoption(state, env, starting.called, adoption, starting.value.name, out);
                 } else {
                     let mut operation = render::outcome::Operation::of(
                         &starting.value.ask(&env.limits.domain.forge).expect("admitted project name"),
@@ -536,12 +537,12 @@ fn adopted(state: &mut Forges, env: &Env<Limits>, mut adopting: Adopting, outcom
         out.push(Out::Client { event: Event::Send { key, name: Some(name), request } });
     } else {
         let mut printed = crate::forge::print(&adopting.adoption, outcome, adopting.called.json, false, &env.limits);
-        if printed.status == 0 && connection::owns(&adopting.called.call) {
+        if printed.status == 0 {
             let project = u64::from(adopting.adoption.project);
             let mut measure = Text::measure();
-            project_answer(&mut measure, adopting.called.json, project, &printed.stdout);
+            project_answer(&mut measure, adopting.called.json, project, &adopting.project_name, &printed.stdout);
             let mut text = Text::writing_exact(measure);
-            project_answer(&mut text, adopting.called.json, project, &printed.stdout);
+            project_answer(&mut text, adopting.called.json, project, &adopting.project_name, &printed.stdout);
             printed.stdout = text.finish();
             if printed.stdout.len() > usize::try_from(env.limits.tools.text).expect("text fits") {
                 printed = render::failure(b"result limit", adopting.called.json, 1);
@@ -550,9 +551,13 @@ fn adopted(state: &mut Forges, env: &Env<Limits>, mut adopting: Adopting, outcom
         finish(adopting.called, printed, out);
     }
 }
-fn project_answer(out: &mut Text, json: bool, project: u64, bytes: &[u8]) {
-    out.put(if json { b"{\"project\":" } else { b"project " });
+fn project_answer(out: &mut Text, json: bool, project: u64, name: &[u8], bytes: &[u8]) {
+    out.put(if json { b"{\"project\":" } else { b"project: " });
     out.number(project);
+    if !json {
+        out.put(" · ".as_bytes());
+        out.put(name);
+    }
     out.put(if json { b",\"outcome\":" } else { b"\n" });
     out.put(bytes);
     if json {
@@ -582,7 +587,7 @@ fn changed(state: &mut Forges, client: &Client, env: &Env<Limits>, handle: Handl
         return;
     };
     if state.watches.get(&handle).expect("active watch").setup.is_some() {
-        setup_changed(state, env, handle, &rows, out);
+        setup_changed(state, client, env, handle, &rows, out);
         return;
     }
     let watch = state.watches.get_mut(&handle).expect("active watch");
@@ -1143,7 +1148,14 @@ fn admin_stop(stop: domain::AdminStop, out: &mut Text) {
         }
     }
 }
-fn setup_changed(state: &mut Forges, env: &Env<Limits>, handle: Handle, rows: &[Row], out: &mut Queue<Out>) {
+fn setup_changed(
+    state: &mut Forges,
+    client: &Client,
+    env: &Env<Limits>,
+    handle: Handle,
+    rows: &[Row],
+    out: &mut Queue<Out>,
+) {
     let watch = state.watches.get(&handle).expect("active setup watch");
     let intent = watch.setup.as_ref().expect("setup intent");
     for row in rows {
@@ -1205,7 +1217,18 @@ fn setup_changed(state: &mut Forges, env: &Env<Limits>, handle: Handle, rows: &[
                 checks: Box::default(),
             };
             match intent.project {
-                SetUpProject::Existing(_) => send_adoption(state, env, watch.called, adoption, out),
+                SetUpProject::Existing(project) => {
+                    let mut name = Box::default();
+                    if let Some(me) = crate::forge::me(client) {
+                        for row in &me.projects {
+                            if row.project == project {
+                                name = row.name.bytes().into();
+                                break;
+                            }
+                        }
+                    }
+                    send_adoption(state, env, watch.called, adoption, name, out);
+                }
                 SetUpProject::New(name) => {
                     let value = temper_client_domain::forge::start::StartIn::new(adoption, name);
                     let Some(request) = value.ask(&env.limits.domain.forge) else {
@@ -1230,6 +1253,7 @@ fn send_adoption(
     env: &Env<Limits>,
     called: Called,
     adoption: temper_client_domain::forge::Adoption,
+    project_name: Box<[u8]>,
     out: &mut Queue<Out>,
 ) {
     let Some(request) = temper_client_domain::forge::ask(&adoption, &env.limits.domain.forge) else {
@@ -1239,7 +1263,7 @@ fn send_adoption(
     };
     let name = temper_client_domain::forge::first_repository_key(adoption.forge, false);
     let key = Key { asker: Owner::Forge.asker(), number: (u64::from(called.call_number) << 32u32) | 3 };
-    state.adopting.insert(key, Adopting { called, adoption });
+    state.adopting.insert(key, Adopting { project_name, called, adoption });
     out.push(Out::Client { event: Event::Send { key, name: Some(name), request } });
 }
 fn first_json(first: &First, out: &mut Encoder) {
