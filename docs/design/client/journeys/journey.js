@@ -10,11 +10,13 @@ function journeyNote() {
 
 document.addEventListener('click', event => {
   if (!(event.target instanceof Element)) return;
-  const next = event.target.closest('[data-journey-next]');
+  const next = event.target.closest('[data-journey-next]:not([data-journey-act])');
   if (next) {
     event.preventDefault();
     location.href = next.dataset.journeyNext;
   } else if (event.target.closest('button, a[href]')) {
+    const button = event.target.closest('button');
+    if (button && button.type === 'submit' && button.form) return;
     event.preventDefault();
     journeyNote();
   }
@@ -22,7 +24,18 @@ document.addEventListener('click', event => {
 
 document.addEventListener('submit', event => {
   event.preventDefault();
-  journeyNote();
+  if (!(event.target instanceof HTMLFormElement)) return;
+  const form = event.target;
+  const selector = '[data-journey-act="submit"][data-journey-next]';
+  const next = form.matches(selector) ? form : Array.from(form.elements).find(field => field.matches(selector));
+  if (next) location.href = next.dataset.journeyNext;
+  else journeyNote();
+});
+
+document.addEventListener('change', event => {
+  if (!(event.target instanceof Element)) return;
+  const next = event.target.closest('[data-journey-act="toggle"][data-journey-next]');
+  if (next) location.href = next.dataset.journeyNext;
 });
 
 document.addEventListener('keydown', event => {

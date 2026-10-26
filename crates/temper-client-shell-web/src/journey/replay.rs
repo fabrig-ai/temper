@@ -27,6 +27,7 @@ pub struct Mark<'a> {
     pub page: &'a Page<'static>,
     pub tree: &'a Tree,
     pub acted: Vec<NodeId>,
+    pub lead: super::Lead,
     pub recorded: Option<&'a [u8]>,
     pub end: bool,
 }
@@ -51,16 +52,14 @@ impl Replay {
     /// # Errors
     /// Refuses malformed records, facts, versions and a missing final end.
     pub fn new(recording: &[u8]) -> Result<Self, Refusal> {
-        let lines = lines(recording).map_err(Refusal::Unreadable)?;
-        let (facts, at) = facts(&lines).map_err(Refusal::Unreadable)?;
-        if !matches!(lines.last(), Some(Line::End(_))) {
-            return Err(Refusal::Unreadable(Unreadable { line: number(lines.len()), why: "missing end" }));
-        }
-        if let Some(at) = lines[..lines.len() - 1].iter().position(|line| matches!(line, Line::End(_))) {
-            return Err(Refusal::Unreadable(Unreadable { line: number(at), why: "end must be last" }));
-        }
+        let (lines, facts, at) = read(recording).map_err(Refusal::Unreadable)?;
         let (host, page) = facts.start();
         Ok(Self { lines, at, turn: 0, marks: 0, host, page, in_turn: false, departed: false, ended: false })
+    }
+    /// The replayed host, to read once the replay has ended.
+    #[must_use]
+    pub fn host(&self) -> &Host {
+        &self.host
     }
     /// Run until the next mark, returning None after the end mark.
     ///
@@ -87,6 +86,11 @@ impl Replay {
                 } else {
                     Vec::new()
                 };
+                let lead = match self.lines.get(self.at + 1) {
+                    Some(Line::Act { act: skein_ui::Act::Submit, .. }) => super::Lead::Submit,
+                    Some(Line::Act { act: skein_ui::Act::Toggle, .. }) => super::Lead::Toggle,
+                    _ => super::Lead::Press,
+                };
                 self.at += 1;
                 self.marks += 1;
                 self.ended = end;
@@ -95,6 +99,7 @@ impl Replay {
                     page: &self.page,
                     tree: self.host.tree(),
                     acted,
+                    lead,
                     recorded: html.as_deref(),
                     end,
                 }));
@@ -208,6 +213,18 @@ impl Replay {
             asked,
         }
     }
+}
+// Share the recording envelope without replaying: an old walk may be stale.
+pub(super) fn read(recording: &[u8]) -> Result<(Vec<Line>, Facts, usize), Unreadable> {
+    let lines = lines(recording)?;
+    let (facts, at) = facts(&lines)?;
+    if !matches!(lines.last(), Some(Line::End(_))) {
+        return Err(Unreadable { line: number(lines.len()), why: "missing end" });
+    }
+    if let Some(at) = lines[..lines.len() - 1].iter().position(|line| matches!(line, Line::End(_))) {
+        return Err(Unreadable { line: number(at), why: "end must be last" });
+    }
+    Ok((lines, facts, at))
 }
 fn number(index: usize) -> u32 {
     u32::try_from(index + 1).expect("recording line count fits u32")
