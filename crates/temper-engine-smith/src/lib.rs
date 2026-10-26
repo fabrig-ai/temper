@@ -27,17 +27,17 @@ pub use calls::{call, tools};
 pub use finish::{ChangeResource, Terminal, result, turn};
 pub use start::{charter, model, section, start};
 
-fn decimal(bytes: &[u8]) -> Result<u64, Problem> {
+fn decimal(bytes: &[u8], member: &'static [u8]) -> Result<u64, Problem> {
     if bytes.is_empty() {
-        return Err(Problem::Range);
+        return Err(Problem::Range(member));
     }
     let mut value = 0_u64;
     for byte in bytes {
         if !byte.is_ascii_digit() {
-            return Err(Problem::Range);
+            return Err(Problem::Range(member));
         }
-        value = value.checked_mul(10).ok_or(Problem::Range)?;
-        value = value.checked_add(u64::from(byte.saturating_sub(b'0'))).ok_or(Problem::Range)?;
+        value = value.checked_mul(10).ok_or(Problem::Range(member))?;
+        value = value.checked_add(u64::from(byte.saturating_sub(b'0'))).ok_or(Problem::Range(member))?;
     }
     Ok(value)
 }
@@ -67,9 +67,9 @@ pub const CALL_NAME_BYTES: u32 = 16;
 pub enum Problem {
     Malformed,
     TooLarge,
-    Missing,
-    Type,
-    Range,
+    Missing(&'static [u8]),
+    Type(&'static [u8]),
+    Range(&'static [u8]),
     UnknownTool,
 }
 

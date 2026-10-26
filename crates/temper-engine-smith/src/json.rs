@@ -63,7 +63,7 @@ pub(crate) fn parse(input: &[u8]) -> Result<Value, Problem> {
                 return match value {
                     Value::Object(_) => Ok(value),
                     Value::Array(_) | Value::String(_) | Value::Number(_) | Value::Boolean(_) | Value::Null => {
-                        Err(Problem::Type)
+                        Err(Problem::Type(b"input"))
                     }
                 };
             }
@@ -154,7 +154,16 @@ fn value(tokens: &[Token], at: &mut usize) -> Result<Value, Problem> {
 }
 
 impl Value {
-    pub(crate) fn field(&self, name: &[u8]) -> Result<Option<&Value>, Problem> {
+    pub(crate) fn object(&self, member: &'static [u8]) -> Result<&Self, Problem> {
+        match self {
+            Value::Object(_) => Ok(self),
+            Value::Array(_) | Value::String(_) | Value::Number(_) | Value::Boolean(_) | Value::Null => {
+                Err(Problem::Type(member))
+            }
+        }
+    }
+
+    pub(crate) fn field(&self, name: &'static [u8]) -> Result<Option<&Value>, Problem> {
         match self {
             Value::Object(fields) => {
                 for (key, value) in fields {
@@ -165,58 +174,58 @@ impl Value {
                 Ok(None)
             }
             Value::Array(_) | Value::String(_) | Value::Number(_) | Value::Boolean(_) | Value::Null => {
-                Err(Problem::Type)
+                Err(Problem::Type(name))
             }
         }
     }
 
-    pub(crate) fn required(&self, name: &[u8]) -> Result<&Value, Problem> {
-        self.field(name)?.ok_or(Problem::Missing)
+    pub(crate) fn required(&self, name: &'static [u8]) -> Result<&Value, Problem> {
+        self.field(name)?.ok_or(Problem::Missing(name))
     }
 
-    pub(crate) fn text(&self) -> Result<Box<[u8]>, Problem> {
+    pub(crate) fn text(&self, member: &'static [u8]) -> Result<Box<[u8]>, Problem> {
         match self {
             Value::String(text) => Ok(text.clone()),
             Value::Object(_) | Value::Array(_) | Value::Number(_) | Value::Boolean(_) | Value::Null => {
-                Err(Problem::Type)
+                Err(Problem::Type(member))
             }
         }
     }
 
-    pub(crate) fn number(&self) -> Result<u64, Problem> {
+    pub(crate) fn number(&self, member: &'static [u8]) -> Result<u64, Problem> {
         match self {
-            Value::Number(text) => crate::decimal(text),
+            Value::Number(text) => crate::decimal(text, member),
             Value::Object(_) | Value::Array(_) | Value::String(_) | Value::Boolean(_) | Value::Null => {
-                Err(Problem::Type)
+                Err(Problem::Type(member))
             }
         }
     }
 
-    pub(crate) fn boolean(&self) -> Result<bool, Problem> {
+    pub(crate) fn boolean(&self, member: &'static [u8]) -> Result<bool, Problem> {
         match self {
             Value::Boolean(value) => Ok(*value),
             Value::Object(_) | Value::Array(_) | Value::String(_) | Value::Number(_) | Value::Null => {
-                Err(Problem::Type)
+                Err(Problem::Type(member))
             }
         }
     }
 
-    pub(crate) fn array(&self) -> Result<&[Value], Problem> {
+    pub(crate) fn array(&self, member: &'static [u8]) -> Result<&[Value], Problem> {
         match self {
             Value::Array(items) => Ok(items),
             Value::Object(_) | Value::String(_) | Value::Number(_) | Value::Boolean(_) | Value::Null => {
-                Err(Problem::Type)
+                Err(Problem::Type(member))
             }
         }
     }
 
-    pub(crate) fn small(&self) -> Result<u32, Problem> {
-        let Ok(value) = u32::try_from(self.number()?) else { return Err(Problem::Range) };
+    pub(crate) fn small(&self, member: &'static [u8]) -> Result<u32, Problem> {
+        let Ok(value) = u32::try_from(self.number(member)?) else { return Err(Problem::Range(member)) };
         Ok(value)
     }
 
-    pub(crate) fn narrow(&self) -> Result<u16, Problem> {
-        let Ok(value) = u16::try_from(self.number()?) else { return Err(Problem::Range) };
+    pub(crate) fn narrow(&self, member: &'static [u8]) -> Result<u16, Problem> {
+        let Ok(value) = u16::try_from(self.number(member)?) else { return Err(Problem::Range(member)) };
         Ok(value)
     }
 }

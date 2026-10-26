@@ -62,7 +62,7 @@ pub fn turn(request: smith::Request, transcript: Box<[u8]>) -> Result<host::Turn
         | smith::Request::Read { .. }
         | smith::Request::Probe { .. }
         | smith::Request::Check { .. }
-        | smith::Request::Abort { .. } => Err(Problem::Type),
+        | smith::Request::Abort { .. } => Err(Problem::Type(b"request")),
     }
 }
 
@@ -94,9 +94,11 @@ pub fn result(answer: run::Answer, change: Option<ChangeResource>) -> Result<Ter
                 run::outcome::Declared::Failure(failure) => tasks::TaskResult::Failure { reason: failure.reason },
                 run::outcome::Declared::Verdict(verdict) => {
                     if !verdict.items.is_empty() {
-                        return Err(Problem::Type);
+                        return Err(Problem::Type(b"items"));
                     }
-                    let Ok(code) = u32::try_from(crate::decimal(&verdict.name)?) else { return Err(Problem::Range) };
+                    let Ok(code) = u32::try_from(crate::decimal(&verdict.name, b"name")?) else {
+                        return Err(Problem::Range(b"name"));
+                    };
                     let Ok(count) = u32::try_from(verdict.fields.len()) else { return Err(Problem::TooLarge) };
                     let mut fields = List::with_capacity(count);
                     for field in verdict.fields {
@@ -107,20 +109,20 @@ pub fn result(answer: run::Answer, change: Option<ChangeResource>) -> Result<Ter
                     tasks::TaskResult::Verdict { code, fields: fields.into_boxed(), words: verdict.text }
                 }
                 run::outcome::Declared::Change(change_result) => {
-                    let resource = change.ok_or(Problem::Missing)?;
+                    let resource = change.ok_or(Problem::Missing(b"resource"))?;
                     let mut words = None;
                     for field in change_result.fields {
                         match field.name.as_ref() {
                             b"body" => words = Some(field.value),
                             b"title" => {}
-                            _ => return Err(Problem::Type),
+                            _ => return Err(Problem::Type(b"fields")),
                         }
                     }
                     tasks::TaskResult::Change {
                         connector: resource.connector,
                         kind: resource.kind,
                         resource: resource.resource,
-                        words: words.ok_or(Problem::Missing)?,
+                        words: words.ok_or(Problem::Missing(b"body"))?,
                     }
                 }
             };

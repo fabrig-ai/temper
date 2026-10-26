@@ -39,14 +39,14 @@ impl Text {
                     return Err(Problem::TooLarge);
                 }
             } else {
-                let high = usize::from(byte.checked_div(16).ok_or(Problem::Range)?);
-                let low = usize::from(byte.checked_rem(16).ok_or(Problem::Range)?);
+                let high = usize::from(byte.checked_div(16).ok_or(Problem::Range(b"answer"))?);
+                let low = usize::from(byte.checked_rem(16).ok_or(Problem::Range(b"answer"))?);
                 if writer
                     .put(&[
                         b'\\',
                         b'x',
-                        *DIGITS.get(high).ok_or(Problem::Range)?,
-                        *DIGITS.get(low).ok_or(Problem::Range)?,
+                        *DIGITS.get(high).ok_or(Problem::Range(b"answer"))?,
+                        *DIGITS.get(low).ok_or(Problem::Range(b"answer"))?,
                     ])
                     .is_err()
                 {
@@ -67,12 +67,12 @@ impl Text {
         let len = bytes.len().checked_mul(2).ok_or(Problem::TooLarge)?;
         let mut writer = Writer::new(len);
         for byte in bytes {
-            let high = usize::from(byte.checked_div(16).ok_or(Problem::Range)?);
-            let low = usize::from(byte.checked_rem(16).ok_or(Problem::Range)?);
-            if writer.put(&[*DIGITS.get(high).ok_or(Problem::Range)?]).is_err() {
+            let high = usize::from(byte.checked_div(16).ok_or(Problem::Range(b"answer"))?);
+            let low = usize::from(byte.checked_rem(16).ok_or(Problem::Range(b"answer"))?);
+            if writer.put(&[*DIGITS.get(high).ok_or(Problem::Range(b"answer"))?]).is_err() {
                 return Err(Problem::TooLarge);
             }
-            if writer.put(&[*DIGITS.get(low).ok_or(Problem::Range)?]).is_err() {
+            if writer.put(&[*DIGITS.get(low).ok_or(Problem::Range(b"answer"))?]).is_err() {
                 return Err(Problem::TooLarge);
             }
         }
@@ -101,7 +101,7 @@ pub fn answer(answer: &CallAnswer) -> HostAnswer {
             true,
         )
         .expect("fixed host feedback fits"),
-        Err(Problem::Malformed | Problem::Missing | Problem::Type | Problem::Range | Problem::UnknownTool) => {
+        Err(Problem::Malformed | Problem::Missing(_) | Problem::Type(_) | Problem::Range(_) | Problem::UnknownTool) => {
             HostAnswer::new(bytes::copy_of(b"The recorded answer cannot be rendered as text."), true)
                 .expect("fixed host feedback fits")
         }
@@ -124,9 +124,14 @@ fn rendered(answer: &CallAnswer) -> Result<HostAnswer, Problem> {
             }
             false
         }
-        CallAnswer::ChangeRefused { named, repositories, .. } => {
+        CallAnswer::ReadRepositoryRefused { named, repositories }
+        | CallAnswer::ChangeRefused { named, repositories, .. } => {
             if repositories.is_empty() {
-                text.add(b"this project has no repository to change")?;
+                if let CallAnswer::ReadRepositoryRefused { .. } = answer {
+                    text.add(b"this project has no repository to read")?;
+                } else {
+                    text.add(b"this project has no repository to change")?;
+                }
             } else {
                 match named {
                     Some(named) => {
