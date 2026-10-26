@@ -20,6 +20,8 @@ pub(crate) enum Proc {
     Agent(Box<skein_world::PipeHost<smith_agent_shell::Agent>>),
     Git(Box<temper_fake_git_hosted::Git<temper_fake_git_hosted::Typed>>),
     GitRoute(Box<temper_fake_git::Git<temper_fake_git::Route>>),
+    Claude(Box<smith_fake_claude::Fake>),
+    Relay(Box<smith_agent_shell::relay::Process>),
 }
 impl Proc {
     fn host(&self) -> &dyn Host {
@@ -34,6 +36,8 @@ impl Proc {
             Self::Agent(h) => h.as_ref(),
             Self::Git(h) => h.as_ref(),
             Self::GitRoute(h) => h.as_ref(),
+            Self::Claude(h) => h.as_ref(),
+            Self::Relay(h) => h.as_ref(),
         }
     }
     fn host_mut(&mut self) -> &mut dyn Host {
@@ -48,6 +52,8 @@ impl Proc {
             Self::Agent(h) => h.as_mut(),
             Self::Git(h) => h.as_mut(),
             Self::GitRoute(h) => h.as_mut(),
+            Self::Claude(h) => h.as_mut(),
+            Self::Relay(h) => h.as_mut(),
         }
     }
 }
@@ -314,14 +320,26 @@ fn host<R: Referee<Proc>>(
         crate::terminal::roots,
     );
     let configuration = smith_agent_shell::config::read(&path.join("agent.json")).expect("agent operation bound");
+    if let Some(program) = configuration.programs.get(&smith_agent_shell::config::ProgramName::ClaudeCode) {
+        use std::os::unix::ffi::OsStrExt;
+        world.host_startup(
+            crate::claude::program(program.path.as_os_str().as_bytes()),
+            |spawn| {
+                smith_fake_claude::config_root(spawn).into_iter().chain(smith_fake_claude::mcp_root(spawn)).collect()
+            },
+            |spawn| smith_fake_claude::observation_append(spawn).into_iter().collect(),
+        );
+        world.host(crate::claude::relay(crate::claude::RELAY));
+    }
     world.host_roots(
         HostedProgram {
             program: fixtures::AGENT.into(),
             make: agent::agent,
             instances: agents,
-            operations: configuration.service.limits.routes + 3,
+            operations: smith_agent_service::program_operations(&configuration.service).expect("agent program routes")
+                + 3,
         },
-        agent::roots,
+        if configuration.programs.is_empty() { |_| Vec::new() } else { agent::roots },
     );
 }
 #[expect(clippy::struct_excessive_bools, reason = "independent referee cues for placement and shutdown")]
