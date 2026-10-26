@@ -142,14 +142,18 @@ fn a_sign_in_digest_and_expiry_are_kept_in_secrets() {
     store.iterate();
     let Some(jig_protocol_store::Event::Kept { owner }) = store.above.pop() else { panic!("digest kept") };
     assert_eq!(owner, Token::new(crate::tokens::CLIENTS + 1));
-    let Some(jig_protocol_store::Event::Secret { value: Some(value), .. }) = store.secrets(
+    let Some(jig_protocol_store::Event::Secret {
+        value: Some(jig_protocol_store::SecretValue::Digest { expiry, digest }),
+        ..
+    }) = store.secrets(
         Token::new(9),
         jig_protocol_store::Secrets::Get { owner: jig_protocol_store::SecretOwner::SignIn, number: 3 },
-    ) else {
+    )
+    else {
         panic!("secret read")
     };
-    assert_eq!(value.expose().get(..8), Some([0, 0, 0, 0, 0, 0, 0, 12].as_slice()));
-    assert_eq!(value.expose().get(8..), Some([5; 32].as_slice()));
+    assert_eq!(expiry, 12);
+    assert_eq!(digest, [5; 32]);
 }
 #[test]
 fn a_sign_in_ending_waits_for_its_erase_to_commit() {
@@ -233,7 +237,8 @@ fn a_link_sign_in_reaches_the_root_and_answers_a_token() {
     ) else {
         panic!("digest durable in real secrets store")
     };
-    assert_eq!(secret.expose().len(), 40);
+    let jig_protocol_store::SecretValue::Digest { digest, .. } = secret else { panic!("credential digest") };
+    assert_eq!(digest, skein_lib::sha256::digest(answer.token().as_ref().expect("credential").expose()));
     let bearer = peer::bearer(answer.token().as_ref().expect("native credential").expose());
     let mut stream = peer::Peer::new(engine, b"GET", b"/jig/v1/stream", &[], Some(&bearer));
     stream.pump(engine, true);

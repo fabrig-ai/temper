@@ -3,7 +3,7 @@ use crate::engine::Engine;
 use alloc::boxed::Box;
 use core::num::NonZeroU64;
 use jig_domain_core::Carried;
-use jig_protocol_store::{Event, SecretOwner, Secrets};
+use jig_protocol_store::{CarriedKind, Event, SecretOwner, SecretValue, Secrets};
 use skein_forge_setup::host;
 use skein_lib::{Secret, Time, Token};
 use temper_engine_domain as root;
@@ -65,7 +65,7 @@ pub(crate) fn admin_connect(
     event(engine, domain::Event::ConnectAnswered { forge, request, answer: domain::ConnectAnswer::Connecting });
     let value = engine.store.secrets(run, Secrets::Get { owner: SecretOwner::Application, number: carried.number });
     let parsed = match value {
-        Some(Event::Secret { value: Some(value), .. })
+        Some(Event::Secret { value: Some(SecretValue::Carried { kind: CarriedKind::Value, value }), .. })
             if skein_lib::sha256::digest(value.expose()) == carried.digest =>
         {
             pasted(value.expose(), 1).ok_or(b"the pasted value is not a token".as_slice())
@@ -126,7 +126,7 @@ pub(crate) fn connect(engine: &mut Engine, forge: u16, request: Token, app: NonZ
     event(engine, domain::Event::ConnectAnswered { forge, request, answer: domain::ConnectAnswer::Connecting });
     let value = engine.store.secrets(run, Secrets::Get { owner: SecretOwner::Application, number: carried.number });
     let parsed = match value {
-        Some(Event::Secret { value: Some(value), .. }) => {
+        Some(Event::Secret { value: Some(SecretValue::Carried { kind: CarriedKind::Value, value }), .. }) => {
             if skein_lib::sha256::digest(value.expose()) == carried.digest {
                 pasted(value.expose(), 11).ok_or(b"the pasted value is not a key".as_slice())
             } else {

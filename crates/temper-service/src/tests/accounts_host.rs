@@ -137,7 +137,10 @@ fn signed_out(events: &mut Queue<root::Event>, old: u32) -> Option<bool> {
 }
 
 fn carry_llm_key(engine: &mut crate::engine::Engine, value: &[u8]) -> u64 {
-    let _later = engine.store.secrets(Token::new(123), store::Secrets::Carry { value: Secret::new(value.into()) });
+    let _later = engine.store.secrets(
+        Token::new(123),
+        store::Secrets::Carry { kind: store::CarriedKind::Key, value: Secret::new(value.into()) },
+    );
     let Some(store::Event::Carried { number, .. }) = engine.store.above.pop() else { panic!("carried LLM key") };
     number
 }
@@ -203,7 +206,7 @@ fn service_restart_restores_an_llm_key_before_want_and_sweeps_only_unnamed_sourc
         store::Secrets::Keep {
             owner: store::SecretOwner::Source,
             number: 8,
-            value: Secret::new(b"orphaned-source-value".as_slice().into()),
+            value: jig_protocol_store::SecretValue::Record(Secret::new(b"orphaned-source-value".as_slice().into())),
         },
     );
     while engine.store.above.pop().is_some() {}
@@ -436,9 +439,9 @@ fn a_restored_sign_ins_metadata_leaves_its_grant_a_bearer() {
         store::Secrets::Replace {
             owner: store::SecretOwner::Source,
             number: u64::from(SOURCE),
-            value: Secret::new(
+            value: jig_protocol_store::SecretValue::Record(Secret::new(
                 oauth::encode_record(&saved, &config.limits.driver.client.document).expect("record fits"),
-            ),
+            )),
             replaces: None,
         },
     );
@@ -552,7 +555,7 @@ fn a_move_out_answers_with_its_record_once_and_a_move_in_is_adopted() {
         store::Secrets::Replace {
             owner: store::SecretOwner::Source,
             number: 71,
-            value: Secret::new(encoded),
+            value: jig_protocol_store::SecretValue::Record(Secret::new(encoded)),
             replaces: None,
         },
     );
@@ -618,7 +621,7 @@ fn adopt_moved_record(
         }
     }
     assert!(adopted, "adoption is acknowledged by the store");
-    let Some(store::Event::Secret { value: Some(value), .. }) =
+    let Some(store::Event::Secret { value: Some(store::SecretValue::Record(value)), .. }) =
         engine.store.secrets(Token::new(123), store::Secrets::Get { owner: store::SecretOwner::Source, number: 72 })
     else {
         panic!("adopted source record")

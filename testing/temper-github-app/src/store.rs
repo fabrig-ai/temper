@@ -103,7 +103,11 @@ impl StoreHost {
         if let Some((number, value)) = self.records.pop_front() {
             self.request = Some(Request::Secrets {
                 owner: OWNER,
-                request: Secrets::Keep { owner: SecretOwner::Application, number, value: Secret::new(value) },
+                request: Secrets::Keep {
+                    owner: SecretOwner::Application,
+                    number,
+                    value: protocol::SecretValue::Application(Secret::new(value)),
+                },
             });
         } else if self.load {
             self.request = Some(Request::Secrets {
@@ -119,7 +123,9 @@ impl StoreHost {
             Event::Opened { .. } | Event::Kept { .. } => self.next(),
             Event::SecretsLoaded { rows, next, .. } => {
                 for row in rows {
-                    self.rows.push((row.number, row.value.expose().into()));
+                    if let protocol::SecretValue::Application(value) = row.value {
+                        self.rows.push((row.number, value.expose().into()));
+                    }
                 }
                 if let Some(after) = next {
                     self.request = Some(Request::Secrets {

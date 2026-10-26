@@ -78,6 +78,9 @@ fn version(family: Family) {
         Family::Notes => u32::from(current.notes),
         Family::Accounts => u32::from(current.accounts),
         Family::Application => current.application,
+        Family::Secrets | Family::SkeinOauth | Family::SmithTranscript => {
+            unreachable!("kept families are checked by layout")
+        }
     };
     refused(OpenRefusal::Format { family, found: wanted.checked_add(1).expect("next format version"), wanted });
 }
