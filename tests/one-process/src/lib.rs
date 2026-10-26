@@ -10,3 +10,5 @@ mod ctl;
 mod settings;
 
 pub mod deployment;
+
+pub mod golden;

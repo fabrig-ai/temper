@@ -10,6 +10,7 @@ pub(crate) struct Forge {
     transport: temper_fake_git_hosted::Typed,
     tree: BTreeMap<Vec<u8>, Vec<u8>>,
     pub(crate) pushed: Vec<Pushed>,
+    pub(crate) effects: Vec<Observation>,
     merge: bool,
     edited: bool,
     prepared: bool,
@@ -22,6 +23,7 @@ impl Forge {
             transport,
             tree: BTreeMap::from([(b"conflict.txt".to_vec(), content.to_vec())]),
             pushed: Vec::new(),
+            effects: Vec::new(),
             merge: matches!(story, Story::Merge),
             edited: false,
             prepared: false,
@@ -60,14 +62,33 @@ impl Forge {
             }
         }
         let mut forge = self.transport.forge.borrow_mut();
+        assert_eq!(forge.domain.observations_lost(), 0, "the forge ledger loses no effects");
         while let Some(observed) = forge.domain.pop_observation() {
+            self.effects.push(observed.clone());
             if let Observation::Merged { repository, head, .. } = &observed {
                 green(&forge, repository, *head);
             }
             let Observation::Moved { repository, branch, from, to, by: 1 } = observed else { continue };
             let metadata = forge.domain.metadata(&repository).expect("observed repository");
             if branch == metadata.default_branch {
-                green(&forge, &repository, to);
+                // A merge checks its admitted head. CI on the newly made merge
+                // commit starts after this move and may still be pending here.
+                let checked = self
+                    .effects
+                    .iter()
+                    .rev()
+                    .find_map(|effect| {
+                        if let Observation::Merged { repository: merged_repository, head, commit, .. } = effect
+                            && *merged_repository == repository
+                            && *commit == to
+                        {
+                            Some(*head)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(to);
+                green(&forge, &repository, checked);
             }
             // Git may create the remote branch at the editor's first committed change.
             // Earlier preparation has no completed agent write.

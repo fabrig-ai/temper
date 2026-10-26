@@ -51,7 +51,12 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
         files,
     )
     .expect("shipped ctl limits");
-    Recorded { host, wire: crate::referee::client::Wire::default(), seen: 0 }
+    Recorded {
+        host,
+        wire: crate::referee::client::Wire::default(),
+        seen: 0,
+        sign_in: spawn.args.get(1).is_some_and(|word| word.as_ref() == b"sign-in"),
+    }
 }
 
 pub(crate) struct Caller {
@@ -105,6 +110,35 @@ impl Caller {
             self.submit(Op::Close { fd });
         } else {
             self.submit(Op::PipeWrite { fd, bytes, from });
+        }
+    }
+    fn words(&self) -> &'static [&'static [u8]] {
+        if self.at == 0 {
+            &[b"/client/private", b"sign-in", b"-"]
+        } else if crate::stories::is_golden() && self.at == 1 {
+            &[
+                b"/client/private",
+                b"forge",
+                b"connect",
+                b"1",
+                b"forgejo-admin",
+                b"/setup/admin-token",
+                b"--key",
+                b"golden-forge",
+            ]
+        } else if crate::stories::is_golden() {
+            &[b"/client/private", b"forge", b"list", b"--until", b"connected:1"]
+        } else {
+            &[
+                b"/client/private",
+                b"settings",
+                b"apply",
+                b"/setup/settings.json",
+                b"--against",
+                b"1",
+                b"--key",
+                b"world-settings",
+            ]
         }
     }
 }
@@ -173,24 +207,13 @@ impl Host for Caller {
             self.output.clear();
             self.error.clear();
         }
-        if self.at >= 2 {
+        // forge-connect answers Connecting; wait for its credentials before adoption.
+        let steps = if crate::stories::is_golden() { 3 } else { 2 };
+        if self.at >= steps {
             self.finished = true;
             return;
         }
-        let words: &[&[u8]] = if self.at == 0 {
-            &[b"/client/private", b"sign-in", b"-"]
-        } else {
-            &[
-                b"/client/private",
-                b"settings",
-                b"apply",
-                b"/setup/settings.json",
-                b"--against",
-                b"1",
-                b"--key",
-                b"world-settings",
-            ]
-        };
+        let words = self.words();
         self.started = true;
         self.submit(Op::Spawn {
             spawn: Box::new(Spawn {
@@ -236,11 +259,14 @@ pub(crate) struct Recorded {
     host: OneShot,
     wire: crate::referee::client::Wire,
     seen: usize,
+    sign_in: bool,
 }
 impl Host for Recorded {
     fn iterate(&mut self, now: Time, wall: Wall) {
-        for complete in self.host.completions().iter() {
-            self.wire.complete(complete);
+        if self.sign_in {
+            for complete in self.host.completions().iter() {
+                self.wire.complete(complete);
+            }
         }
         for event in &self.wire.received[self.seen..] {
             if let crate::referee::client::Received::SignedIn(party) = event {

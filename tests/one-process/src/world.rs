@@ -26,6 +26,7 @@ pub enum Story {
     Adoption,
     Adopt,
     Merge,
+    Golden,
 }
 #[derive(Debug)]
 pub struct Outcome {
@@ -251,6 +252,7 @@ impl Person {
             ],
             Story::Adoption => stories::adoption_person(),
             Story::Adopt | Story::Merge => stories::person(),
+            Story::Golden => crate::golden::person(),
         };
         let mut offset = PROGRESS.with(|progress| progress.borrow().at);
         if matches!(scenario, Story::Adoption) && offset < fixtures::ADOPTION_REPLY_STEP {
@@ -569,16 +571,19 @@ fn service(inherited: &Inherited) -> Proc {
     let mut service = STARTUP.with(|slot| {
         let slot = slot.borrow();
         let startup = slot.as_ref().expect("phase startup inputs");
-        temper_service::startup::startup_with(
+        let setup = stories::is_golden().then(|| crate::golden::checked_setup(&startup.configuration));
+        temper_service::startup::with_setup_given(
             &startup.configuration,
             // Simulated fixture paths stay relative to their inherited roots.
             &jig_protocol_config::Directories::working(),
             &startup.files(),
-            &fixtures::agent(),
+            Some(&fixtures::agent()),
             &fixtures::seeds(),
             None,
-            temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() },
+            Some(temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() }),
             fixtures::forges(),
+            setup.as_ref(),
+            false,
             &stories::given(&serde_json::from_slice(&startup.configuration).expect("deployment JSON")),
         )
         .expect("one-process startup")
@@ -772,15 +777,19 @@ fn transport() -> temper_fake_git_hosted::Typed {
     SHARED.with(|shared| shared.borrow().as_ref().expect("world's forge").clone())
 }
 fn peer() -> Peer {
-    Peer::new(
+    let mut peer = Peer::new(
         fixtures::FORGE,
         fixtures::peer_limits(),
-        temper_fake_git_hosted::fixtures::table(b"acme/app", None),
+        stories::forge_table(),
         fixtures::forge_limits(),
         transport().forge,
         fixtures::SEED,
     )
-    .expect("forge peer")
+    .expect("forge peer");
+    if stories::is_golden() {
+        crate::golden::setup_peer(&mut peer);
+    }
+    peer
 }
 
 fn fake_forge(inherited: &Inherited) -> Proc {
@@ -884,7 +893,12 @@ fn token_bytes(disk: &mut skein_fake_machine::Machine) -> Vec<u8> {
 
 fn write_settings(disk: &mut skein_fake_machine::Machine) {
     if stories::needs_settings() {
-        let root = disk.lay(&[skein_fake_machine::Item::file(b"settings.json", &stories::settings_file())]);
+        let items = if stories::is_golden() {
+            vec![skein_fake_machine::Item::file(b"admin-token", crate::golden::ADMIN_TOKEN).mode(0o600)]
+        } else {
+            vec![skein_fake_machine::Item::file(b"settings.json", &stories::settings_file())]
+        };
+        let root = disk.lay(&items);
         disk.close(root);
     }
 }
@@ -918,21 +932,27 @@ fn run_phase(
     previous: Store,
     run: Rc<RefCell<referee::Run>>,
 ) -> (Outcome, skein_fake_machine::Machine, Store) {
-    let (outcome, disk, store, _) = run_phase_with_startup(settings, scenario, phase, disk, previous, run, None);
+    let (outcome, disk, store, _, _) =
+        run_phase_with_inputs(settings, scenario, phase, disk, previous, run, Inputs::default());
     (outcome, disk, store)
 }
-fn run_phase_with_startup(
+#[derive(Default)]
+struct Inputs {
+    startup: Option<crate::deployment::Startup>,
+    ledger: Option<crate::golden::Ledger>,
+}
+fn run_phase_with_inputs(
     settings: Settings,
     scenario: Story,
     phase: Phase,
     mut disk: skein_fake_machine::Machine,
     previous: Store,
     run: Rc<RefCell<referee::Run>>,
-    startup: Option<crate::deployment::Startup>,
-) -> (Outcome, skein_fake_machine::Machine, Store, crate::deployment::Startup) {
+    inputs: Inputs,
+) -> (Outcome, skein_fake_machine::Machine, Store, crate::deployment::Startup, crate::golden::Ledger) {
     stories::set(scenario);
     stories::setup_settings(phase);
-    let startup = startup.unwrap_or_else(crate::deployment::Startup::fixture);
+    let startup = inputs.startup.unwrap_or_else(crate::deployment::Startup::fixture);
     STARTUP.with(|slot| *slot.borrow_mut() = Some(startup));
     if !matches!(phase, Phase::Open) {
         write_settings(&mut disk);
@@ -943,7 +963,8 @@ fn run_phase_with_startup(
     STORE.with(|cell| {
         *cell.borrow_mut() = Some(store.clone());
     });
-    let transport = stories::forge(scenario);
+    let mut ledger = inputs.ledger.unwrap_or_else(|| crate::golden::Ledger::new(stories::forge(scenario), scenario));
+    let transport = ledger.transport.clone();
     let observed_forge = Rc::new(RefCell::new(referee::forge::Forge::new(transport.clone(), scenario)));
     share(Some(transport.clone()));
     let mut world = skein_world::World::new_controlled(settings.seed, settings.config, Memory::Unchecked, |controls| {
@@ -1000,6 +1021,8 @@ fn run_phase_with_startup(
     let pushed = std::mem::take(&mut observed_forge.borrow_mut().pushed);
     let deliveries = deliveries(&outcome.procs);
     assert!(outcome.procs.iter().all(Host::is_empty), "all processes drain");
+    ledger.effects.extend(std::mem::take(&mut observed_forge.borrow_mut().effects));
+    ledger.observe(&outcome.procs);
     share(None);
     STORE.with(|cell| {
         *cell.borrow_mut() = None;
@@ -1021,7 +1044,7 @@ fn run_phase_with_startup(
     };
     drop(run);
     let startup = STARTUP.with(|slot| slot.borrow_mut().take().expect("phase inputs"));
-    (result, std::mem::replace(&mut outcome.machine.0, machine::fresh()), records, startup)
+    (result, std::mem::replace(&mut outcome.machine.0, machine::fresh()), records, startup, ledger)
 }
 
 #[cfg(test)]
@@ -1032,20 +1055,26 @@ pub struct World {
     disk: skein_fake_machine::Machine,
     startup: crate::deployment::Startup,
     pub outcome: Outcome,
+    ledger: crate::golden::Ledger,
 }
 impl World {
     #[must_use]
     pub fn run(settings: Settings, story: Story) -> Self {
-        let (outcome, disk, _, startup) = run_phase_with_startup(
+        let (outcome, disk, _, startup, ledger) = run_phase_with_inputs(
             settings,
             story,
             Phase::Story,
             machine::fresh(),
             Store::new(),
             Rc::new(RefCell::new(referee::Run::default())),
-            None,
+            Inputs::default(),
         );
-        Self { disk, startup, outcome }
+        Self { disk, startup, outcome, ledger }
+    }
+    /// Capture the deployment and hand its outside forge history to the next phase.
+    #[must_use]
+    pub fn into_parts(mut self) -> (crate::deployment::Deployment, crate::golden::Ledger) {
+        (self.deployment(), self.ledger)
     }
     /// Capture all entries after every process has drained (protocol/README.md, 9).
     #[must_use]
@@ -1056,16 +1085,32 @@ impl World {
 /// Lay a kept deployment on a fresh machine and run startup, then drain.
 #[must_use]
 pub fn over(deployment: &crate::deployment::Deployment, settings: Settings) -> World {
-    let (outcome, disk, _, startup) = run_phase_with_startup(
+    open(deployment, settings, None)
+}
+/// Start with the same outside forge and append to its ledger across the restart.
+#[must_use]
+pub fn over_with_ledger(
+    deployment: &crate::deployment::Deployment,
+    settings: Settings,
+    ledger: crate::golden::Ledger,
+) -> World {
+    open(deployment, settings, Some(ledger))
+}
+fn open(
+    deployment: &crate::deployment::Deployment,
+    settings: Settings,
+    ledger: Option<crate::golden::Ledger>,
+) -> World {
+    let (outcome, disk, _, startup, ledger) = run_phase_with_inputs(
         settings,
-        Story::Chat { words: b"Hello" },
+        ledger.as_ref().map_or(Story::Chat { words: b"Hello" }, |ledger| ledger.story),
         Phase::Open,
         deployment.machine(),
         Store::over(deployment),
         Rc::new(RefCell::new(referee::Run::default())),
-        Some(deployment.startup()),
+        Inputs { startup: Some(deployment.startup()), ledger },
     );
-    World { disk, startup, outcome }
+    World { disk, startup, outcome, ledger }
 }
 
 fn signed_in(procs: &[Proc]) -> u32 {
