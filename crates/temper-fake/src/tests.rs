@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 use jig_protocol_config::Path;
 use serde_json::{Value, json};
 use skein_fake_llm_domain::api;
-use skein_lib::{Env, Queue, ReplyTo, Time, Token, Wall};
+use skein_lib::{Duration, Env, Queue, ReplyTo, Time, Token, Wall};
 
 fn llm_document() -> Value {
     json!({"listen":{"socket":"127.0.0.1:0"},"key":"/tmp/key","tls":null,
@@ -24,6 +24,180 @@ fn forge_document() -> Value {
     json!({"listen":{"socket":"127.0.0.1:0"},"admin_token":"/tmp/forge/admin_token","owner":"fake",
         "repositories":[{"name":"widget","landing":"main","ci":null}]})
 }
+#[test]
+fn a_model_document_with_a_pace_waits_that_long_before_each_reply() {
+    use skein_fake_llm_domain::{self as domain, Event, Request};
+    for pieces in [false, true] {
+        let mut doc = llm_document();
+        doc["pace"] = json!({"reply_ms":1500});
+        if pieces {
+            doc["otherwise"] = json!([{"lines":[{"pieces":[
+                {"text":"first", "hold":null}, {"text":"last", "hold":null}
+            ]}], "finish":"stop", "tokens":1}]);
+        }
+        let doc = llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).unwrap();
+        assert_eq!(doc.reply(), Duration::from_millis(1500));
+        let config = llm::configuration(&doc, b"key", 23);
+        assert_eq!(config.limits.latency_min, doc.reply());
+        assert_eq!(config.limits.latency_max, doc.reply());
+        // Exercise both entry points, with the exact limits the peer receives.
+        for mut played in [doc.domain(23), config.domain] {
+            let mut env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: config.limits };
+            let mut out = Queue::with_capacity(1);
+            for millis in [5000_u64, 11000] {
+                env.now = Time::ZERO.saturating_add(Duration::from_millis(millis));
+                let start = env.now;
+                domain::step(
+                    &mut played,
+                    &env,
+                    Event::Call {
+                        reply_to: ReplyTo::new(Token::new(millis)),
+                        call: Token::new(millis),
+                        query: query(b"", b"other"),
+                    },
+                    &mut out,
+                );
+                assert!(out.is_empty());
+                let due = start.saturating_add(doc.reply());
+                assert_eq!(played.next_deadline(), Some(due));
+                for now in [start, Time::from_nanos(due.as_nanos() - 1)] {
+                    env.now = now;
+                    domain::fire(&mut played, &env, &mut out);
+                    assert!(out.is_empty(), "no first piece before the reply's latency");
+                }
+                env.now = due;
+                domain::fire(&mut played, &env, &mut out);
+                if pieces {
+                    let Some(Request::Piece { text, .. }) = out.pop() else { panic!("first piece") };
+                    assert_eq!(text.as_ref(), b"first");
+                    env.now = due.saturating_add(doc.reply());
+                    domain::fire(&mut played, &env, &mut out);
+                }
+                let Some(Request::Reply { result, .. }) = out.pop() else { panic!("completed answer") };
+                let expected: &[u8] = if pieces { b"firstlast" } else { b"fallback" };
+                assert_eq!(result.unwrap().parts.as_ref(), &[api::Part::Text { text: expected.into() }]);
+                played.reclaim();
+            }
+        }
+    }
+}
+
+#[test]
+fn a_forge_document_with_a_pace_gives_ci_its_verdict_that_long_after_a_push() {
+    use skein_fake_forge_domain::{self as domain, api as a};
+    let mut doc = forge_document();
+    doc["pace"] = json!({"ci_ms":2000});
+    doc["repositories"].as_array_mut().unwrap().push(json!({"name":"second","landing":"trunk","ci":null}));
+    let doc = forge::Document::decode(&serde_json::to_vec(&doc).unwrap()).unwrap();
+    assert_eq!(doc.ci(), Duration::from_secs(2));
+    let (mut forge, config) = doc.seed(23);
+    let mut env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: forge::LIMITS };
+    let mut out = Queue::with_capacity(128);
+    for repository in &config.repositories {
+        for millis in [5000_u64, 11000] {
+            env.now = Time::ZERO.saturating_add(Duration::from_millis(millis + u64::from(repository.id) * 20000));
+            let start = env.now;
+            let landing = if repository.id == 1 { b"main".as_slice() } else { b"trunk" };
+            let head = domain::advance(
+                &mut forge.domain,
+                &env,
+                &repository.full,
+                landing,
+                b"ci/result",
+                b"green",
+                forge::OWNER,
+            )
+            .unwrap();
+            let due = start.saturating_add(doc.ci());
+            for (now, expected) in [
+                (start, a::Check::Pending),
+                (Time::from_nanos(due.as_nanos() - 1), a::Check::Pending),
+                (due, a::Check::Passed),
+                (due.saturating_add(Duration::from_secs(1)), a::Check::Passed),
+            ] {
+                env.now = now;
+                for _ in 0..128_u32 {
+                    if !forge.domain.is_due(now) {
+                        break;
+                    }
+                    domain::fire(&mut forge.domain, &env, &mut out);
+                    while out.pop().is_some() {}
+                    forge.domain.reclaim();
+                }
+                assert!(!forge.domain.is_due(now), "all due events drained");
+                let a::Answer::Statuses(statuses) = forge
+                    .domain
+                    .inspect(&forge::LIMITS, &repository.full, &a::Read::Statuses { commit: head })
+                    .unwrap()
+                else {
+                    panic!("statuses")
+                };
+                assert_eq!(statuses.len(), 1);
+                assert_eq!(statuses[0].state, expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_pace_past_its_bound_is_refused_naming_it() {
+    for value in [json!(60001), json!(4_294_967_296_u64), json!(-1), json!(1.5), json!("1500")] {
+        let mut llm = llm_document();
+        llm["pace"] = json!({"reply_ms":value});
+        let error = llm::Document::decode(&serde_json::to_vec(&llm).unwrap()).unwrap_err();
+        assert!(error.line().starts_with(b"pace.reply_ms:"));
+        let mut forge = forge_document();
+        forge["pace"] = json!({"ci_ms":value});
+        let error = forge::Document::decode(&serde_json::to_vec(&forge).unwrap()).unwrap_err();
+        assert!(error.line().starts_with(b"pace.ci_ms:"));
+    }
+    for millis in [0_u32, 60000] {
+        let mut llm = llm_document();
+        llm["pace"] = json!({"reply_ms":millis});
+        let doc = llm::Document::decode(&serde_json::to_vec(&llm).unwrap()).unwrap();
+        assert_eq!(doc.reply(), Duration::from_millis(u64::from(millis)));
+        let mut forge = forge_document();
+        forge["pace"] = json!({"ci_ms":millis});
+        let doc = forge::Document::decode(&serde_json::to_vec(&forge).unwrap()).unwrap();
+        assert_eq!(doc.ci(), Duration::from_millis(u64::from(millis)));
+    }
+}
+
+#[test]
+fn a_pace_with_another_member_is_refused_naming_it() {
+    for pace in [json!({"reply_ms":1500,"other":0}), json!({"other":0})] {
+        let mut llm = llm_document();
+        llm["pace"] = pace;
+        assert_eq!(
+            llm::Document::decode(&serde_json::to_vec(&llm).unwrap()).unwrap_err().line().as_ref(),
+            b"pace.other: unknown member\n"
+        );
+    }
+    for pace in [json!({"ci_ms":2000,"other":0}), json!({"other":0})] {
+        let mut forge = forge_document();
+        forge["pace"] = pace;
+        assert_eq!(
+            forge::Document::decode(&serde_json::to_vec(&forge).unwrap()).unwrap_err().line().as_ref(),
+            b"pace.other: unknown member\n"
+        );
+    }
+}
+
+#[test]
+fn a_document_without_a_pace_answers_at_once() {
+    let llm = llm::Document::decode(&serde_json::to_vec(&llm_document()).unwrap()).unwrap();
+    assert_eq!(llm.reply(), Duration::ZERO);
+    assert_eq!(llm.limits().latency_min, Duration::ZERO);
+    assert_eq!(llm.limits().latency_max, Duration::ZERO);
+    assert_eq!(
+        answer(&llm, 23, query(b"", b"other")).parts.as_ref(),
+        &[api::Part::Text { text: b"fallback".as_slice().into() }]
+    );
+    let forge = forge::Document::decode(&serde_json::to_vec(&forge_document()).unwrap()).unwrap();
+    assert_eq!(forge.ci(), Duration::ZERO);
+    // ci_cue also verifies both pass and failure verdicts at Time::ZERO.
+}
+
 #[test]
 #[expect(clippy::too_many_lines, reason = "one table names every document bound and refusal path")]
 fn llm_document_checks() {
