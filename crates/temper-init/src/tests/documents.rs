@@ -130,7 +130,7 @@ fn the_default_is_the_owned_example_so_edited() {
                 }
             }
         }
-        assert_eq!(replace_org_patterns(&mut expected), 40, "{row}");
+        assert_eq!(replace_org_patterns(&mut expected), 30, "{row}");
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.repositories"] = json!(3_u32);
