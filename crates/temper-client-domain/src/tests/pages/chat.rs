@@ -1003,3 +1003,22 @@ fn a_change_call_without_objects_reads_the_delegated_numbers() {
     crate::pages::delegation::delegated(&call, &mut delegated);
     assert_eq!(delegated.as_slice(), &[2, 3]);
 }
+
+#[test]
+fn a_goal_call_names_its_task_in_the_chats_delegations() {
+    let mut call = f::delegate_call(DELEGATED);
+    call.tool = fixtures::acts::text(b"goal");
+    let mut delegated = skein_lib::List::with_capacity(2);
+    crate::pages::delegation::delegated(&call, &mut delegated);
+    assert_eq!(delegated.as_slice(), &[DELEGATED]);
+}
+
+#[test]
+fn a_goal_call_without_objects_reads_the_delegated_numbers() {
+    let mut call = f::delegate_call(DELEGATED);
+    call.tool = fixtures::acts::text(b"goal");
+    call.objects = skein_lib::List::with_capacity(0);
+    let mut delegated = skein_lib::List::with_capacity(2);
+    crate::pages::delegation::delegated(&call, &mut delegated);
+    assert_eq!(delegated.as_slice(), &[2, 3]);
+}
