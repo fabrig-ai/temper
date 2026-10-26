@@ -214,7 +214,7 @@ fn worker(engine: &mut Engine, request: root::WorkerRequest) {
     match request {
         root::WorkerRequest::Host(request) => match *request {
             root::HostRequest::Decode { to, task, attempt, call } => {
-                engine.events.push(crate::tools::decode(to, task, attempt, &call));
+                engine.events.push(crate::tools::decode_configured(to, task, attempt, &call, engine.domain.models()));
             }
             root::HostRequest::Dropped { .. } => {}
         },
@@ -252,6 +252,15 @@ fn worker(engine: &mut Engine, request: root::WorkerRequest) {
                 &mut engine.events,
             ),
             root::Delivery::Host(delivery) => match *delivery {
+                root::HostDelivery::Settings { to, answer, from, requested } => {
+                    let (body, error) =
+                        temper_engine_smith::settings_answer(&answer, from, requested, engine.domain.models())
+                            .into_parts();
+                    engine.events.push(root::Event::Worker(root::WorkerInput::RenderedHostCall {
+                        to,
+                        answer: jig_domain_core::SettledAnswer::Host { error, body },
+                    }));
+                }
                 root::HostDelivery::Render { to, answer, .. } => engine.events.push(crate::tools::render(to, &answer)),
                 root::HostDelivery::Answer { channel, task, attempt, name, call } => engine.workers.send(
                     engine.env.now,

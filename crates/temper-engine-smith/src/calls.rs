@@ -143,7 +143,17 @@ const PERMISSION_SPEC: Spec = Spec {
     effect: run::HostEffect::Read,
 };
 
-const SPECS: [Spec; 36] = [
+const SPECS: [Spec; 38] = [
+    Spec {
+        name: b"settings", description: b"Read deployment settings, a setting, a revision or history. Continue with from.",
+        schema: br#"{"type":"object","additionalProperties":false,"properties":{"setting":{"type":"object","additionalProperties":false,"properties":{"kind":{"enum":["charter","template","policy","rules"]},"number":{"type":"integer","minimum":1,"maximum":4294967295}},"required":["kind"]},"revision":{"type":"integer","minimum":1,"maximum":4294967295},"history":{"type":"object","additionalProperties":false,"properties":{"before":{"type":"integer","minimum":1,"maximum":4294967295}}},"from":{"type":"integer","minimum":0,"maximum":4294967295}}}"#,
+        effect: run::HostEffect::Read,
+    },
+    Spec {
+        name: b"propose_settings", description: b"Propose settings items in the settings file form to the deployment's owners, against the newest revision read, with a reason.",
+        schema: br#"{"type":"object","additionalProperties":false,"properties":{"against":{"type":"integer","minimum":1,"maximum":4294967295},"reason":{"type":"string"},"items":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"setting":{"type":"object","properties":{"kind":{"enum":["charter","template","policy","rules"]},"number":{"type":"integer","minimum":1}},"required":["kind"]},"set":{"type":"object","description":"Whole value in temper ctl's settings file form; read the setting first."},"edit":{"enum":["reset","removed"]}},"required":["setting"]}}},"required":["against","items","reason"]}"#,
+        effect: run::HostEffect::Write,
+    },
     ITEMS_SPEC,
     ITEM_SPEC,
     PULL_SPEC,
@@ -203,10 +213,24 @@ pub fn tools(timeout: Duration) -> Box<[run::HostTool]> {
 
 /// Decode an attested Smith host call under one activation-qualified name.
 /// The caller supplies its task/attempt envelope separately to the root.
-#[expect(clippy::too_many_lines, reason = "one exhaustive finite host-tool registry")]
 pub fn call(name: run::CallName, tool: &[u8], input: &run::HostInput) -> Result<Decoded, Problem> {
+    call_configured(name, tool, input, &[])
+}
+
+/// Decode host calls with the deployment's models for settings values.
+#[expect(clippy::too_many_lines, reason = "one exhaustive finite host-tool registry")]
+pub fn call_configured(
+    name: run::CallName,
+    tool: &[u8],
+    input: &run::HostInput,
+    models: &[engine::Model],
+) -> Result<Decoded, Problem> {
+    if tool == b"propose_settings" {
+        return crate::settings::proposal(name, input.bytes(), models);
+    }
     let value = crate::json::parse(input.bytes())?;
     let tool = match tool {
+        b"settings" => crate::settings::read(&value)?,
         b"read_docs" => {
             let answer = match docs::read(&value)? {
                 Ok(read) => docs::answer(&temper_docs::PAGES, &read),

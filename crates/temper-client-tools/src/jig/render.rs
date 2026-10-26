@@ -489,3 +489,27 @@ pub(crate) fn waiting(
     }
     printed
 }
+
+/// Render a settings read with ctl's words and layout, before host pagination.
+#[must_use]
+pub fn settings_text(value: &ReadValue, requested: Option<u64>, limits: &Limits) -> Box<[u8]> {
+    let mut measure = Text::measure();
+    document::settings::text(value, requested, limits, &mut measure);
+    let structural = measure.structural();
+    let mut measure = Text::bounded(limits, structural);
+    document::settings::text(value, requested, limits, &mut measure);
+    let mut out = measure.writing(limits, structural);
+    document::settings::text(value, requested, limits, &mut out);
+    out.finish()
+}
+
+/// Render a proposal refusal with the same words as ctl.
+#[must_use]
+pub fn settings_refusal(why: &contract::Refusal) -> Box<[u8]> {
+    let book = document::phrasebook(crate::limits::TEXT);
+    let mut measure = Text::measure();
+    acts::refusal(why, &book, &mut measure);
+    let mut out = Text::writing_exact(measure);
+    acts::refusal(why, &book, &mut out);
+    out.finish()
+}
