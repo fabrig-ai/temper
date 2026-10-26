@@ -14,7 +14,7 @@ use temper_forge_setup::name::{branch, relative, repository};
 
 /// Setup increments its account number before insertion, so it cannot issue MAX.
 pub const OWNER: u64 = u64::MAX;
-/// The one named check, with no delay, silence or rerun.
+/// The one named check, with no silence or rerun.
 pub const CONTEXT: &[u8] = b"check";
 /// A first commit has an empty message in skein's repository constructor.
 pub const MESSAGE: &[u8] = b"";
@@ -46,6 +46,7 @@ pub struct Document {
     owner: Box<[u8]>,
     repositories: Box<[Repository]>,
     github: Option<github::Github>,
+    ci: Duration,
 }
 impl Document {
     /// The fake forge of a checked setup entry, its token at `admin_token` (protocol/setup.md, 8.4).
@@ -71,6 +72,7 @@ impl Document {
             owner: fake.owner.clone(),
             repositories: repositories.into_boxed(),
             github: None,
+            ci: Duration::ZERO,
         }
     }
     /// The seeded App's public test private key, for the fake box's own-App path.
@@ -87,11 +89,13 @@ impl Document {
         let admin_token = read::field(&mut o, &d, b"admin_token", crate::limits::PATH_BYTES, &p)?;
         let owner = read::field(&mut o, &d, b"owner", 40, &p)?;
         let repositories_at = read::required(&mut o, &d, b"repositories", &p)?;
+        let pace_at = o.member(&d, b"pace");
         let github = match o.member(&d, b"github") {
             Some(at) => Some(github::decode(&d, at, &p.member(b"github"))?),
             None => None,
         };
         read::finish(o, &d, &p)?;
+        let ci = read::pace(&d, pace_at, b"ci_ms", &p.member(b"pace"))?;
         let listen = read::listen(&d, listen_at, &p.member(b"listen"))?;
         read::absolute(&admin_token, &p.member(b"admin_token"))?;
         if !login(&owner) || owner.as_ref() == b"temper-admin" {
@@ -175,7 +179,7 @@ impl Document {
         if let Some(github) = &github {
             github.check(repositories.as_slice())?;
         }
-        Ok(Self { listen, admin_token, owner, repositories: repositories.into_boxed(), github })
+        Ok(Self { listen, admin_token, owner, repositories: repositories.into_boxed(), github, ci })
     }
     #[must_use]
     pub fn listen(&self) -> SocketAddr {
@@ -192,6 +196,10 @@ impl Document {
     #[must_use]
     pub fn repositories(&self) -> &[Repository] {
         &self.repositories
+    }
+    #[must_use]
+    pub fn ci(&self) -> Duration {
+        self.ci
     }
     /// The same seed order gives the same commit at every start: skein stores
     /// tree, message and parents, with no author or time; its id is a count.
@@ -216,6 +224,9 @@ impl Document {
                     tree.into_boxed()
                 }
             };
+            let mut checks = checks(repository.ci.as_ref());
+            checks.latency_min = self.ci();
+            checks.latency_max = self.ci();
             domain::repository(
                 &mut domain,
                 &LIMITS,
@@ -225,7 +236,7 @@ impl Document {
                     default: repository.landing.clone(),
                     tree,
                     labels: Box::new([]),
-                    checks: checks(repository.ci.as_ref()),
+                    checks,
                     protection: None,
                     hooked: true,
                 },

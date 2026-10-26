@@ -17,6 +17,7 @@ pub const MODEL_NAME_BYTES: u32 = 4096;
 pub const CUE_BYTES: u32 = 256;
 pub const CALL_NAME_BYTES: u32 = 64;
 pub const JSON_NUMBER: u32 = 32;
+pub const PACE_MS: u32 = 60_000;
 pub const LLM_REQUEST_BYTES: u32 = 1 << 20;
 pub const LLM_TOKENS: u32 = 65_536;
 pub const LLM_TOOLS: u32 = 64;
