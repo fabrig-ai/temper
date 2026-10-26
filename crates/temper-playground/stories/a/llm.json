@@ -1,0 +1,256 @@
+{
+  "listen": {
+    "socket": "127.0.0.1:8370"
+  },
+  "key": "/demo/llm.key",
+  "tls": null,
+  "models": [
+    {
+      "name": "demo",
+      "window": 131072,
+      "output": 8192
+    }
+  ],
+  "asked": [],
+  "cued": [
+    {
+      "cue": "Add CSV export to widget",
+      "turns": [
+        {
+          "lines": [
+            {
+              "text": "I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge."
+            },
+            {
+              "call": "delegate",
+              "arguments": {
+                "batch": [
+                  {
+                    "executor": {
+                      "kind": "procedure",
+                      "connector": 1,
+                      "code": 2
+                    },
+                    "spec": {
+                      "words": "Export widget's table as CSV",
+                      "parameters": [
+                        {
+                          "name": 1,
+                          "kind": "resource",
+                          "connector": 1,
+                          "resource": 4294967297
+                        },
+                        {
+                          "name": 2,
+                          "kind": "bytes",
+                          "value": "main"
+                        }
+                      ]
+                    },
+                    "contract": {
+                      "kind": "change",
+                      "connector": 1,
+                      "change_kind": 1,
+                      "words": 128
+                    },
+                    "authority": {
+                      "tools": 1,
+                      "grants": [
+                        {
+                          "connector": 1,
+                          "kind": 2,
+                          "segments": [
+                            "forge"
+                          ],
+                          "terminal": "open",
+                          "last": ""
+                        },
+                        {
+                          "connector": 1,
+                          "kind": 3,
+                          "segments": [
+                            "forge"
+                          ],
+                          "terminal": "open",
+                          "last": ""
+                        },
+                        {
+                          "connector": 1,
+                          "kind": 4,
+                          "segments": [
+                            "forge"
+                          ],
+                          "terminal": "open",
+                          "last": ""
+                        },
+                        {
+                          "connector": 1,
+                          "kind": 10,
+                          "segments": [
+                            "forge"
+                          ],
+                          "terminal": "open",
+                          "last": ""
+                        },
+                        {
+                          "connector": 1,
+                          "kind": 11,
+                          "segments": [
+                            "forge"
+                          ],
+                          "terminal": "open",
+                          "last": ""
+                        },
+                        {
+                          "connector": 1,
+                          "kind": 12,
+                          "segments": [
+                            "forge"
+                          ],
+                          "terminal": "open",
+                          "last": ""
+                        }
+                      ],
+                      "delegation": {
+                        "kinds": [
+                          {
+                            "kind": "agent",
+                            "number": 2
+                          }
+                        ],
+                        "tasks": 4,
+                        "depth": 2
+                      },
+                      "budget": {
+                        "spend": 10
+                      },
+                      "notes": 0
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 262
+        },
+        {
+          "lines": [
+            {
+              "call": "wait",
+              "arguments": {}
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 2
+        },
+        {
+          "lines": [
+            {
+              "text": "CSV export is available from widget’s table. The change landed on Playground forge. This was a scripted change."
+            },
+            {
+              "call": "wait",
+              "arguments": {}
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 30
+        }
+      ]
+    },
+    {
+      "cue": "Add a dark theme to widget",
+      "turns": [
+        {
+          "lines": [
+            {
+              "text": "I would give widget a dark theme that follows the system's preference, with its colours as variables in one place so both themes stay in step. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done."
+            }
+          ],
+          "finish": "stop",
+          "tokens": 68
+        }
+      ]
+    },
+    {
+      "cue": "Fix widget's empty search state",
+      "turns": [
+        {
+          "lines": [
+            {
+              "text": "I would have widget say when a search finds nothing, name the words searched for and offer to clear them, in place of an empty table that looks broken. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done."
+            }
+          ],
+          "finish": "stop",
+          "tokens": 70
+        }
+      ]
+    },
+    {
+      "cue": "Export widget's table as CSV",
+      "turns": [
+        {
+          "lines": [
+            {
+              "call": "read",
+              "arguments": {
+                "path": "src/main.rs"
+              }
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 7
+        },
+        {
+          "lines": [
+            {
+              "call": "edit",
+              "arguments": {
+                "path": "src/main.rs",
+                "edits": [
+                  {
+                    "old": "fn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n",
+                    "new": "fn main() {\n    let csv = std::env::args().any(|arg| arg == \"--csv\");\n    if csv {\n        println!(\"name,count\");\n    }\n    for (name, count) in TABLE {\n        if csv {\n            println!(\"{name},{count}\");\n        } else {\n            println!(\"{name:<8}{count}\");\n        }\n    }\n}\n"
+                  }
+                ]
+              }
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 116
+        },
+        {
+          "lines": [
+            {
+              "call": "finish",
+              "arguments": {
+                "form": "change",
+                "fields": {
+                  "title": "Add CSV export to widget",
+                  "body": "widget --csv prints the table as CSV: a header line, then a line for each row. This was a scripted change."
+                }
+              }
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 47
+        }
+      ]
+    }
+  ],
+  "otherwise": [
+    {
+      "lines": [
+        {
+          "text": "This is temper's playground: a scripted model, running in your browser. It answers only the three suggested requests: “Add CSV export to widget”, “Add a dark theme to widget” and “Fix widget’s empty search state”. A real model comes with the download."
+        }
+      ],
+      "finish": "stop",
+      "tokens": 67
+    }
+  ],
+  "pace": {
+    "reply_ms": 1500
+  }
+}

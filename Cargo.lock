@@ -3042,7 +3042,9 @@ dependencies = [
 name = "temper-playground"
 version = "0.0.0"
 dependencies = [
+ "jig-domain-host",
  "jig-protocol-config",
+ "serde_json",
  "skein-fake-forge-protocol",
  "skein-fake-llm-domain",
  "skein-fake-llm-protocol",
@@ -3050,14 +3052,20 @@ dependencies = [
  "skein-fake-peers",
  "skein-forge-connection",
  "skein-io",
+ "skein-json",
  "skein-lib",
  "skein-llm",
  "skein-shell",
  "skein-sim",
  "skein-sim-world",
  "smith-agent-shell",
+ "smith-host-protocol",
+ "smith-local-service",
+ "temper-fake",
  "temper-fake-git-hosted",
+ "temper-forge-setup",
  "temper-service",
+ "temper-worker-domain",
 ]
 
 [[package]]

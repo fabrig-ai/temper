@@ -1,0 +1,51 @@
+{
+  "profile": {
+    "name": "standard",
+    "declared": {
+      "memory": 2147483648,
+      "tool_payload": 4098,
+      "read_window": 256,
+      "conversations": 1,
+      "calls_per_response": 1
+    },
+    "policy": {
+      "max_turns": 8,
+      "check_timeout": 60000,
+      "group_stop": 10,
+      "inbox": 8,
+      "unacknowledged": 8
+    }
+  },
+  "endpoints": [
+    {
+      "name": "demo",
+      "number": 3,
+      "dialect": 3,
+      "provider": "openai",
+      "address": "127.0.0.1:8370",
+      "transport": "plaintext",
+      "identity": "plain",
+      "connect": 10000,
+      "handshake": 10000,
+      "headers": [],
+      "models": [
+        {
+          "name": "demo",
+          "prices": {
+            "input": 1,
+            "cached": 1,
+            "output": 1,
+            "unit": 1000000
+          },
+          "window": 131072,
+          "output": 8192,
+          "reasoning_item": 2048,
+          "head": 60000,
+          "idle": 30000
+        }
+      ]
+    }
+  ],
+  "programs": {},
+  "environment": []
+}

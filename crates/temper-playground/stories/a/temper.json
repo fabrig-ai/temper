@@ -1,0 +1,931 @@
+{
+  "engine": {
+    "acts": [
+      {
+        "connector": 1,
+        "may": [
+          "close",
+          "remove_account"
+        ]
+      }
+    ],
+    "limits": {
+      "profile": "small",
+      "overrides": {
+        "authority.grants": 12,
+        "authority.segments": 8,
+        "core.resume_bytes": 1039548,
+        "documents.lines": 2,
+        "documents.rows": 2,
+        "documents.text_bytes": 128,
+        "hub.transcript_bytes": 4158192,
+        "hub.turn_bytes": 1039544,
+        "hub.turn_queue_bytes": 8316352,
+        "notes.scopes": 15,
+        "tasks.authority_bytes": 512,
+        "tasks.authority_grants": 12,
+        "tasks.authority_segments": 8,
+        "tasks.batch": 1,
+        "tasks.hold_segments": 8,
+        "views.watchers": 16,
+        "views.watchers_per_party": 16
+      }
+    },
+    "llm": {
+      "providers": [
+        {
+          "name": "demo",
+          "number": 3,
+          "signed_in_plan": false,
+          "models": [
+            "demo"
+          ],
+          "sources": {
+            "keys": true
+          }
+        }
+      ],
+      "endpoints": [
+        {
+          "name": "demo",
+          "number": 3,
+          "dialect": 3,
+          "provider": "demo",
+          "address": {
+            "socket": "127.0.0.1:8370"
+          },
+          "transport": "plaintext",
+          "headers": [],
+          "connect_ms": 10000,
+          "handshake_ms": 10000
+        }
+      ],
+      "models": [
+        {
+          "name": "demo",
+          "endpoint": "demo",
+          "window": 131072,
+          "output": 8192,
+          "prices": {
+            "input": 1,
+            "cached": 1,
+            "output": 1,
+            "unit": 1000000
+          }
+        }
+      ]
+    },
+    "hosts": {
+      "workers": [
+        {
+          "name": "worker",
+          "digest": "worker.digest"
+        }
+      ],
+      "listener": [
+        {
+          "in_process": "workers"
+        }
+      ]
+    },
+    "clients": {
+      "heartbeat_ms": 10000,
+      "link": true
+    },
+    "deployment": {
+      "directory": "deployment",
+      "seed": 7
+    },
+    "owners": [
+      {
+        "provider": 1,
+        "subject": "owner-a"
+      }
+    ],
+    "providers": [
+      {
+        "number": 1,
+        "kind": "link"
+      },
+      {
+        "number": 2,
+        "kind": "deployment"
+      }
+    ],
+    "connectors": [
+      1
+    ],
+    "memory_bytes": 630000000000000,
+    "projects": [
+      {
+        "number": 1,
+        "roles": [
+          {
+            "connector": 1,
+            "permission": 1,
+            "role": 0
+          }
+        ],
+        "policy": {
+          "templates": [],
+          "escalation_role": 0,
+          "period_spend": 100,
+          "projections": [
+            {
+              "connector": 1,
+              "kind": 1,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 2,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 3,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 4,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 7,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 8,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 10,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 11,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 12,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 13,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            }
+          ],
+          "requirements": [],
+          "ceiling": {
+            "tools": 513,
+            "grants": [
+              {
+                "connector": 1,
+                "kind": 1,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 2,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 3,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 4,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 7,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 8,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 10,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 11,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 12,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 13,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              }
+            ],
+            "delegation": {
+              "kinds": [
+                {
+                  "kind": "charter",
+                  "number": 1
+                },
+                {
+                  "kind": "charter",
+                  "number": 2
+                },
+                {
+                  "kind": "procedure",
+                  "number": 2
+                }
+              ],
+              "tasks": 8,
+              "depth": 4
+            },
+            "budget": {
+              "spend": 100,
+              "deadline_unix_seconds": null
+            },
+            "notes": 0,
+            "note_resources": []
+          },
+          "roles": [
+            {
+              "number": 0,
+              "period_spend": 100,
+              "requests": 511,
+              "decides": 31,
+              "authority": {
+                "tools": 513,
+                "grants": [
+                  {
+                    "connector": 1,
+                    "kind": 1,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 2,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 3,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 4,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 7,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 8,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 10,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 11,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 12,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 13,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  }
+                ],
+                "delegation": {
+                  "kinds": [
+                    {
+                      "kind": "charter",
+                      "number": 1
+                    },
+                    {
+                      "kind": "charter",
+                      "number": 2
+                    },
+                    {
+                      "kind": "procedure",
+                      "number": 2
+                    }
+                  ],
+                  "tasks": 8,
+                  "depth": 4
+                },
+                "budget": {
+                  "spend": 40,
+                  "deadline_unix_seconds": null
+                },
+                "notes": 0,
+                "note_resources": []
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "workers": [
+    {
+      "engine": {
+        "in_process": "workers"
+      },
+      "name": "worker",
+      "secret": "worker.secret",
+      "slots": 1,
+      "graces": {
+        "grace_ms": 10000,
+        "agent_stop_ms": 5000,
+        "delivery_ms": 1000,
+        "save_ms": 1000
+      },
+      "programs": {
+        "check_interval_ms": 60000
+      },
+      "agent": {
+        "program": "/opt/temper/bin/temper",
+        "configuration": "/opt/temper/agent.json",
+        "arguments": [
+          "agent",
+          "/opt/temper/agent.json"
+        ]
+      },
+      "limits": {
+        "profile": "small",
+        "overrides": {
+          "hub.accounts": 4,
+          "hub.event_bytes": 4096,
+          "hub.transcript_bytes": 4158192,
+          "hub.turn_bytes": 1039544,
+          "hub.turn_queue_bytes": 8316352
+        }
+      },
+      "memory_bytes": 3700000000000
+    }
+  ],
+  "application": {
+    "forges": [
+      {
+        "number": 1,
+        "kind": "forgejo",
+        "api": {
+          "socket": "127.0.0.1:8369"
+        },
+        "transport": "plaintext",
+        "git": "http://127.0.0.1:8369",
+        "web": null
+      }
+    ],
+    "identities": [
+      {
+        "number": 2,
+        "forge": 1,
+        "login": "temper",
+        "author": {
+          "name": "Temper",
+          "email": "temper@localhost"
+        }
+      }
+    ],
+    "landing": {
+      "deployment": [
+        {
+          "connector": 1,
+          "kind": 4,
+          "pattern": {
+            "segments": [
+              "forge"
+            ],
+            "last": "open",
+            "value": ""
+          },
+          "enforce": true,
+          "ci": true,
+          "up_to_date": true,
+          "gates": [],
+          "approvals": []
+        }
+      ],
+      "projects": []
+    },
+    "charter": 2,
+    "clients": {
+      "listener": {
+        "socket": "127.0.0.1:8367"
+      },
+      "bundle": null,
+      "public": null
+    },
+    "webhooks": {
+      "listener": {
+        "socket": "127.0.0.1:8371"
+      }
+    },
+    "setup": [
+      {
+        "forge": 1,
+        "directory": "/demo/forge",
+        "bot": {
+          "login": "temper",
+          "email": "temper@localhost"
+        },
+        "mode": {
+          "fake": {
+            "listen": {
+              "socket": "127.0.0.1:8369"
+            },
+            "git": "/usr/bin/git",
+            "owner": "playground",
+            "repositories": [
+              {
+                "name": "widget",
+                "landing": "main"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "sign_in": null,
+    "demo": {
+      "llm": {
+        "listen": {
+          "socket": "127.0.0.1:8370"
+        },
+        "provider": 3,
+        "key": "/demo/llm.key",
+        "asked": [
+          {
+            "cue": "Add CSV export to widget",
+            "turns": [
+              {
+                "lines": [
+                  {
+                    "text": "I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge."
+                  },
+                  {
+                    "call": "delegate",
+                    "arguments": {
+                      "batch": [
+                        {
+                          "executor": {
+                            "kind": "procedure",
+                            "connector": 1,
+                            "code": 2
+                          },
+                          "spec": {
+                            "words": "Export widget's table as CSV",
+                            "parameters": [
+                              {
+                                "name": 1,
+                                "kind": "resource",
+                                "connector": 1,
+                                "resource": 4294967297
+                              },
+                              {
+                                "name": 2,
+                                "kind": "bytes",
+                                "value": "main"
+                              }
+                            ]
+                          },
+                          "contract": {
+                            "kind": "change",
+                            "connector": 1,
+                            "change_kind": 1,
+                            "words": 128
+                          },
+                          "authority": {
+                            "tools": 1,
+                            "grants": [
+                              {
+                                "connector": 1,
+                                "kind": 2,
+                                "segments": [
+                                  "forge"
+                                ],
+                                "terminal": "open",
+                                "last": ""
+                              },
+                              {
+                                "connector": 1,
+                                "kind": 3,
+                                "segments": [
+                                  "forge"
+                                ],
+                                "terminal": "open",
+                                "last": ""
+                              },
+                              {
+                                "connector": 1,
+                                "kind": 4,
+                                "segments": [
+                                  "forge"
+                                ],
+                                "terminal": "open",
+                                "last": ""
+                              },
+                              {
+                                "connector": 1,
+                                "kind": 10,
+                                "segments": [
+                                  "forge"
+                                ],
+                                "terminal": "open",
+                                "last": ""
+                              },
+                              {
+                                "connector": 1,
+                                "kind": 11,
+                                "segments": [
+                                  "forge"
+                                ],
+                                "terminal": "open",
+                                "last": ""
+                              },
+                              {
+                                "connector": 1,
+                                "kind": 12,
+                                "segments": [
+                                  "forge"
+                                ],
+                                "terminal": "open",
+                                "last": ""
+                              }
+                            ],
+                            "delegation": {
+                              "kinds": [
+                                {
+                                  "kind": "agent",
+                                  "number": 2
+                                }
+                              ],
+                              "tasks": 4,
+                              "depth": 2
+                            },
+                            "budget": {
+                              "spend": 10
+                            },
+                            "notes": 0
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "finish": "tool_calls",
+                "tokens": 262
+              },
+              {
+                "lines": [
+                  {
+                    "call": "wait",
+                    "arguments": {}
+                  }
+                ],
+                "finish": "tool_calls",
+                "tokens": 2
+              },
+              {
+                "lines": [
+                  {
+                    "text": "CSV export is available from widget’s table. The change landed on Playground forge. This was a scripted change."
+                  },
+                  {
+                    "call": "wait",
+                    "arguments": {}
+                  }
+                ],
+                "finish": "tool_calls",
+                "tokens": 30
+              }
+            ]
+          },
+          {
+            "cue": "Add a dark theme to widget",
+            "turns": [
+              {
+                "lines": [
+                  {
+                    "text": "I would give widget a dark theme that follows the system's preference, with its colours as variables in one place so both themes stay in step. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done."
+                  }
+                ],
+                "finish": "stop",
+                "tokens": 68
+              }
+            ]
+          },
+          {
+            "cue": "Fix widget's empty search state",
+            "turns": [
+              {
+                "lines": [
+                  {
+                    "text": "I would have widget say when a search finds nothing, name the words searched for and offer to clear them, in place of an empty table that looks broken. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done."
+                  }
+                ],
+                "finish": "stop",
+                "tokens": 70
+              }
+            ]
+          }
+        ],
+        "cued": [
+          {
+            "cue": "Export widget's table as CSV",
+            "turns": [
+              {
+                "lines": [
+                  {
+                    "call": "read",
+                    "arguments": {
+                      "path": "src/main.rs"
+                    }
+                  }
+                ],
+                "finish": "tool_calls",
+                "tokens": 7
+              },
+              {
+                "lines": [
+                  {
+                    "call": "edit",
+                    "arguments": {
+                      "path": "src/main.rs",
+                      "edits": [
+                        {
+                          "old": "fn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n",
+                          "new": "fn main() {\n    let csv = std::env::args().any(|arg| arg == \"--csv\");\n    if csv {\n        println!(\"name,count\");\n    }\n    for (name, count) in TABLE {\n        if csv {\n            println!(\"{name},{count}\");\n        } else {\n            println!(\"{name:<8}{count}\");\n        }\n    }\n}\n"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "finish": "tool_calls",
+                "tokens": 116
+              },
+              {
+                "lines": [
+                  {
+                    "call": "finish",
+                    "arguments": {
+                      "form": "change",
+                      "fields": {
+                        "title": "Add CSV export to widget",
+                        "body": "widget --csv prints the table as CSV: a header line, then a line for each row. This was a scripted change."
+                      }
+                    }
+                  }
+                ],
+                "finish": "tool_calls",
+                "tokens": 47
+              }
+            ]
+          }
+        ],
+        "otherwise": [
+          {
+            "lines": [
+              {
+                "text": "I am the scripted model, the playground’s: I answer only the suggested requests, from a script. To ask for other work, connect a model from Accounts: a ChatGPT plan, a Claude subscription or an API key."
+              }
+            ],
+            "finish": "stop",
+            "tokens": 51
+          }
+        ]
+      },
+      "forge": 1,
+      "project": 1
+    },
+    "limits": {
+      "profile": "small",
+      "overrides": {
+        "checkout.message_bytes": 4098,
+        "forge.client.repositories": 3,
+        "forge.output": 82,
+        "forge.repositories": 3,
+        "root.journal.transcript_bytes": 1039548,
+        "root.loads.bytes": 1039792,
+        "root.loads.read_bytes": 2079088,
+        "root.loads.reply_bytes": 1039792,
+        "root.loads.transcript_bytes": 1039544,
+        "routes.query_bytes": 2048
+      }
+    },
+    "workers": [
+      {
+        "root": "worker",
+        "git": "/usr/bin/git"
+      }
+    ]
+  }
+}
