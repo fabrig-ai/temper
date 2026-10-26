@@ -93,9 +93,45 @@ pub fn write(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> std::io::R
     private(&directory.join("secrets/forge-1.user"), b"42\n")?;
     private(&directory.join("secrets/forge-1.api-token"), b"forge-1-api-token-value")?;
     private(&directory.join("secrets/forge-1.git-token"), b"forge-1-git-token-value")?;
-    let (agent, config) = documents(directory, llm, forge);
+    let (mut agent, mut config) = documents(directory, llm, forge);
+    if crate::claude::configured(directory) {
+        program_documents(directory, &mut agent, &mut config);
+    }
     private(&directory.join("agent.json"), &serde_json::to_vec(&agent)?)?;
     private(&directory.join("temper.json"), &serde_json::to_vec(&config)?)
+}
+/// Program stories retain the direct provider and add Claude Code on its own source.
+fn program_documents(directory: &Path, agent: &mut serde_json::Value, config: &mut serde_json::Value) {
+    agent["programs"] = serde_json::json!({"claude_code": {
+        "path": std::str::from_utf8(crate::claude::PROGRAM).expect("fake program path"),
+        "directory": directory.join("programs")
+    }});
+    let mut endpoint = agent["endpoints"][0].clone();
+    endpoint["name"] = "fake-claude".into();
+    endpoint["number"] = 2.into();
+    endpoint["dialect"] = 2.into();
+    endpoint["provider"] = "anthropic".into();
+    endpoint["program"] = "claude_code".into();
+    endpoint["models"][0]["name"] = "fake-claude".into();
+    agent["endpoints"].as_array_mut().expect("agent endpoints").push(endpoint);
+    let llm = &mut config["engine"]["llm"];
+    let mut endpoint = llm["endpoints"][0].clone();
+    endpoint["name"] = "fake-claude".into();
+    endpoint["number"] = 2.into();
+    endpoint["dialect"] = 2.into();
+    endpoint["provider"] = "anthropic".into();
+    endpoint["program"] = "claude_code".into();
+    llm["endpoints"].as_array_mut().expect("engine endpoints").push(endpoint);
+    let mut model = llm["models"][0].clone();
+    model["name"] = "fake-claude".into();
+    model["endpoint"] = "fake-claude".into();
+    llm["models"].as_array_mut().expect("engine models").push(model);
+    llm["providers"].as_array_mut().expect("providers").push(serde_json::json!({
+        "name":"anthropic", "number":2, "signed_in_plan":false,
+        "manage_usage":"https://claude.ai/settings/usage", "models":["fake-claude"],
+        "sources":{"programs":["claude_code"]}
+    }));
+    turn_bounds::apply(config, turn_bounds::turn_body(agent));
 }
 /// Keep the configured documents and their derived bounds; only assigned endpoints change.
 pub(crate) fn bind(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> std::io::Result<()> {

@@ -104,6 +104,8 @@ impl Obligations {
         match child {
             Proc::Agent(_) => self.child(index, "agent"),
             Proc::Git(_) | Proc::GitRoute(_) => self.child(index, "git"),
+            Proc::Claude(_) => self.child(index, "claude"),
+            Proc::Relay(_) => self.child(index, "relay"),
             Proc::Llm(_)
             | Proc::Forge(_)
             | Proc::Issuer(_)
