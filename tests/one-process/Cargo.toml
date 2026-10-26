@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 jig-domain-authority.workspace = true
+temper-forge-setup.workspace = true
+jig-domain-accounts.workspace = true
 temper-client-shell-cli.workspace = true
 jig-domain-fleet.workspace = true
 jig-client.workspace = true
@@ -66,6 +68,7 @@ smith-domain.workspace = true
 temper-engine-smith.workspace = true
 
 [dev-dependencies]
+temper-engine-domain-forge-change.workspace = true
 jig-test-store-files.workspace = true
 
 [lints.rust]

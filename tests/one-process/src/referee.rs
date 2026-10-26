@@ -77,11 +77,19 @@ impl Referee {
             ..rules::Scope::default()
         };
         let mut implications = BTreeSet::new();
-        if matches!(scenario, crate::world::Story::Adoption | crate::world::Story::Adopt | crate::world::Story::Merge) {
+        if matches!(
+            scenario,
+            crate::world::Story::Adoption
+                | crate::world::Story::Adopt
+                | crate::world::Story::Merge
+                | crate::world::Story::Golden
+        ) {
             scope.tools = 3;
             scope.depth = 3;
             scope.executors.insert((1, 2));
-            for kind in [3, 11] {
+            let kinds: &[u16] =
+                if matches!(scenario, crate::world::Story::Golden) { &[3, 11, 4, 10] } else { &[3, 11] };
+            for &kind in kinds {
                 scope.grants.push(rules::Grant {
                     connector: 1,
                     kind,
@@ -139,6 +147,19 @@ impl Referee {
             drained: None,
             forge,
             story: scenario,
+        }
+    }
+    fn story_complete(&self, other: &[Proc]) -> bool {
+        match self.story {
+            crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
+            crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
+            crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
+            crate::world::Story::Adopt => {
+                let forge = self.forge.borrow();
+                forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
+            }
+            crate::world::Story::Merge => self.forge.borrow().complete(),
+            crate::world::Story::Golden => crate::golden::complete(&self.store.borrow()),
         }
     }
     fn say(&mut self, now: Time, event: rules::Observed) {
@@ -300,16 +321,7 @@ impl skein_world::Referee<Proc> for Referee {
                     && self.cold.is_none()
                     && crate::stories::adopted(&self.store.borrow().rows) > 0
             }
-            crate::world::Phase::Story => match self.story {
-                crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
-                crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
-                crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
-                crate::world::Story::Adopt => {
-                    let forge = self.forge.borrow();
-                    forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
-                }
-                crate::world::Story::Merge => self.forge.borrow().complete(),
-            },
+            crate::world::Phase::Story => self.story_complete(other),
         };
         if self.done.is_none()
             && (done || !matches!(self.phase, crate::world::Phase::Story | crate::world::Phase::Fault { .. }))
@@ -391,7 +403,7 @@ impl skein_world::Referee<Proc> for Referee {
                         client::Received::Application { key, answer } => {
                             assert!(
                                 matches!(answer, temper_client_domain::forge::Answer::Adopted(_)),
-                                "adoption succeeded"
+                                "adoption succeeded: {answer:?}"
                             );
                             if let Some(old) = self.run.borrow_mut().answers.insert(*key, answer.clone()) {
                                 assert_eq!(&old, answer, "one outcome per adoption key");
@@ -463,7 +475,10 @@ impl skein_world::Referee<Proc> for Referee {
                         || !matches!(self.phase, crate::world::Phase::Story)
                         || matches!(
                             self.story,
-                            crate::world::Story::Adoption | crate::world::Story::Adopt | crate::world::Story::Merge
+                            crate::world::Story::Adoption
+                                | crate::world::Story::Adopt
+                                | crate::world::Story::Merge
+                                | crate::world::Story::Golden
                         )))
     }
 }
@@ -543,10 +558,13 @@ fn client_receipts(event: &client::Received, store: &Store, party: Option<u64>) 
                 panic!("owner task facts")
             };
             assert_eq!(result.task.task, document.chip.task, "result belongs to its task");
-            vec![
-                rules::Receipt::Ended(document.chip.task),
-                rules::Receipt::Terminal(document.chip.task, details.attempt.expect("finished attempt")),
-            ]
+            let mut receipts = vec![rules::Receipt::Ended(document.chip.task)];
+            // A procedure or person ends through its task row; only an agent
+            // has a worker terminal in the immutable transcript archive.
+            if matches!(result.task.executor, c::Executor::Agent { .. }) {
+                receipts.push(rules::Receipt::Terminal(document.chip.task, details.attempt.expect("finished attempt")));
+            }
+            receipts
         }
         client::Received::Read(c::ReadValue::Activity(page)) => page
             .rows
