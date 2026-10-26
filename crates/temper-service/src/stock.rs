@@ -39,9 +39,10 @@ impl Given {
 
 const FORGE: u16 = 1;
 
-/// Delegate (a chat's `change` and `delegate`) and Read (the forge's reads), jig's families
-/// (jig's `domain/authority.md`); a chat answers from its own forge (protocol/configuration.md, 13.4).
-const CHAT_TOOLS: authority::Tools = authority::Tools(1 | 512);
+/// Delegate (`change` and `delegate`), Message (delegates' questions and answers)
+/// and Read (the forge's reads), jig's families (jig's `domain/authority.md`);
+/// protocol/configuration.md, 13.4.
+const CHAT_TOOLS: authority::Tools = authority::Tools(1 | 2 | 512);
 
 /// The defaults temper passes jig's builder at each start. Each charter offers every
 /// model `llm` configures, in its order, the first its default.
@@ -150,7 +151,7 @@ fn ceiling() -> authority::Authority {
                 authority::Executor::Charter(2),
                 authority::Executor::Procedure(2),
             ]),
-            tasks: 8,
+            tasks: 12,
             depth: 4,
         },
         budget: authority::Budget { spend: 100, deadline: None },
