@@ -237,9 +237,20 @@ pub fn store_limits(document: &[u8], directories: &config::Directories) -> Resul
     let mut parsed =
         load(document, directories, false)?.1.ok_or(problem(Path::root().member(b"engine"), What::Standalone))?;
     let root = engine_limits(&mut parsed.engine.limits, &parsed.application.limits)?;
-    let store = crate::store::admit(&root, &root.forge, &parsed.engine.limits.store).map_err(checks::store_refusal)?;
+    let store = checked_store(&root, &parsed.engine.limits.store)?;
     Ok(StoreLimits { store, forge: root.forge })
 }
+
+fn checked_store(
+    root: &temper_engine_domain::Limits,
+    profile: &jig_protocol_store::Limits,
+) -> Result<jig_protocol_store::Limits, Problems> {
+    match crate::store::admit(root, &root.forge, profile) {
+        Ok(store) => Ok(store),
+        Err(why) => Err(checks::store_refusal(why)),
+    }
+}
+
 fn engine_limits(
     jig: &mut config::Limits,
     own: &crate::limits::Limits,
@@ -563,8 +574,7 @@ pub fn memory_terms(
     }
     let mut checked = checked_start(document, directories, files, Some(agent), seeds, accounts, forges, setup)?;
     let root = engine_limits(&mut checked.engine.jig.limits, &checked.engine.limits)?;
-    let store =
-        crate::store::admit(&root, &root.forge, &checked.engine.jig.limits.store).map_err(checks::store_refusal)?;
+    let store = checked_store(&root, &checked.engine.jig.limits.store)?;
     let worker = checked.worker.as_ref();
     let operations = match worker {
         Some(_) => crate::worker_settings::operations(&checked.engine.limits.git_component).ok_or(memory_bound())?,
@@ -776,7 +786,7 @@ fn checked_start(
     if !problems.is_empty() {
         return Err(problems);
     }
-    let store = crate::store::admit(&root, &root.forge, &engine.jig.limits.store).map_err(checks::store_refusal)?;
+    let store = checked_store(&root, &engine.jig.limits.store)?;
     let io = match &worker {
         Some(worker) => checks::process_io(&engine.jig.limits.io, Some(&worker.jig.limits.io)),
         None => checks::process_io(&engine.jig.limits.io, None),

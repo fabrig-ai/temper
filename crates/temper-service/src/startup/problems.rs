@@ -238,17 +238,12 @@ fn codec_words(what: config::What, writer: &mut Writer, length: &mut usize, meas
     put(writer, length, measuring, words);
 }
 
-fn store_page(amounts: [u32; 4], writer: &mut Writer, length: &mut usize, measuring: bool) {
-    let [transcript, frame, page, ceiling] = amounts;
+fn store_page(frame: u32, ceiling: u32, writer: &mut Writer, length: &mut usize, measuring: bool) {
     put(writer, length, measuring, b"its turn's transcript frame, ");
     put(writer, length, measuring, Decimal::of(u64::from(frame)).as_bytes());
-    put(writer, length, measuring, b" bytes, needs a store page of ");
-    put(writer, length, measuring, Decimal::of(u64::from(page)).as_bytes());
-    put(writer, length, measuring, b" bytes, past the profile's ceiling of ");
+    put(writer, length, measuring, b" bytes, needs a store page past the profile's ceiling of ");
     put(writer, length, measuring, Decimal::of(u64::from(ceiling)).as_bytes());
-    put(writer, length, measuring, b" bytes (transcript bound ");
-    put(writer, length, measuring, Decimal::of(u64::from(transcript)).as_bytes());
-    put(writer, length, measuring, b" bytes)");
+    put(writer, length, measuring, b" bytes");
 }
 
 fn store_map(why: jig_protocol_store::sizes::SizeRefusal, writer: &mut Writer, length: &mut usize, measuring: bool) {
@@ -301,8 +296,8 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
             What::Admission { why, offered, required } => {
                 admission(why, offered, required, writer, &mut length, measuring);
             }
-            What::StorePage { transcript, frame, page, ceiling } => {
-                store_page([transcript, frame, page, ceiling], writer, &mut length, measuring);
+            What::StorePage { frame, ceiling, .. } => {
+                store_page(frame, ceiling, writer, &mut length, measuring);
             }
             What::StoreMap(why) => store_map(why, writer, &mut length, measuring),
             What::Redirect(listener) => redirect_listener(listener, writer, &mut length, measuring),

@@ -75,14 +75,16 @@ pub(crate) fn admit(
     if transcript > ceiling {
         return Err(Refusal::Transcript { bytes: transcript, ceiling });
     }
-    let sizes = protocol::sizes::check(
+    let sizes = match protocol::sizes::check(
         &core,
         &temper_protocol_store::application(forge).ok_or(arithmetic)?,
         &root::journal_limits(&root.journal),
         &kv,
         profile.orphan_erases,
-    )
-    .map_err(Refusal::Map)?;
+    ) {
+        Ok(sizes) => sizes,
+        Err(why) => return Err(Refusal::Map(why)),
+    };
     kv.key = sizes.key;
     kv.value = sizes.value;
     kv.ops = sizes.ops;

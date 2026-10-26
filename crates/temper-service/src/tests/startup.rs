@@ -39,7 +39,7 @@ fn startup_admits_a_frame_exactly_at_the_profile_page_ceiling() {
 #[test]
 fn startup_names_a_frame_one_byte_past_the_profile_page_ceiling() {
     let document = transcript_document(1_590_047);
-    let expected = b"application.limits.overrides.root.loads.transcript_bytes: its turn's transcript frame, 1590111 bytes, needs a store page of 1590111 bytes, past the profile's ceiling of 1590110 bytes (transcript bound 1590047 bytes)\n";
+    let expected = b"application.limits.overrides.root.loads.transcript_bytes: its turn's transcript frame, 1590111 bytes, needs a store page past the profile's ceiling of 1590110 bytes\n";
     let named = crate::named(&document, &config::Directories::working()).unwrap_err();
     assert_eq!(lines(&named).as_ref(), expected);
     let opened = crate::store_limits(&document, &config::Directories::working()).unwrap_err();
