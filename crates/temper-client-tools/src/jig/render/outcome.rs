@@ -624,6 +624,15 @@ fn moved_in(account: u32, renewed: bool, out: &mut Text) {
 }
 
 fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, out: &mut Text) {
+    if operation.word == b"close"
+        && matches!(refusal, c::Refusal::Ended { .. })
+        && let Some(task) = operation.task
+    {
+        out.put(b"chat ");
+        out.number(task);
+        out.put(b" has ended");
+        return;
+    }
     out.put(operation.tool_name());
     out.put(b": ");
     acts::refusal(refusal, &document::phrasebook(limits.text), out);

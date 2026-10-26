@@ -440,3 +440,129 @@ fn a_document_at_its_byte_bound_prints_worst_case_json_escapes() {
     assert!(u64::try_from(printed.stdout.len()).expect("output length fits") > crate::limits::DOCUMENT);
     assert!(skein_lib::bytes::find(&printed.stdout, br"\u0000").is_some(), "control text is JSON escaped");
 }
+
+#[test]
+fn an_unknown_run_watch_reads_the_authorized_ended_task_before_answering() {
+    use jig_client::contract as c;
+    let task = fixtures::ended_task(c::Phase::Done);
+    let ending = c::Ending::Task(Box::new(c::OwnerChipEnding::Done(c::ResultValue::Report(fixtures::document_text(
+        b"finished",
+    )))));
+    for argv in [fixtures::CHAT_CALL, fixtures::TASK_CALL] {
+        for json in [false, true] {
+            for end_first in [false, true] {
+                let argv = fixtures::extended(argv, if argv == fixtures::TASK_CALL { &["--run"] } else { &[] });
+                let argv = fixtures::extended(argv.as_slice(), if json { &["--json"] } else { &[] });
+                let (mut root, call) = fixtures::read_call(argv.as_slice());
+                let page = if argv.get(0) == Some(&"chat") {
+                    fixtures::kept_conversation()
+                } else {
+                    fixtures::historical_task_result(task.clone(), ending.clone())
+                };
+                if end_first {
+                    root.end(call, &fixtures::run_watch(), c::WatchEnd::Unknown);
+                    assert!(root.answer(call).is_none(), "Unknown is not proof of completion");
+                }
+                root.serve(call, page);
+                if !end_first {
+                    root.end(call, &fixtures::run_watch(), c::WatchEnd::Unknown);
+                }
+                assert!(root.answer(call).is_none(), "authorized task read still pending");
+                root.serve(call, fixtures::historical_task_result(task.clone(), ending.clone()));
+                let answer = root.answer(call).expect("verified terminal answer");
+                assert_eq!(answer.status, 0);
+                assert!(answer.stderr.is_empty());
+                if argv.get(0) == Some(&"chat") {
+                    for words in fixtures::KEPT_TURNS {
+                        assert!(skein_lib::bytes::find(&answer.stdout, words).is_some());
+                    }
+                }
+                if argv.get(0) == Some(&"task") {
+                    let plain = fixtures::extended(fixtures::TASK_CALL, if json { &["--json"] } else { &[] });
+                    let expected = fixtures::read_answer(
+                        plain.as_slice(),
+                        fixtures::historical_task_result(task.clone(), ending.clone()),
+                    );
+                    assert_eq!(answer.stdout, expected.stdout, "no run added to the ended task");
+                } else {
+                    assert!(skein_lib::bytes::find(&answer.stdout, br#""run":"#).is_none());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn an_unknown_run_watch_does_not_turn_missing_or_live_history_into_success() {
+    use jig_client::contract as c;
+    let mut wrong = fixtures::ended_task(c::Phase::Done);
+    wrong.chip.task += 1;
+    for page in [
+        ReadResult::None(ReadNone::Unknown),
+        ReadResult::None(ReadNone::Refused),
+        ReadResult::None(ReadNone::Gone),
+        fixtures::task_result(fixtures::goal(fixtures::TASK, fixtures::waiting_on_me())),
+        fixtures::task_result(wrong),
+    ] {
+        let (mut root, call) = fixtures::read_call(fixtures::CHAT_CALL);
+        root.serve(call, fixtures::kept_conversation());
+        root.end(call, &fixtures::run_watch(), c::WatchEnd::Unknown);
+        root.serve(call, page);
+        let answer = root.answer(call).expect("invalid fallback refused");
+        assert_eq!(answer.status, 2);
+        assert!(answer.stdout.is_empty());
+    }
+}
+
+#[test]
+fn a_closed_chat_fills_its_conversation_across_activity_pages() {
+    use jig_client::contract as c;
+    for extra in [&[][..], &["--before", "1122"][..]] {
+        for json in [false, true] {
+            let argv = fixtures::extended(fixtures::CHAT_CALL, extra);
+            let argv = fixtures::extended(argv.as_slice(), if json { &["--json"] } else { &[] });
+            let (mut root, call) = fixtures::read_call(argv.as_slice());
+            let ReadResult::Value(c::ReadValue::Activity(page)) = fixtures::kept_conversation() else {
+                panic!("conversation fixture")
+            };
+            for index in [1, 0] {
+                let mut rows = skein_lib::List::with_capacity(1);
+                rows.push(page.rows.get(index).expect("two kept turns").clone()).expect("one page row");
+                root.serve(
+                    call,
+                    ReadResult::Value(c::ReadValue::Activity(Box::new(c::ActivityPage {
+                        rows,
+                        cut: false,
+                        before: if index == 1 { Some(fixtures::cursor()) } else { None },
+                        after: None,
+                    }))),
+                );
+                if index == 1 {
+                    root.end(call, &fixtures::run_watch(), c::WatchEnd::SubjectEnded);
+                    assert!(root.answer(call).is_none(), "older activity still pending");
+                }
+            }
+            let answer = root.answer(call).expect("whole conversation window answered");
+            assert_eq!(answer.status, 0);
+            let mut previous = None;
+            for words in fixtures::KEPT_TURNS {
+                let at = skein_lib::bytes::find(&answer.stdout, words).expect("kept turn printed");
+                if let Some(previous) = previous {
+                    assert!(previous < at);
+                }
+                previous = Some(at);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_closed_chat_does_not_replace_an_activity_refusal_with_an_empty_conversation() {
+    use jig_client::contract as c;
+    let (mut root, call) = fixtures::read_call(fixtures::CHAT_CALL);
+    root.end(call, &fixtures::run_watch(), c::WatchEnd::SubjectEnded);
+    root.serve(call, ReadResult::None(ReadNone::Unknown));
+    let answer = root.answer(call).expect("missing activity refused");
+    assert_eq!(answer.status, 2);
+    assert!(answer.stdout.is_empty());
+}
