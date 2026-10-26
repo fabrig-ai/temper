@@ -104,8 +104,8 @@ parked as `draft/qa-lab.md`. What is still open is section 8.
   the person (section 7):
 
   ```text
-  box: forge 1 api http://ADDR/api/v1
-  box: forge 1 person LOGIN, read header FILE, write header FILE
+  HH:MM:SSZ Forge 3 (Forgejo): api http://ADDR/api/v1
+  HH:MM:SSZ Forge 3 (Forgejo): person LOGIN, read header FILE, write header FILE
   ```
 
   Each header file holds one line, `Authorization: token TOKEN`, private

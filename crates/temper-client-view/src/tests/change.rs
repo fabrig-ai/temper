@@ -481,3 +481,58 @@ fn the_queue_offers_each_task_ahead_as_a_terminal_command() {
         );
     }
 }
+
+fn demo_toolbar(on_demo: bool, address: &[u8]) -> Tree {
+    let root = f::demo_root(temper_client_domain::Address::Forges, f::PROJECT, true);
+    let demo = root.forge().demo().expect("running demo").forge;
+    let mut parts = parts(w::Step::Opening);
+    parts.forge = if on_demo { demo } else { demo.checked_add(1).unwrap() };
+    parts.pull = Some(w::Pull::new(&w::CEILINGS, w::PullParts { number: 23, address: address.into() }).unwrap());
+    let state = forge::panel::State::Shown(Box::new(panel(parts)));
+    let change = forge::change::shown(&state).unwrap();
+    let words = f::words();
+    let limits = crate::Limits::of(&f::limits(), &words).unwrap();
+    let mut builder = skein_ui::Builder::new(&limits.tree);
+    crate::pages::change::toolbar(
+        &mut builder,
+        change,
+        &words,
+        words.capacity().unwrap(),
+        root.forge().serves_pages(change.forge()),
+    );
+    builder.finish()
+}
+#[test]
+fn a_demo_changes_address_is_text_not_a_link() {
+    let address = b"https://forge.example/acme/shop/pull/23";
+    let tree = demo_toolbar(true, address);
+    assert_eq!(styled(&tree, look::TASK_ACTS).len(), 1);
+    let mut paragraph = false;
+    for node in tree.nodes() {
+        paragraph |= node.role == Role::Paragraph;
+        assert_ne!(node.role, Role::Link);
+        assert!(node.external.is_none());
+    }
+    assert!(paragraph);
+    assert!(contains(&tree, "View on forge ↗ https://forge.example/acme/shop/pull/23"));
+}
+#[test]
+fn another_forges_change_keeps_its_link() {
+    let address = b"https://forge.example/acme/shop/pull/23";
+    let tree = demo_toolbar(false, address);
+    let mut link = false;
+    for node in tree.nodes() {
+        link |= node.role == Role::Link && node.external.as_deref() == Some(address);
+    }
+    assert!(link);
+}
+#[test]
+fn a_demo_address_at_its_receiving_bound_is_still_readable() {
+    let fixture = p::panel(TASK, w::Step::Opening);
+    let address = fixture.pull().as_ref().unwrap().address();
+    let tree = demo_toolbar(true, address);
+    assert!(position(&f::text(&tree), address).is_some());
+    for node in tree.nodes() {
+        assert!(node.external.is_none());
+    }
+}

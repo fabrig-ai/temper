@@ -86,7 +86,7 @@ pub(crate) fn key(side: &mut Side, value: Secret) {
     }
     side.app_form.key = None;
     side.app = None;
-    side.app_form.too_long = value.len() > 4090;
+    side.app_form.too_long = value.len() > forges::PASTED_PAYLOAD;
     if !value.is_empty() && !side.app_form.too_long {
         side.app_form.key = Some(value);
     }
@@ -255,6 +255,9 @@ pub(crate) fn decode(outcome: &Outcome, linking: bool, limits: Limits) -> Option
                     w::ForgeReason::NoAccess => Some(Answer::NoAccess),
                     w::ForgeReason::NotFound => Some(Answer::NotFound),
                     w::ForgeReason::NoSuchForge
+                    | w::ForgeReason::AnotherProject
+                    | w::ForgeReason::HomeHeld
+                    | w::ForgeReason::PrefixOccupied
                     | w::ForgeReason::Refused
                     | w::ForgeReason::InFlight
                     | w::ForgeReason::TooLarge

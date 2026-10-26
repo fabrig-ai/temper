@@ -1556,8 +1556,8 @@ into the binary.
 | charter 3, the configuring agent's | as charter 1, with new instructions held in the binary (`../draft/configuring.md`, sections 2 and 5.2: split what temper enforces from what agents follow, offer a rule as structure where temper has it, ask until it can propose; `../domain/agent.md`, 8.1); jig's `settings` family (jig's `domain/engine.md`, 7.3), as `settings` and `propose_settings`, the forge's reads, `read_docs` and `withdraw`; no workspace's families (it has none), no delegation, no effects, no shell |
 | template 2, a goal | jig's goal, its executor chosen |
 | template 3, the configuring chat | a chat, flagged conversation and labelled as jig's chat is, run by charter 3 |
-| policy 1 | today's seeded project's policy, with no requirements: role 0 requests and decides everything, a period's spend of 100 for the project and for role 0, an authority's spend of 40, with the rules' grants and delegation; its ceiling's and role 0's tool families 513, delegation and reads (jig's `ToolFamilies` Delegate and Read), so that a chat reads the forge it works on |
-| the rules | today's: tools 513, delegation and reads, the forge's grants under `forge`, delegation to charters 1, 2 and 3 and the change procedure, 8 tasks 4 deep, a spend of 100, a run's spend from 1 to 10; and 13.3's two requirements |
+| policy 1 | today's seeded project's policy, with no requirements: role 0 requests and decides everything, a period's spend of 100 for the project and for role 0, an authority's spend of 40, with the rules' grants and delegation; its ceiling's and role 0's tool families 515, delegation, messages and reads (jig's `ToolFamilies` Delegate, Message and Read), so that a chat reads the forge it works on and answers its delegates' questions; its ceiling's and role 0's delegation 12 tasks 4 deep, so that a chat's advisor and two dependent delegates, each with its change's procedure, producer, repair and review, fit (`../draft/v0.1.0.md`, rung B2) |
+| the rules | today's: tools 515, delegation, messages and reads, the forge's grants under `forge`, delegation to charters 1, 2 and 3 and the change procedure, 12 tasks 4 deep, a spend of 100, a run's spend from 1 to 10; and 13.3's two requirements |
 | kind 1, rule 1 | everywhere (`forge`, open), enforced: CI passed, up to date, and gate 1, an agent's review, blocking, fresh at a clean head, as `docs/examples/owned.json` has it; no approvals. Until 13.6's second step it is `temper init`'s `application.landing` |
 | kind 3 | charter 2 |
 
@@ -1571,7 +1571,10 @@ into the binary.
   scope, the forge's connector, the bounds above), to jig's builder in
   place of the document's members, and temper's kinds' defaults (kind 1
   rule 1, kind 3) to the forge (jig's `domain/engine.md`, 17.5), and
-  makes the engine as today.
+  makes the engine as today. A test world builds the service with
+  defaults of its own in that field's place, the settings its stories
+  need, so that a story not about settings makes no change to reach
+  them; the binary always passes the stock.
 - **The stock sets floors under the limits.** Its own values must fit
   the limits they are checked against: a configuration whose
   `core.policy_bytes` is below policy 1's encoding, or whose
@@ -1620,7 +1623,8 @@ into the binary.
   and its `charters/` files (`setup.md`, 8.2 and 8.3); the box, which
   has no document of its own but `temper init`'s (`setup.md`, section
   7); `docs/examples/owned.json` and its instructions; the lab's engine
-  documents; the fake backends' document rewriter (`temper-fake`'s
+  documents, whose studies apply their own values as a settings file
+  through ctl after sign-in; the fake backends' document rewriter (`temper-fake`'s
   backends, which edits `engine.charters` today); the tests' documents
   and builders (`../domain/testing.md`, 6.4). A generated document elsewhere, fabrig's, drops the six members;
   what it set differently from the stock values becomes a proposal after

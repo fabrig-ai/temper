@@ -189,6 +189,12 @@ fn snapshot(store: &Store) -> rules::Snapshot {
     let mut snapshot = rules::Snapshot::default();
     for row in store.rows.values() {
         match row {
+            root::Record::Core(core::Record::Core(core::CoreRecord::Settings(core::settings::Record::Revision {
+                revision,
+                history: false,
+            }))) => {
+                snapshot.newest = snapshot.newest.max(revision.head.number);
+            }
             root::Record::Core(core::Record::Tasks(
                 jig_domain_tasks::Stored::Live(task) | jig_domain_tasks::Stored::Ended(task),
             )) => {
@@ -270,7 +276,7 @@ impl skein_world::Referee<Proc> for Referee {
         }
         let done = other.iter().all(|proc| match proc {
             Proc::Client(person) => person.is_empty(),
-            Proc::Service(_) | Proc::Playground(_) => true,
+            Proc::Service(_) | Proc::Playground(_) | Proc::Ctl(_) => true,
         });
         if crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();
@@ -313,15 +319,7 @@ impl skein_world::Referee<Proc> for Referee {
         }
         if self.done.is_some() {
             for proc in other {
-                match proc {
-                    Proc::Playground(Process::Llm(peer)) => peer.shutdown(),
-                    Proc::Playground(Process::Forge(forge)) => forge.shutdown(),
-                    Proc::Playground(Process::Visitor(visitor)) => visitor.close(),
-                    Proc::Service(_)
-                    | Proc::Client(_)
-                    | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) =>
-                        {}
-                }
+                shutdown_peer(proc);
             }
         }
     }
@@ -561,5 +559,17 @@ fn client_receipts(event: &client::Received, store: &Store, party: Option<u64>) 
         client::Received::ApplicationSent { .. } | client::Received::Delivery(_) | client::Received::Read(_) => {
             Vec::new()
         }
+    }
+}
+
+fn shutdown_peer(proc: &mut Proc) {
+    match proc {
+        Proc::Playground(Process::Llm(peer)) => peer.shutdown(),
+        Proc::Playground(Process::Forge(forge)) => forge.shutdown(),
+        Proc::Playground(Process::Visitor(visitor)) => visitor.close(),
+        Proc::Service(_)
+        | Proc::Client(_)
+        | Proc::Ctl(_)
+        | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) => {}
     }
 }

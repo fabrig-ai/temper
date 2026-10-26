@@ -32,6 +32,18 @@ pub struct Cluster {
     bindings: BTreeMap<String, String>,
     prepared: BTreeSet<String>,
 }
+/// The first start records revision 1; apply the lab's whole values before its first chat.
+#[must_use]
+pub fn settings_change(file: &Path) -> super::ctl::Call {
+    super::ctl::Call::new(&[
+        "change-settings",
+        file.to_str().expect("cluster settings FILE path"),
+        "--against",
+        "1",
+        "--key",
+        "cluster-settings",
+    ])
+}
 fn private_directory(path: &Path) {
     fs::DirBuilder::new().recursive(true).mode(0o700).create(path).expect("private cluster directory");
 }
@@ -183,6 +195,11 @@ impl Cluster {
     /// A story-owned template binding, fixed before rendering any document.
     pub fn bind(&mut self, name: &str, value: &str) {
         assert!(self.bindings.insert(name.into(), value.into()).is_none(), "duplicate binding {name}");
+    }
+    /// The study's settings FILE; the native client applies it after owner sign-in.
+    #[must_use]
+    pub fn settings_file(&self) -> PathBuf {
+        self.experiment.join("settings.json")
     }
     /// The process's directory, `{proc.P.dir}`.
     #[must_use]

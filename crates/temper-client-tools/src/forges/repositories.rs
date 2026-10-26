@@ -200,7 +200,10 @@ fn print(pending: &Pending, outcome: &Outcome, structured: bool, limits: &Limits
                 w::ForgeReason::InFlight => b"in flight",
                 w::ForgeReason::TooLarge => b"too large",
                 w::ForgeReason::Unreachable => b"unreachable",
-                w::ForgeReason::InvalidAnswer => b"invalid answer",
+                w::ForgeReason::AnotherProject
+                | w::ForgeReason::HomeHeld
+                | w::ForgeReason::PrefixOccupied
+                | w::ForgeReason::InvalidAnswer => b"invalid answer",
             };
             return render::failure(why, structured, 2);
         }

@@ -8,7 +8,9 @@ root for S, H and P, keeping the root chat open after its delegate settles.
 
 The runner sends the engine's private stdout directly to the `sign-in` seed
 command, once, without retaining the link or any sign-in stream. Public
-readiness still captures all three engine listeners. The remaining seed adds
+readiness still captures all three engine listeners. The next seed action
+applies `settings.json` against revision 1, preserving the long chat wait,
+coding shell and chat cap. The remaining seed adds
 the fake model key, waits for usable accounts and the connected forge, and
 adopts `fake/widget`. The story asks for NOTICE through `tools/ctl`, requires
 the coding delegate's historical successful change result, and reads a

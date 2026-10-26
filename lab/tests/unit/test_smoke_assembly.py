@@ -26,11 +26,40 @@ def read(path):
 
 class AssemblyTests(unittest.TestCase):
     def test_s_inherits_canonical_templates_without_setup_or_worker_exceptions(self):
-        for name in ('agent.json', 'llm.json', 'chat.txt', 'coding.txt', 'forge.json',
+        for name in ('agent.json', 'llm.json', 'settings.json', 'forge.json',
                      'engine.json', 'w1.json', 'w2.json',
                      'w1.secret', 'w1.digest', 'w2.secret', 'w2.digest'):
             with self.subTest(name=name):
                 self.assertEqual((SMOKE / name).read_bytes(), (CLUSTER / name).read_bytes())
+
+    def test_stock_documents_and_settings_action_order(self):
+        family = ('cluster', 'chat-change', 'chat-change-killed', 'chat-change-smoke',
+                  'cluster-web', 'look-live', 'live-0b')
+        for name in (*family, 'live-0a'):
+            root = LAB / name
+            with self.subTest(experiment=name):
+                document = 'temper.json' if name.startswith('live-') else 'engine.json'
+                engine = read(root / document)['engine']
+                for member in ('charters', 'templates', 'policies', 'rules'):
+                    self.assertNotIn(member, engine)
+                for filename in ('chat.txt', 'coding.txt'):
+                    self.assertFalse((root / filename).exists())
+                exp = json.loads((root / 'experiment.json').read_bytes())
+                for process in exp['processes']:
+                    for entry in process.get('files', []):
+                        self.assertNotIn(entry.get('from'), ('chat.txt', 'coding.txt'))
+                if name in ('cluster', 'live-0a'):
+                    self.assertFalse(any(a['name'] == 'settings' for a in exp['actions']))
+                else:
+                    self.assertEqual(exp['actions'][0]['name'], 'sign-in')
+                    self.assertEqual(exp['actions'][1], dict(name='settings', env={}, argv=[
+                        '{artifact.temper}', 'ctl', '{dir.client}', 'change-settings',
+                        '{experiment}/settings.json', '--against', '1', '--key', 'lab-settings']))
+                self.assertEqual((root / 'settings.json').exists(), name != 'live-0a')
+                if name in family:
+                    data = (root / 'settings.json').read_bytes()
+                    self.assertEqual(data, (json.dumps(json.loads(data), sort_keys=True,
+                                     separators=(',', ':'), ensure_ascii=False) + '\n').encode())
 
     def test_all_remote_workers_admit_their_configured_agent_turns(self):
         # Startup requires equality; the first frozen S failed before sign-in
@@ -96,9 +125,9 @@ class AssemblyTests(unittest.TestCase):
             self.assertEqual(turns[1]['lines'], [dict(text=f'{word} chat closed.')])
             self.assertEqual([t['finish'] for t in turns], ['tool_calls', 'stop'])
             self.assertTrue(all(t['tokens'] == 1 for t in turns))
-        chat = read(CLUSTER / 'engine.json')['engine']['charters'][0]
-        self.assertEqual((chat['waiting_ms'], chat['time_ms'], chat['reserve_time_ms']),
-                         (120000, 130000, 10000))
+        chat = json.loads((CLUSTER / 'settings.json').read_bytes())['items'][0]['set']
+        self.assertEqual((chat['waiting'], chat['time'], chat['reserve_time']),
+                         (120_000_000_000, 130_000_000_000, 10_000_000_000))
 
     def test_notice_delegates_change_to_coding_then_reviews_named_head(self):
         scripts = {s['cue']: s['turns'] for s in read(CLUSTER / 'llm.json')['cued']}
@@ -133,7 +162,9 @@ class AssemblyTests(unittest.TestCase):
 
     def test_delegated_authority_is_under_project_and_rules_ceiling(self):
         engine = read(CLUSTER / 'engine.json')['engine']
-        ceiling = engine['rules']['ceiling']
+        # Project grants remain narrow; the stock rules cover all forge hosts.
+        self.assertNotIn('rules', engine)
+        ceiling = engine['projects'][0]['policy']['ceiling']
         self.assertEqual([g['kind'] for g in ceiling['grants']], KINDS)
         self.assertEqual(ceiling['delegation']['kinds'], [dict(kind='charter', number=1),
             dict(kind='charter', number=2), dict(kind='procedure', number=2)])
@@ -152,7 +183,7 @@ class AssemblyTests(unittest.TestCase):
         for grant in authority['grants']:
             self.assertIn(dict(connector=grant['connector'], kind=grant['kind'], pattern=dict(
                 segments=grant['segments'], last=grant['terminal'], value=grant['last'])), ceiling['grants'])
-        self.assertLessEqual(authority['budget']['spend'], engine['rules']['maximum_run_spend'])
+        self.assertLessEqual(authority['budget']['spend'], 10)  # Stock maximum run spend.
 
     def test_landing_requires_ci_up_to_date_and_exact_review(self):
         app = read(CLUSTER / 'engine.json')['application']
@@ -175,13 +206,16 @@ class AssemblyTests(unittest.TestCase):
         self.assertEqual(engine['limits']['overrides']['fleet.engine_slots'], 0)
         self.assertEqual(config['application']['workers'], [])
         self.assertEqual(config['application']['charter'], 2)
-        self.assertEqual([c['number'] for c in engine['charters']], [1, 2])
-        for charter, filename in zip(engine['charters'], ('chat.txt', 'coding.txt')):
+        items = json.loads((CLUSTER / 'settings.json').read_bytes())['items']
+        self.assertEqual([i['setting'] for i in items], [dict(kind='charter', number=1),
+                         dict(kind='charter', number=2), dict(kind='template', number=1)])
+        charters = [i['set'] for i in items[:2]]
+        for charter, filename in zip(charters, ('chat.txt', 'coding.txt')):
             self.assertEqual(charter['hosts'], 'workers')
-            self.assertEqual(charter['instructions'], 'charters/' + filename)
-            self.assertEqual((CLUSTER / filename).read_bytes(),
-                             (LAB.parent / 'docs/examples/owned/charters' / filename).read_bytes())
-        self.assertTrue(all(engine['charters'][1][flag] for flag in ('inspect', 'modify', 'shell')))
+            self.assertEqual(charter['instructions'],
+                             (LAB.parent / 'crates/temper-service/src/stock' / filename).read_text())
+        self.assertTrue(all(charters[1][flag] for flag in ('inspect', 'modify', 'shell')))
+        self.assertEqual(items[2]['set']['budget'], dict(as_allowed=dict(cap=50)))
         limits = engine['limits']['overrides']
         for key, needed in {'tasks.tasks': 4, 'tasks.charters': 2, 'tasks.tree_tasks': 4,
                             'tasks.parameters': 2, 'tasks.authority_grants': len(KINDS),
@@ -200,7 +234,7 @@ class AssemblyTests(unittest.TestCase):
         for field in ('actions', 'checks', 'collect', 'dirs', 'faults'):
             self.assertEqual(exp[field], [])
         engine = next(p for p in exp['processes'] if p['name'] == 'engine')
-        self.assertIn(dict(path='config/charters/coding.txt', **{'from': 'coding.txt'}), engine['files'])
+        self.assertFalse(any('charters/' in entry['path'] for entry in engine['files']))
         self.assertIn(dict(stream='stdout', prefix='http://', capture='link'), engine['ready'])
         self.assertIn(dict(stream='stderr', prefix='listening webhooks ', capture='webhooks'), engine['ready'])
         forge, llm = exp['processes'][:2]
@@ -298,7 +332,7 @@ class AssemblyTests(unittest.TestCase):
         self.assertEqual(exp['faults'], [])
         self.assertEqual(exp['planted'], [])
         self.assertEqual([a['name'] for a in exp['actions']],
-                         ['sign-in', 'add-key', 'usable', 'forge', 'adopt', 'story'])
+                         ['sign-in', 'settings', 'add-key', 'usable', 'forge', 'adopt', 'story'])
         self.assertEqual(exp['actions'][0]['argv'][-2:], ['sign-in', '-'])
         self.assertFalse(any('stdin' in a for a in exp['actions']))
         self.assertNotIn('await', exp['actions'][0])
@@ -307,7 +341,7 @@ class AssemblyTests(unittest.TestCase):
         self.assertFalse(any(r['stream'] == 'stdout' for r in engine['ready']))
         for process in exp['processes']:
             self.assertFalse(any(r['capture'] == 'link' for r in process['ready']))
-        for action in exp['actions'][2:4]:
+        for action in exp['actions'][3:5]:
             self.assertEqual(action['argv'][-2:], ['--timeout', '200'])
         self.assertEqual(exp['actions'][-1]['argv'][-1], 'http://{proc.engine.ready.clients}/')
         self.assertIn('STORY_SECONDS = 220', (SMOKE / 'smoke/_story.py').read_text())

@@ -6,16 +6,20 @@ held ChatGPT record, `chatgpt` (4.3), moved into the box, one chat turn on
 it, and the record moved out again. It has no driver. Its only spend is the
 chat's turn on the account, which the meter reads.
 
-The rendered files are 0a's, except for the budgets. `temper.json` keeps
-0a's document, priced at 1,000 tokens a unit with gpt-6-luna's window at
-131,072. The chat charter's spend and `maximum_run_spend` are 280, and the
-project, policy and rule spends and `period_spend` are 600. Serve refuses a
-charter that cannot buy two of its model's largest turns:
+The rendered files are 0a's, except for the model prices and window.
+`temper.json` prices gpt-6-luna at 1,000 tokens a unit with its window at
+131,072 and seeds no project. After sign-in, the `settings` action applies
+`settings.json` against revision 1: both charters' spend and the rules'
+`maximum_run_spend` become 280; policy 1's and the rules' spends and
+`period_spend` become 600. The following `forge-setup` creates `hello`
+from that policy, including its 600-unit ceiling. The charter's allowance
+buys two of its model's largest turns:
 2 × ceil((window + output) / 1000) units, which is 280 at this window. At
 65,536 the agent's tool payload does not fit its messages. `agent.json`'s
 model carries the same unit and window.
 
-The seed, after 0a's three actions:
+The seed inserts `settings` after 0a's sign-in and before its forge setup
+and person actions, then adds:
 
 - `import` (`seed/import`): `ctl import {held.chatgpt} --key lab-import`,
   which moves the record in and removes the file. The account's number,

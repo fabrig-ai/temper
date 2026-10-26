@@ -1,4 +1,4 @@
-//! Provision a project-only service member through the public client on the story's ring.
+//! Provision a project or project-only service member through the public client on the story's ring.
 use jig_client::{self as client, contract as c};
 use jig_client_shell_native::Shell;
 use skein_io::kernel::{Complete, Fd, Op, Submit};
@@ -25,6 +25,8 @@ pub struct Member {
     out: Queue<client::Request>,
     owner: Option<Secret>,
     made: Option<(u64, Secret)>,
+    project: Option<(&'static str, u32)>,
+    key: client::Key,
     phase: Phase,
     closing: bool,
     sequence: u64,
@@ -53,12 +55,20 @@ impl Member {
             out: Queue::with_capacity(client::max_out(&bounds.root.domain.client)),
             owner: Some(token),
             made: None,
+            project: None,
+            key: KEY,
             phase: Phase::ConfirmingOwner,
             closing: false,
             sequence: super::MEMBER,
             operations: std::collections::BTreeMap::new(),
             names: std::collections::BTreeMap::new(),
         }
+    }
+    pub fn project(root: Fd, base: &Path, owner: &Path, name: &'static str, number: u32) -> Self {
+        let mut host = Self::new(root, base, owner, "case-project");
+        host.project = Some((name, number));
+        host.key = client::Key { asker: client::Asker::JIG, number: 2 };
+        host
     }
     fn event(&mut self, now: Time, wall: Wall, event: client::Event) {
         self.client.step(now, wall, event, &mut self.out);
@@ -68,7 +78,17 @@ impl Member {
         while let Some(request) = self.out.pop() {
             match request {
                 client::Request::ServiceCredential { party, credential } => self.made = Some((party, credential)),
-                client::Request::Told { told: client::Told::Answered { key: KEY, outcome } } => {
+                client::Request::Told { told: client::Told::Answered { key, outcome } } if key == self.key => {
+                    if let Some((_, number)) = self.project {
+                        assert!(
+                            matches!(outcome, client::Outcome::Answered(client::Answered::Jig(c::Answer::Done(
+                                c::Outcome::Owner(c::OwnerOutcome::ProjectMade { project })
+                            ))) if project == number),
+                            "project creation answered: {outcome:?}"
+                        );
+                        self.close();
+                        continue;
+                    }
                     assert!(
                         matches!(outcome, client::Outcome::Answered(client::Answered::Jig(c::Answer::Done(_)))),
                         "member creation answered: {outcome:?}"
@@ -118,18 +138,21 @@ impl Member {
             })
         {
             self.phase = Phase::Creating;
+            let request = match self.project {
+                Some((name, _)) => c::Ask::MakeProject {
+                    name: c::Text::new(name.as_bytes().into(), 64).expect("fixture project name"),
+                    policy: 1,
+                },
+                None => c::Ask::MakeService {
+                    project: PROJECT,
+                    name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
+                    role: c::HeldRole::Member,
+                },
+            };
             self.event(
                 now,
                 wall,
-                client::Event::Send {
-                    key: KEY,
-                    name: None,
-                    request: client::Ask::Jig(Box::new(c::Ask::MakeService {
-                        project: PROJECT,
-                        name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
-                        role: c::HeldRole::Member,
-                    })),
-                },
+                client::Event::Send { key: self.key, name: None, request: client::Ask::Jig(Box::new(request)) },
             );
         }
         if self.phase == Phase::Ready {
@@ -211,7 +234,7 @@ impl Member {
             self.closing,
             self.shell.is_empty(),
             self.operations.len(),
-            self.client.pending(KEY)
+            self.client.pending(self.key)
         )
     }
     pub fn worst_case(&self) -> u64 {

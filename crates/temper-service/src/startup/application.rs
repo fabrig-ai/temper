@@ -1041,10 +1041,19 @@ fn resolved_transport(
         }
     }
 }
-/// Keep one source of the forge's program, after both readers resolve data paths.
+/// Resolve setup modes and the fake forge's program after both readers resolve data paths.
 pub fn git_programs(forges: &mut [settings::Forge], setup: &temper_forge_setup::setup::Setup, problems: &mut Problems) {
     let application = Path::root().member(b"application");
     for (index, entry) in setup.entries.iter().enumerate() {
+        for forge in forges.iter_mut() {
+            if forge.number == entry.forge {
+                forge.mode = match &entry.mode {
+                    temper_forge_setup::setup::Mode::Managed { .. } => temper_engine_domain_forge::Mode::Managed,
+                    temper_forge_setup::setup::Mode::Owned(_) => temper_engine_domain_forge::Mode::Owned,
+                    temper_forge_setup::setup::Mode::Fake(_) => temper_engine_domain_forge::Mode::Fake,
+                };
+            }
+        }
         if let temper_forge_setup::setup::Mode::Fake(fake) = &entry.mode {
             for (forge_index, forge) in forges.iter_mut().enumerate() {
                 if forge.number == entry.forge {
@@ -1158,6 +1167,7 @@ pub fn resolve(members: &Members, files: &settings::Files, problems: &mut Proble
         if let Some(user) = user {
             forges
                 .push(settings::Forge {
+                    mode: temper_engine_domain_forge::Mode::Connected,
                     number: forge.number,
                     kind: forge.kind,
                     api: forge.api.clone(),

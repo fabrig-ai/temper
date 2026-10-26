@@ -308,6 +308,9 @@ fn each_outcome_is_encoded_as_the_forge_familys_answer() {
         ("too large", forge::AdoptionRefusal::TooLarge, w::ForgeReason::TooLarge),
         ("unreachable", forge::AdoptionRefusal::Unreachable, w::ForgeReason::Unreachable),
         ("invalid", forge::AdoptionRefusal::InvalidAnswer, w::ForgeReason::InvalidAnswer),
+        ("another project", forge::AdoptionRefusal::AnotherProject, w::ForgeReason::AnotherProject),
+        ("home held", forge::AdoptionRefusal::HomeHeld, w::ForgeReason::HomeHeld),
+        ("prefix occupied", forge::AdoptionRefusal::PrefixOccupied, w::ForgeReason::PrefixOccupied),
     ] {
         let w::Outcome::ForgeRefused(answer) = encoded(Some(forge::ApplicationOutcome::ForgeRefused(input))) else {
             panic!("{row}: forge refusal")
@@ -818,6 +821,7 @@ fn setup_requests_preserve_the_keyed_envelope_and_forge() {
                 w::SetUp::new(
                     &w::CEILINGS,
                     w::SetUpParts {
+                        playground: false,
                         forge: 3,
                         org: b"work".as_slice().into(),
                         repository: b"hello".as_slice().into(),
@@ -851,6 +855,7 @@ fn setup_requests_preserve_the_keyed_envelope_and_forge() {
             [5; 16],
             [7; 32],
             root::Application::Forge(forge::Ask::SetUp {
+                playground: false,
                 forge: 3,
                 org: b"work".as_slice().into(),
                 repository: b"hello".as_slice().into(),
@@ -1131,6 +1136,7 @@ fn setup_projects_and_first_repository_states_translate_without_losing_fields() 
                     w::SetUp::new(
                         &w::CEILINGS,
                         w::SetUpParts {
+                            playground: false,
                             forge: 3,
                             org: b"team".as_slice().into(),
                             repository: b"widget".as_slice().into(),
@@ -1153,6 +1159,7 @@ fn setup_projects_and_first_repository_states_translate_without_losing_fields() 
         assert_eq!(
             request,
             root::Application::Forge(forge::Ask::SetUp {
+                playground: false,
                 forge: 3,
                 org: b"team".as_slice().into(),
                 repository: b"widget".as_slice().into(),
@@ -1168,6 +1175,7 @@ fn setup_projects_and_first_repository_states_translate_without_losing_fields() 
             forge::FirstState::Failed { step: forge::CreateStep::File },
         ] {
             let first = forge::First {
+                playground: false,
                 org: b"team".as_slice().into(),
                 repository: b"widget".as_slice().into(),
                 project: project.clone(),
@@ -1633,5 +1641,22 @@ fn accept_answers_use_the_appended_success_and_existing_refusals() {
     ] {
         let bytes = family::answer(Some(root::ApplicationAnswer::Accept(answer)), &w::CEILINGS, &jig).unwrap();
         assert_eq!(w::Answer::decode(&w::CEILINGS, &mut Reader::new(&bytes)).unwrap().into_parts().outcome, expected);
+    }
+}
+
+#[test]
+fn a_fake_forges_panel_has_no_address_and_real_forgejos_keep_theirs() {
+    for mode in [forge::Mode::Fake, forge::Mode::Owned, forge::Mode::Connected] {
+        let mut forges = configured(b"http://forge.example");
+        forges[0].mode = mode;
+        let got = decoded_panel(panel(), &forges).into_parts().pull.unwrap();
+        assert_eq!(
+            got.address(),
+            if mode == forge::Mode::Fake {
+                b"".as_slice()
+            } else {
+                b"http://forge.example/acme/shop/pulls/123".as_slice()
+            }
+        );
     }
 }

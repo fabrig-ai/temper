@@ -124,7 +124,10 @@ fn manifest(service: &mut crate::Service, run: u64) -> Box<[u8]> {
 fn row(service: &mut crate::Service, item: Item, bytes: &[u8]) {
     service.engine.as_mut().expect("engine").forge_records.rows.push(
         records::number(1, item),
-        Secret::new(records::encode(bytes).into_boxed_slice()),
+        Secret::new(match records::encode(item, bytes) {
+            Ok(value) => value.into_boxed_slice(),
+            Err(records::Unreadable) => Box::from([0]),
+        }),
         4096,
     );
 }
@@ -387,7 +390,7 @@ fn written_is_answered_only_after_kept_and_the_routing_rows_follow_each_keep() {
         let owner = *service.engine.as_mut().expect("engine").setup.writes.first().unwrap().0;
         let write = service.engine.as_mut().expect("engine").setup.writes.get(&owner).unwrap();
         assert_eq!(write.number, records::number(1, expected));
-        assert_eq!(write.value.expose().first(), Some(&records::VERSION));
+        assert_eq!(write.value.expose().get(..2), Some(records::VERSION.to_be_bytes().as_slice()));
         answer(service.engine.as_mut().expect("engine"), StoreEvent::Kept { owner });
         assert_eq!(
             service.engine.as_mut().expect("engine").setup.answers.pop(),
@@ -856,7 +859,10 @@ fn kept_record(store: &mut crate::store::Store, forge: u16, item: Item, bytes: &
                 owner,
                 fixtures::application_request(
                     records::number(forge, item),
-                    Secret::new(records::encode(bytes).into_boxed_slice())
+                    Secret::new(match records::encode(item, bytes) {
+                        Ok(value) => value.into_boxed_slice(),
+                        Err(records::Unreadable) => Box::from([0]),
+                    })
                 )
             )
             .is_none()
@@ -1355,7 +1361,7 @@ fn takeover_waits_for_kept_done_and_correlated_removal_before_restored_reconcile
     engine.forge.starts.clear();
     engine.forge_records.rows.push(
         records::number(1, Item::GitToken),
-        Secret::new(records::encode(b"replacement-git").into_boxed_slice()),
+        Secret::new(records::encode(Item::GitToken, b"replacement-git").unwrap().into_boxed_slice()),
         engine.setup.value_bytes,
     );
     lifecycle::connect_local(engine, 1);

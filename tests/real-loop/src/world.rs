@@ -289,7 +289,7 @@ fn host<R: Referee<Proc>>(
     let root = skein_shell::open_root(path).expect("caller launch root");
     world.spawn_with_fds(vec![root], || {
         Proc::Caller(Box::new(if direct_key {
-            Caller::new(steps(), path.into(), root)
+            Caller::with_settings(steps(), path.into(), root)
         } else {
             Caller::provisioned(steps(), path.into(), root)
         }))
@@ -680,16 +680,17 @@ impl Referee<Proc> for Judge {
 }
 
 fn check_ending(caller: &Caller, service: &ServiceHost, workers: &[Proc], children: &[Proc]) {
+    let declared = caller.leftovers();
     let mut obligations = crate::ending::Obligations::default();
-    obligations.read(service);
+    obligations.read(service, declared);
     for worker in workers {
         let Proc::Service(worker) = worker else { panic!("worker root") };
-        obligations.read(worker);
+        obligations.read(worker, declared);
     }
     for (index, child) in children.iter().enumerate() {
         obligations.read_child(3 + workers.len() + index, child);
     }
-    obligations.check(caller.leftovers()).unwrap_or_else(|error| panic!("{error}"));
+    obligations.check(declared).unwrap_or_else(|error| panic!("{error}"));
 }
 
 fn person_push(now: Time, caller: &Caller, state: &mut forge::State, seen: &mut forge::Seen) {

@@ -115,6 +115,7 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["propose-settings", "FILE", "--against", "5", "--key", "proposal-5"],
     &["proposal", "p73/7"],
     &["forge-accept", "3", "1"],
+    &["move-to-newest", "7", "--key", "move-7"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -327,6 +328,18 @@ pub(crate) fn historical_task_result(task: c::Task, ending: c::Ending) -> c::Rea
 pub(crate) fn golden(name: &str) -> Box<[u8]> {
     let path = std::path::Path::new("src/tests/golden").join(name).with_extension("txt");
     std::fs::read(path).expect("checked golden").into_boxed_slice()
+}
+/// Task-rendering fixtures regenerate only through their owning tests.
+pub(crate) fn check_golden(name: &str, bytes: &[u8]) {
+    let write = match std::env::var_os("SKEIN_CODEGEN_WRITE") {
+        Some(value) => value == "1",
+        None => false,
+    };
+    if write {
+        let path = std::path::Path::new("src/tests/golden").join(name).with_extension("txt");
+        std::fs::write(path, bytes).expect("write golden");
+    }
+    assert_eq!(bytes, golden(name).as_ref(), "{name}; regenerate with SKEIN_CODEGEN_WRITE=1 and this test");
 }
 pub(crate) struct Harness {
     pub root: root::Root,
@@ -643,9 +656,9 @@ const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot for each guide call, including the model-choice seam.
 pub(super) const GUIDE_CALLS: u32 = 43;
 /// One slot per guide line, including the final line; fewer loses that line.
-const GUIDE_LINES: u32 = 160;
+const GUIDE_LINES: u32 = 173;
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 58;
+pub(super) const TOOL_FORMS: u32 = 59;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

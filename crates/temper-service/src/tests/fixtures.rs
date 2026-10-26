@@ -120,6 +120,7 @@ pub fn guard_engine() -> settings::Engine {
 
 pub fn forges() -> Box<[settings::Forge]> {
     Box::new([settings::Forge {
+        mode: temper_engine_domain_forge::Mode::Connected,
         number: 1,
         kind: settings::Kind::Forgejo,
         api: jig_protocol_config::Address::Host { name: Box::from(&b"forge.example"[..]), port: 443 },
@@ -146,6 +147,7 @@ pub fn task_record(number: u64) -> jig_domain_tasks::TaskRecord {
     use jig_domain_tasks as tasks;
     use skein_lib::Wall;
     tasks::TaskRecord {
+        settings: tasks::SettingsRevision { task: 1, run: None },
         added: Box::new([]),
         hold_bound_since: None,
         label: 0,
@@ -594,6 +596,7 @@ pub fn assignment_with_settings(
         live: jig_domain_host::LiveAsk::NONE,
         charter: 1,
         run: Box::new(temper_engine_domain::RunCharter {
+            revision: 1,
             ended_by: jig_domain_tasks::EndedBy::Result,
             sources: Box::new([Some(1)]),
             accounts: Box::new([jig_domain_authority::AccountBinding { provider: 1, account: 1, source: 1 }]),

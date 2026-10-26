@@ -92,6 +92,22 @@ connected and names the first repository. You may replace `work`,
 and omitting `--project` makes a new project named after the repository.
 Use the project number printed by the adoption in the following steps.
 
+To try the playground's suggested requests on your own Forgejo, set it
+up with a copy of the playground's repository instead:
+
+```sh
+temper ctl DIR forge-setup 3 --playground
+```
+
+It makes `playground/widget`, with the playground's `src/main.rs`
+beside the starter workflow, and adopts it as the home of a new project
+named `widget`. `--playground` takes no `--org` or `--repository`. Ask
+that project the playground's requests: "Add CSV export to widget",
+"Add a dark theme to widget", "Fix widget's empty search state".
+
+Every change is reviewed by an agent at its head before it lands:
+`change N` shows the review, gate 1, pending, then approved.
+
 CI jobs run on this machine as the box's user, with label
 `temper-host`, without a container. Run code you trust there. The
 starter workflow only echoes a success message, on pushes to `main`
@@ -216,9 +232,11 @@ Forge 2 is already configured. For an existing App and installation,
 follow `temper help github`, sections 11 and 12: set shared-App
 read-only mode before starting, connect with the private key, accept
 the installation and adopt its repository. No browser is needed for
-that path. Use the adopted project's number and name the GitHub
-repository in section 6's chat; follow its change through CI and
-landing with the same calls.
+that path. The box's Forgejo repository is already the project's home:
+add `--no-home` when adopting GitHub into that project, or use a new
+project to make GitHub its home. Use the adopted project's number and
+name the GitHub repository in section 6's chat; follow its change
+through CI and landing with the same calls.
 
 ## 9. Trying the welcome with nothing real
 

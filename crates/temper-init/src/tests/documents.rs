@@ -112,6 +112,9 @@ fn the_default_is_the_owned_example_so_edited() {
             "{row}"
         );
         let mut expected = owned.clone();
+        // A review names repository, base, branch, gate and head, then offers two verdicts.
+        expected["engine"]["limits"]["overrides"]["tasks.parameters"] = json!(5_u32);
+        expected["engine"]["limits"]["overrides"]["tasks.contract_choices"] = json!(2_u32);
         expected["engine"]["acts"] = json!([{ "connector": 1_u16, "may": ["close", "remove_account"] }]);
         assert!(!actual["engine"]["owners"].as_array().unwrap().is_empty());
         // The startup turn_bounds writer holds these to each document's own
@@ -207,7 +210,6 @@ fn the_default_is_the_owned_example_so_edited() {
                 },
             ),
             ("/application/landing/projects/0/rules/0/pattern", every_forge()),
-            ("/application/landing/projects/0/rules/0/gates", parse(b"[]")),
             ("/engine/hosts/workers/0/digest", json!("worker.digest")),
             ("/engine/deployment/directory", json!("deployment")),
             ("/workers/0/secret", json!("worker.secret")),
@@ -258,6 +260,12 @@ fn demo(port: u16) -> Value {
                 {
                     "cue": "Export widget's table as CSV",
                     "turns": csv_coding()
+                },
+                {
+                    "cue": "Review this change at the named head",
+                    "turns": [scripted_turn(json!([{"call": "finish", "arguments": {
+                        "form": "verdict", "label": "1", "text": "Checked widget CSV export.", "fields": {}, "items": parse(b"[]")
+                    }}]))]
                 }
             ],
             "otherwise": [
@@ -507,7 +515,7 @@ fn the_template_keeps_project_one_without_settings_members() {
         json!([{
             "connector": 1_u16, "kind": 4_u16, "pattern": every_forge(),
             "enforce": true, "ci": true, "up_to_date": true,
-            "gates": parse(b"[]"), "approvals": parse(b"[]")
+            "gates": [{"number": 1_u32, "blocking": true, "freshness": "clean"}], "approvals": parse(b"[]")
         }])
     );
 }

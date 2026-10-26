@@ -347,6 +347,9 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(picker::worst_case(*limits)?)?
         .checked_add(4097 + 2048)?
         .checked_add(4090)?
+        // Restored PEM bytes and the generated secret coexist with the encoded
+        // carried output, which the root's output queue already prices.
+        .checked_add(u64::try_from(forges::PASTED_PAYLOAD).ok()?.checked_mul(2)?)?
         .checked_add(u64::from(limits.field_bytes).checked_mul(3)?)?
         .checked_add(u64::from(limits.field_bytes.max(wire.first_repository_label)))?
         .checked_add(temper_client_protocol_wire::v1::Answer::worst_case_heap(&wire)?)?

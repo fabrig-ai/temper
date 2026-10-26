@@ -27,10 +27,23 @@ pub(super) struct Starting {
 /// Identity retained when the playground ends (client/README.md, 5.6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RetiredDemo {
+    pub forge: u16,
     pub provider: u32,
     pub project: u32,
 }
 impl Side {
+    /// The demo forge serves no pages, including after its end (playground.md, 6).
+    #[must_use]
+    pub fn serves_pages(&self, forge: u16) -> bool {
+        match self.demo.answer.as_ref() {
+            Some(demo) => demo.forge != forge,
+            None => match self.demo.ended {
+                Some(demo) => demo.forge != forge,
+                None => true,
+            },
+        }
+    }
+
     /// The retired playground, including an end observed in this session.
     #[must_use]
     pub fn retired_demo(&self) -> Option<RetiredDemo> {
@@ -94,7 +107,7 @@ pub(crate) fn told(side: &mut Side, told: &Told, limits: Limits, out: &mut Queue
                 };
                 let retired = match answer.as_ref() {
                     Some(demo) if demo.state == DemoState::Ended => {
-                        Some(RetiredDemo { provider: demo.provider, project: demo.project })
+                        Some(RetiredDemo { forge: demo.forge, provider: demo.provider, project: demo.project })
                     }
                     _ => None,
                 };
@@ -319,7 +332,7 @@ fn observe_end(side: &mut Side, accounts: Option<&c::OwnerAccounts>, client: &Cl
     side.demo.forge_ended |= forge_ended;
     if model_ended || forge_ended {
         // Retain the identity after the engine retires the demo or the owner watch closes.
-        side.demo.ended = Some(RetiredDemo { provider: demo.provider, project: demo.project });
+        side.demo.ended = Some(RetiredDemo { forge: demo.forge, provider: demo.provider, project: demo.project });
     }
     if reread {
         read(side, out);

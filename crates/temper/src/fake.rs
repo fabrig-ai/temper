@@ -677,24 +677,9 @@ impl Host {
         }
         let Some(shared) = &self.shared else { return };
         let stopped = self.stopped && self.peer.host().is_empty();
-        let mut forge = shared.borrow_mut();
         // A later checkpoint would certify observations this FILE has lost.
         // After failure every pass, including stop, only drains and drops.
-        if !self.failed
-            && let Some(writer) = &mut self.writer
-        {
-            let result = if stopped && !self.checkpoint {
-                writer.stop(&mut forge.domain, &mut self.buffer)
-            } else {
-                writer.drain(&mut forge.domain, &mut self.buffer)
-            };
-            self.checkpoint |= stopped;
-            drop(forge);
-            if result.is_err() {
-                self.buffer.clear();
-                self.fail("observations", &"drain exceeds its byte bound");
-                return;
-            }
+        if !self.failed && self.writer.is_some() {
             let full = if let Peer::Forge(peer) = &self.peer
                 && let Some(calls) = peer.git_calls()
             {
@@ -721,6 +706,21 @@ impl Host {
             } else {
                 false
             };
+            let mut forge = shared.borrow_mut();
+            let writer = self.writer.as_mut().expect("writer");
+            // GitHub-only passes also need a checkpoint after their records.
+            let result = if !self.buffer.is_empty() || stopped && !self.checkpoint {
+                writer.stop(&mut forge.domain, &mut self.buffer)
+            } else {
+                writer.drain(&mut forge.domain, &mut self.buffer)
+            };
+            self.checkpoint |= stopped;
+            drop(forge);
+            if result.is_err() {
+                self.buffer.clear();
+                self.fail("observations", &"drain exceeds its byte bound");
+                return;
+            }
             if !self.buffer.is_empty() {
                 let result = self.observations.as_mut().expect("writer has file").write_all(self.buffer.as_slice());
                 self.buffer.clear();
@@ -740,6 +740,7 @@ impl Host {
                 );
             }
         } else {
+            let mut forge = shared.borrow_mut();
             while forge.domain.pop_observation().is_some() {}
             self.checkpoint |= stopped;
         }

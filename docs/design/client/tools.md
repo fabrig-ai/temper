@@ -396,6 +396,13 @@ wait SUBJECT [--since DIGEST] [--until CONDITION] [--timeout DURATION]
   end answers not met, exit 3, with the last panel and its digest, and
   a task that ended with no change result prints `no change panel for
   task N`, exit 2.
+- **A change's wait follows its task,** since the panel of a change
+  that ended without landing keeps its last step (`../domain/forge.md`,
+  8.8): the wait watches task N beside the panel, and when the task
+  ends with no change result (cancelled, failed) it answers at once,
+  not met, exit 3, naming how the task ended (`ended: cancelled`), with
+  the panel's last delivery and its digest; one with no panel ever
+  delivered prints `no change panel for task N`, exit 2.
 - **`replied`** holds while a chat's status (jig's
   `client/domain/client.md`, section 19, its facts) is parked, waiting
   for you, waiting for them, held, closing or ended. A chat wakes on its
@@ -1106,9 +1113,12 @@ may change with them.
   bound) is another ask, refused as a key conflict.
 - **A name the client holds already** is answered `Held`, nothing sent
   (jig's `client/domain/client.md`, section 6). A call sends what
-  DIRECTORY kept, and waits for each answer, before it sends its own
-  (8.2), so it meets `Held` only past that, or for a name another
-  party's parked request holds (8.2); it exits 1.
+  DIRECTORY kept again before it sends its own (8.2). A call whose name
+  a kept request of its party holds, the same ask, is that request: it
+  waits for its answer as for its own, and prints it, so that a rerun
+  still gets the first answer; one under that name with another ask, or
+  under a name another party's parked request holds (8.2), meets
+  `Held`, and exits 1.
 - **Names are the party's.** Agents sharing a party give their names a
   prefix of their own; the guide says so (11.5).
 - **Acts that decide name the revision the agent saw;** a moved one is
@@ -1222,10 +1232,18 @@ as the terminal's host is:
 2. open DIRECTORY and check its address (8.1); for a call that sends,
    take its lock (8.3) and load the small store's records;
 3. start the tools' root, sign in with the token, wait for `me`;
-4. send what the store kept for `me`'s party, each answered as a line
-   on stderr, `kept: ...`, a restored proposal's without its recipient
-   (6.1); the step ends once each is answered and its record erased, so
-   that the store keeps nothing of the party's when the call is sent;
+4. send what the store kept for `me`'s party again, each answered as a
+   line on stderr, `kept: ...`, a restored proposal's without its
+   recipient (6.1), and its record erased once its answer is durable;
+   the step ends once each is sent, not answered, so that a kept request
+   the engine does not answer (busy past its retries, a bound full)
+   holds no other act: the call's own local keys are drawn past those
+   the kept requests hold, and the call goes on beside them. One still
+   unanswered when the call ends stays kept, named on stderr as the
+   record allows, which keeps the request's digest and no name (6.1):
+   `kept: adopt, first sent T, unanswered: it clears when the engine
+   answers it, or past its retention; pending lists it`, a line apart
+   from the call's own output on stdout;
 5. run the call: a read answered, an act's answer durable, a wait's
    condition met or its timeout;
 6. print the result on stdout, close the stream, exit with the call's

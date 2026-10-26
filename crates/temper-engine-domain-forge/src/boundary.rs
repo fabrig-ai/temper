@@ -147,7 +147,7 @@ pub struct Adoption {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Ask {
     Adopt(Adoption),
-    SetUp { forge: u16, org: Box<[u8]>, repository: Box<[u8]>, project: SetUpProject },
+    SetUp { forge: u16, org: Box<[u8]>, repository: Box<[u8]>, project: SetUpProject, playground: bool },
     StartDemo,
     Connect { forge: u16, how: How },
     Install { forge: u16, back: Option<Box<[u8]>> },
@@ -354,6 +354,7 @@ pub enum AdminStop {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct First {
+    pub playground: bool,
     pub org: Box<[u8]>,
     pub repository: Box<[u8]>,
     pub project: SetUpProject,
@@ -430,6 +431,9 @@ pub enum AdoptionRefusal {
     Unreachable,
     NotInstalled,
     InvalidAnswer,
+    AnotherProject,
+    HomeHeld,
+    PrefixOccupied,
 }
 /// Project a forge call's refusal into the adoption's terminal reason.
 #[must_use]
@@ -1202,6 +1206,7 @@ pub enum Request {
         request: Token,
         org: Box<[u8]>,
         repository: Box<[u8]>,
+        playground: bool,
     },
     Connect {
         forge: u16,

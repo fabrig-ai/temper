@@ -34,9 +34,9 @@ pub(crate) fn pull(b: &mut Builder, change: Change<'_>, words: &Words) {
     b.close();
     b.close();
 }
-pub(crate) fn toolbar(b: &mut Builder, change: Change<'_>, words: &Words, text_bound: u32) {
+pub(crate) fn toolbar(b: &mut Builder, change: Change<'_>, words: &Words, text_bound: u32, serves_pages: bool) {
     let Some(address) = change.address() else { return };
-    if !skein_ui::markdown::safe_url(address) {
+    if serves_pages && !skein_ui::markdown::safe_url(address) {
         return;
     }
     let label = say(words, W::View, &[]);
@@ -46,10 +46,21 @@ pub(crate) fn toolbar(b: &mut Builder, change: Change<'_>, words: &Words, text_b
     }
     b.open(Role::Slot);
     b.style(look::TASK_ACTS);
-    b.open(Role::Link);
-    b.text(Run::Plain, &label);
-    b.external(address);
-    b.close();
+    if serves_pages {
+        b.open(Role::Link);
+        b.text(Run::Plain, &label);
+        b.external(address);
+        b.close();
+    } else {
+        b.open(Role::Paragraph);
+        // Separate texts keep the separator within the existing per-text bound.
+        b.open(Role::Text);
+        b.run(Run::Plain, &label);
+        b.run(Run::Plain, b" ");
+        b.close();
+        b.text(Run::Plain, address);
+        b.close();
+    }
     b.close();
 }
 pub(crate) fn start(b: &mut Builder, change: Change<'_>, words: &Words, bindings: &mut Bindings) {

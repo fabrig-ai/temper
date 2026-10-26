@@ -102,8 +102,6 @@ pub fn plan_scripts(plan: &Plan<'_>) -> Box<[Script]> {
         &coding,
     )
     .into_vec();
-    // Init has gates: [], so no reviewer runs in this story.
-    scripts.truncate(2);
     // Keep the first repository's proof that the worker cloned the starter workflow.
     let workflow = Turn {
         lines: Box::new([Line::Call {
@@ -228,6 +226,7 @@ pub(super) struct Reply {
 enum ReplyPhase {
     Snapshot,
     Pages,
+    Delegates(u64),
     Done,
 }
 impl Reply {
@@ -244,6 +243,30 @@ impl Reply {
             self.snapshot = Some(last["digest"].as_str().expect("task read digest").to_owned());
             calls.push(Step::Run(Call::new(&["chat", "1", "--json"])));
             self.phase = ReplyPhase::Pages;
+            return;
+        }
+        if let ReplyPhase::Delegates(parent) = self.phase {
+            if let Some(after) = last["ended"]["rows"]["after"]["value"].as_str() {
+                calls.push(Step::Run(delegate_page(parent, Some(after))));
+            } else if parent == 1 {
+                calls.push(Step::Run(delegate_page(2, None)));
+                self.phase = ReplyPhase::Delegates(2);
+            } else {
+                if !self.first {
+                    // Closing adds no work: task 5 must still be unknown.
+                    expected_exits.push((calls.ends().len() + 3, 2));
+                    for args in [
+                        &["close", "1", "--key", "close-plan", "--json"][..],
+                        &["wait", "task", "1", "--until", "ended", "--timeout", "60s", "--json"],
+                        &["tasks", "--project", FIRST_PROJECT, "--json"],
+                        &["task", "5", "--json"],
+                    ] {
+                        calls.push(Step::Run(Call::new(args)));
+                    }
+                }
+                calls.release();
+                self.phase = ReplyPhase::Done;
+            }
             return;
         }
         // The first box waits for the change's reply; the second, for the
@@ -270,33 +293,19 @@ impl Reply {
             calls.push(Step::Run(Call::new(&["task", "1", "--json"])));
             self.phase = ReplyPhase::Snapshot;
         } else {
-            for parent in ["1", "2"] {
-                calls.push(Step::Run(Call::new(&[
-                    "tasks",
-                    "--project",
-                    FIRST_PROJECT,
-                    "--parent",
-                    parent,
-                    "--ended",
-                    "--json",
-                ])));
-            }
-            if !self.first {
-                // The six queued reads end with task 4, which must be unknown.
-                expected_exits.push((calls.ends().len() + 5, 2));
-                for args in [
-                    &["close", "1", "--key", "close-plan", "--json"][..],
-                    &["wait", "task", "1", "--until", "ended", "--timeout", "60s", "--json"],
-                    &["tasks", "--project", FIRST_PROJECT, "--json"],
-                    &["task", "4", "--json"],
-                ] {
-                    calls.push(Step::Run(Call::new(args)));
-                }
-            }
-            calls.release();
-            self.phase = ReplyPhase::Done;
+            calls.push(Step::Run(delegate_page(1, None)));
+            self.phase = ReplyPhase::Delegates(1);
         }
     }
+}
+
+fn delegate_page(parent: u64, after: Option<&str>) -> super::ctl::Call {
+    let parent = parent.to_string();
+    let mut args = vec!["tasks", "--project", FIRST_PROJECT, "--parent", &parent, "--ended", "--json"];
+    if let Some(after) = after {
+        args.extend(["--after", after]);
+    }
+    super::ctl::Call::new(&args)
 }
 
 #[must_use]
@@ -342,19 +351,42 @@ pub fn landed_identity(task: &str, page: &str) -> (String, String) {
 }
 
 #[must_use]
-pub fn ended_tasks(value: &serde_json::Value, expected: u64) -> Vec<u64> {
-    assert_no_live_tasks(value);
-    let ended = &value["ended"]["rows"];
-    assert_eq!(ended["cut"], false, "whole ended task set: {value}");
-    assert!(ended["after"].is_null(), "whole ended task set: {value}");
-    let mut tasks: Vec<_> = ended["rows"]
-        .as_array()
-        .expect("ended rows")
+pub fn plan_ended_tasks(calls: &[super::Ended]) -> (usize, [Vec<u64>; 2]) {
+    let tasks_at = calls
         .iter()
-        .map(|row| row["chip"]["task"].as_u64().expect("task number"))
-        .collect();
+        .position(|call| {
+            serde_json::from_slice::<serde_json::Value>(&call.stdout)
+                .ok()
+                .is_some_and(|value| value["ended"].is_object() && value["live"].is_array())
+        })
+        .expect("ended delegate pages");
+    let tasks =
+        [0, 1].map(|offset| ended_tasks(&calls[tasks_at..], 1 + offset, if offset == 0 { &[2] } else { &[3, 4] }));
+    (tasks_at, tasks)
+}
+
+#[must_use]
+pub fn ended_tasks(calls: &[super::Ended], parent: u64, expected: &[u64]) -> Vec<u64> {
+    let mut tasks = Vec::new();
+    let mut whole = false;
+    for call in calls {
+        let value = super::ctl::json(call);
+        let ended = &value["ended"]["rows"];
+        let rows = ended["rows"].as_array().expect("ended rows");
+        if !rows.iter().any(|row| row["requester"]["task"] == parent) {
+            continue;
+        }
+        assert_no_live_tasks(&value);
+        assert_eq!(ended["cut"], false, "uncut ended task page: {value}");
+        whole = ended["after"].is_null();
+        for row in rows {
+            assert_eq!(row["requester"]["task"], parent, "one parent's delegates per query");
+            tasks.push(row["chip"]["task"].as_u64().expect("task number"));
+        }
+    }
+    assert!(whole, "every ended task page was read");
     tasks.sort_unstable();
-    assert_eq!(tasks, [expected], "exact ended delegates of this parent");
+    assert_eq!(tasks, expected, "exact ended delegates of this parent");
     tasks
 }
 pub fn assert_no_live_tasks(value: &serde_json::Value) {
@@ -410,7 +442,7 @@ pub fn assert_requests(seen: &Seen, count: usize, words: &[u8], first: bool) {
         };
         counts[kind] += 1;
     }
-    assert_eq!(counts, if first { [3, 4, 0] } else { [2, 0, 0] }, "chat, coder, review requests");
+    assert_eq!(counts, if first { [3, 4, 1] } else { [2, 0, 0] }, "chat, coder, review requests");
     assert_eq!(seen.requests.len(), count, "exact scripted model requests");
     assert_eq!(seen.answers, vec![Ok(()); count], "every request answered");
     assert_eq!(seen.schemes, vec![Some(skein_llm::Scheme::Bearer); count], "a bearer on every request");
@@ -1979,6 +2011,7 @@ pub fn run_live(
         return Err(message);
     }
     Ok(super::boxed::CtlOutcome {
+        model: None,
         exit: binary.exit_status(),
         stdout: calls.stdout().to_vec(),
         stderr: binary.stderr().to_vec(),

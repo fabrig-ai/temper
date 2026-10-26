@@ -89,10 +89,11 @@ struct Probe {
 }
 fn probes(directory: &Path, record: &[u8]) -> Vec<Probe> {
     let mut newer = record.to_vec();
-    assert!(newer.starts_with(b"JIGM"), "real export's magic");
-    let form = u16::from_be_bytes([newer[4], newer[5]]);
+    // jig's protocol/llm.md, 5.6: jig-accounts Moved replaces JIGM at version 1.
+    assert!(newer.starts_with(&[0, 1]), "real export's jig-accounts version");
+    let form = u16::from_be_bytes([newer[0], newer[1]]);
     let next = form.checked_add(1).expect("next form");
-    newer[4..6].copy_from_slice(&next.to_be_bytes());
+    newer[0..2].copy_from_slice(&next.to_be_bytes());
     let mut probes = Vec::new();
     for (name, bytes, mode, words) in [
         ("link", record.to_vec(), 0o600, "record file must not be a link"),
@@ -100,7 +101,9 @@ fn probes(directory: &Path, record: &[u8]) -> Vec<Probe> {
         ("other", record.to_vec(), 0o604, "record file mode 0o604 permits group or other access"),
         ("empty", vec![], 0o600, "record file must contain 1 to 131072 bytes"),
         ("over-bound", vec![b'x'; 131_073], 0o600, "record file must contain 1 to 131072 bytes"),
-        ("magic", b"NOPE-fake-record\n".to_vec(), 0o600, "import: not ours"),
+        // The generated decoder refuses a current version with missing fields
+        // (jig's protocol/llm.md, 5.6), after the CLI's version precheck.
+        ("malformed", b"\0\x01".to_vec(), 0o600, "import: not ours"),
         ("newer", newer, 0o600, ""),
     ] {
         let file = directory.join(format!("{name}.move"));
@@ -113,15 +116,15 @@ fn probes(directory: &Path, record: &[u8]) -> Vec<Probe> {
         let words = if name == "newer" {
             format!("temper ctl: {} holds a moved record of form v{next}; this temper reads up to v{form}: upgrade temper\n", file.display()).into_bytes()
         } else {
-            format!("{}{}\n", if name == "magic" { "" } else { "temper ctl: " }, words).into_bytes()
+            format!("{}{}\n", if name == "malformed" { "" } else { "temper ctl: " }, words).into_bytes()
         };
         probes.push(Probe {
             name,
             file,
             bytes,
-            code: if name == "magic" { 2 } else { 1 },
+            code: if name == "malformed" { 2 } else { 1 },
             words,
-            precheck: name != "magic",
+            precheck: name != "malformed",
             export: false,
         });
     }
@@ -399,7 +402,7 @@ fn moved_record(response: &[u8], account: u32) -> (u32, Vec<u8>) {
     let number = reader.u32().expect("move number");
     let length = reader.u32().expect("record length");
     let record = reader.bytes(length).expect("whole moved record");
-    assert!(record.starts_with(b"JIGM"), "real moved record");
+    assert!(record.starts_with(&[0, 1]), "real moved record's jig-accounts version");
     assert!(reader.is_empty(), "whole moved answer");
     (number, record.to_vec())
 }

@@ -52,7 +52,7 @@ fn expected_given() -> skein_forge_setup::given::Given {
         git_name: b"temper-git".as_slice().into(),
         limits: skein_forge_setup::limits::Limits {
             orgs: 8,
-            files: 1,
+            files: 2,
             file_bytes: 4096,
             reachable: 8,
             repositories: crate::limits::small().repositories,

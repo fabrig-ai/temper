@@ -33,6 +33,7 @@ fn assignment() -> engine::Assignment {
         live: jig_domain_host::LiveAsk::NONE,
         charter: 1,
         run: Box::new(engine::RunCharter {
+            revision: 1,
             ended_by: jig_domain_tasks::EndedBy::Result,
             sources: Box::new([Some(1)]),
             accounts: Box::new([jig_domain_authority::AccountBinding { provider: 1, account: 1, source: 1 }]),
@@ -1124,4 +1125,50 @@ fn every_forge_read_declares_its_flat_members_as_json() {
         }
     }
     assert_eq!(count, members.len());
+}
+
+#[test]
+fn job_and_attempt_zero_decode_but_run_and_explicit_byte_limit_remain_positive() {
+    for attempt_number in [0, 1] {
+        let input = format!(
+            r#"{{"head":"0000000000000000000000000000000000000000","run":1,"job":0,"attempt":{attempt_number}}}"#
+        );
+        let call = decided(b"read_job", input.as_bytes()).expect("zero job or attempt");
+        let engine::Tool::ReadNamed { read: skein_forge::api::Read::Job { attempt, max_bytes }, .. } = call.tool else {
+            panic!("decoded job read")
+        };
+        assert_eq!((attempt.job, attempt.attempt, max_bytes), (0, attempt_number, 0));
+    }
+    for (input, field) in [
+        (
+            br#"{"head":"0000000000000000000000000000000000000000","run":0,"job":0,"attempt":0}"#.as_slice(),
+            b"run".as_slice(),
+        ),
+        (
+            br#"{"head":"0000000000000000000000000000000000000000","run":1,"job":0,"attempt":4294967296}"#.as_slice(),
+            b"attempt".as_slice(),
+        ),
+        (
+            br#"{"head":"0000000000000000000000000000000000000000","run":1,"job":0,"attempt":0,"max_bytes":0}"#
+                .as_slice(),
+            b"max_bytes".as_slice(),
+        ),
+    ] {
+        assert_eq!(decided(b"read_job", input).err(), Some(Problem::Range(field)));
+    }
+    let tools = tools(Duration::from_secs(10));
+    let mut schema = None;
+    for tool in &tools {
+        if tool.name.as_ref() == b"read_job" {
+            schema = Some(&tool.schema);
+        }
+    }
+    let schema = schema.expect("read_job tool");
+    for property in [
+        br#""job":{"type":"integer","description":"a CI job id, which may be 0 on Forgejo","minimum":0"#.as_slice(),
+        br#""attempt":{"type":"integer","description":"a CI attempt number, which may be 0 on Forgejo","minimum":0"#
+            .as_slice(),
+    ] {
+        assert!(skein_lib::bytes::find(schema, property).is_some());
+    }
 }

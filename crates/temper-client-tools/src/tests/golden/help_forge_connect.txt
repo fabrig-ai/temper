@@ -7,7 +7,7 @@ Result: forge-connect
   forge: Forge number
   way: An existing GitHub App
   id: GitHub App id
-  file: Private PEM key file; at most 4090 bytes
+  file: Private PEM key file; at most 4089 bytes
   forge: Forge number
   way: Create a GitHub App from temper's manifest
   forge: Forge number
@@ -15,7 +15,7 @@ Result: forge-connect
   file: Not offered yet; no file is read
   forge: Forge number
   way: A Forgejo site admin
-  file: Private admin token file; at most 4090 bytes
+  file: Private admin token file; at most 4089 bytes
   first: Make the first repository
   project: Project name or number; default a new project named NAME
   label: Runner label; default docker

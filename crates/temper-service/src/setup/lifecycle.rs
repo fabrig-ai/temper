@@ -51,6 +51,7 @@ pub(super) struct AdoptionFiles {
 }
 #[derive(Debug)]
 pub(crate) struct Intent {
+    pub(crate) playground: bool,
     pub(crate) label: Box<[u8]>,
     pub(crate) org: Box<[u8]>,
     pub(crate) repository: Box<[u8]>,
@@ -260,7 +261,7 @@ pub(crate) fn state(engine: &mut crate::engine::Engine, forge: u16, state: domai
     engine.events.push(root::Event::Forge(Box::new(domain::Event::Connection { forge, state })));
 }
 pub(super) fn keep(engine: &mut crate::engine::Engine, forge: u16, item: Item, bytes: &[u8], purpose: Purpose) {
-    let value = Secret::new(records::encode(bytes).into_boxed_slice());
+    let value = Secret::new(records::encode(item, bytes).expect("validated setup item").into_boxed_slice());
     let bound = usize::try_from(engine.setup.value_bytes).expect("record bound");
     assert!(value.expose().len() <= bound, "startup::checks::records proves every encoded setup write fits");
     assert!(engine.setup.next_write < (1_u64 << 60_u32), "setup write names fit prefix");
@@ -1001,15 +1002,22 @@ fn adoption_repository(engine: &mut crate::engine::Engine, forge: u16) -> Option
 fn create_local(engine: &mut crate::engine::Engine, forge: u16) -> bool {
     let local = engine.setup.lifecycle.local_mut(forge).expect("reconciled local");
     let Some(first) = local.first.take() else { return false };
-    let plan = host::Plan::Create {
-        forge,
-        org: first.org.clone(),
-        repository: first.repository.clone(),
-        files: Box::new([host::File {
-            path: temper_forge_setup::STARTER_PATH.into(),
-            content: temper_forge_setup::starter_workflow(b"temper-host").expect("owned runner label"),
-        }]),
+    let starter = host::File {
+        path: temper_forge_setup::STARTER_PATH.into(),
+        content: temper_forge_setup::starter_workflow(b"temper-host").expect("owned runner label"),
     };
+    let files: Box<[host::File]> = if first.playground {
+        Box::new([
+            starter,
+            host::File {
+                path: temper_forge_setup::PLAYGROUND_PATH.into(),
+                content: temper_forge_setup::PLAYGROUND_MAIN.into(),
+            },
+        ])
+    } else {
+        Box::new([starter])
+    };
+    let plan = host::Plan::Create { forge, org: first.org.clone(), repository: first.repository.clone(), files };
     assert!(
         skein_forge_setup::given::check_create(&local.limits, engine.setup.env.limits.string_bytes, &plan).is_ok(),
         "SetUp admission and the starter profile prove Create's inputs"
@@ -1321,12 +1329,18 @@ fn file_answer(engine: &mut crate::engine::Engine, forge: u16) -> bool {
     true
 }
 
-pub(crate) fn first(engine: &mut crate::engine::Engine, forge: u16, org: Box<[u8]>, repository: Box<[u8]>) {
+pub(crate) fn first(
+    engine: &mut crate::engine::Engine,
+    forge: u16,
+    org: Box<[u8]>,
+    repository: Box<[u8]>,
+    playground: bool,
+) {
     if crate::forge::ended(engine, forge) {
         return;
     }
     if let Some(local) = engine.setup.lifecycle.local_mut(forge) {
-        local.first = Some(Intent { org, repository, label: b"temper-host".as_slice().into() });
+        local.first = Some(Intent { playground, label: b"temper-host".as_slice().into(), org, repository });
     }
 }
 

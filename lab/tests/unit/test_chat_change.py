@@ -47,7 +47,7 @@ class ChatChangeTests(unittest.TestCase):
         expected['actions'] = [a for a in expected['actions'] if a['name'] != 'story']
         self.assertEqual(read(H), expected)
         self.assertEqual([a['name'] for a in expected['actions']],
-                         ['sign-in', 'add-key', 'usable', 'forge', 'adopt'])
+                         ['sign-in', 'settings', 'add-key', 'usable', 'forge', 'adopt'])
         self.assertEqual(expected['faults'], [])
         self.assertEqual(expected['planted'], [])
 

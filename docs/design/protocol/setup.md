@@ -188,6 +188,7 @@ connected  the forge component       ◄── its access, built from the record
   | `state` | prepare | prepare, `run` | owned's record: the versions prepared, whether the first preparation ended, Forgejo's own secrets |
   | `admin_token` | prepare, when missing | the engine's setup host, once, at start or the box's `started` (6.5) | the handover: temper's admin's token, kept as the forge's `AdminToken` record by `TakeOver`, after whose `Done` the file is removed (6.5) |
   | `person_password` | prepare | the person | the person's first password on the owned Forgejo |
+  | `person_read.header`, `person_write.header` | prepare | the person, or their agent (`../qa.md`, 4) | the person's two tokens as one header line each, `Authorization: token TOKEN`: one that reads (`read:repository`, `read:issue`, `read:organization`, `read:user`), one that writes (`write:repository`, `write:issue`, `read:organization`, `read:user`) |
 
 - **What the preparation leaves for the engine** is `admin_token`
   alone: the token's text, nothing else, private and written whole;
@@ -560,7 +561,16 @@ files: at a first preparation, and for a runner older than its pin
    ends in a random suffix, since Forgejo refuses a second token of one
    name; the
    person's account, a site admin with a password Forgejo draws into
-   `person_password`, to change at their first sign-in; the runner's
+   `person_password`, private, never printed, never in an argument or a
+   log, with no change forced at the first sign-in (`admin user create
+   --random-password --must-change-password=false`; the user, 10-26), so
+   that the person's tokens work at once; the person's
+   two tokens, each `admin user generate-access-token --raw --scopes`
+   for the person's login under a name ending in a random suffix,
+   written whole into `person_read.header` and `person_write.header`,
+   private, so that the person's agent reads the forge, or acts on it
+   as the person, by a file's path and never a token on a command line
+   (`../qa.md`, 4); the runner's
    secret drawn into `runner/secret` (40 hexadecimal digits, no line
    feed), registered as a global runner by `forgejo-cli actions register
    --secret-file`, and the runner's connection written from it into the
@@ -570,7 +580,8 @@ files: at a first preparation, and for a runner older than its pin
    the first preparation's start before anything else, and its end last.
    A first preparation that `state` says began and did not end is cut
    short: the next one removes what it left (the work path, the runner's
-   directory, `admin_token`, `person_password`) and begins again from an
+   directory, `admin_token`, `person_password`, the two header files)
+   and begins again from an
    empty layout, since Forgejo refuses a user made twice and never shows
    a drawn password again. A forge's directory that holds Forgejo's files
    with no `state` is refused, naming it: the preparation removes only
@@ -580,7 +591,10 @@ files: at a first preparation, and for a runner older than its pin
    the setup reaches Forgejo; `admin_token` made again when missing,
    which it is once the engine has taken it (6.5), under a fresh suffix,
    for temper's admin, which Forgejo's command line cannot make twice:
-   an admin a person deleted fails the preparation, naming it; nothing
+   an admin a person deleted fails the preparation, naming it; the
+   person's two header files made again, each alone, when missing, as
+   on a forge prepared before they were (a person who revokes a token
+   deletes its file, and the next start mints a new one); nothing
    else. It takes Forgejo's lock alone, so a box restarts a Forgejo,
    after its preparation, while the runner runs.
 3. **An upgrade:** a recorded Forgejo older than the pin is dumped
@@ -785,8 +799,8 @@ files: at a first preparation, and for a runner older than its pin
   managed offer "New repository", with the set up's organization,
   repository and project fields (section 15).
 - **The person** signs in on Forgejo's web as a site admin with
-  `person_password`, and changes it, since Forgejo's API refuses them
-  until they do (13.3); makes repositories in their orgs, with Actions,
+  `person_password`, and may change it when they like; makes
+  repositories in their orgs, with Actions,
   and adopts them through temper's client. temper's admin is temper's; a
   person who deletes it makes the next start's reconcile and the next
   preparation stop, naming it.
@@ -1204,7 +1218,11 @@ temper box
   - for an asked group, named by its label (7.3): `<label>: starting`
     at its `start`, then `<label>: started`, `<label>: failed, <WHY>` and
     `<label>: stopped` as the pipe says them; its `step` lines are the
-    client's row's alone;
+    client's row's alone; each start of an owned forge, an asked
+    group's `started` or the box's own start of one that starts with it,
+    is followed by its hands (`../qa.md`, 4): `<label>: api
+    http://ADDRESS/api/v1` and `<label>: person LOGIN, read header PATH,
+    write header PATH`, the files' paths and never their contents;
   - a long step's exit, `<WHY>; restarting in <n> s`, and the box's give
     up, `<WHY>; giving up`, `<WHY>` in `failed`'s words (7.1);
   - `Stopping` at a first termination signal, and `Stopped` once every
@@ -3054,6 +3072,12 @@ conformance's `facts.txt`. What reconcile relies on, and the deliveries,
 are skein's: `forge-setup.md`, section 8 and `forge.md`, section 9. What
 the preparation relies on stays here:
 
+- **Forgejo's API takes the person's tokens** once the person need not
+  change their password (`api-token-of-a-user-whose-password-must-change-is-refused`,
+  403 "You must change your password", recorded at 17.0.0; hence
+  `--must-change-password=false`), and after a later change of it: a
+  token is the person's until it is revoked
+  (`api-token-survives-a-password-change`);
 - **Forgejo's command line** (6.3):
   - `admin user create --random-password` prints `generated random
     password is '<password>'` on its first line
@@ -3281,12 +3305,12 @@ Each is intended; what it needs is named with it.
   limits, the memory bound. Default: 8.3's working minimum, refined once
   a first run works.
 - **Overrides of `app.ini`.** Default: none; the settings are temper's.
-- **A token for the person's scripts and agents.** Default: none; the
-  person makes one on Forgejo's web, with the scopes they choose. A QA
-  harness playing the person makes one so, with read scopes alone, for
-  the agent it runs (`../client/tools.md`, section 10); never the
-  preparation's `admin_token`, which the engine's setup host alone takes
-  (section 9).
+- **A token for the person's scripts and agents.** Settled: the
+  preparation makes two, the person's read and write header files
+  (6.3, 6.5), which the box names (7.2); the person may make others on
+  Forgejo's web, with the scopes they choose; never the preparation's
+  `admin_token`, which the engine's setup host alone takes (section
+  9).
 - **The set up's intent across a restart** (6.7). Default: in memory
   alone, so a restart before the first repository is made loses it,
   and "New repository" makes it; a kept intent would be a stored

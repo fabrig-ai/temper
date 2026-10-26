@@ -318,6 +318,53 @@ fn advance(host: &Host, content: &[u8]) {
 }
 
 #[test]
+fn github_installation_records_end_at_the_pass_checkpoint() {
+    let directory = std::env::temp_dir().join(format!("temper-github-checkpoint-{}", std::process::id()));
+    crate::directories::make_private(&directory, skein_shell::effective_user()).expect("private fixture");
+    let document = directory.join("forge.json");
+    fs::write(
+        &document,
+        serde_json::to_vec(&serde_json::json!({
+            "listen":{"socket":"127.0.0.1:0"},"admin_token":directory.join("admin-token"),
+            "owner":"acme","repositories":[{"name":"widget","landing":"main","ci":null}],
+            "github":{"app":{"id":4242,"slug":"temper-test","bot":4243,"key":0},
+                "accounts":[{"login":"acme","id":10,"kind":"organization",
+                    "installation":{"id":1,"repositories":"all"}}]}
+        }))
+        .expect("document"),
+    )
+    .expect("fixture");
+    let path = directory.join("observations");
+    let arguments = Arguments {
+        kind: Kind::Forge,
+        source: Source::Document(document),
+        ready: None,
+        seed: 23,
+        observations: Some(path.clone()),
+    };
+    let (mut host, mut kernel) = start(&arguments, &mut Created::default()).expect("fixture");
+    // The seeded installation changes only the GitHub layer, without a domain observation.
+    host.observations();
+    let bytes = fs::read(&path).expect("records");
+    let rows: Vec<serde_json::Value> = bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice(line).expect("JSON"))
+        .collect();
+    assert_eq!(rows[1], serde_json::json!({"observation":"installation_created","installation":1}));
+    assert_eq!(rows.last(), Some(&serde_json::json!({"observations_lost":0})));
+    host.observations();
+    assert_eq!(fs::read(&path).expect("idle records"), bytes, "idle passes append nothing");
+    host.stopped = true;
+    host.peer.shutdown();
+    host.signal = Signal::Close;
+    assert_eq!(skein_shell::drive(&mut kernel, &skein_shell::Clock::new(), &mut host), Exit::Code(0));
+    assert!(host.is_empty());
+    assert_eq!(kernel.in_flight(), 0);
+    fs::remove_dir_all(directory).expect("remove fixture");
+}
+
+#[test]
 fn observation_write_failure_drains_the_peer_and_keeps_its_outputs() {
     // The read-only descriptor fails writes with EBADF without damaging the
     // real FILE. Restoring write access after failure detects later writes,

@@ -1,4 +1,5 @@
 //! The reference case on the cluster's processes (domain/testing.md, 2.6 and 5.3).
+mod settings;
 use super::{Ended, Scratch, WITHIN, cluster, ctl};
 use serde_json::{Value, json};
 use skein_fake_llm_domain::api::{Error, Finish, Line, Report, Rule, Script};
@@ -140,24 +141,6 @@ fn encode(scripts: &[Script], rules: &[Box<[Rule]>]) -> Value {
         })
         .collect()
 }
-/// Bring lab's combined document to tests/real-loop/src/fixtures.rs's base
-/// before applying the case fixture once, as that world's cluster does.
-fn base(value: &mut Value, charter: &Path) {
-    // The case owns its charters: fixture_placed appends director charter 2,
-    // which must not collide with a charter added to the lab's base.
-    let case: Value = serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("case base");
-    value["engine"]["charters"] = case["engine"]["charters"].clone();
-    // Forge delegates use the case's charter 1, which their authority permits;
-    // charter 2 belongs to the director, not the lab's coding agents.
-    value["application"]["charter"] = 1.into();
-    value["engine"]["charters"][0]["waiting_ms"] = 1.into();
-    value["engine"]["templates"][0]["ended_by"] = "result".into();
-    for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
-        if name.as_ref() == b"charters/chat.txt" {
-            super::write_private(charter, bytes.expose());
-        }
-    }
-}
 /// Departures from the description's documents: the case's forge owner and
 /// repositories in place of the lab's; the inert spare at id 1 goes when
 /// start-time adoption uses the forge's own ids instead of 1..=len.
@@ -218,6 +201,7 @@ pub fn run(
     ]);
     write(&forge.join("forge.json"), &document);
     let git = scratch.path().join("git");
+    let cluster_settings = description.settings_file();
     let (mut members, roots) = description.members();
     members.up(&["forge"]);
     let result = std::rc::Rc::new(std::cell::RefCell::new(None));
@@ -239,6 +223,8 @@ pub fn run(
         observed_at: Vec::new(),
         slots: Vec::new(),
         client: scratch.path().join("client"),
+        cluster_settings,
+        study: Value::Null,
         provisioning: false,
         live: None,
         placed: placed.to_vec(),
@@ -302,6 +288,8 @@ struct Judge {
     observed_at: Vec<Option<Wall>>,
     slots: Vec<usize>,
     client: PathBuf,
+    cluster_settings: PathBuf,
+    study: Value,
     provisioning: bool,
     live: Option<Value>,
     placed: Vec<u64>,
@@ -350,7 +338,7 @@ impl Judge {
         agent["endpoints"][0]["address"] = llm.to_string().into();
         value["workers"] = ws["workers"].clone();
         value["application"]["workers"] = ws["application"]["workers"].clone();
-        base(&mut value, &engine_dir.join("config/charters/chat.txt"));
+        settings::base(&mut value, &self.cluster_settings);
         let forge = self.members.capture("forge", "address").expect("forge address").parse().expect("socket");
         // The fake forge removes its token file when it ends, so the token is read while it runs.
         let document = read(&self.members.dir("forge").join("forge.json"));
@@ -415,6 +403,7 @@ impl Judge {
         }
         value["workers"] = json!([]);
         value["application"]["workers"] = json!([]);
+        self.study = settings::take(&mut value);
         write(&engine_dir.join("config/temper.json"), &value);
     }
     fn arguments(&self, argv: &calls::Argv) -> Vec<String> {
@@ -493,6 +482,21 @@ impl Judge {
         self.processed = batch.ends().len();
         if !self.provisioning && self.calls.len() == 1 {
             self.provisioning = true;
+            let study = self.study.clone();
+            let scratch = self.client.parent().expect("scratch").to_path_buf();
+            let file = scratch.join("case-settings.json");
+            for arguments in [
+                vec!["setting", "charter", "1", "--json"],
+                vec!["setting", "template", "1", "--json"],
+                vec!["setting", "rules", "--json"],
+                vec!["setting", "policy", "1", "--json"],
+            ] {
+                batch.push(ctl::Step::Run(ctl::Call::new(&arguments)));
+            }
+            batch.push(ctl::Step::Then(Box::new(move |calls| {
+                settings::change(&study, &calls[calls.len() - 4..], &file)
+            })));
+            batch.push(ctl::Step::Project { scratch, client: self.client.clone(), name: "Case", number: 1 });
             let key = self.members.dir("llm").join("llm.key");
             batch.push(ctl::Step::Run(ctl::Call::new(&[
                 "add-key",

@@ -100,10 +100,19 @@ pub enum Step {
     Pause,
     Resume,
     NextLink,
+    /// Release a scripted response after observing the pending review.
+    ReleaseLlm(&'static [u8]),
     /// Provision a service with only a project member role through jig.
     Member {
         scratch: PathBuf,
         directory: &'static str,
+    },
+    /// Make a project from the owner's changed policy 1 through the public client wire.
+    Project {
+        scratch: PathBuf,
+        client: PathBuf,
+        name: &'static str,
+        number: u32,
     },
     Open {
         directory: &'static str,
@@ -323,6 +332,7 @@ enum Action {
     ProgramLogin(&'static str),
     Signal,
     NextLink,
+    ReleaseLlm(&'static [u8]),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -369,6 +379,7 @@ pub struct Calls {
     phase: Option<Time>,
     forgejo: Option<u32>,
     ends: Vec<Ended>,
+    last_unmet: Option<Ended>,
     observed_at: Vec<Option<Wall>>,
     complete: Queue<Complete>,
     submit: Queue<Submit>,
@@ -402,6 +413,20 @@ impl Calls {
     #[must_use]
     pub fn idle(&self) -> bool {
         self.done()
+    }
+    pub(super) fn last_unmet(&self) -> Option<&Ended> {
+        self.last_unmet.as_ref()
+    }
+    pub(super) fn llm_release(&self) -> Option<&'static [u8]> {
+        match self.action {
+            Some(Action::ReleaseLlm(name)) => Some(name),
+            _ => None,
+        }
+    }
+    pub(super) fn llm_released(&mut self) {
+        assert!(self.llm_release().is_some());
+        self.action = None;
+        self.referee_work = RefereeWork::Waiting;
     }
     pub(super) fn visiting(&self) -> bool {
         matches!(self.action, Some(Action::Visit))
@@ -515,6 +540,7 @@ impl Calls {
             phase: None,
             forgejo,
             ends: Vec::new(),
+            last_unmet: None,
             observed_at: Vec::new(),
             complete: Queue::with_capacity(32),
             submit: Queue::with_capacity(32),
@@ -616,13 +642,14 @@ impl Calls {
                     } else {
                         now.saturating_add(PACE)
                     };
+                    self.last_unmet = Some(ended);
                     self.action = Some(Action::Until(call, condition));
                     self.retry = Some(next);
                 }
             }
             Action::Visit => panic!("a visit has no child"),
             Action::Stderr(_) | Action::ProgramLogin(_) => panic!("a stderr gate has no child"),
-            Action::NextLink => unreachable!("link wait has no child"),
+            Action::NextLink | Action::ReleaseLlm(_) => unreachable!("referee action has no child"),
             Action::Signal => assert_eq!(
                 ended.exit,
                 Some(Exit::Code(0)),
@@ -689,7 +716,13 @@ impl Calls {
             || self.awaiting_started
             || matches!(
                 self.action,
-                Some(Action::Stderr(_) | Action::ProgramLogin(_) | Action::NextLink | Action::Visit)
+                Some(
+                    Action::Stderr(_)
+                        | Action::ProgramLogin(_)
+                        | Action::NextLink
+                        | Action::Visit
+                        | Action::ReleaseLlm(_)
+                )
             )
             || self.retry.is_some_and(|retry| retry > now)
     }
@@ -700,6 +733,27 @@ impl Calls {
         }
         self.action = Some(action);
         self.referee_work = RefereeWork::Ready;
+    }
+    fn make_member(&mut self, scratch: &Path, directory: &'static str) {
+        let root = skein_shell::open_root(scratch).expect("member fixture root");
+        self.member = Some(member::Member::new(root, scratch, &scratch.join("client"), directory));
+    }
+    fn make_project(&mut self, scratch: &Path, client: &Path, name: &'static str, number: u32) {
+        let root = skein_shell::open_root(scratch).expect("project fixture root");
+        self.member = Some(member::Member::project(root, scratch, client, name, number));
+    }
+    fn cut_started(&mut self) {
+        let (child, _) = self.started.as_mut().expect("call still running at cut");
+        child.signals += 1;
+        self.awaiting_started = true;
+        self.submit.push(Submit {
+            op: child.token(CUT),
+            kind: Op::Signal {
+                pidfd: child.pidfd.expect("started call pidfd"),
+                signal: Signal::Terminate,
+                to: Target::Child,
+            },
+        });
     }
     fn advance(&mut self, now: Time) {
         // A box that exits before printing its link must be diagnosed by
@@ -741,10 +795,8 @@ impl Calls {
                     self.advance(now);
                 }
             }
-            Some(Step::Member { scratch, directory }) => {
-                let root = skein_shell::open_root(&scratch).expect("member fixture root");
-                self.member = Some(member::Member::new(root, &scratch, &scratch.join("client"), directory));
-            }
+            Some(Step::Member { scratch, directory }) => self.make_member(&scratch, directory),
+            Some(Step::Project { scratch, client, name, number }) => self.make_project(&scratch, &client, name, number),
             Some(Step::Open { directory, until }) => {
                 self.action = Some(Action::Run);
                 let args = super::terminal::open_arguments(Path::new(directory), self.link());
@@ -755,6 +807,10 @@ impl Calls {
                     false,
                 );
                 self.child.as_mut().expect("open child").typing = until.map_or(Input::Hold, Input::After);
+            }
+            Some(Step::ReleaseLlm(name)) => {
+                self.action = Some(Action::ReleaseLlm(name));
+                self.referee_work = RefereeWork::Ready;
             }
             Some(Step::Visit) => {
                 self.action = Some(Action::Visit);
@@ -779,19 +835,7 @@ impl Calls {
                 self.action = Some(Action::Until(call.clone(), condition));
                 self.start(call, false);
             }
-            Some(Step::Cut) => {
-                let (child, _) = self.started.as_mut().expect("call still running at cut");
-                child.signals += 1;
-                self.awaiting_started = true;
-                self.submit.push(Submit {
-                    op: child.token(CUT),
-                    kind: Op::Signal {
-                        pidfd: child.pidfd.expect("started call pidfd"),
-                        signal: Signal::Terminate,
-                        to: Target::Child,
-                    },
-                });
-            }
+            Some(Step::Cut) => self.cut_started(),
             Some(step @ (Step::Pause | Step::Resume)) => {
                 self.action = Some(Action::Signal);
                 let signal: &[u8] = if matches!(step, Step::Pause) { b"-STOP" } else { b"-CONT" };
@@ -1065,8 +1109,13 @@ pub fn settings_change(inventory: &Ended, file: &Path, key: &str) -> Call {
 pub fn settings_proposal(inventory: &Ended, file: &Path, key: &str) -> Call {
     settings_call("propose-settings", inventory, file, key)
 }
+/// The newest revision actually read by the owner.
+#[must_use]
+pub fn newest(inventory: &Ended) -> u64 {
+    json(inventory)["newest"].as_u64().expect("newest settings revision")
+}
 fn settings_call(verb: &str, inventory: &Ended, file: &Path, key: &str) -> Call {
-    let revision = json(inventory)["newest"].as_u64().expect("newest settings revision");
+    let revision = newest(inventory);
     Call::new(&[verb, file.to_str().expect("fixture FILE path"), "--against", &revision.to_string(), "--key", key])
 }
 

@@ -50,7 +50,7 @@ fn an_app_id_takes_only_digits_and_a_nonzero_u64() {
 fn a_key_past_the_pasted_bundle_bound_is_refused_on_the_page() {
     let (mut root, _, _) = connect::opened(true);
     id(&mut root, b"7");
-    key(&mut root, &[b'x'; 4091]);
+    key(&mut root, &[b'x'; 4090]);
     assert!(act(&mut root, forge::Act::ConnectApp { forge: 2 }).is_empty());
     assert!(root.forge().app_form().too_long);
     assert!(!root.forge().app_form().has_key());
@@ -113,7 +113,7 @@ fn password_lf_and_crlf_forms_carry_the_same_body_with_the_armour_separators() {
     ] {
         let value = carried(input);
         assert_eq!(value.expose(), forge::forges::pasted_app_key(expected).unwrap().expose());
-        let pem = &value.expose()[6..];
+        let pem = &value.expose()[7..];
         assert!(
             pem.starts_with(b"-----BEGIN RSA PRIVATE KEY-----\n")
                 || pem.starts_with(b"-----BEGIN RSA PRIVATE KEY-----\r\n")
@@ -158,9 +158,9 @@ fn restoration_trims_outer_whitespace_and_changes_only_missing_rsa_armour_separa
 #[test]
 #[expect(clippy::disallowed_macros, reason = "the test constructs a PEM at the bundle bound")]
 fn the_bundle_bound_includes_restored_separators() {
-    assert_eq!(carried(&[b'x'; 4090]).len(), 4096);
-    let pem = format!("-----BEGIN RSA PRIVATE KEY-----{}-----END RSA PRIVATE KEY-----", "A".repeat(4030));
-    assert_eq!(pem.len(), 4090);
+    assert_eq!(carried(&[b'x'; 4089]).len(), 4096);
+    let pem = format!("-----BEGIN RSA PRIVATE KEY-----{}-----END RSA PRIVATE KEY-----", "A".repeat(4029));
+    assert_eq!(pem.len(), 4089);
     let (mut root, _, _) = connect::opened(true);
     id(&mut root, b"7");
     key(&mut root, pem.as_bytes());

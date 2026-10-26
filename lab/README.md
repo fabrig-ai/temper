@@ -6,8 +6,9 @@ using the canonical [cluster/](cluster/) documents, a TLS fake LLM, two
 remote workers and the subject's fake git.
 
 The runner's private bootstrap pipes engine stdout into `ctl sign-in -`.
-The seed adds the fake key, waits for accounts and forge, adopts `fake/widget`,
-then runs the story through `tools/ctl`. The story asks for NOTICE, requires
+The seed applies `settings.json`, adds the fake key, waits for accounts and
+forge, adopts `fake/widget`, then runs the story through `tools/ctl`.
+The story asks for NOTICE, requires
 the delegate's historical successful landing result and a complete root tree
 with no live or held delegates. The root chat stays open. Public ctl calls
 use exactly `http://HOST:PORT/` from the engine's clients readiness capture.
@@ -17,6 +18,28 @@ its end-state check reads those files only. Stopped collections copy the
 forge observations before the engine store, after confirmed exits and empty
 trees; the promises check reads these copies and independent temper records.
 See [checks/README.md](chat-change-smoke/checks/README.md).
+
+The engine documents use temper's stock settings. Each cluster-family
+experiment keeps its study's changes in its own `settings.json`: charter 1's
+wait and run time, coding charter 2's shell access, and chat template 1's cap
+of 50. S, H, P, cluster-web and look-live apply that FILE with a `settings`
+action immediately after their owner signs in and before the story. Canonical
+`cluster/` stays actionless: its native process harness signs in and applies
+`cluster/settings.json` through `temper ctl change-settings` before the first
+chat. Both paths change against the fresh deployment's revision 1. The
+charters' ordinary instructions come from the binary's stock; no instruction
+files are copied into a deployment.
+
+The process tier's reference cases fold the cluster's cap into one settings
+change with their own charters, wait and result ending. Their harness changes
+settings after sign-in, then makes the project from the changed policy 1;
+it starts without a seeded project.
+
+`live-0a/` needs no settings change. `live-0b/` applies its own
+`settings.json` after sign-in, raising its charters' spend to 280 and policy
+1's and the rules' budgets to 600, with maximum run spend 280. It starts
+without a seeded project: the later `forge-setup` makes `hello` from the
+changed policy 1, so the project has the intended 600-unit ceiling.
 
 With the owner's subject digest, run from this repository:
 
@@ -471,16 +494,13 @@ experiments stand on, and it costs no model call.
 
 ## Its files
 
-- **`cluster/`'s, copied:** `llm.json`, `chat.txt`, `agent.json`,
-  `w1.*`, `w2.*` and `forge-1.*` byte for byte; `engine.json` but for
+- **`cluster/`'s, copied:** `llm.json`, `settings.json`, `agent.json`,
+  `w1.*`, `w2.*` and `forge.json` byte for byte; `engine.json` but for
   `application.clients.bundle`, `"{proc.engine.dir}/bundle"` where
-  `cluster/`'s is null. `experiment.json`'s processes `llm`, `engine`,
-  `w1` and `w2` are `cluster/`'s member for member, but for `engine`'s
-  `files`, which add the bundle's tree, `{"path": "bundle", "tree":
-  "bundle"}` (the lab's `lab.md`, 4.3), and `llm`'s `after`: `cluster/`'s
-  `forge` member, which only the process tier's case stories reach
-  (`docs/design/domain/testing.md`, 2.6), is not the browser's, so its
-  `llm` starts first. Copies, not names: an
+  `cluster/`'s is null. `experiment.json`'s processes `forge`, `llm`,
+  `engine`, `w1` and `w2` are `cluster/`'s member for member, but for
+  `engine`'s `files`, which add the bundle's tree, `{"path": "bundle",
+  "tree": "bundle"}` (the lab's `lab.md`, 4.3). Copies, not names: an
   experiment's digest is its own directory's tree (the lab's `lab.md`,
   2.3), so an experiment that named another's files would run with
   bytes its key does not hold, and the runner would need a new
@@ -510,6 +530,7 @@ Each `{artifact.temper} ctl` action is `draft/qa-lab.md`'s, 5.1. In order:
 | Action | Its argv | Its stdin | For |
 |---|---|---|---|
 | `sign-in` | `{artifact.temper} ctl {dir.client} sign-in -` | `http://{proc.engine.ready.link}` | the owner signs in by serve's printed link, which spends it |
+| `settings` | `{artifact.temper} ctl {dir.client} change-settings {experiment}/settings.json --against 1 --key lab-settings` | | the study's settings, after owner sign-in |
 | `add-key` | `{artifact.temper} ctl {dir.client} add-key 1 {proc.llm.dir}/llm.key --deployment --key cluster-web-llm` | | the fake model's key |
 | `usable` | `{artifact.temper} ctl {dir.client} wait accounts --until usable --timeout 200` | | the account usable |
 | `relink` | `/bin/sh {experiment}/relink {artifact.temper} {dir.spent}` | the spent link again | serve refuses it and prints a fresh one, the action's awaited line: `{"process": "engine", "stream": "stdout", "prefix": "http://", "capture": "link"}` (the lab's `lab.md`, 4.5) |
@@ -561,9 +582,9 @@ person's; the names are o/web-look's words for the pages:
    turn commits (`docs/design/protocol/llm.md`, 7; an agent process
    gives no provisional text, `client/tools.md`). The cue's turn writes
    the reply, then calls `wait`, which ends at the charter's
-   `waiting_ms`, 120 s (`cluster/engine.json`): the reply shows 120 s
-   after Start, most of a run's time, and the wait's 180 s (90 s before the user's doubling of 10-22, provisional) leave it a
-   margin. A shorter fixture or `waiting_ms` would only hide it.
+   `waiting`, 120 s (`cluster/settings.json`, in nanoseconds): the reply
+   shows 120 s after Start, most of a run's time, and the wait's 180 s (90 s before the user's doubling of 10-22, provisional) leave it a
+   margin. A shorter fixture or wait would only hide it.
 3. `address`: the chat's, `/chats/<task>` on the origin, kept.
 4. `go /chats`, `wait heading Chats --exact`; `go` the chat's path,
    `wait text "First worker replied." --in log Conversation`: its page
@@ -619,10 +640,11 @@ evidence, never goldens.
 ## Its tests
 
 - **`lab/tests/unit/test_cluster_web.py`,** in the gate, pure: the
-  copies equal `cluster/`'s, `engine.json` but for its bundle's line,
-  and the four processes but for `engine`'s tree; `browser` and the
-  seed as above; the check's decisions: the page of each route and of
-  the others, the seed's sign-in left out, one line a signature, the
+  copies including `settings.json` equal `cluster/`'s, `engine.json` but
+  for its bundle's line, and the five processes but for `engine`'s tree;
+  `browser` and the seed's settings action after sign-in as above; the
+  check's decisions: the page of each route and of the others, the seed's
+  sign-in left out, one line a signature, the
   statuses, an unreadable line.
 - **`lab/tests/process/test_cluster_web.py`,** on demand: `relink` and
   `smoke` under the real shell against stand-ins for `temper ctl` and
@@ -655,9 +677,9 @@ temper's agent processes do not give (`docs/design/protocol/llm.md`,
     first reply commits; the second turn then waits uncommitted, a quiet
     page whose composer stays. `cluster-first-chat`'s second turn is
     already its final text.
-  - **`engine.json`'s chat charter** waits 300 s (`waiting_ms`), its
-    time and the policy's bounds widened to hold it, as temper's
-    startup checks require: the quiet window, about ten times the
+  - **`settings.json`'s chat charter** waits 300 s (`waiting`), with
+    its run time 310 s and reserve time 10 s (all in nanoseconds),
+    applied by the settings action after owner sign-in: the quiet window, about ten times the
     30 s its steps and captures take. No turn commits inside it, so
     the chatbar holds still (its status "waiting on your words", its
     spend). When it closes, the second reply commits, the spend moves,
@@ -716,7 +738,7 @@ Reject with reason, Accept goal), which a chat at rest has none of.
 
 ## The seed
 
-`cluster-web/`'s actions through `signed-in`, then, each `steps`
+`cluster-web/`'s actions through `signed-in` (including its settings action), then, each `steps`
 phase `/bin/sh {experiment}/steps PHASE {runner}/hand/browse
 {proc.browser.ready.address}`:
 

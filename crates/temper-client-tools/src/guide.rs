@@ -47,6 +47,9 @@ in an items FILE, and edit it before one keyed decision:
 Use setting ... --json > FILE to save a value; FILE for change-settings is
 {"items":[{"setting":{"kind":"charter","number":3},"set":VALUE}]}.
 Running work stays unless --running moves. On stale, read settings again and retry.
+Agent task reads print settings: revision R, the revision recorded by the task.
+A different live run adds its run on N; a different newest adds newest N.
+Procedure and person tasks have no settings line. Task --json carries these numbers.
 
 Read accounts without values; model names and limits are supplied facts:
   temper ctl DIRECTORY accounts
@@ -86,14 +89,14 @@ Connect an existing GitHub App with its private PEM file:
 For a shared App, set forge 2's app_read_only to true in C/temper.json before starting the box.
 Its hook is read and left; an unaccepted installation is kept, never uninstalled; the key and grants are checked.
 The private file must be regular, owned by you, with no group or other permissions.
-PEM is 1 to 4090 bytes after one final newline; the carried bundle is at most 4096 bytes.
+PEM is 1 to 4089 bytes after one final newline; the carried bundle is at most 4096 bytes.
 It is sent once, never kept or replayed; use the same --key and file to recover a lost answer.
 Read the connected App's installations, then accept one already made, with no browser:
   temper ctl DIRECTORY forges
   temper ctl DIRECTORY forge-accept 2 1
   temper ctl DIRECTORY repositories 2 --installation 1 --page 1
   temper ctl DIRECTORY adopt --project 1 --forge 2 --owner OWNER --name NAME --landing main --key github-adopt
-Use the installation id from forges and the owner/name from repositories.
+Use the installation id from forges and the owner/name from repositories; add --no-home if Forgejo is already home, or choose a new project.
 An unaccepted installation says not accepted; read-only mode says kept: the App is read-only.
 Without read-only, reconcile uninstalls a stray once older than an installation link's lifetime: accept it first.
 Or install on another account by opening the printed address on the engine's machine:

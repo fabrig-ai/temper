@@ -52,6 +52,7 @@ pub(crate) enum Phase {
 }
 #[derive(Default)]
 struct Progress {
+    setup_party: Option<u64>,
     at: usize,
     life: u32,
     signed: bool,
@@ -69,6 +70,9 @@ pub struct Pushed {
 thread_local! {
     static STORE: RefCell<Option<Rc<RefCell<Store>>>> = const { RefCell::new(None) };
     static PROGRESS: RefCell<Progress> = RefCell::new(Progress::default());
+}
+pub(crate) fn setup_signed(party: u64) {
+    PROGRESS.with(|progress| progress.borrow_mut().setup_party = Some(party));
 }
 pub(crate) struct ServiceHost {
     pub(crate) service: temper_playground::Service,
@@ -139,6 +143,7 @@ impl Host for ServiceHost {
 pub(crate) enum Proc {
     Service(Box<ServiceHost>),
     Playground(temper_playground::Process),
+    Ctl(Box<crate::ctl::Recorded>),
     Client(Box<SignalHost<Person>>),
 }
 impl Proc {
@@ -146,6 +151,7 @@ impl Proc {
         match self {
             Self::Service(h) => h.as_ref(),
             Self::Playground(h) => h,
+            Self::Ctl(h) => h.as_ref(),
             Self::Client(h) => h.as_ref(),
         }
     }
@@ -153,6 +159,7 @@ impl Proc {
         match self {
             Self::Service(h) => h.as_mut(),
             Self::Playground(h) => h,
+            Self::Ctl(h) => h.as_mut(),
             Self::Client(h) => h.as_mut(),
         }
     }
@@ -203,6 +210,8 @@ pub(crate) struct Person {
     pub(crate) signed_in: u32,
     pub(crate) finished: bool,
     project_selected: bool,
+    setup: Option<crate::ctl::Caller>,
+    printed_link: Box<[u8]>,
     completions: Queue<Complete>,
     submissions: Queue<Submit>,
     offset: usize,
@@ -255,6 +264,8 @@ impl Person {
             signed_in: 0,
             finished: false,
             project_selected: false,
+            setup: None,
+            printed_link: Box::new([]),
             completions: Queue::with_capacity(512),
             submissions: Queue::with_capacity(512),
             offset,
@@ -264,6 +275,11 @@ impl Person {
     }
     pub(crate) fn sign_in(&mut self, link: &[u8]) {
         assert!(self.client.is_none(), "one printed link");
+        self.printed_link = link.into();
+        if stories::needs_settings() {
+            self.setup = Some(crate::ctl::Caller::new(self.root.expect("client parent"), link));
+            return;
+        }
         self.client = Some(
             NativeClient::new(
                 ClientSettings {
@@ -328,10 +344,14 @@ fn prepare_account(
     }
     true
 }
-impl Host for Person {
-    fn iterate(&mut self, now: Time, wall: Wall) {
-        let Some(client) = &mut self.client else { return };
+impl Person {
+    fn prepare_client(&mut self, now: Time, wall: Wall) {
         while let Some(complete) = self.completions.pop() {
+            if crate::ctl::Caller::owns(complete.op) {
+                self.setup.as_mut().expect("ctl setup").completions().push(complete);
+                continue;
+            }
+            let client = self.client.as_mut().expect("native completion");
             self.cache.complete(&complete);
             let received = self.wire.received.len();
             self.wire.complete(&complete);
@@ -344,8 +364,45 @@ impl Host for Person {
             }
             client.completions().push(complete);
         }
+        if let Some(setup) = &mut self.setup {
+            setup.iterate(now, wall);
+            while let Some(submit) = setup.submissions().pop() {
+                self.submissions.push(submit);
+            }
+            if setup.is_empty() {
+                self.setup = None;
+                let party = PROGRESS.with(|progress| progress.borrow().setup_party.expect("observed CLI sign-in"));
+                self.wire.received.push(referee::client::Received::SignedIn(party));
+                self.signed_in = 1;
+                PROGRESS.with(|progress| progress.borrow_mut().signed = true);
+                self.client = Some(
+                    NativeClient::new(
+                        ClientSettings {
+                            engine: skein_io::Addr::Ip(fixtures::CLIENTS),
+                            directory: b"private".as_slice().into(),
+                            limits: stories::client_limits(),
+                        },
+                        self.root.take().expect("private parent"),
+                        1000,
+                        fixtures::SEED,
+                        Start::Token,
+                    )
+                    .expect("saved sign-in"),
+                );
+            }
+        }
+    }
+}
+impl Host for Person {
+    fn iterate(&mut self, now: Time, wall: Wall) {
+        self.prepare_client(now, wall);
+        let Some(client) = &mut self.client else { return };
         client.iterate(now, wall);
         while let Some(signing) = client.signing() {
+            if matches!(signing, Signing::Again) {
+                client.sign_in(&self.printed_link).expect("retry the printed link while startup restores settings");
+                continue;
+            }
             assert!(matches!(signing, Signing::SignedIn { .. }), "sign-in failed: {signing:?}");
             self.signed_in += 1;
             PROGRESS.with(|progress| progress.borrow_mut().signed = true);
@@ -441,6 +498,7 @@ impl Host for Person {
         !self.completions.is_empty()
             || self.wake.is_some_and(|at| at <= now)
             || self.client.as_ref().is_some_and(|client| client.work_pending(now))
+            || self.setup.as_ref().is_some_and(|setup| setup.work_pending(now))
     }
     fn next_deadline(&self) -> Option<Time> {
         [self.client.as_ref().and_then(Host::next_deadline), self.wake].into_iter().flatten().min()
@@ -674,6 +732,16 @@ fn fake_forge(inherited: &Inherited) -> Proc {
     Proc::Playground(Process::Forge(Box::new(SignalHost::new(peer(), Some(inherited.signal)))))
 }
 fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>) {
+    let limits = temper_client_shell_cli::limits::native();
+    world.host_roots(
+        skein_world::HostedProgram {
+            program: crate::ctl::PROGRAM.into(),
+            make: |spawn, inherited| Proc::Ctl(Box::new(crate::ctl::host(spawn, inherited))),
+            instances: 1,
+            operations: skein_io::operations(&limits.io).expect("ctl operations") * 2 + 5,
+        },
+        crate::ctl::roots,
+    );
     world.host_roots(
         skein_world::HostedProgram {
             program: temper_playground::AGENT.into(),
@@ -758,6 +826,13 @@ fn token_bytes(disk: &mut skein_fake_machine::Machine) -> Vec<u8> {
     bytes
 }
 
+fn write_settings(disk: &mut skein_fake_machine::Machine) {
+    if stories::needs_settings() {
+        let root = disk.lay(&[skein_fake_machine::Item::file(b"settings.json", &stories::settings_file())]);
+        disk.close(root);
+    }
+}
+
 fn run_phase(
     settings: Settings,
     scenario: Story,
@@ -767,6 +842,8 @@ fn run_phase(
     run: Rc<RefCell<referee::Run>>,
 ) -> (Outcome, skein_fake_machine::Machine, Store) {
     stories::set(scenario);
+    stories::setup_settings(matches!(phase, Phase::Story | Phase::Drain));
+    write_settings(&mut disk);
     PROGRESS.with(|progress| *progress.borrow_mut() = Progress::default());
     let client = matches!(phase, Phase::Story | Phase::SignIn | Phase::Drain).then(|| disk.reopen_root(2));
     let store = Rc::new(RefCell::new(previous));
@@ -824,7 +901,7 @@ fn run_phase(
         .iter()
         .filter_map(|proc| match proc {
             Proc::Client(person) => Some(person.signed_in),
-            Proc::Service(_) | Proc::Playground(_) => None,
+            Proc::Service(_) | Proc::Playground(_) | Proc::Ctl(_) => None,
         })
         .sum();
     let chats_answered = if matches!(scenario, Story::ChatReadThenWait { .. }) {

@@ -1922,7 +1922,7 @@ if [ "$1" = --version ]; then
 fi
 test "$LISTEN_FDS" = 1 || exit 22
 test -S /proc/self/fd/3 || exit 23
-printf '%s' "$$" > '{}'
+printf '%s' "$$" > '{pid}.tmp' && mv '{pid}.tmp' '{pid}'
 export TEMPER_FORGE_PARENT_HELPER=1
 '{}' --exact forge_parent_listener_helper --nocapture &
 helper=$!
@@ -1932,8 +1932,8 @@ wait "$helper"
 exit 38
 "#,
             skein_forge::forgejo::pin::VERSION,
-            pid_file.display(),
-            test.display()
+            test.display(),
+            pid = pid_file.display()
         ),
     )
     .expect("fake Forgejo");

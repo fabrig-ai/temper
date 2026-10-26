@@ -1288,6 +1288,7 @@ fn setup_rows_and_answers_agree_in_every_connection_state() {
                         [
                             Request::MarkedForges,
                             Request::SetUp {
+                                playground: false,
                                 forge: 1,
                                 request,
                                 org: b"work".as_slice().into(),
@@ -1448,6 +1449,7 @@ fn setup_application(forge: u16, request: Token, token: Token) -> Event {
         token,
         retention: Duration::from_secs(60),
         ask: Ask::SetUp {
+            playground: false,
             forge,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
@@ -1512,6 +1514,7 @@ fn setup_flights_refuse_busy_at_the_bound_and_an_answer_frees_room() {
         [
             Request::MarkedForges,
             Request::SetUp {
+                playground: false,
                 forge: 1,
                 request,
                 org: b"work".as_slice().into(),
@@ -1613,6 +1616,7 @@ fn a_new_project_is_admitted_and_retained_until_the_repository_is_made() {
             token,
             retention: Duration::from_secs(60),
             ask: Ask::SetUp {
+                playground: false,
                 forge: 1,
                 org: b"work".as_slice().into(),
                 repository: b"hello".as_slice().into(),
@@ -1625,6 +1629,7 @@ fn a_new_project_is_admitted_and_retained_until_the_repository_is_made() {
         [
             Request::MarkedForges,
             Request::SetUp {
+                playground: false,
                 forge: 1,
                 request,
                 org: b"work".as_slice().into(),
@@ -1680,6 +1685,7 @@ fn setup_names_are_validated_at_admission_on_both_sides_of_the_name_bound() {
                 };
                 let accepted = given::check_create(&kit_limits, domain_bound, &plan).is_ok();
                 let ask = Ask::SetUp {
+                    playground: false,
                     forge: 1,
                     org: org_name.clone(),
                     repository: repository.clone(),
@@ -1701,7 +1707,10 @@ fn setup_names_are_validated_at_admission_on_both_sides_of_the_name_bound() {
                 );
                 if accepted {
                     assert_eq!(emitted.pop(), Some(Request::MarkedForges));
-                    assert_eq!(emitted.pop(), Some(Request::SetUp { forge: 1, request, org: org_name, repository }));
+                    assert_eq!(
+                        emitted.pop(),
+                        Some(Request::SetUp { playground: false, forge: 1, request, org: org_name, repository })
+                    );
                     assert_eq!(d.forges().rows[0].first.as_ref().unwrap().state, FirstState::Making);
                 } else {
                     assert_eq!(emitted.pop(), Some(Request::ApplicationDone { request, token }));
@@ -1729,6 +1738,7 @@ fn admitted_setup_projects_its_fields_as_making_and_the_next_admission_replaces_
         let request = Token::new(number);
         let token = Token::new(number + 1);
         let first = First {
+            playground: false,
             org: org.into(),
             repository: repository.into(),
             project: SetUpProject::Existing(project),
@@ -1736,6 +1746,7 @@ fn admitted_setup_projects_its_fields_as_making_and_the_next_admission_replaces_
             label: Box::from(b"temper-host".as_slice()),
         };
         let ask = Ask::SetUp {
+            playground: false,
             forge: 1,
             org: first.org.clone(),
             repository: first.repository.clone(),
@@ -1756,7 +1767,7 @@ fn admitted_setup_projects_its_fields_as_making_and_the_next_admission_replaces_
             .as_ref(),
             [
                 Request::MarkedForges,
-                Request::SetUp { forge: 1, request, org: org.into(), repository: repository.into() }
+                Request::SetUp { playground: false, forge: 1, request, org: org.into(), repository: repository.into() }
             ]
         );
         assert_eq!(d.forges().rows[0].first, Some(first));

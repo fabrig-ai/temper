@@ -70,6 +70,9 @@ class Live0aTests(unittest.TestCase):
         text = render('temper.json')
         self.assertNotRegex(text, r'\{[\w-]+(?:\.[\w-]+)+\}')
         configuration = json.loads(text)
+        for member in ('charters', 'templates', 'policies', 'rules'):
+            self.assertNotIn(member, configuration['engine'])
+        self.assertFalse((LIVE / 'settings.json').exists())
         application = configuration['application']
         self.assertEqual(len(application['setup']), 1)
         setup = application['setup'][0]
@@ -91,7 +94,7 @@ class Live0aTests(unittest.TestCase):
         self.assertEqual(agent['configuration'], '/sample/box/config/agent.json')
 
     def test_other_templates_render_without_lab_names(self):
-        for name in ('agent.json', 'chat.txt', 'coding.txt', 'worker.secret', 'worker.digest'):
+        for name in ('agent.json', 'worker.secret', 'worker.digest'):
             with self.subTest(file=name):
                 text = render(name)
                 self.assertNotRegex(text, r'\{[\w-]+(?:\.[\w-]+)+\}')

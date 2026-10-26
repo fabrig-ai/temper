@@ -53,10 +53,13 @@ desktop browsers are well supported (the user, 10-26).
   the box's playground: the banner, the three suggested requests, a
   change followed from a branch to `main`.
 - **Only what the deployment can do is offered.** The playground's
-  document configures the demo alone, so the client offers no Set up
-  temper, no Connect a forge and no Connect a model. That is the
+  document configures the demo alone, so the client should offer no Set
+  up temper, no Connect a forge and no Connect a model. That is the
   client's rule for every deployment that configures them out, never a
-  branch for the playground (`../client/README.md`).
+  branch for the playground (`../client/README.md`). Until it is built,
+  the welcome offers Set up temper beside Try the playground, as on any
+  deployment, and the playground's stories never press it (section
+  11).
 - **The frame around the client** is the page's own, not the client's:
   what this is ("temper's playground: a scripted model and forge,
   running in your browser"), the world's controls (pause, speed, reset,
@@ -277,6 +280,10 @@ desktop browsers are well supported (the user, 10-26).
 
 ## 11. Open questions
 
+- **What the welcome offers on a deployment that can set nothing up:**
+  the client tells nothing of it today, and the welcome is the user's
+  page. Default: the welcome as it is, Set up temper unpressed, until
+  the user says what replaces it.
 - **The memory and download bars for a desktop browser:** the draft's
   256 MiB and 6 MB were a phone's; measured first, then the user's.
 - **The welcome, or straight in.** Default: the welcome, the product's

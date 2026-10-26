@@ -135,11 +135,14 @@ impl Connection {
         let limits = native_link_limits();
         match path {
             b"/jig/v1/sign-in/link" => {
-                let wire::SignInAnswer::SignedIn(value) =
-                    wire::SignInAnswer::decode(&limits.wire, &mut Reader::new(bytes)).expect("sign-in reply bytes")
-                else {
-                    panic!("sign-in accepted")
-                };
+                let answer =
+                    wire::SignInAnswer::decode(&limits.wire, &mut Reader::new(bytes)).expect("sign-in reply bytes");
+                // NotReady asks the native caller to retry after startup. Only an
+                // actual SignedIn answer releases the referee's sign-in receipt.
+                if matches!(answer, wire::SignInAnswer::NotReady) {
+                    return;
+                }
+                let wire::SignInAnswer::SignedIn(value) = answer else { panic!("sign-in accepted: {answer:?}") };
                 received.push(Received::SignedIn(value.party()));
             }
             b"/jig/v1/request" => {

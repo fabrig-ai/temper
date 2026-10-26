@@ -428,16 +428,17 @@ impl Referee<Proc> for Judge {
             self.answered(now, procs);
         }
         if matches!(self.stage, Stage::Done) && !self.stopping && procs[2..2 + PAGES].iter().all(Host::is_empty) {
+            let declared = procs[2].caller().leftovers();
             let mut obligations = crate::ending::Obligations::default();
             for (index, proc) in procs.iter().enumerate() {
                 if let Proc::Hosted(proc) = proc {
                     if let Service(service) = proc {
-                        obligations.read(service);
+                        obligations.read(service, declared);
                     }
                     obligations.read_child(index, proc);
                 }
             }
-            obligations.check(procs[2].caller().leftovers()).unwrap_or_else(|error| panic!("{error}"));
+            obligations.check(declared).unwrap_or_else(|error| panic!("{error}"));
             self.deadline = Some(now.saturating_add(Duration::from_secs(2)));
             self.controls.signal(1, ServiceSignal::Terminate);
             self.stopping = true;
@@ -521,7 +522,7 @@ pub fn run(seen: &Rc<RefCell<Seen>>) {
                         call(D1, crate::argv!["activity", "3", "--json"]),
                         calls::ends_leaving(&[crate::ending::Leftover {
                             task: 4,
-                            state: crate::ending::Left::Due,
+                            may_be: &[crate::ending::Left::Due],
                             why: "bounds pages retain the unclaimed human delegate; the other delegates wait on dependencies",
                         }]),
                     ],

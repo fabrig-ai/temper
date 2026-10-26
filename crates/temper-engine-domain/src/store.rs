@@ -685,6 +685,7 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                         u64::try_from(reason.len()).ok()
                     }
                     jig_domain_people::Ask::ChangeSettings { .. }
+                    | jig_domain_people::Ask::MoveToNewest { .. }
                     | jig_domain_people::Ask::Withdraw { .. }
                     | jig_domain_people::Ask::MarkSeen { .. }
                     | jig_domain_people::Ask::Application { .. }
@@ -899,6 +900,7 @@ pub(crate) fn program_answer_bytes(outcome: &jig_domain_people::Outcome) -> Opti
             Some(bytes)
         }
         Outcome::SettingsChanged { .. }
+        | Outcome::MovedToNewest { .. }
         | Outcome::Compound { .. }
         | Outcome::CompoundRefused { .. }
         | Outcome::ProjectMade { .. }

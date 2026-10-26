@@ -11,8 +11,8 @@ const INSTALL: &[&str] = &["forge-install", "3"];
 const ACCEPT: &[&str] = &["forge-accept", "3", "22"];
 // An opaque fake key; neither these step tests nor the shell tests contact a forge.
 const PEM: &[u8] = b"fake-app-pem";
-const AT_BOUND: &[u8] = &[b'p'; 4090];
-const OVER_BOUND: &[u8] = &[b'p'; 4091];
+const AT_BOUND: &[u8] = &[b'p'; 4089];
+const OVER_BOUND: &[u8] = &[b'p'; 4090];
 const ADDRESS: &[u8] = b"https://forge.invalid/install/app";
 
 fn request(root: &f::Harness, call: u32) -> w::Request {
@@ -68,9 +68,9 @@ fn connect_carries_the_bundle_once_without_saving_it() {
         let w::How::GithubApp(app) = connect.into_parts().how else { panic!("pasted App") };
         assert_eq!(app.id(), 4242);
         assert_eq!(root.sent_name(call), Some(f::named("app")));
-        let mut expected = skein_lib::Writer::new(pem.len().checked_add(6).expect("bundle length"));
-        expected.put(&[1, 1, 11, 0]).expect("header");
-        expected.put(&u16::try_from(pem.len()).expect("bounded").to_le_bytes()).expect("length");
+        let mut expected = skein_lib::Writer::new(pem.len().checked_add(7).expect("bundle length"));
+        expected.put(&[0, 1, 10]).expect("header");
+        expected.put(&u32::try_from(pem.len()).expect("bounded").to_be_bytes()).expect("length");
         expected.put(pem).expect("PEM");
         assert_eq!(root.carried[&call].expose(), expected.finish().as_ref());
         assert!(root.saved.is_empty());
@@ -294,9 +294,9 @@ fn admin_connect_carries_item_one_with_the_file_bytes_unchanged() {
         let w::Request::Connect(connect) = request(&root, call) else { panic!("connect") };
         let w::How::ForgejoAdmin(admin) = connect.how() else { panic!("admin") };
         assert!(admin.first().is_none());
-        let mut expected = skein_lib::Writer::new(token.len() + 6);
-        expected.put(&[1, 1, 1, 0]).unwrap();
-        expected.put(&u16::try_from(token.len()).expect("bounded token").to_le_bytes()).unwrap();
+        let mut expected = skein_lib::Writer::new(token.len() + 7);
+        expected.put(&[0, 1, 0]).unwrap();
+        expected.put(&u32::try_from(token.len()).expect("bounded token").to_be_bytes()).unwrap();
         expected.put(token).unwrap();
         let expected = expected.finish();
         assert_eq!(root.carried[&call].expose(), expected.as_ref());
@@ -417,6 +417,7 @@ fn first_page(root: &mut f::Harness, connection: w::Connection, state: w::FirstS
     let first = w::FirstRepository::new(
         &l,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::New(

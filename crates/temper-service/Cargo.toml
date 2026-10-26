@@ -11,7 +11,7 @@ publish.workspace = true
 jig-protocol-charter.workspace = true
 jig-domain-brief.workspace = true
 temper-forge-setup.workspace = true
-temper-protocol-records.workspace = true
+temper-protocol-records = { workspace = true, features = ["forge"] }
 skein-forge-setup.workspace = true
 skein-forge.workspace = true
 skein-forge-connection.workspace = true
@@ -64,6 +64,7 @@ temper-worker-protocol-git.workspace = true
 jig-protocol-worker-link.workspace = true
 
 [dev-dependencies]
+temper-client-domain.workspace = true
 temper-init.workspace = true
 temper-engine-domain-world = { path = "../../tests/engine/domain" }
 skein-shell.workspace = true

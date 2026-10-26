@@ -670,6 +670,8 @@ fn output_and_memory_bounds_cover_replacement_and_a_full_panel() {
         + forge::picker::worst_case(limits.forge).unwrap()
         // Admin token, four fields and its answer.
         + 4090 + u64::from(limits.forge.field_bytes) * 3
+        // Restored PEM and generated secret at the schema payload bound.
+        + 2 * 4089
         + u64::from(limits.forge.field_bytes.max(wire.first_repository_label))
         + w::Answer::worst_case_heap(&wire).unwrap()
         // App draft key, answered install link and editable App id.

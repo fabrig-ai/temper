@@ -76,6 +76,9 @@ fn encode_reason(v: d::AdoptionRefusal) -> w::ForgeReason {
         d::AdoptionRefusal::TooLarge => w::ForgeReason::TooLarge,
         d::AdoptionRefusal::Unreachable => w::ForgeReason::Unreachable,
         d::AdoptionRefusal::InvalidAnswer => w::ForgeReason::InvalidAnswer,
+        d::AdoptionRefusal::AnotherProject => w::ForgeReason::AnotherProject,
+        d::AdoptionRefusal::HomeHeld => w::ForgeReason::HomeHeld,
+        d::AdoptionRefusal::PrefixOccupied => w::ForgeReason::PrefixOccupied,
     }
 }
 fn decode_reason(v: w::ForgeReason) -> d::AdoptionRefusal {
@@ -89,5 +92,8 @@ fn decode_reason(v: w::ForgeReason) -> d::AdoptionRefusal {
         w::ForgeReason::TooLarge => d::AdoptionRefusal::TooLarge,
         w::ForgeReason::Unreachable => d::AdoptionRefusal::Unreachable,
         w::ForgeReason::InvalidAnswer => d::AdoptionRefusal::InvalidAnswer,
+        w::ForgeReason::AnotherProject => d::AdoptionRefusal::AnotherProject,
+        w::ForgeReason::HomeHeld => d::AdoptionRefusal::HomeHeld,
+        w::ForgeReason::PrefixOccupied => d::AdoptionRefusal::PrefixOccupied,
     }
 }

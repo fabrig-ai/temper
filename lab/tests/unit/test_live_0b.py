@@ -39,7 +39,7 @@ class Live0bTests(unittest.TestCase):
         self.assertIsNone(experiment['driver'])
         self.assertEqual(experiment['held'], ['chatgpt'])
         self.assertEqual([action['name'] for action in experiment['actions']],
-                         ['sign-in', 'forge-setup', 'person', 'import', 'usable', 'chat'])
+                         ['sign-in', 'settings', 'forge-setup', 'person', 'import', 'usable', 'chat'])
         self.assertEqual([action['name'] for action in experiment['release']], ['export'])
         actions = experiment['actions'] + experiment['release']
         self.assertEqual([action['name'] for action in actions
@@ -66,7 +66,8 @@ class Live0bTests(unittest.TestCase):
             with self.subTest(script=name):
                 path = LIVE / name
                 self.assertTrue(path.is_file())
-                self.assertTrue(path.stat().st_mode & 0o100)
+                if path.suffix != '.json':
+                    self.assertTrue(path.stat().st_mode & 0o100)
 
     def test_rendered_model_and_budgets(self):
         text = render('temper.json')
@@ -78,14 +79,30 @@ class Live0bTests(unittest.TestCase):
         for model in models.values():
             self.assertEqual(model['window'], 131072)
             self.assertEqual(model['prices']['unit'], 1000)
-        self.assertTrue(engine['charters'])
-        for charter in engine['charters']:
+        for member in ('charters', 'templates', 'policies', 'rules'):
+            self.assertNotIn(member, engine)
+        self.assertEqual(engine['projects'], [])  # Forge setup creates hello after settings.
+        settings = json.loads((LIVE / 'settings.json').read_bytes())
+        self.assertEqual([i['setting'] for i in settings['items']], [
+            dict(kind='charter', number=1), dict(kind='charter', number=2),
+            dict(kind='rules'), dict(kind='policy', number=1)])
+        charters = [i['set'] for i in settings['items'][:2]]
+        for charter in charters:
             with self.subTest(charter=charter['number']):
                 self.assertEqual(charter['spend'], 280)
-                model = models[charter['model']]
+                model = models[charter['model']['name']]
                 self.assertGreaterEqual(charter['spend'],
                                         2 * math.ceil((model['window'] + model['output']) / 1000))
-        self.assertEqual(engine['rules']['maximum_run_spend'], 280)
+        rules, policy = [i['set'] for i in settings['items'][2:]]
+        self.assertEqual(rules['maximum_run_spend'], 280)
+        self.assertEqual(rules['ceiling']['spend'], 600)
+        self.assertEqual(policy['ceiling']['spend'], 600)
+        self.assertEqual(policy['roles'][0]['authority']['spend'], 600)
+        self.assertEqual(policy['permissions'], [dict(connector=1, permission=1, role=0)])
+        experiment = json.loads((LIVE / 'experiment.json').read_bytes())
+        self.assertEqual(experiment['actions'][1], dict(name='settings', env={}, argv=[
+            '{artifact.temper}', 'ctl', '{dir.client}', 'change-settings',
+            '{experiment}/settings.json', '--against', '1', '--key', 'lab-settings']))
 
         def periods(value):
             if isinstance(value, dict):
@@ -97,7 +114,7 @@ class Live0bTests(unittest.TestCase):
                 for child in value:
                     yield from periods(child)
 
-        spends = list(periods(configuration))
+        spends = list(periods(settings))
         self.assertTrue(spends)
         self.assertEqual(spends, [600] * len(spends))
         agent = json.loads(render('agent.json'))

@@ -744,6 +744,8 @@ fn the_forge_end_rereads_once_and_ended_settles_without_removal() {
     // The deployment lists the demo model's account: the engine removes it at this end, not the client.
     let (mut root, account, forges, watch) = ending_root_with_deployment();
     assert_eq!(root.forge().demo_provider(), Some(PROVIDER));
+    assert!(!root.forge().serves_pages(wire::FORGE));
+    assert!(root.forge().serves_pages(wire::FORGE + 1));
     assert!(deployment_watch(&mut deliver_accounts(&mut root, account, ending_accounts(false))).is_none());
     assert!(forge_rows(&mut root, forges, false).is_empty());
     let mut out = forge_rows(&mut root, forges, true);
@@ -760,6 +762,9 @@ fn the_forge_end_rereads_once_and_ended_settles_without_removal() {
     assert!(closed(&out, watch), "settled removal drops the watch once running ends");
     assert!(removed(&mut out).is_empty());
     assert!(root.forge().demo().is_none());
+    assert!(!root.forge().serves_pages(wire::FORGE));
+    assert!(!reloaded.forge().serves_pages(wire::FORGE));
+    assert!(root.forge().serves_pages(wire::FORGE + 1));
     assert_eq!(root.forge().demo_provider(), Some(PROVIDER), "rereading Ended retains the provider");
     assert!(root.demo().is_none());
     assert_eq!(root.forge().retired_demo(), reloaded.forge().retired_demo());
@@ -769,6 +774,7 @@ fn the_forge_end_rereads_once_and_ended_settles_without_removal() {
         reloaded.forge().retired_demo(),
         "an unavailable reread cannot erase retirement"
     );
+    assert!(!root.forge().serves_pages(wire::FORGE), "unavailable reread retains the forge");
     assert!(removed(&mut deliver_deployment(&mut root, watch, deployment(&[DEMO_ACCOUNT]))).is_empty());
     assert!(removed(&mut deliver_accounts(&mut root, account, ending_accounts(true))).is_empty());
 }
@@ -1103,7 +1109,10 @@ fn a_retired_reload_is_independent_of_document_order() {
         if !ended_first {
             assert!(deliver_demo_read(&mut root, page_with_state(w::DemoState::Ended)).is_empty());
         }
-        assert_eq!(root.forge().retired_demo(), Some(demo::RetiredDemo { provider: PROVIDER, project: f::PROJECT }));
+        assert_eq!(
+            root.forge().retired_demo(),
+            Some(demo::RetiredDemo { forge: wire::FORGE, provider: PROVIDER, project: f::PROJECT })
+        );
         assert_eq!(root.forge().demo_provider(), Some(PROVIDER));
         assert!(root.forge().demo().is_none());
         assert!(root.demo().is_none());
@@ -1180,7 +1189,10 @@ fn a_forge_connected_before_the_playground_starts_retires_and_rereads_once() {
         }
         let mut out = forge_rows(&mut root, forges, true);
         let reread = demo_reread(&mut out);
-        assert_eq!(root.forge().retired_demo(), Some(demo::RetiredDemo { provider: PROVIDER, project: f::PROJECT }));
+        assert_eq!(
+            root.forge().retired_demo(),
+            Some(demo::RetiredDemo { forge: wire::FORGE, provider: PROVIDER, project: f::PROJECT })
+        );
         assert_eq!(root.pages().project(), if survivor { Some(2) } else { None });
         assert!(root.demo().is_none());
         assert!(deployment_watch(&mut out).is_none(), "NotStarted has no model cleanup");

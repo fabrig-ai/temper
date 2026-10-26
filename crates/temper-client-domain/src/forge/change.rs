@@ -221,6 +221,11 @@ pub const fn unavailable(state: &panel::State) -> Option<W> {
 }
 impl<'a> Change<'a> {
     #[must_use]
+    pub fn forge(self) -> u16 {
+        self.panel.forge()
+    }
+
+    #[must_use]
     pub fn slots(self) -> Slots {
         slot(self.panel.step())
     }

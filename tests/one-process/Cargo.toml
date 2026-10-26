@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 temper-playground.workspace = true
+temper-client-shell-cli.workspace = true
+jig-domain-fleet.workspace = true
 jig-client.workspace = true
 serde_json.workspace = true
 temper-service.workspace = true

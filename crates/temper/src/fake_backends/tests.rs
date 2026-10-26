@@ -199,15 +199,15 @@ fn peer_reservations_transfer_once_and_close_with_preparation() {
         assert!(TcpListener::bind(address).is_err(), "peer reservation remains owned");
     }
     drop(prepared);
-    for address in [peers.github, peers.oauth, peers.llm, peers.forgejo] {
-        assert!(TcpListener::bind(address).is_ok(), "owned peer fd closes on preparation drop");
-    }
+    // Hold the released addresses so reuse would fail if it tried to bind any peer.
+    let held: Vec<TcpListener> = [peers.github, peers.oauth, peers.llm, peers.forgejo]
+        .into_iter()
+        .map(|address| TcpListener::bind(address).expect("owned peer fd closes on preparation drop"))
+        .collect();
     let reused = start(&source, None).expect("retained configuration");
     assert_eq!(reused.peers, peers);
     assert!(reused.listeners.0.is_empty(), "reuse leaves binding to the ordinary box");
-    for address in [peers.github, peers.oauth, peers.llm, peers.forgejo] {
-        assert!(TcpListener::bind(address).is_ok(), "retained peer address is available for the ordinary box");
-    }
+    drop(held);
 }
 
 #[test]

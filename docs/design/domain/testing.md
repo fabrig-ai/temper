@@ -434,10 +434,11 @@ in the lower world that owns it, never here.
   preparing, claimed or running, none is closing, no assignment is
   pending, and no agent or git child of the worker's is alive. A task
   parked between runs is no obligation. A story that means to leave work
-  in flight declares each leftover, by its task and state, with its
-  reason (GitHub's push-only story leaves its change's procedure due;
-  the bounds story its live delegates); an undeclared obligation fails
-  the story, and so does a declared leftover that isn't there.
+  in flight declares each leftover, by its task and the states it may be
+  left in, with its reason (GitHub's push-only story leaves its change's
+  procedure unfinished; the bounds story its live delegates); an
+  undeclared obligation fails the story, and so does a declared leftover
+  whose task has ended.
   Teardown's own check stays beside it: no child is killed but those a
   story asks for.
 - **The forge and git:** skein's forge peer (skein's `fake-forge.md`,
@@ -2354,9 +2355,12 @@ and one smoke above:
 
 - **The tests that move:** every test document and typed builder that
   writes the six members (25 files of documents, 20 of builders, a
-  JSON fixture and the lab's documents) takes the stock defaults or a
-  settings change in its setup instead; a story that edited a charter in
-  its document makes the change it needs. Their times do not change.
+  JSON fixture and the lab's documents) takes the stock defaults, or,
+  where its stories need other settings, defaults of its own passed to
+  the service in the stock's place (`../protocol/configuration.md`,
+  13.4), so that no story pays for a change of settings it is not
+  about; one story per world makes its change through ctl after sign-in.
+  Their times do not change.
 - **Its QA:** planned implementation changes the facts of the forge's world and the
   engine's domain world (how a merge is judged), so their `qa_*`
   profiles run before it lands.

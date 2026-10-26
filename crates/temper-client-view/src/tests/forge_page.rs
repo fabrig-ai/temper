@@ -102,12 +102,15 @@ fn adopted() -> forge::Answer {
 #[test]
 fn each_outcome_reads_as_the_designs_sentence() {
     let words = fixtures::words();
-    let rows: [(forge::Answer, &[u8], bool); 10] = [
+    let rows: [(forge::Answer, &[u8], bool); 13] = [
         (adopted(), b"Adopted acme/shop on forge 1 as owned.It is the project's home.temper may: read; push; open pull requests; land; review; set statuses; comment; create issues; create and delete branches.temper's forge user may not read the branch protection: the forge shows it to repository administrators only.", false),
         (forge::Answer::ForgeRefused(forge::Reason::NoSuchForge), b"No forge 1 is configured.", true),
         (forge::Answer::ForgeRefused(forge::Reason::NotFound), b"No repository acme/shop on forge 1 that temper's forge user can see.", true),
         (forge::Answer::ForgeRefused(forge::Reason::NoAccess), b"temper's forge user may not read acme/shop on forge 1.", true),
         (forge::Answer::ForgeRefused(forge::Reason::Refused), b"The forge connector refused it: another project writes acme/shop, the project has a home already, or branches under temper/ are not this deployment's.", true),
+        (forge::Answer::ForgeRefused(forge::Reason::AnotherProject), b"Another project writes acme/shop. Adopt it as context to read it, or use the project that writes it.", true),
+        (forge::Answer::ForgeRefused(forge::Reason::HomeHeld), b"The project has a home already. Adopt this repository without making it home, or choose a new project.", true),
+        (forge::Answer::ForgeRefused(forge::Reason::PrefixOccupied), b"Branches under temper/ are not this deployment's. Choose an unused branch prefix.", true),
         (forge::Answer::ForgeRefused(forge::Reason::InFlight), b"acme/shop is being adopted already; try again when that ends.", true),
         (forge::Answer::ForgeRefused(forge::Reason::TooLarge), b"A field is past the forge's bounds, or the forge's repositories are full.", true),
         (forge::Answer::ForgeRefused(forge::Reason::Unreachable), b"Forge 1 did not answer; nothing was adopted. Try again.", true),

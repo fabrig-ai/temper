@@ -2,7 +2,7 @@
 use crate::jig::table::{
     Keyed, Kind,
     Occurs::{Optional, Required},
-    Tool, flag, positional,
+    Tool, flag, positional, switch,
 };
 pub const READ: Tool = Tool {
     name: b"forges",
@@ -27,6 +27,7 @@ pub const SET_UP: Tool = Tool {
             Optional,
             b"Project name or number; default a new project named R",
         ),
+        switch(b"playground", b"Copy playground/widget; takes no --org or --repository"),
     ]],
     keyed: Keyed::Optional,
     area: 6,
@@ -46,7 +47,7 @@ pub const CONNECT: Tool = Tool {
                 b"An existing GitHub App",
             ),
             positional(b"id", b"ID", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"GitHub App id"),
-            positional(b"file", b"FILE", Kind::File, Required, b"Private PEM key file; at most 4090 bytes"),
+            positional(b"file", b"FILE", Kind::File, Required, b"Private PEM key file; at most 4089 bytes"),
         ],
         &[
             positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"Forge number"),
@@ -72,7 +73,7 @@ pub const CONNECT: Tool = Tool {
                 Required,
                 b"A Forgejo site admin",
             ),
-            positional(b"file", b"FILE", Kind::File, Required, b"Private admin token file; at most 4090 bytes"),
+            positional(b"file", b"FILE", Kind::File, Required, b"Private admin token file; at most 4089 bytes"),
             flag(b"first", b"ORG/NAME", Kind::Literal, Optional, b"Make the first repository"),
             flag(
                 b"project",
@@ -202,6 +203,7 @@ pub(crate) struct Forges {
 }
 #[derive(Debug)]
 struct Intent {
+    playground: bool,
     forge: u16,
     org: Box<[u8]>,
     repository: Box<[u8]>,
@@ -327,6 +329,14 @@ fn send(state: &mut Forges, client: &Client, env: &Env<Limits>, called: Called, 
     }
     let number = (u64::from(called.call_number) << 32u32) | 2;
     let name = crate::table::TOOLS.get(usize::from(called.call.tool)).expect("parsed tool").name;
+    if name == SET_UP.name
+        && value(&called.call, 4).is_some()
+        && (value(&called.call, 1).is_some() || value(&called.call, 2).is_some())
+    {
+        let printed = render::failure(b"--playground takes no --org or --repository", called.json, 1);
+        finish(called, printed, out);
+        return;
+    }
     if name == SET_UP.name || name == DEMO_START.name {
         let intent = if name == SET_UP.name {
             let forge = u16::try_from(number_arg(&called.call)).expect("checked forge number");
@@ -340,6 +350,7 @@ fn send(state: &mut Forges, client: &Client, env: &Env<Limits>, called: Called, 
                 intent.org.clone(),
                 intent.repository.clone(),
                 intent.project.clone(),
+                intent.playground,
                 &env.limits.domain.forge,
             ),
             None => temper_client_domain::forge::demo::ask(&env.limits.domain.forge),
@@ -471,6 +482,7 @@ fn restore(state: &mut Forges, env: &Env<Limits>, key: Key, request: &jig_client
         temper_client_protocol_wire::v1::Request::SetUp(request) => {
             let request = request.into_parts();
             Some(Intent {
+                playground: request.playground,
                 forge: request.forge,
                 org: request.org,
                 repository: request.repository,
@@ -973,6 +985,7 @@ pub(crate) fn setup_print(forge: u16, outcome: &Outcome, json: bool, kept: bool,
                     b"work".as_slice().into(),
                     b"hello".as_slice().into(),
                     SetUpProject::New(b"hello".as_slice().into()),
+                    false,
                     &limits.domain.forge,
                 )
                 .expect("checked limits"),
@@ -1030,13 +1043,26 @@ fn settled(connection: &Connection) -> bool {
 
 fn intent(forge: u16, call: &jig::call::Call, client: &Client) -> Intent {
     use jig::call::Project;
+    let playground = value(call, 4).is_some();
     let org = match value(call, 1) {
         Some(Value::Text(bytes)) => bytes.clone(),
-        _ => b"work".as_slice().into(),
+        _ => {
+            if playground {
+                b"playground".as_slice().into()
+            } else {
+                b"work".as_slice().into()
+            }
+        }
     };
     let repository = match value(call, 2) {
         Some(Value::Text(bytes)) => bytes.clone(),
-        _ => b"hello".as_slice().into(),
+        _ => {
+            if playground {
+                b"widget".as_slice().into()
+            } else {
+                b"hello".as_slice().into()
+            }
+        }
     };
     let project = match value(call, 3) {
         Some(Value::Project(Project::Number(number))) => SetUpProject::Existing(*number),
@@ -1057,7 +1083,7 @@ fn intent(forge: u16, call: &jig::call::Call, client: &Client) -> Intent {
         }
         _ => SetUpProject::New(repository.clone()),
     };
-    Intent { forge, org, repository, project }
+    Intent { playground, forge, org, repository, project }
 }
 // Both ways of making a first repository finish through the same watch and Adopt.
 fn watch_first(state: &mut Forges, env: &Env<Limits>, key: Key, called: Called, intent: Intent, out: &mut Queue<Out>) {
@@ -1218,6 +1244,8 @@ fn first_json(first: &First, out: &mut Encoder) {
         }
     }
     out.object_end();
+    out.key(b"playground");
+    out.boolean(first.playground);
     out.key(b"state");
     match first.state {
         FirstState::Making => out.string(b"making"),

@@ -21,7 +21,7 @@ pub const MESSAGE: &[u8] = b"";
 /// The fixed tree describes the check; the fake never runs its workflow.
 pub const FILES: [(&[u8], &[u8]); 3] = [
     (b"README.md", b"# Widget\n\nA small repository for temper's QA loop.\n"),
-    (b"src/main.rs", b"const TABLE: [(&str, u32); 3] = [(\"apples\", 3), (\"pears\", 5), (\"plums\", 2)];\n\nfn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n"),
+    (temper_forge_setup::PLAYGROUND_PATH, temper_forge_setup::PLAYGROUND_MAIN),
     (b".forgejo/workflows/check.yml", b"name: check\non: [push, pull_request]\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo 'The fake judges the configured CI cue; this workflow is not run.'\n"),
 ];
 #[derive(Clone, PartialEq, Eq, Debug)]

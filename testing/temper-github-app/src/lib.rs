@@ -38,7 +38,12 @@ pub fn records(app: &App, forge: u16, accepted: &[u64], origin: SocketAddr) -> B
         (Item::Origin, origin.into_vec()),
     ]
     .into_iter()
-    .map(|(item, bytes)| (codec::number(forge, item), codec::encode(&bytes).into_boxed_slice()))
+    .map(|(item, bytes)| {
+        (
+            codec::number(forge, item),
+            codec::encode(item, &bytes).expect("fixture item within schema").into_boxed_slice(),
+        )
+    })
     .collect()
 }
 

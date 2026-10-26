@@ -293,23 +293,28 @@ fn encoded_setup_writes_fit_exactly_and_name_the_short_bound() {
     let settings = fixtures::engine();
     let mut own = settings.limits;
     let key = skein_lib::bytes::zeroed(usize::try_from(own.forge_component.key_bytes).unwrap());
-    assert_eq!(records::encode(&key).len(), 1197); // DER bound plus VERSION.
+    assert_eq!(records::encode(records::Item::AppKey, &key).unwrap().len(), 1203); // DER bound plus the two-byte version, tag and four-byte length.
     let mut ids = skein_lib::List::with_capacity(150);
     for id in 1..=150 {
         ids.push(id).unwrap();
     }
-    assert_eq!(records::encode(skein_forge_setup::item::accepted_item(ids.as_slice()).expose()).len(), 1201);
+    assert_eq!(
+        records::encode(records::Item::Accepted, skein_forge_setup::item::accepted_item(ids.as_slice()).expose())
+            .unwrap()
+            .len(),
+        1207
+    );
     for (installations, value, expected) in [
-        (8, 1197, ""),
+        (8, 1203, ""),
         (
             8,
-            1196,
+            1202,
             "application.limits.overrides.records.value_bytes: must agree with AppKey (forge_component.key_bytes)\n",
         ),
-        (150, 1201, "application.limits.overrides.forge_component.installations: 150 bytes, past its bound of 64\n"),
+        (150, 1207, "application.limits.overrides.forge_component.installations: 150 bytes, past its bound of 64\n"),
         (
             150,
-            1200,
+            1206,
             concat!(
                 "application.limits.overrides.records.value_bytes: must agree with Accepted (forges.installations)\n",
                 "application.limits.overrides.forge_component.installations: 150 bytes, past its bound of 64\n"
@@ -390,24 +395,27 @@ fn origin_inventory_keeps_configured_text_prefixes_and_forge_indices() {
     let mut forges = skein_lib::List::with_capacity(5);
     forges.push(crate::named(&document, &Directories::working()).unwrap().forges.into_vec().pop().unwrap()).unwrap();
     for (api, length) in [
-        (Address::Host { name: Box::from(b"api.github.com".as_slice()), port: 443 }, 20),
-        (Address::Host { name: Box::from(b"forge.example".as_slice()), port: 12345 }, 21),
-        (Address::Addr(skein_io::Addr::Ip("127.0.0.1:3000".parse().unwrap())), 16),
-        (Address::Addr(skein_io::Addr::Ip("[::1]:3000".parse().unwrap())), 12),
+        (Address::Host { name: Box::from(b"api.github.com".as_slice()), port: 443 }, 26),
+        (Address::Host { name: Box::from(b"forge.example".as_slice()), port: 12345 }, 27),
+        (Address::Addr(skein_io::Addr::Ip("127.0.0.1:3000".parse().unwrap())), 22),
+        (Address::Addr(skein_io::Addr::Ip("[::1]:3000".parse().unwrap())), 18),
     ] {
         let mut forge =
             crate::named(input.as_bytes(), &Directories::working()).unwrap().forges.into_vec().pop().unwrap();
         forge.api = api;
-        let encoded =
-            records::encode(&records::origin(skein_forge_connection::settings::Kind::GitHub, &forge.api).encode());
+        let encoded = records::encode(
+            records::Item::Origin,
+            &records::origin(skein_forge_connection::settings::Kind::GitHub, &forge.api).encode(),
+        )
+        .unwrap();
         assert_eq!(encoded.len(), length);
-        assert_eq!(&encoded[..2], &[records::VERSION, 2]);
+        assert_eq!(&encoded[..2], &records::VERSION.to_be_bytes());
         let index = usize::try_from(forges.len()).unwrap();
         forges.push(forge).unwrap();
         let inventory = checks::record_writes(&fixtures::engine().limits, forges.as_slice());
-        assert_eq!(inventory.len(), forges.len() + 2);
+        assert_eq!(inventory.len(), forges.len() + 5);
         assert_eq!(
-            *inventory.get(u32::try_from(index + 2).unwrap()).unwrap(),
+            *inventory.get(u32::try_from(index + 5).unwrap()).unwrap(),
             (Some(u64::try_from(length).unwrap()), b"Origin".as_slice(), Some(index))
         );
     }
@@ -496,4 +504,38 @@ fn the_worker_takes_its_agents_host_reply_bound() {
     let agent = fixtures::owned_worker_agent();
     assert_eq!(agent.limits.bodies.host_reply_text, 4_098);
     assert_eq!(crate::worker_settings::root_limits(&part.worker, &agent, &part.limits).reply_bytes, 4_098);
+}
+
+#[test]
+fn secrets_schema_fits_the_small_page_ceiling() {
+    use temper_protocol_records::v1;
+    // The row's u16 version, variant and u32 length precede the largest DER envelope.
+    const APPLICATION_BYTES: u64 = 65_546;
+    // Secrets keys are two owner bytes followed by a u64 number.
+    const KEY_BYTES: u64 = 10;
+    let (_, _, profile) = fixtures::store_limits();
+    assert_eq!(v1::Stored::worst_case_bytes(&v1::CEILINGS), Some(APPLICATION_BYTES));
+    assert_eq!(profile.store.page.bytes, 1_590_110);
+    assert!(APPLICATION_BYTES + KEY_BYTES < u64::from(profile.store.page.bytes));
+}
+
+#[test]
+fn token_rows_include_schema_framing_in_startup_admission() {
+    use crate::startup::{Problems, checks};
+    let settings = fixtures::engine();
+    let mut own = settings.limits;
+    // The worker wire's token ceiling plus seven bytes of schema framing.
+    own.forge_component.token_bytes = 4096;
+    for (value, expected) in [
+        (4103, ""),
+        (
+            4102,
+            "application.limits.overrides.records.value_bytes: must agree with tokens (forge_component.token_bytes and hook_secret_bytes)\n",
+        ),
+    ] {
+        own.records.value_bytes = value;
+        let mut problems = Problems::empty();
+        checks::records(&settings.jig, &own, &[], &mut problems);
+        assert_eq!(crate::startup::lines(&problems).as_ref(), expected.as_bytes());
+    }
 }

@@ -114,12 +114,42 @@ pub(crate) fn root(engine: &mut Engine) {
     let problems = match engine.domain.restore_failure() {
         Some(RestartRequest::Settings { failure, changed }) => settings_problem(failure, changed),
         Some(RestartRequest::ProjectPolicy { project }) => project_policy_problem(project),
+        Some(RestartRequest::HeldPastLimit { which, held, limit }) => held_limit_problem(which, held, limit),
+        Some(RestartRequest::UnheldRevision { task, revision }) => unheld_revision_problem(task, revision),
         Some(RestartRequest::Step(_) | RestartRequest::Idle | RestartRequest::Refused { .. }) | None => {
             unavailable(engine, b"deployment");
             return;
         }
     };
     engine.end = Some(End::Stopped(Stop::Start(problems)));
+}
+fn held_limit_problem(which: jig_domain_core::HeldLimit, held: u32, limit: u32) -> Problems {
+    use jig_domain_core::HeldLimit;
+    let name: &[u8] = match which {
+        HeldLimit::Revisions => b"revisions",
+        HeldLimit::Versions => b"versions",
+    };
+    let path = Path::root()
+        .member(b"settings")
+        .member(name)
+        .member(b"held")
+        .child(jig_protocol_config::Segment::Index(held))
+        .member(b"allowed")
+        .child(jig_protocol_config::Segment::Index(limit));
+    let mut problems = Problems::empty();
+    problems.push(path, What::Bound);
+    problems
+}
+fn unheld_revision_problem(task: u64, revision: u32) -> Problems {
+    let path = Path::root()
+        .member(b"tasks")
+        .member(skein_lib::Decimal::of(task).as_bytes())
+        .member(b"settings")
+        .member(b"revision")
+        .child(jig_protocol_config::Segment::Index(revision));
+    let mut problems = Problems::empty();
+    problems.push(path, What::Refers);
+    problems
 }
 fn project_policy_problem(project: u32) -> Problems {
     let path = Path::root()
@@ -158,6 +188,27 @@ fn settings_problem(failure: jig_domain_core::settings::Failure, changed: bool) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn held_settings_past_a_lowered_limit_name_the_limit_and_both_counts() {
+        use jig_domain_core::HeldLimit;
+        for (which, expected) in [
+            (HeldLimit::Revisions, b"settings.revisions.held[3].allowed[2]: past its bound\n".as_slice()),
+            (HeldLimit::Versions, b"settings.versions.held[3].allowed[2]: past its bound\n".as_slice()),
+        ] {
+            let problems = crate::startup::Problems::jig(held_limit_problem(which, 3, 2), &Path::root());
+            assert_eq!(crate::startup::lines(&problems).as_ref(), expected);
+        }
+    }
+
+    #[test]
+    fn an_unheld_settings_revision_names_the_task_and_revision() {
+        let problems = crate::startup::Problems::jig(unheld_revision_problem(4_294_967_297, 7), &Path::root());
+        assert_eq!(
+            crate::startup::lines(&problems).as_ref(),
+            b"tasks.4294967297.settings.revision[7]: unknown reference\n"
+        );
+    }
 
     #[test]
     fn an_oversized_stored_project_policy_names_its_project_and_byte_bound() {

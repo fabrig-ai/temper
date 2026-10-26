@@ -595,7 +595,7 @@ fn startup_records() -> skein_lib::List<(u64, skein_lib::Secret)> {
             }
         }
         for (item, bytes) in values.into_boxed() {
-            let mut value = records::encode(&bytes);
+            let mut value = records::encode(item, &bytes).unwrap();
             if number == 5 && item == Item::User {
                 value[0] = 2;
             }
@@ -812,7 +812,11 @@ fn a_records_key_that_cannot_sign_stops_only_its_forge() {
     let (mut service, _) = records_service();
     for (number, value) in startup_records().into_boxed() {
         let value = if number == temper_protocol_records::number(2, temper_protocol_records::Item::AppKey) {
-            skein_lib::Secret::new(temper_protocol_records::encode(&[0x30, 0]).into_boxed_slice())
+            skein_lib::Secret::new(
+                temper_protocol_records::encode(temper_protocol_records::Item::AppKey, &[0x30, 0])
+                    .unwrap()
+                    .into_boxed_slice(),
+            )
         } else {
             value
         };

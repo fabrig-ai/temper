@@ -7,7 +7,7 @@ fn arbitrary_record_values_never_panic_and_origins_round_trip() {
     let bounds = skein_forge_setup::item::Bounds { token_bytes: 64, name_bytes: 64, key_bytes: 1196, installations: 8 };
     for _ in 0..4000 {
         let bytes = temper_codecs_world::drawn(&mut rng, 4100);
-        let _version = records::value(&bytes);
+        let _version = records::decode(records::Item::ApiToken, &bytes);
         let origin = Origin {
             kind: if rng.below(2) == 0 { Kind::Forgejo } else { Kind::GitHub },
             api: format!("fake-{}.test:{}", rng.next_u64(), rng.below(65536)).into_boxed_str(),

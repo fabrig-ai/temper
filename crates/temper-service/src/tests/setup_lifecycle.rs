@@ -671,11 +671,8 @@ fn carried_pem() -> (Secret, Secret) {
     skein_lib::base64::encode(skein_lib::base64::Alphabet::Standard, der, &mut writer).unwrap();
     writer.put(b"\n-----END RSA PRIVATE KEY-----\n").unwrap();
     let pem = Secret::new(writer.finish());
-    let mut bundle = skein_lib::Writer::new(pem.expose().len().checked_add(6).unwrap());
-    bundle.put(&[1, 1, 11, 0]).unwrap();
-    bundle.put(&u16::try_from(pem.expose().len()).unwrap().to_le_bytes()).unwrap();
-    bundle.put(pem.expose()).unwrap();
-    (pem, Secret::new(bundle.finish()))
+    let bundle = temper_client_domain::forge::forges::pasted_app_key(pem.expose()).unwrap();
+    (pem, bundle)
 }
 fn paste_start(service: &mut crate::Service, bundle: Secret, digest: [u8; 32]) {
     let engine = service.engine.as_mut().unwrap();
@@ -830,11 +827,8 @@ fn paste_reads_the_fakes_key_as_a_file_or_as_the_web_fields_restored_armour() {
     file.put(b"-----END RSA PRIVATE KEY-----\n").unwrap();
     let file = file.finish();
     for bytes in [restored, pem.expose(), file.as_ref()] {
-        let mut bundle = skein_lib::Writer::new(bytes.len().checked_add(6).unwrap());
-        bundle.put(&[1, 1, 11, 0]).unwrap();
-        bundle.put(&u16::try_from(bytes.len()).unwrap().to_le_bytes()).unwrap();
-        bundle.put(bytes).unwrap();
-        paste_connects(Secret::new(Box::from(bytes)), Secret::new(bundle.finish()));
+        let bundle = records::encode_pasted(11, bytes).unwrap();
+        paste_connects(Secret::new(Box::from(bytes)), bundle);
     }
 }
 fn paste_connects(pem: Secret, bundle: Secret) {
@@ -903,7 +897,7 @@ fn a_stopped_paste_erases_its_carried_row_and_keeps_no_pem_in_its_terminal() {
 #[test]
 fn a_carried_bundle_of_the_wrong_item_is_not_a_key() {
     let mut service = service(8, Duration::from_secs(3600));
-    let bundle = Secret::new(Box::from([1, 1, 1, 0, 1, 0, 42]));
+    let bundle = records::encode_pasted(1, b"*").unwrap();
     let digest = skein_lib::sha256::digest(bundle.expose());
     paste_start(&mut service, bundle, digest);
     assert!(service.engine.as_ref().unwrap().notes.iter().any(|note| if let crate::Note::BoxLink { line } = note {
@@ -1500,11 +1494,7 @@ fn an_install_held_past_the_states_life_answers_busy() {
 fn pasted_app_key_form_and_401_failures_use_the_persons_words() {
     let mut service = service(8, Duration::from_secs(3600));
     let pem = b"not a PEM key";
-    let mut bundle = skein_lib::Writer::new(pem.len() + 6);
-    bundle.put(&[1, 1, 11, 0]).unwrap();
-    bundle.put(&u16::try_from(pem.len()).unwrap().to_le_bytes()).unwrap();
-    bundle.put(pem).unwrap();
-    let bundle = Secret::new(bundle.finish());
+    let bundle = records::encode_pasted(11, pem).unwrap();
     let digest = skein_lib::sha256::digest(bundle.expose());
     paste_start(&mut service, bundle, digest);
     for _ in 0_u32..4 {
@@ -1886,5 +1876,19 @@ fn a_non_owner_accept_never_reaches_the_setup_host() {
         let engine = service.engine.as_ref().unwrap();
         assert_eq!(!engine.setup.public.is_empty(), admitted);
         assert_eq!(!engine.setup.runs.is_empty(), admitted);
+    }
+}
+
+#[test]
+fn foreign_and_legacy_pastes_name_the_version_and_repaste() {
+    for bytes in [&[0, 2, 10, 0, 0, 0, 1, b'*'][..], &[1, 1, 11, 0, 1, 0, b'*'][..]] {
+        let mut service = service(8, Duration::from_secs(3600));
+        let bundle = Secret::new(Box::from(bytes));
+        let digest = skein_lib::sha256::digest(bundle.expose());
+        paste_start(&mut service, bundle, digest);
+        assert_eq!(
+            paste_ended(&mut service, false, b"*").as_deref(),
+            Some(b"pasted with another version of temper: paste it again".as_slice())
+        );
     }
 }

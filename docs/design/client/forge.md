@@ -833,8 +833,7 @@ says:
   box`, and it is kept in temper's data directory. Once set up
   (connecting, connected or stopped), its First password line names the
   `person_password` file's path, never the password: "Your first
-  password is in PATH. Forgejo asks you to change it when you sign
-  in." It stays, since temper keeps no record of the first sign-in
+  password is in PATH. Change it on Forgejo when you like." It stays, since temper keeps no record of the first sign-in
   that uses it (`../protocol/setup.md`, 6.5).
 - **On GitHub, temper's App:** a line labelled "temper’s App", "SLUG ·
   INSTALLATIONS", INSTALLATIONS each installation's words joined by

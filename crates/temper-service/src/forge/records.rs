@@ -30,6 +30,7 @@ impl Rows {
             self.unconfigured.insert(forge, ()).expect("all u16 forge numbers fit");
             return;
         }
+        // Decode temper-secrets here; get() serves skein setup bytes to every reader.
         self.values.push(number, bytes, value_bytes);
     }
     pub(crate) fn forge(&self, forge: u16) -> Option<&records::ForgeRows> {

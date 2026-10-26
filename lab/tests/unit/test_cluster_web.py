@@ -25,7 +25,7 @@ def entry(**changes):
 
 class FilesTests(unittest.TestCase):
     def test_copies_and_engine_line(self):
-        names = ['llm.json', 'chat.txt', 'coding.txt', 'agent.json', 'w1.json', 'w1.digest', 'w1.secret',
+        names = ['llm.json', 'settings.json', 'agent.json', 'w1.json', 'w1.digest', 'w1.secret',
                  'w2.json', 'w2.digest', 'w2.secret', 'forge.json']
         for name in names:
             with self.subTest(name=name):
@@ -59,6 +59,8 @@ class FilesTests(unittest.TestCase):
         expected = [
             dict(name='sign-in', argv=ctl + ['sign-in', '-'], env={},
                  stdin='http://{proc.engine.ready.link}\n'),
+            dict(name='settings', argv=ctl + ['change-settings', '{experiment}/settings.json',
+                 '--against', '1', '--key', 'lab-settings'], env={}),
             dict(name='add-key', argv=ctl + ['add-key', '1', '{proc.llm.dir}/llm.key',
                  '--deployment', '--key', 'cluster-web-llm'], env={}),
             dict(name='usable', argv=ctl + ['wait', 'accounts', '--until', 'usable',

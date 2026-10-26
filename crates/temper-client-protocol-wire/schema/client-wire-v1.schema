@@ -13,7 +13,7 @@ record Adopt { project: u32 home: bool forge: u16 owner: bytes 1024 name: bytes 
 record ExistingProject { project: u32 }
 record NewProject { name: bytes 1024 }
 enum SetUpProject { existing: ExistingProject, new: NewProject }
-record SetUp { forge: u16 org: bytes 1024 repository: bytes 1024 project: SetUpProject }
+record SetUp { forge: u16 org: bytes 1024 repository: bytes 1024 project: SetUpProject playground: bool }
 record Return { source: u32 path: bytes 512 }
 # start_demo: the demo document's start (client/README.md, 4.6; protocol/setup.md, 8.4).
 record GitHubApp { id: u64 }
@@ -54,7 +54,7 @@ enum CreateStep { admin, org, repository, file }
 record Made { id: u64 }
 record CreateFailed { step: CreateStep }
 enum FirstState { making, made: Made, failed: CreateFailed }
-record FirstRepository { org: bytes 1024 repository: bytes 1024 project: SetUpProject state: FirstState label: bytes 64 }
+record FirstRepository { org: bytes 1024 repository: bytes 1024 project: SetUpProject state: FirstState label: bytes 64 playground: bool }
 record Account { id: u64 login: bytes 1024 }
 record Installation { id: u64 account: option Account suspended: bool stray: bool }
 record ConnectStopped { why: bytes 256 }
@@ -100,7 +100,7 @@ record Adopted { forge: u16 repository: u32 owner: bytes 1024 name: bytes 1024 r
 # jig-client-protocol-wire's Refusal, encoded at jig's VERSION; 16777209 so
 # that Answer at its ceiling fits jig's Owned.record (16777216).
 record CoreRefused { refusal: bytes 16777209 }
-enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer }
+enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer, another_project, home_held, prefix_occupied }
 record ForgeRefused { reason: ForgeReason }
 enum ForgeRefusal { role, no_such_forge, not_taken, connected, not_connected, busy, no_key, first_is_bot }
 record ConnectRefused { why: ForgeRefusal }

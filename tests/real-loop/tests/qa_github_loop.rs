@@ -144,7 +144,12 @@ fn push_run() -> Ran {
             call(D1, argv!["task", number(CODER), "--json"]),
             calls::ends_leaving(&[temper_real_loop_world::ending::Leftover {
                 task: PROCEDURE,
-                state: temper_real_loop_world::ending::Left::Due,
+                may_be: &[
+                    temper_real_loop_world::ending::Left::Due,
+                    temper_real_loop_world::ending::Left::Preparing,
+                    temper_real_loop_world::ending::Left::Claimed,
+                    temper_real_loop_world::ending::Left::Running,
+                ],
                 why: "token and secrecy probes end on the coder's push, before review and landing",
             }]),
         ]);

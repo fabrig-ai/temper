@@ -2,6 +2,8 @@ use super::*;
 use crate::tests::fixtures;
 use temper_client_protocol_wire::{self as wire, v1 as w};
 
+const DEMO_SOURCE: u64 = 1;
+
 fn enqueue(clients: &mut Clients) {
     let requesting = w::Requesting::new(&w::CEILINGS, w::RequestingParts { request: w::Request::StartDemo }).unwrap();
     clients.out.push(kit::Request::Application(kit::ToApplication::Request {
@@ -48,6 +50,27 @@ fn start_demo_reads_each_time_and_carries_the_key_before_admission() {
     };
     assert_ne!(carried.number, 0);
     assert_eq!(carried.digest, skein_lib::sha256::digest(b"test-key\n"));
+    // The playground adds its key through accounts, whose store adoption
+    // accepts a carried Key alone (jig's protocol/store.md, 9).
+    let _later = store.secrets(
+        Token::new(DEMO_SOURCE),
+        jig_protocol_store::Secrets::Adopt {
+            carried: carried.number,
+            owner: jig_protocol_store::SecretOwner::Source,
+            number: DEMO_SOURCE,
+            replaces: None,
+        },
+    );
+    store.iterate();
+    let Some(jig_protocol_store::Event::Secret { value: Some(jig_protocol_store::SecretValue::Key(value)), .. }) =
+        store.secrets(
+            Token::new(DEMO_SOURCE),
+            jig_protocol_store::Secrets::Get { owner: jig_protocol_store::SecretOwner::Source, number: DEMO_SOURCE },
+        )
+    else {
+        panic!("the demo key is adoptable as a source")
+    };
+    assert_eq!(value.expose(), b"test-key\n");
     enqueue(&mut engine.clients);
     engine.clients.advance(&mut engine.events, &engine.workers.forges, engine.demo.as_ref(), &mut engine.accounts);
     let next = engine.clients.demo_read().unwrap();

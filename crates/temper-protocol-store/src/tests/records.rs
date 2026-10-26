@@ -632,6 +632,9 @@ fn application_outcomes() -> Box<[forge::ApplicationOutcome]> {
         forge::AdoptionRefusal::TooLarge,
         forge::AdoptionRefusal::Unreachable,
         forge::AdoptionRefusal::InvalidAnswer,
+        forge::AdoptionRefusal::AnotherProject,
+        forge::AdoptionRefusal::HomeHeld,
+        forge::AdoptionRefusal::PrefixOccupied,
     ] {
         outcomes.push(forge::ApplicationOutcome::ForgeRefused(reason)).expect("bounded application cases");
     }

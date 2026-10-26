@@ -1012,30 +1012,39 @@ pub(crate) fn record_writes(
 ) -> List<(Option<u64>, &'static [u8], Option<usize>)> {
     use temper_protocol_records as records;
     let capacity =
-        u32::try_from(forges.len()).expect("bounded configured forges").checked_add(3).expect("three scalars");
+        u32::try_from(forges.len()).expect("bounded configured forges").checked_add(5).expect("five scalars");
     let mut writes = List::with_capacity(capacity);
     let accepted = match u64::from(limits.forges.installations).checked_mul(8) {
-        Some(bytes) => bytes.checked_add(1),
+        Some(bytes) => bytes.checked_add(7),
         None => None,
     };
+    // All rows use a u16 version and an enum tag; variable fields add a u32 length.
+    let tokens = limits.forge_component.token_bytes.max(limits.forge_component.hook_secret_bytes);
     for (bytes, source) in [
-        (u64::from(limits.forge_component.key_bytes).checked_add(1), b"AppKey (forge_component.key_bytes)".as_slice()),
+        (u64::from(tokens).checked_add(7), b"tokens (forge_component.token_bytes and hook_secret_bytes)".as_slice()),
+        (Some(11), b"User and AppId"),
+        (u64::from(limits.forge_component.key_bytes).checked_add(7), b"AppKey (forge_component.key_bytes)".as_slice()),
         (accepted, b"Accepted (forges.installations)"),
-        (u64::from(limits.forge.name_bytes).checked_add(1), b"AppSlug (forge.name_bytes)"),
+        (u64::from(limits.forge.name_bytes).checked_add(7), b"AppSlug (forge.name_bytes)"),
     ] {
-        writes.push((bytes, source, None)).expect("three scalar writes");
+        writes.push((bytes, source, None)).expect("five scalar writes");
     }
     for (index, forge) in forges.iter().enumerate() {
-        if forge.kind != settings::Kind::GitHub {
-            continue;
-        }
         // Already refused by application::forge_endpoint; never encode its socket.
         if let config::Address::Addr(Addr::InProcess(_)) = &forge.api {
             continue;
         }
-        let origin = records::origin(skein_forge_connection::settings::Kind::GitHub, &forge.api).encode();
+        let kind = match forge.kind {
+            settings::Kind::Forgejo => skein_forge_connection::settings::Kind::Forgejo,
+            settings::Kind::GitHub => skein_forge_connection::settings::Kind::GitHub,
+        };
+        let origin = records::origin(kind, &forge.api).encode();
         writes
-            .push((u64::try_from(records::encode(&origin).len()).ok(), b"Origin", Some(index)))
+            .push((
+                u64::try_from(records::encode(records::Item::Origin, &origin).expect("configured origin").len()).ok(),
+                b"Origin",
+                Some(index),
+            ))
             .expect("configured origins");
     }
     writes

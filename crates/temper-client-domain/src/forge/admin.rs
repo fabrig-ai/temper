@@ -92,7 +92,7 @@ pub(crate) fn token(side: &mut Side, value: Secret) {
         return;
     }
     side.admin_form.token = None;
-    side.admin_form.too_long = value.len() > 4090;
+    side.admin_form.too_long = value.len() > forges::PASTED_PAYLOAD;
     if !value.is_empty() && !side.admin_form.too_long {
         side.admin_form.token = Some(value);
     }
@@ -175,10 +175,7 @@ pub(crate) fn send(side: &mut Side, limits: Limits, forge: u16, out: &mut Queue<
         record: Family { family: wire::FORGE, version: wire::CLIENT_VERSION, bytes: wire::requesting(&record) },
     };
     let token = draft.token.take().expect("validated token");
-    let mut bytes = skein_lib::Writer::new(token.len().checked_add(6).expect("bundle fits"));
-    bytes.put(&[1, 1, 1, 0]).expect("header fits");
-    bytes.put(&u16::try_from(token.len()).expect("bounded token").to_le_bytes()).expect("length fits");
-    bytes.put(token.expose()).expect("token fits");
+    let value = forges::pasted_admin_token(token.expose()).expect("validated token fits pasted record");
     draft.clear();
     side.serial = side.serial.checked_add(1).expect("keys fit");
     let key = Key { asker: crate::owner::Owner::Forge.asker(), number: side.serial };
@@ -187,6 +184,7 @@ pub(crate) fn send(side: &mut Side, limits: Limits, forge: u16, out: &mut Queue<
         &crate::key::Name::new(skein_lib::Decimal::of(side.serial).as_bytes()).expect("serial fits"),
     );
     side.set_up = Some(Box::new(forges::SetUp {
+        playground: false,
         forge,
         party,
         org: draft.fields[0].clone(),
@@ -199,7 +197,7 @@ pub(crate) fn send(side: &mut Side, limits: Limits, forge: u16, out: &mut Queue<
         answer: None,
     }));
     side.admin = Some(Pending { forge, key, answer: None });
-    out.push(Request::Client { asked: Event::Carry { key, name, request, value: Some(Secret::new(bytes.finish())) } });
+    out.push(Request::Client { asked: Event::Carry { key, name, request, value: Some(value) } });
     side.changed();
 }
 pub(crate) fn told(

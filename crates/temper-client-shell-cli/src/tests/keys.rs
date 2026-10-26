@@ -95,11 +95,11 @@ fn json_cannot_name_a_key_file() {
 }
 
 const APP: &[&[u8]] = &[b"forge-connect", b"3", b"github-app", b"4242", b"/linked-parent/link-file", b"--key", b"app"];
-const APP_BOUND: &[u8] = &[b'p'; 4090];
-const APP_OVER: &[u8] = &[b'p'; 4091];
+const APP_BOUND: &[u8] = &[b'p'; 4089];
+const APP_OVER: &[u8] = &[b'p'; 4090];
 const APP_NEWLINE: &[u8] = &{
-    let mut bytes = [b'p'; 4091];
-    bytes[4090] = b'\n';
+    let mut bytes = [b'p'; 4090];
+    bytes[4089] = b'\n';
     bytes
 };
 
@@ -145,7 +145,7 @@ fn an_app_key_refuses_empty_and_oversized_files_before_opening_directory() {
     }
 }
 #[test]
-fn an_app_key_strips_one_final_lf_and_reserves_six_bytes_for_the_bundle() {
+fn an_app_key_strips_one_final_lf_and_reserves_seven_bytes_for_the_bundle() {
     for (file, pem) in [
         (b"fake-pem\n".as_slice(), b"fake-pem".as_slice()),
         (b"fake-pem\n\n", b"fake-pem\n"),
@@ -156,8 +156,8 @@ fn an_app_key_strips_one_final_lf_and_reserves_six_bytes_for_the_bundle() {
         f.link = file;
         f.sign_in_then_deliver_me();
         assert_eq!(f.carried_keys.len(), 1);
-        let mut expected = vec![1, 1, 11, 0];
-        expected.extend_from_slice(&u16::try_from(pem.len()).expect("bounded PEM").to_le_bytes());
+        let mut expected = vec![0, 1, 10];
+        expected.extend_from_slice(&u32::try_from(pem.len()).expect("bounded PEM").to_be_bytes());
         expected.extend_from_slice(pem);
         assert_eq!(f.carried_keys[0].expose(), expected);
         assert!(f.stdout().is_empty());
@@ -199,8 +199,8 @@ fn an_admin_token_strips_one_final_lf_and_carries_item_one_without_printing_it()
         f.link = file;
         f.sign_in_then_deliver_me();
         let token = file.strip_suffix(b"\n").unwrap_or(file);
-        let mut expected = vec![1, 1, 1, 0];
-        expected.extend_from_slice(&u16::try_from(token.len()).expect("bounded token").to_le_bytes());
+        let mut expected = vec![0, 1, 0];
+        expected.extend_from_slice(&u32::try_from(token.len()).expect("bounded token").to_be_bytes());
         expected.extend_from_slice(token);
         assert_eq!(f.carried_keys.len(), 1);
         assert_eq!(f.carried_keys[0].expose(), expected);

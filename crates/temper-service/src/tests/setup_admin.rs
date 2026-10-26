@@ -55,12 +55,14 @@ fn service(forge: &Forge) -> crate::Service {
     service
 }
 fn bundle(item: u16, bytes: &[u8]) -> Secret {
-    let mut writer = skein_lib::Writer::new(bytes.len().checked_add(6).unwrap());
-    writer.put(&[1, 1]).unwrap();
-    writer.put(&item.to_le_bytes()).unwrap();
-    writer.put(&u16::try_from(bytes.len()).unwrap().to_le_bytes()).unwrap();
-    writer.put(bytes).unwrap();
-    Secret::new(writer.finish())
+    let value = match item {
+        1 => temper_client_domain::forge::forges::pasted_admin_token(bytes),
+        _ => records::encode_pasted(item, bytes).ok(),
+    };
+    match value {
+        Some(value) => value,
+        None => Secret::new(Box::from([0])),
+    }
 }
 fn first(label: &[u8]) -> domain::FirstAsk {
     domain::FirstAsk {
@@ -386,7 +388,7 @@ fn both_admin_plans_read_the_paste_even_with_different_records_and_adoptions() {
 fn row_placeholder(engine: &mut crate::engine::Engine) {
     engine.forge_records.rows.push(
         records::number(1, Item::AdminToken),
-        Secret::new(records::encode(b"different-record-token").into_boxed_slice()),
+        Secret::new(records::encode(Item::AdminToken, b"different-record-token").unwrap().into_boxed_slice()),
         4096,
     );
 }
@@ -462,7 +464,7 @@ fn admin_record_files_and_directories_are_owner_only() {
         Token::new(901),
         fixtures::application_request(
             records::number(1, Item::AdminToken),
-            Secret::new(records::encode(ADMIN).into_boxed_slice()),
+            Secret::new(records::encode(Item::AdminToken, ADMIN).unwrap().into_boxed_slice()),
         ),
     );
     let mut kept = false;
@@ -564,7 +566,10 @@ fn a_failed_keep_ends_the_admin_caller_and_erases_before_the_engine_stops() {
     let mut service = service(&forge);
     let run = pending(&mut service);
     let engine = service.engine.as_mut().unwrap();
-    lifecycle::keep(engine, 1, Item::Origin, b"placeholder-origin", Purpose::Host(run));
+    let origin =
+        records::Origin { kind: skein_forge_connection::settings::Kind::Forgejo, api: "127.0.0.1:3000".into() }
+            .encode();
+    lifecycle::keep(engine, 1, Item::Origin, &origin, Purpose::Host(run));
     let Some(StoreEvent::Kept { owner }) = engine.store.above.pop() else { panic!("pending keep") };
     answer(engine, StoreEvent::Corrupt { owner });
     assert!(engine.end.is_some());

@@ -257,7 +257,7 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             }
             None
         }
-        core::Ask::ClaimDone { task, attempt, kinds, charter } => {
+        core::Ask::ClaimDone { task, attempt, kinds, version } => {
             if connector == domain.config.forge_connector {
                 let (writes, holders) = forge_route::claimed_writes(domain, env, task)
                     .expect("the admitted assignment retains its bounded held forge writes");
@@ -275,7 +275,7 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                         placement,
                         grants,
                         kinds,
-                        charter,
+                        version,
                         reply_to: internal(task),
                         run: Token::new(task),
                         attempt: Token::new(attempt),

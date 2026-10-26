@@ -496,3 +496,94 @@ fn a_forge_procedure_without_a_change_has_an_unknown_panel() {
     assert!(panel.handle.is_none());
     assert!(!world.front().watching_change(person, task));
 }
+
+fn demo_change_page(demo_forge: u16, ended: bool) {
+    let mut world = fixtures::world(fixtures::SEED);
+    *world.front() = Joint::with_change_landing(fixtures::SEED, &fixtures::domain_limits());
+    world.front().engine.forge = Some(ForgeStand::with_checks(fixtures::REPOSITORIES, &[BUILD]));
+    fixtures::adopt_change_repository(world.front());
+    world.front().engine.forge.as_mut().expect("story's forge").push_branch(REPOSITORY.repository, BRANCH);
+    let goal = fixtures::goal_with_pushed_change(world.front(), BRANCH);
+    let mut cues = skein_lib::List::with_capacity(1);
+    cues.push(b"Change the title".as_slice().into()).expect("one cue");
+    world.front().demo = Some(
+        w::DemoAnswer::new(
+            &w::CEILINGS,
+            w::DemoAnswerParts {
+                state: if ended { w::DemoState::Ended } else { w::DemoState::Running },
+                project: 1,
+                forge: demo_forge,
+                provider: 17,
+                owner: b"acme".as_slice().into(),
+                name: b"shop".as_slice().into(),
+                cues,
+            },
+        )
+        .expect("scripted demo read beside the real engine"),
+    );
+    let person = world.client(fixtures::PARTY, fixtures::task_page(goal));
+    let on_demo = demo_forge == REPOSITORY.forge;
+    let link = Find::exactly_named(Role::Link, "View on forge ↗".as_bytes());
+    let address = format!("http://forge.example/acme/shop/pulls/{}", facts_after_open(&mut world).pull.number);
+    world.person(
+        person,
+        vec![
+            Step::See { find: Find::text(b"Waiting for its gates at its head."), within: fixtures::WITHIN },
+            if on_demo {
+                Step::See {
+                    find: Find::exactly_named(Role::Paragraph, format!("View on forge ↗ {address}").as_bytes()),
+                    within: fixtures::WITHIN,
+                }
+            } else {
+                Step::See { find: link.clone(), within: fixtures::WITHIN }
+            },
+        ],
+    );
+    let outcome = world.run(Until::Done);
+    assert_eq!(outcome.verdict, Verdict::Passed, "{outcome:?}");
+    let root = world.root(person).person();
+    if ended {
+        assert!(root.forge().demo().is_none());
+        assert_eq!(root.forge().retired_demo().expect("retired identity").forge, demo_forge);
+    } else {
+        assert_eq!(root.forge().demo().expect("started demo").forge, demo_forge);
+    }
+    let external: Vec<_> =
+        world.tree(person).nodes().iter().filter(|node| node.external.as_deref() == Some(address.as_bytes())).collect();
+    if on_demo {
+        assert!(external.is_empty(), "no node can navigate to the demo address");
+        assert!(
+            !world
+                .tree(person)
+                .nodes()
+                .iter()
+                .any(|node| node.role == Role::Link && node.name.as_deref() == Some("View on forge ↗".as_bytes()))
+        );
+    } else {
+        assert_eq!(external.len(), 1);
+        assert_eq!(external[0].role, Role::Link);
+    }
+}
+fn facts_after_open(world: &mut World<Temper, Joint>) -> Facts {
+    for _ in 0..STEPS {
+        if world.front().engine.store.rows.values().any(|record| matches!(record,
+            engine::Record::Forge { row } if matches!(row.as_ref(), temper_engine_domain_forge::Stored::Change(change) if change.pull.is_some()))) {
+            return facts(world.front());
+        }
+        let outcome = world.run(Until::Steps(2));
+        assert!(matches!(outcome.verdict, Verdict::Passed | Verdict::Open { .. }), "{outcome:?}");
+    }
+    panic!("pull opened within the step budget");
+}
+#[test]
+fn a_demo_changes_address_is_text_not_a_link() {
+    demo_change_page(REPOSITORY.forge, false);
+}
+#[test]
+fn another_forges_change_keeps_its_link() {
+    demo_change_page(REPOSITORY.forge + 1, false);
+}
+#[test]
+fn an_ended_demo_changes_address_stays_text() {
+    demo_change_page(REPOSITORY.forge, true);
+}

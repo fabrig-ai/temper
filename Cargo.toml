@@ -69,7 +69,7 @@ temper-docs = { path = "crates/temper-docs" }
 rustls = { version = "=0.23.41", default-features = false, features = ["std", "ring", "tls12"] }
 temper-github-app = { path = "testing/temper-github-app" }
 temper-fake = { path = "crates/temper-fake" }
-temper-protocol-records = { path = "crates/temper-protocol-records" }
+temper-protocol-records = { path = "crates/temper-protocol-records", default-features = false }
 skein-fake-forge-github = { git = "https://github.com/fabrig-dev/skein.git" }
 temper-box = { path = "crates/temper-box" }
 temper-forge-setup-shell = { path = "crates/temper-forge-setup-shell" }

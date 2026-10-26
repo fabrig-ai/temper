@@ -56,10 +56,10 @@ Old entries are eventually forgotten; a forgotten-revision answer
 names the oldest revision still kept. A history entry can report a
 size or a cut when its contents are too large to show.
 
-Whole setting values can currently be read only at the newest
+Whole charter values can also be read at a held revision, as shown
+under Running work. Other whole setting values are read at the newest
 revision. A revision record is history of a decision, not a promise
-that you can retrieve every older whole value. A hint to read the
-current setting does not reconstruct the old value.
+that you can retrieve every older whole value.
 
 ## Revisions
 
@@ -129,8 +129,43 @@ list of affected tasks can be bounded rather than naming them all.
 
 `--running stays` or `--running moves` is recorded with the revision;
 a direct change defaults to `stays`. A run already going keeps what
-it was given. A task's next run reads the newest settings, whichever
-choice was recorded.
+it was given. An agent task records the settings revision in which it
+was created, and its later runs read that revision's charter. A new
+delegate records the newest revision, even when its parent uses an
+older one. Host placement follows that same charter version: changing its
+host kinds does not change where an older task's next run may run. Tasks
+created after the change use the new host kinds.
+
+A held revision is the settings revision from which a live task's runs
+read their charter. It is kept while a task holds it. The settings
+inventory shows these revisions and their live holder counts. While
+a revision is held, you can read its whole charter value:
+
+```sh
+temper ctl me setting charter 3 --revision 5 --json
+```
+
+An owner can move eligible live agent tasks from a held revision to
+the newest. For example, if revision 5 has two live tasks and the
+newest is 6:
+
+```sh
+temper ctl me move-to-newest 5 --key move-revision-5
+```
+
+The answer is `moved 2 tasks to revision 6`. If some cannot move, the
+answer also counts those that stay on 5. A task can move only if the
+newest charter permits its model choices. A run already going keeps
+its instructions; the task reads its new revision at its next run.
+A conversation moves to the newest compatible revision at its next run.
+
+Other setting kinds are read only at the newest revision. A held
+revision leaves memory when its last live holder ends or moves away;
+its revision record remains readable only within the history window.
+
+The recorded `--running moves` choice moves eligible existing tasks
+with the change; `stays` keeps their recorded revisions. Conversations
+still move at their next run.
 
 ## Proposals
 
@@ -194,13 +229,10 @@ The first start records revision 1. A later start whose defaults
 changed records a revision of its own. A stored change still wins over
 a default changed at that later start. Editing the configuration does
 not undo an accepted stored change; reset the setting when you want to
-return it to its default.
+return it to its default. A reset uses the default at the reset's
+revision; work holding an older revision keeps that revision's charter.
 
 ## What it cannot do yet
-
-A running task does not keep an older settings revision for its
-later runs. Whole older charter values and movement of live tasks
-between settings revisions are not built.
 
 Landing rules and the forge's charter selection are not settings
 yet. There is no settings page in the client, nor a page that

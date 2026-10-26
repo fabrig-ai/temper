@@ -94,8 +94,8 @@ pub(crate) fn client_limits() -> temper_client_shell_terminal::limits::Limits {
     limits.client.client.domain.fields = 8;
     limits.client.client.domain.parts = 4;
     limits.client.client.domain.reads = 8;
-    limits.client.client.domain.text = 64;
-    limits.client.client.domain.turn_text = 64;
+    limits.client.client.domain.text = 128;
+    limits.client.client.domain.turn_text = 128;
     limits.client.client.domain.document_bytes = 65_536;
     limits.client.client.domain.requests.bytes = 262_144;
     limits.client.client.domain.ask_bytes =
@@ -134,6 +134,20 @@ pub(crate) fn document() -> Vec<u8> {
         "limits":{"profile":"small","overrides":{"checkout.name_bytes":256,"checkout.repositories":2,"checkout.message_bytes":4096,"forge.name_bytes":64,"forge.resources_per_task":2,"git_component.stdout_bytes":2048}},
         "workers":[{"root":"worker","git":"/usr/bin/git"}]});
     crate::stories::configure(&mut value);
+    if crate::stories::uses_stock() {
+        for member in ["charters", "templates", "policies", "rules"] {
+            value["engine"].as_object_mut().expect("engine").remove(member);
+        }
+        for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
+            for role in project["policy"]["roles"].as_array_mut().expect("roles") {
+                role["authority"]["delegation"]["depth"] = 4.into();
+            }
+        }
+        for (name, count) in [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32)] {
+            value["engine"]["limits"]["overrides"][name] = count.into();
+        }
+    }
     for (name, count) in [
         ("people.amendment_bytes", 512),
         ("tasks.hold_bytes", 256),
@@ -158,6 +172,9 @@ pub(crate) fn files() -> temper_service::settings::Files {
     let mut entries = List::with_capacity(10);
     for source in [channel::files(false), channel::files(true)] {
         for (name, value) in source.entries.into_boxed() {
+            if crate::stories::uses_stock() && name.starts_with(b"charters/") {
+                continue;
+            }
             let name = if name.as_ref() == b"agent.json" { b"/opt/temper/agent.json".as_slice().into() } else { name };
             entries.push((name, value)).expect("fixture files");
         }
@@ -361,13 +378,7 @@ fn engine() -> jig_protocol_config::Engine {
     .expect("document");
     let mut object = jig_protocol_config::read::Object::new(&doc, 0).expect("object");
     let at = object.member(&doc, b"engine").expect("engine member");
-    jig_protocol_config::engine(
-        &doc,
-        at,
-        &jig_protocol_config::Directories::working(),
-        jig_protocol_config::Defaults::Document,
-    )
-    .expect("engine")
+    temper_service::startup::engine(&doc, at, &jig_protocol_config::Directories::working()).expect("engine")
 }
 fn jig_test_service_limits(overrides: &jig_protocol_config::Limits) -> jig_test_service::limits::Limits {
     jig_test_service::limits::for_profile(jig_protocol_config::Profile::Small, overrides)

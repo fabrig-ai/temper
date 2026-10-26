@@ -1148,7 +1148,7 @@ fn a_first_run_answers_on_the_demo() {
 
 /// domain/testing.md, 2.6; protocol/setup.md, 13.4, "A first run set up for real".
 #[test]
-fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
+fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_lands_and_survives_restart() {
     use skein_forge::forgejo::pin::VERSION;
     use std::{fs, os::unix::fs::PermissionsExt};
     use support::ctl::Step;
@@ -1162,6 +1162,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
     let flags = support::boxed::echo_steps(deployment_flags(&paths));
     let (cached, sources) = cache_forgejo_binaries(&paths[2]);
     let mut bot = None;
+    let mut csv_landing = None;
     for run in ["first", "second"] {
         let client_root = scratch.path().join(run);
         fs::create_dir(&client_root).expect("fresh client root");
@@ -1174,7 +1175,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
             // protocol/setup.md, 13.4: main's push run is taken before the owner's
             // first task; no pull exists yet to have caused this runner line.
             steps.push(Step::Stderr(b" repo is work/hello "));
-            steps.extend(support::first_repository::task_steps(&client_root));
+            steps.extend(support::first_repository::csv_task_steps(&client_root));
         } else {
             steps.extend(support::first_repository::found_steps());
         }
@@ -1185,7 +1186,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
             steps,
             support::forge_land::OWNED_ALLOWANCE,
             || support::first_repository::live(&paths[0], &paths[1], &client_root),
-            support::first_repository::llm(&paths[0]),
+            support::first_repository::csv_llm(&paths[0]),
         );
         eprintln!("{run} Forgejo setup run: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
         let stderr = String::from_utf8_lossy(&ended.stderr);
@@ -1204,6 +1205,25 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
         }
         let evidence = ended.checked.expect("the live forge and task reads ran");
         support::first_repository::assert_task(run, &ended.calls[setup_calls..], &stderr, &evidence);
+        let panel = support::ctl::json(&evidence.panel);
+        assert_eq!(panel["step"], "landed");
+        let merge = panel["merge"].as_str().expect("landed merge commit");
+        assert_eq!(merge.len(), 40);
+        let identity = (panel["head"].clone(), panel["merge"].clone());
+        if run == "first" {
+            let pending = ended
+                .calls
+                .iter()
+                .filter_map(|call| serde_json::from_slice::<serde_json::Value>(&call.stdout).ok())
+                .find(|panel| panel["gates"][0]["verdict"] == "pending")
+                .expect("pending review at head");
+            assert_eq!(panel["head"], pending["head"], "land exactly the reviewed head");
+            assert_eq!(panel["gates"][0]["verdict"], "approved");
+            assert!(evidence.producer.contains("--csv"), "the coder wrote widget's CSV implementation");
+            csv_landing = Some(identity);
+        } else {
+            assert_eq!(Some(identity), csv_landing, "the same landing survives restart");
+        }
         let support::first_repository::Evidence { address, version, .. } = evidence;
         let version = version.unwrap_or_else(|why| panic!("{run}: live Forgejo version: {why:?}; box: {stderr}"));
         assert_eq!(version["version"].as_str().expect("version").split('+').next(), Some(VERSION));
@@ -1468,30 +1488,28 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
         forge_land::assert_landed_chat_pull(run, &evidence);
         let task = String::from_utf8(outcome.calls[found_at + 1].stdout.clone()).expect("landed task UTF-8");
         let identity = forge_land::landed_identity(&task, &evidence.page);
-        let tasks_at = outcome.calls.len() - if first { 2 } else { 6 };
-        let tasks = [0, 1].map(|offset| {
-            forge_land::ended_tasks(&support::ctl::json(&outcome.calls[tasks_at + offset]), 2 + offset as u64)
-        });
+        let closing_at = outcome.calls.len() - if first { 0 } else { 4 };
+        let (tasks_at, tasks) = forge_land::plan_ended_tasks(&outcome.calls[..closing_at]);
         if first {
             landed = Some(identity);
             ended_tasks = Some(tasks);
         } else {
             assert_eq!(Some(identity), landed, "same pull and merge commit");
             assert_eq!(Some(tasks), ended_tasks, "no second change or producer");
-            let ended = support::ctl::json(&outcome.calls[tasks_at + 3]);
+            let ended = support::ctl::json(&outcome.calls[closing_at + 1]);
             assert_eq!(ended["met"], true);
             assert_eq!(ended["task"]["chip"]["phase"], "ended");
-            forge_land::assert_no_live_roots(&support::ctl::json(&outcome.calls[tasks_at + 4]));
-            let unknown = &outcome.calls[tasks_at + 5];
-            assert_eq!(unknown.exit, Some(Exit::Code(2)), "no task 4: {stderr}");
-            assert_eq!(unknown.stderr.trim_ascii_end(), b"{\"error\":\"unknown\"}", "no task 4: {stderr}");
+            forge_land::assert_no_live_roots(&support::ctl::json(&outcome.calls[closing_at + 2]));
+            let unknown = &outcome.calls[closing_at + 3];
+            assert_eq!(unknown.exit, Some(Exit::Code(2)), "no task 5: {stderr}");
+            assert_eq!(unknown.stderr.trim_ascii_end(), b"{\"error\":\"unknown\"}", "no task 5: {stderr}");
         }
         forge_land::assert_reply(&outcome.calls[found_at + 4..tasks_at], first);
-        // Init has no review gate. Four coder turns include the workflow read;
+        // One reviewer turn follows CI. Four coder turns include the workflow read;
         // three chat turns delegate, wait, then reply after the procedure ends.
         // After the restart, the chat's lost attempt answers again, then Close's
         // finish request takes its last text.
-        forge_land::assert_requests(&seen, if first { 7 } else { 2 }, words.as_bytes(), first);
+        forge_land::assert_requests(&seen, if first { 8 } else { 2 }, words.as_bytes(), first);
         let link = support::printed_link(&outcome.stdout).expect("printed link");
         assert_eq!(outcome.stdout, [link, b"\n"].concat(), "one printed link");
         assert_eq!(support::boxed::status(evidence.address, "/api/v1/version"), None);
@@ -1915,9 +1933,9 @@ fn first_run(restart: bool) {
         ),
         (
             "second",
-            // After chat 1, its change 2, and the change's review gate 3.
+            // After chat 1, change 2, producer 3 and reviewer 4.
             support::person::demo_chat(
-                4,
+                5,
                 b"Add a dark theme to widget",
                 b"I would give widget a dark theme that follows the system's preference, with its colours as variables in one place so both themes stay in step. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done.",
             ),
@@ -2508,7 +2526,7 @@ fn cluster_chats(case: &str, story: ClusterStory) {
     if matches!(story, ClusterStory::Kill | ClusterStory::Hung) {
         cluster.record_llm();
     }
-    let engine = cluster.dir("engine").join("config/temper.json");
+    let settings = cluster.settings_file();
     let key = cluster.dir("llm").join("llm.key");
     let (mut members, hosts) = cluster.members();
     members.up(if story == ClusterStory::Each { &["w1", "w2"] } else { &["w1"] });
@@ -2516,7 +2534,7 @@ fn cluster_chats(case: &str, story: ClusterStory) {
     let mut world = skein_world::real::World::new(ClusterChatJudge {
         members,
         deadline: clock.now().now.saturating_add(support::WITHIN),
-        engine,
+        settings,
         key,
         client: scratch.path().join("client"),
         stage: ClusterChatStage::Start,
@@ -2584,7 +2602,7 @@ enum ClusterChatStage {
 struct ClusterChatJudge {
     members: support::cluster::Members,
     deadline: skein_lib::Time,
-    engine: std::path::PathBuf,
+    settings: std::path::PathBuf,
     key: std::path::PathBuf,
     client: std::path::PathBuf,
     stage: ClusterChatStage,
@@ -2611,35 +2629,31 @@ impl ClusterChatJudge {
     }
     fn begin(&mut self, client: &mut support::cluster::Root) {
         use support::ctl::{Call, PROJECT};
-        let engine: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&self.engine).expect("rendered engine document"))
-                .expect("engine JSON");
-        let template = engine["engine"]["templates"]
+        // Read the same whole charter value the owner applies below, rather than the startup document.
+        let settings: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&self.settings).expect("cluster settings FILE"))
+                .expect("settings JSON");
+        let charter = &settings["items"]
             .as_array()
-            .expect("templates")
+            .expect("settings items")
             .iter()
-            .find(|template| template["name"] == "chat")
-            .expect("chat template");
-        let charter = engine["engine"]["charters"]
-            .as_array()
-            .expect("charters")
-            .iter()
-            .find(|charter| charter["number"] == template["executor"]["charter"])
-            .expect("chat charter");
+            .find(|item| item["setting"] == serde_json::json!({"kind":"charter","number":1}))
+            .expect("chat charter setting")["set"];
         assert!(
-            Duration::from_millis(charter["waiting_ms"].as_u64().expect("chat waiting_ms")) >= CHAT_HOLDS_ITS_SLOT,
-            "lab/cluster/engine.json: chat charter waiting_ms must hold its slot past the story deadline"
+            Duration::from_nanos(charter["waiting"].as_u64().expect("chat waiting")) >= CHAT_HOLDS_ITS_SLOT,
+            "lab/cluster/settings.json: charter 1 waiting must hold its slot past the story deadline"
         );
-        let time = charter["time_ms"].as_u64().expect("chat time_ms");
-        let reserve = charter["reserve_time_ms"].as_u64().expect("chat reserve_time_ms");
+        let time = charter["time"].as_u64().expect("chat time");
+        let reserve = charter["reserve_time"].as_u64().expect("chat reserve_time");
         assert!(
-            time.checked_sub(reserve).is_some_and(|ordinary| Duration::from_millis(ordinary) >= CHAT_HOLDS_ITS_SLOT),
-            "lab/cluster/engine.json: chat charter time_ms less its reserve must hold its slot past the story deadline"
+            time.checked_sub(reserve).is_some_and(|ordinary| Duration::from_nanos(ordinary) >= CHAT_HOLDS_ITS_SLOT),
+            "lab/cluster/settings.json: charter 1 time less its reserve must hold its slot past the story deadline"
         );
         self.queue(
             client,
             vec![
                 Call::sign_in(),
+                support::cluster::settings_change(&self.settings),
                 Call::new(&[
                     "add-key",
                     "1",
@@ -3549,7 +3563,8 @@ fn a_story_box_and_its_steps_die_when_the_test_process_is_killed() {
             .stderr(Stdio::null())
             .spawn()
             .expect("wrapped box");
-        fs::write(root.join("box.pid"), box_process.id().to_string()).expect("box pid");
+        fs::write(root.join("box.pid.tmp"), box_process.id().to_string()).expect("box pid");
+        fs::rename(root.join("box.pid.tmp"), root.join("box.pid")).expect("publish box pid");
         let _ended = box_process.wait().expect("box wait");
         return;
     }
@@ -3753,5 +3768,195 @@ fn temper_ctl_decide_settings() {
     assert!(!revision["head"]["by"].is_null());
     assert!(String::from_utf8_lossy(&calls[12].stdout).contains("Settings proposed by the member."));
     assert!(String::from_utf8_lossy(&calls[13].stdout).contains("withdrawn"));
+    scratch.remove();
+}
+
+#[test]
+fn temper_ctl_move_to_newest() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_move_to_newest");
+    let steps = vec![
+        Step::Mark("An owner reads the newest settings revision"),
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Mark("A ctl-created agent chat records the newest settings revision"),
+        Step::Run(Call::new(&[
+            "chat",
+            "--project",
+            "1",
+            "--key",
+            "settings-chat",
+            "Inspect my settings revision",
+            "--json",
+        ])),
+        Step::Then(Box::new(|calls| {
+            let created = support::ctl::json(&calls[2]);
+            let task = created["outcome"]["done"]["owner"]["created"]["first"].as_u64().expect("created chat");
+            Call::new(&["task", &task.to_string()])
+        })),
+        Step::Mark("Moving the newest revision answers no tasks moved or left behind"),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["move-to-newest", &support::ctl::newest(&calls[1]).to_string(), "--key", "move-newest"])
+        })),
+        Step::Then(Box::new(|calls| {
+            Call::new(&[
+                "move-to-newest",
+                &support::ctl::newest(&calls[1]).to_string(),
+                "--key",
+                "move-newest-json",
+                "--json",
+            ])
+        })),
+        Step::Mark("A revision not held is unknown"),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["move-to-newest", &(support::ctl::newest(&calls[1]) + 5).to_string(), "--key", "move-unknown"])
+        })),
+    ];
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    let calls = &seen.calls;
+    ctl_assert_success(&calls[..6]);
+    let newest = support::ctl::newest(&calls[1]);
+    let task = String::from_utf8_lossy(&calls[3].stdout);
+    assert!(task.lines().any(|line| line == format!("settings: revision {newest}")), "{task}");
+    assert_eq!(calls[4].stdout, format!("moved 0 tasks to revision {newest}\n").as_bytes());
+    assert_eq!(
+        calls[5].stdout.trim_ascii_end(),
+        format!("{{\"newest\":{newest},\"moved\":0,\"stayed\":0}}").as_bytes()
+    );
+    assert_eq!(calls[6].exit, Some(Exit::Code(2)));
+    assert!(calls[6].stdout.is_empty());
+    assert_eq!(calls[6].stderr.as_slice(), b"move-to-newest: No visible object with that name\n");
+    scratch.remove();
+}
+
+/// client/tools.md, 11.4: the owner moves a parked delegate's next run.
+#[test]
+fn temper_ctl_running_work_keeps_its_revision() {
+    use support::{
+        ctl::{Call, Step},
+        running_revision,
+    };
+    let scratch = support::Scratch::new("ctl_running_revision");
+    let (paths, flags) = first_run_directories(&scratch);
+    let key = scratch.path().join("llm-key");
+    std::fs::write(&key, jig_channel_world::fixtures::KEY).expect("fixture key");
+    std::fs::set_permissions(&key, std::os::unix::fs::PermissionsExt::from_mode(0o600)).expect("private key");
+    let file = scratch.path().join("settings.json");
+    let steps = vec![
+        Step::Mark("An owner reads revision R and its delegate charter"),
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["add-key", "1", key.to_str().expect("key path"), "--key", "revision-account"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["setting", "charter", "2", "--json"])),
+        Step::Mark("A chat delegates one task, and both park under R"),
+        Step::Run(Call::new(&["chat", "--project", "1", "--key", "revision-chat", "@revision-chat Delegate and wait"])),
+        Step::Until(Call::new(&["task", "2", "--json"]), running_revision::PARKED_DELEGATE),
+        Step::Until(Call::new(&["task", "1", "--json"]), b"\"phase\":\"idle\""),
+        Step::Mark("Changing the delegate charter makes R+1 while running work keeps R"),
+        Step::Then(Box::new(move |calls| {
+            assert_eq!(support::ctl::json(&calls[5])["chip"]["phase"], "idle");
+            support::ctl::charter_change_file(&file, &calls[3], running_revision::INSTRUCTIONS);
+            support::ctl::settings_change(&calls[2], &file, "revision-instructions")
+        })),
+        Step::Run(Call::new(&["task", "2"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["setting", "charter", "2", "--revision", &support::ctl::newest(&calls[2]).to_string()])
+        })),
+        Step::Mark("The owner moves both live tasks to R+1"),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["move-to-newest", &support::ctl::newest(&calls[2]).to_string(), "--key", "move-running"])
+        })),
+        Step::Mark("A ctl message wakes the delegate, whose next run reads the new instructions"),
+        Step::Run(Call::new(&["message", "2", "Read your revised instructions", "--key", "wake-delegate"])),
+        Step::Run(Call::new(&["task", "2", "--json"])),
+        Step::Until(Call::new(&["task", "2", "--json"]), running_revision::PARKED_DELEGATE),
+        Step::Mark("Revision R is no longer held"),
+        Step::Run(Call::new(&["settings", "--json"])),
+    ];
+    let seen = support::boxed::run_ctl_with_llm(
+        scratch.path(),
+        flags,
+        scratch.path(),
+        steps,
+        support::WITHIN,
+        || (),
+        running_revision::llm(&paths[0]),
+    );
+    assert_eq!(seen.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&seen.stderr));
+    assert_eq!(seen.left, Some(Vec::new()), "no process outlives its box");
+    ctl_assert_success(&seen.calls);
+    assert_eq!(
+        seen.calls.len(),
+        16,
+        "box {}; model answers {:?}; requests {}",
+        String::from_utf8_lossy(&seen.stderr),
+        seen.model.as_ref().map(|model| &model.answers),
+        seen.model.as_ref().map_or(0, |model| model.requests.len())
+    );
+    running_revision::assert_story(&seen.calls, seen.model.as_ref().expect("model requests"));
+    scratch.remove();
+}
+
+/// protocol/setup.md, 6.7: the playground copy is made and adopted through ctl.
+#[test]
+fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_forge() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    use support::{
+        ctl::{Call, Step},
+        first_repository,
+    };
+    let scratch = support::Scratch::new("forgejo-playground-copy");
+    let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
+    for path in &paths {
+        fs::create_dir(path).expect("empty first-run directory");
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).expect("private directory");
+    }
+    let flags = support::boxed::echo_steps(deployment_flags(&paths));
+    let _cached = cache_forgejo_binaries(&paths[2]);
+    let mut steps = vec![
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["forge-setup", "3", "--playground"])),
+        Step::Run(Call::new(&["forges", "--json"])),
+    ];
+    steps.extend(first_repository::playground_task_steps(scratch.path()));
+    let ended = support::boxed::run_ctl_with_llm(
+        scratch.path(),
+        flags,
+        scratch.path(),
+        steps,
+        support::forge_land::OWNED_ALLOWANCE,
+        || first_repository::live(&paths[0], &paths[1], scratch.path()),
+        first_repository::playground_llm(&paths[0]),
+    );
+    let stderr = String::from_utf8_lossy(&ended.stderr);
+    assert_eq!(ended.exit, Some(Exit::Code(0)), "box drained: {stderr}");
+    assert_eq!(ended.left, Some(Vec::new()), "no processes outlive the box");
+    for call in &ended.calls {
+        assert_eq!(
+            call.exit,
+            Some(Exit::Code(0)),
+            "stdout: {}; stderr: {}; box: {stderr}",
+            String::from_utf8_lossy(&call.stdout),
+            String::from_utf8_lossy(&call.stderr)
+        );
+    }
+    let adoption = String::from_utf8_lossy(&ended.calls[1].stdout);
+    assert!(adoption.contains("Adopted playground/widget on forge 3 as owned."), "{adoption}");
+    assert!(adoption.contains("It is the project's home."), "{adoption}");
+    let rows = support::ctl::json(&ended.calls[2]);
+    let row = rows["forges"].as_array().expect("forge rows").iter().find(|row| row["number"] == 3).expect("forge 3");
+    assert_eq!(row["first"]["project"]["new"], "widget");
+    assert_eq!(row["first"]["org"], "playground");
+    assert_eq!(row["first"]["repository"], "widget");
+    assert_eq!(row["first"]["playground"], true);
+    let evidence = ended.checked.expect("live worker reads");
+    assert!(evidence.producer.contains("\"path\":\".forgejo/workflows/ci.yml\"}\nRead "), "{}", evidence.producer);
+    assert!(evidence.producer.contains("\"path\":\"src/main.rs\"}\nRead "), "{}", evidence.producer);
+    // ctl prints read counts; the service test compares every source byte.
+    assert!(evidence.producer.contains("Read 7 of 7 lines; skipped 0"), "{}", evidence.producer);
+    let panel = support::ctl::json(&evidence.panel);
+    assert_eq!(panel["landing"], "main", "{panel}");
+    assert_eq!(panel["pull"]["address"], format!("http://{}/playground/widget/pulls/1", evidence.address));
     scratch.remove();
 }

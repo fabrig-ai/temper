@@ -2,7 +2,7 @@
 
 H asks a chat in project 1 for NOTICE through the provisioned `ctl` tool and
 follows the coding change to landing. Its charter is draft/qa-lab.md, 6.1 verbatim.
-It shares S's documents, processes, five seed actions, collections and checks;
+It shares S's documents, processes, six seed actions, collections and checks;
 the scripted story is replaced by the driver. The runtime LLM adapter adapts
 the cluster's NOTICE root for S, H and P, keeping the root chat open after
 its delegate settles. No smoke story is included.

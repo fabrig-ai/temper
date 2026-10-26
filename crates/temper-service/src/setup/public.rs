@@ -69,7 +69,7 @@ pub(crate) fn admin_connect(
         Some(Event::Secret { value: Some(SecretValue::Carried { kind: CarriedKind::Value, value }), .. })
             if skein_lib::sha256::digest(value.expose()) == carried.digest =>
         {
-            pasted(value.expose(), 1).ok_or(b"the pasted value is not a token".as_slice())
+            pasted(value.expose(), 1, b"the pasted value is not a token")
         }
         Some(_) | None => Err(b"the pasted value changed".as_slice()),
     };
@@ -86,9 +86,12 @@ pub(crate) fn admin_connect(
         )
         .expect("public room checked");
     let first = match first {
-        Some(first) => {
-            Some(super::lifecycle::Intent { org: first.org, repository: first.repository, label: first.label })
-        }
+        Some(first) => Some(super::lifecycle::Intent {
+            playground: false,
+            org: first.org,
+            repository: first.repository,
+            label: first.label,
+        }),
         None => None,
     };
     engine
@@ -129,7 +132,7 @@ pub(crate) fn connect(engine: &mut Engine, forge: u16, request: Token, app: NonZ
     let parsed = match value {
         Some(Event::Secret { value: Some(SecretValue::Carried { kind: CarriedKind::Value, value }), .. }) => {
             if skein_lib::sha256::digest(value.expose()) == carried.digest {
-                pasted(value.expose(), 11).ok_or(b"the pasted value is not a key".as_slice())
+                pasted(value.expose(), 11, b"the pasted value is not a key")
             } else {
                 Err(b"the pasted value changed".as_slice())
             }
@@ -181,20 +184,18 @@ fn manifest_link(engine: &Engine, forge: u16, state: &[u8], page: bool) -> Box<[
     }
     writer.finish()
 }
-fn pasted(bytes: &[u8], item: u16) -> Option<Secret> {
-    if bytes.len() > 4096 {
-        return None;
+fn pasted(bytes: &[u8], item: u16, invalid: &'static [u8]) -> Result<Secret, &'static [u8]> {
+    let (found, value) = match temper_protocol_records::decode_pasted(bytes) {
+        Ok(value) => value,
+        Err(temper_protocol_records::PastedError::Version) => {
+            return Err(temper_protocol_records::PastedError::Version.message());
+        }
+        Err(temper_protocol_records::PastedError::Unreadable) => return Err(invalid),
+    };
+    if found != item || value.expose().is_empty() {
+        return Err(invalid);
     }
-    let mut reader = skein_lib::Reader::new(bytes);
-    if reader.u8()? != 1 || reader.u8()? != 1 || u16::from_le_bytes(reader.bytes(2)?.try_into().ok()?) != item {
-        return None;
-    }
-    let size = u32::from(u16::from_le_bytes(reader.bytes(2)?.try_into().ok()?));
-    let pem = reader.bytes(size)?;
-    if pem.is_empty() || !reader.is_empty() {
-        return None;
-    }
-    Some(Secret::new(Box::from(pem)))
+    Ok(value)
 }
 pub(crate) fn install(engine: &mut Engine, forge: u16, request: Token, back: Option<Box<[u8]>>) {
     // The engine's own run on the forge holds an Install rather than refusing it (setup.md, 5.1).

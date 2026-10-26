@@ -124,12 +124,12 @@ pub fn text_files(parsed: &Parsed) -> Vec<(u8, Box<[u8]>)> {
     files
 }
 
-/// A forge credential has six bytes of carried-bundle framing within jig's 4096-byte bound.
+/// A forge credential has seven bytes of carried-bundle framing within jig's 4096-byte bound.
 pub(crate) fn key_bytes(call: &Call) -> u32 {
     if call.tool == temper_client_tools::jig::rows::IMPORT_AT {
         temper_client_tools::limits::MOVED_BYTES
     } else if TOOLS[usize::from(call.tool)].name == b"forge-connect" {
-        4090
+        4089
     } else {
         temper_client_tools::limits::KEY_BYTES
     }

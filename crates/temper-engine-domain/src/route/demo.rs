@@ -337,6 +337,7 @@ pub(crate) fn end_acted(
             (false, Some(refusal_name(why)))
         }
         people::Outcome::SettingsChanged { .. }
+        | people::Outcome::MovedToNewest { .. }
         | people::Outcome::Renamed { .. }
         | people::Outcome::ProjectMade { .. }
         | people::Outcome::Created { .. }

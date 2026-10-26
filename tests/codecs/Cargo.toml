@@ -14,7 +14,7 @@ skein-lib.workspace = true
 [dev-dependencies]
 skein-io.workspace = true
 skein-forge.workspace = true
-temper-protocol-records.workspace = true
+temper-protocol-records = { workspace = true, features = ["forge"] }
 jig-protocol-config.workspace = true
 skein-forge-connection.workspace = true
 skein-fake-forge-github.workspace = true

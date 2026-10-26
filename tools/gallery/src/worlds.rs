@@ -416,6 +416,7 @@ fn forges(world: World) -> Box<[u8]> {
                             w::FirstRepository::new(
                                 &limits,
                                 w::FirstRepositoryParts {
+                                    playground: false,
                                     org: b"work".as_slice().into(),
                                     repository: b"hello".as_slice().into(),
                                     project: w::SetUpProject::Existing(
@@ -592,6 +593,10 @@ fn owner(chip: &mut c::Chip) -> (&mut c::OwnerChipPhase, &mut c::OwnerChipDetail
 fn finish_document(mut t: c::Task) -> c::Task {
     let compact = t.chip.phase;
     let executor = t.chip.executor;
+    match executor {
+        c::Executor::Agent { .. } => {}
+        c::Executor::Procedure { .. } | c::Executor::Party { .. } | c::Executor::Role { .. } => t.settings = None,
+    }
     let (phase, details) = owner(&mut t.chip);
     *phase = match compact {
         c::Phase::Ended | c::Phase::Done => c::OwnerChipPhase::Ended,
@@ -2202,6 +2207,7 @@ fn base_task(number: u64, title: &str) -> c::Task {
         deadline: None,
     };
     c::Task {
+        settings: Some(c::TaskSettings { task: 1, run: None, newest: 1 }),
         chip: c::Chip {
             task: number,
             title: doc(title),

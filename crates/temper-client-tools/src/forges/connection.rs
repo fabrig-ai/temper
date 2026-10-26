@@ -79,14 +79,7 @@ fn request(
 }
 // The bundle's item is AdminToken (1), not AppKey (11). Preserve every byte.
 fn admin_token(token: &[u8]) -> Option<skein_lib::Secret> {
-    if token.is_empty() || token.len() > 4090 {
-        return None;
-    }
-    let mut out = skein_lib::Writer::new(token.len().checked_add(6)?);
-    out.put(&[1, 1, 1, 0]).ok()?;
-    out.put(&u16::try_from(token.len()).ok()?.to_le_bytes()).ok()?;
-    out.put(token).ok()?;
-    Some(skein_lib::Secret::new(out.finish()))
+    temper_client_domain::forge::forges::pasted_admin_token(token)
 }
 fn admin_how(
     call: &jig::call::Call,
@@ -221,7 +214,13 @@ pub(super) fn send(
             w::SetUpProject::Existing(project) => domain::SetUpProject::Existing(project.project()),
             w::SetUpProject::New(project) => domain::SetUpProject::New(project.name().into()),
         };
-        Some(super::Intent { forge, org: first.org().into(), repository: first.repository().into(), project })
+        Some(super::Intent {
+            playground: false,
+            forge,
+            org: first.org().into(),
+            repository: first.repository().into(),
+            project,
+        })
     } else {
         None
     };
@@ -246,7 +245,7 @@ pub(super) fn send(
         Some(pem) => {
             let bundled = if admin { admin_token(pem.expose()) } else { domain::pasted_app_key(pem.expose()) };
             let Some(value) = bundled else {
-                let printed = render::failure(b"credential file must contain 1 to 4090 bytes", called.json, 1);
+                let printed = render::failure(b"credential file must contain 1 to 4089 bytes", called.json, 1);
                 finish(called, printed, out);
                 return;
             };
@@ -569,7 +568,10 @@ fn accept_refusal(pending: &Pending, why: &w::ForgeReason, out: &mut Text) {
         w::ForgeReason::Unreachable => out.put(b"GitHub did not answer: try again\n"),
         // The refusal carries its reason alone, not the deployment's configured capacity.
         w::ForgeReason::TooLarge => out.put(b"temper's accepted installation set is full\n"),
-        w::ForgeReason::InvalidAnswer => out.put(b"GitHub answered what temper did not expect\n"),
+        w::ForgeReason::AnotherProject
+        | w::ForgeReason::HomeHeld
+        | w::ForgeReason::PrefixOccupied
+        | w::ForgeReason::InvalidAnswer => out.put(b"GitHub answered what temper did not expect\n"),
         w::ForgeReason::NoSuchForge => out.put(b"no such forge\n"),
         w::ForgeReason::Refused => out.put(b"refused\n"),
         w::ForgeReason::InFlight => out.put(b"in flight\n"),
@@ -586,5 +588,8 @@ fn forge_reason_name(why: &w::ForgeReason) -> &'static [u8] {
         w::ForgeReason::TooLarge => b"too_large",
         w::ForgeReason::Unreachable => b"unreachable",
         w::ForgeReason::InvalidAnswer => b"invalid_answer",
+        w::ForgeReason::AnotherProject => b"another_project",
+        w::ForgeReason::HomeHeld => b"home_held",
+        w::ForgeReason::PrefixOccupied => b"prefix_occupied",
     }
 }

@@ -2,8 +2,9 @@ task 41 · goal · Running · shop · priority 2
 asked: Add a /health endpoint that reports the store's state
 requester: you · spent 1.20 of 5.00 · deadline 2026-10-24 17:00 UTC
 instructions: Answer on port 8080 unless the store's file names another one, and keep the /hea… (99 bytes; --json prints them whole)
+settings: revision 1
 waiting on: you: question of task 42 · 1 waiting
 acts:
   stop 41 --key NAME
   cancel 41 REASON --key NAME
-digest: task 487472298fa1ca00
+digest: task 1ca2eb7da760b84b

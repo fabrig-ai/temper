@@ -68,7 +68,7 @@ pub(crate) fn main(
             // Word capacity prices the full pull address and label; Limits::of
             // guarantees at least this text bound for every view preset.
             let text_bound = words.capacity().expect("checked text capacity");
-            super::change::toolbar(b, change, words, text_bound);
+            super::change::toolbar(b, change, words, text_bound, root.forge().serves_pages(change.forge()));
         }
         if page.shape == Shape::Tracked {
             if root.pages().confirmation().is_none()

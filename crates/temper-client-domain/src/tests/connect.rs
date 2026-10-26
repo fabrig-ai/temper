@@ -435,6 +435,7 @@ fn reply_at(root: &mut crate::Domain, attempt: Token, outcome: w::Outcome, now: 
 }
 fn first(state: forges::FirstState) -> forges::First {
     forges::First {
+        playground: false,
         org: b"work".as_slice().into(),
         repository: b"hello".as_slice().into(),
         project: forges::SetUpProject::Existing(1),
@@ -456,6 +457,7 @@ fn deliver_first(
     let first = w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::Existing(
@@ -676,7 +678,7 @@ fn the_adoption_is_keyed_as_ctls_and_retried_once_without_home() {
     );
     let (attempt, _, _) = sent(out);
     let refused = w::Outcome::ForgeRefused(
-        w::ForgeRefused::new(&w::CEILINGS, w::ForgeRefusedParts { reason: w::ForgeReason::Refused }).unwrap(),
+        w::ForgeRefused::new(&w::CEILINGS, w::ForgeRefusedParts { reason: w::ForgeReason::HomeHeld }).unwrap(),
     );
     let (attempt, key, w::Request::Adopt(adoption)) = sent(reply(&mut root, attempt, refused.clone())) else {
         panic!("retry")
@@ -691,7 +693,7 @@ fn the_adoption_is_keyed_as_ctls_and_retried_once_without_home() {
     }
     assert_eq!(
         root.forge().set_up().unwrap().adoption.as_ref().unwrap().outcome,
-        Some(forge::Answer::ForgeRefused(forge::Reason::Refused))
+        Some(forge::Answer::ForgeRefused(forge::Reason::HomeHeld))
     );
     assert!(deliver_first(&mut root, watch, connected(), made()).is_empty());
 }
@@ -723,7 +725,8 @@ fn set_up_again_on_another_client_uses_the_rows_fields() {
     let value = w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
-            org: b"team".as_slice().into(),
+            playground: true,
+            org: b"playground".as_slice().into(),
             repository: b"widget".as_slice().into(),
             project: w::SetUpProject::Existing(
                 w::ExistingProject::new(&w::CEILINGS, w::ExistingProjectParts { project: 7 }).unwrap(),
@@ -737,7 +740,8 @@ fn set_up_again_on_another_client_uses_the_rows_fields() {
     .unwrap();
     deliver_first_record(&mut root, watch, w::Connection::Connecting, value);
     let (_, _, w::Request::SetUp(value)) = sent(setup(&mut root)) else { panic!("setup") };
-    assert_eq!((value.org(), value.repository()), (b"team".as_slice(), b"widget".as_slice()));
+    assert_eq!((value.org(), value.repository()), (b"playground".as_slice(), b"widget".as_slice()));
+    assert!(value.playground());
     let w::SetUpProject::Existing(project) = value.project() else { panic!("existing project") };
     assert_eq!(project.project(), 7_u32);
 }

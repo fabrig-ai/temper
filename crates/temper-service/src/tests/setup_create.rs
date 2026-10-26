@@ -260,6 +260,9 @@ fn configured(forge: &Forge) -> crate::Service {
     service
 }
 fn ask(service: &mut crate::Service, number: u64) {
+    ask_copy(service, number, false);
+}
+fn ask_copy(service: &mut crate::Service, number: u64, playground: bool) {
     let engine = service.engine.as_mut().unwrap();
     engine.step(root::Event::Forge(Box::new(domain::Event::Connection {
         forge: 1,
@@ -272,9 +275,10 @@ fn ask(service: &mut crate::Service, number: u64) {
         token: Token::new(number.checked_add(1).unwrap()),
         retention: Duration::from_secs(60),
         ask: domain::Ask::SetUp {
+            playground,
             forge: 1,
-            org: b"work".as_slice().into(),
-            repository: b"hello".as_slice().into(),
+            org: if playground { b"playground".as_slice().into() } else { b"work".as_slice().into() },
+            repository: if playground { b"widget".as_slice().into() } else { b"hello".as_slice().into() },
             project: domain::SetUpProject::Existing(1),
         },
     })));
@@ -331,6 +335,7 @@ fn reconcile_then_create_then_connect_makes_the_first_repository_and_bot_workflo
         object.tree.get(temper_forge_setup::STARTER_PATH).unwrap().as_ref(),
         temper_forge_setup::starter_workflow(b"temper-host").unwrap().as_ref()
     );
+    assert!(object.tree.get(temper_forge_setup::PLAYGROUND_PATH).is_none());
     assert_eq!(object.author.as_ref().unwrap().name.as_ref(), b"temper");
     assert_eq!(object.author, object.committer);
 }
@@ -422,4 +427,27 @@ fn failed(engine: &crate::engine::Engine) -> bool {
         | domain::Connection::Connecting
         | domain::Connection::Stopped { .. } => false,
     }
+}
+
+#[test]
+fn playground_create_copies_the_fake_source_beside_the_starter_and_keeps_forgejos_readme() {
+    let mut forge = Forge::new(false);
+    let mut service = configured(&forge);
+    ask_copy(&mut service, 91, true);
+    forge.settle(&mut service);
+    let engine = service.engine.as_ref().unwrap();
+    assert!(connected(engine), "{:?}", engine.domain.forge_connection(1));
+    assert!(engine.domain.forges().rows[0].first.as_ref().unwrap().playground);
+    let head = forge.git.branch(b"playground/widget", b"main").unwrap();
+    let object = forge.git.object(head).unwrap();
+    assert_eq!(object.tree.get(b"README.md".as_slice()).unwrap().as_ref(), b"# widget\n");
+    assert_eq!(
+        object.tree.get(temper_forge_setup::STARTER_PATH).unwrap().as_ref(),
+        temper_forge_setup::starter_workflow(b"temper-host").unwrap().as_ref()
+    );
+    assert_eq!(
+        object.tree.get(temper_forge_setup::PLAYGROUND_PATH).unwrap().as_ref(),
+        temper_forge_setup::PLAYGROUND_MAIN
+    );
+    assert!(object.tree.get(b".forgejo/workflows/check.yml".as_slice()).is_none());
 }

@@ -38,22 +38,19 @@ def template(path):
 
 class FilesTests(unittest.TestCase):
     def test_copies_and_only_two_charter_changes(self):
-        copies = ['agent.json', 'chat.txt', 'coding.txt', 'relink', 'w1.json', 'w1.digest', 'w1.secret',
+        copies = ['agent.json', 'engine.json', 'relink', 'w1.json', 'w1.digest', 'w1.secret',
                   'w2.json', 'w2.digest', 'w2.secret', 'forge.json']
         for name in copies:
             with self.subTest(name=name):
                 self.assertEqual((LIVE / name).read_bytes(), (WEB / name).read_bytes())
         self.assertEqual((LIVE / 'stage').read_bytes(), (LOOK / 'stage').read_bytes())
-        expected = (WEB / 'engine.json').read_bytes().replace(
-            b'"waiting_ms": 120000', b'"waiting_ms": 300000').replace(
-            b'"time_ms": 130000', b'"time_ms": 310000')
-        self.assertEqual((LIVE / 'engine.json').read_bytes(), expected)
-        before, after = template(WEB / 'engine.json'), template(LIVE / 'engine.json')
-        before['engine']['charters'][0].update(waiting_ms=300000, time_ms=310000)
+        before, after = read(WEB / 'settings.json'), read(LIVE / 'settings.json')
+        before['items'][0]['set'].update(waiting=300_000_000_000, time=310_000_000_000)
         self.assertEqual(before, after)
+        self.assertEqual((LIVE / 'settings.json').read_bytes(), canonical(after))
         self.assertFalse((LIVE / 'checks/trouble').exists())
         self.assertEqual({p.relative_to(LIVE).as_posix() for p in LIVE.rglob('*') if p.is_file()},
-                         set(copies) | {'engine.json', 'llm.json', 'stage', 'steps', 'experiment.json',
+                         set(copies) | {'settings.json', 'llm.json', 'stage', 'steps', 'experiment.json',
                                         'checks/gallery', 'gallery/chat.json', 'gallery/chat-closing.json'} |
                          {'scenes/' + name + '.json' for name in SCENES})
 
@@ -127,7 +124,7 @@ class FilesTests(unittest.TestCase):
             self.assertEqual(exp[field], base[field])
         self.assertEqual(exp['name'], 'look-live')
         self.assertEqual(exp['dirs'], ['client', 'hand', 'look', 'page', 'spent'])
-        self.assertEqual(exp['actions'][:6], base['actions'][:6])
+        self.assertEqual(exp['actions'][:7], base['actions'][:7])
         browse = ['{runner}/hand/browse', '{proc.browser.ready.address}']
         env = {'PATH': '/usr/bin:/bin'}
         capture = ['{runner}/look/capture', '--browser', '{browser.program}', '--chromium',
@@ -141,7 +138,7 @@ class FilesTests(unittest.TestCase):
                     '--mockups', '{source}/docs/design/client/mockups', '--live',
                     '{proc.browser.ready.address}', '--live-out', '{dir.hand}', '--ready-seconds', '40',
                     '--out', '{dir.look}/' + scene, '{experiment}/scenes/' + scene + '.json'])])
-        self.assertEqual(exp['actions'][6:], expected)
+        self.assertEqual(exp['actions'][7:], expected)
         self.assertEqual(exp['collect'], [
             dict(name='look', env={}, scan=[], argv=['/bin/cp', '-R', '--', '{dir.look}/.', '{collect.dir}/.']),
             base['collect'][0], dict(name='gallery', env=env, scan=[], argv=capture + [
