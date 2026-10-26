@@ -117,6 +117,10 @@ pub struct ForgeWorkspace {
 /// (domain/root.md, sections 3 and 5.2). Later routes extend this vocabulary.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Tool {
+    /// Read settings without retaining a named-call record.
+    Settings { read: jig_domain_core::SettingsRead, from: u32 },
+    /// Propose whole settings to the deployment's owners.
+    ProposeSettings { against: u32, items: Box<[jig_domain_core::settings::Item]>, reason: Box<[u8]> },
     /// Write or correct one scoped note by the revision this run recalled.
     Note { entry: jig_domain_notes::New, recalled: Option<u32> },
     /// Read one bounded page of notes by name or description.

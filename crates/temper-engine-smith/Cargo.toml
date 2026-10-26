@@ -8,6 +8,12 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+jig-domain-core.workspace = true
+jig-client.workspace = true
+jig-client-protocol-wire.workspace = true
+jig-client-protocol-link.workspace = true
+jig-protocol-engine-clients.workspace = true
+temper-client-tools.workspace = true
 temper-docs.workspace = true
 skein-forge.workspace = true
 skein-lib.workspace = true

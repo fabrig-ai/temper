@@ -56,7 +56,9 @@ pub(crate) fn checked_call(mut body: Call, limits: &Limits) -> Call {
     let note_valid = match &body.tool {
         Tool::Note { entry, .. } => notes::valid_new(entry, &limits.notes),
         Tool::Recall { by, .. } => notes::valid_recall(by, &limits.notes),
-        Tool::Change { .. }
+        Tool::Settings { .. }
+        | Tool::ProposeSettings { .. }
+        | Tool::Change { .. }
         | Tool::Delegate { .. }
         | Tool::Message { .. }
         | Tool::Amend { .. }
@@ -91,7 +93,9 @@ pub(crate) fn checked_call(mut body: Call, limits: &Limits) -> Call {
             }
             Tool::Propose { .. } | Tool::Decide { .. } | Tool::Withdraw { .. } => Tool::RejectedProposal(why),
             Tool::Note { .. } | Tool::Recall { .. } => Tool::RejectedNote(jig_domain_notes::Refusal::Oversized),
-            Tool::Change { .. }
+            Tool::Settings { .. }
+            | Tool::ProposeSettings { .. }
+            | Tool::Change { .. }
             | Tool::Delegate { .. }
             | Tool::Introduce { .. }
             | Tool::Subscribe { .. }
@@ -123,7 +127,9 @@ pub(crate) fn relay_call(
 
 pub(crate) fn call_needs_input(tool: &Tool) -> bool {
     match tool {
-        Tool::Change { .. }
+        Tool::Settings { .. }
+        | Tool::ProposeSettings { .. }
+        | Tool::Change { .. }
         | Tool::Unavailable
         | Tool::Rejected(_)
         | Tool::RejectedMessage(_)
@@ -221,7 +227,9 @@ pub(crate) fn call_shape(tool: &Tool, limits: &tasks::Limits) -> Option<tasks::R
             }
             EscalationChoice::Release | EscalationChoice::Reject { .. } | EscalationChoice::Pass => None,
         },
-        Tool::Change { .. }
+        Tool::Settings { .. }
+        | Tool::ProposeSettings { .. }
+        | Tool::Change { .. }
         | Tool::Withdraw { .. }
         | Tool::Unavailable
         | Tool::Rejected(_)
@@ -302,6 +310,7 @@ pub(crate) fn call_shape(tool: &Tool, limits: &tasks::Limits) -> Option<tasks::R
 
 pub(crate) fn tool_kind(tool: &Tool) -> Option<jig_domain_core::ToolKind> {
     Some(match tool {
+        Tool::Settings { .. } | Tool::ProposeSettings { .. } => jig_domain_core::ToolKind::Settings,
         Tool::Change { .. } | Tool::Delegate { .. } => jig_domain_core::ToolKind::Delegate,
         Tool::Message { target, .. } => jig_domain_core::ToolKind::Message { target: *target },
         Tool::Introduce { left, .. } => jig_domain_core::ToolKind::Message { target: *left },
@@ -387,6 +396,7 @@ pub(crate) fn keep_connector_answer(
         | CallAnswer::NoteWritten { .. }
         | CallAnswer::NoteRecalled { .. }
         | CallAnswer::NoteRefused(_)
+        | CallAnswer::SettingsRefused(_)
         | CallAnswer::Unavailable) => return Err(answer),
     };
     match domain.forge.keep_named_answer(&domain.limits.forge, named_call(key), payload) {
