@@ -1,0 +1,1 @@
+{"head":{"number":5,"against":4,"at":0,"by":{"party":2},"proposal":"p2/7","moved":false},"items":[{"setting":{"kind":"charter","number":3},"edit":"removed","replaced":{"edit":"removed"}}]}

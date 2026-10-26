@@ -1,7 +1,7 @@
 //! Deep owned bytes of jig's settings rows; no history is retained by the root.
 use alloc::boxed::Box;
 use jig_domain_authority as authority;
-use jig_domain_core::settings::{Edit, Item, Record, Value};
+use jig_domain_core::settings::{Edit, Item, Record, Replaced, RevisionItem, Value};
 use jig_domain_tasks as tasks;
 
 pub(super) fn record(row: &Record) -> Option<u64> {
@@ -11,7 +11,7 @@ pub(super) fn record(row: &Record) -> Option<u64> {
             Some(changed) => value(changed),
             None => Some(0),
         },
-        Record::Revision { revision, .. } => items(&revision.items),
+        Record::Revision { revision, .. } => revision_items(&revision.items),
         Record::Proposal { value, .. } => items(&value.items),
         Record::Charter { value: version, .. } => match &version.charter {
             Some(charter) => u64::try_from(size_of::<jig_domain_core::Charter>())
@@ -27,6 +27,18 @@ fn items(items: &[Item]) -> Option<u64> {
     for item in items {
         if let Edit::Set(set) = &item.edit {
             bytes = bytes.checked_add(value(set)?)?;
+        }
+    }
+    Some(bytes)
+}
+fn revision_items(items: &[RevisionItem]) -> Option<u64> {
+    let mut bytes = u64::try_from(items.len()).ok()?.checked_mul(u64::try_from(size_of::<RevisionItem>()).ok()?)?;
+    for item in items {
+        if let Edit::Set(set) = &item.edit {
+            bytes = bytes.checked_add(value(set)?)?;
+        }
+        if let Replaced::Value(replaced) = &item.replaced {
+            bytes = bytes.checked_add(u64::try_from(size_of::<Value>()).ok()?)?.checked_add(value(replaced)?)?;
         }
     }
     Some(bytes)
@@ -180,5 +192,57 @@ mod tests {
             part: tasks::Part { connector: 1, kind: tasks::PartKind::Resource, key: tasks::PartKey::Path(segments) },
         };
         assert_eq!(contract(&approval), Some(u64::try_from(3 * size_of::<Box<[u8]>>() + 17).expect("small path")));
+    }
+    #[test]
+    fn revision_before_values_are_charged_beside_their_edits() {
+        use jig_domain_core::{Template, settings as s};
+        use jig_domain_people::{TemplateBudget, TemplateDeadline, TemplateExecutor};
+        let value = Value::Template(Box::new(Template {
+            number: 1,
+            name: Box::from(b"template".as_slice()),
+            executor: TemplateExecutor::Chosen,
+            contract: tasks::Contract::Report { words: 8 },
+            shallower: 0,
+            budget: TemplateBudget::Given,
+            deadline: TemplateDeadline::None,
+            tracked: None,
+            flags: tasks::Flags::PLAIN,
+            label: 0,
+            grace: None,
+            llm: None,
+        }));
+        for replaced in
+            [Replaced::Default, Replaced::Removed, Replaced::NotOffered, Replaced::Value(Box::new(value.clone()))]
+        {
+            let before_bytes = match &replaced {
+                Replaced::Value(_) => size_of::<Value>() + size_of::<Template>() + 8,
+                Replaced::Default | Replaced::Removed | Replaced::NotOffered => 0,
+            };
+            let row = Record::Revision {
+                history: true,
+                revision: s::Revision {
+                    head: s::Head {
+                        number: 2,
+                        against: 1,
+                        at: skein_lib::Wall::EPOCH,
+                        by: s::Decider::Party(1),
+                        proposal: None,
+                        moved: false,
+                    },
+                    items: Box::new([RevisionItem {
+                        setting: s::Setting::Template(1),
+                        edit: Edit::Set(value.clone()),
+                        replaced,
+                    }]),
+                },
+            };
+            assert_eq!(
+                record(&row),
+                Some(
+                    u64::try_from(size_of::<RevisionItem>() + size_of::<Template>() + 8 + before_bytes)
+                        .expect("small revision")
+                )
+            );
+        }
     }
 }

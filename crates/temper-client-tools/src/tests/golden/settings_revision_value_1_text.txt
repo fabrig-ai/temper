@@ -1,3 +1,4 @@
 revision 5, against revision 4, at 00:00 UTC, by the release, from p2/7, running work stays
   template 4: set
 {"number":4,"name":{"bytes":"work","cut":false},"executor":{"charter":3},"contract":{"report":{"words":1024}},"shallower":1,"budget":{"as_allowed":{"cap":1000}},"deadline":{"span":10000000000},"tracked":5,"flags":{"conversation":false,"listed":true,"retention":"kept","ended_by":"result"},"label":1,"grace":1000000000,"llm":{"account":9,"main":{"model":"model","effort":"high"},"subagents":[{"model":"model","effort":null}]}}
+    was: {"number":4,"name":{"bytes":"work","cut":false},"executor":{"charter":3},"contract":{"report":{"words":1024}},"shallower":1,"budget":{"as_allowed":{"cap":1000}},"deadline":{"span":10000000000},"tracked":5,"flags":{"conversation":false,"listed":true,"retention":"kept","ended_by":"result"},"label":1,"grace":1000000000,"llm":{"account":9,"main":{"model":"model","effort":"high"},"subagents":[{"model":"model","effort":null}]}}

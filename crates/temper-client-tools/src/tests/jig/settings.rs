@@ -329,8 +329,13 @@ fn whole_settings_document_renderings_are_stable() {
             c::RevisionItem {
                 setting: c::Setting::Charter(c::SettingNumber { number: 3 }),
                 edit: c::RevisionEdit::TooLarge(c::Size { bytes: 1_000_000 }),
+                replaced: c::RevisionReplaced::Default,
             },
-            c::RevisionItem { setting: c::Setting::Rules, edit: c::RevisionEdit::Reset },
+            c::RevisionItem {
+                setting: c::Setting::Rules,
+                edit: c::RevisionEdit::Reset,
+                replaced: c::RevisionReplaced::Removed,
+            },
         ]),
     })));
     let revisions = c::ReadValue::Revisions(Box::new(c::RevisionsPage {
@@ -557,6 +562,7 @@ fn setting_text_and_revisions_include_whole_set_values_and_last_page_facts() {
                     items: list([c::RevisionItem {
                         setting,
                         edit: c::RevisionEdit::Set(c::SettingSet { value: value.clone() }),
+                        replaced: c::RevisionReplaced::Value(c::SettingSet { value: value.clone() }),
                     }]),
                 }))),
             );
@@ -744,11 +750,12 @@ fn non_charter_revision_hints_explicitly_read_the_current_value() {
                 items: list([c::RevisionItem {
                     setting,
                     edit: c::RevisionEdit::TooLarge(c::Size { bytes: 1_000_000 }),
+                    replaced: c::RevisionReplaced::Default,
                 }]),
             }))),
         );
         let line = format!("  {name}: too large, 1000000 bytes; read current value with setting {name}\n");
-        assert!(answer.stdout.ends_with(line.as_bytes()), "{}", String::from_utf8_lossy(&answer.stdout));
+        assert!(String::from_utf8_lossy(&answer.stdout).contains(&line), "{}", String::from_utf8_lossy(&answer.stdout));
     }
 }
 
@@ -1159,6 +1166,41 @@ fn move_to_newest_sends_the_revision_and_renders_both_counts() {
                 text.into()
             };
             assert_eq!(printed.stdout.as_ref(), expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn revision_renderings_keep_each_replaced_state() {
+    let (setting, value) = values().remove(0);
+    for (index, replaced) in [
+        c::RevisionReplaced::Value(c::SettingSet { value }),
+        c::RevisionReplaced::TooLarge(c::Size { bytes: 1_000_000 }),
+        c::RevisionReplaced::Default,
+        c::RevisionReplaced::Removed,
+        c::RevisionReplaced::NotOffered,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        for json in [false, true] {
+            let mut argv = vec!["revision", "5"];
+            if json {
+                argv.push("--json");
+            }
+            let answer = read(
+                &argv,
+                c::ReadValue::Revision(Box::new(c::RevisionAnswer::Revision(c::RevisionDocument {
+                    head: head(c::RevisionDecider::Party(c::RevisionParty { number: 2 })),
+                    items: list([c::RevisionItem {
+                        setting,
+                        edit: c::RevisionEdit::Removed,
+                        replaced: replaced.clone(),
+                    }]),
+                }))),
+            );
+            assert_eq!(answer.status, 0);
+            golden(&format!("settings_replaced_{index}_{}", if json { "json" } else { "text" }), &answer.stdout);
         }
     }
 }

@@ -167,6 +167,12 @@ The recorded `--running moves` choice moves eligible existing tasks
 with the change; `stays` keeps their recorded revisions. Conversations
 still move at their next run.
 
+A revision lists what each item changed and what it replaced. The `was:`
+line shows the previous chosen value, `its default`, `removed`, or
+`not offered`. A value past the read bound shows its size and a setting
+read hint. JSON includes the same information under `replaced`.
+The `revisions` pages keep compact previews without values.
+
 ## Proposals
 
 If you have a project or deployment role, you can propose settings

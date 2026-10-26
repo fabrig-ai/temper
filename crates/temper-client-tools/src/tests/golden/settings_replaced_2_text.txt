@@ -1,0 +1,3 @@
+revision 5, against revision 4, at 00:00 UTC, by party 2, from p2/7, running work stays
+  charter 3: removed
+    was: its default
