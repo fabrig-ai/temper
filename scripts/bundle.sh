@@ -43,18 +43,12 @@ else
     set --
 fi
 cargo build -p skein-ui-bundle
-directory=$(target/debug/skein-ui-bundle \
+target/debug/skein-ui-bundle \
     --module "target/wasm32-unknown-unknown/$profile/temper_client_shell_web.wasm" \
     --name temper_client_shell_web --prefix /bundle/ \
     --stylesheet "$shell/temper.css" \
     --stylesheet "$shell/task-pages.css" \
     --files "$shell/files" \
     --noscript "$noscript" "$@" \
-    --out "$out")
-echo "$directory" >&2
-if "$playground"; then
-    # A static server maps /bundle/ directly into OUT/bundle/.
-    mkdir "$out/bundle"
-    mv "$directory" "$out/bundle/"
-fi
+    --out "$out" >&2
 echo "$(cd "$out" && pwd)"

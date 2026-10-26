@@ -23,7 +23,7 @@ class References(HTMLParser):
 
 def check(out):
     shell = Path(__file__).resolve().parent.parent / "crates/temper-client-shell-web"
-    directories = list((out / "bundle").iterdir())
+    directories = [path for path in out.iterdir() if path.is_dir()]
     assert len(directories) == 1, "one digest directory"
     directory, = directories
     assert directory.is_dir() and re.fullmatch(r"[0-9a-f]{16}", directory.name), "bundle digest"
@@ -49,14 +49,14 @@ def check(out):
             expected.add(name)
             assert (directory / name).read_bytes() == source.read_bytes(), name
     actual = {path.relative_to(out).as_posix() for path in out.rglob("*") if path.is_file()}
-    wanted = {"index.html"} | {f"bundle/{directory.name}/{name}" for name in expected}
+    wanted = {"index.html"} | {f"{directory.name}/{name}" for name in expected}
     assert actual == wanted, f"file list: missing {wanted - actual}, extra {actual - wanted}"
 
     references = References()
     references.feed(page)
     assert references.paths, "page references its bundle"
     for reference in references.paths:
-        assert reference.startswith(prefix) and (out / reference.lstrip("/")).is_file(), reference
+        assert reference.startswith(prefix) and (out / reference.removeprefix("/bundle/")).is_file(), reference
 
     digest = hashlib.sha256()
     for name in sorted(expected):
@@ -66,7 +66,7 @@ def check(out):
         digest.update(len(data).to_bytes(8, "little"))
         digest.update(data)
     assert digest.hexdigest()[:16] == directory.name, "digest covers every bundled file"
-    print(f"playground bundle: {len(actual)} files; page references resolve under {prefix}")
+    print(f"playground bundle: {len(actual)} files; page references resolve through {prefix}")
 
 
 if __name__ == "__main__":
