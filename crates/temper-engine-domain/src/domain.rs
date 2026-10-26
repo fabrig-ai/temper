@@ -551,7 +551,7 @@ fn finish_close(
         out.push(Request::Stop);
         return false;
     }
-    let requests = jig_domain_core::finish_decision(&mut domain.core, &environment_core(env));
+    let requests = jig_domain_core::finish_decision(&mut domain.core, &environment_core(env), decision.write_free());
     let finished = only_decided(&requests);
     route_core_requests(domain, env, &mut decision, requests);
     route_into(domain, env, &mut decision);

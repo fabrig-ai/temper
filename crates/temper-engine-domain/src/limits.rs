@@ -202,17 +202,19 @@ pub(crate) fn route_bound(limits: &Limits) -> Option<u32> {
         .checked_add(fleet::max_out(&limits.fleet).checked_mul(4)?)?
         .checked_add(forge::max_out(&limits.forge))?
         // One serialized role cohort revisits each Waiting task, then answers.
-        .checked_add(limits.tasks.tasks.checked_add(4)?)?
-        // One quiet projection receipt routes the full task/people publication
-        // beside the ordinary decision, and final forget erases one pair per task.
-        .checked_add(tasks::max_out(&limits.tasks).checked_mul(8)?)?
+        .checked_add(limits.tasks.tasks.checked_add(4)?)?;
+    // Core admits quiet news only before any ordinary writes. Its publication
+    // may finish one closing projection and synchronously forget the connector.
+    let news = tasks::max_out(&limits.tasks)
+        .checked_mul(8)?
         .checked_add(people::max_out(&limits.people).checked_mul(4)?)?
-        .checked_add(1)?
-        .checked_add(limits.tasks.tasks)?;
-    Some(routes.max(jig_domain_core::settings::writes_worst_case(&core_limits(limits))?))
+        .checked_add(limits.tasks.tree_tasks)?
+        .checked_add(forge::max_out(&limits.forge))?
+        .checked_add(4)?;
+    Some(routes.max(news).max(jig_domain_core::settings::writes_worst_case(&core_limits(limits))?))
 }
 
-// Quiet news republishes one task in addition to the admitted event. An
+// A write-free admitted event may retain held replies before quiet news. An
 // unavailable destination may reroute each task's proposal and escalation;
 // reserve another full task delivery cohort (4N+8), including its keyed reply
 // and abandoned brief continuations. Historical people callbacks are drained
