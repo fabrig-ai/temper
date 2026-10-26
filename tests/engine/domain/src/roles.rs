@@ -537,6 +537,7 @@ impl World {
                 | engine::Request::Return { .. }
                 | engine::Request::Setup { .. }
                 | engine::Request::Busy(_)
+                | engine::Request::Unsettled(_)
                 | engine::Request::Drained) => panic!("unexpected role output {other:?}"),
             }
         }

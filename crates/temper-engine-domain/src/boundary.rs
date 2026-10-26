@@ -512,6 +512,8 @@ pub enum PartyInput {
 /// and 4). Every output crosses the journal door in its peer's vocabulary.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Request {
+    /// A sent forge entry left without its outcome at the stop bound (domain/root.md, 9.2).
+    Unsettled(Unsettled),
     Bound {
         request: Token,
         answer: forge::BindAnswer,
@@ -789,4 +791,11 @@ pub(crate) fn delivery_output(delivery: Delivery) -> Request {
         Delivery::Bound { request, answer } => Request::Bound { request, answer },
         Delivery::ForgeCall { call, repository, op } => Request::Forge { call, repository, op },
     }
+}
+
+/// A forge write a settling stop left without its outcome (domain/root.md, 9.2).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Unsettled {
+    pub entry: u64,
+    pub task: u64,
 }

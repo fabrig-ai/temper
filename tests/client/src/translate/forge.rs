@@ -418,7 +418,8 @@ pub fn incoming(
         | engine::Request::Setup { .. }
         | engine::Request::ToChild(_)
         | engine::Request::Busy(_)
-        | engine::Request::Drained
+        | engine::Request::Unsettled(_)
+                | engine::Request::Drained
         | engine::Request::Stop
         | engine::Request::Party(
             PartyRequest::SignInRefused { .. } | PartyRequest::WatchRefused { .. } | PartyRequest::RunText { .. },

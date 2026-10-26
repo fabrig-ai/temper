@@ -515,6 +515,7 @@ impl Application for Temper {
             }
             // A refused sign-in is asked again at the next poll.
             engine::Request::Party(engine::PartyRequest::SignInRefused { .. }) => peers.signed_in = false,
+            engine::Request::Unsettled(_) => {}
             engine::Request::Drained => peers.observed.push(r::Observed::Drained { at: store.applied }),
             _ => {}
         }

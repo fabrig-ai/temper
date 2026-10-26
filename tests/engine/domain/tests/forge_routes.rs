@@ -11,7 +11,7 @@ use temper_engine_domain as engine;
 use temper_engine_domain::{Key, Record};
 use temper_engine_domain_forge as forge_top;
 use temper_engine_domain_world::forge_routes::{
-    Change, Gate, StoryLimits, Until, World, change_world, change_world_in, change_world_with_gate,
+    Change, Gate, HoldWrite, StoryLimits, Until, World, change_world, change_world_in, change_world_with_gate,
     change_world_with_policy, failed_ci_with_delayed_brief,
 };
 use temper_engine_domain_world::{protocol, walking};
@@ -2871,4 +2871,145 @@ fn spec_revision(world: &World, task: u64) -> u64 {
         Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) => row.revisions.spec,
         _ => panic!("live task {task}"),
     }
+}
+
+fn held_issue_write() -> (World, engine::Assignment, u64) {
+    let (mut world, assignment) = pending_issue_effect();
+    world.hold_write_answers = Some(HoldWrite::All);
+    for _ in 0..80 {
+        world.tick();
+        if !world.held_write_answers.is_empty() {
+            break;
+        }
+    }
+    assert_eq!(world.held_write_answers.len(), 1, "one sent write’s answer is held");
+    let entry = world.store.rows.values().find_map(|record| match record {
+        Record::Forge { row } => match row.as_ref() {
+            forge_top::Stored::Entry { entry, .. } if entry.task == assignment.task => Some(entry.number),
+            _ => None,
+        },
+        _ => None,
+    }).expect("sent entry is durable");
+    (world, assignment, entry)
+}
+
+fn drain_stop(world: &mut World) {
+    for _ in 0..80 {
+        world.tick();
+        if world.drained {
+            return;
+        }
+    }
+    panic!("stop drains after the write’s terminal");
+}
+
+#[test]
+fn a_stop_commits_the_answer_of_a_forge_write_already_sent() {
+    let (mut world, assignment, entry) = held_issue_write();
+    world.send(engine::Event::Stop);
+    for _ in 0..20 { world.tick(); }
+    assert!(!world.drained, "the stop waits for the held answer");
+    assert!(world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))));
+    world.release_write_answers();
+    drain_stop(&mut world);
+    assert!(!world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))), "outcome committed before Drained");
+    assert!(world.unsettled.is_empty());
+    assert_eq!(issue_count(&mut world), 1);
+    world.restart(true, false);
+    for _ in 0..40 { world.tick(); }
+    let event = issue_effect_call(&mut world, &assignment);
+    world.send(event);
+    for _ in 0..40 { world.tick(); }
+    assert_eq!(issue_count(&mut world), 1);
+    assert!(!world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))), "nothing to find after restart");
+}
+
+#[test]
+fn settling_places_no_run_and_answers_a_call_busy() {
+    let (mut world, assignment, _entry) = held_issue_write();
+    // Another task becomes due, with a slot available, immediately before Stop.
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]), reply_to: ReplyTo::new(Token::new(992)),
+        sign_in: world.signed_in.expect("owner session"), key: [99; 16],
+        ask: world.chat(1, b"due during settlement"),
+    }));
+    let assigned = world.assigned.len();
+    world.send(engine::Event::Stop);
+    let event = world.protocol.call(Token::new(7), assignment.task, assignment.attempt, 994,
+        engine::Call { completion: 2, position: 1, tool: engine::Tool::ReadForge {
+            repository: forge_world::REPO,
+            read: skein_forge::api::Read::Branches { prefix: Box::from(b"temper/".as_slice()) },
+        } });
+    world.send(event);
+    for _ in 0..30 { world.tick(); }
+    assert!(!world.drained);
+    assert_eq!(world.assigned.len(), assigned, "the due task gets no placement");
+    assert_eq!(world.busy_calls, 1, "a run’s call is answered busy");
+    world.release_write_answers();
+    drain_stop(&mut world);
+}
+
+#[test]
+fn a_write_unanswered_past_its_lifetime_stops_unsettled_naming_it() {
+    let (mut world, assignment, entry) = held_issue_write();
+    world.send(engine::Event::Stop);
+    let until = world.env.now.saturating_add(world.env.limits.forge.client.lifetime
+        .saturating_add(world.env.limits.forge.client.clock_margin).saturating_mul(2));
+    while world.env.now < until { world.tick(); }
+    drain_stop(&mut world);
+    assert_eq!(world.unsettled.as_slice(), &[engine::Unsettled { entry, task: assignment.task }]);
+    assert!(world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))));
+    assert_eq!(issue_count(&mut world), 1);
+    world.restart(true, false);
+    for _ in 0..80 { world.tick(); }
+    let event = issue_effect_call(&mut world, &assignment);
+    world.send(event);
+    for _ in 0..40 { world.tick(); }
+    assert_eq!(issue_count(&mut world), 1, "the next start finds the issue rather than writing twice");
+    assert!(!world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))));
+}
+
+
+#[test]
+fn a_stop_waits_for_a_sent_merge_to_be_proved() {
+    let (mut world, _chat, producer, branch) = change_world(false, 1000, None);
+    world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
+    fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"fixed", 1).expect("producer pushed");
+    world.hold_write_answers = Some(HoldWrite::Merge);
+    let event = world.protocol.answer(Token::new(7), producer.task, producer.attempt, 5,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0, kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: Box::from(b"pushed".as_slice()),
+            }, cancel_delegates: false,
+        }, engine::Parts::none());
+    world.send(event);
+    for _ in 0..300 {
+        world.tick();
+        if !world.held_write_answers.is_empty() { break; }
+    }
+    assert_eq!(world.held_write_answers.len(), 1, "merge answer held");
+    assert_eq!(world.merges, 1);
+    let entry = world.store.rows.values().find_map(|record| match record {
+        Record::Forge { row } => match row.as_ref() {
+            forge_top::Stored::Entry { entry, .. }
+                if matches!(entry.effect.write, skein_forge::api::Write::Merge { .. }) => Some(entry.number),
+            _ => None,
+        }, _ => None,
+    }).expect("durable merge attempt");
+    world.send(engine::Event::Stop);
+    for _ in 0..10 { world.tick(); }
+    assert!(!world.drained);
+    let calls = world.forge_calls;
+    world.release_write_answers();
+    // The answer schedules a proving read; even an accepted write has no outcome yet.
+    world.tick();
+    assert!(!world.drained);
+    drain_stop(&mut world);
+    assert!(world.forge_calls > calls, "the proving read crosses the paused write fence");
+    assert!(!world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))), "the proved outcome is durable before Drained");
+    assert!(world.unsettled.is_empty());
+    assert_eq!(world.merges, 1);
 }

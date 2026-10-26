@@ -27,7 +27,11 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             assert!(super::now(domain, crate::boundary::delivery_output(delivery)), "read answer door reserved");
         }
         core::Now::Call { to, run, attempt, call } => {
-            super::host_route::decode(domain, to, run.raw(), attempt.raw(), call);
+            if domain.settling {
+                crate::stopping::call(domain, to);
+            } else {
+                super::host_route::decode(domain, to, run.raw(), attempt.raw(), call);
+            }
         }
         core::Now::DropCall { call } => {
             let request = Request::Worker(crate::WorkerRequest::Host(Box::new(HostRequest::Dropped { call })));
