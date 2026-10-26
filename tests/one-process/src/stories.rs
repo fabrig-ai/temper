@@ -126,9 +126,9 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
     let config = skein_fake_forge_domain::Config {
         limits: skein_fake_forge_domain::Limits {
             statuses: fixtures::FORGE_STATUSES,
-            ..temper_fake_git_hosted::fixtures::CONFIG.limits
+            ..temper_fake_git_fixtures::CONFIG.limits
         },
-        ..temper_fake_git_hosted::fixtures::CONFIG
+        ..temper_fake_git_fixtures::CONFIG
     };
     let mut domain = skein_fake_forge_domain::Domain::new(&config, fixtures::SEED);
     let base = skein_fake_forge_domain::repository(
@@ -163,9 +163,8 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
         skein_fake_forge_domain::api::Permission::Write,
     );
     let forge = std::rc::Rc::new(std::cell::RefCell::new(skein_fake_peers::forge::Forge::new(domain, config)));
-    let mut transport =
-        temper_fake_git_hosted::Typed::new(forge, &temper_fake_git_hosted::fixtures::table(b"acme/app", None));
-    let identity = temper_fake_git_hosted::fixtures::identity();
+    let mut transport = temper_fake_git_hosted::Typed::new(forge, &temper_fake_git_fixtures::table(b"acme/app", None));
+    let identity = temper_fake_git_fixtures::identity();
     transport.authenticate(Some(&(identity.login, identity.token)));
     assert_eq!(
         transport.commit_tree(base, None, BTreeMap::from([(b"conflict.txt".to_vec(), b"topic\n".to_vec())]), b"topic"),

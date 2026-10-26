@@ -417,7 +417,13 @@ impl Decision {
     /// Retain one root effect for the decision, without releasing or issuing it. Bounds or capacity
     /// refusal returns ownership; successful admission ends through journal release after
     /// durability.
-    #[expect(clippy::result_large_err, reason = "bounded assignment ownership is returned intact on admission refusal")]
+    #[cfg_attr(
+        target_pointer_width = "64",
+        expect(
+            clippy::result_large_err,
+            reason = "bounded assignment ownership is returned intact on admission refusal"
+        )
+    )]
     pub fn deliver(&mut self, limits: &Limits, delivery: Delivery) -> Result<(), Delivery> {
         assert!(*limits == self.limits, "decision uses its configured limits");
         let within = match &delivery {
@@ -510,7 +516,10 @@ impl Decision {
     }
 
     /// Carry the owner's assembled output without inspecting its value.
-    #[expect(clippy::result_large_err, reason = "a refused assembled output returns ownership")]
+    #[cfg_attr(
+        target_pointer_width = "64",
+        expect(clippy::result_large_err, reason = "a refused assembled output returns ownership")
+    )]
     pub(crate) fn carry_delivery(&mut self, limits: &Limits, delivery: Delivery) -> Result<(), Delivery> {
         assert!(*limits == self.limits, "decision uses configured limits");
         if self.deliveries.len() >= self.reserved.held {

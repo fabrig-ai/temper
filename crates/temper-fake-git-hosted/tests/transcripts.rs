@@ -1,4 +1,4 @@
-use temper_fake_git_hosted::fixtures::{self, Fault};
+use temper_fake_git_fixtures::{self as fixtures, Fault};
 use temper_worker_domain_checkout::git;
 use temper_worker_protocol_git::output;
 use temper_worker_protocol_git_world::transcripts;
@@ -112,7 +112,7 @@ use skein_fake_machine::{How, Is, Item, Machine, Opened};
 use skein_io::kernel::{self as k, Done, Exit, Fd, Op, OpenHow};
 use skein_lib::{Time, Wall};
 use skein_shell::Host;
-use skein_world::Inherited;
+use skein_sim_world::Inherited;
 use std::collections::BTreeSet;
 use temper_fake_git_hosted::Answer;
 use temper_worker_protocol_git::invocation::{self, Command};

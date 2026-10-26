@@ -1,6 +1,6 @@
 //! The fake's hosted file operations against the real kernel.
 use skein_world::domain::heap::Counting;
-use temper_fake_git_hosted::fixtures;
+use temper_fake_git_fixtures as fixtures;
 use temper_real_loop_world::git::Disk;
 use temper_worker_domain_checkout::git;
 use temper_worker_protocol_git::invocation::{self, Command};

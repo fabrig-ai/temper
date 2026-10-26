@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 temper-client-shell-cli.workspace = true
 jig-domain-fleet.workspace = true
+temper-fake-git-fixtures.workspace = true
 temper-playground.workspace = true
 jig-client.workspace = true
 serde_json.workspace = true

@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+temper-fake-git-fixtures.workspace = true
 skein-world.workspace = true
 skein-lib.workspace = true
 temper-worker-domain-checkout.workspace = true

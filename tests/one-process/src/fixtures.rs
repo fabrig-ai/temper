@@ -12,8 +12,8 @@ pub const HOOK_SECRET: &[u8] = b"world-webhook-secret";
 pub const SEED: u64 = 7;
 pub const ANSWER: &[u8] = b"World answer";
 pub const LLM_TOKEN: &[u8] = channel::KEY;
-pub const GIT_TOKEN: &[u8] = temper_fake_git_hosted::fixtures::TOKEN;
-pub const API_TOKEN: &[u8] = temper_fake_git_hosted::fixtures::TOKEN;
+pub const GIT_TOKEN: &[u8] = temper_fake_git_fixtures::TOKEN;
+pub const API_TOKEN: &[u8] = temper_fake_git_fixtures::TOKEN;
 #[must_use]
 pub fn two_forge_records() -> Vec<temper_engine_domain_forge::Stored> {
     [1, 2]
@@ -180,7 +180,7 @@ pub(crate) fn files() -> temper_service::settings::Files {
         }
     }
     for name in [b"secrets/forge.api-token".as_slice(), b"secrets/forge.git-token"] {
-        entries.push((name.into(), Secret::new(temper_fake_git_hosted::fixtures::TOKEN.into()))).expect("forge files");
+        entries.push((name.into(), Secret::new(temper_fake_git_fixtures::TOKEN.into()))).expect("forge files");
     }
     entries
         .push((b"secrets/forge-1.user".as_slice().into(), Secret::new(b"1\n".as_slice().into())))

@@ -2,7 +2,8 @@
 use crate::{calls::Caller, world::Proc};
 use skein_world::{HostedProgram, Inherited, StartupRoot, real::World};
 use std::{cell::RefCell, ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf};
-use temper_fake_git_hosted::{Answer, Typed, fixtures::Scenario};
+use temper_fake_git_fixtures::Scenario;
+use temper_fake_git_hosted::{Answer, Typed};
 use temper_worker_protocol_git::invocation::Command;
 
 pub struct Disk {
@@ -44,7 +45,7 @@ impl Disk {
         share(Some(self.scenario.transport.clone()));
         let mut world = World::new_controlled(|_| Judge);
         let root = skein_shell::open_root(self.scratch.path()).expect("git launch root");
-        let mut spawn = temper_fake_git_hosted::fixtures::spawn_of(command);
+        let mut spawn = temper_fake_git_fixtures::spawn_of(command);
         spawn.dir = self.scenario.at.clone().into();
         world.spawn_with_fds(vec![root], || Proc::Caller(Box::new(Caller::command(spawn, input, root))));
         world.host_roots(program(), roots);

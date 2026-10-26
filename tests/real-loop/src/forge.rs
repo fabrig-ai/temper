@@ -51,8 +51,8 @@ pub fn write(scratch: &Path, forge: SocketAddr, fixture: &Fixture) -> std::io::R
     (fixture.configure)(&mut config, &mut agent, forge);
     fixtures::turn_bounds::apply(&mut config, fixtures::turn_bounds::turn_body(&agent));
     for (name, bytes) in [
-        ("forge-1.api-token", temper_fake_git_hosted::fixtures::TOKEN),
-        ("forge-1.git-token", temper_fake_git_hosted::fixtures::TOKEN),
+        ("forge-1.api-token", temper_fake_git_fixtures::TOKEN),
+        ("forge-1.git-token", temper_fake_git_fixtures::TOKEN),
         ("forge-1.user", b"1\n"),
         ("forge-1.webhook-secret", HOOK_SECRET),
     ] {
@@ -175,7 +175,7 @@ impl State {
         let setups = std::iter::once(setup).chain((fixture.extra_setups)()).collect::<Vec<_>>();
         let setup = &setups[0];
         let mut table =
-            temper_fake_git_hosted::fixtures::table(&setup.name, setup.protection.as_ref().map(|p| p.branch.as_ref()));
+            temper_fake_git_fixtures::table(&setup.name, setup.protection.as_ref().map(|p| p.branch.as_ref()));
         // fixtures::table reserves one repository; rebuild before sharing with
         // typed git and HTTP so every setup has the same wire identity.
         table.repositories = skein_lib::List::with_capacity(u32::try_from(setups.len()).expect("repository count"));
@@ -189,7 +189,7 @@ impl State {
                 })
                 .expect("one table entry per setup");
         }
-        let mut config = temper_fake_git_hosted::fixtures::CONFIG;
+        let mut config = temper_fake_git_fixtures::CONFIG;
         // The HTTP peer admits four simultaneous calls, unlike the git-only fixture.
         config.limits.calls = protocol_limits().calls;
         // A change opens its pull under the full specification, before coding's

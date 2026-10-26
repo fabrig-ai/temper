@@ -721,7 +721,7 @@ fn peer() -> Peer {
     temper_playground::forge(temper_playground::ForgeStart {
         address: fixtures::FORGE,
         limits: fixtures::peer_limits(),
-        table: temper_fake_git_hosted::fixtures::table(b"acme/app", None),
+        table: temper_fake_git_fixtures::table(b"acme/app", None),
         protocol: fixtures::forge_limits(),
         forge: transport().forge,
         seed: fixtures::SEED,
