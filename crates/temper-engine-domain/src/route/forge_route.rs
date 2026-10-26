@@ -2103,7 +2103,9 @@ fn change_delegate(
 ) -> Option<super::Delegate> {
     let row = domain.forge.change(task)?;
     let context = domain.core.tasks.delegation(task)?;
-    let authority = child_authority(&context)?;
+    let mut authority = child_authority(&context)?;
+    // domain/agent.md, 8.2: every agent below a change asks no one.
+    authority.tools.0 &= !domain.core.settings.tools.message.0;
     let mut parameters = List::with_capacity(env.limits.tasks.parameters);
     parameters
         .push(tasks::Parameter::Resource {
@@ -2220,6 +2222,65 @@ fn produce_words(title: &[u8], base: &[u8], branch: &[u8], bound: u32) -> Box<[u
         writer.put(part).expect("measured brief");
     }
     writer.finish()
+}
+
+/// domain/forge.md, 8.1: replies take the same inbox prefix as their step.
+pub(super) fn change_replies(domain: &Domain, env: &Env<Limits>, task: u64) -> Box<[jig_domain_core::StepMessage]> {
+    let mut messages = List::with_capacity(env.limits.tasks.inbox_messages);
+    let Some(row) = domain.core.tasks.task(task) else { return messages.into_boxed() };
+    let Some(offered) = domain.core.tasks.procedure_offered(task) else { return messages.into_boxed() };
+    for word in &row.inbox {
+        if word.number > offered {
+            continue;
+        }
+        let kind = match word.kind {
+            tasks::MessageKind::Question => tasks::MessageKind::Answer { question: word.number },
+            tasks::MessageKind::Words | tasks::MessageKind::Answer { .. } => tasks::MessageKind::Words,
+            tasks::MessageKind::Result(_)
+            | tasks::MessageKind::Escalation { .. }
+            | tasks::MessageKind::Proposal { .. }
+            | tasks::MessageKind::ProposalDecision { .. }
+            | tasks::MessageKind::FinishRequested { .. }
+            | tasks::MessageKind::Amendment { .. }
+            | tasks::MessageKind::Met { .. }
+            | tasks::MessageKind::Notice { .. }
+            | tasks::MessageKind::Timer { .. }
+            | tasks::MessageKind::PersonStalled { .. }
+            | tasks::MessageKind::EffectNotMade { .. }
+            | tasks::MessageKind::News { .. } => continue,
+        };
+        let tasks::Party::Task(target) = word.from else { continue };
+        // Jig's domain/tasks.md, 8.5: a step can address only these tasks.
+        if row.requester != tasks::Party::Task(target)
+            && !row.delegates.contains(&target)
+            && !row.references.contains(&target)
+        {
+            continue;
+        }
+        messages
+            .push(jig_domain_core::StepMessage {
+                target,
+                kind,
+                words: takes_no_messages(row.requester, env.limits.tasks.message_bytes),
+            })
+            .expect("one reply per offered inbox message");
+    }
+    messages.into_boxed()
+}
+
+/// The change names who requested its already agreed work (domain/forge.md, 8.1).
+fn takes_no_messages(requester: tasks::Party, limit: u32) -> Box<[u8]> {
+    let mut words = List::with_capacity(limit);
+    append(&mut words, b"A change takes no questions, answers or words; its requester is ");
+    let (kind, number): (&[u8], u64) = match requester {
+        tasks::Party::Task(number) => (b"task ", number),
+        tasks::Party::Person(number) => (b"person ", number),
+        tasks::Party::Deployment { project } => (b"deployment for project ", u64::from(project)),
+    };
+    append(&mut words, kind);
+    append(&mut words, &decimal(number));
+    append(&mut words, b".");
+    words.into_boxed()
 }
 
 fn gate_executor(domain: &Domain, kind: forge_change::GateKind) -> tasks::Executor {
@@ -2347,6 +2408,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
         return;
     }
     domain.forge.offered_change(task);
+    let messages = change_replies(domain, env, task);
     let mut again = false;
     let decision = match choice {
         forge_change::Decision::Finish { merge } => {
@@ -2360,7 +2422,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                     step,
                     connector,
                     code,
-                    decision: ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)),
+                    decision: ProcedureStep { messages, ..ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)) },
                 }));
                 return;
             };
@@ -2407,7 +2469,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                     step,
                     connector,
                     code,
-                    decision: ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)),
+                    decision: ProcedureStep { messages, ..ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)) },
                 }));
                 return;
             };
@@ -2417,11 +2479,12 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 step,
                 connector,
                 code,
-                decision: ProcedureStep { batch: Box::new([delegate]), ..ProcedureStep::new(StepEnd::Wait) },
+                decision: ProcedureStep { batch: Box::new([delegate]), messages, ..ProcedureStep::new(StepEnd::Wait) },
             }));
             return;
         }
     };
+    let decision = ProcedureStep { messages, ..decision };
     domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep { task, step, connector, code, decision }));
     if again {
         domain.work.push(Work::Tasks(tasks::Event::WakeProcedure { task }));
