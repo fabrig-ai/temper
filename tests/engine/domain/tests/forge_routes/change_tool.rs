@@ -508,6 +508,54 @@ fn a_chat_read_pull_for_reaches_the_fake_forge_through_named_routing() {
 }
 
 #[test]
+fn a_chat_reads_its_landed_pulls_state_and_the_merge_the_fake_made() {
+    let (mut world, chat, producer, branch) = change_world(false, 1000, None);
+    assert!(matches!(
+        world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 })),
+        raw::Answer::Branch(raw::Created::Created)
+    ));
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"fixed", 1)
+        .expect("producer pushed its branch");
+    let event = world.protocol.answer(
+        Token::new(7),
+        producer.task,
+        producer.attempt,
+        5,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"pushed".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    for _ in 0..200 {
+        world.tick();
+        if world.merges == 1 {
+            break;
+        }
+    }
+    assert_eq!(world.merges, 1, "the chat's change landed");
+    let raw::Answer::Pull(pull) = world.external(1, raw::Op::Read(raw::Read::Pull { number: 1 })) else {
+        panic!("the fake's pull");
+    };
+    let merge = pull.merged.expect("the fake merged the pull");
+    assert_ne!(merge, head, "the merge differs from the producer's head");
+    let answer = named_read(&mut world, &chat, 94, b"read_pull", br#"{"repository":"org/repo","number":1}"#);
+    let rendered = temper_engine_smith::answer(&answer);
+    assert!(!rendered.error(), "{answer:?}");
+    let mut expected = String::from("state closed merged commit ");
+    for byte in fake::object_bytes(merge) {
+        write!(&mut expected, "{byte:02x}").expect("merge digits");
+    }
+    assert!(rendered.text().windows(expected.len()).any(|part| part == expected.as_bytes()), "{:?}", rendered.text());
+}
+
+#[test]
 fn an_omitted_file_limit_uses_the_engine_read_bound() {
     let (mut world, chat) = chat_world(true);
     let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"main", b"file", b"contents", 1)
