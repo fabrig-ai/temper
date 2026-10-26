@@ -51,6 +51,8 @@ pub struct Limits {
 /// resumed by the root and never passed to the protocol as child events.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Delivery {
+    /// Switch is released behind prior writes; AdoptRuns completes the durable mark.
+    Restart(jig_domain_core::RestartStep),
     /// The root hears a project made only after its decision commits.
     ProjectMade {
         project: u32,
@@ -313,8 +315,10 @@ impl Decision {
     pub fn write(&mut self, limits: &Limits, write: Write) -> Result<(), Write> {
         assert!(*limits == self.limits, "decision uses its configured limits");
         let within = match &write {
+            Write::Wires => true,
             Write::CopySettingsRevision(number) => *number != 0,
-            Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_))))
+            Write::Erase(Key::Wires)
+            | Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_))))
             | Write::Erase(Key::Core(jig_domain_core::Key::Core(
                 jig_domain_core::CoreKey::Deployment
                 | jig_domain_core::CoreKey::EscalationDecision { .. }
@@ -501,6 +505,7 @@ impl Decision {
             | Delivery::Refuse { .. }
             | Delivery::ReadEscalationDecision { .. }
             | Delivery::TurnBusy { .. }
+            | Delivery::Restart(_)
             | Delivery::Load { .. } => true,
         };
         if !within {

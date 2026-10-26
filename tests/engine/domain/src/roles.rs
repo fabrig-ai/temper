@@ -290,7 +290,7 @@ impl World {
             store,
             settings,
         };
-        world.queue(engine::Event::Restart, 0);
+        world.queue(engine::Event::Restart { pending: world.store.pending_generation }, 0);
         world.bootstrap();
         world
     }
@@ -455,7 +455,7 @@ impl World {
             self.recovering = true;
             self.restarts += 1;
             self.trace.push("restart after atomic role application".into());
-            self.queue(engine::Event::Restart, 0);
+            self.queue(engine::Event::Restart { pending: self.store.pending_generation }, 0);
         } else {
             self.queue(engine::Event::Store(engine::StoreInput::Committed { number, fill: 0 }), 0);
         }
@@ -476,6 +476,10 @@ impl World {
             };
             match request {
                 engine::Request::ToChild(released) => self.queue(engine::Event::Released(released), 0),
+                engine::Request::Store(engine::StoreRequest::Switch) => {
+                    let answer = self.store.switch();
+                    self.queue(engine::Event::Store(answer), 0);
+                }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     self.cohorts.push((self.referee.clone(), writes.to_vec()));
                     self.referee.commit(&writes).expect("independent role transaction observer");

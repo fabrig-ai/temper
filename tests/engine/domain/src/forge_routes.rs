@@ -399,7 +399,7 @@ impl World {
             root: engine::Domain::new(config, &limits).expect("valid engine configuration"),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
             out: Queue::with_capacity(engine::max_out(&limits)),
-            events: VecDeque::from([engine::Event::Restart]),
+            events: VecDeque::from([engine::Event::Restart { pending: store.pending_generation }]),
             store,
             fake,
             fake_env,
@@ -489,7 +489,7 @@ impl World {
         self.answers.clear();
         self.adopted.clear();
         self.period = None;
-        self.events.push_back(engine::Event::Restart);
+        self.events.push_back(engine::Event::Restart { pending: self.store.pending_generation });
         if !self.assigned.is_empty() {
             self.events.push_back(protocol::hello_slots(
                 Token::new(7),
@@ -549,6 +549,10 @@ impl World {
             };
             match request {
                 engine::Request::ToChild(released) => self.events.push_back(engine::Event::Released(released)),
+                engine::Request::Store(engine::StoreRequest::Switch) => {
+                    let answer = self.store.switch();
+                    self.events.push_back(engine::Event::Store(answer));
+                }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     self.store.pending.push_back((number, writes));
                 }

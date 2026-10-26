@@ -470,8 +470,8 @@ const FORGE_LIMITS: forge::Limits = forge::Limits {
     queue_window: Duration::from_secs(30),
 };
 
-// Seven restart steps for one connector, followed by Idle.
-const RESTORE_PASSES: u32 = 8;
+// Eight restart steps for one connector (including Switch), followed by Idle.
+const RESTORE_PASSES: u32 = 9;
 
 pub fn root() -> (engine::Domain, Env<engine::Limits>) {
     root_with_config(config(7))
@@ -502,7 +502,7 @@ pub fn root_with_config_and_limits(
     }
     let mut root = engine::Domain::new(config, limits).unwrap();
     let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: *limits };
-    let mut request = root.core.restart_begin();
+    let mut request = root.core.restart_begin(false);
     let mut deployment = root.core.counters.deployment();
     deployment.projects = project_mark;
     engine::restart::restore_page_row(
@@ -524,10 +524,22 @@ pub fn root_with_config_and_limits(
     }
     for _ in 0..RESTORE_PASSES {
         match request {
-            jig_domain_core::RestartRequest::Step(step) => request = root.core.restart_done(step),
+            jig_domain_core::RestartRequest::Step(step) => {
+                if step == jig_domain_core::RestartStep::LoadInbox {
+                    let _requests =
+                        jig_domain_core::want_accounts(&mut root.core, &crate::limits::environment_core(&env));
+                }
+                if step == jig_domain_core::RestartStep::Switch {
+                    check_switch(&mut root, &env);
+                }
+                request = root.core.restart_done(step);
+            }
             jig_domain_core::RestartRequest::Idle => break,
             jig_domain_core::RestartRequest::Settings { failure, changed } => {
                 panic!("fixture settings restore: {failure:?}, changed {changed}")
+            }
+            jig_domain_core::RestartRequest::Unresolved { child, records } => {
+                panic!("fixture restore {child:?}: {records}")
             }
             jig_domain_core::RestartRequest::ProjectPolicy { project } => {
                 panic!("fixture project policy restore: {project}")
@@ -537,4 +549,14 @@ pub fn root_with_config_and_limits(
     }
     assert!(root.ready(), "fixture store restored");
     (root, env)
+}
+
+/// Unit fixtures drive the script without routing its store deliveries.
+pub fn check_switch(root: &mut engine::Domain, env: &Env<engine::Limits>) {
+    let _requests = jig_domain_core::step(
+        &mut root.core,
+        &crate::limits::environment_core(env),
+        jig_domain_core::Event::Tasks(tasks::Event::Check),
+    );
+    assert!(root.core.restart_checked(), "fixture children checked before switch");
 }

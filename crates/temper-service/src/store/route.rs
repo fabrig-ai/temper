@@ -94,10 +94,13 @@ pub enum Up {
 #[must_use]
 pub fn down(routes: &mut Routes, request: engine::StoreRequest) -> Option<store::Request> {
     Some(match request {
+        engine::StoreRequest::Switch => store::Request::Switch { owner: Token::new(u64::MAX - 2) },
         engine::StoreRequest::Commit { number, writes } => {
             let mut out = List::with_capacity(u32::try_from(writes.len()).ok()?);
             for write in writes {
                 let translated = match write {
+                    engine::Write::Wires => store::Write::Wires,
+                    engine::Write::Erase(engine::Key::Wires) => return None,
                     engine::Write::CopySettingsRevision(number) => store::Write::CopySettingsRevision(number),
                     engine::Write::Save(engine::Record::Core(row)) => store::Write::Save(row),
                     engine::Write::Erase(engine::Key::Core(key)) => store::Write::Erase(key),
@@ -198,7 +201,9 @@ pub fn up(routes: &mut Routes, event: store::Event, into: &mut Queue<Up>) {
         store::Event::Site { owner, of, site, patcher, .. } => {
             into.push(Up::Ask(dispatch(owner, of, site, patcher)));
         }
+        store::Event::Switched { .. } => root(into, engine::StoreInput::Switched),
         store::Event::OpenRefused { .. } => stop(routes, into),
+        store::Event::SecretsNotReady { .. } => stop(routes, into),
         store::Event::Patched { .. }
         | store::Event::Opened { .. }
         | store::Event::Kept { .. }

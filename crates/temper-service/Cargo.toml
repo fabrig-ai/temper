@@ -26,6 +26,7 @@ jig-protocol-engine-workers.workspace = true
 temper-protocol-worker-wire.workspace = true
 jig-protocol-worker-wire.workspace = true
 smith-charter.workspace = true
+smith-transcript.workspace = true
 smith-channel.workspace = true
 smith-domain-run.workspace = true
 jig-domain-fleet.workspace = true
@@ -75,7 +76,6 @@ skein-fake-forge-github.workspace = true
 jig-domain-views.workspace = true
 skein-world.workspace = true
 temper-worker-protocol-git-world.workspace = true
-smith-transcript.workspace = true
 
 [lints]
 workspace = true

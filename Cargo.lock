@@ -2938,6 +2938,7 @@ dependencies = [
 name = "temper-github-app"
 version = "0.0.0"
 dependencies = [
+ "jig-domain-core",
  "jig-protocol-config",
  "jig-protocol-store",
  "skein-fake-forge-github",

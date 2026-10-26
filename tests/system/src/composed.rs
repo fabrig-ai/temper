@@ -395,7 +395,7 @@ impl World {
             root: engine::Domain::new(config, &limits).expect("valid engine configuration"),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
             root_out: Queue::with_capacity(engine::max_out(&limits)),
-            root_events: VecDeque::from([engine::Event::Restart]),
+            root_events: VecDeque::from([engine::Event::Restart { pending: false }]),
             store,
             party: parties::Party::new(
                 1,

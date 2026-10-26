@@ -271,3 +271,31 @@ fn settings_history_loads_with_the_roots_effective_envelope() {
     assert_eq!(rows.len(), 1);
     assert_eq!(reads::settings::record_revision(&rows[0].value), Some(&revision));
 }
+
+#[test]
+fn every_service_start_keeps_the_shells_wires() {
+    use jig_protocol_store as protocol;
+    use skein_lib::{Env, Queue, Reader, Token, Wall};
+    let service = fixtures::ready();
+    let (root, _, profile) = fixtures::store_limits();
+    let limits = store::limits(&root, &root.forge, &profile).expect("fixture limits");
+    let mut maps = service.engine.expect("started engine").store.component.into_stores();
+    let mut above = Queue::with_capacity(skein_kv::MAX_OUT.above);
+    let mut below = Queue::with_capacity(skein_kv::MAX_OUT.below);
+    skein_kv::down(
+        &mut maps.store,
+        &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: limits.store },
+        skein_kv::Request::Get {
+            owner: Token::new(1),
+            key: protocol::keys::encode_own(&protocol::keys::Own::Wires, limits.store.key).unwrap(),
+        },
+        &mut above,
+        &mut below,
+    );
+    let Some(skein_kv::Event::Got { value: Some(bytes), .. }) = above.pop() else { panic!("durable wires row") };
+    let wires =
+        protocol::component_v3::Wires::decode(&protocol::component_v3::CEILINGS, &mut Reader::new(&bytes)).unwrap();
+    let kept: Vec<_> = wires.wires().iter().map(|wire| (wire.name(), wire.version())).collect();
+    let expected: Vec<_> = store::WIRES.iter().map(|wire| (wire.name.as_bytes(), wire.version)).collect();
+    assert_eq!(kept, expected);
+}

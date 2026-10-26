@@ -13,6 +13,7 @@ temper-protocol-store.workspace = true
 temper-service.workspace = true
 jig-protocol-config.workspace = true
 jig-protocol-store.workspace = true
+jig-domain-core.workspace = true
 skein-fake-forge-github.workspace = true
 skein-forge-connection.workspace = true
 skein-lib.workspace = true

@@ -938,6 +938,7 @@ pub(crate) fn subscribe_goal(domain: &mut Domain, env: &Env<Limits>, goal: u64, 
                 previous = Some(subscriber.clone());
             }
             Work::GoalSubscribe(_)
+            | Work::SwitchChecked
             | Work::AdoptRestored
             | Work::AdoptDone
             | Work::Restart(_)

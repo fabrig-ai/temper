@@ -81,6 +81,7 @@ impl Referee {
         let mut keys = BTreeSet::new();
         for write in writes {
             let key = match write {
+                Write::Wires => Key::Wires,
                 Write::Save(record) => record.key(),
                 Write::Erase(key) => key.clone(),
                 Write::CopySettingsRevision(number) => Key::Core(jig_domain_core::Key::Core(
@@ -128,6 +129,7 @@ impl Referee {
                     | Record::Forge { .. },
                 )
                 | Write::Erase(_)
+                | Write::Wires
                 | Write::CopySettingsRevision(_) => None,
             })
             .collect();
@@ -176,6 +178,7 @@ impl Referee {
                     | Record::Forge { .. },
                 )
                 | Write::Erase(_)
+                | Write::Wires
                 | Write::CopySettingsRevision(_) => None,
             })
             .collect();
@@ -248,6 +251,7 @@ impl Referee {
                         | Record::Forge { .. },
                     )
                     | Write::Erase(_)
+                    | Write::Wires
                     | Write::CopySettingsRevision(_) => None,
                 });
                 if found.is_none() {
@@ -289,6 +293,7 @@ impl Referee {
         }
         for write in writes {
             match write {
+                Write::Wires | Write::Erase(Key::Wires) => return Err("role administration changed wires"),
                 Write::CopySettingsRevision(_) => return Err("role administration changed settings"),
                 Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(record)))) => {
                     if replacement.is_none_or(|replacement| !replacement.tasks.contains_key(&record.number)) {
@@ -345,7 +350,9 @@ impl Referee {
         }
         for write in writes {
             match write {
-                Write::CopySettingsRevision(_) => unreachable!("role administration settings write refused above"),
+                Write::Wires | Write::CopySettingsRevision(_) => {
+                    unreachable!("role administration settings write refused above")
+                }
                 Write::Save(record) => {
                     self.rows.insert(record.key(), record.clone());
                 }

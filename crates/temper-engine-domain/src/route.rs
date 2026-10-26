@@ -173,12 +173,19 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
             accept_load(domain, env, decision);
             return;
         }
+        Event::Store(crate::StoreInput::Switched) => {
+            let mut decision = crate::limits::route_decision(domain, &env.limits).expect("mark route room");
+            save(&mut decision, &env.limits, Write::Wires);
+            emit(&mut decision, &env.limits, Delivery::Restart(core::RestartStep::AdoptRuns));
+            close(domain, env, decision, out);
+            return;
+        }
         Event::Store(crate::StoreInput::ReadLoaded { load, result }) => {
             domain.work.push(Work::Core(core::Event::ReadLoaded { load, result }));
         }
-        Event::Restart => {
+        Event::Restart { pending } => {
             let Some(mut decision) = crate::limits::route_decision(domain, &env.limits) else { return };
-            let request = domain.core.restart_begin();
+            let request = domain.core.restart_begin(pending);
             restart_request(domain, env, &mut decision, request);
             route_into(domain, env, &mut decision);
             close(domain, env, decision, out);
@@ -256,6 +263,13 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
             break;
         };
         match work {
+            Work::SwitchChecked => {
+                if domain.core.restart_checked() {
+                    emit(decision, &env.limits, Delivery::Restart(core::RestartStep::Switch));
+                } else {
+                    domain.stop_pending = true;
+                }
+            }
             Work::AdoptRestored => {
                 if domain.core.restart_admit_claims() {
                     for _ in 0..domain.core.adopted.len() {
@@ -475,11 +489,12 @@ pub(crate) fn discard_after_stop(domain: &mut Domain, event: Event) {
         | Event::Forge(_)
         | Event::Credential { .. }
         | Event::Setup { .. }
-        | Event::Restart
+        | Event::Restart { .. }
         | Event::Resume
         | Event::Stop
         | Event::Store(
-            crate::StoreInput::Committed { .. }
+            crate::StoreInput::Switched
+            | crate::StoreInput::Committed { .. }
             | crate::StoreInput::Uncommitted { .. }
             | crate::StoreInput::ReadLoaded { .. },
         )

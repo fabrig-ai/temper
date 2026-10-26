@@ -285,6 +285,7 @@ pub struct CallRecord {
 /// (jig's domain/engine.md, 5.3–5.6).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Key {
+    Wires,
     Core(jig_domain_core::Key),
     Forge(temper_engine_domain_forge::Key),
 }
@@ -363,6 +364,7 @@ impl Range {
     #[must_use]
     pub fn contains(&self, key: &Key) -> bool {
         let core = match key {
+            Key::Wires => return false,
             Key::Core(core) => core,
             Key::Forge(_) => return *self == Range::Forge,
         };
@@ -502,6 +504,8 @@ impl Record {
 /// (domain/root.md, 8).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Write {
+    /// Persist the shell-supplied wire versions in the start’s mark.
+    Wires,
     /// Copy a held revision to its history destination before its held row is erased.
     CopySettingsRevision(u32),
     /// Replace the row at its own key.
@@ -519,6 +523,7 @@ impl Write {
             Write::CopySettingsRevision(number) => Key::Core(jig_domain_core::Key::Core(
                 jig_domain_core::CoreKey::Settings(jig_domain_core::settings::Key::History(*number)),
             )),
+            Write::Wires => Key::Wires,
             Write::Save(row) => row.key(),
             Write::Erase(key) => key.clone(),
         }
@@ -764,6 +769,7 @@ fn note_entry_bytes(entry: &jig_domain_notes::Entry) -> Option<u64> {
 /// Checked deep-byte projection for journal admission, including scoped erase keys.
 pub(crate) fn owned_bytes(write: &Write) -> Option<u64> {
     match write {
+        Write::Wires => Some(0),
         Write::CopySettingsRevision(_) => u64::try_from(size_of::<u32>()).ok(), // The store copies the payload; only the number crosses this boundary.
         Write::Save(record) => record_bytes(record),
         Write::Erase(Key::Core(jig_domain_core::Key::Notes(jig_domain_notes::Key::Line { scope, .. }))) => {
@@ -787,6 +793,7 @@ pub(crate) fn owned_bytes(write: &Write) -> Option<u64> {
                 | jig_domain_core::Key::People(_)
                 | jig_domain_core::Key::Accounts(_),
             )
+            | Key::Wires
             | Key::Forge(_),
         ) => Some(0),
     }

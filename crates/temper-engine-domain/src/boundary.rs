@@ -247,7 +247,9 @@ pub enum Event {
     },
     Forge(Box<forge::Event>),
     Released(Released),
-    Restart,
+    Restart {
+        pending: bool,
+    },
     /// Iterate offers progress requested by ready owners.
     Resume,
     /// The service begins its drain (jig's `domain/engine.md`, 6.1).
@@ -258,6 +260,7 @@ pub type TranscriptTexts = Box<[Option<Box<[u8]>>]>;
 
 #[derive(Debug)]
 pub enum StoreInput {
+    Switched,
     Committed {
         /// Store-echoed positive commit number, at most the latest issued commit; older cumulative
         /// answers are inert.
@@ -287,7 +290,10 @@ pub enum StoreInput {
         owner: Token,
     },
     /// The one terminal of a core read load (jig's `client/domain/contract.md`, 6).
-    ReadLoaded { load: Token, result: core::reads::Loaded },
+    ReadLoaded {
+        load: Token,
+        result: core::reads::Loaded,
+    },
 }
 
 /// The three inputs of a worker channel, in the hub's vocabulary (jig's
@@ -591,6 +597,7 @@ pub enum Request {
 }
 #[derive(PartialEq, Eq, Debug)]
 pub enum StoreRequest {
+    Switch,
     Commit {
         /// Positive ordered commit number allocated by the journal, echoed by the store terminal;
         /// checked `u64` exhaustion stops admission.
@@ -613,7 +620,10 @@ pub enum StoreRequest {
         bytes: u32,
     },
     /// One core read load after every preceding commit, answered by `ReadLoaded`.
-    Read { load: Token, range: Box<core::reads::Range> },
+    Read {
+        load: Token,
+        range: Box<core::reads::Range>,
+    },
 }
 #[derive(PartialEq, Eq, Debug)]
 pub enum WorkerRequest {
@@ -653,6 +663,7 @@ pub enum PartyRequest {
 
 #[derive(Debug)]
 pub(crate) enum Work {
+    SwitchChecked,
     AdoptRestored,
     AdoptDone,
     Restart(jig_domain_core::RestartRequest),
@@ -767,6 +778,7 @@ pub(crate) fn delivery_output(delivery: Delivery) -> Request {
         | Delivery::ForgeCommitted { .. }
         | Delivery::Fleet(_)
         | Delivery::Relay { .. }
+        | Delivery::Restart(_)
         | Delivery::Load { .. }
         | Delivery::ReadEscalationDecision { .. }) => Request::ToChild(Released(delivery)),
         delivery @ (Delivery::Host(_)

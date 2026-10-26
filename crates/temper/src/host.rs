@@ -126,6 +126,15 @@ fn ending(
                 found.clone(),
                 &jig_protocol_config::Path::root(),
             )),
+            Stop::Unresolved { child, records } => {
+                let name = match child {
+                    jig_domain_core::RestoreChild::People => "people",
+                    jig_domain_core::RestoreChild::Tasks => "tasks",
+                    jig_domain_core::RestoreChild::Accounts => "accounts",
+                    jig_domain_core::RestoreChild::Core => "core",
+                };
+                format!("temper serve: {name}: unresolved records: {records}\n")
+            }
             Stop::StoreOpen { why } => {
                 let deployment = crate::path(store);
                 let (lines, exit) = temper_service::refused_start(why, deployment.display().to_string().as_bytes());
@@ -366,6 +375,12 @@ fn other_endings_keep_their_exit_behavior() {
     problems.push(jig_protocol_config::Path::root().member(b"deployment"), jig_protocol_config::What::Refers);
     for (end, output_failed, expected, code) in [
         (Some(End::Stopped(Stop::Start(problems))), false, "temper serve: deployment: unknown reference\n", 1),
+        (
+            Some(End::Stopped(Stop::Unresolved { child: jig_domain_core::RestoreChild::Tasks, records: 3 })),
+            false,
+            "temper serve: tasks: unresolved records: 3\n",
+            1,
+        ),
         (Some(End::Stopped(Stop::CommitFailed { number: 7 })), false, "temper serve: commit 7 failed\n", 1),
         (
             Some(End::Stopped(Stop::FrameTooLarge { number: 7, task: 11, bytes: 79, limit: 78 })),

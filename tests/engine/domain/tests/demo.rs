@@ -223,7 +223,7 @@ fn demo_restart_asks_the_group_makes_no_act_and_forgets_the_start_answer() {
     d.root = engine::Domain::new(config(true), &d.env.limits).expect("valid demo config");
     d.immediate.clear();
     d.delivered.clear();
-    d.send(engine::Event::Restart);
+    d.send(engine::Event::Restart { pending: false });
     d.settle();
     assert!(d.immediate.iter().any(|request| matches!(request, engine::Request::SetUpGroup { forge: 1, .. })));
     assert_eq!((keeps(&d), d.forge.as_ref().expect("fake forge").calls), (old_keeps, old_calls));
@@ -364,7 +364,7 @@ fn another_connected_forge_ends_the_demo_persists_and_stops_once_and_restart_ask
     );
     d.root = engine::Domain::new(config(true), &d.env.limits).expect("valid demo config");
     d.immediate.clear();
-    d.send(engine::Event::Restart);
+    d.send(engine::Event::Restart { pending: false });
     d.settle();
     assert_eq!(d.root.demo_state(), Some(forge::DemoState::Ended));
     assert!(d.root.forge_ended(1));
@@ -529,7 +529,7 @@ fn reopen(d: &mut Driver, configuration: engine::Config) {
     d.root = engine::Domain::new(configuration, &d.env.limits).expect("restart config");
     d.events.clear();
     d.delivered.clear();
-    d.send(engine::Event::Restart);
+    d.send(engine::Event::Restart { pending: false });
     d.pump();
 }
 fn assert_erased(d: &Driver, rows: &[forge::DemoAct]) {

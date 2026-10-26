@@ -99,7 +99,7 @@ fn policy_maps_connector_permissions_to_seeded_roles_after_restart() {
     driver.root = engine::Domain::new(temper_engine_domain_world::walking::config(71), &driver.env.limits)
         .expect("valid engine configuration");
     driver.delivered.clear();
-    driver.send(engine::Event::Restart);
+    driver.send(engine::Event::Restart { pending: false });
     driver.settle();
     driver.sign_in();
     driver.settle();

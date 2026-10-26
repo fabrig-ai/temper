@@ -530,7 +530,7 @@ impl World {
             period_sent: false,
             settings,
         };
-        world.queue(engine::Event::Restart, 0);
+        world.queue(engine::Event::Restart { pending: world.store.pending_generation }, 0);
         world.hello();
         world
     }
@@ -574,7 +574,7 @@ impl World {
             }
             .into(),
         );
-        self.queue(engine::Event::Restart, 0);
+        self.queue(engine::Event::Restart { pending: self.store.pending_generation }, 0);
         self.hello();
     }
 
@@ -736,6 +736,10 @@ impl World {
             };
             match request {
                 engine::Request::ToChild(released) => self.queue(engine::Event::Released(released), 0),
+                engine::Request::Store(engine::StoreRequest::Switch) => {
+                    let answer = self.store.switch();
+                    self.queue(engine::Event::Store(answer), 0);
+                }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     assert!(self.terminal_snapshot.is_none(), "terminal recovery commits nothing: {writes:?}");
                     self.referee.commit(&writes).expect("independent transaction referee");
@@ -892,7 +896,8 @@ impl World {
             | Delivery::Refuse { .. } => {
                 panic!("unexpected walking delivery {delivery:?}")
             }
-            Delivery::Fleet(_)
+            Delivery::Restart(_)
+            | Delivery::Fleet(_)
             | Delivery::ProjectMade { .. }
             | Delivery::ForgeCommitted { .. }
             | Delivery::ReadEscalationDecision { .. }

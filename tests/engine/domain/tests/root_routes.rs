@@ -3584,7 +3584,7 @@ fn multiple_waiting_recipients_preflight_together_and_a_full_journal_hands_the_a
                 {
                     Some(actual)
                 }
-                Write::CopySettingsRevision(_) | Write::Save(_) | Write::Erase(_) => None,
+                Write::Wires | Write::CopySettingsRevision(_) | Write::Save(_) | Write::Erase(_) => None,
             })
             .expect("each exact affected task belongs to the same cohort");
         // Rerouting keeps the hold's revision (jig 00de0b8c).

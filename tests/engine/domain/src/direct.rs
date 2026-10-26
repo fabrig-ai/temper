@@ -27,6 +27,8 @@ pub struct Driver {
     pub fail_archive_once: bool,
     pub transactions: Vec<Vec<Write>>,
     pub host_requests: Vec<Box<engine::HostRequest>>,
+    /// Load count at each switch ask, to observe its position in the script.
+    pub switches: Vec<usize>,
     /// Every store load the root asked for, by its owner, in order.
     pub loads: Vec<(Token, temper_engine_domain::Range)>,
     /// How many inputs `try_step` handed back while the journal was full; the
@@ -71,7 +73,7 @@ impl Driver {
             root: engine::Domain::new(config, limits).expect("valid engine configuration"),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: *limits },
             out: Queue::with_capacity(engine::max_out(limits)),
-            events: VecDeque::from([engine::Event::Restart]),
+            events: VecDeque::from([engine::Event::Restart { pending: store.pending_generation }]),
             store,
             delivered: Vec::new(),
             protocol: Protocol::default(),
@@ -80,6 +82,7 @@ impl Driver {
             fail_archive_once: false,
             transactions: Vec::new(),
             host_requests: Vec::new(),
+            switches: Vec::new(),
             loads: Vec::new(),
             returned: 0,
             immediate: Vec::new(),
@@ -129,6 +132,11 @@ impl Driver {
             };
             match request {
                 engine::Request::ToChild(released) => self.events.push_back(engine::Event::Released(released)),
+                engine::Request::Store(engine::StoreRequest::Switch) => {
+                    self.switches.push(self.loads.len());
+                    let answer = self.store.switch();
+                    self.events.push_back(engine::Event::Store(answer));
+                }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     self.transactions.push(writes.to_vec());
                     self.store.pending.push_back((number, writes));

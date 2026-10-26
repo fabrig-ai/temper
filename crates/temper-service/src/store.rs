@@ -12,6 +12,14 @@ use skein_io::{
 use skein_lib::{Duration, Env, Map, Queue, Time, Token, Wall};
 use temper_engine_domain as root;
 use temper_engine_domain_forge as forge;
+/// The wires this engine speaks to its workers (jig's protocol/store.md,
+/// 5.3; temper's protocol/README.md, 9).
+pub const WIRES: [protocol::Wire; 4] = [
+    protocol::Wire { name: "jig-channel", version: jig_protocol_worker_wire::VERSION as u32 },
+    protocol::Wire { name: "smith-charter", version: smith_charter::Charter::FORMAT_VERSION as u32 },
+    protocol::Wire { name: "smith-turn", version: smith_transcript::Turn::FORMAT_VERSION as u32 },
+    protocol::Wire { name: "temper-payload", version: temper_protocol_worker_wire::PAYLOAD_VERSION },
+];
 const ADOPT: Token = Token::new(u64::MAX - 1);
 const CLOSE: Token = Token::new(u64::MAX);
 const MASK: u64 = (1_u64 << 60) - 1;
@@ -40,6 +48,7 @@ pub struct Store {
     drivers: [Driver; 3],
     pub(crate) submitted: Queue<Submit>,
     pub(crate) opened: bool,
+    pub(crate) pending_generation: bool,
     /// The installation's identifier: the drawn one until the store opens,
     /// then the one it keeps (jig's store.md 4.4).
     pub(crate) installation: [u8; 16],
@@ -182,17 +191,19 @@ impl Store {
             [&mut store.io, &mut secrets.io, &mut transcripts.io],
             u64::from_le_bytes(*installation.first_chunk::<8>().expect("installation seed")),
         );
+        let mut component = protocol::Store::on_directory(
+            limits,
+            temper_protocol_store::application(&application.forge).expect("checked application sizes"),
+            models,
+            seeded,
+        );
+        assert!(component.wires(&WIRES), "valid engine wires before open");
         Self {
             #[cfg(test)]
             forge_loads: skein_lib::List::with_capacity(128),
             #[cfg(test)]
             erases: 0,
-            component: protocol::Store::on_directory(
-                limits,
-                temper_protocol_store::application(&application.forge).expect("checked application sizes"),
-                models,
-                seeded,
-            ),
+            component,
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: *limits },
             routes,
             above: Queue::with_capacity(room),
@@ -207,6 +218,7 @@ impl Store {
             drivers,
             submitted: Queue::with_capacity(room),
             opened: false,
+            pending_generation: false,
             installation,
             adopted: false,
             root: None,
@@ -256,6 +268,7 @@ impl Store {
                 }
             }
             request @ (protocol::Request::Open { .. }
+            | protocol::Request::Switch { .. }
             | protocol::Request::Commit { .. }
             | protocol::Request::Restore { .. }
             | protocol::Request::Load { .. }

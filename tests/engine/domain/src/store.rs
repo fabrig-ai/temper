@@ -47,6 +47,7 @@ struct Delayed {
 /// Numbered root transactions and their durable typed mirror.
 pub struct Store {
     pub applied: u64,
+    pub pending_generation: bool,
     pub rows: BTreeMap<Key, Record>,
     pub pending: VecDeque<(u64, Box<[Write]>)>,
     pub held: VecDeque<u64>,
@@ -131,14 +132,16 @@ impl Store {
         };
         // The worlds' configured models, in their order (jig's store over a configuration's).
         let models = crate::walking::models();
-        let component = protocol::Store::over(
+        let mut component = protocol::Store::over(
             &component_limits,
             temper_protocol_store::application(&limits.forge).expect("checked family sizes"),
             &models,
             stores,
         );
+        assert!(component.wires(&temper_service::store::WIRES));
         let mut store = Store {
             applied: 0,
+            pending_generation: false,
             rows: BTreeMap::new(),
             pending: VecDeque::new(),
             held: VecDeque::new(),
@@ -227,6 +230,7 @@ impl Store {
             &self.models,
             stores,
         ));
+        assert!(self.component.as_mut().unwrap().wires(&temper_service::store::WIRES));
         self.routes = routes(&self.limits);
         self.pending.clear();
         self.delays.clear();
@@ -299,7 +303,8 @@ impl Store {
                 match reply {
                     engine::StoreInput::Loaded { rows, next, .. } => return (rows, next),
                     engine::StoreInput::Committed { .. } => continue,
-                    reply @ (engine::StoreInput::Uncommitted { .. }
+                    reply @ (engine::StoreInput::Switched
+                    | engine::StoreInput::Uncommitted { .. }
                     | engine::StoreInput::Unloaded { .. }
                     | engine::StoreInput::ReadLoaded { .. }) => {
                         panic!("load {range:?} after {after:?} did not return its page: {reply:?}");
@@ -320,7 +325,8 @@ impl Store {
                 match reply {
                     engine::StoreInput::ReadLoaded { result, .. } => return result,
                     engine::StoreInput::Committed { .. } => continue,
-                    engine::StoreInput::Uncommitted { .. }
+                    engine::StoreInput::Switched
+                    | engine::StoreInput::Uncommitted { .. }
                     | engine::StoreInput::Unloaded { .. }
                     | engine::StoreInput::Loaded { .. } => {
                         panic!("historical read returned another terminal: {reply:?}")
@@ -331,7 +337,36 @@ impl Store {
             self.tick_pages();
         }
     }
+    #[must_use]
+    pub fn into_wires(mut self) -> protocol::component_v3::Wires {
+        let mut stores = self.component.take().expect("live component").into_stores();
+        let mut above = Queue::with_capacity(skein_kv::MAX_OUT.above);
+        let mut below = Queue::with_capacity(skein_kv::MAX_OUT.below);
+        skein_kv::down(
+            &mut stores.store,
+            &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: self.component_limits.store },
+            skein_kv::Request::Get {
+                owner: Token::new(1),
+                key: protocol::keys::encode_own(&protocol::keys::Own::Wires, u32::MAX).unwrap(),
+            },
+            &mut above,
+            &mut below,
+        );
+        let Some(skein_kv::Event::Got { value: Some(bytes), .. }) = above.pop() else { panic!("durable wires row") };
+        protocol::component_v3::Wires::decode(&protocol::component_v3::CEILINGS, &mut skein_lib::Reader::new(&bytes))
+            .unwrap()
+    }
+    pub fn switch(&mut self) -> engine::StoreInput {
+        self.request(engine::StoreRequest::Switch);
+        let answer = self.replies.pop().expect("switch terminal");
+        self.pending_generation = false;
+        answer
+    }
     fn request(&mut self, request: engine::StoreRequest) {
+        if request == engine::StoreRequest::Switch && !self.pending_generation {
+            self.replies.push(engine::StoreInput::Switched);
+            return;
+        }
         let request = route::down(&mut self.routes, request).expect("root store request admitted");
         self.drive(VecDeque::from([request]), Queue::with_capacity(protocol::MAX_OUT_DOWN));
     }
@@ -383,12 +418,16 @@ impl Store {
     }
     fn event(&mut self, event: Event, requests: &mut VecDeque<Request>) {
         match event {
-            Event::Opened { last, .. } => self.applied = last,
+            Event::Opened { last, pending, .. } => {
+                self.applied = last;
+                self.pending_generation = pending;
+            }
             Event::Patched { .. } => {}
             Event::Committed { number, .. } => {
                 let writes = self.inflight.remove(&number).expect("root commit");
                 for write in &writes {
                     match write {
+                        Write::Wires => {}
                         Write::CopySettingsRevision(number) => {
                             let held = Key::Core(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Settings(
                                 jig_domain_core::settings::Key::Held(*number),
@@ -421,7 +460,10 @@ impl Store {
                     self.held.push_back(number);
                 }
             }
-            Event::Failed { .. } | Event::FrameTooLarge { .. } | Event::OpenRefused { .. } => self.failed = true,
+            Event::Failed { .. }
+            | Event::FrameTooLarge { .. }
+            | Event::OpenRefused { .. }
+            | Event::SecretsNotReady { .. } => self.failed = true,
             event @ (Event::Restored { .. } | Event::Loaded { .. } | Event::Turns { .. } | Event::Got { .. })
                 if self.page_delay != 0 =>
             {
@@ -431,7 +473,8 @@ impl Store {
                 self.failed = true;
                 self.route(event, requests);
             }
-            event @ (Event::Site { .. }
+            event @ (Event::Switched { .. }
+            | Event::Site { .. }
             | Event::Restored { .. }
             | Event::Loaded { .. }
             | Event::Read { .. }

@@ -53,8 +53,10 @@ pub(super) fn run(data: &Path, records: &[(u64, Box<[u8]>)], load: bool) -> Resu
     }
     let [store, secrets, transcripts] = &mut drivers;
     let seeded = protocol::seed([&mut store.io, &mut secrets.io, &mut transcripts.io], 0);
+    let mut component = protocol::Store::on_directory(&limits, application, &[], seeded);
+    assert!(component.wires(&temper_service::store::WIRES));
     let mut host = StoreHost {
-        store: protocol::Store::on_directory(&limits, application, &[], seeded),
+        store: component,
         limits,
         drivers,
         above: Queue::with_capacity(ROOM),
@@ -69,6 +71,7 @@ pub(super) fn run(data: &Path, records: &[(u64, Box<[u8]>)], load: bool) -> Resu
         records: records.iter().cloned().collect(),
         rows: Vec::new(),
         load,
+        last: 0,
         closing: false,
         error: None,
     };
@@ -95,10 +98,27 @@ struct StoreHost {
     records: VecDeque<(u64, Box<[u8]>)>,
     rows: Rows,
     load: bool,
+    last: u64,
     closing: bool,
     error: Option<String>,
 }
 impl StoreHost {
+    fn header(&mut self) {
+        self.request = Some(Request::Get {
+            owner: OWNER,
+            key: protocol::Get::Jig(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Deployment)),
+        });
+    }
+    fn mark(&mut self, mut header: jig_domain_core::Deployment) {
+        header.commits = self.last + 1;
+        self.request = Some(Request::Commit {
+            number: header.commits,
+            writes: Box::new([
+                protocol::Write::Save(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(header))),
+                protocol::Write::Wires,
+            ]),
+        });
+    }
     fn next(&mut self) {
         if let Some((number, value)) = self.records.pop_front() {
             self.request = Some(Request::Secrets {
@@ -116,7 +136,42 @@ impl StoreHost {
     }
     fn answer(&mut self, event: Event) {
         match event {
-            Event::Opened { .. } | Event::Kept { .. } => self.next(),
+            Event::Opened { last, pending, .. } => {
+                self.last = last;
+                if pending {
+                    self.request = Some(Request::Switch { owner: OWNER });
+                } else {
+                    self.header();
+                }
+            }
+            Event::Switched { .. } => self.header(),
+            Event::Got { row, .. } => {
+                let header = match row {
+                    Some(protocol::Row::Jig(jig_domain_core::Record::Core(
+                        jig_domain_core::CoreRecord::Deployment(header),
+                    ))) => header,
+                    None => jig_domain_core::Deployment {
+                        id: [1; 16],
+                        tasks: 0,
+                        people: 0,
+                        sign_ins: 0,
+                        messages: 0,
+                        runs: 0,
+                        calls: 0,
+                        connector_rows: 0,
+                        applications: 0,
+                        commits: 0,
+                        projects: 0,
+                    },
+                    other => {
+                        self.error = Some(format!("fixture header: {other:?}"));
+                        self.closing = true;
+                        return;
+                    }
+                };
+                self.mark(header);
+            }
+            Event::Committed { .. } | Event::Kept { .. } => self.next(),
             Event::SecretsLoaded { rows, next, .. } => {
                 for row in rows {
                     self.rows.push((row.number, row.value.expose().into()));

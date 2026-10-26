@@ -14,7 +14,7 @@ pub fn try_step(domain: &mut Domain, env: &Env<Limits>, event: Event) -> Result<
     domain.changed();
     crate::domain::invalidate_input(domain, &event);
     match event {
-        event @ Event::Store(StoreInput::ReadLoaded { .. }) => {
+        event @ Event::Store(StoreInput::ReadLoaded { .. } | StoreInput::Switched) => {
             if domain.store_answers.is_empty() && admits(domain, &env.limits) {
                 step(domain, env, event);
             } else {
@@ -48,7 +48,7 @@ pub fn try_step(domain: &mut Domain, env: &Env<Limits>, event: Event) -> Result<
         | Event::Credential { .. }
         | Event::Forge(_)
         | Event::Setup { .. }
-        | Event::Restart
+        | Event::Restart { .. }
         | Event::Stop) => {
             if !admits(domain, &env.limits) {
                 return Err(event);

@@ -286,7 +286,7 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
     if engine.begin {
         if engine.credentials.is_empty() {
             engine.begin = false;
-            engine.step(root::Event::Restart);
+            engine.step(root::Event::Restart { pending: engine.store.pending_generation });
         } else {
             let last = engine.credentials.len().checked_sub(1).expect("first credential");
             let number = *engine.credentials.get(last).expect("configured identity");
@@ -405,8 +405,9 @@ pub(crate) fn answer(engine: &mut Engine) {
         }
         let event = engine.store.above.pop().expect("store terminals");
         match event {
-            jig_protocol_store::Event::Opened { installation, .. } => {
+            jig_protocol_store::Event::Opened { installation, pending, .. } => {
                 engine.store.opened = true;
+                engine.store.pending_generation = pending;
                 engine.store.installation = installation;
             }
             jig_protocol_store::Event::OpenRefused { why, .. } => open_refused(engine, why),
@@ -416,7 +417,8 @@ pub(crate) fn answer(engine: &mut Engine) {
             event @ jig_protocol_store::Event::Site { .. } => {
                 crate::store::route::up(&mut engine.store.routes, event, &mut engine.store.routed);
             }
-            event @ (jig_protocol_store::Event::Kept { owner }
+            event @ (jig_protocol_store::Event::SecretsNotReady { owner }
+            | jig_protocol_store::Event::Kept { owner }
             | jig_protocol_store::Event::Stale { owner }
             | jig_protocol_store::Event::Erased { owner }
             | jig_protocol_store::Event::Carried { owner, .. }
@@ -437,6 +439,10 @@ pub(crate) fn answer(engine: &mut Engine) {
                 } else {
                     engine.store.secrets.push(event);
                 }
+            }
+            event @ jig_protocol_store::Event::Switched { .. } => {
+                engine.store.pending_generation = false;
+                crate::store::route::up(&mut engine.store.routes, event, &mut engine.store.routed);
             }
             event @ (jig_protocol_store::Event::Committed { .. }
             | jig_protocol_store::Event::Failed { .. }
@@ -540,7 +546,7 @@ fn watcher(event: &root::Event) -> Option<skein_lib::Token> {
         | root::Event::Released(_)
         | root::Event::Credential { .. }
         | root::Event::Setup { .. }
-        | root::Event::Restart
+        | root::Event::Restart { .. }
         | root::Event::Stop
         | root::Event::Resume => None,
     }

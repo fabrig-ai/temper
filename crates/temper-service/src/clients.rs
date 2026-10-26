@@ -709,7 +709,7 @@ impl Clients {
                         endings.push(number).expect("bounded commit writes");
                     }
                 }
-                root::Write::CopySettingsRevision(_) | root::Write::Save(_) => {}
+                root::Write::Wires | root::Write::CopySettingsRevision(_) | root::Write::Save(_) => {}
             }
         }
         if !endings.is_empty() {
@@ -772,6 +772,7 @@ fn ended(key: &root::Key) -> Option<u64> {
             | core::Key::Notes(_)
             | core::Key::Accounts(_),
         )
+        | root::Key::Wires
         | root::Key::Forge(_) => None,
     }
 }
@@ -869,6 +870,8 @@ impl Clients {
                 kit::SecretsAnswer::Got { owner, value }
             }
             Event::SecretsLoaded { .. }
+            | Event::Switched { .. }
+            | Event::SecretsNotReady { .. }
             | Event::Site { .. }
             | Event::Patched { .. }
             | Event::Opened { .. }

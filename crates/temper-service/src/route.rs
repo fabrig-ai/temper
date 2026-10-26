@@ -195,6 +195,10 @@ fn account_return(engine: &Engine, source: u32, path: &[u8]) -> Option<skein_oau
 }
 
 fn store(engine: &mut Engine, request: root::StoreRequest) {
+    if request == root::StoreRequest::Switch && !engine.store.pending_generation {
+        engine.events.push(root::Event::Store(root::StoreInput::Switched));
+        return;
+    }
     if let root::StoreRequest::Commit { number, writes } = &request {
         engine.clients.commit(*number, writes);
     }
@@ -280,6 +284,7 @@ fn worker(engine: &mut Engine, request: root::WorkerRequest) {
             | root::Delivery::ReadEscalationDecision { .. }
             | root::Delivery::Fleet(_)
             | root::Delivery::ReadLoad { .. }
+            | root::Delivery::Restart(_)
             | root::Delivery::Load { .. }
             | root::Delivery::Drained => stop::unavailable(engine, b"workers"),
         },

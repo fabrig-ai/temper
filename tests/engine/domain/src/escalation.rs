@@ -243,7 +243,7 @@ impl World {
             period_sent: false,
             settings,
         };
-        world.queue(engine::Event::Restart, 0);
+        world.queue(engine::Event::Restart { pending: world.store.pending_generation }, 0);
         world.hello();
         world
     }
@@ -494,7 +494,7 @@ impl World {
         self.recovery = Recovery::Pending;
         self.restarts += 1;
         self.trace.push(format!("restart {:?}", self.settings.cut));
-        self.queue(engine::Event::Restart, 0);
+        self.queue(engine::Event::Restart { pending: self.store.pending_generation }, 0);
         self.hello();
     }
 
@@ -628,6 +628,10 @@ impl World {
             };
             match request {
                 engine::Request::ToChild(released) => self.queue(engine::Event::Released(released), 0),
+                engine::Request::Store(engine::StoreRequest::Switch) => {
+                    let answer = self.store.switch();
+                    self.queue(engine::Event::Store(answer), 0);
+                }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     if writes.iter().any(|write| matches!(write, Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Terminal(terminal)))) if terminal.end == tasks::End::Refused)) {
                         assert!(self.unplaced_referee.is_none(), "one unassigned-claim terminal in this script");
@@ -808,7 +812,8 @@ impl World {
             | Delivery::Drained
             | Delivery::Refuse { .. }
             | Delivery::TurnBusy { .. } => panic!("unexpected escalation delivery {delivery:?}"),
-            Delivery::Fleet(_)
+            Delivery::Restart(_)
+            | Delivery::Fleet(_)
             | Delivery::ProjectMade { .. }
             | Delivery::ForgeCommitted { .. }
             | Delivery::ReadLoad { .. }

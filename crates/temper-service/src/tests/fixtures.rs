@@ -263,6 +263,7 @@ fn memory_store_for(
             secrets: skein_kv::Store::memory(&limits.secrets),
         },
     );
+    assert!(store.component.wires(&crate::store::WIRES));
     store.ask(jig_protocol_store::Request::Open {
         owner: OWNER,
         root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },

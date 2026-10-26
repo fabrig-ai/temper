@@ -371,7 +371,7 @@ impl Domain {
         })
     }
 
-    /// A restore refusal retains its named settings value or project for startup diagnostics.
+    /// A restore refusal retains its named settings value, project or child for startup diagnostics.
     #[must_use]
     pub fn restore_failure(&self) -> Option<jig_domain_core::RestartRequest> {
         self.core.restore_failure()
@@ -395,7 +395,12 @@ impl Domain {
     pub fn connectors_restored(&self) -> bool {
         use jig_domain_core::RestartStep;
         match self.core.restart_step() {
-            Some(RestartStep::LoadCore | RestartStep::LoadInbox | RestartStep::RestoreConnector { .. }) => false,
+            Some(
+                RestartStep::LoadCore
+                | RestartStep::LoadInbox
+                | RestartStep::RestoreConnector { .. }
+                | RestartStep::Switch,
+            ) => false,
             Some(
                 RestartStep::AdoptRuns
                 | RestartStep::ReadAfresh { .. }
@@ -607,7 +612,7 @@ pub(crate) fn invalidate_input(domain: &mut Domain, event: &Event) {
         | Event::Account(_)
         | Event::Party(_)
         | Event::Store(_)
-        | Event::Restart
+        | Event::Restart { .. }
         | Event::Worker(_) => domain.settled = None,
     }
 }
@@ -652,7 +657,9 @@ pub(crate) fn stage_now(domain: &mut Domain, out: &mut Queue<Request>) {
             | Request::Bound { .. }
             | Request::Return { .. }
             | Request::Forge { .. }
-            | Request::Store(crate::StoreRequest::Load { .. } | crate::StoreRequest::Read { .. })
+            | Request::Store(
+                crate::StoreRequest::Switch | crate::StoreRequest::Load { .. } | crate::StoreRequest::Read { .. },
+            )
             | Request::ToChild(_)
             | Request::Busy(_)
             | Request::Unsettled(_)
@@ -885,6 +892,14 @@ fn released_into(
         Delivery::ForgeCommitted { entry } => {
             domain.work.push(Work::Forge(forge::Event::Committed { entry }));
         }
+        Delivery::Restart(jig_domain_core::RestartStep::Switch) => {
+            out.push(Request::Store(crate::StoreRequest::Switch))
+        }
+        Delivery::Restart(jig_domain_core::RestartStep::AdoptRuns) => {
+            let request = domain.core.restart_done(jig_domain_core::RestartStep::Switch);
+            domain.work.push(Work::Restart(request));
+        }
+        Delivery::Restart(_) => unreachable!("root holds only switch and mark continuations"),
         Delivery::Fleet(event) => domain.work.push(Work::Fleet(event)),
         Delivery::Relay { task, attempt, word, .. } => {
             let name = Token::new(word.number);

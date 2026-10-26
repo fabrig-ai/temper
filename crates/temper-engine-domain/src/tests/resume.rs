@@ -61,16 +61,25 @@ fn reconciliation_can_start_once_the_connectors_restore_and_stays_open() {
     let limits = super::resume_fixture::limits();
     let mut domain = Domain::new(super::resume_fixture::config(7), &limits).unwrap();
     assert!(!domain.connectors_restored());
-    let mut request = domain.core.restart_begin();
-    // False through the last connector restore, true from the next step on.
+    let mut request = domain.core.restart_begin(false);
+    // False through Switch and its mark, true once adoption starts.
     let (mut restoring, mut after) = (false, false);
     for _ in 0_u32..16 {
         match request {
             RestartRequest::Step(step) => {
                 match step {
                     RestartStep::RestoreConnector { .. } => restoring = true,
+                    RestartStep::Switch => super::resume_fixture::check_switch(
+                        &mut domain,
+                        &Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
+                    ),
+                    RestartStep::LoadInbox => {
+                        let _requests = jig_domain_core::want_accounts(
+                            &mut domain.core,
+                            &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: crate::core_limits(&limits) },
+                        );
+                    }
                     RestartStep::LoadCore
-                    | RestartStep::LoadInbox
                     | RestartStep::AdoptRuns
                     | RestartStep::ReadAfresh { .. }
                     | RestartStep::SettleOutbox { .. }
@@ -88,6 +97,7 @@ fn reconciliation_can_start_once_the_connectors_restore_and_stays_open() {
             RestartRequest::Settings { failure, changed } => {
                 panic!("empty settings restore: {failure:?}, changed {changed}")
             }
+            RestartRequest::Unresolved { child, records } => panic!("empty restore {child:?}: {records}"),
             RestartRequest::ProjectPolicy { project } => panic!("empty project policy restore: {project}"),
             RestartRequest::Refused { step } => panic!("empty restore: {step:?}"),
         }
@@ -173,7 +183,7 @@ fn released_callbacks_and_restart_preserve_derived_quiet_readiness() {
     crate::try_step(&mut domain, &env, Event::Released(released)).unwrap();
     resume(&mut domain, &env);
     let after_callback = domain.empty_resumes;
-    crate::try_step(&mut domain, &env, Event::Restart).unwrap();
+    crate::try_step(&mut domain, &env, Event::Restart { pending: false }).unwrap();
     resume(&mut domain, &env);
     assert_eq!((after_callback, domain.empty_resumes), (0, 0));
 }

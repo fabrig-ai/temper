@@ -63,6 +63,11 @@ pub enum Stop {
         number: u64,
     },
     Start(Problems),
+    /// A child refused restored records before the store switch.
+    Unresolved {
+        child: jig_domain_core::RestoreChild,
+        records: u32,
+    },
     /// The store refuses this start (jig's protocol/store.md, 5.3 and 10).
     StoreOpen {
         why: jig_protocol_store::OpenRefusal,

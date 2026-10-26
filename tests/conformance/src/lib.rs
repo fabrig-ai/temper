@@ -330,7 +330,7 @@ impl Application for Temper {
         }
     }
     fn start(_: &Config, _: &mut Store) -> Vec<Event> {
-        vec![Event::Root(engine::Event::Restart)]
+        vec![Event::Root(engine::Event::Restart { pending: false })]
     }
     fn cold(peers: &mut Peers, store: &Store, _: Clock) {
         peers.observed.push(r::Observed::ColdStore { receipts: observations::snapshot(store).receipts });
