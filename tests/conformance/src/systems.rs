@@ -106,7 +106,6 @@ impl FakeForge {
     }
     #[expect(
         clippy::wildcard_enum_match_arm,
-        clippy::match_wildcard_for_single_variants,
         reason = "only forge entry rows associate the released write with its durable key"
     )]
     pub fn call(
@@ -126,7 +125,7 @@ impl FakeForge {
                         forge::Stored::Entry { entry, held: false } if &entry.effect.write == write => Some(entry),
                         _ => None,
                     },
-                    _ => None,
+                    root::Record::Core(_) | root::Record::Delivery { .. } => None,
                 })
                 .expect("released write has a durable forge entry");
             let key = observations::key(store, entry);

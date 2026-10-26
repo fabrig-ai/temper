@@ -309,7 +309,7 @@ fn a_smith_change_with_failed_ci_is_repaired_reviewed_and_landed() {
                 forge_top::Stored::Change(change) => change.pull,
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("opened pull request");
     assert!(matches!(

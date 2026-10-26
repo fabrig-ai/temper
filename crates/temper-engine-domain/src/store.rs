@@ -277,7 +277,7 @@ impl CallAnswer {
 pub struct CallRecord {
     pub key: CallKey,
     pub answer: CallAnswer,
-    /// The exact protocol-rendered host answer and any opaque delivery evidence.
+    /// The protocol-rendered host answer or delivery outcome; evidence is application-owned.
     pub settled: Option<jig_domain_core::SettledCall>,
 }
 
@@ -288,6 +288,7 @@ pub struct CallRecord {
 pub enum Key {
     Core(jig_domain_core::Key),
     Forge(temper_engine_domain_forge::Key),
+    Delivery(CallKey),
 }
 
 /// Root-owned page ranges (domain/root.md, section 8).
@@ -365,7 +366,7 @@ impl Range {
     pub fn contains(&self, key: &Key) -> bool {
         let core = match key {
             Key::Core(core) => core,
-            Key::Forge(_) => return *self == Range::Forge,
+            Key::Forge(_) | Key::Delivery(_) => return *self == Range::Forge,
         };
         match self {
             Range::Forge => false,
@@ -484,6 +485,7 @@ impl CoreRange {
 pub enum Record {
     Core(jig_domain_core::Record),
     Forge { row: Box<temper_engine_domain_forge::Stored> },
+    Delivery { row: Box<crate::DeliveryRecord> },
 }
 
 impl Record {
@@ -494,6 +496,7 @@ impl Record {
         match self {
             Record::Core(row) => Key::Core(row.key()),
             Record::Forge { row } => Key::Forge(temper_engine_domain_forge::stored_key(row)),
+            Record::Delivery { row } => Key::Delivery(row.key),
         }
     }
 }
@@ -588,6 +591,7 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
             }
         },
         Record::Forge { row, .. } => temper_engine_domain_forge::stored_bytes(row),
+        Record::Delivery { row } => row.reply.record_bytes(),
         Record::Core(jig_domain_core::Record::People(row)) => match row {
             jig_domain_people::Stored::Person { identity, .. } => u64::try_from(identity.key.subject.len())
                 .ok()?
@@ -788,7 +792,8 @@ pub(crate) fn owned_bytes(write: &Write) -> Option<u64> {
                 | jig_domain_core::Key::People(_)
                 | jig_domain_core::Key::Accounts(_),
             )
-            | Key::Forge(_),
+            | Key::Forge(_)
+            | Key::Delivery(_),
         ) => Some(0),
     }
 }

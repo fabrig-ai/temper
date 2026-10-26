@@ -344,7 +344,7 @@ fn a_change_whose_ci_takes_minutes_lands_without_being_held() {
                 forge_top::Stored::Change(change) => Some(change),
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("the change is durable");
     assert!(
@@ -456,7 +456,7 @@ fn a_branch_read_sent_before_the_push_and_answered_missing_after_it_does_not_hol
                 forge_top::Stored::Change(change) => Some(change),
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("the change is durable");
     assert!(
@@ -1012,7 +1012,7 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once() {
                 },
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         });
         if review.is_some() {
             break;
@@ -1129,7 +1129,7 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once_and_merges() {
                 },
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         });
         if review.is_some() {
             break;
@@ -1365,7 +1365,7 @@ fn an_approval_carries_over_a_clean_update_and_is_asked_again_after_a_repair() {
                 forge_top::Stored::Change(change) => change.pull,
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("opened pull before review");
     assert!(
@@ -1468,7 +1468,7 @@ fn an_approval_carries_over_a_clean_update_and_is_asked_again_after_a_repair() {
                 forge_top::Stored::Change(change) => change.pull,
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("opened pull for repair");
     assert!(matches!(
@@ -1627,7 +1627,7 @@ fn a_worker_frozen_past_its_grace_resumes_with_a_push_in_hand_and_lands_nothing_
                 },
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(landed.len(), 1, "one landing after a frozen worker resumes");
@@ -2792,7 +2792,7 @@ fn a_tracked_goals_changes_install_landing_and_current_head_ci_topics_without_ag
                     }
                     _ => None,
                 },
-                Record::Core(_) => None,
+                Record::Core(_) | Record::Delivery { .. } => None,
             })
             .collect()
     };
@@ -2951,7 +2951,7 @@ fn held_issue_write() -> (World, engine::Assignment, u64) {
                 forge_top::Stored::Entry { entry, .. } if entry.task == assignment.task => Some(entry.number),
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("sent entry is durable");
     (world, assignment, entry)
@@ -3118,7 +3118,7 @@ fn a_stop_waits_for_a_sent_merge_to_be_proved() {
                 }
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("durable merge attempt");
     world.send(engine::Event::Stop);

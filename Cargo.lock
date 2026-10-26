@@ -2757,6 +2757,7 @@ dependencies = [
  "temper-engine-smith",
  "temper-protocol-store",
  "temper-service",
+ "temper-worker-domain-world",
 ]
 
 [[package]]
@@ -3050,6 +3051,7 @@ dependencies = [
  "skein-forge-client",
  "skein-kv",
  "skein-lib",
+ "smith-channel",
  "temper-engine-domain",
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",

@@ -4845,3 +4845,47 @@ mod exceeded;
 
 #[path = "root_routes/transcript_unread.rs"]
 mod transcript_unread;
+
+#[test]
+fn a_workers_delivery_evidence_reaches_its_process_after_engine_restart() {
+    use temper_worker_domain_world::{evidence, whole};
+    let encoded = whole::delivered_evidence(73);
+    let reply = temper_protocol_store::delivery::decode_reply(&encoded).expect("protocol reads worker evidence");
+    let (mut driver, first) = Driver::chat();
+    turn(&mut driver, &first, 1, 1);
+    driver.settle();
+    driver.protocol.defer_render = true;
+    let to = typed_call(&mut driver, &first, b"delivery-call");
+    driver.send(engine::Event::Worker(engine::WorkerInput::DecodedHostCall {
+        to,
+        body: engine::Call { completion: 2, position: 0, tool: engine::Tool::Unavailable },
+    }));
+    for _ in 0..60 {
+        driver.advance(true);
+    }
+    let (to, _) = driver.protocol.pending_renders.pop().expect("recorded delivery awaits its reply");
+    driver.send(engine::Event::Worker(engine::WorkerInput::RenderedDelivery { to, reply }));
+    driver.settle();
+    driver.answer(Token::new(7), first.task, first.attempt, 1, tasks::End::Parked, engine::Parts::none());
+    driver.settle();
+    let mut store = driver.store;
+    store.crash(91);
+    let mut restarted = Driver::new(store);
+    restarted.hello(Token::new(7));
+    restarted.settle();
+    restarted.sign_in();
+    restarted.settle();
+    restarted.say(first.task, 94);
+    let assignment = restarted.last_assignment();
+    let calls = temper_service::assignment::answered(&assignment.settled, &assignment.delivery_replies)
+        .expect("the application restored its evidence");
+    let replayed = whole::replayed_answers(74, assignment.attempt, calls);
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].name.activation, first.attempt);
+    assert_eq!(
+        replayed[0].reply,
+        temper_worker_domain_world::SavedDeliveryReply::Delivery(Box::new(
+            evidence::decode(host::DeliveryOutcome::Delivered, &encoded).expect("expected delivery")
+        ))
+    );
+}

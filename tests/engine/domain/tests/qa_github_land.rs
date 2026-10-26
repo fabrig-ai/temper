@@ -28,7 +28,7 @@ fn change_row(world: &World) -> &forge::ChangeRow {
                     None
                 }
             }
-            engine::Record::Core(_) => None,
+            engine::Record::Core(_) | engine::Record::Delivery { .. } => None,
         })
         .expect("requester-backed change")
 }

@@ -32,7 +32,9 @@ fn cut_chat() -> (World, Client, u64) {
             temper_engine_domain::Key::Core(jig_domain_core::Key::Tasks(jig_domain_tasks::Key::Live(task))) => {
                 Some(*task)
             }
-            temper_engine_domain::Key::Core(_) | temper_engine_domain::Key::Forge(_) => None,
+            temper_engine_domain::Key::Core(_)
+            | temper_engine_domain::Key::Forge(_)
+            | temper_engine_domain::Key::Delivery(_) => None,
         })
         .expect("committed chat task");
     (world, agent, task)

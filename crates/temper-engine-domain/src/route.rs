@@ -194,7 +194,13 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
         Event::Worker(crate::WorkerInput::DecodedHostCall { to, body }) => {
             domain.work.push(Work::Decoded { to, body });
         }
-        Event::Worker(crate::WorkerInput::RenderedHostCall { to, answer }) => host_route::rendered(domain, to, answer),
+        Event::Worker(crate::WorkerInput::RenderedHostCall { to, answer }) => {
+            host_route::rendered(domain, to, answer, None);
+        }
+        Event::Worker(crate::WorkerInput::RenderedDelivery { to, reply }) => {
+            let answer = core::SettledAnswer::Delivery { outcome: reply.outcome() };
+            host_route::rendered(domain, to, answer, Some(reply));
+        }
         Event::Worker(crate::WorkerInput::ResultRead { payload, end }) => {
             if let Some(event) = crate::link::result_event(domain, payload, end) {
                 domain.work.push(Work::Core(event));
@@ -239,6 +245,11 @@ pub(crate) fn route_core_requests(
                 {
                     save(decision, &env.limits, Write::Erase(Key::Forge(forge::Key::Call(named_call(call)))));
                 }
+                if let core::Key::Core(core::CoreKey::Call(call)) = key
+                    && domain.delivery_replies.remove(&call).is_some()
+                {
+                    save(decision, &env.limits, Write::Erase(Key::Delivery(call)));
+                }
                 save(decision, &env.limits, Write::Erase(Key::Core(key)));
             }
             core::Request::Ask { connector, ask } => asks::ask(domain, env, decision, connector, ask),
@@ -271,6 +282,17 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
             }
             Work::Restart(request) => restart_request(domain, env, decision, request),
             Work::Decoded { to, body } => host_route::decoded(domain, env, decision, to, body),
+            Work::SettleDelivery { to, key, name, call, reply } => {
+                let event = core::Event::SettledCall { to, key, name, call };
+                let first = !domain.core.call_settled.contains_key(&key);
+                let routed = core::step(&mut domain.core, &environment_core(env), event);
+                if first && domain.core.call_settled.contains_key(&key) && !domain.delivery_replies.contains_key(&key) {
+                    let row = crate::DeliveryRecord { key, reply: reply.clone() };
+                    assert!(domain.delivery_replies.insert(key, reply).is_ok(), "delivery records fit retained calls");
+                    save(decision, &env.limits, Write::Save(Record::Delivery { row: Box::new(row) }));
+                }
+                route_core_requests(domain, env, decision, routed);
+            }
             Work::Core(event) => {
                 let routed = core::step(&mut domain.core, &environment_core(env), event);
                 route_core_requests(domain, env, decision, routed);

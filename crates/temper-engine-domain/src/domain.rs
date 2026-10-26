@@ -75,6 +75,7 @@ pub struct Domain {
     pub(crate) forge_delegating: Map<(u64, u64), forge_change::Delegate>,
     pub(crate) loads: loads::Loads,
     pub(crate) assignments: Map<u64, Assignment>,
+    pub(crate) delivery_replies: Map<CallKey, crate::DeliveryReply>,
     pub(crate) payloads: Slab<Option<Payload>>,
     /// Loads of durable rows outside the working set: a run's preparation
     /// (transcript, dependencies, inputs) and historical queries.
@@ -374,6 +375,7 @@ impl Domain {
             forge_delegating: Map::with_capacity(limits.forge.changes),
             loads: loads::Loads::new(&limits.loads),
             assignments: Map::with_capacity(limits.tasks.tasks),
+            delivery_replies: Map::with_capacity(limits.call_records),
             payloads: Slab::with_capacity(payload_slots(limits).expect("valid payload room")),
             archive_reads: Slab::with_capacity(limits.loads.loads),
             store_answers: Queue::with_capacity(limits.loads.loads),

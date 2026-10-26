@@ -419,6 +419,26 @@ fn restore_account(domain: &mut Domain, env: &Env<Limits>, record: jig_domain_ac
     }
 }
 
+fn restore_delivery(domain: &mut Domain, row: crate::DeliveryRecord) {
+    let agrees = match domain.core.call_settled.get(&row.key) {
+        Some(call) => match call.answer {
+            jig_domain_core::SettledAnswer::Delivery { outcome } => outcome == row.reply.outcome(),
+            jig_domain_core::SettledAnswer::Host { .. } => false,
+        },
+        None => false,
+    };
+    if !agrees
+        || row.key.task == 0
+        || row.key.attempt == 0
+        || row.key.completion == 0
+        || !row.reply.valid()
+        || domain.delivery_replies.contains_key(&row.key)
+        || domain.delivery_replies.insert(row.key, row.reply).is_err()
+    {
+        let _refused = domain.core.restart_refuse();
+    }
+}
+
 /// Reject unsupported root shapes and identities above durable high-water marks before child
 /// restoration. Proof rows consume exact transient live-row correlations and never load archive
 /// history into the live map.
@@ -474,6 +494,7 @@ pub(crate) fn restore_page_row(domain: &mut Domain, env: &Env<Limits>, row: Reco
             domain.work.push(Work::People(people::Event::Restore { record }));
         }
         Record::Core(jig_domain_core::Record::Accounts(record)) => restore_account(domain, env, record),
+        Record::Delivery { row } => restore_delivery(domain, *row),
         Record::Forge { row } => {
             domain.work.push(Work::Forge(forge::Event::Restore { record: *row }));
         }
@@ -536,7 +557,7 @@ fn census_page(
     for row in rows {
         let restored = match row {
             Record::Core(row) => domain.core.restore_inbox_row(&core_limits(&env.limits), &row),
-            Record::Forge { .. } => false,
+            Record::Forge { .. } | Record::Delivery { .. } => false,
         };
         if !restored {
             let _refused = domain.core.restart_refuse();

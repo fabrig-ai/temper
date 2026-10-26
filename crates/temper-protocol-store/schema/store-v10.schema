@@ -198,5 +198,14 @@ record DemoAct { key: fixed 16 act: DemoActKind }
 # Family 21: writes with a committed attempt (protocol/store.md, 2).
 # Key family 20 is reserved for Setting, still design-only. Value tags are codec-local.
 record Flight { task: u64 entry: u64 }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight }
+# Family 22: application-owned delivery replies, retained beside core calls.
+record DeliveryReceipt { directory: u32 text: bytes 512 }
+record DeliveryDelivered { receipts: list 64 DeliveryReceipt }
+record DeliveryMarker { directory: u32 path: text 4096 }
+record DeliveryRefusal { marker: option DeliveryMarker explanation: text 512 }
+enum DeliveryReason { unreachable, refused_by_target, timed_out, broken, too_large, missing, busy, unavailable, cancelled, unknown }
+record DeliveryFailure { directory: u32 reason: DeliveryReason diagnostic: bytes 512 dropped: u64 }
+enum DeliveryReply { delivered: DeliveryDelivered, nothing, refused: DeliveryRefusal, failed: DeliveryFailure, stale }
+record DeliveryRecord { key: NamedCall reply: DeliveryReply }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, delivery: DeliveryRecord }
 versioned record Row { value: Value }

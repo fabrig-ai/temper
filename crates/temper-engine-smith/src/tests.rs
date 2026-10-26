@@ -93,6 +93,7 @@ fn assignment() -> engine::Assignment {
         transcript: Box::new([]),
         answered: Box::new([]),
         settled: Box::new([]),
+        delivery_replies: Box::new([]),
         grants: Box::new([accounts::Grant {
             form: accounts::Form::Credential(accounts::Scheme::Bearer),
             account: 1,

@@ -90,6 +90,7 @@ pub fn encode(value: &d::Stored) -> Box<[u8]> {
 pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
     let row = w::Row::decode(bounds.limits(), &mut Reader::new(bytes)).or(Err(Undecodable))?;
     Ok(match row.into_parts().value {
+        w::Value::Delivery(_) => return Err(Undecodable),
         w::Value::Application(value) => application::decode(value, bounds)?,
         w::Value::Issue(value) => d::Stored::Issue(issues::decode(*value)),
         w::Value::Change(value) => d::Stored::Change(change::decode_change_row(*value)),

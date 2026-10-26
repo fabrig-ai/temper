@@ -343,7 +343,8 @@ impl Decision {
                     | jig_domain_core::Key::People(_)
                     | jig_domain_core::Key::Accounts(_),
                 )
-                | Key::Forge(_),
+                | Key::Forge(_)
+                | Key::Delivery(_),
             ) => true,
             Write::Save(Record::Core(jig_domain_core::Record::Core(
                 jig_domain_core::CoreRecord::EscalationDecision(row),
@@ -379,7 +380,8 @@ impl Decision {
                     | jig_domain_core::Record::Notes(_)
                     | jig_domain_core::Record::Accounts(_),
                 )
-                | Record::Forge { .. },
+                | Record::Forge { .. }
+                | Record::Delivery { .. },
             ) => match crate::store::owned_bytes(&write) {
                 Some(bytes) => bytes <= u64::from(limits.transcript_bytes),
                 None => false,
@@ -865,17 +867,22 @@ fn host_within(host: &crate::HostDelivery, limits: &Limits) -> bool {
                 && length_within(name.len().checked_add(tool.len()), limits.transcript_bytes)
                 && bytes_within(crate::store::call_answer_bytes(answer), limits.transcript_bytes)
         }
-        crate::HostDelivery::Answer { name, call, .. } => {
-            !name.is_empty()
-                && bytes_within(
-                    match call.owned_bytes() {
-                        Some(bytes) => bytes.checked_add(u64::try_from(name.len()).expect("usize fits u64")),
-                        None => None,
-                    },
-                    limits.transcript_bytes,
-                )
+        crate::HostDelivery::Answer { name, call, reply, .. } => {
+            !name.is_empty() && bytes_within(relay_owned_bytes(name, call, reply.as_ref()), limits.transcript_bytes)
         }
     }
+}
+
+fn relay_owned_bytes(
+    name: &[u8],
+    call: &jig_domain_core::SettledCall,
+    reply: Option<&crate::DeliveryReply>,
+) -> Option<u64> {
+    let evidence = match reply {
+        Some(reply) => reply.owned_bytes()?,
+        None => 0,
+    };
+    call.owned_bytes()?.checked_add(evidence)?.checked_add(u64::try_from(name.len()).ok()?)
 }
 
 pub(crate) fn length_within(bytes: Option<usize>, limit: u32) -> bool {
@@ -893,6 +900,11 @@ fn bytes_within(bytes: Option<u64>, limit: u32) -> bool {
 }
 
 fn answered_within(assignment: &crate::Assignment, limits: &Limits) -> bool {
+    for row in &assignment.delivery_replies {
+        if !row.reply.valid() || !bytes_within(row.reply.owned_bytes(), limits.transcript_bytes) {
+            return false;
+        }
+    }
     let mut previous = None;
     for row in &assignment.answered {
         let key = row.key;

@@ -9,7 +9,7 @@ pub(crate) fn forge(rows: &BTreeMap<root::Key, root::Record>) -> Records {
     rows.values()
         .filter_map(|row| match row {
             root::Record::Forge { row } => Some((temper_engine_domain_forge::stored_key(row), *row.clone())),
-            root::Record::Core(_) => None,
+            root::Record::Core(_) | root::Record::Delivery { .. } => None,
         })
         .collect()
 }

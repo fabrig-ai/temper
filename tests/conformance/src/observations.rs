@@ -248,7 +248,7 @@ pub fn snapshot(store: &Store) -> r::Snapshot {
                     accepted_by: None,
                 });
             }
-            root::Record::Core(_) => {}
+            root::Record::Core(_) | root::Record::Delivery { .. } => {}
         }
     }
     for accepted in decisions {

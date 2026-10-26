@@ -49,6 +49,7 @@ pub struct Assignment {
     /// worker gives these to the new attempt before it can decide new calls.
     pub answered: Box<[crate::CallRecord]>,
     pub settled: Box<[jig_domain_core::Settled]>,
+    pub delivery_replies: Box<[crate::DeliveryRecord]>,
     /// Secret-free account and application credential grants; token bytes stay in the protocol.
     pub grants: Box<[accounts::Grant]>,
 }
@@ -365,6 +366,8 @@ pub enum WorkerInput {
     DecodedHostCall { to: ReplyTo, body: Call },
     /// The protocol rendered a decided call's answer for its host.
     RenderedHostCall { to: ReplyTo, answer: jig_domain_core::SettledAnswer },
+    /// Delivery evidence decoded by the application protocol, once, before settlement.
+    RenderedDelivery { to: ReplyTo, reply: crate::DeliveryReply },
     /// The protocol read an ended answer's opaque outcome after the fleet fenced it.
     ResultRead { payload: Token, end: tasks::End },
 }
@@ -665,24 +668,54 @@ pub(crate) enum Work {
     AdoptRestored,
     AdoptDone,
     Restart(jig_domain_core::RestartRequest),
-    Decoded { to: ReplyTo, body: Call },
+    Decoded {
+        to: ReplyTo,
+        body: Call,
+    },
     Core(jig_domain_core::Event),
+    SettleDelivery {
+        to: ReplyTo,
+        key: CallKey,
+        name: Box<[u8]>,
+        call: jig_domain_core::SettledCall,
+        reply: crate::DeliveryReply,
+    },
     Tasks(tasks::Event),
     People(people::Event),
     Fleet(fleet::Event),
     Brief(brief::GatherEvent),
-    StartBrief { task: u64 },
+    StartBrief {
+        task: u64,
+    },
     Forge(forge::Event),
     ProjectGoal(Box<jig_domain_core::ProjectionFeed>),
     GoalSubscribe(forge::Subscriber),
     Activate(Box<tasks::RunContext>),
-    EscalationLoaded { waiter: Token, rows: Box<[Record]> },
-    EscalationFailed { waiter: Token },
-    ProposalLoaded { waiter: Token, rows: Box<[Record]> },
-    ProposalFailed { waiter: Token },
-    TaskProposalLoaded { waiter: Token, rows: Option<Box<[Record]>> },
-    EndedLoaded { waiter: Token, rows: Box<[Record]> },
-    EndedFailed { waiter: Token },
+    EscalationLoaded {
+        waiter: Token,
+        rows: Box<[Record]>,
+    },
+    EscalationFailed {
+        waiter: Token,
+    },
+    ProposalLoaded {
+        waiter: Token,
+        rows: Box<[Record]>,
+    },
+    ProposalFailed {
+        waiter: Token,
+    },
+    TaskProposalLoaded {
+        waiter: Token,
+        rows: Option<Box<[Record]>>,
+    },
+    EndedLoaded {
+        waiter: Token,
+        rows: Box<[Record]>,
+    },
+    EndedFailed {
+        waiter: Token,
+    },
 }
 
 #[derive(Debug)]

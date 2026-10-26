@@ -44,7 +44,7 @@ fn row(world: &World, task: u64) -> &tasks::TaskRecord {
             Some(root::Record::Core(core::Record::Tasks(tasks::Stored::Live(row) | tasks::Stored::Ended(row)))) => {
                 Some(row)
             }
-            Some(root::Record::Core(_) | root::Record::Forge { .. }) | None => None,
+            Some(root::Record::Core(_) | root::Record::Forge { .. } | root::Record::Delivery { .. }) | None => None,
         })
         .expect("story task retained")
 }

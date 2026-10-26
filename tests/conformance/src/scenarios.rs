@@ -140,7 +140,6 @@ impl ScenarioApplication for Temper {
     #[expect(
         clippy::too_many_lines,
         clippy::wildcard_enum_match_arm,
-        clippy::match_wildcard_for_single_variants,
         reason = "the shared actions bind seven stories and select their durable task and outbox facts"
     )]
     fn action(world: &mut World, action: Action) -> Result<(), Violation> {
@@ -327,7 +326,7 @@ impl ScenarioApplication for Temper {
                             forge::Stored::Entry { entry, held: false } => entry.attempt.map(|a| a.expires),
                             _ => None,
                         },
-                        _ => None,
+                        root::Record::Core(_) | root::Record::Delivery { .. } => None,
                     })
                     .expect("uncertain entry");
                 if let Some(saved) = world.peers.saved_deadline {

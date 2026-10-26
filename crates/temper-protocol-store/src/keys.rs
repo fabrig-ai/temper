@@ -322,3 +322,33 @@ pub fn flight(bytes: &[u8]) -> Option<(u64, u64)> {
     }
     Some((task, entry))
 }
+
+/// Family 22, after the forge's families, in the same application interval.
+pub const DELIVERY: u8 = 22;
+#[must_use]
+pub fn delivery(key: temper_engine_domain::CallKey, limit: u32) -> Option<Box<[u8]>> {
+    let mut writer = KeyWriter::new(limit);
+    writer.tag(DELIVERY).u64(key.task).u64(key.attempt).u64(u64::from(key.completion)).u64(u64::from(key.position));
+    writer.finish()
+}
+#[must_use]
+pub fn decode_delivery(bytes: &[u8]) -> Option<temper_engine_domain::CallKey> {
+    let mut reader = KeyReader::new(bytes);
+    if reader.tag()? != DELIVERY {
+        return None;
+    }
+    let key = temper_engine_domain::CallKey {
+        task: reader.u64()?,
+        attempt: reader.u64()?,
+        completion: u32::try_from(reader.u64()?).ok()?,
+        position: u32::try_from(reader.u64()?).ok()?,
+    };
+    if !reader.is_empty() {
+        return None;
+    }
+    Some(key)
+}
+#[must_use]
+pub fn delivery_interval() -> skein_kv::Range {
+    skein_kv::Range { start: Box::new([DELIVERY]), end: Some(Box::new([DELIVERY + 1])) }
+}

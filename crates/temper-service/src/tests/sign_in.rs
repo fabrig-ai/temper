@@ -272,7 +272,7 @@ fn a_signed_member_mints_twice_and_keeps_the_binding_against_another_subject() {
                 false
             }
         }
-        temper_engine_domain::Record::Core(_) => false,
+        temper_engine_domain::Record::Core(_) | temper_engine_domain::Record::Delivery { .. } => false,
     }));
 }
 #[test]

@@ -7,6 +7,9 @@ use temper_engine_domain::{CoreRange, Key, Range};
 
 pub(super) fn cursor(range: &Range, key: &Key) -> Option<store::Cursor> {
     let after = match key {
+        Key::Delivery(key) => {
+            store::keys::application(&temper_protocol_store::keys::delivery(*key, u32::MAX)?, u32::MAX)?
+        }
         Key::Core(key) => store::keys::encode(key, u32::MAX)?,
         Key::Forge(key) => store::keys::application(&temper_protocol_store::keys::encode(key, u32::MAX)?, u32::MAX)?,
     };
@@ -22,7 +25,7 @@ pub(super) fn cursor(range: &Range, key: &Key) -> Option<store::Cursor> {
             )),
         )
         | (Range::Core(CoreRange::Tasks), Key::Core(core::Key::Tasks(_))) => 1,
-        (Range::Core(_) | Range::Census(_) | Range::Forge, Key::Core(_) | Key::Forge(_)) => 0,
+        (Range::Core(_) | Range::Census(_) | Range::Forge, Key::Core(_) | Key::Forge(_) | Key::Delivery(_)) => 0,
     };
     Some(store::Cursor { interval, after })
 }
@@ -147,7 +150,9 @@ pub(super) fn texts(
                     Err(_) => None,
                 }
             }
-            temper_engine_domain::Record::Core(_) | temper_engine_domain::Record::Forge { .. } => None,
+            temper_engine_domain::Record::Core(_)
+            | temper_engine_domain::Record::Forge { .. }
+            | temper_engine_domain::Record::Delivery { .. } => None,
         };
         texts.push(text).expect("one rendering per row");
     }

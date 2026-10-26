@@ -259,7 +259,8 @@ impl World {
                     | jig_domain_core::Record::Notes(_)
                     | jig_domain_core::Record::Accounts(_),
                 )
-                | Record::Forge { .. } => {}
+                | Record::Forge { .. }
+                | Record::Delivery { .. } => {}
             }
         }
         let sessions = signed_in(&store, people);

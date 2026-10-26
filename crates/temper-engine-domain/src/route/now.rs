@@ -345,6 +345,15 @@ fn run_prepared(domain: &mut Domain, env: &Env<Limits>, prepared: Prepared) {
             .push(crate::CallRecord { key, answer, settled: domain.core.call_settled.get(&key).cloned() })
             .expect("retained call bound");
     }
+    let settled = domain.core.settled_calls(task, attempt);
+    let mut delivery_replies = List::with_capacity(domain.limits.call_records);
+    for call in &settled {
+        if let Some(reply) = domain.delivery_replies.get(&call.key) {
+            delivery_replies
+                .push(crate::DeliveryRecord { key: call.key, reply: reply.clone() })
+                .expect("retained delivery bound");
+        }
+    }
     let assignment = Assignment {
         task,
         attempt,
@@ -360,7 +369,8 @@ fn run_prepared(domain: &mut Domain, env: &Env<Limits>, prepared: Prepared) {
         workstream: workspace.workstream,
         transcript,
         answered: records.into_boxed(),
-        settled: domain.core.settled_calls(task, attempt),
+        settled,
+        delivery_replies: delivery_replies.into_boxed(),
         grants,
     };
     let budget = assignment.run.budget;

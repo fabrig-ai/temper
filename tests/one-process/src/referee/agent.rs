@@ -107,7 +107,9 @@ impl Wire {
                     {
                         Some(proof)
                     }
-                    temper_engine_domain::Record::Core(_) | temper_engine_domain::Record::Forge { .. } => None,
+                    temper_engine_domain::Record::Core(_)
+                    | temper_engine_domain::Record::Forge { .. }
+                    | temper_engine_domain::Record::Delivery { .. } => None,
                 })
                 .expect("agent identity names a durable claim");
             self.runs.insert(identity_fd, (proof.task, start.activation()));

@@ -227,6 +227,7 @@ fn walking_referee_rejects_wrong_task_or_uncommitted_or_duplicate_assignment() {
         transcript: Box::new([]),
         answered: Box::new([]),
         settled: Box::new([]),
+        delivery_replies: Box::new([]),
         grants: Box::new([Grant {
             form: jig_domain_accounts::Form::Credential(jig_domain_accounts::Scheme::Bearer),
             account: 1,
