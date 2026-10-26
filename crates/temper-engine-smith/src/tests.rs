@@ -237,6 +237,7 @@ fn every_declared_tool_decodes_its_minimum_shape_and_rejects_a_wrong_shape() {
         (b"effect_forge", br#"{"repository":{"forge":1,"repository":2},"resource":{"kind":"repository"},"write":{"kind":"close","number":3}}"#, br#"{"repository":{"forge":1,"repository":2},"resource":{},"write":{"kind":"close","number":3}}"#),
         (b"subscribe_forge", br#"{"topic":{"repository":{"forge":1,"repository":2},"kind":"pull","number":3}}"#, br#"{"topic":{}}"#),
         (b"change", br#"{"words":"edit README"}"#, br#"{"words":""}"#),
+        (b"goal", br#"{"words":"plan"}"#, br"{}"),
         (b"delegate", br#"{"batch":[]}"#, br#"{"batch":{}}"#),
         (b"amend", br#"{"target":3,"revision":1,"amendment":{"reason":"x"}}"#, br#"{"target":3,"amendment":{}}"#),
         (b"message", br#"{"target":3,"form":"words","words":"x"}"#, br#"{"target":3,"form":"unknown","words":"x"}"#),
@@ -1262,4 +1263,19 @@ fn job_and_attempt_zero_decode_but_run_and_explicit_byte_limit_remain_positive()
     ] {
         assert!(skein_lib::bytes::find(schema, property).is_some());
     }
+}
+
+#[test]
+fn goal_decodes_words_and_an_optional_advisor() {
+    for (input, expected) in [
+        (br#"{"words":"plan"}"#.as_slice(), false),
+        (br#"{"words":"plan","advisor":true}"#, true),
+        (br#"{"words":"plan","advisor":false}"#, false),
+    ] {
+        let call = decided(b"goal", input).expect("goal declared and decoded");
+        assert_eq!(call.tool, engine::Tool::Goal { words: Box::from(b"plan".as_slice()), advisor: expected });
+    }
+    assert_eq!(decided(b"goal", b"{}"), Err(Problem::Missing(b"words")));
+    assert_eq!(decided(b"goal", br#"{"words":""}"#), Err(Problem::Range(b"words")));
+    assert_eq!(decided(b"goal", br#"{"words":"plan","advisor":1}"#), Err(Problem::Type(b"advisor")));
 }

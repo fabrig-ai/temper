@@ -16,8 +16,11 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
 
 ## How it changes
 
-- **Made a goal:** an agent's run delegates a task tracked at a
-  priority, with the host tool `delegate`; or a party accepts a
+- **Made a goal:** an agent's run calls `goal` with the work in your
+  words to make a tracked delegate that plans, asks and calls `change`.
+  With `advisor` set, it reads and reports without changing the forge,
+  and stays untracked. A run can also delegate a task tracked at a
+  priority with `delegate`; or a party accepts a
   proposal that makes one; or an amendment tracks a task.
 - **Reprioritised:** an amendment of its priority alone needs no
   spec revision; tracking an untracked task, or untracking a goal,
@@ -41,7 +44,7 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
 - **ctl:** `tasks` lists a project's goals, tracked alone and ordered
   by priority; `task` reads one; `amend` changes its priority or its
   tracking; `decide` accepts a proposal that makes one.
-- **temper's runs** make goals with `delegate` and reprioritise
+- **temper's runs** make goals with `goal` or `delegate` and reprioritise
   their delegates with `amend`.
 
 ## Limits
