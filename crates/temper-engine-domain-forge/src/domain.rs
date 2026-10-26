@@ -861,6 +861,18 @@ impl Domain {
         if adopted.project == project { Some(adopted) } else { None }
     }
 
+    /// All adopted repositories of this project on forges that have not ended.
+    #[must_use]
+    pub fn readable_repositories(&self, project: u32) -> Box<[&Repository]> {
+        let mut repositories = List::with_capacity(self.repositories.capacity());
+        for (_, repository) in &self.repositories {
+            if repository.project == project && !self.forge_ended(repository.provider.forge) {
+                repositories.push(repository).expect("bounded adopted repositories");
+            }
+        }
+        repositories.into_boxed()
+    }
+
     /// Adopted repositories in this project that still permit a workspace push.
     #[must_use]
     pub fn writable_repositories(&self, project: u32) -> Box<[&Repository]> {

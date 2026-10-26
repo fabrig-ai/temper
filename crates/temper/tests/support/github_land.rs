@@ -93,6 +93,7 @@ enum Stage {
     ReplySnapshot,
     ReplyPages,
     ChatEnded,
+    ChatEvidence,
     BeforeRestart,
     StopWorker,
     StopEngine,
@@ -318,6 +319,17 @@ impl Judge {
             Stage::ReplyPages => self.reply_page(host, calls),
             Stage::ChatEnded => {
                 assert_eq!(ctl::json(calls.ends().last().expect("chat ended"))["task"]["chip"]["phase"], "ended");
+                self.queue(host, vec![ctl::Call::new(&["activity", "1", "--limit", "32", "--json"])]);
+                self.stage = Stage::ChatEvidence;
+            }
+            Stage::ChatEvidence => {
+                let activity = ctl::json(calls.ends().last().expect("chat activity"));
+                // The scripted reply says only “The change landed.” The PR's
+                // words therefore come from the result the run was given.
+                assert!(
+                    activity["rows"].to_string().contains("pull request #1"),
+                    "chat heard the landed pull: {activity}"
+                );
                 self.queue(host, landing_reads());
                 self.stage = Stage::BeforeRestart;
             }
@@ -543,7 +555,13 @@ impl Judge {
             write!(hex, "{byte:02x}").expect("commit hex");
         }
         let result = &self.landed.as_ref().expect("landed result")["value"]["change"];
-        assert_eq!(result["words"]["bytes"], hex);
+        let words = result["words"]["bytes"].as_str().expect("landing words");
+        assert_eq!(words.lines().next(), Some(hex.as_str()));
+        let forge = self.members.capture("forge", "address").expect("forge address");
+        assert_eq!(
+            words.lines().nth(1),
+            Some(format!("pull request #1 of acme/app on {forge}: http://{forge}/acme/app/pull/1").as_str())
+        );
         let panel = self.panel.as_ref().expect("ctl change panel");
         assert_eq!(panel["merge"], hex, "ctl names the fake forge's merge");
         assert_eq!(panel["pull"]["number"], merge["number"]);
@@ -636,6 +654,7 @@ impl Referee<cluster::Root> for Judge {
                     | Stage::ReplySnapshot
                     | Stage::ReplyPages
                     | Stage::ChatEnded
+                    | Stage::ChatEvidence
                     | Stage::BeforeRestart
                     | Stage::Restored
                     | Stage::LandingRestored

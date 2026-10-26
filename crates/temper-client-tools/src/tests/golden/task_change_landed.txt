@@ -5,5 +5,6 @@ waiting on: Nothing awaited
 resource: branch temper/1/c2 of repository 1 on forge 1
 acts:
 result: Landed · pull request #1 of qa/pilot-20261026 on localhost:3000 · merge commit 1d0b14e4db018fed000000000000000300000000
+pull request: http://localhost:3000/qa/pilot-20261026/pulls/1
 next: temper ctl DIRECTORY change 2
-digest: task 7e3f4823c479dfe6
+digest: task b5bc8ccfa722ef85

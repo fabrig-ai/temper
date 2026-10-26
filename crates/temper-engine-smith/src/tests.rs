@@ -208,31 +208,31 @@ fn message_schema_decodes_a_named_question_and_rejects_a_malformed_body() {
             },
         })
     );
-    assert_eq!(decided(b"message", br#"{"target":0,"form":"words","words":"x"}"#), Err(Problem::Range));
+    assert_eq!(decided(b"message", br#"{"target":0,"form":"words","words":"x"}"#), Err(Problem::Range(b"target")));
     assert_eq!(decided(b"message", br#"{"target":23,,"form":"words","words":"x"}"#), Err(Problem::Malformed));
 }
 
 #[test]
 fn every_declared_tool_decodes_its_minimum_shape_and_rejects_a_wrong_shape() {
     let cases: &[(&[u8], &[u8], &[u8])] = &[
-        (b"read_items", br#"{"repository":{"forge":1,"repository":2},"read":{"since":0,"page":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_item", br#"{"repository":{"forge":1,"repository":2},"read":{"number":1,"after":0}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_pull", br#"{"repository":{"forge":1,"repository":2},"read":{"number":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_pull_for", br#"{"repository":{"forge":1,"repository":2},"read":{"head":"h","base":"b"}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_reviews", br#"{"repository":{"forge":1,"repository":2},"read":{"number":1,"page":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_statuses", br#"{"repository":{"forge":1,"repository":2},"read":{"commit":"0000000000000000000000000000000000000000000000000000000000000000","page":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_remarks", br#"{"repository":{"forge":1,"repository":2},"read":{"number":1,"review":1,"page":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_branch", br#"{"repository":{"forge":1,"repository":2},"read":{"branch":"main"}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_branches", br#"{"repository":{"forge":1,"repository":2},"read":{"prefix":"temper/"}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{"kind":"wrong"}}"#),
-        (b"read_pull_files", br#"{"repository":{"forge":1,"repository":2},"read":{"number":1,"head":"0000000000000000000000000000000000000000000000000000000000000000","page":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_compare", br#"{"repository":{"forge":1,"repository":2},"read":{"before":"0000000000000000000000000000000000000000000000000000000000000000","after":"0000000000000000000000000000000000000000000000000000000000000000"}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_checks", br#"{"repository":{"forge":1,"repository":2},"read":{"commit":"0000000000000000000000000000000000000000000000000000000000000000"}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_file", br#"{"repository":{"forge":1,"repository":2},"read":{"head":"0000000000000000000000000000000000000000000000000000000000000000","path":"file","max_bytes":32}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_job", br#"{"repository":{"forge":1,"repository":2},"read":{"head":"0000000000000000000000000000000000000000000000000000000000000000","run":1,"job":1,"attempt":1,"max_bytes":32}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_protection", br#"{"repository":{"forge":1,"repository":2},"read":{"branch":"main"}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_settings", br#"{"repository":{"forge":1,"repository":2},"read":{}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{"kind":"wrong"}}"#),
-        (b"read_collaborators", br#"{"repository":{"forge":1,"repository":2},"read":{"page":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
-        (b"read_permission", br#"{"repository":{"forge":1,"repository":2},"read":{"user":1}}"#, br#"{"repository":{"forge":1,"repository":2},"read":{}}"#),
+        (b"read_items", br#"{"repository":"qa/pilot","since":0,"page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_item", br#"{"repository":"qa/pilot","number":1,"after":0}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_pull", br#"{"repository":"qa/pilot","number":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_pull_for", br#"{"repository":"qa/pilot","head":"h","base":"b"}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_reviews", br#"{"repository":"qa/pilot","number":1,"page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_statuses", br#"{"repository":"qa/pilot","commit":"0000000000000000000000000000000000000000000000000000000000000000","page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_remarks", br#"{"repository":"qa/pilot","number":1,"review":1,"page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_branch", br#"{"repository":"qa/pilot","branch":"main"}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_branches", br#"{"repository":"qa/pilot","prefix":"temper/"}"#, br#"{"repository":"qa/pilot","kind":"wrong"}"#),
+        (b"read_pull_files", br#"{"repository":"qa/pilot","number":1,"head":"0000000000000000000000000000000000000000000000000000000000000000","page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_compare", br#"{"repository":"qa/pilot","before":"0000000000000000000000000000000000000000000000000000000000000000","after":"0000000000000000000000000000000000000000000000000000000000000000"}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_checks", br#"{"repository":"qa/pilot","commit":"0000000000000000000000000000000000000000000000000000000000000000"}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_file", br#"{"repository":"qa/pilot","head":"0000000000000000000000000000000000000000000000000000000000000000","path":"file","max_bytes":32}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_job", br#"{"repository":"qa/pilot","head":"0000000000000000000000000000000000000000000000000000000000000000","run":1,"job":1,"attempt":1,"max_bytes":32}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_protection", br#"{"repository":"qa/pilot","branch":"main"}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_settings", br#"{"repository":"qa/pilot"}"#, br#"{"repository":"qa/pilot","kind":"wrong"}"#),
+        (b"read_collaborators", br#"{"repository":"qa/pilot","page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
+        (b"read_permission", br#"{"repository":"qa/pilot","user":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
         (b"effect_forge", br#"{"repository":{"forge":1,"repository":2},"resource":{"kind":"repository"},"write":{"kind":"close","number":3}}"#, br#"{"repository":{"forge":1,"repository":2},"resource":{},"write":{"kind":"close","number":3}}"#),
         (b"subscribe_forge", br#"{"topic":{"repository":{"forge":1,"repository":2},"kind":"pull","number":3}}"#, br#"{"topic":{}}"#),
         (b"change", br#"{"words":"edit README"}"#, br#"{"words":""}"#),
@@ -284,11 +284,11 @@ fn delegate_tracking_is_optional_and_requires_a_priority_object() {
         assert_eq!(batch[0].label, 0);
     }
     for (tracked, problem) in [
-        ("8", Problem::Type),
-        (r#""untracked""#, Problem::Type),
-        (r#"{"priority":"8"}"#, Problem::Type),
-        (r#"{"priority":4294967296}"#, Problem::Range),
-        ("{}", Problem::Missing),
+        ("8", Problem::Type(b"tracked")),
+        (r#""untracked""#, Problem::Type(b"tracked")),
+        (r#"{"priority":"8"}"#, Problem::Type(b"priority")),
+        (r#"{"priority":4294967296}"#, Problem::Range(b"priority")),
+        ("{}", Problem::Missing(b"priority")),
     ] {
         let input = format!("{{\"batch\":[{{{member},\"tracked\":{tracked}}}]}}");
         assert_eq!(decided(b"delegate", input.as_bytes()), Err(problem), "{tracked}");
@@ -316,15 +316,15 @@ fn only_a_priority_amendment_can_omit_its_revision() {
     ] {
         let input =
             format!("{{\"target\":3,\"amendment\":{{\"reason\":\"x\",\"tracked\":{{\"priority\":8}}{other}}}}}");
-        assert_eq!(decided(b"amend", input.as_bytes()), Err(Problem::Missing), "{other}");
+        assert_eq!(decided(b"amend", input.as_bytes()), Err(Problem::Missing(b"revision")), "{other}");
     }
     assert_eq!(
         decided(b"amend", br#"{"target":3,"amendment":{"reason":"x","tracked":"untracked"}}"#),
-        Err(Problem::Missing)
+        Err(Problem::Missing(b"revision"))
     );
     assert_eq!(
         decided(b"amend", br#"{"target":3,"revision":"0","amendment":{"reason":"x","tracked":{"priority":8}}}"#),
-        Err(Problem::Type)
+        Err(Problem::Type(b"revision"))
     );
 }
 
@@ -341,18 +341,18 @@ fn amendments_replace_tracking_and_instructions_including_empty_words() {
         assert_eq!(amendment.instructions.as_deref(), Some(instructions.as_bytes()));
     }
     for (tracked, problem) in [
-        ("8", Problem::Type),
-        (r#""tracked""#, Problem::Range),
-        (r#"{"priority":"8"}"#, Problem::Type),
-        (r#"{"priority":4294967296}"#, Problem::Range),
-        ("{}", Problem::Missing),
+        ("8", Problem::Type(b"tracked")),
+        (r#""tracked""#, Problem::Range(b"tracked")),
+        (r#"{"priority":"8"}"#, Problem::Type(b"priority")),
+        (r#"{"priority":4294967296}"#, Problem::Range(b"priority")),
+        ("{}", Problem::Missing(b"priority")),
     ] {
         let input = format!("{{\"target\":3,\"revision\":1,\"amendment\":{{\"reason\":\"x\",\"tracked\":{tracked}}}}}");
         assert_eq!(decided(b"amend", input.as_bytes()), Err(problem), "{tracked}");
     }
     assert_eq!(
         decided(b"amend", br#"{"target":3,"revision":1,"amendment":{"reason":"x","instructions":8}}"#),
-        Err(Problem::Type)
+        Err(Problem::Type(b"instructions"))
     );
 }
 
@@ -363,7 +363,7 @@ fn the_declared_deadline_example_decodes_the_whole_authority() {
         if tool.name.as_ref() == b"amend" {
             let schema = crate::json::parse(&tool.schema).expect("amend schema");
             assert_eq!(
-                schema.required(b"examples").expect("examples").array().expect("examples array"),
+                schema.required(b"examples").expect("examples").array(b"examples").expect("examples array"),
                 &[crate::json::parse(EXAMPLE).expect("example")]
             );
         }
@@ -430,7 +430,7 @@ fn a_delegate_names_one_deadline() {
             };
             assert_eq!(batch[0].deadline, tasks::Deadline::Span(Duration::from_secs(MAX_SECONDS)));
         } else {
-            assert_eq!(result, Err(Problem::Range), "seconds={seconds}, wall={wall}");
+            assert_eq!(result, Err(Problem::Range(b"deadline_seconds")), "seconds={seconds}, wall={wall}");
         }
     }
 }
@@ -449,7 +449,7 @@ fn proposed_amendments_share_controls_but_still_require_a_revision() {
             b"propose",
             br#"{"action":"amend","task":3,"amendment":{"reason":"x","tracked":{"priority":8}},"reason":"x"}"#
         ),
-        Err(Problem::Missing)
+        Err(Problem::Missing(b"revision"))
     );
 }
 
@@ -469,7 +469,7 @@ fn an_effect_proposal_decodes_its_connector_payload_and_rejects_an_unknown_resou
             },
         })
     );
-    assert_eq!(decided(b"propose", br#"{"action":"effect","repository":{"forge":1,"repository":2},"resource":{},"write":{"kind":"close","number":3},"reason":"x"}"#), Err(Problem::Missing));
+    assert_eq!(decided(b"propose", br#"{"action":"effect","repository":{"forge":1,"repository":2},"resource":{},"write":{"kind":"close","number":3},"reason":"x"}"#), Err(Problem::Missing(b"kind")));
 }
 
 fn spend(units: u64) -> run::Spend {
@@ -524,7 +524,7 @@ fn smith_terminals_preserve_charge_and_the_root_result_contract() {
             },
         })
     );
-    assert_eq!(result(change_answer(), None), Err(Problem::Missing));
+    assert_eq!(result(change_answer(), None), Err(Problem::Missing(b"resource")));
     assert_eq!(
         result(change_answer(), Some(ChangeResource { connector: 1, kind: 2, resource: 42 })),
         Ok(crate::Terminal {
@@ -633,7 +633,7 @@ const REVISION_CALLS: &[RevisionCall] = &[
 #[test]
 fn amend_and_release_calls_name_their_revision() {
     for row in REVISION_CALLS {
-        assert_eq!(decided(row.name, row.missing), Err(Problem::Missing), "{:?}", row.name);
+        assert_eq!(decided(row.name, row.missing), Err(Problem::Missing(b"revision")), "{:?}", row.name);
         let expected = if row.name == b"amend" {
             engine::Tool::Amend {
                 target: CALL_TASK,
@@ -757,7 +757,7 @@ fn each_of_jigs_new_call_answers_renders_its_task_and_value() {
 fn a_job_request_is_not_a_turn() {
     assert_eq!(
         turn(smith::Request::Job { owner: Token::new(1), act: smith::tools::JobAct::Hasten }, Box::default()).err(),
-        Some(Problem::Type)
+        Some(Problem::Type(b"request"))
     );
 }
 
@@ -769,7 +769,7 @@ fn account_notices_are_not_turns_and_terminal_failure_classes_stay_distinct() {
         smith::Request::Limited { account: 17, reset: Some(Duration::ZERO) },
         smith::Request::Refused { account: 17, code: b"quota".as_slice().into(), reason: b"refused".as_slice().into() },
     ] {
-        assert_eq!(turn(notice, Box::default()), Err(Problem::Type));
+        assert_eq!(turn(notice, Box::default()), Err(Problem::Type(b"request")));
     }
     for (failure, class) in [
         (run::Failure::Stale, tasks::Class::Transient),
@@ -952,24 +952,24 @@ fn change_decodes_words_and_an_optional_repository() {
 
 #[test]
 fn change_refuses_missing_words() {
-    assert_eq!(decided(b"change", b"{}"), Err(Problem::Missing));
+    assert_eq!(decided(b"change", b"{}"), Err(Problem::Missing(b"words")));
 }
 
 #[test]
 fn change_refuses_empty_words() {
-    assert_eq!(decided(b"change", br#"{"words":""}"#), Err(Problem::Range));
+    assert_eq!(decided(b"change", br#"{"words":""}"#), Err(Problem::Range(b"words")));
 }
 
 #[test]
 fn change_refuses_non_string_words() {
-    assert_eq!(decided(b"change", br#"{"words":1}"#), Err(Problem::Type));
+    assert_eq!(decided(b"change", br#"{"words":1}"#), Err(Problem::Type(b"words")));
 }
 
 #[test]
 fn change_refuses_malformed_repository_names() {
     for name in ["", "hello", "/hello", "work/", "work/hello/other"] {
         let input = format!(r#"{{"words":"edit README","repository":"{name}"}}"#);
-        assert_eq!(decided(b"change", input.as_bytes()), Err(Problem::Range));
+        assert_eq!(decided(b"change", input.as_bytes()), Err(Problem::Range(b"repository")));
     }
 }
 
@@ -1027,3 +1027,101 @@ fn change_repository_refusals_render_the_three_choices() {
 }
 
 mod docs;
+
+#[test]
+fn flat_forge_reads_decode_the_repository_name_and_name_bad_members() {
+    assert_eq!(
+        decided(b"read_branch", br#"{"branch":"main"}"#).unwrap().tool,
+        engine::Tool::ReadNamed {
+            repository: None,
+            read: skein_forge::api::Read::Branch { branch: b"main".as_slice().into() }
+        }
+    );
+    assert_eq!(
+        decided(b"read_pull_for", br#"{"repository":"qa/pilot","head":"temper/1","base":"main"}"#).unwrap().tool,
+        engine::Tool::ReadNamed {
+            repository: Some(b"qa/pilot".as_slice().into()),
+            read: skein_forge::api::Read::PullFor {
+                head: b"temper/1".as_slice().into(),
+                base: b"main".as_slice().into()
+            }
+        }
+    );
+    for (tool, input, problem) in [
+        (b"read_branch".as_slice(), b"{}".as_slice(), Problem::Missing(b"branch")),
+        (b"read_branch", br#"{"branch":1}"#, Problem::Type(b"branch")),
+        (b"read_reviews", br#"{"number":1,"page":4294967296}"#, Problem::Range(b"page")),
+        (b"read_reviews", br#"{"number":1,"page":0}"#, Problem::Range(b"page")),
+        (b"read_checks", br#"{"commit":"bad"}"#, Problem::Range(b"commit")),
+    ] {
+        assert_eq!(decided(tool, input), Err(problem));
+    }
+    assert_eq!(
+        decided(b"read_items", b"{}").unwrap().tool,
+        engine::Tool::ReadNamed {
+            repository: None,
+            read: skein_forge::api::Read::Items { since: skein_lib::Time::ZERO, page: 1, kind: None }
+        }
+    );
+    let engine::Tool::ReadNamed { read: skein_forge::api::Read::Checks { commit }, .. } =
+        decided(b"read_checks", br#"{"commit":"abcdef0123456789abcdef0123456789abcdef01"}"#).unwrap().tool
+    else {
+        panic!("commit read");
+    };
+    assert_eq!(commit[20..], [0; 12]);
+}
+
+#[test]
+fn every_forge_read_declares_its_flat_members_as_json() {
+    let members: &[(&[u8], &[&[u8]])] = &[
+        (b"read_items", &[b"since", b"page", b"item_kind"]),
+        (b"read_item", &[b"number", b"after"]),
+        (b"read_pull", &[b"number"]),
+        (b"read_pull_for", &[b"head", b"base"]),
+        (b"read_reviews", &[b"number", b"page"]),
+        (b"read_statuses", &[b"commit", b"page"]),
+        (b"read_remarks", &[b"number", b"review", b"page"]),
+        (b"read_branch", &[b"branch"]),
+        (b"read_branches", &[b"prefix"]),
+        (b"read_pull_files", &[b"number", b"head", b"page"]),
+        (b"read_compare", &[b"before", b"after"]),
+        (b"read_checks", &[b"commit"]),
+        (b"read_file", &[b"head", b"path", b"max_bytes"]),
+        (b"read_job", &[b"head", b"run", b"job", b"attempt", b"max_bytes"]),
+        (b"read_protection", &[b"branch"]),
+        (b"read_settings", &[]),
+        (b"read_collaborators", &[b"page"]),
+        (b"read_permission", &[b"user"]),
+    ];
+    let mut count = 0;
+    for tool in tools(Duration::from_secs(1)) {
+        let mut names = None;
+        for (name, fields) in members {
+            if *name == tool.name.as_ref() {
+                names = Some(fields);
+                break;
+            }
+        }
+        let Some(names) = names else {
+            continue;
+        };
+        count += 1;
+        let schema = crate::json::parse(&tool.schema).expect("JSON schema");
+        assert!(!schema.required(b"additionalProperties").unwrap().boolean(b"additionalProperties").unwrap());
+        let properties = schema.required(b"properties").unwrap();
+        let crate::json::Value::Object(fields) = properties else {
+            panic!("properties object");
+        };
+        assert_eq!(fields.len(), names.len() + 1);
+        assert_eq!(
+            properties.required(b"repository").unwrap().required(b"type").unwrap().text(b"type").unwrap().as_ref(),
+            b"string"
+        );
+        for name in *names {
+            let property = properties.required(name).unwrap();
+            assert!(!property.required(b"description").unwrap().text(b"description").unwrap().is_empty());
+            assert!(property.field(b"type").unwrap().is_some());
+        }
+    }
+    assert_eq!(count, members.len());
+}

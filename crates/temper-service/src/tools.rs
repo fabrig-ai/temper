@@ -15,7 +15,7 @@ pub(crate) fn decode(to: ReplyTo, _task: u64, attempt: u64, call: &fleet::Call) 
         Ok(_) | Err(_) => return invalid(to, Problem::Malformed),
     };
     if name.activation() != attempt {
-        return invalid(to, Problem::Range);
+        return invalid(to, Problem::Range(b"activation"));
     }
     if call.input.len() > run::HostInput::CAPACITY {
         return invalid(to, Problem::TooLarge);
@@ -38,17 +38,33 @@ pub(crate) fn decode(to: ReplyTo, _task: u64, attempt: u64, call: &fleet::Call) 
     }
 }
 fn invalid(to: ReplyTo, problem: Problem) -> engine::Event {
-    let body: &[u8] = match problem {
-        Problem::Malformed => b"malformed host call",
-        Problem::TooLarge => b"host call too large",
-        Problem::Missing => b"host call member missing",
-        Problem::Type => b"host call member of wrong type",
-        Problem::Range => b"host call out of range",
-        Problem::UnknownTool => b"unknown tool",
+    let (body, member): (&[u8], Option<&[u8]>) = match problem {
+        Problem::Malformed => (b"malformed host call", None),
+        Problem::TooLarge => (b"host call too large", None),
+        Problem::Missing(member) => (b"host call member missing", Some(member)),
+        Problem::Type(member) => (b"host call member of wrong type", Some(member)),
+        Problem::Range(member) => (b"host call out of range", Some(member)),
+        Problem::UnknownTool => (b"unknown tool", None),
+    };
+    let body = match member {
+        None => body.into(),
+        Some(member) => {
+            let mut writer = Writer::new(
+                body.len()
+                    .checked_add(2)
+                    .expect("fixed error separator")
+                    .checked_add(member.len())
+                    .expect("static error member"),
+            );
+            writer.put(body).expect("measured error");
+            writer.put(b": ").expect("measured separator");
+            writer.put(member).expect("static member name");
+            writer.finish()
+        }
     };
     engine::Event::Worker(engine::WorkerInput::RenderedHostCall {
         to,
-        answer: core::SettledAnswer::Host { error: true, body: body.into() },
+        answer: core::SettledAnswer::Host { error: true, body },
     })
 }
 pub(crate) fn render(to: ReplyTo, answer: &engine::CallAnswer) -> engine::Event {

@@ -357,3 +357,147 @@ fn change_selects_the_named_repository_among_several() {
         tasks::Parameter::Resource { name: 1, connector: 0, resource: forge_top::tag(forge_world::REPO.forge, 3) }
     );
 }
+
+fn named_read(
+    world: &mut World,
+    chat: &engine::Assignment,
+    completion: u32,
+    tool: &[u8],
+    input: &[u8],
+) -> engine::CallAnswer {
+    let before = world.answers.len();
+    let input = smith_domain_run::HostInput::attested(input.into()).expect("bounded input");
+    let temper_engine_smith::Decoded::Call(body) = temper_engine_smith::call(
+        smith_domain_run::CallName { activation: chat.attempt, completion, position: 1 },
+        tool,
+        &input,
+    )
+    .expect("flat read") else {
+        panic!("root read");
+    };
+    let event = world.protocol.call(Token::new(7), chat.task, chat.attempt, u64::from(completion), body);
+    world.send(event);
+    for _ in 0..200 {
+        world.tick();
+        if world.answers.len() > before {
+            return world.answers[before].clone();
+        }
+    }
+    panic!("read was not answered");
+}
+
+#[test]
+fn a_chat_reads_its_only_repository_by_branch_without_a_repository_name() {
+    let (mut world, chat) = chat_world(true);
+    let answer = named_read(&mut world, &chat, 93, b"read_branch", br#"{"branch":"main"}"#);
+    assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
+    assert!(world.store.pending.is_empty(), "a read needs no commit");
+}
+
+#[test]
+fn an_unnamed_read_with_two_repositories_names_both() {
+    let (mut world, chat) = several_repositories();
+    let answer = named_read(&mut world, &chat, 93, b"read_branch", br#"{"branch":"main"}"#);
+    assert!(
+        matches!(answer, engine::CallAnswer::ReadRepositoryRefused { named: None, ref repositories }
+        if repositories.as_ref() == [Box::from(b"org/repo".as_slice()), Box::from(b"org/extra".as_slice())]),
+        "{answer:?}"
+    );
+}
+
+#[test]
+fn a_read_with_an_unknown_name_names_the_project_repositories() {
+    let (mut world, chat) = chat_world(true);
+    let answer = named_read(&mut world, &chat, 93, b"read_branch", br#"{"repository":"org/missing","branch":"main"}"#);
+    assert!(
+        matches!(answer, engine::CallAnswer::ReadRepositoryRefused { named: Some(ref named), ref repositories }
+        if named.as_ref() == b"org/missing" && repositories.as_ref() == [Box::from(b"org/repo".as_slice())]),
+        "{answer:?}"
+    );
+}
+
+#[test]
+fn a_named_context_repository_is_readable() {
+    let (mut world, chat) = several_repositories();
+    world.send(engine::Event::Party(engine::PartyInput::Application {
+        scope: people::ApplicationScope::Project(1),
+        reply_to: ReplyTo::new(Token::new(96)),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [96; 16],
+        digest: [6; 32],
+        carried: None,
+        request: engine::Application::Forge(forge_top::Ask::Adopt(forge_top::Adoption {
+            project: 1,
+            home: true,
+            forge: forge_world::REPO.forge,
+            host: b"forge.example".as_slice().into(),
+            owner: b"org".as_slice().into(),
+            name: b"repo".as_slice().into(),
+            prefix: b"temper/".as_slice().into(),
+            role: forge_top::Role::Context,
+            landing: b"main".as_slice().into(),
+            ci: true,
+            checks: Box::new([]),
+        })),
+    }));
+    for _ in 0..200 {
+        world.tick();
+        if world.adopted.len() == 3 {
+            break;
+        }
+    }
+    assert_eq!(world.adopted.len(), 3);
+    let answer = named_read(&mut world, &chat, 93, b"read_branch", br#"{"repository":"org/repo","branch":"main"}"#);
+    assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
+}
+
+#[test]
+fn a_chat_read_pull_for_reaches_the_fake_forge_through_named_routing() {
+    let (mut world, chat) = chat_world(true);
+    assert!(matches!(
+        world.external(2, raw::Op::Git(raw::Git::Create { branch: b"work".as_slice().into(), commit: 1 })),
+        raw::Answer::Branch(_)
+    ));
+    fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"work", b"file", b"change", 1).expect("head");
+    let raw::Answer::Created(_) = world.external(
+        2,
+        raw::Op::Write(raw::Write::OpenPull {
+            opens_empty: false,
+            title: b"Named read".as_slice().into(),
+            body: Box::new([]),
+            head: b"work".as_slice().into(),
+            base: b"main".as_slice().into(),
+        }),
+    ) else {
+        panic!("pull opened");
+    };
+    let before = world.forge_calls;
+    let answer = named_read(
+        &mut world,
+        &chat,
+        93,
+        b"read_pull_for",
+        br#"{"repository":"org/repo","head":"work","base":"main"}"#,
+    );
+    assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
+    assert!(world.forge_calls > before, "the read reached the fake forge");
+    let rendered = temper_engine_smith::answer(&answer);
+    assert!(!rendered.error());
+    assert!(rendered.text().starts_with(b"Pull 1 head work commit "), "{:?}", rendered.text());
+}
+
+#[test]
+fn an_omitted_file_limit_uses_the_engine_read_bound() {
+    let (mut world, chat) = chat_world(true);
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"main", b"file", b"contents", 1)
+        .expect("file head");
+    let mut digits = String::new();
+    for byte in translate::commit(head) {
+        write!(&mut digits, "{byte:02x}").unwrap();
+    }
+    let input = format!(r#"{{"head":"{digits}","path":"file"}}"#);
+    let answer = named_read(&mut world, &chat, 93, b"read_file", input.as_bytes());
+    assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
+    let rendered = temper_engine_smith::answer(&answer);
+    assert!(rendered.text().windows(b"contents".len()).any(|part| part == b"contents"), "{:?}", rendered.text());
+}

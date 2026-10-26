@@ -52,7 +52,39 @@ pub(crate) fn relay_payload(
                 domain.work.push(Work::Core(core::Event::NamedAnswer { to: reply_to, key, part }));
                 return;
             }
-            match body.tool {
+            let tool = if let Tool::ReadNamed { repository, mut read } = body.tool {
+                let project = match domain.core.tasks.delegation(key.task) {
+                    Some(context) => Some(context.project),
+                    None => None,
+                };
+                let resolved = match project {
+                    Some(project) => forge_route::named_repository(domain, project, repository.as_deref()),
+                    None => Err(tasks::Refusal::Unknown),
+                };
+                let Ok(adopted) = resolved else {
+                    let repositories = match project {
+                        Some(project) => forge_route::read_repositories(domain, project),
+                        None => Box::new([]),
+                    };
+                    super::host_route::read(
+                        domain,
+                        reply_to,
+                        super::CallAnswer::ReadRepositoryRefused { named: repository, repositories },
+                    );
+                    return;
+                };
+                if let skein_forge::api::Read::File { max_bytes, .. } | skein_forge::api::Read::Job { max_bytes, .. } =
+                    &mut read
+                    && *max_bytes == 0
+                {
+                    *max_bytes = env.limits.forge.client.answer_bytes;
+                }
+                Tool::ReadForge { repository: adopted.provider, read }
+            } else {
+                body.tool
+            };
+            match tool {
+                Tool::ReadNamed { .. } => unreachable!("named reads resolved before deciding"),
                 Tool::Change { words, repository } => {
                     let expanded = match domain.core.tasks.delegation(key.task) {
                         Some(context) => forge_route::chat_change(domain, env, &context, words, repository.as_deref()),
