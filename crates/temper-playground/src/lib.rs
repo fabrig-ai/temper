@@ -9,6 +9,8 @@ mod signalled;
 mod startup;
 mod story;
 mod visitor;
+#[cfg(target_arch = "wasm32")]
+pub mod worker;
 mod world;
 
 pub use story::{A, STORIES, Story};
