@@ -830,3 +830,26 @@ pub fn issue_row() -> top::IssueRow {
         }),
     }
 }
+
+// Small: jig authority has four base segments, 256 bytes per word and four roles;
+// jig tasks has four charters, and temper's forge has eight gates (configuration.md, 13.2).
+pub const SETTINGS_BOUNDS: top::settings::Bounds =
+    top::settings::Bounds { landing_rules: 4, gates: 8, roles: 4, charters: 4, segments: 4, segment_bytes: 256 };
+
+pub fn landing_rule() -> top::settings::LandingRule {
+    use top::{
+        JudgeFreshness,
+        settings::{LandingRule, RuleApproval, RuleGate},
+    };
+    LandingRule {
+        pattern: jig_domain_authority::Pattern {
+            segments: Box::new([b"forge".as_slice().into(), b"forge.example".as_slice().into()]),
+            last: jig_domain_authority::Last::Open(b"org".as_slice().into()),
+        },
+        enforce: true,
+        ci: true,
+        up_to_date: false,
+        gates: Box::new([RuleGate { number: 7, blocking: true, freshness: JudgeFreshness::Clean }]),
+        approvals: Box::new([RuleApproval { role: 2, people: 3, freshness: JudgeFreshness::Exact }]),
+    }
+}

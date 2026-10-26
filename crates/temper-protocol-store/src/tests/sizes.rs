@@ -62,3 +62,57 @@ fn demo_row_sizes_fit_the_existing_application_ceiling() {
         assert_eq!(records::row(&key, &value, &bounds), Ok(row));
     }
 }
+
+#[test]
+fn the_largest_landing_rule_fits_the_kinds_bound() {
+    use forge::{
+        JudgeFreshness,
+        settings::{self, LandingRule, RuleApproval, RuleGate, Value},
+    };
+    use jig_domain_authority::{Last, Pattern};
+    use skein_lib::List;
+    let bounds = &fixtures::SETTINGS_BOUNDS;
+    let mut word = List::with_capacity(bounds.segment_bytes);
+    for _ in 0..bounds.segment_bytes {
+        word.push(b'x').expect("bounded word");
+    }
+    let word = word.into_boxed();
+    let mut segments = List::with_capacity(bounds.segments);
+    for _ in 0..bounds.segments {
+        segments.push(word.clone()).expect("bounded segments");
+    }
+    let mut gates = List::with_capacity(bounds.gates);
+    for number in 0..bounds.gates {
+        gates.push(RuleGate { number, blocking: true, freshness: JudgeFreshness::Exact }).expect("bounded gates");
+    }
+    let mut approvals = List::with_capacity(bounds.roles);
+    for role in 0..bounds.roles {
+        approvals
+            .push(RuleApproval { role, people: u32::MAX, freshness: JudgeFreshness::Clean })
+            .expect("bounded roles");
+    }
+    let mut rule = LandingRule {
+        pattern: Pattern { segments: segments.into_boxed(), last: Last::Exact(word.clone()) },
+        enforce: true,
+        ci: true,
+        up_to_date: true,
+        gates: gates.into_boxed(),
+        approvals: approvals.into_boxed(),
+    };
+    let bound = records::landing_rule_bytes(bounds);
+    assert_eq!(bound, 1400, "small's record bound, including lengths and tags");
+    for last in [Last::Exact(word.clone()), Last::Open(word)] {
+        rule.pattern.last = last;
+        let value = Value::Rule(rule.clone());
+        let bytes = records::encode_value(&value);
+        assert_eq!(u64::try_from(bytes.len()).expect("encoded size"), bound, "fixed at every encoding bound");
+        assert_eq!(records::decode_value(1, &bytes), Some(value));
+    }
+    // The kind's byte bound reserves a full first segment too. An admitted rule's
+    // literal `forge` makes it smaller by 251 bytes at small's 256-byte word bound.
+    *rule.pattern.segments.first_mut().expect("nonempty pattern") = b"forge".as_slice().into();
+    let value = Value::Rule(rule);
+    let bytes = records::encode_value(&value);
+    assert_eq!(u64::try_from(bytes.len()).expect("encoded size"), 1149);
+    assert_eq!(settings::judge(&settings::Item { kind: 1, scope: 0, number: 4, value: Some(value) }, bounds), Ok(()));
+}

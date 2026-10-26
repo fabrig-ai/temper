@@ -2677,6 +2677,7 @@ dependencies = [
 name = "temper-engine-domain-forge"
 version = "0.0.0"
 dependencies = [
+ "jig-domain-authority",
  "jig-domain-core",
  "jig-domain-people",
  "skein-forge",
@@ -3023,6 +3024,7 @@ dependencies = [
 name = "temper-protocol-store"
 version = "0.0.0"
 dependencies = [
+ "jig-domain-authority",
  "jig-domain-core",
  "jig-domain-notes",
  "jig-domain-people",

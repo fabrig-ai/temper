@@ -863,3 +863,78 @@ fn release_comments_decode_only_within_the_deployment_byte_bound() {
         assert_eq!(records::decode(&records::encode(&row), &bounds).is_ok(), fits, "{bytes}");
     }
 }
+
+#[test]
+fn a_landing_rule_keeps_its_golden_bytes() {
+    use forge::settings::Value;
+    let value = Value::Rule(fixtures::landing_rule());
+    let bytes = records::encode_value(&value);
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/golden/landing-rule.bin");
+    if std::env::var_os("SKEIN_CODEGEN_WRITE").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        std::fs::write(path, &bytes).expect("write landing rule golden");
+    }
+    assert_eq!(std::fs::read(path).expect("committed landing rule golden").as_slice(), bytes.as_ref());
+    for kind in [1, 2] {
+        assert_eq!(records::decode_value(kind, &bytes), Some(value.clone()));
+    }
+    let mut exact = fixtures::landing_rule();
+    exact.pattern.last = jig_domain_authority::Last::Exact(b"org".as_slice().into());
+    let value = Value::Rule(exact);
+    assert_eq!(records::decode_value(1, &records::encode_value(&value)), Some(value));
+}
+
+#[test]
+fn setting_values_refuse_malformed_bytes_and_the_wrong_kind() {
+    use forge::settings::{self, Item, Refusal, Value};
+    let rule = records::encode_value(&Value::Rule(fixtures::landing_rule()));
+    for length in 0..rule.len() {
+        assert_eq!(records::decode_value(1, rule.get(..length).expect("prefix")), None, "truncated at {length}");
+    }
+    for (name, kind, bytes) in [
+        ("unknown kind", 4, rule.clone()),
+        ("zero kind", 0, rule.clone()),
+        ("charter as deployment rule", 1, records::encode_value(&Value::Charter(1))),
+        ("charter as project rule", 2, records::encode_value(&Value::Charter(1))),
+        ("rule as charter", 3, rule.clone()),
+        ("short charter", 3, Box::from([0_u8; 3])),
+        ("trailing charter bytes", 3, Box::from([0_u8; 5])),
+        ("trailing rule bytes", 1, {
+            let count = u32::try_from(rule.len()).expect("small record").checked_add(1).expect("one more byte");
+            let mut bytes = skein_lib::List::with_capacity(count);
+            for byte in &rule {
+                bytes.push(*byte).expect("counted bytes");
+            }
+            bytes.push(0).expect("trailing byte");
+            bytes.into_boxed()
+        }),
+    ] {
+        assert_eq!(records::decode_value(kind, &bytes), None, "{name}");
+    }
+    for charter in [0, 1, fixtures::SETTINGS_BOUNDS.charters, u32::MAX] {
+        let value = Value::Charter(charter);
+        let bytes = records::encode_value(&value);
+        assert_eq!(bytes.as_ref(), &charter.to_be_bytes(), "codec's bare u32");
+        assert_eq!(records::decode_value(3, &bytes), Some(value));
+    }
+    let item = Item { kind: 1, scope: 0, number: 1, value: Some(Value::Charter(1)) };
+    assert_eq!(settings::judge(&item, &fixtures::SETTINGS_BOUNDS), Err(Refusal::Decode));
+}
+
+#[test]
+fn a_decoded_rule_one_gate_past_the_kinds_bound_is_refused() {
+    use forge::{
+        JudgeFreshness,
+        settings::{self, Item, Refusal, RuleGate, Value},
+    };
+    let bounds = &fixtures::SETTINGS_BOUNDS;
+    let count = bounds.gates.checked_add(1).expect("one past bound");
+    let mut gates = skein_lib::List::with_capacity(count);
+    for number in 0..count {
+        gates.push(RuleGate { number, blocking: true, freshness: JudgeFreshness::Exact }).expect("counted gates");
+    }
+    let value = Value::Rule(settings::LandingRule { gates: gates.into_boxed(), ..fixtures::landing_rule() });
+    let bytes = records::encode_value(&value);
+    assert_eq!(records::decode_value(1, &bytes), Some(value.clone()), "syntactically decodable");
+    let item = Item { kind: 1, scope: 0, number: 1, value: records::decode_value(1, &bytes) };
+    assert_eq!(settings::judge(&item, bounds), Err(Refusal::Gates));
+}

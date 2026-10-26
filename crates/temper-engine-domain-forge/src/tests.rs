@@ -7,6 +7,7 @@ mod demo;
 mod fixtures;
 mod panel;
 mod purpose;
+mod settings;
 mod stopping;
 use alloc::boxed::Box;
 use skein_lib::{Duration, Env, Queue, Time, Token, Wall};

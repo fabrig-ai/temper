@@ -13,7 +13,9 @@ pub(crate) use api::encode_error;
 mod entries;
 mod issues;
 mod names;
+mod settings;
 mod topics;
+pub use settings::{decode_value, encode_value, landing_rule_bytes};
 const FITS: &str = "admitted fields fit the schema";
 
 /// Encode every durable family admitted by the domain.

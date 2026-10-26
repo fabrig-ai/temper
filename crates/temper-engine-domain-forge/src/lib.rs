@@ -29,6 +29,7 @@ mod limits;
 mod panel;
 pub mod purpose;
 pub mod resources;
+pub mod settings;
 mod settle;
 #[cfg(test)]
 mod tests;

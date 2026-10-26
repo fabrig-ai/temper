@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+jig-domain-authority.workspace = true
 skein-forge.workspace = true
 skein-codec.workspace = true
 skein-lib.workspace = true

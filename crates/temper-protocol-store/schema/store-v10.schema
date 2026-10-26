@@ -195,3 +195,12 @@ enum DemoActKind { close: DemoClose, remove_account: DemoRemoveAccount }
 record DemoAct { key: fixed 16 act: DemoActKind }
 enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct }
 versioned record Row { value: Value }
+
+# Settings' values, before the Setting family is wired (configuration.md, 13.2).
+# Pattern ceilings are jig's settings codec's: eight bases, 4096 bytes per word.
+record RuleTerminal { value: bytes 4096 }
+enum RuleLast { exact: RuleTerminal, open: RuleTerminal }
+record RulePattern { segments: list 8 bytes 4096 last: RuleLast }
+record RuleGate { number: u32 blocking: bool freshness: Freshness }
+record RuleApproval { role: u32 people: u32 freshness: Freshness }
+record LandingRule { pattern: RulePattern enforce: bool ci: bool up_to_date: bool gates: list 1024 RuleGate approvals: list 8 RuleApproval }
