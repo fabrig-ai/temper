@@ -8,6 +8,14 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+temper-fake.workspace = true
+temper-forge-setup.workspace = true
+skein-json.workspace = true
+serde_json.workspace = true
+smith-local-service.workspace = true
+smith-host-protocol.workspace = true
+jig-domain-host.workspace = true
+temper-worker-domain.workspace = true
 temper-service.workspace = true
 temper-fake-git-hosted.workspace = true
 jig-protocol-config.workspace = true

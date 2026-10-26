@@ -6,6 +6,15 @@ mod peers;
 mod service;
 mod shell;
 mod signalled;
+mod startup;
+mod story;
+mod world;
+
+pub use story::{A, STORIES, Story};
+pub use world::world;
+
+#[cfg(test)]
+mod tests;
 
 pub use agent::agent;
 pub use machine::Machine;

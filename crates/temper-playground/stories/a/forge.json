@@ -1,0 +1,17 @@
+{
+  "listen": {
+    "socket": "127.0.0.1:8369"
+  },
+  "admin_token": "/demo/forge/admin_token",
+  "owner": "playground",
+  "repositories": [
+    {
+      "name": "widget",
+      "landing": "main",
+      "ci": null
+    }
+  ],
+  "pace": {
+    "ci_ms": 5000
+  }
+}
