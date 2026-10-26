@@ -73,6 +73,26 @@ fn startup_names_map_sizing_without_inventing_a_records_bound() {
 }
 
 #[test]
+fn startup_names_a_store_driver_read_below_its_page() {
+    let found = crate::startup::checks::store_refusal(crate::store::Refusal::ReadPage { read: 99, page: 100 });
+    assert_eq!(
+        lines(&found).as_ref(),
+        b"application.limits.overrides.root.loads.bytes: 99 bytes, short of the store's page, 100 bytes\n"
+    );
+}
+
+#[test]
+fn startup_names_a_whole_file_bound_below_the_manifest() {
+    let found = crate::startup::checks::store_refusal(crate::store::Refusal::Map(
+        jig_protocol_store::sizes::SizeRefusal::Whole { needs: 5464, has: 5463 },
+    ));
+    assert_eq!(
+        lines(&found).as_ref(),
+        b"engine.limits.store: the store's map whole-file read, 5464 bytes, past its bound of 5463 bytes\n"
+    );
+}
+
+#[test]
 fn startup_checks_the_effective_codec_envelope_before_generic_sizing() {
     let jig = config::profile(config::Profile::Small);
     let mut own = crate::limits::profile(crate::limits::Profile::Small);

@@ -1107,6 +1107,10 @@ pub(crate) fn secret_value_bound(jig: &config::Engine, own: &limits::Limits) -> 
 
 pub(crate) fn store_refusal(refused: crate::store::Refusal) -> Problems {
     let (path, what) = match refused {
+        crate::store::Refusal::ReadPage { read, page } => (
+            own(b"root.loads.bytes"),
+            What::Short { bytes: u64::from(read), of: b"the store's page", needs: u64::from(page) },
+        ),
         crate::store::Refusal::Page { transcript, frame, page, ceiling } => {
             (own(b"root.loads.transcript_bytes"), What::StorePage { transcript, frame, page, ceiling })
         }
