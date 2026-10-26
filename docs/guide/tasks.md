@@ -78,8 +78,10 @@ its priority, and **Plan** lets you follow its work. Lower numbers
 order work that has not started first; changing priority does not
 promise to interrupt work already running.
 
-An agent can make a goal by creating a tracked delegate. You can also
-accept a proposed goal in **Inbox**. You can read existing goals and
+An agent can call `goal` with the work in your words to make a tracked
+delegate that plans, asks and calls `change`. With `advisor` set, it
+reads and reports without changing the forge, and stays untracked. You
+can also accept a proposed goal in **Inbox**. You can read existing goals and
 change their priority, even though there is no goal-creation command.
 
 For task 41, already tracked, set priority 2 with a reason and a key

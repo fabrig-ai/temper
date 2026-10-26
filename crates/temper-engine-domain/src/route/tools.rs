@@ -85,9 +85,16 @@ pub(crate) fn relay_payload(
             };
             match tool {
                 Tool::ReadNamed { .. } => unreachable!("named reads resolved before deciding"),
-                Tool::Change { words, repository } => {
+                tool @ (Tool::Change { .. } | Tool::Goal { .. }) => {
                     let expanded = match domain.core.tasks.delegation(key.task) {
-                        Some(context) => forge_route::chat_change(domain, env, &context, words, repository.as_deref()),
+                        Some(context) => {
+                            if let Tool::Change { words, repository } = tool {
+                                forge_route::chat_change(domain, env, &context, words, repository.as_deref())
+                            } else {
+                                let Tool::Goal { words, advisor } = tool else { unreachable!("goal or change") };
+                                super::goal::goal(domain, env, key.task, &context, words, advisor)
+                            }
+                        }
                         None => Err(tasks::Refusal::Unknown),
                     };
                     let tool = match expanded {
@@ -99,7 +106,7 @@ pub(crate) fn relay_payload(
                         &env.limits,
                     );
                     let Tool::Delegate { batch } = expanded.tool else {
-                        let Tool::Rejected(why) = expanded.tool else { unreachable!("expanded change shape") };
+                        let Tool::Rejected(why) = expanded.tool else { unreachable!("expanded delegation shape") };
                         domain.work.push(Work::Core(core::Event::NamedAnswer {
                             to: reply_to,
                             key,

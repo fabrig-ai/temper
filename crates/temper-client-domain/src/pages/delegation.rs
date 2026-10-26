@@ -162,7 +162,9 @@ fn owner_ending(how: &c::OwnerChipEnding) -> (State, Option<&c::ResultValue>, Op
 /// The tasks a delegate call made (temper-engine-smith answers.rs `CallAnswer::Delegated`): none
 /// for a failed call or another tool.
 pub fn delegated(call: &c::Call, into: &mut List<u64>) {
-    if call.failed || (call.tool.bytes() != b"delegate" && call.tool.bytes() != b"change") {
+    if call.failed
+        || (call.tool.bytes() != b"delegate" && call.tool.bytes() != b"change" && call.tool.bytes() != b"goal")
+    {
         return;
     }
     let mut named = false;
