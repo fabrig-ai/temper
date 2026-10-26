@@ -233,7 +233,7 @@ verify ACCOUNT [--source sign_in|key|program] [--key NAME]
   Ask hosts to check a program login; then wait accounts --until settled
 forges
   Read the deployment's forges
-forge-setup F [--org O] [--repository R] [--project P] [--key NAME]
+forge-setup F [--org O] [--repository R] [--project P] [--playground] [--key NAME]
   Set up an owned Forgejo here
 demo-start [--key NAME]
   Start the playground; run again to finish what is not done

@@ -417,6 +417,7 @@ fn first_page(root: &mut f::Harness, connection: w::Connection, state: w::FirstS
     let first = w::FirstRepository::new(
         &l,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::New(

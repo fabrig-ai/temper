@@ -449,6 +449,7 @@ fn setup_fields_reach_the_engine_and_unknown_project_names_are_admitted() {
     assert_eq!(
         row(&world, FORGE).first,
         Some(d::First {
+            playground: false,
             org: b"team".as_slice().into(),
             repository: b"widget".as_slice().into(),
             project: d::SetUpProject::Existing(1),

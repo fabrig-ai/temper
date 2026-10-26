@@ -559,6 +559,7 @@ fn set_up_request(
         digest: skein_lib::sha256::digest(&record.bytes),
         carried: None,
         request: temper_engine_domain::Application::Forge(owner::Ask::SetUp {
+            playground: setup.playground,
             forge: setup.forge,
             org: setup.org,
             repository: setup.repository,

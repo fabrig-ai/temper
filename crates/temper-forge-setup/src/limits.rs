@@ -50,7 +50,7 @@ impl Host {
         Limits {
             orgs: self.orgs,
             reachable: self.reachable,
-            files: 1,
+            files: 2,
             file_bytes: 4096,
             repositories: self.repositories,
             deadline: self.deadline,
@@ -106,7 +106,7 @@ pub fn small() -> Limits {
     Limits {
         orgs: 8,
         reachable: 8, // temper-10 supplies picker.page.
-        files: 1,
+        files: 2,
         file_bytes: 4096,
         repositories,
         deadline: Duration::from_secs(120),

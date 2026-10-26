@@ -23,6 +23,7 @@ pub fn forge_settings() -> [temper_service::settings::Forge; 1] {
     let mut base = b"http://".to_vec();
     base.extend_from_slice(FORGE_HOST);
     [Forge {
+        mode: temper_engine_domain_forge::Mode::Connected,
         number: 1,
         kind: Kind::Forgejo,
         api: jig_protocol_config::Address::Host { name: FORGE_HOST.into(), port: 80 },

@@ -542,6 +542,7 @@ pub enum Request {
         request: Token,
         org: Box<[u8]>,
         repository: Box<[u8]>,
+        playground: bool,
     },
     Connect {
         forge: u16,

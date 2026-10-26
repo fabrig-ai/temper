@@ -221,7 +221,13 @@ pub(super) fn send(
             w::SetUpProject::Existing(project) => domain::SetUpProject::Existing(project.project()),
             w::SetUpProject::New(project) => domain::SetUpProject::New(project.name().into()),
         };
-        Some(super::Intent { forge, org: first.org().into(), repository: first.repository().into(), project })
+        Some(super::Intent {
+            playground: false,
+            forge,
+            org: first.org().into(),
+            repository: first.repository().into(),
+            project,
+        })
     } else {
         None
     };

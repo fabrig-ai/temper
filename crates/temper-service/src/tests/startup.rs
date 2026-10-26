@@ -563,6 +563,7 @@ fn startup_refuses_both_sources_of_a_forges_git_program() {
 fn the_checked_fake_git_program_reaches_the_services_forge_settings() {
     let service = start_with_git_program(&fixtures::document(), Some(&checked_fake_setup())).unwrap();
     let forge = &service.engine.as_ref().expect("engine").workers.forges[0];
+    assert_eq!(forge.mode, temper_engine_domain_forge::Mode::Fake);
     assert_eq!(forge.git_program.as_deref(), Some(b"/data/demo/bin/git".as_slice()));
     assert_eq!(forge.git.as_ref(), b"http://127.0.0.1:9");
 }

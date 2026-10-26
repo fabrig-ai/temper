@@ -50,3 +50,8 @@ pub fn starter_workflow(label: &[u8]) -> Option<Box<[u8]>> {
     writer.put(STARTER_WORKFLOW.get(after..)?).ok()?;
     Some(writer.finish())
 }
+
+/// The playground source shared by its fake seed and its owned copy (protocol/setup.md, 6.7).
+pub const PLAYGROUND_PATH: &[u8] = b"src/main.rs";
+/// Widget prints the playground table.
+pub const PLAYGROUND_MAIN: &[u8] = b"const TABLE: [(&str, u32); 3] = [(\"apples\", 3), (\"pears\", 5), (\"plums\", 2)];\n\nfn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n";

@@ -416,6 +416,7 @@ fn forges(world: World) -> Box<[u8]> {
                             w::FirstRepository::new(
                                 &limits,
                                 w::FirstRepositoryParts {
+                                    playground: false,
                                     org: b"work".as_slice().into(),
                                     repository: b"hello".as_slice().into(),
                                     project: w::SetUpProject::Existing(

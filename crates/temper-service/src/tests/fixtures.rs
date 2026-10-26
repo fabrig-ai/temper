@@ -120,6 +120,7 @@ pub fn guard_engine() -> settings::Engine {
 
 pub fn forges() -> Box<[settings::Forge]> {
     Box::new([settings::Forge {
+        mode: temper_engine_domain_forge::Mode::Connected,
         number: 1,
         kind: settings::Kind::Forgejo,
         api: jig_protocol_config::Address::Host { name: Box::from(&b"forge.example"[..]), port: 443 },

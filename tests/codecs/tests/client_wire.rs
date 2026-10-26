@@ -55,6 +55,7 @@ fn first(state: v1::FirstState) -> v1::FirstRepository {
     v1::FirstRepository::new(
         &v1::CEILINGS,
         v1::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: project(),
@@ -82,6 +83,7 @@ fn setup_and_every_first_repository_state_round_trip_at_version_eleven() {
                     v1::SetUp::new(
                         &v1::CEILINGS,
                         v1::SetUpParts {
+                            playground: false,
                             forge: 3,
                             org: b"work".as_slice().into(),
                             repository: b"hello".as_slice().into(),
@@ -159,6 +161,7 @@ fn first_repository_names_are_bounded_at_construction_and_decode() {
         limits.first_repository_repository = 2;
         for field in 0..3 {
             let parts = v1::SetUpParts {
+                playground: false,
                 forge: 3,
                 org: if field == 0 { name.clone() } else { b"o".as_slice().into() },
                 repository: if field == 1 { name.clone() } else { b"r".as_slice().into() },
@@ -183,6 +186,7 @@ fn first_repository_names_are_bounded_at_construction_and_decode() {
         }
         for field in 0..2 {
             let parts = v1::FirstRepositoryParts {
+                playground: false,
                 org: if field == 0 { name.clone() } else { b"o".as_slice().into() },
                 repository: if field == 1 { name.clone() } else { b"r".as_slice().into() },
                 project: project(),
@@ -208,6 +212,7 @@ fn first_repository_names_are_bounded_at_construction_and_decode() {
         );
         for org in [true, false] {
             let parts = v1::SetUpParts {
+                playground: false,
                 forge: 3,
                 org: if org { name.clone() } else { b"o".as_slice().into() },
                 repository: if org { b"r".as_slice().into() } else { name.clone() },
@@ -215,6 +220,7 @@ fn first_repository_names_are_bounded_at_construction_and_decode() {
             };
             assert_eq!(v1::SetUp::new(&v1::CEILINGS, parts).is_ok(), size == 1024);
             let parts = v1::FirstRepositoryParts {
+                playground: false,
                 org: if org { name.clone() } else { b"o".as_slice().into() },
                 repository: if org { b"r".as_slice().into() } else { name.clone() },
                 project: project(),

@@ -232,6 +232,7 @@ fn admin(
                 .insert(
                     forge,
                     crate::First {
+                        playground: false,
                         org: first.org.clone(),
                         repository: first.repository.clone(),
                         project: first.project.clone(),
