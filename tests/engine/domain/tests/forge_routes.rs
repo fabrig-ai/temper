@@ -3446,3 +3446,222 @@ fn an_ended_goal_closes_its_issue_after_its_task_ended() {
     };
     assert_eq!(issue.state, raw::State::Closed);
 }
+
+/// Read every Activity page through the durable store's ordinary historical route.
+fn archived_projection_news(world: &mut World, task: u64) -> Vec<tasks::ActivityLine> {
+    use jig_domain_core::reads::{Loaded, Range, Scope};
+    let mut range = Range {
+        party: 1,
+        scope: Scope::Activity { task },
+        after: None,
+        backwards: true,
+        rows: 2,
+        bytes: u64::from(world.env.limits.loads.reply_bytes),
+    };
+    let mut news = Vec::new();
+    loop {
+        let Loaded::Page { rows, next } = world.store.read(Box::new(range.clone())) else {
+            panic!("ended task's Activity is readable")
+        };
+        for row in rows {
+            let jig_domain_core::Record::Tasks(tasks::Stored::Activity(line)) = row.value else {
+                panic!("Activity range returns Activity")
+            };
+            assert_eq!(line.task, task);
+            assert!(matches!(row.owner.expect("durable Activity owner").phase, tasks::Phase::Ended(_)));
+            if matches!(&line.line, tasks::Line::Heard(notice) if notice.words.as_ref() == b"Projection 1 failed") {
+                news.push(line);
+            }
+        }
+        let Some(next) = next else { return news };
+        assert_ne!(range.after.as_ref(), Some(&next), "Activity pagination advances");
+        range.after = Some(next);
+    }
+}
+
+fn retained_goal_issue(world: &World, goal: u64) -> &forge_top::IssueRow {
+    let Some(Record::Forge { row }) = world.store.rows.get(&Key::Forge(forge_top::Key::Issue(goal))) else {
+        panic!("retained issue")
+    };
+    let forge_top::Stored::Issue(issue) = row.as_ref() else { panic!("issue row") };
+    issue
+}
+
+#[test]
+#[expect(clippy::too_many_lines, reason = "one root story follows the refused close through archived news and restart")]
+fn an_ended_goals_issue_refused_for_good_is_told_once_in_its_archive() {
+    use jig_domain_core::{CoreKey, CoreRecord, ProjectionFailureState, ProjectionKey, ProjectionRecord};
+    let mut world = World::configured_limits(
+        true,
+        false,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { forge_connector: 1, ..StoryLimits::default() },
+    );
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(941)),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [141; 16],
+        ask: walking::goal_from(
+            world.chat(1, b"Read the refused close in the archive"),
+            people::TaskExecutor::Agent { charter: 1 },
+            jig_core_world::fixtures::Goal { budget: 50, priority: 3, deadline: None },
+        ),
+    }));
+    world.until(Until::Assigned);
+    let goal = world.assigned[0].clone();
+    let issue_key = Key::Forge(forge_top::Key::Issue(goal.task));
+    for _ in 0..100 {
+        world.tick();
+        if matches!(world.store.rows.get(&issue_key), Some(Record::Forge { row }) if matches!(row.as_ref(), forge_top::Stored::Issue(issue) if issue.number.is_some() && issue.pending.is_none()))
+        {
+            break;
+        }
+    }
+    let number = retained_goal_issue(&world, goal.task).number.expect("made issue");
+    world.hold_write_answers = Some(HoldWrite::Close);
+    let event = world.protocol.answer(
+        Token::new(7),
+        goal.task,
+        goal.attempt,
+        1,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: Box::from(&b"done"[..]) },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    // The fake applies an operation when called, before its delayed answer.
+    // Let the close's Date read succeed, then revoke permission before Make.
+    for _ in 0..300 {
+        world.tick();
+        if retained_goal_issue(&world, goal.task).state.closed
+            && world.pending.values().any(|op| matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Items { since, .. }) if since.as_nanos() == u64::MAX)) {
+            break;
+        }
+    }
+    assert!(retained_goal_issue(&world, goal.task).state.closed, "closing write is accepted");
+    assert!(world.pending.values().any(|op| matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Items { since, .. }) if since.as_nanos() == u64::MAX)), "successful Date read's answer is still pending");
+    fake::grant(&mut world.fake, b"org/repo", 1, raw::Permission::None);
+    let ended_key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(goal.task)));
+    let projection_key = Key::Core(jig_domain_core::Key::Core(CoreKey::Projection(ProjectionKey::Goal(goal.task))));
+    let receipt_key = Key::Core(jig_domain_core::Key::Core(CoreKey::Projection(ProjectionKey::Failure {
+        goal: goal.task,
+        connector: 1,
+    })));
+    for _ in 0..300 {
+        world.tick();
+        if !world.held_write_answers.is_empty() && world.store.rows.contains_key(&ended_key) {
+            break;
+        }
+    }
+    assert_eq!(world.held_write_answers.len(), 1, "close refusal remains withheld after Ended is durable");
+    assert!(matches!(&world.held_write_answers[0], engine::Event::Forge(event)
+    if matches!(event.as_ref(), forge_top::Event::Client(skein_forge_client::Event::Answered {
+        result: Err(skein_forge::api::Error::Forbidden), ..
+    }))));
+    let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(before)))) =
+        world.store.rows.get(&ended_key)
+    else {
+        panic!("durable ended goal")
+    };
+    let before = before.clone();
+    assert!(matches!(before.phase, tasks::Phase::Ended(tasks::Ending::Done(_))));
+    let issue = retained_goal_issue(&world, goal.task);
+    let source = issue.pending.expect("closing write has no accepted terminal");
+    let generation = issue.closing_generation.expect("accepted final generation");
+    assert!(!issue.before.as_ref().expect("closing rollback").closed);
+    assert!(matches!(world.store.rows.get(&projection_key),
+        Some(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Goal { closing_at: Some(saved), .. })))) if *saved == generation));
+    assert!(archived_projection_news(&mut world, goal.task).is_empty());
+    let reads_before = world.ended_task_loads.iter().filter(|task| **task == goal.task).count();
+    world.held_ended_task_loads = Some(Vec::new());
+    world.release_write_answers();
+    for _ in 0..300 {
+        world.tick();
+        if world.held_ended_task_loads.as_ref().is_some_and(|loads| !loads.is_empty()) && world.store.pending.is_empty()
+        {
+            break;
+        }
+    }
+    let held = world.held_ended_task_loads.take().expect("held archived read");
+    assert_eq!(held.len(), 1, "jig reads the ended goal once");
+    let Some(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Failure(receipt))))) =
+        world.store.rows.get(&receipt_key)
+    else {
+        panic!("durable failure receipt waits for its archived news")
+    };
+    let ProjectionFailureState::Pending(failure) = receipt.state else { panic!("one pending failure") };
+    assert_eq!(failure.source, source);
+    assert!(
+        matches!(world.store.rows.get(&projection_key),
+        Some(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Goal { closing_at: Some(saved), pending, .. })))) if *saved == generation && pending.is_empty()),
+        "saved generation settled while news still keeps the projection"
+    );
+    let failed = retained_goal_issue(&world, goal.task);
+    assert!(failed.failed);
+    assert_eq!(failed.pending, None);
+    assert_eq!(failed.before, None);
+    assert!(!failed.state.closed, "permanent refusal rolled back the close");
+    assert!(archived_projection_news(&mut world, goal.task).is_empty());
+    for request in held {
+        let engine::Request::Store(engine::StoreRequest::Load { owner, range, after, most, .. }) = request else {
+            panic!("ordinary archived load")
+        };
+        let (rows, next) = world.store.page(&range, after.as_ref(), most);
+        world.send(engine::Event::Store(engine::StoreInput::Loaded { owner, rows, next, texts: None }));
+    }
+    for _ in 0..300 {
+        world.tick();
+        if !world.store.rows.contains_key(&projection_key)
+            && !world.store.rows.contains_key(&issue_key)
+            && world.store.pending.is_empty()
+            && world.pending.is_empty()
+            && world.events.is_empty()
+        {
+            break;
+        }
+    }
+    let news = archived_projection_news(&mut world, goal.task);
+    assert_eq!(news.len(), 1, "the person reads exactly one failure line");
+    let tasks::Line::Heard(notice) = &news[0].line else { panic!("quiet heard news") };
+    assert!(matches!(notice.kind, tasks::MessageKind::News { class: tasks::NewsClass::Kept, .. }));
+    assert_eq!(news[0].at, failure.at);
+    assert_eq!(notice.at, failure.at);
+    for restarted in [false, true] {
+        if restarted {
+            world.store.crash(954);
+            world.restart(true, false);
+            world.until(Until::Ready);
+        }
+        assert_eq!(archived_projection_news(&mut world, goal.task), news, "one identical line across restart");
+        let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(after)))) =
+            world.store.rows.get(&ended_key)
+        else {
+            panic!("ended goal stays archived")
+        };
+        assert_eq!(after.phase, before.phase, "result is unchanged");
+        assert_eq!(after.ended_at, before.ended_at);
+        assert_eq!(after.result_position, before.result_position);
+        assert_eq!(after.activity, before.activity + 1);
+        assert_eq!(after.inbox, before.inbox, "quiet news leaves the ended inbox alone");
+        assert_eq!(
+            world.ended_task_loads.iter().filter(|task| **task == goal.task).count(),
+            reads_before + 1,
+            "one archived news read, including across restart"
+        );
+        assert!(!world.store.rows.contains_key(&projection_key), "jig forgets the saved generation");
+        assert!(!world.store.rows.contains_key(&receipt_key), "jig forgets its receipt");
+        assert!(!world.store.rows.contains_key(&issue_key), "forge forgets its failed issue");
+    }
+    let raw::Answer::Item { item, .. } = world.external(2, raw::Op::Read(raw::Read::Item { number, after: 0 })) else {
+        panic!("provider's retained issue")
+    };
+    assert_eq!(item.state, raw::State::Open, "refused close never changed the provider's issue");
+}

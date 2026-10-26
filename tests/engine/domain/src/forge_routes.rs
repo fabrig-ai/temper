@@ -42,6 +42,10 @@ pub struct World {
     pub assigned: Vec<engine::Assignment>,
     pub answers: Vec<temper_engine_domain::CallAnswer>,
     pub reads: Vec<(ReplyTo, jig_domain_core::reads::Answer)>,
+    /// Ended-owner demand loads, retained across process restarts for story assertions.
+    pub ended_task_loads: Vec<u64>,
+    /// Retain ordinary ended-owner loads at a scripted store boundary.
+    pub held_ended_task_loads: Option<Vec<engine::Request>>,
     pub protocol: Protocol,
     pub immediate: VecDeque<engine::Event>,
     /// The funding period sent to this process's root, once it is ready.
@@ -51,6 +55,7 @@ pub struct World {
     /// A branch whose reads take twenty seconds, each decided when it is sent.
     pub slow_branch: Option<Box<[u8]>>,
     owner_gate: bool,
+    forge_connector: u16,
     pub held_reads: Option<Vec<engine::Request>>,
     pub merges: u32,
     /// Hold decoded write answers after the independent forge has made the effect.
@@ -66,6 +71,7 @@ pub struct World {
 pub struct StoryLimits {
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
+    pub forge_connector: u16,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -150,7 +156,7 @@ impl World {
         documents: Option<jig_domain_core::documents::DocumentLimits>,
         timing: StoryLimits,
     ) -> Self {
-        let StoryLimits { brief, stall } = timing;
+        let StoryLimits { brief, stall, forge_connector } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -163,6 +169,12 @@ impl World {
             }
             limits.journal.writes += (people::max_out(&limits.people) - people::max_out(&walking::limits().people)) * 4;
             let mut config = walking::config(71);
+            config.core.connectors = Box::new([forge_connector]);
+            for project in &mut config.core.seed_projects {
+                for permission in &mut project.policy.permissions {
+                    permission.connector = forge_connector;
+                }
+            }
             if approval.is_some() || agent_gate || owner_gate {
                 limits.authority.roles = 3;
             }
@@ -237,7 +249,7 @@ impl World {
                     limits.tasks.authority_bytes = 64;
                 }
                 let grant = authority::Grant {
-                    connector: 0,
+                    connector: forge_connector,
                     kind: 1,
                     pattern: authority::Pattern {
                         segments: Box::new([
@@ -279,7 +291,7 @@ impl World {
                 rules.ceiling.grants = ceiling_grants.into_boxed();
                 if approval.is_some() || agent_gate || owner_gate {
                     let landing: Box<[engine::LandingRule]> = Box::new([engine::LandingRule {
-                        connector: 0,
+                        connector: forge_connector,
                         kind: 4,
                         enforce: !owner_gate,
                         pattern: authority::Pattern {
@@ -411,6 +423,8 @@ impl World {
             assigned: Vec::new(),
             answers: Vec::new(),
             reads: Vec::new(),
+            ended_task_loads: Vec::new(),
+            held_ended_task_loads: None,
             protocol: Protocol::default(),
             immediate: VecDeque::new(),
             period: None,
@@ -418,6 +432,7 @@ impl World {
             slow_brief_reads: false,
             slow_branch: None,
             owner_gate,
+            forge_connector,
             held_reads: None,
             hold_write_answers: None,
             held_write_answers: Vec::new(),
@@ -457,27 +472,19 @@ impl World {
     pub fn restart(&mut self, with_read: bool, with_change: bool) {
         assert!(self.store.pending.is_empty(), "the chosen cut resolves store uncertainty first");
         assert!(self.pending.is_empty(), "old API terminals are drained at this cut");
-        let mut fresh = if self.owner_gate {
-            Self::configured_brief(
-                with_read,
-                with_change,
-                false,
-                0,
-                paths::Gate { owner: true, ..paths::Gate::default() },
-                None,
-                Some(self.env.limits.brief),
-            )
-        } else {
-            Self::configured_brief(
-                with_read,
-                with_change,
-                false,
-                1000,
-                paths::Gate::default(),
-                None,
-                Some(self.env.limits.brief),
-            )
-        };
+        let mut fresh = Self::configured_limits(
+            with_read,
+            with_change,
+            false,
+            if self.owner_gate { 0 } else { 1000 },
+            paths::Gate { owner: self.owner_gate, ..paths::Gate::default() },
+            None,
+            StoryLimits {
+                brief: Some(self.env.limits.brief),
+                forge_connector: self.forge_connector,
+                ..StoryLimits::default()
+            },
+        );
         std::mem::swap(&mut self.root, &mut fresh.root);
         std::mem::swap(&mut self.out, &mut fresh.out);
         self.events.clear();
@@ -551,7 +558,20 @@ impl World {
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     self.store.pending.push_back((number, writes));
                 }
-                engine::Request::Store(engine::StoreRequest::Load { owner, range, after, most, .. }) => {
+                engine::Request::Store(engine::StoreRequest::Load { owner, range, after, most, bytes }) => {
+                    if let engine::Range::Core(engine::CoreRange::TaskResult { task }) = &range {
+                        self.ended_task_loads.push(*task);
+                        if let Some(held) = &mut self.held_ended_task_loads {
+                            held.push(engine::Request::Store(engine::StoreRequest::Load {
+                                owner,
+                                range,
+                                after,
+                                most,
+                                bytes,
+                            }));
+                            continue;
+                        }
+                    }
                     let (rows, next) = self.store.page(&range, after.as_ref(), most);
                     self.events.push_back(engine::Event::Store(engine::StoreInput::Loaded {
                         owner,
