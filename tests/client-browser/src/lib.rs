@@ -258,6 +258,7 @@ impl Tier {
                 names: Names::Url,
             },
             chromium: chromium(),
+            downloads: None,
             expected: vec![],
             origins: vec![],
         }
