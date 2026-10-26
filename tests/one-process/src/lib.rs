@@ -2,5 +2,6 @@
 pub mod fixtures;
 mod machine;
 pub mod referee;
+pub mod replay;
 mod stories;
 pub mod world;

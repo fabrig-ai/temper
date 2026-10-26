@@ -9,6 +9,10 @@ publish.workspace = true
 
 [dependencies]
 temper-playground.workspace = true
+temper-fake.workspace = true
+skein-playground.workspace = true
+skein-sim-world = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-ui-web.workspace = true
 jig-client.workspace = true
 serde_json.workspace = true
 temper-service.workspace = true

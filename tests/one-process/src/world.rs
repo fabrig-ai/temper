@@ -84,6 +84,10 @@ pub(crate) struct ServiceHost {
     pub(crate) before_iteration: u32,
     codec: jig_protocol_store::codec::Limits,
     families: temper_protocol_store::Bounds,
+    names: Box<[jig_domain_core::settings::ModelName]>,
+    pub(crate) turns: u64,
+    pub(crate) printed: Vec<skein_ui_web::bridge::Line>,
+    page: bool,
 }
 impl Host for ServiceHost {
     fn iterate(&mut self, now: Time, wall: Wall) {
@@ -98,10 +102,20 @@ impl Host for ServiceHost {
         self.commits.extend(self.store.borrow_mut().observe(
             &mut self.capture.events,
             &self.codec,
-            fixtures::store_names(),
+            &self.names,
             &self.families,
         ));
         self.service.iterate(now, wall);
+        self.turns += 1;
+        if self.page {
+            while let Some(link) = self.service.service().links().pop() {
+                self.printed.push(skein_ui_web::bridge::Line {
+                    process: b"temper".as_slice().into(),
+                    stream: skein_ui_web::bridge::Output::Standard,
+                    line: link,
+                });
+            }
+        }
         for submit in self.service.submissions().iter() {
             self.capture.pending(&submit.kind);
         }
@@ -490,9 +504,47 @@ fn person_failed(step: u32, why: &skein_fake_person::Why, wire: &referee::client
         panic!("person step {step}: {why:?}; adoption keys sent {sent:?}, answered {answered:?}, durable outcomes {durable}; pre-cut sent {before:?}; Adopt presses had frame {:?}; private cache {:?}", progress.press_had_frame, progress.cache.borrow());
     })
 }
-fn service(inherited: &Inherited) -> Proc {
+/// Bounds and model names of the documents whose bytes the referee observes.
+pub(crate) struct Observations {
+    pub(crate) codec: jig_protocol_store::codec::Limits,
+    pub(crate) families: temper_protocol_store::Bounds,
+    pub(crate) names: Box<[jig_domain_core::settings::ModelName]>,
+    pub(crate) agent: smith_channel::Limits,
+}
+pub(crate) fn instrumented(
+    start: &temper_playground::Start,
+    inherited: &Inherited,
+    store: Rc<RefCell<Store>>,
+    observations: Observations,
+    page: bool,
+) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
-    let service = temper_playground::Service::start(
+    let service = temper_playground::Service::start(start, inherited);
+    let service = if page { service.with_files(&start.files) } else { service };
+    let mut capture = Capture::default();
+    capture.root(root);
+    Proc::Service(Box::new(ServiceHost {
+        service,
+        hooks: None,
+        bound_hooks: None,
+        capture,
+        wire: Wire::new(store.clone(), observations.agent),
+        store,
+        commits: Vec::new(),
+        attached: false,
+        cut_before: None,
+        submitted: 0,
+        before_iteration: 0,
+        codec: observations.codec,
+        families: observations.families,
+        names: observations.names,
+        turns: 0,
+        printed: Vec::new(),
+        page,
+    }))
+}
+fn service(inherited: &Inherited) -> Proc {
+    instrumented(
         &temper_playground::Start {
             document: fixtures::document().into_boxed_slice(),
             files: fixtures::files(),
@@ -502,27 +554,18 @@ fn service(inherited: &Inherited) -> Proc {
             user: 1000,
         },
         inherited,
-    );
-    let mut capture = Capture::default();
-    capture.root(root);
-    let families =
-        temper_protocol_store::bounds(&temper_service::limits::profile(temper_service::limits::Profile::Small).forge)
-            .expect("application codec bounds");
-    Proc::Service(Box::new(ServiceHost {
-        service,
-        hooks: None,
-        bound_hooks: None,
-        capture,
-        store: STORE.with(|store| store.borrow().as_ref().expect("world store").clone()),
-        commits: Vec::new(),
-        wire: Wire::new(STORE.with(|store| store.borrow().as_ref().expect("world store").clone())),
-        attached: false,
-        cut_before: None,
-        submitted: 0,
-        before_iteration: 0,
-        codec: fixtures::codec(),
-        families,
-    }))
+        STORE.with(|store| store.borrow().as_ref().expect("world store").clone()),
+        Observations {
+            codec: fixtures::codec(),
+            families: temper_protocol_store::bounds(
+                &temper_service::limits::profile(temper_service::limits::Profile::Small).forge,
+            )
+            .expect("application codec bounds"),
+            names: fixtures::store_names().to_vec().into_boxed_slice(),
+            agent: fixtures::agent_limits().channel.bodies,
+        },
+        false,
+    )
 }
 #[expect(
     clippy::zero_sized_map_values,
@@ -547,7 +590,7 @@ fn agent(_spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
 fn git(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
     Proc::Playground(Process::Git(Box::new(temper_playground::git(spawn, inherited, transport()))))
 }
-fn shell(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
+pub(crate) fn shell(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
     Proc::Playground(Process::Shell(Box::new(temper_playground::Shell::new(spawn, inherited))))
 }
 #[must_use]
@@ -673,22 +716,44 @@ fn peer() -> Peer {
 fn fake_forge(inherited: &Inherited) -> Proc {
     Proc::Playground(Process::Forge(Box::new(SignalHost::new(peer(), Some(inherited.signal)))))
 }
-fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>) {
+pub(crate) struct Programs {
+    pub(crate) agent: fn(&skein_io::kernel::Spawn, &Inherited) -> Proc,
+    pub(crate) git: fn(&skein_io::kernel::Spawn, &Inherited) -> Proc,
+    pub(crate) agents: u32,
+    pub(crate) children: u32,
+    pub(crate) operations: u32,
+}
+impl Programs {
+    fn terminal() -> Self {
+        Self { agent, git, agents: fixtures::AGENTS, children: 1, operations: fixtures::agent_limits().routes + 3 }
+    }
+}
+pub(crate) fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>, programs: &Programs) {
     world.host_roots(
         skein_world::HostedProgram {
             program: temper_playground::AGENT.into(),
-            make: agent,
-            instances: fixtures::AGENTS,
-            operations: fixtures::agent_limits().routes + 3,
+            make: programs.agent,
+            instances: programs.agents,
+            operations: programs.operations,
         },
         temper_playground::agent_roots,
     );
     world.host_roots(
-        skein_world::HostedProgram { program: temper_playground::GIT.into(), make: git, instances: 1, operations: 1 },
+        skein_world::HostedProgram {
+            program: temper_playground::GIT.into(),
+            make: programs.git,
+            instances: programs.children,
+            operations: 1,
+        },
         temper_playground::worker_roots,
     );
     world.host_roots(
-        skein_world::HostedProgram { program: temper_playground::SH.into(), make: shell, instances: 1, operations: 1 },
+        skein_world::HostedProgram {
+            program: temper_playground::SH.into(),
+            make: shell,
+            instances: programs.children,
+            operations: 1,
+        },
         temper_playground::agent_roots,
     );
 }
@@ -780,7 +845,7 @@ fn run_phase(
         referee::Referee::new(controls, store.clone(), scenario, observed_forge.clone(), run.clone(), phase)
     })
     .with_machine(Machine(temper_playground::Machine::new(disk, fixtures::PREPARED_REPOSITORY)));
-    host_programs(&mut world);
+    host_programs(&mut world, &Programs::terminal());
     world.spawn_restartable(
         vec![
             skein_world::StartupRoot { name: b"state".as_slice().into(), path: b"state".as_slice().into() },

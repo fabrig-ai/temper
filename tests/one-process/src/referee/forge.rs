@@ -15,6 +15,7 @@ pub(crate) struct Forge {
     edited: bool,
     prepared: bool,
     hooks: Option<std::net::SocketAddr>,
+    address: std::net::SocketAddr,
 }
 impl Forge {
     pub(crate) fn new(transport: temper_fake_git_hosted::Typed, story: Story) -> Self {
@@ -27,7 +28,12 @@ impl Forge {
             edited: false,
             prepared: false,
             hooks: None,
+            address: fixtures::FORGE,
         }
+    }
+    pub(crate) fn at(mut self, address: std::net::SocketAddr) -> Self {
+        self.address = address;
+        self
     }
     pub(crate) fn hand_hooks(&mut self, bound: std::net::SocketAddr) {
         if self.hooks != Some(bound) {
@@ -49,7 +55,7 @@ impl Forge {
         for proc in procs {
             if let Proc::Playground(Process::Forge(peer)) = proc {
                 assert!(
-                    peer.address().is_none() || peer.address() == Some(fixtures::FORGE),
+                    peer.address().is_none() || peer.address() == Some(self.address),
                     "forge binds the configured address"
                 );
             }

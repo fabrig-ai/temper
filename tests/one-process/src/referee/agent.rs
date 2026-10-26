@@ -32,14 +32,8 @@ pub(crate) struct Wire {
     pub events: Vec<Observed>,
 }
 impl Wire {
-    pub(crate) fn new(store: std::rc::Rc<std::cell::RefCell<super::Store>>) -> Self {
-        Self {
-            pipes: BTreeMap::new(),
-            limits: crate::fixtures::agent_limits().channel.bodies,
-            store,
-            runs: BTreeMap::new(),
-            events: Vec::new(),
-        }
+    pub(crate) fn new(store: std::rc::Rc<std::cell::RefCell<super::Store>>, limits: smith_channel::Limits) -> Self {
+        Self { pipes: BTreeMap::new(), limits, store, runs: BTreeMap::new(), events: Vec::new() }
     }
     pub fn complete(&mut self, complete: &Complete) {
         match (&complete.kind, &complete.result) {
