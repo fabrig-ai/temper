@@ -1,13 +1,15 @@
-//! The composition's disk with the harness's client root at index 2.
+//! The composition's disk with the harness's client and setup roots at indices 2 and 3.
 use skein_lib::Queue;
 pub(crate) use temper_playground::Signalled as SignalHost;
 pub(crate) struct Machine(pub temper_playground::Machine);
 impl skein_world::Machine for Machine {
     fn open_root(&mut self, path: &[u8]) -> Result<skein_sim::Handle, skein_io::kernel::Error> {
-        if path == b"client" {
-            return Ok(skein_sim::Handle::new(self.0.disk().reopen_root(2).raw()));
-        }
-        self.0.open_root(path)
+        let index = match path {
+            b"client" => 2,
+            b"/setup" => 3,
+            _ => return self.0.open_root(path),
+        };
+        Ok(skein_sim::Handle::new(self.0.disk().reopen_root(index).raw()))
     }
     fn close_root(&mut self, root: skein_sim::Handle) {
         self.0.close_root(root);
