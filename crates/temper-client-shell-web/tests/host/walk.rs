@@ -134,6 +134,15 @@ pub(super) fn walked() -> Box<[u8]> {
     walked_with_no_event(false)
 }
 pub(super) fn walked_with_no_event(no_event: bool) -> Box<[u8]> {
+    walked_with_saves(no_event).recording
+}
+pub(super) struct Saves {
+    pub recording: Box<[u8]>,
+    pub before_press: Box<[u8]>,
+    pub first: Box<[u8]>,
+    pub later: Box<[u8]>,
+}
+pub(super) fn walked_with_saves(no_event: bool) -> Saves {
     let mut walk = Walk::new();
     walk.turn(vec![Report::Start]);
     walk.turn(vec![Report::Heard(Heard::StreamOpened)]);
@@ -172,6 +181,51 @@ pub(super) fn walked_with_no_event(no_event: bool) -> Box<[u8]> {
             matches!(subject, w::Subject::Me).then_some(open.watch())
         })
         .expect("me watch");
+    let value = me_with_openai();
+    walk.streamed(&w::StreamEvent::Delivery(
+        w::Delivery::new(
+            &w::CEILINGS,
+            w::DeliveryParts { watch, document: owned(encoded(value.measure(), |writer| value.encode(writer))) },
+        )
+        .expect("me delivery"),
+    ));
+    if no_event {
+        walk.press_heading();
+    }
+    let before_press = walk.recorder.as_ref().expect("recording").save(&walk.page);
+    let signing = walk.continue_with_chatgpt();
+    let first = walk.recorder.as_ref().expect("recording").save(&walk.page);
+    let started = w::OwnerOutcome::AccountSignInStarted(
+        w::OwnerOutcomeAccountSignInStarted::new(
+            &w::CEILINGS,
+            w::OwnerOutcomeAccountSignInStartedParts { source: 43, address: ADDRESS.into() },
+        )
+        .expect("sign-in started"),
+    );
+    let outcome = w::Outcome::Owner(
+        w::OutcomeOwner::new(&w::CEILINGS, w::OutcomeOwnerParts { value: started }).expect("owner outcome"),
+    );
+    let answer = w::Final::Done(w::Done::new(&w::CEILINGS, w::DoneParts { outcome }).expect("done"));
+    let answer = w::KeyedAnswer::FinalAnswer(owned(encoded(answer.measure(), |writer| answer.encode(writer))));
+    let returning = exchange(walk.answered(signing, &answer));
+    let later = walk.recorder.as_ref().expect("recording").save(&walk.page);
+    let answer = f::Answer::new(&f::CEILINGS, f::AnswerParts { outcome: f::Outcome::Returning }).expect("returning");
+    let record = w::Owned::new(
+        &w::CEILINGS,
+        w::OwnedParts {
+            owner: w::Owner::Family(
+                w::Family::new(&w::CEILINGS, w::FamilyParts { number: wire::FORGE }).expect("forge family"),
+            ),
+            version: wire::CLIENT_VERSION,
+            record: encoded(answer.measure(), |writer| answer.encode(writer)),
+        },
+    )
+    .expect("family answer");
+    walk.answered(returning, &w::KeyedAnswer::FinalAnswer(record));
+    Saves { recording: walk.recording.expect("departure ended the walk"), before_press, first, later }
+}
+
+fn me_with_openai() -> w::DeliveryValue {
     let mut me = jig_client_test_records::frame_record().into_parts();
     let provider = w::ProviderOffer::new(
         &w::CEILINGS,
@@ -193,43 +247,5 @@ pub(super) fn walked_with_no_event(no_event: bool) -> Box<[u8]> {
         writer.put(&provider.measure().to_be_bytes())?;
         provider.encode(writer)
     });
-    let value = w::DeliveryValue::Me(w::Me::new(&w::CEILINGS, me).expect("me"));
-    walk.streamed(&w::StreamEvent::Delivery(
-        w::Delivery::new(
-            &w::CEILINGS,
-            w::DeliveryParts { watch, document: owned(encoded(value.measure(), |writer| value.encode(writer))) },
-        )
-        .expect("me delivery"),
-    ));
-    if no_event {
-        walk.press_heading();
-    }
-    let signing = walk.continue_with_chatgpt();
-    let started = w::OwnerOutcome::AccountSignInStarted(
-        w::OwnerOutcomeAccountSignInStarted::new(
-            &w::CEILINGS,
-            w::OwnerOutcomeAccountSignInStartedParts { source: 43, address: ADDRESS.into() },
-        )
-        .expect("sign-in started"),
-    );
-    let outcome = w::Outcome::Owner(
-        w::OutcomeOwner::new(&w::CEILINGS, w::OutcomeOwnerParts { value: started }).expect("owner outcome"),
-    );
-    let answer = w::Final::Done(w::Done::new(&w::CEILINGS, w::DoneParts { outcome }).expect("done"));
-    let answer = w::KeyedAnswer::FinalAnswer(owned(encoded(answer.measure(), |writer| answer.encode(writer))));
-    let returning = exchange(walk.answered(signing, &answer));
-    let answer = f::Answer::new(&f::CEILINGS, f::AnswerParts { outcome: f::Outcome::Returning }).expect("returning");
-    let record = w::Owned::new(
-        &w::CEILINGS,
-        w::OwnedParts {
-            owner: w::Owner::Family(
-                w::Family::new(&w::CEILINGS, w::FamilyParts { number: wire::FORGE }).expect("forge family"),
-            ),
-            version: wire::CLIENT_VERSION,
-            record: encoded(answer.measure(), |writer| answer.encode(writer)),
-        },
-    )
-    .expect("family answer");
-    walk.answered(returning, &w::KeyedAnswer::FinalAnswer(record));
-    walk.recording.expect("departure ended the walk")
+    w::DeliveryValue::Me(w::Me::new(&w::CEILINGS, me).expect("me"))
 }

@@ -75,7 +75,12 @@ fn an_unreadable_recording_is_refused_by_add() {
 }
 
 fn mark(html: &str, heading: &str, acted: Option<u32>) -> Mark {
-    Mark { html: html.to_owned(), heading: heading.as_bytes().to_vec(), acted: acted.into_iter().map(NodeId).collect() }
+    Mark {
+        html: html.to_owned(),
+        heading: heading.as_bytes().to_vec(),
+        acted: acted.into_iter().map(NodeId).collect(),
+        lead: journey::Lead::Press,
+    }
 }
 
 #[test]
@@ -215,4 +220,23 @@ fn a_reprint_keeps_a_journeys_readme() {
     assert!(crate::reprint(Path::new(JOURNEYS), scratch.path()).expect("reprint").is_empty());
     assert_eq!(fs::read(readme).expect("description kept"), description);
     assert!(!directory.join("99.html").exists());
+}
+
+#[test]
+fn a_submits_field_leads_on_by_its_act() {
+    let mut first = mark("<div><form><input data-node=\"3\"></form></div>", "", Some(3));
+    first.lead = journey::Lead::Submit;
+    let printed = pages(&[first, mark("<div></div>", "", None)]);
+    assert!(printed[0].document.contains("<input data-journey-next=\"02.html\" data-journey-act=\"submit\"\n>"));
+}
+#[test]
+fn a_toggles_box_leads_on_by_its_act() {
+    let mut first = mark("<div><input type=\"checkbox\" data-node=\"3\"></div>", "", Some(3));
+    first.lead = journey::Lead::Toggle;
+    let printed = pages(&[first, mark("<div></div>", "", None)]);
+    assert!(
+        printed[0]
+            .document
+            .contains("<input type=\"checkbox\" data-journey-next=\"02.html\" data-journey-act=\"toggle\"\n>")
+    );
 }

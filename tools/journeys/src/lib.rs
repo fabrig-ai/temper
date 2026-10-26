@@ -98,7 +98,12 @@ fn print_one(out: &Path, name: &str, recording: &[u8]) -> Result<Option<Stale>, 
     loop {
         match replay.next() {
             Ok(Some(mark)) => {
-                marks.push(print::Mark { html: mark.page.html(), heading: heading(mark.tree), acted: mark.acted });
+                marks.push(print::Mark {
+                    html: mark.page.html(),
+                    heading: heading(mark.tree),
+                    acted: mark.acted,
+                    lead: mark.lead,
+                });
             }
             Ok(None) => break,
             Err(stale) => return Ok(Some(stale)),

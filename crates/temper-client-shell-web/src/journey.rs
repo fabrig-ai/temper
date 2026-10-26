@@ -1,14 +1,16 @@
 //! Record and replay the shipped host's seam (client/journeys.md, 2–4).
 use crate::host::{self, Host};
 use skein_lib::{Time, Wall};
-use skein_ui::{Act, NodeId, Tree};
+use skein_ui::{Act, NodeId, Role, Tree};
 use skein_ui_web::{mapping::Primary, page::Page};
 mod line;
 mod record;
 mod replay;
+mod walk;
 pub use line::{Line, Unreadable, lines};
 pub use record::Recorder;
 pub use replay::{Mark, Refusal, Replay, Stale, prove};
+pub use walk::{Step, Unwalkable, differs, still, walk};
 #[cfg(test)]
 mod tests;
 
@@ -74,4 +76,43 @@ fn name(tree: &Tree, node: NodeId) -> Box<[u8]> {
         .iter()
         .flat_map(|node| node.text.as_slice().iter().flat_map(|run| run.text.iter().copied()))
         .collect()
+}
+
+/// How a mark's controls lead on (client/journeys.md, 5.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Lead {
+    Press,
+    Submit,
+    Toggle,
+}
+
+/// A control's role, accessible name and order among exact matches, from zero
+/// (client/journeys.md, 8.1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Control {
+    pub role: Role,
+    pub name: Box<[u8]>,
+    pub order: u32,
+}
+impl Control {
+    #[must_use]
+    pub fn of(tree: &Tree, node: NodeId) -> Option<Self> {
+        let index = tree.nodes().iter().position(|candidate| candidate.id == node)?;
+        let role = tree.nodes()[index].role;
+        let name = self::name(tree, node);
+        let order = tree.nodes()[..index]
+            .iter()
+            .filter(|candidate| candidate.role == role && self::name(tree, candidate.id) == name)
+            .count();
+        Some(Self { role, name, order: u32::try_from(order).expect("tree count fits u32") })
+    }
+}
+/// Replay a save to its end, then find the first control giving the act's event.
+/// # Errors
+/// Returns the save's unreadable or stale refusal.
+pub fn control(save: &[u8], act: &Act, event: &[u8]) -> Result<Option<Control>, Refusal> {
+    let mut replay = Replay::new(save)?;
+    while replay.next().map_err(Refusal::Stale)?.is_some() {}
+    let host = replay.host();
+    Ok(giving(host, act, event).first().and_then(|node| Control::of(host.tree(), *node)))
 }

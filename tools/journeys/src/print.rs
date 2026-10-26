@@ -2,12 +2,14 @@
 
 use skein_ui::NodeId;
 use std::{fmt::Write, fs, io, path::Path};
+pub use temper_client_shell_web::journey::Lead;
 
 /// A page as the person saw it, at one mark (client/journeys.md, 3.4).
 pub struct Mark {
     pub html: String,
     pub heading: Vec<u8>,
     pub acted: Vec<NodeId>,
+    pub lead: Lead,
 }
 
 /// One printed page: its file name in the journey's directory and its document.
@@ -28,7 +30,12 @@ pub fn pages(marks: &[Mark]) -> Vec<Printed> {
             let next = next.as_deref().expect("an acted mark has a next page");
             let attribute = format!(" data-node=\"{node}\"");
             assert!(html.contains(&attribute), "the acted control is on the marked page");
-            html = html.replacen(&attribute, &format!(" data-journey-next=\"{next}\""), 1);
+            let act = match mark.lead {
+                Lead::Press => "",
+                Lead::Submit => " data-journey-act=\"submit\"",
+                Lead::Toggle => " data-journey-act=\"toggle\"",
+            };
+            html = html.replacen(&attribute, &format!(" data-journey-next=\"{next}\"{act}"), 1);
         }
         while let Some(start) = html.find(" data-node=\"") {
             let value = start + " data-node=\"".len();
