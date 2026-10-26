@@ -261,6 +261,7 @@ fn old_form_service(hooks: bool) -> crate::Service {
             bot: b"temper".as_slice().into(),
             admin_connect: false,
             owned: None,
+            git: config.forges[0].git.clone(),
             web: None,
             read_only: false,
             number: 1,
@@ -443,6 +444,7 @@ fn old_form_owned_and_managed_serve_reads_without_start_time_writing_plans() {
                         password: b"/data/forge/person_password".as_slice().into(),
                     })
                 },
+                git: config.forges[0].git.clone(),
                 web: None,
                 read_only: false,
                 number: 1,

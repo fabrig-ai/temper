@@ -147,6 +147,7 @@ fn configured(under_box: bool) -> Domain {
                     admin_connect: false,
                     bot: Box::new([]),
                     owned: None,
+                    git: Box::new([]),
                     web: None,
                     read_only: false,
                     number,

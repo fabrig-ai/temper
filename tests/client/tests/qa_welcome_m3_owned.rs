@@ -31,6 +31,7 @@ fn owned_fixture(runner: Option<&[u8]>) -> (Joint, Root) {
             bot: Box::new([]),
             read_only: false,
             asked: true,
+            git: Box::new([]),
             web: Some(b"http://forge.test:3000".as_slice().into()),
             owned: Some(forge::Owned {
                 forgejo: b"71.2.3".as_slice().into(),

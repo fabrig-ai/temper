@@ -25,6 +25,7 @@ fn configured(under_box: bool) -> ClientWorld {
             admin_connect: false,
             bot: Box::new([]),
             owned: None,
+            git: Box::new([]),
             web: None,
             read_only: false,
             number: FORGE,

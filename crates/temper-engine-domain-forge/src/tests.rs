@@ -1170,6 +1170,7 @@ fn configured() -> [Configured; 2] {
             admin_connect: false,
             bot: Box::new([]),
             owned: None,
+            git: Box::new([]),
             web: None,
             read_only: false,
             number: 1,
@@ -1181,6 +1182,7 @@ fn configured() -> [Configured; 2] {
             admin_connect: false,
             bot: Box::new([]),
             owned: None,
+            git: Box::new([]),
             web: None,
             read_only: false,
             number: 2,
@@ -1204,6 +1206,32 @@ fn setup_domain(forges: &[Configured], under_box: bool) -> Domain {
     )
     .unwrap()
 }
+#[test]
+fn a_configured_git_base_is_bounded_by_its_priced_pull_address_bytes() {
+    let base = [b'g'; 2049];
+    for length in [2048, 2049] {
+        let mut forge = configured()[0].clone();
+        forge.git = base.get(..length).unwrap().into();
+        let result = Domain::new(
+            &LIMITS,
+            4,
+            skein_forge_client::Config { namespace: b"test".as_slice().into(), writers: Box::new([]) },
+            &[],
+            &[forge],
+            false,
+        );
+        if length == 2048 {
+            assert!(result.is_ok(), "the priced base is admitted");
+        } else {
+            assert_eq!(
+                result.err(),
+                Some(skein_forge::api::Error::TooLarge),
+                "a larger base is refused before retaining it"
+            );
+        }
+    }
+}
+
 fn setup_row(number: u16, kind: Kind, connection: Connection, offer: Offer) -> Row {
     Row {
         number,
@@ -1821,6 +1849,7 @@ fn forges_lists_web_and_only_each_forges_adoptions_for_every_kind() {
                 kind,
                 mode: Mode::Connected,
                 asked: false,
+                git: Box::new([]),
                 web: Some(Box::from(b"https://forge.example".as_slice())),
                 read_only: false,
             }],

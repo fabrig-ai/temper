@@ -486,41 +486,72 @@ fn a_change_unnamed_after_its_pull_swap_was_queued_stays_unnamed() {
 
 #[test]
 fn landing_words_name_the_pull_and_use_the_forges_address_when_it_fits() {
+    use super::forge::Kind;
     let repository = adopted(1);
-    for (address, line) in [
+    for (kind, git, web, line) in [
         (
-            Some((super::forge::Kind::GitHub, b"https://github.example/".as_slice())),
+            Kind::GitHub,
+            b"https://git.example".as_slice(),
+            Some(b"https://github.example/".as_slice()),
             b"pull request #7 of org/repo on forge.example: https://github.example/org/repo/pull/7".as_slice(),
         ),
         (
-            Some((super::forge::Kind::Forgejo, b"https://forge.example/base".as_slice())),
+            Kind::Forgejo,
+            b"https://forge.example/base".as_slice(),
+            None,
             b"pull request #7 of org/repo on forge.example: https://forge.example/base/org/repo/pulls/7".as_slice(),
         ),
-        (None, b"pull request #7 of org/repo on forge.example".as_slice()),
+        (
+            Kind::Forgejo,
+            b"https://forge.example/base/".as_slice(),
+            None,
+            b"pull request #7 of org/repo on forge.example: https://forge.example/base/org/repo/pulls/7".as_slice(),
+        ),
+        (
+            Kind::GitHub,
+            b"https://git.example".as_slice(),
+            None,
+            b"pull request #7 of org/repo on forge.example".as_slice(),
+        ),
+        (Kind::Forgejo, b"".as_slice(), None, b"pull request #7 of org/repo on forge.example".as_slice()),
     ] {
+        let configured = landing_forge(kind, git, web);
         let expected = expected_landing(line);
-        assert_eq!(landing_words(&SHA1, 512, Some(&repository), 7, address), expected);
+        assert_eq!(landing_words(&SHA1, 512, Some(&repository), 7, Some(&configured)), expected);
         let bound = u32::try_from(expected.len()).unwrap();
-        assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, address), expected);
+        assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, Some(&configured)), expected);
+        assert_eq!(landing_words(&SHA1, bound - 1, Some(&repository), 7, Some(&configured)).as_ref(), COMMITS[0].1);
     }
     let line = b"pull request #7 of org/repo on forge.example";
     let bound = u32::try_from(COMMITS[0].1.len() + 1 + line.len()).unwrap();
     let expected = expected_landing(line);
-    assert_eq!(
-        landing_words(
-            &SHA1,
-            bound,
-            Some(&repository),
-            7,
-            Some((super::forge::Kind::GitHub, b"https://github.example"))
-        )
-        .as_ref(),
-        COMMITS[0].1
-    );
+    assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, None), expected);
     assert_eq!(landing_words(&SHA1, bound - 1, Some(&repository), 7, None).as_ref(), COMMITS[0].1);
     assert_eq!(landing_words(&SHA1, 7, Some(&repository), 7, None).as_ref(), b"abcdef0");
     let long = [b'x'; 2048];
-    assert_eq!(landing_words(&SHA1, 4096, Some(&repository), 7, Some((super::forge::Kind::Forgejo, &long))), expected);
+    for kind in [Kind::GitHub, Kind::Forgejo] {
+        let configured = landing_forge(kind, &long, Some(&long));
+        assert_eq!(landing_words(&SHA1, 4096, Some(&repository), 7, Some(&configured)), expected);
+    }
+}
+
+#[expect(clippy::manual_map, reason = "the strict subset uses explicit matches")]
+fn landing_forge(kind: super::forge::Kind, git: &[u8], web: Option<&[u8]>) -> super::forge::Configured {
+    super::forge::Configured {
+        admin_connect: false,
+        bot: Box::new([]),
+        owned: None,
+        git: git.into(),
+        web: match web {
+            Some(web) => Some(web.into()),
+            None => None,
+        },
+        read_only: false,
+        number: 1,
+        kind,
+        mode: super::forge::Mode::Connected,
+        asked: false,
+    }
 }
 
 fn expected_landing(line: &[u8]) -> Box<[u8]> {
