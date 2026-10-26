@@ -68,7 +68,7 @@ pub(crate) fn run_configuration(
         if let Some(webhooks) = &named.webhooks {
             serve.push(super::address(&webhooks.listener)?);
         }
-        let steps = temper_fake::steps(
+        let mut steps = temper_fake::steps(
             &checked.setup,
             demo.as_ref(),
             &directories.flags(),
@@ -76,6 +76,7 @@ pub(crate) fn run_configuration(
             cfg!(target_os = "linux"),
             first,
         );
+        owned_notices(&mut steps, &checked.setup);
         let mut listeners = Vec::new();
         for step in
             steps.always.iter().chain(steps.asked.iter().flat_map(|group| group.steps.iter().map(|(_, step)| step)))
@@ -150,6 +151,42 @@ pub(crate) fn run_configuration(
         }
     };
     Ok(skein_shell::drive(&mut kernel, &Clock::new(), &mut service))
+}
+
+/// The checked setup supplies the identity and paths; the box keeps only opaque
+/// public lines on the Forgejo step, never credentials or setup configuration.
+fn owned_notices(steps: &mut temper_forge_setup::Steps, setup: &temper_forge_setup::Setup) {
+    for entry in &setup.entries {
+        let temper_forge_setup::setup::Mode::Owned(owned) = &entry.mode else { continue };
+        let label = format!("Forge {} (Forgejo): ", entry.forge);
+        let address = owned.listen.to_string();
+        let notice = [
+            label.as_bytes(),
+            b"started\n",
+            label.as_bytes(),
+            b"api http://",
+            address.as_bytes(),
+            b"/api/v1\n",
+            label.as_bytes(),
+            b"person ",
+            &owned.person.login,
+            b", read header ",
+            &entry.directory,
+            b"/person_read.header, write header ",
+            &entry.directory,
+            b"/person_write.header\n",
+        ]
+        .concat();
+        for step in steps
+            .always
+            .iter_mut()
+            .chain(steps.asked.iter_mut().flat_map(|group| group.steps.iter_mut().map(|(_, step)| step)))
+        {
+            if step.ready() == Some(owned.listen) {
+                step.set_started_notice(notice.clone().into_boxed_slice());
+            }
+        }
+    }
 }
 
 type Configuration = (Box<[u8]>, Vec<(Fd, std::num::NonZeroU16)>);

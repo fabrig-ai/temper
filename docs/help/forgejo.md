@@ -222,7 +222,9 @@ For an already configured owned forge, the box runs these commands:
 1. **`temper forge prepare --config C --data D --cache K 1`** makes the forge's private
    directory and Forgejo's settings; temper's admin, `temper-admin`;
    your account, a site admin, with its first password in
-   `person_password`; and the runner's registration. It leaves one file
+   `person_password`, private, with no forced password change; your read and
+   write API headers, `person_read.header` and `person_write.header`; and
+   the runner's registration. It leaves one file
    for the engine: `admin_token`, the handover, temper's admin's token.
    A later preparation makes it again only when it is missing.
 2. **`temper forge run --config C --data D --cache K 1 forgejo`**, and `... 1 runner`,
@@ -239,8 +241,10 @@ For an already configured owned forge, the box runs these commands:
   `webhook_secret` in the forge's directory, are left unread, and
   nothing is converted: temper makes the forge's records afresh from
   the handover.
-- **Sign in on Forgejo** as yourself with `person_password`, and change
-  the password: Forgejo's API refuses you until you do. temper's admin
+- **Sign in on Forgejo** as yourself with `person_password`. Change it
+  on Forgejo when you like. The box prints the API address and your read
+  and write header paths after the forge starts; pass a header by path
+  with `curl -H @FILE`, keeping its token private. temper's admin
   is temper's; deleting it stops the next start's repair and the next
   preparation, naming it.
 
