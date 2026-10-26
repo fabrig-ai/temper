@@ -20,7 +20,7 @@ pub fn in_bytes(bytes: &[u8]) -> Option<&'static str> {
     }
     None
 }
-pub(crate) struct Roots<'a>(pub &'a temper_service::Service);
+pub(crate) struct Roots<'a>(pub &'a temper_playground::Service);
 impl fmt::Debug for Roots<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt_roots(formatter)

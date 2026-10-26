@@ -1,4 +1,5 @@
 //! Outside conformance over actual bytes and independently decoded durable records.
+use temper_playground::Process;
 pub(crate) mod durable;
 pub(crate) use durable::{Capture, Store};
 mod agent;
@@ -256,7 +257,7 @@ impl skein_world::Referee<Proc> for Referee {
             self.attached = Some(());
         }
         if !self.handed
-            && let Some(link) = service.service.links().pop()
+            && let Some(link) = service.service.service().links().pop()
         {
             for proc in other.iter_mut() {
                 if let Proc::Client(person) = proc
@@ -269,13 +270,7 @@ impl skein_world::Referee<Proc> for Referee {
         }
         let done = other.iter().all(|proc| match proc {
             Proc::Client(person) => person.is_empty(),
-            Proc::Service(_)
-            | Proc::Agent(_)
-            | Proc::Peer(_)
-            | Proc::Git(_)
-            | Proc::Shell(_)
-            | Proc::Forge(_)
-            | Proc::Ctl(_) => true,
+            Proc::Service(_) | Proc::Playground(_) | Proc::Ctl(_) => true,
         });
         if crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();
@@ -563,8 +558,11 @@ fn client_receipts(event: &client::Received, store: &Store, party: Option<u64>) 
 
 fn shutdown_peer(proc: &mut Proc) {
     match proc {
-        Proc::Peer(peer) => peer.shutdown(),
-        Proc::Forge(forge) => forge.shutdown(),
-        Proc::Service(_) | Proc::Agent(_) | Proc::Git(_) | Proc::Shell(_) | Proc::Client(_) | Proc::Ctl(_) => {}
+        Proc::Playground(Process::Llm(peer)) => peer.shutdown(),
+        Proc::Playground(Process::Forge(forge)) => forge.shutdown(),
+        Proc::Service(_)
+        | Proc::Client(_)
+        | Proc::Ctl(_)
+        | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) => {}
     }
 }
