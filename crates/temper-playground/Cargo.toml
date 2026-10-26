@@ -1,0 +1,42 @@
+[package]
+name = "temper-playground"
+description = "The playground world composed from startup values"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+temper-service.workspace = true
+temper-fake-git-hosted.workspace = true
+jig-protocol-config.workspace = true
+skein-forge-connection.workspace = true
+skein-lib.workspace = true
+skein-io.workspace = true
+skein-shell.workspace = true
+skein-sim-world = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-sim = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-fake-machine = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-fake-peers.workspace = true
+skein-fake-llm-domain = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-fake-llm-protocol.workspace = true
+skein-fake-forge-protocol.workspace = true
+skein-llm.workspace = true
+smith-agent-shell.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_panics_doc = "allow"          # the world asserts its invariants by panicking
+wildcard_enum_match_arm = "deny"      # a new variant must break the translation
+match_wildcard_for_single_variants = "deny"
+unwrap_used = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"
