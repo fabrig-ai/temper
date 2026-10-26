@@ -225,3 +225,5 @@ propose-settings FILE [REASON] --against R --key NAME
   Propose a change of deployment settings to its owners
 proposal tN/K|pN/K
   Read a proposal, with its review for settings
+move-to-newest R --key NAME
+  Move every live agent task on held revision R that may move to the newest

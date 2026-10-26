@@ -31,6 +31,7 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::CHANGE_SETTINGS_AT), "help_change_settings"),
     (Some(jig::rows::PROPOSE_SETTINGS_AT), "help_propose_settings"),
     (Some(jig::rows::PROPOSAL_AT), "help_proposal"),
+    (Some(jig::rows::MOVE_TO_NEWEST_AT), "help_move_to_newest"),
 ];
 #[test]
 fn the_help_prints_as_its_golden_files() {
@@ -96,6 +97,7 @@ const USAGES: &[&[u8]] = &[
     b"change-settings FILE --against R [--running stays|moves] --key NAME\n",
     b"propose-settings FILE [REASON] --against R --key NAME\n",
     b"proposal tN/K|pN/K\n",
+    b"move-to-newest R --key NAME\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {

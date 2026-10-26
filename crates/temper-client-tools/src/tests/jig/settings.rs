@@ -1118,3 +1118,47 @@ fn retained_party_single_goal_batch_keeps_its_actual_kind_key_and_pending_state(
         br#"{"key":{"proposer":{"party":73},"number":7},"action":"batch","state":{"pending":{"since":17}}}"#
     );
 }
+
+#[test]
+fn move_to_newest_parses_the_revision_and_requires_a_number_and_key() {
+    let argv = ["move-to-newest", "7", "--key", "move-7"];
+    let call = fixtures::call(&argv);
+    assert_eq!(call.tool, rows::MOVE_TO_NEWEST_AT);
+    assert_eq!(fixtures::back(&call), fixtures::owned(&argv));
+    for argv in [
+        vec!["move-to-newest", "--key", "move-7"],
+        vec!["move-to-newest", "seven", "--key", "move-7"],
+        vec!["move-to-newest", "4294967296", "--key", "move-7"],
+        vec!["move-to-newest", "7"],
+    ] {
+        assert!(fixtures::parse(&argv).is_err(), "{argv:?}");
+    }
+}
+#[test]
+fn move_to_newest_sends_the_revision_and_renders_both_counts() {
+    for (revision, newest, moved, stayed, text) in [
+        (1, 1, 0, 0, "moved 0 tasks to revision 1\n"),
+        (7, 9, 3, 1, "moved 3 tasks to revision 9; 1 could not, and finishes on 7\n"),
+        (7, 9, 1, 2, "moved 1 task to revision 9; 2 could not, and finish on 7\n"),
+    ] {
+        for json in [false, true] {
+            let mut root = fixtures::signed_in(fixtures::PARTY);
+            let call = fixtures::call(&["move-to-newest", &revision.to_string(), "--key", "move-7"]);
+            let call = root.submit_prepared(call, json, None);
+            let (_, _, jig_client::Ask::Jig(ask)) = root.sends.get(&call).expect("one keyed request") else {
+                panic!("jig ask")
+            };
+            assert_eq!(ask.as_ref(), &c::Ask::MoveToNewest(c::MoveToNewest { revision }));
+            assert_eq!(root.sent_name(call), Some(fixtures::named("move-7")));
+            root.done(call, c::Outcome::MovedToNewest(c::OutcomeMovedToNewest { newest, moved, stayed }));
+            let printed = root.answer(call).expect("move answer");
+            assert_eq!(printed.status, 0);
+            let expected = if json {
+                format!("{{\"newest\":{newest},\"moved\":{moved},\"stayed\":{stayed}}}")
+            } else {
+                text.into()
+            };
+            assert_eq!(printed.stdout.as_ref(), expected.as_bytes());
+        }
+    }
+}
