@@ -1125,7 +1125,7 @@ pub const CAP_REVISION: u64 = 1;
 pub const CAP_HOLD_REVISION: u64 = 1;
 pub const CAP_RELEASE_DECISION: u64 = 2;
 // Provisional cap while measuring A1's making through a5's begin.
-pub const CAP_SECONDS: u64 = 3;
+pub const CAP_SECONDS: u64 = 1;
 pub const CAP_PERSON: &str = "@case_cap_director Delegate A to own M1 and decide its cap without asking me.";
 pub const CAP_SPLIT: &str = "What has landed is M1; a5's fix opens M2. Report the split once a5 has ended.";
 pub const CAP_REASON: &str = "Split M1 at its cap instead of granting a grace to its delegates.";
