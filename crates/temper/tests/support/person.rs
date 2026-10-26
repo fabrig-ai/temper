@@ -116,11 +116,7 @@ pub fn kept_chatgpt_account(heading: &[u8]) -> Script {
         steps: Box::new([
             Step::Go { address: Address::Accounts },
             Step::See { find: Find::exactly_named(Role::Disclosure, heading), within: START_WITHIN },
-            Step::See {
-                find: Find::text("ChatGPT sign-in · Ready".as_bytes())
-                    .within(Box::new([Target::Role { role: Role::Disclosure, name: heading.into() }])),
-                within: START_WITHIN,
-            },
+            chatgpt_source_ready(heading),
         ]),
     }
 }
@@ -137,16 +133,23 @@ pub fn signed_in_account(signing: &[u8], name: &[u8]) -> Script {
             Step::Go { address: Address::Accounts },
             Step::See { find: Find::exactly_named(Role::Status, signing), within: START_WITHIN },
             Step::See { find: Find::exactly_named(Role::Disclosure, card.as_bytes()), within: START_WITHIN },
-            // TreeFace reads disclosure contents even while the native shell folds them.
-            Step::See {
-                find: Find::text("ChatGPT sign-in · Ready".as_bytes()).within(Box::new([Target::Role {
-                    role: Role::Disclosure,
-                    name: card.into_bytes().into_boxed_slice(),
-                }])),
-                within: START_WITHIN,
-            },
+            chatgpt_source_ready(card.as_bytes()),
             Step::See { find: Find::exactly_named(Role::Status, b"Signed in to ChatGPT"), within: START_WITHIN },
         ]),
+    }
+}
+/// Read the state in the sign-in source's own Item, inside the exact account card.
+/// The source kind and state are separate nodes (client/README.md, 5.5).
+#[must_use]
+pub fn chatgpt_source_ready(heading: &[u8]) -> Step<Address> {
+    use skein_ui::Role;
+    // TreeFace reads disclosure contents even while the native shell folds them.
+    Step::See {
+        find: Find::exactly_named(Role::Status, b"Ready").within(Box::new([
+            Target::ExactRole { role: Role::Disclosure, name: heading.into() },
+            Target::Role { role: Role::Item, name: b"ChatGPT sign-in".as_slice().into() },
+        ])),
+        within: START_WITHIN,
     }
 }
 /// Signs in by the printed link; the demo's running start keeps the deployment key.
