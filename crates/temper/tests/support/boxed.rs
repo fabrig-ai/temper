@@ -21,6 +21,8 @@ use std::{
 pub enum Plan {
     /// Probe Forgejo and ask the box to stop.
     Stop,
+    /// Wait for the box's own exit; send it no signal.
+    Exit,
     /// Kill Forgejo, wait for its replacement, and check the engine before stopping.
     KillForgejo,
 }
@@ -62,6 +64,7 @@ impl Judge {
                 self.forgejo_at_link.set(self.forgejo.and_then(|address| status(address, "/api/v1/version")));
                 match self.plan {
                     Plan::Stop => self.stop(binary),
+                    Plan::Exit => {}
                     Plan::KillForgejo => {
                         if let Some(engine) = find(pids, &self.temper_program, b"serve")
                             && let Some(forgejo) =
@@ -94,7 +97,9 @@ impl Judge {
         }
     }
     fn stop(&mut self, binary: &mut Binary) {
-        binary.signal(Signal::Terminate);
+        if binary.exit_status().is_none() {
+            binary.signal(Signal::Terminate);
+        }
         self.phase = Phase::Stopping;
     }
 }

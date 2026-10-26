@@ -60,7 +60,7 @@ fn held_listener_stops_serve(listener: &str, expected: &str) {
             environment: Vec::new(),
         },
         None,
-        support::boxed::Plan::Stop,
+        support::boxed::Plan::Exit,
         Duration::from_secs(5),
     );
     let diagnostic = String::from_utf8_lossy(&ended.stderr);
