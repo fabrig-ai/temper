@@ -1,0 +1,14 @@
+task 41 · goal · Running · shop · priority 2
+asked: Add a /health endpoint that reports the store's state
+requester: you · spent 1.20 of 5.00 · no deadline
+instructions: Read the task's charter.
+settings: revision 7 · its run on 6 · newest 9
+dependencies:
+  task 43 · Completed
+  task 44 · Running · added by you at 2026-10-22 05:10 UTC · keeps task 41 from ending
+  task 45 · Waiting · added by task 7 at 2026-10-22 05:10 UTC
+waiting on: Nothing awaited
+acts:
+  stop 41 --key NAME
+  cancel 41 REASON --key NAME
+digest: task 2107e9314b515a99

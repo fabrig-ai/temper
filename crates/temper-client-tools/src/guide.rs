@@ -23,7 +23,8 @@ in an items FILE, and edit it before one keyed decision:
   temper ctl DIRECTORY proposal p3/7
 Use setting ... --json > FILE to save a value; FILE for change-settings is
 {"items":[{"setting":{"kind":"charter","number":3},"set":VALUE}]}.
-Running work stays unless --running moves. On stale, read settings again and retry.
+The running choice is recorded; moving existing tasks is not built yet.
+On stale, read settings again and retry.
 Agent task reads print settings: revision R, the revision recorded by the task.
 A different live run adds its run on N; a different newest adds newest N.
 Procedure and person tasks have no settings line. Task --json carries these numbers.

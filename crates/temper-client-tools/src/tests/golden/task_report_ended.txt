@@ -1,9 +1,10 @@
 task 2 · report · Ended · project 1 · untracked
 asked: Export widget's table as CSV
 requester: task 1 · spent 0.00 of 0.10 · no deadline
+settings: revision 1
 waiting on: Nothing awaited
 acts:
 result: Completed
   widget --csv prints the table
   and preserves its column order
-digest: task 7c5521bfab335b4e
+digest: task ca84db17970f4f92

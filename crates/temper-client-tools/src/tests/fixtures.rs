@@ -328,6 +328,18 @@ pub(crate) fn golden(name: &str) -> Box<[u8]> {
     let path = std::path::Path::new("src/tests/golden").join(name).with_extension("txt");
     std::fs::read(path).expect("checked golden").into_boxed_slice()
 }
+/// Task-rendering fixtures regenerate only through their owning tests.
+pub(crate) fn check_golden(name: &str, bytes: &[u8]) {
+    let write = match std::env::var_os("SKEIN_CODEGEN_WRITE") {
+        Some(value) => value == "1",
+        None => false,
+    };
+    if write {
+        let path = std::path::Path::new("src/tests/golden").join(name).with_extension("txt");
+        std::fs::write(path, bytes).expect("write golden");
+    }
+    assert_eq!(bytes, golden(name).as_ref(), "{name}; regenerate with SKEIN_CODEGEN_WRITE=1 and this test");
+}
 pub(crate) struct Harness {
     pub root: root::Root,
     pub now: Time,
@@ -643,7 +655,7 @@ const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot for each guide call, including the model-choice seam.
 pub(super) const GUIDE_CALLS: u32 = 31;
 /// One slot per guide line, including the final line; fewer loses that line.
-const GUIDE_LINES: u32 = 130;
+const GUIDE_LINES: u32 = 133;
 /// One slot per row and form; fewer omits decide's second form.
 pub(super) const TOOL_FORMS: u32 = 58;
 /// Exactly one example exercises each row and form; zero misses it entirely.

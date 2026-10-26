@@ -5,7 +5,8 @@ fn a_task_read_prints_its_document() {
     let (mut root, call, task) = fixtures::task_read();
     root.serve(call, fixtures::task_result(task));
     let answer = root.answer(call).expect("answered once the read is");
-    assert_eq!((answer.status, answer.stdout), (0, fixtures::golden("task_goal_waiting")));
+    assert_eq!(answer.status, 0);
+    fixtures::check_golden("task_goal_waiting", &answer.stdout);
 }
 #[test]
 fn a_closed_chat_reads_its_kept_conversation() {
@@ -96,7 +97,7 @@ fn a_proposable_act_says_to_whom() {
     task.acts.get_mut(0).expect("first offer").admission =
         Admission::Proposed { to: jig_client::contract::Recipient::Party(fixtures::PARTY) };
     root.serve(call, fixtures::task_result(task));
-    assert_eq!(root.answer(call).expect("read answered").stdout, fixtures::golden("task_proposed"));
+    fixtures::check_golden("task_proposed", &root.answer(call).expect("read answered").stdout);
 }
 #[test]
 fn a_refused_act_says_why_without_a_call() {
@@ -104,7 +105,7 @@ fn a_refused_act_says_why_without_a_call() {
     task.acts.get_mut(0).expect("first offer").admission =
         Admission::Refused(jig_client::contract::Refusal::NotOffered);
     root.serve(call, fixtures::task_result(task));
-    assert_eq!(root.answer(call).expect("read answered").stdout, fixtures::golden("task_refused"));
+    fixtures::check_golden("task_refused", &root.answer(call).expect("read answered").stdout);
 }
 #[test]
 fn me_prints_the_live_frame() {
@@ -157,7 +158,7 @@ fn a_result_past_the_text_limit_says_how_much_is_left() {
     task.spec.specification.words = fixtures::document_text(&words.finish());
     root.serve(call, fixtures::task_result(task));
     let answer = root.answer(call).expect("cut result answered");
-    assert_eq!(answer.stdout, fixtures::golden("task_cut"));
+    fixtures::check_golden("task_cut", &answer.stdout);
 }
 
 #[test]
@@ -172,7 +173,7 @@ fn a_bounded_offer_prints_its_whole_bounds() {
         let (mut root, call, mut task) = fixtures::task_read();
         task.acts.get_mut(0).expect("first offer").admission = fixtures::bounded_offer(beyond);
         root.serve(call, fixtures::task_result(task));
-        assert_eq!(root.answer(call).expect("read answered").stdout, fixtures::golden(golden), "{golden}");
+        fixtures::check_golden(golden, &root.answer(call).expect("read answered").stdout);
     }
 }
 
@@ -181,7 +182,7 @@ fn an_owner_resource_path_is_printed_whole() {
     let (mut root, call, mut task) = fixtures::task_read();
     fixtures::long_resource(&mut task);
     root.serve(call, fixtures::task_result(task));
-    assert_eq!(root.answer(call).expect("read answered").stdout, fixtures::golden("task_whole_path"));
+    fixtures::check_golden("task_whole_path", &root.answer(call).expect("read answered").stdout);
 }
 
 #[test]
@@ -202,7 +203,9 @@ fn an_act_with_no_tool_prints_its_name() {
         offer.act = jig_client::contract::ActKind::Take;
         offer.admission = admission;
         root.serve(call, fixtures::task_result(task));
-        printed_by_admission.push((golden, root.answer(call).expect("read answered").stdout)).expect("every row");
+        let printed = root.answer(call).expect("read answered");
+        fixtures::check_golden(golden, &printed.stdout);
+        printed_by_admission.push((golden, printed.stdout)).expect("every row");
         expected.push((golden, fixtures::golden(golden))).expect("every row");
     }
     assert_eq!(printed_by_admission, expected);

@@ -4,11 +4,7 @@ use jig_client::contract as c;
 
 fn golden(name: &str, printed: crate::jig::Printed) {
     assert_eq!(printed.status, 0);
-    if std::env::var_os("SKEIN_CODEGEN_WRITE").is_some() {
-        std::fs::write(std::path::Path::new("src/tests/golden").join(name).with_extension("txt"), &printed.stdout)
-            .expect("write golden");
-    }
-    assert_eq!(printed.stdout, f::golden(name), "{name}");
+    f::check_golden(name, &printed.stdout);
 }
 
 #[test]

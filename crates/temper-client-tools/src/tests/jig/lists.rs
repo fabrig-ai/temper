@@ -32,7 +32,7 @@ fn ended_tasks_use_only_the_ended_group() {
 #[test]
 fn a_composite_task_prints_one_answer() {
     let (mut root, call) = fixtures::composite();
-    assert_eq!(root.answer(call).expect("all parts answered").stdout, fixtures::golden("task_composite"));
+    fixtures::check_golden("task_composite", &root.answer(call).expect("all parts answered").stdout);
 }
 #[test]
 fn a_composite_task_closes_its_related_watches() {
@@ -97,7 +97,7 @@ fn a_limited_task_activity_names_its_whole_page() {
     let (mut root, call) = fixtures::read_call(fixtures::LIMITED_TASK_CALL);
     root.serve(call, fixtures::task_result(fixtures::goal(fixtures::TASK, fixtures::waiting_on_me())));
     root.serve(call, fixtures::activity_words());
-    assert_eq!(root.answer(call).expect("task answered").stdout, fixtures::golden("task_limited_activity"));
+    fixtures::check_golden("task_limited_activity", &root.answer(call).expect("task answered").stdout);
 }
 
 #[test]
