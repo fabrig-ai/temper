@@ -197,3 +197,5 @@ pub enum Refusal {
 }
 
 pub use jig_protocol_worker_wire::Reason as WorkerRefusalReason;
+
+pub use temper_engine_domain::Unsettled;

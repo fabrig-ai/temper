@@ -6,6 +6,7 @@ use temper_engine_domain as root;
 pub(crate) struct Drain {
     pub(crate) closing: bool,
     stopped: Option<Stop>,
+    pub(crate) unsettled: skein_lib::List<root::Unsettled>,
 }
 /// A second call aborts, ending at once with the reason a failure's drain
 /// carries (protocol/README.md, section 4).
@@ -17,7 +18,11 @@ pub(crate) fn shutdown(engine: &mut Engine) {
         });
         return;
     }
-    engine.drain = Some(Drain { closing: false, stopped: None });
+    engine.drain = Some(Drain {
+        closing: false,
+        stopped: None,
+        unsettled: skein_lib::List::with_capacity(engine.env.limits.forge.entries),
+    });
     engine.workers.down(engine.env.now, jig_protocol_engine_workers::Event::Stop, &mut engine.events);
     engine.clients.down(jig_protocol_engine_clients::Event::Stop);
     engine.events.push(root::Event::Stop);

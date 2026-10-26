@@ -153,3 +153,83 @@ fn a_store_without_demo_acts_refuses_at_startup() {
     assert_eq!(wanted, 10);
     refused(OpenRefusal::Format { family: Family::Application, found: 9, wanted });
 }
+
+#[test]
+fn unfinished_forge_writes_stay_with_the_drain() {
+    let mut service = fixtures::ready();
+    assert!(service.unsettled().is_empty());
+    service.shutdown();
+    let writes =
+        [temper_engine_domain::Unsettled { entry: 7, task: 3 }, temper_engine_domain::Unsettled { entry: 9, task: 5 }];
+    for write in writes {
+        crate::route::request(
+            service.engine.as_mut().expect("engine"),
+            temper_engine_domain::Request::Unsettled(write),
+        );
+    }
+    for _ in 0_u32..256 {
+        fixtures::turn(&mut service);
+        if service.end().is_some() {
+            break;
+        }
+    }
+    assert_eq!(service.end(), Some(&End::Drained));
+    assert_eq!(service.unsettled(), &writes);
+}
+
+#[test]
+fn a_second_signal_while_settling_aborts() {
+    use skein_forge::api::{Answer, Check, Repository, Write};
+    use skein_forge_client::{Condition, Effect, Entry, Event as Client};
+    use skein_lib::Token;
+    use temper_engine_domain as root;
+    use temper_engine_domain_forge::{Event, Stored};
+    let mut service = fixtures::ready();
+    let entry = Entry {
+        number: 7,
+        task: 3,
+        repository: Repository { forge: 1, repository: 2 },
+        effect: Effect {
+            write: Write::Status { commit: [3; 32], context: b"stop".as_slice().into(), check: Check::Passed },
+            condition: Condition::None,
+        },
+        start: None,
+        attempt: None,
+        failures: 0,
+        queued: false,
+    };
+    // Restore the connector-owned entry, then play its committed handoff to the client.
+    for event in [
+        Event::Connection {
+            forge: 1,
+            state: temper_engine_domain_forge::Connection::Connected { id: 7, login: b"writer".as_slice().into() },
+        },
+        Event::Restore { record: Stored::Entry { entry: entry.clone(), held: false } },
+        Event::Client(Client::Make { entry }),
+    ] {
+        service.engine.as_mut().unwrap().step(root::Event::Forge(Box::new(event)));
+    }
+    for _ in 0_u32..16 {
+        fixtures::turn(&mut service);
+    }
+    // The clock lookup is the first client call. The connection's write answer
+    // is held by leaving its IO completions with the fixture.
+    service.engine.as_mut().unwrap().step(root::Event::Forge(Box::new(Event::Client(Client::Answered {
+        call: Token::new(1),
+        cost: 1,
+        free: 0,
+        rate: None,
+        result: Ok(Answer::Items { items: Box::new([]), more: false, now: skein_lib::Time::from_nanos(1) }),
+    }))));
+    for _ in 0_u32..16 {
+        fixtures::turn(&mut service);
+    }
+    service.shutdown();
+    for _ in 0_u32..16 {
+        fixtures::turn(&mut service);
+    }
+    assert_eq!(service.end(), None);
+    assert!(!service.engine.as_ref().unwrap().drain.as_ref().unwrap().closing, "still settling, before the drain");
+    service.shutdown();
+    assert_eq!(service.end(), Some(&End::Aborted));
+}

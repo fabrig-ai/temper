@@ -723,6 +723,7 @@ pub fn settle_root(
                 | root::Request::Return { .. }
                 | root::Request::Forge { .. }
                 | root::Request::Busy(_)
+                | root::Request::Unsettled(_)
                 | root::Request::Drained
                 | root::Request::Stop => {
                     panic!("unexpected chat request")

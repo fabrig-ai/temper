@@ -51,7 +51,8 @@ impl skein_shell::Host for Host {
         if !self.service.is_empty() {
             return None;
         }
-        let (lines, code) = ending(self.service.end(), self.output_failed, &self.directories, &self.store);
+        let (lines, code) =
+            ending(self.service.end(), self.output_failed, &self.directories, &self.store, self.service.unsettled());
         eprint!("{lines}");
         Some(Exit::Code(code))
     }
@@ -112,8 +113,14 @@ fn remove_handover(remove: &temper_service::HandoverRemoval) -> Result<(), i32> 
     }
 }
 
-fn ending(end: Option<&End>, output_failed: bool, _directories: &Directories, store: &[u8]) -> (String, u8) {
-    let lines = match end {
+fn ending(
+    end: Option<&End>,
+    output_failed: bool,
+    _directories: &Directories,
+    store: &[u8],
+    unsettled: &[temper_service::Unsettled],
+) -> (String, u8) {
+    let mut lines = match end {
         Some(End::Stopped(why)) => match why {
             Stop::Start(found) => crate::problems(&temper_service::startup::Problems::jig(
                 found.clone(),
@@ -132,6 +139,17 @@ fn ending(end: Option<&End>, output_failed: bool, _directories: &Directories, st
         },
         None | Some(End::Drained | End::Aborted) => String::new(),
     };
+    if end == Some(&End::Drained) {
+        use std::fmt::Write as _;
+        for write in unsettled {
+            let (entry, task) = (write.entry, write.task);
+            writeln!(
+                lines,
+                "temper serve: stopped before task {task}'s forge write {entry} settled; the next start settles it"
+            )
+            .expect("format stop diagnostic");
+        }
+    }
     (lines, u8::from(output_failed || end != Some(&End::Drained)))
 }
 
@@ -327,6 +345,7 @@ fn older_store_refusals_use_jigs_recovery_words_and_the_store_path() {
                 false,
                 &directories,
                 store.as_bytes(),
+                &[],
             );
             assert_eq!(line, expected);
             assert!(line.contains("this start has changed nothing"));
@@ -361,7 +380,7 @@ fn other_endings_keep_their_exit_behavior() {
         (None, false, "", 1),
     ] {
         assert_eq!(
-            ending(end.as_ref(), output_failed, &directories, b"/data/store"),
+            ending(end.as_ref(), output_failed, &directories, b"/data/store", &[]),
             (expected.into(), code),
             "{end:?}, output failed {output_failed}"
         );
@@ -479,4 +498,16 @@ fn the_shell_trims_only_the_handovers_final_newline() {
     let answer = read_handover(&read).expect("handover fixture").expect("handover fixture");
     assert!(answer.expose() == b"test-admin", "the final LF is not part of the handover");
     std::fs::remove_dir_all(directory).expect("handover fixture");
+}
+
+#[test]
+fn a_drained_end_prints_each_unsettled_write() {
+    let arguments =
+        [b"--config".as_slice(), b"/configuration", b"--data", b"/data", b"--cache", b"/cache"].map(Box::from);
+    let (directories, _) = crate::directories::resolve(&arguments, &[], b"/").expect("resolved directories");
+    let unfinished =
+        [temper_service::Unsettled { entry: 17, task: 3 }, temper_service::Unsettled { entry: 22, task: 9 }];
+    assert_eq!(ending(Some(&End::Drained), false, &directories, b"/data/store", &unfinished), (
+        "temper serve: stopped before task 3's forge write 17 settled; the next start settles it\ntemper serve: stopped before task 9's forge write 22 settled; the next start settles it\n".into(), 0
+    ));
 }
