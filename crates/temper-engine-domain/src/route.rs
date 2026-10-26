@@ -389,6 +389,7 @@ pub(crate) fn decide_call(
         | core::CallPart::NoteWritten { .. }
         | core::CallPart::NoteRecalled { .. }
         | core::CallPart::NoteRefused(_)
+        | core::CallPart::SettingsRefused(_)
         | core::CallPart::Unavailable => false,
     };
     if !domain.core.decide_named_call(key, part) {
