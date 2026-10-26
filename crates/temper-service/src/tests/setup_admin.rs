@@ -73,17 +73,10 @@ fn first(label: &[u8]) -> domain::FirstAsk {
 fn ask(service: &mut crate::Service, value: Secret, first: Option<domain::FirstAsk>) {
     let engine = service.engine.as_mut().unwrap();
     let digest = skein_lib::sha256::digest(value.expose());
-    engine.store.secrets(
-        Token::new(901),
-        Secrets::Keep {
-            owner: SecretOwner::Application,
-            number: records::CARRIED,
-            value: crate::tests::fixtures::application_secret(records::CARRIED, value),
-        },
-    );
+    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, value));
     assert!(
         (match engine.store.above.pop() {
-            Some(StoreEvent::Kept { .. }) => true,
+            Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
             _ => false,
         })
     );
@@ -330,17 +323,10 @@ fn create_file_stop_marks_first_failed_and_erases_without_keeping_the_token() {
 fn restart_without_an_admin_record_offers_connect_and_sweeps_a_crashed_carry() {
     let forge = forge(true, true, false);
     let mut store = store(&forge);
-    store.secrets(
-        Token::new(901),
-        Secrets::Keep {
-            owner: SecretOwner::Application,
-            number: records::CARRIED,
-            value: crate::tests::fixtures::application_secret(records::CARRIED, bundle(1, ADMIN)),
-        },
-    );
+    store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, bundle(1, ADMIN)));
     assert!(
         (match store.above.pop() {
-            Some(StoreEvent::Kept { .. }) => true,
+            Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
             _ => false,
         })
     );
@@ -379,17 +365,10 @@ fn both_admin_plans_read_the_paste_even_with_different_records_and_adoptions() {
     let carried = {
         let value = bundle(1, ADMIN);
         let digest = skein_lib::sha256::digest(value.expose());
-        engine.store.secrets(
-            Token::new(901),
-            Secrets::Keep {
-                owner: SecretOwner::Application,
-                number: records::CARRIED,
-                value: crate::tests::fixtures::application_secret(records::CARRIED, value),
-            },
-        );
+        engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, value));
         assert!(
             (match engine.store.above.pop() {
-                Some(StoreEvent::Kept { .. }) => true,
+                Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
                 _ => false,
             })
         );
@@ -481,14 +460,10 @@ fn admin_record_files_and_directories_are_owner_only() {
     assert!(opened);
     store.secrets(
         Token::new(901),
-        Secrets::Keep {
-            owner: SecretOwner::Application,
-            number: records::number(1, Item::AdminToken),
-            value: crate::tests::fixtures::application_secret(
-                records::number(1, Item::AdminToken),
-                Secret::new(records::encode(ADMIN).into_boxed_slice()),
-            ),
-        },
+        crate::tests::fixtures::application_request(
+            records::number(1, Item::AdminToken),
+            Secret::new(records::encode(ADMIN).into_boxed_slice()),
+        ),
     );
     let mut kept = false;
     for _ in 0_u32..4096 {
@@ -554,17 +529,10 @@ fn busy_admin_connect_erases_its_unused_paste() {
     let value = bundle(1, ADMIN);
     let digest = skein_lib::sha256::digest(value.expose());
     let number = records::CARRIED.checked_add(1).unwrap();
-    engine.store.secrets(
-        Token::new(901),
-        Secrets::Keep {
-            owner: SecretOwner::Application,
-            number,
-            value: crate::tests::fixtures::application_secret(number, value),
-        },
-    );
+    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(number, value));
     assert!(
         (match engine.store.above.pop() {
-            Some(StoreEvent::Kept { .. }) => true,
+            Some(StoreEvent::Carried { number: found, .. }) => found == number,
             _ => false,
         })
     );
@@ -662,17 +630,10 @@ fn a_github_app_paste_cannot_decode_an_admin_bundle() {
     let engine = service.engine.as_mut().unwrap();
     let value = bundle(1, ADMIN);
     let digest = skein_lib::sha256::digest(value.expose());
-    engine.store.secrets(
-        Token::new(901),
-        Secrets::Keep {
-            owner: SecretOwner::Application,
-            number: records::CARRIED,
-            value: crate::tests::fixtures::application_secret(records::CARRIED, value),
-        },
-    );
+    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, value));
     assert!(
         (match engine.store.above.pop() {
-            Some(StoreEvent::Kept { .. }) => true,
+            Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
             _ => false,
         })
     );
@@ -776,4 +737,33 @@ fn admin_connect_refuses_a_first_organization_named_as_the_bot() {
     assert!(engine.domain.forges().rows[0].first.is_none());
     assert!(forge.service.setup().organization(b"TeMpEr").is_none());
     assert!(admin_record(&service).is_none());
+}
+
+#[test]
+fn setup_refuses_a_carried_value_of_another_kind() {
+    for kind in [jig_protocol_store::CarriedKind::Key, jig_protocol_store::CarriedKind::Moved] {
+        let mut service = routing_service(4, Duration::from_secs(60));
+        let engine = service.engine.as_mut().unwrap();
+        let value = bundle(11, ADMIN);
+        let digest = skein_lib::sha256::digest(value.expose());
+        engine.store.secrets(Token::new(901), Secrets::Carry { kind, value });
+        let Some(StoreEvent::Carried { number, .. }) = engine.store.above.pop() else { panic!("carried seed") };
+        public::connect(
+            engine,
+            1,
+            Token::new(90),
+            core::num::NonZeroU64::new(7).unwrap(),
+            jig_domain_core::Carried { number, digest },
+        );
+        assert!(engine.setup.public.is_empty());
+        assert!(engine.setup.runs.is_empty());
+        assert!(engine.events.iter().any(|event| match event {
+            root::Event::Forge(event) => match event.as_ref() {
+                domain::Event::ConnectEnded { connected: false, why: Some(why), .. } =>
+                    why.as_ref() == b"the pasted value changed",
+                _ => false,
+            },
+            _ => false,
+        }));
+    }
 }

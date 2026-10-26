@@ -674,17 +674,10 @@ fn carried_pem() -> (Secret, Secret) {
     (pem, Secret::new(bundle.finish()))
 }
 fn paste_start(service: &mut crate::Service, bundle: Secret, digest: [u8; 32]) {
-    use jig_protocol_store::{SecretOwner, Secrets};
     let engine = service.engine.as_mut().unwrap();
-    engine.store.secrets(
-        Token::new(901),
-        Secrets::Keep {
-            owner: SecretOwner::Application,
-            number: records::CARRIED,
-            value: crate::tests::fixtures::application_secret(records::CARRIED, bundle),
-        },
-    );
-    let Some(StoreEvent::Kept { .. }) = engine.store.above.pop() else { panic!("carried seed kept") };
+    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, bundle));
+    let Some(StoreEvent::Carried { number, .. }) = engine.store.above.pop() else { panic!("carried seed kept") };
+    assert_eq!(number, records::CARRIED);
     public::connect(
         engine,
         1,

@@ -854,14 +854,10 @@ fn kept_record(store: &mut crate::store::Store, forge: u16, item: Item, bytes: &
         store
             .secrets(
                 owner,
-                jig_protocol_store::Secrets::Keep {
-                    owner: jig_protocol_store::SecretOwner::Application,
-                    number: records::number(forge, item),
-                    value: crate::tests::fixtures::application_secret(
-                        records::number(forge, item),
-                        Secret::new(records::encode(bytes).into_boxed_slice())
-                    ),
-                }
+                crate::tests::fixtures::application_request(
+                    records::number(forge, item),
+                    Secret::new(records::encode(bytes).into_boxed_slice())
+                )
             )
             .is_none()
     );

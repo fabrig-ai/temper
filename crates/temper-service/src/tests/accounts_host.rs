@@ -136,13 +136,21 @@ fn signed_out(events: &mut Queue<root::Event>, old: u32) -> Option<bool> {
     Some(confirmed)
 }
 
-fn carry_llm_key(engine: &mut crate::engine::Engine, value: &[u8]) -> u64 {
-    let _later = engine.store.secrets(
-        Token::new(123),
-        store::Secrets::Carry { kind: store::CarriedKind::Key, value: Secret::new(value.into()) },
-    );
+fn carried(engine: &mut crate::engine::Engine, request: store::Secrets) -> u64 {
+    let _later = engine.store.secrets(Token::new(123), request);
     let Some(store::Event::Carried { number, .. }) = engine.store.above.pop() else { panic!("carried LLM key") };
     number
+}
+fn carry_llm_key(engine: &mut crate::engine::Engine, value: &[u8]) -> u64 {
+    carried(engine, store::Secrets::Carry { kind: store::CarriedKind::Key, value: Secret::new(value.into()) })
+}
+fn held_address(engine: &mut crate::engine::Engine) -> u64 {
+    carried(
+        engine,
+        store::Secrets::Hold {
+            value: Secret::new(b"http://127.0.0.1:7103/callback?state=fake&code=fake".as_slice().into()),
+        },
+    )
 }
 fn pump_accounts(accounts: &mut Accounts, engine: &mut crate::engine::Engine) -> List<domain::FromComponent> {
     let mut events = Queue::with_capacity(64);
@@ -601,7 +609,7 @@ fn adopt_moved_record(
     document: &oauth::Limits,
     refresh_token: &[u8],
 ) {
-    let carried = carry_llm_key(engine, file.expose());
+    let carried = carried(engine, store::Secrets::Carry { kind: store::CarriedKind::Moved, value: file });
     let mut accounts = engine.accounts.take().unwrap();
     accounts.request(domain::Request::Signing(domain::Signing::Open { source: 72, carried }));
     let mut events = pump_move_events(&mut accounts, engine);
@@ -646,7 +654,7 @@ fn a_finish_reads_the_held_address_and_hands_it_to_the_driver() {
         let (config, runtime) = registered();
         let mut accounts = host(&config, runtime);
         pump_accounts(&mut accounts, engine);
-        let carried = carry_llm_key(engine, b"http://127.0.0.1:7103/callback?state=fake&code=fake");
+        let carried = held_address(engine);
         accounts.request(domain::Request::Signing(domain::Signing::Redirected { source: 71, carried }));
         accounts.start(&mut engine.store, &mut engine.values);
         let mut events = Queue::with_capacity(64);
@@ -752,7 +760,7 @@ fn aborting_drops_a_finish_in_flight() {
     let (config, runtime) = registered();
     let mut accounts = host(&config, runtime);
     pump_accounts(&mut accounts, engine);
-    let carried = carry_llm_key(engine, b"http://127.0.0.1:7103/callback?state=fake&code=fake");
+    let carried = held_address(engine);
     accounts.request(domain::Request::Signing(domain::Signing::Redirected { source: 71, carried }));
     accounts.start(&mut engine.store, &mut engine.values);
     let Some(finishes::Next::Get { exchange, carried }) = accounts.finish_out.pop() else {
@@ -774,4 +782,34 @@ fn aborting_drops_a_finish_in_flight() {
     assert!(accounts.finish_out.is_empty());
     assert!(accounts.io.is_empty());
     assert!(accounts.is_empty());
+}
+
+#[test]
+fn a_restored_sources_other_kind_fails_the_read() {
+    const SOURCE: u32 = 7;
+    for (kind, value) in [
+        (domain::Kind::Key, store::SecretValue::Record(Secret::new(b"record".as_slice().into()))),
+        (domain::Kind::SignIn, store::SecretValue::Key(Secret::new(b"key".as_slice().into()))),
+    ] {
+        let mut service = fixtures::ready();
+        let engine = service.engine.as_mut().expect("engine");
+        let mut accounts = engine.accounts.take().expect("accounts");
+        engine.store.secrets(
+            Token::new(123),
+            store::Secrets::Keep { owner: store::SecretOwner::Source, number: u64::from(SOURCE), value },
+        );
+        accounts.dispatch(
+            domain::Request::Signing(domain::Signing::Restore { source: SOURCE, provider: 1, kind }),
+            &mut engine.store,
+            &mut engine.values,
+        );
+        let mut failed = false;
+        while let Some(event) = engine.store.above.pop() {
+            if let store::Event::Corrupt { .. } = event {
+                failed = true;
+            }
+        }
+        assert!(failed, "the wrong kind follows the failed-read path");
+        assert!(accounts.aborting);
+    }
 }

@@ -630,20 +630,14 @@ fn records_start_erases_carried_rows_before_connecting_without_decoding_them() {
                 .as_mut()
                 .expect("engine")
                 .store
-                .secrets(
-                    Token::new(123),
-                    Secrets::Keep {
-                        owner: SecretOwner::Application,
-                        number: *number,
-                        value: crate::tests::fixtures::application_secret(*number, value.clone())
-                    }
-                )
+                .secrets(Token::new(123), crate::tests::fixtures::application_request(*number, value.clone()))
                 .is_none()
         );
-        let Some(jig_protocol_store::Event::Kept { .. }) = service.engine.as_mut().expect("engine").store.above.pop()
-        else {
-            panic!("row kept")
-        };
+        match service.engine.as_mut().expect("engine").store.above.pop() {
+            Some(jig_protocol_store::Event::Kept { .. }) if *number < records::CARRIED => (),
+            Some(jig_protocol_store::Event::Carried { number: found, .. }) => assert_eq!(found, *number),
+            other => panic!("row kept: {other:?}"),
+        }
     }
     let mut face = fixtures::ForgeFace::new();
     for _ in 0_u32..40 {
@@ -823,14 +817,12 @@ fn a_records_key_that_cannot_sign_stops_only_its_forge() {
         } else {
             value
         };
-        let _write = service.engine.as_mut().expect("engine").store.secrets(
-            Token::new(123),
-            Secrets::Keep {
-                owner: SecretOwner::Application,
-                number,
-                value: crate::tests::fixtures::application_secret(number, value),
-            },
-        );
+        let _write = service
+            .engine
+            .as_mut()
+            .expect("engine")
+            .store
+            .secrets(Token::new(123), crate::tests::fixtures::application_request(number, value));
         let _kept = service.engine.as_mut().expect("engine").store.above.pop();
     }
     let mut face = fixtures::ForgeFace::new();

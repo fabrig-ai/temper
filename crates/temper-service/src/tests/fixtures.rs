@@ -1027,11 +1027,15 @@ fn project_name(number: u32) -> Box<str> {
     alloc::format!("Project {number}").into_boxed_str()
 }
 
-/// Application payloads remain unchanged; the carried range has its own typed envelope.
-pub fn application_secret(number: u64, value: Secret) -> jig_protocol_store::SecretValue {
+/// Seed low application rows with Keep and carried rows through the store's allocator.
+pub fn application_request(number: u64, value: Secret) -> jig_protocol_store::Secrets {
     if number >= temper_protocol_records::CARRIED {
-        jig_protocol_store::SecretValue::Carried { kind: jig_protocol_store::CarriedKind::Value, value }
+        jig_protocol_store::Secrets::Carry { kind: jig_protocol_store::CarriedKind::Value, value }
     } else {
-        jig_protocol_store::SecretValue::Application(value)
+        jig_protocol_store::Secrets::Keep {
+            owner: jig_protocol_store::SecretOwner::Application,
+            number,
+            value: jig_protocol_store::SecretValue::Application(value),
+        }
     }
 }
