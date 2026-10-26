@@ -129,7 +129,9 @@ a direct change defaults to `stays`. A run already going keeps what
 it was given. An agent task records the settings revision in which it
 was created, and its later runs read that revision's charter. A new
 delegate records the newest revision, even when its parent uses an
-older one.
+older one. Host placement follows that same charter version: changing its
+host kinds does not change where an older task's next run may run. Tasks
+created after the change use the new host kinds.
 
 The settings inventory shows held revisions and their live holder
 counts. While a revision is held, you can read its whole charter value:

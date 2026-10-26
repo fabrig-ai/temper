@@ -98,6 +98,7 @@ pub fn limits() -> engine::Limits {
         source_detail_bytes: 4096,
         workers: 1,
         needs_bytes: 65_536,
+        versions: 0,
         engine_slots: 0,
         slots: 1,
         workstreams: 1,
