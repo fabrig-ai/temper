@@ -750,7 +750,7 @@ pub(crate) fn adopted(
     if adopting.request != request || adopting.outcome.is_some() {
         return false;
     }
-    let refused = *answer == super::Answer::ForgeRefused(super::Reason::Refused);
+    let refused = *answer == super::Answer::ForgeRefused(super::Reason::HomeHeld);
     if refused && !adopting.additional && side.party == Some(last.party) {
         let mut adoption = adopting.value.clone();
         adoption.home = false;

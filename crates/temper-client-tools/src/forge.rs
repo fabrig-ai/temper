@@ -373,6 +373,15 @@ fn answer_text(a: &forge::Adoption, answer: &forge::Answer, kept: bool, text: u3
             forge::Reason::NotFound => phrase(Word::NotFound, &[name, number], out),
             forge::Reason::NoAccess => phrase(Word::NoAccess, &[name, number], out),
             forge::Reason::Refused => phrase(Word::Refused, &[name, Hole::Name(a.prefix.clone())], out),
+            forge::Reason::AnotherProject => phrase(Word::AnotherProject, &[name], out),
+            forge::Reason::HomeHeld => {
+                phrase(Word::HomeHeld, &[], out);
+                adoption_retry(a, true, false, out);
+            }
+            forge::Reason::PrefixOccupied => {
+                phrase(Word::PrefixOccupied, &[Hole::Name(a.prefix.clone())], out);
+                adoption_retry(a, !a.home, true, out);
+            }
             forge::Reason::InFlight => phrase(Word::InFlight, &[name], out),
             forge::Reason::TooLarge => phrase(Word::TooLarge, &[], out),
             forge::Reason::Unreachable => phrase(Word::Unreachable, &[number], out),
@@ -381,6 +390,41 @@ fn answer_text(a: &forge::Adoption, answer: &forge::Answer, kept: bool, text: u3
     }
     out.put(b"\n");
 }
+fn adoption_retry(a: &forge::Adoption, no_home: bool, new_prefix: bool, out: &mut Text) {
+    out.put(b"\n  temper ctl DIRECTORY adopt --project ");
+    out.put(skein_lib::Decimal::of(u64::from(a.project)).as_bytes());
+    out.put(b" --forge ");
+    out.put(skein_lib::Decimal::of(u64::from(a.forge)).as_bytes());
+    for (flag, value) in [
+        (b" --owner ".as_slice(), a.owner.as_ref()),
+        (b" --name ", a.name.as_ref()),
+        (b" --landing ", a.landing.as_ref()),
+    ] {
+        out.put(flag);
+        render::lists::argument(value, out);
+    }
+    out.put(b" --role ");
+    out.put(match a.role {
+        forge::Role::Owned => b"owned",
+        forge::Role::Adopted => b"adopted",
+        forge::Role::Fork => b"fork",
+        forge::Role::Context => b"context",
+    });
+    out.put(b" --prefix ");
+    render::lists::argument(if new_prefix { b"UNUSED-PREFIX/" } else { &a.prefix }, out);
+    if no_home {
+        out.put(b" --no-home");
+    }
+    if !a.ci {
+        out.put(b" --no-ci");
+    }
+    for check in &a.checks {
+        out.put(b" --check ");
+        out.put(skein_lib::Decimal::of(u64::from(*check)).as_bytes());
+    }
+    out.put(b" --key NEW-KEY");
+}
+
 fn kinds(kinds: forge::Kinds, out: &mut Text) {
     let mut first = true;
     for (on, word) in words::kinds(kinds) {
@@ -444,6 +488,9 @@ fn reason(why: forge::Reason) -> &'static [u8] {
         forge::Reason::NotFound => b"not_found",
         forge::Reason::NoAccess => b"no_access",
         forge::Reason::Refused => b"refused",
+        forge::Reason::AnotherProject => b"another_project",
+        forge::Reason::HomeHeld => b"home_held",
+        forge::Reason::PrefixOccupied => b"prefix_occupied",
         forge::Reason::InFlight => b"in_flight",
         forge::Reason::TooLarge => b"too_large",
         forge::Reason::Unreachable => b"unreachable",

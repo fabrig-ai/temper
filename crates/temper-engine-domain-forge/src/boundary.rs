@@ -430,6 +430,9 @@ pub enum AdoptionRefusal {
     Unreachable,
     NotInstalled,
     InvalidAnswer,
+    AnotherProject,
+    HomeHeld,
+    PrefixOccupied,
 }
 /// Project a forge call's refusal into the adoption's terminal reason.
 #[must_use]

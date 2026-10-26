@@ -297,3 +297,116 @@ fn a_stopped_forge_keeps_its_writer_but_refuses_adoption_before_a_read() {
     assert_eq!(d.writers.get(&1), Some(&7));
     assert!(ready(&mut d).is_empty());
 }
+
+#[test]
+fn each_admission_conflict_keeps_its_own_reason() {
+    for why in [AdoptionRefusal::AnotherProject, AdoptionRefusal::HomeHeld, AdoptionRefusal::PrefixOccupied] {
+        let mut d = domain();
+        if why != AdoptionRefusal::PrefixOccupied {
+            let mut row = adopted();
+            if why == AdoptionRefusal::AnotherProject {
+                row.project += 1;
+            } else {
+                row.provider.repository += 1;
+            }
+            outputs(&mut d, Event::Restore { record: Stored::Repository(row) });
+        }
+        let request = Token::new(4);
+        let mut requests = fixtures::begin_adoption(&mut d, request, fixtures::adoption());
+        if why == AdoptionRefusal::PrefixOccupied {
+            fixtures::answer_next(
+                &mut d,
+                Ok(skein_forge::api::Answer::Permission(skein_forge::api::Permission::Write)),
+            );
+            requests = fixtures::answer_next(
+                &mut d,
+                Ok(skein_forge::api::Answer::Branches(Box::new([Box::from(b"temper/foreign".as_slice())]))),
+            );
+        }
+        assert!(
+            requests.contains(&Request::Adopted { reply_to: request, result: Err(skein_forge::api::Error::Refused) }),
+            "{why:?}"
+        );
+        let requests = outputs(
+            &mut d,
+            Event::ApplicationAnswered { request, outcome: people::Outcome::Refused(people::Refusal::Unknown) },
+        );
+        let outcome = ApplicationOutcome::ForgeRefused(why);
+        assert_eq!(d.application_outcome(request), Some(&outcome));
+        assert!(requests.contains(&Request::Save {
+            record: Stored::Application { token: request.raw(), until: Wall::from_nanos(160_000_000_000), outcome },
+            release: None,
+            read_afresh: None
+        }));
+        assert!(requests.contains(&Request::ApplicationDone { request, token: request }));
+    }
+}
+
+#[test]
+fn thirty_two_adoptions_are_answered_during_retention() {
+    let limits = Limits { applications: 32, ..LIMITS };
+    let env = Env { limits, ..env() };
+    let mut d = Domain::new(
+        &limits,
+        4,
+        skein_forge_client::Config {
+            namespace: Box::from(b"test".as_slice()),
+            writers: Box::new([skein_forge_client::Writer { forge: 1, author: 7 }]),
+        },
+        &[GitIdentity { forge: 1, credential: 1 }],
+        &[],
+        false,
+    )
+    .expect("valid connector");
+    let mut out = Queue::with_capacity(max_out(&limits));
+    for number in 1..=32 {
+        let request = Token::new(number);
+        let mut adoption = fixtures::adoption();
+        adoption.forge = 9;
+        step(
+            &mut d,
+            &env,
+            Event::Application {
+                role: None,
+                carried: None,
+                request,
+                token: request,
+                retention: Duration::from_secs(86400),
+                ask: Ask::Adopt(adoption),
+            },
+            &mut out,
+        );
+        let mut done = false;
+        while let Some(output) = out.pop() {
+            if output == (Request::ApplicationDone { request, token: request }) {
+                done = true;
+            }
+        }
+        assert!(done, "adoption {number}, including fifth and 32nd, must answer");
+        assert_eq!(
+            d.application_outcome(request),
+            Some(&ApplicationOutcome::ForgeRefused(AdoptionRefusal::NoSuchForge))
+        );
+    }
+    assert_eq!(
+        d.application_outcome(Token::new(1)),
+        Some(&ApplicationOutcome::ForgeRefused(AdoptionRefusal::NoSuchForge)),
+        "earlier answers remain retained"
+    );
+    let request = Token::new(33);
+    step(
+        &mut d,
+        &env,
+        Event::Application {
+            role: None,
+            carried: None,
+            request,
+            token: request,
+            retention: Duration::from_secs(86400),
+            ask: Ask::Adopt(fixtures::adoption()),
+        },
+        &mut out,
+    );
+    assert_eq!(out.pop(), Some(Request::ApplicationAgain { request, why: people::Again::Busy }));
+    assert!(out.is_empty());
+}

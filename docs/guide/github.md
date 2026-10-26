@@ -352,7 +352,10 @@ alone does not accept installations. `forges` names each installation
 and its id. Accept prints `accepted: installation 67890 on forge 2`,
 then the repository-listing call. It works without a browser, including
 when that installation is accepted already. The repository list prints
-`OWNER/NAME`; follow its next-page call if needed. Adoption prints the adopted repository, with CI on.
+`OWNER/NAME`; follow its next-page call if needed. If the box's Forgejo
+repository is project 1's home already, add `--no-home` to the `adopt`
+call above, or choose a new project to make GitHub its home. Adoption
+prints the adopted repository, with CI on.
 
 Without read-only mode, a stray is uninstalled at the next reconcile
 once older than an installation link's lifetime. Accept it before

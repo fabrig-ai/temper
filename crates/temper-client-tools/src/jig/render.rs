@@ -2,7 +2,7 @@
 mod activity;
 pub mod acts;
 pub mod document;
-mod lists;
+pub(crate) mod lists;
 pub(crate) mod outcome;
 pub mod pending;
 mod turn;

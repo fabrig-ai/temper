@@ -3740,6 +3740,12 @@ pub enum ForgeReason {
     Unreachable,
     /// `invalid_answer` without a payload.
     InvalidAnswer,
+    /// `another_project` without a payload.
+    AnotherProject,
+    /// `home_held` without a payload.
+    HomeHeld,
+    /// `prefix_occupied` without a payload.
+    PrefixOccupied,
 }
 
 impl ForgeReason {
@@ -7468,7 +7474,7 @@ impl ForgeReason {
     #[must_use]
     pub fn measure(&self) -> u32 {
         match self {
-            Self::NoSuchForge | Self::NotFound | Self::NoAccess | Self::Refused | Self::InFlight | Self::TooLarge | Self::Unreachable | Self::InvalidAnswer => 1,
+            Self::NoSuchForge | Self::NotFound | Self::NoAccess | Self::Refused | Self::InFlight | Self::TooLarge | Self::Unreachable | Self::InvalidAnswer | Self::AnotherProject | Self::HomeHeld | Self::PrefixOccupied => 1,
         }
     }
 
@@ -7483,6 +7489,9 @@ impl ForgeReason {
             Self::TooLarge => writer.put(&[5_u8])?,
             Self::Unreachable => writer.put(&[6_u8])?,
             Self::InvalidAnswer => writer.put(&[7_u8])?,
+            Self::AnotherProject => writer.put(&[8_u8])?,
+            Self::HomeHeld => writer.put(&[9_u8])?,
+            Self::PrefixOccupied => writer.put(&[10_u8])?,
         }
         Ok(())
     }
@@ -7505,6 +7514,9 @@ impl ForgeReason {
             5 => Self::TooLarge,
             6 => Self::Unreachable,
             7 => Self::InvalidAnswer,
+            8 => Self::AnotherProject,
+            9 => Self::HomeHeld,
+            10 => Self::PrefixOccupied,
             _ => return Err(Problem { path: Path::ForgeReasonTag, reason: skein_codec::Reason::Tag }),
         };
         Ok(value)
@@ -10612,7 +10624,7 @@ mod golden_tests {
         };
         at && past
     }
-    static GOLDEN_0: [Case; 410] = [
+    static GOLDEN_0: [Case; 416] = [
         ("enum_role_owned_smallest", || { let value = Role::Owned; let bytes: &[u8] = &[0]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, Role::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("enum_role_owned_full", || { let value = Role::Owned; let bytes: &[u8] = &[0]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, Role::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("enum_role_adopted_smallest", || { let value = Role::Adopted; let bytes: &[u8] = &[1]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, Role::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
@@ -10963,6 +10975,12 @@ mod golden_tests {
         ("enum_forge_reason_unreachable_full", || { let value = ForgeReason::Unreachable; let bytes: &[u8] = &[6]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("enum_forge_reason_invalid_answer_smallest", || { let value = ForgeReason::InvalidAnswer; let bytes: &[u8] = &[7]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("enum_forge_reason_invalid_answer_full", || { let value = ForgeReason::InvalidAnswer; let bytes: &[u8] = &[7]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
+        ("enum_forge_reason_another_project_smallest", || { let value = ForgeReason::AnotherProject; let bytes: &[u8] = &[8]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
+        ("enum_forge_reason_another_project_full", || { let value = ForgeReason::AnotherProject; let bytes: &[u8] = &[8]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
+        ("enum_forge_reason_home_held_smallest", || { let value = ForgeReason::HomeHeld; let bytes: &[u8] = &[9]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
+        ("enum_forge_reason_home_held_full", || { let value = ForgeReason::HomeHeld; let bytes: &[u8] = &[9]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
+        ("enum_forge_reason_prefix_occupied_smallest", || { let value = ForgeReason::PrefixOccupied; let bytes: &[u8] = &[10]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
+        ("enum_forge_reason_prefix_occupied_full", || { let value = ForgeReason::PrefixOccupied; let bytes: &[u8] = &[10]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeReason::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("record_forge_refused_smallest", || { let value = ForgeRefused::new(&CEILINGS, ForgeRefusedParts { reason: ForgeReason::NoSuchForge }).expect("golden within ceilings"); let bytes: &[u8] = &[0]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeRefused::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("record_forge_refused_full", || { let value = ForgeRefused::new(&CEILINGS, ForgeRefusedParts { reason: ForgeReason::NoSuchForge }).expect("golden within ceilings"); let bytes: &[u8] = &[0]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeRefused::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),
         ("enum_forge_refusal_role_smallest", || { let value = ForgeRefusal::Role; let bytes: &[u8] = &[0]; let mut writer = skein_lib::Writer::new(usize::try_from(value.measure()).expect("size fits usize")); let encoded = match value.encode(&mut writer) { Ok(()) => Ok(writer.finish()), Err(problem) => Err(problem) }; golden(value, bytes, encoded, ForgeRefusal::decode(&CEILINGS, &mut skein_lib::Reader::new(bytes))) }),

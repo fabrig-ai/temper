@@ -192,7 +192,7 @@ pub(super) fn write_call(call: &Call, out: &mut Text) {
         argument(word, out);
     }
 }
-pub(super) fn argument(word: &[u8], out: &mut Text) {
+pub(crate) fn argument(word: &[u8], out: &mut Text) {
     let mut quoted = word.is_empty();
     for byte in word {
         if !byte.is_ascii_alphanumeric() && !b"-_./:".contains(byte) {

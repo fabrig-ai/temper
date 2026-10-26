@@ -255,6 +255,9 @@ pub(crate) fn decode(outcome: &Outcome, linking: bool, limits: Limits) -> Option
                     w::ForgeReason::NoAccess => Some(Answer::NoAccess),
                     w::ForgeReason::NotFound => Some(Answer::NotFound),
                     w::ForgeReason::NoSuchForge
+                    | w::ForgeReason::AnotherProject
+                    | w::ForgeReason::HomeHeld
+                    | w::ForgeReason::PrefixOccupied
                     | w::ForgeReason::Refused
                     | w::ForgeReason::InFlight
                     | w::ForgeReason::TooLarge

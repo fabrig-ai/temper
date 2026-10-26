@@ -173,8 +173,8 @@ const FORGE: forge::Limits = forge::Limits {
     facts: 16,
     // Adoptions in flight, from the engine forge world fixture.
     adoptions: 2,
-    // Keyed application requests retained, from the engine forge world fixture.
-    applications: 4,
+    // Product capacity: keyed adoption answers retained for the request retention.
+    applications: 32,
     // protocol/sign-in.md, 5: small permits 64 durable member bindings.
     bindings: 64,
     // Collaborators kept by the forge, from the engine forge world fixture.
