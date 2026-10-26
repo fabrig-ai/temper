@@ -410,7 +410,7 @@ enum Visit {
     AwaitingAddress,
     Handed,
 }
-impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
+impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
     fn act(&mut self, now: Time, procs: &mut [Process]) {
         let Process::Calls(calls) = &procs[1] else { panic!("ctl") };
         let failed = calls.ends().iter().enumerate().any(|(index, call)| {
@@ -488,7 +488,7 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
                 eprintln!("face box stderr: {}", String::from_utf8_lossy(binary.stderr()));
             }
             if calls.idle() && !failed && !expired && binary.exit_status().is_none() {
-                self.checked.set(Some(self.check.take().expect("one live check")()));
+                self.checked.set(Some(self.check.take().expect("one live check")(binary.stderr())));
             }
             // A held batch keeps its root open for the reply referee. Release
             // it on failure too, so cancellation drains that descriptor.
@@ -562,7 +562,7 @@ pub fn run_ctl_with_exits<T>(
         client_root,
         steps,
         deadline,
-        check,
+        |_| check(),
         CtlPeers { expected_exits: expected_exits.to_vec(), model: CtlModel::None },
     )
     .0
@@ -590,7 +590,7 @@ pub fn run_ctl_with_llm<T>(
     client_root: &Path,
     steps: Vec<super::ctl::Step>,
     deadline: Duration,
-    check: impl FnOnce() -> T,
+    check: impl FnOnce(&[u8]) -> T,
     llm: CtlLlm,
 ) -> CtlOutcome<T> {
     run_ctl_peers(
@@ -621,7 +621,7 @@ pub fn run_ctl_with_face<T>(
         client_root,
         steps,
         deadline,
-        check,
+        |_| check(),
         CtlPeers { expected_exits: Vec::new(), model: CtlModel::Face(Box::new(face)) },
     );
     (outcome, seen.expect("face observations"))
@@ -632,7 +632,7 @@ fn run_ctl_peers<T>(
     client_root: &Path,
     steps: Vec<super::ctl::Step>,
     deadline: Duration,
-    check: impl FnOnce() -> T,
+    check: impl FnOnce(&[u8]) -> T,
     peers: CtlPeers,
 ) -> (CtlOutcome<T>, Option<super::forge_land::Seen>) {
     let (peer, on_link, face, reply) = match peers.model {

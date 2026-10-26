@@ -30,10 +30,11 @@ pub enum Exit {
 /// Files discovered by the host while it holds Forgejo's lock.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Found {
-    pub state: Option<Secret>, // Whole record, absent on a fresh preparation.
-    pub admin_token: bool,     // Whether the token file exists.
-    pub runner_secret: bool,   // Whether an added runner can keep its secret.
-    pub files: bool,           // Whether Forgejo's files exist.
+    pub state: Option<Secret>,     // Whole record, absent on a fresh preparation.
+    pub admin_token: bool,         // Whether the token file exists.
+    pub person_headers: [bool; 2], // Whether each person's header file exists.
+    pub runner_secret: bool,       // Whether an added runner can keep its secret.
+    pub files: bool,               // Whether Forgejo's files exist.
 }
 /// A command's bounded output, kept private until masked for a failure.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -75,6 +76,8 @@ pub enum Request {
     Run { command: Command, spec: Spec }, // Execute a preparation command.
     /// Generate the administrator’s token.
     Token { spec: Spec }, // Execute the admin token command.
+    /// Generate one missing person token without exposing it in an argument.
+    PersonToken { file: File, spec: Spec },
     /// Write a complete private file.
     Write { file: File, contents: Secret }, // Write the whole private file.
     /// Check for an upgrade backup without changing it.
@@ -93,6 +96,8 @@ pub enum Failure {
     Command { command: Command, exit: Exit, tail: Box<[u8]> },
     /// The admin token command failed or printed no token.
     Token { exit: Exit, tail: Box<[u8]> },
+    /// A person's token could not be made; names its header, never its value.
+    PersonToken { file: File, exit: Exit, tail: Box<[u8]> },
     /// A successful command printed no required first line.
     Unread { command: Command },
     /// The preparation record could not be decoded.
@@ -120,6 +125,9 @@ enum Phase {
     Token,
     AdminToken,
     Password,
+    PersonDraw(File),
+    PersonToken(File),
+    PersonHeader(File),
     RunnerSecret,
     RunnerConfiguration,
     Finish,
@@ -150,6 +158,8 @@ pub struct Prepare {
     first: bool,
     clear: bool,
     admin_token: bool,
+    person_headers: [bool; 2],
+    person_tokens: [Option<Secret>; 2],
     forgejo: Course,
     runner: RunnerCourse,
     backup: Box<[u8]>,
@@ -183,6 +193,8 @@ impl Prepare {
             first: true,
             clear: false,
             admin_token: false,
+            person_headers: [false; 2],
+            person_tokens: [None, None],
             forgejo: Course::Same,
             runner: RunnerCourse::None,
             backup: Box::new([]),
@@ -310,7 +322,43 @@ impl Prepare {
         }
     }
     fn later_token(&mut self) -> Request {
-        if self.admin_token { self.end(Ok(())) } else { self.request(Phase::Draw(3), Request::Draw) }
+        if self.admin_token { self.person_headers() } else { self.request(Phase::Draw(3), Request::Draw) }
+    }
+    fn person_headers(&mut self) -> Request {
+        for (index, file) in [File::PersonReadHeader, File::PersonWriteHeader].into_iter().enumerate() {
+            if !self.person_headers.get(index).expect("person header index") {
+                return self.request(Phase::PersonDraw(file), Request::Draw);
+            }
+        }
+        if self.first {
+            match &self.runner_secret {
+                Some(secret) => self.write(File::RunnerSecret, secret.clone(), Phase::RunnerSecret),
+                None => self.finish(),
+            }
+        } else {
+            self.end(Ok(()))
+        }
+    }
+    fn person_draw(&mut self, file: File, value: &Secret) -> Request {
+        assert_eq!(value.expose().len(), 32, "host draws 32 bytes");
+        let prefix =
+            if file == File::PersonReadHeader { b"person-read-".as_slice() } else { b"person-write-".as_slice() };
+        let name = joined(&[prefix, hex(value.expose(), 8).expose()]);
+        let spec = spec::person_token(&self.owned, &self.place, &name, file);
+        self.request(Phase::PersonToken(file), Request::PersonToken { file, spec })
+    }
+    fn person_ran(&mut self, file: File, ran: &Ran) -> Request {
+        let token = first_line(&ran.stdout);
+        self.person_tokens.get_mut(person_index(file)).expect("person token index").clone_from(&token);
+        if ran.exit != Exit::Code(0) {
+            return self.end(Err(Failure::PersonToken { file, exit: ran.exit, tail: self.tail(ran) }));
+        }
+        if let Some(token) = token {
+            let contents = Secret::new(joined(&[b"Authorization: token ", token.expose(), b"\n"]));
+            self.write(file, contents, Phase::PersonHeader(file))
+        } else {
+            self.end(Err(Failure::PersonToken { file, exit: ran.exit, tail: self.tail(ran) }))
+        }
     }
     fn ini(&mut self) -> Request {
         self.write(
@@ -367,6 +415,13 @@ impl Prepare {
         self.write(File::State, state::encode(&self.state), Phase::Finish)
     }
     fn ran(&mut self, command: Command, ran: &Ran) -> Request {
+        if command == Command::CreatePerson || command == Command::CreateAdmin {
+            // A command can print its generated password before exiting with a
+            // failure. Mask it before constructing any diagnostic as well.
+            if let Some(password) = person_password(&ran.stdout) {
+                self.password = Some(password);
+            }
+        }
         if ran.exit != Exit::Code(0) {
             return self.end(Err(Failure::Command { command, exit: ran.exit, tail: self.tail(ran) }));
         }
@@ -400,6 +455,42 @@ impl Prepare {
             Command::Web | Command::Daemon => unreachable!("preparation never runs a daemon"),
         }
     }
+    fn done(&mut self, phase: Phase) -> Request {
+        match phase {
+            Phase::Lock if self.first => self.begin(),
+            Phase::Clear => {
+                self.person_headers = [false; 2];
+                self.request(Phase::Draw(0), Request::Draw)
+            }
+            Phase::Lock | Phase::Start => self.request(Phase::Layout, Request::Layout),
+            Phase::Layout if !self.first && self.forgejo == Course::Older => {
+                self.request(Phase::Backup, Request::Exists { path: self.backup.clone() })
+            }
+            Phase::Layout | Phase::Rename => self.ini(),
+            Phase::Ini => self.after_ini(),
+            Phase::Finish if !self.first => self.later_token(),
+            Phase::AdminToken if self.first => self.run(Command::CreatePerson),
+            Phase::Finish => self.end(Ok(())),
+            Phase::AdminToken | Phase::Password => self.person_headers(),
+            Phase::PersonHeader(file) => {
+                *self.person_headers.get_mut(person_index(file)).expect("person header index") = true;
+                self.person_headers()
+            }
+            Phase::RunnerSecret => self.run(Command::Register),
+            Phase::RunnerConfiguration => self.finish(),
+            Phase::Found
+            | Phase::Version(_)
+            | Phase::Draw(_)
+            | Phase::Run(_)
+            | Phase::Token
+            | Phase::PersonDraw(_)
+            | Phase::PersonToken(_)
+            | Phase::Backup
+            | Phase::End => {
+                unreachable!("phase handled or terminal")
+            }
+        }
+    }
     fn tail(&self, ran: &Ran) -> Box<[u8]> {
         for stream in [&ran.stdout, &ran.stderr] {
             assert!(
@@ -416,7 +507,13 @@ impl Prepare {
     fn mask(&self, input: &[u8], mut output: Option<&mut Writer>) -> usize {
         let secrets =
             [&self.state.secrets.secret_key, &self.state.secrets.internal_token, &self.state.secrets.jwt_secret];
-        let extra = [self.runner_secret.as_ref(), self.token.as_ref(), self.password.as_ref()];
+        let extra = [
+            self.runner_secret.as_ref(),
+            self.token.as_ref(),
+            self.password.as_ref(),
+            self.person_tokens[0].as_ref(),
+            self.person_tokens[1].as_ref(),
+        ];
         let mut length = 0_usize;
         let mut at = 0_usize;
         while at < input.len() {
@@ -484,6 +581,10 @@ pub fn step(machine: &mut Prepare, event: Event, out: &mut Queue<Request>) {
             machine.first = true;
             // A later preparation needs only the file's presence, never its bytes.
             machine.admin_token = found.admin_token;
+            machine.person_headers = found.person_headers;
+            if found.state.is_none() {
+                machine.person_headers = [false; 2];
+            }
             machine.found = Some(found);
             machine.version(Which::Forgejo)
         }
@@ -525,6 +626,14 @@ pub fn step(machine: &mut Prepare, event: Event, out: &mut Queue<Request>) {
                 machine.end(Err(Failure::Token { exit: ran.exit, tail: machine.tail(&ran) }))
             }
         }
+        Phase::PersonDraw(file) => {
+            let Event::Drew(value) = event else { unreachable!("entropy expected") };
+            machine.person_draw(file, &value)
+        }
+        Phase::PersonToken(file) => {
+            let Event::Ran(ran) = event else { unreachable!("token result expected") };
+            machine.person_ran(file, &ran)
+        }
         phase @ (Phase::Lock
         | Phase::Clear
         | Phase::Start
@@ -533,40 +642,18 @@ pub fn step(machine: &mut Prepare, event: Event, out: &mut Queue<Request>) {
         | Phase::Rename
         | Phase::AdminToken
         | Phase::Password
+        | Phase::PersonHeader(_)
         | Phase::RunnerSecret
         | Phase::RunnerConfiguration
         | Phase::Finish
         | Phase::End) => {
             let Event::Done = event else { unreachable!("effect completion expected") };
-            match phase {
-                Phase::Lock if machine.first => machine.begin(),
-                Phase::Clear => machine.request(Phase::Draw(0), Request::Draw),
-                Phase::Lock | Phase::Start => machine.request(Phase::Layout, Request::Layout),
-                Phase::Layout if !machine.first && machine.forgejo == Course::Older => {
-                    machine.request(Phase::Backup, Request::Exists { path: machine.backup.clone() })
-                }
-                Phase::Layout | Phase::Rename => machine.ini(),
-                Phase::Ini => machine.after_ini(),
-                Phase::Finish if !machine.first => machine.later_token(),
-                Phase::AdminToken if machine.first => machine.run(Command::CreatePerson),
-                Phase::Finish | Phase::AdminToken => machine.end(Ok(())),
-                Phase::Password => match &machine.runner_secret {
-                    Some(secret) => machine.write(File::RunnerSecret, secret.clone(), Phase::RunnerSecret),
-                    None => machine.finish(),
-                },
-                Phase::RunnerSecret => machine.run(Command::Register),
-                Phase::RunnerConfiguration => machine.finish(),
-                Phase::Found
-                | Phase::Version(_)
-                | Phase::Draw(_)
-                | Phase::Run(_)
-                | Phase::Token
-                | Phase::Backup
-                | Phase::End => {
-                    unreachable!("phase handled or terminal")
-                }
-            }
+            machine.done(phase)
         }
     };
     out.push(request);
+}
+fn person_index(file: File) -> usize {
+    assert!(file == File::PersonReadHeader || file == File::PersonWriteHeader, "person header");
+    usize::from(file == File::PersonWriteHeader)
 }

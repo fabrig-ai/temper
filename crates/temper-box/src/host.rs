@@ -203,20 +203,7 @@ impl Service {
                     .expect("prefix"),
             );
             children.push(Child::new(&settings.serve, step, limits.tail_lines)).expect("one child per step");
-            inputs = inputs
-                .checked_add(u64::try_from(size_of_val(step.listeners())).expect("listener addresses"))
-                .expect("bounded startup memory");
-            inputs = inputs
-                .checked_add(u64::try_from(step.name().len()).expect("name length"))
-                .expect("bounded startup memory");
-            inputs = inputs
-                .checked_add(u64::try_from(size_of_val(step.arguments())).expect("argument slots"))
-                .expect("bounded startup memory");
-            for argument in step.arguments() {
-                inputs = inputs
-                    .checked_add(u64::try_from(argument.len()).expect("argument length"))
-                    .expect("bounded startup memory");
-            }
+            inputs = inputs.checked_add(step_bytes(step)).expect("bounded startup memory");
         }
         inputs = inputs.checked_add(inherited_bytes(&settings, count)).expect("bounded startup memory");
         let mut io = Io::new(&bounds);
@@ -1265,6 +1252,20 @@ fn link_memory(steps: &[Placed]) -> u64 {
         }
     }
     memory
+}
+fn step_bytes(step: &Step) -> u64 {
+    let mut bytes = u64::try_from(size_of_val(step.listeners())).expect("listener addresses");
+    for part in [step.name(), step.started_notice()] {
+        bytes = bytes.checked_add(u64::try_from(part.len()).expect("step bytes")).expect("bounded startup memory");
+    }
+    bytes = bytes
+        .checked_add(u64::try_from(size_of_val(step.arguments())).expect("argument slots"))
+        .expect("bounded startup memory");
+    for argument in step.arguments() {
+        bytes =
+            bytes.checked_add(u64::try_from(argument.len()).expect("argument length")).expect("bounded startup memory");
+    }
+    bytes
 }
 fn inherited_bytes(settings: &Settings, count: u32) -> u64 {
     let mut inputs = 0_u64;

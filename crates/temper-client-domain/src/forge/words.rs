@@ -118,7 +118,7 @@ pub const ROWS: [Row; 51] = [
     (Word::Branch, &[b"create and delete branches"], &[]),
     (Word::Runs, &[b"Forgejo ", b" and its runner ", b", on this machine. CI jobs run here, as you."], &[Name, Name]),
     (Word::RunsWithoutRunner, &[b"Forgejo ", b", on this machine, with no runner."], &[Name]),
-    (Word::Password, &[b"Your first password is in ", b". Forgejo asks you to change it when you sign in."], &[Name]),
+    (Word::Password, &[b"Your first password is in ", b". Change it on Forgejo when you like."], &[Name]),
 ];
 fn phrase_id(connector: u16, index: usize) -> PhraseId {
     PhraseId {
@@ -950,7 +950,7 @@ pub fn forge_runs(owned: &super::forges::Owned) -> Box<[u8]> {
 /// The first password's file path, never its value (protocol/setup.md, 6.5).
 #[must_use]
 pub fn forge_password(path: &[u8]) -> Box<[u8]> {
-    join_words(&[b"Your first password is in ", &lossy(path), b". Forgejo asks you to change it when you sign in."])
+    join_words(&[b"Your first password is in ", &lossy(path), b". Change it on Forgejo when you like."])
 }
 /// A row's summary, its "forge N · KIND" and its connection's words, joined
 /// here: a login or a reason can outgrow any phrase hole once shown as UTF-8.

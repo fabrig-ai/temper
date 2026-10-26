@@ -1017,8 +1017,31 @@ fn box_terminal_line(line: &str, starting: &[&str], group_notices: &[&str]) -> b
         || words.strip_prefix("Logs: ").is_some_and(|path| path.starts_with('/') && path.ends_with("/box/logs/"))
         || ["Stopping", "Stopped"].contains(&words)
         || group_notices.contains(&words)
+        || owned_hands_line(words)
         || (words != line && words == "A fresh sign-in link:")
         || words.strip_prefix("Starting ").is_some_and(|name| starting.contains(&name))
+}
+
+fn owned_hands_line(words: &str) -> bool {
+    let Some((number, words)) = words.strip_prefix("Forge ").and_then(|words| words.split_once(" (Forgejo): ")) else {
+        return false;
+    };
+    if number.parse::<u16>().is_err() {
+        return false;
+    }
+    if words == "started" {
+        return true;
+    }
+    if let Some(address) = words.strip_prefix("api http://").and_then(|api| api.strip_suffix("/api/v1")) {
+        return address.parse::<std::net::SocketAddr>().is_ok();
+    }
+    words
+        .strip_prefix("person ")
+        .and_then(|words| words.split_once(", read header "))
+        .and_then(|(_, headers)| headers.split_once(", write header "))
+        .is_some_and(|(read, write)| {
+            std::path::Path::new(read).is_absolute() && std::path::Path::new(write).is_absolute()
+        })
 }
 
 #[test]
@@ -1184,7 +1207,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
             &client_root,
             steps,
             support::forge_land::OWNED_ALLOWANCE,
-            || support::first_repository::live(&paths[0], &paths[1], &client_root),
+            |stderr| support::first_repository::live_from_hands(&paths[0], &paths[1], &client_root, stderr),
             support::first_repository::llm(&paths[0]),
         );
         eprintln!("{run} Forgejo setup run: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
@@ -1293,7 +1316,7 @@ fn a_first_run_plays_the_demo_then_sets_up_a_forgejo_here_with_no_restart() {
         scratch.path(),
         steps,
         support::forge_land::OWNED_ALLOWANCE,
-        || {
+        |_| {
             (
                 first_repository::live_for(&paths[0], &paths[1], scratch.path(), HELLO),
                 first_repository::turns(scratch.path(), "1"),
@@ -3862,7 +3885,7 @@ fn temper_ctl_running_work_keeps_its_revision() {
         scratch.path(),
         steps,
         support::WITHIN,
-        || (),
+        |_| (),
         running_revision::llm(&paths[0]),
     );
     assert_eq!(seen.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&seen.stderr));

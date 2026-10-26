@@ -185,6 +185,74 @@ pub struct Evidence {
 pub fn live(config: &Path, data: &Path, client: &Path) -> Evidence {
     live_for(config, data, client, FIRST)
 }
+
+/// The process story uses only the API and header paths printed for the person,
+/// after their forge's started line, before consulting the normal ctl evidence.
+#[must_use]
+pub fn live_from_hands(config: &Path, data: &Path, client: &Path, stderr: &[u8]) -> Evidence {
+    let words = std::str::from_utf8(stderr).expect("box terminal UTF-8");
+    let mut lines = words.lines().skip_while(|line| !line.ends_with("Forge 3 (Forgejo): started"));
+    lines.next().expect("owned forge started");
+    let api = lines.next().expect("API line after started").split_once("Forge 3 (Forgejo): api ").expect("API label").1;
+    let person =
+        lines.next().expect("person line after API").split_once("Forge 3 (Forgejo): person ").expect("person label").1;
+    let (login, headers) = person.split_once(", read header ").expect("read header path");
+    let (read, write) = headers.split_once(", write header ").expect("write header path");
+    let document: Value =
+        serde_json::from_slice(&fs::read(config.join("temper.json")).expect("configuration")).expect("JSON");
+    let setup = document["application"]["setup"]
+        .as_array()
+        .expect("setup")
+        .iter()
+        .find(|entry| entry["forge"] == 3)
+        .expect("forge 3 setup");
+    assert_eq!(Some(login), setup["mode"]["owned"]["person"]["login"].as_str(), "init chose the person");
+    let address: std::net::SocketAddr = api
+        .strip_prefix("http://")
+        .and_then(|url| url.strip_suffix("/api/v1"))
+        .expect("local API URL")
+        .parse()
+        .expect("listener address");
+    for (header, name) in [(read, "person_read.header"), (write, "person_write.header")] {
+        assert!(Path::new(header).is_absolute(), "printed header path must be absolute");
+        assert_eq!(Path::new(header), data.join("forge-3").join(name));
+        let (status, body) = header_request(api, header, "GET", "/user", None);
+        assert_eq!(status, 200, "person header must authenticate: {body}");
+        assert_eq!(body["login"].as_str(), Some(login));
+    }
+    let (status, body) =
+        header_request(api, read, "POST", "/repos/work/hello/issues", Some(r#"{"title":"read-header-must-refuse"}"#));
+    assert_eq!(status, 403, "read header must refuse a write: {body}");
+    let evidence = live(config, data, client);
+    assert_eq!(evidence.address, address, "the printed API is this forge's listener");
+    evidence
+}
+
+fn header_request(api: &str, header: &str, method: &str, route: &str, body: Option<&str>) -> (u16, Value) {
+    let mut command = std::process::Command::new("curl");
+    command.args([
+        "--silent",
+        "--show-error",
+        "--noproxy",
+        "*",
+        "--max-time",
+        "5",
+        "--header",
+        &format!("@{header}"),
+        "--request",
+        method,
+        "--write-out",
+        "\n%{http_code}",
+    ]);
+    if let Some(body) = body {
+        command.args(["--header", "Content-Type: application/json", "--data", body]);
+    }
+    let output = command.arg(format!("{api}{route}")).output().expect("curl with header by path");
+    assert!(output.status.success(), "header request failed: {}", String::from_utf8_lossy(&output.stderr));
+    let text = std::str::from_utf8(&output.stdout).expect("HTTP response UTF-8");
+    let (json, status) = text.rsplit_once('\n').expect("HTTP status");
+    (status.parse().expect("HTTP status number"), serde_json::from_str(json).expect("API JSON"))
+}
 #[must_use]
 pub fn live_for(config: &Path, data: &Path, client: &Path, task: Task) -> Evidence {
     use std::os::unix::fs::PermissionsExt;
