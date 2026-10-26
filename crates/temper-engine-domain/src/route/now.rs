@@ -18,7 +18,7 @@ use skein_lib::Queue;
 pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decision, now: core::Now) {
     match now {
         core::Now::RelayBusy { channel, run, attempt, call } => {
-            let delivery = super::host_route::busy(channel, run, attempt, call.name);
+            let delivery = super::host_route::busy(channel, run, attempt, call);
             assert!(super::now(domain, crate::boundary::delivery_output(delivery)), "busy answer door reserved");
         }
         core::Now::CallBusy { to } => crate::stopping::call(domain, to),
