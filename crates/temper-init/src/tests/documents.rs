@@ -134,22 +134,9 @@ fn the_default_is_the_owned_example_so_edited() {
             }
         }
         assert_eq!(replace_org_patterns(&mut expected), 30, "{row}");
-        expected["engine"]["projects"][0]["policy"]["ceiling"]["tools"] = json!(515_u64);
-        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["tools"] = json!(515_u64);
-        expected["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["tasks"] = json!(14_u32);
-        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["delegation"]["tasks"] = json!(14_u32);
-        expected["engine"]["projects"][0]["policy"]["ceiling"]["budget"]["spend"] = json!(202_944_u64);
-        expected["engine"]["projects"][0]["policy"]["period_spend"] = json!(202_944_u64);
-        expected["engine"]["projects"][0]["policy"]["roles"][0]["period_spend"] = json!(202_944_u64);
-        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = json!(101_472_u64);
-        for authority in ["/engine/projects/0/policy/ceiling", "/engine/projects/0/policy/roles/0/authority"] {
-            expected.pointer_mut(authority).expect("seed authority")["delegation"]["kinds"]
-                .as_array_mut()
-                .expect("executor kinds")
-                .insert(2, json!({"kind":"charter", "number":4_u32}));
-        }
-        expected["engine"]["policies"] = expected["engine"]["projects"].clone();
         expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(12_288_u32);
+        expected["engine"]["projects"][0]["policy"] = json!(1_u32);
+        expected["engine"]["projects"][0].as_object_mut().unwrap().remove("roles");
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.output"] = json!(82_u32);
@@ -520,6 +507,8 @@ fn the_template_keeps_project_one_without_settings_members() {
     let document = parse(template::TEMPER);
     assert_eq!(document["engine"]["projects"].as_array().unwrap().len(), 1);
     assert_eq!(document["engine"]["projects"][0]["number"], 1_u32);
+    assert_eq!(document["engine"]["projects"][0]["policy"], 1_u32);
+    assert!(document["engine"]["projects"][0].get("roles").is_none());
     for member in ["charters", "templates", "policies", "rules"] {
         assert!(document["engine"].get(member).is_none());
     }

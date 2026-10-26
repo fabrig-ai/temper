@@ -31,6 +31,24 @@ pub fn playground_llm(config: &Path) -> CtlLlm {
     scripts[1].turns = turns.into_boxed_slice();
     model(config, scripts.into_boxed_slice())
 }
+/// Project one's first chat uses the stock's forge reads, without a settings change.
+#[must_use]
+pub fn forge_read_llm(config: &Path) -> CtlLlm {
+    model(
+        config,
+        Box::new([Script {
+            cue: b"@first-forge-read".as_slice().into(),
+            turns: Box::new([
+                call(b"read_branch", &json!({"repository":"playground/widget","branch":"main"})),
+                Turn {
+                    lines: Box::new([Line::Text { text: b"Read widget's main branch.".as_slice().into() }]),
+                    finish: Finish::Stop,
+                    tokens: 20,
+                },
+            ]),
+        }]),
+    )
+}
 fn model(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
     let config = config.to_path_buf();
     let peer = super::fake_llm(scripts);

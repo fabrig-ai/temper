@@ -1177,6 +1177,71 @@ fn program_login_story(row: &str, login: smith_fake_claude::Login, exit: u8) {
 }
 
 #[test]
+fn a_fresh_init_s_first_chat_reads_its_forge() {
+    use support::ctl::{Call, Step};
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let scratch = support::Scratch::new("fresh-init-forge-read");
+    let (paths, flags) = first_run_directories(&scratch);
+    let initialized = std::process::Command::new(skein_scratch::paths::binary("temper"))
+        .arg("init")
+        .args(&flags)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .current_dir(scratch.path())
+        .output()
+        .expect("fresh temper init");
+    assert!(initialized.status.success(), "{}", String::from_utf8_lossy(&initialized.stderr));
+    let client = scratch.path().join("client");
+    std::fs::create_dir(&client).expect("client directory");
+    let key = client.join("llm-key");
+    support::write_private(&key, jig_channel_world::fixtures::KEY);
+    // As in the first-repository story, box supervises serve and its demo forge;
+    // the fake changes only the model endpoint. The binary supplies the stock.
+    let ended = support::boxed::run_ctl_with_llm(
+        scratch.path(),
+        flags,
+        &client,
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["demo-start", "--key", "start-demo"])),
+            Step::Run(Call::new(&["wait", "forges", "--until", "settled"])),
+            Step::Run(Call::new(&["add-key", "1", key.to_str().expect("key path"), "--key", "first-read-llm"])),
+            Step::Run(Call::new(&["wait", "accounts", "--until", "usable"])),
+            Step::Run(Call::new(&[
+                "chat",
+                "--project",
+                "1",
+                "--key",
+                "first-read",
+                "@first-forge-read Read widget's main branch",
+                "--json",
+            ])),
+            Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--json"])),
+        ],
+        BOX_DEADLINE,
+        || support::first_repository::turns(&client, "1"),
+        support::first_repository::forge_read_llm(&paths[0]),
+    );
+    let stderr = String::from_utf8_lossy(&ended.stderr);
+    assert_eq!(ended.exit, Some(Exit::Code(0)), "{stderr}");
+    assert_eq!(ended.left, Some(Vec::new()), "all processes drained: {stderr}");
+    assert_eq!(ended.calls.len(), 7);
+    ctl_assert_success(&ended.calls);
+    assert_eq!(support::ctl::json(&ended.calls[6])["met"], true);
+    let turns = ended.checked.expect("committed first-chat turns read through ctl");
+    assert!(turns.contains("read_branch"), "{turns}");
+    assert!(turns.lines().any(|line| line.starts_with("result ") && !line.contains("failed")), "{turns}");
+    assert!(
+        turns.lines().any(|line| line.len() == 64 && line.bytes().all(|byte| byte.is_ascii_hexdigit())),
+        "branch head returned: {turns}"
+    );
+    assert!(turns.contains("Read widget's main branch."), "{turns}");
+    eprintln!("fresh init first forge read: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
+    scratch.remove();
+}
+
+#[test]
 fn a_first_run_answers_on_the_demo() {
     first_run(false);
 }

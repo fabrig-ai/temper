@@ -800,8 +800,8 @@ pub(crate) fn configure_llm(path: &Path) {
 }
 fn configure_engine(value: &mut Value, forge: SocketAddr) {
     configure_landing(value, forge, "acme", "app");
-    // Keep init's seed authority, priced for this fixture's cheap model rather
-    // than init's model. No story-specific tool grants are added.
+    // Use the stock defaults and init's seed policy reference, with no story-specific
+    // tool grants. Init's placeholders do not occur in the seed projects.
     let init: Value = serde_json::from_slice(include_bytes!("../../../temper-init/template/temper.json"))
         .expect("init template JSON");
     let engine = value["engine"].as_object_mut().expect("engine object");
@@ -809,14 +809,6 @@ fn configure_engine(value: &mut Value, forge: SocketAddr) {
         engine.remove(member);
     }
     engine.insert("projects".into(), init["engine"]["projects"].clone());
-    let configured = temper_real_loop_world::settings::configuration(value);
-    let defaults = temper_service::stock::defaults(&configured.llm);
-    let stock = &defaults.policies.get(&1).expect("stock policy 1").policy;
-    let policy = &mut value["engine"]["projects"][0]["policy"];
-    policy["period_spend"] = stock.period_spend.into();
-    policy["ceiling"]["budget"]["spend"] = stock.ceiling.budget.spend.into();
-    policy["roles"][0]["period_spend"] = stock.roles[0].period_spend.into();
-    policy["roles"][0]["authority"]["budget"]["spend"] = stock.roles[0].authority.budget.spend.into();
     // Four slots hold the stock chat, coding and reviewer charters.
     value["engine"]["limits"]["overrides"]["tasks.charters"] = 4.into();
     // Keep App setup and log polling aligned with the live GitHub story.
