@@ -316,6 +316,7 @@ impl skein_world::Referee<Proc> for Referee {
                 match proc {
                     Proc::Playground(Process::Llm(peer)) => peer.shutdown(),
                     Proc::Playground(Process::Forge(forge)) => forge.shutdown(),
+                    Proc::Playground(Process::Visitor(visitor)) => visitor.close(),
                     Proc::Service(_)
                     | Proc::Client(_)
                     | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) =>
