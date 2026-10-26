@@ -7,6 +7,7 @@ use std::{
 };
 use temper_client_shell_web::journey::{self, Stale};
 
+pub mod again;
 pub mod print;
 /// Where the journeys live, by the manifest's path (client/journeys.md, 5.1).
 pub const JOURNEYS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/design/client/journeys");
@@ -17,6 +18,12 @@ pub enum Refusal {
     Proof { name: String, refusal: journey::Refusal },
     Unreadable { name: String, unreadable: journey::Unreadable },
     Io { path: PathBuf },
+    Unwalkable { name: String, unwalkable: journey::Unwalkable },
+    NotStill { name: String, step: u32 },
+    NoControl { name: String, step: u32 },
+    WalkDiffers { name: String, step: u32 },
+    Save { name: String, step: u32, refusal: journey::Refusal },
+    Harness { name: String, step: u32, report: String },
 }
 
 /// Whether NAME is a journey's name, `[a-z][a-z0-9-]*` (client/journeys.md, 5.1).

@@ -2441,7 +2441,11 @@ dependencies = [
 name = "temper-client-journeys"
 version = "0.0.0"
 dependencies = [
+ "skein-browser",
  "skein-fail-stop",
+ "skein-fake-person",
+ "skein-fake-person-browser",
+ "skein-lib",
  "skein-scratch",
  "skein-ui",
  "skein-ui-bundle",
