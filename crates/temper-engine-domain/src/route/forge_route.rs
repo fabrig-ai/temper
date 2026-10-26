@@ -2188,6 +2188,9 @@ pub(crate) fn outputs(
                     "reachable door"
                 );
             }
+            forge::Request::Accept { forge, request, installation } => {
+                assert!(super::now(domain, Request::Accept { forge, request, installation }), "accept door");
+            }
             forge::Request::Install { forge, request, back } => {
                 assert!(super::now(domain, Request::Install { forge, request, back }), "install door");
             }

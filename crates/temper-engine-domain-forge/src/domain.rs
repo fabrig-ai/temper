@@ -239,6 +239,7 @@ impl Domain {
                 None => (None, None),
             };
             rows.push(crate::Row {
+                read_only: config.kind == crate::Kind::GitHub && config.read_only,
                 number: *forge,
                 kind: config.kind,
                 mode: config.mode,
@@ -1044,6 +1045,9 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         }
         Event::ConnectAnswered { forge, request, answer } => crate::connect::connected(d, forge, request, answer, out),
         Event::ReachableAnswered { forge, request, answer } => crate::connect::reached(d, forge, request, answer, out),
+        Event::AcceptAnswered { forge, request, answer, stopped } => {
+            crate::connect::accepted(d, forge, request, answer, stopped, out);
+        }
         Event::InstallAnswered { forge, request, answer, stopped } => {
             crate::connect::installed(d, forge, request, answer, stopped, out);
         }
@@ -1136,7 +1140,10 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             out.push(Request::MarkedForges);
         }
         Event::Application { request, token, retention, ask, role, carried } => match ask {
-            ask @ (crate::Ask::Connect { .. } | crate::Ask::Install { .. } | crate::Ask::Reachable { .. }) => {
+            ask @ (crate::Ask::Connect { .. }
+            | crate::Ask::Install { .. }
+            | crate::Ask::Accept { .. }
+            | crate::Ask::Reachable { .. }) => {
                 crate::connect::start(d, request, token, ask, role, carried, out);
             }
             crate::Ask::StartDemo => crate::demo::start(d, request, token, out),

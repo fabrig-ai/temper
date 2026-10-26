@@ -89,6 +89,7 @@ fn settle(domain: &mut Domain, env: &Env<Limits>) -> Box<[Request]> {
                 | Request::Manifest { .. }
                 | Request::Reachable { .. }
                 | Request::Install { .. }
+                | Request::Accept { .. }
                 | Request::EraseCarried { .. }
                 | Request::Setup { .. }
                 | Request::Store(_)
@@ -216,6 +217,7 @@ fn the_deployment_owner_watches_forges_again_after_a_connection_changes() {
                     repositories: Box::new([]),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 }])
             },
@@ -256,6 +258,7 @@ fn row(connection: forge::Connection) -> forge::Row {
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
@@ -833,4 +836,36 @@ fn a_seed_policy_at_its_actual_joined_byte_bound_is_admitted() {
     limits.policy_bytes = joined_seed_bytes(&seed_with_landing(), &limits);
     assert!(crate::refused(seed_with_landing(), &limits).is_empty());
     Domain::new(seed_with_landing(), &limits).expect("joined seed policy at its exact bound constructs the root");
+}
+
+#[test]
+fn public_accept_defers_the_keyed_answer_until_the_verified_installation_is_kept() {
+    let (mut domain, env) = signed_in_on(Some(people::Role::Owner), forge::Kind::GitHub);
+    connection(&mut domain, &env, forge::Connection::Connected { id: 1, login: b"app[bot]".as_slice().into() });
+    let installation = ::core::num::NonZeroU64::new(22).unwrap();
+    crate::try_step(&mut domain, &env, public_request(forge::Ask::Accept { forge: 1, installation }, None)).unwrap();
+    let requests = settle(&mut domain, &env);
+    let [Request::Accept { forge: 1, request, installation: id }] = requests.as_ref() else {
+        panic!("accept: {requests:?}")
+    };
+    assert_eq!(*id, installation);
+    let answer = forge::AcceptAnswer::Accepted { installation: 22 };
+    crate::try_step(
+        &mut domain,
+        &env,
+        Event::Forge(Box::new(forge::Event::AcceptAnswered {
+            forge: 1,
+            request: *request,
+            answer: answer.clone(),
+            stopped: None,
+        })),
+    )
+    .unwrap();
+    assert_eq!(
+        settle(&mut domain, &env).as_ref(),
+        [Request::Party(PartyRequest::Deliver(Delivery::Application {
+            to: ReplyTo::new(Token::new(90)),
+            outcome: Some(crate::ApplicationAnswer::Accept(answer)),
+        }))]
+    );
 }

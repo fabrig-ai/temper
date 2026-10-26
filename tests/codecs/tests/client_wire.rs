@@ -133,6 +133,7 @@ fn setup_and_every_first_repository_state_round_trip_at_version_eleven() {
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )

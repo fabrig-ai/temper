@@ -27,6 +27,7 @@ fn row(number: u16, kind: Kind, mode: Mode, connection: C, offer: Offer) -> Row 
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
@@ -491,6 +492,7 @@ fn deliver_first_record(
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )
@@ -1003,6 +1005,7 @@ fn deliver_picker(root: &mut crate::Domain, watch: Token, changed: bool) -> Queu
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )

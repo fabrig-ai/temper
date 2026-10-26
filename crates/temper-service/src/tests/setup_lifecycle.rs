@@ -224,7 +224,11 @@ fn accepting(ids: &[u64], installation: u64) -> (crate::Service, Face) {
     start(
         &mut service,
         2,
-        host::Plan::Accept { forge: 1, installation: core::num::NonZeroU64::new(installation).unwrap(), state },
+        host::Plan::Accept {
+            forge: 1,
+            installation: core::num::NonZeroU64::new(installation).unwrap(),
+            state: Some(state),
+        },
     );
     let mut face = Face::new();
     face.sent(&mut service);
@@ -1711,4 +1715,110 @@ fn an_empty_github_redirect_releases_the_connection_for_its_next_visit() {
     pump_visit(&mut service, &mut peer);
     status(&peer, b"404");
     assert!(contains(peer.received(), b"Forge not found"));
+}
+
+fn accept_answer(service: &mut crate::Service) -> Option<domain::AcceptAnswer> {
+    let engine = service.engine.as_mut().unwrap();
+    let mut found = None;
+    while let Some(event) = engine.events.pop() {
+        if let root::Event::Forge(event) = event
+            && let domain::Event::AcceptAnswered { forge, request, answer, .. } = *event
+        {
+            assert_eq!((forge, request), (1, Token::new(91)));
+            assert!(found.is_none(), "one terminal answer");
+            found = Some(answer);
+        }
+    }
+    found
+}
+#[test]
+fn a_stateless_accept_answers_once_and_hands_down_the_set_only_after_done() {
+    let mut service = service(8, Duration::from_secs(3600));
+    app(&mut service);
+    accepted(&mut service, &[11]);
+    installation(&mut service, 22, Change::Created);
+    public::accept(service.engine.as_mut().unwrap(), 1, Token::new(91), core::num::NonZeroU64::new(22).unwrap());
+    let mut face = Face::new();
+    face.sent(&mut service);
+    assert_eq!(accept_answer(&mut service), None);
+    accept_reply(&mut service, &mut face);
+    assert_eq!(accept_answer(&mut service), None, "wait for Kept");
+    assert!(service.engine.as_ref().unwrap().forge.accepted.is_empty());
+    assert_eq!(values(&service).as_ref(), [11]);
+    keep_next(&mut service, Item::Accepted);
+    for _ in 0_u32..4 {
+        advance(service.engine.as_mut().unwrap());
+    }
+    assert_eq!(accept_answer(&mut service), Some(domain::AcceptAnswer::Accepted { installation: 22 }));
+    assert_eq!(values(&service).as_ref(), [11, 22]);
+    assert_eq!(service.engine.as_ref().unwrap().forge.accepted.get(0).unwrap().1.as_ref(), [11, 22]);
+    assert!(!service.engine.as_ref().unwrap().setup.lifecycle.installations.get(&(1, 22)).unwrap().stray);
+    for _ in 0_u32..4 {
+        advance(service.engine.as_mut().unwrap());
+    }
+    assert_eq!(accept_answer(&mut service), None);
+}
+#[test]
+fn a_stateless_accept_during_any_run_answers_busy() {
+    for internal in [false, true] {
+        let mut service = service(8, Duration::from_secs(3600));
+        app(&mut service);
+        running(&mut service, internal);
+        public::accept(service.engine.as_mut().unwrap(), 1, Token::new(91), core::num::NonZeroU64::new(22).unwrap());
+        assert_eq!(accept_answer(&mut service), Some(domain::AcceptAnswer::Refused(domain::ForgeRefusal::Busy)));
+        assert!(service.engine.as_ref().unwrap().setup.public.is_empty());
+    }
+}
+#[test]
+fn a_stateless_accept_of_a_missing_installation_answers_not_found_without_handing_down_a_set() {
+    let mut service = service(8, Duration::from_secs(3600));
+    app(&mut service);
+    public::accept(service.engine.as_mut().unwrap(), 1, Token::new(91), core::num::NonZeroU64::new(22).unwrap());
+    let mut face = Face::new();
+    face.sent(&mut service);
+    let token = *service.engine.as_ref().unwrap().setup.runs.first().unwrap().0;
+    lifecycle::stopped(
+        service.engine.as_mut().unwrap(),
+        token,
+        reconcile::Failure {
+            forge: 1,
+            step: reconcile::Stage::Installation,
+            subject: b"22".as_slice().into(),
+            why: reconcile::Why::Missing,
+        },
+    );
+    assert_eq!(
+        accept_answer(&mut service),
+        Some(domain::AcceptAnswer::ForgeRefused(domain::AdoptionRefusal::NotFound))
+    );
+    assert!(service.engine.as_ref().unwrap().forge.accepted.is_empty());
+    assert_eq!(accept_answer(&mut service), None);
+}
+
+#[test]
+fn a_non_owner_accept_never_reaches_the_setup_host() {
+    for (role, admitted) in [(jig_domain_people::Role::Owner, true), (jig_domain_people::Role::Member, false)] {
+        let mut service = routing_service(8, Duration::from_secs(3600));
+        fixtures::restart(&mut service);
+        app(&mut service);
+        service.engine.as_mut().unwrap().events.push(root::Event::Forge(Box::new(domain::Event::Connection {
+            forge: 1,
+            state: domain::Connection::Connected { id: 9, login: b"app[bot]".as_slice().into() },
+        })));
+        // The core's admitted request carries the deployment role to the forge.
+        service.engine.as_mut().unwrap().events.push(root::Event::Forge(Box::new(domain::Event::Application {
+            request: Token::new(91),
+            token: Token::new(92),
+            retention: Duration::from_secs(60),
+            ask: domain::Ask::Accept { forge: 1, installation: core::num::NonZeroU64::new(22).unwrap() },
+            role: Some(role),
+            carried: None,
+        })));
+        for _ in 0_u32..64 {
+            fixtures::turn(&mut service);
+        }
+        let engine = service.engine.as_ref().unwrap();
+        assert_eq!(!engine.setup.public.is_empty(), admitted);
+        assert_eq!(!engine.setup.runs.is_empty(), admitted);
+    }
 }

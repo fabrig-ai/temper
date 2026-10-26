@@ -112,6 +112,7 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["change-settings", "FILE", "--against", "5", "--key", "settings-5"],
     &["propose-settings", "FILE", "--against", "5", "--key", "proposal-5"],
     &["proposal", "p73/7"],
+    &["forge-accept", "3", "1"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -638,11 +639,11 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 /// A stable stored request's engine key, unrelated to its client call prefix.
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot for each guide call, including the model-choice seam.
-pub(super) const GUIDE_CALLS: u32 = 29;
+pub(super) const GUIDE_CALLS: u32 = 30;
 /// One slot per guide line, including the final line; fewer loses that line.
-const GUIDE_LINES: u32 = 125;
+const GUIDE_LINES: u32 = 127;
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 55;
+pub(super) const TOOL_FORMS: u32 = 56;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

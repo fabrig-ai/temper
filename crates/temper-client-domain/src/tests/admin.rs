@@ -41,6 +41,7 @@ fn row(
             repositories: List::with_capacity(0),
             owned: None,
             admin,
+            read_only: false,
             ended_stop: stop,
         },
     )

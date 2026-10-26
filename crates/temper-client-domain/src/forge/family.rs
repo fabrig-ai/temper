@@ -106,6 +106,7 @@ pub fn answer(record: &jig_client::Family, limits: &w::Limits, link: &link::Limi
         }),
         w::Outcome::Unknown => forge::Answer::Unknown,
         w::Outcome::Page(_)
+        | w::Outcome::Accepted(_)
         | w::Outcome::Returning
         | w::Outcome::Connecting
         | w::Outcome::Link(_)
@@ -216,6 +217,7 @@ pub fn set_up_answer(record: &jig_client::Family, limits: &w::Limits) -> Option<
         }),
         w::Outcome::Unknown => O::Unknown,
         w::Outcome::Page(_)
+        | w::Outcome::Accepted(_)
         | w::Outcome::Returning
         | w::Outcome::Connecting
         | w::Outcome::Link(_)
@@ -263,6 +265,7 @@ pub fn forges(bytes: &[u8], limits: &w::Limits) -> Option<Box<[forge::forges::Ro
                 .ok()?;
         }
         rows.push(Row {
+            read_only: row.read_only,
             number: row.number,
             kind: match row.kind {
                 w::Kind::Forgejo => Kind::Forgejo,

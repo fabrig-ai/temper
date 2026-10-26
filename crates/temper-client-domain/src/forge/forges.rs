@@ -129,6 +129,7 @@ pub struct Owned {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Row {
+    pub read_only: bool,
     pub number: u16,
     pub kind: Kind,
     pub mode: Mode,

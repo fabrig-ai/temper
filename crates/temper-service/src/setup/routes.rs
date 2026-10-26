@@ -348,7 +348,11 @@ fn accept(
     }
     let run = super::lifecycle::next_run(&mut engine.setup.lifecycle);
     engine.setup.public.insert(run, super::public::Caller::Accept { forge, call, back }).expect("public room checked");
-    engine.setup.staged.insert(run, host::Plan::Accept { forge, installation, state }).expect("staged room");
+    engine
+        .setup
+        .staged
+        .insert(run, host::Plan::Accept { forge, installation, state: Some(state) })
+        .expect("staged room");
     super::request(engine, run);
 }
 fn bad_request(engine: &mut Engine, call: Token, forge: u16) {

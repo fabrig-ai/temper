@@ -30,6 +30,7 @@ pub(super) fn row(
             repositories: List::with_capacity(0),
             owned: None,
             admin: false,
+            read_only: false,
             ended_stop: None,
         },
     )
@@ -547,6 +548,7 @@ pub(super) fn first_rows(connection: w::Connection, state: w::FirstState) -> Lis
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )
@@ -873,7 +875,7 @@ pub(super) fn github_rows(accepted: bool) -> List<w::ForgeRow> {
             )
             .unwrap();
     }
-    for (id, suspended, stray) in [(2, true, false), (3, false, true)] {
+    for (id, suspended, stray) in [(2, true, !accepted), (3, false, true)] {
         row.installations
             .push(
                 w::Installation::new(&w::CEILINGS, w::InstallationParts { id, account: None, suspended, stray })

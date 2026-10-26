@@ -379,6 +379,7 @@ pub enum ApplicationAnswer {
     StartDemo(forge::StartAnswer),
     Connect(forge::ConnectAnswer),
     Install(forge::InstallAnswer),
+    Accept(forge::AcceptAnswer),
     Reachable(forge::ReachableAnswer),
     Returning,
 }
@@ -555,6 +556,11 @@ pub enum Request {
         request: Token,
         installation: Option<u64>,
         page: u32,
+    },
+    Accept {
+        forge: u16,
+        request: Token,
+        installation: ::core::num::NonZeroU64,
     },
     Install {
         forge: u16,

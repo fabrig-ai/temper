@@ -151,6 +151,7 @@ pub enum Ask {
     StartDemo,
     Connect { forge: u16, how: How },
     Install { forge: u16, back: Option<Box<[u8]>> },
+    Accept { forge: u16, installation: core::num::NonZeroU64 },
     Reachable { forge: u16, installation: Option<u64>, page: u32 },
 }
 /// The first repository requested when connecting a Forgejo (client/README.md, 8).
@@ -182,6 +183,7 @@ pub enum Answered {
     StartDemo(StartAnswer),
     Connect(ConnectAnswer),
     Install(InstallAnswer),
+    Accept(AcceptAnswer),
     Reachable(ReachableAnswer),
 }
 /// Public forge admission refusals (client/README.md, 8).
@@ -209,6 +211,13 @@ pub enum InstallAnswer {
     Link(Box<[u8]>),
     Connecting,
     Refused(ForgeRefusal),
+}
+/// An existing installation, verified and retained by the setup host.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum AcceptAnswer {
+    Accepted { installation: u64 },
+    Refused(ForgeRefusal),
+    ForgeRefused(AdoptionRefusal),
 }
 /// A picker answer lives beside the public links, never in the store.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -361,6 +370,7 @@ pub struct AdoptedRow {
 /// One configured forge, including its connection, offer and first repository.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Row {
+    pub read_only: bool,
     pub number: u16,
     pub kind: Kind,
     pub mode: Mode,
@@ -861,6 +871,12 @@ pub enum Event {
         request: Token,
         answer: ReachableAnswer,
     },
+    AcceptAnswered {
+        forge: u16,
+        request: Token,
+        answer: AcceptAnswer,
+        stopped: Option<Box<[u8]>>,
+    },
     InstallAnswered {
         forge: u16,
         request: Token,
@@ -1186,6 +1202,11 @@ pub enum Request {
         forge: u16,
         request: Token,
         back: Option<Box<[u8]>>,
+    },
+    Accept {
+        forge: u16,
+        request: Token,
+        installation: core::num::NonZeroU64,
     },
     Install {
         forge: u16,

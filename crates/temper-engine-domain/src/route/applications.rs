@@ -27,6 +27,7 @@ pub(super) fn start(domain: &mut Domain, admission: Admission, request: Applicat
             | forge::Ask::StartDemo
             | forge::Ask::Connect { .. }
             | forge::Ask::Install { .. }
+            | forge::Ask::Accept { .. }
             | forge::Ask::Reachable { .. },
         ) => people::ApplicationScope::Deployment,
         Application::Forge(forge::Ask::Adopt(_)) => scope,
@@ -139,6 +140,7 @@ pub(super) fn answer(domain: &Domain, token: Token) -> Option<ApplicationAnswer>
         Some(forge::Answered::StartDemo(answer)) => Some(ApplicationAnswer::StartDemo(answer)),
         Some(forge::Answered::Connect(answer)) => Some(ApplicationAnswer::Connect(answer)),
         Some(forge::Answered::Reachable(answer)) => Some(ApplicationAnswer::Reachable(answer)),
+        Some(forge::Answered::Accept(answer)) => Some(ApplicationAnswer::Accept(answer)),
         Some(forge::Answered::Install(answer)) => Some(ApplicationAnswer::Install(answer)),
         None => None,
     }

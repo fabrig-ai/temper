@@ -917,6 +917,7 @@ fn forge_row(
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
@@ -942,6 +943,7 @@ fn configured_forge_rows() -> forge::Forges {
                     password: b"/fake/forge/person_password".as_slice().into(),
                 }),
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
             forge_row(
@@ -1046,6 +1048,7 @@ fn expected_forge_row(
                 None
             },
             admin: false,
+            read_only: false,
             ended_stop: None,
         },
     )
@@ -1454,6 +1457,7 @@ fn installations_and_the_last_connect_end_encode_unchanged() {
                 repositories: Box::new([]),
                 owned: None,
                 admin: true,
+                read_only: false,
                 ended_stop: Some(forge::AdminStop::Refused { status: 403, stage: forge::SetupStage::Token }),
             }]),
         },
@@ -1525,6 +1529,7 @@ fn owned_details_fit_their_bounds_and_an_overlong_field_drops_only_the_details()
                     password: Box::from(&[b'/'; 513][..password]),
                 }),
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             }]),
         };
@@ -1544,5 +1549,65 @@ fn owned_details_fit_their_bounds_and_an_overlong_field_drops_only_the_details()
             );
             assert_eq!(owned.password().len(), password);
         }
+    }
+}
+
+#[test]
+fn accept_decodes_only_a_nonzero_installation_and_keeps_its_id() {
+    for installation in [0, 22, u64::MAX] {
+        let request = w::Requesting::new(
+            &w::CEILINGS,
+            w::RequestingParts {
+                request: w::Request::Accept(
+                    w::Accept::new(&w::CEILINGS, w::AcceptParts { forge: 1, installation }).unwrap(),
+                ),
+            },
+        )
+        .unwrap();
+        let result = family::to_root(
+            exchange(wire::FORGE, wire::CLIENT_VERSION, wire::requesting(&request)),
+            &[],
+            None,
+            &w::CEILINGS,
+        );
+        if installation == 0 {
+            assert!(result.is_err());
+        } else {
+            let root::Event::Party(root::PartyInput::Application {
+                request: root::Application::Forge(forge::Ask::Accept { forge: 1, installation: id }),
+                ..
+            }) = result.unwrap()
+            else {
+                panic!("accept")
+            };
+            assert_eq!(id.get(), installation);
+        }
+    }
+}
+#[test]
+fn accept_answers_use_the_appended_success_and_existing_refusals() {
+    let jig = jig_protocol_config::profile(jig_protocol_config::Profile::Small).clients.wire;
+    for (answer, expected) in [
+        (
+            forge::AcceptAnswer::Accepted { installation: 22 },
+            w::Outcome::Accepted(
+                w::AcceptedInstallation::new(&w::CEILINGS, w::AcceptedInstallationParts { installation: 22 }).unwrap(),
+            ),
+        ),
+        (
+            forge::AcceptAnswer::Refused(forge::ForgeRefusal::Role),
+            w::Outcome::ConnectRefused(
+                w::ConnectRefused::new(&w::CEILINGS, w::ConnectRefusedParts { why: w::ForgeRefusal::Role }).unwrap(),
+            ),
+        ),
+        (
+            forge::AcceptAnswer::ForgeRefused(forge::AdoptionRefusal::NotFound),
+            w::Outcome::ForgeRefused(
+                w::ForgeRefused::new(&w::CEILINGS, w::ForgeRefusedParts { reason: w::ForgeReason::NotFound }).unwrap(),
+            ),
+        ),
+    ] {
+        let bytes = family::answer(Some(root::ApplicationAnswer::Accept(answer)), &w::CEILINGS, &jig).unwrap();
+        assert_eq!(w::Answer::decode(&w::CEILINGS, &mut Reader::new(&bytes)).unwrap().into_parts().outcome, expected);
     }
 }

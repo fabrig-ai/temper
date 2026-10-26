@@ -531,6 +531,7 @@ impl World {
                 | engine::Request::Manifest { .. }
                 | engine::Request::Reachable { .. }
                 | engine::Request::Install { .. }
+                | engine::Request::Accept { .. }
                 | engine::Request::EraseCarried { .. }
                 | engine::Request::SetUp { .. }
                 | engine::Request::Bound { .. }

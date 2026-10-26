@@ -79,7 +79,7 @@ pub fn to_root(
                         request: root::Application::Return { source: value.source, path: value.path },
                     }));
                 }
-                value @ (w::Request::Connect(_) | w::Request::Install(_)) => {
+                value @ (w::Request::Connect(_) | w::Request::Install(_) | w::Request::Accept(_)) => {
                     let request = match value {
                         w::Request::Connect(value) => {
                             let value = value.into_parts();
@@ -122,6 +122,15 @@ pub fn to_root(
                                 }
                             };
                             forge::Ask::Connect { forge: value.forge, how }
+                        }
+                        w::Request::Accept(value) => {
+                            let value = value.into_parts();
+                            let Some(installation) = core::num::NonZeroU64::new(value.installation) else {
+                                return Err(Box::new(kit::Event::Application(kit::FromApplication::Undecodable {
+                                    to: reply_to,
+                                })));
+                            };
+                            forge::Ask::Accept { forge: value.forge, installation }
                         }
                         w::Request::Install(value) => {
                             let value = value.into_parts();
@@ -541,7 +550,8 @@ pub fn answer(
         }
         Some(
             temper_engine_domain::ApplicationAnswer::Adopt(forge::ApplicationOutcome::ForgeRefused(reason))
-            | root::ApplicationAnswer::Reachable(forge::ReachableAnswer::ForgeRefused(reason)),
+            | root::ApplicationAnswer::Reachable(forge::ReachableAnswer::ForgeRefused(reason))
+            | root::ApplicationAnswer::Accept(forge::AcceptAnswer::ForgeRefused(reason)),
         ) => {
             w::Outcome::ForgeRefused(
                 w::ForgeRefused::new(
@@ -565,6 +575,9 @@ pub fn answer(
                 .ok()?,
             )
         }
+        Some(root::ApplicationAnswer::Accept(forge::AcceptAnswer::Accepted { installation })) => w::Outcome::Accepted(
+            w::AcceptedInstallation::new(limits, w::AcceptedInstallationParts { installation }).ok()?,
+        ),
         Some(
             root::ApplicationAnswer::Connect(forge::ConnectAnswer::Connecting)
             | root::ApplicationAnswer::Install(forge::InstallAnswer::Connecting),
@@ -574,7 +587,8 @@ pub fn answer(
             | root::ApplicationAnswer::Connect(forge::ConnectAnswer::Link(address)),
         ) => w::Outcome::Link(w::Link::new(limits, w::LinkParts { address }).ok()?),
         Some(
-            root::ApplicationAnswer::Reachable(forge::ReachableAnswer::Refused(why))
+            root::ApplicationAnswer::Accept(forge::AcceptAnswer::Refused(why))
+            | root::ApplicationAnswer::Reachable(forge::ReachableAnswer::Refused(why))
             | root::ApplicationAnswer::Connect(forge::ConnectAnswer::Refused(why))
             | root::ApplicationAnswer::Install(forge::InstallAnswer::Refused(why)),
         ) => w::Outcome::ConnectRefused(
@@ -716,6 +730,7 @@ pub fn forges(value: forge::Forges, limits: &w::Limits) -> Option<Box<[u8]>> {
                     limits,
                     w::ForgeRowParts {
                         number: row.number,
+                        read_only: row.read_only,
                         kind: match row.kind {
                             forge::Kind::Forgejo => w::Kind::Forgejo,
                             forge::Kind::GitHub => w::Kind::Github,

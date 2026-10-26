@@ -1,5 +1,5 @@
 //! Volatile public connects; only handles cross this boundary (client/README.md, 8).
-use crate::{Answered, Ask, ConnectAnswer, Connection, Domain, ForgeRefusal, InstallAnswer, Request};
+use crate::{AcceptAnswer, Answered, Ask, ConnectAnswer, Connection, Domain, ForgeRefusal, InstallAnswer, Request};
 use alloc::boxed::Box;
 use jig_domain_core::Carried;
 use jig_domain_people::Role;
@@ -63,7 +63,7 @@ pub(crate) fn start(
     let (forge, install, manifest) = match &ask {
         Ask::Connect { forge, how: crate::How::GitHubApp { .. } } => (*forge, false, false),
         Ask::Connect { forge, how: crate::How::GitHubManifest { .. } } => (*forge, false, true),
-        Ask::Install { forge, .. } => (*forge, true, false),
+        Ask::Install { forge, .. } | Ask::Accept { forge, .. } => (*forge, true, false),
         Ask::Connect { how: crate::How::ForgejoAdmin { .. }, .. }
         | Ask::Reachable { .. }
         | Ask::Adopt(_)
@@ -105,7 +105,9 @@ pub(crate) fn start(
         if let Some(value) = carried {
             out.push(Request::CarriedUnused { number: value.number });
         }
-        let answer = if install {
+        let answer = if let Ask::Accept { .. } = ask {
+            Answered::Accept(AcceptAnswer::Refused(why))
+        } else if install {
             Answered::Install(InstallAnswer::Refused(why))
         } else {
             Answered::Connect(ConnectAnswer::Refused(why))
@@ -117,6 +119,9 @@ pub(crate) fn start(
         out.push(Request::MarkedForges);
     }
     d.connect.pending.insert(request, token).expect("room checked");
+    send(d, request, forge, ask, carried, out);
+}
+fn send(d: &mut Domain, request: Token, forge: u16, ask: Ask, carried: Option<Carried>, out: &mut Queue<Request>) {
     match ask {
         Ask::Connect { how: how @ crate::How::GitHubApp { .. }, .. } => {
             let carried = carried.expect("admitted key");
@@ -135,6 +140,13 @@ pub(crate) fn start(
             }
             d.connect.running.insert(forge, (request, None)).expect("room checked");
             out.push(Request::Manifest { forge, request, back });
+        }
+        Ask::Accept { installation, .. } => {
+            if let Some(value) = carried {
+                out.push(Request::CarriedUnused { number: value.number });
+            }
+            d.connect.running.insert(forge, (request, None)).expect("room checked");
+            out.push(Request::Accept { forge, request, installation });
         }
         Ask::Install { back, .. } => {
             if let Some(value) = carried {
@@ -277,6 +289,26 @@ pub(crate) fn installed(
             }
         }
         d.connect.answer(request, token, Answered::Install(answer), out);
+    }
+}
+pub(crate) fn accepted(
+    d: &mut Domain,
+    forge: u16,
+    request: Token,
+    answer: AcceptAnswer,
+    stopped: Option<Box<[u8]>>,
+    out: &mut Queue<Request>,
+) {
+    if let Some(token) = d.connect.pending.remove(&request) {
+        if let Some((held, _)) = d.connect.running.get(&forge)
+            && *held == request
+        {
+            d.connect.running.remove(&forge);
+            if let Some(why) = stopped {
+                stopped_end(d, forge, &why, None, out);
+            }
+        }
+        d.connect.answer(request, token, Answered::Accept(answer), out);
     }
 }
 pub(crate) fn ended(

@@ -149,7 +149,7 @@ pub fn request(
                 request: engine::Application::Forge(owner::Ask::Install { forge: value.forge, back: value.back }),
             });
         }
-        v1::Request::Reachable(_) | v1::Request::StartDemo => {
+        v1::Request::Accept(_) | v1::Request::Reachable(_) | v1::Request::StartDemo => {
             panic!("client sends no demo start yet")
         }
         v1::Request::Connect(connect) => {
@@ -410,6 +410,7 @@ pub fn incoming(
         | engine::Request::Manifest { .. }
         | engine::Request::Reachable { .. }
         | engine::Request::Install { .. }
+        | engine::Request::Accept { .. }
         | engine::Request::EraseCarried { .. }
         | engine::Request::StopGroup { .. }
         | engine::Request::SetUp { .. }

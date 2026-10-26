@@ -95,6 +95,23 @@ pub const INSTALL: Tool = Tool {
     keyed: Keyed::Optional,
     area: 6,
 };
+pub const ACCEPT: Tool = Tool {
+    name: b"forge-accept",
+    line: b"Accept an existing GitHub App installation",
+    result: b"forge-accept",
+    forms: &[&[
+        positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"Forge number"),
+        positional(
+            b"installation",
+            b"I",
+            Kind::NumberRange { min: 1, max: u64::MAX },
+            Required,
+            b"Installation id, as forges prints it",
+        ),
+    ]],
+    keyed: Keyed::Optional,
+    area: 6,
+};
 pub const REPOSITORIES: Tool = Tool {
     name: b"repositories",
     line: b"Read one page of reachable repositories",
@@ -264,6 +281,7 @@ pub(crate) fn owns(call: &jig::call::Call) -> bool {
         || name == DEMO_START.name
         || name == CONNECT.name
         || name == INSTALL.name
+        || name == ACCEPT.name
         || name == REPOSITORIES.name
         || (name == WAIT.name && call.form == 1)
 }
@@ -470,6 +488,7 @@ fn restore(state: &mut Forges, env: &Env<Limits>, key: Key, request: &jig_client
         | temper_client_protocol_wire::v1::Request::Adopt(_)
         | temper_client_protocol_wire::v1::Request::Return(_)
         | temper_client_protocol_wire::v1::Request::Connect(_)
+        | temper_client_protocol_wire::v1::Request::Accept(_)
         | temper_client_protocol_wire::v1::Request::Install(_) => return,
     };
     state.pending.insert(key, SettingUp { intent, called: None });
@@ -667,6 +686,8 @@ fn encode_rows(rows: &[Row], digest: Option<Digest>, out: &mut Encoder) {
             domain::Kind::Forgejo => b"forgejo",
             domain::Kind::GitHub => b"github",
         });
+        out.key(b"read_only");
+        out.boolean(row.read_only);
         out.key(b"mode");
         out.string(words::forge_mode(row.mode));
         out.key(b"offer");
@@ -783,9 +804,13 @@ fn text_rows(rows: Option<&[Row]>, digest: Option<Digest>, met: Option<bool>, ou
             out.put(words::forge_mode(row.mode));
             out.put(b" \xc2\xb7 ");
             out.put(&words::forge_connection(row));
-            if let Some(app) = words::app_line(row) {
+            if let Some(slug) = domain::slug(row) {
                 out.put(b" \xc2\xb7 ");
-                out.put(&app);
+                if row.installations.is_empty() {
+                    out.put(&words::app_line(row).expect("GitHub App slug"));
+                } else {
+                    out.put(&words::lossy(slug));
+                }
             }
             if let Some(last) = words::last_connect(row) {
                 out.put(b" \xc2\xb7 ");
@@ -794,6 +819,21 @@ fn text_rows(rows: Option<&[Row]>, digest: Option<Digest>, met: Option<bool>, ou
             if let Some(first) = &row.first {
                 out.put(b" \xc2\xb7 ");
                 out.put(&words::first_repository(first));
+            }
+            for installation in &row.installations {
+                out.put(b"\n  ");
+                if installation.account.is_some() {
+                    out.put(b"installation ");
+                    out.number(installation.id);
+                    out.put(b" \xc2\xb7 ");
+                }
+                out.put(&words::installation_words(installation, row.read_only));
+                if installation.stray {
+                    out.put(b" \xc2\xb7 forge-accept ");
+                    out.number(u64::from(row.number));
+                    out.put(b" ");
+                    out.number(installation.id);
+                }
             }
             out.put(b"\n");
         }

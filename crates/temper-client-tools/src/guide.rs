@@ -69,6 +69,8 @@ Install the connected App on another account by opening the printed address on t
   temper ctl DIRECTORY repositories 3 --page 1
   temper ctl DIRECTORY wait forges --until settled
 The tools print links; they never open a browser. A stopped install prints connecting and exits 1.
+Accept an installation already made on GitHub, using its id from forges:
+  temper ctl DIRECTORY forge-accept 3 1
 
 Start the built-in playground, or finish a previous failed start:
   temper ctl DIRECTORY demo-start --key playground

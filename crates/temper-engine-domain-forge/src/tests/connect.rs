@@ -51,11 +51,14 @@ fn application(
     )
 }
 fn refused(d: &mut Domain, ask: Ask, role: Option<PartyRole>, carried: Option<Carried>, why: ForgeRefusal) {
+    let accept = if let Ask::Accept { .. } = ask { true } else { false };
     let install = if let Ask::Install { .. } = ask { true } else { false };
     let reading = if let Ask::Reachable { .. } = ask { true } else { false };
     let out = application(d, 1, ask, role, carried);
     let expected = if reading {
         Answered::Reachable(ReachableAnswer::Refused(why))
+    } else if accept {
+        Answered::Accept(AcceptAnswer::Refused(why))
     } else if install {
         Answered::Install(InstallAnswer::Refused(why))
     } else {
@@ -72,7 +75,8 @@ fn refused(d: &mut Domain, ask: Ask, role: Option<PartyRole>, carried: Option<Ca
         if let Request::Reachable { .. }
         | Request::Connect { .. }
         | Request::Manifest { .. }
-        | Request::Install { .. } = r
+        | Request::Install { .. }
+        | Request::Accept { .. } = r
         {
             true
         } else {
@@ -911,4 +915,75 @@ fn typed_admin_stops_survive_a_cut_diagnostic_and_clear_on_connection() {
         assert_eq!(d.forges().rows[0].ended, None);
         assert_eq!(d.forges().rows[0].ended_stop, None);
     }
+}
+
+#[test]
+fn accept_requires_the_owner_a_real_connected_github_and_a_free_writing_slot() {
+    let ask = Ask::Accept { forge: 1, installation: NonZeroU64::new(22).unwrap() };
+    for role in [None, Some(PartyRole::Member), Some(PartyRole::Maintainer), Some(PartyRole::Observer)] {
+        refused(&mut github(Kind::GitHub, Mode::Connected), ask.clone(), role, Some(VALUE), ForgeRefusal::Role);
+    }
+    refused(
+        &mut github(Kind::GitHub, Mode::Connected),
+        Ask::Accept { forge: 2, installation: NonZeroU64::new(22).unwrap() },
+        Some(PartyRole::Owner),
+        None,
+        ForgeRefusal::NoSuchForge,
+    );
+    refused(
+        &mut github(Kind::Forgejo, Mode::Connected),
+        ask.clone(),
+        Some(PartyRole::Owner),
+        None,
+        ForgeRefusal::NotTaken,
+    );
+    refused(&mut github(Kind::GitHub, Mode::Fake), ask.clone(), Some(PartyRole::Owner), None, ForgeRefusal::NotTaken);
+    refused(
+        &mut github(Kind::GitHub, Mode::Connected),
+        ask.clone(),
+        Some(PartyRole::Owner),
+        None,
+        ForgeRefusal::NotConnected,
+    );
+    let mut d = github(Kind::GitHub, Mode::Connected);
+    outputs(
+        &mut d,
+        Event::Connection { forge: 1, state: Connection::Connected { id: 9, login: b"app[bot]".as_slice().into() } },
+    );
+    let out = application(&mut d, 1, ask.clone(), Some(PartyRole::Owner), Some(VALUE));
+    assert!(out.iter().any(|r| if let Request::Accept { forge: 1, installation, .. } = r {
+        installation.get() == 22
+    } else {
+        false
+    }));
+    assert_eq!(d.application_answer(Token::new(1)), None);
+    application(&mut d, 2, ask.clone(), Some(PartyRole::Owner), None);
+    assert_eq!(d.application_answer(Token::new(2)), Some(Answered::Accept(AcceptAnswer::Refused(ForgeRefusal::Busy))));
+    let event = Event::AcceptAnswered {
+        forge: 1,
+        request: Token::new(1),
+        answer: AcceptAnswer::Accepted { installation: 22 },
+        stopped: None,
+    };
+    outputs(
+        &mut d,
+        Event::AcceptAnswered {
+            forge: 1,
+            request: Token::new(1),
+            answer: AcceptAnswer::Accepted { installation: 22 },
+            stopped: None,
+        },
+    );
+    assert_eq!(
+        d.application_answer(Token::new(1)),
+        Some(Answered::Accept(AcceptAnswer::Accepted { installation: 22 }))
+    );
+    assert!(outputs(&mut d, event).is_empty(), "one terminal answer");
+    assert!(
+        application(&mut d, 3, ask, Some(PartyRole::Owner), None).iter().any(|r| if let Request::Accept { .. } = r {
+            true
+        } else {
+            false
+        })
+    );
 }

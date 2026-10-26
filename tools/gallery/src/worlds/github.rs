@@ -20,6 +20,7 @@ pub(super) fn forges(world: World) -> Box<[u8]> {
         offer: w::Offer::NotOffered,
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
         installations: List::with_capacity(1),
         ended: None,

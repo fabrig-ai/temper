@@ -717,6 +717,7 @@ pub fn settle_root(
                 | root::Request::Manifest { .. }
                 | root::Request::Reachable { .. }
                 | root::Request::Install { .. }
+                | root::Request::Accept { .. }
                 | root::Request::EraseCarried { .. }
                 | root::Request::SetUp { .. }
                 | root::Request::Bound { .. }

@@ -245,6 +245,7 @@ pub fn incoming(
         | engine::Request::Manifest { .. }
         | engine::Request::Reachable { .. }
         | engine::Request::Install { .. }
+        | engine::Request::Accept { .. }
         | engine::Request::EraseCarried { .. }
         | engine::Request::StopGroup { .. }
         | engine::Request::SetUp { .. }

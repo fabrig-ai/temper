@@ -20,6 +20,7 @@ fn an_adoption_round_trips_through_the_family_record() {
             w::Request::Adopt(adopt) => adopt,
             w::Request::Reachable(_)
             | w::Request::Connect(_)
+            | w::Request::Accept(_)
             | w::Request::Install(_)
             | w::Request::Return(_)
             | w::Request::SetUp(_)

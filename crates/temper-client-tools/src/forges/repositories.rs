@@ -205,7 +205,8 @@ fn print(pending: &Pending, outcome: &Outcome, structured: bool, limits: &Limits
             return render::failure(why, structured, 2);
         }
         w::Outcome::Unknown => return render::failure(b"unknown", structured, 1),
-        w::Outcome::Adopted(_)
+        w::Outcome::Accepted(_)
+        | w::Outcome::Adopted(_)
         | w::Outcome::CoreRefused(_)
         | w::Outcome::Returning
         | w::Outcome::Connecting

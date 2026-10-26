@@ -673,6 +673,7 @@ impl World {
                 | top::Request::Connect { .. }
                 | top::Request::Reachable { .. }
                 | top::Request::Install { .. }
+                | top::Request::Accept { .. }
                 | top::Request::Manifest { .. }
                 | top::Request::CarriedUnused { .. }
                 | top::Request::EraseCarried { .. }

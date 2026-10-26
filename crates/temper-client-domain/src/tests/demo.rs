@@ -637,6 +637,7 @@ fn forge_document(connected: bool) -> jig_client::Family {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )

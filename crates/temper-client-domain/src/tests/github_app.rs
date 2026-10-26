@@ -250,6 +250,7 @@ fn github_row() -> forge::forges::Row {
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
@@ -304,7 +305,7 @@ fn the_github_row_names_its_app_by_slug_and_lists_its_installations() {
     ]);
     assert_eq!(
         forge::words::app_line(&row).unwrap().as_ref(),
-        "my-app · acme, installation 2 · suspended · uninstalled at the next reconcile".as_bytes()
+        "my-app · acme, installation 2 · suspended · not accepted · uninstalled at the next reconcile".as_bytes()
     );
     assert!(forge::forges::accepted(&row));
 }
@@ -400,4 +401,34 @@ fn manifest_connect_shares_the_pending_install_guard() {
     let (mut root, _, _) = connect::opened(true);
     act(&mut root, forge::Act::Install { forge: 2, back: b"/forges/connect".as_slice().into() });
     assert!(manifest(&mut root).is_empty());
+}
+
+#[test]
+fn github_connecting_words_distinguish_none_from_strays_and_respect_read_only() {
+    use forge::{
+        forges::{Account, Installation},
+        words,
+    };
+    let mut row = github_row();
+    assert_eq!(words::forge_connection(&row).as_ref(), b"Connecting: installed nowhere yet");
+    row.installations = Box::new([Installation {
+        id: 22,
+        account: Some(Account { id: 2, login: b"acme".as_slice().into() }),
+        stray: true,
+        suspended: false,
+    }]);
+    assert_eq!(words::forge_connection(&row).as_ref(), b"Connecting: no installation accepted yet");
+    assert_eq!(
+        words::app_line(&row).unwrap().as_ref(),
+        "my-app · acme · not accepted · uninstalled at the next reconcile".as_bytes()
+    );
+    row.read_only = true;
+    assert_eq!(
+        words::app_line(&row).unwrap().as_ref(),
+        "my-app · acme · not accepted · kept: the App is read-only".as_bytes()
+    );
+    row.installations[0].stray = false;
+    assert_eq!(words::forge_connection(&row).as_ref(), b"Connected as my-app[bot] (9)");
+    row.installations[0].suspended = true;
+    assert_eq!(words::forge_connection(&row).as_ref(), b"Connected as my-app[bot] (9)");
 }

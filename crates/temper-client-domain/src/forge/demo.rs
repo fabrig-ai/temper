@@ -485,6 +485,7 @@ pub fn answer(value: &jig_client::Answered, limits: &Limits) -> Option<StartAnsw
         | w::Outcome::Link(_)
         | w::Outcome::ConnectRefused(_)
         | w::Outcome::Page(_)
+        | w::Outcome::Accepted(_)
         | w::Outcome::Adopted(_)
         | w::Outcome::CoreRefused(_)
         | w::Outcome::ForgeRefused(_)

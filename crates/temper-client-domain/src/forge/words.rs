@@ -964,6 +964,10 @@ pub fn forge_connection(row: &super::forges::Row) -> Box<[u8]> {
     if let Some(super::forges::First { state: super::forges::FirstState::Failed { step }, .. }) = &row.first {
         return join_words(&[b"Set up failed: ", create_step(*step)]);
     }
+    let mut has_accepted = false;
+    for installation in &row.installations {
+        has_accepted |= !installation.stray;
+    }
     match &row.connection {
         C::NotConnected => Box::from(b"Not connected".as_slice()),
         C::NotSetUp => {
@@ -981,8 +985,12 @@ pub fn forge_connection(row: &super::forges::Row) -> Box<[u8]> {
         }),
         C::SetUpFailed { why, .. } => join_words(&[b"Set up failed: ", &lossy(why)]),
         C::Connecting => Box::from(b"Connecting".as_slice()),
-        C::Connected { .. } if row.kind == super::forges::Kind::GitHub && !super::forges::accepted(row) => {
-            Box::from(b"Connecting: installed nowhere yet".as_slice())
+        C::Connected { .. } if row.kind == super::forges::Kind::GitHub && !has_accepted => {
+            Box::from(if row.installations.is_empty() {
+                b"Connecting: installed nowhere yet".as_slice()
+            } else {
+                b"Connecting: no installation accepted yet".as_slice()
+            })
         }
         C::Connected { id, login } => {
             join_words(&[b"Connected as ", &lossy(login), b" (", skein_lib::Decimal::of(*id).as_bytes(), b")"])
@@ -1060,12 +1068,12 @@ pub fn app_line(row: &super::forges::Row) -> Option<Box<[u8]>> {
     }
     for (index, installation) in row.installations.iter().enumerate() {
         let separator: &[u8] = if index == 0 { b"" } else { b", " };
-        line = join_words(&[&line, separator, &installation_words(installation)]);
+        line = join_words(&[&line, separator, &installation_words(installation, row.read_only)]);
     }
     Some(line)
 }
 #[must_use]
-pub fn installation_words(installation: &super::forges::Installation) -> Box<[u8]> {
+pub fn installation_words(installation: &super::forges::Installation, read_only: bool) -> Box<[u8]> {
     let account = match &installation.account {
         Some(account) => lossy(&account.login),
         None => join_words(&[b"installation ", skein_lib::Decimal::of(installation.id).as_bytes()]),
@@ -1073,7 +1081,15 @@ pub fn installation_words(installation: &super::forges::Installation) -> Box<[u8
     join_words(&[
         &account,
         if installation.suspended { b" \xc2\xb7 suspended" } else { b"" },
-        if installation.stray { b" \xc2\xb7 uninstalled at the next reconcile" } else { b"" },
+        if installation.stray {
+            if read_only {
+                b" \xc2\xb7 not accepted \xc2\xb7 kept: the App is read-only"
+            } else {
+                b" \xc2\xb7 not accepted \xc2\xb7 uninstalled at the next reconcile"
+            }
+        } else {
+            b""
+        },
     ])
 }
 #[must_use]
@@ -1127,6 +1143,6 @@ pub fn app_head(slug: &[u8], empty: bool) -> Box<[u8]> {
     join_words(&[&lossy(slug), b" \xc2\xb7 ", if empty { b"installed nowhere yet" } else { b"" }])
 }
 #[must_use]
-pub fn app_installation(installation: &super::forges::Installation, first: bool) -> Box<[u8]> {
-    join_words(&[if first { b"" } else { b", " }, &installation_words(installation)])
+pub fn app_installation(installation: &super::forges::Installation, first: bool, read_only: bool) -> Box<[u8]> {
+    join_words(&[if first { b"" } else { b", " }, &installation_words(installation, read_only)])
 }

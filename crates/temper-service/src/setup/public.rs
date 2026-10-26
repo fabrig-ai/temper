@@ -16,6 +16,7 @@ pub(super) enum Caller {
     // Admin runs start with Other for local failures; skein failures replace it.
     Connect { forge: u16, request: Token, number: u64, pasted: Option<Pasted>, stop: Option<domain::AdminStop> },
     Install { forge: u16, request: Token, back: Option<Box<[u8]>> },
+    AcceptAsked { forge: u16, request: Token, installation: u64, missing: bool },
     Accept { forge: u16, call: Token, back: Option<Box<[u8]>> },
     Reachable { forge: u16, request: Token },
 }
@@ -214,6 +215,27 @@ pub(crate) fn install(engine: &mut Engine, forge: u16, request: Token, back: Opt
     engine.setup.public.insert(run, Caller::Install { forge, request, back }).expect("public room checked");
     stage(engine, run, host::Plan::Install { forge });
 }
+pub(crate) fn accept(engine: &mut Engine, forge: u16, request: Token, installation: NonZeroU64) {
+    if full(engine, forge) {
+        event(
+            engine,
+            domain::Event::AcceptAnswered {
+                forge,
+                request,
+                answer: domain::AcceptAnswer::Refused(domain::ForgeRefusal::Busy),
+                stopped: None,
+            },
+        );
+        return;
+    }
+    let run = super::lifecycle::next_run(&mut engine.setup.lifecycle);
+    engine
+        .setup
+        .public
+        .insert(run, Caller::AcceptAsked { forge, request, installation: installation.get(), missing: false })
+        .expect("public room checked");
+    stage(engine, run, host::Plan::Accept { forge, installation, state: None });
+}
 fn matches_app(pasted: Option<&Pasted>) -> bool {
     match pasted {
         Some(Pasted::App(_)) => true,
@@ -224,6 +246,19 @@ fn done(end: &root::SetupEnd) -> bool {
     match end {
         root::SetupEnd::Done { .. } => true,
         root::SetupEnd::Stopped { .. } => false,
+    }
+}
+fn accept_answer(end: &root::SetupEnd, installation: u64, missing: bool) -> domain::AcceptAnswer {
+    if done(end) {
+        domain::AcceptAnswer::Accepted { installation }
+    } else if missing {
+        domain::AcceptAnswer::ForgeRefused(domain::AdoptionRefusal::NotFound)
+    } else if let root::SetupEnd::Stopped { reason, .. } = end
+        && reason.as_ref() == b"setup host: busy"
+    {
+        domain::AcceptAnswer::Refused(domain::ForgeRefusal::Busy)
+    } else {
+        domain::AcceptAnswer::ForgeRefused(domain::AdoptionRefusal::Unreachable)
     }
 }
 pub(super) fn ended(engine: &mut Engine, run: Token, end: &root::SetupEnd) -> bool {
@@ -284,6 +319,10 @@ pub(super) fn ended(engine: &mut Engine, run: Token, end: &root::SetupEnd) -> bo
                 root::SetupEnd::Done { .. } | root::SetupEnd::Stopped { .. } => domain::InstallAnswer::Connecting,
             };
             event(engine, domain::Event::InstallAnswered { forge, request, answer, stopped });
+        }
+        Caller::AcceptAsked { forge, request, installation, missing } => {
+            let answer = accept_answer(end, installation, missing);
+            event(engine, domain::Event::AcceptAnswered { forge, request, answer, stopped });
         }
         Caller::Reachable { forge, request } => {
             let answer = match end {
@@ -394,6 +433,9 @@ pub(super) fn reached(engine: &mut Engine, run: Token, answer: domain::Reachable
 /// Preserve structured failures before the diagnostic is formatted or bounded.
 pub(super) fn stopped(engine: &mut Engine, run: Token, failure: &skein_forge_setup::reconcile::Failure) {
     use skein_forge_setup::reconcile::{Stage, Why};
+    if let Some(Caller::AcceptAsked { missing, .. }) = engine.setup.public.get_mut(&run) {
+        *missing = failure.step == Stage::Installation && failure.why == Why::Missing;
+    }
     if let Some(Caller::Connect { stop: Some(stop), .. }) = engine.setup.public.get_mut(&run) {
         *stop = match failure.why {
             Why::NotAdmin => domain::AdminStop::NotAdmin,

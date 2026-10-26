@@ -261,7 +261,8 @@ pub(crate) fn decode(outcome: &Outcome, linking: bool, limits: Limits) -> Option
                     | w::ForgeReason::Unreachable
                     | w::ForgeReason::InvalidAnswer => None,
                 },
-                w::Outcome::Adopted(_)
+                w::Outcome::Accepted(_)
+                | w::Outcome::Adopted(_)
                 | w::Outcome::CoreRefused(_)
                 | w::Outcome::SettingUp
                 | w::Outcome::SetUpRefused(_)

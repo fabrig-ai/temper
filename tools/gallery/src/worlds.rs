@@ -307,6 +307,7 @@ fn forges(world: World) -> Box<[u8]> {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -345,6 +346,7 @@ fn forges(world: World) -> Box<[u8]> {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -370,6 +372,7 @@ fn forges(world: World) -> Box<[u8]> {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -458,6 +461,7 @@ fn forges(world: World) -> Box<[u8]> {
                         )
                     },
                     admin: step == 23,
+                    read_only: false,
                     ended_stop: None,
                 },
             )

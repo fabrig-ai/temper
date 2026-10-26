@@ -337,6 +337,7 @@ fn forges_rows(numbers: &[u16], connection: &v1::Connection) -> v1::Forges {
                         repositories: List::with_capacity(0),
                         owned: None,
                         admin: false,
+                        read_only: false,
                         ended_stop: None,
                     },
                 )
@@ -368,6 +369,7 @@ fn each_forge_offer_round_trips() {
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )
@@ -461,6 +463,7 @@ fn forge_fields_refuse_one_past_their_bounds_on_construction_and_decode() {
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )
@@ -500,6 +503,7 @@ fn forges_refuse_seventeen_rows_unsorted_rows_and_duplicate_numbers() {
                 repositories: List::with_capacity(0),
                 owned: None,
                 admin: false,
+                read_only: false,
                 ended_stop: None,
             },
         )
@@ -564,6 +568,7 @@ fn forge_login_and_stop_reason_round_trip_at_schema_ceilings() {
                             repositories: List::with_capacity(0),
                             owned: None,
                             admin: false,
+                            read_only: false,
                             ended_stop: None,
                         },
                     )
@@ -769,14 +774,15 @@ fn installation_row(count: u32, why_bytes: usize) -> v1::ForgeRowParts {
         repositories: List::with_capacity(0),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
 // Encode the fields explicitly to feed invalid lengths to the receiving boundary.
 fn installation_row_bytes(parts: v1::ForgeRowParts, why: &[u8]) -> Box<[u8]> {
     // Number (2), four enum tags, first tag, list length (4), end tag, why length (4),
-    // app tag, web tag, repositories length (4), owned tag, admin bool, typed stop tag.
-    let mut size = why.len().checked_add(25).unwrap();
+    // app tag, web tag, repositories length (4), owned tag, admin bool, typed stop tag, read-only bool.
+    let mut size = why.len().checked_add(26).unwrap();
     for installation in &parts.installations {
         size = size.checked_add(usize::try_from(installation.measure()).unwrap()).unwrap();
     }
@@ -798,7 +804,7 @@ fn installation_row_bytes(parts: v1::ForgeRowParts, why: &[u8]) -> Box<[u8]> {
     writer.put(&[0]).unwrap(); // no web address
     writer.put(&0_u32.to_be_bytes()).unwrap(); // no adoptions
     writer.put(&[0]).unwrap(); // no owned details
-    writer.put(&[0, 0]).unwrap(); // admin false, no typed stop
+    writer.put(&[0, 0, 0]).unwrap(); // admin false, no typed stop, read-only false
     writer.finish()
 }
 #[test]

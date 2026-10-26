@@ -240,6 +240,7 @@ fn every_connection_decodes_into_the_forges_words() {
                         },
                         owned: fixture_wire_owned(m),
                         admin: false,
+                        read_only: false,
                         ended_stop: None,
                     },
                 )
@@ -264,6 +265,7 @@ fn every_connection_decodes_into_the_forges_words() {
             }]),
             owned: fixture_owned(m),
             admin: false,
+            read_only: false,
             ended_stop: None,
         };
         assert_eq!(words::forge_connection(&row).as_ref(), words);
@@ -297,6 +299,7 @@ fn the_offer_drives_the_manual_words_and_setup_actions() {
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     };
     assert_eq!(words::forge_set_up_action(&row), Some(b"Set up a Forgejo here".as_slice()));
@@ -352,6 +355,7 @@ fn an_out_of_order_document_is_refused() {
                         repositories: List::with_capacity(0),
                         owned: None,
                         admin: false,
+                        read_only: false,
                         ended_stop: None,
                     },
                 )
@@ -458,6 +462,7 @@ fn first_repository_decodes_each_state_project_and_creation_step() {
                             repositories: List::with_capacity(0),
                             owned: None,
                             admin: false,
+                            read_only: false,
                             ended_stop: None,
                         },
                     )
@@ -546,6 +551,7 @@ fn installation_accounts_flags_and_connect_ends_survive_client_decode() {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -606,6 +612,7 @@ fn admin_form_and_typed_stops_survive_client_decode() {
                             repositories: List::with_capacity(0),
                             owned: None,
                             admin,
+                            read_only: false,
                             ended_stop: stop.clone(),
                         },
                     )

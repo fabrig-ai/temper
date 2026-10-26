@@ -1018,7 +1018,7 @@ pub(crate) fn app_line(b: &mut Builder, w: &Words, row: &Row) {
         b.open(Role::Description);
         crate::cards::text(b, Role::Slot, &forge::words::app_head(slug, row.installations.is_empty()));
         for (index, installation) in row.installations.iter().enumerate() {
-            crate::cards::text(b, Role::Slot, &forge::words::app_installation(installation, index == 0));
+            crate::cards::text(b, Role::Slot, &forge::words::app_installation(installation, index == 0, row.read_only));
         }
         b.close();
         b.close();

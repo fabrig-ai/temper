@@ -121,6 +121,7 @@ fn rows(root: &mut Domain, watch: Token, number: u16) -> Queue<Request> {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -355,6 +356,7 @@ fn strip_forges(root: &mut Domain, watch: Token, connection: Option<w::Connectio
                         repositories: List::with_capacity(0),
                         owned: None,
                         admin: false,
+                        read_only: false,
                         ended_stop: None,
                     },
                 )

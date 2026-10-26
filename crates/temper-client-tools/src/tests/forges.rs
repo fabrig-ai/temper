@@ -25,6 +25,7 @@ fn row(connection: C) -> Row {
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
@@ -52,6 +53,7 @@ fn record_first(connection: w::Connection, first: Option<w::FirstRepository>) ->
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -144,7 +146,7 @@ fn every_state_renders_as_text_and_structured_json() {
         assert_eq!(plain.status, 0);
         assert_eq!(json.status, 0);
         let document = concat(&[
-            br#"{"forges":[{"number":3,"kind":"forgejo","mode":"owned","offer":"offered","#,
+            br#"{"forges":[{"number":3,"kind":"forgejo","read_only":false,"mode":"owned","offer":"offered","#,
             fields,
             br#","installations":[],"ended":null,"first":null}]}"#,
         ]);
@@ -795,6 +797,7 @@ fn settled_wait_with_installations(count: u32) {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )
@@ -860,7 +863,7 @@ fn human_forges_names_the_app_accounts_unknown_installations_and_their_states() 
     assert!(
         skein_lib::bytes::find(
             &plain.stdout,
-            " · my-app · acme, installation 22 · suspended · uninstalled at the next reconcile\n".as_bytes(),
+            " · my-app\n  installation 11 · acme\n  installation 22 · suspended · not accepted · uninstalled at the next reconcile · forge-accept 3 22\n".as_bytes(),
         )
         .is_some()
     );
@@ -949,6 +952,7 @@ fn human_forges_bounds_the_wire_maximum_installations_with_longest_logins() {
                     repositories: List::with_capacity(0),
                     owned: None,
                     admin: false,
+                    read_only: false,
                     ended_stop: None,
                 },
             )

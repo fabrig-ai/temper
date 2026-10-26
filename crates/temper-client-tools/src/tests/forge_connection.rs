@@ -8,6 +8,7 @@ const ADMIN: &[&str] = &["forge-connect", "3", "forgejo-admin", "token", "--key"
 const TOKEN: &[u8] = b"admin-token-placeholder-0123\n\n";
 const MANIFEST: &[&str] = &["forge-connect", "3", "github", "--key", "app"];
 const INSTALL: &[&str] = &["forge-install", "3"];
+const ACCEPT: &[&str] = &["forge-accept", "3", "22"];
 // An opaque fake key; neither these step tests nor the shell tests contact a forge.
 const PEM: &[u8] = b"fake-app-pem";
 const AT_BOUND: &[u8] = &[b'p'; 4090];
@@ -149,7 +150,7 @@ fn every_forge_refusal_prints_words_json_and_exit_two() {
         (w::ForgeRefusal::FirstIsBot, "first_is_bot", "the organization is the bot's login: name another organization"),
     ] {
         for json in [false, true] {
-            for words in [CONNECT, ADMIN, MANIFEST, INSTALL] {
+            for words in [CONNECT, ADMIN, MANIFEST, INSTALL, ACCEPT] {
                 let mut root = f::signed_in(f::PARTY);
                 let value = if words == CONNECT {
                     Some(Secret::new(PEM.into()))
@@ -444,6 +445,7 @@ fn first_page(root: &mut f::Harness, connection: w::Connection, state: w::FirstS
                 repositories: skein_lib::List::with_capacity(0),
                 owned: None,
                 admin: true,
+                read_only: false,
                 ended_stop: stop,
             },
         )
@@ -640,5 +642,88 @@ fn admin_first_refused_as_the_bot_s_login_exits_two_naming_the_remedy() {
         assert_eq!(root.sends.len(), 1);
         assert_eq!(request(&root, call), w::Request::Connect(connect));
         assert!(crate::root::next_deadline(&root.root).is_none());
+    }
+}
+
+#[test]
+fn accept_sends_the_existing_id_without_a_value_and_prints_its_next_call() {
+    for words in [ACCEPT, &["forge-accept", "3", "22", "--key", "accept"]] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let call = root.submit_prepared(f::call(words), json, None);
+            let w::Request::Accept(accept) = request(&root, call) else { panic!("accept") };
+            assert_eq!((accept.forge(), accept.installation()), (3, 22));
+            assert!(root.carried.is_empty());
+            let limits = temper_client_domain::forge::wire_limits(&root.limits.domain.forge).expect("limits");
+            root.adoption_answer(
+                call,
+                w::Outcome::Accepted(
+                    w::AcceptedInstallation::new(&limits, w::AcceptedInstallationParts { installation: 22 })
+                        .expect("accepted"),
+                ),
+            );
+            let printed = root.answer(call).expect("accepted");
+            assert_eq!(printed.status, 0);
+            assert_eq!(
+                printed.stdout.as_ref(),
+                if json {
+                    br#"{"forge":3,"accepted":22}"#.as_slice()
+                } else {
+                    b"accepted: installation 22 on forge 3\ntemper ctl DIRECTORY repositories 3 --installation 22\n"
+                }
+            );
+        }
+    }
+    for words in [
+        &["forge-accept", "0", "22"][..],
+        &["forge-accept", "65536", "22"],
+        &["forge-accept", "3", "0"],
+        &["forge-accept", "3", "18446744073709551616"],
+    ] {
+        f::parse(words).expect_err("nonzero numbers within bounds");
+    }
+}
+#[test]
+fn accept_names_an_installation_github_does_not_have() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(ACCEPT);
+    let limits = temper_client_domain::forge::wire_limits(&root.limits.domain.forge).expect("limits");
+    root.adoption_answer(
+        call,
+        w::Outcome::ForgeRefused(
+            w::ForgeRefused::new(&limits, w::ForgeRefusedParts { reason: w::ForgeReason::NotFound }).expect("refusal"),
+        ),
+    );
+    let printed = root.answer(call).expect("refused");
+    assert_eq!(printed.status, 2);
+    assert_eq!(printed.stderr.as_ref(), b"GitHub has no installation 22 of this App\n");
+}
+
+#[test]
+fn an_accept_recovers_its_durable_answer_with_its_own_operation_name() {
+    for json in [false, true] {
+        let mut root = f::signed_in(f::PARTY);
+        let call = root.submit(ACCEPT);
+        assert!(root.saved.contains_key(&call));
+        let mut records = f::restored_adoption(f::PARTY);
+        let record = records.get_mut(0).expect("one restore");
+        record.key = root.sent_name(call).expect("engine key");
+        record.request.request = root.adoption_bytes(call).clone();
+        let mut root = f::started_with(records, f::SEED, json);
+        root.deliver(c::Delivery::Me(Box::new(f::me(f::PARTY))));
+        let limits = temper_client_domain::forge::wire_limits(&root.limits.domain.forge).expect("limits");
+        root.adoption_answer(
+            0,
+            w::Outcome::Accepted(
+                w::AcceptedInstallation::new(&limits, w::AcceptedInstallationParts { installation: 22 })
+                    .expect("accepted"),
+            ),
+        );
+        let expected = if json {
+            b"{\"operation\":\"forge-accept\",\"outcome\":{\"forge\":3,\"accepted\":22}}\n".as_slice()
+        } else {
+            b"kept: forge-accept accepted: installation 22 on forge 3\ntemper ctl DIRECTORY repositories 3 --installation 22\n"
+        };
+        assert_eq!(root.kept_lines.as_slice(), &[Box::<[u8]>::from(expected)]);
     }
 }

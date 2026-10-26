@@ -83,6 +83,7 @@ impl Harness {
             w::Request::Return(_)
             | w::Request::SetUp(_)
             | w::Request::StartDemo
+            | w::Request::Accept(_)
             | w::Request::Reachable(_)
             | w::Request::Connect(_)
             | w::Request::Install(_) => {

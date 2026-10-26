@@ -734,3 +734,8 @@ fn file_scan_excludes_only_jigs_generation_secrets_store() {
     assert!(std::panic::catch_unwind(|| scan.files(scratch.path(), &excluded, &downloaded)).is_err());
     scratch.remove();
 }
+
+mod existing;
+pub fn accept_existing() {
+    existing::accept_existing();
+}

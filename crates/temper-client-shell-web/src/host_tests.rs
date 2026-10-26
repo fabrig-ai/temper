@@ -462,6 +462,7 @@ fn the_github_rows_external_web_link_has_its_address_and_noopener() {
                         ended: None,
                         owned: None,
                         admin: false,
+                        read_only: false,
                         ended_stop: None,
                     },
                 )

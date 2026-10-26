@@ -131,7 +131,7 @@ fn model_says_github_has_no_repository_chosen_yet() {
 #[test]
 fn model_keeps_github_connecting_until_an_installation_is_accepted() {
     let view = model_view(forge::github_rows(false));
-    line_before_model(view.tree(), "GitHub · Connecting: installed nowhere yet");
+    line_before_model(view.tree(), "GitHub · Connecting: no installation accepted yet");
     each_step(view.tree(), true);
 }
 

@@ -310,6 +310,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Manifest { .. }
         | Request::Reachable { .. }
         | Request::Install { .. }
+        | Request::Accept { .. }
         | Request::CarriedUnused { .. }
         | Request::EraseCarried { .. }
         | Request::SetUp { .. }
@@ -379,6 +380,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Manifest { .. }
         | Request::Reachable { .. }
         | Request::Install { .. }
+        | Request::Accept { .. }
         | Request::CarriedUnused { .. }
         | Request::EraseCarried { .. }
         | Request::SetUp { .. }
@@ -445,6 +447,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Manifest { .. }
         | Request::Reachable { .. }
         | Request::Install { .. }
+        | Request::Accept { .. }
         | Request::CarriedUnused { .. }
         | Request::EraseCarried { .. }
         | Request::SetUp { .. }
@@ -1219,6 +1222,7 @@ fn setup_row(number: u16, kind: Kind, connection: Connection, offer: Offer) -> R
         repositories: Box::new([]),
         owned: None,
         admin: false,
+        read_only: false,
         ended_stop: None,
     }
 }
