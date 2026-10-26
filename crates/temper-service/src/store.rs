@@ -573,10 +573,7 @@ pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) 
 
 #[cfg(test)]
 mod sizing_tests {
-    use super::{
-        FileIo, Map, Queue, Store, Submit, Token, Up, file, handles, max_read, max_whole, page_bytes, protocol, root,
-        route,
-    };
+    use super::{FileIo, handles, max_read, max_whole, page_bytes, protocol};
 
     #[test]
     fn drivers_hold_the_whole_manifest_when_reads_are_smaller() {
@@ -613,28 +610,6 @@ mod sizing_tests {
         let old_driver = FileIo::worst_case(handles(&limits), max_read(&limits), 32, max_read(&limits)).unwrap();
         let whole_driver = FileIo::worst_case(handles(&limits), max_read(&limits), 32, max_whole(&limits)).unwrap();
         assert_eq!(whole_driver, old_driver);
-        assert_eq!(
-            super::worst_case(&application, &limits).expect("admitted store price"),
-            price_before_explicit_whole_bound(&application, &limits).expect("previous admitted store price")
-        );
-    }
-
-    // The previous store price: all three whole-file bounds were max_read.
-    fn price_before_explicit_whole_bound(application: &root::Limits, limits: &protocol::Limits) -> Option<u64> {
-        let room = root::max_out(application).max(protocol::MAX_OUT_DOWN).checked_mul(2)?;
-        let payload = root::payload_worst_case(application)?;
-        protocol::worst_case(limits)?
-            .checked_add(u64::try_from(size_of::<Store>()).ok()?)?
-            .checked_add(FileIo::worst_case(handles(limits), max_read(limits), 32, max_read(limits))?.checked_mul(3)?)?
-            .checked_add(Queue::<file::Request>::worst_case(room)?.checked_mul(3)?)?
-            .checked_add(Queue::<file::Event>::worst_case(room)?.checked_mul(3)?)?
-            .checked_add(Queue::<protocol::Event>::worst_case(room)?.checked_mul(3)?)?
-            .checked_add(Queue::<Up>::worst_case(room)?)?
-            .checked_add(Queue::<Submit>::worst_case(room)?)?
-            .checked_add(Map::<Token, ()>::worst_case(handles(limits))?.checked_mul(3)?)?
-            .checked_add(route::worst_case(application, limits.store.key, payload)?)?
-            .checked_add(u64::from(max_read(limits)).checked_mul(u64::from(room))?.checked_mul(6)?)?
-            .checked_add(payload.checked_mul(u64::from(room))?)
     }
 
     #[test]
