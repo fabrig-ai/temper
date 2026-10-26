@@ -60,14 +60,8 @@ fn the_stock_passes_jigs_one_check() {
         let engine = engine(&document);
         let core = config::core(&engine, [1; 16], 7);
         let defaults = crate::stock::defaults(&engine.llm);
-        assert_eq!(
-            defaults.charters[0].policy.instructions.as_ref(),
-            include_bytes!("../../../../docs/examples/owned/charters/chat.txt")
-        );
-        assert_eq!(
-            defaults.charters[1].policy.instructions.as_ref(),
-            include_bytes!("../../../../docs/examples/owned/charters/coding.txt")
-        );
+        assert_eq!(defaults.charters[0].policy.instructions.as_ref(), include_bytes!("../stock/chat.txt"));
+        assert_eq!(defaults.charters[1].policy.instructions.as_ref(), include_bytes!("../stock/coding.txt"));
         for charter in &defaults.charters {
             assert_eq!(charter.hosts, jig_domain_fleet::Kinds::Workers, "{row}");
         }
@@ -131,8 +125,24 @@ fn stock_startup_requires_a_model_before_building_its_charters() {
 
 #[test]
 fn the_transition_keeps_the_documents_own_defaults() {
-    let owned = include_bytes!("../../../../docs/examples/owned.json");
-    let document = fixtures::with(owned, b"engine.charters[0].turns", b"9");
+    let legacy = [
+        br#"{"charters":[{
+            "number":1,"instructions":"charters/chat.txt","model":"small","alternatives":[],
+            "hosts":"workers","waiting_ms":10000,"resume":true,"turns":8,"time_ms":120000,
+            "reserve_turns":1,"reserve_time_ms":60000,"spend":20,"inspect":true,"modify":true,
+            "shell":false,"agents":true,"call_timeout_ms":10000
+        }],"templates":[],"policies":[],"rules":{
+            "ceiling":{"tools":1,"grants":[],
+                "delegation":{"kinds":[{"kind":"charter","number":1}],"tasks":8,"depth":4},
+                "budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]},
+            "period_spend":100,"minimum_run_spend":1,"maximum_run_spend":10,"implies":[],"requirements":[]
+        },"#
+        .as_slice(),
+        &fixtures::ENGINE[1..],
+    ]
+    .concat();
+    let document = fixtures::with(br#"{"engine":{}}"#, b"engine", &legacy);
+    let document = fixtures::with(&document, b"engine.charters[0].turns", b"9");
     let parsed =
         config::document(&document, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 }).unwrap();
     let at = config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"engine").unwrap();
