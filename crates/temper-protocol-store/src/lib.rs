@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 extern crate alloc;
 use alloc::boxed::Box;
+pub mod delivery;
 pub mod keys;
 pub mod records;
 #[rustfmt::skip]

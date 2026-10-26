@@ -1070,6 +1070,7 @@ pub(crate) fn subscribe_goal(domain: &mut Domain, env: &Env<Limits>, goal: u64, 
             | Work::AdoptDone
             | Work::Restart(_)
             | Work::Decoded { .. }
+            | Work::SettleDelivery { .. }
             | Work::Core(_)
             | Work::Tasks(_)
             | Work::People(_)

@@ -773,7 +773,8 @@ fn ended(key: &root::Key) -> Option<u64> {
             | core::Key::Accounts(_),
         )
         | root::Key::Wires
-        | root::Key::Forge(_) => None,
+        | root::Key::Forge(_)
+        | root::Key::Delivery(_) => None,
     }
 }
 

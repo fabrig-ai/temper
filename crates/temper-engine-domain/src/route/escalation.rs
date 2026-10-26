@@ -77,7 +77,8 @@ pub(crate) fn loaded(domain: &mut Domain, _env: &Env<Limits>, waiter: Token, row
                 | jig_domain_core::Record::Accounts(_)
                 | jig_domain_core::Record::Notes(_),
             )
-            | Record::Forge { .. } => None,
+            | Record::Forge { .. }
+            | Record::Delivery { .. } => None,
         }
     } else {
         None

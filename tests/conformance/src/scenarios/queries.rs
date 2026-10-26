@@ -32,7 +32,7 @@ fn indexed(store: &Store) -> Vec<u64> {
         .keys()
         .filter_map(|key| match key {
             root::Key::Core(core::Key::Tasks(tasks::Key::EndedByParty { party: 1, task, .. })) => Some(*task),
-            root::Key::Wires | root::Key::Core(_) | root::Key::Forge { .. } => None,
+            root::Key::Wires | root::Key::Core(_) | root::Key::Forge { .. } | root::Key::Delivery(_) => None,
         })
         .collect()
 }
@@ -65,7 +65,7 @@ pub(super) fn advance(world: &mut World, action: Action, phase: &mut u8) -> Resu
                     .values()
                     .filter_map(|record| match record {
                         root::Record::Core(core::Record::Tasks(tasks::Stored::Live(row))) => Some(row.number),
-                        root::Record::Core(_) | root::Record::Forge { .. } => None,
+                        root::Record::Core(_) | root::Record::Forge { .. } | root::Record::Delivery { .. } => None,
                     })
                     .collect();
             }

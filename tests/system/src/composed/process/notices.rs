@@ -12,7 +12,7 @@ fn saves(world: &World) -> Vec<accounts::Stored> {
         .values()
         .filter_map(|record| match record {
             Record::Core(jig_domain_core::Record::Accounts(record)) => Some(record.clone()),
-            Record::Core(_) | Record::Forge { .. } => None,
+            Record::Core(_) | Record::Forge { .. } | Record::Delivery { .. } => None,
         })
         .collect()
 }

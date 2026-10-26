@@ -142,7 +142,7 @@ fn a_members_checked_identity_binds_and_mints_twice_then_refuses_another_subject
                 false
             }
         }
-        temper_engine_domain::Record::Core(_) => false,
+        temper_engine_domain::Record::Core(_) | temper_engine_domain::Record::Delivery { .. } => false,
     }));
 }
 #[test]

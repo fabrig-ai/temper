@@ -430,6 +430,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
                     )?,
             )?,
         )?
+        .checked_add(delivery_worst_case(limits)?)?
         .checked_add(role_scratch_bytes(limits)?)?
         // Retained step/fire scratch and the owner's output queue. Journal
         // failure translation below still needs its one-entry Output scratch.
@@ -592,6 +593,16 @@ pub(crate) fn run_charter_bytes(charter: &RunCharter) -> Option<u64> {
     Some(bytes)
 }
 
+pub(crate) fn delivery_worst_case(limits: &Limits) -> Option<u64> {
+    let payload = crate::DeliveryReply::worst_case()?.min(u64::from(limits.journal.transcript_bytes));
+    let row = u64::try_from(size_of::<crate::DeliveryRecord>()).ok()?.checked_add(payload)?;
+    // Prepared assignments and held assignments, plus settlement, decision-row,
+    // protocol/store and relay scratch copies. The retained map is priced separately.
+    let copies = u64::from(limits.tasks.tasks).checked_add(u64::from(limits.journal.held))?.checked_add(4)?;
+    Map::<CallKey, crate::DeliveryReply>::worst_case(limits.call_records)?
+        .checked_add(u64::from(limits.call_records).checked_mul(payload.checked_add(row.checked_mul(copies)?)?)?)
+}
+
 pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
     let tasks = limits.tasks;
     let mut bytes = u64::try_from(size_of::<tasks::TaskRecord>()).ok()?;
@@ -631,6 +642,11 @@ pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
     let people = limits.people;
     Some(
         bytes
+            .max(
+                crate::DeliveryReply::worst_case()?
+                    .checked_add(u64::try_from(size_of::<crate::DeliveryRecord>()).ok()?)?
+                    .min(u64::from(limits.journal.transcript_bytes)),
+            )
             .max(u64::from(people.identity_bytes))
             .max(u64::from(people.words))
             .max(u64::from(limits.forge.client.answer_bytes))

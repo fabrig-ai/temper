@@ -10,6 +10,8 @@ mod archive;
 mod assemble;
 mod boundary;
 mod deadline;
+mod delivery;
+pub use delivery::{DeliveryMarker, DeliveryReason, DeliveryReceipt, DeliveryRecord, DeliveryReply};
 mod decision;
 mod domain;
 mod limits;

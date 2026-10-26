@@ -253,18 +253,24 @@ fn worker(engine: &mut Engine, request: root::WorkerRequest) {
             ),
             root::Delivery::Host(delivery) => match *delivery {
                 root::HostDelivery::Render { to, answer, .. } => engine.events.push(crate::tools::render(to, &answer)),
-                root::HostDelivery::Answer { channel, task, attempt, name, call } => engine.workers.send(
-                    engine.env.now,
-                    channel,
-                    jig_domain_host::LinkDown::Relayed {
-                        run: skein_lib::Token::new(task),
-                        attempt: skein_lib::Token::new(attempt),
-                        call: name,
-                        answer: crate::tools::settled(call.answer),
-                    },
-                    &engine.values,
-                    &mut engine.events,
-                ),
+                root::HostDelivery::Answer { channel, task, attempt, name, call, reply } => {
+                    let evidence = match reply {
+                        Some(reply) => temper_protocol_store::delivery::encode_reply(&reply),
+                        None => None,
+                    };
+                    engine.workers.send(
+                        engine.env.now,
+                        channel,
+                        jig_domain_host::LinkDown::Relayed {
+                            run: skein_lib::Token::new(task),
+                            attempt: skein_lib::Token::new(attempt),
+                            call: name,
+                            answer: crate::tools::settled(call.answer, evidence.as_deref()),
+                        },
+                        &engine.values,
+                        &mut engine.events,
+                    );
+                }
             },
             root::Delivery::DemoActed { .. }
             | root::Delivery::DemoNote { .. }

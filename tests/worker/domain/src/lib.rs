@@ -128,3 +128,6 @@ pub fn limits() -> Limits {
 /// The stop bound the worker's configuration derives: past the link's
 /// noticing and its grace, a push's deadline, then a save's.
 pub const STOP_BOUND: Duration = Duration::from_secs(300);
+
+/// The process observation used by cross-world delivery replay stories.
+pub use temper_worker_domain::agent::SavedReply as SavedDeliveryReply;

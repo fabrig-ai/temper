@@ -59,7 +59,8 @@ pub fn assignment(assignment: &engine::Assignment) -> (host::Assignment, wire::W
             grants: grants(&assignment.grants),
         },
         turns: assignment.transcript.clone(),
-        answered: answered(&assignment.settled),
+        answered: temper_service::assignment::answered(&assignment.settled, &assignment.delivery_replies)
+            .expect("world keeps delivery evidence"),
     };
     (hub, repositories, save)
 }
@@ -167,40 +168,4 @@ fn grants(grants: &[accounts::Grant]) -> Box<[host::Grant]> {
         translated.push(host::Grant { form, account: grant.account, generation: grant.generation, valid: grant.valid });
     }
     translated.into_boxed_slice()
-}
-
-fn answered(settled: &[core::Settled]) -> Box<[host::AnsweredCall]> {
-    let mut answered = Vec::with_capacity(settled.len());
-    for core::Settled { key, call } in settled {
-        let answer = match &call.answer {
-            core::SettledAnswer::Host { error, body } => {
-                host::SettledAnswer::Host { error: *error, body: body.clone() }
-            }
-            core::SettledAnswer::Delivery { outcome, evidence } => {
-                host::SettledAnswer::Delivery { outcome: delivery(*outcome), evidence: evidence.clone() }
-            }
-        };
-        answered.push(host::AnsweredCall {
-            name: jig_protocol_charter::call_name(&jig_protocol_charter::CallKey {
-                activation: key.attempt,
-                completion: key.completion,
-                position: key.position,
-            }),
-            tool: call.tool.clone(),
-            answer,
-        });
-    }
-    answered.into_boxed_slice()
-}
-
-/// As jig's protocol layer names a delivery's outcome: an invalid one was
-/// refused (`testing/jig-test-service`).
-const fn delivery(outcome: core::DeliveryOutcome) -> host::DeliveryOutcome {
-    match outcome {
-        core::DeliveryOutcome::Delivered => host::DeliveryOutcome::Delivered,
-        core::DeliveryOutcome::Nothing => host::DeliveryOutcome::Nothing,
-        core::DeliveryOutcome::Stale => host::DeliveryOutcome::Stale,
-        core::DeliveryOutcome::Refused | core::DeliveryOutcome::Invalid => host::DeliveryOutcome::Refused,
-        core::DeliveryOutcome::Failed => host::DeliveryOutcome::Failed,
-    }
 }

@@ -100,7 +100,7 @@ fn policies(driver: &Driver) -> Vec<(u32, people::PolicyValue)> {
             Record::Core(core::Record::People(people::Stored::Policy { project, value, .. })) => {
                 Some((*project, value.clone()))
             }
-            Record::Core(_) | Record::Forge { .. } => None,
+            Record::Core(_) | Record::Forge { .. } | Record::Delivery { .. } => None,
         })
         .collect()
 }

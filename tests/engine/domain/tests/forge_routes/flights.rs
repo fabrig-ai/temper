@@ -18,7 +18,7 @@ pub(super) fn rows(world: &World) -> Vec<(u64, u64)> {
                 forge_top::Stored::Flight { task, entry } => Some((*task, *entry)),
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .collect()
 }

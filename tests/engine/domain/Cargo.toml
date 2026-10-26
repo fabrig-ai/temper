@@ -43,6 +43,7 @@ smith-domain-tools.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+temper-worker-domain-world = { path = "../../worker/domain" }
 jig-client.workspace = true
 jig-client-world.workspace = true
 temper-engine-smith.workspace = true

@@ -637,6 +637,7 @@ pub fn assignment_with_settings(
         transcript: Box::new([]),
         answered: Box::new([]),
         settled: Box::new([]),
+        delivery_replies: Box::new([]),
         grants: Box::new([]),
     }
 }

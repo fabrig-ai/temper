@@ -25,6 +25,8 @@ const PROCESS: Token = Token::new(707);
 const CALL: Token = Token::new(44);
 /// The scripted channel's `host_reply_text`, small enough to exercise both sides.
 pub const REPLY_BYTES: u32 = 32;
+// Jig Small grants 4096 bytes for opaque delivery evidence.
+const REPLAY_BYTES: u32 = 4096;
 
 const REMOTE: &[u8] = b"org/app";
 const PATH: &[u8] = b"code";
@@ -47,6 +49,10 @@ pub struct Report {
 }
 
 struct World {
+    attempt: Token,
+    answered: Box<[host::AnsweredCall]>,
+    resumed: Box<[agent::AnsweredCall]>,
+    evidence: Option<Box<[u8]>>,
     domain: Domain,
     env: Env<Limits>,
     out: Queue<Request>,
@@ -74,7 +80,17 @@ struct World {
 
 impl World {
     fn new(seed: u64) -> Self {
+        Self::with_replay(seed, ATTEMPT, Box::new([]))
+    }
+
+    fn with_replay(seed: u64, attempt: Token, answered: Box<[host::AnsweredCall]>) -> Self {
         let mut limits = crate::limits();
+        // The replay story carries a receipt within the Small profile's 4096-byte evidence envelope.
+        // Ordinary stories retain their original zero-evidence bounds.
+        if !answered.is_empty() {
+            limits.host.delivery_evidence_bytes = u64::from(REPLAY_BYTES);
+            limits.host.transcript_bytes = u64::from(REPLAY_BYTES);
+        }
         limits.host.slots = 1;
         limits.checkout.workspaces = 1;
         limits.checkout.repositories = 1;
@@ -86,6 +102,10 @@ impl World {
         forge.create_branch(REMOTE, b"topic", first).expect("topic");
         forge.create_branch(REMOTE, b"saved", first).expect("saved");
         Self {
+            attempt,
+            answered,
+            resumed: Box::new([]),
+            evidence: None,
             domain: Domain::new(&limits),
             out: Queue::with_capacity(max_out(&limits)),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
@@ -161,7 +181,7 @@ impl World {
             }
             Request::Link(up) => self.link(up),
             Request::Answer { run, attempt, answer, work, preparation } => {
-                assert_eq!((run, attempt), (RUN, ATTEMPT));
+                assert_eq!((run, attempt), (RUN, self.attempt));
                 assert!(self.held.is_none(), "delivery settles before the final answer");
                 if self.up {
                     assert!(self.answer.replace((answer, work, preparation)).is_none());
@@ -186,9 +206,9 @@ impl World {
 
     fn link(&mut self, up: host::LinkUp) {
         match up {
-            host::LinkUp::Activity { run, attempt, .. } => assert_eq!((run, attempt), (RUN, ATTEMPT)),
+            host::LinkUp::Activity { run, attempt, .. } => assert_eq!((run, attempt), (RUN, self.attempt)),
             host::LinkUp::Call { run, attempt, call, tool, writes, input, .. } => {
-                assert_eq!((run, attempt), (RUN, ATTEMPT));
+                assert_eq!((run, attempt), (RUN, self.attempt));
                 assert_eq!(tool.as_ref(), b"recall");
                 assert!(!writes);
                 assert_eq!(input.as_ref(), b"{}");
@@ -263,10 +283,11 @@ impl World {
     fn down(&mut self, message: agent::Down) -> bool {
         match message {
             agent::Down::Start { start, .. } => {
-                assert_eq!(start.activation, ATTEMPT.raw());
+                assert_eq!(start.activation, self.attempt.raw());
                 assert_eq!(start.directories.len(), 1);
                 assert_eq!(start.directories[0].name.as_ref(), b"app");
                 assert_eq!(start.workspace, Some(start.directories[0].root));
+                self.resumed = start.answered;
             }
             agent::Down::Answer { call, reply } => {
                 assert_eq!(call, CALL);
@@ -286,6 +307,7 @@ impl World {
                     write!(&mut encoded, "{byte:02x}").expect("String write");
                 }
                 assert_eq!(receipts.receipts()[0].text(), encoded.as_bytes(), "the receipt identifies the pushed head");
+                self.evidence = crate::evidence::encode(&agent::Delivery::Delivered(receipts));
                 self.deliveries += 1;
             }
             agent::Down::Cancel => self.report.cancellations += 1,
@@ -336,12 +358,12 @@ impl World {
         let assignment = host::Assignment {
             messages: Box::new([]),
             turns: Box::new([]),
-            answered: Box::new([]),
+            answered: std::mem::take(&mut self.answered),
             assignment: host::RunAssignment {
                 identity: [9; 16],
                 live: host::LiveAsk::NONE,
                 run: RUN,
-                attempt: ATTEMPT,
+                attempt: self.attempt,
                 workspace: Some(host::Workspace { workstream: WORKSTREAM, items: Token::new(0) }),
                 save: true,
                 charter: protocol::charter(),
@@ -355,7 +377,7 @@ impl World {
     fn deliver(&mut self) {
         self.say(agent::Up::Call {
             call: CALL,
-            name: agent::CallName { activation: ATTEMPT.raw(), completion: 1, position: 0 },
+            name: agent::CallName { activation: self.attempt.raw(), completion: 1, position: 0 },
             deadline: self.env.now.saturating_add(Duration::from_secs(60)),
             ask: protocol::delivery(b"Delivery", b"Worker story"),
         });
@@ -390,7 +412,7 @@ impl World {
                 self.deliver();
                 assert!(self.held.is_some());
                 assert_eq!(self.forge.branch(REMOTE, b"topic"), Some(self.first));
-                self.event(Event::Link(host::LinkDown::Cancel { run: RUN, attempt: ATTEMPT }));
+                self.event(Event::Link(host::LinkDown::Cancel { run: RUN, attempt: self.attempt }));
                 assert_eq!(self.report.cancellations, 1);
                 self.gone();
                 assert!(self.answer.is_none());
@@ -458,7 +480,7 @@ impl World {
         self.report.tree = self.forge.tree(commit);
         assert_eq!(self.report.tree, [(PATH.to_vec(), b"edited\n".to_vec())].into(), "the entire edited tree landed");
         assert!(self.forge.is_ancestor(self.first, commit));
-        self.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: ATTEMPT }));
+        self.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: self.attempt }));
         assert_eq!(self.domain.kept_answers(), 0);
         self.event(Event::Shutdown);
         assert_eq!(self.stops, 1, "a worker with nothing left stops, once");
@@ -486,7 +508,7 @@ pub fn saved(seed: u64, start: wire::Start) -> wire::Work {
         answer.ending,
         host::Ending::Failed { failure: host::Failure::Cancelled(host::Reason::Contact), .. }
     ));
-    world.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: ATTEMPT }));
+    world.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: world.attempt }));
     assert_eq!(world.domain.kept_answers(), 0);
     world.event(Event::Shutdown);
     assert_eq!(world.stops, 1);
@@ -510,7 +532,7 @@ pub fn workstreams(seed: u64) -> Box<[u64]> {
     let mut world = World::new(seed);
     world.start();
     world.story(Case::Delivered);
-    world.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: ATTEMPT }));
+    world.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: world.attempt }));
     world.up = false;
     world.event(Event::Lost);
     world.connect();
@@ -554,7 +576,7 @@ fn finish_host_run(world: &mut World) {
     assert_eq!(preparation, None);
     assert_eq!(world.domain.agent().agents(), 0);
     assert_eq!(world.domain.workspaces(), 0);
-    world.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: ATTEMPT }));
+    world.event(Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: world.attempt }));
     assert_eq!(world.domain.kept_answers(), 0);
     world.event(Event::Shutdown);
     assert_eq!(world.stops, 1);
@@ -595,4 +617,25 @@ fn host_reply(reply: agent::Reply) -> Option<smith_channel::Reply> {
     let decoded = smith_channel::HostAnswer::decode(&limits, &mut reader).expect("agent decodes");
     assert!(reader.is_empty());
     Some(decoded.reply().clone())
+}
+
+/// Actual delivered receipt bytes made by the complete worker story.
+#[must_use]
+pub fn delivered_evidence(seed: u64) -> Box<[u8]> {
+    let mut world = World::new(seed);
+    world.start();
+    world.deliver();
+    let evidence = world.evidence.take().expect("the worker encoded its delivered receipt");
+    finish_host_run(&mut world);
+    evidence
+}
+
+/// Restart the worker and observe the saved answers passed to its process's Start.
+#[must_use]
+pub fn replayed_answers(seed: u64, attempt: u64, answered: Box<[host::AnsweredCall]>) -> Box<[agent::AnsweredCall]> {
+    let mut world = World::with_replay(seed, Token::new(attempt), answered);
+    world.start();
+    let resumed = std::mem::take(&mut world.resumed);
+    finish_host_run(&mut world);
+    resumed
 }

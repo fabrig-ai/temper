@@ -234,8 +234,7 @@ fn each_settled_delivery_becomes_the_hubs_answer() {
         (core::DeliveryOutcome::Invalid, true, b"invalid delivery: evidence"),
         (core::DeliveryOutcome::Failed, true, b"delivery failed: evidence"),
     ] {
-        let answer =
-            crate::tools::settled(core::SettledAnswer::Delivery { outcome, evidence: b"evidence".as_slice().into() });
+        let answer = crate::tools::settled(core::SettledAnswer::Delivery { outcome }, Some(b"evidence"));
         assert_eq!(answer, host::Relayed::Answer { error, text: text.into() }, "{outcome:?}");
     }
 }

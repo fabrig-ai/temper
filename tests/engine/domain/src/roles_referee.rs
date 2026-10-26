@@ -141,7 +141,8 @@ impl Referee {
                         | jig_domain_core::Record::Notes(_)
                         | jig_domain_core::Record::Accounts(_),
                     )
-                    | Record::Forge { .. },
+                    | Record::Forge { .. }
+                    | Record::Delivery { .. },
                 )
                 | Write::Erase(_)
                 | Write::Wires
@@ -190,7 +191,8 @@ impl Referee {
                         | jig_domain_core::Record::Notes(_)
                         | jig_domain_core::Record::Accounts(_),
                     )
-                    | Record::Forge { .. },
+                    | Record::Forge { .. }
+                    | Record::Delivery { .. },
                 )
                 | Write::Erase(_)
                 | Write::Wires
@@ -263,7 +265,8 @@ impl Referee {
                             | jig_domain_core::Record::Notes(_)
                             | jig_domain_core::Record::Accounts(_),
                         )
-                        | Record::Forge { .. },
+                        | Record::Forge { .. }
+                        | Record::Delivery { .. },
                     )
                     | Write::Erase(_)
                     | Write::Wires
@@ -352,7 +355,8 @@ impl Referee {
                     | jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_)),
                 ))
                 | Write::Erase(Key::Core(jig_domain_core::Key::People(_))) => {}
-                Write::Save(Record::Forge { .. }) | Write::Erase(Key::Forge(_)) => {
+                Write::Save(Record::Forge { .. } | Record::Delivery { .. })
+                | Write::Erase(Key::Forge(_) | Key::Delivery(_)) => {
                     return Err("role administration changed forge state");
                 }
                 Write::Erase(Key::Core(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Deployment))) => {

@@ -85,7 +85,8 @@ pub(crate) fn input_loaded(
             | jig_domain_core::Record::Accounts(_)
             | jig_domain_core::Record::Notes(_),
         )
-        | Record::Forge { .. } => {
+        | Record::Forge { .. }
+        | Record::Delivery { .. } => {
             input_failed(domain, waiter);
             return;
         }
@@ -175,7 +176,8 @@ pub(crate) fn note_loaded(
                 | jig_domain_core::Record::People(_)
                 | jig_domain_core::Record::Accounts(_),
             )
-            | Record::Forge { .. } => {
+            | Record::Forge { .. }
+            | Record::Delivery { .. } => {
                 note_failed(domain, waiter);
                 return;
             }
@@ -321,7 +323,8 @@ pub(crate) fn transcript_loaded(
                 | jig_domain_core::Record::Accounts(_)
                 | jig_domain_core::Record::Notes(_),
             )
-            | Record::Forge { .. } => {
+            | Record::Forge { .. }
+            | Record::Delivery { .. } => {
                 transcript_failed(domain, waiter);
                 return;
             }

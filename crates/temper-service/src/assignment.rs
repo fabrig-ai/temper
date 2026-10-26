@@ -118,7 +118,7 @@ pub fn down(
                     grants,
                 },
                 turns: assignment.transcript,
-                answered: answered(&assignment.settled),
+                answered: answered(&assignment.settled, &assignment.delivery_replies)?,
             },
         },
         parts: parts.into_boxed(),
@@ -174,14 +174,16 @@ fn grants(grants: &[accounts::Grant]) -> Box<[host::Grant]> {
     }
     filled.into_boxed()
 }
-fn answered(calls: &[core::Settled]) -> Box<[host::AnsweredCall]> {
+/// Join settled calls to their typed application evidence, refusing a missing reply.
+#[must_use]
+pub fn answered(calls: &[core::Settled], evidence: &[root::DeliveryRecord]) -> Option<Box<[host::AnsweredCall]>> {
     let mut answered = List::with_capacity(u32::try_from(calls.len()).expect("bounded answered calls"));
     for core::Settled { key, call } in calls {
         let answer = match &call.answer {
             core::SettledAnswer::Host { error, body } => {
                 host::SettledAnswer::Host { error: *error, body: body.clone() }
             }
-            core::SettledAnswer::Delivery { outcome, evidence } => host::SettledAnswer::Delivery {
+            core::SettledAnswer::Delivery { outcome } => host::SettledAnswer::Delivery {
                 outcome: match outcome {
                     core::DeliveryOutcome::Delivered => host::DeliveryOutcome::Delivered,
                     core::DeliveryOutcome::Nothing => host::DeliveryOutcome::Nothing,
@@ -189,7 +191,7 @@ fn answered(calls: &[core::Settled]) -> Box<[host::AnsweredCall]> {
                     core::DeliveryOutcome::Refused | core::DeliveryOutcome::Invalid => host::DeliveryOutcome::Refused,
                     core::DeliveryOutcome::Failed => host::DeliveryOutcome::Failed,
                 },
-                evidence: evidence.clone(),
+                evidence: evidence_for(*key, *outcome, evidence)?,
             },
         };
         answered
@@ -204,7 +206,23 @@ fn answered(calls: &[core::Settled]) -> Box<[host::AnsweredCall]> {
             })
             .expect("bounded answered calls");
     }
-    answered.into_boxed()
+    Some(answered.into_boxed())
+}
+
+fn evidence_for(
+    key: core::CallKey,
+    outcome: core::DeliveryOutcome,
+    records: &[root::DeliveryRecord],
+) -> Option<Box<[u8]>> {
+    for row in records {
+        if row.key == key {
+            if row.reply.outcome() != outcome {
+                return None;
+            }
+            return temper_protocol_store::delivery::encode_reply(&row.reply);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -227,5 +245,45 @@ mod tests {
         let started = messages(&[met]);
         assert_eq!(started[0].sender.as_ref(), b"2");
         assert_eq!(started[0].words.as_ref(), b"T2 is done; the task can go on");
+    }
+}
+
+#[cfg(test)]
+mod delivery_tests {
+    use super::*;
+    const KEY: core::CallKey = core::CallKey { task: 1, attempt: 2, completion: 3, position: 4 };
+    fn settled() -> core::Settled {
+        core::Settled {
+            key: KEY,
+            call: core::SettledCall {
+                serial: 1,
+                tool: b"deliver".as_slice().into(),
+                answer: core::SettledAnswer::Delivery { outcome: core::DeliveryOutcome::Failed },
+            },
+        }
+    }
+    #[test]
+    fn assignment_encodes_smiths_reply_from_the_kept_delivery_record() {
+        let record = root::DeliveryRecord {
+            key: KEY,
+            reply: root::DeliveryReply::Failed {
+                directory: 2,
+                reason: root::DeliveryReason::TimedOut,
+                diagnostic: b"oops".as_slice().into(),
+                dropped: 7,
+            },
+        };
+        let calls = answered(&[settled()], &[record]).unwrap();
+        assert_eq!(
+            calls[0].answer,
+            host::SettledAnswer::Delivery {
+                outcome: host::DeliveryOutcome::Failed,
+                evidence: Box::from([3, 0, 0, 0, 2, 2, 0, 0, 0, 4, b'o', b'o', b'p', b's', 0, 0, 0, 0, 0, 0, 0, 7])
+            }
+        );
+    }
+    #[test]
+    fn a_settled_delivery_without_a_kept_record_refuses_assignment() {
+        assert_eq!(answered(&[settled()], &[]), None);
     }
 }

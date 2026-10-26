@@ -94,10 +94,11 @@ pub(crate) fn result(
     engine::Event::Worker(engine::WorkerInput::ResultRead { payload, end })
 }
 /// The hub carries a settled workspace delivery as host text.
-pub(crate) fn settled(answer: core::SettledAnswer) -> host::Relayed {
+pub(crate) fn settled(answer: core::SettledAnswer, evidence: Option<&[u8]>) -> host::Relayed {
     match answer {
         core::SettledAnswer::Host { error, body } => host::Relayed::Answer { error, text: body },
-        core::SettledAnswer::Delivery { outcome, evidence } => {
+        core::SettledAnswer::Delivery { outcome } => {
+            let Some(evidence) = evidence else { return host::Relayed::Busy };
             let (label, error): (&[u8], bool) = match outcome {
                 core::DeliveryOutcome::Delivered => (b"delivered", false),
                 core::DeliveryOutcome::Nothing => (b"nothing to deliver", false),
@@ -111,7 +112,7 @@ pub(crate) fn settled(answer: core::SettledAnswer) -> host::Relayed {
             let mut writer = Writer::new(bytes);
             writer.put(label).expect("measured delivery label");
             writer.put(b": ").expect("measured separator");
-            writer.put(&evidence).expect("measured evidence");
+            writer.put(evidence).expect("measured evidence");
             let Some(answer) = run::HostAnswer::new(writer.finish(), error) else {
                 return host::Relayed::Answer { error: true, text: b"delivery answer too large".as_slice().into() };
             };

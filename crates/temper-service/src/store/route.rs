@@ -104,6 +104,13 @@ pub fn down(routes: &mut Routes, request: engine::StoreRequest) -> Option<store:
                     engine::Write::CopySettingsRevision(number) => store::Write::CopySettingsRevision(number),
                     engine::Write::Save(engine::Record::Core(row)) => store::Write::Save(row),
                     engine::Write::Erase(engine::Key::Core(key)) => store::Write::Erase(key),
+                    engine::Write::Save(engine::Record::Delivery { row }) => store::Write::Put {
+                        key: families::keys::delivery(row.key, u32::MAX)?,
+                        value: families::delivery::encode(&row)?,
+                    },
+                    engine::Write::Erase(engine::Key::Delivery(key)) => {
+                        store::Write::Remove { key: families::keys::delivery(key, u32::MAX)? }
+                    }
                     engine::Write::Save(engine::Record::Forge { row }) => store::Write::Put {
                         key: families::keys::encode(&temper_engine_domain_forge::stored_key(&row), u32::MAX)?,
                         value: families::records::encode(&row),
@@ -330,7 +337,11 @@ fn decode(row: store::Row, bounds: &families::Bounds) -> Option<engine::Record> 
     Some(match row {
         store::Row::Jig(row) => engine::Record::Core(row),
         store::Row::Application { key, value } => {
-            engine::Record::Forge { row: Box::new(families::records::row(&key, &value, bounds).ok()?) }
+            if key.first() == Some(&families::keys::DELIVERY) {
+                engine::Record::Delivery { row: Box::new(families::delivery::row(&key, &value, bounds).ok()?) }
+            } else {
+                engine::Record::Forge { row: Box::new(families::records::row(&key, &value, bounds).ok()?) }
+            }
         }
     })
 }

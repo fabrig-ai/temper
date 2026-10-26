@@ -60,7 +60,7 @@ pub(super) fn action(world: &mut World, action: Action) {
                             {
                                 Some(row.number)
                             }
-                            root::Record::Core(_) | root::Record::Forge { .. } => None,
+                            root::Record::Core(_) | root::Record::Forge { .. } | root::Record::Delivery { .. } => None,
                         })
                         .expect("created conversation")
                 })
@@ -83,7 +83,7 @@ pub(super) fn action(world: &mut World, action: Action) {
                 .values()
                 .filter_map(|record| match record {
                     root::Record::Core(core::Record::Tasks(tasks::Stored::Ended(row))) => Some(row.result_position),
-                    root::Record::Core(_) | root::Record::Forge { .. } => None,
+                    root::Record::Core(_) | root::Record::Forge { .. } | root::Record::Delivery { .. } => None,
                 })
                 .max()
                 .expect("ended results");
@@ -157,14 +157,14 @@ pub(super) fn check_ending(world: &World) -> Result<(), Violation> {
             root::Key::Core(core::Key::Tasks(tasks::Key::Update {
                 task, object: tasks::UpdateObject::Result, ..
             })) => task.value() != forgotten,
-            root::Key::Wires | root::Key::Core(_) | root::Key::Forge { .. } => true,
+            root::Key::Wires | root::Key::Core(_) | root::Key::Forge { .. } | root::Key::Delivery(_) => true,
         }),
         "forgettable conversation left an owner, result update, index or read position",
     )?;
     check(
         world.store.rows.values().all(|record| match record {
             root::Record::Core(core::Record::Tasks(tasks::Stored::Result(row))) => row.task != forgotten,
-            root::Record::Core(_) | root::Record::Forge { .. } => true,
+            root::Record::Core(_) | root::Record::Forge { .. } | root::Record::Delivery { .. } => true,
         }),
         "forgettable conversation left its result row",
     )

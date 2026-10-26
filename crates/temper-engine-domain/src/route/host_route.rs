@@ -21,8 +21,21 @@ pub enum HostRequest {
 /// the hub's link names only as text (jig's `domain/hosts.md`, 2).
 #[derive(PartialEq, Eq, Debug)]
 pub enum HostDelivery {
-    Render { to: ReplyTo, key: CallKey, name: Box<[u8]>, tool: Box<[u8]>, answer: CallAnswer },
-    Answer { channel: Token, task: u64, attempt: u64, name: Box<[u8]>, call: SettledCall },
+    Render {
+        to: ReplyTo,
+        key: CallKey,
+        name: Box<[u8]>,
+        tool: Box<[u8]>,
+        answer: CallAnswer,
+    },
+    Answer {
+        channel: Token,
+        task: u64,
+        attempt: u64,
+        name: Box<[u8]>,
+        call: SettledCall,
+        reply: Option<crate::DeliveryReply>,
+    },
 }
 
 #[derive(Debug)]
@@ -173,7 +186,7 @@ pub(crate) fn render(domain: &mut Domain, limits: &Limits, decision: &mut Decisi
     );
 }
 
-pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer) {
+pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer, reply: Option<crate::DeliveryReply>) {
     let right = to.into_token();
     let to = ReplyTo::new(right);
     let Some(flight) = domain.host_calls.remove(&right) else { return };
@@ -187,22 +200,20 @@ pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer) 
         Some(answer) => crate::store::call_answer_bytes(&answer),
         None => Some(0),
     };
-    let fits = call.valid(&super::core_limits(&domain.limits))
-        && match answer_bytes {
-            Some(answer) => match call.owned_bytes() {
-                Some(bytes) => match bytes.checked_add(answer) {
-                    Some(total) => total <= u64::from(domain.limits.journal.transcript_bytes),
-                    None => false,
-                },
-                None => false,
-            },
-            None => false,
-        };
+    let valid_reply = match (&call.answer, &reply) {
+        (SettledAnswer::Delivery { outcome }, Some(reply)) => reply.valid() && reply.outcome() == *outcome,
+        (SettledAnswer::Host { .. }, None) => true,
+        (SettledAnswer::Delivery { .. }, None) | (SettledAnswer::Host { .. }, Some(_)) => false,
+    };
+    let fits = valid_reply && rendered_fits(&call, reply.as_ref(), answer_bytes, &domain.limits);
     if !fits {
         call.answer = SettledAnswer::Host { error: true, body: Box::from(&b"busy"[..]) };
     }
     if fits && recorded {
-        domain.work.push(Work::Core(jig_domain_core::Event::SettledCall { to, key, name: flight.name, call }));
+        domain.work.push(match reply {
+            Some(reply) => Work::SettleDelivery { to, key, name: flight.name, call, reply },
+            None => Work::Core(jig_domain_core::Event::SettledCall { to, key, name: flight.name, call }),
+        });
     } else {
         let id = domain.payloads.insert(Some(Payload::SettledCall(call))).expect("fleet call reserved answer room");
         domain.work.push(Work::Fleet(fleet::Event::Relayed { to, answer: id.token() }));
@@ -272,7 +283,14 @@ pub(crate) fn relayed(
             SettledAnswer::Host { error, body } => host::Relayed::Answer { error, text: body },
             SettledAnswer::Delivery { .. } => {
                 let (task, attempt) = (run.raw(), attempt.raw());
-                return Delivery::Host(Box::new(HostDelivery::Answer { channel, task, attempt, name, call }));
+                let mut reply = None;
+                for (key, kept) in &domain.core.call_settled {
+                    if key.task == task && key.attempt == attempt && kept.serial == call.serial {
+                        reply = domain.delivery_replies.get(key).cloned();
+                        break;
+                    }
+                }
+                return Delivery::Host(Box::new(HostDelivery::Answer { channel, task, attempt, name, call, reply }));
             }
         },
         Some(Payload::Call { .. } | Payload::InboxWord(_) | Payload::Turn { .. } | Payload::Answer { .. }) | None => {
@@ -295,4 +313,47 @@ pub(crate) fn read(domain: &mut Domain, to: ReplyTo, answer: CallAnswer) {
         answer,
     })));
     assert!(super::now(domain, request), "read render door reserved");
+}
+
+fn rendered_bytes(call: &SettledCall, reply: Option<&crate::DeliveryReply>, answer: Option<u64>) -> Option<(u64, u64)> {
+    let (owned, encoded) = match reply {
+        Some(reply) => (reply.record_bytes()?, reply.reply_bytes()?),
+        None => (0, 0),
+    };
+    let call = call.owned_bytes()?;
+    Some((call.checked_add(owned)?.checked_add(answer?)?, call.checked_add(encoded)?))
+}
+fn rendered_fits(
+    call: &SettledCall,
+    reply: Option<&crate::DeliveryReply>,
+    answer: Option<u64>,
+    limits: &Limits,
+) -> bool {
+    call.valid(&super::core_limits(limits))
+        && match rendered_bytes(call, reply, answer) {
+            Some((owned, encoded)) => {
+                owned <= u64::from(limits.journal.transcript_bytes) && encoded <= u64::from(limits.call_answer_bytes)
+            }
+            None => false,
+        }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn delivery_evidence_obeys_both_sides_of_the_call_answer_budget() {
+        let reply = crate::DeliveryReply::Nothing;
+        let call = SettledCall {
+            serial: 0,
+            tool: b"deliver".as_slice().into(),
+            answer: SettledAnswer::Delivery { outcome: reply.outcome() },
+        };
+        // The tool is seven bytes and Nothing's encoding is one byte.
+        for (bound, fits) in [(7, false), (8, true)] {
+            let mut limits = crate::tests::resume_fixture::limits();
+            limits.call_answer_bytes = bound;
+            assert_eq!(rendered_fits(&call, Some(&reply), Some(0), &limits), fits);
+        }
+    }
 }

@@ -637,6 +637,7 @@ fn held_assignment() -> crate::Assignment {
         transcript: Box::new([]),
         answered: Box::new([]),
         settled: Box::new([]),
+        delivery_replies: Box::new([]),
         grants: Box::new([accounts::Grant {
             form: accounts::Form::Credential(accounts::Scheme::Bearer),
             account: 1,
@@ -785,3 +786,5 @@ fn a_refused_settlement_uses_cores_returned_reply_address() {
         }
     );
 }
+
+mod delivery;

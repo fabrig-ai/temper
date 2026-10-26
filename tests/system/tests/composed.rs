@@ -49,7 +49,7 @@ fn an_open_chats_text_reply_ends_its_turn_after_one_call() {
                     assert_eq!(terminal.end, tasks::End::Parked, "the Open reply parks its run");
                     terminals += 1;
                 }
-                Record::Core(_) | Record::Forge { .. } => {}
+                Record::Core(_) | Record::Forge { .. } | Record::Delivery { .. } => {}
             }
         }
         assert_eq!(replies, 1, "the reply is committed once in this chat's conversation");
@@ -120,7 +120,7 @@ fn a_finite_chats_text_reply_is_nudged_and_finishes_with_its_report() {
                 assert!(!matches!(terminal.end, tasks::End::Failed(_)), "no failed run");
                 terminals += 1;
             }
-            Record::Core(_) | Record::Forge { .. } => {}
+            Record::Core(_) | Record::Forge { .. } | Record::Delivery { .. } => {}
         }
     }
     assert_eq!(terminals, 1, "one committed activation terminal");
@@ -178,7 +178,7 @@ fn an_open_chats_reply_reaches_its_run_watch_in_pieces_before_its_turn_commits()
         .values()
         .filter_map(|row| match row {
             Record::Core(CoreRecordRow::Core(CoreRecord::Turn(turn))) if turn.task == task => Some(turn),
-            Record::Core(_) | Record::Forge { .. } => None,
+            Record::Core(_) | Record::Forge { .. } | Record::Delivery { .. } => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(turns.len(), 1, "one committed reply turn");

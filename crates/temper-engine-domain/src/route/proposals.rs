@@ -74,7 +74,8 @@ pub(crate) fn historical_loaded(domain: &mut Domain, waiter: Token, rows: Box<[s
                 | jig_domain_core::Record::Accounts(_)
                 | jig_domain_core::Record::Notes(_),
             )
-            | super::Record::Forge { .. } => None,
+            | super::Record::Forge { .. }
+            | super::Record::Delivery { .. } => None,
         }
     } else {
         None
