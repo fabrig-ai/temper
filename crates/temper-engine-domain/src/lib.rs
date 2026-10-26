@@ -9,6 +9,7 @@ mod admission;
 mod archive;
 mod assemble;
 mod boundary;
+mod commit;
 mod deadline;
 mod decision;
 mod domain;
@@ -35,6 +36,7 @@ pub use store::{
 pub use admission::try_step;
 pub use boundary::Request as Output;
 pub use boundary::*;
+pub use commit::commit_text;
 pub use domain::{Domain, Refused, fire, max_out, refused, release, step};
 pub use jig_domain_core::{Charter, Delegate, Dependency, Model, ProcedureStep, RunCharter, RunPolicy, StepEnd};
 pub use limits::{
