@@ -21,8 +21,27 @@ pub enum HostRequest {
 /// the hub's link names only as text (jig's `domain/hosts.md`, 2).
 #[derive(PartialEq, Eq, Debug)]
 pub enum HostDelivery {
-    Render { to: ReplyTo, key: CallKey, name: Box<[u8]>, tool: Box<[u8]>, answer: CallAnswer },
-    Answer { channel: Token, task: u64, attempt: u64, name: Box<[u8]>, call: SettledCall },
+    /// Settings reads have no durable call part; the protocol renders the core document.
+    Settings {
+        to: ReplyTo,
+        answer: Box<jig_domain_core::SettingsAnswer>,
+        from: u32,
+        requested: Option<u32>,
+    },
+    Render {
+        to: ReplyTo,
+        key: CallKey,
+        name: Box<[u8]>,
+        tool: Box<[u8]>,
+        answer: CallAnswer,
+    },
+    Answer {
+        channel: Token,
+        task: u64,
+        attempt: u64,
+        name: Box<[u8]>,
+        call: SettledCall,
+    },
 }
 
 #[derive(Debug)]
@@ -40,6 +59,7 @@ pub(crate) struct Flight {
 #[derive(Debug)]
 pub(crate) enum FlightRender {
     Plain,
+    Settings { from: u32, requested: Option<u32> },
     Amended(crate::Changed),
     Change(Box<ChangeChoice>),
 }
@@ -87,10 +107,13 @@ pub(crate) fn decoded(domain: &mut Domain, env: &Env<Limits>, decision: &mut Dec
     // for room is answered busy, and its run asks it again after a backoff
     // (jig's `domain/engine.md`, 5.1).
     let invalid = body.completion == 0 || !super::current_proof(domain, key.task, key.attempt);
-    let busy = domain.core.pending_calls.contains_key(&key)
-        || (!domain.core.call_parts.contains_key(&key)
-            && domain.core.call_parts.len().saturating_add(domain.core.pending_calls.len()) >= env.limits.call_records)
-        || (super::call_needs_input(&body.tool) && domain.archive_reads.len() >= domain.archive_reads.capacity());
+    let reading = matches!(body.tool, crate::Tool::Settings { .. });
+    let busy = !reading
+        && (domain.core.pending_calls.contains_key(&key)
+            || (!domain.core.call_parts.contains_key(&key)
+                && domain.core.call_parts.len().saturating_add(domain.core.pending_calls.len())
+                    >= env.limits.call_records)
+            || (super::call_needs_input(&body.tool) && domain.archive_reads.len() >= domain.archive_reads.capacity()));
     if invalid || busy {
         let flight = domain.host_calls.remove(&right).expect("current typed flight");
         let answer = if invalid {
@@ -106,7 +129,15 @@ pub(crate) fn decoded(domain: &mut Domain, env: &Env<Limits>, decision: &mut Dec
         domain.work.push(Work::Fleet(fleet::Event::Relayed { to, answer: id.token() }));
         return;
     }
-    let render = if let crate::Tool::Change { repository, .. } = &body.tool {
+    let render = if let crate::Tool::Settings { from, read } = &body.tool {
+        let requested = match read {
+            jig_domain_core::SettingsRead::Revision { number } => Some(*number),
+            jig_domain_core::SettingsRead::Inventory
+            | jig_domain_core::SettingsRead::Setting { .. }
+            | jig_domain_core::SettingsRead::Revisions { .. } => None,
+        };
+        FlightRender::Settings { from: *from, requested }
+    } else if let crate::Tool::Change { repository, .. } = &body.tool {
         match domain.core.tasks.delegation(key.task) {
             Some(context) => {
                 FlightRender::Change(Box::new(ChangeChoice { named: repository.clone(), project: context.project }))
@@ -158,7 +189,7 @@ pub(crate) fn render(domain: &mut Domain, limits: &Limits, decision: &mut Decisi
                 answer
             }
         }
-        FlightRender::Plain => answer,
+        FlightRender::Plain | FlightRender::Settings { .. } => answer,
     };
     emit(
         decision,
@@ -295,4 +326,19 @@ pub(crate) fn read(domain: &mut Domain, to: ReplyTo, answer: CallAnswer) {
         answer,
     })));
     assert!(super::now(domain, request), "read render door reserved");
+}
+
+/// A settings read crosses the same journal door as other fresh reads.
+pub(crate) fn settings(domain: &mut Domain, to: ReplyTo, answer: Box<jig_domain_core::SettingsAnswer>) {
+    let right = to.into_token();
+    let to = ReplyTo::new(right);
+    let flight = domain.host_calls.get(&right).expect("settings read flight");
+    let FlightRender::Settings { from, requested } = flight.render else { unreachable!("settings rendering context") };
+    let request = crate::boundary::delivery_output(Delivery::Host(Box::new(HostDelivery::Settings {
+        to,
+        answer,
+        from,
+        requested,
+    })));
+    assert!(super::now(domain, request), "settings read render door reserved");
 }

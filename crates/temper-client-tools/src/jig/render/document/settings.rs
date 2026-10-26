@@ -124,7 +124,7 @@ fn encode_head(head: &c::RevisionHead, out: &mut Encoder) {
     out.boolean(head.moved);
     out.object_end();
 }
-pub(super) fn text(value: &c::ReadValue, requested: Option<u64>, limits: &Limits, out: &mut Text) {
+pub(crate) fn text(value: &c::ReadValue, requested: Option<u64>, limits: &Limits, out: &mut Text) {
     match value {
         c::ReadValue::Settings(document) => inventory_text(document, out),
         c::ReadValue::Setting(document) => {
