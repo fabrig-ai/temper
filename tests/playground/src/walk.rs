@@ -79,13 +79,13 @@ impl Walk {
             while let Some(heard) = native.heard() {
                 match heard {
                     Heard::Line(line) if line.process.as_ref() == b"temper" && line.stream == Output::Standard => {
-                        if let Some(path) = line.line.strip_prefix(prefix.as_bytes()) {
-                            if let Some(taken) = sign_in::take(
+                        if let Some(path) = line.line.strip_prefix(prefix.as_bytes())
+                            && let Some(taken) = sign_in::take(
                                 &sign_in::Route { path: b"/jig/v1/sign-in/link", home: b"/welcome" },
                                 path,
-                            ) {
-                                break 'link taken;
-                            }
+                            )
+                        {
+                            break 'link taken;
                         }
                     }
                     Heard::Stopped | Heard::Failed { .. } => panic!("world ended before its printed sign-in link"),
@@ -96,11 +96,20 @@ impl Walk {
             native.advance(native.wake().expect("world wakes before printing its link"));
         };
         let (now, wall) = native.now();
-        let store = Store::new(b"temper.", None);
+        let page_store = Store::new(b"temper.", None);
         let mut host = Host::new(seed, now, wall, Ways::NONE);
-        host.start(&taken.address, store.read_all(&native), Some(taken.secret));
+        host.start(&taken.address, page_store.read_all(&native), Some(taken.secret));
         let page = host::page(&host.bounds.tree, Primary::Control);
-        Self { story, seed, native, host, page, store, inbox: VecDeque::from([Report::Start]), path: taken.address }
+        Self {
+            story,
+            seed,
+            native,
+            host,
+            page,
+            store: page_store,
+            inbox: VecDeque::from([Report::Start]),
+            path: taken.address,
+        }
     }
 
     /// Run the same report/duty/draw/person order for every story.
