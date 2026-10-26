@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 use core::net::SocketAddr;
 use jig_protocol_config::{self as config, Path, Segment, What};
 use skein_json::{Document, document::Kind};
-use skein_lib::{Decimal, List, Writer};
+use skein_lib::{Decimal, Duration, List, Writer};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Refusal {
@@ -139,6 +139,17 @@ pub fn integer(d: &Document, at: u32, max: u64, p: &Path) -> Result<u64, Refusal
         Ok(v) => Ok(v),
         Err(w) => Err(kind(p, w)),
     }
+}
+pub fn pace(d: &Document, at: Option<u32>, member: &[u8], p: &Path) -> Result<Duration, Refusal> {
+    let Some(at) = at else {
+        return Ok(Duration::ZERO);
+    };
+    let mut o = object(d, at, p)?;
+    let at = o.member(d, member);
+    finish(o, d, p)?;
+    let at = at.ok_or(why(&p.member(member), b"missing"))?;
+    let millis = integer(d, at, u64::from(crate::limits::PACE_MS), &p.member(member))?;
+    Ok(Duration::from_millis(millis))
 }
 pub fn list(d: &Document, at: u32, min: u32, p: &Path) -> Result<List<u32>, Refusal> {
     match config::read::list(d, at, crate::ENTRIES) {
