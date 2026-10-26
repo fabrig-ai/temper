@@ -3093,6 +3093,7 @@ dependencies = [
  "skein-shell",
  "skein-sim",
  "skein-sim-world",
+ "skein-ui-web",
  "smith-agent-shell",
  "smith-host-protocol",
  "smith-local-service",
@@ -3101,6 +3102,7 @@ dependencies = [
  "temper-forge-setup",
  "temper-service",
  "temper-worker-domain",
+ "wasm-bindgen",
 ]
 
 [[package]]

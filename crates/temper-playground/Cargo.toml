@@ -7,6 +7,9 @@ license.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 skein-playground.workspace = true
 skein-http.workspace = true
@@ -34,6 +37,10 @@ skein-fake-llm-protocol.workspace = true
 skein-fake-forge-protocol.workspace = true
 skein-llm.workspace = true
 smith-agent-shell.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+skein-ui-web.workspace = true
+wasm-bindgen.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"
