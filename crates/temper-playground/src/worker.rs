@@ -4,9 +4,12 @@ use skein_sim_world::World;
 use skein_ui_web::bridge::Start;
 use wasm_bindgen::prelude::wasm_bindgen;
 
-/// Steps a slice runs at most (skein's playground.md, 3): the browser
-/// tier measures a slice's latency against it.
-pub const BUDGET: u32 = 256;
+/// Steps a slice runs at most (skein's playground.md, 3).
+/// The browser welcome measures 2.566-3.672 s, 46-73 ms longest slices,
+/// and 612.9 MiB at 32 steps. Its 73 ms worst is nearer the 16-33 ms goal
+/// than 64 steps' 74 ms; neither reaches it. The 256-step welcome takes
+/// 3.277-3.984 s, so these measurements add no one-fifth delay.
+pub const BUDGET: u32 = 32;
 
 /// Install the worker's slices loop, waiting for the visit's start message.
 #[wasm_bindgen(start)]
