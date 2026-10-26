@@ -133,10 +133,94 @@ fn commit_text(commit: &skein_forge::api::Commit) -> Box<[u8]> {
     out.into_boxed()
 }
 
-fn landing_words(merge: &skein_forge::api::Commit, bound: u32) -> Box<[u8]> {
+fn landing_words(
+    merge: &skein_forge::api::Commit,
+    bound: u32,
+    repository: Option<&forge::Repository>,
+    pull: u64,
+    web: Option<(forge::Kind, &[u8])>,
+) -> Box<[u8]> {
     let digits = commit_text(merge);
-    let length = digits.len().min(usize::try_from(bound).unwrap_or(usize::MAX));
-    Box::from(digits.get(..length).expect("landing words fit the merge id"))
+    let bound = usize::try_from(bound).expect("u32 fits usize");
+    let length = digits.len().min(bound);
+    let id = digits.get(..length).expect("landing words fit merge id");
+    let line = match repository {
+        Some(repository) if length == digits.len() => match bound.checked_sub(length.saturating_add(1)) {
+            Some(room) => landing_pull(repository, pull, web, room),
+            None => None,
+        },
+        Some(_) | None => None,
+    };
+    let Some(line) = line else {
+        return Box::from(id);
+    };
+    let bytes = length.checked_add(1).expect("id separator").checked_add(line.len()).expect("bounded line");
+    let mut out = List::with_capacity(u32::try_from(bytes).expect("within contract bound"));
+    append(&mut out, id);
+    append(&mut out, b"\n");
+    append(&mut out, &line);
+    out.into_boxed()
+}
+
+fn landing_pull(
+    repository: &forge::Repository,
+    pull: u64,
+    web: Option<(forge::Kind, &[u8])>,
+    bound: usize,
+) -> Option<Box<[u8]>> {
+    // Same address ceiling as the panel (client/forge.md, 9.2).
+    const ADDRESS_BYTES: usize = 2048;
+    let number = skein_lib::Decimal::of(pull);
+    let parts: [&[u8]; 8] = [
+        b"pull request #",
+        number.as_bytes(),
+        b" of ",
+        &repository.owner,
+        b"/",
+        &repository.name,
+        b" on ",
+        &repository.host,
+    ];
+    let mut bytes = 0_usize;
+    for part in parts {
+        bytes = bytes.checked_add(part.len())?;
+    }
+    // The descriptive line is atomic even when the contract shortens the id.
+    if bytes > bound {
+        return None;
+    }
+    let mut address = None;
+    if let Some((kind, mut web)) = web {
+        while web.last() == Some(&b'/') {
+            web = web.get(..web.len().checked_sub(1)?)?;
+        }
+        let route: &[u8] = match kind {
+            forge::Kind::GitHub => b"/pull/",
+            forge::Kind::Forgejo => b"/pulls/",
+        };
+        let mut address_bytes = 0_usize;
+        for part in [web, b"/", &repository.owner, b"/", &repository.name, route, number.as_bytes()] {
+            address_bytes = address_bytes.checked_add(part.len())?;
+        }
+        let total = bytes.checked_add(2)?.checked_add(address_bytes)?;
+        if address_bytes <= ADDRESS_BYTES {
+            address = Some((web, route));
+            bytes = total;
+        }
+    }
+    if bytes > bound {
+        return None;
+    }
+    let mut out = List::with_capacity(u32::try_from(bytes).ok()?);
+    for part in parts {
+        append(&mut out, part);
+    }
+    if let Some((web, route)) = address {
+        for part in [b": ".as_slice(), web, b"/", &repository.owner, b"/", &repository.name, route, number.as_bytes()] {
+            append(&mut out, part);
+        }
+    }
+    Some(out.into_boxed())
 }
 
 fn news_words(news: &forge::News, limit: u32) -> Box<[u8]> {
@@ -1882,7 +1966,12 @@ pub(crate) fn chat_change(
             )),
             inputs: Box::new([]),
         },
-        contract: tasks::Contract::Change { connector: domain.config.forge_connector, kind: 1, words: 128 },
+        // Leave room for the pull's words and address as well as the merge id.
+        contract: tasks::Contract::Change {
+            connector: domain.config.forge_connector,
+            kind: 1,
+            words: 512.min(env.limits.tasks.result_bytes),
+        },
         authority,
         llm: None,
         symbolic_grants: Box::new([]),
@@ -2097,6 +2186,28 @@ fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool
     true
 }
 
+fn change_landing_words(
+    domain: &Domain,
+    task: u64,
+    merge: &skein_forge::api::Commit,
+    pull: u64,
+    bound: u32,
+) -> Box<[u8]> {
+    let row = domain.forge.change(task).expect("landed change");
+    let repository = domain.forge.repository(row.repository);
+    let forges = domain.forge.forges();
+    let mut web = None;
+    for forge in &forges.rows {
+        if forge.number == row.repository.forge {
+            if let Some(address) = &forge.web {
+                web = Some((forge.kind, address.as_ref()));
+            }
+            break;
+        }
+    }
+    landing_words(merge, bound, repository, pull, web)
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
     if connector != domain.config.forge_connector || code != 2 {
@@ -2133,7 +2244,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 connector: domain.config.forge_connector,
                 kind: 1,
                 resource: pull,
-                words: landing_words(&merge, bound),
+                words: change_landing_words(domain, task, &merge, pull, bound),
             }))
         }
         forge_change::Decision::Hold(why) => {

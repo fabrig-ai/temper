@@ -130,6 +130,11 @@ fn another_connectors_change_keeps_its_connector_and_kind() {
 }
 #[test]
 fn a_landed_delegate_names_the_pull_before_the_whole_merge_commit() {
+    let line =
+        b"\npull request #1 of qa/pilot-20261026 on localhost:3000: http://localhost:3000/qa/pilot-20261026/pulls/1";
+    let mut words = skein_lib::Writer::new(MERGE.len() + line.len());
+    words.put(MERGE).unwrap();
+    words.put(line).unwrap();
     let mut task = delegate();
     let branch = part();
     task.resources = List::with_capacity(1);
@@ -158,7 +163,7 @@ fn a_landed_delegate_names_the_pull_before_the_whole_merge_commit() {
                     path
                 }),
             },
-            words: f::document_text(MERGE),
+            words: f::document_text(&words.finish()),
         }))),
         None,
     );

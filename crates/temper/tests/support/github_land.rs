@@ -93,6 +93,7 @@ enum Stage {
     ReplySnapshot,
     ReplyPages,
     ChatEnded,
+    ChatEvidence,
     BeforeRestart,
     StopWorker,
     StopEngine,
@@ -318,9 +319,10 @@ impl Judge {
             Stage::ReplyPages => self.reply_page(host, calls),
             Stage::ChatEnded => {
                 assert_eq!(ctl::json(calls.ends().last().expect("chat ended"))["task"]["chip"]["phase"], "ended");
-                self.queue(host, landing_reads());
-                self.stage = Stage::BeforeRestart;
+                self.queue(host, vec![ctl::Call::new(&["activity", "1", "--limit", "32", "--json"])]);
+                self.stage = Stage::ChatEvidence;
             }
+            Stage::ChatEvidence => self.chat_evidence(host, calls),
             Stage::BeforeRestart => self.before_restart(now, host, calls),
             Stage::Restored => self.restored(host, &ctl::json(calls.ends().last().expect("restored forges"))),
             Stage::LandingRestored => {
@@ -343,6 +345,18 @@ impl Judge {
             | Stage::RestartWorker
             | Stage::Stopping => unreachable!("active calls"),
         }
+    }
+    fn chat_evidence(&mut self, host: &mut cluster::Root, calls: &ctl::Calls) {
+        let activity = ctl::json(calls.ends().last().expect("chat activity"));
+        // The scripted reply says only “The change landed.” The PR's
+        // words therefore come from the result the run was given.
+        assert!(activity["rows"].to_string().contains("pull request #1"), "chat heard the landed pull: {activity}");
+        assert!(
+            activity["rows"].to_string().contains("Pull 1 head "),
+            "chat received its read_pull_for answer: {activity}"
+        );
+        self.queue(host, landing_reads());
+        self.stage = Stage::BeforeRestart;
     }
     fn adopted(&mut self, host: &mut cluster::Root, calls: &ctl::Calls) {
         let packet = ctl::json(calls.ends().last().expect("adoption"));
@@ -543,7 +557,13 @@ impl Judge {
             write!(hex, "{byte:02x}").expect("commit hex");
         }
         let result = &self.landed.as_ref().expect("landed result")["value"]["change"];
-        assert_eq!(result["words"]["bytes"], hex);
+        let words = result["words"]["bytes"].as_str().expect("landing words");
+        assert_eq!(words.lines().next(), Some(hex.as_str()));
+        let forge = self.members.capture("forge", "address").expect("forge address");
+        assert_eq!(
+            words.lines().nth(1),
+            Some(format!("pull request #1 of acme/app on {forge}: http://{forge}/acme/app/pull/1").as_str())
+        );
         let panel = self.panel.as_ref().expect("ctl change panel");
         assert_eq!(panel["merge"], hex, "ctl names the fake forge's merge");
         assert_eq!(panel["pull"]["number"], merge["number"]);
@@ -577,7 +597,14 @@ impl Referee<cluster::Root> for Judge {
         let host = hosts.last_mut().expect("client root");
         if matches!(self.stage, Stage::Forge) && self.members.is_up() {
             self.members.prepare("llm");
-            configure_llm(&self.members.dir("llm").join("llm.json"));
+            let path = self.members.dir("llm").join("llm.json");
+            configure_llm(&path);
+            let mut value: Value = serde_json::from_slice(&fs::read(&path).expect("LLM fixture")).expect("LLM JSON");
+            value["cued"][0]["turns"].as_array_mut().expect("chat turns").insert(
+                2,
+                serde_json::json!({"lines":[{"call":"read_pull_for","arguments":{"head":"temper/1/c2","base":"main"}}],"finish":"tool_calls","tokens":20}),
+            );
+            super::write_private(&path, &serde_json::to_vec(&value).expect("LLM JSON"));
             self.members.up(&["llm"]);
             self.stage = Stage::Fakes;
         } else if matches!(self.stage, Stage::Fakes) && self.members.is_up() {
@@ -636,6 +663,7 @@ impl Referee<cluster::Root> for Judge {
                     | Stage::ReplySnapshot
                     | Stage::ReplyPages
                     | Stage::ChatEnded
+                    | Stage::ChatEvidence
                     | Stage::BeforeRestart
                     | Stage::Restored
                     | Stage::LandingRestored
@@ -662,11 +690,7 @@ impl Referee<cluster::Root> for Judge {
         }
         if let Some(stopped) = self.members.stopped() {
             assert!(hosts.iter().all(Host::is_empty), "Must: no process or ctl client outlives the story");
-            assert_eq!(
-                stopped.iter().map(|member| member.name.as_str()).collect::<Vec<_>>(),
-                ["w1", "engine", "w1", "engine", "llm", "forge"]
-            );
-            for (index, member) in stopped.iter().enumerate() {
+            for member in stopped {
                 assert_eq!(
                     member.exit,
                     Some(Exit::Code(0)),
@@ -674,8 +698,14 @@ impl Referee<cluster::Root> for Judge {
                     member.name,
                     String::from_utf8_lossy(&member.stderr)
                 );
-                assert_eq!(member.ending, if index < 2 { cluster::Ending::Alone } else { cluster::Ending::Cluster });
                 assert!(!member.killed && member.survivors.is_empty(), "no surviving process");
+            }
+            assert_eq!(
+                stopped.iter().map(|member| member.name.as_str()).collect::<Vec<_>>(),
+                ["w1", "engine", "w1", "engine", "llm", "forge"]
+            );
+            for (index, member) in stopped.iter().enumerate() {
+                assert_eq!(member.ending, if index < 2 { cluster::Ending::Alone } else { cluster::Ending::Cluster });
             }
             self.forge(false);
             let app = self.app.as_ref().expect("made App");
@@ -756,6 +786,11 @@ fn configure_engine(value: &mut Value, forge: SocketAddr) {
     limits["forge.client.calls"] = 4.into();
     limits["forge_component.connections"] = 4.into();
     limits["forge_component.log_poll_ms"] = 15000.into();
+    value["engine"]["limits"]["overrides"]["tasks.result_bytes"] = 512.into();
+    // Only this story grants the chat Read, through every creation ceiling.
+    value["engine"]["rules"]["ceiling"]["tools"] = 513.into();
+    value["engine"]["projects"][0]["policy"]["ceiling"]["tools"] = 513.into();
+    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["tools"] = 513.into();
 }
 
 pub(crate) fn landing_reads() -> Vec<ctl::Call> {

@@ -77,7 +77,10 @@ fn change_expands_the_only_repository_field_by_field() {
             inputs: Box::new([]),
         }
     );
-    assert_eq!(row.contract, tasks::Contract::Change { connector: 0, kind: 1, words: 128 });
+    assert_eq!(
+        row.contract,
+        tasks::Contract::Change { connector: 0, kind: 1, words: 512.min(world.env.limits.tasks.result_bytes) }
+    );
     assert_eq!(row.authority.tools, parent.authority.tools);
     assert_eq!(
         row.authority.grants,

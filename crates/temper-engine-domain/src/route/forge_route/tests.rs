@@ -29,7 +29,7 @@ fn landing_words_are_the_merge_id_cut_to_the_contract_bound() {
         (SHA1, 7, &b"abcdef0"[..]),
         (SHA1, 0, &b""[..]),
     ] {
-        assert_eq!(landing_words(&merge, bound).as_ref(), expected, "merge {merge:?}, bound {bound}");
+        assert_eq!(landing_words(&merge, bound, None, 1, None).as_ref(), expected, "merge {merge:?}, bound {bound}");
     }
 }
 
@@ -482,4 +482,52 @@ fn a_change_unnamed_after_its_pull_swap_was_queued_stays_unnamed() {
     forge::step(&mut domain.forge, &forge_env, event, &mut out);
     assert_eq!(domain.forge.names(7), None, "the swap revives no watch");
     assert!(out.is_empty());
+}
+
+#[test]
+fn landing_words_name_the_pull_and_use_the_forges_address_when_it_fits() {
+    let repository = adopted(1);
+    for (address, line) in [
+        (
+            Some((super::forge::Kind::GitHub, b"https://github.example/".as_slice())),
+            b"pull request #7 of org/repo on forge.example: https://github.example/org/repo/pull/7".as_slice(),
+        ),
+        (
+            Some((super::forge::Kind::Forgejo, b"https://forge.example/base".as_slice())),
+            b"pull request #7 of org/repo on forge.example: https://forge.example/base/org/repo/pulls/7".as_slice(),
+        ),
+        (None, b"pull request #7 of org/repo on forge.example".as_slice()),
+    ] {
+        let expected = expected_landing(line);
+        assert_eq!(landing_words(&SHA1, 512, Some(&repository), 7, address), expected);
+        let bound = u32::try_from(expected.len()).unwrap();
+        assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, address), expected);
+    }
+    let line = b"pull request #7 of org/repo on forge.example";
+    let bound = u32::try_from(COMMITS[0].1.len() + 1 + line.len()).unwrap();
+    let expected = expected_landing(line);
+    assert_eq!(
+        landing_words(
+            &SHA1,
+            bound,
+            Some(&repository),
+            7,
+            Some((super::forge::Kind::GitHub, b"https://github.example"))
+        )
+        .as_ref(),
+        COMMITS[0].1
+    );
+    assert_eq!(landing_words(&SHA1, bound - 1, Some(&repository), 7, None).as_ref(), COMMITS[0].1);
+    assert_eq!(landing_words(&SHA1, 7, Some(&repository), 7, None).as_ref(), b"abcdef0");
+    let long = [b'x'; 2048];
+    assert_eq!(landing_words(&SHA1, 4096, Some(&repository), 7, Some((super::forge::Kind::Forgejo, &long))), expected);
+}
+
+fn expected_landing(line: &[u8]) -> Box<[u8]> {
+    let bytes = COMMITS[0].1.len().checked_add(1).unwrap().checked_add(line.len()).unwrap();
+    let mut writer = skein_lib::Writer::new(bytes);
+    writer.put(COMMITS[0].1).unwrap();
+    writer.put(b"\n").unwrap();
+    writer.put(line).unwrap();
+    writer.finish()
 }

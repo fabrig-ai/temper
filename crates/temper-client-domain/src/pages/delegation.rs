@@ -120,9 +120,13 @@ pub fn facts(task: &c::Task) -> Facts<'_> {
         steps: if kind == Kind::Change { Some(if state == State::Landed { 4 } else { 0 }) } else { None },
     }
 }
-/// The engine's landing words are a whole merge commit id when they are lowercase hex.
+/// The first line of the engine's landing words is its lowercase merge commit id.
 #[must_use]
 pub fn merge_commit(words: &[u8]) -> Option<&[u8]> {
+    let words = match skein_lib::bytes::find(words, b"\n") {
+        Some(end) => words.get(..end).expect("newline within words"),
+        None => words,
+    };
     if words.len() < 7 {
         return None;
     }
