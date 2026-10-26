@@ -755,3 +755,32 @@ fn a_conversations_prepared_text_ask_reaches_its_assignment() {
     assert!(!assignment.live.reasoning);
     assert!(!assignment.live.input);
 }
+
+#[test]
+fn a_refused_settlement_uses_cores_returned_reply_address() {
+    let (mut domain, _) = resume_fixture::root();
+    let payload = domain
+        .payloads
+        .insert(Some(crate::boundary::Payload::RefusedCall { name: b"returned opaque address".as_slice().into() }))
+        .unwrap();
+    let delivery = crate::route::host_route::relayed(
+        &mut domain,
+        Token::new(7),
+        Token::new(3),
+        Token::new(9),
+        b"fleet address".as_slice().into(),
+        payload.token(),
+    );
+    assert_eq!(
+        delivery,
+        Delivery::Link {
+            channel: Token::new(7),
+            down: jig_domain_host::LinkDown::Relayed {
+                run: Token::new(3),
+                attempt: Token::new(9),
+                call: b"returned opaque address".as_slice().into(),
+                answer: jig_domain_host::Relayed::Answer { error: true, text: b"busy".as_slice().into() },
+            },
+        }
+    );
+}

@@ -298,6 +298,7 @@ pub(crate) fn answer(domain: &mut Domain, run: Token, attempt: Token, payload: T
                 Payload::Busy
                 | Payload::Call { .. }
                 | Payload::SettledCall(_)
+                | Payload::RefusedCall { .. }
                 | Payload::InboxWord(_)
                 | Payload::Turn { .. },
             )
@@ -340,6 +341,7 @@ pub(crate) fn result_event(domain: &mut Domain, payload: Token, end: tasks::End)
                     Payload::Busy
                     | Payload::Call { .. }
                     | Payload::SettledCall(_)
+                    | Payload::RefusedCall { .. }
                     | Payload::InboxWord(_)
                     | Payload::Turn { .. },
                 )

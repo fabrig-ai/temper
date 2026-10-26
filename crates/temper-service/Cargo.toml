@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+jig-protocol-charter.workspace = true
 jig-domain-brief.workspace = true
 temper-forge-setup.workspace = true
 temper-protocol-records.workspace = true

@@ -168,9 +168,9 @@ fn grants(grants: &[accounts::Grant]) -> Box<[host::Grant]> {
     translated.into_boxed_slice()
 }
 
-fn answered(settled: &[core::SettledCall]) -> Box<[host::AnsweredCall]> {
+fn answered(settled: &[core::Settled]) -> Box<[host::AnsweredCall]> {
     let mut answered = Vec::with_capacity(settled.len());
-    for call in settled {
+    for core::Settled { key, call } in settled {
         let answer = match &call.answer {
             core::SettledAnswer::Host { error, body } => {
                 host::SettledAnswer::Host { error: *error, body: body.clone() }
@@ -179,7 +179,15 @@ fn answered(settled: &[core::SettledCall]) -> Box<[host::AnsweredCall]> {
                 host::SettledAnswer::Delivery { outcome: delivery(*outcome), evidence: evidence.clone() }
             }
         };
-        answered.push(host::AnsweredCall { name: call.name.clone(), tool: call.tool.clone(), answer });
+        answered.push(host::AnsweredCall {
+            name: jig_protocol_charter::call_name(&jig_protocol_charter::CallKey {
+                activation: key.attempt,
+                completion: key.completion,
+                position: key.position,
+            }),
+            tool: call.tool.clone(),
+            answer,
+        });
     }
     answered.into_boxed_slice()
 }

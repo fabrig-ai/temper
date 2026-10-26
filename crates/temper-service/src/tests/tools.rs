@@ -38,13 +38,13 @@ fn a_call_of_another_activation_is_answered_an_error() {
         panic!("rendered error")
     };
     assert_eq!(to, TO);
-    assert_eq!(answer, core::SettledAnswer::Host { error: true, body: b"host call out of range".as_slice().into() });
+    assert_eq!(answer, core::SettledAnswer::Host { error: true, body: b"malformed host call".as_slice().into() });
 }
-#[test]
-fn an_unknown_tool_is_answered_an_error_with_no_commit() {
-    let (mut service, run) = fixtures::claimed_chat();
-    let commits = service.engine.as_mut().expect("engine").domain.deployment().commits;
-    let call = call(run.attempt, b"no_such_tool", b"{}");
+fn answered_at_decode(
+    service: &mut crate::Service,
+    run: &root::Assignment,
+    call: jig_domain_fleet::Call,
+) -> Option<host::Relayed> {
     service.engine.as_mut().expect("engine").step(root::Event::Worker(root::WorkerInput::Link {
         channel: Token::new(7),
         link: root::Link::Up {
@@ -61,7 +61,7 @@ fn an_unknown_tool_is_answered_an_error_with_no_commit() {
         },
     }));
     let mut delivered = skein_lib::Queue::with_capacity(32);
-    fixtures::settle_root(&mut service, &mut delivered);
+    fixtures::settle_root(service, &mut delivered);
     let mut answer = None;
     for _ in 0..delivered.len() {
         let root::Delivery::Link { down: host::LinkDown::Relayed { call: name, answer: relayed, .. }, .. } =
@@ -72,6 +72,26 @@ fn an_unknown_tool_is_answered_an_error_with_no_commit() {
         assert_eq!(name, call.name);
         assert!(answer.replace(relayed).is_none(), "one answer");
     }
+    answer
+}
+
+#[test]
+fn a_mismatched_activation_is_malformed_without_a_commit() {
+    let (mut service, run) = fixtures::claimed_chat();
+    let commits = service.engine.as_ref().expect("engine").domain.deployment().commits;
+    let call = call(run.attempt + 1, b"release", br#"{"target":5,"revision":1}"#);
+    let answer = answered_at_decode(&mut service, &run, call);
+    assert_eq!(answer, Some(host::Relayed::Answer { error: true, text: b"malformed host call".as_slice().into() }));
+    assert_eq!(service.engine.as_ref().expect("engine").domain.deployment().commits, commits);
+    assert_eq!(service.end(), None);
+}
+
+#[test]
+fn an_unknown_tool_is_answered_an_error_with_no_commit() {
+    let (mut service, run) = fixtures::claimed_chat();
+    let commits = service.engine.as_mut().expect("engine").domain.deployment().commits;
+    let call = call(run.attempt, b"no_such_tool", b"{}");
+    let answer = answered_at_decode(&mut service, &run, call);
     assert_eq!(answer, Some(host::Relayed::Answer { error: true, text: b"unknown tool".as_slice().into() }));
     assert_eq!(service.engine.as_ref().expect("engine").domain.deployment().commits, commits);
     assert_eq!(service.end(), None);
@@ -81,33 +101,7 @@ fn a_documentation_read_is_answered_at_decode_with_no_commit() {
     let (mut service, run) = fixtures::claimed_chat();
     let commits = service.engine.as_mut().expect("engine").domain.deployment().commits;
     let call = call(run.attempt, b"read_docs", br#"{"search":"WireGuard"}"#);
-    service.engine.as_mut().expect("engine").step(root::Event::Worker(root::WorkerInput::Link {
-        channel: Token::new(7),
-        link: root::Link::Up {
-            parts: root::Parts::none(),
-            up: host::LinkUp::Call {
-                run: Token::new(run.task),
-                attempt: Token::new(run.attempt),
-                call: call.name.clone(),
-                tool: call.tool,
-                input: call.input,
-                writes: false,
-                deadline: call.deadline,
-            },
-        },
-    }));
-    let mut delivered = skein_lib::Queue::with_capacity(32);
-    fixtures::settle_root(&mut service, &mut delivered);
-    let mut answer = None;
-    for _ in 0..delivered.len() {
-        let root::Delivery::Link { down: host::LinkDown::Relayed { call: name, answer: relayed, .. }, .. } =
-            delivered.pop().unwrap()
-        else {
-            continue;
-        };
-        assert_eq!(name, call.name);
-        assert!(answer.replace(relayed).is_none(), "one answer");
-    }
+    let answer = answered_at_decode(&mut service, &run, call);
     let Some(host::Relayed::Answer { error, text }) = answer else { panic!("documentation answer") };
     assert!(!error);
     assert!(text.starts_with(b"server@"));

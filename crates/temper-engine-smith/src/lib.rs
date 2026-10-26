@@ -53,8 +53,8 @@ pub enum Decoded {
 }
 
 /// The most a call answered at decode holds, as the root counts a
-/// settled call (jig's `SettledCall::owned_bytes`: its name, its tool
-/// and its body); the start refuses a smaller answer bound
+/// settled call (jig's `SettledCall::owned_bytes`: its tool and body);
+/// the start refuses a smaller answer bound
 /// (protocol/documentation.md, section 5).
 pub const DOC_ANSWER: u32 = 2_048;
 

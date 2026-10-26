@@ -38,18 +38,9 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             let _sent = super::now(domain, request);
         }
         core::Now::Undelivered { message, .. } => drop(take_payload(domain, message.words)),
-        core::Now::SettledCallRefused { to, key: _, name, tool } => super::host_route::settled(
-            domain,
-            &env.limits,
-            decision,
-            to,
-            core::SettledCall {
-                serial: 0,
-                name,
-                tool,
-                answer: core::SettledAnswer::Host { error: true, body: Box::from(&b"busy"[..]) },
-            },
-        ),
+        core::Now::SettledCallRefused { to, name, .. } => {
+            super::host_route::refused(domain, &env.limits, decision, to, name);
+        }
         core::Now::SignInRefused { to } => {
             let _sent = super::now(domain, Request::Party(crate::PartyRequest::SignInRefused { to }));
         }
@@ -70,6 +61,7 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                         Payload::Busy
                         | Payload::Call { .. }
                         | Payload::SettledCall(_)
+                        | Payload::RefusedCall { .. }
                         | Payload::InboxWord(_)
                         | Payload::Answer { .. },
                     )
@@ -97,6 +89,7 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                     Payload::Busy
                     | Payload::Call { .. }
                     | Payload::SettledCall(_)
+                    | Payload::RefusedCall { .. }
                     | Payload::InboxWord(_)
                     | Payload::Answer { .. },
                 )
@@ -122,7 +115,13 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                     domain.forge_left.remove(&(task, attempt));
                     Some(core::PayloadRefusal::Answer { task, attempt })
                 }
-                Some(Payload::Busy | Payload::Call { .. } | Payload::SettledCall(_) | Payload::InboxWord(_)) => {
+                Some(
+                    Payload::Busy
+                    | Payload::Call { .. }
+                    | Payload::SettledCall(_)
+                    | Payload::RefusedCall { .. }
+                    | Payload::InboxWord(_),
+                ) => {
                     unreachable!("task refusal owns a task payload")
                 }
                 None => None,

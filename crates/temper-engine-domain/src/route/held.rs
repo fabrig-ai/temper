@@ -62,6 +62,7 @@ pub(crate) fn held(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisi
                     Payload::Busy
                     | Payload::Call { .. }
                     | Payload::SettledCall(_)
+                    | Payload::RefusedCall { .. }
                     | Payload::Turn { .. }
                     | Payload::Answer { .. },
                 )

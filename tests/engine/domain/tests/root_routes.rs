@@ -4385,7 +4385,7 @@ const RENDERED_CALL_NAME: &[u8] = b"answer-bound";
 const TYPED_TOOL: &[u8] = b"unknown-tool";
 
 /// Use the existing recorded typed-call and deferred Render path. The core's
-/// answer bound counts the opaque call name and tool as well as the body.
+/// answer bound counts the tool and body; the live name is kept apart.
 fn rendered_call_answer(extra: u32) -> (Driver, Box<[u8]>) {
     let mut bounds = limits();
     bounds.call_answer_bytes = CONFIGURED_RENDERED_CALL_BYTES;
@@ -4398,9 +4398,8 @@ fn rendered_call_answer(extra: u32) -> (Driver, Box<[u8]>) {
         driver.advance(true);
     }
     let (to, _) = driver.protocol.pending_renders.pop().expect("recorded call reached Render");
-    let payload_bytes = usize::try_from(CONFIGURED_RENDERED_CALL_BYTES + extra).expect("small answer")
-        - RENDERED_CALL_NAME.len()
-        - TYPED_TOOL.len();
+    let payload_bytes =
+        usize::try_from(CONFIGURED_RENDERED_CALL_BYTES + extra).expect("small answer") - TYPED_TOOL.len();
     let body: Box<[u8]> = vec![b'x'; payload_bytes].into();
     driver.send(engine::Event::Worker(engine::WorkerInput::RenderedHostCall {
         to,
@@ -4510,7 +4509,13 @@ fn typed_calls_keep_their_opaque_answers_for_resumed_assignments() {
     driver.say(first.task, 93);
     let resumed = driver.last_assignment();
     assert_eq!(resumed.transcript.as_ref(), [Box::<[u8]>::from(&b"step"[..])]);
-    assert_eq!(resumed.settled.as_ref(), std::slice::from_ref(&settled));
+    assert_eq!(
+        resumed.settled.as_ref(),
+        &[jig_domain_core::Settled {
+            key: engine::CallKey { task: first.task, attempt: first.attempt, completion: 2, position: 0 },
+            call: settled.clone(),
+        }]
+    );
     assert_eq!(resumed.answered[0].settled.as_ref(), Some(&settled));
 }
 

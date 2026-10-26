@@ -96,7 +96,6 @@ pub(crate) fn decoded(domain: &mut Domain, env: &Env<Limits>, decision: &mut Dec
         let answer = if invalid {
             Payload::SettledCall(SettledCall {
                 serial: 0,
-                name: flight.name,
                 tool: flight.tool,
                 answer: SettledAnswer::Host { error: true, body: Box::from(&b"invalid call"[..]) },
             })
@@ -182,7 +181,7 @@ pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer) 
         answered_at_decode(domain, to, flight, answer);
         return;
     };
-    let mut call = SettledCall { serial: 0, name: flight.name, tool: flight.tool, answer };
+    let mut call = SettledCall { serial: 0, tool: flight.tool, answer };
     let recorded = domain.core.call_parts.contains_key(&key);
     let answer_bytes = match super::call_answer(domain, key) {
         Some(answer) => crate::store::call_answer_bytes(&answer),
@@ -203,7 +202,7 @@ pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer) 
         call.answer = SettledAnswer::Host { error: true, body: Box::from(&b"busy"[..]) };
     }
     if fits && recorded {
-        domain.work.push(Work::Core(jig_domain_core::Event::SettledCall { to, key, call }));
+        domain.work.push(Work::Core(jig_domain_core::Event::SettledCall { to, key, name: flight.name, call }));
     } else {
         let id = domain.payloads.insert(Some(Payload::SettledCall(call))).expect("fleet call reserved answer room");
         domain.work.push(Work::Fleet(fleet::Event::Relayed { to, answer: id.token() }));
@@ -212,7 +211,7 @@ pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer) 
 
 /// An answer made at decode decides nothing (domain/root.md, 5.2).
 fn answered_at_decode(domain: &mut Domain, to: ReplyTo, flight: Flight, answer: SettledAnswer) {
-    let mut call = SettledCall { serial: 0, name: flight.name, tool: flight.tool, answer };
+    let mut call = SettledCall { serial: 0, tool: flight.tool, answer };
     call.answer = if call.valid(&super::core_limits(&domain.limits)) {
         match call.answer {
             answer @ SettledAnswer::Host { .. } => answer,
@@ -229,6 +228,12 @@ fn answered_at_decode(domain: &mut Domain, to: ReplyTo, flight: Flight, answer: 
 
 pub(crate) fn settled(domain: &mut Domain, limits: &Limits, decision: &mut Decision, to: ReplyTo, call: SettledCall) {
     let id = domain.payloads.insert(Some(Payload::SettledCall(call))).expect("fleet call reserved answer room");
+    emit(decision, limits, Delivery::Fleet(fleet::Event::Relayed { to, answer: id.token() }));
+}
+
+/// Core's refusal supplies its own live address; no settled record is kept.
+pub(crate) fn refused(domain: &mut Domain, limits: &Limits, decision: &mut Decision, to: ReplyTo, name: Box<[u8]>) {
+    let id = domain.payloads.insert(Some(Payload::RefusedCall { name })).expect("fleet call reserved answer room");
     emit(decision, limits, Delivery::Fleet(fleet::Event::Relayed { to, answer: id.token() }));
 }
 
@@ -252,6 +257,17 @@ pub(crate) fn relayed(
     }
     let answer = match super::take_payload(domain, answer) {
         Some(Payload::Busy) => host::Relayed::Busy,
+        Some(Payload::RefusedCall { name }) => {
+            return Delivery::Link {
+                channel,
+                down: host::LinkDown::Relayed {
+                    run,
+                    attempt,
+                    call: name,
+                    answer: host::Relayed::Answer { error: true, text: Box::from(&b"busy"[..]) },
+                },
+            };
+        }
         Some(Payload::SettledCall(call)) => match call.answer {
             SettledAnswer::Host { error, body } => host::Relayed::Answer { error, text: body },
             SettledAnswer::Delivery { .. } => {

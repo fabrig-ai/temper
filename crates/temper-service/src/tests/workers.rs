@@ -274,11 +274,13 @@ fn an_assignment_preserves_its_ordered_messages_and_answered_calls() {
         word(3, tasks::Party::Person(8), b"first"),
         word(5, tasks::Party::Deployment { project: 1 }, b"second"),
     ]);
-    assignment.settled = Box::new([core::SettledCall {
-        serial: 6,
-        name: b"call".as_slice().into(),
-        tool: b"note".as_slice().into(),
-        answer: core::SettledAnswer::Host { error: false, body: b"done".as_slice().into() },
+    assignment.settled = Box::new([core::Settled {
+        key: core::CallKey { task: assignment.task, attempt: 1, completion: 2, position: 1 },
+        call: core::SettledCall {
+            serial: 6,
+            tool: b"note".as_slice().into(),
+            answer: core::SettledAnswer::Host { error: false, body: b"done".as_slice().into() },
+        },
     }]);
     let values = fixtures::values_with_identity(1, b"forge-token-1234");
     let event =
@@ -297,7 +299,11 @@ fn an_assignment_preserves_its_ordered_messages_and_answered_calls() {
     assert_eq!(
         assignment.answered.as_ref(),
         &[host::AnsweredCall {
-            name: b"call".as_slice().into(),
+            name: jig_protocol_charter::call_name(&jig_protocol_charter::CallKey {
+                activation: 1,
+                completion: 2,
+                position: 1,
+            }),
             tool: b"note".as_slice().into(),
             answer: host::SettledAnswer::Host { error: false, body: b"done".as_slice().into() }
         }]

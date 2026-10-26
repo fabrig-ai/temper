@@ -860,13 +860,20 @@ fn assignment_within(assignment: &crate::Assignment, limits: &Limits) -> bool {
 fn host_within(host: &crate::HostDelivery, limits: &Limits) -> bool {
     match host {
         crate::HostDelivery::Render { name, tool, answer, .. } => {
-            length_within(name.len().checked_add(tool.len()), limits.transcript_bytes)
+            !name.is_empty()
+                && length_within(name.len().checked_add(tool.len()), limits.transcript_bytes)
                 && bytes_within(crate::store::call_answer_bytes(answer), limits.transcript_bytes)
         }
-        crate::HostDelivery::Answer { call, .. } => match call.owned_bytes() {
-            Some(bytes) => bytes <= u64::from(limits.transcript_bytes),
-            None => false,
-        },
+        crate::HostDelivery::Answer { name, call, .. } => {
+            !name.is_empty()
+                && bytes_within(
+                    match call.owned_bytes() {
+                        Some(bytes) => bytes.checked_add(u64::try_from(name.len()).expect("usize fits u64")),
+                        None => None,
+                    },
+                    limits.transcript_bytes,
+                )
+        }
     }
 }
 
@@ -902,9 +909,12 @@ fn answered_within(assignment: &crate::Assignment, limits: &Limits) -> bool {
         previous = Some(key);
     }
     let mut serial = 0;
-    for call in &assignment.settled {
-        if call.serial <= serial
-            || call.name.is_empty()
+    for jig_domain_core::Settled { key, call } in &assignment.settled {
+        if key.task != assignment.task
+            || key.attempt == 0
+            || key.attempt >= assignment.attempt
+            || key.completion == 0
+            || call.serial <= serial
             || call.tool.is_empty()
             || !bytes_within(call.owned_bytes(), limits.transcript_bytes)
         {

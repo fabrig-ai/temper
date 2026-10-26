@@ -48,7 +48,7 @@ pub struct Assignment {
     /// Named answers committed after the task's last accepted turn. The
     /// worker gives these to the new attempt before it can decide new calls.
     pub answered: Box<[crate::CallRecord]>,
-    pub settled: Box<[jig_domain_core::SettledCall]>,
+    pub settled: Box<[jig_domain_core::Settled]>,
     /// Secret-free account and application credential grants; token bytes stay in the protocol.
     pub grants: Box<[accounts::Grant]>,
 }
@@ -700,6 +700,10 @@ pub(crate) enum Payload {
         body: Call,
     },
     SettledCall(jig_domain_core::SettledCall),
+    /// A refused settlement keeps only core's live reply address.
+    RefusedCall {
+        name: Box<[u8]>,
+    },
     InboxWord(tasks::Word),
     Turn {
         task: u64,

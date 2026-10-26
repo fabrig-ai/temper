@@ -3,28 +3,22 @@ use jig_domain_core as core;
 use jig_domain_fleet as fleet;
 use jig_domain_host as host;
 use jig_domain_tasks as tasks;
-use skein_lib::{Reader, ReplyTo, Token, Writer};
+use skein_lib::{ReplyTo, Token, Writer};
 use smith_domain_run as run;
 use temper_engine_domain as engine;
 use temper_engine_smith::{Decoded, Problem};
 
 pub(crate) fn decode(to: ReplyTo, _task: u64, attempt: u64, call: &fleet::Call) -> engine::Event {
-    let mut reader = Reader::new(&call.name);
-    let name = match smith_channel::CallName::decode(&smith_channel::CEILINGS, &mut reader) {
-        Ok(name) if reader.is_empty() => name,
-        Ok(_) | Err(_) => return invalid(to, Problem::Malformed),
+    let Some(name) = jig_protocol_charter::call_key(&call.name, attempt) else {
+        return invalid(to, Problem::Malformed);
     };
-    if name.activation() != attempt {
-        return invalid(to, Problem::Range);
-    }
     if call.input.len() > run::HostInput::CAPACITY {
         return invalid(to, Problem::TooLarge);
     }
     let Some(input) = run::HostInput::attested(call.input.clone()) else {
         return invalid(to, Problem::Malformed);
     };
-    let name =
-        run::CallName { activation: name.activation(), completion: name.completion(), position: name.position() };
+    let name = run::CallName { activation: name.activation, completion: name.completion, position: name.position };
     match temper_engine_smith::call(name, &call.tool, &input) {
         Ok(Decoded::Call(body)) => engine::Event::Worker(engine::WorkerInput::DecodedHostCall { to, body }),
         Ok(Decoded::Answered(answer)) => {

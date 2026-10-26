@@ -174,9 +174,9 @@ fn grants(grants: &[accounts::Grant]) -> Box<[host::Grant]> {
     }
     filled.into_boxed()
 }
-fn answered(calls: &[core::SettledCall]) -> Box<[host::AnsweredCall]> {
+fn answered(calls: &[core::Settled]) -> Box<[host::AnsweredCall]> {
     let mut answered = List::with_capacity(u32::try_from(calls.len()).expect("bounded answered calls"));
-    for call in calls {
+    for core::Settled { key, call } in calls {
         let answer = match &call.answer {
             core::SettledAnswer::Host { error, body } => {
                 host::SettledAnswer::Host { error: *error, body: body.clone() }
@@ -193,7 +193,15 @@ fn answered(calls: &[core::SettledCall]) -> Box<[host::AnsweredCall]> {
             },
         };
         answered
-            .push(host::AnsweredCall { name: call.name.clone(), tool: call.tool.clone(), answer })
+            .push(host::AnsweredCall {
+                name: jig_protocol_charter::call_name(&jig_protocol_charter::CallKey {
+                    activation: key.attempt,
+                    completion: key.completion,
+                    position: key.position,
+                }),
+                tool: call.tool.clone(),
+                answer,
+            })
             .expect("bounded answered calls");
     }
     answered.into_boxed()
