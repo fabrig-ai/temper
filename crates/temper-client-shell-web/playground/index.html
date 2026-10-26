@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>temper's playground</title>
+  <link rel="stylesheet" href="{bundle}skein-ui.css">
+  <link rel="stylesheet" href="{bundle}temper.css">
+  <link rel="stylesheet" href="{bundle}playground.css">
+  <script type="module" src="{bundle}boot.js"></script>
+</head>
+<body>
+  <header class="playground-frame" aria-label="Playground">
+    <p>temper's playground: a scripted model and forge, running in your browser</p>
+    <div class="playground-controls">
+      <button id="playground-pause" type="button" aria-pressed="false">Pause</button>
+      <label>Speed <select id="playground-speed">
+        <option value="1">1×</option>
+        <option value="10">10×</option>
+        <option value="100">100×</option>
+      </select></label>
+      <button id="playground-reset" type="button">Reset</button>
+      <label>Story <select id="playground-story"><option value="a">A</option></select></label>
+      <span>World time: <time id="playground-time"></time></span>
+      <span>temper <span id="playground-version"></span></span>
+      <a href="https://github.com/fabrig-dev/temper/releases" target="_blank" rel="noopener noreferrer">Download temper</a>
+    </div>
+    <p id="playground-status" role="status"></p>
+  </header>
+  <p id="playground-loading" class="playground-message" role="status">Loading the playground…</p>
+  <section id="playground-failure" class="playground-message" role="alert" hidden>
+    <h1>The playground failed.</h1>
+    <p id="playground-failure-words"></p>
+    <a href="/">Start over</a>
+  </section>
+  <div id="app"></div>
+  <noscript>temper's playground needs WebAssembly and scripts.</noscript>
+</body>
+</html>

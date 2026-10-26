@@ -46,6 +46,8 @@ step wasm cargo clippy --target wasm32-unknown-unknown \
     -p temper-client-domain -p temper-client-view \
     -p temper-client-protocol-wire -p temper-client-shell-web \
     --features loopback-navigation,record -- -D warnings
+step wasm cargo clippy --target wasm32-unknown-unknown \
+    -p temper-client-shell-web --features playground -- -D warnings
 # skein's testing-strategy.md, section 8: a test is a process.
 export NEXTEST_DOUBLE_SPAWN=0
 step build cargo nextest run --workspace --no-run
