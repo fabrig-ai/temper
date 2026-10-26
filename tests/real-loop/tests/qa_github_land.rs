@@ -142,7 +142,11 @@ fn landed(ran: &Ran) -> u64 {
     assert_eq!(task["chip"]["phase"], "ended");
     let result = &task["result"]["value"]["change"];
     assert_eq!(result["kind"], 1, "landed change");
-    assert_eq!(result["words"]["bytes"], sha, "change result names main's merge commit");
+    assert_eq!(
+        result["words"]["bytes"].as_str().expect("landing words").lines().next(),
+        Some(sha.as_str()),
+        "first result line names main's merge commit"
+    );
     for request in &ran.github().git_calls {
         assert!(request.status == 200 || (!request.writes && request.status == 404), "authenticated git: {request:?}");
         assert_eq!(request.minted.expect("installation token").installation, github::INSTALLATION);

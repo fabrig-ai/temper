@@ -271,43 +271,73 @@ pub(crate) fn forges() -> List<temper_service::ForgeRuntime> {
 pub(crate) fn provider() -> skein_fake_peers::llm::Peer {
     let mut script = channel::one_chat(b"Hello");
     script.result = br#"{"form":"report","text":"World answer","fields":{}}"#.as_slice().into();
-    channel::provider(
-        Box::new([skein_fake_llm_domain::api::Script { cue: Box::default(), turns: channel::provider_turns(&script) }]),
-        skein_llm::Credential { value: channel::KEY.into(), scheme: skein_llm::Scheme::Key, account_id: Box::new([]) },
-        Duration::ZERO,
-        skein_fake_peers::Transport::Plaintext,
-        skein_fake_llm_protocol::documents::Provider::OpenAi,
-    )
+    scripted_provider(Box::new([skein_fake_llm_domain::api::Script {
+        cue: Box::default(),
+        turns: channel::provider_turns(&script),
+    }]))
 }
 pub(crate) fn read_then_wait_provider() -> skein_fake_peers::llm::Peer {
     use skein_fake_llm_domain::api::{Finish, Line, Script, Turn};
-    channel::provider(
-        Box::new([Script {
-            cue: Box::default(),
-            turns: Box::new([
-                Turn {
-                    lines: Box::new([Line::Call {
-                        name: b"read".as_slice().into(),
-                        arguments: br#"{"path":"README.md"}"#.as_slice().into(),
-                    }]),
-                    finish: Finish::ToolCalls,
-                    tokens: 20,
-                },
-                Turn {
-                    lines: Box::new([
-                        Line::Text { text: ANSWER.into() },
-                        Line::Call { name: b"wait".as_slice().into(), arguments: b"{}".as_slice().into() },
-                    ]),
-                    finish: Finish::ToolCalls,
-                    tokens: 20,
-                },
-            ]),
-        }]),
-        skein_llm::Credential { value: channel::KEY.into(), scheme: skein_llm::Scheme::Key, account_id: Box::new([]) },
-        Duration::ZERO,
+    scripted_provider(Box::new([Script {
+        cue: Box::default(),
+        turns: Box::new([
+            Turn {
+                lines: Box::new([Line::Call {
+                    name: b"read".as_slice().into(),
+                    arguments: br#"{"path":"README.md"}"#.as_slice().into(),
+                }]),
+                finish: Finish::ToolCalls,
+                tokens: 20,
+            },
+            Turn {
+                lines: Box::new([
+                    Line::Text { text: ANSWER.into() },
+                    Line::Call { name: b"wait".as_slice().into(), arguments: b"{}".as_slice().into() },
+                ]),
+                finish: Finish::ToolCalls,
+                tokens: 20,
+            },
+        ]),
+    }]))
+}
+/// Temper's flat host schemas and a mounted workspace fit this fake's request.
+pub(crate) fn scripted_provider(scripts: Box<[skein_fake_llm_domain::api::Script]>) -> skein_fake_peers::llm::Peer {
+    use skein_fake_llm_protocol::{documents, provider};
+    const REQUEST: u32 = 65_536;
+    const STRINGS: u32 = 16_384;
+    let mut config = skein_llm_world::fake::config();
+    config.latency_min = Duration::ZERO;
+    config.latency_max = Duration::ZERO;
+    config.script_bytes = config.script_bytes.max(STRINGS);
+    config.answer_bytes = config.answer_bytes.max(STRINGS);
+    config.query_bytes = config.query_bytes.max(REQUEST);
+    let mut protocol = skein_llm_world::fake::limits(&skein_llm_world::limits());
+    protocol.documents.openai.request = REQUEST;
+    protocol.documents.openai.strings = STRINGS;
+    protocol.documents.openai.answer = protocol.documents.openai.answer.max(STRINGS);
+    protocol.http.body = protocol.http.body.max(u64::from(REQUEST));
+    protocol.sse.event = protocol.sse.event.max(STRINGS);
+    protocol.documents.openai.tokens = 4096;
+    protocol.documents.openai.output_items = 256;
+    protocol.documents.anthropic.output_items = 256;
+    skein_fake_peers::llm::Peer::new(
+        (smith_agent_process_world::fake::loopback(), 443).into(),
         skein_fake_peers::Transport::Plaintext,
-        skein_fake_llm_protocol::documents::Provider::OpenAi,
+        smith_agent_process_world::fake::limits(),
+        provider::Config {
+            echo: skein_llm::openai::Echo::NONE,
+            usage_fields: documents::UsageFields::ALL,
+            provider: documents::Provider::OpenAi,
+            path: skein_llm::Endpoint::openai().target,
+            headers: Box::new([]),
+            without_credential: false,
+        },
+        skein_llm::Credential { value: channel::KEY.into(), scheme: skein_llm::Scheme::Key, account_id: Box::new([]) },
+        protocol,
+        skein_fake_llm_domain::Domain::try_scripted(&config, 17, scripts).expect("bounded provider scripts"),
+        config,
     )
+    .expect("configured provider")
 }
 pub(crate) fn codec() -> jig_protocol_store::codec::Limits {
     let limits = jig_test_service_limits(&engine().limits);

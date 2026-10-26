@@ -50,6 +50,7 @@ skein-fake-peers = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-fake-llm-domain = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-fake-llm-protocol = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-llm = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-llm-world.workspace = true
 skein-kv = { git = "https://github.com/fabrig-dev/skein.git" }
 smith-agent-process-world = { git = "https://github.com/fabrig-dev/smith.git" }
 smith-agent-shell = { git = "https://github.com/fabrig-dev/smith.git" }
