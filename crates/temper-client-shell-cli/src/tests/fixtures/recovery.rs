@@ -182,7 +182,7 @@ impl Frame {
         self.host.root.kept()
     }
     pub fn act_sent(&self) -> bool {
-        self.acts.iter().any(|key| *key != KEPT_KEY)
+        self.acts.iter().any(|key| !self.is_kept(key))
     }
     pub fn store_count(&self) -> u32 {
         self.store_writes
@@ -197,14 +197,18 @@ impl Frame {
         if let Some(value) = keyed.value() {
             self.carried_keys.push(value.clone());
         }
-        if self.move_mode {
+        if self.move_mode && matches!(keyed.owner(), w::Owner::Jig) {
             self.move_reply(fd, &keyed);
             return;
         }
-        if !if *keyed.key() == KEPT_KEY { self.answer_kept.is_some() } else { self.answer_new.is_some() } {
+        if !if self.is_kept(keyed.key()) { self.answer_kept.is_some() } else { self.answer_new.is_some() } {
             return;
         }
         self.hold_stores = Some(());
+        if matches!(keyed.owner(), w::Owner::Family(_)) {
+            self.adopt_reply(fd);
+            return;
+        }
         let value = w::OwnerOutcome::Created(
             w::OwnerOutcomeCreated::new(&w::CEILINGS, w::OwnerOutcomeCreatedParts { first: 41, last: 41, given: None })
                 .expect("created"),
@@ -225,5 +229,87 @@ impl Frame {
         let reply = &mut self.sockets.get_mut(&fd).expect("socket").reply;
         reply.extend(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()).bytes());
         reply.extend(body.iter().copied());
+    }
+}
+
+pub const ADOPT: &[&[u8]] = &[
+    b"adopt",
+    b"--project",
+    b"shop",
+    b"--owner",
+    b"o",
+    b"--name",
+    b"n",
+    b"--landing",
+    b"main",
+    b"--key",
+    b"adopt-repo",
+];
+pub fn unanswered_adopt() -> Box<[u8]> {
+    let mut first = Frame::act_words_with(ADOPT, small_store(&[]));
+    first.sign_in_then_deliver_me();
+    first.store_snapshot()
+}
+impl Frame {
+    fn is_kept(&self, key: &[u8; 16]) -> bool {
+        self.initial_records().iter().any(|record| record.key.as_ref() == key)
+    }
+    pub fn initial_records(&self) -> Vec<jig_client::Record> {
+        let Some(bytes) = &self.store else { return Vec::new() };
+        let count = Reader::new(bytes).u32().expect("store count");
+        let mut rest = &bytes[4..];
+        let mut records = Vec::new();
+        for _ in 0..count {
+            let length = Reader::new(rest).u32().expect("key length") as usize;
+            let key = rest[4..4 + length].into();
+            rest = &rest[4 + length..];
+            let length = Reader::new(rest).u32().expect("record length") as usize;
+            let bytes = rest[4..4 + length].into();
+            rest = &rest[4 + length..];
+            records.push(jig_client::Record { key, bytes });
+        }
+        records
+    }
+    pub fn answer_restored(&mut self) {
+        self.answer_kept = Some(());
+        let mut requests = Vec::new();
+        for (fd, socket) in &self.sockets {
+            if !socket.closed
+                && socket.reply.is_empty()
+                && let Some(end) = skein_lib::bytes::find(&socket.request, b"\r\n\r\n")
+                && socket.request.starts_with(b"POST /jig/v1/request ")
+            {
+                requests.push((*fd, socket.request[end + 4..].to_vec()));
+            }
+        }
+        for (fd, bytes) in requests {
+            self.act_reply(fd, &bytes);
+        }
+        self.run();
+    }
+    fn adopt_reply(&mut self, fd: Fd) {
+        use temper_client_protocol_wire::{self as wire, v1 as f};
+        let answer = f::Answer::new(
+            &f::CEILINGS,
+            f::AnswerParts {
+                outcome: f::Outcome::ForgeRefused(
+                    f::ForgeRefused::new(&f::CEILINGS, f::ForgeRefusedParts { reason: f::ForgeReason::NotFound })
+                        .expect("refusal"),
+                ),
+            },
+        )
+        .expect("answer");
+        let owned = w::Owned::new(
+            &w::CEILINGS,
+            w::OwnedParts {
+                owner: w::Owner::Family(
+                    w::Family::new(&w::CEILINGS, w::FamilyParts { number: wire::FORGE }).expect("family"),
+                ),
+                version: wire::CLIENT_VERSION,
+                record: wire::answer(&answer),
+            },
+        )
+        .expect("owned answer");
+        self.reply(fd, &encode!(w::KeyedAnswer::FinalAnswer(owned)));
     }
 }

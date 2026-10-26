@@ -17,7 +17,7 @@ macro_rules! encode {
 }
 pub mod local;
 pub mod moves;
-mod recovery;
+pub mod recovery;
 pub mod waits;
 pub use recovery::{dropped, kept_chat, other_party, small_store};
 pub const LINK: &[u8] = b"http://127.0.0.1:4000/jig/v1/sign-in/link?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
