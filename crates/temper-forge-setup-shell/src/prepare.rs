@@ -34,6 +34,10 @@ fn found(place: &Place) -> Result<Found, Failed> {
         state,
         runner_secret: crate::path(&place.path(File::RunnerSecret)).exists(),
         admin_token: crate::path(&place.path(File::AdminToken)).exists(),
+        person_headers: [
+            crate::path(&place.path(File::PersonReadHeader)).exists(),
+            crate::path(&place.path(File::PersonWriteHeader)).exists(),
+        ],
         files: files::present(place).map_err(|why| Failed::Io("directory", why.kind()))?,
     })
 }
@@ -52,7 +56,7 @@ pub fn run(limits: &skein_io::Limits, place: &Place, mut machine: Prepare) -> Re
                     String::from_utf8_lossy(line.strip_suffix(b"\r").unwrap_or(line)).into_owned().into_boxed_str(),
                 )
             }
-            Request::Run { spec, .. } | Request::Token { spec } => {
+            Request::Run { spec, .. } | Request::Token { spec } | Request::PersonToken { spec, .. } => {
                 Event::Ran(command::run_one(limits, &spec).map_err(Failed::Command)?)
             }
             Request::Lock(file) => {

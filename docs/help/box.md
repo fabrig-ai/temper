@@ -99,6 +99,12 @@ temper ctl DIR forge-setup 3 --org work --repository hello --project PROJECT --k
 Expect: `setting up`, then `Adopted work/hello on forge 3 as owned.`
 and `It is the project's home.`
 
+At each Forgejo start the box prints its API address, your login and
+the absolute paths to `person_read.header` and `person_write.header`.
+Pass a header by path with `curl -H @FILE`, keeping its token private.
+Your first password is in `person_password`; change it on Forgejo
+when you like, with no forced first password change.
+
 If not: past 300 seconds it prints the forges and `not met: timeout`
 (exit 3) while the box still fetches Forgejo: run `temper ctl DIR
 wait forges --until made:3`, then go on. A failed fetch or start
