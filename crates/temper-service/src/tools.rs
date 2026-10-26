@@ -8,7 +8,17 @@ use smith_domain_run as run;
 use temper_engine_domain as engine;
 use temper_engine_smith::{Decoded, Problem};
 
-pub(crate) fn decode(to: ReplyTo, _task: u64, attempt: u64, call: &fleet::Call) -> engine::Event {
+#[cfg(test)]
+pub(crate) fn decode(to: ReplyTo, task: u64, attempt: u64, call: &fleet::Call) -> engine::Event {
+    decode_configured(to, task, attempt, call, &[])
+}
+pub(crate) fn decode_configured(
+    to: ReplyTo,
+    _task: u64,
+    attempt: u64,
+    call: &fleet::Call,
+    models: &[engine::Model],
+) -> engine::Event {
     let Some(name) = jig_protocol_charter::call_key(&call.name, attempt) else {
         return invalid(to, Problem::Malformed);
     };
@@ -19,7 +29,7 @@ pub(crate) fn decode(to: ReplyTo, _task: u64, attempt: u64, call: &fleet::Call) 
         return invalid(to, Problem::Malformed);
     };
     let name = run::CallName { activation: name.activation, completion: name.completion, position: name.position };
-    match temper_engine_smith::call(name, &call.tool, &input) {
+    match temper_engine_smith::call_configured(name, &call.tool, &input, models) {
         Ok(Decoded::Call(body)) => engine::Event::Worker(engine::WorkerInput::DecodedHostCall { to, body }),
         Ok(Decoded::Answered(answer)) => {
             let (body, error) = answer.into_parts();
