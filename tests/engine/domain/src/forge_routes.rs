@@ -17,6 +17,10 @@ use temper_engine_domain_world::protocol::{self, Protocol};
 use temper_engine_domain_world::{store::Store, walking};
 use temper_engine_forge_world::{self as forge_world, translate};
 
+/// Which outward write’s decoded answer the story retains.
+#[derive(Clone, Copy)]
+pub enum HoldWrite { All, Merge }
+
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
     pub root: engine::Domain,
@@ -45,6 +49,12 @@ pub struct World {
     owner_gate: bool,
     pub held_reads: Option<Vec<engine::Request>>,
     pub merges: u32,
+    /// Hold decoded write answers after the independent forge has made the effect.
+    pub hold_write_answers: Option<HoldWrite>,
+    pub held_write_answers: Vec<engine::Event>,
+    pub drained: bool,
+    pub unsettled: Vec<engine::Unsettled>,
+    pub busy_calls: u32,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -403,6 +413,11 @@ impl World {
             slow_branch: None,
             owner_gate,
             held_reads: None,
+            hold_write_answers: None,
+            held_write_answers: Vec::new(),
+            drained: false,
+            unsettled: Vec::new(),
+            busy_calls: 0,
             merges: 0,
         }
     }
@@ -460,6 +475,10 @@ impl World {
         std::mem::swap(&mut self.root, &mut fresh.root);
         std::mem::swap(&mut self.out, &mut fresh.out);
         self.events.clear();
+        self.held_write_answers.clear();
+        self.hold_write_answers = None;
+        self.drained = false;
+        self.unsettled.clear();
         self.answers.clear();
         self.adopted.clear();
         self.period = None;
@@ -620,6 +639,9 @@ impl World {
                             .expect("the world rendered every relayed answer");
                         self.answers.push(answer.clone());
                     }
+                    Delivery::Link { down: host::LinkDown::Relayed { answer: host::Relayed::Busy, .. }, .. } => {
+                        self.busy_calls += 1;
+                    }
                     Delivery::Application { outcome, .. } => {
                         let Some(engine::ApplicationAnswer::Adopt(outcome)) = outcome else {
                             panic!("retained adoption answer")
@@ -643,11 +665,25 @@ impl World {
                 | engine::Request::Party(_)
                 | engine::Request::Store(_)
                 | engine::Request::Busy(_)
-                | engine::Request::Drained => {}
+                => {}
+                engine::Request::Unsettled(write) => {
+                    assert!(!self.drained, "unfinished entries precede Drained");
+                    self.unsettled.push(write);
+                }
+                engine::Request::Drained => {
+                    assert!(!self.drained, "drained once");
+                    self.drained = true;
+                }
                 engine::Request::Worker(other) => panic!("forge fixture received an unexpected request {other:?}"),
                 engine::Request::Stop => panic!("root startup or store failure"),
             }
         }
+    }
+
+    /// Release the terminals this world held; the provider operation is not repeated.
+    pub fn release_write_answers(&mut self) {
+        self.hold_write_answers = None;
+        self.events.extend(self.held_write_answers.drain(..));
     }
 
     pub fn tick(&mut self) {
@@ -684,9 +720,19 @@ impl World {
                             Err(translate::error(error, fake::time(&self.fake_env.limits, self.fake_env.now)))
                         }
                     };
-                    self.events.push_back(engine::Event::Forge(Box::new(temper_engine_domain_forge::Event::Client(
+                    let event = engine::Event::Forge(Box::new(temper_engine_domain_forge::Event::Client(
                         skein_forge_client::Event::Answered { free: 0, rate: None, call, cost: 1, result },
-                    ))));
+                    )));
+                    let held = match self.hold_write_answers {
+                        Some(HoldWrite::All) => matches!(op, skein_forge::api::Op::Write(_)),
+                        Some(HoldWrite::Merge) => matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. })),
+                        None => false,
+                    };
+                    if held {
+                        self.held_write_answers.push(event);
+                    } else {
+                        self.events.push_back(event);
+                    }
                 }
                 fake::Request::Hook { .. } => {}
             }

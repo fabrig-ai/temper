@@ -820,6 +820,7 @@ fn a_change_produced_opened_checked_queued_and_landed() {
                 | top::Request::ApplicationPart { .. }
                 | top::Request::ApplicationDone { .. }
                 | top::Request::ApplicationAgain { .. }
+                | top::Request::Settled { .. }
                 | top::Request::RestartDone { .. }
                 | top::Request::Call { .. } => {}
             }

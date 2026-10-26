@@ -416,6 +416,7 @@ impl World {
                 | engine::Request::Party(_)
                 | engine::Request::Store(_)
                 | engine::Request::Busy(_)
+                | engine::Request::Unsettled(_)
                 | engine::Request::Drained => {}
                 engine::Request::Worker(other) => panic!("forge fixture received an unexpected request {other:?}"),
                 engine::Request::Stop => panic!("root startup or store failure"),

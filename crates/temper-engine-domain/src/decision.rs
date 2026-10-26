@@ -702,6 +702,7 @@ pub fn resume(journal: &mut Journal, out: &mut Queue<Output>) {
             | crate::Output::Reachable { .. }
             | crate::Output::Install { .. }
             | crate::Output::EraseCarried { .. }
+            | crate::Output::Unsettled(_)
             | crate::Output::Stop) => out.push(Output::Now(request)),
         }
     }

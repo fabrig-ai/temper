@@ -623,6 +623,9 @@ impl World {
                 top::Request::Call { call, repository, op } => {
                     calls.push((call, repository, op)).expect("bounded calls");
                 }
+                top::Request::Settled { unfinished } => {
+                    self.seen.push(top::Request::Settled { unfinished }).expect("world output capacity");
+                }
                 top::Request::RestartDone { stage } => {
                     restart = match stage {
                         top::RestartStage::Restored => Some(top::Event::ReadAfresh),

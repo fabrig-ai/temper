@@ -85,7 +85,7 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
             }
             domain.work.push(Work::Forge(*event));
         }
-        Event::Stop => domain.work.push(Work::Core(core::Event::Stopping)),
+        Event::Stop => crate::settling::start(domain),
         Event::Credential { number, generation, valid } => {
             domain.work.push(Work::Core(core::Event::Account(jig_domain_accounts::Event::Credential {
                 number,
@@ -309,6 +309,9 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
             Work::ProjectGoal(goal) => forge_route::project_goal(domain, env, &goal),
             Work::GoalSubscribe(subscriber) => forge_route::goal_subscribed(domain, env, subscriber),
             Work::Activate(context) => {
+                if domain.settling || domain.core.stopping() {
+                    continue;
+                }
                 let ready = domain.ready();
                 let routed =
                     core::step(&mut domain.core, &environment_core(env), core::Event::Activate { context, ready });

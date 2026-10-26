@@ -2289,6 +2289,7 @@ pub(crate) fn outputs(
                     subjects,
                 }));
             }
+            forge::Request::Settled { unfinished } => crate::settling::finished(domain, unfinished),
             forge::Request::Save { record, release, read_afresh } => {
                 // Both opening and finding a pull save the change with its number.
                 if let forge::Stored::Change(row) = &record {

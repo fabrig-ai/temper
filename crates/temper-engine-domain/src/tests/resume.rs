@@ -396,6 +396,7 @@ fn stopping_continues_projection_deferred_finishing_without_new_commits() {
                 | Request::Account(_)
                 | Request::ToChild(_)
                 | Request::Busy(_)
+                | Request::Unsettled(_)
                 | Request::Stop) => panic!("unexpected stopped continuation: {other:?}"),
             }
         }

@@ -32,6 +32,7 @@ pub struct Domain {
     /// Retired M1 latch storage, kept for the existing route reset sites.
     /// Resume readiness is derived from the core and never reads this field.
     pub(crate) settled: Option<(Time, Wall)>,
+    pub(crate) settling: bool,
     #[cfg(test)]
     pub(crate) empty_resumes: u32,
     pub(crate) limits: Limits,
@@ -290,6 +291,7 @@ impl Domain {
         }
         Ok(Domain {
             settled: None,
+            settling: false,
             #[cfg(test)]
             empty_resumes: 0,
             journal: Journal::new(&root_journal_limits(limits)),
@@ -459,9 +461,10 @@ impl Domain {
 /// Reserve before release; step and fire allocate the same bounded scratch room.
 #[must_use]
 /// The views' share is fixed by [`crate::limits::VIEWS`].
-pub const fn max_out(_limits: &Limits) -> u32 {
+pub const fn max_out(limits: &Limits) -> u32 {
     let viewed = views::max_out(&crate::limits::VIEWS).saturating_add(4);
-    if viewed > 4 { viewed } else { 4 }
+    let stopped = limits.forge.entries.saturating_add(4);
+    if viewed > stopped { viewed } else { stopped }
 }
 
 pub(crate) fn internal(number: u64) -> ReplyTo {
@@ -625,6 +628,7 @@ pub(crate) fn stage_now(domain: &mut Domain, out: &mut Queue<Request>) {
             | Request::Store(crate::StoreRequest::Load { .. } | crate::StoreRequest::Read { .. })
             | Request::ToChild(_)
             | Request::Busy(_)
+            | Request::Unsettled(_)
             | Request::Drained
             | Request::Account(_)) => {
                 assert!(now(domain, request), "root door reserves one route's immediate outputs");
@@ -720,7 +724,7 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
         if !domain.ready() {
             return;
         }
-        if let Some(context) = domain.core.take_due() {
+        if !domain.settling && let Some(context) = domain.core.take_due() {
             domain.work.push(Work::Activate(context));
             let decision = route(domain, env);
             close(domain, env, decision, out);
@@ -774,7 +778,7 @@ pub(crate) fn fire_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Queu
         route_core_requests(domain, env, &mut decision, routed);
     }
     let restarting = connector_restarting(domain);
-    if (restarting || domain.ready()) && !domain.core.stopping() {
+    if (restarting || domain.ready() || domain.settling) && !domain.core.stopping() {
         let mut forge_out = Queue::with_capacity(forge::max_out(&env.limits.forge));
         forge::fire(&mut domain.forge, &environment_forge(env), &mut forge_out);
         forge_route::outputs(domain, env, &mut decision, &mut forge_out);
@@ -819,7 +823,7 @@ pub(crate) fn step_released(domain: &mut Domain, env: &Env<Limits>, released: Re
     // Retire the notification while stopping. The entry stays durable for
     // the next start's outbox settlement; returning it would retry forever.
     if let Delivery::ForgeCommitted { .. } = released.0
-        && domain.core.stopping()
+        && (domain.core.stopping() || domain.settling)
     {
         return;
     }
