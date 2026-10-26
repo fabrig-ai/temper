@@ -111,6 +111,28 @@ fn the_stock_passes_jigs_one_check() {
     }
 }
 #[test]
+fn the_chats_words_send_work_agreed_first_to_a_goal() {
+    let words = include_str!("../stock/chat.txt");
+    assert!(words.contains("When a task, not a person, requested you"), "a goal is told apart by its requester");
+    assert!(
+        words.contains("before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, and wait for the answer. Then call change with what was agreed"),
+        "the goal asks its requester with message and waits before change"
+    );
+    assert!(
+        words.contains("When they want to agree a plan before anything is changed, never call change yourself: call goal with their words"),
+        "the chat sends work agreed first to goal with the person's words"
+    );
+    assert!(
+        words.contains("tell them a question will wait in their inbox"),
+        "the chat names the waiting inbox question"
+    );
+    assert!(
+        words.contains("send their answer to the goal with message, as the answer to that question's number"),
+        "the chat relays the answer with message to the question's number"
+    );
+}
+
+#[test]
 fn each_charter_offers_every_configured_model() {
     for (document, names) in [
         (single_model(), [b"gpt-6-luna".as_slice()].as_slice()),

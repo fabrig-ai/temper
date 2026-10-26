@@ -161,3 +161,58 @@ fn a_retried_step_answers_once() {
     assert_eq!(world.assigned.len(), 2);
     assert_eq!(world.merges, 0);
 }
+
+#[test]
+fn replies_past_the_batch_are_capped() {
+    let (mut world, chat, producer, _) = change_world(true, PASSES, None);
+    let change = change_task(&world, producer.task);
+    let batch = world.env.limits.tasks.batch;
+    assert!(batch + 1 <= world.env.limits.tasks.inbox_messages, "the tiny inbox fits one past the batch");
+    assert!(world.store.pending.is_empty());
+    let mut header = world.store.header();
+    let mut row = Box::new(live_task(&world, change).clone());
+    assert!(row.inbox.is_empty());
+    let mut inbox = Vec::new();
+    for index in 0..=batch {
+        header.messages += 1;
+        inbox.push(tasks::Word {
+            number: header.messages,
+            from: tasks::Party::Task(if index < batch { chat.task } else { producer.task }),
+            kind: tasks::MessageKind::Words,
+            words: MESSAGE.into(),
+            at: world.env.wall,
+            hits: 1,
+            eligible: true,
+        });
+    }
+    row.inbox = inbox.into_boxed_slice();
+    row.last_message = header.messages;
+    row.phase = tasks::Phase::Active(tasks::Active::Due);
+    header.commits += 1;
+    world.store.pending.push_back((
+        header.commits,
+        Box::new([
+            engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))),
+            engine::Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(
+                header,
+            )))),
+        ]),
+    ));
+    world.store.apply();
+    world.restart(true, true);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if live_task(&world, change).inbox.is_empty() {
+            break;
+        }
+    }
+    assert!(live_task(&world, change).inbox.is_empty(), "one step takes all offered words");
+    assert_eq!(replies(&world, chat.task, change).len(), batch as usize, "the oldest words get batch replies");
+    assert!(replies(&world, producer.task, change).is_empty(), "the newest word is taken unanswered");
+    while let Some(fact) = world.root.pop_fact() {
+        assert!(
+            !matches!(fact, engine::Fact::StepRefused { task, .. } if task == change),
+            "the step is admitted: {fact:?}"
+        );
+    }
+}
