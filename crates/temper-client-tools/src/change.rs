@@ -67,6 +67,7 @@ struct Watching {
     task_watch: Option<Handle>,
     activity: Option<u64>,
     final_panel: bool,
+    ended: Option<&'static [u8]>,
     last: Option<Box<w::ChangePanel>>,
     serial: u32,
     started: bool,
@@ -128,6 +129,7 @@ pub(crate) fn call(state: &mut Changes, client: &Client, env: &Env<Limits>, call
             task_watch: None,
             activity: None,
             final_panel: false,
+            ended: None,
             last: None,
             serial: 16,
             started: false,
@@ -184,6 +186,9 @@ pub(crate) fn ready(state: &mut Changes, client: &Client, env: &Env<Limits>, out
 }
 
 fn open_panel(watch: &mut Watching, env: &Env<Limits>, out: &mut Queue<Out>) {
+    if watch.waiting && watch.task_watch.is_none() {
+        watch_task(watch, out);
+    }
     let handle = handle(watch);
     watch.panel = Some(handle);
     out.push(Out::Client {
@@ -296,29 +301,72 @@ fn task_read(
     if task.chip.task != watch.task {
         return Some(render::failure(b"unexpected task document", watch.called.json, 1));
     }
-    // The first task read supplies the project; a read remains a read once.
+    // The first task read supplies the project; waits follow the task beside its panel.
     if watch.project.is_none() {
         watch.project = Some(task.project);
         open_panel(watch, env, out);
-    } else if terminal(task) {
+    }
+    if watch.waiting && terminal(task) {
         if !has_change(task, result) {
-            return Some(missing(watch.task, watch.called.json));
+            let why = ending(task, result);
+            watch.ended = Some(why);
+            if watch.last.is_some() {
+                return Some(print(watch.last.as_deref(), watch.called.json, Some(false), why, &env.limits));
+            }
+            if watch.panel.is_none() {
+                return Some(missing(watch.task, watch.called.json));
+            }
+        } else if watch.final_panel {
+            return Some(match watch.last.as_deref() {
+                Some(panel) => print(Some(panel), watch.called.json, Some(false), b"ended", &env.limits),
+                None => missing(watch.task, watch.called.json),
+            });
+        } else {
+            watch.final_panel = true;
+            if watch.panel.is_none() {
+                open_panel(watch, env, out);
+            }
         }
-        if watch.final_panel {
-            return Some(print(watch.last.as_deref(), watch.called.json, Some(false), b"ended", &env.limits));
-        }
-        watch.final_panel = true;
-        open_panel(watch, env, out);
-    } else {
+    } else if watch.waiting {
         watch.activity = Some(task.activity);
-        let handle = handle(watch);
-        watch.task_watch = Some(handle);
-        out.push(Out::Client {
-            event: Event::Watch { handle, subject: Watchable::Jig(c::Subject::Task { task: watch.task }) },
-        });
+        if watch.task_watch.is_none() {
+            watch_task(watch, out);
+        }
     }
     None
 }
+fn watch_task(watch: &mut Watching, out: &mut Queue<Out>) {
+    let handle = handle(watch);
+    watch.task_watch = Some(handle);
+    out.push(Out::Client {
+        event: Event::Watch { handle, subject: Watchable::Jig(c::Subject::Task { task: watch.task }) },
+    });
+}
+fn ending(task: &c::Task, result: Option<&c::Result>) -> &'static [u8] {
+    let result = result.or(match &task.result {
+        Some(c::TaskResult::Document(result)) => Some(result.as_ref()),
+        _ => None,
+    });
+    let phase = if task.chip.phase == c::Phase::Cancelled {
+        b"ended: cancelled".as_slice()
+    } else if task.chip.phase == c::Phase::Failed {
+        b"ended: failed".as_slice()
+    } else {
+        b"ended".as_slice()
+    };
+    let Some(result) = result else { return phase };
+    match &result.ending {
+        c::Ending::Cancelled { .. } => b"ended: cancelled",
+        c::Ending::Failed { .. } => b"ended: failed",
+        c::Ending::Task(ending) => match ending.as_ref() {
+            c::OwnerChipEnding::Cancelled { .. } => b"ended: cancelled",
+            c::OwnerChipEnding::Failed(_) => b"ended: failed",
+            c::OwnerChipEnding::Done(_) => b"ended",
+        },
+        c::Ending::Done | c::Ending::Withdrawn { .. } | c::Ending::Decided { .. } | c::Ending::Deleted => phase,
+    }
+}
+
 pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told: &Told, out: &mut Queue<Out>) {
     let handle = match told {
         Told::Changed { handle } | Told::Ended { handle, .. } | Told::Page { handle, .. } => *handle,
@@ -371,7 +419,7 @@ pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told
                         out.push(Out::Client { event: Event::Unwatch { handle } });
                     }
                     read_task(watch, out);
-                } else if watch.activity != Some(task.activity) {
+                } else if watch.panel.is_none() && watch.activity != Some(task.activity) {
                     watch.activity = Some(task.activity);
                     if let Some(handle) = watch.task_watch.take() {
                         out.push(Out::Client { event: Event::Unwatch { handle } });
@@ -444,6 +492,9 @@ fn delivered(watch: &mut Watching, env: &Env<Limits>) -> Option<jig::Printed> {
         None => None,
         _ => unreachable!("checked condition"),
     };
+    if let Some(why) = watch.ended {
+        return Some(print(Some(panel), watch.called.json, Some(false), why, &env.limits));
+    }
     let met = jig::wait::met(watch.since, watch.first, digest, holds);
     watch.first = Some(watch.first.unwrap_or(digest));
     if met || watch.final_panel || landed(panel.step()).is_some() {
