@@ -571,6 +571,16 @@ pub(crate) fn change(kind: u16, resource: &c::OwnerPart, words: &c::DocumentText
         }
         out.put(b" \xc2\xb7 merge commit ");
         out.words(commit);
+        if let Some(start) = skein_lib::bytes::find(words.bytes(), b"\n") {
+            let line =
+                words.bytes().get(start.checked_add(1).expect("newline separator")..).expect("newline within words");
+            if let Some(separator) = skein_lib::bytes::find(line, b": ") {
+                out.put(b"\npull request: ");
+                out.words(
+                    line.get(separator.checked_add(2).expect("address separator")..).expect("separator within line"),
+                );
+            }
+        }
     } else {
         out.result_words(words.bytes());
     }

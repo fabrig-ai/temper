@@ -221,6 +221,10 @@ fn an_ended_chip_supplies_its_state_and_reason() {
 fn merge_commits_are_whole_lowercase_hex_ids_of_at_least_seven_bytes() {
     for (words, expected) in [
         (MERGE, Some(MERGE)),
+        (
+            b"abc1234\npull request #7 of acme/app on github.com: https://github.com/acme/app/pull/7",
+            Some(b"abc1234".as_slice()),
+        ),
         (b"abc1234".as_slice(), Some(b"abc1234".as_slice())),
         (b"abc123", None),
         (b"ABC1234", None),
