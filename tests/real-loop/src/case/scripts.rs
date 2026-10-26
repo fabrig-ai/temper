@@ -762,10 +762,7 @@ pub fn step_5_6(_forge: SocketAddr) -> Box<[Script]> {
                     "query":MISREAD_NOTE}),
                     ),
                 ),
-                call(
-                    b"read_branch",
-                    &json!({"repository":{"forge":1,"repository":crate::forge::ID},"read":{"branch":"main"}}),
-                ),
+                call(b"read_branch", &json!({"repository":"acme/app","branch":"main"})),
                 report(MISREAD_REPORT),
             ]),
         },

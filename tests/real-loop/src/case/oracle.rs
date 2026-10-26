@@ -274,6 +274,10 @@ fn check(misses: &mut Vec<Miss>, met: bool, promise: Promise, what: String) {
 fn text<'a>(value: &'a Value, path: &str) -> &'a str {
     pointer(value, path).and_then(Value::as_str).unwrap_or_default()
 }
+// Result words may carry a pull description after the merge id (domain/root.md, 6).
+fn landing_commit(value: &Value) -> &str {
+    text(value, "/result/value/change/words/bytes").lines().next().unwrap_or_default()
+}
 fn number(value: &Value, path: &str) -> Option<u64> {
     pointer(value, path).and_then(Value::as_u64)
 }
@@ -3693,8 +3697,8 @@ fn misread_helper(observed: &Observed, misses: &mut Vec<Miss>) {
         "5.6",
         heads.len() == 1
             && heads.iter().all(|(read, args, output)| {
-                args["repository"] == serde_json::json!({"forge":1,"repository":crate::forge::ID})
-                    && args["read"]["branch"] == "main"
+                args["repository"] == "acme/app"
+                    && args["branch"] == "main"
                     && output.as_slice() == draft_commit().as_bytes()
                     && recalls.iter().any(|(recalled, _, _)| recalled < read)
             }),
@@ -3980,13 +3984,7 @@ mod misread_tests {
             &format!("Note 3 revision 1: {MISREAD_NOTE}\n{MISREAD_RULE}\n"),
         ));
         let recalled = told(Agent::Misread, &next);
-        next.extend(tool(
-            "head",
-            "read_branch",
-            &json!({"repository":{"forge":1,"repository":crate::forge::ID},
-            "read":{"branch":"main"}}),
-            &draft_commit(),
-        ));
+        next.extend(tool("head", "read_branch", &json!({"repository":"acme/app","branch":"main"}), &draft_commit()));
         Observed {
             observed_at: BTreeMap::new(),
             documents,
@@ -4417,8 +4415,7 @@ fn direction_pulls(observed: &Observed, misses: &mut Vec<Miss>) {
                     && pull.pushed == Some(pull.opened)
                     && pull.merged_head == pull.pushed
                     && pull.landed.is_some_and(|commit| {
-                        text(task_document(observed, Read::StoryLanded), "/result/value/change/words/bytes")
-                            == direction_commit(commit)
+                        landing_commit(task_document(observed, Read::StoryLanded)) == direction_commit(commit)
                     })
             }),
         DIRECTION_CANCELLED,
@@ -5363,6 +5360,15 @@ mod direction_tests {
     #[test]
     fn both_pull_heads_and_the_merge_commit_come_from_forge_records() {
         let passing = met();
+        let mut multiline = passing.clone();
+        let words = multiline
+            .documents
+            .get_mut(&Read::StoryLanded)
+            .expect("landed task")
+            .pointer_mut("/task/result/value/change/words/bytes")
+            .expect("landing words");
+        *words = format!("{}\npull request #1 of acme/app on forge.example", words.as_str().expect("merge id")).into();
+        assert_met(&step_5_4(&multiline));
         for pull in 0..2 {
             for mutation in 0..5 {
                 let mut observed = passing.clone();
@@ -6650,9 +6656,7 @@ fn blocker_landing(observed: &Observed, misses: &mut Vec<Miss>) {
                     && pull.merged
                     && pull.pushed == Some(pull.opened)
                     && pull.merged_head == pull.pushed
-                    && pull
-                        .landed
-                        .is_some_and(|commit| text(e1, "/result/value/change/words/bytes") == direction_commit(commit))
+                    && pull.landed.is_some_and(|commit| landing_commit(e1) == direction_commit(commit))
             }),
         BLOCKER_LANDING,
         "e1's only pull must merge its green pushed head and leave B's fixed file on kit main",
@@ -8486,8 +8490,7 @@ fn red_landings(observed: &Observed, misses: &mut Vec<Miss>) {
                 pull.is_some_and(|pull| {
                     pull.merged
                         && pull.landed.is_some_and(|commit| {
-                            text(task_document(observed, *read), "/result/value/change/words/bytes")
-                                == direction_commit(commit)
+                            landing_commit(task_document(observed, *read)) == direction_commit(commit)
                         })
                 })
             }),
@@ -10547,9 +10550,7 @@ fn waiting_landings(observed: &Observed, misses: &mut Vec<Miss>) {
         step_check(
             misses,
             "6.6",
-            merge.is_some_and(|m| {
-                text(task_document(observed, read), "/result/value/change/words/bytes") == direction_commit(m.5)
-            }),
+            merge.is_some_and(|m| landing_commit(task_document(observed, read)) == direction_commit(m.5)),
             WAITING_PIN,
             format_args!("{repository}'s terminal result names its actual merge"),
         );
@@ -11346,7 +11347,7 @@ fn qa_landing(observed: &Observed) -> bool {
                 && p.merged
                 && !p.closed
                 && number(change, "/result/value/change/part/key/number") == Some(**pull)
-                && text(change, "/result/value/change/words/bytes") == direction_commit(**commit)
+                && landing_commit(change) == direction_commit(**commit)
                 && waiting_review(observed, Read::QaReviewerEnded, C, **head)
         })
 }
