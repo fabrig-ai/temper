@@ -138,6 +138,7 @@ pub(crate) fn run(
         Proc::Llm(Box::new(Llm {
             peer: llm::peer(recipe()).expect("independent LLM peer"),
             scripts: None,
+            recipe: None,
             rules: None,
             cue: false,
             release: None,
@@ -162,6 +163,7 @@ type Scripts = fn(std::net::SocketAddr) -> Box<[skein_fake_llm_domain::api::Scri
 pub(crate) struct Llm {
     pub(crate) peer: skein_fake_peers::llm::Peer,
     scripts: Option<Scripts>,
+    recipe: Option<crate::ForgeRecipe>,
     rules: Option<Rules>,
     cue: bool,
     release: Option<&'static [u8]>,
@@ -182,6 +184,11 @@ impl Llm {
 impl Llm {
     /// Plays the deferred scripts, by their turn rules where given, once the forge is bound.
     fn bind(&mut self, address: std::net::SocketAddr) {
+        if let Some(recipe) = self.recipe.take() {
+            self.peer = llm::peer((recipe.build)(address, &recipe.source)).expect("derived forge recipe");
+            self.scripts = None;
+            return;
+        }
         let Some(scripts) = self.scripts.take() else { return };
         let recipe = match self.rules.take() {
             Some(rules) => llm::played_by_input(scripts(address), rules()),
@@ -206,6 +213,7 @@ pub(crate) fn run_forge(
     fixture: forge::Fixture,
     scripts: Scripts,
     rules: Option<Rules>,
+    recipe: Option<crate::ForgeRecipe>,
     steps: impl FnOnce() -> Vec<crate::calls::Step>,
 ) -> skein_world::real::Outcome<Proc> {
     let state = std::rc::Rc::new(std::cell::RefCell::new(None));
@@ -226,6 +234,7 @@ pub(crate) fn run_forge(
         Proc::Llm(Box::new(Llm {
             peer: llm::peer(llm::scripted(Box::new([]))).expect("deferred peer"),
             scripts: Some(scripts),
+            recipe,
             rules,
             cue: false,
             release: None,
@@ -262,6 +271,7 @@ pub(crate) fn run_github(
         Proc::Llm(Box::new(Llm {
             peer: llm::peer(llm::scripted(Box::new([]))).expect("deferred peer"),
             scripts: Some(scripts),
+            recipe: None,
             rules: None,
             cue: false,
             release: None,
@@ -800,6 +810,7 @@ fn cluster_roots<R: Referee<Proc>>(
         Proc::Llm(Box::new(Llm {
             peer: llm::peer(recipe()).expect("cluster LLM"),
             scripts: forge.map(|(_, scripts, _)| scripts),
+            recipe: None,
             rules: forge.map(|(_, _, rules)| rules),
             cue: false,
             release: None,
