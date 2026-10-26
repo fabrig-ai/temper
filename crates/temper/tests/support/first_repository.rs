@@ -105,6 +105,7 @@ fn scripts() -> Box<[Script]> {
     ])
 }
 
+#[must_use]
 pub fn review_script() -> Script {
     Script {
         cue: b"Review this change at the named head".as_slice().into(),

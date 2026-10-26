@@ -351,6 +351,21 @@ pub fn landed_identity(task: &str, page: &str) -> (String, String) {
 }
 
 #[must_use]
+pub fn plan_ended_tasks(calls: &[super::Ended]) -> (usize, [Vec<u64>; 2]) {
+    let tasks_at = calls
+        .iter()
+        .position(|call| {
+            serde_json::from_slice::<serde_json::Value>(&call.stdout)
+                .ok()
+                .is_some_and(|value| value["ended"].is_object() && value["live"].is_array())
+        })
+        .expect("ended delegate pages");
+    let tasks =
+        [0, 1].map(|offset| ended_tasks(&calls[tasks_at..], 1 + offset, if offset == 0 { &[2] } else { &[3, 4] }));
+    (tasks_at, tasks)
+}
+
+#[must_use]
 pub fn ended_tasks(calls: &[super::Ended], parent: u64, expected: &[u64]) -> Vec<u64> {
     let mut tasks = Vec::new();
     let mut whole = false;

@@ -113,8 +113,8 @@ fn the_default_is_the_owned_example_so_edited() {
         );
         let mut expected = owned.clone();
         // A review names repository, base, branch, gate and head, then offers two verdicts.
-        expected["engine"]["limits"]["overrides"]["tasks.parameters"] = json!(5);
-        expected["engine"]["limits"]["overrides"]["tasks.contract_choices"] = json!(2);
+        expected["engine"]["limits"]["overrides"]["tasks.parameters"] = json!(5_u32);
+        expected["engine"]["limits"]["overrides"]["tasks.contract_choices"] = json!(2_u32);
         expected["engine"]["acts"] = json!([{ "connector": 1_u16, "may": ["close", "remove_account"] }]);
         assert!(!actual["engine"]["owners"].as_array().unwrap().is_empty());
         // The startup turn_bounds writer holds these to each document's own
@@ -264,7 +264,7 @@ fn demo(port: u16) -> Value {
                 {
                     "cue": "Review this change at the named head",
                     "turns": [scripted_turn(json!([{"call": "finish", "arguments": {
-                        "form": "verdict", "label": "1", "text": "Checked widget CSV export.", "fields": {}, "items": []
+                        "form": "verdict", "label": "1", "text": "Checked widget CSV export.", "fields": {}, "items": parse(b"[]")
                     }}]))]
                 }
             ],
@@ -515,7 +515,7 @@ fn the_template_keeps_project_one_without_settings_members() {
         json!([{
             "connector": 1_u16, "kind": 4_u16, "pattern": every_forge(),
             "enforce": true, "ci": true, "up_to_date": true,
-            "gates": [{"number": 1, "blocking": true, "freshness": "clean"}], "approvals": parse(b"[]")
+            "gates": [{"number": 1_u32, "blocking": true, "freshness": "clean"}], "approvals": parse(b"[]")
         }])
     );
 }
