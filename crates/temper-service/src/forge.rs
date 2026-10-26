@@ -262,6 +262,9 @@ impl Layer {
         self.held.get(&forge).cloned()
     }
     pub(crate) fn down(&mut self, request: skein_forge_connection::Request) {
+        if let skein_forge_connection::Request::Close = &request {
+            self.begun = true; // A closed component owes no initial begin, including before the mark.
+        }
         if let skein_forge_connection::Request::Connect { forge, .. } = &request {
             assert!(!self.held.contains_key(forge), "temper gates unresolved connects");
         }
@@ -285,6 +288,8 @@ impl Layer {
     pub(crate) fn up(&mut self, event: skein_io::Event) {
         self.component.up(&self.env, crate::accounts::untag(event), &mut self.above, &mut self.io);
     }
+    #[cfg(test)]
+    pub(crate) const fn startup_begun(&self) -> bool { self.begun }
     pub(crate) fn iterate(&mut self, now: Time, wall: Wall) {
         self.env.now = now;
         self.env.wall = wall;

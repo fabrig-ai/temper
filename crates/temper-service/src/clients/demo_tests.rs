@@ -31,7 +31,7 @@ fn start_demo_reads_each_time_and_carries_the_key_before_admission() {
     // The shell removes exactly one LF. This remaining LF belongs to the key.
     service.handover_read(read.forge, read.run, Ok(Some(skein_lib::Secret::new(b"test-key\n".as_slice().into()))));
     let engine = service.engine.as_mut().unwrap();
-    let mut store = fixtures::memory_store();
+    let mut store = fixtures::marked_store();
     engine.clients.secrets_step(&mut store);
     store.iterate();
     while let Some(answer) = store.above.pop() {

@@ -14,6 +14,7 @@ pub struct ForgeStand {
     limits: skein_forge_client::Limits,
     repositories: std::collections::BTreeMap<u32, Box<[u8]>>,
     pub calls: u32,
+    pub writes: u32,
 }
 
 impl Default for ForgeStand {
@@ -113,6 +114,7 @@ impl ForgeStand {
             limits: crate::fixtures::forge_limits().forge.client,
             repositories: names,
             calls: 0,
+            writes: 0,
         }
     }
 
@@ -207,6 +209,7 @@ impl ForgeStand {
     }
 
     pub fn call(&mut self, call: Token, repository: api::Repository, op: api::Op, limits: &skein_forge_client::Limits) {
+        if matches!(&op, api::Op::Write(_)) { self.writes += 1; }
         self.limits = *limits;
         self.calls = self.calls.checked_add(1).expect("stand calls bound");
         assert_eq!(repository.forge, self.forge);

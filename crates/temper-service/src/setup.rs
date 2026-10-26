@@ -240,6 +240,8 @@ pub(crate) fn worst_case(
 }
 
 impl Layer {
+    #[cfg(test)]
+    pub(crate) fn startup_restored(&self) -> bool { self.lifecycle.startup_restored() }
     /// Consume the listener's typed bind result before any setup plan can copy Given.
     pub(crate) fn webhooks_listening(&mut self, addr: core::net::SocketAddr) {
         if let Some((settings, _)) = &mut self.pending {

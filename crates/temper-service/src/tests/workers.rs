@@ -68,7 +68,7 @@ fn identities_are_announced_before_the_restart() {
         }
         assert!(service.engine.as_ref().expect("engine").store.routed.is_empty(), "records precede Restart");
     }
-    assert!(service.engine.as_ref().expect("engine").forge_records.done());
+    assert!(!service.engine.as_ref().expect("engine").forge_records.done(), "secrets follow the mark");
     assert!(service.engine.as_ref().expect("engine").credentials.is_empty());
     assert_eq!(
         service.engine.as_ref().expect("engine").domain.next_deadline(&service.engine.as_ref().expect("engine").env),

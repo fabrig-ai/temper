@@ -130,7 +130,7 @@ fn closing_a_listener_during_start_closes_the_component() {
 #[test]
 fn a_sign_in_digest_and_expiry_are_kept_in_secrets() {
     let mut clients = super::fixtures::clients();
-    let mut store = super::fixtures::memory_store();
+    let mut store = super::fixtures::marked_store();
     clients.secrets.push(kit::SecretsRequest::Keep {
         owner: kit::SecretOwner::SignIn(3),
         value: kit::Kept {

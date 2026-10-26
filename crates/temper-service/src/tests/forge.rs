@@ -782,23 +782,12 @@ fn assert_records_untouched(service: &mut crate::Service, kept: &skein_lib::List
 
 #[test]
 fn a_refused_or_corrupt_records_load_stops_the_engine_named() {
-    for corrupt in [true, false] {
+    for event in [
+        jig_protocol_store::Event::Corrupt { owner: forge::records::LOAD },
+        jig_protocol_store::Event::SecretsNotReady { owner: forge::records::LOAD },
+    ] {
         let mut service = fixtures::started();
-        if corrupt {
-            service
-                .engine
-                .as_mut()
-                .expect("engine")
-                .store
-                .above
-                .push(jig_protocol_store::Event::Corrupt { owner: forge::records::LOAD });
-        } else {
-            let (root, _, profile) = fixtures::store_limits();
-            let limits = crate::store::limits(&root, &root.forge, &profile).unwrap();
-            service.engine.as_mut().expect("engine").store =
-                crate::store::Store::new(&root, &limits, &[], fixtures::seeds().installation);
-            service.engine.as_mut().expect("engine").store.opened = true; // The closed store refuses the loader's synchronous read.
-        }
+        service.engine.as_mut().expect("engine").store.above.push(event);
         crate::engine::iterate(service.engine.as_mut().expect("engine"), Time::from_nanos(1), skein_lib::Wall::EPOCH);
         let mut expected = jig_protocol_config::Problems::empty();
         expected.push(jig_protocol_config::Path::root().member(b"forge records"), jig_protocol_config::What::Refers);

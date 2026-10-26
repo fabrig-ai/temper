@@ -245,7 +245,22 @@ pub fn records_store() -> crate::store::Store {
     let (root, _, mut profile) = store_limits();
     profile.store.page.rows = 32;
     let models = jig_protocol_config::core(&engine().jig, [7; 16], 7).settings.models;
-    memory_store_for(&root, &profile, &models)
+    // Secret-record fixtures start from a real completed deployment, as the
+    // store now refuses secrets until that start's mark is durable.
+    let maps = ready().engine.expect("bootstrap engine").store.component.into_stores();
+    let limits = crate::store::limits(&root, &root.forge, &profile).expect("record fixture limits");
+    let mut store = memory_store_for(&root, &profile, &models);
+    store.component = jig_protocol_store::Store::over(
+        &limits, temper_protocol_store::application(&root.forge).expect("fixture families"), &models, maps,
+    );
+    assert!(store.component.wires(&crate::store::WIRES));
+    store.ask(jig_protocol_store::Request::Open {
+        owner: OWNER, root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },
+        installation: seeds().installation,
+    });
+    let Some(jig_protocol_store::Event::Opened { .. }) = store.above.pop() else { panic!("record store reopened") };
+    mark_store(&mut store);
+    store
 }
 fn memory_store_for(
     root: &temper_engine_domain::Limits,
@@ -1026,4 +1041,35 @@ pub fn owned_setup(forge: u16) -> settings::Setup {
 #[expect(clippy::disallowed_macros, reason = "test fixture supplies unique numbered project names")]
 fn project_name(number: u32) -> Box<str> {
     alloc::format!("Project {number}").into_boxed_str()
+}
+
+/// Reopen a fixture's durable maps as a fresh process, including a fresh mark gate.
+pub fn reopened_store(mut store: crate::store::Store, root: &temper_engine_domain::Limits) -> crate::store::Store {
+    let settings = engine();
+    let models = jig_protocol_config::core(&settings.jig, [7; 16], 7).settings.models;
+    let limits = crate::store::limits(root, &root.forge, &settings.jig.limits.store).expect("fixture store limits");
+    let maps = store.component.into_stores();
+    store.component = jig_protocol_store::Store::over(
+        &limits, temper_protocol_store::application(&root.forge).expect("fixture families"), &models, maps,
+    );
+    assert!(store.component.wires(&crate::store::WIRES));
+    store.ask(jig_protocol_store::Request::Open {
+        owner: OWNER, root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },
+        installation: seeds().installation,
+    });
+    let Some(jig_protocol_store::Event::Opened { pending: false, .. }) = store.above.pop() else { panic!("reopened fixture") };
+    store.secret_requests = 0;
+    store.forge_loads = skein_lib::List::with_capacity(128);
+    store
+}
+
+pub fn mark_store(store: &mut crate::store::Store) {
+    if store.component.mark_durable() { return; }
+    commit(store, 1, Box::new([temper_engine_domain::Write::Wires]));
+    let Some(jig_protocol_store::Event::Committed { .. }) = store.above.pop() else { panic!("fixture start mark") };
+}
+pub fn marked_store() -> crate::store::Store {
+    let mut store = memory_store();
+    mark_store(&mut store);
+    store
 }

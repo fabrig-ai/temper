@@ -465,6 +465,15 @@ fn admin_record_files_and_directories_are_owner_only() {
         }
     }
     assert!(opened);
+    fixtures::commit(&mut store, 1, Box::new([root::Write::Wires]));
+    for _ in 0_u32..4096 {
+        disk_turn(&mut store, &mut kernel);
+        if let Some(event) = store.above.pop() {
+            assert!(matches!(event, StoreEvent::Committed { .. }), "{event:?}");
+            break;
+        }
+    }
+    assert!(store.component.mark_durable());
     store.secrets(
         Token::new(901),
         Secrets::Keep {

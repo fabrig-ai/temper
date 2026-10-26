@@ -11,10 +11,7 @@ fn a_revoked_record_waits_for_erased_and_coalesces_a_sign_out() {
     for (notifications, expected_signed_out, removing) in
         [(&[][..], None, false), (&[true, true][..], Some(true), true), (&[false, false][..], Some(false), true)]
     {
-        let mut service = fixtures::started();
-        for _ in 0_u32..8 {
-            fixtures::turn(&mut service);
-        }
+        let mut service = fixtures::ready();
         let engine = service.engine.as_mut().expect("engine");
         let (config, runtime) = registered();
         let mut accounts = host(&config, runtime);
@@ -159,10 +156,7 @@ fn pump_accounts(accounts: &mut Accounts, engine: &mut crate::engine::Engine) ->
 }
 #[test]
 fn llm_key_work_reaches_the_store_and_the_workers_table_through_the_service() {
-    let mut service = fixtures::started();
-    for _ in 0_u32..8 {
-        fixtures::turn(&mut service);
-    }
+    let mut service = fixtures::ready();
     let engine = service.engine.as_mut().expect("engine");
     let mut accounts = engine.accounts.take().expect("accounts component");
     let carried = carry_llm_key(engine, b"first-llm-key");
@@ -187,10 +181,7 @@ fn llm_key_work_reaches_the_store_and_the_workers_table_through_the_service() {
 }
 #[test]
 fn service_restart_restores_an_llm_key_before_want_and_sweeps_only_unnamed_sources() {
-    let mut service = fixtures::started();
-    for _ in 0_u32..8 {
-        fixtures::turn(&mut service);
-    }
+    let mut service = fixtures::ready();
     let engine = service.engine.as_mut().expect("engine");
     let mut accounts = engine.accounts.take().expect("accounts component");
     let carried = carry_llm_key(engine, b"kept-llm-key");
@@ -254,10 +245,7 @@ fn has_llm_key_grant(heard: &List<domain::FromComponent>, wanted: u64) -> bool {
 
 #[test]
 fn aborting_does_not_submit_an_llm_key_adoption_to_the_closing_store() {
-    let mut service = fixtures::started();
-    for _ in 0_u32..8 {
-        fixtures::turn(&mut service);
-    }
+    let mut service = fixtures::ready();
     let engine = service.engine.as_mut().expect("engine");
     let mut accounts = engine.accounts.take().expect("accounts component");
     let carried = carry_llm_key(engine, b"aborted-llm-key");

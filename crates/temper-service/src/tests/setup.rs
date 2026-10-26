@@ -72,6 +72,7 @@ fn github_config(
     config
 }
 fn load_routing(service: &mut crate::Service) {
+    fixtures::mark_store(&mut service.engine.as_mut().expect("engine").store);
     assert!(service.engine.as_ref().expect("engine").setup.component.is_none(), "no host before the rows load");
     for _ in 0_u32..8 {
         crate::forge::records::advance(service.engine.as_mut().expect("engine"));
@@ -783,6 +784,7 @@ fn an_unresolved_forge_keeps_its_setup_entry_but_restored_and_asked_connects_nev
         .is_ok(),
         "restorable access"
     );
+    engine.store = fixtures::records_store();
     engine.forge_records.loaded(Box::new([]), None);
     for _ in 0_u32..8 {
         crate::forge::records::advance(engine);
@@ -862,8 +864,9 @@ fn kept_record(store: &mut crate::store::Store, forge: u16, item: Item, bytes: &
             )
             .is_none()
     );
-    let Some(StoreEvent::Kept { owner: found }) = store.above.pop() else {
-        panic!("durable seed");
+    let answer = store.above.pop();
+    let Some(StoreEvent::Kept { owner: found }) = answer else {
+        panic!("durable seed: {answer:?}, marked: {}", store.component.mark_durable());
     };
     assert_eq!(found, owner);
 }
@@ -1888,4 +1891,39 @@ fn github_app_urls_use_the_clients_public_origin() {
     let page = service.setup_page(1, &state, Time::ZERO).unwrap();
     assert!(contains(page, b"https://temper.example.com:8443/forges/1/github/redirect"));
     assert!(contains(page, b"https://temper.example.com:8443/forges/1/github/setup"));
+}
+
+#[test]
+fn setup_reconciliation_waits_for_the_mark() {
+    // The shared service restart fixture's existing iteration horizon.
+    const PASSES: u32 = 256;
+    let mut previous = fixtures::ready().engine.unwrap();
+    kept_record(&mut previous.store, 1, Item::AdminToken, b"test-admin");
+    let store = fixtures::reopened_store(previous.store, &previous.env.limits);
+    let mut service = fixtures::start_with_store(&[(1, 100)], Some(store));
+    let config = local_config(true, false);
+    let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+    // The normal service reserves two setup handoff slots beside a root pass.
+    const SETUP_HEADROOM: u32 = 2;
+    let batch = root::max_out(&previous.env.limits).checked_add(SETUP_HEADROOM).unwrap();
+    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, batch, false).unwrap();
+    service.engine.as_mut().unwrap().setup = setup;
+    service.engine.as_mut().unwrap().store.hold_mark = true;
+    for _ in 0..PASSES { fixtures::turn(&mut service); }
+    let engine = service.engine.as_mut().unwrap();
+    assert!(engine.store.held_mark.is_some(), "end {:?}, room {}, restart {:?}, ready {}", engine.end, engine.room(), engine.domain.restart_failure(), engine.domain.ready());
+    assert!(!engine.setup.lifecycle.startup_restored());
+    assert!(engine.setup.component.is_none());
+    assert!(engine.setup.runs.is_empty());
+    assert!(engine.setup.io.is_empty());
+    let mark = engine.store.held_mark.take().unwrap();
+    engine.store.hold_mark = false;
+    assert!(engine.store.down(mark));
+    for _ in 0..PASSES { crate::engine::iterate(engine, Time::ZERO, Wall::EPOCH); }
+    assert!(engine.store.component.mark_durable());
+    assert!(engine.setup.lifecycle.startup_restored());
+    assert!(engine.setup.component.is_some());
+    assert_eq!(engine.setup.runs.len(), 1, "one configured reconciliation");
+    for _ in 0..PASSES { crate::engine::iterate(engine, Time::ZERO, Wall::EPOCH); }
+    assert_eq!(engine.setup.runs.len(), 1, "no second reconciliation while its file answer is held");
 }

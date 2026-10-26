@@ -235,17 +235,21 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
         accounts.iterate(now, wall, &mut engine.values, &mut engine.events, &mut engine.store);
     }
     crate::forge::records::advance(engine);
-    if !engine.forge_records.loading() || engine.end.is_some() || engine.drain.is_some() {
+    if engine.store.component.mark_durable()
+        && (!engine.forge_records.loading() || engine.end.is_some() || stop::requested(engine))
+    {
         engine.forge.iterate(now, wall);
     }
     // Reconcile must observe the root's restored repositories.
-    if !engine.begin && engine.domain.connectors_restored() {
+    if !engine.begin && engine.store.component.mark_durable() && engine.forge_records.done() {
         crate::setup::lifecycle::restored(engine);
     }
-    crate::setup::advance(engine);
+    if engine.store.component.mark_durable() {
+        crate::setup::advance(engine);
+    }
     forge_pass(engine);
     engine.workers.iterate(now, &mut engine.events);
-    let open = !engine.begin && engine.domain.ready() && engine.first_periods.is_empty();
+    let open = !engine.begin && engine.domain.ready() && engine.forge_records.done() && engine.first_periods.is_empty();
     engine.clients.starting = if open { None } else { Some(()) };
     if let Some(demo) = &mut engine.demo {
         demo.state = engine.domain.demo_state();
@@ -280,7 +284,9 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
     if !engine.room() {
         return;
     }
-    if !engine.forge_records.done() && engine.drain.is_none() {
+    // Public restore runs before secrets. Once marked, finish secret bootstrap
+    // before releasing the script into adoption and fresh forge reads.
+    if engine.store.component.mark_durable() && !engine.forge_records.done() && !stop::requested(engine) {
         return;
     }
     if engine.begin {
@@ -323,7 +329,7 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
 }
 fn clients_pass(engine: &mut Engine) {
     engine.clients.advance(&mut engine.events, &engine.workers.forges, engine.demo.as_ref(), &mut engine.accounts);
-    if engine.end.is_none() {
+    if engine.end.is_none() && engine.store.component.mark_durable() {
         engine.clients.secrets_step(&mut engine.store);
     }
     engine.clients.advance(&mut engine.events, &engine.workers.forges, engine.demo.as_ref(), &mut engine.accounts);

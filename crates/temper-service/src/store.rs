@@ -36,6 +36,12 @@ pub struct Store {
     pub(crate) forge_loads: skein_lib::List<Option<u64>>,
     #[cfg(test)]
     pub(crate) erases: u32,
+    #[cfg(test)]
+    pub(crate) hold_mark: bool,
+    #[cfg(test)]
+    pub(crate) held_mark: Option<root::StoreRequest>,
+    #[cfg(test)]
+    pub(crate) secret_requests: u32,
     pub(crate) component: protocol::Store,
     env: Env<protocol::Limits>,
     pub(crate) routes: route::Routes,
@@ -203,6 +209,12 @@ impl Store {
             forge_loads: skein_lib::List::with_capacity(128),
             #[cfg(test)]
             erases: 0,
+            #[cfg(test)]
+            hold_mark: false,
+            #[cfg(test)]
+            held_mark: None,
+            #[cfg(test)]
+            secret_requests: 0,
             component,
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: *limits },
             routes,
@@ -281,6 +293,14 @@ impl Store {
         }
     }
     pub fn down(&mut self, out: root::StoreRequest) -> bool {
+        #[cfg(test)]
+        if self.hold_mark && let root::StoreRequest::Commit { writes, .. } = &out
+            && writes.contains(&root::Write::Wires)
+        {
+            assert!(self.held_mark.is_none(), "one held startup mark");
+            self.held_mark = Some(out);
+            return true;
+        }
         if let Some(request) = route::down(&mut self.routes, out) {
             self.ask(request);
             true
@@ -290,6 +310,8 @@ impl Store {
     }
     /// Get answers stay in this pass; secret writes' terminals are handed to their owner.
     pub fn secrets(&mut self, owner: Token, request: protocol::Secrets) -> Option<protocol::Event> {
+        #[cfg(test)]
+        { self.secret_requests += 1; }
         #[cfg(test)]
         if owner == crate::forge::records::LOAD
             && let protocol::Secrets::Load { after, .. } = &request

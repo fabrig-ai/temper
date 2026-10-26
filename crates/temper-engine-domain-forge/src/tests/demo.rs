@@ -255,7 +255,9 @@ fn demo_restore_asks_only_for_a_running_dormant_group_and_makes_no_act() {
                 let mut d = configured(under_box);
                 outputs(&mut d, Event::Connection { forge: 1, state: connection.clone() });
                 outputs(&mut d, Event::Restore { record: Stored::Demo(Demo { forge: 1, state }) });
-                let sent = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+                let restored = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+                assert_eq!(group_asks(&restored), 0);
+                let sent = outputs(&mut d, Event::ReadAfresh);
                 assert_eq!(
                     group_asks(&sent),
                     usize::from(under_box && state == DemoState::Running && connection == Connection::NotConnected)
@@ -396,6 +398,9 @@ fn an_ended_home_does_not_prevent_a_new_home_adoption() {
     let mut d = configured(false);
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
     outputs(&mut d, Event::Restore { record: Stored::Demo(Demo { forge: 1, state: DemoState::Ended }) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
     connected(&mut d, 2);
     let mut request = fixtures::adoption();
     request.forge = 2;

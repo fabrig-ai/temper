@@ -598,3 +598,13 @@ fn component_limits(limits: &engine::Limits) -> Limits {
     profile.store.page.rows = 8;
     temper_service::store::limits(limits, &limits.forge, &profile).expect("world sizes fit real store")
 }
+
+/// The only mirrored row changed by a write-free restart's required start mark.
+#[must_use]
+pub fn with_start_mark(mut rows: BTreeMap<Key, Record>) -> BTreeMap<Key, Record> {
+    let Some(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(header)))) =
+        rows.get_mut(&Key::Core(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Deployment)))
+    else { panic!("snapshot deployment"); };
+    header.commits += 1;
+    rows
+}

@@ -438,8 +438,8 @@ fn final_transaction_survives_a_lost_completion_and_its_retained_answer_recovers
     uninterrupted_rows.remove(&Key::Core(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Deployment)));
     assert_eq!(recovered_rows, uninterrupted_rows, "same task, transcript, terminal and financial history");
     // Reading the result after the cut is the core's (jig 62410d35), and
-    // marks nothing read: recovery commits nothing more.
-    assert_eq!(recovered.store.applied, uninterrupted.store.applied, "recovery adds no commit");
+    // marks nothing read; the restart adds only its own wires mark.
+    assert_eq!(recovered.store.applied, uninterrupted.store.applied + 1, "recovery adds only its start mark");
 }
 
 #[test]

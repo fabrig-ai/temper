@@ -501,6 +501,7 @@ fn an_unresolved_old_form_fake_keeps_its_entry_but_suppresses_file_access_and_ad
     let engine = service.engine.as_mut().unwrap();
     assert!(engine.setup.served.contains_key(&1));
     assert!(engine.setup.lifecycle.adoptions.is_empty());
+    engine.store = fixtures::records_store();
     engine.forge_records.loaded(Box::new([]), None);
     for _ in 0_u32..8 {
         crate::forge::records::advance(engine);
@@ -532,6 +533,7 @@ fn an_unresolved_old_form_forgejos_asked_check_is_refused_before_its_unstaged_co
     runtime.get_mut(0).unwrap().address = crate::forge::HELD_ADDRESS;
     let mut service = crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap();
     let engine = service.engine.as_mut().unwrap();
+    fixtures::mark_store(&mut engine.store);
     engine.forge_records.loaded(Box::new([]), None);
     for _ in 0_u32..8 {
         crate::forge::records::advance(engine);

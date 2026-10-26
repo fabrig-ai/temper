@@ -307,6 +307,9 @@ pub(crate) fn restart_request(
     decision: &mut Decision,
     request: jig_domain_core::RestartRequest,
 ) {
+    // A drain may close the accounts during public restore. It must finish
+    // without validating or advancing the startup script into its switch.
+    if domain.core.stopping() { return; }
     match request {
         jig_domain_core::RestartRequest::Idle => {}
         jig_domain_core::RestartRequest::Settings { .. }

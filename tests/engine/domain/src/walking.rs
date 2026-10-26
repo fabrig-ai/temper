@@ -741,7 +741,12 @@ impl World {
                     self.queue(engine::Event::Store(answer), 0);
                 }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
-                    assert!(self.terminal_snapshot.is_none(), "terminal recovery commits nothing: {writes:?}");
+                    if self.terminal_snapshot.is_some() {
+                        assert_eq!(writes.len(), 2, "terminal restart has only its start mark");
+                        assert!(writes.contains(&engine::Write::Wires));
+                        assert!(writes.iter().any(|write| matches!(write,
+                            engine::Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_)))))));
+                    }
                     self.referee.commit(&writes).expect("independent transaction referee");
                     if self.store.pending.is_empty() {
                         self.commit_wait = self.settings.commit_delay;

@@ -367,6 +367,7 @@ fn named_pull_verdict(number: u64) -> Box<[Request]> {
     row.branch = Box::from(LATER_BRANCH);
     outputs(&mut d, Event::Change { row });
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
     outputs(
         &mut d,
         Event::Names {

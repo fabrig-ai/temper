@@ -431,7 +431,7 @@ fn a_new_binding_answers_only_after_its_commit_is_durable() {
             };
             assert!(writes.iter().any(|write| match write {
                 crate::Write::Save(crate::Record::Forge { row }) => row.as_ref() == &binding,
-                crate::Write::CopySettingsRevision(_) | crate::Write::Save(_) | crate::Write::Erase(_) => false,
+                crate::Write::Wires | crate::Write::CopySettingsRevision(_) | crate::Write::Save(_) | crate::Write::Erase(_) => false,
             }));
             committed = Some(number);
         }

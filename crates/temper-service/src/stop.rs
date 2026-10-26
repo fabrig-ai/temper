@@ -5,6 +5,7 @@ use temper_engine_domain as root;
 
 pub(crate) struct Drain {
     pub(crate) closing: bool,
+    pub(crate) requested: bool,
     stopped: Option<Stop>,
     pub(crate) unsettled: skein_lib::List<root::Unsettled>,
 }
@@ -20,12 +21,13 @@ pub(crate) fn shutdown(engine: &mut Engine) {
     }
     engine.drain = Some(Drain {
         closing: false,
+        requested: false,
         stopped: None,
         unsettled: skein_lib::List::with_capacity(engine.env.limits.forge.entries),
     });
     engine.workers.down(engine.env.now, jig_protocol_engine_workers::Event::Stop, &mut engine.events);
     engine.clients.down(jig_protocol_engine_clients::Event::Stop);
-    engine.events.push(root::Event::Stop);
+    advance(engine);
 }
 pub(crate) fn drained(engine: &mut Engine) {
     let Some(drain) = &mut engine.drain else {
@@ -50,6 +52,15 @@ pub(crate) fn advance(engine: &mut Engine) {
     let Some(drain) = &mut engine.drain else {
         return;
     };
+    if !drain.requested {
+        // Finish public restore and the mark before closing the core's children.
+        // In particular, Switch must still see the accounts in Wanted.
+        if engine.domain.ready() && engine.events.room() > 0 {
+            drain.requested = true;
+            engine.events.push(root::Event::Stop);
+        }
+        return;
+    }
     if !drain.closing {
         return;
     }
@@ -184,4 +195,8 @@ mod tests {
             assert_eq!(path.get(4), Some(&jig_protocol_config::Segment::Member(b"grace".as_slice().into())));
         }
     }
+}
+
+pub(crate) fn requested(engine: &Engine) -> bool {
+    match &engine.drain { Some(drain) => drain.requested, None => false }
 }

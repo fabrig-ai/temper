@@ -1,4 +1,4 @@
-//! Application records before forge IO and the root's Restart (protocol/forge.md, 2.1).
+//! Application secrets and forge connections after the durable start mark (domain/root.md, 9.1).
 use alloc::boxed::Box;
 use jig_protocol_store::{Event, SecretOwner, Secrets};
 use skein_lib::{List, Map, Secret, Token};
@@ -132,7 +132,7 @@ fn matches_done(phase: &Phase) -> bool {
     }
 }
 pub(crate) fn advance(engine: &mut crate::engine::Engine) {
-    if engine.end.is_some() || engine.drain.is_some() {
+    if engine.end.is_some() || crate::stop::requested(engine) || !engine.store.component.mark_durable() {
         return;
     }
     match engine.forge_records.phase {

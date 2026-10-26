@@ -121,6 +121,8 @@ pub(super) struct Lifecycle {
     restored: bool,
 }
 impl Lifecycle {
+    #[cfg(test)]
+    pub(crate) const fn startup_restored(&self) -> bool { self.restored }
     pub(super) fn local(&self, forge: u16) -> Option<&Local> {
         match self.reconcile.get(&forge) {
             Some(Reconcile::Local(local)) => Some(local),
@@ -816,7 +818,7 @@ pub(super) fn refused(engine: &mut crate::engine::Engine, run: Token, forge: u16
     }
 }
 
-/// Called after connector rows restore, before fresh reads need their connections.
+/// Called after the start mark and secret bootstrap, before fresh reads need their connections.
 pub(crate) fn restored(engine: &mut crate::engine::Engine) {
     if engine.setup.lifecycle.restored {
         return;

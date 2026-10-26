@@ -2749,9 +2749,7 @@ fn effect_survives_each_commit_and_outbox_cut_without_a_second_issue() {
             }
         }
         world.restart(true, false);
-        for _ in 0..40 {
-            world.tick();
-        }
+        world.until(Until::Ready);
         let event = issue_effect_call(&mut world, &assignment);
         world.send(event);
         for _ in 0..40 {
