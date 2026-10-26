@@ -71,7 +71,7 @@ pub(crate) fn decode(domain: &mut Domain, to: ReplyTo, task: u64, attempt: u64, 
 pub(crate) fn decoded(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decision, to: ReplyTo, body: Call) {
     let right = to.into_token();
     let to = ReplyTo::new(right);
-    if domain.settling {
+    if domain.settling.active() {
         drop(domain.host_calls.remove(&right));
         crate::stopping::call(domain, to);
         return;
@@ -244,7 +244,7 @@ pub(crate) fn relayed(
     name: Box<[u8]>,
     answer: Token,
 ) -> Delivery {
-    if domain.settling {
+    if domain.settling.active() {
         drop(super::take_payload(domain, answer));
         return busy(channel, run, attempt, name);
     }

@@ -55,7 +55,8 @@ pub struct World {
     /// Hold decoded write answers after the independent forge has made the effect.
     pub hold_write_answers: Option<HoldWrite>,
     pub held_write_answers: Vec<engine::Event>,
-    pub drained: bool,
+    /// The durable commit number observed when the root drained.
+    pub drained: Option<u64>,
     pub unsettled: Vec<engine::Unsettled>,
     pub busy_calls: u32,
 }
@@ -418,7 +419,7 @@ impl World {
             held_reads: None,
             hold_write_answers: None,
             held_write_answers: Vec::new(),
-            drained: false,
+            drained: None,
             unsettled: Vec::new(),
             busy_calls: 0,
             merges: 0,
@@ -480,7 +481,7 @@ impl World {
         self.events.clear();
         self.held_write_answers.clear();
         self.hold_write_answers = None;
-        self.drained = false;
+        self.drained = None;
         self.unsettled.clear();
         self.answers.clear();
         self.adopted.clear();
@@ -669,12 +670,12 @@ impl World {
                 | engine::Request::Store(_)
                 | engine::Request::Busy(_) => {}
                 engine::Request::Unsettled(write) => {
-                    assert!(!self.drained, "unfinished entries precede Drained");
+                    assert!(self.drained.is_none(), "unfinished entries precede Drained");
                     self.unsettled.push(write);
                 }
                 engine::Request::Drained => {
-                    assert!(!self.drained, "drained once");
-                    self.drained = true;
+                    assert!(self.drained.is_none(), "drained once");
+                    self.drained = Some(self.store.header().commits);
                 }
                 engine::Request::Worker(other) => panic!("forge fixture received an unexpected request {other:?}"),
                 engine::Request::Stop => panic!("root startup or store failure"),
