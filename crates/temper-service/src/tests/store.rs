@@ -64,7 +64,7 @@ fn page_floor_admits_exact_map_and_frame_bounds_and_refuses_one_short() {
         profile.store.page.bytes = page;
         let checked = store::limits(&root, &root.forge, &profile).expect("exact page ceiling");
         assert_eq!(checked.store.page.bytes, page);
-        assert_eq!(checked.store, checked.secrets);
+        assert_eq!(checked.secrets, profile.secrets, "page sizing preserves the independent secrets envelope");
         assert_eq!(checked.store.page.rows, profile.store.page.rows);
         assert_eq!(checked.store.chunk, map.store.chunk);
         assert_eq!(checked.store.key, map.store.key);
