@@ -34,6 +34,7 @@ members = [
     "crates/temper-worker-protocol-git",
     "crates/temper-client-protocol-wire",
     "tools/git-transcripts",
+    "tools/twin",
     "crates/temper-protocol-worker-wire",
     "tests/codecs",
     "crates/temper-protocol-store",
