@@ -46,8 +46,6 @@ pub fn write(scratch: &Path, forge: SocketAddr, fixture: &Fixture) -> std::io::R
     config["application"]["webhooks"] = serde_json::json!({"listener":{"socket":"127.0.0.1:0"}});
     config["application"]["forges"][0]["webhook_secret"] = "secrets/forge-1.webhook-secret".into();
     config["application"]["identities"][0]["login"] = "worker".into();
-    // A retained reference-case callback may write another charter's instructions.
-    std::fs::create_dir_all(scratch.join("charters"))?;
     (fixture.configure)(&mut config, &mut agent, forge);
     fixtures::turn_bounds::apply(&mut config, fixtures::turn_bounds::turn_body(&agent));
     for (name, bytes) in [

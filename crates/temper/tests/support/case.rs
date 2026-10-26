@@ -1,4 +1,5 @@
 //! The reference case on the cluster's processes (domain/testing.md, 2.6 and 5.3).
+mod project;
 use super::{Ended, Scratch, WITHIN, cluster, ctl};
 use serde_json::{Value, json};
 use skein_fake_llm_domain::api::{Error, Finish, Line, Report, Rule, Script};
@@ -142,37 +143,75 @@ fn encode(scripts: &[Script], rules: &[Box<[Rule]>]) -> Value {
 }
 /// Bring lab's combined document to tests/real-loop/src/fixtures.rs's base
 /// before applying the case fixture once, as that world's cluster does.
-fn base(value: &mut Value, charter: &Path) {
-    // The case owns its charters: fixture_placed appends director charter 2,
-    // which must not collide with a charter added to the lab's base.
-    let case: Value = serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("case base");
-    value["engine"]["charters"] = case["engine"]["charters"].clone();
-    // Forge delegates use the case's charter 1, which their authority permits;
-    // charter 2 belongs to the director, not the lab's coding agents.
-    value["application"]["charter"] = 1.into();
-    value["engine"]["charters"][0]["waiting_ms"] = 1.into();
-    value["engine"]["templates"][0]["ended_by"] = "result".into();
-    for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
-        if name.as_ref() == b"charters/chat.txt" {
-            super::write_private(charter, bytes.expose());
-        }
+fn base(value: &mut Value) {
+    for member in ["charters", "templates", "policies", "rules"] {
+        value["engine"].as_object_mut().expect("engine").remove(member);
     }
+    // The forge's delegates use the same ordinary charter as the real loop.
+    value["application"]["charter"] = 1.into();
 }
-/// Departures from the description's documents: the case's forge owner and
-/// repositories in place of the lab's; the inert spare at id 1 goes when
-/// start-time adoption uses the forge's own ids instead of 1..=len.
-fn setup(value: &mut Value, forge: SocketAddr, directory: &Path, git: &Path) {
-    let d = directory.to_str().expect("setup directory");
+fn process_settings(value: &mut Value) -> Value {
+    let given = temper_real_loop_world::fixtures::own_defaults(value, &value["world_settings"]);
+    let temper_service::stock::Given::Own(defaults) = given else { panic!("case defaults") };
+    let items = temper_real_loop_world::case::defaults::items(&defaults);
+    value.as_object_mut().expect("deployment").remove("world_settings");
+    // Settings and the project are established by the owner after sign-in.
+    // Local setup supplies credentials, without adopting an incidental project first.
+    value["engine"]["projects"] = json!([]);
+    let landing = std::mem::take(&mut value["application"]["landing"]["projects"]);
+    assert_eq!(value["application"]["landing"]["deployment"], json!([]));
+    let mut rules = Vec::new();
+    for project in landing.as_array().expect("project landing rules") {
+        assert_eq!(project["project"], temper_real_loop_world::case::PROJECT);
+        rules.extend(project["rules"].as_array().expect("landing rules").iter().cloned());
+    }
+    value["application"]["landing"]["projects"] = json!([]);
+    value["application"]["landing"]["deployment"] = rules.into();
+    for member in ["charters", "templates", "policies", "rules"] {
+        value["engine"].as_object_mut().expect("engine").remove(member);
+    }
+    for (name, minimum) in
+        [("tasks.charters", 2), ("authority.grants", 16), ("notes.scopes", 32), ("core.policy_bytes", 4096)]
+    {
+        let held = value["engine"]["limits"]["overrides"][name].as_u64().unwrap_or(0);
+        value["engine"]["limits"]["overrides"][name] = held.max(minimum).into();
+    }
+    items
+}
+
+fn reconcile(directory: &Path) {
+    let reconciled = std::process::Command::new(skein_scratch::paths::binary("temper"))
+        .env_clear()
+        .args(["forge", "reconcile", "--config"])
+        .arg(directory.join("config"))
+        .arg("--data")
+        .arg(directory.join("data"))
+        .arg("--cache")
+        .arg(directory.join("cache"))
+        .arg("1")
+        .current_dir(directory)
+        .output()
+        .expect("case forge credentials reconciled");
+    assert!(reconciled.status.success(), "case forge reconcile: {}", String::from_utf8_lossy(&reconciled.stderr));
+}
+
+/// Establish the same forge identity without adopting a project before sign-in.
+fn setup(value: &mut Value, forge: SocketAddr, directory: &Path, admin_token: &Value) {
     value["application"]["webhooks"] = json!({"listener":{"socket":"127.0.0.1:0"}});
     value["application"]["forges"] = json!([{
         "number":1,"kind":"forgejo","api":{"socket":forge.to_string()},
-        "transport":"plaintext","git":format!("http://{forge}")
+        "transport":"plaintext","git":format!("http://{forge}"),
+        "api_token":directory.join("api_token"),"user":{"file":directory.join("user")},
+        "webhook_secret":directory.join("webhook_secret")
     }]);
     value["application"]["identities"] = json!([{
-        "number":1,"forge":1,"login":"temper","author":{"name":"Temper","email":"temper@example.test"}
+        "number":1,"forge":1,"login":"temper","author":{"name":"Temper","email":"temper@example.test"},
+        "token":directory.join("git_token")
     }]);
-    // Adoption walks ids 1..=len; the setup names are not consulted.
-    value["application"]["setup"] = json!([{"forge":1,"directory":d,"bot":{"login":"temper","email":"temper@example.test"},"mode":{"fake":{"listen":{"socket":forge.to_string()},"git":git,"owner":"acme","repositories":[{"name":"spare","landing":"main"},{"name":"app","landing":"main"}]}}}]);
+    value["application"]["setup"] = json!([{
+        "forge":1,"directory":directory,"bot":{"login":"temper","email":"temper@example.test"},
+        "orgs":["acme"],"mode":{"managed":{"admin_token":admin_token}}
+    }]);
 }
 
 pub fn run(
@@ -254,6 +293,8 @@ pub fn run(
         processed: 0,
         stopped_links: None,
         admin_token: Vec::new(),
+        settings: Value::Null,
+        project: None,
     });
     for root in roots {
         world.spawn(|| root);
@@ -280,6 +321,8 @@ enum Stage {
     BeforeStop,
     Acts,
     Provision,
+    ReadRules,
+    ChangeSettings,
     Live,
     Accounts,
     Stop,
@@ -317,6 +360,8 @@ struct Judge {
     processed: usize,
     stopped_links: Option<usize>,
     admin_token: Vec<u8>,
+    settings: Value,
+    project: Option<u32>,
 }
 impl Judge {
     fn mark(&mut self, phase: &'static str, now: Time) {
@@ -334,6 +379,41 @@ impl Judge {
         let cluster::Root::Client { calls, .. } = root else { panic!("client root") };
         *calls = Some(Box::new(batch));
     }
+    fn read_startup_rules(&mut self, root: &mut cluster::Root) {
+        for call in Self::calls(root).ends() {
+            success(call);
+        }
+        Self::calls(root).push(ctl::Step::Run(ctl::Call::new(&["setting", "rules", "--json"])));
+        self.stage = Stage::ReadRules;
+    }
+    fn change_settings(&mut self, root: &mut cluster::Root) {
+        let read = Self::calls(root).ends().last().expect("startup rules");
+        success(read);
+        let original = ctl::json(read);
+        for item in self.settings.as_array_mut().expect("case setting items") {
+            if item["setting"]["kind"] == "rules" {
+                item["set"]["requirements"] = original["value"]["requirements"].clone();
+            }
+        }
+        let file = self.client.parent().expect("case scratch").join("case-settings.json");
+        write(&file, &json!({"items":self.settings}));
+        Self::calls(root).push(ctl::Step::Run(ctl::Call::new(&[
+            "change-settings",
+            file.to_str().expect("settings path"),
+            "--against",
+            "1",
+            "--key",
+            "case-settings",
+        ])));
+        self.stage = Stage::ChangeSettings;
+    }
+    fn make_project(&mut self, root: &mut cluster::Root) {
+        success(Self::calls(root).ends().last().expect("case settings changed"));
+        let made = project::make(&self.client);
+        assert_eq!(u64::from(made), temper_real_loop_world::case::PROJECT, "the case keeps its project identity");
+        self.project = Some(made);
+        self.stage = Stage::Acts;
+    }
     fn configure(&mut self) {
         let engine_dir = self.members.prepare("engine");
         let ws_dir = self.members.prepare("ws");
@@ -350,15 +430,15 @@ impl Judge {
         agent["endpoints"][0]["address"] = llm.to_string().into();
         value["workers"] = ws["workers"].clone();
         value["application"]["workers"] = ws["application"]["workers"].clone();
-        base(&mut value, &engine_dir.join("config/charters/chat.txt"));
+        base(&mut value);
         let forge = self.members.capture("forge", "address").expect("forge address").parse().expect("socket");
         // The fake forge removes its token file when it ends, so the token is read while it runs.
         let document = read(&self.members.dir("forge").join("forge.json"));
         self.admin_token =
             fs::read(document["admin_token"].as_str().expect("admin token file")).expect("fake admin token");
         (self.fixture.configure)(&mut value, &mut agent, forge);
-        // The forge's credential comes from its setup, so 4.6 adopts the fixture's repositories too.
-        setup(&mut value, forge, &self.members.dir("forge").join("setup"), &self.git);
+        self.settings = process_settings(&mut value);
+        setup(&mut value, forge, &self.members.dir("forge").join("setup"), &document["admin_token"]);
         super::configuration::turn_bounds::apply(&mut value, super::configuration::turn_bounds::turn_body(&agent));
         value["engine"]["hosts"]["listener"] = json!([{"socket":self.hosts.to_string()}]);
         for key in ["fleet.workers", "fleet.attempts"] {
@@ -416,13 +496,21 @@ impl Judge {
         value["workers"] = json!([]);
         value["application"]["workers"] = json!([]);
         write(&engine_dir.join("config/temper.json"), &value);
+        reconcile(&engine_dir);
+        permit_repository(forge, &self.admin_token);
     }
     fn arguments(&self, argv: &calls::Argv) -> Vec<String> {
         argv.0
             .iter()
-            .map(|arg| match arg {
+            .enumerate()
+            .map(|(position, arg)| match arg {
                 calls::Arg::GithubApp => panic!("GithubApp unsupported"),
                 calls::Arg::Lit(word) => (*word).into(),
+                calls::Arg::Number(_)
+                    if position > 0 && matches!(&argv.0[position - 1], calls::Arg::Lit("--project")) =>
+                {
+                    self.project.expect("ProjectMade before acts").to_string()
+                }
                 calls::Arg::Number(n) => n.to_string(),
                 calls::Arg::File(name) => {
                     self.client.parent().expect("scratch").join(name).to_str().expect("file path").into()
@@ -788,12 +876,9 @@ impl Referee<cluster::Root> for Judge {
             Stage::Starting { target } if self.members.linked("ws") == target => self.stage = Stage::Acts,
             Stage::Acts => self.advance(now, root),
             Stage::Accounts if Self::calls(root).foreground_idle() => self.finish_acts(now, root),
-            Stage::Provision if Self::calls(root).foreground_idle() => {
-                for call in Self::calls(root).ends() {
-                    success(call);
-                }
-                self.stage = Stage::Acts;
-            }
+            Stage::Provision if Self::calls(root).foreground_idle() => self.read_startup_rules(root),
+            Stage::ReadRules if Self::calls(root).foreground_idle() => self.change_settings(root),
+            Stage::ChangeSettings if Self::calls(root).foreground_idle() => self.make_project(root),
             Stage::Live if Self::calls(root).foreground_idle() => {
                 let read = Self::calls(root).ends().last().expect("director's running read");
                 success(read);
@@ -814,6 +899,8 @@ impl Referee<cluster::Root> for Judge {
             | Stage::Stopping
             | Stage::Starting { .. }
             | Stage::Provision
+            | Stage::ReadRules
+            | Stage::ChangeSettings
             | Stage::Live
             | Stage::Accounts
             | Stage::Stop => {}
@@ -1154,4 +1241,20 @@ fn release(address: SocketAddr) {
     let mut response = Vec::new();
     socket.take(4096).read_to_end(&mut response).expect("PLACED response");
     assert!(response.starts_with(b"HTTP/1.1 204 "), "PLACED release: {}", String::from_utf8_lossy(&response));
+}
+
+// Managed setup creates the bot but leaves each existing repository's access to
+// its owner. Supply the same collaborator grant the former fake setup supplied.
+fn permit_repository(address: SocketAddr, token: &[u8]) {
+    let within = std::time::Duration::from_secs(10);
+    let mut socket = TcpStream::connect_timeout(&address, within).expect("fixture forge");
+    socket.set_read_timeout(Some(within)).expect("read bound");
+    socket.set_write_timeout(Some(within)).expect("write bound");
+    let body = br#"{"permission":"write"}"#;
+    write!(socket, "PUT /api/v1/repos/acme/app/collaborators/temper HTTP/1.1\r\nHost: {address}\r\nAuthorization: token {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", text(token), body.len()).expect("collaborator head");
+    socket.write_all(body).expect("collaborator body");
+    let mut response = Vec::new();
+    socket.take(65_537).read_to_end(&mut response).expect("collaborator response");
+    assert!(response.len() <= 65_536);
+    assert!(response.starts_with(b"HTTP/1.1 204 "), "fixture bot collaborator: {}", String::from_utf8_lossy(&response));
 }

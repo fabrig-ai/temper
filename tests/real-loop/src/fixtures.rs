@@ -439,6 +439,7 @@ pub fn given(directory: &Path) -> temper_service::stock::Given {
 pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -> temper_service::stock::Given {
     let engine = crate::settings::configuration(deployment);
     let mut defaults = temper_service::stock::defaults(&engine.llm);
+    let stock_period_spend = defaults.rules.period_spend;
     defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(1);
     defaults.templates[0].grace = Some(skein_lib::Duration::from_millis(1));
     defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(50) };
@@ -463,6 +464,9 @@ pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -
                 },
             )
             .expect("existing policy slot");
+    }
+    if flags["case"] == true {
+        crate::case::defaults::apply(&mut defaults, flags, stock_period_spend);
     }
     temper_service::stock::Given::Own(Box::new(defaults))
 }

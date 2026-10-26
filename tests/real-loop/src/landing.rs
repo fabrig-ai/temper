@@ -153,7 +153,12 @@ pub(crate) fn admit(value: &Value) {
     )
     .expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
-    let jig = temper_service::startup::engine(&document, 0, &jig_protocol_config::Directories::working())
+    let given = if value["world_settings"]["case"] == true {
+        crate::fixtures::own_defaults(value, &value["world_settings"])
+    } else {
+        temper_service::stock::Given::Stock
+    };
+    let jig = temper_service::startup::engine_with(&document, 0, &jig_protocol_config::Directories::working(), &given)
         .expect("engine configuration");
     let mut own = temper_service::limits::profile(temper_service::limits::Profile::Small);
     for (name, number) in value["application"]["limits"]["overrides"].as_object().expect("own overrides") {
