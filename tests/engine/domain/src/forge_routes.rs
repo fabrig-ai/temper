@@ -19,7 +19,10 @@ use temper_engine_forge_world::{self as forge_world, translate};
 
 /// Which outward write’s decoded answer the story retains.
 #[derive(Clone, Copy)]
-pub enum HoldWrite { All, Merge }
+pub enum HoldWrite {
+    All,
+    Merge,
+}
 
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
@@ -664,8 +667,7 @@ impl World {
                 | engine::Request::Setup { .. }
                 | engine::Request::Party(_)
                 | engine::Request::Store(_)
-                | engine::Request::Busy(_)
-                => {}
+                | engine::Request::Busy(_) => {}
                 engine::Request::Unsettled(write) => {
                     assert!(!self.drained, "unfinished entries precede Drained");
                     self.unsettled.push(write);
@@ -725,7 +727,9 @@ impl World {
                     )));
                     let held = match self.hold_write_answers {
                         Some(HoldWrite::All) => matches!(op, skein_forge::api::Op::Write(_)),
-                        Some(HoldWrite::Merge) => matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. })),
+                        Some(HoldWrite::Merge) => {
+                            matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. }))
+                        }
                         None => false,
                     };
                     if held {

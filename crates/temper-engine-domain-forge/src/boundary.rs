@@ -1143,7 +1143,9 @@ pub enum Event {
 #[derive(PartialEq, Eq, Debug)]
 pub enum Request {
     /// The client finished sent entries or reached its bound; those without an outcome.
-    Settled { unfinished: Box<[Unfinished]> },
+    Settled {
+        unfinished: Box<[Unfinished]>,
+    },
     /// The root holds this answer behind the decision's durable commit.
     Bound {
         request: Token,

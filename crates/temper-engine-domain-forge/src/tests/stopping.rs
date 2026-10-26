@@ -1,5 +1,5 @@
+use super::fixtures::{answer, next_call};
 use super::*;
-use super::fixtures::{next_call, answer};
 
 fn sent() -> (Domain, Token) {
     let mut d = domain();
@@ -29,9 +29,16 @@ fn settle_waits_for_a_sent_write_and_starts_no_other() {
     outputs(&mut d, Event::Committed { entry: 2 });
     assert!(outputs(&mut d, Event::Settle).is_empty());
     assert!(ready(&mut d).is_empty());
-    let requests = outputs(&mut d, Event::Client(skein_forge_client::Event::Answered {
-        call, cost: 1, free: 0, rate: None, result: Ok(skein_forge::api::Answer::Done),
-    }));
+    let requests = outputs(
+        &mut d,
+        Event::Client(skein_forge_client::Event::Answered {
+            call,
+            cost: 1,
+            free: 0,
+            rate: None,
+            result: Ok(skein_forge::api::Answer::Done),
+        }),
+    );
     assert!(requests.contains(&Request::Erase { key: Key::Entry(1) }));
     assert_eq!(requests.last(), Some(&Request::Settled { unfinished: Box::new([]) }));
     assert!(ready(&mut d).is_empty());

@@ -17,7 +17,10 @@ pub(crate) fn finished(domain: &mut Domain, unfinished: Box<[forge::Unfinished]>
         return;
     }
     for write in unfinished {
-        assert!(now(domain, Request::Unsettled(Unsettled { entry: write.entry, task: write.task })), "stop report door reserved");
+        assert!(
+            now(domain, Request::Unsettled(Unsettled { entry: write.entry, task: write.task })),
+            "stop report door reserved"
+        );
     }
     domain.settling = false;
     domain.work.push(Work::Core(core::Event::Stopping));

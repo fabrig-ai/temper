@@ -724,7 +724,9 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
         if !domain.ready() {
             return;
         }
-        if !domain.settling && let Some(context) = domain.core.take_due() {
+        if !domain.settling
+            && let Some(context) = domain.core.take_due()
+        {
             domain.work.push(Work::Activate(context));
             let decision = route(domain, env);
             close(domain, env, decision, out);
