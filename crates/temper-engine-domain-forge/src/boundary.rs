@@ -822,6 +822,8 @@ pub struct Installation {
 /// A parent or child input to the connector top.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Event {
+    /// The engine stops: finish sent entries without starting another write (domain/forge.md, 6).
+    Settle,
     /// A successful conversion kept its App records.
     AppRecorded {
         forge: u16,
@@ -1140,6 +1142,8 @@ pub enum Event {
 /// The connector's output to the root, including child API calls.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Request {
+    /// The client finished sent entries or reached its bound; those without an outcome.
+    Settled { unfinished: Box<[Unfinished]> },
     /// The root holds this answer behind the decision's durable commit.
     Bound {
         request: Token,
@@ -1401,4 +1405,11 @@ pub struct DemoAct {
 pub enum DemoActKind {
     Close { project: u32, task: u64 },
     RemoveAccount { account: u32 },
+}
+
+/// A sent entry still without its outcome when the client’s stop bound passed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Unfinished {
+    pub entry: u64,
+    pub task: u64,
 }

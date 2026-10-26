@@ -154,6 +154,7 @@ pub struct Domain {
     /// and fetch with (protocol/credentials.md).
     pub(crate) identities: Map<u16, u32>,
     pub(crate) capabilities: Map<Token, crate::capabilities::Pending>,
+    stopping: bool,
     client: skein_forge_client::Domain,
     client_out: Queue<skein_forge_client::Request>,
     pub(crate) brief_fetches: Map<Token, brief::BriefFetch>,
@@ -561,6 +562,7 @@ impl Domain {
             capabilities: Map::with_capacity(l.repositories),
             writers,
             identities: credentials,
+            stopping: false,
             client: skein_forge_client::Domain::configured(&l.client, seed, config)?,
             client_out: Queue::with_capacity(skein_forge_client::max_out(&l.client)),
             brief_fetches: Map::with_capacity(l.brief_sections),
@@ -650,6 +652,9 @@ impl Domain {
     /// Earliest procedure or projection wait, reported to the root's clock.
     #[must_use]
     pub fn next_wall_deadline(&self) -> Option<skein_lib::Wall> {
+        if self.stopping {
+            return None;
+        }
         let mut next: Option<skein_lib::Wall> = None;
         for deadlines in [&self.projection_due, &self.change_due] {
             for (_, deadline) in deadlines {
@@ -665,6 +670,9 @@ impl Domain {
     /// Whether a child call or a newly committed entry may be sent.
     #[must_use]
     pub fn is_ready(&self) -> bool {
+        if self.stopping {
+            return self.client.is_ready();
+        }
         self.next_handoff().is_some()
             || !self.procedure_wakes.is_empty()
             || self.client.is_ready()
@@ -984,6 +992,10 @@ pub const fn max_out(l: &Limits) -> u32 {
 #[expect(clippy::too_many_lines, reason = "one exhaustive connector input dispatcher")]
 pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Request>) {
     match event {
+        Event::Settle => {
+            d.stopping = true;
+            child(d, env, skein_forge_client::Event::Settle, out);
+        }
         Event::Bind { request, mut address, subject } => {
             address.make_ascii_lowercase();
             assert!(crate::binding_address(&address) && subject.len() <= 255, "admitted binding fields");
@@ -1327,6 +1339,11 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
 
 /// Drive one child call after prior saves have committed.
 pub fn resume(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    if d.stopping {
+        skein_forge_client::resume(&mut d.client, &child_env(env), &mut d.client_out);
+        drain(d, env, out);
+        return;
+    }
     let before = out.len();
     handoff_one(d, env, out);
     if out.len() != before {
@@ -1350,6 +1367,11 @@ pub fn resume(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 
 /// Expire one client timer.
 pub fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    if d.stopping {
+        skein_forge_client::fire(&mut d.client, &child_env(env), &mut d.client_out);
+        drain(d, env, out);
+        return;
+    }
     // Keep the client child's whole cohort available. Excess ready timers stay
     // in their owner's bounded tables for the next iteration.
     let room = out.room().saturating_sub(skein_forge_client::max_out(&env.limits.client));
@@ -1403,6 +1425,14 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     for _ in 0..d.client_out.len() {
         let request = d.client_out.pop().expect("counted child output");
         match request {
+            skein_forge_client::Request::Settled { left } => {
+                let mut unfinished = List::with_capacity(env.limits.entries);
+                for entry in left {
+                    let row = d.entries.get(&entry).expect("client’s unfinished entry remains durable");
+                    unfinished.push(crate::Unfinished { entry, task: row.entry.task }).expect("bounded entries");
+                }
+                emit(out, Request::Settled { unfinished: unfinished.into_boxed() });
+            }
             skein_forge_client::Request::Save { record } => {
                 let record = match record {
                     skein_forge_client::Stored::Writer(row) => Stored::Writer(row),
@@ -1770,7 +1800,8 @@ fn kept(out: &Queue<skein_forge_client::Request>) -> bool {
             | skein_forge_client::Request::Call { .. }
             | skein_forge_client::Request::Read { .. }
             | skein_forge_client::Request::ReadAfreshDone
-            | skein_forge_client::Request::OutboxDone => {}
+            | skein_forge_client::Request::OutboxDone
+            | skein_forge_client::Request::Settled { .. } => {}
         }
     }
     false
@@ -2248,6 +2279,9 @@ fn delegate_result(
 }
 
 fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Queue<Request>) {
+    if d.stopping {
+        return;
+    }
     let StepInput { task, entry, heard, gates, queue_repair_active, kept } = input;
     let Some(row) = d.changes.get(&task) else {
         emit(out, Request::Refused { task });
@@ -2334,6 +2368,9 @@ fn step_read(
     out: &mut Queue<Request>,
 ) {
     let Some(mut pending) = d.steps.remove(&owner) else { return };
+    if d.stopping {
+        return;
+    }
     if result == Err(skein_forge::api::Error::Busy) {
         emit(
             out,
@@ -3491,6 +3528,9 @@ fn release_projection(d: &mut Domain, goal: u64, out: &mut Queue<Request>) {
 }
 
 fn committed(d: &mut Domain, env: &Env<Limits>, number: u64, out: &mut Queue<Request>) {
+    if d.stopping {
+        return;
+    }
     if let Some(row) = d.entries.get_mut(&number)
         && row.handoff == Handoff::Uncommitted
     {
@@ -3500,6 +3540,9 @@ fn committed(d: &mut Domain, env: &Env<Limits>, number: u64, out: &mut Queue<Req
 }
 
 fn handoff_one(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    if d.stopping {
+        return;
+    }
     // skein's forge-client.md, 7.2: each new Make is above every held entry.
     // Fresh-read chains retain their reserved numbers; built changes,
     // projections and releases share this outbox and wait for lower chains
