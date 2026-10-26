@@ -18,6 +18,7 @@ mod configuration;
 mod forgery;
 mod github;
 mod issuer;
+mod playground;
 
 /// How long a story waits for what a page shows.
 pub const WITHIN: skein_lib::Duration = skein_lib::Duration::from_secs(10);
@@ -114,6 +115,39 @@ pub struct Tier {
     command: &'static str,
 }
 impl Tier {
+    /// The static playground, opened at `/`; its worker supplies the visitor's printed link.
+    #[must_use]
+    pub fn playground(name: &str) -> Self {
+        let scratch = skein_scratch::Scratch::new(name);
+        let bundle = playground::bundle();
+        let (files, bytes) = playground::download(&bundle);
+        configuration::write(scratch.path(), &temper(), &bundle);
+        let path = scratch.path().join("temper.json");
+        let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("deployment")).expect("JSON");
+        let overrides = &mut value["application"]["limits"]["overrides"];
+        // The least powers of two strictly above the measured bundle, as playground.md, 8 asks.
+        let files = files.checked_add(1).and_then(u64::checked_next_power_of_two).expect("bundle file bound");
+        let bytes = bytes.checked_add(1).and_then(u64::checked_next_power_of_two).expect("bundle byte bound");
+        overrides["clients.bundle_files"] = files.into();
+        overrides["clients.bundle_bytes"] = bytes.into();
+        println!("playground server bounds: {files} files, {bytes} bytes");
+        configuration::private(&path, &serde_json::to_vec(&value).expect("playground deployment JSON"));
+        Self { scratch, forged: forgery::request(), command: "serve" }
+    }
+
+    /// Open the static page at the server's root, rather than its unrelated server sign-in link.
+    #[must_use]
+    pub fn playground_setup(&self) -> Setup<'_> {
+        let mut setup = self.setup();
+        setup.printed = Printed {
+            sent: skein_fake_person_browser::Sent::Page,
+            prefix: b"listening clients ",
+            on: Output::Stderr,
+            names: Names::Address,
+        };
+        setup
+    }
+
     #[must_use]
     pub fn new(name: &str) -> Self {
         let scratch = skein_scratch::Scratch::new(name);
