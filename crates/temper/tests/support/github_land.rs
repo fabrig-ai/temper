@@ -310,12 +310,7 @@ impl Judge {
                 self.queue(host, vec![ctl::Call::new(&["task", "1", "--json"])]);
                 self.stage = Stage::ReplySnapshot;
             }
-            Stage::ReplySnapshot => {
-                let packet = ctl::json(calls.ends().last().expect("reply snapshot"));
-                self.reply_snapshot = Some(packet["digest"].as_str().expect("task digest").to_owned());
-                self.queue(host, vec![ctl::Call::new(&["chat", "1", "--json"])]);
-                self.stage = Stage::ReplyPages;
-            }
+            Stage::ReplySnapshot => self.reply_snapshot(host, calls),
             Stage::ReplyPages => self.reply_page(host, calls),
             Stage::ChatEnded => {
                 assert_eq!(ctl::json(calls.ends().last().expect("chat ended"))["task"]["chip"]["phase"], "ended");
@@ -345,6 +340,18 @@ impl Judge {
             | Stage::RestartWorker
             | Stage::Stopping => unreachable!("active calls"),
         }
+    }
+    fn reply_snapshot(&mut self, host: &mut cluster::Root, calls: &ctl::Calls) {
+        let packet = ctl::json(calls.ends().last().expect("reply snapshot"));
+        let families = jig_domain_core::ToolFamilies::JIG;
+        assert_eq!(
+            packet["authority"]["authority"]["tools"],
+            families.delegate.0 | families.read.0,
+            "the default chat inherits Delegate and Read: {packet}"
+        );
+        self.reply_snapshot = Some(packet["digest"].as_str().expect("task digest").to_owned());
+        self.queue(host, vec![ctl::Call::new(&["chat", "1", "--json"])]);
+        self.stage = Stage::ReplyPages;
     }
     fn chat_evidence(&mut self, host: &mut cluster::Root, calls: &ctl::Calls) {
         let activity = ctl::json(calls.ends().last().expect("chat activity"));
@@ -775,6 +782,17 @@ pub(crate) fn configure_llm(path: &Path) {
 }
 fn configure_engine(value: &mut Value, forge: SocketAddr) {
     configure_landing(value, forge, "acme", "app");
+    // Use the stock defaults and exactly init's inline seed policy, with no story-specific
+    // tool grants. Init's placeholders do not occur in the seed projects.
+    let init: Value = serde_json::from_slice(include_bytes!("../../../temper-init/template/temper.json"))
+        .expect("init template JSON");
+    let engine = value["engine"].as_object_mut().expect("engine object");
+    for member in ["charters", "templates", "policies", "rules"] {
+        engine.remove(member);
+    }
+    engine.insert("projects".into(), init["engine"]["projects"].clone());
+    // The stock offers both chat and coding charters; the old fixture held one.
+    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
     // Keep App setup and log polling aligned with the live GitHub story.
     value["application"]["forges"][0]["app_read_only"] = true.into();
     let limits = &mut value["application"]["limits"]["overrides"];
@@ -787,10 +805,6 @@ fn configure_engine(value: &mut Value, forge: SocketAddr) {
     limits["forge_component.connections"] = 4.into();
     limits["forge_component.log_poll_ms"] = 15000.into();
     value["engine"]["limits"]["overrides"]["tasks.result_bytes"] = 512.into();
-    // Only this story grants the chat Read, through every creation ceiling.
-    value["engine"]["rules"]["ceiling"]["tools"] = 513.into();
-    value["engine"]["projects"][0]["policy"]["ceiling"]["tools"] = 513.into();
-    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["tools"] = 513.into();
 }
 
 pub(crate) fn landing_reads() -> Vec<ctl::Call> {

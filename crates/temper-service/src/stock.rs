@@ -12,6 +12,10 @@ use skein_lib::{Duration, List, Map, bytes};
 
 const FORGE: u16 = 1;
 
+/// Delegate (a chat's `change` and `delegate`) and Read (the forge's reads), jig's families
+/// (jig's `domain/authority.md`); a chat answers from its own forge (protocol/configuration.md, 13.4).
+const CHAT_TOOLS: authority::Tools = authority::Tools(1 | 512);
+
 /// The defaults temper passes jig's builder at each start. Each charter offers every
 /// model `llm` configures, in its order, the first its default.
 /// # Panics
@@ -110,7 +114,7 @@ fn grants() -> Box<[authority::Grant]> {
 }
 fn ceiling() -> authority::Authority {
     authority::Authority {
-        tools: authority::Tools(1),
+        tools: CHAT_TOOLS,
         models: authority::Models::ALL,
         grants: grants(),
         delegation: authority::Delegation {

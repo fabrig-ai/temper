@@ -51,6 +51,31 @@ fn single_model() -> Box<[u8]> {
 fn engine(document: &[u8]) -> config::Engine {
     fixtures::parse_engine(&fixtures::value(document, b"engine"))
 }
+
+#[test]
+fn stock_chats_can_delegate_and_read_the_forge() {
+    let engine = engine(&single_model());
+    let defaults = crate::stock::defaults(&engine.llm);
+    let policy = &defaults.policies.get(&1).expect("stock policy 1").policy;
+    let families = jig_domain_core::ToolFamilies::JIG;
+    for tools in [defaults.rules.ceiling.tools, policy.ceiling.tools, policy.roles[0].authority.tools] {
+        assert_eq!(tools, jig_domain_authority::Tools(families.delegate.0 | families.read.0));
+    }
+}
+
+#[test]
+fn the_seeded_project_keeps_the_stocks_tool_families() {
+    // Interim: the seeded project will take its policy from the stock at configuring-stock's
+    // seed boundary. Then both the template's inline copy and this agreement test go.
+    let engine = engine(&generated());
+    let defaults = crate::stock::defaults(&engine.llm);
+    let stock_tools = defaults.rules.ceiling.tools; // The stock's ceiling().tools.
+    let core = config::core(&engine, [1; 16], 7);
+    let seed = &core.seed_projects[0].policy.policy;
+    assert_eq!(seed.ceiling.tools, stock_tools);
+    assert_eq!(seed.roles[0].authority.tools, stock_tools);
+}
+
 #[test]
 fn the_stock_passes_jigs_one_check() {
     let init = generated();
