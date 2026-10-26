@@ -159,7 +159,6 @@ pub(super) fn project_creation(value: &mut serde_json::Value, address: SocketAdd
         u32::try_from(amendment_bytes).expect("one adoption").into();
     // forge/host/owner/repository/branch, plus temper/<root>/<task>.
     value["engine"]["limits"]["overrides"]["authority.segments"] = BRANCH_SEGMENTS.into();
-    value["engine"]["policies"] = value["engine"]["projects"].clone();
 }
 
 // The picker and adoption both read this repository through the GitHub layer.
