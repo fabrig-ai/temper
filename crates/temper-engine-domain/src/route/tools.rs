@@ -43,6 +43,21 @@ pub(crate) fn relay_payload(
         domain.next_effect_owner = domain.next_effect_owner.checked_add(1).expect("transient effect owner");
         return;
     }
+    // Settings reads enter before replay and admission to the durable call map.
+    // The core checks their family and answers denials through its immediate lane.
+    if let Tool::Settings { mut read, .. } = body.tool {
+        if let core::SettingsRead::Setting { revision, .. } = &mut read
+            && *revision == 0
+        {
+            *revision = domain.core.current.newest();
+        }
+        domain.work.push(Work::Core(core::Event::NamedAction {
+            to: reply_to,
+            key,
+            action: core::NamedAction::Settings(read),
+        }));
+        return;
+    }
     match call_answer(domain, key) {
         Some(answer) => relay_call(domain, &env.limits, decision, reply_to, answer),
         None => {
@@ -84,6 +99,14 @@ pub(crate) fn relay_payload(
                 body.tool
             };
             match tool {
+                Tool::Settings { .. } => unreachable!("settings reads enter before replay"),
+                Tool::ProposeSettings { against, items, reason } => {
+                    domain.work.push(Work::Core(core::Event::NamedAction {
+                        to: reply_to,
+                        key,
+                        action: core::NamedAction::ProposeSettings { against, items, reason },
+                    }))
+                }
                 Tool::ReadNamed { .. } => unreachable!("named reads resolved before deciding"),
                 tool @ (Tool::Change { .. } | Tool::Goal { .. }) => {
                     let expanded = match domain.core.tasks.delegation(key.task) {

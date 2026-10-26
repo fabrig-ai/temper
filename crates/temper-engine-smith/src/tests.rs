@@ -1289,3 +1289,6 @@ fn goal_decodes_words_and_an_optional_advisor() {
     assert_eq!(decided(b"goal", br#"{"words":""}"#), Err(Problem::Range(b"words")));
     assert_eq!(decided(b"goal", br#"{"words":"plan","advisor":1}"#), Err(Problem::Type(b"advisor")));
 }
+
+#[path = "tests/settings.rs"]
+mod settings;

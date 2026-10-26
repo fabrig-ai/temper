@@ -280,14 +280,22 @@ fn item(d: &Decoder, at: u32) -> Result<c::SettingItem, Error> {
     };
     Ok(c::SettingItem { setting, edit })
 }
-pub(crate) fn decode(bytes: &[u8], limits: &Limits) -> Result<List<c::SettingItem>, Box<[u8]>> {
+/// Decode the items in a settings file using the same bounds as ctl.
+pub fn decode(bytes: &[u8], limits: &Limits) -> Result<List<c::SettingItem>, Box<[u8]>> {
+    decode_root(bytes, limits, false)
+}
+/// Decode a host proposal's items in the settings file form.
+pub fn proposal_items(bytes: &[u8], limits: &Limits) -> Result<List<c::SettingItem>, Box<[u8]>> {
+    decode_root(bytes, limits, true)
+}
+fn decode_root(bytes: &[u8], limits: &Limits, proposal: bool) -> Result<List<c::SettingItem>, Box<[u8]>> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limits.ask_bytes {
         return Err(message(None, bound(b"file bytes", u32::try_from(limits.ask_bytes).unwrap_or(u32::MAX))));
     }
     let doc = super::json::document_depth(bytes, 32)
         .or(Err(message(None, error(b"JSON", b"invalid JSON or depth bound 32"))))?;
     let d = Decoder { doc, limits: limits.settings };
-    let fields = match d.object(0, &[b"items"]) {
+    let fields = match d.object(0, if proposal { &[b"items", b"against", b"reason"] } else { &[b"items"] }) {
         Ok(fields) => fields,
         Err(why) => return Err(message(None, why)),
     };
