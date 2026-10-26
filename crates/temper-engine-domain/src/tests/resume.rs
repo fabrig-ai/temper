@@ -10,6 +10,34 @@ const WATCHER: skein_lib::Token = skein_lib::Token::new(30);
 const SIGN_IN: u64 = 10;
 
 #[test]
+fn every_public_mutating_entry_advances_the_root_revision() {
+    let (mut domain, env) = root();
+    let mut out = Queue::with_capacity(crate::max_out(&env.limits));
+    let mut revisions = List::with_capacity(9);
+    revisions.push(domain.revision()).unwrap();
+    crate::step(&mut domain, &env, Event::Resume);
+    revisions.push(domain.revision()).unwrap();
+    crate::try_step(&mut domain, &env, Event::Resume).unwrap();
+    revisions.push(domain.revision()).unwrap();
+    crate::fire(&mut domain, &env);
+    revisions.push(domain.revision()).unwrap();
+    crate::release(&mut domain, &env, &mut out);
+    revisions.push(domain.revision()).unwrap();
+    domain.connection_limits(1, 1);
+    revisions.push(domain.revision()).unwrap();
+    domain.drain_facts();
+    revisions.push(domain.revision()).unwrap();
+    assert!(domain.pop_fact().is_none());
+    revisions.push(domain.revision()).unwrap();
+    domain.reclaim();
+    revisions.push(domain.revision()).unwrap();
+    for pair in revisions.as_slice().windows(2) {
+        assert!(pair[1] > pair[0], "even empty mutations invalidate a settled owner");
+    }
+    assert!(out.is_empty());
+}
+
+#[test]
 fn empty_release_and_resume_probes_allocate_nothing() {
     use skein_world::domain::heap::Meter;
 

@@ -31,6 +31,7 @@ pub(crate) struct Engine {
     begin: bool,
     pub(crate) credentials: List<u32>,
     ready: bool,
+    settled_revision: Option<u64>,
     aborted: Option<()>,
     max_out: u32,
 }
@@ -98,6 +99,7 @@ impl Engine {
             pending: None,
             begin: true,
             ready: true,
+            settled_revision: None,
             aborted: None,
             max_out,
         })
@@ -114,6 +116,9 @@ impl Engine {
                 Some(accounts) => accounts.batch_room(self.max_out),
                 None => true,
             }
+    }
+    fn release_pending(&self) -> bool {
+        self.ready || self.settled_revision != Some(self.domain.revision())
     }
     pub(crate) fn step(&mut self, event: root::Event) {
         let watcher = watcher(&event);
@@ -176,7 +181,7 @@ impl Engine {
         components
             || self.room()
                 && (self.begin
-                    || self.ready
+                    || self.release_pending()
                     || !self.blocked
                         && (self.pending.is_some()
                             || !self.events.is_empty()
@@ -324,6 +329,20 @@ fn clients_pass(engine: &mut Engine) {
     engine.clients.advance(&mut engine.events, &engine.workers.forges, engine.demo.as_ref(), &mut engine.accounts);
 }
 fn release(engine: &mut Engine) {
+    // Clocks are inputs too: Resume can observe a due timer even when normal
+    // input admission is blocked. Recompute wall-to-monotonic mapping now.
+    if !engine.release_pending() {
+        let due = match engine.domain.next_deadline(&engine.env) {
+            Some(deadline) => deadline <= engine.env.now,
+            None => false,
+        };
+        if !due {
+            // No root mutation since its last reclaim means no newly retired slots.
+            // Child IO may still have closed, so shutdown must advance on this pass.
+            stop::advance(engine);
+            return;
+        }
+    }
     engine.ready = true;
     let mut empty = 0_u32;
     for _ in 0..root::max_out(&engine.env.limits) {
@@ -361,8 +380,12 @@ fn release(engine: &mut Engine) {
         engine.clients.down(jig_protocol_engine_clients::Event::Admitted { watcher });
     }
     engine.domain.reclaim();
+    if !engine.ready {
+        engine.settled_revision = Some(engine.domain.revision());
+    }
     stop::advance(engine);
 }
+
 pub(crate) fn answer(engine: &mut Engine) {
     if engine.end.is_some() {
         for _ in 0..engine.store.above.len() {
@@ -607,5 +630,29 @@ pub(crate) fn forge_pass(engine: &mut Engine) {
             }
             skein_forge_connection::Event::Closed => engine.forge.closed = true,
         }
+    }
+}
+
+#[cfg(test)]
+mod release_tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_release_stays_settled_until_the_root_changes() {
+        let mut service = crate::tests::fixtures::ready();
+        let engine = service.engine.as_mut().expect("engine");
+        engine.step(root::Event::Resume);
+        assert!(engine.release_pending());
+        release(engine);
+        assert!(!engine.ready);
+        assert!(!engine.release_pending());
+        assert!(engine.requests.is_empty());
+        release(engine);
+        assert!(!engine.release_pending());
+        assert_eq!(engine.settled_revision, Some(engine.domain.revision()));
+        let revision = engine.domain.revision();
+        root::step(&mut engine.domain, &engine.env, root::Event::Resume);
+        assert!(engine.domain.revision() > revision);
+        assert!(engine.release_pending(), "direct root inputs wake the owner too");
     }
 }
