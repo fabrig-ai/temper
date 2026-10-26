@@ -24,7 +24,7 @@ pub enum Command {
     Migrate,
     /// Make temper-admin with a discarded random password.
     CreateAdmin,
-    /// Make the person with a random password to change.
+    /// Make the person with a private random password and no forced change.
     CreatePerson,
     /// Register the global runner through its secret file.
     Register,
@@ -123,6 +123,7 @@ pub fn command(command: Command, owned: &Owned, place: &Place) -> Spec {
             &owned.person.email,
             b"--admin",
             b"--random-password",
+            b"--must-change-password=false",
         ]),
         Command::Register => {
             let runner = owned.runner.as_ref().expect("runner configured");
@@ -174,6 +175,32 @@ pub fn admin_token(owned: &Owned, place: &Place, name: &[u8]) -> Spec {
             b"--raw",
             b"--scopes",
             b"write:admin,read:user,write:organization,write:repository",
+        ]),
+    )
+}
+/// The person's two API hands, scoped separately from temper's administrator.
+#[must_use]
+pub fn person_token(owned: &Owned, place: &Place, name: &[u8], file: File) -> Spec {
+    assert!(file == File::PersonReadHeader || file == File::PersonWriteHeader, "person header");
+    let scopes = if file == File::PersonReadHeader {
+        b"read:repository,read:issue,read:organization,read:user".as_slice()
+    } else {
+        b"write:repository,write:issue,read:organization,read:user".as_slice()
+    };
+    forgejo(
+        owned,
+        place,
+        &words(&[
+            b"admin",
+            b"user",
+            b"generate-access-token",
+            b"--username",
+            &owned.person.login,
+            b"--token-name",
+            name,
+            b"--raw",
+            b"--scopes",
+            scopes,
         ]),
     )
 }

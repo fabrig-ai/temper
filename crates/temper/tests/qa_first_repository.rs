@@ -121,7 +121,7 @@ fn first_landed_task_and_adoption_survive_a_box_restart_without_setup_replay() {
         root,
         steps,
         Duration::from_secs(180),
-        || first_repository::live(root, root, root),
+        |_| first_repository::live(root, root, root),
         first_repository::llm(root),
     );
     assert_box(&first);
