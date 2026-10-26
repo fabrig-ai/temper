@@ -55,6 +55,8 @@ skein-lib.workspace = true
 skein-shell.workspace = true
 
 [dev-dependencies]
+temper-twin = { path = "../../tools/twin" }
+temper-fake.workspace = true
 skein-ui.workspace = true
 skein-ui-text.workspace = true
 skein-forge-client.workspace = true
