@@ -1624,6 +1624,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "skein-playground"
+version = "0.0.0"
+source = "git+https://github.com/fabrig-dev/skein.git#b368945a51af9eda77fb000c64ba365a70a14aff"
+dependencies = [
+ "js-sys",
+ "skein-http",
+ "skein-io",
+ "skein-lib",
+ "skein-shell",
+ "skein-sim-world",
+ "skein-ui-web",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "skein-scratch"
 version = "0.0.0"
 source = "git+https://github.com/fabrig-dev/skein.git#b368945a51af9eda77fb000c64ba365a70a14aff"
@@ -3051,10 +3067,12 @@ dependencies = [
  "skein-fake-machine",
  "skein-fake-peers",
  "skein-forge-connection",
+ "skein-http",
  "skein-io",
  "skein-json",
  "skein-lib",
  "skein-llm",
+ "skein-playground",
  "skein-shell",
  "skein-sim",
  "skein-sim-world",
@@ -3066,6 +3084,22 @@ dependencies = [
  "temper-forge-setup",
  "temper-service",
  "temper-worker-domain",
+]
+
+[[package]]
+name = "temper-playground-world"
+version = "0.0.0"
+dependencies = [
+ "jig-client-shell-web",
+ "skein-fake-person",
+ "skein-lib",
+ "skein-playground",
+ "skein-ui",
+ "skein-ui-web",
+ "temper-client-domain",
+ "temper-client-shell-web",
+ "temper-client-view",
+ "temper-playground",
 ]
 
 [[package]]

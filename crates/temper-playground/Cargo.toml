@@ -8,6 +8,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+skein-playground.workspace = true
+skein-http.workspace = true
 temper-fake.workspace = true
 temper-forge-setup.workspace = true
 skein-json.workspace = true
