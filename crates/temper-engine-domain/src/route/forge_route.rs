@@ -2239,10 +2239,14 @@ fn produce_words(title: &[u8], base: &[u8], branch: &[u8], bound: u32) -> Box<[u
 
 /// domain/forge.md, 8.1: replies take the same inbox prefix as their step.
 pub(super) fn change_replies(domain: &Domain, env: &Env<Limits>, task: u64) -> Box<[jig_domain_core::StepMessage]> {
-    let mut messages = List::with_capacity(env.limits.tasks.inbox_messages);
+    let mut messages = List::with_capacity(env.limits.tasks.batch);
     let Some(row) = domain.core.tasks.task(task) else { return messages.into_boxed() };
     let Some(offered) = domain.core.tasks.procedure_offered(task) else { return messages.into_boxed() };
     for word in &row.inbox {
+        // domain/forge.md, 8.1: answer the oldest within the batch; the rest are taken unanswered.
+        if messages.len() == env.limits.tasks.batch {
+            break;
+        }
         if word.number > offered {
             continue;
         }
@@ -2276,7 +2280,7 @@ pub(super) fn change_replies(domain: &Domain, env: &Env<Limits>, task: u64) -> B
                 kind,
                 words: takes_no_messages(row.requester, env.limits.tasks.message_bytes),
             })
-            .expect("one reply per offered inbox message");
+            .expect("replies capped at the step batch");
     }
     messages.into_boxed()
 }
