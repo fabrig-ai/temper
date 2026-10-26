@@ -518,7 +518,13 @@ pub fn check_landing(ran: &Ran) -> String {
     for byte in domain::object_bytes(*commit) {
         write!(hex, "{byte:02x}").expect("commit hex");
     }
-    assert_eq!(result["words"]["bytes"], hex, "result names the merge commit");
+    let words = result["words"]["bytes"].as_str().expect("landing words");
+    let mut lines = words.lines();
+    assert_eq!(lines.next(), Some(hex.as_str()), "first result line names the merge commit");
+    assert!(
+        lines.next().expect("landed pull line").starts_with(&format!("pull request #{pull} of acme/app on ")),
+        "second result line names the landed pull: {words}"
+    );
     hex
 }
 
@@ -526,7 +532,10 @@ pub fn check_landing(ran: &Ran) -> String {
 pub fn check_chat_heard_the_landing(ran: &Ran, hex: &str) {
     let chat: Value = serde_json::from_slice(&ran.calls()[CHAT].stdout).expect("chat document");
     assert_eq!(chat["task"]["result"]["value"]["report"]["bytes"], "The change landed.");
-    let told = format!("Result from task 2:\n{hex}");
+    let change: Value = serde_json::from_slice(&ran.calls()[CHANGE].stdout).expect("change document");
+    let words = change["result"]["value"]["change"]["words"]["bytes"].as_str().expect("landing words");
+    assert_eq!(words.lines().next(), Some(hex), "the chat's result begins with the merge id");
+    let told = format!("Result from task 2:\n{words}");
     let chat_queries: Vec<_> = ran
         .llm()
         .iter()
