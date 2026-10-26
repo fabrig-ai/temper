@@ -554,6 +554,97 @@ fn root_call_answers_become_bounded_smith_text_or_error() {
     assert!(!denied.text().is_empty());
 }
 
+const SHA1_HEAD: [u8; 32] = [
+    0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+    0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+];
+const COMMIT_SPELLINGS: &[([u8; 32], &[u8])] = &[
+    (SHA1_HEAD, b"abcdef0123456789abcdef0123456789abcdef01"),
+    ([0xab; 32], b"abababababababababababababababababababababababababababababababab"),
+];
+
+fn pull_answer(state: skein_forge::api::State, head: [u8; 32], merged: Option<[u8; 32]>) -> skein_forge::api::Answer {
+    use skein_forge::api;
+    api::Answer::Pull(api::Pull {
+        reviewers: Box::new([]),
+        number: 1,
+        state,
+        head: b"work".as_slice().into(),
+        base: b"main".as_slice().into(),
+        commit: head,
+        base_commit: None,
+        merged,
+        mergeable: true,
+        ci: api::Ci::Passed,
+        queued: None,
+        dequeued: None,
+    })
+}
+
+#[test]
+fn forge_answers_print_commits_at_the_identifier_width() {
+    use skein_forge::api;
+    for (commit, digits) in COMMIT_SPELLINGS {
+        for (read, prefix, suffix) in [
+            (api::Answer::Commit(*commit), b"".as_slice(), b"".as_slice()),
+            (api::Answer::Merged(*commit), b"".as_slice(), b"".as_slice()),
+            (
+                api::Answer::File { head: *commit, path: b"file".as_slice().into(), bytes: Box::new([]), truncated: false },
+                b"file at ".as_slice(),
+                b":\n".as_slice(),
+            ),
+            (
+                api::Answer::Compare {
+                    before: SHA1_HEAD,
+                    after: *commit,
+                    contains_before: true,
+                    files: Box::new([]),
+                    commits: Box::new([*commit]),
+                },
+                b"Contains prior head: yes\n".as_slice(),
+                b"\n".as_slice(),
+            ),
+            (pull_answer(api::State::Open, *commit, None), b"Pull 1 head work commit ".as_slice(), b" base main state open CI passed".as_slice()),
+            (pull_answer(api::State::Closed, SHA1_HEAD, Some(*commit)), b"Pull 1 head work commit abcdef0123456789abcdef0123456789abcdef01 base main state closed merged commit ".as_slice(), b" CI passed".as_slice()),
+        ] {
+            let rendered = answer(&engine::CallAnswer::ForgeRead(Box::new(Ok(read))));
+            assert!(!rendered.error());
+            let mut expected = skein_lib::Writer::new(prefix.len() + digits.len() + suffix.len());
+            expected.put(prefix).unwrap();
+            expected.put(digits).unwrap();
+            expected.put(suffix).unwrap();
+            assert_eq!(rendered.text(), expected.finish().as_ref());
+        }
+        for made in [
+            skein_forge_client::Made::Merged(*commit),
+            skein_forge_client::Made::Updated(*commit),
+            skein_forge_client::Made::Branch(*commit),
+        ] {
+            let rendered = answer(&engine::CallAnswer::ForgeEffect {
+                entry: 1,
+                outcome: Some(skein_forge_client::Outcome::Made { made, found: false }),
+                deadline: skein_lib::Wall::EPOCH,
+            });
+            assert!(!rendered.error());
+            assert_eq!(rendered.text().strip_prefix(b"Forge effect 1: made "), Some(*digits));
+        }
+    }
+}
+
+#[test]
+fn pull_answers_name_open_closed_and_merged_state_and_the_merge_commit() {
+    use skein_forge::api;
+    for (state, merged, expected) in [
+        (api::State::Open, None, b"Pull 1 head work commit abcdef0123456789abcdef0123456789abcdef01 base main state open CI passed".as_slice()),
+        (api::State::Closed, None, b"Pull 1 head work commit abcdef0123456789abcdef0123456789abcdef01 base main state closed CI passed".as_slice()),
+        (api::State::Closed, Some([0xab; 32]), b"Pull 1 head work commit abcdef0123456789abcdef0123456789abcdef01 base main state closed merged commit abababababababababababababababababababababababababababababababab CI passed".as_slice()),
+    ] {
+        let rendered = answer(&engine::CallAnswer::ForgeRead(Box::new(Ok(pull_answer(state, SHA1_HEAD, merged)))));
+        assert!(!rendered.error());
+        assert_eq!(rendered.text(), expected);
+    }
+}
+
 #[test]
 fn a_charter_resumes_when_its_policy_does_and_turns_are_kept() {
     let mut assignment = assignment();
