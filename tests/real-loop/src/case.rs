@@ -1124,7 +1124,9 @@ pub const CAP_A5: u64 = 4;
 pub const CAP_REVISION: u64 = 1;
 pub const CAP_HOLD_REVISION: u64 = 1;
 pub const CAP_RELEASE_DECISION: u64 = 2;
-// Provisional cap while measuring A1's making through a5's begin.
+// A1 making to a5 begin: 10 isolated trials max 99,528,732 ns;
+// 3 concurrent fuzzy suites max 113,037,615 ns (3 serial suites: 99,921,661 ns).
+// Twice the largest, 226,075,230 ns, rounded up to whole seconds (at least 1): 1 s.
 pub const CAP_SECONDS: u64 = 1;
 pub const CAP_PERSON: &str = "@case_cap_director Delegate A to own M1 and decide its cap without asking me.";
 pub const CAP_SPLIT: &str = "What has landed is M1; a5's fix opens M2. Report the split once a5 has ended.";
