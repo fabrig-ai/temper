@@ -272,7 +272,7 @@ fn live_task_waits_for_the_next_document_then_reopens_the_panel() {
     assert_eq!(root.answer(call).unwrap().status, 0);
 }
 #[test]
-fn unmet_final_panel_exits_three_and_no_change_result_exits_two() {
+fn an_unmet_final_panel_or_a_task_without_a_change_keeps_its_last_panel() {
     for change_result in [false, true] {
         let mut root = f::signed_in(f::PARTY);
         let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "ci:passed", "--json"]);
@@ -283,11 +283,11 @@ fn unmet_final_panel_exits_three_and_no_change_result_exits_two() {
             deliver(&mut root, panel(landed()));
         }
         let answer = root.answer(call).unwrap();
-        assert_eq!(answer.status, if change_result { 3 } else { 2 });
+        assert_eq!(answer.status, 3);
         if change_result {
             contains(&answer.stdout, br#""met":false,"why":"ended"#);
         } else {
-            contains(&answer.stderr, b"no change panel for task 2");
+            contains(&answer.stdout, br#""step":"checking"#);
         }
     }
 }
@@ -340,4 +340,53 @@ fn a_held_wait_and_a_wait_without_a_condition_use_the_panel_facts() {
     assert!(root.answer(call).is_none(), "repeated digest is no change");
     deliver(&mut root, panel(w::Step::Gating));
     assert_eq!(root.answer(call).unwrap().status, 0);
+}
+
+fn cancelled() -> c::Task {
+    let mut task = task(true, false);
+    task.chip.phase = c::Phase::Cancelled;
+    task
+}
+#[test]
+fn a_change_wait_follows_cancelled_and_failed_tasks_beside_the_live_panel() {
+    for (phase, why) in [(c::Phase::Cancelled, b"ended: cancelled".as_slice()), (c::Phase::Failed, b"ended: failed")] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let words = f::extended(
+                &["wait", "change", "2", "--project", "1", "--until", "landed"],
+                if json { &["--json"] } else { &[] },
+            );
+            let call = root.submit(words.as_slice());
+            deliver(&mut root, panel(w::Step::Producing));
+            assert!(root.answer(call).is_none());
+            let subject = client::Watchable::Jig(c::Subject::Task { task: 2 });
+            let token = root.watch_token(&subject);
+            let mut task = cancelled();
+            task.chip.phase = phase;
+            root.pending_reads.push(call);
+            root.client(client::Event::Up {
+                up: client::Up::Watched {
+                    watch: token,
+                    event: c::WatchEvent::Delivered(c::Delivery::Task(Box::new(task.clone()))),
+                },
+            });
+            root.serve(call, c::ReadResult::Value(c::ReadValue::Task(Box::new(task))));
+            let answer = root.answer(call).expect("task end answers without a panel end or timeout");
+            assert_eq!(answer.status, 3);
+            contains(&answer.stdout, why);
+            contains(&answer.stdout, b"producing");
+            contains(&answer.stdout, b"digest");
+            assert_eq!(root.watches.len(), 1);
+        }
+    }
+}
+#[test]
+fn a_cancelled_task_with_no_panel_exits_two() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "landed"]);
+    end_panel(&mut root, call, c::WatchEnd::Unknown);
+    root.serve(call, c::ReadResult::Value(c::ReadValue::Task(Box::new(cancelled()))));
+    let answer = root.answer(call).unwrap();
+    assert_eq!(answer.status, 2);
+    contains(&answer.stderr, b"no change panel for task 2");
 }

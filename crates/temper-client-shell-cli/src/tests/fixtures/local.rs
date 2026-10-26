@@ -1,7 +1,6 @@
 use super::*;
 use jig_client::Record;
 pub const ACT_WITH_STREAM: u32 = 2; // Both the request and stream predecessor survive a deadline.
-pub const ONE_REQUEST: usize = 1; // A restart must resend the original request without adding another.
 const PENDING_PARTY: u64 = 73;
 pub fn pending(unread: bool, stream: bool, json: bool) -> Frame {
     let mut records = vec![recovery::record(PENDING_PARTY)];

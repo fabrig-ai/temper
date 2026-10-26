@@ -11,6 +11,7 @@ mod forges;
 pub mod jig;
 pub mod key;
 pub mod limits;
+pub mod recovery;
 pub mod root;
 pub mod table;
 #[cfg(test)]
