@@ -1480,6 +1480,43 @@ fn an_unsent_spawn_is_withdrawn_at_the_first_stop() {
     assert_eq!(rig.machine.outcome(), Some(Outcome::Stopped));
 }
 
+#[test]
+fn an_owned_forge_starting_with_the_box_announces_its_hands_only_after_readiness() {
+    use super::fixtures::{step, take_facts};
+    use crate::{layout, machine::Machine, terminal::Fact};
+    use skein_lib::{Queue, Time};
+    use temper_forge_setup::{Group, Kind, Stage, Steps};
+    for restored in [false, true] {
+        let mut forge = step(b"forge", Kind::Long).with_ready(([127, 0, 0, 1], 3000).into());
+        forge.set_started_notice(b"owned: started\nowned: api http://127.0.0.1:3000/api/v1\n".as_slice().into());
+        let steps = if restored {
+            Steps {
+                always: Box::new([]),
+                asked: Box::new([Group {
+                    forge: 37,
+                    label: b"owned".as_slice().into(),
+                    recorded: true,
+                    before: 0,
+                    steps: Box::new([(Stage::Run, forge)]),
+                }]),
+            }
+        } else {
+            Steps { always: Box::new([forge]), asked: Box::new([]) }
+        };
+        let placed = layout::flatten(steps);
+        let mut machine = Machine::new(&limits::small(), &placed).unwrap();
+        let mut out = Queue::with_capacity(machine.max_out());
+        machine.start(Time::ZERO, &[37], &mut out);
+        take_facts(&mut out);
+        machine.input(Time::ZERO, Input::Started { step: 0 }, &mut out);
+        assert!(take_facts(&mut out).is_empty());
+        machine.input(Time::ZERO, Input::Ready { step: 0 }, &mut out);
+        assert_eq!(take_facts(&mut out).as_ref(), &[Fact::Started { step: 0 }]);
+        machine.input(Time::ZERO, Input::Ready { step: 0 }, &mut out);
+        assert!(take_facts(&mut out).is_empty(), "readiness is announced once");
+    }
+}
+
 fn stopping_forgejo_spawn() -> Rig {
     let mut rig = Rig::new(&limits::small());
     rig.effects();

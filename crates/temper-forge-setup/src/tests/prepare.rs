@@ -48,6 +48,33 @@ fn person(runner: bool) -> Drive {
     assert_eq!(drive.send(Event::Done), run(Command::CreatePerson));
     drive
 }
+fn headers(drive: &mut Drive, files: &[File]) -> Request {
+    let mut request = drive.send(Event::Done);
+    for file in files {
+        assert_eq!(request, Request::Draw);
+        let (name, value) = if *file == File::PersonReadHeader {
+            (b"person-read-0707070707070707".as_slice(), b"read-token".as_slice())
+        } else {
+            (b"person-write-0707070707070707".as_slice(), b"write-token".as_slice())
+        };
+        assert_eq!(
+            drive.send(Event::Drew(fixtures::draw(7))),
+            Request::PersonToken {
+                file: *file,
+                spec: spec::person_token(&fixtures::owned(), &fixtures::place(), name, *file),
+            }
+        );
+        assert_eq!(
+            drive.send(fixtures::ran(value)),
+            Request::Write {
+                file: *file,
+                contents: Secret::new(crate::check::joined(&[b"Authorization: token ", value, b"\n"])),
+            }
+        );
+        request = drive.send(Event::Done);
+    }
+    request
+}
 fn later(admin_token: bool) -> Drive {
     let mut drive = Drive::new(fixtures::owned());
     let found = Found { admin_token, ..fixtures::later() };
@@ -100,7 +127,7 @@ fn a_first_preparation_runs_its_commands_in_order() {
         Request::Write { file: File::PersonPassword, contents: Secret::new(b"person-password".as_slice().into()) }
     );
     assert_eq!(
-        drive.send(Event::Done),
+        headers(&mut drive, &[File::PersonReadHeader, File::PersonWriteHeader]),
         Request::Write {
             file: File::RunnerSecret,
             contents: Secret::new(b"0404040404040404040404040404040404040404".as_slice().into())
@@ -130,7 +157,11 @@ fn a_preparation_records_its_start_and_end() {
     let Request::Write { file: File::PersonPassword, .. } = drive.send(fixtures::person_created()) else {
         panic!("password")
     };
-    let Request::Write { file: File::State, contents } = drive.send(Event::Done) else { panic!("record last") };
+    let Request::Write { file: File::State, contents } =
+        headers(&mut drive, &[File::PersonReadHeader, File::PersonWriteHeader])
+    else {
+        panic!("record last")
+    };
     assert!(state::decode(contents.expose()).unwrap().prepared);
     assert_eq!(drive.send(Event::Done), Request::End(Ok(())));
 }
@@ -204,9 +235,9 @@ fn forgejos_files_with_no_state_are_refused() {
 fn a_failed_command_names_its_status_and_none_of_the_secrets() {
     let mut drive = person(true);
     drive.send(fixtures::person_created());
+    headers(&mut drive, &[File::PersonReadHeader, File::PersonWriteHeader]);
     drive.send(Event::Done);
-    drive.send(Event::Done);
-    let output = b"0000000000000000000000000000000000000000000000000000000000000000 0101010101010101010101010101010101010101010101010101010101010101 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI 0404040404040404040404040404040404040404 admin-token person-password";
+    let output = b"0000000000000000000000000000000000000000000000000000000000000000 0101010101010101010101010101010101010101010101010101010101010101 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI 0404040404040404040404040404040404040404 admin-token person-password read-token write-token";
     assert_eq!(
         drive.send(Event::Ran(Ran {
             exit: Exit::Signal(9),
@@ -216,7 +247,9 @@ fn a_failed_command_names_its_status_and_none_of_the_secrets() {
         Request::End(Err(Failure::Command {
             command: Command::Register,
             exit: Exit::Signal(9),
-            tail: b"[redacted] [redacted] [redacted] [redacted] [redacted] [redacted] failed".as_slice().into()
+            tail: b"[redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] failed"
+                .as_slice()
+                .into()
         }))
     );
 }
@@ -234,6 +267,59 @@ fn secrets_across_the_two_streams_are_masked_before_the_tail_is_cut() {
             command: Command::CreatePerson,
             exit: Exit::Code(1),
             tail: b"[redacted]".as_slice().into()
+        }))
+    );
+}
+
+#[test]
+fn each_missing_person_header_is_remade_without_touching_the_other() {
+    for (present, file) in [([false, true], File::PersonReadHeader), ([true, false], File::PersonWriteHeader)] {
+        let mut drive = Drive::new(fixtures::owned());
+        assert_eq!(drive.versions(Found { person_headers: present, ..fixtures::later() }, true), Request::Layout);
+        let Request::Write { file: File::AppIni, .. } = drive.send(Event::Done) else { panic!("settings") };
+        assert_eq!(headers(&mut drive, &[file]), Request::End(Ok(())));
+    }
+}
+#[test]
+fn a_preparation_from_before_person_headers_makes_both() {
+    let mut drive = Drive::new(fixtures::owned());
+    assert_eq!(drive.versions(Found { person_headers: [false; 2], ..fixtures::later() }, true), Request::Layout);
+    drive.send(Event::Done);
+    assert_eq!(headers(&mut drive, &[File::PersonReadHeader, File::PersonWriteHeader]), Request::End(Ok(())));
+}
+
+#[test]
+fn a_person_creation_failure_masks_the_password_it_just_printed() {
+    let mut drive = person(false);
+    let Request::End(Err(Failure::Command { tail, .. })) = drive.send(Event::Ran(Ran {
+        exit: Exit::Code(1),
+        stdout: Secret::new(b"generated random password is 'new-private-password'\n".as_slice().into()),
+        stderr: Secret::new(b"failed with new-private-password".as_slice().into()),
+    })) else {
+        panic!("creation failure")
+    };
+    assert_eq!(tail.as_ref(), b"generated random password is '[redacted]'\nfailed with [redacted]");
+}
+
+#[test]
+fn a_person_token_failure_names_the_header_and_masks_the_token() {
+    let mut drive = Drive::new(fixtures::owned());
+    drive.versions(Found { person_headers: [false, true], ..fixtures::later() }, true);
+    drive.send(Event::Done);
+    assert_eq!(drive.send(Event::Done), Request::Draw);
+    let Request::PersonToken { file: File::PersonReadHeader, .. } = drive.send(Event::Drew(fixtures::draw(7))) else {
+        panic!("read token")
+    };
+    assert_eq!(
+        drive.send(Event::Ran(Ran {
+            exit: Exit::Code(1),
+            stdout: Secret::new(b"new-token\n".as_slice().into()),
+            stderr: Secret::new(b"failed with new-token".as_slice().into()),
+        })),
+        Request::End(Err(Failure::PersonToken {
+            file: File::PersonReadHeader,
+            exit: Exit::Code(1),
+            tail: b"[redacted]\nfailed with [redacted]".as_slice().into()
         }))
     );
 }

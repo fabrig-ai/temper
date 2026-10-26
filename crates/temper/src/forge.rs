@@ -65,6 +65,14 @@ fn failure(why: prepare::Failed, place: &Place) -> String {
             Failure::Token { exit, tail } => {
                 format!("no token for temper-admin: ended with status {}: {}", status(exit), text(&tail))
             }
+            Failure::PersonToken { file, exit, tail } => {
+                format!(
+                    "{}: no person token: ended with status {}: {}",
+                    text(&place.path(file)),
+                    status(exit),
+                    text(&tail)
+                )
+            }
             Failure::Unread { command } => format!("{command:?} printed no required value"),
             Failure::State(why) => format!("{}: state cannot be decoded: {why:?}", text(&place.directory)),
             Failure::Unrecorded => format!("{}: Forgejo files have no preparation state", text(&place.directory)),
