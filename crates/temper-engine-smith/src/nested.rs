@@ -13,6 +13,16 @@ pub(crate) fn delegate(value: &Value) -> Result<engine::Delegate, Problem> {
     let spec = spec(value.required(b"spec")?)?;
     let contract = contract(value.required(b"contract")?)?;
     let authority = authority(value.required(b"authority")?)?;
+    let deadline = match value.field(b"deadline_seconds")? {
+        Some(value) => {
+            let seconds = value.number()?;
+            if seconds == 0 || seconds > u64::MAX / 1_000_000_000 || authority.budget.deadline.is_some() {
+                return Err(Problem::Range);
+            }
+            tasks::Deadline::Span(Duration::from_secs(seconds))
+        }
+        None => tasks::Deadline::Named,
+    };
     let symbolic_grants = match value.field(b"symbolic_grants")? {
         Some(grants) => grants_list(grants)?,
         None => Box::new([]),
@@ -40,6 +50,7 @@ pub(crate) fn delegate(value: &Value) -> Result<engine::Delegate, Problem> {
         None => tasks::WakePolicy::DEFAULT,
     };
     Ok(engine::Delegate {
+        deadline,
         executor,
         spec,
         contract,

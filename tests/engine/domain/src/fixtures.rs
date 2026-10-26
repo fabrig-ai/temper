@@ -35,6 +35,7 @@ pub fn adoption(forge: u16) -> forge::Adoption {
 #[must_use]
 pub fn report_delegate(words: &[u8], dependencies: Box<[engine::Dependency]>) -> engine::Delegate {
     engine::Delegate {
+        deadline: tasks::Deadline::Named,
         tracked: None,
         label: 0,
         flags: tasks::Flags::PLAIN,

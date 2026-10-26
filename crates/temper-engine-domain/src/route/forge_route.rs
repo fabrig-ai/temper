@@ -1821,6 +1821,7 @@ pub(crate) fn chat_change(
     authority.notes = tasks::Scopes(0);
     authority.note_resources = Box::new([]);
     Ok(super::Delegate {
+        deadline: tasks::Deadline::Named,
         executor: tasks::Executor::Procedure { connector: domain.config.forge_connector, code: 2 },
         spec: tasks::Spec {
             words,
@@ -1953,6 +1954,7 @@ fn change_delegate(
         }
     };
     Some(super::Delegate {
+        deadline: tasks::Deadline::Named,
         tracked: None,
         label: 0,
         flags: tasks::Flags::PLAIN,

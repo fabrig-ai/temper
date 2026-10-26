@@ -385,6 +385,48 @@ fn the_declared_deadline_example_decodes_the_whole_authority() {
     assert!(amendment.tracked.is_none() && amendment.instructions.is_none());
 }
 
+const DELEGATE_MEMBER: &str = r#""executor":{"kind":"agent","charter":1},"spec":{"words":"x"},"contract":{"kind":"report","words":128},"authority":{"tools":1,"grants":[],"delegation":{"kinds":[],"tasks":0,"depth":0},"budget":{"spend":40},"notes":0}"#;
+
+#[test]
+fn a_delegate_deadline_in_seconds_is_a_span() {
+    for (field, expected) in [
+        ("", tasks::Deadline::Named),
+        (r#", "deadline_seconds":14400"#, tasks::Deadline::Span(Duration::from_secs(14_400))),
+    ] {
+        let input = format!("{{\"batch\":[{{{DELEGATE_MEMBER}{field}}}]}}");
+        let engine::Tool::Delegate { batch } = decoded(b"delegate", input.as_bytes()).expect("delegate deadline").tool
+        else {
+            panic!("delegate tool")
+        };
+        assert_eq!(batch[0].deadline, expected);
+        assert_eq!(batch[0].authority.budget.deadline, None);
+    }
+}
+
+#[test]
+fn a_delegate_names_one_deadline() {
+    const MAX_SECONDS: u64 = u64::MAX / 1_000_000_000;
+    for (seconds, wall, accepted) in
+        [(1, true, false), (0, false, false), (MAX_SECONDS + 1, false, false), (MAX_SECONDS, false, true)]
+    {
+        let member = if wall {
+            DELEGATE_MEMBER.replace(r#""spend":40"#, r#""spend":40,"deadline":20000000000"#)
+        } else {
+            DELEGATE_MEMBER.into()
+        };
+        let input = format!("{{\"batch\":[{{{member},\"deadline_seconds\":{seconds}}}]}}");
+        let result = decoded(b"delegate", input.as_bytes());
+        if accepted {
+            let engine::Tool::Delegate { batch } = result.expect("largest whole second").tool else {
+                panic!("delegate tool")
+            };
+            assert_eq!(batch[0].deadline, tasks::Deadline::Span(Duration::from_secs(MAX_SECONDS)));
+        } else {
+            assert_eq!(result, Err(Problem::Range), "seconds={seconds}, wall={wall}");
+        }
+    }
+}
+
 #[test]
 fn proposed_amendments_share_controls_but_still_require_a_revision() {
     let engine::Tool::Propose { action: engine::ProposedAction::Amend { revision, amendment, .. }, .. } =

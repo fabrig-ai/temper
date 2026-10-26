@@ -136,7 +136,7 @@ a chat that names none, runs with no workspace (worker.md, 4.1).
 
 | Tool | Family | What it does | What it names, as the run saw it | What it answers |
 |---|---|---|---|---|
-| `delegate` | delegate | makes a batch of direct delegates, each with what a party's `Create` names (jig's `domain/tasks.md`, section 4), tracked as a goal at a priority (`tracked`, the lower first) or untracked | | their numbers, their specs' revisions, and what a budget given `AsAllowed` was given; refused, and why |
+| `delegate` | delegate | makes a batch of direct delegates, each with what a party's `Create` names (a deadline as seconds after it is made, or none, to end with its creator's) (jig's `domain/tasks.md`, section 4), tracked as a goal at a priority (`tracked`, the lower first) or untracked | | their numbers, their specs' revisions, and what a budget given `AsAllowed` was given; refused, and why |
 | `change` | delegate | one change to one of the project's repositories, landed (forge.md, section 8): the run gives the words and, where the project has more than one repository it may write, which as `owner/name`; the root fills in the rest, as 4.3.1 says, and decides it as a `delegate` | | its task's number, as `delegate`'s; refused, and why: naming the project's repositories where none fits |
 | `message` | message | words, a question, or the answer to one, to a task it references (jig's `domain/tasks.md`, 8.5) | the question, for an answer | sent, with the message's number; refused: no reference, the inbox full, too large for a run to read |
 | `introduce` | message | gives two tasks it references a reference to each other | | done; refused, and why |

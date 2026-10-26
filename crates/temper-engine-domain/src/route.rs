@@ -407,7 +407,7 @@ pub(crate) fn delegate_call(
     validated: bool,
     stubs: Box<[tasks::Stub]>,
 ) {
-    if let Err(part) = domain.core.delegate_preflight(&env.limits.tasks, key, &batch) {
+    if let Err(part) = domain.core.delegate_preflight(&env.limits.tasks, key, &batch, env.wall) {
         domain.work.push(Work::Core(core::Event::NamedAnswer { to, key, part }));
         return;
     }
