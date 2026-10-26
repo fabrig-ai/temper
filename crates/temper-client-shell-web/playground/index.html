@@ -20,6 +20,7 @@
         <option value="100">100×</option>
       </select></label>
       <button id="playground-reset" type="button">Reset</button>
+      <button id="playground-log" type="button">Download the session's log</button>
       <label>Story <select id="playground-story"><option value="a">A</option></select></label>
       <span>World time: <time id="playground-time"></time></span>
       <span>temper <span id="playground-version"></span></span>
@@ -31,6 +32,7 @@
   <section id="playground-failure" class="playground-message" role="alert" hidden>
     <h1>The playground failed.</h1>
     <p id="playground-failure-words"></p>
+    <div id="playground-failure-log"></div>
     <a href="/">Start over</a>
   </section>
   <div id="app"></div>

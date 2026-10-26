@@ -19,6 +19,9 @@ playground = [
     "web-sys/HtmlSelectElement",
     "web-sys/HtmlScriptElement",
     "web-sys/Event",
+    "web-sys/Blob",
+    "web-sys/BlobPropertyBag",
+    "web-sys/HtmlAnchorElement",
 ]
 record = [
     "dep:js-sys",

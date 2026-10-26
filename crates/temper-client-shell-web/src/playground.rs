@@ -4,7 +4,7 @@ use super::{Inbox, Platform, Report as ShellReport, Shell, limits, platform, sig
 use skein_lib::Wall;
 use skein_ui_web::{
     bridge::Start,
-    platform::worker::{Heard, Speed},
+    platform::worker::{Heard, Limits, Speed},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -12,11 +12,15 @@ use std::{
 };
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
+// The session log's bound: past 4 MiB, the log says it was cut.
+const LOG_BYTES: u32 = 4 * 1024 * 1024;
+
 thread_local! {
     // Independent of the shell and bridge borrows, including during a panic.
     static INTERVAL: Cell<Option<i32>> = const { Cell::new(None) };
     static PANICKED: Cell<bool> = const { Cell::new(false) };
     static STOP: RefCell<Option<platform::Stop>> = const { RefCell::new(None) };
+    static LOG: RefCell<Option<(String, platform::Log)>> = const { RefCell::new(None) };
 }
 
 pub(super) enum Report {
@@ -25,6 +29,7 @@ pub(super) enum Report {
     Speed(u32),
     Reset,
     Story(String),
+    DownloadLog,
 }
 
 pub(super) fn start() {
@@ -36,7 +41,6 @@ pub(super) fn start() {
     let story = query.get("story").unwrap_or_else(|| "a".to_owned());
     let inbox = Inbox::new();
     let facts = platform::facts();
-    let frame = Frame::new(&story, &inbox);
     let script = document
         .query_selector("script[type='module'][src]")
         .expect("starter selector")
@@ -44,16 +48,19 @@ pub(super) fn start() {
         .dyn_into::<web_sys::HtmlScriptElement>()
         .expect("script element");
     let directory = web_sys::Url::new_with_base(".", &script.src()).expect("starter directory").href();
+    let build = directory.trim_end_matches('/').rsplit('/').next().expect("bundle digest").to_owned();
+    let frame = Frame::new(&story, build.clone(), &inbox);
     let platform = Platform::new(
         &directory,
         Start { story: story.into_bytes().into(), seed: facts.seed, start: facts.wall },
-        limits::EXCHANGES + 1,
+        Limits { exchanges: limits::EXCHANGES + 1, log: LOG_BYTES },
         Speed(1),
         Rc::clone(&inbox),
         ShellReport::World,
         || ShellReport::Due,
     );
     STOP.with_borrow_mut(|stop| *stop = Some(platform.stop()));
+    LOG.with_borrow_mut(|log| *log = Some((build, platform.log_handle())));
     let mut starter = Starter { starting: Some(Starting { platform, frame, facts }), shell: None };
     // Worker::new can have queued a failure already. The stop handle is kept
     // before installing the turn, which takes those reports synchronously.
@@ -127,6 +134,7 @@ fn printed_link(line: &[u8]) -> Option<String> {
 
 pub(super) struct Frame {
     story: String,
+    build: String,
     speed: u32,
     paused: bool,
     ended: bool,
@@ -135,7 +143,7 @@ pub(super) struct Frame {
     _listeners: Vec<Closure<dyn FnMut(web_sys::Event)>>,
 }
 impl Frame {
-    fn new(story: &str, inbox: &Rc<Inbox<ShellReport>>) -> Self {
+    fn new(story: &str, build: String, inbox: &Rc<Inbox<ShellReport>>) -> Self {
         element("playground-version").set_text_content(Some(env!("CARGO_PKG_VERSION")));
         let select = element("playground-story").dyn_into::<web_sys::HtmlSelectElement>().expect("story select");
         if story != "a" {
@@ -154,6 +162,7 @@ impl Frame {
         for (id, event, wrap) in [
             ("playground-pause", "click", (|_: web_sys::Event| Report::Pause) as fn(web_sys::Event) -> Report),
             ("playground-reset", "click", |_: web_sys::Event| Report::Reset),
+            ("playground-log", "click", |_: web_sys::Event| Report::DownloadLog),
             ("playground-speed", "change", |event: web_sys::Event| {
                 Report::Speed(select_value(&event).parse().expect("offered speed"))
             }),
@@ -183,6 +192,7 @@ impl Frame {
         INTERVAL.set(Some(interval));
         Self {
             story: story.to_owned(),
+            build,
             speed: 1,
             paused: false,
             ended: false,
@@ -209,6 +219,10 @@ impl Frame {
 
     pub(super) fn report(&mut self, report: Report, platform: &Platform) {
         match report {
+            Report::DownloadLog => {
+                let blob = log_blob(&platform.log()).expect("session log blob");
+                download(&blob, &log_name(&self.build)).expect("session log download");
+            }
             Report::Reset => reload(&self.story, platform),
             Report::Story(story) => reload(&story, platform),
             Report::Pause if !self.ended => {
@@ -238,7 +252,7 @@ impl Frame {
             Heard::Failed { words } => {
                 platform.end();
                 self.end();
-                show_failure(&String::from_utf8_lossy(&words));
+                show_failure(&String::from_utf8_lossy(&words), Some(&platform.log()), &self.build);
             }
             Heard::Nothing | Heard::Line(_) | Heard::Stamp(_) | Heard::Report(_) => {}
         }
@@ -284,16 +298,29 @@ fn install_panic_hook() {
         {
             window.clear_interval_with_handle(interval);
         }
-        show_failure(&panic.to_string());
+        let words = panic.to_string();
+        LOG.with_borrow(|log| {
+            if let Some((build, log)) = log {
+                let file = log.file();
+                show_failure(&words, file.as_deref(), build);
+            } else {
+                show_failure(&words, None, "");
+            }
+        });
         fail_stop(panic);
     }));
 }
-fn show_failure(words: &str) {
+fn show_failure(words: &str, file: Option<&[u8]>, build: &str) {
     // The panic hook must not panic again, even if startup failed before it
     // found the page's elements. Failure words are text, never markup.
     if let Some(window) = web_sys::window() {
         window.set_onbeforeunload(None);
         if let Some(document) = window.document() {
+            if PANICKED.get()
+                && let Some(button) = document.get_element_by_id("playground-log")
+            {
+                let _disabled = button.set_attribute("disabled", "");
+            }
             for id in ["app", "playground-loading"] {
                 if let Some(element) = document.get_element_by_id(id) {
                     let _hidden = element.set_attribute("hidden", "");
@@ -302,9 +329,66 @@ fn show_failure(words: &str) {
             if let Some(element) = document.get_element_by_id("playground-failure-words") {
                 element.set_text_content(Some(words));
             }
+            if let Some(holder) = document.get_element_by_id("playground-failure-log") {
+                holder.set_text_content(None);
+                if let Some(file) = file {
+                    let _offered = offer_failure_log(&document, &holder, file, build);
+                }
+            }
             if let Some(element) = document.get_element_by_id("playground-failure") {
                 let _visible = element.remove_attribute("hidden");
             }
         }
     }
+}
+
+fn log_name(build: &str) -> String {
+    format!("temper-playground-{build}.log")
+}
+
+fn log_blob(bytes: &[u8]) -> Result<web_sys::Blob, JsValue> {
+    let parts = js_sys::Array::new();
+    parts.push(&js_sys::Uint8Array::from(bytes));
+    let options = web_sys::BlobPropertyBag::new();
+    options.set_type("application/octet-stream");
+    web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
+}
+
+fn offer_failure_log(
+    document: &web_sys::Document,
+    holder: &web_sys::Element,
+    file: &[u8],
+    build: &str,
+) -> Result<(), JsValue> {
+    let blob = log_blob(file)?;
+    let name = log_name(build);
+    let button = document.create_element("button")?;
+    button.set_attribute("type", "button")?;
+    button.set_text_content(Some("Download the session's log"));
+    // A panic leaves the interrupted inbox turn borrowed. This separate
+    // listener owns a snapshot and works without the inbox or shell.
+    let listener = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+        let _downloaded = download(&blob, &name);
+    });
+    button.add_event_listener_with_callback("click", listener.as_ref().unchecked_ref())?;
+    holder.append_child(&button)?;
+    // One failure page per visit; the document owns this listener's lifetime.
+    listener.forget();
+    Ok(())
+}
+
+fn download(blob: &web_sys::Blob, name: &str) -> Result<(), JsValue> {
+    let window = web_sys::window().expect("window");
+    let document = window.document().expect("document");
+    let anchor = document.create_element("a")?.dyn_into::<web_sys::HtmlAnchorElement>()?;
+    let url = web_sys::Url::create_object_url_with_blob(blob)?;
+    anchor.set_href(&url);
+    anchor.set_download(name);
+    anchor.click();
+    // Let the browser start the download before releasing this click's URL.
+    let revoke = Closure::once_into_js(move || {
+        let _revoked = web_sys::Url::revoke_object_url(&url);
+    });
+    window.set_timeout_with_callback_and_timeout_and_arguments_0(revoke.unchecked_ref(), 1_000)?;
+    Ok(())
 }
