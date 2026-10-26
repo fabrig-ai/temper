@@ -85,6 +85,7 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
         reads: core.load_slots.checked_add(core.tasks.tasks)?,
         orphan_erases: profile.orphan_erases,
     };
+    check_read_page(&limits)?;
     protocol::sizes::whole(max_whole(&limits)).ok()?;
     Some(limits)
 }
@@ -500,6 +501,12 @@ fn max_read(limits: &protocol::Limits) -> u32 {
 fn max_whole(limits: &protocol::Limits) -> u32 {
     max_read(limits).max(protocol::sizes::MANIFEST_BYTES)
 }
+fn check_read_page(limits: &protocol::Limits) -> Option<()> {
+    if max_read(limits) < limits.store.page.bytes {
+        return None;
+    }
+    Some(())
+}
 fn driver(limits: &protocol::Limits, capacity: u32) -> Driver {
     Driver {
         io: FileIo::with_whole_limit(handles(limits), max_read(limits), 32, max_whole(limits), limits.store.deadline),
@@ -548,7 +555,34 @@ pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) 
 
 #[cfg(test)]
 mod sizing_tests {
-    use super::{FileIo, handles, max_read, max_whole, page_bytes, protocol};
+    use super::{FileIo, check_read_page, handles, max_read, max_whole, page_bytes, protocol};
+
+    #[test]
+    fn drivers_read_a_whole_page_in_every_admitted_store() {
+        let (application, _, profile) = crate::tests::fixtures::store_limits();
+        let limits = super::limits(&application, &application.forge, &profile).unwrap();
+        assert!(max_read(&limits) >= limits.store.page.bytes);
+    }
+
+    #[test]
+    fn a_store_whose_reads_are_below_its_page_is_refused() {
+        let (_, _, mut limits) = crate::tests::fixtures::store_limits();
+        let page = limits.store.page.bytes;
+        let below = page.checked_sub(1).unwrap();
+        // Synthetic fields check admission without constructing an invalid KV store.
+        limits.store.chunk = below;
+        limits.core.resume_bytes = below;
+        limits.core.load_bytes = u64::from(below);
+        assert_eq!(max_read(&limits), below);
+        assert_eq!(check_read_page(&limits), None);
+        for (chunk, resume, load) in [(page, below, below), (below, page, below), (below, below, page)] {
+            limits.store.chunk = chunk;
+            limits.core.resume_bytes = resume;
+            limits.core.load_bytes = u64::from(load);
+            assert_eq!(max_read(&limits), page);
+            assert_eq!(check_read_page(&limits), Some(()));
+        }
+    }
 
     #[test]
     fn drivers_hold_the_whole_manifest_when_reads_are_smaller() {
