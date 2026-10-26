@@ -1,4 +1,5 @@
-use temper_fake_git_hosted::{Refusal, check, fixtures};
+use temper_fake_git_fixtures as fixtures;
+use temper_fake_git_hosted::{Refusal, check};
 use temper_worker_protocol_git::invocation::{self, Command, Source};
 #[test]
 fn an_argument_vector_the_builders_did_not_make_exits_129() {

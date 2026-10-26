@@ -278,7 +278,7 @@ pub(crate) struct State {
 }
 impl State {
     pub(crate) fn new(fixture: Fixture) -> (Self, Peer) {
-        let mut config = temper_fake_git_hosted::fixtures::CONFIG;
+        let mut config = temper_fake_git_fixtures::CONFIG;
         (fixture.configure_domain)(&mut config);
         // These smoke repositories have two small files each. The GitHub
         // layer pads every API response to its admitted wire capacity, so

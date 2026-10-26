@@ -14,7 +14,8 @@ members = [
     "tests/one-process",
     "crates/temper-playground",
     "crates/temper-fake-git",
-    "testing/temper-fake-git-hosted",
+    "crates/temper-fake-git-hosted",
+    "testing/temper-fake-git-fixtures",
     "testing/temper-github-app",
     "crates/temper",
     "crates/temper-client-bundle",
@@ -62,6 +63,7 @@ rust-version = "1.95"
 publish = false
 
 [workspace.dependencies]
+skein-fake-machine = { git = "https://github.com/fabrig-dev/skein.git" }
 temper-playground = { path = "crates/temper-playground" }
 temper-docs = { path = "crates/temper-docs" }
 rustls = { version = "=0.23.41", default-features = false, features = ["std", "ring", "tls12"] }
@@ -76,7 +78,8 @@ temper-init = { path = "crates/temper-init" }
 temper-client-bundle = { path = "crates/temper-client-bundle" }
 jig-boundary = { git = "https://github.com/fabrig-dev/jig.git" }
 temper-fake-git = { path = "crates/temper-fake-git" }
-temper-fake-git-hosted = { path = "testing/temper-fake-git-hosted" }
+temper-fake-git-hosted = { path = "crates/temper-fake-git-hosted" }
+temper-fake-git-fixtures = { path = "testing/temper-fake-git-fixtures" }
 skein-fake-peers = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-llm = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-llm-world = { git = "https://github.com/fabrig-dev/skein.git" }
@@ -159,6 +162,7 @@ skein-forge-client = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-forge = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-json = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-world = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-sim-world = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-fake-checkout = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-fake-llm-domain = { git = "https://github.com/fabrig-dev/skein.git" }
 smith-agent-world = { git = "https://github.com/fabrig-dev/smith.git" }

@@ -28,7 +28,13 @@ pub struct Settings {
 
 /// Each Io request ends with exactly one Done echoing its owner.
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant, reason = "bounded operation payloads remain inline and are counted in worst_case")]
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(
+        clippy::large_enum_variant,
+        reason = "bounded operation payloads remain inline and are counted in worst_case"
+    )
+)]
 pub enum Request {
     Io { owner: Token, op: git::Op, deadline: Time, identity: Option<Identity> },
     CancelIo { owner: Token },

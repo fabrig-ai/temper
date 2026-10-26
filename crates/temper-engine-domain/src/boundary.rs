@@ -172,7 +172,10 @@ pub enum Tool {
 
 /// Action a worker can submit for an authority holder's decision.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[expect(clippy::large_enum_variant, reason = "the worker boundary carries jig's bounded amendment whole")]
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(clippy::large_enum_variant, reason = "the worker boundary carries jig's bounded amendment whole")
+)]
 pub enum ProposedAction {
     Effect { repository: skein_forge::api::Repository, resource: forge::What, write: Box<skein_forge::api::Write> },
     Batch(Box<[Delegate]>),
@@ -231,6 +234,10 @@ pub enum SetupEnd {
 /// store answers are always taken (jig's `domain/root.md`, 3).
 /// The input union, with one variant for each typed peer.
 #[derive(Debug)]
+#[cfg_attr(
+    target_pointer_width = "32",
+    expect(clippy::large_enum_variant, reason = "bounded peer inputs stay inline in the root input queue")
+)]
 pub enum Event {
     /// Terminal of the protocol-owned plan named by `run`; temper-07 consumes it.
     Setup {
@@ -357,7 +364,13 @@ pub enum Fact {
 }
 
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant, reason = "decoded calls stay inline in the bounded input queue priced at startup")]
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(
+        clippy::large_enum_variant,
+        reason = "decoded calls stay inline in the bounded input queue priced at startup"
+    )
+)]
 pub enum WorkerInput {
     /// A worker channel's hello, record or loss.
     Link { channel: Token, link: Link },
@@ -700,7 +713,10 @@ pub(crate) struct PreparedWorkspace {
 
 /// Bodies the fleet names by token while it routes them (jig's `domain/hosts.md`, 6.4).
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant, reason = "bounded call ownership moves whole through the fleet handoff")]
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(clippy::large_enum_variant, reason = "bounded call ownership moves whole through the fleet handoff")
+)]
 pub(crate) enum Payload {
     /// The drain's answer to a relayed call.
     Busy,

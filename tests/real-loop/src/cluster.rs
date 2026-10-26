@@ -35,7 +35,7 @@ pub fn run_cluster(
     recipe: impl FnOnce() -> llm::Recipe,
     steps: impl FnOnce() -> Vec<calls::Step>,
 ) -> Cluster {
-    let git = temper_fake_git_hosted::fixtures::scenario().transport;
+    let git = temper_fake_git_fixtures::scenario().transport;
     crate::git::share(Some(git.clone()));
     run_with(workers, Some(git), |scratch| crate::Outcome::Checked(world::run_cluster(workers, scratch, recipe, steps)))
 }

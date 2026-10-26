@@ -50,17 +50,17 @@ pub fn spawn_of(command: &Command) -> Spawn {
     }
 }
 
-use crate::{Answer, Typed, answer, check, id::id};
+use skein_fake_checkout::{
+    Checkout,
+    git::{self as local, Remote, Tree},
+};
 use skein_fake_forge_domain::{self as domain, api};
 use skein_fake_peers::forge::Forge;
 use skein_lib::{Duration, List};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
-use temper_fake_checkout::{
-    Checkout,
-    git::{self as local, Remote, Tree},
-};
-/// The protocol world's synchronous forge configuration, shared by the worlds.
-pub const CONFIG: domain::Config = temper_worker_checkout_world::forge::CONFIG;
+use temper_fake_git::{Answer, Typed, answer, check, id::id};
+mod forge;
+pub use forge::{CONFIG, LIMITS};
 /// Each protocol or refusal case has its own equivalent checkout fixture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {

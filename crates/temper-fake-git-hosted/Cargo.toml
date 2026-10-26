@@ -1,0 +1,38 @@
+[package]
+name = "temper-fake-git-hosted"
+description = "Git invocations hosted on the world's files and fake forge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+temper-fake-git.workspace = true
+skein-io.workspace = true
+skein-sim-world.workspace = true
+
+[dev-dependencies]
+temper-fake-git-fixtures.workspace = true
+skein-lib.workspace = true
+skein-shell.workspace = true
+skein-fake-machine.workspace = true
+temper-worker-protocol-git.workspace = true
+temper-worker-domain-checkout.workspace = true
+temper-worker-protocol-git-world.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_panics_doc = "allow"
+wildcard_enum_match_arm = "deny"
+match_wildcard_for_single_variants = "deny"
+unwrap_used = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"
