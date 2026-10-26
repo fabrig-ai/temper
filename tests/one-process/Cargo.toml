@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+jig-domain-authority.workspace = true
 temper-client-shell-cli.workspace = true
 jig-domain-fleet.workspace = true
 jig-client.workspace = true

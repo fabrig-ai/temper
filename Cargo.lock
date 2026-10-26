@@ -2976,6 +2976,7 @@ dependencies = [
  "jig-client-shell-native",
  "jig-conformance",
  "jig-core-world",
+ "jig-domain-authority",
  "jig-domain-core",
  "jig-domain-fleet",
  "jig-domain-people",

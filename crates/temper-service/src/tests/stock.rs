@@ -174,5 +174,36 @@ fn the_transition_keeps_the_documents_own_defaults() {
     let engine = crate::startup::engine(&parsed, at, &config::Directories::working()).unwrap();
     assert_eq!(engine.defaults, config::Defaults::Document);
     assert_eq!(engine.charters[0].policy.turns, 9, "the document's edit survives the transition");
+    let mut own = crate::stock::defaults(&engine.llm);
+    own.charters[0].policy.turns = 1;
+    let own = crate::startup::engine_with(
+        &parsed,
+        at,
+        &config::Directories::working(),
+        &crate::stock::Given::Own(Box::new(own)),
+    )
+    .unwrap();
+    assert_eq!(own.charters[0].policy.turns, 9, "Document ignores Given::Own too");
     assert!(config::files(&engine).iter().any(|file| file.path.ends_with(b"charters/chat.txt")));
+}
+
+#[test]
+fn a_worlds_own_defaults_replace_the_stock_without_document_members() {
+    let bytes = generated();
+    let document =
+        config::document(&bytes, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 }).unwrap();
+    let at = config::read::Object::new(&document, 0).unwrap().member(&document, b"engine").unwrap();
+    let stock = crate::startup::engine(&document, at, &config::Directories::working()).unwrap();
+    let mut own = crate::stock::defaults(&stock.llm);
+    own.charters[0].policy.waiting = skein_lib::Duration::from_millis(1);
+    own.templates[0].flags.listed = true;
+    own.policies.get_mut(&1).unwrap().policy.period_spend = 41;
+    own.rules.maximum_run_spend = 2;
+    let given = crate::stock::Given::Own(Box::new(own));
+    let engine = crate::startup::engine_with(&document, at, &config::Directories::working(), &given).unwrap();
+    assert_eq!(stock.charters[0].policy.waiting, skein_lib::Duration::from_secs(10));
+    assert_eq!(engine.charters[0].policy.waiting, skein_lib::Duration::from_millis(1));
+    assert!(engine.templates[0].flags.listed);
+    assert_eq!(engine.policies.iter().find(|policy| policy.number == 1).unwrap().policy.period_spend, 41);
+    assert_eq!(engine.rules.maximum_run_spend, 2);
 }

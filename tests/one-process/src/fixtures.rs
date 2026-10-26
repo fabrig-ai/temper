@@ -134,10 +134,10 @@ pub(crate) fn document() -> Vec<u8> {
         "limits":{"profile":"small","overrides":{"checkout.name_bytes":256,"checkout.repositories":2,"checkout.message_bytes":4096,"forge.name_bytes":64,"forge.resources_per_task":2,"git_component.stdout_bytes":2048}},
         "workers":[{"root":"worker","git":"/usr/bin/git"}]});
     crate::stories::configure(&mut value);
+    for member in ["charters", "templates", "policies", "rules"] {
+        value["engine"].as_object_mut().expect("engine").remove(member);
+    }
     if crate::stories::uses_stock() {
-        for member in ["charters", "templates", "policies", "rules"] {
-            value["engine"].as_object_mut().expect("engine").remove(member);
-        }
         for project in value["engine"]["projects"].as_array_mut().expect("projects") {
             project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
             for role in project["policy"]["roles"].as_array_mut().expect("roles") {
@@ -172,7 +172,7 @@ pub(crate) fn files() -> temper_service::settings::Files {
     let mut entries = List::with_capacity(10);
     for source in [channel::files(false), channel::files(true)] {
         for (name, value) in source.entries.into_boxed() {
-            if crate::stories::uses_stock() && name.starts_with(b"charters/") {
+            if name.starts_with(b"charters/") {
                 continue;
             }
             let name = if name.as_ref() == b"agent.json" { b"/opt/temper/agent.json".as_slice().into() } else { name };
@@ -375,7 +375,13 @@ fn engine() -> jig_protocol_config::Engine {
     .expect("document");
     let mut object = jig_protocol_config::read::Object::new(&doc, 0).expect("object");
     let at = object.member(&doc, b"engine").expect("engine member");
-    temper_service::startup::engine(&doc, at, &jig_protocol_config::Directories::working()).expect("engine")
+    temper_service::startup::engine_with(
+        &doc,
+        at,
+        &jig_protocol_config::Directories::working(),
+        &crate::stories::given(&serde_json::from_slice(&bytes).expect("deployment JSON")),
+    )
+    .expect("engine")
 }
 fn jig_test_service_limits(overrides: &jig_protocol_config::Limits) -> jig_test_service::limits::Limits {
     jig_test_service::limits::for_profile(jig_protocol_config::Profile::Small, overrides)
