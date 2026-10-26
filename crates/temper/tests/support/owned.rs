@@ -69,10 +69,18 @@ pub fn prepare(directory: &Path, forge: u16) -> Output {
 }
 #[must_use]
 pub fn files(directory: &Path) -> Vec<PathBuf> {
-    ["state", "admin_token", "person_password", "runner/secret", "runner/config.yaml"]
-        .iter()
-        .map(|name| directory.join("forge-1").join(name))
-        .collect()
+    [
+        "state",
+        "admin_token",
+        "person_password",
+        "person_read.header",
+        "person_write.header",
+        "runner/secret",
+        "runner/config.yaml",
+    ]
+    .iter()
+    .map(|name| directory.join("forge-1").join(name))
+    .collect()
 }
 pub struct Programs {
     directory: PathBuf,

@@ -97,6 +97,8 @@ pub fn bound(settings: &Settings, file: File) -> u32 {
         | File::State
         | File::AdminToken
         | File::PersonPassword
+        | File::PersonReadHeader
+        | File::PersonWriteHeader
         | File::ApiToken
         | File::GitToken
         | File::RunnerSecret
