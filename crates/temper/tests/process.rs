@@ -1148,7 +1148,7 @@ fn a_first_run_answers_on_the_demo() {
 
 /// domain/testing.md, 2.6; protocol/setup.md, 13.4, "A first run set up for real".
 #[test]
-fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
+fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_lands_and_survives_restart() {
     use skein_forge::forgejo::pin::VERSION;
     use std::{fs, os::unix::fs::PermissionsExt};
     use support::ctl::Step;
@@ -1162,6 +1162,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
     let flags = support::boxed::echo_steps(deployment_flags(&paths));
     let (cached, sources) = cache_forgejo_binaries(&paths[2]);
     let mut bot = None;
+    let mut csv_landing = None;
     for run in ["first", "second"] {
         let client_root = scratch.path().join(run);
         fs::create_dir(&client_root).expect("fresh client root");
@@ -1174,7 +1175,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
             // protocol/setup.md, 13.4: main's push run is taken before the owner's
             // first task; no pull exists yet to have caused this runner line.
             steps.push(Step::Stderr(b" repo is work/hello "));
-            steps.extend(support::first_repository::task_steps(&client_root));
+            steps.extend(support::first_repository::csv_task_steps(&client_root));
         } else {
             steps.extend(support::first_repository::found_steps());
         }
@@ -1185,7 +1186,7 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
             steps,
             support::forge_land::OWNED_ALLOWANCE,
             || support::first_repository::live(&paths[0], &paths[1], &client_root),
-            support::first_repository::llm(&paths[0]),
+            support::first_repository::csv_llm(&paths[0]),
         );
         eprintln!("{run} Forgejo setup run: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
         let stderr = String::from_utf8_lossy(&ended.stderr);
@@ -1204,6 +1205,25 @@ fn a_forgejo_set_up_from_the_client_starts_again_by_its_record() {
         }
         let evidence = ended.checked.expect("the live forge and task reads ran");
         support::first_repository::assert_task(run, &ended.calls[setup_calls..], &stderr, &evidence);
+        let panel = support::ctl::json(&evidence.panel);
+        assert_eq!(panel["step"], "landed");
+        let merge = panel["merge"].as_str().expect("landed merge commit");
+        assert_eq!(merge.len(), 40);
+        let identity = (panel["head"].clone(), panel["merge"].clone());
+        if run == "first" {
+            let pending = ended
+                .calls
+                .iter()
+                .filter_map(|call| serde_json::from_slice::<serde_json::Value>(&call.stdout).ok())
+                .find(|panel| panel["gates"][0]["verdict"] == "pending")
+                .expect("pending review at head");
+            assert_eq!(panel["head"], pending["head"], "land exactly the reviewed head");
+            assert_eq!(panel["gates"][0]["verdict"], "approved");
+            assert!(evidence.producer.contains("--csv"), "the coder wrote widget's CSV implementation");
+            csv_landing = Some(identity);
+        } else {
+            assert_eq!(Some(identity), csv_landing, "the same landing survives restart");
+        }
         let support::first_repository::Evidence { address, version, .. } = evidence;
         let version = version.unwrap_or_else(|why| panic!("{run}: live Forgejo version: {why:?}; box: {stderr}"));
         assert_eq!(version["version"].as_str().expect("version").split('+').next(), Some(VERSION));
@@ -1468,9 +1488,22 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
         forge_land::assert_landed_chat_pull(run, &evidence);
         let task = String::from_utf8(outcome.calls[found_at + 1].stdout.clone()).expect("landed task UTF-8");
         let identity = forge_land::landed_identity(&task, &evidence.page);
-        let tasks_at = outcome.calls.len() - if first { 2 } else { 6 };
+        let tasks_at = outcome
+            .calls
+            .iter()
+            .position(|call| {
+                serde_json::from_slice::<serde_json::Value>(&call.stdout)
+                    .ok()
+                    .is_some_and(|value| value["ended"].is_object() && value["live"].is_array())
+            })
+            .expect("ended delegate pages");
+        let closing_at = outcome.calls.len() - if first { 0 } else { 4 };
         let tasks = [0, 1].map(|offset| {
-            forge_land::ended_tasks(&support::ctl::json(&outcome.calls[tasks_at + offset]), 2 + offset as u64)
+            forge_land::ended_tasks(
+                &outcome.calls[tasks_at..closing_at],
+                1 + offset,
+                if offset == 0 { &[2] } else { &[3, 4] },
+            )
         });
         if first {
             landed = Some(identity);
@@ -1478,20 +1511,20 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
         } else {
             assert_eq!(Some(identity), landed, "same pull and merge commit");
             assert_eq!(Some(tasks), ended_tasks, "no second change or producer");
-            let ended = support::ctl::json(&outcome.calls[tasks_at + 3]);
+            let ended = support::ctl::json(&outcome.calls[closing_at + 1]);
             assert_eq!(ended["met"], true);
             assert_eq!(ended["task"]["chip"]["phase"], "ended");
-            forge_land::assert_no_live_roots(&support::ctl::json(&outcome.calls[tasks_at + 4]));
-            let unknown = &outcome.calls[tasks_at + 5];
-            assert_eq!(unknown.exit, Some(Exit::Code(2)), "no task 4: {stderr}");
-            assert_eq!(unknown.stderr.trim_ascii_end(), b"{\"error\":\"unknown\"}", "no task 4: {stderr}");
+            forge_land::assert_no_live_roots(&support::ctl::json(&outcome.calls[closing_at + 2]));
+            let unknown = &outcome.calls[closing_at + 3];
+            assert_eq!(unknown.exit, Some(Exit::Code(2)), "no task 5: {stderr}");
+            assert_eq!(unknown.stderr.trim_ascii_end(), b"{\"error\":\"unknown\"}", "no task 5: {stderr}");
         }
         forge_land::assert_reply(&outcome.calls[found_at + 4..tasks_at], first);
-        // Init has no review gate. Four coder turns include the workflow read;
+        // One reviewer turn follows CI. Four coder turns include the workflow read;
         // three chat turns delegate, wait, then reply after the procedure ends.
         // After the restart, the chat's lost attempt answers again, then Close's
         // finish request takes its last text.
-        forge_land::assert_requests(&seen, if first { 7 } else { 2 }, words.as_bytes(), first);
+        forge_land::assert_requests(&seen, if first { 8 } else { 2 }, words.as_bytes(), first);
         let link = support::printed_link(&outcome.stdout).expect("printed link");
         assert_eq!(outcome.stdout, [link, b"\n"].concat(), "one printed link");
         assert_eq!(support::boxed::status(evidence.address, "/api/v1/version"), None);
@@ -1915,9 +1948,9 @@ fn first_run(restart: bool) {
         ),
         (
             "second",
-            // After chat 1, its change 2, and the change's review gate 3.
+            // After chat 1, change 2, producer 3 and reviewer 4.
             support::person::demo_chat(
-                4,
+                5,
                 b"Add a dark theme to widget",
                 b"I would give widget a dark theme that follows the system's preference, with its colours as variables in one place so both themes stay in step. I am the scripted model and play this from a script, so nothing is changed: connect a model from Accounts to have the work done.",
             ),

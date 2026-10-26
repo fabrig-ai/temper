@@ -18,7 +18,9 @@
         "tasks.authority_grants": 12,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
+        "tasks.contract_choices": 2,
         "tasks.hold_segments": 8,
+        "tasks.parameters": 5,
         "views.watchers": 16,
         "views.watchers_per_party": 16
       }
@@ -684,7 +686,9 @@
           "enforce": true,
           "ci": true,
           "up_to_date": true,
-          "gates": [],
+          "gates": [
+            {"number": 1, "blocking": true, "freshness": "clean"}
+          ],
           "approvals": []
         }
       ],
@@ -990,6 +994,18 @@
                 ],
                 "finish": "tool_calls",
                 "tokens": 47
+              }
+            ]
+          },
+          {
+            "cue": "Review this change at the named head",
+            "turns": [
+              {
+                "lines": [
+                  {"call": "finish", "arguments": {"form": "verdict", "label": "1", "text": "Checked widget CSV export.", "fields": {}, "items": []}}
+                ],
+                "finish": "tool_calls",
+                "tokens": 24
               }
             ]
           }

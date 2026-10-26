@@ -100,6 +100,8 @@ pub enum Step {
     Pause,
     Resume,
     NextLink,
+    /// Release a scripted response after observing the pending review.
+    ReleaseLlm(&'static [u8]),
     /// Provision a service with only a project member role through jig.
     Member {
         scratch: PathBuf,
@@ -323,6 +325,7 @@ enum Action {
     ProgramLogin(&'static str),
     Signal,
     NextLink,
+    ReleaseLlm(&'static [u8]),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -369,6 +372,7 @@ pub struct Calls {
     phase: Option<Time>,
     forgejo: Option<u32>,
     ends: Vec<Ended>,
+    last_unmet: Option<Ended>,
     observed_at: Vec<Option<Wall>>,
     complete: Queue<Complete>,
     submit: Queue<Submit>,
@@ -402,6 +406,20 @@ impl Calls {
     #[must_use]
     pub fn idle(&self) -> bool {
         self.done()
+    }
+    pub(super) fn last_unmet(&self) -> Option<&Ended> {
+        self.last_unmet.as_ref()
+    }
+    pub(super) fn llm_release(&self) -> Option<&'static [u8]> {
+        match self.action {
+            Some(Action::ReleaseLlm(name)) => Some(name),
+            _ => None,
+        }
+    }
+    pub(super) fn llm_released(&mut self) {
+        assert!(self.llm_release().is_some());
+        self.action = None;
+        self.referee_work = RefereeWork::Waiting;
     }
     pub(super) fn visiting(&self) -> bool {
         matches!(self.action, Some(Action::Visit))
@@ -515,6 +533,7 @@ impl Calls {
             phase: None,
             forgejo,
             ends: Vec::new(),
+            last_unmet: None,
             observed_at: Vec::new(),
             complete: Queue::with_capacity(32),
             submit: Queue::with_capacity(32),
@@ -616,13 +635,14 @@ impl Calls {
                     } else {
                         now.saturating_add(PACE)
                     };
+                    self.last_unmet = Some(ended);
                     self.action = Some(Action::Until(call, condition));
                     self.retry = Some(next);
                 }
             }
             Action::Visit => panic!("a visit has no child"),
             Action::Stderr(_) | Action::ProgramLogin(_) => panic!("a stderr gate has no child"),
-            Action::NextLink => unreachable!("link wait has no child"),
+            Action::NextLink | Action::ReleaseLlm(_) => unreachable!("referee action has no child"),
             Action::Signal => assert_eq!(
                 ended.exit,
                 Some(Exit::Code(0)),
@@ -689,7 +709,13 @@ impl Calls {
             || self.awaiting_started
             || matches!(
                 self.action,
-                Some(Action::Stderr(_) | Action::ProgramLogin(_) | Action::NextLink | Action::Visit)
+                Some(
+                    Action::Stderr(_)
+                        | Action::ProgramLogin(_)
+                        | Action::NextLink
+                        | Action::Visit
+                        | Action::ReleaseLlm(_)
+                )
             )
             || self.retry.is_some_and(|retry| retry > now)
     }
@@ -755,6 +781,10 @@ impl Calls {
                     false,
                 );
                 self.child.as_mut().expect("open child").typing = until.map_or(Input::Hold, Input::After);
+            }
+            Some(Step::ReleaseLlm(name)) => {
+                self.action = Some(Action::ReleaseLlm(name));
+                self.referee_work = RefereeWork::Ready;
             }
             Some(Step::Visit) => {
                 self.action = Some(Action::Visit);
