@@ -137,6 +137,11 @@ fn fixture() -> crate::forge::Fixture {
             }
             value["engine"]["limits"]["overrides"]["tasks.delegates"] = 5.into();
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
+            // Keep two calls, payload 4,096 and output 8,192: lowering either bound alone
+            // cannot fit Small. Window 262,144 gives final A = 1,320,403 and
+            // F(A) = P = 1,320,467, within Small's page ceiling of 1,590,110.
+            agent["endpoints"][0]["models"][0]["window"] = 262_144.into();
+            value["engine"]["llm"]["models"][0]["window"] = 262_144.into();
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             // These report-only members carry no forge grants or parameters.
             value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 1.into();
