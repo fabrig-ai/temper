@@ -3233,6 +3233,7 @@ fn a_final_feed_saves_desired_and_generation_in_its_core_commit_before_a_root_cr
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "one recovery episode checks both durability cuts and the source fence")]
 fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atomic_commit() {
     use jig_domain_core::{
         CoreKey, CoreRecord, ProjectionFailure, ProjectionFailureSource, ProjectionFailureState, ProjectionKey,
@@ -3245,7 +3246,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
         world.send(engine::Event::Party(engine::PartyInput::Ask {
             models: Box::new([]),
             reply_to: ReplyTo::new(Token::new(950)),
-            sign_in: world.signed_in.unwrap(),
+            sign_in: world.signed_in.expect("owner session"),
             key: [150; 16],
             ask: walking::goal_from(
                 world.chat(1, b"Recover projection"),
@@ -3277,7 +3278,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
             task: goal,
             repository: retained.repository,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Close { number: retained.number.unwrap() },
+                write: skein_forge::api::Write::Close { number: retained.number.expect("created issue") },
                 condition: skein_forge_client::Condition::None,
             },
             start: None,
@@ -3316,7 +3317,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
             }
         }
         assert!(world.root.ready());
-        world.root.recover_projection(&world.env, goal, Token::new(951)).unwrap();
+        world.root.recover_projection(&world.env, goal, Token::new(951)).expect("recovery room");
         engine::release(&mut world.root, &world.env, &mut world.out);
         world.collect();
         let (_, writes) = world.store.pending.front().expect("one recovery commit");
@@ -3355,7 +3356,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
             assert_eq!(*receipt, reported);
             assert_eq!(issue, &retained);
             assert!(world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(source))));
-            world.root.recover_projection(&world.env, goal, Token::new(953)).unwrap();
+            world.root.recover_projection(&world.env, goal, Token::new(953)).expect("recovery room");
             for _ in 0..40 {
                 world.tick();
                 if world.root.take_projection_recovery(Token::new(953)).is_some() {
@@ -3366,4 +3367,82 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
         }
         assert!(world.store.rows.values().all(|record| !matches!(record, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Writer(slot))) if slot.writer == tasks::Writer::Effect { entry: source })), "covered projection has no writer debt after recovery");
     }
+}
+
+#[test]
+fn an_ended_goal_closes_its_issue_after_its_task_ended() {
+    use jig_domain_core::{CoreKey, ProjectionKey};
+    let mut world = World::configured(true, false);
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(940)),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [140; 16],
+        ask: walking::goal_from(
+            world.chat(1, b"End before the closing answer"),
+            people::TaskExecutor::Agent { charter: 1 },
+            jig_core_world::fixtures::Goal { budget: 50, priority: 3, deadline: None },
+        ),
+    }));
+    world.until(Until::Assigned);
+    let goal = world.assigned[0].clone();
+    let issue_key = Key::Forge(forge_top::Key::Issue(goal.task));
+    for _ in 0..100 {
+        world.tick();
+        if matches!(world.store.rows.get(&issue_key), Some(Record::Forge { row }) if matches!(row.as_ref(), forge_top::Stored::Issue(issue) if issue.number.is_some() && issue.pending.is_none()))
+        {
+            break;
+        }
+    }
+    assert!(
+        matches!(world.store.rows.get(&issue_key), Some(Record::Forge { row }) if matches!(row.as_ref(), forge_top::Stored::Issue(issue) if issue.number.is_some() && issue.pending.is_none()))
+    );
+    world.hold_write_answers = Some(HoldWrite::Close);
+    let event = world.protocol.answer(
+        Token::new(7),
+        goal.task,
+        goal.attempt,
+        1,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: Box::from(&b"done"[..]) },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    let ended_key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(goal.task)));
+    let projection_key = Key::Core(jig_domain_core::Key::Core(CoreKey::Projection(ProjectionKey::Goal(goal.task))));
+    for _ in 0..300 {
+        world.tick();
+        if !world.held_write_answers.is_empty() && world.store.rows.contains_key(&ended_key) {
+            break;
+        }
+    }
+    assert_eq!(world.held_write_answers.len(), 1, "closing write's answer remains withheld");
+    assert!(
+        matches!(world.store.rows.get(&ended_key), Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row)))) if matches!(row.phase, tasks::Phase::Ended(tasks::Ending::Done(_))))
+    );
+    assert!(world.store.rows.contains_key(&projection_key), "projection outlives its ended task");
+    let Some(Record::Forge { row }) = world.store.rows.get(&issue_key) else { panic!("retained issue") };
+    let forge_top::Stored::Issue(issue) = row.as_ref() else { panic!("issue row") };
+    let number = issue.number.expect("opened issue");
+    assert!(issue.pending.is_some(), "close has no terminal yet");
+    assert!(!issue.before.as_ref().expect("close rollback").closed);
+    assert!(issue.closing_generation.is_some(), "final view accepted before its answer");
+    world.release_write_answers();
+    for _ in 0..300 {
+        world.tick();
+        if !world.store.rows.contains_key(&projection_key) && !world.store.rows.contains_key(&issue_key) {
+            break;
+        }
+    }
+    assert!(!world.store.rows.contains_key(&projection_key), "jig forgets the settled projection");
+    assert!(!world.store.rows.contains_key(&issue_key), "forge forgets the completed issue");
+    let raw::Answer::Item { item: issue, .. } = world.external(1, raw::Op::Read(raw::Read::Item { number, after: 0 }))
+    else {
+        panic!("forge's closed issue")
+    };
+    assert_eq!(issue.state, raw::State::Closed);
 }

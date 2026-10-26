@@ -608,7 +608,8 @@ mod coupled_layout {
     fn a_c0_core_with_an_old_v10_issue_is_refused_before_application_decode_without_mutation() {
         let application_limits = crate::walking::limits();
         let limits = component_limits(&application_limits);
-        let application = temper_protocol_store::application(&application_limits.forge).unwrap();
+        let application =
+            temper_protocol_store::application(&application_limits.forge).expect("valid bounded store fixture");
         assert_eq!(application.version, 10);
         let mut stores =
             Stores { store: skein_kv::Store::memory(&limits.store), secrets: skein_kv::Store::memory(&limits.secrets) };
@@ -625,7 +626,7 @@ mod coupled_layout {
         assert!(
             temper_protocol_store::records::decode(
                 &old_issue,
-                &temper_protocol_store::bounds(&application_limits.forge).unwrap()
+                &temper_protocol_store::bounds(&application_limits.forge).expect("valid bounded store fixture")
             )
             .is_err(),
             "this old row cannot accidentally satisfy the new decoder"
@@ -634,24 +635,25 @@ mod coupled_layout {
             jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(Deployment { commits: 1, ..HEADER }));
         let ops = Box::new([
             skein_kv::Op::Put {
-                key: keys::encode_own(&keys::Own::Format, limits.store.key).unwrap(),
-                value: format::current(10, HEADER.id).encode().unwrap(),
+                key: keys::encode_own(&keys::Own::Format, limits.store.key).expect("valid bounded store fixture"),
+                value: format::current(10, HEADER.id).encode().expect("valid bounded store fixture"),
             },
             skein_kv::Op::Put {
-                key: keys::encode_own(&keys::Own::Layouts, limits.store.key).unwrap(),
+                key: keys::encode_own(&keys::Own::Layouts, limits.store.key).expect("valid bounded store fixture"),
                 value: old_layout.encode(),
             },
             skein_kv::Op::Put {
-                key: keys::encode(&header.key(), limits.store.key).unwrap(),
-                value: codec::encode(&header, &codec::limits(&limits.core).unwrap(), &[]).unwrap(),
+                key: keys::encode(&header.key(), limits.store.key).expect("valid bounded store fixture"),
+                value: codec::encode(&header, &codec::limits(&limits.core).expect("valid bounded store fixture"), &[])
+                    .expect("valid bounded store fixture"),
             },
             skein_kv::Op::Put {
                 key: keys::application(
                     &temper_protocol_store::keys::encode(&temper_engine_domain_forge::Key::Issue(0), limits.store.key)
-                        .unwrap(),
+                        .expect("valid bounded store fixture"),
                     limits.store.key,
                 )
-                .unwrap(),
+                .expect("valid bounded store fixture"),
                 value: old_issue.into_boxed_slice(),
             },
         ]);

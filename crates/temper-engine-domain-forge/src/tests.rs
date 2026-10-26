@@ -2023,13 +2023,6 @@ fn a_held_projection_keeps_its_rollback_until_late_not_made_after_restart() {
     );
     assert_eq!(d.issue(7), Some(&rolled_back));
     assert!(outputs(&mut d, Event::Resolve { entry: 11, again: false }).is_empty());
-    eprintln!(
-        "projection wait ABI: Wall={} ProjectionWait={} map capacity8={} prior={}",
-        size_of::<Wall>(),
-        size_of::<domain::ProjectionWait>(),
-        skein_lib::Map::<u64, domain::ProjectionWait>::worst_case(8).unwrap(),
-        skein_lib::Map::<u64, Wall>::worst_case(8).unwrap()
-    );
 }
 
 #[test]
@@ -2068,4 +2061,68 @@ fn a_full_outbox_keeps_final_desired_and_defers_its_retry_instead_of_reentering(
             },
         ]
     );
+}
+
+/// The issue alone owns entry 11; the same goal's entry 12 remains its effect.
+fn issue_with_pending_entry() -> IssueRow {
+    IssueRow {
+        goal: 7,
+        repository: REPO,
+        state: temper_engine_domain_forge_issues::Projected { opened: true, ..Default::default() },
+        number: Some(1),
+        pending: Some(11),
+        before: Some(temper_engine_domain_forge_issues::Projected::default()),
+        failed: false,
+        desired: None,
+        closing_generation: None,
+    }
+}
+
+#[test]
+fn projection_ownership_excludes_only_the_issues_pending_entry_from_task_settlement() {
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    outputs(&mut d, Event::Restore { record: Stored::Issue(issue_with_pending_entry()) });
+    for number in [11, 12] {
+        outputs(&mut d, Event::Enqueue { entry: status(number, 7) });
+    }
+    let out = outputs(&mut d, Event::SettleEffects { task: 7, root: 7, ending: ReleaseEnding::Cancelled });
+    assert!(!out.contains(&Request::Erase { key: Key::Entry(11) }));
+    assert!(out.contains(&Request::Outcome { entry: 12, task: 7, outcome: skein_forge_client::Outcome::Withdrawn }));
+    assert!(out.contains(&Request::EffectsSettled { task: 7 }));
+    assert_eq!(d.issue(7).expect("issue retains ownership").pending, Some(11));
+}
+
+#[test]
+fn a_projection_outcome_continues_no_task_release() {
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    outputs(&mut d, Event::Restore { record: Stored::Issue(issue_with_pending_entry()) });
+    outputs(&mut d, Event::Restore { record: Stored::Release(settling_release(None)) });
+    outputs(&mut d, Event::Enqueue { entry: status(11, 7) });
+    outputs(&mut d, Event::Committed { entry: 11 });
+    fixtures::answer_next(
+        &mut d,
+        Ok(skein_forge::api::Answer::Items { items: Box::new([]), more: false, now: env().now }),
+    );
+    let (call, op) = fixtures::next_call(&mut d);
+    let skein_forge::api::Op::Write(_) = op else { unreachable!("projection write sent") };
+    let out = outputs(
+        &mut d,
+        Event::Client(skein_forge_client::Event::Answered {
+            free: 0,
+            rate: None,
+            call,
+            cost: 1,
+            result: Ok(skein_forge::api::Answer::Done),
+        }),
+    );
+    assert!(out.contains(&Request::ProjectionOutbox {
+        entry: 11,
+        outcome: skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Set, found: false },
+    }));
+    assert!(!out.contains(&Request::ContinueRelease { task: 7 }));
 }

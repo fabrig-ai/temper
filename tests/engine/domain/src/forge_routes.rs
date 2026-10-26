@@ -21,6 +21,7 @@ use temper_engine_forge_world::{self as forge_world, translate};
 #[derive(Clone, Copy)]
 pub enum HoldWrite {
     All,
+    Close,
     Merge,
 }
 
@@ -729,6 +730,9 @@ impl World {
                     )));
                     let held = match self.hold_write_answers {
                         Some(HoldWrite::All) => matches!(op, skein_forge::api::Op::Write(_)),
+                        Some(HoldWrite::Close) => {
+                            matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Close { .. }))
+                        }
                         Some(HoldWrite::Merge) => {
                             matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. }))
                         }

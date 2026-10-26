@@ -2192,9 +2192,8 @@ fn an_old_completed_desired_cannot_settle_a_refused_final_generation_after_its_t
     let due = world
         .seen()
         .iter()
-        .find_map(|request| match request {
-            top::Request::ProjectAfter { goal: 42, when: Some(when) } => Some(*when),
-            _ => None,
+        .find_map(|request| {
+            if let top::Request::ProjectAfter { goal: 42, when: Some(when) } = request { Some(*when) } else { None }
         })
         .expect("changed body waits for its interval");
     world.projection_after(42, due);
@@ -2299,5 +2298,445 @@ fn accepted_final_desired_restores_and_settles_only_its_saved_generation() {
             .seen()
             .iter()
             .any(|request| matches!(request, top::Request::ProjectionSettled { generation, .. } if *generation != 77))
+    );
+}
+
+fn projection_view(goal: u64, finished: bool) -> issues::GoalView {
+    issues::GoalView {
+        phase: if finished { issues::Phase::Done } else { issues::Phase::Active },
+        goal,
+        repository: u64::from(REPO.repository),
+        title: "Goal".into(),
+        goal_text: "Plan".into(),
+        plan: Box::new([]),
+        milestones: Box::new([]),
+        finished: finished.then(|| "Finished".into()),
+    }
+}
+
+fn projected_issue(world: &World) -> &top::IssueRow {
+    let Some(top::Stored::Issue(row)) = world.stored().get(&top::Key::Issue(42)) else {
+        panic!("goal's issue is durable")
+    };
+    row
+}
+
+/// Make the final body and milestone, leaving its closing entry uncommitted.
+fn closing_issue_write(seed: u64) -> (World, u64) {
+    let mut world = World::new(seed);
+    world.adopt();
+    world.event(top::Event::Project {
+        entry: 1,
+        repository: REPO,
+        view: projection_view(42, true),
+        closing_generation: Some(77),
+    });
+    for entry in 1..8 {
+        let Some(top::Stored::Entry { entry: kept, .. }) = world.stored().get(&top::Key::Entry(entry)) else {
+            panic!("final projection has a next write")
+        };
+        if matches!(kept.effect.write, skein_forge::api::Write::Close { .. }) {
+            world.take_seen();
+            return (world, entry);
+        }
+        world.event(top::Event::Committed { entry });
+        world.run_for(1);
+        world.event(top::Event::ProjectDesired { entry: entry + 1, goal: 42 });
+    }
+    panic!("final projection reaches its closing write")
+}
+
+#[test]
+fn a_goal_is_released_while_its_issue_closing_write_is_uncertain() {
+    let (mut world, entry) = closing_issue_write(903);
+    world.slow_calls(skein_lib::Duration::from_secs(2));
+    world.event(top::Event::Committed { entry });
+    world.run_for(3);
+    assert_eq!(projected_issue(&world).pending, Some(entry));
+    assert!(
+        matches!(world.stored().get(&top::Key::Entry(entry)), Some(top::Stored::Entry { entry, .. }) if entry.attempt.is_some())
+    );
+    world.event(top::Event::SettleEffects { task: 42, root: 42, ending: top::ReleaseEnding::Done });
+    world.event(top::Event::Release { task: 42, root: 42, ending: top::ReleaseEnding::Done, reason: None, entry: 20 });
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::EffectsSettled { task: 42 })));
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: 42 })));
+    assert_eq!(projected_issue(&world).pending, Some(entry));
+    world.take_seen();
+    world.run_for(3);
+    world.event(top::Event::ProjectDesired { entry: 21, goal: 42 });
+    assert!(projected_issue(&world).state.closed);
+    assert_eq!(projected_issue(&world).pending, None);
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::ProjectionOutbox { entry: actual, outcome: skein_forge_client::Outcome::Made { .. } } if *actual == entry)));
+    assert!(
+        world
+            .seen()
+            .iter()
+            .any(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 77 }))
+    );
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ContinueRelease { .. })));
+}
+
+fn ordinary_goal_effect(number: u64) -> skein_forge_client::Entry {
+    skein_forge_client::Entry {
+        number,
+        task: 42,
+        repository: REPO,
+        effect: skein_forge_client::Effect {
+            write: skein_forge::api::Write::CreateIssue {
+                key: b"ordinary".as_slice().into(),
+                title: b"Finding".as_slice().into(),
+                body: b"Fix".as_slice().into(),
+            },
+            condition: skein_forge_client::Condition::None,
+        },
+        start: None,
+        attempt: None,
+        failures: 0,
+        queued: false,
+    }
+}
+
+#[test]
+fn ordinary_effects_still_hold_release_beside_an_uncertain_issue_write() {
+    let (mut world, entry) = closing_issue_write(904);
+    world.slow_calls(skein_lib::Duration::from_secs(2));
+    world.event(top::Event::Committed { entry });
+    world.run_for(3);
+    world.event(top::Event::Enqueue { entry: ordinary_goal_effect(20) });
+    world.event(top::Event::SettleEffects { task: 42, root: 42, ending: top::ReleaseEnding::Done });
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::EffectsSettled { .. })));
+    world.event(top::Event::Release { task: 42, root: 42, ending: top::ReleaseEnding::Done, reason: None, entry: 21 });
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::Released { .. })));
+    // The ordinary write completes first; the issue's slower answer still waits.
+    world.slow_calls(skein_lib::Duration::ZERO);
+    world.event(top::Event::Committed { entry: 20 });
+    world.inputs_before_fire();
+    world.event(top::Event::ContinueRelease { task: 42, entry: 22 });
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::EffectsSettled { task: 42 })));
+    world.event(top::Event::ContinueRelease { task: 42, entry: 23 });
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: 42 })));
+    assert_eq!(projected_issue(&world).pending, Some(entry));
+}
+
+#[test]
+fn cancelling_a_goal_leaves_its_unsent_issue_write_to_the_issue() {
+    let (mut world, entry) = closing_issue_write(905);
+    world.event(top::Event::Enqueue { entry: ordinary_goal_effect(20) });
+    world.event(top::Event::SettleEffects { task: 42, root: 42, ending: top::ReleaseEnding::Cancelled });
+    assert!(!world.stored().contains_key(&top::Key::Entry(20)));
+    assert!(world.stored().contains_key(&top::Key::Entry(entry)));
+    assert!(world.seen().iter().any(|request| matches!(
+        request,
+        top::Request::Outcome { entry: 20, outcome: skein_forge_client::Outcome::Withdrawn, .. }
+    )));
+    assert!(!world.seen().iter().any(|request| matches!(
+        request,
+        top::Request::ProjectionOutbox { outcome: skein_forge_client::Outcome::Withdrawn, .. }
+    )));
+    world.event(top::Event::Release {
+        task: 42,
+        root: 42,
+        ending: top::ReleaseEnding::Cancelled,
+        reason: None,
+        entry: 21,
+    });
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: 42 })));
+    world.event(top::Event::Committed { entry });
+    world.run_for(2);
+    world.event(top::Event::ProjectDesired { entry: 22, goal: 42 });
+    assert!(projected_issue(&world).state.closed);
+    assert!(
+        world
+            .seen()
+            .iter()
+            .any(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 77 }))
+    );
+}
+
+#[test]
+fn a_failure_for_good_settles_the_final_view_across_a_restart() {
+    let (mut world, entry) = closing_issue_write(906);
+    world.permission(skein_fake_forge_domain::api::Permission::None);
+    world.event(top::Event::Committed { entry });
+    world.run_for(5);
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionFailed { goal: 42, .. }))
+            .count(),
+        1,
+        "row={:?}, seen={:?}",
+        projected_issue(&world),
+        world.seen()
+    );
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 77 }))
+            .count(),
+        1
+    );
+    assert!(projected_issue(&world).failed);
+    assert_eq!(projected_issue(&world).pending, None);
+    assert!(!projected_issue(&world).state.closed, "refusal rolls back the optimistic close");
+    // Lose parent callbacks before their acknowledgement, keeping the durable failure.
+    world.take_seen();
+    let writes = world.writes();
+    world.restart();
+    world.run_for(1);
+    world.fire_top();
+    assert_eq!(world.writes(), writes);
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ProjectionFailed { .. })));
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 77 }))
+            .count(),
+        1
+    );
+}
+
+/// A retained Held snapshot, with the actual candidate's optimistic state and rollback.
+fn retained_issue_write(world: &mut World) -> issues::Projected {
+    let mut row = projected_issue(world).clone();
+    let before = row.before.clone().expect("pending projection has rollback");
+    let number = row.pending.expect("pending write");
+    let Some(top::Stored::Entry { entry, .. }) = world.stored().get(&top::Key::Entry(number)) else {
+        panic!("projection's entry")
+    };
+    let mut entry = entry.clone();
+    entry.start =
+        Some(skein_forge_client::Position { at: skein_lib::Time::ZERO, comment: 0, review: 0, review_page: 1 });
+    entry.attempt = Some(skein_forge_client::Attempt {
+        sent: skein_lib::Time::ZERO,
+        deadline: skein_lib::Time::ZERO,
+        wall: Wall::EPOCH,
+        expires: Wall::EPOCH,
+    });
+    row.failed = true;
+    world.restore_record(top::Stored::Entry { entry, held: true });
+    world.restore_record(top::Stored::Issue(row));
+    before
+}
+
+#[test]
+fn a_held_issue_write_is_withdrawn_once_the_final_view_is_accepted() {
+    // Test both acceptance of a final view over a live Held and restoration
+    // after that accepted final view committed before its withdrawal reached core.
+    for restart in [false, true] {
+        let mut world = World::new(907);
+        world.adopt();
+        world.event(top::Event::Project {
+            entry: 1,
+            repository: REPO,
+            view: projection_view(42, false),
+            closing_generation: None,
+        });
+        let before = retained_issue_write(&mut world);
+        world.event(top::Event::SettleEffects { task: 42, root: 42, ending: top::ReleaseEnding::Done });
+        world.event(top::Event::Release {
+            task: 42,
+            root: 42,
+            ending: top::ReleaseEnding::Done,
+            reason: None,
+            entry: 20,
+        });
+        assert!(matches!(world.stored().get(&top::Key::Entry(1)), Some(top::Stored::Entry { held: true, .. })));
+        assert!(world.seen().iter().any(|request| matches!(request, top::Request::EffectsSettled { task: 42 })));
+        assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: 42 })));
+        world.take_seen();
+        if restart {
+            let mut row = projected_issue(&world).clone();
+            row.desired = Some(projection_view(42, true));
+            row.closing_generation = Some(77);
+            world.restore_record(top::Stored::Issue(row));
+            world.restart();
+            world.fire_top();
+        } else {
+            world.event(top::Event::Project {
+                entry: 21,
+                repository: REPO,
+                view: projection_view(42, true),
+                closing_generation: Some(77),
+            });
+        }
+        assert!(!world.stored().contains_key(&top::Key::Entry(1)));
+        assert_eq!(projected_issue(&world).state, before);
+        assert_eq!(projected_issue(&world).pending, None);
+        assert_eq!(projected_issue(&world).before, None);
+        assert!(projected_issue(&world).failed);
+        assert_eq!(
+            world
+                .seen()
+                .iter()
+                .filter(|request| matches!(
+                    request,
+                    top::Request::ProjectionOutbox { entry: 1, outcome: skein_forge_client::Outcome::Withdrawn }
+                ))
+                .count(),
+            1
+        );
+        assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ProjectionFailed { .. })));
+        assert_eq!(
+            world
+                .seen()
+                .iter()
+                .filter(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 77 }))
+                .count(),
+            1
+        );
+        assert_eq!(world.writes(), 0);
+    }
+}
+
+#[test]
+fn an_issue_failed_while_live_settles_its_final_view_without_writing() {
+    let mut world = World::new(908);
+    world.adopt();
+    world.event(top::Event::Project {
+        entry: 1,
+        repository: REPO,
+        view: projection_view(42, false),
+        closing_generation: None,
+    });
+    world.permission(skein_fake_forge_domain::api::Permission::None);
+    world.event(top::Event::Committed { entry: 1 });
+    world.run_for(5);
+    assert!(projected_issue(&world).failed, "row={:?}, seen={:?}", projected_issue(&world), world.seen());
+    assert_eq!(projected_issue(&world).pending, None);
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionFailed { goal: 42, .. }))
+            .count(),
+        1
+    );
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ProjectionSettled { .. })));
+    let writes = world.writes();
+    world.take_seen();
+    world.event(top::Event::Project {
+        entry: 2,
+        repository: REPO,
+        view: projection_view(42, true),
+        closing_generation: Some(78),
+    });
+    world.run_for(1);
+    assert_eq!(world.writes(), writes);
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ProjectionFailed { .. })));
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 78 }))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn an_issue_write_held_after_final_acceptance_is_withdrawn_without_repeating_failure() {
+    let mut world = World::new(909);
+    world.adopt();
+    world.event(top::Event::Project {
+        entry: 1,
+        repository: REPO,
+        view: projection_view(42, true),
+        closing_generation: Some(79),
+    });
+    retained_issue_write(&mut world);
+    // The attempt expired while its answer was lost, before the connector
+    // classified it Held. The fake has no matching keyed creation to find.
+    let mut row = projected_issue(&world).clone();
+    row.failed = false;
+    world.restore_record(top::Stored::Issue(row));
+    let Some(top::Stored::Entry { entry, .. }) = world.stored().get(&top::Key::Entry(1)).cloned() else {
+        panic!("expired entry")
+    };
+    world.restore_record(top::Stored::Entry { entry, held: false });
+    world.take_seen();
+    world.restart();
+    world.run_for(2);
+    assert!(!world.stored().contains_key(&top::Key::Entry(1)));
+    assert_eq!(projected_issue(&world).pending, None);
+    assert!(!projected_issue(&world).state.opened);
+    assert!(projected_issue(&world).failed);
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionFailed { goal: 42, .. }))
+            .count(),
+        1
+    );
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(
+                request,
+                top::Request::ProjectionOutbox { entry: 1, outcome: skein_forge_client::Outcome::Held }
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(
+                request,
+                top::Request::ProjectionOutbox { entry: 1, outcome: skein_forge_client::Outcome::Withdrawn }
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 79 }))
+            .count(),
+        1
+    );
+    assert_eq!(world.writes(), 0, "an unrecoverable creation is never sent again");
+}
+
+#[test]
+fn a_permanent_refusal_without_an_outbox_entry_settles_the_accepted_final_view() {
+    let (mut world, entry) = closing_issue_write(910);
+    world.event(top::Event::Committed { entry });
+    world.run_for(2);
+    assert!(projected_issue(&world).state.closed);
+    assert_eq!(projected_issue(&world).pending, None);
+    world.take_seen();
+    let writes = world.writes();
+    // A closed issue cannot be rewritten to a changed final body. The valid
+    // view is accepted, then the projection policy refuses that write for good.
+    let mut view = projection_view(42, true);
+    view.goal_text = "Changed final plan".into();
+    world.event(top::Event::Project { entry: 20, repository: REPO, view, closing_generation: Some(80) });
+    assert!(projected_issue(&world).failed);
+    assert_eq!(projected_issue(&world).closing_generation, Some(80));
+    assert_eq!(world.writes(), writes);
+    assert!(!world.stored().contains_key(&top::Key::Entry(20)));
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionFailed { goal: 42, source: 20 }))
+            .count(),
+        1
+    );
+    assert_eq!(
+        world
+            .seen()
+            .iter()
+            .filter(|request| matches!(request, top::Request::ProjectionSettled { goal: 42, generation: 80 }))
+            .count(),
+        1
     );
 }

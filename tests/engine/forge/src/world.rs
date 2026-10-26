@@ -396,6 +396,12 @@ impl World {
     pub fn stored(&self) -> &Map<top::Key, top::Stored> {
         &self.stored
     }
+    /// Install one durable row at a story's scripted restore cut.
+    pub fn restore_record(&mut self, record: top::Stored) {
+        self.stored.insert(key(&record), record.clone()).expect("world store capacity");
+        self.event(top::Event::Restore { record });
+    }
+
     pub fn slow_calls(&mut self, delay: Duration) {
         self.forge_env.limits.latency_min = delay;
         self.forge_env.limits.latency_max = delay;
@@ -415,7 +421,7 @@ impl World {
             }) {
                 return;
             }
-            assert!(self.iterate(end), "post must reach the forge before the horizon");
+            assert!(self.iterate(end, true), "post must reach the forge before the horizon");
         }
         panic!("post did not settle at the forge");
     }

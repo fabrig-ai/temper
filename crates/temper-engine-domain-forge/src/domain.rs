@@ -1388,7 +1388,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             keep_entry(d, entry, None, out);
         }
         Event::Project { entry, repository, view, closing_generation } => {
-            project(d, env, entry, repository, view, closing_generation, out)
+            project(d, env, entry, repository, view, closing_generation, out);
         }
         Event::ProjectDesired { entry, goal } => {
             if let Some(row) = d.issues.get(&goal)
@@ -1517,7 +1517,8 @@ pub fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     // Keep the client child's whole cohort available. Excess ready timers stay
     // in their owner's bounded tables for the next iteration.
     let room = out.room().saturating_sub(skein_forge_client::max_out(&env.limits.client));
-    let mut goals = List::with_capacity(env.limits.issues.min(room));
+    // A final held timer can erase its entry, save rollback, withdraw and settle.
+    let mut goals = List::with_capacity(env.limits.issues.min(room / 4));
     for (goal, wait) in &d.projection_due {
         if wait.recovery.is_none()
             && match wait.when {
@@ -1531,7 +1532,14 @@ pub fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     }
     for goal in &goals {
         d.projection_due.remove(goal);
-        emit(out, Request::ProjectAfter { goal: *goal, when: None });
+        if let Some(row) = d.issues.get(goal)
+            && row.closing_generation.is_some()
+            && row.failed
+        {
+            settle_final_projection(d, env, *goal, out);
+        } else {
+            emit(out, Request::ProjectAfter { goal: *goal, when: None });
+        }
     }
     let room = out.room().saturating_sub(skein_forge_client::max_out(&env.limits.client));
     let mut changes = List::with_capacity(env.limits.changes.min(room));
@@ -1593,14 +1601,14 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
             skein_forge_client::Request::Erase { key } => emit(out, Request::Erase { key: Key::Client(key) }),
             skein_forge_client::Request::Progress { entry } => keep_entry(d, entry, None, out),
             skein_forge_client::Request::Outcome { entry, task, outcome } => {
-                let projection = projection_entry(d, entry);
+                let projection = projection_owned(d, entry);
                 d.named_outcome(entry, outcome);
                 outcome_facts(d, env, entry, task, outcome, out);
                 match outcome {
                     skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {}
                     skein_forge_client::Outcome::Held => {
                         // It stays in the outbox, keeping its room, until a
-                        // person or its task's close settles it.
+                        // person, its task's close, or its final projection settles it.
                         if let Some(row) = d.entries.get_mut(&entry) {
                             row.held = true;
                             let record = Stored::Entry { entry: row.entry.clone(), held: true };
@@ -1617,10 +1625,12 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                 }
                 if projection {
                     emit(out, Request::ProjectionOutbox { entry, outcome });
+                    settle_final_projection(d, env, task, out);
                 } else {
                     emit(out, Request::Outcome { entry, task, outcome });
                 }
-                if outcome != skein_forge_client::Outcome::Uncertain
+                if !projection
+                    && outcome != skein_forge_client::Outcome::Uncertain
                     && outcome != skein_forge_client::Outcome::Queued
                     && match d.releases.get(&task) {
                         Some(row) => !row.failed,
@@ -3219,13 +3229,14 @@ fn settle_effects(
     if ending == ReleaseEnding::Cancelled {
         let mut unsent = List::with_capacity(env.limits.entries);
         for (number, row) in &d.entries {
-            if row.entry.task == task && !row.held && row.entry.attempt.is_none() {
+            if row.entry.task == task && !projection_owned(d, *number) && !row.held && row.entry.attempt.is_none() {
                 unsent.push(*number).expect("entry table bounded");
             }
         }
         for number in unsent.into_boxed() {
             withdraw(d, env, number, out);
-            if let Some(row) = d.entries.get(&number)
+            if !projection_owned(d, number)
+                && let Some(row) = d.entries.get(&number)
                 && row.entry.start.is_none()
             {
                 d.entries.remove(&number);
@@ -3239,13 +3250,6 @@ fn settle_effects(
 }
 
 fn settle_prior_effects(d: &mut Domain, task: u64, out: &mut Queue<Request>) {
-    if let Some(issue) = d.issues.get(&task)
-        && let Some(desired) = &issue.desired
-        && desired.finished.is_some()
-        && !issue.state.closed
-    {
-        return;
-    }
     if !settle_held(d, task, out) {
         return;
     }
@@ -3530,9 +3534,14 @@ fn project(
         emit(out, Request::ProjectionFailed { goal, source: number });
         return;
     };
+    // A failed issue accepts its final view without needing authority to write.
+    let failed_final = closing_generation.is_some()
+        && match d.issues.get(&goal) {
+            Some(row) => row.failed && row.repository == repository,
+            None => false,
+        };
     if view.repository != u64::from(repository.repository)
-        || adopted.role == Role::Context
-        || !adopted.kinds.issue
+        || (!failed_final && (adopted.role == Role::Context || !adopted.kinds.issue))
         || (!d.issues.contains_key(&goal) && d.issues.len() == env.limits.issues)
     {
         emit(out, Request::ProjectionFailed { goal, source: number });
@@ -3571,7 +3580,11 @@ fn project(
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(prior.clone()) });
     }
     if prior.failed {
-        emit(out, Request::ProjectionFailed { goal, source: number });
+        if prior.closing_generation.is_some() {
+            settle_final_projection(d, env, goal, out);
+        } else {
+            emit(out, Request::ProjectionFailed { goal, source: number });
+        }
         return;
     }
     if prior.pending.is_some() {
@@ -3585,52 +3598,79 @@ fn project(
             issues::Decision::None => settled_projection(d, env, goal, out),
             issues::Decision::Hold | issues::Decision::Effect(_) => unreachable!("matched above"),
         },
-        issues::Decision::Hold => emit(out, Request::ProjectionFailed { goal, source: number }),
-        issues::Decision::Effect(effect) => {
-            if d.entries.len() == env.limits.entries || d.entries.contains_key(&number) {
-                emit(
-                    out,
-                    Request::ProjectAfter {
-                        goal,
-                        when: Some(skein_lib::Wall::from_nanos(
-                            env.wall.as_nanos().saturating_add(env.limits.issue_policy.interval.as_nanos()),
-                        )),
-                    },
-                );
-                return;
-            }
-            let Some(write) = project_write(d, &prior, effect, &env.limits) else {
-                emit(out, Request::ProjectionFailed { goal, source: number });
-                return;
-            };
-            let entry = skein_forge_client::Entry {
-                number,
-                task: goal,
-                repository,
-                effect: skein_forge_client::Effect { write, condition: skein_forge_client::Condition::None },
-                start: None,
-                attempt: None,
-                failures: 0,
-                queued: false,
-            };
-            let row = IssueRow {
-                goal,
-                repository,
-                state: projected.projected,
-                number: prior.number,
-                pending: Some(number),
-                before: Some(prior.state),
-                failed: false,
-                desired: Some(view),
-                closing_generation,
-            };
-            let Some(description) = crate::describe_projection_effect(adopted, &entry.effect.write) else {
-                emit(out, Request::ProjectionFailed { goal, source: number });
-                return;
-            };
-            emit(out, Request::ProjectionEffect { row, entry, description });
-        }
+        issues::Decision::Hold => refuse_projection(d, env, goal, number, out),
+        issues::Decision::Effect(_) => project_effect(d, env, number, prior, projected, out),
     }
+}
+
+fn project_effect(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    number: u64,
+    prior: IssueRow,
+    projected: issues::Projection,
+    out: &mut Queue<Request>,
+) {
+    let goal = prior.goal;
+    let issues::Decision::Effect(effect) = projected.decision else { unreachable!("projection effect selected") };
+    if d.entries.len() == env.limits.entries || d.entries.contains_key(&number) {
+        emit(
+            out,
+            Request::ProjectAfter {
+                goal,
+                when: Some(skein_lib::Wall::from_nanos(
+                    env.wall.as_nanos().saturating_add(env.limits.issue_policy.interval.as_nanos()),
+                )),
+            },
+        );
+        return;
+    }
+    let Some(write) = project_write(d, &prior, effect, &env.limits) else {
+        refuse_projection(d, env, goal, number, out);
+        return;
+    };
+    let entry = skein_forge_client::Entry {
+        number,
+        task: goal,
+        repository: prior.repository,
+        effect: skein_forge_client::Effect { write, condition: skein_forge_client::Condition::None },
+        start: None,
+        attempt: None,
+        failures: 0,
+        queued: false,
+    };
+    let row = IssueRow {
+        goal,
+        repository: prior.repository,
+        state: projected.projected,
+        number: prior.number,
+        pending: Some(number),
+        before: Some(prior.state),
+        failed: false,
+        desired: prior.desired,
+        closing_generation: prior.closing_generation,
+    };
+    let Some(description) = crate::describe_projection_effect(
+        d.repositories.get(&prior.repository).expect("projection adoption checked"),
+        &entry.effect.write,
+    ) else {
+        refuse_projection(d, env, goal, number, out);
+        return;
+    };
+    emit(out, Request::ProjectionEffect { row, entry, description });
+}
+
+/// A permanent refusal after accepting a final desired view settles that view,
+/// including refusals that never admitted an outbox entry.
+fn refuse_projection(d: &mut Domain, env: &Env<Limits>, goal: u64, source: u64, out: &mut Queue<Request>) {
+    if let Some(row) = d.issues.get_mut(&goal)
+        && row.closing_generation.is_some()
+    {
+        row.failed = true;
+        emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(row.clone()) });
+    }
+    emit(out, Request::ProjectionFailed { goal, source });
+    settled_projection(d, env, goal, out);
 }
 
 fn project_write(d: &Domain, row: &IssueRow, effect: issues::Effect, l: &Limits) -> Option<skein_forge::api::Write> {
@@ -3677,7 +3717,7 @@ fn projection_key(namespace: &[u8], goal: u64, key: issues::Key, l: &Limits) -> 
     crate::purpose::EffectPurpose::Projection { goal, part, number }.key(namespace, l.client.op_bytes)
 }
 
-fn projection_entry(d: &Domain, entry: u64) -> bool {
+fn projection_owned(d: &Domain, entry: u64) -> bool {
     for (_, row) in &d.issues {
         if row.pending == Some(entry) {
             return true;
@@ -3695,6 +3735,7 @@ fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
     }
     let Some(goal) = goal else { return };
     let Some(row) = d.issues.get_mut(&goal) else { unreachable!("found issue row") };
+    let already_failed = row.failed;
     match outcome {
         skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => return,
         skein_forge_client::Outcome::Made { made, .. } => {
@@ -3732,7 +3773,10 @@ fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
     let saved = row.clone();
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(saved) });
     if row.failed {
-        emit(out, Request::ProjectionFailed { goal, source: entry });
+        // Withdrawing a final held write completes its existing failure episode.
+        if !(already_failed && row.closing_generation.is_some()) {
+            emit(out, Request::ProjectionFailed { goal, source: entry });
+        }
     } else {
         emit(out, Request::ProjectAfter { goal, when: None });
     }
@@ -3801,7 +3845,7 @@ fn resolve(d: &mut Domain, env: &Env<Limits>, number: u64, again: bool, out: &mu
 fn not_made(d: &mut Domain, number: u64, out: &mut Queue<Request>) {
     let row = d.entries.remove(&number).expect("a held entry lives");
     emit(out, Request::Erase { key: Key::Entry(number) });
-    if projection_entry(d, number) {
+    if projection_owned(d, number) {
         projection_outcome(d, number, skein_forge_client::Outcome::Withdrawn, out);
         emit(out, Request::ProjectionOutbox { entry: number, outcome: skein_forge_client::Outcome::Withdrawn });
     } else {
@@ -3809,7 +3853,7 @@ fn not_made(d: &mut Domain, number: u64, out: &mut Queue<Request>) {
     }
 }
 
-/// A closing task's held entries are settled not made, as many as the
+/// A closing task's own held entries are settled not made, as many as the
 /// output has room for, so its effects settle and their room is freed. True
 /// when none of the task's entries remains; one settled here continues the
 /// close in a later step.
@@ -3817,7 +3861,7 @@ fn settle_held(d: &mut Domain, task: u64, out: &mut Queue<Request>) -> bool {
     let mut held = List::with_capacity(d.entries.len());
     let mut pending = false;
     for (number, row) in &d.entries {
-        if row.entry.task != task {
+        if row.entry.task != task || projection_owned(d, *number) {
             continue;
         }
         if row.held {
@@ -4505,13 +4549,11 @@ fn restore(d: &mut Domain, env: &Env<Limits>, record: Stored) {
                         }),
                 "restored issue cohort agrees with desired"
             );
-            if row.pending.is_none()
-                && !row.failed
-                && (!row.state.closed || row.closing_generation.is_some())
-                && row.desired.is_some()
+            if row.desired.is_some()
+                && (row.closing_generation.is_some() || (row.pending.is_none() && !row.failed && !row.state.closed))
             {
-                // A committed desired view may still await its body interval,
-                // milestone, or closing write when the transient timer is lost.
+                // Restore projection work independently of task settlement:
+                // a final view also needs its failed/held settlement retried.
                 d.projection_after(row.goal, env.wall);
             }
             d.issues.insert(row.goal, row).expect("restored issue within limits");
@@ -4545,7 +4587,8 @@ fn restored(d: &mut Domain, env: &Env<Limits>, clock: skein_forge_client::Recove
         }
     }
     child(d, env, skein_forge_client::Event::PauseOutbox, out);
-    // A held entry waits for a person, out of the client's outbox.
+    // Held entries remain outside the client. A restored final projection's
+    // timer withdraws its held entry and settles within fire's output budget.
     let mut entries = List::with_capacity(env.limits.entries);
     for (_, row) in &d.entries {
         if !row.held {
@@ -4658,6 +4701,23 @@ fn read_afresh_complete(d: &mut Domain, out: &mut Queue<Request>) {
     }
 }
 
+/// Final held writes have already reported failure; abandon their optimistic
+/// state through the projection's own withdrawal before settling the saved view.
+fn settle_final_projection(d: &mut Domain, env: &Env<Limits>, goal: u64, out: &mut Queue<Request>) {
+    let Some(row) = d.issues.get(&goal) else { return };
+    if row.closing_generation.is_none() || !row.failed {
+        return;
+    }
+    if let Some(entry) = row.pending
+        && projection_owned(d, entry)
+        && let Some(pending) = d.entries.get(&entry)
+        && pending.held
+    {
+        not_made(d, entry, out);
+    }
+    settled_projection(d, env, goal, out);
+}
+
 fn settled_projection(d: &Domain, env: &Env<Limits>, goal: u64, out: &mut Queue<Request>) {
     let mut generation = None;
     let mut found = false;
@@ -4667,7 +4727,7 @@ fn settled_projection(d: &Domain, env: &Env<Limits>, goal: u64, out: &mut Queue<
         }
         found = true;
         let Some(saved) = row.closing_generation else { return };
-        if saved == 0 || row.pending.is_some() || row.failed || !row.state.closed {
+        if saved == 0 || row.pending.is_some() {
             return;
         }
         if let Some(prior) = generation
@@ -4679,9 +4739,14 @@ fn settled_projection(d: &Domain, env: &Env<Limits>, goal: u64, out: &mut Queue<
         if desired.finished.is_none() {
             return;
         }
-        match issues::project(desired, &row.state, env.wall, &env.limits.issue_policy).decision {
-            issues::Decision::None => {}
-            issues::Decision::Wait(_) | issues::Decision::Effect(_) | issues::Decision::Hold => return,
+        if !row.failed {
+            if !row.state.closed {
+                return;
+            }
+            match issues::project(desired, &row.state, env.wall, &env.limits.issue_policy).decision {
+                issues::Decision::None => {}
+                issues::Decision::Wait(_) | issues::Decision::Effect(_) | issues::Decision::Hold => return,
+            }
         }
         generation = Some(saved);
     }
