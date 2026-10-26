@@ -93,6 +93,7 @@ enum Phase {
 pub(crate) struct State {
     kind: Kind,
     ready: bool,
+    notice: Option<Fact>,
     waiting: bool,
     withdraw: bool,
     group: Option<usize>,
@@ -166,6 +167,7 @@ impl Machine {
                 .push(State {
                     kind: step.step.kind(),
                     ready: step.step.ready().is_some(),
+                    notice: (!step.step.started_notice().is_empty()).then_some(Fact::Started { step: index }),
                     waiting: false,
                     withdraw: false,
                     group,
@@ -432,6 +434,11 @@ impl Machine {
             return;
         }
         self.states.get_mut(step).expect("step").phase = Phase::Live { next: None };
+        let starting_group = self.starting_group(step).is_some();
+        let state = self.states.get_mut(step).expect("step");
+        if !starting_group && let Some(fact) = state.notice {
+            orders.push(Order::Terminal { fact });
+        }
         if let Some(group) = self.starting_group(step) {
             if self.group_failing(step) {
                 self.states.get_mut(step).expect("step").phase = Phase::Closing { next: None, success: false };

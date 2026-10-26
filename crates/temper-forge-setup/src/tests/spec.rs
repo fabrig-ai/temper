@@ -40,7 +40,7 @@ fn admin_creation_draws_a_password_and_clears_the_change_flag() {
     );
 }
 #[test]
-fn person_creation_draws_a_password_to_change_at_sign_in() {
+fn person_creation_draws_a_private_password_without_forcing_a_change() {
     forgejo_suffix(
         Command::CreatePerson,
         &[
@@ -53,6 +53,7 @@ fn person_creation_draws_a_password_to_change_at_sign_in() {
             b"ada@example.invalid",
             b"--admin",
             b"--random-password",
+            b"--must-change-password=false",
         ],
     );
 }
@@ -191,4 +192,31 @@ fn the_upgrade_names_the_partial_and_its_private_temp_directory() {
         Command::Dump,
         &[b"dump", b"--file", b"/srv/forge-2/backups/dump.partial.zip", b"--tempdir", b"/srv/forge-2/backups/"],
     );
+}
+
+#[test]
+fn the_persons_tokens_name_the_person_and_have_only_the_prescribed_scopes() {
+    use crate::place::File;
+    for (file, scopes) in [
+        (File::PersonReadHeader, b"read:repository,read:issue,read:organization,read:user".as_slice()),
+        (File::PersonWriteHeader, b"write:repository,write:issue,read:organization,read:user".as_slice()),
+    ] {
+        let spec = spec::person_token(&fixtures::owned(), &fixtures::place(), b"person-0123456789abcdef", file);
+        let expected = [
+            b"admin".as_slice(),
+            b"user",
+            b"generate-access-token",
+            b"--username",
+            b"ada",
+            b"--token-name",
+            b"person-0123456789abcdef",
+            b"--raw",
+            b"--scopes",
+            scopes,
+        ];
+        assert_eq!(spec.arguments.len(), expected.len() + 4);
+        for (argument, expected) in spec.arguments.iter().skip(4).zip(expected) {
+            assert_eq!(argument.as_ref(), expected);
+        }
+    }
 }

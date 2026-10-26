@@ -190,7 +190,13 @@ pub fn line(which: crate::spec::Which) -> Box<str> {
     chunk.valid().into()
 }
 pub fn first() -> crate::prepare::Found {
-    crate::prepare::Found { state: None, admin_token: false, runner_secret: false, files: false }
+    crate::prepare::Found {
+        state: None,
+        admin_token: false,
+        person_headers: [false; 2],
+        runner_secret: false,
+        files: false,
+    }
 }
 pub fn later() -> crate::prepare::Found {
     use skein_forge::forgejo::pin::{RUNNER_VERSION, VERSION};
@@ -202,6 +208,7 @@ pub fn later() -> crate::prepare::Found {
             secrets: secrets(),
         })),
         admin_token: true,
+        person_headers: [true; 2],
         runner_secret: true,
         files: true,
     }
