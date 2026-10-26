@@ -3028,6 +3028,7 @@ dependencies = [
  "temper-engine-smith",
  "temper-fake-checkout",
  "temper-fake-git-hosted",
+ "temper-protocol-records",
  "temper-protocol-store",
  "temper-service",
 ]

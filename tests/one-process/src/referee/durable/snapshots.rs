@@ -2,7 +2,7 @@
 use jig_protocol_store::transcripts::frame::crc32c;
 use skein_lib::Reader;
 
-pub(super) fn read(bytes: &[u8]) -> Option<(u64, Box<[skein_kv::Op]>)> {
+pub(crate) fn read(bytes: &[u8]) -> Option<(u64, Box<[skein_kv::Op]>)> {
     if bytes.len() < 46 || !bytes.ends_with(b"END!") {
         return None;
     }
