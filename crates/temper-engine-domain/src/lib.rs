@@ -17,8 +17,8 @@ mod link;
 pub mod loads;
 mod restart;
 mod route;
-mod stopping;
 mod settling;
+mod stopping;
 mod store;
 #[cfg(test)]
 mod tests;

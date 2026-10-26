@@ -741,7 +741,7 @@ impl World {
             | engine::Request::Setup { .. }
             | engine::Request::Busy(_)
             | engine::Request::Unsettled(_)
-                | engine::Request::Drained
+            | engine::Request::Drained
             | engine::Request::Stop) => panic!("unscripted engine output: {other:?}"),
         }
     }
@@ -785,7 +785,7 @@ impl World {
             | engine::Request::ToChild(_)
             | engine::Request::Busy(_)
             | engine::Request::Unsettled(_)
-                | engine::Request::Drained
+            | engine::Request::Drained
             | engine::Request::Stop) => return self.protocol.play(other),
         };
         Ok(vec![engine::Event::Worker(event)])
