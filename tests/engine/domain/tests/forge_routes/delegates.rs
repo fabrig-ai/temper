@@ -2,7 +2,7 @@
 use super::*;
 
 #[path = "delegates/fixtures.rs"]
-mod fixtures;
+pub(super) mod fixtures;
 
 use fixtures::{BASE_COMMIT, INITIAL_COMMIT, OWNER, PUSHER, answer_producer, assert_commit, next_delegate};
 

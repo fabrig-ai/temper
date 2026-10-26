@@ -913,7 +913,67 @@ impl World {
         self.events.extend(self.held_write_answers.drain(..));
     }
 
+    /// Restore a question admitted by an older delegate, including its reserved
+    /// answer room. Current change delegates cannot call Message themselves.
+    pub fn restore_delegate_question(&mut self, delegate: u64, words: &[u8]) -> u64 {
+        assert!(self.store.pending.is_empty());
+        let mut header = self.store.header();
+        header.messages += 1;
+        header.commits += 1;
+        let question = header.messages;
+        let key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(delegate)));
+        let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(mut sender)))) =
+            self.store.rows.get(&key).cloned()
+        else {
+            panic!("live delegate")
+        };
+        let tasks::Party::Task(change) = sender.requester else { panic!("delegate's requester") };
+        let key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(change)));
+        let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(mut target)))) =
+            self.store.rows.get(&key).cloned()
+        else {
+            panic!("live change")
+        };
+        assert!(target.delegates.contains(&delegate));
+        sender.questions = Box::new([tasks::QuestionCredit { number: question, answerer: change }]);
+        let mut inbox = target.inbox.into_vec();
+        inbox.push(tasks::Word {
+            number: question,
+            from: tasks::Party::Task(delegate),
+            kind: tasks::MessageKind::Question,
+            words: words.into(),
+            at: self.env.wall,
+            hits: 1,
+            eligible: true,
+        });
+        target.inbox = inbox.into_boxed_slice();
+        target.last_message = question;
+        target.phase = tasks::Phase::Active(tasks::Active::Due);
+        let writes = Box::new([
+            engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(sender)))),
+            engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(target)))),
+            engine::Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(
+                header,
+            )))),
+        ]);
+        self.store.pending.push_back((header.commits, writes));
+        self.store.apply();
+        self.restart(true, true);
+        question
+    }
+
     pub fn tick(&mut self) {
+        self.tick_with_reply_cut(None);
+    }
+
+    /// Apply the step saving a reply to `target`, losing its commit terminal.
+    /// Other decisions and the clock follow an ordinary world tick.
+    pub fn tick_losing_reply_commit(&mut self, target: u64) -> bool {
+        self.tick_with_reply_cut(Some(target))
+    }
+
+    fn tick_with_reply_cut(&mut self, target: Option<u64>) -> bool {
+        let mut lost = false;
         self.env.now = self.env.now.saturating_add(Duration::from_millis(100));
         self.env.wall = Wall::from_nanos(self.env.now.as_nanos());
         self.fake_env.now = self.env.now;
@@ -921,9 +981,18 @@ impl World {
         if let Some(event) = self.events.pop_front() {
             self.send(event);
         }
-        if !self.store.pending.is_empty() {
+        if let Some((_, writes)) = self.store.pending.front() {
+            lost = target.is_some_and(|target| {
+                writes.iter().any(|write| {
+                    matches!(write,
+                engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))))
+                    if row.number == target && row.inbox.iter().any(|word| matches!(word.from, tasks::Party::Task(_))))
+                })
+            });
             let number = self.store.apply();
-            self.send(engine::Event::Store(engine::StoreInput::Committed { number, fill: 0 }));
+            if !lost {
+                self.send(engine::Event::Store(engine::StoreInput::Committed { number, fill: 0 }));
+            }
         }
         if self.period.is_none() && self.root.ready() {
             self.period = Some(1);
@@ -975,6 +1044,7 @@ impl World {
         self.flush();
         self.root.reclaim();
         self.fake.reclaim();
+        lost
     }
 
     pub fn until(&mut self, target: Until) {
