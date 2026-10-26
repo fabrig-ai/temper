@@ -112,7 +112,10 @@ pub(crate) fn admit(
         orphan_erases: profile.orphan_erases,
     };
     check_read_page(&limits).ok_or(Refusal::ReadPage { read: max_read(&limits), page: limits.store.page.bytes })?;
-    protocol::sizes::whole(max_whole(&limits)).map_err(Refusal::Map)?;
+    match protocol::sizes::whole(max_whole(&limits)) {
+        Ok(()) => {}
+        Err(why) => return Err(Refusal::Map(why)),
+    }
     Ok(limits)
 }
 
