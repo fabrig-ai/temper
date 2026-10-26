@@ -2218,7 +2218,13 @@ The two suites are the strategy's (testing-strategy.md, section 8). In temper:
 - **The worlds' sums are measured as the suites' rules are:** each test's
   own time, run alone on the idle development machine (testing-strategy.md,
   section 8), with `--profile measure -j 1` the
-  median of three runs. Beside another task, it measures that task.
+  median of three runs. Beside another task, it measures that task. So
+  no test asserts its own wall time, and no story's deadline is its
+  guide: a deadline is the world's patience, there to end a hung run.
+  A story that shows a landing needs no slow poll sets the polls beyond
+  that patience, so that one needing a poll fails
+  (`qa_github_land`'s `a_landing_merges_before_any_resource_poll`;
+  the director's decision 1260).
 - **The sums are the worlds' guides, never a landing's.** A test within its
   own guide lands. A plan that adds to these worlds gives both default-suite
   sums at its base and at its end: the other worlds' against 8 s (4 s before
