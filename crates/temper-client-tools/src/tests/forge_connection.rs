@@ -520,8 +520,16 @@ fn admin_first_makes_a_new_project_or_uses_its_number_or_name_then_prints_the_ad
             let printed = root.answer(call).unwrap();
             assert_eq!(printed.status, 0);
             no_token(&printed);
+            if !json {
+                let line = match project {
+                    Some("1" | "shop") => "project: 1 · shop\n",
+                    Some("Next") => "project: 8 · Next\n",
+                    _ => "project: 8 · hello\n",
+                };
+                assert!(printed.stdout.starts_with(line.as_bytes()));
+            }
             assert!(
-                skein_lib::bytes::find(&printed.stdout, if json { b"\"project\":" } else { b"project " }).is_some()
+                skein_lib::bytes::find(&printed.stdout, if json { b"\"project\":" } else { b"project: " }).is_some()
             );
         }
     }
