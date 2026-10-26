@@ -1,5 +1,5 @@
 //! Durability observations from real file completions, independent of the service.
-mod snapshots;
+pub(crate) mod snapshots;
 #[cfg(test)]
 mod tests;
 use jig_domain_core as core;
@@ -79,7 +79,7 @@ impl Capture {
                     });
                     if is_log(&path) {
                         self.events.push(Observed::Recovered(path.clone()));
-                    } else if path == b"generations/1/store/snapshot" {
+                    } else if generation_path(&path).is_some_and(|(_, suffix)| suffix == b"store/snapshot") {
                         self.events.push(Observed::Snapshot(path.clone()));
                     }
                 }
@@ -108,11 +108,23 @@ impl Store {
     pub fn new() -> Self {
         Self::default()
     }
+    pub(crate) fn over(deployment: &crate::deployment::Deployment) -> Self {
+        let mut store = Self::new();
+        // A new observer has never seen the writes to existing transcripts.
+        // Their bytes must be present before replay reaches a transcript place.
+        store.files = deployment
+            .files
+            .iter()
+            .filter(|(path, _)| path.starts_with(b"transcripts/"))
+            .map(|(path, entry)| (path.to_vec(), entry.bytes.to_vec()))
+            .collect();
+        store
+    }
     pub(crate) fn recovering(&mut self) {
         self.rows.clear();
         self.applied = 0;
         self.lengths.clear();
-        self.files.retain(|path, _| !path.starts_with(b"generations/1/store/"));
+        self.files.retain(|path, _| !generation_path(path).is_some_and(|(_, suffix)| suffix.starts_with(b"store/")));
         self.validated.clear();
         self.pending.clear();
         self.recovered.clear();
@@ -133,7 +145,7 @@ impl Store {
                     // The secrets' store keeps a signed-in or handed-in source's
                     // record; the store, its snapshots and its logs hold none
                     // (jig's store.md, section 9).
-                    if !path.starts_with(b"generations/1/secrets/") {
+                    if !generation_path(&path).is_some_and(|(_, suffix)| suffix.starts_with(b"secrets/")) {
                         super::secrets::require(&bytes, "store bytes");
                     }
                     if let Some(validated) = self.validated.get_mut(&path)
@@ -172,7 +184,9 @@ impl Store {
                 Observed::Sync(path) if is_log(&path) => {
                     committed.extend(self.durable(&path, limits, names, connector));
                 }
-                Observed::Sync(path) if path == b"generations/1/store" && self.restoring => {
+                Observed::Sync(path)
+                    if generation_path(&path).is_some_and(|(_, suffix)| suffix == b"store") && self.restoring =>
+                {
                     // KV announces its new segment only after replaying every old log.
                     // Capture this boundary before any new startup commit can join it.
                     self.restored = Some(self.rows.clone());
@@ -285,7 +299,7 @@ impl Store {
     }
 }
 type Frames = Vec<(u64, Box<[skein_kv::Op]>)>;
-fn frames(bytes: &[u8], after: u64) -> (Frames, usize) {
+pub(crate) fn frames(bytes: &[u8], after: u64) -> (Frames, usize) {
     let mut reader = Reader::new(bytes);
     let mut frames = Vec::new();
     let mut used = 0;
@@ -332,7 +346,14 @@ fn frames(bytes: &[u8], after: u64) -> (Frames, usize) {
     (frames, used)
 }
 
+pub(crate) fn generation_path(path: &[u8]) -> Option<(u64, &[u8])> {
+    let path = path.strip_prefix(b"generations/")?;
+    let at = path.iter().position(|byte| *byte == b'/')?;
+    let number = std::str::from_utf8(&path[..at]).ok()?.parse().ok()?;
+    Some((number, &path[at + 1..]))
+}
 fn is_log(path: &[u8]) -> bool {
-    path.strip_prefix(b"generations/1/store/log-")
+    generation_path(path)
+        .and_then(|(_, suffix)| suffix.strip_prefix(b"store/log-"))
         .is_some_and(|number| number.len() == 20 && number.iter().all(u8::is_ascii_digit))
 }

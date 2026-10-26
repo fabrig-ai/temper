@@ -19,6 +19,7 @@ temper-engine-domain.workspace = true
 temper-engine-domain-forge.workspace = true
 skein-forge-connection.workspace = true
 temper-protocol-store.workspace = true
+temper-protocol-records.workspace = true
 temper-fake-git-hosted.workspace = true
 temper-fake-checkout.workspace = true
 skein-fake-forge-domain.workspace = true

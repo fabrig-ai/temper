@@ -356,20 +356,27 @@ pub(crate) fn scripted_provider(scripts: Box<[skein_fake_llm_domain::api::Script
     )
     .expect("configured provider")
 }
+#[cfg(test)]
 pub(crate) fn codec() -> jig_protocol_store::codec::Limits {
-    let limits = jig_test_service_limits(&engine().limits);
+    codec_for(&document())
+}
+pub(crate) fn codec_for(bytes: &[u8]) -> jig_protocol_store::codec::Limits {
+    let limits = jig_test_service_limits(&engine_from(bytes).limits);
     jig_protocol_store::codec::limits(&limits.root.core).expect("codec")
 }
+pub(crate) fn names_for(bytes: &[u8]) -> Box<[jig_domain_core::settings::ModelName]> {
+    jig_protocol_store::codec::names(&engine_from(bytes).llm.models)
+}
 /// The configured models' names the people records name models by (jig's protocol/store.md, 5.1).
+#[cfg(test)]
 pub(crate) fn store_names() -> &'static [jig_domain_core::settings::ModelName] {
     static NAMES: std::sync::OnceLock<Box<[jig_domain_core::settings::ModelName]>> = std::sync::OnceLock::new();
-    NAMES.get_or_init(|| jig_protocol_store::codec::names(&engine().llm.models))
+    NAMES.get_or_init(|| names_for(&document()))
 }
-fn engine() -> jig_protocol_config::Engine {
-    let bytes = document();
+fn engine_from(bytes: &[u8]) -> jig_protocol_config::Engine {
     let size = u32::try_from(bytes.len()).expect("fixture document");
     let doc = jig_protocol_config::document(
-        &bytes,
+        bytes,
         &jig_protocol_config::DocumentLimits { bytes: size, tokens: size, depth: 32 },
     )
     .expect("document");
