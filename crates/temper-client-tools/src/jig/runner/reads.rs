@@ -5,7 +5,7 @@ use crate::jig::{
     call::{Call, Project, Value, cursor, number, value},
     render, rows,
 };
-use alloc::collections::BTreeMap;
+use alloc::{boxed::Box, collections::BTreeMap};
 use jig_client::{
     Client, Event, Handle, Latest, Readable, Readout, Watchable, Why, contract as c,
     thread::{self, Thread},
@@ -155,6 +155,12 @@ pub(super) fn page(
     let local = u32::try_from(handle.number & u64::from(u32::MAX)).expect("low half");
     let Some(mut reading) = runner.active.remove(&prefix) else { return };
     reading.pending &= !1u8.checked_shl(local).expect("fixed read slot");
+    // An opening Unknown can mean an ended task, but proves no identity or
+    // authority. Only the authorized task read may establish that end.
+    if local == 6 && (reading.called.call.tool == 3 || reading.called.call.tool == 4) {
+        terminal_read(runner, client, env, reading, &page, out);
+        return;
+    }
     // The setting read requires a concrete revision; omission in ctl means
     // the newest revision named by the authorized inventory read.
     if reading.called.call.tool == rows::SETTING_AT
@@ -169,9 +175,17 @@ pub(super) fn page(
     }
     if let Some(thread) = &mut reading.thread
         && let Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(page))) = &page
-        && let Some(next) = thread.accept(*page.clone())
     {
-        read(runner, &mut reading, local, next, out);
+        let mut next = thread.accept(*page.clone());
+        // The engine's page can be smaller than ctl's conversation window.
+        // Read older pages until that bounded window is filled, including
+        // when closing activity occupies the newest page.
+        if next.is_none() && thread.lines.rows.len() < env.limits.rows {
+            next = thread.older();
+        }
+        if let Some(next) = next {
+            read(runner, &mut reading, local, next, out);
+        }
     }
     let more_inbox = match &page {
         Readout::Jig(c::ReadResult::Value(c::ReadValue::Inbox(page))) => page.after.is_some(),
@@ -242,6 +256,13 @@ pub(super) fn ended(
         complete(runner, client, env, reading, out);
         return;
     }
+    if local == 4 && (reading.called.call.tool == 3 || reading.called.call.tool == 4) && why == Why::Unknown {
+        reading.pending &= !1u8.checked_shl(local).expect("fixed watch slot");
+        let task = number(&reading.called.call, 0).expect("task argument");
+        read(runner, &mut reading, 6, c::Read::Task { task }, out);
+        complete(runner, client, env, reading, out);
+        return;
+    }
     let status = match why {
         Why::Unknown | Why::NotAllowed | Why::SubjectEnded => 2,
         Why::NotServed | Why::SignedOut | Why::Limit => 1,
@@ -268,6 +289,25 @@ fn complete(runner: &mut Runner, client: &Client, env: &Env<Limits>, mut reading
         && let Some(c::Delivery::RunState(run)) = reading.documents.get(&4)
     {
         thread.run(run, reading.text.as_ref());
+    }
+    if let Some(thread) = &reading.thread
+        && matches!(reading.pages.get(&1), Some(Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(_)))))
+    {
+        // JSON and text expose the same kept window, not just the final
+        // transport page used to fill it. Thread rows are newest first.
+        let mut rows = skein_lib::List::with_capacity(thread.lines.rows.len());
+        for row in thread.lines.rows.as_slice().iter().rev() {
+            rows.push(row.clone()).expect("bounded conversation rows");
+        }
+        reading.pages.insert(
+            1,
+            Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(Box::new(c::ActivityPage {
+                rows,
+                cut: thread.page_cut,
+                before: edge_cursor(&thread.lines.edges.after),
+                after: edge_cursor(&thread.lines.edges.before),
+            })))),
+        );
     }
     if reading.called.call.tool == 25
         || (27..=30).contains(&reading.called.call.tool)
@@ -392,5 +432,60 @@ fn settings_start(runner: &Runner, reading: &mut Reading, out: &mut Queue<Out>) 
             None => read(runner, reading, 1, c::Read::Revisions(c::ReadRevisions { before: None }), out),
         },
         _ => unreachable!("settings read tool"),
+    }
+}
+
+fn edge_cursor(edge: &thread::window::Edge) -> Option<c::Cursor> {
+    match edge {
+        thread::window::Edge::More(cursor) => Some(cursor.clone()),
+        thread::window::Edge::End => None,
+    }
+}
+
+fn terminal_read(
+    runner: &mut Runner,
+    client: &Client,
+    env: &Env<Limits>,
+    reading: Reading,
+    page: &Readout,
+    out: &mut Queue<Out>,
+) {
+    let expected = number(&reading.called.call, 0).expect("task argument");
+    let terminal = match page {
+        Readout::Jig(c::ReadResult::Value(value)) => match render::read_task(value) {
+            Some((task, _)) => {
+                task.chip.task == expected
+                    && matches!(
+                        task.chip.phase,
+                        c::Phase::Ended | c::Phase::Done | c::Phase::Failed | c::Phase::Cancelled
+                    )
+            }
+            None => false,
+        },
+        Readout::Jig(c::ReadResult::None(_)) | Readout::Limit | Readout::NotServed { .. } | Readout::Family { .. } => {
+            false
+        }
+    };
+    if terminal {
+        complete(runner, client, env, reading, out);
+    } else {
+        close(runner, &reading, out);
+        let printed = match page {
+            Readout::Jig(c::ReadResult::Value(_)) => {
+                render::failure(b"watch ended; task is not the requested ended task", reading.called.json, 2)
+            }
+            Readout::Jig(c::ReadResult::None(_))
+            | Readout::Limit
+            | Readout::NotServed { .. }
+            | Readout::Family { .. } => render::read(
+                page,
+                client,
+                runner.me(),
+                reading.called.json,
+                &env.limits,
+                runner.parts.expect("host vocabulary"),
+            ),
+        };
+        finish(reading.called, printed, out);
     }
 }
