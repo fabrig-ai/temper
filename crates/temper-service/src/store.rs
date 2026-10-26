@@ -73,7 +73,7 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
     if kv.page.bytes > profile.store.page.bytes {
         return None;
     }
-    Some(protocol::Limits {
+    let limits = protocol::Limits {
         core,
         store: kv,
         secrets: kv,
@@ -84,7 +84,9 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
         files: profile.files,
         reads: core.load_slots.checked_add(core.tasks.tasks)?,
         orphan_erases: profile.orphan_erases,
-    })
+    };
+    protocol::sizes::whole(max_whole(&limits)).ok()?;
+    Some(limits)
 }
 
 // protocol/store.md, 4; jig owns current full-frame sizing.
@@ -495,9 +497,12 @@ fn max_read(limits: &protocol::Limits) -> u32 {
         .max(limits.core.resume_bytes)
         .max(u32::try_from(limits.core.load_bytes.min(u64::from(u32::MAX))).expect("file read length"))
 }
+fn max_whole(limits: &protocol::Limits) -> u32 {
+    max_read(limits).max(protocol::sizes::MANIFEST_BYTES)
+}
 fn driver(limits: &protocol::Limits, capacity: u32) -> Driver {
     Driver {
-        io: FileIo::new(handles(limits), max_read(limits), 32, limits.store.deadline),
+        io: FileIo::with_whole_limit(handles(limits), max_read(limits), 32, max_whole(limits), limits.store.deadline),
         above: Queue::with_capacity(capacity),
         handles: Map::with_capacity(handles(limits)),
     }
@@ -529,7 +534,7 @@ pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) 
     let payload = root::payload_worst_case(application)?;
     protocol::worst_case(limits)?
         .checked_add(u64::try_from(size_of::<Store>()).ok()?)?
-        .checked_add(FileIo::worst_case(handles(limits), max_read(limits), 32, max_read(limits))?.checked_mul(3)?)?
+        .checked_add(FileIo::worst_case(handles(limits), max_read(limits), 32, max_whole(limits))?.checked_mul(3)?)?
         .checked_add(Queue::<file::Request>::worst_case(room)?.checked_mul(3)?)?
         .checked_add(Queue::<file::Event>::worst_case(room)?.checked_mul(3)?)?
         .checked_add(Queue::<protocol::Event>::worst_case(room)?.checked_mul(3)?)?
@@ -543,7 +548,69 @@ pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) 
 
 #[cfg(test)]
 mod sizing_tests {
-    use super::page_bytes;
+    use super::{
+        FileIo, Map, Queue, Store, Submit, Token, Up, file, handles, max_read, max_whole, page_bytes, protocol, root,
+        route,
+    };
+
+    #[test]
+    fn drivers_hold_the_whole_manifest_when_reads_are_smaller() {
+        let (_, _, mut limits) = crate::tests::fixtures::store_limits();
+        limits.core.resume_bytes = 16;
+        limits.core.load_bytes = 8;
+        // Synthetic read fields exercise the helper without constructing a KV store.
+        for chunk in [32, protocol::sizes::MANIFEST_BYTES.checked_sub(1).unwrap()] {
+            limits.store.chunk = chunk;
+            assert_eq!(max_read(&limits), chunk);
+            assert_eq!(max_whole(&limits), protocol::sizes::MANIFEST_BYTES);
+        }
+    }
+
+    #[test]
+    fn drivers_take_reads_whole_when_reads_are_larger() {
+        let (_, _, mut limits) = crate::tests::fixtures::store_limits();
+        let above = protocol::sizes::MANIFEST_BYTES.checked_add(1).unwrap();
+        for (chunk, resume, load) in [(above, 16, 8), (32, above, 8), (32, 16, u64::from(above))] {
+            limits.store.chunk = chunk;
+            limits.core.resume_bytes = resume;
+            limits.core.load_bytes = load;
+            assert_eq!(max_read(&limits), above);
+            assert_eq!(max_whole(&limits), max_read(&limits));
+        }
+    }
+
+    #[test]
+    fn an_admitted_store_already_reads_the_whole_manifest() {
+        let (application, _, profile) = crate::tests::fixtures::store_limits();
+        let limits = super::limits(&application, &application.forge, &profile).unwrap();
+        assert!(max_read(&limits) >= protocol::sizes::MANIFEST_BYTES);
+        assert_eq!(max_whole(&limits), max_read(&limits));
+        let old_driver = FileIo::worst_case(handles(&limits), max_read(&limits), 32, max_read(&limits)).unwrap();
+        let whole_driver = FileIo::worst_case(handles(&limits), max_read(&limits), 32, max_whole(&limits)).unwrap();
+        assert_eq!(whole_driver, old_driver);
+        assert_eq!(
+            super::worst_case(&application, &limits).expect("admitted store price"),
+            price_before_explicit_whole_bound(&application, &limits).expect("previous admitted store price")
+        );
+    }
+
+    // The previous store price: all three whole-file bounds were max_read.
+    fn price_before_explicit_whole_bound(application: &root::Limits, limits: &protocol::Limits) -> Option<u64> {
+        let room = root::max_out(application).max(protocol::MAX_OUT_DOWN).checked_mul(2)?;
+        let payload = root::payload_worst_case(application)?;
+        protocol::worst_case(limits)?
+            .checked_add(u64::try_from(size_of::<Store>()).ok()?)?
+            .checked_add(FileIo::worst_case(handles(limits), max_read(limits), 32, max_read(limits))?.checked_mul(3)?)?
+            .checked_add(Queue::<file::Request>::worst_case(room)?.checked_mul(3)?)?
+            .checked_add(Queue::<file::Event>::worst_case(room)?.checked_mul(3)?)?
+            .checked_add(Queue::<protocol::Event>::worst_case(room)?.checked_mul(3)?)?
+            .checked_add(Queue::<Up>::worst_case(room)?)?
+            .checked_add(Queue::<Submit>::worst_case(room)?)?
+            .checked_add(Map::<Token, ()>::worst_case(handles(limits))?.checked_mul(3)?)?
+            .checked_add(route::worst_case(application, limits.store.key, payload)?)?
+            .checked_add(u64::from(max_read(limits)).checked_mul(u64::from(room))?.checked_mul(6)?)?
+            .checked_add(payload.checked_mul(u64::from(room))?)
+    }
 
     #[test]
     fn page_covers_map_or_full_current_frame() {
