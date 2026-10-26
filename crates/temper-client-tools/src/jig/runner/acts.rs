@@ -255,6 +255,15 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
     if call.tool == rows::AMEND_AT {
         return Err(Failed::Fixed(b"unexpected amendment document"));
     }
+    if call.tool == rows::CLOSE_AT {
+        let (task, _) = render::read_task(document).ok_or(Failed::Fixed(b"unexpected close document"))?;
+        if task.chip.task != number(call, 0).expect("chat argument") {
+            return Err(Failed::Fixed(b"unexpected close task"));
+        }
+        // The task read supplies only its immutable routing scope. Offers and
+        // live delegates cannot change a named close's compound on replay.
+        return Ok((Request::Ask(close(call, me, task.project, limits)?), None));
+    }
     let (project, offers) = match document {
         c::ReadValue::Task(task) => (task.project, &task.acts),
         c::ReadValue::Question(question) => {
@@ -309,7 +318,6 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
     let task = number(call, 0).unwrap_or(0);
     let ask = match call.tool {
         rows::MESSAGE_AT => c::Ask::Message { project, task, words: words(call, 1, limits)? },
-        rows::CLOSE_AT => close(call, document, me, project, limits)?,
         rows::ANSWER_AT => c::Ask::Answer {
             project,
             on: c::AnswerOn::Question {
@@ -614,34 +622,31 @@ pub(super) fn answered(
     }
 }
 
-fn close(call: &Call, document: &c::ReadValue, me: &c::Me, project: u32, limits: &Limits) -> Result<c::Ask, Failed> {
-    let c::ReadValue::Task(task) = document else { return Err(Failed::Fixed(b"unexpected close document")) };
-    if let Some(Some(Values::Many(moves))) = call.values.get(1) {
+fn close(call: &Call, me: &c::Me, project: u32, limits: &Limits) -> Result<c::Ask, Failed> {
+    let moves = match call.values.get(1) {
+        Some(Some(Values::Many(moves))) => Some(moves),
+        _ => None,
+    };
+    let count = match moves {
+        Some(moves) => u32::try_from(moves.len()).expect("bounded moves"),
+        None => 0,
+    };
+    let mut delegates = List::with_capacity(count);
+    if let Some(moves) = moves {
         for moved in moves {
-            let mut found = false;
-            for delegate in &task.delegates {
-                if *moved == Value::Number(delegate.chip.task) {
-                    found = true;
-                }
-            }
-            if !found {
-                return Err(Failed::Fixed(b"move is not a live delegate"));
-            }
+            let Value::Number(task) = moved else { unreachable!("move argument") };
+            delegates.push(shapes::Delegate { task: *task, fate: shapes::Fate::Move }).expect("one per move");
         }
     }
-    let mut delegates = List::with_capacity(task.delegates.len());
-    for delegate in &task.delegates {
-        let mut fate = shapes::Fate::Cancel;
-        if let Some(Some(Values::Many(moves))) = call.values.get(1) {
-            for moved in moves {
-                if *moved == Value::Number(delegate.chip.task) {
-                    fate = shapes::Fate::Move;
-                }
-            }
-        }
-        delegates.push(shapes::Delegate { task: delegate.chip.task, fate }).expect("one fate per delegate");
-    }
-    match shapes::close_chat(me, project, task.chip.task, delegates.as_slice(), words(call, 2, limits)?) {
+    // Cancelling the chat cancels its remaining tree in the engine. Only
+    // explicit moves precede it, so changing delegates cannot change the ask.
+    match shapes::close_chat(
+        me,
+        project,
+        number(call, 0).expect("chat argument"),
+        delegates.as_slice(),
+        words(call, 2, limits)?,
+    ) {
         Ok(ask) => Ok(ask),
         Err(_) => Err(Failed::Fixed(b"close not offered")),
     }
