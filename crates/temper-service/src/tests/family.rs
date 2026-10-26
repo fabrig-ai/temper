@@ -699,30 +699,50 @@ fn every_hold_and_ci_verdict_keeps_its_meaning_on_the_wire() {
 }
 #[test]
 #[expect(clippy::manual_map, reason = "the strict subset uses explicit matches")]
-fn a_panels_pull_address_uses_its_configured_forge_kind_and_web() {
+fn a_panels_pull_address_uses_its_configured_forge_kind_and_base() {
     use crate::settings::Kind;
-    for (row, kind, web, number, expected) in [
+    for (row, kind, git, web, number, expected) in [
         (
             "github",
             Kind::GitHub,
+            b"https://git.example".as_slice(),
             Some(b"https://github.example".as_slice()),
+            1,
+            b"https://github.example/acme/shop/pull/123".as_slice(),
+        ),
+        (
+            "github trailing slash",
+            Kind::GitHub,
+            b"https://git.example".as_slice(),
+            Some(b"https://github.example/".as_slice()),
             1,
             b"https://github.example/acme/shop/pull/123".as_slice(),
         ),
         (
             "forgejo",
             Kind::Forgejo,
-            Some(b"https://forge.example/base/".as_slice()),
+            b"https://forge.example/base".as_slice(),
+            None,
             1,
             b"https://forge.example/base/acme/shop/pulls/123".as_slice(),
         ),
-        ("no web", Kind::GitHub, None, 1, b"".as_slice()),
-        ("another forge", Kind::Forgejo, Some(b"https://other.example".as_slice()), 2, b"".as_slice()),
+        (
+            "forgejo trailing slash",
+            Kind::Forgejo,
+            b"https://forge.example/base/".as_slice(),
+            None,
+            1,
+            b"https://forge.example/base/acme/shop/pulls/123".as_slice(),
+        ),
+        ("no web", Kind::GitHub, b"".as_slice(), None, 1, b"".as_slice()),
+        ("no git", Kind::Forgejo, b"".as_slice(), None, 1, b"".as_slice()),
+        ("another forge", Kind::Forgejo, b"https://other.example".as_slice(), None, 2, b"".as_slice()),
     ] {
         let mut forges = fixtures::forges();
         let forge = forges.get_mut(0).unwrap();
         forge.kind = kind;
         forge.number = number;
+        forge.git = git.into();
         forge.web = match web {
             Some(web) => Some(web.into()),
             None => None,
@@ -739,7 +759,7 @@ fn a_panels_pull_address_past_its_bound_is_left_out_and_the_panel_still_delivere
     let web = b"https://forge.example".as_slice();
     let owner = core::iter::repeat_n(b'o', 1024).collect::<Box<[u8]>>();
     for (kind, route) in [(Kind::GitHub, b"/pull/".as_slice()), (Kind::Forgejo, b"/pulls/".as_slice())] {
-        // The longest name whose address, WEB/OWNER/NAME + route + "123", fills
+        // The longest name whose address, BASE/OWNER/NAME + route + "123", fills
         // ADDRESS_BYTES exactly; one byte more passes the bound.
         let fits = usize::try_from(wire::ADDRESS_BYTES).unwrap() - (web.len() + 1 + owner.len() + 1 + route.len() + 3);
         for (row, length, shown) in [("at the bound", fits, true), ("past the bound", fits + 1, false)] {
@@ -747,7 +767,11 @@ fn a_panels_pull_address_past_its_bound_is_left_out_and_the_panel_still_delivere
             let mut forges = fixtures::forges();
             let forge = forges.get_mut(0).unwrap();
             forge.kind = kind;
-            forge.web = Some(web.into());
+            forge.git = web.into();
+            forge.web = match kind {
+                Kind::GitHub => Some(web.into()),
+                Kind::Forgejo => None,
+            };
             let mut value = panel();
             value.owner = owner.clone();
             value.name = name.clone();
