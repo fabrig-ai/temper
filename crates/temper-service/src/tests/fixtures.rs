@@ -793,7 +793,7 @@ fn restored_key() -> crate::Service {
         Secrets::Replace {
             owner: SecretOwner::Source,
             number: 0,
-            value: Secret::new(b"fixture-key".as_slice().into()),
+            value: jig_protocol_store::SecretValue::Key(Secret::new(b"fixture-key".as_slice().into())),
             replaces: None,
         },
     );
@@ -1025,4 +1025,13 @@ pub fn owned_setup(forge: u16) -> settings::Setup {
 #[expect(clippy::disallowed_macros, reason = "test fixture supplies unique numbered project names")]
 fn project_name(number: u32) -> Box<str> {
     alloc::format!("Project {number}").into_boxed_str()
+}
+
+/// Application payloads remain unchanged; the carried range has its own typed envelope.
+pub fn application_secret(number: u64, value: Secret) -> jig_protocol_store::SecretValue {
+    if number >= temper_protocol_records::CARRIED {
+        jig_protocol_store::SecretValue::Carried { kind: jig_protocol_store::CarriedKind::Value, value }
+    } else {
+        jig_protocol_store::SecretValue::Application(value)
+    }
 }

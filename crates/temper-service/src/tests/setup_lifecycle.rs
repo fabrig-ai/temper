@@ -678,7 +678,11 @@ fn paste_start(service: &mut crate::Service, bundle: Secret, digest: [u8; 32]) {
     let engine = service.engine.as_mut().unwrap();
     engine.store.secrets(
         Token::new(901),
-        Secrets::Keep { owner: SecretOwner::Application, number: records::CARRIED, value: bundle },
+        Secrets::Keep {
+            owner: SecretOwner::Application,
+            number: records::CARRIED,
+            value: crate::tests::fixtures::application_secret(records::CARRIED, bundle),
+        },
     );
     let Some(StoreEvent::Kept { .. }) = engine.store.above.pop() else { panic!("carried seed kept") };
     public::connect(

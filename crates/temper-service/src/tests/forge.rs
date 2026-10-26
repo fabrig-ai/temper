@@ -632,7 +632,11 @@ fn records_start_erases_carried_rows_before_connecting_without_decoding_them() {
                 .store
                 .secrets(
                     Token::new(123),
-                    Secrets::Keep { owner: SecretOwner::Application, number: *number, value: value.clone() }
+                    Secrets::Keep {
+                        owner: SecretOwner::Application,
+                        number: *number,
+                        value: crate::tests::fixtures::application_secret(*number, value.clone())
+                    }
                 )
                 .is_none()
         );
@@ -767,7 +771,10 @@ fn assert_records_untouched(service: &mut crate::Service, kept: &skein_lib::List
         if *number >= temper_protocol_records::CARRIED {
             continue;
         }
-        let Some(jig_protocol_store::Event::Secret { value: Some(found), .. }) = service
+        let Some(jig_protocol_store::Event::Secret {
+            value: Some(jig_protocol_store::SecretValue::Application(found)),
+            ..
+        }) = service
             .engine
             .as_mut()
             .expect("engine")
@@ -816,12 +823,14 @@ fn a_records_key_that_cannot_sign_stops_only_its_forge() {
         } else {
             value
         };
-        let _write = service
-            .engine
-            .as_mut()
-            .expect("engine")
-            .store
-            .secrets(Token::new(123), Secrets::Keep { owner: SecretOwner::Application, number, value });
+        let _write = service.engine.as_mut().expect("engine").store.secrets(
+            Token::new(123),
+            Secrets::Keep {
+                owner: SecretOwner::Application,
+                number,
+                value: crate::tests::fixtures::application_secret(number, value),
+            },
+        );
         let _kept = service.engine.as_mut().expect("engine").store.above.pop();
     }
     let mut face = fixtures::ForgeFace::new();
