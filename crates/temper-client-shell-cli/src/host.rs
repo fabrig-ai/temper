@@ -114,7 +114,7 @@ impl OneShot {
             + limits::transport(&limits).expect("native envelope")
             + FileIo::worst_case(4, limits.connections.body_bytes, 1, limits.connections.body_bytes).expect("native file envelope")
             + u64::from(limits.connections.body_bytes) * 3 // Loaded store, credential and routing copies.
-            + jig_client::worst_case(&limits.root.domain.client).expect("client envelope")
+            + jig_client::worst_case(&limits.root.domain.client).expect("client envelope") * 3 // Client, restored asks and diagnostic copies.
             + Queue::<root::Request>::worst_case(request_room).expect("root outputs")
             + Queue::<jig_client::Request>::worst_case(request_room).expect("ordered store writes")
             + u64::from(request_room) * u64::from(limits.connections.body_bytes) // Queued store records.
@@ -197,6 +197,16 @@ impl OneShot {
         self.output.push(true, line.into_boxed_slice());
         self.finish(1, false);
     }
+    fn print(&mut self, printed: temper_client_tools::jig::Printed) {
+        self.file_end = Some(printed.file);
+        self.output.push(false, printed.stdout);
+        if printed.status == 1 && !printed.stderr.is_empty() {
+            self.fail(printed.stderr.strip_suffix(b"\n").unwrap_or(&printed.stderr));
+        } else {
+            self.output.push(true, printed.stderr);
+            self.finish(printed.status, false);
+        }
+    }
     fn finish(&mut self, status: u8, signal: bool) {
         if self.status.is_some() {
             return;
@@ -207,6 +217,7 @@ impl OneShot {
             });
             self.directory.end_record(end);
         }
+        self.output.push(true, self.root.unanswered());
         self.status = Some(status);
         self.value = None;
         self.until = None;
@@ -385,7 +396,14 @@ impl OneShot {
             if let Some(shell) = self.signing.as_mut().and_then(|s| s.shell.as_mut()) {
                 self.recovery.pump(shell);
             }
-            if self.recovery.admits(self.root.kept())
+            if self.recovery.admits()
+                && self.root.replayed()
+                && self.recovery.sending == 0
+                && self
+                    .signing
+                    .as_ref()
+                    .and_then(|s| s.shell.as_ref())
+                    .is_some_and(|shell| !shell.work_pending(self.env.now))
                 && let Some(Parsed::Call { call, json }) = self.call.take()
             {
                 self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
@@ -396,13 +414,10 @@ impl OneShot {
                     &mut self.requests,
                 );
             }
-            if self.recovery.admits(self.root.kept())
+            if self.recovery.admits()
                 && let Some(printed) = self.recovery.printed.take()
             {
-                self.file_end = Some(printed.file);
-                self.output.push(false, printed.stdout);
-                self.output.push(true, printed.stderr);
-                self.finish(printed.status, false);
+                self.print(printed);
             }
         }
         self.sign_out_keep();
@@ -478,7 +493,7 @@ impl OneShot {
                 }
                 root::Request::Printed { printed, .. } => {
                     self.file_end = Some(printed.file);
-                    if self.class == Class::Act && printed.status == 0 {
+                    if self.class == Class::Act {
                         self.recovery.printed = Some(printed);
                         continue;
                     }
@@ -489,13 +504,7 @@ impl OneShot {
                         signing.printed = Some(printed.stdout);
                         continue;
                     }
-                    self.output.push(false, printed.stdout);
-                    if printed.status == 1 && !printed.stderr.is_empty() {
-                        self.fail(printed.stderr.strip_suffix(b"\n").unwrap_or(&printed.stderr));
-                    } else {
-                        self.output.push(true, printed.stderr);
-                        self.finish(printed.status, false);
-                    }
+                    self.print(printed);
                 }
                 root::Request::Kept { line } => self.output.push(true, line),
                 root::Request::Progress { line } => self.output.push(false, line),
@@ -547,6 +556,9 @@ impl OneShot {
             shell.iterate(now, wall);
             while self.submit.room() > 0 {
                 let Some(submit) = shell.submissions().pop() else { break };
+                if matches!(submit.kind, Op::Connect { .. } | Op::Send { .. }) {
+                    self.recovery.sending += 1;
+                }
                 self.submit.push(submit);
             }
         }
@@ -621,6 +633,9 @@ impl OneShot {
     }
     fn complete(&mut self, mut complete: Complete) {
         if complete.op.raw() & (TAG | FILES) == 0 {
+            if matches!(complete.kind, Op::Connect { .. } | Op::Send { .. }) {
+                self.recovery.sending -= 1;
+            }
             self.signing.as_mut().expect("native completion").complete(complete);
             return;
         }
