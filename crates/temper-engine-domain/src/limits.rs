@@ -221,13 +221,13 @@ pub(crate) fn route_room(limits: &Limits) -> skein_lib::JournalRoom {
     }
 }
 
-pub(crate) fn route_takes(domain: &Domain, limits: &Limits) -> bool {
-    domain.journal.takes(&route_room(limits))
+pub(crate) fn route_takes(domain: &Domain) -> bool {
+    domain.journal.takes(&domain.route_room)
 }
 
 pub(crate) fn route_decision(domain: &mut Domain, limits: &Limits) -> Option<Decision> {
     domain.settled = None;
-    Decision::reserve_room(&mut domain.journal, &limits.journal, route_room(limits))
+    Decision::reserve_room(&mut domain.journal, &limits.journal, domain.route_room)
 }
 
 /// Count participating child state, fixed handoffs, decoded input and all simultaneously retained
@@ -431,6 +431,8 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
             )?,
         )?
         .checked_add(role_scratch_bytes(limits)?)?
+        // Retained step/fire scratch and the owner's output queue. Journal
+        // failure translation below still needs its one-entry Output scratch.
         .checked_add(Queue::<Request>::worst_case(max_out(limits))?.checked_mul(2)?)?
         .checked_add(u64::try_from(size_of::<forge::Event>()).ok()?)?
         .checked_add(Queue::<Output>::worst_case(1)?)?
