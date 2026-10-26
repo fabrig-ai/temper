@@ -3598,14 +3598,12 @@ fn ctl_settings_member_setup(scratch: &std::path::Path) -> Vec<support::ctl::Ste
     // The shared channel fixture admits only its one owner. These member stories need two people/holdings.
     document["engine"]["limits"]["overrides"]["people.people"] = 2.into();
     document["engine"]["limits"]["overrides"]["people.holdings"] = 2.into();
-    for group in ["projects", "policies"] {
-        for project in document["engine"][group].as_array_mut().expect("configured projects/policies") {
-            project["policy"]["roles"].as_array_mut().expect("policy roles").push(serde_json::json!({
-                "number":2,"period_spend":100,"requests":0,"decides":0,
-                "authority":{"tools":0,"grants":[],"delegation":{"kinds":[],"tasks":1,"depth":1},
-                "budget":{"spend":1,"deadline_unix_seconds":null},"notes":0,"note_resources":[]}
-            }));
-        }
+    for project in document["engine"]["projects"].as_array_mut().expect("seeded projects") {
+        project["policy"]["roles"].as_array_mut().expect("policy roles").push(serde_json::json!({
+            "number":2,"period_spend":100,"requests":0,"decides":0,
+            "authority":{"tools":0,"grants":[],"delegation":{"kinds":[],"tasks":1,"depth":1},
+            "budget":{"spend":1,"deadline_unix_seconds":null},"notes":0,"note_resources":[]}
+        }));
     }
     std::fs::write(&path, serde_json::to_vec(&document).expect("member policy fixture")).expect("fixture document");
     let file = scratch.join("proposed.json");

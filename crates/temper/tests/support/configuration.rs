@@ -7,7 +7,7 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     let agent = serde_json::json!({
         "profile":{"name":"standard","declared":{"memory":2_147_483_648_u64,"tool_payload":2048,"read_window":256,
             "conversations":1,"calls_per_response":1},
-            "policy":{"max_turns":5,"group_stop":10,"inbox":8,"unacknowledged":8}},
+            "policy":{"max_turns":8,"check_timeout":60000,"group_stop":10,"inbox":8,"unacknowledged":8}},
         "endpoints":[{"name":"fake","number":0,"dialect":3,"provider":"openai",
             "address":"127.0.0.1:0","transport":"tls","server_name":"skein.test","trust_der":directory.join("root.der"),
             "identity":"plain","connect":1000,"handshake":1000,
@@ -16,6 +16,15 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     let mut value: serde_json::Value =
         serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("engine JSON");
     value.as_object_mut().expect("whole object").remove("service");
+    use_stock(&mut value);
+    // Seed policies are startup inputs; neither this fixture nor its ctl stories
+    // uses the channel world's depth eight beyond the stock's depth four.
+    for project in value["engine"]["projects"].as_array_mut().expect("seeded projects") {
+        project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
+        for role in project["policy"]["roles"].as_array_mut().expect("seeded roles") {
+            role["authority"]["delegation"]["depth"] = 4.into();
+        }
+    }
     let worker: serde_json::Value =
         serde_json::from_slice(jig_channel_world::fixtures::WORKER_DOCUMENT).expect("worker JSON");
     value["workers"] = worker["workers"].clone();
@@ -29,6 +38,11 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     value["engine"]["connectors"] = serde_json::json!([1]);
     value["engine"]["llm"]["endpoints"][0]["dialect"] = 3.into();
     value["engine"]["llm"]["endpoints"][0]["address"] = serde_json::json!({"socket":"127.0.0.1:0"});
+    // The stock carries two charters, ten forge grants and its 2374-byte policy 1.
+    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
+    value["engine"]["limits"]["overrides"]["authority.grants"] = 16.into();
+    value["engine"]["limits"]["overrides"]["notes.scopes"] = 32.into();
+    value["engine"]["limits"]["overrides"]["core.policy_bytes"] = 4096.into();
     value["engine"]["limits"]["overrides"]["core.load_slots"] = 8.into();
     value["engine"]["limits"]["overrides"]["documents.rows"] = 2.into();
     value["engine"]["limits"]["overrides"]["documents.lines"] = 2.into();
@@ -40,8 +54,6 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     value["engine"]["limits"]["overrides"]["people.projects"] = 3.into();
     value["engine"]["limits"]["overrides"]["authority.projects"] = 3.into();
     value["engine"]["limits"]["overrides"]["tasks.funders"] = 4.into();
-    // That project is made from policy 1 (tools.md 5.5).
-    value["engine"]["policies"] = value["engine"]["projects"].clone();
     value["application"] = serde_json::json!({
         "webhooks":null,
 "clients":{"listener":{"socket":"127.0.0.1:0"},"public":null,"bundle":null},
@@ -55,6 +67,13 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
         "workers":[{"root":"worker-root","git":"/usr/bin/git"}]});
     turn_bounds::apply(&mut value, turn_bounds::turn_body(&agent));
     (serde_json::to_vec(&agent).expect("agent JSON"), serde_json::to_vec(&value).expect("deployment JSON"))
+}
+
+/// Keep a copied fixture's startup members and use temper's stock settings.
+pub fn use_stock(value: &mut serde_json::Value) {
+    for member in ["charters", "templates", "policies", "rules"] {
+        value["engine"].as_object_mut().expect("engine object").remove(member);
+    }
 }
 
 /// All directories are explicit and belong to this fixture's scratch.

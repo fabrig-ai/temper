@@ -676,10 +676,6 @@ pub fn live_deployment(paths: &[PathBuf; 3]) -> std::net::SocketAddr {
     let path = paths[0].join("temper.json");
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("configuration")).expect("JSON");
     value["engine"]["limits"]["overrides"]["accounts.sign_in_deadline_ms"] = 600_000.into();
-    for charter in value["engine"]["charters"].as_array_mut().expect("charters") {
-        assert_eq!(charter["model"], "gpt-6-luna", "the shipped plan model");
-        charter["time_ms"] = 240_000.into();
-    }
     super::write_private(&path, &serde_json::to_vec(&value).expect("live configuration"));
     value["application"]["forges"]
         .as_array()
@@ -792,8 +788,6 @@ pub fn reserve_live_store(path: &std::path::Path) -> Result<bool, String> {
         ("data/forge-3/forgejo", true),
         ("config/temper.json", false),
         ("config/agent.json", false),
-        ("config/charters/chat.txt", false),
-        ("config/charters/coding.txt", false),
         ("data/box/started/3", false),
         ("data/forge-3/forgejo/app.ini", false),
         ("data/forge-3/forgejo/forgejo.db", false),
@@ -1146,6 +1140,8 @@ fn live_json(call: &super::Ended) -> Result<serde_json::Value, String> {
 
 enum LivePhase {
     Setup,
+    Settings,
+    SettingsChanged,
     Roots,
     Created,
     Delegates,
@@ -1196,12 +1192,19 @@ impl LiveJudge<'_> {
         if !calls.foreground_idle() || !self.pending.is_empty() {
             return Ok(());
         }
+        if matches!(self.phase, LivePhase::SettingsChanged) {
+            self.queue(&["tasks", "--project", &self.tasks.project.to_string(), "--json"]);
+            self.phase = LivePhase::Roots;
+            return Ok(());
+        }
         let last = live_json(calls.ends().last().ok_or("live read missing")?)?;
         let chat = self.tasks.chat.to_string();
         let change = self.tasks.change.to_string();
         let project = self.tasks.project.to_string();
         match self.phase {
             LivePhase::Setup => self.setup(now, calls)?,
+            LivePhase::Settings => self.settings(calls)?,
+            LivePhase::SettingsChanged => unreachable!("settings change handled before the JSON reads"),
             LivePhase::Roots => {
                 self.roots = live_roots(&last)?;
                 let key = format!("live-chat-{}", now.as_nanos());
@@ -1330,15 +1333,48 @@ impl LiveJudge<'_> {
         }
         self.token = Some(token);
         if self.plan.first {
-            // All fixed setup indices were consumed before this extra read.
-            self.queue(&["tasks", "--project", &self.tasks.project.to_string(), "--json"]);
-            self.phase = LivePhase::Roots;
+            // All fixed setup indices were consumed before these extra reads.
+            if self.plan.kept {
+                self.queue(&["tasks", "--project", &self.tasks.project.to_string(), "--json"]);
+                self.phase = LivePhase::Roots;
+            } else {
+                self.queue(&["settings", "--json"]);
+                self.queue(&["setting", "charter", "1", "--json"]);
+                self.queue(&["setting", "charter", "2", "--json"]);
+                self.phase = LivePhase::Settings;
+            }
         } else {
             self.wait_started = Some(now);
             self.wait_until = Some(now.saturating_add(Duration::from_secs(1800)));
             self.wait_round(now)?;
         }
 
+        Ok(())
+    }
+    fn settings(&mut self, calls: &super::ctl::Calls) -> Result<(), String> {
+        let reads = &calls.ends()[calls.ends().len() - 3..];
+        let revision = live_json(&reads[0])?["newest"].as_u64().ok_or("settings revision missing")?;
+        let mut items = Vec::new();
+        for read in &reads[1..] {
+            let setting = live_json(read)?;
+            let mut value = setting["value"].clone();
+            require(value["model"]["name"] == "gpt-6-luna", "the shipped plan model")?;
+            value["time"] = 240_000_000_000_u64.into();
+            items.push(serde_json::json!({"setting":setting["setting"],"set":value}));
+        }
+        let file = self.plan.client.join("settings.json");
+        let change = serde_json::json!({"items":items});
+        fs::write(&file, serde_json::to_vec(&change).map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
+        self.queue(&[
+            "change-settings",
+            file.to_str().ok_or("settings FILE path is not UTF-8")?,
+            "--against",
+            &revision.to_string(),
+            "--key",
+            "live-settings",
+        ]);
+        self.phase = LivePhase::SettingsChanged;
         Ok(())
     }
     fn find_delegates(

@@ -73,7 +73,7 @@ corresponding XDG directory under `temper`. Relative flags are joined to
 the working directory once at startup. Data and cache must be private.
 
 `temper init --config ./config --data ./data --cache ./cache` writes the
-initial configuration, worker secret and charters. It refuses existing
+initial configuration and worker secret. It refuses existing
 `temper.json`, `worker.secret` or `worker.digest` files.
 
 After starting temper, open the accounts page and add an OpenAI API key.

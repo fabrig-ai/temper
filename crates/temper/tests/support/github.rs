@@ -18,6 +18,35 @@ const INSTALLATION: u64 = 1;
 const CODER: u64 = 3; // Fresh deployment: chat 1, change procedure 2, its coder 3.
 const EDIT: &[u8] = b"Changed by temper.\n";
 
+/// Both GitHub stories park chat promptly and reserve 50 units for its delegates.
+/// Read the stock's whole settings after sign-in, then commit both edits together.
+pub fn settings_setup(client: &Path, following: Vec<ctl::Call>) -> Vec<ctl::Step> {
+    use ctl::{Call, Step};
+    let file = client.join("settings.json");
+    let mut steps = vec![
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        Step::Run(Call::new(&["setting", "template", "1", "--json"])),
+        Step::Then(Box::new(move |calls| {
+            let charter = ctl::json(&calls[2]);
+            let template = ctl::json(&calls[3]);
+            let mut chat = charter["value"].clone();
+            chat["waiting"] = 1_000_000.into();
+            let mut recipe = template["value"].clone();
+            recipe["budget"] = serde_json::json!({"as_allowed":{"cap":50}});
+            let change = serde_json::json!({"items":[
+                {"setting":charter["setting"],"set":chat},
+                {"setting":template["setting"],"set":recipe}
+            ]});
+            fs::write(&file, serde_json::to_vec(&change).expect("GitHub settings JSON")).expect("settings FILE");
+            ctl::settings_change(&calls[1], &file, "github-settings")
+        })),
+    ];
+    steps.extend(following.into_iter().map(Step::Run));
+    steps
+}
+
 pub fn restart() {
     let clock = Clock::new();
     let began = clock.now().now;
@@ -118,11 +147,14 @@ impl Judge {
         eprintln!("github git: {step} {:?}", Clock::new().now().now.saturating_since(self.began));
     }
     fn queue(&mut self, host: &mut cluster::Root, calls: Vec<ctl::Call>) {
+        self.queue_steps(host, calls.into_iter().map(ctl::Step::Run).collect());
+    }
+    fn queue_steps(&mut self, host: &mut cluster::Root, steps: Vec<ctl::Step>) {
         self.call_marks = 0;
         let link = format!("http://{}", self.members.capture("engine", "link").expect("engine link"));
         let mut batch = ctl::Calls::linked(&link, &self.client);
-        for call in calls {
-            batch.push(ctl::Step::Run(call));
+        for step in steps {
+            batch.push(step);
         }
         let cluster::Root::Client { calls, .. } = host else { panic!("client root") };
         *calls = Some(Box::new(batch));
@@ -137,31 +169,33 @@ impl Judge {
         assert_eq!(workers.len(), 1);
         assert_eq!(workers[0]["name"], "w1");
         assert_eq!(self.members.linked("w1"), 1, "the sole worker linked");
-        self.queue(
+        self.queue_steps(
             host,
-            vec![
-                Call::sign_in(),
-                Call::new(&[
-                    "add-key",
-                    "1",
-                    self.key.to_str().expect("key path"),
-                    "--deployment",
-                    "--key",
-                    "github-llm",
-                ]),
-                Call::new(&["wait", "accounts", "--until", "usable"]),
-                Call::new(&[
-                    "forge-connect",
-                    "1",
-                    "github-app",
-                    &self.app.as_ref().expect("made App").id.to_string(),
-                    self.scratch.join("github-app.pem").to_str().expect("PEM path"),
-                    "--key",
-                    "github-app",
-                ]),
-                Call::new(&["wait", "forges", "--until", "connected:1"]),
-                Call::new(&["forge-install", "1", "--key", "github-install"]),
-            ],
+            super::github::settings_setup(
+                &self.client,
+                vec![
+                    Call::new(&[
+                        "add-key",
+                        "1",
+                        self.key.to_str().expect("key path"),
+                        "--deployment",
+                        "--key",
+                        "github-llm",
+                    ]),
+                    Call::new(&["wait", "accounts", "--until", "usable"]),
+                    Call::new(&[
+                        "forge-connect",
+                        "1",
+                        "github-app",
+                        &self.app.as_ref().expect("made App").id.to_string(),
+                        self.scratch.join("github-app.pem").to_str().expect("PEM path"),
+                        "--key",
+                        "github-app",
+                    ]),
+                    Call::new(&["wait", "forges", "--until", "connected:1"]),
+                    Call::new(&["forge-install", "1", "--key", "github-install"]),
+                ],
+            ),
         );
         self.stage = Stage::Install;
     }

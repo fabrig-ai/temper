@@ -9,9 +9,9 @@ fn a_real_model_answers_a_chat_and_pushes_a_small_change() {
     let scratch = support::Scratch::live();
     let forgejo = support::forgejo::Throwaway::start(&scratch);
     support::configuration(scratch.path(), &forgejo.forge());
-    support::live::configure(scratch.path(), &forgejo);
+    let instructions = support::live::configure(scratch.path(), &forgejo);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        support::live::run(scratch.path(), &forgejo, Duration::from_secs(2_580))
+        support::live::run(scratch.path(), &forgejo, &instructions, Duration::from_secs(2_580))
     }));
     let completions = support::live::completions(scratch.path());
     support::live::notice(&format!(

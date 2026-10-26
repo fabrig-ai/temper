@@ -1041,14 +1041,20 @@ fn settings_call(verb: &str, inventory: &Ended, file: &Path, key: &str) -> Call 
     Call::new(&[verb, file.to_str().expect("fixture FILE path"), "--against", &revision.to_string(), "--key", key])
 }
 
-/// Edit the whole charter value returned by ctl and wrap it in FILE's items.
-pub fn charter_change_file(file: &Path, setting: &Ended, instructions: &str) {
+/// Write FILE for `change-settings`: the setting `ctl setting KIND N --json` read,
+/// its whole value edited by `edit`.
+pub fn setting_change_file(file: &Path, setting: &Ended, edit: impl FnOnce(&mut serde_json::Value)) {
     let document = json(setting);
-    assert_eq!(document["setting"]["kind"], "charter");
     let mut value = document["value"].clone();
-    value["instructions"] = instructions.into();
+    edit(&mut value);
     let file_value = serde_json::json!({"items":[{"setting":document["setting"],"set":value}]});
     std::fs::write(file, serde_json::to_vec(&file_value).expect("settings FILE JSON")).expect("settings FILE");
+}
+
+/// Edit the whole charter value returned by ctl and wrap it in FILE's items.
+pub fn charter_change_file(file: &Path, setting: &Ended, instructions: &str) {
+    assert_eq!(json(setting)["setting"]["kind"], "charter");
+    setting_change_file(file, setting, |value| value["instructions"] = instructions.into());
 }
 
 /// Use the typed party proposal identity actually returned by the engine.

@@ -66,10 +66,13 @@ pub(super) fn write_private(path: &Path, bytes: &[u8]) {
 }
 pub fn configuration(directory: &Path, forge: &Forge<'_>) {
     assert!(Path::new("/usr/bin/git").is_file(), "/usr/bin/git is required");
-    for name in ["accounts", "secrets", "charters", "state"] {
+    for name in ["accounts", "secrets", "state"] {
         fs::create_dir_all(directory.join(name)).expect("deployment directory");
     }
     for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
+        if name.starts_with(b"charters/") {
+            continue;
+        }
         write_private(&directory.join(std::str::from_utf8(&name).expect("fixture path")), bytes.expose());
     }
     write_private(&directory.join("worker.secret"), b"worker-secret");

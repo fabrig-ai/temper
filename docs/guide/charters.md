@@ -150,12 +150,11 @@ acceptance alone does not prove an existing host can satisfy a
 larger request.
 
 Save the current whole value with `setting ... --json` before editing
-it. Setting JSON and the configuration document are different
-formats: the setting contains inline instructions, model objects
-and durations in nanoseconds. Never copy a value from the
-configuration document into a settings change, or copy a setting
-value back into that document. Follow the items-file construction
-in `temper help settings`.
+it. The setting contains inline instructions, model objects and
+durations in nanoseconds. Charters, templates, numbered policies and
+rules do not go in `temper.json`; there are no charter instruction
+files to copy or edit. Follow the items-file construction in
+`temper help settings`.
 
 ## What it cannot do yet
 

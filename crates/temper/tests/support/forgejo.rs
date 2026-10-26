@@ -230,7 +230,17 @@ pub fn configuration(directory: &Path, forge: &Forge<'_>, value: &mut Value) {
     value["application"]["limits"]["overrides"]["root.brief.gather_ms"] = BRIEF_GATHER_MS.into();
     let path = directory.join("agent.json");
     let mut agent: Value = serde_json::from_slice(&fs::read(&path).expect("agent configuration")).expect("agent JSON");
+    // The real-loop helper still checks Document defaults in this slice.
+    // Lend its preflight the channel fixture's settings, then keep only its
+    // project, worker and capacity edits in this process document.
+    let mut inherited: Value =
+        serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("engine JSON");
+    for member in ["charters", "templates", "rules"] {
+        value["engine"][member] = inherited["engine"][member].take();
+    }
     landing::configure(value, &mut agent, *api);
+    super::configuration::use_stock(value);
+    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
     super::configuration::turn_bounds::apply(value, super::configuration::turn_bounds::turn_body(&agent));
     write_private(&path, &serde_json::to_vec(&agent).expect("agent JSON"));
 }

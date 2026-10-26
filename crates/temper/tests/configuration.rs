@@ -18,13 +18,8 @@ fn process_engine() -> jig_protocol_config::Engine {
     let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(&bytes, &DOCUMENT).expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
-    let engine = jig_protocol_config::engine(
-        &document,
-        0,
-        &jig_protocol_config::Directories::working(),
-        jig_protocol_config::Defaults::Document,
-    )
-    .expect("engine configuration");
+    let engine = temper_service::startup::engine(&document, 0, &jig_protocol_config::Directories::working())
+        .expect("engine configuration");
     scratch.remove();
     engine
 }
@@ -65,13 +60,8 @@ fn the_owned_example_fits_the_native_client() {
     let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(&bytes, &DOCUMENT).expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
-    let engine = jig_protocol_config::engine(
-        &document,
-        0,
-        &jig_protocol_config::Directories::working(),
-        jig_protocol_config::Defaults::Document,
-    )
-    .expect("engine configuration");
+    let engine = temper_service::startup::engine(&document, 0, &jig_protocol_config::Directories::working())
+        .expect("engine configuration");
     let native = temper_client_shell_terminal::limits::native().client.client.domain;
     assert!(engine.limits.core.documents.rows <= native.rows);
     assert!(engine.limits.core.documents.lines <= native.rows);

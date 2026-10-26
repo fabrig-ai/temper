@@ -476,17 +476,13 @@ fn serve_checks_the_owned_agents_admission_at_each_bound() {
     let original: serde_json::Value =
         serde_json::from_slice(&fs::read(&path).expect("agent fixture")).expect("agent JSON");
     for (member, value, expected) in [
-        (
-            "max_turns",
-            7,
-            Some("engine.charters[0].turns: needs 8 turns; the agent's profile.policy.max_turns allows 7\n"),
-        ),
+        ("max_turns", 7, Some("charter 1.turns: needs 8 turns; the agent's profile.policy.max_turns allows 7\n")),
         ("max_turns", 8, None),
         (
             "check_timeout",
             60001,
             Some(
-                "engine.charters[0].reserve_time_ms: needs checks within 60000 ms; the agent's profile.policy.check_timeout is 60001 ms\n",
+                "charter 1.reserve_time_ms: needs checks within 60000 ms; the agent's profile.policy.check_timeout is 60001 ms\n",
             ),
         ),
         ("check_timeout", 60000, None),
@@ -494,7 +490,7 @@ fn serve_checks_the_owned_agents_admission_at_each_bound() {
             "check_timeout",
             300_000,
             Some(
-                "engine.charters[0].reserve_time_ms: needs checks within 60000 ms; the agent's profile.policy.check_timeout is 300000 ms\n",
+                "charter 1.reserve_time_ms: needs checks within 60000 ms; the agent's profile.policy.check_timeout is 300000 ms\n",
             ),
         ),
         (
@@ -534,21 +530,7 @@ fn serve_checks_the_owned_agents_admission_at_each_bound() {
     support::write_private(&path, &serde_json::to_vec(&agent).expect("agent JSON"));
     assert_eq!(
         temper::prepare_in(&support::configuration::directories(scratch.path())).err().expect("old tuple refused"),
-        "temper serve: engine.charters[0].turns: needs 8 turns; the agent's profile.policy.max_turns allows 5\ntemper serve: workers[0].agent.profile.declared.tool_payload: 600 bytes, short of temper's documentation answer (read_docs), 2048 bytes\n"
-    );
-    // The selected charter's number identifies its path, even when it is not its index.
-    let config_path = scratch.path().join("temper.json");
-    let mut document: serde_json::Value =
-        serde_json::from_slice(&fs::read(&config_path).expect("configuration")).expect("JSON");
-    assert_eq!(document["engine"]["charters"][1]["number"].as_u64(), Some(2));
-    document["engine"]["charters"][0]["turns"] = 4.into();
-    support::write_private(&config_path, &serde_json::to_vec(&document).expect("configuration JSON"));
-    agent = original;
-    agent["profile"]["policy"]["max_turns"] = 7.into();
-    support::write_private(&path, &serde_json::to_vec(&agent).expect("agent JSON"));
-    assert_eq!(
-        temper::prepare_in(&support::configuration::directories(scratch.path())).err().expect("second charter refused"),
-        "temper serve: engine.charters[1].turns: needs 8 turns; the agent's profile.policy.max_turns allows 7\n"
+        "temper serve: charter 1.turns: needs 8 turns; the agent's profile.policy.max_turns allows 5\ntemper serve: workers[0].agent.profile.declared.tool_payload: 600 bytes, short of temper's documentation answer (read_docs), 2048 bytes\n"
     );
     scratch.remove();
 }

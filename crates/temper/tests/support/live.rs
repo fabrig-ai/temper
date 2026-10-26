@@ -13,16 +13,13 @@ use std::{
     rc::Rc,
 };
 
-pub fn configure(directory: &Path, forge: &Throwaway) {
+#[must_use]
+pub fn configure(directory: &Path, forge: &Throwaway) -> String {
     let path = directory.join("temper.json");
     let mut value: Value = serde_json::from_slice(&fs::read(&path).expect("configuration")).expect("JSON");
     let owned: Value = serde_json::from_slice(super::owned::EXAMPLE).expect("owned example");
     value["engine"]["llm"] = owned["engine"]["llm"].clone();
-    value["engine"]["charters"][0]["model"] = "gpt-6-luna".into();
-    value["engine"]["charters"][0]["alternatives"] = serde_json::json!([]);
     value["engine"]["limits"]["overrides"]["documents.rows"] = 32.into();
-    value["engine"]["charters"][0]["turns"] = 5.into();
-    value["engine"]["charters"][0]["time_ms"] = 240_000.into();
     let agent_path = directory.join("agent.json");
     let mut agent: Value = serde_json::from_slice(super::owned::SHIPPED[0].1).expect("owned agent JSON");
     if let Some(program) = agent["programs"].get_mut("claude_code") {
@@ -36,7 +33,7 @@ pub fn configure(directory: &Path, forge: &Throwaway) {
             agent["programs"].as_object_mut().expect("programs").remove("claude_code");
         }
     }
-    agent["profile"]["policy"]["max_turns"] = 5.into();
+    agent["profile"]["policy"]["max_turns"] = 8.into();
     value["workers"][0]["limits"]["overrides"]["hub.event_bytes"] = 4096.into();
     value["application"]["limits"]["overrides"]["checkout.message_bytes"] = 4098.into();
     let scripts = super::landing_scripts(super::ANSWER, forge);
@@ -51,10 +48,10 @@ pub fn configure(directory: &Path, forge: &Throwaway) {
         For a change review task, finish with {{\"form\":\"verdict\",\"label\":\"1\",\"text\":\"Checked\",\"fields\":{{}},\"items\":[]}}.",
         std::str::from_utf8(arguments).expect("delegate JSON").replace("@coding", "\\u0040coding")
     );
-    write_private(&directory.join("charters/chat.txt"), instructions.as_bytes());
     super::configuration::turn_bounds::apply(&mut value, super::configuration::turn_bounds::turn_body(&agent));
     write_private(&path, &serde_json::to_vec(&value).expect("live configuration JSON"));
     write_private(&agent_path, &serde_json::to_vec(&agent).expect("live agent JSON"));
+    instructions
 }
 
 pub struct Pushed {
@@ -209,7 +206,7 @@ impl Judge<'_> {
                     String::from_utf8_lossy(&ended.stderr)
                 );
             }
-            let [_, _, _, account] = calls.ends() else { panic!("live setup calls") };
+            let [_, _, _, account, ..] = calls.ends() else { panic!("live setup calls") };
             account_ready(&super::ctl::json(account));
             let link = calls.link().to_vec();
             self.checked = SETUP_CALLS;
@@ -247,7 +244,8 @@ impl Judge<'_> {
         }
     }
 }
-const SETUP_CALLS: usize = 4;
+// Sign-in/account setup, then the stock inventory, charter read and one settings change.
+const SETUP_CALLS: usize = 7;
 fn sign_in_within() -> Duration {
     jig_protocol_config::profile::profile(jig_protocol_config::profile::Profile::Small).driver.client.sign_in_time
 }
@@ -314,8 +312,10 @@ impl Referee<Process> for Judge<'_> {
 }
 
 #[must_use]
-pub fn run(directory: &Path, forge: &Throwaway, deadline: Duration) -> Pushed {
+pub fn run(directory: &Path, forge: &Throwaway, instructions: &str, deadline: Duration) -> Pushed {
     use super::ctl::{Call, Calls, Step};
+    let instructions = instructions.to_owned();
+    let file = directory.join("settings.json");
     let clock = Clock::new();
     let started = clock.now().now;
     let mut binary = super::serve(directory);
@@ -348,6 +348,16 @@ pub fn run(directory: &Path, forge: &Throwaway, deadline: Duration) -> Pushed {
                 Step::Run(Call::new(&["connect", "1", "--key", "live-sign-in"])),
                 Step::Run(Call::new(&["wait", "accounts", "--until", "settled", "--json"])),
                 Step::Run(Call::new(&["accounts", "--json"])),
+                Step::Run(Call::new(&["settings", "--json"])),
+                Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+                Step::Then(Box::new(move |calls| {
+                    super::ctl::setting_change_file(&file, &calls[5], |value| {
+                        value["turns"] = 5.into();
+                        value["time"] = 240_000_000_000_u64.into();
+                        value["instructions"] = instructions.into();
+                    });
+                    super::ctl::settings_change(&calls[4], &file, "live-settings")
+                })),
             ],
             Some(&streams),
             None,
@@ -424,9 +434,7 @@ fn count_completions(config: &Path, directories: &temper::directories::Directori
         .expect("object")
         .member(&document, b"engine")
         .expect("engine member");
-    let engine =
-        jig_protocol_config::engine(&document, at, &directories.jig(), jig_protocol_config::Defaults::Document)
-            .expect("engine configuration");
+    let engine = temper_service::startup::engine(&document, at, &directories.jig()).expect("engine configuration");
     let limits = codec::limits(&engine.limits.core).expect("store codec limits");
     let mut paths = Vec::new();
     let deployment = Path::new(std::ffi::OsStr::from_bytes(&engine.deployment.directory));

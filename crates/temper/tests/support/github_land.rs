@@ -134,11 +134,14 @@ impl Judge {
         eprintln!("github land: {step} {:?}", Clock::new().now().now.saturating_since(self.began));
     }
     fn queue(&mut self, host: &mut cluster::Root, calls: Vec<ctl::Call>) {
+        self.queue_steps(host, calls.into_iter().map(ctl::Step::Run).collect());
+    }
+    fn queue_steps(&mut self, host: &mut cluster::Root, steps: Vec<ctl::Step>) {
         self.call_marks = 0;
         let link = format!("http://{}", self.members.capture("engine", "link").expect("engine link"));
         let mut batch = ctl::Calls::linked(&link, &self.client);
-        for call in calls {
-            batch.push(ctl::Step::Run(call));
+        for step in steps {
+            batch.push(step);
         }
         let cluster::Root::Client { calls, .. } = host else { panic!("client root") };
         *calls = Some(Box::new(batch));
@@ -153,31 +156,33 @@ impl Judge {
         assert_eq!(workers.len(), 1);
         assert_eq!(workers[0]["name"], "w1");
         assert_eq!(self.members.linked("w1"), 1, "the sole worker linked");
-        self.queue(
+        self.queue_steps(
             host,
-            vec![
-                Call::sign_in(),
-                Call::new(&[
-                    "add-key",
-                    "1",
-                    self.key.to_str().expect("key path"),
-                    "--deployment",
-                    "--key",
-                    "github-llm",
-                ]),
-                Call::new(&["wait", "accounts", "--until", "usable"]),
-                Call::new(&[
-                    "forge-connect",
-                    "1",
-                    "github-app",
-                    &self.app.as_ref().expect("made App").id.to_string(),
-                    self.scratch.join("github-app.pem").to_str().expect("PEM path"),
-                    "--key",
-                    "github-app",
-                ]),
-                Call::new(&["wait", "forges", "--until", "connected:1"]),
-                Call::new(&["forge-install", "1", "--key", "github-install"]),
-            ],
+            super::github::settings_setup(
+                &self.client,
+                vec![
+                    Call::new(&[
+                        "add-key",
+                        "1",
+                        self.key.to_str().expect("key path"),
+                        "--deployment",
+                        "--key",
+                        "github-llm",
+                    ]),
+                    Call::new(&["wait", "accounts", "--until", "usable"]),
+                    Call::new(&[
+                        "forge-connect",
+                        "1",
+                        "github-app",
+                        &self.app.as_ref().expect("made App").id.to_string(),
+                        self.scratch.join("github-app.pem").to_str().expect("PEM path"),
+                        "--key",
+                        "github-app",
+                    ]),
+                    Call::new(&["wait", "forges", "--until", "connected:1"]),
+                    Call::new(&["forge-install", "1", "--key", "github-install"]),
+                ],
+            ),
         );
         self.stage = Stage::Install;
     }

@@ -7,8 +7,13 @@ loopback, from a checkout of temper, then adopt a repository and ask
 for work.
 
 This walk starts from a checkout of temper. Everything is on loopback.
-The example's rule covers acme/widget alone. Its charters are short texts
-to edit in `owned/charters/` before asking for work.
+The example's landing rule covers acme/widget alone. Temper supplies the
+stock charters, templates, the policy new projects are made from and the
+rules. They are settings: read them with `temper ctl me settings`. An
+owner changes them with `temper ctl me change-settings`, or a member
+proposes a change with `temper ctl me propose-settings`. Here `me` is
+your signed-in client directory; `temper help settings` explains the
+change file and the required revision and key.
 
 ## Step 1. Install the three programs
 

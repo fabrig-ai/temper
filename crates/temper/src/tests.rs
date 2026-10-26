@@ -93,7 +93,7 @@ fn the_standalone_envelope_retains_no_descriptors() {
     let directory = std::env::temp_dir().join(format!("temper-envelope-{}", std::process::id()));
     fs::create_dir(&directory).expect("envelope scratch");
     fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).expect("private scratch");
-    for name in ["accounts", "secrets", "charters", "state"] {
+    for name in ["accounts", "secrets", "state"] {
         fs::create_dir_all(directory.join(name)).expect("fixture parents");
     }
     let write = |name: &str, bytes: &[u8]| {
@@ -102,6 +102,9 @@ fn the_standalone_envelope_retains_no_descriptors() {
         fs::set_permissions(path, fs::Permissions::from_mode(0o600)).expect("private fixture");
     };
     for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
+        if name.starts_with(b"charters/") {
+            continue;
+        }
         write(std::str::from_utf8(&name).expect("fixture path"), bytes.expose());
     }
     for (name, bytes) in [

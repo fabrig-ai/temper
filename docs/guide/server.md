@@ -21,7 +21,7 @@ worker alone) and `docs/design/protocol/setup.md` (the owned forge).
 
 - **On `engine`,** under a service user of its own, `temper`, home
   `/var/lib/temper` (0700, no login shell), which holds `bin/temper`,
-  `config/` (the document and the charters), `data/` (the store, the
+  `config/` (the document), `data/` (the store, the
   forge's directory `forge-1/`, `secrets/`) and `cache/` (the fetched
   Forgejo):
   - Forgejo, fetched, prepared and run by temper, at `127.0.0.1:3000`;
@@ -56,8 +56,14 @@ binary's format and figures.
 ## 3. The engine's configuration
 
 Start from `owned.json` and change these members; keep the rest. The
-document goes to `/var/lib/temper/config/temper.json`, the charters to
-`config/owned/charters/`.
+document goes to `/var/lib/temper/config/temper.json`.
+
+Temper supplies the stock charters, templates, the policy new projects
+are made from and the rules. Read these settings after signing in with
+`temper ctl me settings`, where `me` is your client directory. An owner
+uses `temper ctl me change-settings` to change them; a member can ask
+with `temper ctl me propose-settings`. Read `temper help settings` for
+the change file, revision and key these commands need.
 
 | Member | Value |
 |---|---|

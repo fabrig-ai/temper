@@ -7,11 +7,14 @@ is, how a proposal asks the deployment's owners, and what still needs a restart.
 
 ## What the settings are
 
-Settings are defaults with stored changes over them. A changed value
+Temper supplies stock defaults for its settings in the binary. The
+store keeps changes over those defaults. A changed value
 wins until reset. Removing a default hides its value while keeping
 its origin in the inventory. The kinds are numbered charters,
 templates and policies, and unnumbered deployment rules. Read
-`temper help charters` for what each controls.
+`temper help charters` for what each controls. These values do not go in
+`temper.json`, and charter instructions are part of the setting rather
+than separate files.
 
 Providers and model catalogues, listener addresses, workers, slots,
 secrets and capacity limits are startup inputs rather than settings.

@@ -494,11 +494,8 @@ pub fn tier_configuration(directory: &Path) -> std::net::SocketAddr {
 
 /// The complete owned deployment and its non-secret files, kept with the guide.
 pub const EXAMPLE: &[u8] = include_bytes!("../../../../docs/examples/owned.json");
-pub const SHIPPED: [(&str, &[u8]); 3] = [
-    ("owned/agent.json", include_bytes!("../../../../docs/examples/owned/agent.json")),
-    ("owned/charters/chat.txt", include_bytes!("../../../../docs/examples/owned/charters/chat.txt")),
-    ("owned/charters/coding.txt", include_bytes!("../../../../docs/examples/owned/charters/coding.txt")),
-];
+pub const SHIPPED: [(&str, &[u8]); 1] =
+    [("owned/agent.json", include_bytes!("../../../../docs/examples/owned/agent.json"))];
 /// The example's three listeners, provider, binaries and optional agent review.
 pub struct Owned {
     pub forgejo: SocketAddr,
@@ -583,7 +580,7 @@ pub fn example_document(directory: &Path, owned: &Owned) -> Vec<u8> {
 }
 /// The guide's copied files and private forge credentials.
 pub fn lay(directory: &Path, owned: &Owned) {
-    for name in ["owned/charters", "secrets"] {
+    for name in ["owned", "secrets"] {
         let path = directory.join(name);
         fs::create_dir_all(&path).expect("example directory");
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).expect("private directory");
