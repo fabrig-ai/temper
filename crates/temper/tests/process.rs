@@ -1488,23 +1488,8 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
         forge_land::assert_landed_chat_pull(run, &evidence);
         let task = String::from_utf8(outcome.calls[found_at + 1].stdout.clone()).expect("landed task UTF-8");
         let identity = forge_land::landed_identity(&task, &evidence.page);
-        let tasks_at = outcome
-            .calls
-            .iter()
-            .position(|call| {
-                serde_json::from_slice::<serde_json::Value>(&call.stdout)
-                    .ok()
-                    .is_some_and(|value| value["ended"].is_object() && value["live"].is_array())
-            })
-            .expect("ended delegate pages");
         let closing_at = outcome.calls.len() - if first { 0 } else { 4 };
-        let tasks = [0, 1].map(|offset| {
-            forge_land::ended_tasks(
-                &outcome.calls[tasks_at..closing_at],
-                1 + offset,
-                if offset == 0 { &[2] } else { &[3, 4] },
-            )
-        });
+        let (tasks_at, tasks) = forge_land::plan_ended_tasks(&outcome.calls[..closing_at]);
         if first {
             landed = Some(identity);
             ended_tasks = Some(tasks);

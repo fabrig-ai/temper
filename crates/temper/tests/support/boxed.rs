@@ -410,6 +410,46 @@ enum Visit {
     AwaitingAddress,
     Handed,
 }
+fn report_face_stop(calls: &super::ctl::Calls, stderr: &[u8], failed: bool, expired: bool) {
+    eprintln!("face box stop: idle {}, failed {failed}, expired {expired}, calls {}", calls.idle(), calls.ends().len());
+    for (index, call) in calls.ends().iter().enumerate().rev().take(3) {
+        eprintln!(
+            "face call {index}: {:?}; stdout {}; stderr {}",
+            call.exit,
+            String::from_utf8_lossy(&call.stdout),
+            String::from_utf8_lossy(&call.stderr)
+        );
+    }
+    eprintln!("face box stderr: {}", String::from_utf8_lossy(stderr));
+}
+fn release_llm(calls: &mut super::ctl::Calls, peers: &mut [Process], release_answers: &mut Option<usize>) {
+    let Some(name) = calls.llm_release() else { return };
+    let peer = peers
+        .iter_mut()
+        .find_map(|proc| match proc {
+            Process::Peer(peer) => Some(peer),
+            Process::Calls(_)
+            | Process::Binary(_)
+            | Process::Stdout(_)
+            | Process::Person(_)
+            | Process::Issuer(_)
+            | Process::Visitor(_) => None,
+        })
+        .expect("scripted model owns the hold");
+    let answered = peer
+        .observations()
+        .iter()
+        .filter(|event| matches!(event, skein_fake_peers::llm::Observation::Answered { .. }))
+        .count();
+    let before = *release_answers.get_or_insert(answered);
+    if answered > before {
+        calls.llm_released();
+        *release_answers = None;
+    } else {
+        // The review task can be visible before its model reaches the hold.
+        peer.release(name).expect("release scripted review");
+    }
+}
 impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
     fn act(&mut self, now: Time, procs: &mut [Process]) {
         let Process::Calls(calls) = &procs[1] else { panic!("ctl") };
@@ -458,28 +498,7 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         }
         let (drivers, peers) = procs.split_at_mut(2);
         let [Process::Binary(binary), Process::Calls(calls)] = drivers else { panic!("box and ctl") };
-        if let Some(name) = calls.llm_release() {
-            let peer = peers
-                .iter_mut()
-                .find_map(|proc| match proc {
-                    Process::Peer(peer) => Some(peer),
-                    _ => None,
-                })
-                .expect("scripted model owns the hold");
-            let answered = peer
-                .observations()
-                .iter()
-                .filter(|event| matches!(event, skein_fake_peers::llm::Observation::Answered { .. }))
-                .count();
-            let before = *self.release_answers.get_or_insert(answered);
-            if answered > before {
-                calls.llm_released();
-                self.release_answers = None;
-            } else {
-                // The review task can be visible before its model reaches the hold.
-                peer.release(name).expect("release scripted review");
-            }
-        }
+        release_llm(calls, peers, &mut self.release_answers);
         if printed_link(calls.stdout()).is_some()
             && let Some(on_link) = self.on_link.take()
         {
@@ -500,20 +519,7 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         }
         if !self.stopping && (calls.idle() || failed || expired || binary.exit_status().is_some()) {
             if self.face.is_some() {
-                eprintln!(
-                    "face box stop: idle {}, failed {failed}, expired {expired}, calls {}",
-                    calls.idle(),
-                    calls.ends().len()
-                );
-                for (index, call) in calls.ends().iter().enumerate().rev().take(3) {
-                    eprintln!(
-                        "face call {index}: {:?}; stdout {}; stderr {}",
-                        call.exit,
-                        String::from_utf8_lossy(&call.stdout),
-                        String::from_utf8_lossy(&call.stderr)
-                    );
-                }
-                eprintln!("face box stderr: {}", String::from_utf8_lossy(binary.stderr()));
+                report_face_stop(calls, binary.stderr(), failed, expired);
             }
             if calls.idle() && !failed && !expired && binary.exit_status().is_none() {
                 self.checked.set(Some(self.check.take().expect("one live check")()));
