@@ -4,7 +4,7 @@ use super::{Inbox, Platform, Report as ShellReport, Shell, limits, platform, sig
 use skein_lib::Wall;
 use skein_ui_web::{
     bridge::Start,
-    platform::worker::{Heard, Limits, Speed},
+    platform::worker::{Figures, Heard, Limits, Speed},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -81,7 +81,7 @@ impl Starter {
     fn turn(&mut self, inbox: &Rc<Inbox<ShellReport>>) {
         if self.shell.is_none() {
             let starting = self.starting.as_mut().expect("waiting for the printed link");
-            starting.frame.time(starting.platform.clocks().1);
+            starting.frame.time(starting.platform.clocks().1, starting.platform.figures());
             let mut linked = false;
             while let Some(report) = inbox.next() {
                 match report {
@@ -206,7 +206,7 @@ impl Frame {
         self.ended
     }
 
-    pub(super) fn time(&self, wall: Wall) {
+    pub(super) fn time(&self, wall: Wall, figures: Figures) {
         if !self.ended {
             // Integer milliseconds of any u64-nanosecond wall fit a double's
             // exact integers. Date formats that world wall, never Date::now.
@@ -214,6 +214,13 @@ impl Frame {
             let date = js_sys::Date::new(&JsValue::from_f64(millis));
             let words: String = date.to_iso_string().into();
             element("playground-time").set_text_content(Some(&words));
+            // Round to the nearest tenth of a MiB. u128 keeps the rounding
+            // safe even for the largest u64 byte count.
+            let mib = 1024_u128 * 1024;
+            let tenths = (u128::from(figures.memory) * 10 + mib / 2) / mib;
+            let millis = figures.slice.as_nanos().div_ceil(1_000_000);
+            let words = format!("The world: {}.{} MiB, slices up to {millis} ms", tenths / 10, tenths % 10);
+            element("temper-playground-figures").set_text_content(Some(&words));
         }
     }
 

@@ -19,3 +19,4 @@
 .playground-message { margin: 24px; }
 .playground-message h1 { font-size: 16px; }
 #playground-failure-words { white-space: pre-wrap; overflow-wrap: anywhere; }
+#temper-playground-figures { white-space: nowrap; }

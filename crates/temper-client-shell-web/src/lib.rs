@@ -165,7 +165,7 @@ impl Shell {
         #[cfg(feature = "playground")]
         let (now, wall) = self.platform.clocks();
         #[cfg(feature = "playground")]
-        self.frame.time(wall);
+        self.frame.time(wall, self.platform.figures());
         #[cfg(feature = "record")]
         if let Some(recorder) = &mut self.recorder {
             recorder.turn(now, wall);
