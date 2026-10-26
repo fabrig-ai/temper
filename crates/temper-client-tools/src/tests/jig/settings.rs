@@ -695,7 +695,7 @@ fn a_settings_change_keeps_the_exact_request_for_recovery_and_pending() {
         },
     }]);
     let pending = jig::render::pending::pending(records.as_slice(), 0, false);
-    assert_eq!(pending.stdout.as_ref(), b"change-settings, party 73, not sent\n");
+    assert_eq!(pending.stdout.as_ref(), b"change-settings, party 73, not sent, unanswered: it clears when the engine answers it, or past its retention; pending lists it\n");
     let mut restored = fixtures::started_with(records, fixtures::SEED, false);
     restored.deliver(c::Delivery::Me(Box::new(fixtures::me(fixtures::PARTY))));
     let (_, _, resent) = restored.sends.get(&0).expect("kept request resent");
