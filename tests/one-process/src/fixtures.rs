@@ -337,11 +337,10 @@ pub(crate) fn scripted_provider(scripts: Box<[skein_fake_llm_domain::api::Script
     protocol.documents.openai.tokens = 4096;
     protocol.documents.openai.output_items = 256;
     protocol.documents.anthropic.output_items = 256;
-    skein_fake_peers::llm::Peer::new(
-        (smith_agent_process_world::fake::loopback(), 443).into(),
-        skein_fake_peers::Transport::Plaintext,
-        smith_agent_process_world::fake::limits(),
-        provider::Config {
+    temper_playground::llm(temper_playground::LlmStart {
+        address: (smith_agent_process_world::fake::loopback(), 443).into(),
+        limits: smith_agent_process_world::fake::limits(),
+        provider: provider::Config {
             echo: skein_llm::openai::Echo::NONE,
             usage_fields: documents::UsageFields::ALL,
             provider: documents::Provider::OpenAi,
@@ -349,12 +348,16 @@ pub(crate) fn scripted_provider(scripts: Box<[skein_fake_llm_domain::api::Script
             headers: Box::new([]),
             without_credential: false,
         },
-        skein_llm::Credential { value: channel::KEY.into(), scheme: skein_llm::Scheme::Key, account_id: Box::new([]) },
+        credential: skein_llm::Credential {
+            value: channel::KEY.into(),
+            scheme: skein_llm::Scheme::Key,
+            account_id: Box::new([]),
+        },
         protocol,
-        skein_fake_llm_domain::Domain::try_scripted(&config, 17, scripts).expect("bounded provider scripts"),
         config,
-    )
-    .expect("configured provider")
+        seed: 17,
+        scripts,
+    })
 }
 pub(crate) fn codec() -> jig_protocol_store::codec::Limits {
     let limits = jig_test_service_limits(&engine().limits);

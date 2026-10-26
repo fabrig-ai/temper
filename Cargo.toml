@@ -12,6 +12,7 @@ members = [
     "tools/journeys",
     "tools/fake-claude",
     "tests/one-process",
+    "crates/temper-playground",
     "crates/temper-fake-git",
     "testing/temper-fake-git-hosted",
     "testing/temper-github-app",
@@ -62,6 +63,7 @@ rust-version = "1.95"
 publish = false
 
 [workspace.dependencies]
+temper-playground = { path = "crates/temper-playground" }
 temper-docs = { path = "crates/temper-docs" }
 rustls = { version = "=0.23.41", default-features = false, features = ["std", "ring", "tls12"] }
 temper-github-app = { path = "testing/temper-github-app" }
