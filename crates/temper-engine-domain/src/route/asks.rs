@@ -56,7 +56,7 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             );
             None
         }
-        core::Ask::DropDocument { .. } => None,
+        core::Ask::DropDocument { .. } | core::Ask::ProjectionBegun { .. } => None,
         core::Ask::DropApplication { owner } => {
             super::applications::drop(domain, owner);
             None
@@ -226,7 +226,6 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             forge_route::outputs(domain, env, decision, &mut out);
             None
         }
-        core::Ask::ProjectionBegun { .. } => None,
         core::Ask::ProjectGoal { feed } => {
             if connector == domain.config.forge_connector {
                 domain.work.push(Work::ProjectGoal(feed));

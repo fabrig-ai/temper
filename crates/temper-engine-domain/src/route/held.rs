@@ -12,7 +12,7 @@ use jig_domain_host as host;
 pub(crate) fn held(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decision, held: core::Held) {
     match held {
         core::Held::ProjectionRecovery { connector, owner, result } => {
-            emit(decision, &env.limits, Delivery::ProjectionRecovery { connector, owner, result })
+            emit(decision, &env.limits, Delivery::ProjectionRecovery { connector, owner, result });
         }
         core::Held::Sources { channel, sources } => {
             let mut names = skein_lib::List::with_capacity(u32::try_from(sources.len()).expect("bounded sources"));

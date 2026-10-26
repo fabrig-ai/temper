@@ -3233,6 +3233,10 @@ fn a_final_feed_saves_desired_and_generation_in_its_core_commit_before_a_root_cr
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one two-cut story proves connector reset and core fence in the same durable commit"
+)]
 fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atomic_commit() {
     use jig_domain_core::{
         CoreKey, CoreRecord, ProjectionFailure, ProjectionFailureSource, ProjectionFailureState, ProjectionKey,
@@ -3245,7 +3249,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
         world.send(engine::Event::Party(engine::PartyInput::Ask {
             models: Box::new([]),
             reply_to: ReplyTo::new(Token::new(950)),
-            sign_in: world.signed_in.unwrap(),
+            sign_in: world.signed_in.expect("signed-in owner"),
             key: [150; 16],
             ask: walking::goal_from(
                 world.chat(1, b"Recover projection"),
@@ -3277,7 +3281,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
             task: goal,
             repository: retained.repository,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Close { number: retained.number.unwrap() },
+                write: skein_forge::api::Write::Close { number: retained.number.expect("opened issue") },
                 condition: skein_forge_client::Condition::None,
             },
             start: None,
@@ -3316,7 +3320,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
             }
         }
         assert!(world.root.ready());
-        world.root.recover_projection(&world.env, goal, Token::new(951)).unwrap();
+        world.root.recover_projection(&world.env, goal, Token::new(951)).expect("recovery admitted");
         engine::release(&mut world.root, &world.env, &mut world.out);
         world.collect();
         let (_, writes) = world.store.pending.front().expect("one recovery commit");
@@ -3355,7 +3359,7 @@ fn projection_recovery_reset_and_fence_survive_crashes_on_both_sides_of_the_atom
             assert_eq!(*receipt, reported);
             assert_eq!(issue, &retained);
             assert!(world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(source))));
-            world.root.recover_projection(&world.env, goal, Token::new(953)).unwrap();
+            world.root.recover_projection(&world.env, goal, Token::new(953)).expect("recovery admitted");
             for _ in 0..40 {
                 world.tick();
                 if world.root.take_projection_recovery(Token::new(953)).is_some() {

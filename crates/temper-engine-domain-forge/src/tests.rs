@@ -2023,13 +2023,6 @@ fn a_held_projection_keeps_its_rollback_until_late_not_made_after_restart() {
     );
     assert_eq!(d.issue(7), Some(&rolled_back));
     assert!(outputs(&mut d, Event::Resolve { entry: 11, again: false }).is_empty());
-    eprintln!(
-        "projection wait ABI: Wall={} ProjectionWait={} map capacity8={} prior={}",
-        size_of::<Wall>(),
-        size_of::<domain::ProjectionWait>(),
-        skein_lib::Map::<u64, domain::ProjectionWait>::worst_case(8).unwrap(),
-        skein_lib::Map::<u64, Wall>::worst_case(8).unwrap()
-    );
 }
 
 #[test]

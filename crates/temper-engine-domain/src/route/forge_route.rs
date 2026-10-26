@@ -780,11 +780,6 @@ pub(crate) struct RunWorkspace {
 }
 
 /// Translate committed tracked-task facts into one bounded issue projection.
-#[expect(
-    clippy::disallowed_methods,
-    clippy::wildcard_enum_match_arm,
-    reason = "projection converts already validated task text and selects current milestone kinds"
-)]
 pub(crate) fn project_goal(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -844,6 +839,11 @@ fn begin_projection(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decis
     source
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    clippy::wildcard_enum_match_arm,
+    reason = "projection converts already validated task text and selects current milestone kinds"
+)]
 fn project_goal_begun(domain: &mut Domain, env: &Env<Limits>, feed: &jig_domain_core::ProjectionFeed, source: u64) {
     let goal = &feed.goal;
     let Some(repository) = domain.forge.home(goal.project) else { return };
@@ -2716,10 +2716,9 @@ pub(crate) fn outputs(
                 } else if match domain.forge.issue(goal) {
                     Some(row) => row.pending.is_none(),
                     None => false,
-                } {
-                    if let Some(entry) = begin_projection(domain, env, decision, goal) {
-                        domain.work.push(Work::Forge(forge::Event::ProjectDesired { entry, goal }));
-                    }
+                } && let Some(entry) = begin_projection(domain, env, decision, goal)
+                {
+                    domain.work.push(Work::Forge(forge::Event::ProjectDesired { entry, goal }));
                 }
             }
         }

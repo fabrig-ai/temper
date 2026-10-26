@@ -481,6 +481,10 @@ fn a_change_unnamed_after_its_pull_swap_was_queued_stays_unnamed() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one story carries accepted final desired through full admission and its normal retry"
+)]
 fn final_desired_survives_full_projection_handoff_and_retries_at_the_normal_interval() {
     use super::{Work, forge};
     use skein_lib::{Env, Queue, Wall};
@@ -517,7 +521,9 @@ fn final_desired_survives_full_projection_handoff_and_retries_at_the_normal_inte
             &mut out,
         );
         super::outputs(&mut domain, &env, &mut decision, &mut out);
-        assert!(matches!(domain.work.pop(), Some(Work::Core(jig_domain_core::Event::EffectStart { .. }))));
+        let Some(Work::Core(jig_domain_core::Event::EffectStart { .. })) = domain.work.pop() else {
+            panic!("the admitted projection starts its effect")
+        };
         assert!(domain.work.is_empty());
     }
     assert_eq!(domain.forge_effects.len(), domain.forge_effects.capacity());
@@ -557,7 +563,13 @@ fn final_desired_survives_full_projection_handoff_and_retries_at_the_normal_inte
     );
     env.wall = due;
     forge::fire(&mut domain.forge, &Env { now: env.now, wall: env.wall, limits: env.limits.forge }, &mut out);
-    assert!(out.iter().any(|request| matches!(request, forge::Request::ProjectAfter { goal: 7, when: None })));
+    let mut retry = false;
+    for request in &out {
+        if let forge::Request::ProjectAfter { goal: 7, when: None } = request {
+            retry = true;
+        }
+    }
+    assert!(retry);
     super::outputs(&mut domain, &env, &mut decision, &mut out);
     let Some(Work::Forge(forge::Event::ProjectDesired { entry, goal: retried })) = domain.work.pop() else {
         panic!("normal timer performs Begin before retrying accepted desired")
@@ -572,8 +584,14 @@ fn final_desired_survives_full_projection_handoff_and_retries_at_the_normal_inte
         &mut out,
     );
     super::outputs(&mut domain, &env, &mut decision, &mut out);
-    assert!(matches!(domain.work.pop(), Some(Work::Core(jig_domain_core::Event::EffectStart {
-        origin: jig_domain_core::EffectOrigin::Projection { goal: 7, source, entry: Some(kept) }, ..
-    })) if source == entry && kept == entry));
+    let Some(Work::Core(jig_domain_core::Event::EffectStart {
+        origin: jig_domain_core::EffectOrigin::Projection { goal: 7, source, entry: Some(kept) },
+        ..
+    })) = domain.work.pop()
+    else {
+        panic!("the retry starts the accepted projection")
+    };
+    assert_eq!(source, entry);
+    assert_eq!(kept, entry);
     assert_eq!(domain.forge.issue(goal), Some(&accepted));
 }

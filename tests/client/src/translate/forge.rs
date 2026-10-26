@@ -466,7 +466,8 @@ pub fn incoming(
                 },
             )));
         }
-        delivery @ (Delivery::DemoActed { .. }
+        delivery @ (Delivery::ProjectionRecovery { .. }
+        | Delivery::DemoActed { .. }
         | Delivery::DemoNote { .. }
         | Delivery::SourceSignedOut { .. }
         | Delivery::Result { .. }

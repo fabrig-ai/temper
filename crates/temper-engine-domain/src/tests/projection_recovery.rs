@@ -1,11 +1,11 @@
-//! The public admission door and the real Held -> ToChild -> Released consumer.
+//! The public admission door and the real Held -> `ToChild` -> Released consumer.
 use super::resume_fixture;
 use crate::{Domain, Event, Family, Limits, Record, Request, StoreInput, Write};
 use jig_domain_core::{
     CoreRecord, ProjectionFailure, ProjectionFailureSource, ProjectionFailureState, ProjectionGoal, ProjectionRecord,
     ProjectionRecovery,
 };
-use skein_lib::{Env, Queue, Time, Token, Wall};
+use skein_lib::{Env, List, Queue, Time, Token, Wall};
 use temper_engine_domain_forge as forge;
 
 fn fixture() -> (Domain, Env<Limits>) {
@@ -50,21 +50,24 @@ fn fixture() -> (Domain, Env<Limits>) {
     clippy::wildcard_enum_match_arm,
     reason = "this bounded recovery script must produce only commits and child continuations"
 )]
-fn consume(domain: &mut Domain, env: &Env<Limits>) -> Vec<Write> {
-    let mut writes = Vec::new();
+fn consume(domain: &mut Domain, env: &Env<Limits>) -> Box<[Write]> {
+    let capacity = env.limits.journal.writes.checked_mul(env.limits.journal.commits).unwrap().checked_mul(32).unwrap();
+    let mut writes = List::with_capacity(capacity);
     let mut out = Queue::with_capacity(crate::max_out(&env.limits));
-    for _ in 0..32 {
+    for _ in 0_u8..32 {
         crate::release(domain, env, &mut out);
         if out.is_empty() {
             if domain.journal.idle() && !domain.door_pass {
-                return writes;
+                return writes.into_boxed();
             }
             continue;
         }
         while let Some(request) = out.pop() {
             match request {
                 Request::Store(crate::StoreRequest::Commit { number, writes: rows }) => {
-                    writes.extend(rows.into_vec());
+                    for row in rows {
+                        writes.push(row).expect("at most 32 passes of the admitted journal commits");
+                    }
                     crate::try_step(domain, env, Event::Store(StoreInput::Committed { number, fill: 0 })).unwrap();
                 }
                 Request::ToChild(released) => crate::try_step(domain, env, Event::Released(released)).unwrap(),
@@ -85,7 +88,16 @@ fn projection_recovery_returns_competing_ownership_and_consumes_each_real_termin
     assert_eq!(domain.deployment(), after_stage, "refusal has zero core mutation");
     assert_eq!(domain.take_projection_recovery(owner), None, "Held has not reached Released yet");
     let writes = consume(&mut domain, &env);
-    assert!(writes.iter().any(|write| matches!(write, Write::Save(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(ProjectionRecord::Failure(row))))) if row.after == 1 && row.state == ProjectionFailureState::Armed)));
+    let mut armed = false;
+    for write in &writes {
+        if let Write::Save(Record::Core(jig_domain_core::Record::Core(CoreRecord::Projection(
+            ProjectionRecord::Failure(row),
+        )))) = write
+        {
+            armed |= row.after == 1 && row.state == ProjectionFailureState::Armed;
+        }
+    }
+    assert!(armed);
     assert_eq!(domain.take_projection_recovery(Token::new(901)), None);
     assert_eq!(domain.take_projection_recovery(owner), Some(ProjectionRecovery::Recovered { after: 1 }));
     assert_eq!(domain.take_projection_recovery(owner), None);
@@ -165,7 +177,13 @@ fn projection_recovery_busy_is_unchanged_then_the_same_request_resets_a_retained
     domain.forge.projection_after(1, deadline);
     domain.recover_projection(&env, 1, owner).unwrap();
     let writes = consume(&mut domain, &env);
-    assert!(writes.iter().any(|write| matches!(write, Write::Erase(crate::Key::Forge(forge::Key::Entry(1))))));
+    let mut erased = false;
+    for write in &writes {
+        if let Write::Erase(crate::Key::Forge(forge::Key::Entry(1))) = write {
+            erased = true;
+        }
+    }
+    assert!(erased);
     let issue = domain.forge.issue(1).unwrap();
     assert_eq!(issue.pending, None);
     assert_eq!(issue.before, None);

@@ -2192,9 +2192,8 @@ fn an_old_completed_desired_cannot_settle_a_refused_final_generation_after_its_t
     let due = world
         .seen()
         .iter()
-        .find_map(|request| match request {
-            top::Request::ProjectAfter { goal: 42, when: Some(when) } => Some(*when),
-            _ => None,
+        .find_map(|request| {
+            if let top::Request::ProjectAfter { goal: 42, when: Some(when) } = request { Some(*when) } else { None }
         })
         .expect("changed body waits for its interval");
     world.projection_after(42, due);
