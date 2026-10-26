@@ -32,10 +32,12 @@ fn text(rows: &[RequestRecord<Held>], unread: u32, out: &mut Text) {
         if let Some(wall) = row.first_sent {
             out.put(b", first sent ");
             document::utc(wall, out);
-            out.put(b" UTC\n");
+            out.put(b" UTC");
         } else {
-            out.put(b", not sent\n");
+            out.put(b", not sent");
         }
+        out.put(CLEARS);
+        out.put(b"\n");
     }
     if unread > 0 {
         out.number(u64::from(unread));
@@ -58,10 +60,37 @@ fn encode(rows: &[RequestRecord<Held>], unread: u32, out: &mut Encoder) {
         } else {
             out.null();
         }
+        out.key(b"unanswered");
+        out.string(b"it clears when the engine answers it, or past its retention; pending lists it");
         out.object_end();
     }
     out.array_end();
     out.key(b"unread");
     out.unsigned(u64::from(unread));
     out.object_end();
+}
+
+const CLEARS: &[u8] = b", unanswered: it clears when the engine answers it, or past its retention; pending lists it";
+#[must_use]
+pub fn unanswered(rows: &[RequestRecord<Held>]) -> Box<[u8]> {
+    let mut measure = Text::measure();
+    unanswered_text(rows, &mut measure);
+    let mut out = Text::writing_exact(measure);
+    unanswered_text(rows, &mut out);
+    out.finish()
+}
+fn unanswered_text(rows: &[RequestRecord<Held>], out: &mut Text) {
+    for row in rows {
+        out.put(b"kept: ");
+        out.put(Operation::of(&row.request.request).word);
+        out.put(b", first sent ");
+        if let Some(wall) = row.first_sent {
+            document::utc(wall, out);
+            out.put(b" UTC");
+        } else {
+            out.put(b"not sent");
+        }
+        out.put(CLEARS);
+        out.put(b"\n");
+    }
 }

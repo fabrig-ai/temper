@@ -443,7 +443,7 @@ fn file_root_splits_a_file_argument() {
 fn pending_lists_each_kept_request() {
     let mut f = fixtures::local::pending(false, false, false);
     f.drain();
-    assert_eq!(f.stdout(), b"chat, party 73, not sent\n");
+    assert_eq!(f.stdout(), b"chat, party 73, not sent, unanswered: it clears when the engine answers it, or past its retention; pending lists it\n");
     assert_eq!((f.locks, f.requests()), (0, 0));
     assert_eq!(f.store_count(), 0);
     assert_eq!(f.exit(), Some(Exit::Code(0)));
@@ -454,7 +454,7 @@ fn pending_counts_unread_records_in_its_line() {
     f.drain();
     assert_eq!(
         f.stdout(),
-        b"chat, party 73, not sent\n1 kept records these tools cannot read; a call that sends drops them\n"
+        b"chat, party 73, not sent, unanswered: it clears when the engine answers it, or past its retention; pending lists it\n1 kept records these tools cannot read; a call that sends drops them\n"
     );
     assert_eq!(f.exit(), Some(Exit::Code(0)));
 }
@@ -462,14 +462,14 @@ fn pending_counts_unread_records_in_its_line() {
 fn pending_skips_the_stream_record() {
     let mut f = fixtures::local::pending(false, true, false);
     f.drain();
-    assert_eq!(f.stdout(), b"chat, party 73, not sent\n");
+    assert_eq!(f.stdout(), b"chat, party 73, not sent, unanswered: it clears when the engine answers it, or past its retention; pending lists it\n");
     assert_eq!(f.exit(), Some(Exit::Code(0)));
 }
 #[test]
 fn pending_json_carries_its_rows_with_unread() {
     let mut f = fixtures::local::pending(true, false, true);
     f.drain();
-    assert_eq!(f.stdout(), br#"{"pending":[{"operation":"chat","party":73,"first_sent":null}],"unread":1}"#);
+    assert_eq!(f.stdout(), br#"{"pending":[{"operation":"chat","party":73,"first_sent":null,"unanswered":"it clears when the engine answers it, or past its retention; pending lists it"}],"unread":1}"#);
     assert_eq!(f.exit(), Some(Exit::Code(0)));
 }
 #[test]
@@ -507,15 +507,16 @@ fn close_kept_line() {
 }
 
 #[test]
-fn a_drawn_key_is_resent_from_directory() {
+fn a_drawn_key_is_resent_before_a_new_unnamed_request() {
     let words = &[b"stop".as_slice(), b"7"];
     let mut first = fixtures::Disk::act_words_with(words, fixtures::small_store(&[]));
     first.sign_in_then_deliver_me();
     first.advance_past(crate::limits::DEADLINE);
     let mut next = fixtures::Disk::act_words_with(words, first.store_snapshot());
     next.sign_in_then_deliver_me();
-    assert_eq!(next.act_keys(), first.act_keys());
-    assert_eq!(next.act_keys().len(), fixtures::local::ONE_REQUEST);
+    assert_eq!(next.act_keys().first(), first.act_keys().first());
+    assert_eq!(next.act_keys().len(), 2, "replay and a fresh unnamed act");
+    assert_ne!(next.act_keys()[0], next.act_keys()[1]);
 }
 #[test]
 fn adopt_is_an_act() {
@@ -743,3 +744,74 @@ fn repeated_again_keeps_the_original_sign_in_deadline() {
 mod keys;
 
 mod moves;
+
+#[test]
+fn an_unanswered_adopt_holds_no_close_export_or_unrelated_adopt() {
+    use fixtures::recovery::{ADOPT, unanswered_adopt};
+    let mut other = ADOPT.to_vec();
+    *other.last_mut().expect("adopt key") = b"another-adopt";
+    for (words, status) in [
+        (&[b"close".as_slice(), b"7", b"--key", b"close"][..], 0),
+        (&[b"export".as_slice(), b"7", b"/linked-parent/record"][..], 0),
+        (other.as_slice(), 2),
+    ] {
+        let store = unanswered_adopt();
+        let mut f = fixtures::Frame::act_words_with(words, store);
+        let original = f.initial_records().into_iter().find(|row| row.key.len() == 16).expect("restored adoption");
+        f.move_answers
+            .extend([fixtures::moves::Answer::Moving(fixtures::moves::RECORD), fixtures::moves::Answer::Done]);
+        f.answer_new_act();
+        assert!(f.act_sent(), "new act must be sent beside kept adoption");
+        f.store_erase();
+        assert_eq!(f.exit(), Some(Exit::Code(status)), "{:?}", f.stderr());
+        assert!(skein_lib::bytes::find(f.stderr(), b"kept: adopt, first sent ").is_some());
+        assert!(
+            skein_lib::bytes::find(
+                f.stderr(),
+                b"unanswered: it clears when the engine answers it, or past its retention; pending lists it"
+            )
+            .is_some()
+        );
+        let mut pending = fixtures::Frame::act_words_with(&[b"pending"], f.store_snapshot());
+        assert!(pending.initial_records().contains(&original), "kept record remains byte identical");
+        pending.drain();
+        assert!(skein_lib::bytes::find(pending.stdout(), b"adopt, party 7, first sent ").is_some());
+    }
+}
+#[test]
+fn a_rerun_under_a_kept_name_waits_for_that_answer_and_a_different_ask_is_held() {
+    use fixtures::recovery::{ADOPT, unanswered_adopt};
+    let mut f = fixtures::Frame::act_words_with(ADOPT, unanswered_adopt());
+    f.sign_in_then_deliver_me();
+    assert_eq!(f.act_keys().len(), 1, "same ask reuses the restored request");
+    assert!(f.stdout().is_empty());
+    f.answer_restored();
+    f.store_erase();
+    assert_eq!(f.exit(), Some(Exit::Code(2)));
+    assert!(f.stderr().starts_with(b"No repository o/n"), "{:?}", f.stderr());
+    assert!(skein_lib::bytes::find(f.stderr(), b"kept:").is_none());
+    let mut words = ADOPT.to_vec();
+    words.extend_from_slice(&[b"--prefix", b"different/"]);
+    let mut f = fixtures::Frame::act_words_with(&words, unanswered_adopt());
+    f.sign_in_then_deliver_me();
+    assert_eq!(f.exit(), Some(Exit::Code(1)));
+    assert_eq!(f.act_keys().len(), 1);
+    assert!(skein_lib::bytes::find(f.stderr(), b"held").is_some());
+}
+
+#[test]
+fn a_jig_rerun_prints_the_kept_requests_success_as_its_own() {
+    let mut first = fixtures::Frame::act_words_with(fixtures::CHAT, fixtures::small_store(&[]));
+    first.sign_in_then_deliver_me();
+    let mut rerun = fixtures::Frame::act_words_with(fixtures::CHAT, first.store_snapshot());
+    rerun.sign_in_then_deliver_me();
+    assert_eq!(rerun.act_keys(), first.act_keys());
+    assert_eq!(rerun.exit(), None);
+    rerun.answer_restored();
+    assert_eq!(rerun.exit(), None, "answer waits for its erase to be durable");
+    rerun.store_erase();
+    assert_eq!(rerun.exit(), Some(Exit::Code(0)));
+    assert_eq!(rerun.stdout(), b"done: task 41, chat\n");
+    assert!(rerun.stderr().is_empty());
+    assert_eq!(rerun.kept_records(), 1, "only the stream record remains");
+}

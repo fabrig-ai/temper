@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 jig-client.workspace = true
+jig-client-domain.workspace = true
 jig-client-protocol-link.workspace = true
 jig-client-protocol-wire.workspace = true
 temper-docs.workspace = true
