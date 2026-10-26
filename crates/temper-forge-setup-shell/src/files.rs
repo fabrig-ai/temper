@@ -21,7 +21,8 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     fs::rename(&temporary, path)?;
     fs::File::open(path.parent().expect("a forge file has a parent"))?.sync_all()
 }
-const CLEARED: [&str; 4] = ["forgejo", "runner", "admin_token", "person_password"];
+const CLEARED: [&str; 6] =
+    ["forgejo", "runner", "admin_token", "person_password", "person_read.header", "person_write.header"];
 /// Whether a first preparation's files exist, including a dangling link.
 pub fn present(place: &Place) -> io::Result<bool> {
     let root = crate::path(&place.directory);

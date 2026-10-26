@@ -18,6 +18,10 @@ pub enum File {
     AdminToken,
     /// The person's first password.
     PersonPassword,
+    /// The person's read-only API authorization header.
+    PersonReadHeader,
+    /// The person's writing API authorization header.
+    PersonWriteHeader,
     /// The bot's API token.
     ApiToken,
     /// The bot's git token.
@@ -47,6 +51,8 @@ impl Place {
             File::State => b"state",
             File::AdminToken => b"admin_token",
             File::PersonPassword => b"person_password",
+            File::PersonReadHeader => b"person_read.header",
+            File::PersonWriteHeader => b"person_write.header",
             File::ApiToken => b"api_token",
             File::GitToken => b"git_token",
             File::User => b"user",

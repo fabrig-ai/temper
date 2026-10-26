@@ -21,11 +21,20 @@ fn a_file_is_written_whole_private_and_renamed_over() {
 fn clear_removes_a_first_preparations_files_and_never_backups() {
     let scratch = support::Scratch::new("file_clear");
     files::layout(&scratch.place()).expect("layout");
-    for name in ["state", "backups/dump.zip", "forgejo/leftover", "runner/secret", "admin_token", "person_password"] {
+    for name in [
+        "state",
+        "backups/dump.zip",
+        "forgejo/leftover",
+        "runner/secret",
+        "admin_token",
+        "person_password",
+        "person_read.header",
+        "person_write.header",
+    ] {
         fs::write(scratch.path().join(name), b"kept").expect("file");
     }
     files::clear(&scratch.place()).expect("cleared");
-    for name in ["forgejo", "runner", "admin_token", "person_password"] {
+    for name in ["forgejo", "runner", "admin_token", "person_password", "person_read.header", "person_write.header"] {
         assert!(!scratch.path().join(name).exists(), "{name} removed");
     }
     for name in ["state", "backups/dump.zip"] {

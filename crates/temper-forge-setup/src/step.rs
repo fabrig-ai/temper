@@ -54,12 +54,21 @@ pub struct Step {
     kind: Kind,
     ready: Option<core::net::SocketAddr>,
     listeners: Box<[core::net::SocketAddr]>,
+    started_notice: Box<[u8]>,
 }
 impl Step {
     /// Constructs a step from its display name, arguments and lifetime.
     #[must_use]
     pub fn new(name: Box<[u8]>, arguments: Box<[Box<[u8]>]>, kind: Kind) -> Self {
-        Self { name, arguments, kind, ready: None, listeners: Box::new([]) }
+        Self { name, arguments, kind, ready: None, listeners: Box::new([]), started_notice: Box::new([]) }
+    }
+    /// Opaque public lines supplied by the binary, printed once this forge starts.
+    pub fn set_started_notice(&mut self, notice: Box<[u8]>) {
+        self.started_notice = notice;
+    }
+    #[must_use]
+    pub fn started_notice(&self) -> &[u8] {
+        &self.started_notice
     }
     /// The listening sockets given to this step, in descriptor order from fd 3.
     /// Port zero stays the step's own bind: its kernel-chosen address cannot
