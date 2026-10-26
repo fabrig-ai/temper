@@ -518,7 +518,9 @@ fn made_sends_the_home_adoption_with_its_stable_key_and_prints_its_answer() {
             assert_eq!(root.sent_name(call), Some(forge::first_repository_key(3, true)));
             root.adoption_answer(call, f::adopted_with_unknown_protection());
         }
-        assert_eq!(root.answer(call).unwrap().status, 0);
+        let printed = root.answer(call).unwrap();
+        assert_eq!(printed.status, 0);
+        assert!(printed.stdout.starts_with(b"project: 1 \xc2\xb7 shop\nAdopted "));
         assert!(root.answer(call).is_none(), "one terminal answer");
     }
 }
@@ -994,52 +996,80 @@ fn human_forges_bounds_the_wire_maximum_installations_with_longest_logins() {
 
 #[test]
 fn setup_makes_the_default_or_named_project_then_adopts_the_answered_number() {
-    for flags in [&[][..], &["--project", "Next"][..], &["--project", "7"][..]] {
-        let mut root = f::signed_in(f::PARTY);
-        let mut argv = List::with_capacity(4);
-        argv.push("forge-setup").unwrap();
-        argv.push("3").unwrap();
-        for flag in flags {
-            argv.push(*flag).unwrap();
+    for flags in [&[][..], &["--project", "Next"][..], &["--project", "1"][..]] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            for _ in 0u8..2 {
+                let mut argv = List::with_capacity(6);
+                argv.push("forge-setup").unwrap();
+                argv.push("3").unwrap();
+                for flag in flags {
+                    argv.push(*flag).unwrap();
+                }
+                argv.push("--key").unwrap();
+                argv.push("setup-project").unwrap();
+                let call = root.submit_prepared(f::call(argv.as_slice()), json, None);
+                root.adoption_answer(call, w::Outcome::SettingUp);
+                deliver(
+                    &mut root,
+                    record_first(
+                        w::Connection::Connected(
+                            w::Connected::new(
+                                &w::CEILINGS,
+                                w::ConnectedParts { id: 1, login: b"temper".as_slice().into() },
+                            )
+                            .unwrap(),
+                        ),
+                        Some(first_record(made())),
+                    ),
+                );
+                let expected = if flags == ["--project", "1"] {
+                    1
+                } else {
+                    let client::Ask::Jig(ask) = root.adoption_bytes(call) else { panic!("MakeProject before Adopt") };
+                    let c::Ask::MakeProject { name, policy } = ask.as_ref() else { panic!("MakeProject") };
+                    assert_eq!(name.bytes(), if flags.is_empty() { b"hello".as_slice() } else { b"Next" });
+                    assert_eq!(*policy, 1);
+                    assert_eq!(root.sent_name(call), Some(crate::key::engine(&f::name(b"start-project-3"))));
+                    let (attempt, _, _) = root.sends.get(&call).unwrap();
+                    root.client(client::Event::Up {
+                        up: client::Up::Answer {
+                            attempt: *attempt,
+                            envelope: skein_lib::RequestEnvelope::Final,
+                            answer: Some(client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
+                                c::OwnerOutcome::ProjectMade { project: 8 },
+                            )))),
+                            why: None,
+                        },
+                    });
+                    8
+                };
+                assert_eq!(root.sent_adoption(call).project, expected);
+                assert!(root.sent_adoption(call).home);
+                assert_eq!(root.sent_name(call), Some(forge::first_repository_key(3, false)));
+                root.adoption_answer(call, f::adopted_with_unknown_protection());
+                let printed = root.answer(call).unwrap();
+                assert_eq!(printed.status, 0);
+                let line = if expected == 1 {
+                    "project: 1 · shop\n"
+                } else if flags.is_empty() {
+                    "project: 8 · hello\n"
+                } else {
+                    "project: 8 · Next\n"
+                };
+                if json {
+                    let prefix = if expected == 1 {
+                        br#"{"project":1,"outcome":{"adopted":"#.as_slice()
+                    } else {
+                        br#"{"project":8,"outcome":{"adopted":"#.as_slice()
+                    };
+                    assert!(printed.stdout.starts_with(prefix));
+                    f::unique_keys(&printed.stdout).unwrap();
+                } else {
+                    assert!(printed.stdout.starts_with(line.as_bytes()));
+                }
+            }
         }
-        let call = root.submit(argv.as_slice());
-        root.adoption_answer(call, w::Outcome::SettingUp);
-        deliver(
-            &mut root,
-            record_first(
-                w::Connection::Connected(
-                    w::Connected::new(&w::CEILINGS, w::ConnectedParts { id: 1, login: b"temper".as_slice().into() })
-                        .unwrap(),
-                ),
-                Some(first_record(made())),
-            ),
-        );
-        let expected = if flags == ["--project", "7"] {
-            7
-        } else {
-            let client::Ask::Jig(ask) = root.adoption_bytes(call) else { panic!("MakeProject before Adopt") };
-            let c::Ask::MakeProject { name, policy } = ask.as_ref() else { panic!("MakeProject") };
-            assert_eq!(name.bytes(), if flags.is_empty() { b"hello".as_slice() } else { b"Next" });
-            assert_eq!(*policy, 1);
-            assert_eq!(root.sent_name(call), Some(crate::key::engine(&f::name(b"start-project-3"))));
-            let (attempt, _, _) = root.sends.get(&call).unwrap();
-            root.client(client::Event::Up {
-                up: client::Up::Answer {
-                    attempt: *attempt,
-                    envelope: skein_lib::RequestEnvelope::Final,
-                    answer: Some(client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
-                        c::OwnerOutcome::ProjectMade { project: 8 },
-                    )))),
-                    why: None,
-                },
-            });
-            8
-        };
-        assert_eq!(root.sent_adoption(call).project, expected);
-        assert!(root.sent_adoption(call).home);
-        assert_eq!(root.sent_name(call), Some(forge::first_repository_key(3, false)));
-        root.adoption_answer(call, f::adopted_with_unknown_protection());
-        assert_eq!(root.answer(call).unwrap().status, 0);
     }
 }
 
