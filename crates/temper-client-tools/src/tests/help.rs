@@ -260,3 +260,15 @@ fn the_moves_places_name_their_rows_in_the_table() {
         assert_eq!(table::TOOLS[usize::from(at)].name, row.name);
     }
 }
+
+#[test]
+fn every_call_line_of_the_task_settings_topic_parses() {
+    let mut calls = 0;
+    for line in include_str!("../../../../docs/guide/tasks.md").lines() {
+        if let Some(call) = line.as_bytes().strip_prefix(b"temper ctl DIRECTORY ".as_slice()) {
+            fixtures::parse_line(call).expect("task settings guide call parses");
+            calls += 1;
+        }
+    }
+    assert_eq!(calls, 2);
+}
