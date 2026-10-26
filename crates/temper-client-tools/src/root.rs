@@ -2,7 +2,7 @@
 use crate::jig::{self, runner};
 use alloc::boxed::Box;
 use jig_client::{Client, Told};
-use skein_lib::{Env, Queue, Time};
+use skein_lib::{Env, List, Queue, Time};
 use temper_client_domain::owner::Owner;
 pub const RUNNER: Owner = Owner::Runner;
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub struct Root {
     forges: crate::forges::Forges,
     changes: crate::change::Changes,
     next: Option<u32>,
+    recovery: crate::recovery::Recovery,
 }
 #[derive(Debug)]
 pub enum Event {
@@ -55,6 +56,7 @@ impl Root {
             forges: crate::forges::Forges::new(),
             changes: crate::change::Changes::new(),
             next: Some(1),
+            recovery: crate::recovery::Recovery::new(),
         }
     }
     #[must_use]
@@ -64,6 +66,20 @@ impl Root {
     #[must_use]
     pub fn kept(&self) -> u32 {
         self.runner.kept(&self.client)
+    }
+    #[must_use]
+    pub fn replayed(&self) -> bool {
+        match crate::forge::me(&self.client) {
+            Some(me) => self.recovery.replayed(&self.client, me.party.number),
+            None => false,
+        }
+    }
+    #[must_use]
+    pub fn unanswered(&self) -> Box<[u8]> {
+        match crate::forge::me(&self.client) {
+            Some(me) => self.recovery.unanswered(&self.client, me.party.number),
+            None => Box::default(),
+        }
     }
     pub fn kept_json(&mut self, json: bool) {
         self.runner.kept_json(json);
@@ -78,6 +94,12 @@ pub fn step(root: &mut Root, env: &Env<Limits>, event: Event, out: &mut Queue<Re
         Event::Client { event } => {
             if let jig_client::Event::Start { .. } | jig_client::Event::StartUnlinked { .. } = &event {
                 root.runner.start(&mut child);
+            }
+            if let jig_client::Event::Start { kept } = &event {
+                root.recovery.load(kept, &link_limits(env));
+            }
+            if let jig_client::Event::StartUnlinked { kept } = &event {
+                root.recovery.load_rows(kept);
             }
             root.client.step(env.now, env.wall, event, &mut client);
         }
@@ -149,11 +171,23 @@ fn drain(
                 | jig_client::Request::Erase { .. }
                 | jig_client::Request::Down { .. }
                 | jig_client::Request::SignOut
-                | jig_client::Request::ServiceCredential { .. }) => out.push(Request::Client { request }),
+                | jig_client::Request::ServiceCredential { .. }) => {
+                    root.recovery.output(&request, &link_limits(env));
+                    out.push(Request::Client { request });
+                }
             }
         } else if let Some(request) = child.pop() {
             match request {
-                runner::Out::Client { event } => root.client.step(env.now, env.wall, event, client),
+                runner::Out::Client { event } => {
+                    if let jig_client::Event::Send { key, name: Some(name), request } = &event
+                        && let Some(me) = crate::forge::me(&root.client)
+                        && let Some(kept) = root.recovery.same(*name, request, me.party.number, &root.client)
+                    {
+                        root.recovery.joined.insert(*key, kept);
+                    } else {
+                        root.client.step(env.now, env.wall, event, client);
+                    }
+                }
                 runner::Out::Record { number, record } => out.push(Request::Record { number, record }),
                 runner::Out::Ready => out.push(Request::Ready),
                 runner::Out::Kept { line } => out.push(Request::Kept { line }),
@@ -175,13 +209,41 @@ fn drain(
 }
 fn route(root: &mut Root, env: &Env<Limits>, told: Told, child: &mut Queue<runner::Out>, out: &mut Queue<Request>) {
     if let Told::Kept { key, .. } = &told {
-        let prefix = u32::try_from(key.number >> 32u32).expect("high half fits");
-        if let Some(next) = root.next
-            && prefix >= next
-        {
-            root.next = prefix.checked_add(1);
+        jig::key::reserve(&mut root.next, *key);
+        root.recovery.kept(*key);
+    }
+    if let Told::Answered { key, outcome } = &told {
+        root.recovery.answered(*key);
+        let mut joined = List::with_capacity(env.limits.tools.rows);
+        for (local, kept) in &root.recovery.joined {
+            if kept == key {
+                joined.push(*local).expect("bounded calls");
+            }
+        }
+        if !joined.is_empty() {
+            // Clear the restored owners' bookkeeping without printing a second answer.
+            let mut discard = Queue::with_capacity(env.limits.tools.rows.checked_mul(2).expect("tools outputs fit"));
+            route_owner(root, env, told.clone(), &mut discard, out);
+            for key in &joined {
+                root.recovery.joined.remove(key);
+                route_owner(root, env, Told::Answered { key: *key, outcome: outcome.clone() }, child, out);
+            }
+            return;
         }
     }
+    route_owner(root, env, told, child, out);
+}
+fn link_limits(env: &Env<Limits>) -> jig_client_protocol_link::Limits {
+    jig_client_protocol_link::Limits::new(env.limits.domain.client.domain, env.limits.domain.client.exchanges)
+        .expect("checked client limits")
+}
+fn route_owner(
+    root: &mut Root,
+    env: &Env<Limits>,
+    told: Told,
+    child: &mut Queue<runner::Out>,
+    out: &mut Queue<Request>,
+) {
     let asker = match &told {
         Told::Link { .. } | Told::Dropped { .. } => RUNNER.asker(),
         Told::Kept { key, .. } | Told::Pending { key } | Told::Answered { key, .. } => key.asker,

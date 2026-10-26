@@ -468,7 +468,7 @@ fn send(
     to: Option<c::Recipient>,
     out: &mut Queue<Out>,
 ) {
-    let key = Key { asker: runner.asker, number: (u64::from(called.call_number) << 32u32) | 1 };
+    let key = crate::jig::key::local(runner.asker, called.call_number);
     if client.pending(key).is_some() {
         let printed = render::failure(b"tools' bug; client key collision; report it as a finding", called.json, 1);
         finish(called, printed, out);

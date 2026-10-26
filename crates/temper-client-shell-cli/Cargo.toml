@@ -23,6 +23,7 @@ skein-shell.workspace = true
 skein-http.workspace = true
 
 [dev-dependencies]
+temper-client-protocol-wire.workspace = true
 jig-client-test-records.workspace = true
 
 [lints.rust]

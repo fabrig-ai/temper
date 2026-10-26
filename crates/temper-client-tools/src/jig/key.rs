@@ -38,3 +38,17 @@ pub fn named(salt: &[u8], name: &Name) -> RequestKey {
     }
     key
 }
+
+/// Local requests partition their numbers by the root's reserved call prefix.
+#[must_use]
+pub(crate) fn local(asker: jig_client::Asker, call: u32) -> jig_client::Key {
+    jig_client::Key { asker, number: (u64::from(call) << 32u32) | 1 }
+}
+pub(crate) fn reserve(next: &mut Option<u32>, key: jig_client::Key) {
+    let prefix = u32::try_from(key.number >> 32u32).expect("high half fits");
+    if let Some(current) = *next
+        && prefix >= current
+    {
+        *next = prefix.checked_add(1);
+    }
+}

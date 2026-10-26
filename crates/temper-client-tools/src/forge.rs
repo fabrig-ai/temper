@@ -90,7 +90,7 @@ fn send(adopter: &mut Adopter, client: &Client, me: &c::Me, limits: &Limits, cal
         fail(called, b"adoption encoding failed", out);
         return;
     };
-    let key = Key { asker: Owner::Forge.asker(), number: (u64::from(called.call_number) << 32u32) | 1 };
+    let key = jig::key::local(Owner::Forge.asker(), called.call_number);
     if client.pending(key).is_some() {
         fail(called, b"tools' bug; client key collision; report it as a finding", out);
         return;

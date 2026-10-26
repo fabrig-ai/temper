@@ -2482,6 +2482,7 @@ dependencies = [
  "skein-lib",
  "skein-shell",
  "temper-client-domain",
+ "temper-client-protocol-wire",
  "temper-client-tools",
 ]
 
@@ -2536,6 +2537,7 @@ name = "temper-client-tools"
 version = "0.0.0"
 dependencies = [
  "jig-client",
+ "jig-client-domain",
  "jig-client-protocol-link",
  "jig-client-protocol-wire",
  "jig-client-test-records",
