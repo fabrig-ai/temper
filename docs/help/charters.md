@@ -86,7 +86,9 @@ between a task's budget rule and a run's limits.
 A charter's local tool families are only part of what permits work.
 Each tool call must fit the task's authority and the project and
 deployment ceilings. A charter does not by itself give an agent
-unrestricted permission to act on a repository.
+unrestricted permission to act on a repository. The stock tool permissions
+allow delegation, messages and forge reads, including a delegate's
+question and the chat's answer.
 
 A task's authority includes tool permissions, resource grants and
 delegation permission. A resource grant names a connector, a kind
@@ -102,9 +104,9 @@ the authority and ceilings that bound it; starting another delegate
 does not give that work a fresh unrestricted allowance.
 
 In the client, **Budget and authority** shows **May spend** and
-**May delegate**, including **Up to 8 tasks, 4 deep** when those are
+**May delegate**, including **Up to 12 tasks, 4 deep** when those are
 the allowed values. The default deployment delegation ceiling allows
-charters 1 and 2 and procedure 2, with 8 lifetime descendants and
+charters 1 and 2 and procedure 2, with 12 lifetime descendants and
 depth 4. Read the current ceiling:
 
 ```sh
