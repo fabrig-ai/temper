@@ -53,27 +53,34 @@ fn engine(document: &[u8]) -> config::Engine {
 }
 
 #[test]
-fn stock_chats_can_delegate_and_read_the_forge() {
+fn stock_chats_can_delegate_message_and_read_the_forge() {
     let engine = engine(&single_model());
     let defaults = crate::stock::defaults(&engine.llm);
     let policy = &defaults.policies.get(&1).expect("stock policy 1").policy;
     let families = jig_domain_core::ToolFamilies::JIG;
-    for tools in [defaults.rules.ceiling.tools, policy.ceiling.tools, policy.roles[0].authority.tools] {
-        assert_eq!(tools, jig_domain_authority::Tools(families.delegate.0 | families.read.0));
+    for authority in [&defaults.rules.ceiling, &policy.ceiling, &policy.roles[0].authority] {
+        assert_eq!(
+            authority.tools,
+            jig_domain_authority::Tools(families.delegate.0 | families.message.0 | families.read.0)
+        );
+        assert_eq!(authority.delegation.tasks, 12);
+        assert_eq!(authority.delegation.depth, 4);
     }
 }
 
 #[test]
-fn the_seeded_project_keeps_the_stocks_tool_families() {
+fn the_seeded_project_keeps_the_stocks_tool_families_and_delegation() {
     // Interim: the seeded project will take its policy from the stock at configuring-stock's
     // seed boundary. Then both the template's inline copy and this agreement test go.
     let engine = engine(&generated());
     let defaults = crate::stock::defaults(&engine.llm);
-    let stock_tools = defaults.rules.ceiling.tools; // The stock's ceiling().tools.
+    let stock = &defaults.rules.ceiling;
     let core = config::core(&engine, [1; 16], 7);
     let seed = &core.seed_projects[0].policy.policy;
-    assert_eq!(seed.ceiling.tools, stock_tools);
-    assert_eq!(seed.roles[0].authority.tools, stock_tools);
+    for authority in [&seed.ceiling, &seed.roles[0].authority] {
+        assert_eq!(authority.tools, stock.tools);
+        assert_eq!(authority.delegation, stock.delegation);
+    }
 }
 
 #[test]
