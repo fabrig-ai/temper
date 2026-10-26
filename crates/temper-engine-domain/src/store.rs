@@ -52,6 +52,8 @@ impl Changed {
 /// Typed call feedback; amendment details are joined from the decoded tool.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CallAnswer {
+    /// Settings proposal admission failed before mutation.
+    SettingsRefused(jig_domain_people::Refusal),
     /// A release must name again exactly when its effect is uncertain.
     Again { task: u64, required: bool },
     /// The caller exceeded its authority and passed the escalation up.
@@ -128,6 +130,7 @@ impl CallAnswer {
     #[must_use]
     pub fn core_part(&self, connector: u16) -> jig_domain_core::CallPart {
         match self {
+            CallAnswer::SettingsRefused(why) => jig_domain_core::CallPart::SettingsRefused(why.clone()),
             CallAnswer::Again { task, required } => {
                 jig_domain_core::CallPart::Again { task: *task, required: *required }
             }
@@ -213,6 +216,7 @@ impl CallAnswer {
     #[must_use]
     pub fn from_core(part: &jig_domain_core::CallPart) -> Option<CallAnswer> {
         Some(match part {
+            jig_domain_core::CallPart::SettingsRefused(why) => CallAnswer::SettingsRefused(why.clone()),
             jig_domain_core::CallPart::Again { task, required } => {
                 CallAnswer::Again { task: *task, required: *required }
             }
@@ -821,6 +825,7 @@ pub(crate) fn call_answer_bytes(answer: &CallAnswer) -> Option<u64> {
         CallAnswer::ForgeEffect { .. }
         | CallAnswer::ForgeEffectRefused(_)
         | CallAnswer::Unavailable
+        | CallAnswer::SettingsRefused(_)
         | CallAnswer::Proposed { .. }
         | CallAnswer::ProposalDecided { .. }
         | CallAnswer::ProposalRefused(_)
