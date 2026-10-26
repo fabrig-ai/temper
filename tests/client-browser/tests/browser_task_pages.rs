@@ -36,6 +36,10 @@ fn a_procedures_plan_reaches_its_agent_and_back_by_address() {
         press(Find::exactly_named(Role::Button, b"Add CSV export to widget")),
         // 2: qa_delegation::running_card_names_the_change_and_exposes_its_steps opens this procedure
         // (broken on main since a2d78e2a4, see the module's doc).
+        // The card settles at its call once the turn's words show (client/README.md, 5.7).
+        // A person reads the reply, then follows its card.
+        see(Find::text("I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge.".as_bytes())
+            .within(Box::new([Target::ExactRole { role: Role::Log, name: b"Conversation".as_slice().into() }]))),
         see(Find::exactly_named(Role::Region, b"Task 2")),
         see(task(b"Task 2")
             .within(Box::new([Target::ExactRole { role: Role::Region, name: b"Task 2".as_slice().into() }]))),
