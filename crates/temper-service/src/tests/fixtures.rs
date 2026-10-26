@@ -595,6 +595,7 @@ pub fn assignment_with_settings(
         live: jig_domain_host::LiveAsk::NONE,
         charter: 1,
         run: Box::new(temper_engine_domain::RunCharter {
+            revision: 1,
             ended_by: jig_domain_tasks::EndedBy::Result,
             sources: Box::new([Some(1)]),
             accounts: Box::new([jig_domain_authority::AccountBinding { provider: 1, account: 1, source: 1 }]),

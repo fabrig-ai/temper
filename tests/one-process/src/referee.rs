@@ -188,6 +188,12 @@ fn snapshot(store: &Store) -> rules::Snapshot {
     let mut snapshot = rules::Snapshot::default();
     for row in store.rows.values() {
         match row {
+            root::Record::Core(core::Record::Core(core::CoreRecord::Settings(core::settings::Record::Revision {
+                revision,
+                history: false,
+            }))) => {
+                snapshot.newest = snapshot.newest.max(revision.head.number);
+            }
             root::Record::Core(core::Record::Tasks(
                 jig_domain_tasks::Stored::Live(task) | jig_domain_tasks::Stored::Ended(task),
             )) => {
