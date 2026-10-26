@@ -1803,6 +1803,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 }
                 tasks::MessageKind::Escalation { .. }
                 | tasks::MessageKind::Proposal { .. }
+                | tasks::MessageKind::SettingsDecision { .. }
                 | tasks::MessageKind::ProposalDecision { .. }
                 | tasks::MessageKind::Words
                 | tasks::MessageKind::FinishRequested { .. }
@@ -2968,6 +2969,7 @@ pub(crate) fn effect_answer(domain: &Domain, key: CallKey, part: &jig_domain_cor
         | jig_domain_core::CallPart::NoteWritten { .. }
         | jig_domain_core::CallPart::NoteRecalled { .. }
         | jig_domain_core::CallPart::NoteRefused(_)
+        | jig_domain_core::CallPart::SettingsRefused(_)
         | jig_domain_core::CallPart::Unavailable => CallAnswer::from_core(part).expect("core owns its answer"),
     }
 }
@@ -3009,6 +3011,7 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                             | tasks::ProposalAction::ProcedureEffect { .. }
                             | tasks::ProposalAction::Amend { .. }
                             | tasks::ProposalAction::Widen { .. }
+                            | tasks::ProposalAction::Settings { .. }
                             | tasks::ProposalAction::Release { .. } => return,
                         },
                         None => return,

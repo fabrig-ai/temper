@@ -1263,3 +1263,6 @@ fn job_and_attempt_zero_decode_but_run_and_explicit_byte_limit_remain_positive()
         assert!(skein_lib::bytes::find(schema, property).is_some());
     }
 }
+
+#[path = "tests/settings.rs"]
+mod settings;
