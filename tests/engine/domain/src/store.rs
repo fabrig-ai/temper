@@ -421,7 +421,7 @@ impl Store {
                     self.held.push_back(number);
                 }
             }
-            Event::Failed { .. } | Event::OpenRefused { .. } => self.failed = true,
+            Event::Failed { .. } | Event::FrameTooLarge { .. } | Event::OpenRefused { .. } => self.failed = true,
             event @ (Event::Restored { .. } | Event::Loaded { .. } | Event::Turns { .. } | Event::Got { .. })
                 if self.page_delay != 0 =>
             {
@@ -452,6 +452,7 @@ impl Store {
         while let Some(output) = outputs.pop() {
             match output {
                 Up::Ask(request) => requests.push_back(request),
+                Up::FrameTooLarge { .. } => self.failed = true,
                 Up::Root(event) => {
                     let engine::Event::Store(input) = *event else {
                         panic!("store terminal");
