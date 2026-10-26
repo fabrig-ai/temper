@@ -954,6 +954,8 @@ pub fn step_5_4_rules() -> Box<[Box<[Rule]>]> {
     .map(|(cue, turn)| Rule { cue: cue.as_bytes().into(), turn });
     let owner = [
         (&format!("Note {DEFERRED_NOTE_NUMBER} revision 1: ") as &str, 8),
+        // Landing news may cross the report after the note has been recalled.
+        (CROSSED, 8),
         (&format!("Result from task {STORY_CHANGE}:"), 7),
         (&format!("Result from task {X3}:"), 5),
         (&format!("Note {DEFERRED_NOTE_NUMBER} revision 1 written"), 4),
@@ -1500,6 +1502,8 @@ pub fn step_6_4_rules() -> Box<[Box<[Rule]>]> {
     };
     Box::new([
         table(&[
+            // The final report can cross the interim timer or A1's news.
+            (CROSSED, 3),
             ("Subscription removed", 3),
             (RED_OWNER_REPORT, 2),
             (&format!("Subscription {RED_TIMER} added"), 4),
@@ -1826,4 +1830,99 @@ pub fn step_6_8_rules() -> Box<[Box<[Rule]>]> {
         Box::new([]),
         Box::new([]),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use skein_fake_llm_domain::{self as fake, api};
+    use skein_lib::{Env, Queue, ReplyTo, Time, Token, Wall};
+
+    fn answer(scripts: Box<[Script]>, rules: Box<[Box<[Rule]>]>, agent: Agent, fresh: &str) -> api::Answer {
+        let mut recipe = crate::llm::played_by_input(scripts, rules);
+        let message =
+            |role, words: &[u8]| api::Message { role, parts: Box::new([api::Part::Text { text: words.into() }]) };
+        let query = api::Query {
+            credential: None,
+            caching: api::Caching::Unscoped,
+            model: b"fake".as_slice().into(),
+            system: agent.cue().into(),
+            tools: ["finish", "wait"]
+                .map(|name| api::ToolSpec {
+                    name: name.as_bytes().into(),
+                    description: Box::new([]),
+                    parameters: b"{}".as_slice().into(),
+                })
+                .into(),
+            choice: api::ToolChoice::Auto,
+            messages: Box::new([
+                message(api::Role::User, CROSSED.as_bytes()),
+                message(api::Role::Assistant, b"The preceding feedback has been read."),
+                message(api::Role::User, fresh.as_bytes()),
+            ]),
+            max_tokens: 4096,
+        };
+        let mut env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: recipe.domain_limits };
+        let mut out = Queue::with_capacity(fake::MAX_OUT);
+        fake::step(
+            &mut recipe.domain,
+            &env,
+            fake::Event::Call { reply_to: ReplyTo::new(Token::new(1)), call: Token::new(1), query },
+            &mut out,
+        );
+        loop {
+            if let Some(request) = out.pop() {
+                let fake::Request::Reply { result, .. } = request else { panic!("unheld script reply") };
+                return result.expect("script accepted the query");
+            }
+            env.now = recipe.domain.next_deadline().expect("a reply is scheduled");
+            fake::fire(&mut recipe.domain, &env, &mut out);
+        }
+    }
+
+    fn check_finish_feedback(scripts: &[Script], rules: &[Box<[Rule]>], agent: Agent, report: &str) {
+        let crossed = format!("{CROSSED} Read them before finishing.\n2: forge landing 910a2dec -> 6e73e372");
+        for (fresh, finishes) in [("2: forge ci passed at 975835de", false), (crossed.as_str(), true)] {
+            let reply = answer(scripts.into(), rules.into(), agent, fresh);
+            assert_eq!(reply.finish, Finish::ToolCalls);
+            let calls: Vec<_> = reply
+                .parts
+                .iter()
+                .filter_map(|part| match part {
+                    api::Part::ToolCall { name, arguments, .. } => Some((name.as_ref(), arguments.as_ref())),
+                    api::Part::Opaque { .. } | api::Part::Text { .. } | api::Part::ToolOutput { .. } => None,
+                })
+                .collect();
+            assert_eq!(calls.len(), 1, "one scripted judgement");
+            let (name, arguments) = calls[0];
+            let arguments: Value = serde_json::from_slice(arguments).expect("tool arguments");
+            if finishes {
+                assert_eq!(name, b"finish", "new feedback must complete the final report");
+                assert_eq!(arguments, json!({"form":"report","text":report,"fields":{}}));
+            } else {
+                assert_eq!(name, b"wait", "ordinary fresh CI must not replay an older crossed finish");
+                assert_eq!(arguments, json!({}));
+            }
+        }
+    }
+
+    #[test]
+    fn case_5_4_owner_finishes_after_crossed_report_and_waits_on_fresh_ci() {
+        check_finish_feedback(
+            &step_5_4(([127, 0, 0, 1], 3000).into()),
+            &step_5_4_rules(),
+            Agent::StoryOwner,
+            super::super::STORY_OWNER_REPORT,
+        );
+    }
+
+    #[test]
+    fn case_6_4_director_finishes_after_crossed_report_and_waits_on_fresh_ci() {
+        check_finish_feedback(
+            &step_6_4(([127, 0, 0, 1], 3000).into()),
+            &step_6_4_rules(),
+            Agent::RedDirector,
+            super::super::RED_REPORT,
+        );
+    }
 }
