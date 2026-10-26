@@ -1,0 +1,13 @@
+# The composition is ordinary Rust (playground.md, 3 and 4), as the one-process
+# world it came from; a seed must replay to the same run.
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order depends on a random seed: BTreeMap" },
+    { path = "std::collections::HashSet", reason = "iteration order depends on a random seed: BTreeSet" },
+    { path = "std::time::Instant", reason = "the world's clock is World::now" },
+    { path = "std::time::SystemTime", reason = "the world's clock is World::now" },
+]
+
+disallowed-methods = [
+    { path = "std::thread::spawn", reason = "one thread, so that a run replays" },
+]

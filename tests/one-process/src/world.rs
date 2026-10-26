@@ -14,6 +14,7 @@ use skein_shell::Host;
 use skein_world::{Inherited, Memory};
 use std::{cell::RefCell, net::SocketAddr, rc::Rc};
 use temper_client_shell_terminal::client::{NativeClient, Settings as ClientSettings, Start};
+use temper_playground::Process;
 #[derive(Clone, Copy, Debug)]
 pub struct Settings {
     pub seed: u64,
@@ -70,7 +71,7 @@ thread_local! {
     static PROGRESS: RefCell<Progress> = RefCell::new(Progress::default());
 }
 pub(crate) struct ServiceHost {
-    pub(crate) service: temper_service::Service,
+    pub(crate) service: temper_playground::Service,
     pub(crate) hooks: Option<SocketAddr>,
     bound_hooks: Option<(Fd, SocketAddr)>,
     capture: Capture,
@@ -100,7 +101,7 @@ impl Host for ServiceHost {
             fixtures::store_names(),
             &self.families,
         ));
-        temper_service::iterate(&mut self.service, now, wall);
+        self.service.iterate(now, wall);
         for submit in self.service.submissions().iter() {
             self.capture.pending(&submit.kind);
         }
@@ -137,33 +138,21 @@ impl Host for ServiceHost {
 }
 pub(crate) enum Proc {
     Service(Box<ServiceHost>),
-    Agent(Box<skein_world::PipeHost<smith_agent_shell::Agent>>),
-    Git(Box<temper_fake_git_hosted::Git<temper_fake_git_hosted::Typed>>),
-    Shell(Box<stories::Shell>),
-    Peer(Box<SignalHost<skein_fake_peers::llm::Peer>>),
-    Forge(Box<SignalHost<Peer>>),
+    Playground(temper_playground::Process),
     Client(Box<SignalHost<Person>>),
 }
 impl Proc {
     fn host(&self) -> &dyn Host {
         match self {
             Self::Service(h) => h.as_ref(),
-            Self::Agent(h) => h.as_ref(),
-            Self::Git(h) => h.as_ref(),
-            Self::Shell(h) => h.as_ref(),
-            Self::Peer(h) => h.as_ref(),
-            Self::Forge(h) => h.as_ref(),
+            Self::Playground(h) => h,
             Self::Client(h) => h.as_ref(),
         }
     }
     fn host_mut(&mut self) -> &mut dyn Host {
         match self {
             Self::Service(h) => h.as_mut(),
-            Self::Agent(h) => h.as_mut(),
-            Self::Git(h) => h.as_mut(),
-            Self::Shell(h) => h.as_mut(),
-            Self::Peer(h) => h.as_mut(),
-            Self::Forge(h) => h.as_mut(),
+            Self::Playground(h) => h,
             Self::Client(h) => h.as_mut(),
         }
     }
@@ -503,21 +492,17 @@ fn person_failed(step: u32, why: &skein_fake_person::Why, wire: &referee::client
 }
 fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
-    let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
-    let mut service = temper_service::startup::startup(
-        &fixtures::document(),
-        // Simulated fixture paths stay relative to their inherited roots.
-        &jig_protocol_config::Directories::working(),
-        &fixtures::files(),
-        &fixtures::agent(),
-        &fixtures::seeds(),
-        None,
-        temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() },
-        fixtures::forges(),
-    )
-    .expect("one-process startup");
-    service.adopt_store(root, 1000).expect("deployment store");
-    service.adopt_signals(inherited.signal).expect("service signal");
+    let service = temper_playground::Service::start(
+        &temper_playground::Start {
+            document: fixtures::document().into_boxed_slice(),
+            files: fixtures::files(),
+            agent: fixtures::agent(),
+            seeds: fixtures::seeds(),
+            forges: fixtures::forges(),
+            user: 1000,
+        },
+        inherited,
+    );
     let mut capture = Capture::default();
     capture.root(root);
     let families =
@@ -544,48 +529,26 @@ fn service(inherited: &Inherited) -> Proc {
     reason = "smith's endpoint program selections use the sole adapter name as the map's value"
 )]
 fn agent(_spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
-    let stderr = inherited.pipes.iter().find(|(child, _)| *child == 2).expect("stderr").1;
-    let (errors, capture) = smith_agent_process_world::AgentErrors::pipe(stderr);
-    Proc::Agent(Box::new(
-        capture.host(
-            smith_agent_shell::Agent::new(
-                smith_agent_shell::config::Configuration {
-                    service: fixtures::agent_configuration(),
-                    memory: fixtures::agent_profile().declared.memory,
-                    trace: None,
-                    profile: fixtures::agent_profile(),
-                    declarations: fixtures::agent_declarations(),
-                    programs: std::collections::BTreeMap::new(),
-                    endpoint_programs: std::collections::BTreeMap::new(),
-                },
-                smith_agent_shell::Resources {
-                    input: inherited.pipes.iter().find(|(child, _)| *child == 0).expect("stdin").1,
-                    output: inherited.pipes.iter().find(|(child, _)| *child == 1).expect("stdout").1,
-                    error: Some(stderr),
-                    signals: inherited.signal,
-                    seed: fixtures::SEED,
-                    pid: 101,
-                    trace: None,
-                    roots: Some(inherited.roots.iter().map(|(_, fd)| *fd).collect()),
-                    programs: None,
-                },
-                Box::new(errors),
-            )
-            .expect("hosted agent"),
-        ),
-    ))
+    Proc::Playground(Process::Agent(Box::new(temper_playground::agent(
+        inherited,
+        smith_agent_shell::config::Configuration {
+            service: fixtures::agent_configuration(),
+            memory: fixtures::agent_profile().declared.memory,
+            trace: None,
+            profile: fixtures::agent_profile(),
+            declarations: fixtures::agent_declarations(),
+            programs: std::collections::BTreeMap::new(),
+            endpoint_programs: std::collections::BTreeMap::new(),
+        },
+        fixtures::SEED,
+        101,
+    ))))
 }
 fn git(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
-    Proc::Git(Box::new(temper_fake_git_hosted::git(spawn, inherited, transport())))
+    Proc::Playground(Process::Git(Box::new(temper_playground::git(spawn, inherited, transport()))))
 }
 fn shell(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
-    Proc::Shell(Box::new(stories::Shell::new(spawn, inherited)))
-}
-fn worker_root(_spawn: &skein_io::kernel::Spawn) -> Vec<skein_world::StartupRoot> {
-    vec![skein_world::StartupRoot { name: b"worker".as_slice().into(), path: b"worker".as_slice().into() }]
-}
-fn agent_root(_spawn: &skein_io::kernel::Spawn) -> Vec<skein_world::StartupRoot> {
-    vec![skein_world::StartupRoot { name: b"worker".as_slice().into(), path: b"agent".as_slice().into() }]
+    Proc::Playground(Process::Shell(Box::new(temper_playground::Shell::new(spawn, inherited))))
 }
 #[must_use]
 pub fn run(settings: Settings, scenario: Story) -> Outcome {
@@ -675,7 +638,7 @@ fn person(inherited: &Inherited) -> Proc {
     Proc::Client(Box::new(SignalHost::new(person, Some(inherited.signal))))
 }
 fn llm_peer(inherited: &Inherited) -> Proc {
-    Proc::Peer(Box::new(SignalHost::new(fixtures::provider(), Some(inherited.signal))))
+    Proc::Playground(Process::Llm(Box::new(SignalHost::new(fixtures::provider(), Some(inherited.signal)))))
 }
 
 fn hooks_address(bound: &mut Option<(Fd, SocketAddr)>, complete: &Complete) -> Option<SocketAddr> {
@@ -697,48 +660,46 @@ fn transport() -> temper_fake_git_hosted::Typed {
     SHARED.with(|shared| shared.borrow().as_ref().expect("world's forge").clone())
 }
 fn peer() -> Peer {
-    Peer::new(
-        fixtures::FORGE,
-        fixtures::peer_limits(),
-        temper_fake_git_hosted::fixtures::table(b"acme/app", None),
-        fixtures::forge_limits(),
-        transport().forge,
-        fixtures::SEED,
-    )
-    .expect("forge peer")
+    temper_playground::forge(temper_playground::ForgeStart {
+        address: fixtures::FORGE,
+        limits: fixtures::peer_limits(),
+        table: temper_fake_git_hosted::fixtures::table(b"acme/app", None),
+        protocol: fixtures::forge_limits(),
+        forge: transport().forge,
+        seed: fixtures::SEED,
+    })
 }
 
 fn fake_forge(inherited: &Inherited) -> Proc {
-    Proc::Forge(Box::new(SignalHost::new(peer(), Some(inherited.signal))))
+    Proc::Playground(Process::Forge(Box::new(SignalHost::new(peer(), Some(inherited.signal)))))
 }
 fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>) {
     world.host_roots(
         skein_world::HostedProgram {
-            program: b"/opt/temper/bin/temper".as_slice().into(),
+            program: temper_playground::AGENT.into(),
             make: agent,
             instances: fixtures::AGENTS,
             operations: fixtures::agent_limits().routes + 3,
         },
-        agent_root,
+        temper_playground::agent_roots,
     );
     world.host_roots(
-        skein_world::HostedProgram {
-            program: b"/usr/bin/git".as_slice().into(),
-            make: git,
-            instances: 1,
-            operations: 1,
-        },
-        worker_root,
+        skein_world::HostedProgram { program: temper_playground::GIT.into(), make: git, instances: 1, operations: 1 },
+        temper_playground::worker_roots,
     );
     world.host_roots(
-        skein_world::HostedProgram { program: b"/bin/sh".as_slice().into(), make: shell, instances: 1, operations: 1 },
-        agent_root,
+        skein_world::HostedProgram { program: temper_playground::SH.into(), make: shell, instances: 1, operations: 1 },
+        temper_playground::agent_roots,
     );
 }
 fn deliveries(procs: &[Proc]) -> Vec<Delivery> {
     procs
         .iter()
-        .filter_map(|proc| if let Proc::Forge(peer) = proc { Some(peer.observations()) } else { None })
+        .filter_map(
+            |proc| {
+                if let Proc::Playground(Process::Forge(peer)) = proc { Some(peer.observations()) } else { None }
+            },
+        )
         .flatten()
         .filter_map(|observation| {
             if let Observation::Delivery { outcome, .. } = observation {
@@ -818,7 +779,7 @@ fn run_phase(
     let mut world = skein_world::World::new_controlled(settings.seed, settings.config, Memory::Unchecked, |controls| {
         referee::Referee::new(controls, store.clone(), scenario, observed_forge.clone(), run.clone(), phase)
     })
-    .with_machine(Machine(disk));
+    .with_machine(Machine(temper_playground::Machine::new(disk, fixtures::PREPARED_REPOSITORY)));
     host_programs(&mut world);
     world.spawn_restartable(
         vec![
@@ -841,15 +802,17 @@ fn run_phase(
             world.cut(0, before, cut);
         }
         Phase::Restart => {
-            world.spawn(|| Proc::Peer(Box::new(SignalHost::new(stories::provider(scenario), None))));
-            world.spawn(|| Proc::Forge(Box::new(SignalHost::new(peer(), None))));
+            world
+                .spawn(|| Proc::Playground(Process::Llm(Box::new(SignalHost::new(stories::provider(scenario), None)))));
+            world.spawn(|| Proc::Playground(Process::Forge(Box::new(SignalHost::new(peer(), None)))));
         }
         Phase::Story | Phase::SignIn | Phase::Drain => {
             world.spawn_root(skein_sim::Handle::new(client.expect("story client root").raw()), |root| {
                 Proc::Client(Box::new(SignalHost::new(Person::new(root, scenario), None)))
             });
-            world.spawn(|| Proc::Peer(Box::new(SignalHost::new(stories::provider(scenario), None))));
-            world.spawn(|| Proc::Forge(Box::new(SignalHost::new(peer(), None))));
+            world
+                .spawn(|| Proc::Playground(Process::Llm(Box::new(SignalHost::new(stories::provider(scenario), None)))));
+            world.spawn(|| Proc::Playground(Process::Forge(Box::new(SignalHost::new(peer(), None)))));
         }
     }
     let mut outcome = world.run();
@@ -861,7 +824,7 @@ fn run_phase(
         .iter()
         .filter_map(|proc| match proc {
             Proc::Client(person) => Some(person.signed_in),
-            Proc::Service(_) | Proc::Agent(_) | Proc::Git(_) | Proc::Shell(_) | Proc::Peer(_) | Proc::Forge(_) => None,
+            Proc::Service(_) | Proc::Playground(_) => None,
         })
         .sum();
     let chats_answered = if matches!(scenario, Story::ChatReadThenWait { .. }) {
@@ -895,7 +858,7 @@ fn run_phase(
         adoption_pending_at_restart: run.borrow().pending_adoption,
     };
     drop(run);
-    (result, std::mem::replace(&mut outcome.machine.0, machine::fresh()), records)
+    (result, std::mem::replace(outcome.machine.0.disk(), machine::fresh()), records)
 }
 
 #[cfg(test)]
