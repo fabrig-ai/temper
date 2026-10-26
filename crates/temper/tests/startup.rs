@@ -1677,10 +1677,6 @@ fn the_live_github_configuration_passes_startup_admission_for_both_owners() {
     }
 }
 
-// These profiles declare less than their worst case on main. A profile leaves
-// this list once its declarations cover its worst case.
-const MAIN_DECLARATION_SHORTFALLS: &[&str] = &["lab/live-0a/temper.json", "lab/live-0b/temper.json"];
-
 #[test]
 fn checked_in_deployment_profiles_pass_startup_admission() {
     let mut profiles = vec![
@@ -2113,7 +2109,7 @@ fn declaration_shortfalls(
         ));
     }
     for (component, required, declared) in components {
-        if declared < required && !MAIN_DECLARATION_SHORTFALLS.contains(&relative) {
+        if declared < required {
             writeln!(
                 failures,
                 "{relative}: {component} required={required} declared={declared} shortfall={}",

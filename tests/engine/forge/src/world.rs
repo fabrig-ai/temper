@@ -415,7 +415,7 @@ impl World {
             }) {
                 return;
             }
-            assert!(self.iterate(end), "post must reach the forge before the horizon");
+            assert!(self.iterate(end, true), "post must reach the forge before the horizon");
         }
         panic!("post did not settle at the forge");
     }
