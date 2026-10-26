@@ -9,9 +9,9 @@ use skein_ui_web::{
     fetch, history,
     inbox::Inbox,
     page::{Page, web::Dom},
-    platform,
+    platform::{self, Platform as _},
     store::Store,
-    timer, title, transport, wasm_bindgen,
+    title, transport, wasm_bindgen,
 };
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, rc::Rc};
@@ -19,7 +19,15 @@ pub mod host;
 #[cfg(any(not(target_arch = "wasm32"), feature = "record"))]
 pub mod journey;
 pub mod limits;
+#[cfg(all(target_arch = "wasm32", feature = "playground"))]
+mod playground;
 pub mod records;
+#[cfg(all(target_arch = "wasm32", not(feature = "playground")))]
+type Platform = platform::Browser<Report>;
+#[cfg(all(target_arch = "wasm32", feature = "playground"))]
+type Platform = platform::Worker<Report>;
+#[cfg(target_arch = "wasm32")]
+const SIGN_IN: sign_in::Route<'static> = sign_in::Route { path: b"/jig/v1/sign-in/link", home: b"/welcome" };
 #[cfg(target_arch = "wasm32")]
 enum Report {
     Start,
@@ -29,7 +37,12 @@ enum Report {
     Save,
     Due,
     Act(NodeId, Act),
+    #[cfg(not(feature = "playground"))]
     Fetch(fetch::Report),
+    #[cfg(feature = "playground")]
+    World(platform::worker::Heard),
+    #[cfg(feature = "playground")]
+    Playground(playground::Report),
     Carried(Vec<transport::Carried>, u32),
     Place(Box<[u8]>),
 }
@@ -40,96 +53,119 @@ struct Shell {
     recorder: Option<journey::Recorder>,
     page: Rc<RefCell<Page<'static>>>,
     dom: Dom,
-    platform: platform::Browser<Report>,
+    platform: Platform,
+    #[cfg(feature = "playground")]
+    frame: playground::Frame,
     store: Store,
     history: history::web::History,
-    timer: timer::web::Timer,
+    #[cfg(not(feature = "playground"))]
+    timer: skein_ui_web::timer::web::Timer,
     title: title::web::Title,
 }
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn start() {
-    if !skein_ui_web::restart::Restart::new(
-        3,
-        skein_lib::Duration::from_secs(60),
-        "temper-restarts",
-        "The application failed.",
-    )
-    .install("app")
+    #[cfg(feature = "playground")]
+    playground::start();
+    #[cfg(not(feature = "playground"))]
     {
-        return;
+        if !skein_ui_web::restart::Restart::new(
+            3,
+            skein_lib::Duration::from_secs(60),
+            "temper-restarts",
+            "The application failed.",
+        )
+        .install("app")
+        {
+            return;
+        }
+        let inbox = Inbox::new();
+        let platform = Platform::new(fetch::web::Fetch::new(limits::EXCHANGES + 1, Rc::clone(&inbox), Report::Fetch));
+        let mut shell = Shell::new(platform, &platform::facts(), &inbox);
+        inbox.start(Box::new(move |inbox| shell.turn(inbox)));
+        inbox.raise(Report::Start);
     }
-    // Replace the printed secret's address before starting anything that can send.
-    let secret = sign_in::web::take_from_page(&sign_in::Route { path: b"/jig/v1/sign-in/link", home: b"/welcome" });
-    let window = web_sys::window().expect("window");
-    let document = window.document().expect("document");
-    let ways = document
-        .query_selector("meta[name=\"temper-sign-in\"]")
-        .expect("sign-in selector")
-        .and_then(|meta| meta.get_attribute("content"))
-        .map(|content| {
-            let origin = window.location().origin().expect("origin");
-            (content, origin)
-        });
-    let parsed_ways = ways.as_ref().map_or(temper_client_view::sign_in::Ways::NONE, |(content, origin)| {
-        temper_client_view::sign_in::Ways::parse(content, origin.as_bytes())
-    });
-    let mount = document.get_element_by_id("app").expect("bundle mount");
-    let facts = platform::facts();
-    let path = window.location().pathname().expect("path") + &window.location().search().expect("query");
-    #[cfg(debug_assertions)]
-    assert_ne!(path.split('?').next(), Some("/test/panic"), "the test address panics at start");
-    let inbox = Inbox::new();
-    #[cfg(feature = "record")]
-    record_keys(&document, &inbox);
-    let platform =
-        platform::Browser::new(fetch::web::Fetch::new(limits::EXCHANGES + 1, Rc::clone(&inbox), Report::Fetch));
-    let store = Store::new(b"temper.", None);
-    let mut host = host::Host::new(facts.seed, facts.now, facts.wall, parsed_ways);
-    #[cfg(feature = "record")]
-    let mut forges = Vec::new();
-    host.forge_sign_in(forge_sign_in(
-        &document,
-        #[cfg(feature = "record")]
-        &mut forges,
-    ));
-    let stored = store.read_all(&platform);
-    #[cfg(feature = "record")]
-    let recorder = Some(journey::Recorder::new(&journey::Facts {
-        seed: facts.seed,
-        now: facts.now,
-        wall: facts.wall,
-        primary: facts.primary,
-        ways: ways.map(|(content, origin)| (content.into_bytes().into(), origin.into_bytes().into())),
-        forges,
-        path: path.as_bytes().into(),
-        secret: secret.clone(),
-        stored: stored.clone(),
-    }));
-    host.start(path.as_bytes(), stored, secret);
-    let page = Rc::new(RefCell::new(host::page(&host.bounds.tree, facts.primary)));
-    let dom = Dom::new(mount, &page, &inbox, Report::Act, &[]);
-    let history = history::web::History::new(Rc::clone(&inbox), Report::Place);
-    let timer = timer::web::Timer::new(Rc::clone(&inbox), || Report::Due);
-    let mut shell = Shell {
-        host,
-        #[cfg(feature = "record")]
-        recorder,
-        page,
-        dom,
-        platform,
-        store,
-        history,
-        timer,
-        title: title::web::Title::default(),
-    };
-    inbox.start(Box::new(move |inbox| shell.turn(inbox)));
-    inbox.raise(Report::Start);
 }
 #[cfg(target_arch = "wasm32")]
 impl Shell {
+    fn new(
+        platform: Platform,
+        facts: &platform::Facts,
+        inbox: &Rc<Inbox<Report>>,
+        #[cfg(feature = "playground")] frame: playground::Frame,
+    ) -> Self {
+        // Replace the printed secret's address before starting anything that can send.
+        let secret = sign_in::web::take_from_page(&SIGN_IN);
+        let window = web_sys::window().expect("window");
+        let document = window.document().expect("document");
+        let ways = document
+            .query_selector("meta[name=\"temper-sign-in\"]")
+            .expect("sign-in selector")
+            .and_then(|meta| meta.get_attribute("content"))
+            .map(|content| {
+                let origin = window.location().origin().expect("origin");
+                (content, origin)
+            });
+        let parsed_ways = ways.as_ref().map_or(temper_client_view::sign_in::Ways::NONE, |(content, origin)| {
+            temper_client_view::sign_in::Ways::parse(content, origin.as_bytes())
+        });
+        let mount = document.get_element_by_id("app").expect("bundle mount");
+        let path = window.location().pathname().expect("path") + &window.location().search().expect("query");
+        #[cfg(debug_assertions)]
+        assert_ne!(path.split('?').next(), Some("/test/panic"), "the test address panics at start");
+        #[cfg(feature = "record")]
+        record_keys(&document, inbox);
+        let store = Store::new(b"temper.", None);
+        let mut host = host::Host::new(facts.seed, facts.now, facts.wall, parsed_ways);
+        #[cfg(feature = "record")]
+        let mut forges = Vec::new();
+        host.forge_sign_in(forge_sign_in(
+            &document,
+            #[cfg(feature = "record")]
+            &mut forges,
+        ));
+        let stored = store.read_all(&platform);
+        #[cfg(feature = "record")]
+        let recorder = Some(journey::Recorder::new(&journey::Facts {
+            seed: facts.seed,
+            now: facts.now,
+            wall: facts.wall,
+            primary: facts.primary,
+            ways: ways.map(|(content, origin)| (content.into_bytes().into(), origin.into_bytes().into())),
+            forges,
+            path: path.as_bytes().into(),
+            secret: secret.clone(),
+            stored: stored.clone(),
+        }));
+        host.start(path.as_bytes(), stored, secret);
+        let page = Rc::new(RefCell::new(host::page(&host.bounds.tree, facts.primary)));
+        let dom = Dom::new(mount, &page, inbox, Report::Act, &[]);
+        let history = history::web::History::new(Rc::clone(inbox), Report::Place);
+        #[cfg(not(feature = "playground"))]
+        let timer = skein_ui_web::timer::web::Timer::new(Rc::clone(inbox), || Report::Due);
+        Self {
+            host,
+            #[cfg(feature = "record")]
+            recorder,
+            page,
+            dom,
+            platform,
+            #[cfg(feature = "playground")]
+            frame,
+            store,
+            history,
+            #[cfg(not(feature = "playground"))]
+            timer,
+            title: title::web::Title::default(),
+        }
+    }
     fn turn(&mut self, inbox: &Inbox<Report>) {
+        #[cfg(not(feature = "playground"))]
         let (now, wall) = platform::clocks();
+        #[cfg(feature = "playground")]
+        let (now, wall) = self.platform.clocks();
+        #[cfg(feature = "playground")]
+        self.frame.time(wall);
         #[cfg(feature = "record")]
         if let Some(recorder) = &mut self.recorder {
             recorder.turn(now, wall);
@@ -137,8 +173,20 @@ impl Shell {
         self.host.clocks(now, wall);
         let mut new_page = false;
         while let Some(report) = inbox.next() {
+            #[cfg(feature = "playground")]
+            if self.frame.ended() && !matches!(&report, Report::Playground(_)) {
+                continue;
+            }
+            #[cfg(not(feature = "playground"))]
             let read_on =
                 matches!(&report, Report::Fetch(fetch::Report::StreamOpened | fetch::Report::StreamPiece { .. }));
+            #[cfg(feature = "playground")]
+            let read_on = matches!(
+                &report,
+                Report::World(platform::worker::Heard::Report(
+                    fetch::Report::StreamOpened | fetch::Report::StreamPiece { .. }
+                ))
+            );
             let report = match report {
                 Report::Start => host::Report::Start,
                 #[cfg(feature = "record")]
@@ -154,12 +202,26 @@ impl Shell {
                     continue;
                 }
                 Report::Due => {
+                    #[cfg(not(feature = "playground"))]
                     self.timer.fired();
                     host::Report::Due
                 }
                 Report::Act(node, act) => host::Report::Act { node, act },
                 Report::Place(path) => host::Report::Place { path },
+                #[cfg(not(feature = "playground"))]
                 Report::Fetch(report) => host::Report::Heard(adapter::fetched(report)),
+                #[cfg(feature = "playground")]
+                Report::World(platform::worker::Heard::Report(report)) => host::Report::Heard(adapter::fetched(report)),
+                #[cfg(feature = "playground")]
+                Report::World(heard) => {
+                    self.frame.world(heard, &self.platform);
+                    continue;
+                }
+                #[cfg(feature = "playground")]
+                Report::Playground(report) => {
+                    self.frame.report(report, &self.platform);
+                    continue;
+                }
                 Report::Carried(reports, writes) => host::Report::Carried { reports, writes },
             };
             #[cfg(feature = "record")]
@@ -174,34 +236,49 @@ impl Shell {
             if duties.departs() {
                 self.save_recording(true);
             }
-            let mut requests = adapter::requests(duties.asked);
-            requests.navigate = duties.navigate;
-            if requests.navigate.is_some() {
-                // This acknowledged departure erases its finished request before
-                // navigating. The previous turn's close warning is already stale.
-                web_sys::window().expect("window").set_onbeforeunload(None);
-            }
-            if let Some(to) = duties.replace {
-                let window = web_sys::window().expect("window");
-                window.set_onbeforeunload(None);
-                window
-                    .location()
-                    .replace(std::str::from_utf8(&to).expect("jig address is UTF-8"))
-                    .expect("replace authorization address");
-            }
-            let mut carried = Vec::new();
-            transport::carry(requests, &mut self.store, &mut self.platform, &mut carried);
-            if duties.writes != 0 || !carried.is_empty() {
-                inbox.raise(Report::Carried(carried, duties.writes));
-            }
-            if read_on {
-                self.platform.fetch.read_on();
-            }
-            if let Some((path, replace)) = duties.show {
+            let show = self.carry(duties, read_on, inbox);
+            if let Some((path, replace)) = show {
                 self.history.show(&path, replace);
                 new_page = !replace;
             }
         }
+        #[cfg(feature = "playground")]
+        if self.frame.ended() {
+            return;
+        }
+        self.draw(
+            new_page,
+            #[cfg(not(feature = "playground"))]
+            now,
+        );
+    }
+    fn carry(&mut self, duties: host::Duties, read_on: bool, inbox: &Inbox<Report>) -> Option<(Box<[u8]>, bool)> {
+        let mut requests = adapter::requests(duties.asked);
+        requests.navigate = duties.navigate;
+        if requests.navigate.is_some() {
+            // This acknowledged departure erases its finished request before
+            // navigating. The previous turn's close warning is already stale.
+            web_sys::window().expect("window").set_onbeforeunload(None);
+        }
+        if let Some(to) = duties.replace {
+            let window = web_sys::window().expect("window");
+            window.set_onbeforeunload(None);
+            window
+                .location()
+                .replace(std::str::from_utf8(&to).expect("jig address is UTF-8"))
+                .expect("replace authorization address");
+        }
+        let mut carried = Vec::new();
+        transport::carry(requests, &mut self.store, &mut self.platform, &mut carried);
+        if duties.writes != 0 || !carried.is_empty() {
+            inbox.raise(Report::Carried(carried, duties.writes));
+        }
+        if read_on {
+            self.platform.read_on();
+        }
+        duties.show
+    }
+    fn draw(&mut self, new_page: bool, #[cfg(not(feature = "playground"))] now: skein_lib::Time) {
         let mut ops = Vec::new();
         self.host.draw(&mut self.page.borrow_mut(), &mut ops);
         self.dom.apply(&ops);
@@ -230,9 +307,19 @@ impl Shell {
             link.set_attribute("target", "_blank").expect("link target");
             link.set_attribute("rel", "noopener noreferrer").expect("link relation");
         }
-        self.finish(&ops, new_page, now);
+        self.finish(
+            &ops,
+            new_page,
+            #[cfg(not(feature = "playground"))]
+            now,
+        );
     }
-    fn finish(&mut self, ops: &[skein_ui_web::page::Op], new_page: bool, now: skein_lib::Time) {
+    fn finish(
+        &mut self,
+        ops: &[skein_ui_web::page::Op],
+        new_page: bool,
+        #[cfg(not(feature = "playground"))] now: skein_lib::Time,
+    ) {
         let window = web_sys::window().expect("window");
         let document = window.document().expect("document");
         let heading = document.query_selector("main h1").expect("heading selector");
@@ -256,7 +343,10 @@ impl Shell {
         if let Some(recorder) = &mut self.recorder {
             recorder.deadline(deadline);
         }
+        #[cfg(not(feature = "playground"))]
         self.timer.set(deadline, now);
+        #[cfg(feature = "playground")]
+        self.platform.deadline(deadline);
     }
     #[cfg(feature = "record")]
     fn save_recording(&mut self, departing: bool) {

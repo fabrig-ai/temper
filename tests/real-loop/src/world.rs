@@ -289,7 +289,7 @@ fn host<R: Referee<Proc>>(
     let root = skein_shell::open_root(path).expect("caller launch root");
     world.spawn_with_fds(vec![root], || {
         Proc::Caller(Box::new(if direct_key {
-            Caller::new(steps(), path.into(), root)
+            Caller::with_settings(steps(), path.into(), root)
         } else {
             Caller::provisioned(steps(), path.into(), root)
         }))

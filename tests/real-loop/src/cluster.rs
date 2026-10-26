@@ -89,7 +89,7 @@ impl Shape {
         use serde_json::json;
         let config = path.join("config");
         let data = path.join("data");
-        for name in ["config/charters", "cache"] {
+        for name in ["config", "cache"] {
             std::fs::DirBuilder::new()
                 .mode(0o700)
                 .recursive(true)
@@ -159,7 +159,11 @@ impl Shape {
         }
         fixtures::private(&config.join("temper.json"), &serde_json::to_vec(&document).expect("cluster document"))
             .expect("private cluster document");
-        std::fs::copy(data.join("charters/chat.txt"), config.join("charters/chat.txt")).expect("configuration charter");
+        if data.join("charters/chat.txt").exists() {
+            std::fs::create_dir_all(config.join("charters")).expect("retained charter directory");
+            std::fs::copy(data.join("charters/chat.txt"), config.join("charters/chat.txt"))
+                .expect("configuration charter");
+        }
     }
 }
 

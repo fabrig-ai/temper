@@ -9,6 +9,9 @@ publish.workspace = true
 
 [dependencies]
 temper-fake-git-fixtures.workspace = true
+jig-domain-core.workspace = true
+jig-domain-fleet.workspace = true
+jig-domain-people.workspace = true
 jig-domain-tasks.workspace = true
 temper-worker-domain.workspace = true
 jig-protocol-config.workspace = true

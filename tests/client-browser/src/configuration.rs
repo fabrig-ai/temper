@@ -12,7 +12,6 @@ use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 pub(crate) const UNREACHED: &str = "127.0.0.1:9";
 /// The paths the deployment names, each relative to its directory.
 const RELATIVE: &[&str] = &[
-    "charters/chat.txt",
     "secrets/worker-a.digest",
     "app.secret",
     "worker.secret",
@@ -27,7 +26,7 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
     let agent = serde_json::json!({
         "profile":{"name":"standard","declared":{"memory":2_147_483_648_u64,"tool_payload":2048,"read_window":256,
             "conversations":1,"calls_per_response":1},
-            "policy":{"max_turns":5,"group_stop":10,"inbox":8,"unacknowledged":8}},
+            "policy":{"max_turns":8,"group_stop":10,"inbox":8,"unacknowledged":8,"check_timeout":60000}},
         "endpoints":[{"name":"fake","number":0,"dialect":3,"provider":"openai",
             "address":UNREACHED,"transport":"tls","server_name":"skein.test","trust_der":directory.join("root.der"),
             "identity":"plain","connect":1000,"handshake":1000,
@@ -36,6 +35,22 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
     let mut value: serde_json::Value =
         serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("engine JSON");
     value.as_object_mut().expect("whole object").remove("service");
+    for member in ["charters", "templates", "policies", "rules"] {
+        value["engine"].as_object_mut().expect("engine object").remove(member);
+    }
+    // The inherited project's unused depth eight exceeded the stock's four.
+    for project in value["engine"]["projects"].as_array_mut().expect("seed projects") {
+        project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
+        for role in project["policy"]["roles"].as_array_mut().expect("seed roles") {
+            role["authority"]["delegation"]["depth"] = 4.into();
+        }
+    }
+    // Admit stock policy 1 and its ten grants.
+    for (name, count) in
+        [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32), ("tasks.charters", 2)]
+    {
+        value["engine"]["limits"]["overrides"][name] = count.into();
+    }
     let worker: serde_json::Value =
         serde_json::from_slice(jig_channel_world::fixtures::WORKER_DOCUMENT).expect("worker JSON");
     value["workers"] = worker["workers"].clone();
@@ -103,11 +118,14 @@ pub(crate) fn private(path: &Path, bytes: &[u8]) {
 /// The deployment's files and its two documents, `agent.json` and `temper.json`, in `directory`.
 pub(crate) fn write(directory: &Path, program: &Path, bundle: &Path) {
     assert!(Path::new("/usr/bin/git").is_file(), "/usr/bin/git is required");
-    for name in ["", "accounts", "secrets", "charters", "state"] {
+    for name in ["", "accounts", "secrets", "state"] {
         fs::create_dir_all(directory.join(name)).expect("deployment directory");
         fs::set_permissions(directory.join(name), fs::Permissions::from_mode(0o700)).expect("private directory");
     }
     for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
+        if name.starts_with(b"charters/") {
+            continue;
+        }
         private(&directory.join(std::str::from_utf8(&name).expect("fixture path")), bytes.expose());
     }
     private(&directory.join("worker.secret"), b"worker-secret");

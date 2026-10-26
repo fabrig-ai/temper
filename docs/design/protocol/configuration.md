@@ -1571,7 +1571,10 @@ into the binary.
   scope, the forge's connector, the bounds above), to jig's builder in
   place of the document's members, and temper's kinds' defaults (kind 1
   rule 1, kind 3) to the forge (jig's `domain/engine.md`, 17.5), and
-  makes the engine as today.
+  makes the engine as today. A test world builds the service with
+  defaults of its own in that field's place, the settings its stories
+  need, so that a story not about settings makes no change to reach
+  them; the binary always passes the stock.
 - **The stock sets floors under the limits.** Its own values must fit
   the limits they are checked against: a configuration whose
   `core.policy_bytes` is below policy 1's encoding, or whose

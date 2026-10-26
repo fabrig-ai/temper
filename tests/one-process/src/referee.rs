@@ -229,6 +229,7 @@ fn shutdown_peers(procs: &mut [Proc]) {
             Proc::Playground(Process::Visitor(visitor)) => visitor.close(),
             Proc::Service(_)
             | Proc::Client(_)
+            | Proc::Ctl(_)
             | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) => {}
         }
     }
@@ -282,7 +283,7 @@ impl skein_world::Referee<Proc> for Referee {
         }
         let done = other.iter().all(|proc| match proc {
             Proc::Client(person) => person.is_empty(),
-            Proc::Service(_) | Proc::Playground(_) => true,
+            Proc::Service(_) | Proc::Playground(_) | Proc::Ctl(_) => true,
         });
         if crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();

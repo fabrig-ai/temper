@@ -25,3 +25,5 @@ mod task_words;
 mod amend_controls;
 
 mod settings;
+
+mod task_settings;

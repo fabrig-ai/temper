@@ -1,8 +1,9 @@
 task 41 · goal · Running · shop · priority 2
 asked: Add a /health endpoint that reports the store's state
 requester: you · spent 1.20 of 5.00 · no deadline
+settings: revision 1
 waiting on: you: question of task 42 · 1 waiting
 acts:
   stop 41 --key NAME (proposed to you)
   cancel 41 REASON --key NAME
-digest: task 81723d00b4bf8d02
+digest: task 44a8e6f24bbe81d6

@@ -60,6 +60,8 @@ pub fn limits() -> engine::Limits {
         saved_resources: 2,
         contract_choices: 1,
         charters: 1,
+        revisions: 4,
+        versions: 8,
         authority_grants: 1,
         authority_segments: 2,
         authority_bytes: 32,
@@ -107,6 +109,7 @@ pub fn limits() -> engine::Limits {
         source_detail_bytes: 4096,
         workers: 1,
         needs_bytes: 65_536,
+        versions: 0,
         engine_slots: 0,
         slots: 1,
         workstreams: 1,
@@ -124,7 +127,14 @@ pub fn limits() -> engine::Limits {
     let mut limits = engine::Limits {
         policy_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.policy_bytes,
         call_answer_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.call_answer_bytes,
-        settings: jig_domain_core::settings::Limits { history: 64, alternatives: 16, permissions: 32, proposals: 4 },
+        settings: jig_domain_core::settings::Limits {
+            revisions: 4,
+            versions: 8,
+            history: 64,
+            alternatives: 16,
+            permissions: 32,
+            proposals: 4,
+        },
         templates: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.templates,
         documents: jig_domain_core::documents::DocumentLimits {
             roles: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.documents.roles,

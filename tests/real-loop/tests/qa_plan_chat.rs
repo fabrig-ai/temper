@@ -21,18 +21,11 @@ const SECOND: &[u8] = b"The queued QA words were answered.";
 const QUEUED: &[u8] = b"These are the queued QA words.";
 const HOLD: &[u8] = b"qa-first-turn";
 
-// The shared fixture intentionally defaults to a result-ended conversation.
-// This pass needs the requester's Open chat; keep every time and budget bound.
+// This pass keeps the stock requester-ended chat in the shared settings setup.
 fn chat_fixture() -> temper_real_loop_world::forge::Fixture {
     fn configure(document: &mut serde_json::Value, agent: &mut serde_json::Value, forge: std::net::SocketAddr) {
         (temper_real_loop_world::forge::fixture().configure)(document, agent, forge);
-        let chat = document["engine"]["templates"]
-            .as_array_mut()
-            .expect("templates")
-            .iter_mut()
-            .find(|template| template["number"] == 1)
-            .expect("chat template");
-        chat["ended_by"] = serde_json::json!("requester");
+        fixtures::requester(document);
     }
     let mut fixture = temper_real_loop_world::forge::fixture();
     fixture.configure = configure;

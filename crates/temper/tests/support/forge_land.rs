@@ -1979,6 +1979,7 @@ pub fn run_live(
         return Err(message);
     }
     Ok(super::boxed::CtlOutcome {
+        model: None,
         exit: binary.exit_status(),
         stdout: calls.stdout().to_vec(),
         stderr: binary.stderr().to_vec(),

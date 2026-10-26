@@ -80,7 +80,10 @@ pub fn outcome(b: &mut Builder, words: &Words, value: &c::Outcome) {
     let phrase = match value {
         c::Outcome::Owner(value) => return owner_outcome(b, words, value),
         c::Outcome::Decided { how, .. } | c::Outcome::DecidedFirst { how, .. } => return decided(b, words, how),
-        c::Outcome::SettingsChanged(_) | c::Outcome::Made { .. } | c::Outcome::Changed => P::Applied,
+        c::Outcome::SettingsChanged(_)
+        | c::Outcome::MovedToNewest(_)
+        | c::Outcome::Made { .. }
+        | c::Outcome::Changed => P::Applied,
         c::Outcome::Proposed { .. } => P::ProposeInstead,
     };
     status(b, words, phrase, &[]);

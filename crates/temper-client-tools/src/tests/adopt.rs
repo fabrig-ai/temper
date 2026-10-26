@@ -213,7 +213,8 @@ fn a_task_reads_forge_resource_in_its_words() {
     let (mut root, call, task) = fixtures::part_read();
     root.serve(call, fixtures::task_result(task));
     let printed = root.answer(call).expect("task answered");
-    assert_eq!((printed.status, printed.stdout.as_ref()), (0, fixtures::golden("forge_part").as_ref()));
+    assert_eq!(printed.status, 0);
+    fixtures::check_golden("forge_part", &printed.stdout);
 }
 #[test]
 fn an_unserved_forge_part_prints_shown_on_the_forge() {

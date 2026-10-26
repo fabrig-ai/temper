@@ -96,7 +96,7 @@ impl Clients {
     }
 
     /// The service reads the file at each start and carries its bytes as a
-    /// pasted value's (protocol/setup.md, 8.4). The shell's private read removes
+    /// pasted LLM key's (protocol/setup.md, 8.4). The shell's private read removes
     /// one final LF, as it does for a handover.
     pub(crate) fn demo_read_answer(
         &mut self,
@@ -113,7 +113,7 @@ impl Clients {
             {
                 *carried = Some(core::Carried { number: 0, digest: skein_lib::sha256::digest(value.expose()) });
             }
-            self.demo_carries.push(kit::SecretsRequest::Carry { exchange: run, value, kind: kit::CarriedKind::Value });
+            self.demo_carries.push(kit::SecretsRequest::Carry { exchange: run, value, kind: kit::CarriedKind::Key });
         } else {
             self.demo_carried(run, None);
         }

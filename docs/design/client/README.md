@@ -3625,7 +3625,15 @@ does for the client:
   (`adopt_repository_ask`), which the core judges as the party's own.
   The forge connector's adoption then reads what temper may do there.
   The outcome is kept under the request's key for the retention and
-  answered once durable (jig's `client/domain/contract.md`, 3.3).
+  answered once durable (jig's `client/domain/contract.md`, 3.3). The
+  forge keeps at most `forge.applications` (32) such outcomes and the
+  requests in flight beside them; one admitted while they are full is
+  refused at once, jig's `Limit` of kind `ApplicationAnswers` with that
+  bound, which jig keeps under the key (jig's `domain/people.md`, its
+  application requests), never answered busy until the retention ends.
+  The key keeps that refusal for the retention, so ctl says it as
+  "temper keeps at most N answers to requests like this within a day:
+  ask again later, under a new key", N the bound.
 - **The forge's errors as reasons,** by the forge connector
   (`temper-engine-domain-forge`'s `reason`, from `skein-forge`'s
   `Error`, skein's `forge.md`, section 3.4): `NotConnected` is not

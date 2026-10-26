@@ -160,7 +160,6 @@ pub(crate) fn write(path: &Path, address: SocketAddr, clients: SocketAddr, fixtu
             grant["pattern"]["value"] = address.to_string().into();
         }
     };
-    broaden(&mut value["engine"]["rules"]["ceiling"]["grants"]);
     for project in value["engine"]["projects"].as_array_mut().expect("projects") {
         broaden(&mut project["policy"]["ceiling"]["grants"]);
         broaden(&mut project["policy"]["roles"][0]["authority"]["grants"]);
@@ -168,7 +167,7 @@ pub(crate) fn write(path: &Path, address: SocketAddr, clients: SocketAddr, fixtu
     }
     (fixture.configure)(&mut value, &mut agent, address);
     fixtures::turn_bounds::apply(&mut value, fixtures::turn_bounds::turn_body(&agent));
-    fixtures::private(&path.join("temper.json"), &serde_json::to_vec(&value)?)?;
+    fixtures::finish_configuration(path, &mut value)?;
     fixtures::private(&path.join("agent.json"), &serde_json::to_vec(&agent)?)
 }
 

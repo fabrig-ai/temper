@@ -149,6 +149,14 @@ Charters, templates, numbered policies and rules are settings. Use
 `temper help settings` for whole-value changes, revisions and
 proposals. An admitted stored change does not need a restart.
 
+A charter change reaches tasks and delegates made after the change.
+An existing agent task's later runs keep the charter from its recorded
+settings revision until it moves. An owner can move running work with
+`move-to-newest`; a conversation moves at its next run. A run already
+going keeps the instructions it received. While older work holds a
+revision, read that charter with `setting charter` and `--revision`,
+as shown in `temper help settings`.
+
 A changed charter must name configured models, leave turns and time
 above its finishing reserve, and supply enough spend for that
 reserve. A larger charter must still fit the host that will run it;

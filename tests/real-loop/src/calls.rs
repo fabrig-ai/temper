@@ -411,7 +411,22 @@ pub(crate) struct Caller {
     serial: u64,
     memory: u64,
     command: Option<Spawn>,
+    fixture_calls: usize,
+    settings_files: fixtures::SettingsFiles,
     input: Box<[u8]>,
+}
+fn is_settings(argv: &Argv) -> bool {
+    matches!(argv.0.first(), Some(Arg::Lit("change-settings")))
+}
+// Only task-creating stories pay for the common timing/budget settings.
+fn reads_settings(step: &Step) -> bool {
+    if let Step::Call { argv, .. } | Step::Start { argv, .. } | Step::Until { argv, .. } = step {
+        return matches!(argv.0.first(), Some(Arg::Lit("chat" | "goal")));
+    }
+    if let Step::Terminal(crate::terminal::Act::TypeOn { label, .. }) = step {
+        return *label == b"Start a chat";
+    }
+    false
 }
 impl Caller {
     pub(crate) fn leftovers(&self) -> &'static [crate::ending::Leftover] {
@@ -485,15 +500,53 @@ impl Caller {
             position + 1,
             call(at, crate::argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "fixture-llm"]),
         );
+        let settings = steps.iter().any(reads_settings).then(|| fixtures::setup_items(&scratch)).flatten();
+        let calls = if let Some(items) = settings {
+            steps.insert(
+                position + 2,
+                fixtures::change_settings(at, "fixture-settings", items).pop().expect("one settings call"),
+            );
+            steps.insert(position + 3, Step::FixtureReady);
+            2
+        } else {
+            steps.insert(position + 2, Step::FixtureReady);
+            1
+        };
+        let mut caller = Self::new(steps, scratch, root);
+        caller.recording = Recording::Fixture;
+        caller.fixture_calls = calls;
+        caller
+    }
+    pub(crate) fn with_settings(mut steps: Vec<Step>, scratch: PathBuf, root: Fd) -> Self {
+        let Some((position, at)) = steps.iter().enumerate().find_map(|(index, step)| {
+            if let Step::SignIn { at } | Step::SameParty { at } = step { Some((index, *at)) } else { None }
+        }) else {
+            return Self::new(steps, scratch, root);
+        };
+        if !steps.iter().any(reads_settings) {
+            return Self::new(steps, scratch, root);
+        }
+        let Some(items) = fixtures::setup_items(&scratch) else { return Self::new(steps, scratch, root) };
+        steps.insert(
+            position + 1,
+            fixtures::change_settings(at, "fixture-settings", items).pop().expect("one settings call"),
+        );
         steps.insert(position + 2, Step::FixtureReady);
         let mut caller = Self::new(steps, scratch, root);
         caller.recording = Recording::Fixture;
+        caller.fixture_calls = 1;
         caller
     }
     pub(crate) fn new(steps: Vec<Step>, scratch: PathBuf, root: Fd) -> Self {
         let browsers = steps.iter().filter(|step| matches!(step, Step::Browse { .. })).count();
         let visits = steps.iter().filter(|step| matches!(step, Step::Authorize | Step::Return)).count();
-        let memory = u64::try_from((steps.len() + 1) * (OUTPUT * 4 + 4096)).expect("caller memory")
+        let settings_files = fixtures::take_settings();
+        let settings_memory =
+            settings_files.iter().map(|(_, bytes)| u64::try_from(bytes.len()).expect("settings bytes")).sum::<u64>()
+                + skein_lib::Map::<&str, Box<[u8]>>::worst_case(settings_files.capacity())
+                    .expect("settings FILE table");
+        let memory = settings_memory
+            + u64::try_from((steps.len() + 1) * (OUTPUT * 4 + 4096)).expect("caller memory")
             + Browser::MEMORY * u64::try_from(browsers).expect("browser count")
             + crate::issuer::Visit::MEMORY * u64::try_from(visits).expect("sign-in visits")
             + crate::terminal::Typist::worst_case()
@@ -534,6 +587,8 @@ impl Caller {
             serial: 0,
             memory,
             command: None,
+            fixture_calls: 0,
+            settings_files,
             input: Box::new([]),
         }
     }
@@ -587,6 +642,12 @@ impl Caller {
             | Step::Release { .. }
             | Step::Contended { .. } => panic!("command step"),
         };
+        if is_settings(argv) {
+            let Some(Arg::Lit(key)) = argv.0.last() else { panic!("settings key") };
+            if let Some(bytes) = self.settings_files.get(key) {
+                fixtures::private(&self.scratch.join("settings.json"), bytes).expect("settings FILE");
+            }
+        }
         let mut words = vec![fixtures::directory(&self.scratch, *at).as_os_str().as_bytes().into()];
         if let Step::Until { holds, .. } = &self.steps[self.next]
             && let Some(index) = self.current
@@ -839,9 +900,18 @@ impl Caller {
     }
     fn fixture_ready(&mut self) {
         assert!(self.running.iter().all(Option::is_none), "fixture commands settled");
-        let key = self.calls.pop().expect("runtime key call");
-        assert_eq!(key.exit, Some(Exit::Code(0)), "runtime key provisioned: {}", String::from_utf8_lossy(&key.stderr));
-        self.running.pop().expect("settled key call");
+        for _ in 0..self.fixture_calls {
+            let call = self.calls.pop().expect("fixture call");
+            assert_eq!(
+                call.exit,
+                Some(Exit::Code(0)),
+                "runtime fixture setup: {} {}",
+                String::from_utf8_lossy(&call.stdout),
+                String::from_utf8_lossy(&call.stderr)
+            );
+            self.running.pop().expect("settled fixture call");
+        }
+        self.fixture_calls = 0;
         self.recording = Recording::Story;
     }
     fn kill_call(&mut self, index: usize) -> bool {
@@ -924,6 +994,52 @@ impl Caller {
         self.browsed.push(self.browser.take().expect("finished browser").seen);
         true
     }
+    fn command_act(&mut self, now: Time) -> bool {
+        let step = &self.steps[self.next];
+        let Some(index) = self.current else {
+            assert!(self.running.iter().flatten().count() < fixtures::CALLS_AT_ONCE as usize);
+            let index = self.calls.len();
+            self.spawn(now, index);
+            self.current = Some(index);
+            return false;
+        };
+        if let Step::Start { .. } = step {
+            if !self.running[index].as_ref().is_some_and(|r| r.started) {
+                return false;
+            }
+        } else if self.running[index].is_some() {
+            return false;
+        }
+        let call = &mut self.calls[index];
+        if matches!(step, Step::SameParty { .. }) && call.tries == 1 {
+            let link = *self.retry_link.get_or_insert(self.links.get());
+            if self.links.get() <= link {
+                return false;
+            }
+            self.retry_link = None;
+            self.spawn(now, index);
+            return false;
+        }
+        if let Step::Until { holds, early, .. } = step
+            && !holds.matches(&call.stdout)
+            && call.exit == Some(Exit::Code(0))
+        {
+            call.early += u32::from(occurrences(&call.stdout, early) != 0);
+            self.spawn(now, index);
+            return false;
+        }
+        if matches!(step,Step::Call { argv,.. } if is_settings(argv)) {
+            assert_eq!(
+                call.exit,
+                Some(Exit::Code(0)),
+                "settings change: {} {}",
+                String::from_utf8_lossy(&call.stdout),
+                String::from_utf8_lossy(&call.stderr)
+            );
+        }
+        self.current = None;
+        true
+    }
     fn skip_completed_steps(&mut self) {
         if matches!(self.steps.get(self.next), Some(Step::Held { .. })) && self.held.get() {
             // Issue the following kill in this pass, before the hosted caller's next turn.
@@ -998,39 +1114,9 @@ impl Caller {
             | Step::Call { .. }
             | Step::Start { .. }
             | Step::Until { .. } => {
-                let Some(index) = self.current else {
-                    assert!(self.running.iter().flatten().count() < fixtures::CALLS_AT_ONCE as usize);
-                    let index = self.calls.len();
-                    self.spawn(now, index);
-                    self.current = Some(index);
-                    return;
-                };
-                if let Step::Start { .. } = step {
-                    if !self.running[index].as_ref().is_some_and(|r| r.started) {
-                        return;
-                    }
-                } else if self.running[index].is_some() {
+                if !self.command_act(now) {
                     return;
                 }
-                let call = &mut self.calls[index];
-                if matches!(step, Step::SameParty { .. }) && call.tries == 1 {
-                    let link = *self.retry_link.get_or_insert(self.links.get());
-                    if self.links.get() <= link {
-                        return;
-                    }
-                    self.retry_link = None;
-                    self.spawn(now, index);
-                    return;
-                }
-                if let Step::Until { holds, early, .. } = step
-                    && !holds.matches(&call.stdout)
-                    && call.exit == Some(Exit::Code(0))
-                {
-                    call.early += u32::from(occurrences(&call.stdout, early) != 0);
-                    self.spawn(now, index);
-                    return;
-                }
-                self.current = None;
             }
         }
         self.next += 1;

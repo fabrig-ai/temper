@@ -18,7 +18,7 @@ pub fn documents(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> (serde
     let agent = serde_json::json!({
         "profile":{"name":"standard","declared":{"memory":2_147_483_648_u64,"tool_payload":2048,"read_window":256,
             "conversations":1,"calls_per_response":1},
-            "policy":{"max_turns":5,"group_stop":10,"inbox":8,"unacknowledged":8}},
+            "policy":{"max_turns":8,"check_timeout":60000,"group_stop":10,"inbox":8,"unacknowledged":8}},
         "endpoints":[{"name":"fake","number":0,"dialect":3,"provider":"openai",
             "address":llm.to_string(),"transport":"plaintext",
             "identity":"plain","connect":1000,"handshake":1000,
@@ -36,10 +36,6 @@ pub fn documents(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> (serde
     value["workers"][0]["agent"]["arguments"] = serde_json::json!(["agent", directory.join("agent.json")]);
     value["workers"][0]["limits"]["overrides"]["hub.accounts"] = 4.into();
     value["workers"][0]["limits"]["overrides"]["hub.event_bytes"] = 2046.into();
-    // A minimal positive wait parks the scripted run and settles its withheld turn.
-    value["engine"]["charters"][0]["waiting_ms"] = 1.into();
-    // The close story exercises the grace transition without a five-second real wait.
-    value["engine"]["templates"][0]["grace_ms"] = 1.into();
     value["engine"]["hosts"]["listener"] = serde_json::json!([{"in_process":"workers"}]);
     value["engine"]["connectors"] = serde_json::json!([1]);
     value["engine"]["llm"]["endpoints"][0]["dialect"] = 3.into();
@@ -51,7 +47,6 @@ pub fn documents(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> (serde
     value["engine"]["limits"]["overrides"]["people.sign_ins"] = 4.into();
     // Two concurrent acts each need one task and half the project purse.
     value["engine"]["limits"]["overrides"]["tasks.project_tasks"] = 2.into();
-    value["engine"]["templates"][0]["budget"] = serde_json::json!({"as_allowed":50});
     value["engine"]["limits"]["overrides"]["views.watchers"] = 16.into();
     value["engine"]["limits"]["overrides"]["views.watchers_per_party"] = 16.into();
     value["application"] = serde_json::json!({
@@ -65,6 +60,7 @@ pub fn documents(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> (serde
         "limits":{"profile":"small","overrides":{"checkout.name_bytes":256,"checkout.repositories":2,
             "checkout.message_bytes":4096,"forge.name_bytes":64,"forge.resources_per_task":2,"git_component.stdout_bytes":2048}},
         "workers":[{"root":"worker-root","git":"/usr/bin/git"}]});
+    stock_document(&mut value);
     turn_bounds::apply(&mut value, turn_bounds::turn_body(&agent));
     (agent, value)
 }
@@ -82,12 +78,14 @@ pub(crate) fn sign_in_documents(directory: &Path, issuer: SocketAddr) -> std::io
 
 /// Create the standalone tree; every private directory and file has its final mode.
 pub fn write(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> std::io::Result<()> {
-    for name in ["", "accounts", "secrets", "charters", "state", "clients"] {
+    for name in ["", "accounts", "secrets", "state", "clients"] {
         std::fs::create_dir_all(directory.join(name))?;
         std::fs::set_permissions(directory.join(name), std::fs::Permissions::from_mode(0o700))?;
     }
     for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
-        private(&directory.join(std::str::from_utf8(&name).expect("fixture path")), bytes.expose())?;
+        if !name.starts_with(b"charters/") {
+            private(&directory.join(std::str::from_utf8(&name).expect("fixture path")), bytes.expose())?;
+        }
     }
     private(&directory.join("worker.secret"), b"worker-secret")?;
     private(&directory.join("fixture.key"), jig_channel_world::fixtures::KEY)?;
@@ -174,6 +172,9 @@ pub(crate) fn ctl_roots(spawn: &skein_io::kernel::Spawn) -> Vec<skein_world::Sta
     if let Some(path) = temper_client_shell_cli::arguments::file_root(&parsed) {
         roots.push(skein_world::StartupRoot { name: b"file_parent".as_slice().into(), path });
     }
+    for (number, path) in temper_client_shell_cli::arguments::text_files(&parsed) {
+        roots.push(skein_world::StartupRoot { name: format!("text-{number}").into_bytes().into(), path });
+    }
     roots
 }
 pub(crate) fn ctl(spawn: &skein_io::kernel::Spawn, inherited: &skein_world::Inherited) -> crate::world::Proc {
@@ -185,7 +186,7 @@ pub(crate) fn ctl(spawn: &skein_io::kernel::Spawn, inherited: &skein_world::Inhe
     let directory = Path::new(std::ffi::OsStr::from_bytes(&spawn.args[0]));
     let pipe = |child| inherited.pipes.iter().find(|(number, _)| *number == child).expect("standard pipe").1;
     crate::world::Proc::Ctl(Box::new(crate::calls::Recorded::new(
-        OneShot::new(
+        OneShot::with_text_files(
             Invocation {
                 directory: Some(directory.file_name().expect("directory leaf").as_bytes().into()),
                 parsed: arguments::parse(&spawn.args[1..].iter().map(AsRef::as_ref).collect::<Vec<_>>())
@@ -205,6 +206,15 @@ pub(crate) fn ctl(spawn: &skein_io::kernel::Spawn, inherited: &skein_world::Inhe
                 user: skein_shell::effective_user(),
                 seed: SEED,
             },
+            inherited
+                .roots
+                .iter()
+                .filter_map(|(name, fd)| {
+                    name.strip_prefix(b"text-").map(|number| {
+                        (std::str::from_utf8(number).expect("text argument").parse().expect("text argument"), *fd)
+                    })
+                })
+                .collect(),
         )
         .expect("shipped tools limits"),
         std::str::from_utf8(spawn.env[0].strip_prefix(b"CALL=").expect("call binding"))
@@ -261,6 +271,134 @@ pub(crate) fn key_documents(directory: &Path) -> std::io::Result<()> {
     private(&path, &serde_json::to_vec(&agent)?)
 }
 
+/// One owner transaction with whole values, after sign-in and before the story.
+#[must_use]
+pub fn change_settings(at: crate::calls::Dir, key: &'static str, items: serde_json::Value) -> Vec<crate::calls::Step> {
+    let mut file = serde_json::json!({});
+    file["items"] = items;
+    let bytes = serde_json::to_vec(&file).expect("settings FILE").into_boxed_slice();
+    PENDING_SETTINGS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let files = slot.get_or_insert_with(|| skein_lib::Map::with_capacity(16));
+        assert!(
+            files.insert(key, bytes).expect("at most sixteen setup settings files").is_none(),
+            "unique setup settings keys"
+        );
+    });
+    vec![crate::calls::call(
+        at,
+        crate::argv!["change-settings", crate::calls::file("settings.json"), "--against", "1", "--key", key],
+    )]
+}
+// A step factory runs immediately before Caller construction, under its heap meter.
+// Move its bounded FILE table into that Caller; no global file state is retained.
+pub(crate) type SettingsFiles = skein_lib::Map<&'static str, Box<[u8]>>;
+thread_local! { static PENDING_SETTINGS: std::cell::RefCell<Option<SettingsFiles>> = const { std::cell::RefCell::new(None) }; }
+pub(crate) fn take_settings() -> SettingsFiles {
+    PENDING_SETTINGS.with(|slot| slot.borrow_mut().take().unwrap_or_else(|| skein_lib::Map::with_capacity(0)))
+}
+
+fn stock_document(value: &mut serde_json::Value) {
+    for member in ["charters", "templates", "policies", "rules"] {
+        value["engine"].as_object_mut().expect("engine").remove(member);
+    }
+    for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
+        for role in project["policy"]["roles"].as_array_mut().expect("roles") {
+            role["authority"]["delegation"]["depth"] = 4.into();
+        }
+    }
+    for (name, count) in
+        [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32), ("tasks.charters", 2)]
+    {
+        let held = value["engine"]["limits"]["overrides"][name].as_u64().unwrap_or(0);
+        value["engine"]["limits"]["overrides"][name] = held.max(count).into();
+    }
+}
+/// Existing callbacks for blocked and reference-case fixtures still edit document defaults.
+/// Stage their original values; only those final projects exceeding stock keep them.
+pub(crate) fn document_defaults(value: &mut serde_json::Value) {
+    if value["engine"].get("charters").is_some() {
+        return;
+    }
+    let original: serde_json::Value =
+        serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("original fixture");
+    for member in ["charters", "templates", "policies", "rules"] {
+        if let Some(member_value) = original["engine"].get(member) {
+            value["engine"][member] = member_value.clone();
+        }
+    }
+    value["engine"]["charters"][0]["waiting_ms"] = 1.into();
+    value["engine"]["templates"][0]["grace_ms"] = 1.into();
+    value["engine"]["templates"][0]["budget"] = serde_json::json!({"as_allowed":50});
+}
+fn beyond_stock(value: &serde_json::Value) -> bool {
+    value["engine"]["projects"].as_array().expect("projects").iter().any(|project| {
+        let ceiling = &project["policy"]["ceiling"];
+        ceiling["tools"].as_u64().expect("tools") & !1 != 0
+            || ceiling["notes"].as_u64().expect("notes") != 0
+            || ceiling["delegation"]["depth"].as_u64().expect("depth") > 4
+            || ceiling["delegation"]["kinds"].as_array().expect("kinds").iter().any(|kind| kind["kind"] == "role")
+    })
+}
+/// The QA conversation uses stock's requester ending.
+pub fn requester(value: &mut serde_json::Value) {
+    value["world_settings"]["requester"] = true.into();
+}
+/// The QA person follows the chat on their page.
+pub fn listed(value: &mut serde_json::Value) {
+    value["world_settings"]["listed"] = true.into();
+}
+pub(crate) fn finish_configuration(directory: &Path, value: &mut serde_json::Value) -> std::io::Result<()> {
+    let flags = value.as_object_mut().expect("configuration").remove("world_settings").unwrap_or(serde_json::json!({}));
+    if beyond_stock(value) {
+        std::fs::create_dir_all(directory.join("charters"))?;
+        std::fs::set_permissions(directory.join("charters"), std::fs::Permissions::from_mode(0o700))?;
+        for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
+            if name.starts_with(b"charters/") {
+                private(&directory.join(std::str::from_utf8(&name).expect("charter path")), bytes.expose())?;
+            }
+        }
+    } else {
+        if directory.join("charters").exists() {
+            std::fs::remove_dir(directory.join("charters"))?;
+        }
+        stock_document(value);
+        private(&directory.join("world-settings.json"), &serde_json::to_vec(&flags)?)?;
+    }
+    private(&directory.join("temper.json"), &serde_json::to_vec(value)?)
+}
+pub(crate) fn setup_items(directory: &Path) -> Option<serde_json::Value> {
+    let value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("temper.json")).expect("deployment document"))
+            .expect("deployment JSON");
+    if value["engine"].get("charters").is_some() {
+        return None;
+    }
+    let flags = if directory.join("world-settings.json").exists() {
+        serde_json::from_slice(&std::fs::read(directory.join("world-settings.json")).expect("fixture flags"))
+            .expect("fixture flags JSON")
+    } else {
+        serde_json::json!({})
+    };
+    let stock = crate::settings::stock(&value);
+    let mut charter = stock["charter"].clone();
+    charter["waiting"] = 1_000_000.into();
+    let mut template = stock["template"].clone();
+    template["grace"] = 1_000_000.into();
+    template["budget"]["as_allowed"]["cap"] = 50.into();
+    if flags["requester"] != true {
+        template["flags"]["ended_by"] = "result".into();
+    }
+    if flags["listed"] == true {
+        template["flags"]["listed"] = true.into();
+    }
+    Some(serde_json::json!([
+        crate::settings::item("charter", 1, charter),
+        crate::settings::item("template", 1, template)
+    ]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,6 +410,9 @@ mod tests {
     ) -> (serde_json::Value, serde_json::Value) {
         let (mut agent, mut config) = documents(Path::new("/fixture"), llm, forge);
         (fixture.configure)(&mut config, &mut agent, forge);
+        if !beyond_stock(&config) {
+            stock_document(&mut config);
+        }
         turn_bounds::apply(&mut config, turn_bounds::turn_body(&agent));
         (agent, config)
     }

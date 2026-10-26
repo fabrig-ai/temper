@@ -380,6 +380,7 @@ pub fn run_story<T>(
 
 /// A box driven through ctl, with evidence taken before its stop.
 pub struct CtlOutcome<T> {
+    pub model: Option<super::forge_land::Seen>,
     pub exit: Option<Exit>,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
@@ -707,14 +708,13 @@ fn run_ctl_peers<T>(
     }
     let face_procs = face.map(|face| face.spawn(&mut world));
 
-    if let Some(peer) = peer {
-        peer.spawn(&mut world);
-    }
+    let peer = peer.map(|peer| peer.spawn(&mut world));
     let ended = world.run(&clock, deadline);
     assert!(ended.procs.iter().all(Host::is_empty), "box, ctl and peer io settles");
     let [Process::Binary(binary), Process::Calls(calls), ..] = ended.procs.as_slice() else { panic!("box and ctl") };
     (
         CtlOutcome {
+            model: peer.map(|index| super::forge_land::peer_seen(&ended.procs, index)),
             exit: binary.exit_status(),
             stdout: calls.stdout().to_vec(),
             stderr: binary.stderr().to_vec(),

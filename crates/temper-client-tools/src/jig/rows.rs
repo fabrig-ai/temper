@@ -550,3 +550,20 @@ pub const PROPOSAL: Tool = Tool {
     keyed: Keyed::Never,
     area: 2,
 };
+
+/// New rows append to preserve every earlier durable call identity.
+pub const MOVE_TO_NEWEST_AT: u8 = 51;
+pub const MOVE_TO_NEWEST: Tool = Tool {
+    name: b"move-to-newest",
+    line: b"Move every live agent task on held revision R that may move to the newest",
+    result: b"move_to_newest",
+    forms: &[&[positional(
+        b"revision",
+        b"R",
+        Kind::NumberRange { min: 0, max: 4_294_967_295 },
+        Required,
+        b"Held revision number",
+    )]],
+    keyed: Keyed::Required,
+    area: 1,
+};

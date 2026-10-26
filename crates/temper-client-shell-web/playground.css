@@ -1,0 +1,21 @@
+/* The page's frame, apart from the client's look (playground.md, 6 and 11). */
+.playground-frame {
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--temper-line);
+  background: var(--temper-topbar);
+  color: var(--temper-ink);
+}
+.playground-frame p { margin: 0 0 8px; }
+.playground-frame p:empty { display: none; }
+.playground-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.playground-controls button, .playground-controls select, .playground-message button {
+  padding: 4px 8px;
+  border: 1px solid var(--temper-line);
+  border-radius: 3px;
+  background: var(--temper-paper);
+  color: var(--temper-ink);
+}
+.playground-frame a, .playground-message a { color: var(--temper-accent-dark); text-decoration: underline; }
+.playground-message { margin: 24px; }
+.playground-message h1 { font-size: 16px; }
+#playground-failure-words { white-space: pre-wrap; overflow-wrap: anywhere; }

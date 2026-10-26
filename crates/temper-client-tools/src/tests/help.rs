@@ -31,6 +31,7 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::CHANGE_SETTINGS_AT), "help_change_settings"),
     (Some(jig::rows::PROPOSE_SETTINGS_AT), "help_propose_settings"),
     (Some(jig::rows::PROPOSAL_AT), "help_proposal"),
+    (Some(jig::rows::MOVE_TO_NEWEST_AT), "help_move_to_newest"),
 ];
 #[test]
 fn the_help_prints_as_its_golden_files() {
@@ -98,6 +99,7 @@ const USAGES: &[&[u8]] = &[
     b"proposal tN/K|pN/K\n",
     b"change N [--project P]\n",
     b"forge-accept F I [--key NAME]\n",
+    b"move-to-newest R --key NAME\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {
@@ -259,4 +261,17 @@ fn the_moves_places_name_their_rows_in_the_table() {
     for (at, row) in [(jig::rows::EXPORT_AT, &jig::rows::EXPORT), (jig::rows::IMPORT_AT, &jig::rows::IMPORT)] {
         assert_eq!(table::TOOLS[usize::from(at)].name, row.name);
     }
+}
+
+#[test]
+fn every_call_line_of_the_task_settings_topic_parses() {
+    let source = std::fs::read_to_string("../../docs/guide/tasks.md").expect("tasks guide");
+    let mut calls = 0_u32;
+    for line in source.lines() {
+        if let Some(call) = line.as_bytes().strip_prefix(b"temper ctl me ".as_slice()) {
+            fixtures::parse_line(call).expect("tasks guide call parses");
+            calls += 1;
+        }
+    }
+    assert_eq!(calls, 15);
 }

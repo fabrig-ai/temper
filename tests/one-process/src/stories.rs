@@ -314,3 +314,30 @@ pub(crate) fn configure(value: &mut serde_json::Value) {
         overrides.remove(name);
     }
 }
+
+/// Wider repository stories retain the document path pending deployment-only bootstrap.
+pub(crate) fn uses_stock() -> bool {
+    STORY.with(|slot| matches!(slot.get(), Story::Chat { .. } | Story::ChatReadThenWait { .. }))
+}
+
+thread_local! { static SETTINGS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+pub(crate) fn setup_settings(enabled: bool) {
+    SETTINGS.with(|slot| slot.set(enabled));
+}
+pub(crate) fn needs_settings() -> bool {
+    uses_stock() && SETTINGS.with(std::cell::Cell::get)
+}
+pub(crate) fn settings_file() -> Vec<u8> {
+    let document: serde_json::Value = serde_json::from_slice(&fixtures::document()).expect("deployment JSON");
+    let stock = crate::settings::stock(&document);
+    let item = if STORY.with(|slot| matches!(slot.get(), Story::ChatReadThenWait { .. })) {
+        let mut charter = stock["charter"].clone();
+        charter["waiting"] = (u64::from(fixtures::CHAT_WAIT_MS) * 1_000_000).into();
+        crate::settings::item("charter", 1, charter)
+    } else {
+        let mut template = stock["template"].clone();
+        template["flags"]["ended_by"] = "result".into();
+        crate::settings::item("template", 1, template)
+    };
+    serde_json::to_vec(&serde_json::json!({"items":[item]})).expect("settings FILE")
+}

@@ -2354,9 +2354,12 @@ and one smoke above:
 
 - **The tests that move:** every test document and typed builder that
   writes the six members (25 files of documents, 20 of builders, a
-  JSON fixture and the lab's documents) takes the stock defaults or a
-  settings change in its setup instead; a story that edited a charter in
-  its document makes the change it needs. Their times do not change.
+  JSON fixture and the lab's documents) takes the stock defaults, or,
+  where its stories need other settings, defaults of its own passed to
+  the service in the stock's place (`../protocol/configuration.md`,
+  13.4), so that no story pays for a change of settings it is not
+  about; one story per world makes its change through ctl after sign-in.
+  Their times do not change.
 - **Its QA:** planned implementation changes the facts of the forge's world and the
   engine's domain world (how a merge is judged), so their `qa_*`
   profiles run before it lands.
