@@ -29,6 +29,7 @@ use temper_engine_domain_forge_change as forge_change;
 /// (jig's domain/root.md, sections 2–4).
 #[derive(Debug)]
 pub struct Domain {
+    revision: u64,
     /// Retired M1 latch storage, kept for the existing route reset sites.
     /// Resume readiness is derived from the core and never reads this field.
     pub(crate) settled: Option<(Time, Wall)>,
@@ -38,7 +39,7 @@ pub struct Domain {
     pub(crate) limits: Limits,
     /// Derived once from the configured limits, shared by every admission.
     pub(crate) route_room: skein_lib::JournalRoom,
-    /// Step/fire scratch, priced by worst_case and empty between calls.
+    /// Step/fire scratch, priced by `worst_case` and empty between calls.
     scratch: Queue<Request>,
     pub(crate) config: RootConfig,
     pub(crate) core: Core,
@@ -88,8 +89,21 @@ pub struct Domain {
 }
 
 impl Domain {
+    /// Conservative mutation revision, including refused inputs, empty probes,
+    /// observation drains and reclamation. Nested public calls may bump twice.
+    /// Owners checkpoint it only after their release and reclaim pass settles.
+    #[must_use]
+    pub const fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(crate) fn changed(&mut self) {
+        self.revision = self.revision.checked_add(1).expect("root revision space");
+    }
+
     /// Routing capacities are fixed before the first input and priced by the service.
     pub fn connection_limits(&mut self, forges: u32, installations: u32) {
+        self.changed();
         self.settled = None;
         self.forge.connection_limits(forges, installations);
     }
@@ -294,6 +308,7 @@ impl Domain {
             }
         }
         Ok(Domain {
+            revision: 0,
             route_room: route_room(limits),
             scratch: Queue::with_capacity(max_out(limits)),
             settled: None,
@@ -429,6 +444,7 @@ impl Domain {
     /// pass. Bounded child/slab bookkeeping releases only retired entries; issued loads still
     /// awaiting a terminal remain owned. Emits no request or terminal.
     pub fn reclaim(&mut self) {
+        self.changed();
         self.settled = None;
         self.core.reclaim();
         self.brief_connectors.reclaim();
@@ -441,11 +457,13 @@ impl Domain {
     /// Shell/root caller discards every currently queued child observation, scanning at most each
     /// child's configured fact capacity. Emits no effect or terminal and changes no decision state.
     pub fn drain_facts(&mut self) {
+        self.changed();
         self.core.drain_facts(&core_limits(&self.limits));
     }
 
     /// The oldest of the root's own facts not drained yet.
     pub fn pop_fact(&mut self) -> Option<Fact> {
+        self.changed();
         self.facts.pop()
     }
 
@@ -491,6 +509,7 @@ pub(crate) fn save(decision: &mut Decision, limits: &Limits, write: Write) {
 /// notices before child mutation; admitted effects may wait in the journal until store durability.
 /// Account operations keep their own secret-free terminal contract.
 pub fn step(domain: &mut Domain, env: &Env<Limits>, event: Event) {
+    domain.changed();
     let mut out = core::mem::replace(&mut domain.scratch, Queue::with_capacity(0));
     step_routed(domain, env, event, &mut out);
     stage_now(domain, &mut out);
@@ -652,6 +671,7 @@ pub(crate) fn stage_now(domain: &mut Domain, out: &mut Queue<Request>) {
 /// Drain the journal only; child continuations enter through `Event::Released`
 /// and owner progress through `Event::Resume`, each with its own admission.
 pub fn release(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    domain.changed();
     assert!(out.room() >= max_out(&env.limits), "root output room reserved");
     if domain.stop_pending {
         domain.stop_pending = false;
@@ -765,6 +785,7 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
 /// timers may emit bounded protocol actions independently; root routes that mutate tasks/fleet wait
 /// for whole-decision admission. Their store and account outcomes enter later through `step`.
 pub fn fire(domain: &mut Domain, env: &Env<Limits>) {
+    domain.changed();
     let mut out = core::mem::replace(&mut domain.scratch, Queue::with_capacity(0));
     fire_routed(domain, env, &mut out);
     stage_now(domain, &mut out);
