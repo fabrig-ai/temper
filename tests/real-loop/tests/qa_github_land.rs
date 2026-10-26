@@ -18,6 +18,8 @@ const LANDING_HEARD: usize = 8;
 const HELD_TOLD: usize = 10;
 const ONE: usize = 1;
 const LANDED: &[u8] = b"The change landed.";
+// A resource poll cannot rescue the story within the world's 20 s PATIENCE.
+const NO_POLL_IN_PATIENCE_MS: u64 = 60_000;
 
 fn fixture() -> github::Fixture {
     github::Fixture {
@@ -594,31 +596,25 @@ fn q7_g6_whole_run_and_refresh_observe_every_token_byte() {
 }
 
 #[test]
-fn pull_watch_wakes_landing_before_the_slow_poll() {
-    // QA: draft/github.md 7; domain/forge.md 5.2, 8.2;
-    // domain/testing.md 2.4, 6.1: a whole GitHub chat has a 3 s guide.
-    // An absent pull watch or lost wake must not hide behind a 10 ms poll.
+fn a_landing_merges_before_any_resource_poll() {
+    // domain/forge.md 5.2: a landing moves on the forge's news and the
+    // procedure's own wakes and reads, never by waiting for a resource poll.
+    // The resource polls are set beyond the world's patience, so a landing
+    // that needed one fails the story (director decision 1260). Which wake
+    // carries it is the lower worlds' to show. Its 3 s whole-chat guide is
+    // measured idle under `--profile measure`, not asserted here.
     let fixture = github::Fixture {
         configure: |value, agent, address| {
             (fixture().configure)(value, agent, address);
             for name in ["poll_ms", "poll_max_ms", "slow_ms"] {
-                value["application"]["limits"]["overrides"][format!("forge.client.{name}")] = 5000.into();
+                value["application"]["limits"]["overrides"][format!("forge.client.{name}")] =
+                    NO_POLL_IN_PATIENCE_MS.into();
             }
         },
         ..github::fixture()
     };
-    #[expect(
-        clippy::disallowed_types,
-        reason = "this external QA timer includes setup and drain in the real whole-chat wall-time guide"
-    )]
-    let start = std::time::Instant::now();
     let ran = run_github(fixture, scripts, landed_steps);
-    let elapsed = start.elapsed();
     landed(&ran);
-    assert!(
-        elapsed < std::time::Duration::from_secs(3),
-        "pull watch must wake within the whole-chat guide, before slow polling: {elapsed:?}"
-    );
 }
 
 #[test]
