@@ -51,7 +51,7 @@ pub struct Limits {
 /// resumed by the root and never passed to the protocol as child events.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Delivery {
-    /// Switch is released behind prior writes; AdoptRuns completes the durable mark.
+    /// `Switch` is released behind prior writes; `AdoptRuns` completes the durable mark.
     Restart(jig_domain_core::RestartStep),
     /// The root hears a project made only after its decision commits.
     ProjectMade {
@@ -315,15 +315,16 @@ impl Decision {
     pub fn write(&mut self, limits: &Limits, write: Write) -> Result<(), Write> {
         assert!(*limits == self.limits, "decision uses its configured limits");
         let within = match &write {
-            Write::Wires => true,
             Write::CopySettingsRevision(number) => *number != 0,
-            Write::Erase(Key::Wires)
-            | Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_))))
-            | Write::Erase(Key::Core(jig_domain_core::Key::Core(
-                jig_domain_core::CoreKey::Deployment
-                | jig_domain_core::CoreKey::EscalationDecision { .. }
-                | jig_domain_core::CoreKey::ProposalDecision { .. },
-            ))) => false,
+            Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_))))
+            | Write::Erase(
+                Key::Wires
+                | Key::Core(jig_domain_core::Key::Core(
+                    jig_domain_core::CoreKey::Deployment
+                    | jig_domain_core::CoreKey::EscalationDecision { .. }
+                    | jig_domain_core::CoreKey::ProposalDecision { .. },
+                )),
+            ) => false,
             Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Turn(row)))) => {
                 row.task != 0
                     && row.attempt != 0
@@ -333,7 +334,8 @@ impl Decision {
             Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Call(row)))) => {
                 row.key.task != 0 && row.key.attempt != 0 && row.key.completion != 0
             }
-            Write::Erase(
+            Write::Wires
+            | Write::Erase(
                 Key::Core(
                     jig_domain_core::Key::Core(
                         jig_domain_core::CoreKey::Settings(_)

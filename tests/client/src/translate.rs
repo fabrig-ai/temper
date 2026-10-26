@@ -337,6 +337,7 @@ fn delivery_packet(
         | Delivery::Assigned { .. }
         | Delivery::ReadLoad { .. }
         | Delivery::Drained
+        | Delivery::Restart(_)
         | Delivery::Refuse { .. }
         | Delivery::TurnBusy { .. }
         | Delivery::Load { .. } => None,

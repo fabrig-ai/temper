@@ -209,7 +209,9 @@ impl ForgeStand {
     }
 
     pub fn call(&mut self, call: Token, repository: api::Repository, op: api::Op, limits: &skein_forge_client::Limits) {
-        if matches!(&op, api::Op::Write(_)) { self.writes += 1; }
+        if matches!(&op, api::Op::Write(_)) {
+            self.writes += 1;
+        }
         self.limits = *limits;
         self.calls = self.calls.checked_add(1).expect("stand calls bound");
         assert_eq!(repository.forge, self.forge);

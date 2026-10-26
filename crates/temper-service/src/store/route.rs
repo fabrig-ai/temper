@@ -202,8 +202,7 @@ pub fn up(routes: &mut Routes, event: store::Event, into: &mut Queue<Up>) {
             into.push(Up::Ask(dispatch(owner, of, site, patcher)));
         }
         store::Event::Switched { .. } => root(into, engine::StoreInput::Switched),
-        store::Event::OpenRefused { .. } => stop(routes, into),
-        store::Event::SecretsNotReady { .. } => stop(routes, into),
+        store::Event::OpenRefused { .. } | store::Event::SecretsNotReady { .. } => stop(routes, into),
         store::Event::Patched { .. }
         | store::Event::Opened { .. }
         | store::Event::Kept { .. }

@@ -1897,21 +1897,29 @@ fn github_app_urls_use_the_clients_public_origin() {
 fn setup_reconciliation_waits_for_the_mark() {
     // The shared service restart fixture's existing iteration horizon.
     const PASSES: u32 = 256;
-    let mut previous = fixtures::ready().engine.unwrap();
-    kept_record(&mut previous.store, 1, Item::AdminToken, b"test-admin");
-    let store = fixtures::reopened_store(previous.store, &previous.env.limits);
-    let mut service = fixtures::start_with_store(&[(1, 100)], Some(store));
-    let config = local_config(true, false);
-    let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
     // The normal service reserves two setup handoff slots beside a root pass.
     const SETUP_HEADROOM: u32 = 2;
-    let batch = root::max_out(&previous.env.limits).checked_add(SETUP_HEADROOM).unwrap();
+    let mut previous = fixtures::ready().engine.unwrap();
+    kept_record(&mut previous.store, 1, Item::AdminToken, b"test-admin");
+    let mut service = fixtures::restarting_from(previous);
+    let config = local_config(true, false);
+    let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+    let batch = root::max_out(&service.engine.as_ref().unwrap().env.limits).checked_add(SETUP_HEADROOM).unwrap();
     let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, batch, false).unwrap();
     service.engine.as_mut().unwrap().setup = setup;
     service.engine.as_mut().unwrap().store.hold_mark = true;
-    for _ in 0..PASSES { fixtures::turn(&mut service); }
+    for _ in 0..PASSES {
+        fixtures::turn(&mut service);
+    }
     let engine = service.engine.as_mut().unwrap();
-    assert!(engine.store.held_mark.is_some(), "end {:?}, room {}, restart {:?}, ready {}", engine.end, engine.room(), engine.domain.restart_failure(), engine.domain.ready());
+    assert!(
+        engine.store.held_mark.is_some(),
+        "end {:?}, room {}, restart {:?}, ready {}",
+        engine.end,
+        engine.room(),
+        engine.domain.restart_failure(),
+        engine.domain.ready()
+    );
     assert!(!engine.setup.lifecycle.startup_restored());
     assert!(engine.setup.component.is_none());
     assert!(engine.setup.runs.is_empty());
@@ -1919,11 +1927,15 @@ fn setup_reconciliation_waits_for_the_mark() {
     let mark = engine.store.held_mark.take().unwrap();
     engine.store.hold_mark = false;
     assert!(engine.store.down(mark));
-    for _ in 0..PASSES { crate::engine::iterate(engine, Time::ZERO, Wall::EPOCH); }
+    for _ in 0..PASSES {
+        crate::engine::iterate(engine, Time::ZERO, Wall::EPOCH);
+    }
     assert!(engine.store.component.mark_durable());
     assert!(engine.setup.lifecycle.startup_restored());
     assert!(engine.setup.component.is_some());
     assert_eq!(engine.setup.runs.len(), 1, "one configured reconciliation");
-    for _ in 0..PASSES { crate::engine::iterate(engine, Time::ZERO, Wall::EPOCH); }
+    for _ in 0..PASSES {
+        crate::engine::iterate(engine, Time::ZERO, Wall::EPOCH);
+    }
     assert_eq!(engine.setup.runs.len(), 1, "no second reconciliation while its file answer is held");
 }

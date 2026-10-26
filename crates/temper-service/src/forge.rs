@@ -289,7 +289,9 @@ impl Layer {
         self.component.up(&self.env, crate::accounts::untag(event), &mut self.above, &mut self.io);
     }
     #[cfg(test)]
-    pub(crate) const fn startup_begun(&self) -> bool { self.begun }
+    pub(crate) const fn startup_begun(&self) -> bool {
+        self.begun
+    }
     pub(crate) fn iterate(&mut self, now: Time, wall: Wall) {
         self.env.now = now;
         self.env.wall = wall;

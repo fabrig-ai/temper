@@ -295,7 +295,9 @@ fn every_service_start_keeps_the_shells_wires() {
     let Some(skein_kv::Event::Got { value: Some(bytes), .. }) = above.pop() else { panic!("durable wires row") };
     let wires =
         protocol::component_v3::Wires::decode(&protocol::component_v3::CEILINGS, &mut Reader::new(&bytes)).unwrap();
-    let kept: Vec<_> = wires.wires().iter().map(|wire| (wire.name(), wire.version())).collect();
-    let expected: Vec<_> = store::WIRES.iter().map(|wire| (wire.name.as_bytes(), wire.version)).collect();
-    assert_eq!(kept, expected);
+    assert_eq!(wires.wires().len(), u32::try_from(store::WIRES.len()).expect("four wires"));
+    for (kept, expected) in wires.wires().iter().zip(&store::WIRES) {
+        assert_eq!(kept.name(), expected.name.as_bytes());
+        assert_eq!(kept.version(), expected.version);
+    }
 }

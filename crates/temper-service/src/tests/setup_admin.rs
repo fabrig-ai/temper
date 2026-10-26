@@ -469,7 +469,7 @@ fn admin_record_files_and_directories_are_owner_only() {
     for _ in 0_u32..4096 {
         disk_turn(&mut store, &mut kernel);
         if let Some(event) = store.above.pop() {
-            assert!(matches!(event, StoreEvent::Committed { .. }), "{event:?}");
+            let StoreEvent::Committed { .. } = event else { panic!("{event:?}") };
             break;
         }
     }

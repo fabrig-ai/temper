@@ -337,6 +337,9 @@ impl World {
             };
             match request {
                 engine::Request::ToChild(released) => self.events.push_back(engine::Event::Released(released)),
+                engine::Request::Store(engine::StoreRequest::Switch) => {
+                    self.events.push_back(engine::Event::Store(self.store.switch()));
+                }
                 engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                     self.store.pending.push_back((number, writes));
                 }

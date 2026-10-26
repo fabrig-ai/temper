@@ -251,11 +251,15 @@ pub fn records_store() -> crate::store::Store {
     let limits = crate::store::limits(&root, &root.forge, &profile).expect("record fixture limits");
     let mut store = memory_store_for(&root, &profile, &models);
     store.component = jig_protocol_store::Store::over(
-        &limits, temper_protocol_store::application(&root.forge).expect("fixture families"), &models, maps,
+        &limits,
+        temper_protocol_store::application(&root.forge).expect("fixture families"),
+        &models,
+        maps,
     );
     assert!(store.component.wires(&crate::store::WIRES));
     store.ask(jig_protocol_store::Request::Open {
-        owner: OWNER, root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },
+        owner: OWNER,
+        root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },
         installation: seeds().installation,
     });
     let Some(jig_protocol_store::Event::Opened { .. }) = store.above.pop() else { panic!("record store reopened") };
@@ -1050,21 +1054,29 @@ pub fn reopened_store(mut store: crate::store::Store, root: &temper_engine_domai
     let limits = crate::store::limits(root, &root.forge, &settings.jig.limits.store).expect("fixture store limits");
     let maps = store.component.into_stores();
     store.component = jig_protocol_store::Store::over(
-        &limits, temper_protocol_store::application(&root.forge).expect("fixture families"), &models, maps,
+        &limits,
+        temper_protocol_store::application(&root.forge).expect("fixture families"),
+        &models,
+        maps,
     );
     assert!(store.component.wires(&crate::store::WIRES));
     store.ask(jig_protocol_store::Request::Open {
-        owner: OWNER, root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },
+        owner: OWNER,
+        root: jig_protocol_store::Root { token: OWNER, fd: skein_io::kernel::Fd::new(1) },
         installation: seeds().installation,
     });
-    let Some(jig_protocol_store::Event::Opened { pending: false, .. }) = store.above.pop() else { panic!("reopened fixture") };
+    let Some(jig_protocol_store::Event::Opened { pending: false, .. }) = store.above.pop() else {
+        panic!("reopened fixture")
+    };
     store.secret_requests = 0;
     store.forge_loads = skein_lib::List::with_capacity(128);
     store
 }
 
 pub fn mark_store(store: &mut crate::store::Store) {
-    if store.component.mark_durable() { return; }
+    if store.component.mark_durable() {
+        return;
+    }
     commit(store, 1, Box::new([temper_engine_domain::Write::Wires]));
     let Some(jig_protocol_store::Event::Committed { .. }) = store.above.pop() else { panic!("fixture start mark") };
 }
@@ -1072,4 +1084,9 @@ pub fn marked_store() -> crate::store::Store {
     let mut store = memory_store();
     mark_store(&mut store);
     store
+}
+
+pub fn restarting_from(previous: crate::engine::Engine) -> crate::Service {
+    let reopened = reopened_store(previous.store, &previous.env.limits);
+    start_with_store(&[(1, 100)], Some(reopened))
 }

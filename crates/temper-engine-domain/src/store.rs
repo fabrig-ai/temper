@@ -769,13 +769,13 @@ fn note_entry_bytes(entry: &jig_domain_notes::Entry) -> Option<u64> {
 /// Checked deep-byte projection for journal admission, including scoped erase keys.
 pub(crate) fn owned_bytes(write: &Write) -> Option<u64> {
     match write {
-        Write::Wires => Some(0),
         Write::CopySettingsRevision(_) => u64::try_from(size_of::<u32>()).ok(), // The store copies the payload; only the number crosses this boundary.
         Write::Save(record) => record_bytes(record),
         Write::Erase(Key::Core(jig_domain_core::Key::Notes(jig_domain_notes::Key::Line { scope, .. }))) => {
             note_scope_bytes(scope)
         }
-        Write::Erase(
+        Write::Wires
+        | Write::Erase(
             Key::Core(
                 jig_domain_core::Key::Notes(jig_domain_notes::Key::Entry { .. })
                 | jig_domain_core::Key::Core(

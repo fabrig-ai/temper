@@ -49,6 +49,7 @@ smith-host-domain.workspace = true
 smith-local-service.workspace = true
 smith-host-protocol.workspace = true
 
+jig-domain-core.workspace = true
 jig-protocol-store.workspace = true
 temper-protocol-store.workspace = true
 skein-fake-forge-domain.workspace = true
@@ -63,7 +64,6 @@ skein-http.workspace = true
 skein-forge-client.workspace = true
 temper-worker-protocol-git.workspace = true
 temper-worker-domain-checkout.workspace = true
-jig-domain-core.workspace = true
 jig-domain-fleet.workspace = true
 jig-domain-tasks.workspace = true
 skein-fake-llm-domain.workspace = true

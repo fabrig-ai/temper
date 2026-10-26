@@ -228,11 +228,11 @@ pub fn first_start_over(
     config: engine::Config,
     limits: &engine::Limits,
 ) -> crate::store::Store {
+    // First-start rows, then the separate header-and-wires mark (domain/root.md, 9.1).
+    const FIRST_START_COMMITS: u64 = 2;
     let mut driver = Driver::cold(store, config, limits);
     driver.period_sent = true;
     driver.settle();
-    // First-start rows, then the separate header-and-wires mark (domain/root.md, 9.1).
-    const FIRST_START_COMMITS: u64 = 2;
     assert_eq!(driver.store.applied, FIRST_START_COMMITS, "first-start rows and start mark");
     driver.store
 }

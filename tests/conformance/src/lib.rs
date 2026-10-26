@@ -482,6 +482,9 @@ impl Application for Temper {
         let mut events = Vec::new();
         match request {
             engine::Request::ToChild(released) => events.push(engine::Event::Released(released)),
+            engine::Request::Store(engine::StoreRequest::Switch) => {
+                events.push(engine::Event::Store(store.switch()));
+            }
             engine::Request::Store(engine::StoreRequest::Load { owner, range, after, most, .. }) => {
                 let (rows, next) = store.page(&range, after.as_ref(), most);
                 events.push(engine::Event::Store(engine::StoreInput::Loaded { owner, rows, next, texts: None }));
@@ -640,8 +643,10 @@ impl Application for Temper {
     fn observed(peers: &mut Peers, systems: &systems::FakeForge, store: &Store, _: Clock) -> Vec<r::Observed> {
         let mut observations = Vec::new();
         if let Some(snapshot) = peers.first_start.take() {
-            observations.push(r::Observed::Durable { number: 1, snapshot });
-            peers.applied = 1;
+            // The bootstrap rows and its separate wires mark have the same public snapshot.
+            observations.push(r::Observed::Durable { number: 1, snapshot: snapshot.clone() });
+            observations.push(r::Observed::Durable { number: 2, snapshot });
+            peers.applied = 2;
         }
         if peers.applied != store.applied {
             peers.applied = store.applied;

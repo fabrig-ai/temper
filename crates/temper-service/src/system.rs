@@ -733,7 +733,9 @@ pub fn iterate(service: &mut Service, now: Time, wall: Wall) {
     }
     box_io(service);
     service.route_components();
-    if let Some(engine) = &mut service.engine {
+    if let Some(engine) = &mut service.engine
+        && engine.clients.starting.is_none()
+    {
         for _ in 0..engine.clients.links.len() {
             if service.links.room() == 0 {
                 break;

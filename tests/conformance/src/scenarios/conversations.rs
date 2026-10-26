@@ -157,7 +157,7 @@ pub(super) fn check_ending(world: &World) -> Result<(), Violation> {
             root::Key::Core(core::Key::Tasks(tasks::Key::Update {
                 task, object: tasks::UpdateObject::Result, ..
             })) => task.value() != forgotten,
-            root::Key::Core(_) | root::Key::Forge { .. } => true,
+            root::Key::Wires | root::Key::Core(_) | root::Key::Forge { .. } => true,
         }),
         "forgettable conversation left an owner, result update, index or read position",
     )?;

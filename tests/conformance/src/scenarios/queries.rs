@@ -32,7 +32,7 @@ fn indexed(store: &Store) -> Vec<u64> {
         .keys()
         .filter_map(|key| match key {
             root::Key::Core(core::Key::Tasks(tasks::Key::EndedByParty { party: 1, task, .. })) => Some(*task),
-            root::Key::Core(_) | root::Key::Forge { .. } => None,
+            root::Key::Wires | root::Key::Core(_) | root::Key::Forge { .. } => None,
         })
         .collect()
 }

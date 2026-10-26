@@ -230,7 +230,7 @@ impl Store {
             &self.models,
             stores,
         ));
-        assert!(self.component.as_mut().unwrap().wires(&temper_service::store::WIRES));
+        assert!(self.component.as_mut().expect("live component").wires(&temper_service::store::WIRES));
         self.routes = routes(&self.limits);
         self.pending.clear();
         self.delays.clear();
@@ -347,14 +347,14 @@ impl Store {
             &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: self.component_limits.store },
             skein_kv::Request::Get {
                 owner: Token::new(1),
-                key: protocol::keys::encode_own(&protocol::keys::Own::Wires, u32::MAX).unwrap(),
+                key: protocol::keys::encode_own(&protocol::keys::Own::Wires, u32::MAX).expect("component key fits"),
             },
             &mut above,
             &mut below,
         );
         let Some(skein_kv::Event::Got { value: Some(bytes), .. }) = above.pop() else { panic!("durable wires row") };
         protocol::component_v3::Wires::decode(&protocol::component_v3::CEILINGS, &mut skein_lib::Reader::new(&bytes))
-            .unwrap()
+            .expect("durable wires decode")
     }
     pub fn switch(&mut self) -> engine::StoreInput {
         self.request(engine::StoreRequest::Switch);
@@ -604,7 +604,9 @@ fn component_limits(limits: &engine::Limits) -> Limits {
 pub fn with_start_mark(mut rows: BTreeMap<Key, Record>) -> BTreeMap<Key, Record> {
     let Some(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(header)))) =
         rows.get_mut(&Key::Core(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Deployment)))
-    else { panic!("snapshot deployment"); };
+    else {
+        panic!("snapshot deployment");
+    };
     header.commits += 1;
     rows
 }

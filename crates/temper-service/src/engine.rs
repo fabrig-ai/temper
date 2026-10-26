@@ -156,17 +156,19 @@ impl Engine {
         )
     }
     pub(crate) fn work_pending(&self, now: Time) -> bool {
+        let effects = self.store.component.mark_durable() || self.end.is_some();
         let components = (self.store.opened || self.end.is_some()) && self.clients.work_pending(now)
-            || (self.store.opened || self.end.is_some()) && self.setup.work_pending(now)
-            || self.setup.lifecycle_ready(self)
+            || effects && self.setup.work_pending(now)
+            || effects
+                && self.setup.lifecycle_ready(self)
                 && self.setup.room()
                 && self.store.room()
                 && self.forge.room(2)
                 && self.events.room() >= 4
             || self.store.work_pending(now)
-            || (self.store.opened || self.end.is_some()) && self.forge.work_pending(now)
+            || effects && self.forge.work_pending(now)
             || (self.store.opened || self.end.is_some()) && self.workers.work_pending(now)
-            || (self.store.opened || self.end.is_some())
+            || effects
                 && match &self.accounts {
                     Some(accounts) => accounts.work_pending(now),
                     None => false,

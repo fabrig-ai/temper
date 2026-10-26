@@ -326,7 +326,7 @@ impl Clients {
                 || !self.early.is_empty()
                 || !self.github_calls.is_empty()
                 || !self.io.is_empty()
-                || !self.links.is_empty()
+                || self.starting.is_none() && !self.links.is_empty()
                 || match self.next_deadline() {
                     Some(at) => at <= now,
                     None => false,

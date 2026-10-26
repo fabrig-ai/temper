@@ -80,10 +80,13 @@ impl Referee {
     pub fn commit(&mut self, writes: &[Write]) -> Result<(), &'static str> {
         if writes.contains(&Write::Wires) {
             // domain/root.md 9.1: exactly the deployment header and Wires.
-            if writes.len() != 2 { return Err("startup mark contains other writes"); }
-            let Some(Write::Save(record @ Record::Core(jig_domain_core::Record::Core(
-                jig_domain_core::CoreRecord::Deployment(_),
-            )))) = writes.iter().find(|write| !matches!(write, Write::Wires)) else {
+            if writes.len() != 2 {
+                return Err("startup mark contains other writes");
+            }
+            let Some(Write::Save(
+                record @ Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_))),
+            )) = writes.iter().find(|write| !matches!(write, Write::Wires))
+            else {
                 return Err("startup mark lacks deployment header");
             };
             self.rows.insert(record.key(), record.clone());

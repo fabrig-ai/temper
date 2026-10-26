@@ -251,14 +251,16 @@ const STARTUP_PASSES: u32 = 256;
 #[test]
 fn nothing_leaves_before_the_mark() {
     let previous = fixtures::ready().engine.expect("previous engine");
-    let reopened = fixtures::reopened_store(previous.store, &previous.env.limits);
-    let mut service = fixtures::start_with_store(&[(1, 100)], Some(reopened));
+    let mut service = fixtures::restarting_from(previous);
     service.engine.as_mut().expect("engine").store.hold_mark = true;
-    for _ in 0..STARTUP_PASSES { fixtures::turn(&mut service); }
+    for _ in 0..STARTUP_PASSES {
+        fixtures::turn(&mut service);
+    }
+    assert!(service.links().is_empty(), "no sign-in link is published before startup opens");
     let engine = service.engine.as_mut().expect("engine");
     assert!(engine.store.held_mark.is_some(), "public restore reaches its mark without secret bootstrap");
     assert!(!engine.store.component.mark_durable());
-    assert_eq!(engine.accounts.as_ref().expect("accounts").startup_state().0, false);
+    assert!(!engine.accounts.as_ref().expect("accounts").startup_state().0);
     assert!(engine.accounts.as_ref().expect("accounts").startup_state().1 > 0, "early account requests retained");
     assert_eq!(engine.store.secret_requests, 0);
     assert!(engine.store.forge_loads.is_empty());
@@ -266,6 +268,7 @@ fn nothing_leaves_before_the_mark() {
     assert!(engine.forge.starts.is_empty());
     assert!(!engine.forge.startup_begun());
     assert!(!engine.setup.startup_restored());
+    assert!(!engine.work_pending(Time::from_nanos(1)), "a held mark waits for its storage answer");
     let mark = engine.store.held_mark.take().expect("held mark");
     engine.store.hold_mark = false;
     assert!(engine.store.down(mark));
@@ -278,7 +281,9 @@ fn nothing_leaves_before_the_mark() {
     assert!(engine.forge.startup_begun());
     assert!(engine.setup.startup_restored());
     let secrets = engine.store.secret_requests;
-    for _ in 0..STARTUP_PASSES { fixtures::turn(&mut service); }
+    for _ in 0..STARTUP_PASSES {
+        fixtures::turn(&mut service);
+    }
     let engine = service.engine.as_ref().expect("engine");
     assert_eq!(engine.accounts.as_ref().expect("accounts").startup_state(), (true, 0));
     assert_eq!(engine.store.secret_requests, secrets, "bootstrap is not repeated");

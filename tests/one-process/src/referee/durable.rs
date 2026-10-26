@@ -209,6 +209,7 @@ impl Store {
     fn apply(&mut self, commit: &Commit, limits: &codec::Limits) {
         for write in &commit.writes {
             match write {
+                root::Write::Wires => {}
                 root::Write::CopySettingsRevision(_) => super::restart::apply(&mut self.rows, write),
                 root::Write::Save(row) => {
                     self.rows.insert(row.key(), row.clone());

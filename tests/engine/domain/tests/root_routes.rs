@@ -753,7 +753,11 @@ fn restart_replays_no_raw_notice_of_an_ended_result() {
     assert!(!driver.root.quiescent(), "cold startup has outstanding work");
     driver.settle();
     assert!(driver.delivered.is_empty(), "startup does not repeat any person or worker notice");
-    assert_eq!(driver.store.rows, temper_engine_domain_world::store::with_start_mark(rows), "ended result is unchanged beside the start mark");
+    assert_eq!(
+        driver.store.rows,
+        temper_engine_domain_world::store::with_start_mark(rows),
+        "ended result is unchanged beside the start mark"
+    );
 }
 
 // The role inbox views between the steps are the core's reads now (jig
@@ -3004,7 +3008,11 @@ fn restored_waiting_rechecks_snapshot_membership_and_same_holder_changes_nothing
     same.settle();
     assert!(!same.stopped);
     assert!(same.root.quiescent());
-    assert_eq!(same.store.rows, temper_engine_domain_world::store::with_start_mark(rows), "same holder preserves revision beside the start mark");
+    assert_eq!(
+        same.store.rows,
+        temper_engine_domain_world::store::with_start_mark(rows),
+        "same holder preserves revision beside the start mark"
+    );
     let mut store = held_waiting_store();
     let requester = store
         .rows
@@ -3058,7 +3066,11 @@ fn a_rejected_hold_stays_rejected_across_a_restart() {
     configured.people.sign_ins = 3;
     let mut driver = Driver::configured(world.store, [config(9203), config(9203)], &configured);
     driver.settle();
-    assert_eq!(driver.store.rows, temper_engine_domain_world::store::with_start_mark(before), "rejection never reopens or reroutes beside the start mark");
+    assert_eq!(
+        driver.store.rows,
+        temper_engine_domain_world::store::with_start_mark(before),
+        "rejection never reopens or reroutes beside the start mark"
+    );
     assert!(driver.delivered.is_empty());
 }
 
@@ -4577,9 +4589,14 @@ fn restart_refuses_live_tasks_or_claims_past_lowered_limits_without_dropping_the
     task_bounds.tasks.tree_tasks = 1;
     let mut claim_bounds = limits();
     claim_bounds.fleet.attempts = 1;
-    for (bounds, step) in
-        [(task_bounds, jig_domain_core::RestartStep::LoadCore), (claim_bounds, jig_domain_core::RestartStep::AdoptRuns)]
-    {
+    for (bounds, step, expected) in [
+        (task_bounds, jig_domain_core::RestartStep::LoadCore, before.clone()),
+        (
+            claim_bounds,
+            jig_domain_core::RestartStep::AdoptRuns,
+            temper_engine_domain_world::store::with_start_mark(before),
+        ),
+    ] {
         let store = driver.store.fork();
         let mut restarted = Driver::configured(store, [sharing_config(91), sharing_config(91)], &bounds);
         for _ in 0..100 {
@@ -4587,7 +4604,7 @@ fn restart_refuses_live_tasks_or_claims_past_lowered_limits_without_dropping_the
         }
         assert!(restarted.stopped);
         assert_eq!(restarted.root.restart_failure(), Some(step));
-        assert_eq!(restarted.store.rows, if step == jig_domain_core::RestartStep::AdoptRuns { temper_engine_domain_world::store::with_start_mark(before.clone()) } else { before.clone() });
+        assert_eq!(restarted.store.rows, expected);
         assert!(restarted.delivered.is_empty());
     }
 }
@@ -4792,7 +4809,11 @@ fn an_empty_deployment_recovers_after_its_first_start_commit() {
     recovered.period_sent = true;
     recovered.settle();
     assert!(recovered.root.ready());
-    assert_eq!(recovered.store.rows, temper_engine_domain_world::store::with_start_mark(first), "recovery does not reseed the first-start rows");
+    assert_eq!(
+        recovered.store.rows,
+        temper_engine_domain_world::store::with_start_mark(first),
+        "recovery does not reseed the first-start rows"
+    );
 }
 
 #[test]

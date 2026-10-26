@@ -744,8 +744,12 @@ impl World {
                     if self.terminal_snapshot.is_some() {
                         assert_eq!(writes.len(), 2, "terminal restart has only its start mark");
                         assert!(writes.contains(&engine::Write::Wires));
-                        assert!(writes.iter().any(|write| matches!(write,
-                            engine::Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(_)))))));
+                        assert!(writes.iter().any(|write| matches!(
+                            write,
+                            engine::Write::Save(Record::Core(jig_domain_core::Record::Core(
+                                jig_domain_core::CoreRecord::Deployment(_)
+                            )))
+                        )));
                     }
                     self.referee.commit(&writes).expect("independent transaction referee");
                     if self.store.pending.is_empty() {

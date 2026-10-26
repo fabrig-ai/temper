@@ -15,11 +15,21 @@ use temper_engine_domain_forge as forge;
 /// The wires this engine speaks to its workers (jig's protocol/store.md,
 /// 5.3; temper's protocol/README.md, 9).
 pub const WIRES: [protocol::Wire; 4] = [
-    protocol::Wire { name: "jig-channel", version: jig_protocol_worker_wire::VERSION as u32 },
-    protocol::Wire { name: "smith-charter", version: smith_charter::Charter::FORMAT_VERSION as u32 },
-    protocol::Wire { name: "smith-turn", version: smith_transcript::Turn::FORMAT_VERSION as u32 },
+    protocol::Wire { name: "jig-channel", version: channel_version(jig_protocol_worker_wire::VERSION) },
+    protocol::Wire { name: "smith-charter", version: record_version(smith_charter::Charter::FORMAT_VERSION) },
+    protocol::Wire { name: "smith-turn", version: record_version(smith_transcript::Turn::FORMAT_VERSION) },
     protocol::Wire { name: "temper-payload", version: temper_protocol_worker_wire::PAYLOAD_VERSION },
 ];
+// These conversions are checked while the static wire table is evaluated.
+const fn channel_version(version: u16) -> u32 {
+    let bytes = version.to_le_bytes();
+    u32::from_le_bytes([bytes[0], bytes[1], 0, 0])
+}
+const fn record_version(version: u64) -> u32 {
+    let bytes = version.to_le_bytes();
+    assert!(bytes[4] == 0 && bytes[5] == 0 && bytes[6] == 0 && bytes[7] == 0, "wire version fits u32");
+    u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+}
 const ADOPT: Token = Token::new(u64::MAX - 1);
 const CLOSE: Token = Token::new(u64::MAX);
 const MASK: u64 = (1_u64 << 60) - 1;
@@ -31,6 +41,10 @@ struct Driver {
     handles: Map<Token, ()>,
 }
 #[derive(Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "opened, pending generation, descriptor adoption and closing are independent lifecycle facts"
+)]
 pub struct Store {
     #[cfg(test)]
     pub(crate) forge_loads: skein_lib::List<Option<u64>>,
@@ -294,7 +308,8 @@ impl Store {
     }
     pub fn down(&mut self, out: root::StoreRequest) -> bool {
         #[cfg(test)]
-        if self.hold_mark && let root::StoreRequest::Commit { writes, .. } = &out
+        if self.hold_mark
+            && let root::StoreRequest::Commit { writes, .. } = &out
             && writes.contains(&root::Write::Wires)
         {
             assert!(self.held_mark.is_none(), "one held startup mark");
@@ -311,7 +326,9 @@ impl Store {
     /// Get answers stay in this pass; secret writes' terminals are handed to their owner.
     pub fn secrets(&mut self, owner: Token, request: protocol::Secrets) -> Option<protocol::Event> {
         #[cfg(test)]
-        { self.secret_requests += 1; }
+        {
+            self.secret_requests = self.secret_requests.checked_add(1).expect("test secret requests");
+        }
         #[cfg(test)]
         if owner == crate::forge::records::LOAD
             && let protocol::Secrets::Load { after, .. } = &request

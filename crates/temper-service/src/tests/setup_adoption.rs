@@ -533,7 +533,7 @@ fn an_unresolved_old_form_forgejos_asked_check_is_refused_before_its_unstaged_co
     runtime.get_mut(0).unwrap().address = crate::forge::HELD_ADDRESS;
     let mut service = crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap();
     let engine = service.engine.as_mut().unwrap();
-    fixtures::mark_store(&mut engine.store);
+    engine.store = fixtures::records_store();
     engine.forge_records.loaded(Box::new([]), None);
     for _ in 0_u32..8 {
         crate::forge::records::advance(engine);

@@ -122,7 +122,9 @@ pub(super) struct Lifecycle {
 }
 impl Lifecycle {
     #[cfg(test)]
-    pub(crate) const fn startup_restored(&self) -> bool { self.restored }
+    pub(crate) const fn startup_restored(&self) -> bool {
+        self.restored
+    }
     pub(super) fn local(&self, forge: u16) -> Option<&Local> {
         match self.reconcile.get(&forge) {
             Some(Reconcile::Local(local)) => Some(local),

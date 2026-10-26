@@ -893,7 +893,7 @@ fn released_into(
             domain.work.push(Work::Forge(forge::Event::Committed { entry }));
         }
         Delivery::Restart(jig_domain_core::RestartStep::Switch) => {
-            out.push(Request::Store(crate::StoreRequest::Switch))
+            out.push(Request::Store(crate::StoreRequest::Switch));
         }
         Delivery::Restart(jig_domain_core::RestartStep::AdoptRuns) => {
             let request = domain.core.restart_done(jig_domain_core::RestartStep::Switch);

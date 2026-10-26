@@ -680,6 +680,10 @@ impl World {
         };
         match request {
             engine::Request::ToChild(released) => self.root_events.push_back(engine::Event::Released(released)),
+            engine::Request::Store(engine::StoreRequest::Switch) => {
+                let answer = self.store.switch();
+                self.root_events.push_back(engine::Event::Store(answer));
+            }
             engine::Request::Store(engine::StoreRequest::Commit { number, writes }) => {
                 let delay = u32::try_from(self.seed % 3).expect("small seeded delay");
                 self.store.submit(number, writes, delay);
@@ -885,6 +889,7 @@ impl World {
             | Delivery::Fleet(_)
             | Delivery::ReadLoad { .. }
             | Delivery::Drained
+            | Delivery::Restart(_)
             | Delivery::Load { .. }
             | Delivery::CarriedUnused { .. }) => panic!("unscripted released delivery: {other:?}"),
         }

@@ -170,6 +170,13 @@ fn settings_problem(failure: jig_domain_core::settings::Failure, changed: bool) 
     problems
 }
 
+pub(crate) fn requested(engine: &Engine) -> bool {
+    match &engine.drain {
+        Some(drain) => drain.requested,
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,8 +202,4 @@ mod tests {
             assert_eq!(path.get(4), Some(&jig_protocol_config::Segment::Member(b"grace".as_slice().into())));
         }
     }
-}
-
-pub(crate) fn requested(engine: &Engine) -> bool {
-    match &engine.drain { Some(drain) => drain.requested, None => false }
 }
