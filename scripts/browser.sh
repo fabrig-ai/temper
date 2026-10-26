@@ -12,7 +12,9 @@ export TEMPER_BUNDLE=none
 export NEXTEST_DOUBLE_SPAWN=0
 
 scripts/bundle.sh --loopback target/temper-bundle >/dev/null
+scripts/bundle.sh --playground target/playground-bundle >/dev/null
 cargo build -p temper
 TEMPER_TEST_BUNDLE="$(pwd)/target/temper-bundle"
-export TEMPER_TEST_BUNDLE
+TEMPER_TEST_PLAYGROUND="$(pwd)/target/playground-bundle"
+export TEMPER_TEST_BUNDLE TEMPER_TEST_PLAYGROUND
 cargo nextest run --workspace --profile browser "$@"
