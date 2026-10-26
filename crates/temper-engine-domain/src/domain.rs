@@ -32,7 +32,7 @@ pub struct Domain {
     /// Retired M1 latch storage, kept for the existing route reset sites.
     /// Resume readiness is derived from the core and never reads this field.
     pub(crate) settled: Option<(Time, Wall)>,
-    pub(crate) settling: bool,
+    pub(crate) settling: crate::settling::Phase,
     #[cfg(test)]
     pub(crate) empty_resumes: u32,
     pub(crate) limits: Limits,
@@ -291,7 +291,7 @@ impl Domain {
         }
         Ok(Domain {
             settled: None,
-            settling: false,
+            settling: crate::settling::Phase::Running,
             #[cfg(test)]
             empty_resumes: 0,
             journal: Journal::new(&root_journal_limits(limits)),
@@ -724,7 +724,7 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
         if !domain.ready() {
             return;
         }
-        if !domain.settling
+        if !domain.settling.active()
             && let Some(context) = domain.core.take_due()
         {
             domain.work.push(Work::Activate(context));
@@ -780,7 +780,7 @@ pub(crate) fn fire_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Queu
         route_core_requests(domain, env, &mut decision, routed);
     }
     let restarting = connector_restarting(domain);
-    if (restarting || domain.ready() || domain.settling) && !domain.core.stopping() {
+    if (restarting || domain.ready() || domain.settling.active()) && !domain.core.stopping() {
         let mut forge_out = Queue::with_capacity(forge::max_out(&env.limits.forge));
         forge::fire(&mut domain.forge, &environment_forge(env), &mut forge_out);
         forge_route::outputs(domain, env, &mut decision, &mut forge_out);
@@ -825,7 +825,7 @@ pub(crate) fn step_released(domain: &mut Domain, env: &Env<Limits>, released: Re
     // Retire the notification while stopping. The entry stays durable for
     // the next start's outbox settlement; returning it would retry forever.
     if let Delivery::ForgeCommitted { .. } = released.0
-        && (domain.core.stopping() || domain.settling)
+        && (domain.core.stopping() || domain.settling.active())
     {
         return;
     }

@@ -2948,7 +2948,7 @@ fn held_issue_write() -> (World, engine::Assignment, u64) {
                 forge_top::Stored::Entry { entry, .. } if entry.task == assignment.task => Some(entry.number),
                 _ => None,
             },
-            _ => None,
+            Record::Core(_) => None,
         })
         .expect("sent entry is durable");
     (world, assignment, entry)
@@ -2957,7 +2957,7 @@ fn held_issue_write() -> (World, engine::Assignment, u64) {
 fn drain_stop(world: &mut World) {
     for _ in 0..80 {
         world.tick();
-        if world.drained {
+        if world.drained.is_some() {
             return;
         }
     }
@@ -2971,7 +2971,7 @@ fn a_stop_commits_the_answer_of_a_forge_write_already_sent() {
     for _ in 0..20 {
         world.tick();
     }
-    assert!(!world.drained, "the stop waits for the held answer");
+    assert!(world.drained.is_none(), "the stop waits for the held answer");
     assert!(world.store.rows.contains_key(&Key::Forge(forge_top::Key::Entry(entry))));
     world.release_write_answers();
     drain_stop(&mut world);
@@ -3026,7 +3026,7 @@ fn settling_places_no_run_and_answers_a_call_busy() {
     for _ in 0..30 {
         world.tick();
     }
-    assert!(!world.drained);
+    assert!(world.drained.is_none());
     assert_eq!(world.assigned.len(), assigned, "the due task gets no placement");
     assert_eq!(world.busy_calls, 1, "a run’s call is answered busy");
     world.release_write_answers();
@@ -3112,19 +3112,19 @@ fn a_stop_waits_for_a_sent_merge_to_be_proved() {
                 }
                 _ => None,
             },
-            _ => None,
+            Record::Core(_) => None,
         })
         .expect("durable merge attempt");
     world.send(engine::Event::Stop);
     for _ in 0..10 {
         world.tick();
     }
-    assert!(!world.drained);
+    assert!(world.drained.is_none());
     let calls = world.forge_calls;
     world.release_write_answers();
     // The answer schedules a proving read; even an accepted write has no outcome yet.
     world.tick();
-    assert!(!world.drained);
+    assert!(world.drained.is_none());
     drain_stop(&mut world);
     assert!(world.forge_calls > calls, "the proving read crosses the paused write fence");
     assert!(

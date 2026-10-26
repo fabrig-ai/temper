@@ -27,7 +27,7 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             assert!(super::now(domain, crate::boundary::delivery_output(delivery)), "read answer door reserved");
         }
         core::Now::Call { to, run, attempt, call } => {
-            if domain.settling {
+            if domain.settling.active() {
                 crate::stopping::call(domain, to);
             } else {
                 super::host_route::decode(domain, to, run.raw(), attempt.raw(), call);

@@ -5,15 +5,26 @@ use alloc::boxed::Box;
 use jig_domain_core as core;
 use temper_engine_domain_forge as forge;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Phase {
+    Running,
+    Waiting,
+}
+impl Phase {
+    pub(crate) fn active(self) -> bool {
+        self == Self::Waiting
+    }
+}
+
 pub(crate) fn start(domain: &mut Domain) {
-    if domain.settling || domain.core.stopping() {
+    if domain.settling.active() || domain.core.stopping() {
         return;
     }
-    domain.settling = true;
+    domain.settling = Phase::Waiting;
     domain.work.push(Work::Forge(forge::Event::Settle));
 }
 pub(crate) fn finished(domain: &mut Domain, unfinished: Box<[forge::Unfinished]>) {
-    if !domain.settling {
+    if !domain.settling.active() {
         return;
     }
     for write in unfinished {
@@ -22,6 +33,6 @@ pub(crate) fn finished(domain: &mut Domain, unfinished: Box<[forge::Unfinished]>
             "stop report door reserved"
         );
     }
-    domain.settling = false;
+    domain.settling = Phase::Running;
     domain.work.push(Work::Core(core::Event::Stopping));
 }

@@ -309,7 +309,7 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
             Work::ProjectGoal(goal) => forge_route::project_goal(domain, env, &goal),
             Work::GoalSubscribe(subscriber) => forge_route::goal_subscribed(domain, env, subscriber),
             Work::Activate(context) => {
-                if domain.settling || domain.core.stopping() {
+                if domain.settling.active() || domain.core.stopping() {
                     continue;
                 }
                 let ready = domain.ready();
