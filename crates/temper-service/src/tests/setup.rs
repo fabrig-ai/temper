@@ -854,7 +854,7 @@ fn kept_record(store: &mut crate::store::Store, forge: u16, item: Item, bytes: &
         store
             .secrets(
                 owner,
-                crate::tests::fixtures::application_request(
+                fixtures::application_request(
                     records::number(forge, item),
                     Secret::new(records::encode(bytes).into_boxed_slice())
                 )

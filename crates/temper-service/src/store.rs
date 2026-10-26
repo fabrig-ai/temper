@@ -684,6 +684,19 @@ mod sizing_tests {
     }
 
     #[test]
+    fn typed_secret_rows_fit_the_small_profiles_page() {
+        // Secrets keys are the two owner bytes followed by a u64 number.
+        const KEY_BYTES: u64 = 2 + 8;
+        let (application, _, profile) = crate::tests::fixtures::store_limits();
+        let limits = super::limits(&application, &application.forge, &profile).unwrap();
+        let row = protocol::secrets_v1::worst_case_bytes(&protocol::secrets_v1::CEILINGS).unwrap();
+        assert_eq!(row, 274_504);
+        assert!(row <= u64::from(limits.secrets.value));
+        assert!(row.checked_add(KEY_BYTES).unwrap() < u64::from(limits.secrets.page.bytes));
+        assert_eq!(profile.store.page.bytes, 1_590_110);
+    }
+
+    #[test]
     fn page_covers_map_or_full_current_frame() {
         let (_, core, _) = crate::tests::fixtures::store_limits();
         // Versioned TurnRecord: 52 bytes including Some(read), plus payload;

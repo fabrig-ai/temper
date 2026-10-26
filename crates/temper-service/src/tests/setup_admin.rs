@@ -73,7 +73,7 @@ fn first(label: &[u8]) -> domain::FirstAsk {
 fn ask(service: &mut crate::Service, value: Secret, first: Option<domain::FirstAsk>) {
     let engine = service.engine.as_mut().unwrap();
     let digest = skein_lib::sha256::digest(value.expose());
-    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, value));
+    engine.store.secrets(Token::new(901), fixtures::application_request(records::CARRIED, value));
     assert!(
         (match engine.store.above.pop() {
             Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
@@ -323,7 +323,7 @@ fn create_file_stop_marks_first_failed_and_erases_without_keeping_the_token() {
 fn restart_without_an_admin_record_offers_connect_and_sweeps_a_crashed_carry() {
     let forge = forge(true, true, false);
     let mut store = store(&forge);
-    store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, bundle(1, ADMIN)));
+    store.secrets(Token::new(901), fixtures::application_request(records::CARRIED, bundle(1, ADMIN)));
     assert!(
         (match store.above.pop() {
             Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
@@ -365,7 +365,7 @@ fn both_admin_plans_read_the_paste_even_with_different_records_and_adoptions() {
     let carried = {
         let value = bundle(1, ADMIN);
         let digest = skein_lib::sha256::digest(value.expose());
-        engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, value));
+        engine.store.secrets(Token::new(901), fixtures::application_request(records::CARRIED, value));
         assert!(
             (match engine.store.above.pop() {
                 Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,
@@ -460,7 +460,7 @@ fn admin_record_files_and_directories_are_owner_only() {
     assert!(opened);
     store.secrets(
         Token::new(901),
-        crate::tests::fixtures::application_request(
+        fixtures::application_request(
             records::number(1, Item::AdminToken),
             Secret::new(records::encode(ADMIN).into_boxed_slice()),
         ),
@@ -529,7 +529,7 @@ fn busy_admin_connect_erases_its_unused_paste() {
     let value = bundle(1, ADMIN);
     let digest = skein_lib::sha256::digest(value.expose());
     let number = records::CARRIED.checked_add(1).unwrap();
-    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(number, value));
+    engine.store.secrets(Token::new(901), fixtures::application_request(number, value));
     assert!(
         (match engine.store.above.pop() {
             Some(StoreEvent::Carried { number: found, .. }) => found == number,
@@ -630,7 +630,7 @@ fn a_github_app_paste_cannot_decode_an_admin_bundle() {
     let engine = service.engine.as_mut().unwrap();
     let value = bundle(1, ADMIN);
     let digest = skein_lib::sha256::digest(value.expose());
-    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, value));
+    engine.store.secrets(Token::new(901), fixtures::application_request(records::CARRIED, value));
     assert!(
         (match engine.store.above.pop() {
             Some(StoreEvent::Carried { number: found, .. }) => found == records::CARRIED,

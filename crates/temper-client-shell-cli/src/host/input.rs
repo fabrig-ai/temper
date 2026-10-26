@@ -113,12 +113,11 @@ impl OneShot {
                     );
                     return;
                 }
-                if call.tool == temper_client_tools::jig::rows::IMPORT_AT
-                    && stripped.len() >= 6
-                    && stripped[..4] == jig_protocol_accounts::moved::MAGIC
-                {
-                    let version = u16::from_be_bytes([stripped[4], stripped[5]]);
-                    let reads = jig_protocol_accounts::moved::VERSION;
+                if call.tool == temper_client_tools::jig::rows::IMPORT_AT && stripped.len() >= 2 {
+                    // jig-accounts v1 begins with its schema's u16 version.
+                    const READS: u16 = 1;
+                    let version = u16::from_be_bytes([stripped[0], stripped[1]]);
+                    let reads = READS;
                     if version > reads {
                         let mut line = self.move_file.as_deref().expect("import file").to_vec();
                         line.extend_from_slice(format!(" holds a moved record of form v{version}; this temper reads up to v{reads}: upgrade temper").as_bytes());

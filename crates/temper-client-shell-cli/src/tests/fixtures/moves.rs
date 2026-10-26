@@ -1,6 +1,6 @@
 //! The fake engine scripts answers; no move reaches a real engine.
 use super::*;
-pub const RECORD: &[u8] = b"JIGM\0\x01opaque-fake-moved-secret\n";
+pub const RECORD: &[u8] = b"\0\x01opaque-fake-moved-secret\n";
 pub const ACCOUNT: u32 = 7;
 pub const NUMBER: u32 = 83;
 pub enum Answer {

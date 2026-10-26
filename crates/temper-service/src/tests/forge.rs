@@ -630,7 +630,7 @@ fn records_start_erases_carried_rows_before_connecting_without_decoding_them() {
                 .as_mut()
                 .expect("engine")
                 .store
-                .secrets(Token::new(123), crate::tests::fixtures::application_request(*number, value.clone()))
+                .secrets(Token::new(123), fixtures::application_request(*number, value.clone()))
                 .is_none()
         );
         match service.engine.as_mut().expect("engine").store.above.pop() {
@@ -809,7 +809,6 @@ fn a_refused_or_corrupt_records_load_stops_the_engine_named() {
 
 #[test]
 fn a_records_key_that_cannot_sign_stops_only_its_forge() {
-    use jig_protocol_store::{SecretOwner, Secrets};
     let (mut service, _) = records_service();
     for (number, value) in startup_records().into_boxed() {
         let value = if number == temper_protocol_records::number(2, temper_protocol_records::Item::AppKey) {
@@ -822,7 +821,7 @@ fn a_records_key_that_cannot_sign_stops_only_its_forge() {
             .as_mut()
             .expect("engine")
             .store
-            .secrets(Token::new(123), crate::tests::fixtures::application_request(number, value));
+            .secrets(Token::new(123), fixtures::application_request(number, value));
         let _kept = service.engine.as_mut().expect("engine").store.above.pop();
     }
     let mut face = fixtures::ForgeFace::new();

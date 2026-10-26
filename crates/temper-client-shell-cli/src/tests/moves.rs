@@ -8,7 +8,7 @@ use skein_io::kernel::{Error, Exit, Kind, OpenHow, ServiceSignal, Stat};
 const EXPORT: &[&[u8]] = &[b"export", b"7", b"/linked-parent/record"];
 const IMPORT: &[&[u8]] = &[b"import", b"/linked-parent/record", b"--key", b"move-in"];
 const LOST: &[u8] = b"temper ctl: the record of the move was lost on its way; the engine keeps the account and cancels the move at its deadline; export again after it\n";
-const AT_BOUND: &[u8] = &[b'r'; 131_072]; // tools.md, 12: 128 KiB whole.
+const AT_BOUND: &[u8] = &[0; 131_072]; // tools.md, 12: 128 KiB whole.
 const OVER_BOUND: &[u8] = &[b'r'; 131_073];
 fn exporting(answers: impl IntoIterator<Item = Answer>) -> Frame {
     let mut f = Frame::act(EXPORT);
@@ -141,14 +141,14 @@ fn an_import_refuses_a_file_not_private_a_link_empty_or_too_large_and_sends_noth
 }
 #[test]
 fn an_import_of_a_newer_form_refuses_it_and_sends_nothing() {
-    let f = importing(b"JIGM\0\x02opaque-fake-moved-secret\n", []);
+    let f = importing(b"\0\x02opaque-fake-moved-secret\n", []);
     done(&f, 1, false);
     assert_eq!(f.requests(), 0);
     assert_eq!(f.stderr(), b"temper ctl: /linked-parent/record holds a moved record of form v2; this temper reads up to v1: upgrade temper\n");
 }
 #[test]
-fn an_import_sends_other_magic_short_or_older_forms_whole() {
-    for bytes in [b"other-magic\n".as_slice(), b"JIGM", b"JIGM\0\0old\n", b"\n", AT_BOUND, RECORD] {
+fn an_import_sends_malformed_short_current_or_older_forms_whole() {
+    for bytes in [b"\0\x01malformed\n".as_slice(), b"\0", b"\0\0old\n", b"\n", AT_BOUND, RECORD] {
         let f = importing(bytes, []);
         assert_eq!(f.carried_keys.len(), 1);
         assert_eq!(f.carried_keys[0].expose(), bytes);

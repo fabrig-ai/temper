@@ -675,7 +675,7 @@ fn carried_pem() -> (Secret, Secret) {
 }
 fn paste_start(service: &mut crate::Service, bundle: Secret, digest: [u8; 32]) {
     let engine = service.engine.as_mut().unwrap();
-    engine.store.secrets(Token::new(901), crate::tests::fixtures::application_request(records::CARRIED, bundle));
+    engine.store.secrets(Token::new(901), fixtures::application_request(records::CARRIED, bundle));
     let Some(StoreEvent::Carried { number, .. }) = engine.store.above.pop() else { panic!("carried seed kept") };
     assert_eq!(number, records::CARRIED);
     public::connect(

@@ -399,7 +399,7 @@ fn a_moved_file_at_its_forms_bound_passes_and_one_byte_past_is_refused() {
     let bearer = peer::bearer(answer.token().as_ref().expect("credential").expose());
     let settings = super::fixtures::engine();
     let bound = jig_protocol_accounts::moved::bound(&settings.jig.limits.driver.client.document);
-    assert_eq!(bound, 68_252);
+    assert_eq!(bound, 68_248);
     assert_eq!(u64::from(engine.clients.env.limits.wire.keyed_value_some), bound);
     for extra in 0_u8..2 {
         let value = Secret::new(bytes::zeroed(usize::try_from(bound + u64::from(extra)).unwrap()));
