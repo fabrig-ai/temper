@@ -117,7 +117,9 @@ impl Loader {
             }
             #[cfg(test)]
             self.inspected.push(row.number).expect("test inspected records");
-            self.rows.push(row.number, row.value, self.value_bytes);
+            if let jig_protocol_store::SecretValue::Application(value) = row.value {
+                self.rows.push(row.number, value, self.value_bytes);
+            }
         }
         self.phase = match next {
             Some(after) => Phase::Load { after: Some(after) },

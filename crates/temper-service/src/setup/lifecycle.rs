@@ -273,9 +273,14 @@ pub(super) fn keep(engine: &mut crate::engine::Engine, forge: u16, item: Item, b
         .insert(owner, Write { purpose, number, value: value.clone() })
         .ok()
         .expect("bounded setup writes");
-    if let Some(terminal) =
-        engine.store.secrets(owner, Secrets::Keep { owner: SecretOwner::Application, number, value })
-    {
+    if let Some(terminal) = engine.store.secrets(
+        owner,
+        Secrets::Keep {
+            owner: SecretOwner::Application,
+            number,
+            value: jig_protocol_store::SecretValue::Application(value),
+        },
+    ) {
         answer(engine, terminal);
     }
 }

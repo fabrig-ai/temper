@@ -73,9 +73,14 @@ fn first(label: &[u8]) -> domain::FirstAsk {
 fn ask(service: &mut crate::Service, value: Secret, first: Option<domain::FirstAsk>) {
     let engine = service.engine.as_mut().unwrap();
     let digest = skein_lib::sha256::digest(value.expose());
-    engine
-        .store
-        .secrets(Token::new(901), Secrets::Keep { owner: SecretOwner::Application, number: records::CARRIED, value });
+    engine.store.secrets(
+        Token::new(901),
+        Secrets::Keep {
+            owner: SecretOwner::Application,
+            number: records::CARRIED,
+            value: crate::tests::fixtures::application_secret(records::CARRIED, value),
+        },
+    );
     assert!(
         (match engine.store.above.pop() {
             Some(StoreEvent::Kept { .. }) => true,
@@ -164,10 +169,11 @@ fn erased(service: &mut crate::Service, connected: bool) {
         panic!("store rows")
     };
     for row in rows {
+        let jig_protocol_store::SecretValue::Application(value) = row.value else { panic!("application row") };
         if row.number == records::number(1, Item::AdminToken) && connected {
-            assert!(contains(row.value.expose(), ADMIN));
+            assert!(contains(value.expose(), ADMIN));
         } else {
-            assert!(!contains(row.value.expose(), ADMIN));
+            assert!(!contains(value.expose(), ADMIN));
         }
     }
     if !connected {
@@ -326,7 +332,11 @@ fn restart_without_an_admin_record_offers_connect_and_sweeps_a_crashed_carry() {
     let mut store = store(&forge);
     store.secrets(
         Token::new(901),
-        Secrets::Keep { owner: SecretOwner::Application, number: records::CARRIED, value: bundle(1, ADMIN) },
+        Secrets::Keep {
+            owner: SecretOwner::Application,
+            number: records::CARRIED,
+            value: crate::tests::fixtures::application_secret(records::CARRIED, bundle(1, ADMIN)),
+        },
     );
     assert!(
         (match store.above.pop() {
@@ -371,7 +381,11 @@ fn both_admin_plans_read_the_paste_even_with_different_records_and_adoptions() {
         let digest = skein_lib::sha256::digest(value.expose());
         engine.store.secrets(
             Token::new(901),
-            Secrets::Keep { owner: SecretOwner::Application, number: records::CARRIED, value },
+            Secrets::Keep {
+                owner: SecretOwner::Application,
+                number: records::CARRIED,
+                value: crate::tests::fixtures::application_secret(records::CARRIED, value),
+            },
         );
         assert!(
             (match engine.store.above.pop() {
@@ -470,7 +484,10 @@ fn admin_record_files_and_directories_are_owner_only() {
         Secrets::Keep {
             owner: SecretOwner::Application,
             number: records::number(1, Item::AdminToken),
-            value: Secret::new(records::encode(ADMIN).into_boxed_slice()),
+            value: crate::tests::fixtures::application_secret(
+                records::number(1, Item::AdminToken),
+                Secret::new(records::encode(ADMIN).into_boxed_slice()),
+            ),
         },
     );
     let mut kept = false;
@@ -537,7 +554,14 @@ fn busy_admin_connect_erases_its_unused_paste() {
     let value = bundle(1, ADMIN);
     let digest = skein_lib::sha256::digest(value.expose());
     let number = records::CARRIED.checked_add(1).unwrap();
-    engine.store.secrets(Token::new(901), Secrets::Keep { owner: SecretOwner::Application, number, value });
+    engine.store.secrets(
+        Token::new(901),
+        Secrets::Keep {
+            owner: SecretOwner::Application,
+            number,
+            value: crate::tests::fixtures::application_secret(number, value),
+        },
+    );
     assert!(
         (match engine.store.above.pop() {
             Some(StoreEvent::Kept { .. }) => true,
@@ -638,9 +662,14 @@ fn a_github_app_paste_cannot_decode_an_admin_bundle() {
     let engine = service.engine.as_mut().unwrap();
     let value = bundle(1, ADMIN);
     let digest = skein_lib::sha256::digest(value.expose());
-    engine
-        .store
-        .secrets(Token::new(901), Secrets::Keep { owner: SecretOwner::Application, number: records::CARRIED, value });
+    engine.store.secrets(
+        Token::new(901),
+        Secrets::Keep {
+            owner: SecretOwner::Application,
+            number: records::CARRIED,
+            value: crate::tests::fixtures::application_secret(records::CARRIED, value),
+        },
+    );
     assert!(
         (match engine.store.above.pop() {
             Some(StoreEvent::Kept { .. }) => true,

@@ -44,7 +44,7 @@ fn a_restored_key_is_durable_before_its_value_is_lent() {
         Secrets::Replace {
             owner: SecretOwner::Source,
             number: 1,
-            value: skein_lib::Secret::new(TOKEN.into()),
+            value: jig_protocol_store::SecretValue::Key(skein_lib::Secret::new(TOKEN.into())),
             replaces: None,
         },
     );
