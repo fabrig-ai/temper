@@ -72,3 +72,12 @@ fn a_second_run_pushes_its_own_agents_edit() {
     assert_ne!(first_root, second_root);
     assert!(!second_root.ends_with(b"/workspaces/0/app"), "second edit runs outside the first workspace");
 }
+
+#[test]
+fn a_session_log_of_the_welcome_replays_under_the_referee() {
+    let log = skein_ui_web::bridge::log::read(include_bytes!("../../playground/fixtures/welcome.log"))
+        .expect("welcome session log");
+    let outcome = temper_one_process_world::replay::run(log);
+    assert!(outcome.drained);
+    assert!(outcome.commits > 0, "the referee observed real durable commits");
+}

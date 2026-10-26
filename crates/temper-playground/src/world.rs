@@ -36,11 +36,38 @@ fn draw_id(rng: &mut Rng) -> [u8; 16] {
     }
     id
 }
+/// Story startup values shared by the bare world and the instrumented harness.
+/// Seed drawing and private startup files have one source (playground.md, 4 and 9).
+pub struct StoryStart {
+    pub simulator: u64,
+    pub service: Start,
+    pub agent: u64,
+    pub llm: u64,
+    pub forge: u64,
+}
+impl StoryStart {
+    /// The story's state and worker roots, with its prepared repository layout.
+    #[must_use]
+    pub fn machine(&self) -> Machine {
+        Machine::new(Machine::fresh(self.service.user))
+    }
+}
+/// Derives every startup seed and the service's values from the story's documents.
+#[must_use]
+pub fn story_start(story: &Story, seed: u64) -> StoryStart {
+    let seeds = seeds(seed);
+    StoryStart {
+        simulator: seeds.simulator,
+        service: start(story, &seeds, b"/worker"),
+        agent: seeds.agent,
+        llm: seeds.llm,
+        forge: seeds.forge,
+    }
+}
 struct Context {
     story: &'static Story,
-    worker_path: Box<[u8]>,
+    start: StoryStart,
     bot_login: Box<[u8]>,
-    seeds: Seeds,
     printer: Printer,
     shared: Rc<RefCell<skein_fake_peers::forge::Forge>>,
     table: skein_fake_forge_protocol::Config,
@@ -53,29 +80,19 @@ thread_local! {
 /// processes started from its documents, calm at every layer, seeds derived
 /// from `seed`, wall starting at `start`, trace off. Its caller steps it bare.
 #[must_use]
-pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Machine> {
-    let seeds = seeds(seed);
+pub fn world(story: &'static Story, seed: u64, wall: Wall) -> World<Process, Machine> {
+    let start = story_start(story, seed);
     let forge_document = temper_fake::forge::Document::decode(story.forge).expect("story forge");
-    let token = temper_fake::credential::credential(seeds.forge, temper_fake::credential::ADMIN_TOKEN);
-    let (peer, shared) = temper_fake::forge::peer(&forge_document, &token, seeds.forge).expect("story forge peer");
-    let (_, table) = forge_document.seed(seeds.forge);
-    let config = skein_sim::Config { wall: start, trace: skein_sim::Trace::Off, ..skein_sim::Config::calm() };
-    let mut world = World::new(seeds.simulator, config).with_machine(Machine::new(Machine::fresh(USER)));
+    let token = temper_fake::credential::credential(start.forge, temper_fake::credential::ADMIN_TOKEN);
+    let (peer, shared) = temper_fake::forge::peer(&forge_document, &token, start.forge).expect("story forge peer");
+    let (_, table) = forge_document.seed(start.forge);
+    let config = skein_sim::Config { wall, trace: skein_sim::Trace::Off, ..skein_sim::Config::calm() };
+    let mut world = World::new(start.simulator, config).with_machine(start.machine());
     let printer = world.printer(b"temper", Stream::Output);
     let deployment: serde_json::Value = serde_json::from_slice(story.deployment).expect("story deployment");
     let bot_login =
         deployment["application"]["setup"][0]["bot"]["login"].as_str().expect("story bot").as_bytes().into();
-    CONTEXT.with(|context| {
-        *context.borrow_mut() = Some(Context {
-            story,
-            worker_path: b"/worker".as_slice().into(),
-            bot_login,
-            seeds,
-            printer,
-            shared,
-            table,
-        });
-    });
+    CONTEXT.with(|context| *context.borrow_mut() = Some(Context { story, start, bot_login, printer, shared, table }));
     let agents = smith_agent_shell::config::parse(story.agent).expect("story agent");
     world.host_roots(
         HostedProgram {
@@ -124,16 +141,16 @@ fn service(inherited: &Inherited) -> Process {
     CONTEXT.with(|context| {
         let context = context.borrow();
         let context = context.as_ref().expect("one world per thread");
-        let start = start(context.story, &context.seeds, &context.worker_path);
+        let start = &context.start.service;
         Process::Service(Box::new(
-            Service::start(&start, inherited).with_printer(context.printer.clone()).with_files(&start.files),
+            Service::start(start, inherited).with_printer(context.printer.clone()).with_files(&start.files),
         ))
     })
 }
 fn agent_roots(spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
     CONTEXT.with(|context| {
         let context = context.borrow();
-        crate::agent_roots(spawn, &context.as_ref().expect("world context").worker_path)
+        crate::agent_roots(spawn, &context.as_ref().expect("world context").start.service.worker_path)
     })
 }
 fn model() -> skein_fake_peers::llm::Peer {
@@ -141,8 +158,8 @@ fn model() -> skein_fake_peers::llm::Peer {
         let context = context.borrow();
         let context = context.as_ref().expect("world context");
         let document = temper_fake::llm::Document::decode(context.story.llm).expect("story LLM");
-        let key = temper_fake::credential::credential(context.seeds.llm, temper_fake::credential::KEY);
-        temper_fake::llm::peer(temper_fake::llm::configuration(&document, &key, context.seeds.llm))
+        let key = temper_fake::credential::credential(context.start.llm, temper_fake::credential::KEY);
+        temper_fake::llm::peer(temper_fake::llm::configuration(&document, &key, context.start.llm))
             .expect("story LLM peer")
     })
 }
@@ -180,7 +197,7 @@ fn agent(_spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Process {
         Process::Agent(Box::new(crate::agent(
             inherited,
             smith_agent_shell::config::parse(context.story.agent).expect("story agent"),
-            context.seeds.agent,
+            context.start.agent,
             101,
         )))
     })

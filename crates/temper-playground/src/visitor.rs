@@ -18,7 +18,9 @@ pub const VISITOR_COOKIES: u32 = 8;
 /// A cookie's name and value together.
 pub const VISITOR_COOKIE: u32 = 4096;
 
-pub(crate) fn visitor(story: &Story) -> Visitor {
+/// The same-origin page client for a story, shared with its native replay.
+#[must_use]
+pub fn visitor(story: &Story) -> Visitor {
     let listener = story.clients();
     Visitor::new(Settings {
         listener,

@@ -11,6 +11,10 @@ publish.workspace = true
 temper-client-shell-cli.workspace = true
 jig-domain-fleet.workspace = true
 temper-playground.workspace = true
+temper-fake.workspace = true
+skein-playground.workspace = true
+skein-sim-world = { git = "https://github.com/fabrig-dev/skein.git" }
+skein-ui-web.workspace = true
 jig-client.workspace = true
 serde_json.workspace = true
 temper-service.workspace = true
