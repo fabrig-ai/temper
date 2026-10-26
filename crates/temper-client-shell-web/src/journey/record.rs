@@ -9,11 +9,13 @@ use skein_ui_web::{page::Page, transport::Carried};
 /// What crosses the host's seam, kept as recording lines (client/journeys.md, 3.1).
 pub struct Recorder {
     file: Vec<u8>,
+    turn: Option<(Time, Wall)>,
+    kept: bool,
 }
 impl Recorder {
     #[must_use]
     pub fn new(facts: &Facts) -> Self {
-        let mut this = Self { file: Vec::new() };
+        let mut this = Self { file: Vec::new(), turn: None, kept: false };
         for line in [
             Line::Journey { version: 2 },
             Line::Seed(facts.seed),
@@ -38,7 +40,8 @@ impl Recorder {
         this
     }
     pub fn turn(&mut self, now: Time, wall: Wall) {
-        self.keep(&Line::Turn { now, wall });
+        self.turn = Some((now, wall));
+        self.kept = false;
     }
     /// Give one report and keep its duties in order.
     pub fn report(&mut self, host: &mut Host, page: &Page<'_>, report: Report) -> Duties {
@@ -76,19 +79,35 @@ impl Recorder {
         duties
     }
     pub fn deadline(&mut self, deadline: Option<Time>) {
-        self.keep(&Line::Deadline(deadline));
+        if self.kept {
+            Line::Deadline(deadline).write(&mut self.file);
+            self.kept = false;
+        }
+        self.turn = None;
     }
     /// Mark the page as drawn, without drawing it again.
     pub fn mark(&mut self, page: &Page<'_>) {
         self.keep(&Line::Mark(Some(page.html().into_bytes().into())));
     }
+    /// The recording as it is now, closed by an end mark; recording goes on
+    /// (client/journeys.md, 3.1).
+    #[must_use]
+    pub fn save(&self, page: &Page<'_>) -> Box<[u8]> {
+        let mut file = self.file.clone();
+        Line::End(Some(page.html().into_bytes().into())).write(&mut file);
+        file.into()
+    }
     /// Keep the end mark and consume the recorder.
     #[must_use]
     pub fn end(mut self, page: &Page<'_>) -> Box<[u8]> {
-        self.keep(&Line::End(Some(page.html().into_bytes().into())));
+        Line::End(Some(page.html().into_bytes().into())).write(&mut self.file);
         self.file.into()
     }
     fn keep(&mut self, line: &Line) {
+        if let Some((now, wall)) = self.turn.take() {
+            Line::Turn { now, wall }.write(&mut self.file);
+            self.kept = true;
+        }
         line.write(&mut self.file);
     }
 }

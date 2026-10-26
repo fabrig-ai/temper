@@ -150,7 +150,7 @@ impl Shell {
                 }
                 #[cfg(feature = "record")]
                 Report::Save => {
-                    self.save_recording();
+                    self.save_recording(false);
                     continue;
                 }
                 Report::Due => {
@@ -172,7 +172,7 @@ impl Shell {
             let duties = self.host.report(report);
             #[cfg(feature = "record")]
             if duties.departs() {
-                self.save_recording();
+                self.save_recording(true);
             }
             let mut requests = adapter::requests(duties.asked);
             requests.navigate = duties.navigate;
@@ -259,9 +259,13 @@ impl Shell {
         self.timer.set(deadline, now);
     }
     #[cfg(feature = "record")]
-    fn save_recording(&mut self) {
-        if let Some(recorder) = self.recorder.take() {
-            save_recording(&recorder.end(&self.page.borrow()));
+    fn save_recording(&mut self, departing: bool) {
+        if departing {
+            if let Some(recorder) = self.recorder.take() {
+                save_recording(&recorder.end(&self.page.borrow()));
+            }
+        } else if let Some(recorder) = &self.recorder {
+            save_recording(&recorder.save(&self.page.borrow()));
         }
     }
 }

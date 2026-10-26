@@ -197,3 +197,36 @@ fn an_act_with_no_event_keeps_nothing() {
     assert_eq!(records.iter().filter(|line| matches!(line, Line::Mark(_))).count(), 1);
     prove(&recording).expect("walk without an event's act replays faithfully");
 }
+
+#[test]
+fn a_save_is_whole_and_the_recording_goes_on() {
+    let saves = walk::walked_with_saves(false);
+    prove(&saves.first).expect("first act's save proves");
+    prove(&saves.later).expect("later save proves");
+    prove(&saves.recording).expect("departure still proves");
+    let first = lines(&saves.first).expect("first records");
+    let later = lines(&saves.later).expect("later records");
+    assert_eq!(first.iter().filter(|line| matches!(line, Line::Act { .. })).count(), 1);
+    assert!(later.len() > first.len());
+    assert_eq!(&first[..first.len() - 1], &later[..first.len() - 1]);
+    assert!(later[first.len() - 1..].iter().any(|line| matches!(line, Line::Heard(_))));
+}
+#[test]
+fn a_saves_control_is_found_by_its_event() {
+    use skein_ui::{Act, Role};
+    use temper_client_shell_web::journey::{Control, control};
+    let saves = walk::walked_with_saves(false);
+    let records = lines(&saves.recording).expect("records");
+    let event = records
+        .iter()
+        .find_map(|line| if let Line::Act { event, .. } = line { Some(event) } else { None })
+        .expect("press event");
+    assert_eq!(
+        control(&saves.before_press, &Act::Press, event),
+        Ok(Some(Control { role: Role::Button, name: b"Continue with ChatGPT".as_slice().into(), order: 0 }))
+    );
+    assert_eq!(control(&saves.before_press, &Act::Press, b"Gone"), Ok(None));
+    let stale = edited(&saves.before_press, |line| matches!(line, Line::Deadline(_)), Line::Deadline(Some(Time::ZERO)));
+    assert!(matches!(control(&stale, &Act::Press, event), Err(Refusal::Stale(_))));
+    assert!(matches!(control(b"bad", &Act::Press, event), Err(Refusal::Unreadable(_))));
+}
