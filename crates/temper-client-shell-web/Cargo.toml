@@ -10,6 +10,16 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [features]
+playground = [
+    "dep:js-sys",
+    "dep:skein-fail-stop",
+    "web-sys/History",
+    "web-sys/Url",
+    "web-sys/UrlSearchParams",
+    "web-sys/HtmlSelectElement",
+    "web-sys/HtmlScriptElement",
+    "web-sys/Event",
+]
 record = [
     "dep:js-sys",
     "web-sys/KeyboardEvent",
@@ -34,6 +44,7 @@ temper-client-protocol-wire.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = { workspace = true, optional = true }
+skein-fail-stop = { workspace = true, optional = true }
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Window", "Document", "Element", "Location", "HtmlElement"] }
 

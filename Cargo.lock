@@ -2550,6 +2550,7 @@ dependencies = [
  "jig-client-shell-web",
  "jig-client-test-records",
  "js-sys",
+ "skein-fail-stop",
  "skein-lib",
  "skein-scratch",
  "skein-ui",
