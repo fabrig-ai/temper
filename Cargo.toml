@@ -12,6 +12,7 @@ members = [
     "tools/journeys",
     "tools/fake-claude",
     "tests/one-process",
+    "tests/playground",
     "crates/temper-playground",
     "crates/temper-fake-git",
     "crates/temper-fake-git-hosted",
@@ -65,6 +66,7 @@ publish = false
 [workspace.dependencies]
 skein-fake-machine = { git = "https://github.com/fabrig-dev/skein.git" }
 temper-playground = { path = "crates/temper-playground" }
+skein-playground = { git = "https://github.com/fabrig-dev/skein.git" }
 temper-docs = { path = "crates/temper-docs" }
 rustls = { version = "=0.23.41", default-features = false, features = ["std", "ring", "tls12"] }
 temper-github-app = { path = "testing/temper-github-app" }

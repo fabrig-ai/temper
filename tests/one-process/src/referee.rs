@@ -221,6 +221,18 @@ fn snapshot(store: &Store) -> rules::Snapshot {
     }
     snapshot
 }
+fn shutdown_peers(procs: &mut [Proc]) {
+    for proc in procs {
+        match proc {
+            Proc::Playground(Process::Llm(peer)) => peer.shutdown(),
+            Proc::Playground(Process::Forge(forge)) => forge.shutdown(),
+            Proc::Playground(Process::Visitor(visitor)) => visitor.close(),
+            Proc::Service(_)
+            | Proc::Client(_)
+            | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) => {}
+        }
+    }
+}
 impl skein_world::Referee<Proc> for Referee {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         let (service, other) = procs.split_at_mut(1);
@@ -312,16 +324,7 @@ impl skein_world::Referee<Proc> for Referee {
             self.done = Some(());
         }
         if self.done.is_some() {
-            for proc in other {
-                match proc {
-                    Proc::Playground(Process::Llm(peer)) => peer.shutdown(),
-                    Proc::Playground(Process::Forge(forge)) => forge.shutdown(),
-                    Proc::Service(_)
-                    | Proc::Client(_)
-                    | Proc::Playground(Process::Service(_) | Process::Agent(_) | Process::Git(_) | Process::Shell(_)) =>
-                        {}
-                }
-            }
+            shutdown_peers(other);
         }
     }
     fn observe(&mut self, now: Time, procs: &[Proc]) {

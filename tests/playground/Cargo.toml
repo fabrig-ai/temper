@@ -1,0 +1,36 @@
+[package]
+name = "temper-playground-world"
+description = "The playground walked through the shipped web host and native bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+temper-playground.workspace = true
+temper-client-shell-web.workspace = true
+temper-client-domain.workspace = true
+temper-client-view.workspace = true
+jig-client-shell-web.workspace = true
+skein-playground.workspace = true
+skein-fake-person.workspace = true
+skein-lib.workspace = true
+skein-ui.workspace = true
+skein-ui-web.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_panics_doc = "allow"          # the world asserts its invariants by panicking
+wildcard_enum_match_arm = "deny"      # a new variant must break the translation
+match_wildcard_for_single_variants = "deny"
+unwrap_used = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"

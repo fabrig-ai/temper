@@ -1,0 +1,26 @@
+use skein_fake_person::{Find, Step};
+use skein_lib::{Duration, Wall};
+use skein_ui::Role;
+use temper_client_shell_web::limits;
+use temper_playground::{A, VISITOR_ANSWER, VISITOR_EXCHANGES, VISITOR_PIECE};
+use temper_playground_world::walk::{Outcome, Walk};
+
+const START: Wall = Wall::from_nanos(1_700_000_000_000_000_000);
+const SEED: u64 = 7;
+const WELCOME_WITHIN: Duration = Duration::from_secs(40);
+
+#[test]
+fn the_visitor_signs_in_by_the_printed_link_and_the_welcome_shows() {
+    let script = Box::new([Step::See {
+        find: Find::exactly_named(Role::Button, b"Try the playground"),
+        within: WELCOME_WITHIN,
+    }]);
+    assert_eq!(Walk::new(&A, SEED, START).run(script), Outcome::Done);
+}
+
+#[test]
+fn the_visitors_limits_are_the_web_clients() {
+    assert_eq!(VISITOR_EXCHANGES, limits::EXCHANGES + 1);
+    assert_eq!(VISITOR_ANSWER, limits::BODY_BYTES);
+    assert_eq!(VISITOR_PIECE, limits::PIECE);
+}
