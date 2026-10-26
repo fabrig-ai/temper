@@ -323,7 +323,8 @@ pub fn restart_script(chat_cue: &[u8]) -> Box<[Script]> {
 
 #[must_use]
 pub fn landed_identity(task: &str, page: &str) -> (String, String) {
-    let landed = task.lines().find(|line| line.contains("Landed · merge commit ")).expect("landed line");
+    let landed =
+        task.lines().find(|line| line.contains("Landed · pull request #1 · merge commit ")).expect("landed line");
     let pull = page.lines().find(|line| line.starts_with("PR #")).expect("pull identity on the change page");
     assert!(pull.contains(" · work/hello · "), "pull belongs to the first repository: {pull}");
     (landed.to_owned(), pull.to_owned())
