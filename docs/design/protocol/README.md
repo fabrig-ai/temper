@@ -202,9 +202,9 @@ default; the document is `temper.json` in the configuration directory
     `protocol/service.md`, section 6); a second turns either into an
     abort, which keeps the reason of a failure that started the drain
     (a lost webhooks listener's, forge.md, 2.3). A write the settling
-    left unanswered is printed as the drained engine ends, one line
-    each, and the exit is still 0:
-    `temper serve: stopped before the forge answered task {task}'s write {entry}; the next start settles it`.
+    left without its outcome is printed as the drained engine ends, one
+    line each, and the exit is still 0:
+    `temper serve: stopped before task {task}'s forge write {entry} settled; the next start settles it`.
 - **`temper init`:** writes a deployment that starts, the default
   document among it, into the three directories, refusing when the
   configuration directory holds a document (setup.md, 8.2).

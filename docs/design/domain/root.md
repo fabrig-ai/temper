@@ -609,20 +609,23 @@ drains as jig's `domain/engine.md`, 6.1 says.
   it has. Meanwhile:
   - the forge starts no write and retries none: what it was told to
     make stays in its outbox, durable, for the next start;
-  - the writes it sent before are answered as ever, and each outcome
-    commits as any outcome does;
+  - the writes it sent before finish as ever, each with its answer
+    and, for a review, a merge or an update, the read that proves it,
+    and each outcome commits as any outcome does;
   - the root activates no due task, so no run is placed and no
     procedure steps, and answers every run's call busy, since a call may
     start an effect: its host sends it again, to the next engine;
   - workers' turns and answers, and the commits they make, go on; the
     listeners already refuse new openings and parties' requests
     (jig's `protocol/service.md`, section 5).
-  With no write unanswered, the forge has settled at once.
-- **Bounded** by the forge's writes' lifetime and clock margin from the
-  stop (`forge.client.lifetime_ms` and `forge.client.clock_margin_ms`):
-  each write sent before it has its answer, or its timeout, by then.
-  Past it, the forge names each write still unanswered, by its entry
-  and its task, and the stop goes on unsettled (`Request::Unsettled`);
+  With no write lacking its outcome, the forge has settled at once.
+- **Bounded** by its client's (skein's `forge-client.md`, 7.8): twice
+  the writes' lifetime and their clock margin from the stop
+  (`forge.client.lifetime_ms`, `forge.client.clock_margin_ms`), by
+  which each write sent before has its answer and its proving read, or
+  their timeouts. Past it, the forge names each write still without its
+  outcome, by its entry and its task, and the stop goes on unsettled
+  (`Request::Unsettled`);
   the service prints each as it ends (`../protocol/README.md`, section
   4), and the next start settles it as its class says (forge.md,
   section 16).

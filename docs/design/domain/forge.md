@@ -759,14 +759,14 @@ recovery are skein's `forge-client.md`, section 7. temper's effects:
   procedure's: the entry fails at once, `NotConnected`, and is committed
   again once the forge connects (4.1).
 - **A stop settles first** (root.md, 9.2): told to settle, the connector
-  pauses its client's outbox, so no write starts and no entry is tried
-  again; a committed entry's notification is retired unmade, its row
-  durable; no change steps. The writes already sent are answered, and
-  their outcomes saved, as ever. It says it has settled once none is
-  unanswered, at once if none was; or, its writes' lifetime and clock
-  margin after it was told, with each one still unanswered named by its
-  entry and its task, which the next start settles as its class says
-  (section 16).
+  tells its client to (skein's `forge-client.md`, 7.8), so no write
+  starts and none is tried again; a committed entry's notification is
+  retired unmade, its row durable; no change steps. The writes already
+  sent finish, with the reads that prove them, and their outcomes are
+  saved as ever. It says it has settled when its client does: at once if
+  nothing sent lacked its outcome, or at the client's bound, with each
+  write still without one named by its entry and its task, which the
+  next start settles as its class says (section 16).
 
 ## 7. Topics, and landings as news
 
