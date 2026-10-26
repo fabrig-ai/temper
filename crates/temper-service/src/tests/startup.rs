@@ -1982,6 +1982,21 @@ fn an_asked_file_present_past_its_bound_still_refuses_startup() {
 }
 
 #[test]
+fn forge_configuration_retains_only_git_bases_within_the_pull_address_bound() {
+    let mut settings = fixtures::engine();
+    let base = [b'g'; 2049];
+    for length in [2048, 2049] {
+        settings.forges[0].git = base.get(..length).unwrap().into();
+        let configured = application::configured(&settings);
+        if length == 2048 {
+            assert_eq!(configured[0].git, settings.forges[0].git);
+        } else {
+            assert!(configured[0].git.is_empty(), "an oversized base cannot form a pull address");
+        }
+    }
+}
+
+#[test]
 fn forge_configuration_keeps_kind_mode_and_asked_start() {
     use temper_engine_domain_forge::{Configured, Kind, Mode};
     let mut settings = fixtures::engine();
@@ -1993,6 +2008,7 @@ fn forge_configuration_keeps_kind_mode_and_asked_start() {
                 bot: Box::new([]),
                 admin_connect: false,
                 owned: None,
+                git: settings.forges[0].git.clone(),
                 web: None,
                 read_only: false,
                 number: 1,
@@ -2014,6 +2030,7 @@ fn forge_configuration_keeps_kind_mode_and_asked_start() {
                 runner: None,
                 password: b"/data/forge/person_password".as_slice().into(),
             }),
+            git: settings.forges[0].git.clone(),
             web: None,
             read_only: false,
             number: 1,

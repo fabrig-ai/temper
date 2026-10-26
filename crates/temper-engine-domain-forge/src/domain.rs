@@ -182,6 +182,11 @@ impl Domain {
         self.apps = Map::with_capacity(forges);
         self.installations = Map::with_capacity(forges.checked_mul(installations).expect("connection bounds"));
     }
+    /// Public startup configuration; never restored from records.
+    #[must_use]
+    pub fn configured(&self, forge: u16) -> Option<&crate::Configured> {
+        self.configured.get(&forge)
+    }
     #[must_use]
     pub fn connection(&self, forge: u16) -> crate::Connection {
         if self.forge_ended(forge) {
@@ -504,6 +509,9 @@ impl Domain {
         }
         let mut configured = Map::with_capacity(l.client.repositories);
         for forge in forges {
+            if forge.git.len() > usize::try_from(crate::PULL_ADDRESS_BYTES).expect("u32 fits usize") {
+                return Err(skein_forge::api::Error::TooLarge);
+            }
             if configured.insert(forge.number, forge.clone()).is_err() {
                 return Err(skein_forge::api::Error::TooLarge);
             }

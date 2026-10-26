@@ -138,7 +138,7 @@ fn landing_words(
     bound: u32,
     repository: Option<&forge::Repository>,
     pull: u64,
-    web: Option<(forge::Kind, &[u8])>,
+    configured: Option<&forge::Configured>,
 ) -> Box<[u8]> {
     let digits = commit_text(merge);
     let bound = usize::try_from(bound).expect("u32 fits usize");
@@ -146,7 +146,7 @@ fn landing_words(
     let id = digits.get(..length).expect("landing words fit merge id");
     let line = match repository {
         Some(repository) if length == digits.len() => match bound.checked_sub(length.saturating_add(1)) {
-            Some(room) => landing_pull(repository, pull, web, room),
+            Some(room) => landing_pull(repository, pull, configured, room),
             None => None,
         },
         Some(_) | None => None,
@@ -165,11 +165,9 @@ fn landing_words(
 fn landing_pull(
     repository: &forge::Repository,
     pull: u64,
-    web: Option<(forge::Kind, &[u8])>,
+    configured: Option<&forge::Configured>,
     bound: usize,
 ) -> Option<Box<[u8]>> {
-    // Same address ceiling as the panel (client/forge.md, 9.2).
-    const ADDRESS_BYTES: usize = 2048;
     let number = skein_lib::Decimal::of(pull);
     let parts: [&[u8]; 8] = [
         b"pull request #",
@@ -189,24 +187,14 @@ fn landing_pull(
     if bytes > bound {
         return None;
     }
-    let mut address = None;
-    if let Some((kind, mut web)) = web {
-        while web.last() == Some(&b'/') {
-            web = web.get(..web.len().checked_sub(1)?)?;
+    let address = match configured {
+        Some(forge) => {
+            forge::pull_address(forge.kind, &forge.git, forge.web.as_deref(), &repository.owner, &repository.name, pull)
         }
-        let route: &[u8] = match kind {
-            forge::Kind::GitHub => b"/pull/",
-            forge::Kind::Forgejo => b"/pulls/",
-        };
-        let mut address_bytes = 0_usize;
-        for part in [web, b"/", &repository.owner, b"/", &repository.name, route, number.as_bytes()] {
-            address_bytes = address_bytes.checked_add(part.len())?;
-        }
-        let total = bytes.checked_add(2)?.checked_add(address_bytes)?;
-        if address_bytes <= ADDRESS_BYTES {
-            address = Some((web, route));
-            bytes = total;
-        }
+        None => None,
+    };
+    if let Some(address) = &address {
+        bytes = bytes.checked_add(2)?.checked_add(address.len())?;
     }
     if bytes > bound {
         return None;
@@ -215,10 +203,9 @@ fn landing_pull(
     for part in parts {
         append(&mut out, part);
     }
-    if let Some((web, route)) = address {
-        for part in [b": ".as_slice(), web, b"/", &repository.owner, b"/", &repository.name, route, number.as_bytes()] {
-            append(&mut out, part);
-        }
+    if let Some(address) = address {
+        append(&mut out, b": ");
+        append(&mut out, &address);
     }
     Some(out.into_boxed())
 }
@@ -2195,17 +2182,8 @@ fn change_landing_words(
 ) -> Box<[u8]> {
     let row = domain.forge.change(task).expect("landed change");
     let repository = domain.forge.repository(row.repository);
-    let forges = domain.forge.forges();
-    let mut web = None;
-    for forge in &forges.rows {
-        if forge.number == row.repository.forge {
-            if let Some(address) = &forge.web {
-                web = Some((forge.kind, address.as_ref()));
-            }
-            break;
-        }
-    }
-    landing_words(merge, bound, repository, pull, web)
+    let configured = domain.forge.configured(row.repository.forge);
+    landing_words(merge, bound, repository, pull, configured)
 }
 
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {

@@ -1326,6 +1326,13 @@ pub(crate) fn configured(settings: &settings::Engine) -> Box<[temper_engine_doma
             kind,
             mode,
             asked,
+            git: if forge.git.len()
+                <= usize::try_from(temper_engine_domain_forge::PULL_ADDRESS_BYTES).expect("u32 fits usize")
+            {
+                forge.git.clone()
+            } else {
+                Box::new([])
+            },
             web: forge.web.clone(),
             read_only: forge.app_read_only,
         })

@@ -321,6 +321,16 @@ pub fn restart_script(chat_cue: &[u8]) -> Box<[Script]> {
     }])
 }
 
+/// The plan chat receives the entire landed pull line, including its address.
+pub fn assert_landed_chat_pull(run: &str, evidence: &super::first_repository::Evidence) {
+    let pull = format!("pull request #1 of work/hello on {0}: http://{0}/work/hello/pulls/1", evidence.address);
+    assert!(
+        evidence.delegation.contains(&pull),
+        "{run}: the chat receives the whole pull line: {}",
+        evidence.delegation
+    );
+}
+
 #[must_use]
 pub fn landed_identity(task: &str, page: &str) -> (String, String) {
     let landed =

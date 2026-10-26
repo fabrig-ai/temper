@@ -1,7 +1,7 @@
 //! The forge family's records at the clients' boundary (client/README.md, 8).
 use alloc::boxed::Box;
 use jig_protocol_engine_clients as kit;
-use skein_lib::{Decimal, List, Token, Writer};
+use skein_lib::{List, Token, Writer};
 use temper_client_protocol_wire::{self as wire, v1 as w};
 use temper_engine_domain as root;
 use temper_engine_domain_forge as forge;
@@ -10,6 +10,7 @@ mod refusals;
 
 // client/README.md, 4.6: connector documents and their wire share every bound.
 const _: () = {
+    assert!(forge::PULL_ADDRESS_BYTES == wire::ADDRESS_BYTES, "pull address bound");
     assert!(forge::FIRST_NAME_BYTES == w::CEILINGS.first_ask_org, "first repository org bound");
     assert!(forge::FIRST_NAME_BYTES == w::CEILINGS.first_ask_repository, "first repository name bound");
     assert!(forge::FIRST_NAME_BYTES == w::CEILINGS.new_project_name, "first repository project bound");
@@ -282,7 +283,7 @@ pub fn to_root(
 pub fn panel(value: forge::Panel, forges: &[crate::settings::Forge], limits: &w::Limits) -> Option<Box<[u8]>> {
     let pull = match value.pull {
         Some(number) => {
-            Some(w::Pull::new(limits, w::PullParts { number, address: address(&value, number, forges)? }).ok()?)
+            Some(w::Pull::new(limits, w::PullParts { number, address: address(&value, number, forges) }).ok()?)
         }
         None => None,
     };
@@ -399,49 +400,19 @@ fn panel_hold(value: Option<change::Hold>) -> Option<w::Hold> {
     })
 }
 
-fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge]) -> Option<Box<[u8]>> {
+fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge]) -> Box<[u8]> {
     for forge in forges {
         if forge.number != panel.forge {
             continue;
         }
-        let mut base = match forge.kind {
-            crate::settings::Kind::GitHub => match &forge.web {
-                Some(web) => web.as_ref(),
-                None => return Some(Box::default()),
-            },
-            crate::settings::Kind::Forgejo => forge.git.as_ref(),
+        let kind = match forge.kind {
+            crate::settings::Kind::GitHub => forge::Kind::GitHub,
+            crate::settings::Kind::Forgejo => forge::Kind::Forgejo,
         };
-        if base.is_empty() {
-            return Some(Box::default());
-        }
-        while base.last() == Some(&b'/') {
-            base = base.get(..base.len().checked_sub(1)?).expect("trailing slash");
-        }
-        let route = match forge.kind {
-            crate::settings::Kind::GitHub => b"/pull/".as_slice(),
-            crate::settings::Kind::Forgejo => b"/pulls/".as_slice(),
-        };
-        let digits = Decimal::of(number);
-        let length = base
-            .len()
-            .checked_add(1)?
-            .checked_add(panel.owner.len())?
-            .checked_add(1)?
-            .checked_add(panel.name.len())?
-            .checked_add(route.len())?
-            .checked_add(digits.as_bytes().len())?;
-        // An address past its bound is left out, as with no base, so one long
-        // owner and name never fail the delivery (client/forge.md, 9.2).
-        if length > usize::try_from(wire::ADDRESS_BYTES).expect("u32 fits usize") {
-            return Some(Box::default());
-        }
-        let mut writer = Writer::new(length);
-        for part in [base, b"/", &panel.owner, b"/", &panel.name, route, digits.as_bytes()] {
-            writer.put(part).ok()?;
-        }
-        return Some(writer.finish());
+        return forge::pull_address(kind, &forge.git, forge.web.as_deref(), &panel.owner, &panel.name, number)
+            .unwrap_or_default();
     }
-    Some(Box::default())
+    Box::default()
 }
 /// Keep the authority of an already checked git URL, including its explicit port.
 #[must_use]

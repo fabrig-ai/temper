@@ -119,8 +119,8 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(5 * 1024)?
         .checked_add(Map::<skein_lib::Token, skein_lib::Token>::worst_case(l.applications)?)?
         .checked_add(Map::<u16, crate::Configured>::worst_case(l.client.repositories)?)?
-        // Public startup details: the web address and setup entry's bot login.
-        .checked_add(u64::from(l.client.repositories).checked_mul(2048 + 40)?)?
+        // Public startup details: the git/web addresses and setup entry's bot login.
+        .checked_add(u64::from(l.client.repositories).checked_mul(2048 + 2048 + 40)?)?
         // Owned startup details: two versions and the first-password file path.
         .checked_add(u64::from(l.client.repositories).checked_mul(64 + 64 + 512)?)?
         .checked_add(Map::<u16, crate::First>::worst_case(l.client.repositories)?)?

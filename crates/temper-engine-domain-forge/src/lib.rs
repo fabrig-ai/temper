@@ -13,6 +13,8 @@
 #![forbid(unsafe_code)]
 extern crate alloc;
 use alloc::boxed::Box;
+mod address;
+pub use address::{PULL_ADDRESS_BYTES, pull_address};
 mod adoption;
 pub mod boundary;
 mod brief;

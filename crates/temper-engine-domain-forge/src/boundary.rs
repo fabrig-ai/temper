@@ -288,6 +288,8 @@ pub struct Configured {
     /// The setup entry's bot login; empty for a forge with no setup entry.
     pub bot: Box<[u8]>,
     pub owned: Option<Owned>,
+    /// Pull-address base, empty when the configured git base cannot fit the address bound.
+    pub git: Box<[u8]>,
     pub web: Option<Box<[u8]>>,
     pub read_only: bool,
     pub number: u16,

@@ -701,6 +701,7 @@ fn paste_row(limits: &domain::Limits, request: Token, connected: bool, why: Opti
             bot: Box::new([]),
             admin_connect: false,
             owned: None,
+            git: Box::new([]),
             web: None,
             read_only: false,
             number: 1,

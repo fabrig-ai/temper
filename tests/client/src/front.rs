@@ -158,6 +158,7 @@ impl Joint {
                 number: 1,
                 kind: forge::Kind::GitHub,
                 mode: forge::Mode::Connected,
+                git: Box::new([]),
                 web: Some(b"https://github.test".as_slice().into()),
                 read_only: false,
                 asked: false,

@@ -1464,6 +1464,7 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
         support::sign_in::assert_plan_account(&outcome.calls[setup_calls], &outcome.calls[account_at]);
         let evidence = outcome.checked.expect("live check ran");
         support::first_repository::assert_task(run, &outcome.calls[found_at..found_at + 3], &stderr, &evidence);
+        forge_land::assert_landed_chat_pull(run, &evidence);
         let task = String::from_utf8(outcome.calls[found_at + 1].stdout.clone()).expect("landed task UTF-8");
         let identity = forge_land::landed_identity(&task, &evidence.page);
         let tasks_at = outcome.calls.len() - if first { 2 } else { 6 };

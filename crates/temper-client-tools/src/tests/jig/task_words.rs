@@ -170,6 +170,33 @@ fn a_landed_delegate_names_the_pull_before_the_whole_merge_commit() {
     assert_golden("task_change_landed", delegate_answer(result));
 }
 #[test]
+fn a_landed_delegate_omits_a_pull_address_when_its_document_words_are_cut() {
+    for line in [
+        b"\npull request #1 of work/hello on forge.example: https://forge.example/work/hello/pulls/1".as_slice(),
+        b"\npull request #1 of work/hello on forge.example: https://forge.example/work/hello/pulls".as_slice(),
+    ] {
+        let mut bytes = skein_lib::Writer::new(MERGE.len() + line.len());
+        bytes.put(MERGE).unwrap();
+        bytes.put(line).unwrap();
+        let mut words = f::document_text(&bytes.finish());
+        words.cut = true;
+        result_text(
+            c::Ending::Done,
+            Some(c::ResultValue::Change {
+                kind: 1,
+                part: c::OwnerPart {
+                    connector: FORGE,
+                    kind: c::OwnerPartKind::Resource,
+                    key: c::OwnerPartKey::Number(1),
+                },
+                words,
+            }),
+            b"result: Landed \xc2\xb7 pull request #1 \xc2\xb7 merge commit 1d0b14e4db018fed000000000000000300000000\n",
+        );
+    }
+}
+
+#[test]
 fn an_ended_report_indents_every_line_of_its_words() {
     let mut task = delegate();
     task.result_contract = c::TaskContractDocument::Report { words: f::LONG_WORDS };
