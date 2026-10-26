@@ -267,12 +267,6 @@ fn close_moves_selected_delegates() {
             c::Operation::Move { project: fixtures::PROJECT, task: fixtures::MOVED, reason: fixtures::act_text(b"") },
             c::Operation::Cancel {
                 project: fixtures::PROJECT,
-                task: fixtures::CANCELLED,
-                reason: fixtures::act_text(b""),
-                grace: None
-            },
-            c::Operation::Cancel {
-                project: fixtures::PROJECT,
                 task: fixtures::TASK,
                 reason: fixtures::act_text(b""),
                 grace: Some(fixtures::CHAT_SPAN)
@@ -477,4 +471,25 @@ fn a_proposal_answer_without_original_request_scope_reports_the_tools_invariant(
             .windows(b"proposal answer lacks request scope".len())
             .any(|piece| piece == b"proposal answer lacks request scope")
     );
+}
+
+#[test]
+fn close_rebuilds_the_same_ask_after_the_chat_and_its_delegates_end() {
+    let mut task = fixtures::ended_task(c::Phase::Done);
+    task.acts = skein_lib::List::with_capacity(fixtures::EMPTY);
+    let ending = c::Ending::Task(Box::new(c::OwnerChipEnding::Done(c::ResultValue::Report(fixtures::document_text(
+        b"finished",
+    )))));
+    for extra in [&[][..], fixtures::CLOSE_MOVE] {
+        let argv = fixtures::extended(fixtures::CLOSE_CALL, extra);
+        let mut first = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
+        let call = first.submit(argv.as_slice());
+        first.serve(call, fixtures::task_result(fixtures::with_delegates()));
+        let expected = fixtures::act_ask(&first, call).clone();
+        let mut replay = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
+        let call = replay.submit(argv.as_slice());
+        replay.serve(call, fixtures::historical_task_result(task.clone(), ending.clone()));
+        assert_eq!(fixtures::act_ask(&replay, call), &expected);
+        assert_eq!(replay.sent_name(call), Some(fixtures::named("close-chat")));
+    }
 }
