@@ -8,6 +8,7 @@ pub mod fixtures;
 pub mod forge;
 pub mod git;
 pub mod github;
+pub mod green_light;
 pub mod issuer;
 pub mod landing;
 pub mod llm;
@@ -165,8 +166,26 @@ pub fn run_forge(
     steps: impl FnOnce() -> Vec<calls::Step>,
 ) -> Ran {
     let scratch = Scratch::new("real-forge");
-    let outcome = world::run_forge(&scratch, fixture, scripts, None, steps);
+    let outcome = world::run_forge(&scratch, fixture, scripts, None, None, steps);
     checked(Ran { outcome: Outcome::Forge(outcome), scratch })
+}
+
+/// A deferred recipe, built once the forge's kernel-assigned address is known.
+/// Its source directory belongs to a stopped story retained by the caller.
+pub struct ForgeRecipe {
+    pub source: std::path::PathBuf,
+    pub build: fn(std::net::SocketAddr, &std::path::Path) -> llm::Recipe,
+}
+
+/// Run a forge story on a recipe derived from a stopped source deployment.
+#[must_use]
+pub fn run_forge_with(fixture: forge::Fixture, recipe: ForgeRecipe, steps: impl FnOnce() -> Vec<calls::Step>) -> Ran {
+    let scratch = Scratch::new("real-forge-twin");
+    let outcome = world::run_forge(&scratch, fixture, no_scripts, None, Some(recipe), steps);
+    checked(Ran { outcome: Outcome::Forge(outcome), scratch })
+}
+fn no_scripts(_: std::net::SocketAddr) -> Box<[skein_fake_llm_domain::api::Script]> {
+    Box::new([])
 }
 
 /// Run a forge story whose scripts pick each turn by their input rules (skein's fake-llm.md, 2.4).
@@ -178,7 +197,7 @@ pub fn run_forge_by_input(
     steps: impl FnOnce() -> Vec<calls::Step>,
 ) -> Ran {
     let scratch = Scratch::new("real-forge");
-    let outcome = world::run_forge(&scratch, fixture, scripts, Some(rules), steps);
+    let outcome = world::run_forge(&scratch, fixture, scripts, Some(rules), None, steps);
     checked(Ran { outcome: Outcome::Forge(outcome), scratch })
 }
 
