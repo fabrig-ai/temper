@@ -35,7 +35,10 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                         step,
                         connector,
                         code,
-                        decision: core::ProcedureStep::new(core::StepEnd::Wait),
+                        decision: core::ProcedureStep {
+                            messages: forge_route::change_replies(domain, env, task),
+                            ..core::ProcedureStep::new(core::StepEnd::Wait)
+                        },
                     }));
                 }
                 if domain.facts.try_push(crate::Fact::StepRefused { task, step, problem }).is_err() {
