@@ -99,6 +99,10 @@ pub fn answer(answer: &CallAnswer) -> HostAnswer {
 fn rendered(answer: &CallAnswer) -> Result<HostAnswer, Problem> {
     let mut text = Text::new();
     let error = match answer {
+        CallAnswer::SettingsRefused(why) => {
+            settings_refused(&mut text, why)?;
+            true
+        }
         CallAnswer::ForgeEffect { entry, outcome, .. } => {
             text.add(b"Forge effect ")?;
             text.number(*entry)?;
@@ -194,9 +198,19 @@ fn rendered(answer: &CallAnswer) -> Result<HostAnswer, Problem> {
             task_problem(&mut text, problem)?;
             true
         }
-        CallAnswer::Proposed { proposal, .. } => {
-            text.add(b"Proposed as ")?;
-            text.number(*proposal)?;
+        CallAnswer::Proposed { proposal, holder } => {
+            if let jig_domain_tasks::ProposalHolder::Policy {
+                project: 0,
+                kind: jig_domain_tasks::ProposalKind::Settings,
+            } = holder
+            {
+                text.add(b"proposed as proposal ")?;
+                text.number(*proposal)?;
+                text.add(b" to the deployment's owners")?;
+            } else {
+                text.add(b"Proposed as ")?;
+                text.number(*proposal)?;
+            }
             false
         }
         CallAnswer::ProposalDecided { proposal, .. } => {
@@ -864,4 +878,8 @@ fn hold_reason(reason: &jig_domain_people::HoldReason) -> &'static [u8] {
         HoldReason::PoolLost { .. } => b"for a lost pool",
         HoldReason::Procedure => b"for its procedure",
     }
+}
+
+fn settings_refused(text: &mut Text, why: &jig_domain_people::Refusal) -> Result<(), Problem> {
+    text.add(&crate::settings::refusal(why))
 }

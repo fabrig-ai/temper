@@ -89,6 +89,12 @@ pub struct Domain {
 }
 
 impl Domain {
+    /// Deployment models in the order settings authority and model choices use.
+    #[must_use]
+    pub fn models(&self) -> &[jig_domain_core::Model] {
+        &self.core.settings.models
+    }
+
     /// The live task arena, for a world to inspect between iterations.
     #[must_use]
     pub const fn tasks(&self) -> &tasks::Domain {

@@ -60,8 +60,8 @@ fn a_tool_with_no_members_says_its_input_is_empty() {
 
 #[test]
 fn the_page_holds_every_declared_tool_in_the_tables_order() {
-    // H1's fixed declaration table has 36 host tools.
-    const TOOLS: usize = 36;
+    // H1's 36 host tools plus the run's two settings tools.
+    const TOOLS: usize = 38;
     let mut out = Writer::new(temper_docs::PAGE_BYTES);
     reference(&mut out).expect("page fits PAGE_BYTES");
     let mut exact = Writer::new(out.written());
