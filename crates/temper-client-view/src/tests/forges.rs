@@ -424,7 +424,11 @@ fn owned_ready_rows_say_the_versions_and_first_password_path_in_slots() {
             let root = f::forge_root(Address::Forges, rows);
             let view = f::page_view(&root);
             assert!(slot_has(view.tree(), b"Runs", runs));
-            assert!(slot_has(view.tree(), b"First password", b"Your first password is in /fake/forge/person_password. Forgejo asks you to change it when you sign in."));
+            assert!(slot_has(
+                view.tree(),
+                b"First password",
+                b"Your first password is in /fake/forge/person_password. Change it on Forgejo when you like."
+            ));
         }
     }
 }
@@ -453,7 +457,14 @@ fn unprepared_owned_rows_and_managed_rows_have_no_runs_or_password_lines() {
         for label in [b"Runs".as_slice(), b"First password"] {
             assert!(f::find(view.tree(), Role::Term, label).is_none());
         }
-        assert!(f::find(view.tree(), Role::Description, b"Your first password is in /fake/forge/person_password. Forgejo asks you to change it when you sign in.").is_none());
+        assert!(
+            f::find(
+                view.tree(),
+                Role::Description,
+                b"Your first password is in /fake/forge/person_password. Change it on Forgejo when you like."
+            )
+            .is_none()
+        );
     }
 }
 
