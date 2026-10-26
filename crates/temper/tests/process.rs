@@ -3965,6 +3965,7 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
         );
     }
     let adoption = String::from_utf8_lossy(&ended.calls[1].stdout);
+    assert!(adoption.lines().any(|line| line == "project: 2 · widget"), "{adoption}");
     assert!(adoption.contains("Adopted playground/widget on forge 3 as owned."), "{adoption}");
     assert!(adoption.contains("It is the project's home."), "{adoption}");
     let rows = support::ctl::json(&ended.calls[2]);
