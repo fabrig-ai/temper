@@ -109,6 +109,7 @@ pub enum CallAnswer {
     /// A whole batch refused by structural or finite-funding admission.
     DelegationRefused(jig_domain_tasks::Problem),
     /// Render-only repository choice feedback; only the underlying refusal is stored.
+    ReadRepositoryRefused { named: Option<Box<[u8]>>, repositories: Box<[Box<[u8]>]> },
     /// Box the problem to keep the existing answer slots within their allocation budget.
     ChangeRefused { problem: Box<jig_domain_tasks::Problem>, named: Option<Box<[u8]>>, repositories: Box<[Box<[u8]>]> },
     /// A note write's durable name and revision.
@@ -156,7 +157,7 @@ impl CallAnswer {
                 };
                 jig_domain_core::CallPart::Effect { connector, entry: *entry, deadline: *deadline, outcome }
             }
-            CallAnswer::ForgeEffectRefused(_) | CallAnswer::ForgeRead(_) => {
+            CallAnswer::ForgeEffectRefused(_) | CallAnswer::ForgeRead(_) | CallAnswer::ReadRepositoryRefused { .. } => {
                 jig_domain_core::CallPart::Connector { connector }
             }
             CallAnswer::ForgeEffectDenied { answer, findings } => {
@@ -835,7 +836,8 @@ pub(crate) fn call_answer_bytes(answer: &CallAnswer) -> Option<u64> {
         | CallAnswer::DelegationRefused(_)
         | CallAnswer::NoteWritten { .. }
         | CallAnswer::NoteRefused(_) => Some(0),
-        CallAnswer::ChangeRefused { named, repositories, .. } => {
+        CallAnswer::ReadRepositoryRefused { named, repositories }
+        | CallAnswer::ChangeRefused { named, repositories, .. } => {
             let mut bytes = u64::try_from(repositories.len())
                 .ok()?
                 .checked_mul(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?

@@ -38,7 +38,10 @@ fn a_call_of_another_activation_is_answered_an_error() {
         panic!("rendered error")
     };
     assert_eq!(to, TO);
-    assert_eq!(answer, core::SettledAnswer::Host { error: true, body: b"host call out of range".as_slice().into() });
+    assert_eq!(
+        answer,
+        core::SettledAnswer::Host { error: true, body: b"host call out of range: activation".as_slice().into() }
+    );
 }
 #[test]
 fn an_unknown_tool_is_answered_an_error_with_no_commit() {
@@ -164,9 +167,9 @@ fn each_invalid_call_names_its_problem() {
     for (input, expected) in [
         (b"[]".as_slice(), b"malformed host call".as_slice()),
         (b"{broken}", b"malformed host call"),
-        (b"{}", b"host call member missing"),
-        (br#"{"target":"five"}"#, b"host call member of wrong type"),
-        (br#"{"target":0}"#, b"host call out of range"),
+        (b"{}", b"host call member missing: target"),
+        (br#"{"target":"five"}"#, b"host call member of wrong type: target"),
+        (br#"{"target":0}"#, b"host call out of range: target"),
         (oversized.as_ref(), b"host call too large"),
     ] {
         let event = crate::tools::decode(TO, 3, 7, &call(7, b"release", input));
@@ -311,4 +314,19 @@ fn owned_capacity_refusal_preserves_the_opaque_address_without_a_tool_effect() {
     }
     assert_eq!((decoded, busy), (2, 1), "foreign calls stay discarded; capacity cannot decode a tool");
     assert_eq!(engine.domain.deployment().commits, commits, "no effect or commit from refusal");
+}
+
+#[test]
+fn a_flat_forge_read_error_names_its_missing_member() {
+    for (tool, input, expected) in [
+        (b"read_branch".as_slice(), b"{}".as_slice(), b"host call member missing: branch".as_slice()),
+        (b"read_branch", br#"{"branch":1}"#, b"host call member of wrong type: branch"),
+        (b"read_reviews", br#"{"number":1,"page":0}"#, b"host call out of range: page"),
+    ] {
+        let event = crate::tools::decode(TO, 3, 7, &call(7, tool, input));
+        let root::Event::Worker(root::WorkerInput::RenderedHostCall { answer, .. }) = event else {
+            panic!("read error");
+        };
+        assert_eq!(answer, core::SettledAnswer::Host { error: true, body: expected.into() });
+    }
 }

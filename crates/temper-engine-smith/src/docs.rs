@@ -20,15 +20,15 @@ pub(crate) enum Read {
 /// Decode types and ranges before answering conflicting or missing members.
 pub(crate) fn read(input: &Value) -> Result<Result<Read, run::HostAnswer>, Problem> {
     let topic = match input.field(b"topic")? {
-        Some(value) => Some(value.text()?),
+        Some(value) => Some(value.text(b"topic")?),
         None => None,
     };
     let search = match input.field(b"search")? {
-        Some(value) => Some(value.text()?),
+        Some(value) => Some(value.text(b"search")?),
         None => None,
     };
     let from = match input.field(b"from")? {
-        Some(value) => Some(value.small()?),
+        Some(value) => Some(value.small(b"from")?),
         None => None,
     };
     match (topic, search) {
