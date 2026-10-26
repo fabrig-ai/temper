@@ -391,6 +391,7 @@ pub struct CtlOutcome<T> {
 }
 struct CtlJudge<'a, F, T> {
     expected_exits: Vec<(usize, u8)>,
+    release_answers: Option<usize>,
     face: Option<super::forge_land::FaceProcs>,
     visit: Visit,
     tab: Option<usize>,
@@ -458,6 +459,28 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         }
         let (drivers, peers) = procs.split_at_mut(2);
         let [Process::Binary(binary), Process::Calls(calls)] = drivers else { panic!("box and ctl") };
+        if let Some(name) = calls.llm_release() {
+            let peer = peers
+                .iter_mut()
+                .find_map(|proc| match proc {
+                    Process::Peer(peer) => Some(peer),
+                    _ => None,
+                })
+                .expect("scripted model owns the hold");
+            let answered = peer
+                .observations()
+                .iter()
+                .filter(|event| matches!(event, skein_fake_peers::llm::Observation::Answered { .. }))
+                .count();
+            let before = *self.release_answers.get_or_insert(answered);
+            if answered > before {
+                calls.llm_released();
+                self.release_answers = None;
+            } else {
+                // The review task can be visible before its model reaches the hold.
+                peer.release(name).expect("release scripted review");
+            }
+        }
         if printed_link(calls.stdout()).is_some()
             && let Some(on_link) = self.on_link.take()
         {
@@ -470,6 +493,12 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
             call.exit != Some(Exit::Code(expected))
         });
         let expired = now >= self.deadline;
+        if expired
+            && !self.stopping
+            && let Some(read) = calls.last_unmet()
+        {
+            eprintln!("last unmet ctl read: {}", String::from_utf8_lossy(&read.stdout));
+        }
         if !self.stopping && (calls.idle() || failed || expired || binary.exit_status().is_some()) {
             if self.face.is_some() {
                 eprintln!(
@@ -677,6 +706,7 @@ fn run_ctl_peers<T>(
     let visits = Cell::new(Vec::new());
     let mut world = real::World::new(CtlJudge {
         expected_exits: peers.expected_exits,
+        release_answers: None,
         face: face.as_ref().map(|_| super::forge_land::FaceProcs { issuer: 2, visitor: 3, peer: 4 }),
         visit: Visit::AwaitingAddress,
         tab: tab.then_some(2),

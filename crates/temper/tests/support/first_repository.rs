@@ -10,7 +10,7 @@ use std::{fs, path::Path};
 
 #[must_use]
 pub fn llm(config: &Path) -> CtlLlm {
-    llm_with(config, scripts())
+    model(config, scripts())
 }
 /// The copy uses the same procedure, with its own README and a read of its source.
 #[must_use]
@@ -29,9 +29,9 @@ pub fn playground_llm(config: &Path) -> CtlLlm {
         }]}),
     );
     scripts[1].turns = turns.into_boxed_slice();
-    llm_with(config, scripts.into_boxed_slice())
+    model(config, scripts.into_boxed_slice())
 }
-fn llm_with(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
+fn model(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
     let config = config.to_path_buf();
     let peer = super::fake_llm(scripts);
     let address = peer.address();
@@ -101,8 +101,112 @@ fn scripts() -> Box<[Script]> {
                 ),
             ]),
         },
+        review_script(),
     ])
 }
+
+pub fn review_script() -> Script {
+    Script {
+        cue: b"Review this change at the named head".as_slice().into(),
+        turns: Box::new([call(
+            b"finish",
+            &json!({
+                "form":"verdict", "label":"1", "text":"Checked", "fields":{}, "items":[]
+            }),
+        )]),
+    }
+}
+/// Exercise init's landing rule with the playground's CSV request on real git.
+#[must_use]
+pub fn csv_llm(config: &Path) -> CtlLlm {
+    let mut scripts = scripts();
+    scripts[0].cue = b"Add CSV export to widget".as_slice().into();
+    let Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else { panic!("delegate call") };
+    let mut delegate: Value = serde_json::from_slice(arguments).expect("delegate JSON");
+    delegate["batch"][0]["spec"]["words"] = "@hello-readme Add CSV export to widget in work/hello".into();
+    *arguments = serde_json::to_vec(&delegate).expect("delegate JSON").into_boxed_slice();
+    let mut coder = scripts[1].turns.to_vec();
+    let template: Value =
+        serde_json::from_str(include_str!("../../../temper-init/template/temper.json")).expect("shipped template");
+    let edit = &template["application"]["demo"]["llm"]["cued"][0]["turns"][1]["lines"][0]["arguments"]["edits"][0];
+    let seed = std::str::from_utf8(temper_fake::forge::FILES[1].1).expect("widget source");
+    let source = seed.replace(edit["old"].as_str().expect("old main"), edit["new"].as_str().expect("CSV main"));
+    let _ = coder.pop().expect("coder finish");
+    let finish = call(
+        b"finish",
+        &json!({"form":"change", "fields":{
+            "title":"Add CSV export to widget", "body":"Widget prints its table with --csv."
+        }}),
+    );
+    coder.extend([
+        call(b"write", &json!({"path":"src/main.rs", "content":source})),
+        call(b"write", &json!({"path":"Cargo.toml", "content":"[package]\nname = \"widget\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"})),
+        finish,
+    ]);
+    scripts[1].turns = coder.into_boxed_slice();
+    // The fake streams this review until the story has read the pending gate.
+    let verdict = scripts[2].turns[0].clone();
+    let mut read = call(b"read", &json!({"path":"src/main.rs"}));
+    let mut lines = read.lines.into_vec();
+    lines.insert(
+        0,
+        Line::Pieces {
+            pieces: Box::new([skein_fake_llm_domain::api::Piece {
+                text: b"Checked widget CSV export.".as_slice().into(),
+                hold: Some(b"csv-review".as_slice().into()),
+            }]),
+        },
+    );
+    read.lines = lines.into_boxed_slice();
+    scripts[2].turns = Box::new([read, verdict]);
+    model(config, scripts)
+}
+
+/// Capture the pending review before allowing the scripted verdict to finish.
+#[must_use]
+pub fn csv_task_steps(root: &Path) -> Vec<Step> {
+    let mut steps = task_steps(root);
+    steps[2] =
+        Step::Run(Call::new(&["chat", "--project", "2", "--key", "first-hello", "Add CSV export to widget", "--json"]));
+    let found = steps.split_off(5);
+    steps.extend([
+        Step::Run(Call::new(&["wait", "change", "2", "--until", "ci:passed", "--timeout", "60s", "--json"])),
+        Step::Until(Call::new(&["change", "2", "--json"]), br#""verdict":"pending""#),
+        Step::Then(Box::new(|calls| {
+            let panel = super::ctl::json(calls.last().expect("pending panel"));
+            assert_eq!(panel["ci"], "passed", "review follows head CI: {panel}");
+            assert_eq!(panel["gates"], json!([{"number":1,"kind":"review","blocks":true,"verdict":"pending"}]));
+            assert_eq!(panel["step"], "gating");
+            assert!(panel["merge"].is_null(), "review blocks landing: {panel}");
+            let task = panel["runs"].as_u64().expect("the pending gate names its reviewer's task");
+            Call::new(&["task", &task.to_string(), "--json"])
+        })),
+        Step::Then(Box::new(|calls| {
+            let reviewer = super::ctl::json(calls.last().expect("reviewer's task"));
+            let pending = super::ctl::json(&calls[calls.len() - 2]);
+            assert_eq!(reviewer["chip"]["task"], pending["runs"]);
+            assert_eq!(reviewer["chip"]["executor"], json!({"agent":{"charter":2}}));
+            assert_ne!(reviewer["chip"]["phase"], "ended", "reviewer still runs: {reviewer}");
+            Call::new(&["change", "2", "--json"])
+        })),
+        Step::ReleaseLlm(b"csv-review"),
+        Step::Until(Call::new(&["change", "2", "--json"]), br#""verdict":"approved""#),
+        Step::Then(Box::new(|calls| {
+            let approved = super::ctl::json(calls.last().expect("approved panel"));
+            let pending = calls
+                .iter()
+                .filter_map(|call| serde_json::from_slice::<Value>(&call.stdout).ok())
+                .find(|panel| panel["gates"][0]["verdict"] == "pending")
+                .expect("pending review");
+            assert_eq!(approved["head"], pending["head"], "review is approved at the CI head");
+            assert_eq!(approved["ci"], "passed");
+            Call::new(&["wait", "change", "2", "--until", "landed", "--timeout", "120s", "--json"])
+        })),
+    ]);
+    steps.extend(found);
+    steps
+}
+
 /// The first repository has its own project; earlier demo tasks may precede its task tree.
 #[derive(Clone, Copy)]
 pub struct Task {
