@@ -15,7 +15,28 @@ fn transcript_document(bytes: u32) -> Box<[u8]> {
     let previous = fixtures::startup_agent().limits.bodies.turn_body;
     let needle = format!("\"root.loads.transcript_bytes\":{previous}");
     assert_eq!(document.matches(&needle).count(), 1);
-    document.replace(&needle, &format!("\"root.loads.transcript_bytes\":{bytes}")).into_bytes().into_boxed_slice()
+    let mut document = document.replace(&needle, &format!("\"root.loads.transcript_bytes\":{bytes}"));
+    // A raised transcript needs startup's turn-plus-record and decoded read-row
+    // room too; the hard reply bound must cover the kept load.
+    let transcript = bytes.max(previous);
+    let loaded = transcript.checked_add(u32::try_from(size_of::<temper_engine_domain::Record>()).unwrap()).unwrap();
+    let read = u64::from(transcript)
+        .checked_add(u64::try_from(size_of::<jig_domain_core::reads::Row>()).unwrap())
+        .unwrap()
+        .checked_add(u64::try_from(size_of::<jig_domain_core::Record>()).unwrap())
+        .unwrap();
+    let previous_loaded =
+        previous.checked_add(u32::try_from(size_of::<temper_engine_domain::Record>()).unwrap()).unwrap();
+    for (key, before, after) in [
+        ("root.loads.bytes", u64::from(previous_loaded), u64::from(loaded)),
+        ("root.loads.reply_bytes", u64::from(previous_loaded), u64::from(loaded)),
+        ("root.loads.read_bytes", u64::from(previous).checked_mul(2).unwrap(), read),
+    ] {
+        let needle = format!("\"{key}\":{before}");
+        assert_eq!(document.matches(&needle).count(), 1);
+        document = document.replace(&needle, &format!("\"{key}\":{after}"));
+    }
+    document.into_bytes().into_boxed_slice()
 }
 
 #[test]
