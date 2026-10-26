@@ -10,6 +10,24 @@ const WATCHER: skein_lib::Token = skein_lib::Token::new(30);
 const SIGN_IN: u64 = 10;
 
 #[test]
+fn empty_release_and_resume_probes_allocate_nothing() {
+    use skein_world::domain::heap::Meter;
+
+    let (mut domain, env) = root();
+    let mut out = Queue::with_capacity(crate::max_out(&env.limits));
+    let meter = Meter::new();
+    meter.start();
+    for _ in 0..RESUMES {
+        crate::release(&mut domain, &env, &mut out);
+        crate::try_step(&mut domain, &env, Event::Resume).unwrap();
+        crate::release(&mut domain, &env, &mut out);
+    }
+    let measured = meter.end();
+    assert!(out.is_empty());
+    assert_eq!((measured.held(), measured.peak()), (0, 0));
+}
+
+#[test]
 fn reconciliation_can_start_once_the_connectors_restore_and_stays_open() {
     use jig_domain_core::{RestartRequest, RestartStep};
     let limits = super::resume_fixture::limits();

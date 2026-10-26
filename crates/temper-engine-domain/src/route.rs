@@ -203,7 +203,7 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
     }
     // Connector terminals already belong to the root's bounded work queue.
     // Keep them there until the journal can admit the entire child route.
-    if !route_takes(domain, &env.limits) {
+    if !route_takes(domain) {
         return;
     }
     let decision = route(domain, env);

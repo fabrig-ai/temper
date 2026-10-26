@@ -3,7 +3,7 @@ use crate::boundary::{
     Assignment, BriefConnector, BriefSection, Event, Fact, Payload, PreparedWorkspace, Read, Released, Request, Work,
 };
 use crate::limits::{
-    Limits, core_limits, environment_core, payload_slots, root_journal_limits, route_bound, route_decision,
+    Limits, core_limits, environment_core, payload_slots, root_journal_limits, route_bound, route_decision, route_room,
     route_takes, run_policy_bound, worst_case,
 };
 use crate::restart::{connector_restarting, request_load};
@@ -36,6 +36,10 @@ pub struct Domain {
     #[cfg(test)]
     pub(crate) empty_resumes: u32,
     pub(crate) limits: Limits,
+    /// Derived once from the configured limits, shared by every admission.
+    pub(crate) route_room: skein_lib::JournalRoom,
+    /// Step/fire scratch, priced by worst_case and empty between calls.
+    scratch: Queue<Request>,
     pub(crate) config: RootConfig,
     pub(crate) core: Core,
     pub(crate) journal: Journal,
@@ -290,6 +294,8 @@ impl Domain {
             }
         }
         Ok(Domain {
+            route_room: route_room(limits),
+            scratch: Queue::with_capacity(max_out(limits)),
             settled: None,
             settling: crate::settling::Phase::Running,
             #[cfg(test)]
@@ -485,13 +491,15 @@ pub(crate) fn save(decision: &mut Decision, limits: &Limits, write: Write) {
 /// notices before child mutation; admitted effects may wait in the journal until store durability.
 /// Account operations keep their own secret-free terminal contract.
 pub fn step(domain: &mut Domain, env: &Env<Limits>, event: Event) {
-    let mut out = Queue::with_capacity(max_out(&env.limits));
+    let mut out = core::mem::replace(&mut domain.scratch, Queue::with_capacity(0));
     step_routed(domain, env, event, &mut out);
     stage_now(domain, &mut out);
+    assert!(out.is_empty(), "step stages every immediate output");
+    domain.scratch = out;
 }
 
 pub(crate) fn admits(domain: &Domain, limits: &Limits) -> bool {
-    route_takes(domain, limits)
+    route_takes(domain)
         && domain.core.counters.deployment().messages
             <= u64::MAX.checked_sub(u64::from(limits.tasks.tasks)).expect("task count fits u64")
         && domain.work.is_empty()
@@ -652,21 +660,18 @@ pub fn release(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>)
         out.push(Request::Stop);
         return;
     }
-    let mut released = Queue::with_capacity(1);
     if domain.door_pass {
         domain.door_pass = false;
         send_commit(domain, out);
         for _ in 0..domain.door_count {
-            let _status: skein_lib::Released = domain.journal.release(&mut released);
-            out.push(released.pop().expect("one admitted immediate output"));
+            assert_eq!(domain.journal.release(out), skein_lib::Released::Some, "one admitted immediate output");
         }
         domain.door_count = 0;
         return;
     }
-    let _status: skein_lib::Released = domain.journal.release(&mut released);
-    if let Some(request) = released.pop() {
-        out.push(request);
-    }
+    // journal_limits fixes release to one: the caller's reserved queue can
+    // receive that same single output without an intermediate allocation.
+    let _status: skein_lib::Released = domain.journal.release(out);
     send_commit(domain, out);
 }
 
@@ -691,13 +696,13 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
         return;
     }
     if !domain.work.is_empty() {
-        if route_takes(domain, &env.limits) {
+        if route_takes(domain) {
             let decision = route(domain, env);
             close(domain, env, decision, out);
         }
         return;
     }
-    if !route_takes(domain, &env.limits) {
+    if !route_takes(domain) {
         return;
     }
     // From the stop on, nothing that would make a commit is taken: connector
@@ -760,9 +765,11 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
 /// timers may emit bounded protocol actions independently; root routes that mutate tasks/fleet wait
 /// for whole-decision admission. Their store and account outcomes enter later through `step`.
 pub fn fire(domain: &mut Domain, env: &Env<Limits>) {
-    let mut out = Queue::with_capacity(max_out(&env.limits));
+    let mut out = core::mem::replace(&mut domain.scratch, Queue::with_capacity(0));
     fire_routed(domain, env, &mut out);
     stage_now(domain, &mut out);
+    assert!(out.is_empty(), "fire stages every immediate output");
+    domain.scratch = out;
 }
 
 pub(crate) fn fire_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
