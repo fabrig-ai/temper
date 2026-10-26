@@ -547,8 +547,9 @@ Held by skein's `forge-client.md`, section 3. temper's part:
     updated it, to tell drift from temper's own moves;
   - per participating object: its comments and reviews not yet given to
     its task (section 13);
-  - per issue of a live goal: what temper last wrote into it, so an
-    unchanged projection is not written again.
+  - per issue of a goal, until its projection settles (12.3): what
+    temper last wrote into it, so an unchanged projection is not written
+    again.
 
   A change watches its branch and its base until its pull is known, then
   its branch and its pull. A change of the pull it owns wakes the change,
@@ -704,7 +705,9 @@ recovery are skein's `forge-client.md`, section 7. temper's effects:
   comment, issue, update or branch found by its key, or by the state it
   leads to, is made; one not found by its deadline holds its task for a
   person, and is never sent again by temper on its own. The client makes
-  the find (skein's `forge-client.md`, section 7).
+  the find (skein's `forge-client.md`, section 7). An issue's own writes
+  hold no task: one not found is held by its projection, and reported as
+  failed (12.2, 12.3).
 - **Keys are carried** in what temper creates: a marker at the head of a
   body, a comment or a review, hidden where the forge renders it (skein's
   `forge.md`, section 6; temper's word and namespace,
@@ -1405,7 +1408,10 @@ history they keep if temper is unplugged. Issues are projections (jig's
   by the goal and what they write, made with the authority the project's
   policy gives its goals' projections (jig's `domain/authority.md`,
   section 6), in its home; the last ones, the closing milestone and
-  closing the issue, are made as the goal closes.
+  closing the issue, are made as the goal closes. They are not the
+  goal's effects: its release waits for its own effects alone, never for
+  its issue, and cancelling it withdraws none of its issue's writes,
+  which reconcile, retry and settle on their own (12.3).
 - **Issues others open** in an adopted repository are participating
   objects, which may become intake later.
 
@@ -1421,7 +1427,8 @@ durable across restart; it does not depend on delivery after commit.
 only for an accepted final desired view and is cleared when a non-final
 desired view replaces it. Restart restores it with desired. A late write
 completion rechecks the whole current desired: its body, milestones and
-closing write must all be complete, with no pending write. Every issue
+closing write must all be complete, with no pending write, or the issue
+must have failed for good once its final view was accepted (12.3). Every issue
 row for that goal and connector must agree on the same saved Some
 generation before `ProjectionSettled { goal, generation }` is emitted.
 The root echoes that saved generation; it never stamps a callback with
@@ -1472,6 +1479,24 @@ The commit-held result returns through the root's internal ToChild/Released
 path to that same slot. The initiating workflow takes its terminal exactly
 once through `take_projection_recovery`, releasing the recovery capacity and
 preserving any remaining timer. No separate response queue or retained-result allocation is introduced.
+
+### 12.3 After the goal ends
+
+An issue outlives its goal until its projection settles (jig's
+`domain/connectors.md`, 8.3): the goal's task is released without waiting
+for it, and its cancellation leaves the issue's writes to the issue. Once
+the final view is accepted, whether the goal ended or was untracked:
+
+- **An uncertain write** reconciles as any entry does (section 6), and the
+  issue's timer still projects the accepted final view.
+- **A held write** is withdrawn: its projected state is rolled back, and
+  it counts as a permanent failure. Before the final view, a held write
+  waits for recovery (12.2).
+- **A permanent failure is final:** the issue settles the accepted
+  generation as it stands, keeping what was last written, and its failure
+  is news, once, on the goal, live or ended (jig's
+  `domain/connectors.md`, 8.2 and 8.4). Recovery is for a projection that
+  is not final.
 
 ## 13. Participating objects
 
@@ -1630,8 +1655,10 @@ steps:
    state (merged, in the forge's merge queue, or neither), a creation by
    its key after the entry's start, a set written again; one not found
    waits for the retry deadline its last attempt committed, and an
-   unrecoverable one holds its task for a person;
-3. it steps every change once, and every goal's issue.
+   unrecoverable one holds its task for a person, or, an issue's, is
+   held by its projection (12.3);
+3. it steps every change once, and every issue whose projection has not
+   settled.
 
 Its listings start from the newest time the store kept for each
 repository, inclusive, so what changed while the engine was down is
@@ -1654,7 +1681,11 @@ semantic conflict repaired; the branch's own CI broken by a landing
 temper did not make, the queue paused and repaired; its pull request
 closed by someone else, held, released and reopened; a landing that
 overlaps a goal's change, and one that does not; a goal's issue
-written, revised and closed; a merge whose answer is lost, found merged
+written, revised and closed; a goal released while its issue's closing
+write is uncertain, the issue closed after; a cancelled goal whose
+issue's write is left to the issue; a held issue write withdrawn once the
+final view is accepted, and a failure for good settling that view as it
+stands, told once, across a restart; a merge whose answer is lost, found merged
 after a restart; a mergeability unsettled within the window, then
 settled; a forge preloaded with ten times the history, idle at the same
 cost. Designed, not built (8.9): a landing rule changed between two
