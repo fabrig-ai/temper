@@ -643,6 +643,7 @@ fn run_ctl_peers<T>(
     assert!(!tab || face.is_none(), "box-owned peers or an independent face");
     let clock = Clock::new();
     let fake_backends = flags.iter().any(|flag| flag == "--fake-backends");
+    eprintln!("T4 box-start {}", clock.now().wall.as_nanos());
     let mut binary = Binary::start_with_tree(
         dying_with_test(Command {
             program: skein_scratch::paths::binary("temper"),
@@ -676,7 +677,10 @@ fn run_ctl_peers<T>(
         tab_visit: Visit::AwaitingAddress,
         visits: &visits,
         reply,
-        on_link,
+        on_link: Some(Box::new(move || {
+            eprintln!("T4 link {}", Clock::new().now().wall.as_nanos());
+            if let Some(on_link) = on_link { on_link(); }
+        })),
         check: Some(check),
         checked: &checked,
         stopping: false,
@@ -705,6 +709,7 @@ fn run_ctl_peers<T>(
         peer.spawn(&mut world);
     }
     let ended = world.run(&clock, deadline);
+    eprintln!("T4 box-end {}", clock.now().wall.as_nanos());
     assert!(ended.procs.iter().all(Host::is_empty), "box, ctl and peer io settles");
     let [Process::Binary(binary), Process::Calls(calls), ..] = ended.procs.as_slice() else { panic!("box and ctl") };
     (

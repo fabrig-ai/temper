@@ -392,6 +392,7 @@ impl Calls {
         matches!(self.action, Some(Action::Visit))
     }
     pub(super) fn visited(&mut self, status: u16) {
+        eprintln!("T4 visit-end {} {}", self.ends.len(), self.wall.as_nanos());
         assert!(self.visiting(), "visit requested");
         self.ends.push(Ended {
             exit: Some(Exit::Code(0)),
@@ -549,6 +550,7 @@ impl Calls {
         }
     }
     fn start(&mut self, call: Call, started: bool) {
+        eprintln!("T4 call-start {} {} {:?}", self.ends.len(), self.wall.as_nanos(), call.arguments.iter().map(|word| String::from_utf8_lossy(word)).collect::<Vec<_>>());
         let mut args: Vec<Box<[u8]>> = vec![b"ctl".as_slice().into()];
         if call.directory {
             args.push(call.client.unwrap_or_else(|| self.client.clone()));
@@ -575,6 +577,7 @@ impl Calls {
             return;
         }
         let ended = self.child.take().expect("finished ctl").ended;
+        eprintln!("T4 call-end {} {} {:?}", self.ends.len(), self.wall.as_nanos(), ended.exit);
         self.finish_step(true);
         match self.action.take().expect("current action") {
             Action::Run => {
@@ -1064,6 +1067,47 @@ pub fn proposal_key(ended: &Ended) -> String {
 #[cfg(test)]
 mod read_condition_tests {
     use super::*;
+
+    struct VisitJudge {
+        settled: bool,
+    }
+    impl Referee<Process> for VisitJudge {
+        fn act(&mut self, _now: Time, procs: &mut [Process]) {
+            let Process::Calls(calls) = &mut procs[0] else { panic!("call host") };
+            if calls.visiting() {
+                calls.visited(200);
+            }
+        }
+        fn observe(&mut self, _now: Time, procs: &[Process]) {
+            self.settled = procs.iter().all(Host::is_empty);
+        }
+        fn next_deadline(&self) -> Option<Time> {
+            None
+        }
+        fn overdue(&self, _now: Time) -> Option<String> {
+            None
+        }
+        fn passed(&self) -> bool {
+            self.settled
+        }
+    }
+
+    #[test]
+    fn a_returned_visit_drains_without_another_process_or_a_poll() {
+        let scratch = super::super::Scratch::new("returned-visit-wake");
+        let root = skein_shell::open_root(scratch.path()).expect("scratch root");
+        let clock = Clock::new();
+        let mut world = real::World::new(VisitJudge { settled: false });
+        world.spawn_with_fds(vec![root], || {
+            Process::Calls(Box::new(Calls::new(root, vec![Step::Visit], None, None)))
+        });
+        let ended = world.run(&clock, Duration::from_secs(2));
+        assert!(ended.procs.iter().all(Host::is_empty), "returned visit drains the call host");
+        let Process::Calls(calls) = &ended.procs[0] else { panic!("call host") };
+        assert_eq!(calls.ends().len(), 1, "one browser visit completed");
+        assert_eq!(calls.ends()[0].exit, Some(Exit::Code(0)));
+        scratch.remove();
+    }
 
     fn completed(stdout: &[u8]) -> Child {
         let mut child = Child::new(Vec::new(), 0);
