@@ -46,6 +46,8 @@ fn each_layout_file_is_below_the_forge_directory() {
         (File::State, b"/srv/forge-2/state"),
         (File::AdminToken, b"/srv/forge-2/admin_token"),
         (File::PersonPassword, b"/srv/forge-2/person_password"),
+        (File::PersonReadHeader, b"/srv/forge-2/person_read.header"),
+        (File::PersonWriteHeader, b"/srv/forge-2/person_write.header"),
         (File::ApiToken, b"/srv/forge-2/api_token"),
         (File::GitToken, b"/srv/forge-2/git_token"),
         (File::User, b"/srv/forge-2/user"),

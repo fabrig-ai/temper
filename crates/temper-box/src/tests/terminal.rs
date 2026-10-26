@@ -125,6 +125,30 @@ fn group_and_failure_facts_use_supplied_labels_and_exact_words() {
         assert_eq!(crate::terminal::why(why, &steps).as_ref(), expected);
     }
 }
+
+#[test]
+fn owned_start_notices_follow_started_for_asked_and_always_forges() {
+    use temper_forge_setup::{Kind, Steps};
+    let block = b"Forge 37 (Forgejo): started\nForge 37 (Forgejo): api http://127.0.0.1:3000/api/v1\nForge 37 (Forgejo): person ada, read header /data/forge/person_read.header, write header /data/forge/person_write.header\n";
+    let timed = b"01:02:03Z Forge 37 (Forgejo): started\n01:02:03Z Forge 37 (Forgejo): api http://127.0.0.1:3000/api/v1\n01:02:03Z Forge 37 (Forgejo): person ada, read header /data/forge/person_read.header, write header /data/forge/person_write.header\n";
+    for asked in [false, true] {
+        let mut steps = if asked {
+            labelled(b"Forge 37 (Forgejo)", b"forge")
+        } else {
+            crate::layout::flatten(Steps {
+                always: Box::new([super::fixtures::step(b"forge", Kind::Long)]),
+                asked: Box::new([]),
+            })
+        };
+        steps[0].step.set_started_notice(bytes::copy_of(block));
+        let fact = if asked { Fact::GroupStarted { forge: 37 } } else { Fact::Started { step: 0 } };
+        let mut formatter = Formatter::new();
+        assert_eq!(formatter.fact(fact, &steps, wall(3723)), item(Target::Stderr, block));
+        formatter.admitted_block();
+        assert_eq!(formatter.fact(fact, &steps, wall(3723)), item(Target::Stderr, timed));
+        assert!(usize::try_from(crate::terminal::max_bytes(&steps)).unwrap() >= timed.len());
+    }
+}
 #[test]
 fn lifecycle_output_bound_covers_long_labels_and_signal_numbers() {
     use crate::{machine::Why, terminal::max_bytes};
