@@ -376,6 +376,17 @@ impl Service {
             },
         }
     }
+    /// Sent forge entries left without their outcome when this stop reached its bound.
+    #[must_use]
+    pub fn unsettled(&self) -> &[temper_engine_domain::Unsettled] {
+        if let Some(engine) = &self.engine
+            && let Some(drain) = &engine.drain
+        {
+            drain.unsettled.as_slice()
+        } else {
+            &[]
+        }
+    }
     fn worker_runs(&self) -> bool {
         match &self.engine {
             Some(engine) => {
@@ -956,6 +967,7 @@ fn memory(
     let system = handover_diagnostics(settings, queue, events)?
         .checked_add(u64::try_from(size_of::<Service>()).ok()?)?
         .checked_add(List::<(u32, u64)>::worst_case(root.authority.projects)?)?
+        .checked_add(List::<temper_engine_domain::Unsettled>::worst_case(root.forge.entries)?)?
         .checked_add(Queue::<temper_engine_domain::Event>::worst_case(events)?)?
         .checked_add(Queue::<temper_engine_domain::Request>::worst_case(temper_engine_domain::max_out(root))?)?
         .checked_add(payload.checked_mul(u64::from(events).checked_mul(2)?.checked_add(1)?)?)?

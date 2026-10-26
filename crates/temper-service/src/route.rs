@@ -104,6 +104,10 @@ pub(crate) fn request(engine: &mut Engine, request: root::Request) {
                 other => unreachable!("only forge, setup and box link routing produce root forge inputs: {other:?}"),
             }
         }
+        root::Request::Unsettled(write) => {
+            let drain = engine.drain.as_mut().expect("settling follows the service’s stop");
+            drain.unsettled.push(write).expect("at most one unfinished write per forge entry");
+        }
         root::Request::Drained => stop::drained(engine),
         root::Request::Stop => stop::root(engine),
         root::Request::Worker(request) => worker(engine, request),
