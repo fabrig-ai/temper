@@ -24,6 +24,7 @@ fn set_up_is_a_deployment_request_and_forges_a_deployment_watch() {
         b"work".as_slice().into(),
         b"hello".as_slice().into(),
         forge::forges::SetUpProject::Existing(1),
+        false,
         &fixtures::limits().forge,
     )
     .unwrap() else {
@@ -378,7 +379,8 @@ fn setup_carries_each_field_and_new_project_names_without_semantic_form_checks()
         [SetUpProject::Existing(7), SetUpProject::New(b"Next".as_slice().into()), SetUpProject::New(Box::default())]
     {
         let Ask::Family { record, .. } =
-            ask(3, Box::default(), b"widget".as_slice().into(), project.clone(), &fixtures::limits().forge).unwrap()
+            ask(3, Box::default(), b"widget".as_slice().into(), project.clone(), false, &fixtures::limits().forge)
+                .unwrap()
         else {
             panic!("family")
         };
@@ -435,6 +437,7 @@ fn first_repository_decodes_each_state_project_and_creation_step() {
             let first = w::FirstRepository::new(
                 &limits(),
                 w::FirstRepositoryParts {
+                    playground: false,
                     org: b"team".as_slice().into(),
                     repository: b"widget".as_slice().into(),
                     project,
@@ -477,6 +480,7 @@ fn first_repository_decodes_each_state_project_and_creation_step() {
             assert_eq!(
                 rows(&record, &fixtures::limits().forge).unwrap()[0].first,
                 Some(First {
+                    playground: false,
                     org: b"team".as_slice().into(),
                     repository: b"widget".as_slice().into(),
                     project: if new { SetUpProject::New(b"Next".as_slice().into()) } else { SetUpProject::Existing(7) },

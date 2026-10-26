@@ -53,6 +53,7 @@ impl Demo {
 /// A forge temper works on (protocol/configuration.md, section 3, `forges`).
 #[derive(Debug)]
 pub struct Forge {
+    pub mode: temper_engine_domain_forge::Mode,
     pub number: u16,
     pub kind: Kind,
     /// Where the forge component connects, never an in-process name.

@@ -312,6 +312,7 @@ fn a_saved_setup_request_is_not_restored_as_an_adoption() {
                 w::SetUp::new(
                     &w::CEILINGS,
                     w::SetUpParts {
+                        playground: false,
                         forge: 3,
                         org: b"work".as_slice().into(),
                         repository: b"hello".as_slice().into(),

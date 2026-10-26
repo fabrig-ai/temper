@@ -10,8 +10,30 @@ use std::{fs, path::Path};
 
 #[must_use]
 pub fn llm(config: &Path) -> CtlLlm {
+    llm_with(config, scripts())
+}
+/// The copy uses the same procedure, with its own README and a read of its source.
+#[must_use]
+pub fn playground_llm(config: &Path) -> CtlLlm {
+    let mut scripts = scripts().into_vec();
+    let Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else { panic!("delegate call") };
+    let mut delegation: Value = serde_json::from_slice(arguments).expect("delegate JSON");
+    delegation["batch"][0]["spec"]["words"] = "@hello-readme Edit playground/widget README.md".into();
+    *arguments = serde_json::to_vec(&delegation).expect("delegate JSON").into_boxed_slice();
+    let mut turns = std::mem::take(&mut scripts[1].turns).into_vec();
+    turns.insert(2, call(b"read", &json!({"path":"src/main.rs"})));
+    turns[3] = call(
+        b"edit",
+        &json!({"path":"README.md","edits":[{
+            "old":"# widget","new":"# widget\n\nChanged by temper."
+        }]}),
+    );
+    scripts[1].turns = turns.into_boxed_slice();
+    llm_with(config, scripts.into_boxed_slice())
+}
+fn llm_with(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
     let config = config.to_path_buf();
-    let peer = super::fake_llm(scripts());
+    let peer = super::fake_llm(scripts);
     let address = peer.address();
     CtlLlm {
         peer,
@@ -97,6 +119,13 @@ pub fn task_steps(root: &Path) -> Vec<Step> {
 }
 #[must_use]
 pub fn task_steps_for(root: &Path, task: Task) -> Vec<Step> {
+    task_steps_in(root, task, "work/hello")
+}
+#[must_use]
+pub fn playground_task_steps(root: &Path) -> Vec<Step> {
+    task_steps_in(root, FIRST, "playground/widget")
+}
+fn task_steps_in(root: &Path, task: Task, repository: &str) -> Vec<Step> {
     let project = task.project.to_string();
     let chat = task.chat.to_string();
     let key = root.join("llm-key");
@@ -111,7 +140,7 @@ pub fn task_steps_for(root: &Path, task: Task) -> Vec<Step> {
             &project,
             "--key",
             "first-hello",
-            "@first-repository Land a README change in work/hello",
+            &format!("@first-repository Land a README change in {repository}"),
             "--json",
         ])),
         Step::Run(Call::new(&["wait", "task", &chat, "--until", "replied", "--timeout", "120s", "--json"])),
@@ -246,7 +275,9 @@ pub fn change_page(config: &Path, client: &Path, task: u64) -> String {
                 }
                 page.push('\n');
             }
-            if (page.contains("work/hello") && page.contains("CI at its head")) || now >= self.until {
+            if ((page.contains("work/hello") || page.contains("playground/widget")) && page.contains("CI at its head"))
+                || now >= self.until
+            {
                 self.page.set(page);
                 client.close();
                 self.closing = true;

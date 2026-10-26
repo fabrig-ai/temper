@@ -758,6 +758,7 @@ fn admitted_admin_connect_marks_connecting_and_keeps_the_first_repository_intent
         assert_eq!(
             d.forges().rows[0].first,
             first.map(|first| First {
+                playground: false,
                 org: first.org,
                 repository: first.repository,
                 project: first.project,

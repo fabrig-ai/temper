@@ -117,6 +117,7 @@ fn setup(key: u8) -> Event {
         digest: [key; 32],
         carried: None,
         request: crate::Application::Forge(forge::Ask::SetUp {
+            playground: false,
             forge: 1,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
@@ -133,7 +134,7 @@ fn a_keyed_setup_answers_the_client_and_the_same_key_replays_without_asking_the_
     connection(&mut domain, &env, forge::Connection::NotSetUp);
     crate::try_step(&mut domain, &env, setup(1)).unwrap();
     let requests = settle(&mut domain, &env);
-    let [Request::SetUp { forge: 1, request, org, repository }] = requests.as_ref() else {
+    let [Request::SetUp { playground: false, forge: 1, request, org, repository }] = requests.as_ref() else {
         panic!("one setup ask: {requests:?}")
     };
     assert_eq!((org.as_ref(), repository.as_ref()), (b"work".as_slice(), b"hello".as_slice()));
@@ -646,6 +647,7 @@ fn admin_connect_routes_the_whole_how_and_erases_at_both_ends() {
             assert_eq!(
                 domain.forges().rows[0].first,
                 first.clone().map(|first| forge::First {
+                    playground: false,
                     org: first.org,
                     repository: first.repository,
                     project: first.project,

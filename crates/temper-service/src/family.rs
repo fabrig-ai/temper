@@ -53,6 +53,7 @@ pub fn to_root(
                         digest,
                         carried,
                         request: temper_engine_domain::Application::Forge(forge::Ask::SetUp {
+                            playground: value.playground,
                             forge: value.forge,
                             org: value.org,
                             repository: value.repository,
@@ -413,6 +414,9 @@ fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge])
     for forge in forges {
         if forge.number != panel.forge {
             continue;
+        }
+        if forge.mode == forge::Mode::Fake {
+            return Box::default();
         }
         let kind = match forge.kind {
             crate::settings::Kind::GitHub => forge::Kind::GitHub,
@@ -841,7 +845,14 @@ fn first_repository(first: forge::First, limits: &w::Limits) -> Option<w::FirstR
     };
     w::FirstRepository::new(
         limits,
-        w::FirstRepositoryParts { org: first.org, repository: first.repository, project, state, label: first.label },
+        w::FirstRepositoryParts {
+            playground: first.playground,
+            org: first.org,
+            repository: first.repository,
+            project,
+            state,
+            label: first.label,
+        },
     )
     .ok()
 }

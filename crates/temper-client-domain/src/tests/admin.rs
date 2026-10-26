@@ -208,6 +208,7 @@ fn first() -> w::FirstRepository {
     w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::New(

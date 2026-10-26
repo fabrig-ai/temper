@@ -334,6 +334,7 @@ fn box_setup(
                 w::SetUp::new(
                     &w::CEILINGS,
                     w::SetUpParts {
+                        playground: false,
                         forge,
                         org: b"work".as_slice().into(),
                         repository: b"hello".as_slice().into(),

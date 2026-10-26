@@ -28,6 +28,7 @@ pub const GIT_BASE: &[u8] = b"http://forge.test";
 #[must_use]
 pub fn assignment(assignment: &engine::Assignment) -> (host::Assignment, wire::Workspace, Option<Box<[u8]>>) {
     let forges = [settings::Forge {
+        mode: temper_engine_domain_forge::Mode::Connected,
         number: temper_engine_forge_world::REPO.forge,
         kind: settings::Kind::Forgejo,
         api: jig_protocol_config::Address::Host { name: b"forge.test".as_slice().into(), port: 80 },

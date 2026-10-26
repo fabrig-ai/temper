@@ -281,6 +281,7 @@ fn requesting_round_trips_and_refuses_trailing_and_version_three_adopt_bytes() {
             v1::SetUp::new(
                 &limits,
                 v1::SetUpParts {
+                    playground: true,
                     forge: u16::MAX,
                     org: b"work".as_slice().into(),
                     repository: b"hello".as_slice().into(),
@@ -921,6 +922,7 @@ fn first_with_label(label: Box<[u8]>) -> Result<v1::FirstRepository, v1::Problem
     v1::FirstRepository::new(
         &v1::CEILINGS,
         v1::FirstRepositoryParts {
+            playground: true,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: v1::SetUpProject::Existing(

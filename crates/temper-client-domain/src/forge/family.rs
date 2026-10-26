@@ -181,6 +181,7 @@ pub fn set_up(
     org: Box<[u8]>,
     repository: Box<[u8]>,
     project: forge::forges::SetUpProject,
+    playground: bool,
     limits: &w::Limits,
 ) -> Option<jig_client::Family> {
     let project = match project {
@@ -191,7 +192,7 @@ pub fn set_up(
             w::SetUpProject::New(w::NewProject::new(limits, w::NewProjectParts { name }).ok()?)
         }
     };
-    let request = w::SetUp::new(limits, w::SetUpParts { forge, org, repository, project }).ok()?;
+    let request = w::SetUp::new(limits, w::SetUpParts { playground, forge, org, repository, project }).ok()?;
     let record = w::Requesting::new(limits, w::RequestingParts { request: w::Request::SetUp(request) }).ok()?;
     Some(jig_client::Family { family: wire::FORGE, version: wire::CLIENT_VERSION, bytes: wire::requesting(&record) })
 }
@@ -358,6 +359,7 @@ fn first_from(first: w::FirstRepository) -> forge::forges::First {
     use forge::forges::{CreateStep, First, FirstState, SetUpProject};
     let first = first.into_parts();
     First {
+        playground: first.playground,
         org: first.org,
         repository: first.repository,
         project: match first.project {

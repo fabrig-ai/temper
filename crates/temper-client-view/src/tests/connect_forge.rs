@@ -520,6 +520,7 @@ pub(super) fn first_rows(connection: w::Connection, state: w::FirstState) -> Lis
     let first = w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::Existing(
@@ -2131,6 +2132,7 @@ fn admin_first(state: w::FirstState) -> w::FirstRepository {
     w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::New(

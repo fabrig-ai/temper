@@ -435,6 +435,7 @@ fn reply_at(root: &mut crate::Domain, attempt: Token, outcome: w::Outcome, now: 
 }
 fn first(state: forges::FirstState) -> forges::First {
     forges::First {
+        playground: false,
         org: b"work".as_slice().into(),
         repository: b"hello".as_slice().into(),
         project: forges::SetUpProject::Existing(1),
@@ -456,6 +457,7 @@ fn deliver_first(
     let first = w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::Existing(
@@ -723,7 +725,8 @@ fn set_up_again_on_another_client_uses_the_rows_fields() {
     let value = w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
-            org: b"team".as_slice().into(),
+            playground: true,
+            org: b"playground".as_slice().into(),
             repository: b"widget".as_slice().into(),
             project: w::SetUpProject::Existing(
                 w::ExistingProject::new(&w::CEILINGS, w::ExistingProjectParts { project: 7 }).unwrap(),
@@ -737,7 +740,8 @@ fn set_up_again_on_another_client_uses_the_rows_fields() {
     .unwrap();
     deliver_first_record(&mut root, watch, w::Connection::Connecting, value);
     let (_, _, w::Request::SetUp(value)) = sent(setup(&mut root)) else { panic!("setup") };
-    assert_eq!((value.org(), value.repository()), (b"team".as_slice(), b"widget".as_slice()));
+    assert_eq!((value.org(), value.repository()), (b"playground".as_slice(), b"widget".as_slice()));
+    assert!(value.playground());
     let w::SetUpProject::Existing(project) = value.project() else { panic!("existing project") };
     assert_eq!(project.project(), 7_u32);
 }

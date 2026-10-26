@@ -2330,9 +2330,9 @@ pub(crate) fn outputs(
             forge::Request::SetUpGroup { forge, request } => {
                 assert!(super::now(domain, Request::SetUpGroup { forge, request }), "demo box group door reserved");
             }
-            forge::Request::SetUp { forge, request, org, repository } => {
+            forge::Request::SetUp { forge, request, org, repository, playground } => {
                 assert!(
-                    super::now(domain, Request::SetUp { forge, request, org, repository }),
+                    super::now(domain, Request::SetUp { forge, request, org, repository, playground }),
                     "forge set up door reserved"
                 );
             }

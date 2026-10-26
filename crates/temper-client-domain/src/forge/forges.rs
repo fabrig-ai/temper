@@ -90,6 +90,7 @@ pub enum AdminStop {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct First {
+    pub playground: bool,
     pub org: Box<[u8]>,
     pub repository: Box<[u8]>,
     pub project: SetUpProject,
@@ -180,11 +181,12 @@ pub fn ask(
     org: Box<[u8]>,
     repository: Box<[u8]>,
     project: SetUpProject,
+    playground: bool,
     limits: &super::Limits,
 ) -> Option<Ask> {
     Some(Ask::Family {
         scope: c::Scope::Deployment,
-        record: family::set_up(forge, org, repository, project, &wire_limits(limits)?)?,
+        record: family::set_up(forge, org, repository, project, playground, &wire_limits(limits)?)?,
     })
 }
 #[must_use]
@@ -299,6 +301,7 @@ pub struct FirstProject {
 /// The last set up sent by this client, retained across page changes.
 #[derive(Debug)]
 pub struct SetUp {
+    pub playground: bool,
     pub forge: u16,
     pub party: u64,
     pub org: Box<[u8]>,
@@ -363,22 +366,23 @@ pub(crate) fn set_up(
     let previous = retry_fields(side, forge);
     let draft = &mut side.setup_form;
     draft.checked = true;
-    let (org, repository, project) = match previous {
-        Some(fields) => (fields.org, fields.repository, fields.project),
+    let (org, repository, project, playground) = match previous {
+        Some(fields) => (fields.org, fields.repository, fields.project, fields.playground),
         None => {
             if draft.fields[0].is_empty() || draft.fields[1].is_empty() || draft.fields[2].is_empty() {
                 side.changed();
                 return;
             }
-            (draft.fields[0].clone(), draft.fields[1].clone(), SetUpProject::New(draft.fields[2].clone()))
+            (draft.fields[0].clone(), draft.fields[1].clone(), SetUpProject::New(draft.fields[2].clone()), false)
         }
     };
-    let Some(ask) = ask(forge, org.clone(), repository.clone(), project.clone(), &limits) else {
+    let Some(ask) = ask(forge, org.clone(), repository.clone(), project.clone(), playground, &limits) else {
         return;
     };
     side.serial = side.serial.checked_add(1).expect("forge request serial fits");
     let request = skein_lib::Token::new(side.serial);
     side.set_up = Some(Box::new(SetUp {
+        playground,
         forge,
         party,
         org,
@@ -394,6 +398,7 @@ pub(crate) fn set_up(
     side.changed();
 }
 struct SetupValues {
+    playground: bool,
     org: Box<[u8]>,
     repository: Box<[u8]>,
     project: SetUpProject,
@@ -408,6 +413,7 @@ fn retry_fields(side: &super::Side, forge: u16) -> Option<SetupValues> {
             && last.forge == forge
         {
             return Some(SetupValues {
+                playground: last.playground,
                 org: last.org.clone(),
                 repository: last.repository.clone(),
                 project: last.project.clone(),
@@ -415,6 +421,7 @@ fn retry_fields(side: &super::Side, forge: u16) -> Option<SetupValues> {
         }
         if let Some(first) = &row.first {
             return Some(SetupValues {
+                playground: first.playground,
                 org: first.org.clone(),
                 repository: first.repository.clone(),
                 project: first.project.clone(),

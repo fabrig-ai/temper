@@ -187,6 +187,7 @@ pub(crate) fn send(side: &mut Side, limits: Limits, forge: u16, out: &mut Queue<
         &crate::key::Name::new(skein_lib::Decimal::of(side.serial).as_bytes()).expect("serial fits"),
     );
     side.set_up = Some(Box::new(forges::SetUp {
+        playground: false,
         forge,
         party,
         org: draft.fields[0].clone(),

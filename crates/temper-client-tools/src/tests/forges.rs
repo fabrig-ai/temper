@@ -396,6 +396,7 @@ fn first_record(state: w::FirstState) -> w::FirstRepository {
     w::FirstRepository::new(
         &w::CEILINGS,
         w::FirstRepositoryParts {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: w::SetUpProject::Existing(
@@ -587,6 +588,7 @@ fn made_wait_requires_the_named_forges_first_repository_to_be_made() {
     assert_eq!(root.closed.len(), 1);
     let mut row = row(C::Connecting);
     row.first = Some(forge::forges::First {
+        playground: false,
         org: b"work".as_slice().into(),
         repository: b"hello".as_slice().into(),
         project: forge::forges::SetUpProject::Existing(1),
@@ -624,6 +626,7 @@ fn first_repository_text_and_json_name_every_state_and_creation_step() {
     ] {
         let mut row = row(C::Connecting);
         row.first = Some(First {
+            playground: false,
             org: b"work".as_slice().into(),
             repository: b"hello".as_slice().into(),
             project: SetUpProject::Existing(1),
@@ -1068,4 +1071,40 @@ fn refused_make_project_prints_jigs_words_and_sends_no_adoption() {
     assert_eq!(printed.status, 2);
     assert!(skein_lib::bytes::find(&printed.stderr, b"Another project has that name").is_some());
     let client::Ask::Jig(_) = root.adoption_bytes(call) else { panic!("no adoption after refusal") };
+}
+
+#[test]
+fn playground_setup_sends_its_copy_and_default_or_explicit_project() {
+    for (flags, project) in [
+        (&["--playground"][..], b"widget".as_slice()),
+        (&["--playground", "--project", "copy"][..], b"copy".as_slice()),
+    ] {
+        let mut root = f::signed_in(f::PARTY);
+        let mut words = List::with_capacity(5);
+        words.push("forge-setup").unwrap();
+        words.push("3").unwrap();
+        for word in flags {
+            words.push(*word).unwrap();
+        }
+        let call = root.submit(words.as_slice());
+        let client::Ask::Family { record, .. } = root.adoption_bytes(call) else { panic!("family") };
+        let w::Request::SetUp(value) =
+            wire::decode_requesting(&record.bytes, &w::CEILINGS).unwrap().into_parts().request
+        else {
+            panic!("setup")
+        };
+        assert!(value.playground());
+        assert_eq!((value.org(), value.repository()), (b"playground".as_slice(), b"widget".as_slice()));
+        let w::SetUpProject::New(value) = value.project() else { panic!("new project") };
+        assert_eq!(value.name(), project);
+    }
+}
+#[test]
+fn playground_setup_rejects_org_or_repository_before_sending() {
+    for flag in ["--org", "--repository"] {
+        let mut root = f::signed_in(f::PARTY);
+        let call = root.submit(&["forge-setup", "3", "--playground", flag, "other"]);
+        assert_eq!(root.answer(call).unwrap().status, 1);
+        assert!(root.nothing_sent(), "a usage error must send no request");
+    }
 }

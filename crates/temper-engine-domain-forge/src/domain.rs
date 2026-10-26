@@ -1170,7 +1170,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             }
             crate::Ask::StartDemo => crate::demo::start(d, request, token, out),
             crate::Ask::Adopt(adoption) => adoption::start(d, env, request, token, retention, adoption, out),
-            crate::Ask::SetUp { forge, org, repository, project } => {
+            crate::Ask::SetUp { forge, org, repository, project, playground } => {
                 if d.setup_pending.insert(request, token).is_err() {
                     out.push(Request::ApplicationAgain { request, why: jig_domain_people::Again::Busy });
                 } else {
@@ -1186,6 +1186,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                         || org.len() > usize::try_from(env.limits.name_bytes).expect("name bound fits")
                         || repository.len() > usize::try_from(env.limits.name_bytes).expect("name bound fits")
                         || invalid_project
+                        || (playground && (org.as_ref() != b"playground" || repository.as_ref() != b"widget"))
                     {
                         Some(crate::SetUpRefusal::Invalid)
                     } else {
@@ -1210,6 +1211,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                                 .insert(
                                     forge,
                                     crate::First {
+                                        playground,
                                         org: org.clone(),
                                         repository: repository.clone(),
                                         project,
@@ -1219,7 +1221,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                                 )
                                 .expect("configured forges bound first repositories");
                             out.push(Request::MarkedForges);
-                            out.push(Request::SetUp { forge, request, org, repository });
+                            out.push(Request::SetUp { forge, request, org, repository, playground });
                         }
                     }
                 }

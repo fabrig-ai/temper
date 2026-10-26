@@ -82,7 +82,7 @@ const USAGES: &[&[u8]] = &[
     b"declare PROVIDER ADAPTER NAME [--account A] --key NAME\n",
     b"verify ACCOUNT [--source sign_in|key|program] [--key NAME]\n",
     b"forges\n",
-    b"forge-setup F [--org O] [--repository R] [--project P] [--key NAME]\n",
+    b"forge-setup F [--org O] [--repository R] [--project P] [--playground] [--key NAME]\n",
     b"demo-start [--key NAME]\n",
     b"forge-connect F github-app ID FILE --key NAME\nforge-connect F github --key NAME\nforge-connect F forgejo FILE --key NAME\nforge-connect F forgejo-admin FILE [--first ORG/NAME] [--project P] [--label L] --key NAME\n",
     b"forge-install F [--key NAME]\n",

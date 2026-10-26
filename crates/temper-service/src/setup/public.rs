@@ -86,9 +86,12 @@ pub(crate) fn admin_connect(
         )
         .expect("public room checked");
     let first = match first {
-        Some(first) => {
-            Some(super::lifecycle::Intent { org: first.org, repository: first.repository, label: first.label })
-        }
+        Some(first) => Some(super::lifecycle::Intent {
+            playground: false,
+            org: first.org,
+            repository: first.repository,
+            label: first.label,
+        }),
         None => None,
     };
     engine

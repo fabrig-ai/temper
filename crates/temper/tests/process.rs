@@ -3757,3 +3757,66 @@ fn temper_ctl_decide_settings() {
     assert!(String::from_utf8_lossy(&calls[13].stdout).contains("withdrawn"));
     scratch.remove();
 }
+
+/// protocol/setup.md, 6.7: the playground copy is made and adopted through ctl.
+#[test]
+fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_forge() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    use support::{
+        ctl::{Call, Step},
+        first_repository,
+    };
+    let scratch = support::Scratch::new("forgejo-playground-copy");
+    let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
+    for path in &paths {
+        fs::create_dir(path).expect("empty first-run directory");
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).expect("private directory");
+    }
+    let flags = support::boxed::echo_steps(deployment_flags(&paths));
+    let _cached = cache_forgejo_binaries(&paths[2]);
+    let mut steps = vec![
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["forge-setup", "3", "--playground"])),
+        Step::Run(Call::new(&["forges", "--json"])),
+    ];
+    steps.extend(first_repository::playground_task_steps(scratch.path()));
+    let ended = support::boxed::run_ctl_with_llm(
+        scratch.path(),
+        flags,
+        scratch.path(),
+        steps,
+        support::forge_land::OWNED_ALLOWANCE,
+        || first_repository::live(&paths[0], &paths[1], scratch.path()),
+        first_repository::playground_llm(&paths[0]),
+    );
+    let stderr = String::from_utf8_lossy(&ended.stderr);
+    assert_eq!(ended.exit, Some(Exit::Code(0)), "box drained: {stderr}");
+    assert_eq!(ended.left, Some(Vec::new()), "no processes outlive the box");
+    for call in &ended.calls {
+        assert_eq!(
+            call.exit,
+            Some(Exit::Code(0)),
+            "stdout: {}; stderr: {}; box: {stderr}",
+            String::from_utf8_lossy(&call.stdout),
+            String::from_utf8_lossy(&call.stderr)
+        );
+    }
+    let adoption = String::from_utf8_lossy(&ended.calls[1].stdout);
+    assert!(adoption.contains("Adopted playground/widget on forge 3 as owned."), "{adoption}");
+    assert!(adoption.contains("It is the project's home."), "{adoption}");
+    let rows = support::ctl::json(&ended.calls[2]);
+    let row = rows["forges"].as_array().expect("forge rows").iter().find(|row| row["number"] == 3).expect("forge 3");
+    assert_eq!(row["first"]["project"]["new"], "widget");
+    assert_eq!(row["first"]["org"], "playground");
+    assert_eq!(row["first"]["repository"], "widget");
+    assert_eq!(row["first"]["playground"], true);
+    let evidence = ended.checked.expect("live worker reads");
+    assert!(evidence.producer.contains("\"path\":\".forgejo/workflows/ci.yml\"}\nRead "), "{}", evidence.producer);
+    assert!(evidence.producer.contains("\"path\":\"src/main.rs\"}\nRead "), "{}", evidence.producer);
+    // ctl prints read counts; the service test compares every source byte.
+    assert!(evidence.producer.contains("Read 7 of 7 lines; skipped 0"), "{}", evidence.producer);
+    let panel = support::ctl::json(&evidence.panel);
+    assert_eq!(panel["landing"], "main", "{panel}");
+    assert_eq!(panel["pull"]["address"], format!("http://{}/playground/widget/pulls/1", evidence.address));
+    scratch.remove();
+}
