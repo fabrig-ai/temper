@@ -51,29 +51,52 @@ pub struct Store {
 /// Admit the core, journal and temper families, then copy checked sizes to KV.
 #[must_use]
 pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Limits) -> Option<protocol::Limits> {
+    admit(root, forge, profile).ok()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Refusal {
+    Map(protocol::sizes::SizeRefusal),
+    Transcript { bytes: u32, ceiling: u32 },
+    Page { transcript: u32, frame: u32, page: u32, ceiling: u32 },
+}
+
+/// Keep the cause for startup before any comparison needs the store's bounds.
+pub(crate) fn admit(
+    root: &root::Limits,
+    forge: &forge::Limits,
+    profile: &protocol::Limits,
+) -> Result<protocol::Limits, Refusal> {
+    let arithmetic = Refusal::Map(protocol::sizes::SizeRefusal::Ceiling);
     let core = root::core_limits(root);
     let mut kv = profile.store;
+    let transcript = root.loads.transcript_bytes;
+    let ceiling = protocol::core_v6::CEILINGS.turn_record_transcript;
+    if transcript > ceiling {
+        return Err(Refusal::Transcript { bytes: transcript, ceiling });
+    }
     let sizes = protocol::sizes::check(
         &core,
-        &temper_protocol_store::application(forge)?,
+        &temper_protocol_store::application(forge).ok_or(arithmetic)?,
         &root::journal_limits(&root.journal),
         &kv,
         profile.orphan_erases,
     )
-    .ok()?;
+    .map_err(Refusal::Map)?;
     kv.key = sizes.key;
     kv.value = sizes.value;
     kv.ops = sizes.ops;
     kv.commit = sizes.commit;
-    kv.queued_bytes = u64::from(sizes.commit).checked_mul(u64::from(kv.queued))?;
-    kv.segment = u64::from(sizes.commit).checked_mul(2)?;
+    kv.queued_bytes = u64::from(sizes.commit).checked_mul(u64::from(kv.queued)).ok_or(arithmetic)?;
+    kv.segment = u64::from(sizes.commit).checked_mul(2).ok_or(arithmetic)?;
     kv.snapshot_after = u64::from(sizes.commit);
-    kv.chunk = sizes.key.checked_add(sizes.value)?.checked_add(20)?;
-    kv.page.bytes = page_bytes(&core, root.loads.transcript_bytes, sizes.key, sizes.value)?;
+    kv.chunk = sizes.key.checked_add(sizes.value).ok_or(arithmetic)?.checked_add(20).ok_or(arithmetic)?;
+    kv.page.bytes = page_bytes(&core, transcript, sizes.key, sizes.value).ok_or(arithmetic)?;
     if kv.page.bytes > profile.store.page.bytes {
-        return None;
+        let frame = protocol::sizes::frame(&core, transcript).ok_or(arithmetic)?;
+        return Err(Refusal::Page { transcript, frame, page: kv.page.bytes, ceiling: profile.store.page.bytes });
     }
-    Some(protocol::Limits {
+    Ok(protocol::Limits {
         core,
         store: kv,
         secrets: kv,
@@ -82,7 +105,7 @@ pub fn limits(root: &root::Limits, forge: &forge::Limits, profile: &protocol::Li
         joins: profile.joins,
         queue: kv.queued,
         files: profile.files,
-        reads: core.load_slots.checked_add(core.tasks.tasks)?,
+        reads: core.load_slots.checked_add(core.tasks.tasks).ok_or(arithmetic)?,
         orphan_erases: profile.orphan_erases,
     })
 }

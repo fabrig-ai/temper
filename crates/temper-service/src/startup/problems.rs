@@ -20,6 +20,8 @@ pub enum What {
     Past { bytes: u64, bound: u64 },
     Short { bytes: u64, of: &'static [u8], needs: u64 },
     Within { bytes: u64, limit: &'static [u8], bound: u64 },
+    StorePage { transcript: u32, frame: u32, page: u32, ceiling: u32 },
+    StoreMap(jig_protocol_store::sizes::SizeRefusal),
     Agent,
     Admission { why: jig_domain_fleet::AgentShortfall, offered: u64, required: u64 },
     Adapter,
@@ -96,7 +98,12 @@ fn words(what: What) -> &'static [u8] {
         What::Override(limits::Refused::Unknown) => b"no limit of temper's has this name",
         What::Override(limits::Refused::Range) => b"outside its type",
         What::Against { .. } => b"must agree with ",
-        What::Past { .. } | What::Within { .. } | What::Short { .. } | What::Admission { .. } => b"",
+        What::Past { .. }
+        | What::Within { .. }
+        | What::Short { .. }
+        | What::Admission { .. }
+        | What::StorePage { .. }
+        | What::StoreMap(_) => b"",
         What::Redirect(_) => b"fixed port conflicts with ",
         What::Adapter => b"program adapter not declared in the agent's programs",
         What::Agent => b"not in the agent's configuration under the same name",
@@ -230,6 +237,48 @@ fn codec_words(what: config::What, writer: &mut Writer, length: &mut usize, meas
     let words = line.strip_prefix(b": ").expect("root codec diagnostic prefix");
     put(writer, length, measuring, words);
 }
+
+fn store_page(amounts: [u32; 4], writer: &mut Writer, length: &mut usize, measuring: bool) {
+    let [transcript, frame, page, ceiling] = amounts;
+    put(writer, length, measuring, b"its turn's transcript frame, ");
+    put(writer, length, measuring, Decimal::of(u64::from(frame)).as_bytes());
+    put(writer, length, measuring, b" bytes, needs a store page of ");
+    put(writer, length, measuring, Decimal::of(u64::from(page)).as_bytes());
+    put(writer, length, measuring, b" bytes, past the profile's ceiling of ");
+    put(writer, length, measuring, Decimal::of(u64::from(ceiling)).as_bytes());
+    put(writer, length, measuring, b" bytes (transcript bound ");
+    put(writer, length, measuring, Decimal::of(u64::from(transcript)).as_bytes());
+    put(writer, length, measuring, b" bytes)");
+}
+
+fn store_map(why: jig_protocol_store::sizes::SizeRefusal, writer: &mut Writer, length: &mut usize, measuring: bool) {
+    use jig_protocol_store::sizes::SizeRefusal;
+    if why == SizeRefusal::Ceiling {
+        put(writer, length, measuring, b"the store's map sizing is past its codec or arithmetic bounds");
+        return;
+    }
+    let (name, needs, has, unit): (&[u8], u64, u64, &[u8]) = match why {
+        SizeRefusal::Key { needs, has } => (b"key", u64::from(needs), u64::from(has), b"bytes"),
+        SizeRefusal::Value { needs, has } => (b"value", u64::from(needs), u64::from(has), b"bytes"),
+        SizeRefusal::Ops { needs, has } => (b"commit", u64::from(needs), u64::from(has), b"operations"),
+        SizeRefusal::Commit { needs, has } => (b"commit", u64::from(needs), u64::from(has), b"bytes"),
+        SizeRefusal::Page { needs, has } => (b"page", u64::from(needs), u64::from(has), b"bytes"),
+        SizeRefusal::Queue { needs, has } => (b"queue", u64::from(needs), u64::from(has), b"commits"),
+        SizeRefusal::QueuedBytes { needs, has } => (b"queue", needs, has, b"bytes"),
+        SizeRefusal::Whole { needs, has } => (b"whole-file read", u64::from(needs), u64::from(has), b"bytes"),
+        SizeRefusal::Ceiling => unreachable!("arithmetic diagnostic above"),
+    };
+    put(writer, length, measuring, b"the store's map ");
+    put(writer, length, measuring, name);
+    put(writer, length, measuring, b", ");
+    put(writer, length, measuring, Decimal::of(needs).as_bytes());
+    put(writer, length, measuring, b" ");
+    put(writer, length, measuring, unit);
+    put(writer, length, measuring, b", past its bound of ");
+    put(writer, length, measuring, Decimal::of(has).as_bytes());
+    put(writer, length, measuring, b" ");
+    put(writer, length, measuring, unit);
+}
 #[expect(clippy::too_many_lines, reason = "one exhaustive diagnostic vocabulary shared by both rendering passes")]
 fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
     let mut length = 0_usize;
@@ -252,6 +301,10 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
             What::Admission { why, offered, required } => {
                 admission(why, offered, required, writer, &mut length, measuring);
             }
+            What::StorePage { transcript, frame, page, ceiling } => {
+                store_page([transcript, frame, page, ceiling], writer, &mut length, measuring);
+            }
+            What::StoreMap(why) => store_map(why, writer, &mut length, measuring),
             What::Redirect(listener) => redirect_listener(listener, writer, &mut length, measuring),
             What::Against { other } => put(writer, &mut length, measuring, other),
             What::Past { bytes, bound } => {

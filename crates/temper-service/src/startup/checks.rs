@@ -1058,8 +1058,18 @@ pub fn records(
         against(problems, b"routes.query_bytes", b"positive query bound");
     }
     let value = limits.records.value_bytes;
-    if value == 0 || value > secret_value_bound(jig, limits).unwrap_or(0) {
-        against(problems, b"records.value_bytes", b"engine.limits.store.value");
+    match secret_value_bound(jig, limits) {
+        Ok(bound) => {
+            if value == 0 || value > bound {
+                against(problems, b"records.value_bytes", b"engine.limits.store.value");
+            }
+        }
+        Err(refused) => {
+            let found = store_refusal(refused);
+            for problem in &found.problems {
+                problems.push(problem.path.clone(), problem.what);
+            }
+        }
     }
     let mut largest = (0, b"AppKey (forge_component.key_bytes)".as_slice(), None);
     for (bytes, source, index) in record_writes(limits, forges).into_boxed() {
@@ -1089,9 +1099,32 @@ pub fn records(
     }
 }
 
-pub(crate) fn secret_value_bound(jig: &config::Engine, own: &limits::Limits) -> Option<u32> {
-    let root = limits::engine(&jig.limits, own)?;
-    Some(crate::store::limits(&root, &root.forge, &jig.limits.store)?.secrets.value)
+pub(crate) fn secret_value_bound(jig: &config::Engine, own: &limits::Limits) -> Result<u32, crate::store::Refusal> {
+    let root = limits::engine(&jig.limits, own)
+        .ok_or(crate::store::Refusal::Map(jig_protocol_store::sizes::SizeRefusal::Ceiling))?;
+    Ok(crate::store::admit(&root, &root.forge, &jig.limits.store)?.secrets.value)
+}
+
+pub(crate) fn store_refusal(refused: crate::store::Refusal) -> Problems {
+    let (path, what) = match refused {
+        crate::store::Refusal::Page { transcript, frame, page, ceiling } => {
+            (own(b"root.loads.transcript_bytes"), What::StorePage { transcript, frame, page, ceiling })
+        }
+        crate::store::Refusal::Transcript { bytes, ceiling } => (
+            own(b"root.loads.transcript_bytes"),
+            What::Within {
+                bytes: u64::from(bytes),
+                limit: b"the transcript codec's ceiling",
+                bound: u64::from(ceiling),
+            },
+        ),
+        crate::store::Refusal::Map(why) => {
+            (Path::root().member(b"engine").member(b"limits").member(b"store"), What::StoreMap(why))
+        }
+    };
+    let mut problems = Problems::empty();
+    problems.push(path, what);
+    problems
 }
 
 /// Translate the kit's configured membership refusal into its startup path.
