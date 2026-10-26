@@ -541,6 +541,12 @@ pub fn root_with_config_and_limits(
             jig_domain_core::RestartRequest::ProjectPolicy { project } => {
                 panic!("fixture project policy restore: {project}")
             }
+            jig_domain_core::RestartRequest::HeldPastLimit { which, held, limit } => {
+                panic!("fixture held settings: {which:?} held {held}, allowed {limit}")
+            }
+            jig_domain_core::RestartRequest::UnheldRevision { task, revision } => {
+                panic!("fixture task {task} has unheld settings revision {revision}")
+            }
             jig_domain_core::RestartRequest::Refused { step } => panic!("fixture restore: {step:?}"),
         }
     }

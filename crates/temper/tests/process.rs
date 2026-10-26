@@ -3814,3 +3814,72 @@ fn temper_ctl_move_to_newest() {
     assert_eq!(calls[6].stderr.as_slice(), b"move-to-newest: No visible object with that name\n");
     scratch.remove();
 }
+
+/// client/tools.md, 11.4: the owner moves a parked delegate's next run.
+#[test]
+fn temper_ctl_running_work_keeps_its_revision() {
+    use support::{
+        ctl::{Call, Step},
+        running_revision,
+    };
+    let scratch = support::Scratch::new("ctl_running_revision");
+    let (paths, flags) = first_run_directories(&scratch);
+    let key = scratch.path().join("llm-key");
+    std::fs::write(&key, jig_channel_world::fixtures::KEY).expect("fixture key");
+    std::fs::set_permissions(&key, std::os::unix::fs::PermissionsExt::from_mode(0o600)).expect("private key");
+    let file = scratch.path().join("settings.json");
+    let steps = vec![
+        Step::Mark("An owner reads revision R and its delegate charter"),
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["add-key", "1", key.to_str().expect("key path"), "--key", "revision-account"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["setting", "charter", "2", "--json"])),
+        Step::Mark("A chat delegates one task, and both park under R"),
+        Step::Run(Call::new(&["chat", "--project", "1", "--key", "revision-chat", "@revision-chat Delegate and wait"])),
+        Step::Until(Call::new(&["task", "2", "--json"]), running_revision::PARKED_DELEGATE),
+        Step::Until(Call::new(&["task", "1", "--json"]), b"\"phase\":\"idle\""),
+        Step::Mark("Changing the delegate charter makes R+1 while running work keeps R"),
+        Step::Then(Box::new(move |calls| {
+            assert_eq!(support::ctl::json(&calls[5])["chip"]["phase"], "idle");
+            support::ctl::charter_change_file(&file, &calls[3], running_revision::INSTRUCTIONS);
+            support::ctl::settings_change(&calls[2], &file, "revision-instructions")
+        })),
+        Step::Run(Call::new(&["task", "2"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["setting", "charter", "2", "--revision", &support::ctl::newest(&calls[2]).to_string()])
+        })),
+        Step::Mark("The owner moves both live tasks to R+1"),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["move-to-newest", &support::ctl::newest(&calls[2]).to_string(), "--key", "move-running"])
+        })),
+        Step::Mark("A ctl message wakes the delegate, whose next run reads the new instructions"),
+        Step::Run(Call::new(&["message", "2", "Read your revised instructions", "--key", "wake-delegate"])),
+        Step::Run(Call::new(&["task", "2", "--json"])),
+        Step::Until(Call::new(&["task", "2", "--json"]), running_revision::PARKED_DELEGATE),
+        Step::Mark("Revision R is no longer held"),
+        Step::Run(Call::new(&["settings", "--json"])),
+    ];
+    let seen = support::boxed::run_ctl_with_llm(
+        scratch.path(),
+        flags,
+        scratch.path(),
+        steps,
+        support::WITHIN,
+        || (),
+        running_revision::llm(&paths[0]),
+    );
+    assert_eq!(seen.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&seen.stderr));
+    assert_eq!(seen.left, Some(Vec::new()), "no process outlives its box");
+    ctl_assert_success(&seen.calls);
+    assert_eq!(
+        seen.calls.len(),
+        16,
+        "box {}; model answers {:?}; requests {}",
+        String::from_utf8_lossy(&seen.stderr),
+        seen.model.as_ref().map(|model| &model.answers),
+        seen.model.as_ref().map_or(0, |model| model.requests.len())
+    );
+    running_revision::assert_story(&seen.calls, seen.model.as_ref().expect("model requests"));
+    scratch.remove();
+}

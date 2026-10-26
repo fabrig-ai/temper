@@ -311,6 +311,8 @@ pub(crate) fn restart_request(
         jig_domain_core::RestartRequest::Idle => {}
         jig_domain_core::RestartRequest::Settings { .. }
         | jig_domain_core::RestartRequest::ProjectPolicy { .. }
+        | jig_domain_core::RestartRequest::HeldPastLimit { .. }
+        | jig_domain_core::RestartRequest::UnheldRevision { .. }
         | jig_domain_core::RestartRequest::Refused { .. } => {
             domain.stop_pending = true;
         }
