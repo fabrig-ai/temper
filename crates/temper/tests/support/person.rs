@@ -373,6 +373,13 @@ impl Person {
         person.directory = b"client".as_slice().into();
         person
     }
+    /// Keep the script's key-entry steps, then load ctl's completed sign-in.
+    #[must_use]
+    pub fn waiting_for_ctl_with_key(root: Fd, script: Script) -> Self {
+        let mut person = Self::build(root, None, None, script);
+        person.begin = Begin::Token;
+        person
+    }
     /// Hold the native observer until ctl supplies its identity and the expected page words.
     #[must_use]
     pub fn waiting_for_observation(root: Fd) -> Self {

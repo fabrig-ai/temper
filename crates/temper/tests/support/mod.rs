@@ -442,18 +442,41 @@ enum Ending {
     Box,
     Crash,
 }
+enum ChatPhase {
+    SettingUp,
+    Running,
+    Stopping,
+    Settled,
+}
 struct ChatJudge<'a> {
+    phase: ChatPhase,
     ending: Ending,
-    ended: bool,
-    settled: bool,
     deadline: Time,
     forge: Option<&'a forgejo::Throwaway>,
     poll: Time,
     merged: bool,
 }
+impl ChatJudge<'_> {
+    fn stopping(&self) -> bool {
+        matches!(self.phase, ChatPhase::Stopping | ChatPhase::Settled)
+    }
+}
 impl Referee<Process> for ChatJudge<'_> {
     fn act(&mut self, now: Time, procs: &mut [Process]) {
-        if !self.ended && now >= self.poll {
+        if matches!(self.phase, ChatPhase::SettingUp) {
+            let Process::Calls(calls) = &procs[2] else { panic!("native settings setup") };
+            if calls.ends().len() < NATIVE_SETUP_CALLS {
+                return;
+            }
+            for call in calls.ends() {
+                assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
+            }
+            let link = calls.link().to_vec();
+            let Process::Person(person) = &mut procs[1] else { panic!("native person") };
+            person.ctl_ready(&link);
+            self.phase = ChatPhase::Running;
+        }
+        if !self.stopping() && now >= self.poll {
             if let Some(forge) = self.forge {
                 self.merged = forge.merged_pull().is_some();
             }
@@ -462,7 +485,7 @@ impl Referee<Process> for ChatJudge<'_> {
         let Process::Person(person) = &procs[1] else {
             panic!("native person");
         };
-        if !self.ended
+        if !self.stopping()
             && person.finished
             && person.client.as_ref().is_some_and(Host::is_empty)
             && (self.forge.is_none() || self.merged)
@@ -479,11 +502,13 @@ impl Referee<Process> for ChatJudge<'_> {
                     peer.shutdown();
                 }
             }
-            self.ended = true;
+            self.phase = ChatPhase::Stopping;
         }
     }
     fn observe(&mut self, now: Time, procs: &[Process]) {
-        self.settled = self.ended && procs.iter().all(Host::is_empty);
+        if self.stopping() && procs.iter().all(Host::is_empty) {
+            self.phase = ChatPhase::Settled;
+        }
         let Process::Binary(binary) = &procs[0] else {
             panic!("binary");
         };
@@ -514,7 +539,7 @@ impl Referee<Process> for ChatJudge<'_> {
             String::from_utf8_lossy(binary.stderr())
         );
         assert!(
-            binary.exit_status().is_none() || self.ended,
+            binary.exit_status().is_none() || self.stopping(),
             "temper serve failed: {}",
             String::from_utf8_lossy(binary.stderr())
         );
@@ -527,23 +552,26 @@ impl Referee<Process> for ChatJudge<'_> {
             Ending::Crash => assert!(!binary.stderr_overflowed(), "crashed temper serve overflowed stderr"),
         }
         assert!(
-            now < self.deadline || self.settled,
+            now < self.deadline || matches!(self.phase, ChatPhase::Settled),
             "native chat did not settle: {}",
             String::from_utf8_lossy(binary.stderr())
         );
     }
     fn next_deadline(&self) -> Option<Time> {
-        (!self.settled).then_some(if self.forge.is_some() && !self.ended {
-            self.poll.min(self.deadline)
-        } else {
-            self.deadline
-        })
+        (!matches!(self.phase, ChatPhase::Settled)).then_some(
+            if self.forge.is_some() && matches!(self.phase, ChatPhase::Running) {
+                self.poll.min(self.deadline)
+            } else {
+                self.deadline
+            },
+        )
     }
     fn overdue(&self, now: Time) -> Option<String> {
-        (!self.settled && now >= self.deadline).then(|| "native person's chat did not finish and settle".into())
+        (!matches!(self.phase, ChatPhase::Settled) && now >= self.deadline)
+            .then(|| "native person's chat did not finish and settle".into())
     }
     fn passed(&self) -> bool {
-        self.settled
+        matches!(self.phase, ChatPhase::Settled)
     }
 }
 #[must_use]
@@ -585,6 +613,23 @@ pub fn run_until_landed(
 ) -> Seen {
     run_story(directory, script, Some(peer), LANDING, Some(forge), Ending::Crash)
 }
+// Sign-in, inventory, whole template read, then one owner settings change.
+const NATIVE_SETUP_CALLS: usize = 4;
+fn native_settings_setup(directory: &Path) -> Vec<ctl::Step> {
+    use ctl::{Call, Step};
+    let file = directory.join("settings.json");
+    vec![
+        Step::Run(Call::sign_in().in_directory("private")),
+        Step::Run(Call::new(&["settings", "--json"]).in_directory("private")),
+        Step::Run(Call::new(&["setting", "template", "1", "--json"]).in_directory("private")),
+        Step::Then(Box::new(move |calls| {
+            // These scripts deliver their answer through finish; preserve the
+            // inherited result ending before the native client makes its chat.
+            ctl::setting_change_file(&file, &calls[2], |value| value["flags"]["ended_by"] = "result".into());
+            ctl::settings_change(&calls[1], &file, "native-chat-settings").in_directory("private")
+        })),
+    ]
+}
 fn run_story(
     directory: &Path,
     script: person::Script,
@@ -611,11 +656,10 @@ fn run_story(
         panic!("pipes mode");
     };
     let root = skein_shell::open_root(directory).expect("client's parent root");
-    fds.push(root);
+    let setting_up = peer.is_some();
     let mut world = real::World::new(ChatJudge {
+        phase: if setting_up { ChatPhase::SettingUp } else { ChatPhase::Running },
         ending,
-        ended: false,
-        settled: false,
         forge,
         poll: clock.now().now,
         merged: false,
@@ -624,7 +668,19 @@ fn run_story(
         )),
     });
     world.spawn_with_fds(binary.descriptors(), || Process::Binary(Box::new(binary)));
-    world.spawn_with_fds(fds, || Process::Person(Box::new(person::Person::new(root, input, output, script))));
+    if setting_up {
+        let ctl_root = skein_shell::open_root(directory).expect("ctl's parent root");
+        fds.push(ctl_root);
+        world.spawn_with_fds(vec![root], || {
+            Process::Person(Box::new(person::Person::waiting_for_ctl_with_key(root, script)))
+        });
+        world.spawn_with_fds(fds, || {
+            Process::Calls(Box::new(ctl::Calls::new(ctl_root, native_settings_setup(directory), Some(&streams), None)))
+        });
+    } else {
+        fds.push(root);
+        world.spawn_with_fds(fds, || Process::Person(Box::new(person::Person::new(root, input, output, script))));
+    }
     if let Some(peer) = peer {
         peer.spawn(&mut world);
     }
@@ -640,7 +696,9 @@ fn run_story(
         panic!("native person");
     };
     Seen {
-        signed_in: person.client.as_ref().expect("native client").seen().signed_in,
+        // With settings setup, ctl signed in once and the native client loaded
+        // that same session. Count the actual sign-in on either path.
+        signed_in: person.client.as_ref().expect("native client").seen().signed_in + u32::from(setting_up),
         finished: person.finished,
         stderr: binary.stderr().to_vec(),
     }

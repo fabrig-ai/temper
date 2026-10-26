@@ -244,8 +244,8 @@ impl Judge<'_> {
         }
     }
 }
-// Sign-in/account setup, then the stock inventory, charter read and one settings change.
-const SETUP_CALLS: usize = 7;
+// Sign-in/account setup, inventory, charter/template reads and one settings change.
+const SETUP_CALLS: usize = 8;
 fn sign_in_within() -> Duration {
     jig_protocol_config::profile::profile(jig_protocol_config::profile::Profile::Small).driver.client.sign_in_time
 }
@@ -350,12 +350,21 @@ pub fn run(directory: &Path, forge: &Throwaway, instructions: &str, deadline: Du
                 Step::Run(Call::new(&["accounts", "--json"])),
                 Step::Run(Call::new(&["settings", "--json"])),
                 Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+                Step::Run(Call::new(&["setting", "template", "1", "--json"])),
                 Step::Then(Box::new(move |calls| {
-                    super::ctl::setting_change_file(&file, &calls[5], |value| {
-                        value["turns"] = 5.into();
-                        value["time"] = 240_000_000_000_u64.into();
-                        value["instructions"] = instructions.into();
-                    });
+                    let charter = super::ctl::json(&calls[5]);
+                    let mut value = charter["value"].clone();
+                    value["turns"] = 5.into();
+                    value["time"] = 240_000_000_000_u64.into();
+                    value["instructions"] = instructions.into();
+                    let template = super::ctl::json(&calls[6]);
+                    let mut recipe = template["value"].clone();
+                    recipe["flags"]["ended_by"] = "result".into();
+                    let change = serde_json::json!({"items":[
+                        {"setting":charter["setting"],"set":value},
+                        {"setting":template["setting"],"set":recipe}
+                    ]});
+                    fs::write(&file, serde_json::to_vec(&change).expect("live settings JSON")).expect("settings FILE");
                     super::ctl::settings_change(&calls[4], &file, "live-settings")
                 })),
             ],
