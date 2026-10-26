@@ -25,9 +25,9 @@ fn fixture() -> github::Fixture {
             // Keep the ordinary enforced CI, exact review and up-to-date rule.
             (landing::fixture().configure)(value, agent, address);
             value["engine"]["limits"]["overrides"]["documents.rows"] = 3.into();
-            value["engine"]["templates"][0]["ended_by"] = "requester".into();
+            temper_real_loop_world::fixtures::requester(value);
             // The generic fixture's chat is unlisted; these stories follow it on the person's page.
-            value["engine"]["templates"][0]["listed"] = true.into();
+            temper_real_loop_world::fixtures::listed(value);
         },
         ..github::fixture()
     }

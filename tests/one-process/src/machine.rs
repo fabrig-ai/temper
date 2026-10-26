@@ -98,6 +98,7 @@ impl skein_world::Machine for Machine {
             b"state" => 0,
             b"worker" => 1,
             b"client" => 2,
+            b"/setup" => 3,
             _ => return Err(skein_io::kernel::Error::NotFound),
         };
         Ok(skein_sim::Handle::new(self.0.reopen_root(index).raw()))

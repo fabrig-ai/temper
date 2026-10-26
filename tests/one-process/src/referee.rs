@@ -269,7 +269,13 @@ impl skein_world::Referee<Proc> for Referee {
         }
         let done = other.iter().all(|proc| match proc {
             Proc::Client(person) => person.is_empty(),
-            Proc::Service(_) | Proc::Agent(_) | Proc::Peer(_) | Proc::Git(_) | Proc::Shell(_) | Proc::Forge(_) => true,
+            Proc::Service(_)
+            | Proc::Agent(_)
+            | Proc::Peer(_)
+            | Proc::Git(_)
+            | Proc::Shell(_)
+            | Proc::Forge(_)
+            | Proc::Ctl(_) => true,
         });
         if crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();
@@ -312,11 +318,7 @@ impl skein_world::Referee<Proc> for Referee {
         }
         if self.done.is_some() {
             for proc in other {
-                match proc {
-                    Proc::Peer(peer) => peer.shutdown(),
-                    Proc::Forge(forge) => forge.shutdown(),
-                    Proc::Service(_) | Proc::Agent(_) | Proc::Git(_) | Proc::Shell(_) | Proc::Client(_) => {}
-                }
+                shutdown_peer(proc);
             }
         }
     }
@@ -556,5 +558,13 @@ fn client_receipts(event: &client::Received, store: &Store, party: Option<u64>) 
         client::Received::ApplicationSent { .. } | client::Received::Delivery(_) | client::Received::Read(_) => {
             Vec::new()
         }
+    }
+}
+
+fn shutdown_peer(proc: &mut Proc) {
+    match proc {
+        Proc::Peer(peer) => peer.shutdown(),
+        Proc::Forge(forge) => forge.shutdown(),
+        Proc::Service(_) | Proc::Agent(_) | Proc::Git(_) | Proc::Shell(_) | Proc::Client(_) | Proc::Ctl(_) => {}
     }
 }

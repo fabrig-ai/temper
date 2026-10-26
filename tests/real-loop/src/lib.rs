@@ -203,3 +203,5 @@ pub fn run_github(
     let outcome = world::run_github(&scratch, fixture, scripts, steps);
     checked(Ran { outcome: Outcome::Forge(outcome), scratch })
 }
+
+pub mod settings;
