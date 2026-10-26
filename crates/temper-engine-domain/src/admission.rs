@@ -11,6 +11,7 @@ use skein_lib::Env;
 /// in the root's queue until the journal has room for its decision.
 #[expect(clippy::result_large_err, reason = "the service admission boundary returns the original event by value")]
 pub fn try_step(domain: &mut Domain, env: &Env<Limits>, event: Event) -> Result<(), Event> {
+    domain.changed();
     crate::domain::invalidate_input(domain, &event);
     match event {
         event @ Event::Store(StoreInput::ReadLoaded { .. }) => {
