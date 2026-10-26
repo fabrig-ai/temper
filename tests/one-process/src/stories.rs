@@ -18,7 +18,7 @@ pub(crate) fn set(story: Story) {
 
 pub(crate) fn client_limits() -> temper_client_shell_terminal::limits::Limits {
     let mut limits = fixtures::client_limits();
-    if STORY.with(|slot| matches!(slot.get(), Story::Adopt)) {
+    if STORY.with(|slot| matches!(slot.get(), Story::Adopt | Story::Golden)) {
         // Batch this whole-exchange story without changing the other stories' schedule.
         limits.io.receive = 16_384;
         limits.io.intake = limits.io.receive;
@@ -100,6 +100,12 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
             .expect("parameters")
             .push(serde_json::json!({"name":fixtures::PARAMETER_NAMES[2],"kind":"bytes","value":std::str::from_utf8(fixtures::MERGE_BRANCH).expect("fixture branch")}));
     }
+    if matches!(story, Story::Golden) {
+        delegate["batch"][0]["authority"]["budget"]["spend"] = crate::golden::PRODUCER_ALLOWANCE.into();
+        delegate["batch"][0]["tracked"] = serde_json::json!({"priority":1});
+        let grants = delegate["batch"][0]["authority"]["grants"].as_array_mut().expect("grants");
+        grants.extend([4, 10].map(grant));
+    }
     let delegate = serde_json::to_vec(&delegate).expect("delegate JSON");
     let finish = call(
         b"finish",
@@ -110,7 +116,7 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
     } else {
         vec![call(b"shell", br#"{"command":"echo fixed > conflict.txt"}"#), finish.clone()]
     };
-    fixtures::scripted_provider(Box::new([
+    let mut scripts = vec![
         Script {
             cue: b"@plan".as_slice().into(),
             turns: Box::new([call(b"delegate", &delegate), call(b"wait", b"{}"), call(b"wait", b"{}")]),
@@ -120,7 +126,11 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
             cue: b"Resolve the merge conflict".as_slice().into(),
             turns: Box::new([call(b"shell", br#"{"command":"echo fixed > conflict.txt"}"#), finish]),
         },
-    ]))
+    ];
+    if matches!(story, Story::Golden) {
+        crate::golden::scripts(&mut scripts);
+    }
+    fixtures::scripted_provider(scripts.into_boxed_slice())
 }
 pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
     let config = skein_fake_forge_domain::Config {
@@ -163,8 +173,7 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
         skein_fake_forge_domain::api::Permission::Write,
     );
     let forge = std::rc::Rc::new(std::cell::RefCell::new(skein_fake_peers::forge::Forge::new(domain, config)));
-    let mut transport =
-        temper_fake_git_hosted::Typed::new(forge, &temper_fake_git_hosted::fixtures::table(b"acme/app", None));
+    let mut transport = temper_fake_git_hosted::Typed::new(forge, &forge_table());
     let identity = temper_fake_git_hosted::fixtures::identity();
     transport.authenticate(Some(&(identity.login, identity.token)));
     assert_eq!(
@@ -262,9 +271,12 @@ pub(crate) fn configure(value: &mut serde_json::Value) {
     if STORY.with(|slot| matches!(slot.get(), Story::Chat { .. })) {
         return;
     }
+    if STORY.with(|slot| matches!(slot.get(), Story::Golden)) {
+        value["engine"]["charters"][0]["waiting_ms"] = fixtures::CHAT_WAIT_MS.into();
+    }
     value["workers"][0]["slots"] = fixtures::AGENTS.into();
     value["workers"][0]["limits"]["overrides"]["hub.slots"] = fixtures::AGENTS.into();
-    let grants: Vec<_> = fixtures::GRANT_KINDS
+    let mut grants: Vec<_> = fixtures::GRANT_KINDS
         .into_iter()
         .map(|kind| {
             serde_json::json!({
@@ -272,6 +284,12 @@ pub(crate) fn configure(value: &mut serde_json::Value) {
             })
         })
         .collect();
+    if is_golden() {
+        grants.extend([4, 10].map(|kind| serde_json::json!({
+            "connector":fixtures::FORGE_CONNECTOR,"kind":kind,"pattern":{"segments":["forge","127.0.0.1:3000"],"last":"open","value":"acme"}
+        })));
+        crate::golden::configure(value);
+    }
     let kinds = serde_json::json!([{"kind":"charter","number":fixtures::CHARTER_NUMBER},{"kind":"procedure","number":fixtures::PROCEDURE_CODE}]);
     let mut ceiling = value["engine"]["rules"]["ceiling"].clone();
     ceiling["tools"] = fixtures::PRODUCER_TOOLS.into();
@@ -450,7 +468,7 @@ pub(crate) fn setup_settings(enabled: bool) {
     SETTINGS.with(|slot| slot.set(enabled));
 }
 pub(crate) fn needs_settings() -> bool {
-    uses_stock() && SETTINGS.with(std::cell::Cell::get)
+    (uses_stock() || is_golden()) && SETTINGS.with(std::cell::Cell::get)
 }
 pub(crate) fn settings_file() -> Vec<u8> {
     let document: serde_json::Value = serde_json::from_slice(&fixtures::document()).expect("deployment JSON");
@@ -465,4 +483,11 @@ pub(crate) fn settings_file() -> Vec<u8> {
         crate::settings::item("template", 1, template)
     };
     serde_json::to_vec(&serde_json::json!({"items":[item]})).expect("settings FILE")
+}
+
+pub(crate) fn is_golden() -> bool {
+    STORY.with(|slot| matches!(slot.get(), Story::Golden))
+}
+pub(crate) fn forge_table() -> skein_fake_forge_protocol::Config {
+    if is_golden() { crate::golden::table() } else { temper_fake_git_hosted::fixtures::table(b"acme/app", None) }
 }
