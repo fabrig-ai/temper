@@ -3756,3 +3756,44 @@ fn temper_ctl_decide_settings() {
     assert!(String::from_utf8_lossy(&calls[13].stdout).contains("withdrawn"));
     scratch.remove();
 }
+
+#[test]
+fn temper_ctl_move_to_newest() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_move_to_newest");
+    let steps = vec![
+        Step::Mark("An owner reads the newest settings revision"),
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Mark("Moving the newest revision answers no tasks moved or left behind"),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["move-to-newest", &support::ctl::newest(&calls[1]).to_string(), "--key", "move-newest"])
+        })),
+        Step::Then(Box::new(|calls| {
+            Call::new(&[
+                "move-to-newest",
+                &support::ctl::newest(&calls[1]).to_string(),
+                "--key",
+                "move-newest-json",
+                "--json",
+            ])
+        })),
+        Step::Mark("A revision not held is unknown"),
+        Step::Then(Box::new(|calls| {
+            Call::new(&["move-to-newest", &(support::ctl::newest(&calls[1]) + 5).to_string(), "--key", "move-unknown"])
+        })),
+    ];
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    let calls = &seen.calls;
+    ctl_assert_success(&calls[..4]);
+    let newest = support::ctl::newest(&calls[1]);
+    assert_eq!(calls[2].stdout, format!("moved 0 tasks to revision {newest}\n").as_bytes());
+    assert_eq!(
+        calls[3].stdout.trim_ascii_end(),
+        format!("{{\"newest\":{newest},\"moved\":0,\"stayed\":0}}").as_bytes()
+    );
+    assert_eq!(calls[4].exit, Some(Exit::Code(2)));
+    assert!(calls[4].stdout.is_empty());
+    assert_eq!(calls[4].stderr.as_slice(), b"move-to-newest: No visible object with that name\n");
+    scratch.remove();
+}

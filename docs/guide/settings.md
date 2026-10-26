@@ -126,8 +126,21 @@ list of affected tasks can be bounded rather than naming them all.
 
 `--running stays` or `--running moves` is recorded with the revision;
 a direct change defaults to `stays`. A run already going keeps what
-it was given. A task's next run reads the newest settings, whichever
-choice was recorded.
+it was given. An agent task records the settings revision in which it
+was created, and its later runs read that revision's charter. A new
+delegate records the newest revision, even when its parent uses an
+older one.
+
+The settings inventory shows held revisions and their live holder
+counts. While a revision is held, you can read its whole charter value:
+
+```sh
+temper ctl me setting charter 3 --revision 5 --json
+```
+
+Other setting kinds are read only at the newest revision. A held
+revision leaves memory when its last live holder ends; its revision
+record remains readable only within the history window.
 
 ## Proposals
 
@@ -195,9 +208,16 @@ return it to its default.
 
 ## What it cannot do yet
 
-A running task does not keep an older settings revision for its
-later runs. Whole older charter values and movement of live tasks
-between settings revisions are not built.
+Movement of live tasks between settings revisions is not built yet.
+The owner command `move-to-newest` currently accepts only the newest
+revision and reports zero moved and zero left behind; another revision
+is refused as unknown. Read the newest number before using it, here 7:
+
+```sh
+temper ctl me move-to-newest 7 --key move-newest-7
+```
+
+The recorded `--running` choice does not yet move existing tasks.
 
 Landing rules and the forge's charter selection are not settings
 yet. There is no settings page in the client, nor a page that

@@ -6,6 +6,7 @@ use jig_client::{Answered, Ask, Outcome, contract as c};
 use skein_json::writer::Encoder;
 #[derive(Debug)]
 pub(crate) struct Operation {
+    pub revision: Option<u32>,
     pub exported: Option<(u32, u32)>,
     pub file: Option<Box<[u8]>>,
     pub word: &'static [u8],
@@ -31,6 +32,7 @@ impl Operation {
             Ask::Family { .. } => (b"adopt", None),
             Ask::Jig(ask) => match ask.as_ref() {
                 c::Ask::Propose { action: c::ProposeAction::Settings(_), .. } => (b"propose_settings", None),
+                c::Ask::MoveToNewest(_) => (b"move-to-newest", None),
                 c::Ask::ChangeSettings(_) => (b"change-settings", None),
                 c::Ask::Create { .. } | c::Ask::Propose { action: c::ProposeAction::Batch { .. }, .. } => {
                     (b"chat", None)
@@ -99,6 +101,11 @@ impl Operation {
             },
         };
         Self {
+            revision: if let Ask::Jig(ask) = ask {
+                if let c::Ask::MoveToNewest(value) = ask.as_ref() { Some(value.revision) } else { None }
+            } else {
+                None
+            },
             exported: None,
             file: None,
             word,
@@ -255,6 +262,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         )) => {
             sign_out(operation, *confirmed, failed_hosts, me, limits, out);
         }
+        c::Answer::Done(c::Outcome::MovedToNewest(value)) => moved_text(operation, value, out),
         c::Answer::Done(c::Outcome::SettingsChanged(changed)) => {
             out.put(b"revision ");
             out.number(u64::from(changed.revision));
@@ -262,7 +270,9 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         c::Answer::Done(done) => {
             out.put(b"done: ");
             let task = match done {
-                c::Outcome::SettingsChanged(_) => unreachable!("settings answer handled above"),
+                c::Outcome::SettingsChanged(_) | c::Outcome::MovedToNewest(_) => {
+                    unreachable!("settings answer handled above")
+                }
                 c::Outcome::Made { what: c::Made::Tasks { tasks } } => tasks.get(0).copied(),
                 c::Outcome::Owner(c::OwnerOutcome::Created { first, .. }) => Some(*first),
                 c::Outcome::Owner(_)
@@ -314,6 +324,10 @@ fn encode(
     me: Option<&c::Me>,
     limits: &Limits,
 ) {
+    if !kept && let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::MovedToNewest(value)))) = outcome {
+        moved_json(value, out);
+        return;
+    }
     if !kept && let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::SettingsChanged(changed)))) = outcome {
         out.object_start();
         out.key(b"revision");
@@ -433,6 +447,7 @@ pub(crate) fn retry(call: &crate::jig::call::Call) -> Box<[u8]> {
         15 => &rows::CANCEL,
         24..=30 | 32 | 33 | rows::EXPORT_AT | rows::IMPORT_AT => account_tool(call.tool),
         31 => &rows::AMEND,
+        rows::MOVE_TO_NEWEST_AT => &rows::MOVE_TO_NEWEST,
         _ => unreachable!("act tool"),
     };
     let mut call = call.clone();
@@ -604,7 +619,8 @@ fn proposal_project(ask: &Ask) -> Option<u32> {
     match ask {
         Ask::Jig(ask) => match ask.as_ref() {
             c::Ask::Propose { project, .. } => Some(*project),
-            c::Ask::ChangeSettings(_)
+            c::Ask::MoveToNewest(_)
+            | c::Ask::ChangeSettings(_)
             | c::Ask::Create { .. }
             | c::Ask::Withdraw { .. }
             | c::Ask::Message { .. }
@@ -632,5 +648,29 @@ fn proposal_project(ask: &Ask) -> Option<u32> {
             | c::Ask::SignOut { .. } => None,
         },
         Ask::Family { .. } => None,
+    }
+}
+
+pub(super) fn moved_json(value: &c::OutcomeMovedToNewest, out: &mut Encoder) {
+    out.object_start();
+    out.key(b"newest");
+    out.unsigned(u64::from(value.newest));
+    out.key(b"moved");
+    out.unsigned(u64::from(value.moved));
+    out.key(b"stayed");
+    out.unsigned(u64::from(value.stayed));
+    out.object_end();
+}
+
+fn moved_text(operation: &Operation, value: &c::OutcomeMovedToNewest, out: &mut Text) {
+    out.put(b"moved ");
+    out.number(u64::from(value.moved));
+    out.put(if value.moved == 1 { b" task to revision " } else { b" tasks to revision " });
+    out.number(u64::from(value.newest));
+    if value.stayed != 0 {
+        out.put(b"; ");
+        out.number(u64::from(value.stayed));
+        out.put(if value.stayed == 1 { b" could not, and finishes on " } else { b" could not, and finish on " });
+        out.number(u64::from(operation.revision.expect("move request's revision")));
     }
 }

@@ -233,3 +233,5 @@ proposal tN/K|pN/K
   Read a proposal, with its review for settings
 change N [--project P]
   Read a change's way to landing: its pull request, CI and step
+move-to-newest R --key NAME
+  Move every live agent task on held revision R that may move to the newest

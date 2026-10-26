@@ -1036,8 +1036,13 @@ pub fn settings_change(inventory: &Ended, file: &Path, key: &str) -> Call {
 pub fn settings_proposal(inventory: &Ended, file: &Path, key: &str) -> Call {
     settings_call("propose-settings", inventory, file, key)
 }
+/// The newest revision actually read by the owner.
+#[must_use]
+pub fn newest(inventory: &Ended) -> u64 {
+    json(inventory)["newest"].as_u64().expect("newest settings revision")
+}
 fn settings_call(verb: &str, inventory: &Ended, file: &Path, key: &str) -> Call {
-    let revision = json(inventory)["newest"].as_u64().expect("newest settings revision");
+    let revision = newest(inventory);
     Call::new(&[verb, file.to_str().expect("fixture FILE path"), "--against", &revision.to_string(), "--key", key])
 }
 
