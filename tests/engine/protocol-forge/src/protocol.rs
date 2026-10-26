@@ -497,7 +497,8 @@ impl Protocol {
                     };
                     self.seen.push(top::Request::RestartDone { stage }).expect("world output capacity");
                 }
-                other @ (top::Request::Bound { .. }
+                other @ (top::Request::Settled { .. }
+                | top::Request::Bound { .. }
                 | top::Request::ListDemoActs
                 | top::Request::SendDemoAct(_)
                 | top::Request::DemoStart { .. }
