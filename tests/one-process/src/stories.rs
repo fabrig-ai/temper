@@ -110,27 +110,17 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
     } else {
         vec![call(b"shell", br#"{"command":"echo fixed > conflict.txt"}"#), finish.clone()]
     };
-    jig_channel_world::fixtures::provider(
-        Box::new([
-            Script {
-                cue: b"@plan".as_slice().into(),
-                turns: Box::new([call(b"delegate", &delegate), call(b"wait", b"{}"), call(b"wait", b"{}")]),
-            },
-            Script { cue: b"@edit".as_slice().into(), turns: edits.into_boxed_slice() },
-            Script {
-                cue: b"Resolve the merge conflict".as_slice().into(),
-                turns: Box::new([call(b"shell", br#"{"command":"echo fixed > conflict.txt"}"#), finish]),
-            },
-        ]),
-        skein_llm::Credential {
-            value: jig_channel_world::fixtures::KEY.into(),
-            scheme: skein_llm::Scheme::Key,
-            account_id: Box::new([]),
+    fixtures::scripted_provider(Box::new([
+        Script {
+            cue: b"@plan".as_slice().into(),
+            turns: Box::new([call(b"delegate", &delegate), call(b"wait", b"{}"), call(b"wait", b"{}")]),
         },
-        Duration::ZERO,
-        skein_fake_peers::Transport::Plaintext,
-        skein_fake_llm_protocol::documents::Provider::OpenAi,
-    )
+        Script { cue: b"@edit".as_slice().into(), turns: edits.into_boxed_slice() },
+        Script {
+            cue: b"Resolve the merge conflict".as_slice().into(),
+            turns: Box::new([call(b"shell", br#"{"command":"echo fixed > conflict.txt"}"#), finish]),
+        },
+    ]))
 }
 pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
     let config = skein_fake_forge_domain::Config {

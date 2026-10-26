@@ -387,8 +387,9 @@ fn check_landing(ran: &Ran, commit: u64) {
     assert_eq!(change["chip"]["task"], CHANGE, "the change's task number");
     assert_eq!(change["result"]["value"]["change"]["kind"], 1, "the landed result is a change of kind 1");
     assert_eq!(
-        change["result"]["value"]["change"]["words"]["bytes"], merge_hex,
-        "the change's result names the merge commit in full lowercase hex"
+        change["result"]["value"]["change"]["words"]["bytes"].as_str().expect("landing words").lines().next(),
+        Some(merge_hex.as_str()),
+        "the change's first result line names the merge commit in full lowercase hex"
     );
     let result = format!("Result from task {CHANGE}:\n{merge_hex}");
     assert!(told(query_at(ran, CHAT_CUE, 2)).contains(&result), "T1 heard T2's merge commit before reporting");

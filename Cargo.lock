@@ -2997,6 +2997,7 @@ dependencies = [
  "skein-kv",
  "skein-lib",
  "skein-llm",
+ "skein-llm-world",
  "skein-shell",
  "skein-sim",
  "skein-ui",
