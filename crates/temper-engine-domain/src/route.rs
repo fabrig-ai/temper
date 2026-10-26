@@ -7,6 +7,7 @@ pub(crate) mod forge_route;
 mod held;
 pub(crate) mod host_route;
 pub use host_route::{HostDelivery, HostRequest};
+mod goal;
 pub(crate) mod landing;
 mod now;
 mod panels;

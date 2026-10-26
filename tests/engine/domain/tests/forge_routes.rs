@@ -33,6 +33,9 @@ mod delegates;
 #[path = "forge_routes/change_tool.rs"]
 mod change_tool;
 
+#[path = "forge_routes/goal_tool.rs"]
+mod goal_tool;
+
 #[path = "forge_routes/hints.rs"]
 mod hints;
 

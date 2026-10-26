@@ -136,6 +136,8 @@ pub enum Tool {
     Withdraw { proposal: u64 },
     /// Resolve one held delegate currently waiting at this task.
     DecideEscalation { task: u64, revision: u64, decision: EscalationChoice },
+    /// Expand a goal in the run's words into one ordinary named delegation.
+    Goal { words: Box<[u8]>, advisor: bool },
     /// Expand a project repository change into one ordinary named delegation.
     Change { words: Box<[u8]>, repository: Option<Box<[u8]>> },
     /// Create one authorized batch of direct task delegates.
