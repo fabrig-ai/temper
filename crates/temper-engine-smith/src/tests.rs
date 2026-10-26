@@ -33,7 +33,6 @@ fn assignment() -> engine::Assignment {
         live: jig_domain_host::LiveAsk::NONE,
         charter: 1,
         run: Box::new(engine::RunCharter {
-            revision: 1,
             ended_by: jig_domain_tasks::EndedBy::Result,
             sources: Box::new([Some(1)]),
             accounts: Box::new([jig_domain_authority::AccountBinding { provider: 1, account: 1, source: 1 }]),
@@ -1172,3 +1171,6 @@ fn job_and_attempt_zero_decode_but_run_and_explicit_byte_limit_remain_positive()
         assert!(skein_lib::bytes::find(schema, property).is_some());
     }
 }
+
+#[path = "tests/settings.rs"]
+mod settings;
