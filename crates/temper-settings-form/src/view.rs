@@ -230,6 +230,7 @@ pub struct RevisionHead {
 pub struct RevisionItem {
     pub setting: Setting,
     pub edit: RevisionEdit,
+    pub replaced: RevisionReplaced,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RevisionItemEdit {
@@ -510,4 +511,13 @@ impl Charter {
     pub fn agents(&self) -> bool {
         *self.switches.get(4).expect("charter switch")
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum RevisionReplaced {
+    Value(SettingSet),
+    TooLarge(Size),
+    Default,
+    Removed,
+    NotOffered,
 }

@@ -471,7 +471,11 @@ pub fn form_revision_head(v: &c::RevisionHead) -> n::RevisionHead {
 }
 
 pub fn form_revision_item(v: &c::RevisionItem) -> n::RevisionItem {
-    n::RevisionItem { setting: form_setting(v.setting), edit: form_revision_edit(&v.edit) }
+    n::RevisionItem {
+        setting: form_setting(v.setting),
+        edit: form_revision_edit(&v.edit),
+        replaced: form_revision_replaced(&v.replaced),
+    }
 }
 
 pub fn form_revision_item_edit(v: &c::RevisionItemEdit) -> n::RevisionItemEdit {
@@ -1145,5 +1149,15 @@ pub fn form_read_value(v: &c::ReadValue) -> n::ReadValue {
         | c::ReadValue::Notes(_)
         | c::ReadValue::Deployment(_)
         | c::ReadValue::OwnerDeployment(_) => unreachable!("selected settings read"),
+    }
+}
+
+pub fn form_revision_replaced(v: &c::RevisionReplaced) -> n::RevisionReplaced {
+    match v {
+        c::RevisionReplaced::Value(x) => n::RevisionReplaced::Value(form_setting_set(x)),
+        c::RevisionReplaced::TooLarge(x) => n::RevisionReplaced::TooLarge(form_size(x)),
+        c::RevisionReplaced::Default => n::RevisionReplaced::Default,
+        c::RevisionReplaced::Removed => n::RevisionReplaced::Removed,
+        c::RevisionReplaced::NotOffered => n::RevisionReplaced::NotOffered,
     }
 }

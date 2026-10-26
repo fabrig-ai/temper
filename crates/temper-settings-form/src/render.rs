@@ -307,6 +307,7 @@ fn revision_text(answer: &c::RevisionAnswer, requested: u64, limits: &Limits, ou
                     c::RevisionEdit::Removed => out.put(b"removed\n"),
                     c::RevisionEdit::Reset => out.put(b"reset\n"),
                 }
+                replaced_text(item, document.head.against, limits, out);
             }
         }
         c::RevisionAnswer::Forgotten(f) => {
@@ -317,6 +318,35 @@ fn revision_text(answer: &c::RevisionAnswer, requested: u64, limits: &Limits, ou
             out.put(b"\n");
         }
         c::RevisionAnswer::Unknown => out.put(b"unknown revision\n"),
+    }
+}
+
+fn replaced_text(item: &c::RevisionItem, against: u32, limits: &Limits, out: &mut Text) {
+    out.put(b"    was:");
+    match &item.replaced {
+        c::RevisionReplaced::Value(set) => {
+            out.put(b" ");
+            value_text(&set.value, limits, out);
+        }
+        c::RevisionReplaced::TooLarge(size) => {
+            out.put(b" too large, ");
+            out.number(size.bytes);
+            match item.setting {
+                c::Setting::Charter(_) => out.put(b" bytes; read with settings show "),
+                c::Setting::Template(_) | c::Setting::Policy(_) | c::Setting::Rules => {
+                    out.put(b" bytes; read current value with settings show ");
+                }
+            }
+            setting_text(item.setting, out);
+            if let c::Setting::Charter(_) = item.setting {
+                out.put(b" --revision ");
+                out.number(u64::from(against));
+            }
+            out.put(b"\n");
+        }
+        c::RevisionReplaced::Default => out.put(b" its default\n"),
+        c::RevisionReplaced::Removed => out.put(b" removed\n"),
+        c::RevisionReplaced::NotOffered => out.put(b" not offered\n"),
     }
 }
 
@@ -399,6 +429,8 @@ fn encode_revision(answer: &c::RevisionAnswer, out: &mut Encoder) {
                         out.string(b"reset");
                     }
                 }
+                out.key(b"replaced");
+                encode_replaced(&item.replaced, out);
                 out.object_end();
             }
             out.array_end();
@@ -415,4 +447,31 @@ fn encode_revision(answer: &c::RevisionAnswer, out: &mut Encoder) {
             out.boolean(true);
         }
     }
+}
+
+fn encode_replaced(replaced: &c::RevisionReplaced, out: &mut Encoder) {
+    out.object_start();
+    match replaced {
+        c::RevisionReplaced::Value(set) => {
+            out.key(b"set");
+            encode_value(&set.value, out);
+        }
+        c::RevisionReplaced::TooLarge(size) => {
+            out.key(b"too_large");
+            out.unsigned(size.bytes);
+        }
+        c::RevisionReplaced::Default => {
+            out.key(b"edit");
+            out.string(b"default");
+        }
+        c::RevisionReplaced::Removed => {
+            out.key(b"edit");
+            out.string(b"removed");
+        }
+        c::RevisionReplaced::NotOffered => {
+            out.key(b"edit");
+            out.string(b"not_offered");
+        }
+    }
+    out.object_end();
 }

@@ -355,9 +355,11 @@ fn temper_ctl_change_settings() {
     assert!(!items.is_empty());
     let item = items.iter().find(|item| item["setting"] == whole["setting"]).expect("changed charter item");
     assert_eq!(item["set"], expected);
+    assert_eq!(item["replaced"], serde_json::json!({"edit": "default"}));
     let text = String::from_utf8_lossy(&revision_text.stdout);
     assert!(text.starts_with(&format!("revision {newest}, against revision {previous},")), "{text}");
     assert!(text.contains(instructions), "{text}");
+    assert!(text.contains("    was: its default\n"), "{text}");
     assert_eq!(stale.exit, Some(Exit::Code(2)));
     assert!(stale.stdout.is_empty());
     assert_eq!(
