@@ -62,21 +62,8 @@ impl Text {
         self.add(Decimal::of(value).as_bytes())
     }
 
-    fn hex(&mut self, bytes: &[u8]) -> Result<(), Problem> {
-        const DIGITS: &[u8; 16] = b"0123456789abcdef";
-        let len = bytes.len().checked_mul(2).ok_or(Problem::TooLarge)?;
-        let mut writer = Writer::new(len);
-        for byte in bytes {
-            let high = usize::from(byte.checked_div(16).ok_or(Problem::Range(b"answer"))?);
-            let low = usize::from(byte.checked_rem(16).ok_or(Problem::Range(b"answer"))?);
-            if writer.put(&[*DIGITS.get(high).ok_or(Problem::Range(b"answer"))?]).is_err() {
-                return Err(Problem::TooLarge);
-            }
-            if writer.put(&[*DIGITS.get(low).ok_or(Problem::Range(b"answer"))?]).is_err() {
-                return Err(Problem::TooLarge);
-            }
-        }
-        self.add(&writer.finish())
+    fn commit(&mut self, commit: &api::Commit) -> Result<(), Problem> {
+        self.add(&temper_engine_domain::commit_text(commit))
     }
 
     fn finish(self, error: bool) -> Result<HostAnswer, Problem> {
@@ -397,7 +384,7 @@ fn made_text(text: &mut Text, made: skein_forge_client::Made) -> Result<(), Prob
         | skein_forge_client::Made::Reviewed(number) => text.number(number),
         skein_forge_client::Made::Merged(commit)
         | skein_forge_client::Made::Updated(commit)
-        | skein_forge_client::Made::Branch(commit) => text.hex(&commit),
+        | skein_forge_client::Made::Branch(commit) => text.commit(&commit),
         skein_forge_client::Made::Set => text.add(b"state set"),
     }
 }
@@ -621,9 +608,18 @@ fn forge_answer(text: &mut Text, answer: &api::Answer) -> Result<(), Problem> {
             text.add(b" head ")?;
             text.add(&pull.head)?;
             text.add(b" commit ")?;
-            text.hex(&pull.commit)?;
+            text.commit(&pull.commit)?;
             text.add(b" base ")?;
             text.add(&pull.base)?;
+            text.add(b" state ")?;
+            match pull.state {
+                api::State::Open => text.add(b"open")?,
+                api::State::Closed => text.add(b"closed")?,
+            }
+            if let Some(merge) = &pull.merged {
+                text.add(b" merged commit ")?;
+                text.commit(merge)?;
+            }
             text.add(b" CI ")?;
             ci(text, pull.ci)?;
         }
@@ -664,7 +660,7 @@ fn forge_answer(text: &mut Text, answer: &api::Answer) -> Result<(), Problem> {
                 text.add(b"More remarks available.\n")?;
             }
         }
-        api::Answer::Commit(commit) | api::Answer::Merged(commit) => text.hex(commit)?,
+        api::Answer::Commit(commit) | api::Answer::Merged(commit) => text.commit(commit)?,
         api::Answer::Branches(branches) => {
             for branch in branches {
                 text.add(branch)?;
@@ -683,7 +679,7 @@ fn forge_answer(text: &mut Text, answer: &api::Answer) -> Result<(), Problem> {
             text.add(b"Contains prior head: ")?;
             text.add(if *contains_before { b"yes\n" } else { b"no\n" })?;
             for commit in commits {
-                text.hex(commit)?;
+                text.commit(commit)?;
                 text.add(b"\n")?;
             }
             for file in files {
@@ -719,7 +715,7 @@ fn forge_answer(text: &mut Text, answer: &api::Answer) -> Result<(), Problem> {
         api::Answer::File { head, path, bytes, truncated } => {
             text.add(path)?;
             text.add(b" at ")?;
-            text.hex(head)?;
+            text.commit(head)?;
             text.add(b":\n")?;
             text.add(bytes)?;
             if *truncated {
