@@ -38,8 +38,13 @@ pub(super) fn run(data: &Path, records: &[(u64, Box<[u8]>)], load: bool) -> Resu
         }
     };
     let mut drivers: [Driver; 3] = std::array::from_fn(|_| Driver {
-        io: FileIo::new(limits.files + 4, limits.store.chunk.max(limits.core.resume_bytes), 32, limits.store.deadline)
-            .with_effective_user(skein_shell::effective_user()),
+        io: FileIo::new(
+            limits.files + 4,
+            limits.store.chunk.max(limits.secrets.chunk).max(limits.core.resume_bytes),
+            32,
+            limits.store.deadline,
+        )
+        .with_effective_user(skein_shell::effective_user()),
         events: Queue::with_capacity(ROOM),
         handles: BTreeSet::new(),
     });

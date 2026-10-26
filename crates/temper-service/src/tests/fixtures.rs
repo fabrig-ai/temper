@@ -243,6 +243,7 @@ pub fn memory_store() -> crate::store::Store {
 pub fn records_store() -> crate::store::Store {
     let (root, _, mut profile) = store_limits();
     profile.store.page.rows = 32;
+    profile.secrets.page.rows = 32;
     let models = jig_protocol_config::core(&engine().jig, [7; 16], 7).settings.models;
     memory_store_for(&root, &profile, &models)
 }

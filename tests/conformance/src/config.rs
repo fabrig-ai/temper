@@ -109,7 +109,9 @@ pub fn root(
     limits.journal.deliveries = (limits.tasks.tasks * 4 + 8 + limits.people.pending * limits.people.waiters)
         .max(limits.fleet.workers * jig_domain_fleet::max_out(&limits.fleet) + 1)
         .max(limits.brief.sections)
-        .max(limits.tasks.saved_resources);
+        .max(limits.tasks.saved_resources)
+        + limits.tasks.tasks * 4
+        + 8;
     // Admission reserves three cohorts before routing; retain three more
     // for already committed callbacks while the next cohort runs.
     limits.journal.held = limits.journal.deliveries * 6;

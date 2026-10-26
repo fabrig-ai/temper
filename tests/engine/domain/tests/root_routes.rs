@@ -234,8 +234,8 @@ fn people_roles_config(seed: u64) -> (engine::Config, engine::Limits) {
     limits.people.pending = 4;
     // jig's children name more outputs per route now; the journal takes them.
     limits.journal.writes = 6000;
-    limits.journal.deliveries = 40;
-    limits.journal.held = 120;
+    limits.journal.deliveries = 100;
+    limits.journal.held = 300;
     let mut config = config(seed);
     let mut authority =
         authority::Domain::new(config.core.defaults.rules.clone(), limits.authority).expect("larger policy room");
@@ -1092,7 +1092,7 @@ fn maximum_cold_hello_batch_and_duplicate_losses_fit_one_startup_decision() {
     limits.fleet.program_sources = limits.accounts.program_names;
     // Each worker's fleet outputs take route and delivery room (jig's fleet `max_out`).
     limits.journal.writes += 4 * (4 - 1);
-    limits.journal.deliveries = limits.fleet.workers * fleet::max_out(&limits.fleet) + 1;
+    limits.journal.deliveries = limits.fleet.workers * fleet::max_out(&limits.fleet) + 1 + limits.tasks.tasks * 4 + 8;
     limits.journal.held = 3 * limits.journal.deliveries + 16;
     let mut driver = Driver::configured(Store::new(), [config(97), config(97)], &limits);
     for channel in 1..=4 {
@@ -3093,7 +3093,7 @@ fn coalesced_history_waiters_survive_simultaneous_io_completion_under_full_journ
         + configured.tasks.tasks
         + 6;
     configured.journal.deliveries =
-        configured.tasks.tasks * 4 + 8 + configured.people.pending * configured.people.waiters;
+        (configured.tasks.tasks * 4 + 8) * 2 + configured.people.pending * configured.people.waiters;
     configured.journal.held = configured.journal.deliveries * 3 + 16;
     let mut insufficient = configured;
     insufficient.journal.deliveries -= 1;
@@ -4273,7 +4273,7 @@ fn a_lost_workers_run_is_placed_on_the_other_worker_past_its_grace() {
     bounds.fleet.workers = WORKERS;
     bounds.people.program_hosts = PROGRAM_HOSTS;
     bounds.accounts.program_hosts = PROGRAM_HOSTS;
-    bounds.journal.deliveries = bounds.fleet.workers * fleet::max_out(&bounds.fleet) + 1;
+    bounds.journal.deliveries = bounds.fleet.workers * fleet::max_out(&bounds.fleet) + 1 + bounds.tasks.tasks * 4 + 8;
     bounds.journal.held = 3 * bounds.journal.deliveries + 16;
     let configs = [91, 91].map(|seed| {
         let mut configuration = sharing_config(seed);
@@ -4814,7 +4814,7 @@ fn a_hello_keeps_its_configured_worker_position() {
     limits.fleet.workers = 2;
     limits.people.program_hosts = 3;
     limits.accounts.program_hosts = 3;
-    limits.journal.deliveries = limits.fleet.workers * fleet::max_out(&limits.fleet) + 1;
+    limits.journal.deliveries = limits.fleet.workers * fleet::max_out(&limits.fleet) + 1 + limits.tasks.tasks * 4 + 8;
     limits.journal.held = 3 * limits.journal.deliveries + 16;
     let configs = [config(91), config(91)].map(|mut config| {
         config.core.worker_names = Box::new([b"first-worker".as_slice().into(), b"second-worker".as_slice().into()]);
