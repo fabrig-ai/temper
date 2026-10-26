@@ -6,6 +6,7 @@ use super::{
     connector_answer, core_call, decide_call, emit, escalation, forge, forge_change, forge_issues, people, save,
     save_connector_answer, tasks,
 };
+use crate::commit_text;
 use alloc::boxed::Box;
 use jig_domain_brief as brief;
 use jig_domain_core::connector::{EffectDescription, EffectForm, Recovery};
@@ -120,19 +121,6 @@ fn append_hex(out: &mut List<u8>, bytes: &[u8]) {
     }
 }
 
-fn commit_text(commit: &skein_forge::api::Commit) -> Box<[u8]> {
-    let mut length = 20;
-    for byte in &commit[20..] {
-        if *byte != 0 {
-            length = 32;
-            break;
-        }
-    }
-    let mut out = List::with_capacity(64);
-    append_hex(&mut out, commit.get(..length).expect("a commit has 20 or 32 bytes"));
-    out.into_boxed()
-}
-
 fn landing_words(
     merge: &skein_forge::api::Commit,
     bound: u32,
@@ -215,9 +203,9 @@ fn news_words(news: &forge::News, limit: u32) -> Box<[u8]> {
     match news {
         forge::News::Landing { before, after, .. } => {
             append(&mut out, b"forge landing ");
-            append_hex(&mut out, &before[..4]);
+            append(&mut out, &commit_text(before));
             append(&mut out, b" -> ");
-            append_hex(&mut out, &after[..4]);
+            append(&mut out, &commit_text(after));
         }
         forge::News::Ci { head, status } => {
             append(&mut out, b"forge ci ");
@@ -229,7 +217,7 @@ fn news_words(news: &forge::News, limit: u32) -> Box<[u8]> {
             };
             append(&mut out, label);
             append(&mut out, b" at ");
-            append_hex(&mut out, &head[..4]);
+            append(&mut out, &commit_text(head));
         }
         forge::News::Changed { number } => {
             append(&mut out, b"forge item ");
