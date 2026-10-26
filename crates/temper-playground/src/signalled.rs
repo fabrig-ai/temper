@@ -9,12 +9,19 @@ pub struct Signalled<H> {
     host: H,
     signal: Option<Fd>,
     closing: bool,
+    after_iteration: Option<fn(&mut H)>,
 }
 impl<H> Signalled<H> {
     /// Wraps a host and its optional unused startup signal.
     #[must_use]
     pub fn new(host: H, signal: Option<Fd>) -> Self {
-        Self { host, signal, closing: false }
+        Self { host, signal, closing: false, after_iteration: None }
+    }
+    /// Runs the forge hook that refreshes typed git's issued credentials after each turn.
+    #[must_use]
+    pub fn after_iteration(mut self, after: fn(&mut H)) -> Self {
+        self.after_iteration = Some(after);
+        self
     }
 }
 impl<H> Deref for Signalled<H> {
@@ -50,6 +57,9 @@ impl<H: Host> Host for Signalled<H> {
             self.host.submissions().push(Submit { op: CLOSE, kind: Op::Close { fd } });
         }
         self.host.iterate(now, wall);
+        if let Some(after) = self.after_iteration {
+            after(&mut self.host);
+        }
     }
     fn completions(&mut self) -> &mut Queue<Complete> {
         self.host.completions()
