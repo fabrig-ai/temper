@@ -206,6 +206,12 @@ fn cued(system: &[u8]) -> Option<Agent> {
         Agent::CapOwner,
         Agent::CapSubowner,
         Agent::CapImplementer,
+        Agent::QaDirector,
+        Agent::QaOwner,
+        Agent::QaSubowner,
+        Agent::QaTester,
+        Agent::QaNext,
+        Agent::QaCoder,
     ] {
         for (at, word) in system.windows(agent.cue().len()).enumerate() {
             if word == agent.cue() {
@@ -10901,5 +10907,436 @@ mod waiting_tests {
         );
         assert_eq!(changed.kit.records.len() - before, 1, "one later CI record inserted");
         rejects(&changed, WAITING_LANDING);
+    }
+}
+
+// Act 3, step 6.8 (domain/testing.md, 5.3).
+const QA_MESSAGE: Promise = Promise::Must("A1 messages its requester the exact ten-line M1 report once while live");
+const QA_NEXT: Promise =
+    Promise::Must("A delegates M2's sub-owner on that message, beside live A1 and T, and passes it on");
+const QA_AUTHORITY: Promise = Promise::Must(
+    "a tester without forge effects or delegation is answered beyond authority and writes nothing to the forge",
+);
+const QA_ADD: Promise = Promise::Add("the tester's tests land only through A1's change");
+const QA_ENDED: Promise =
+    Promise::Step("every document ends under its parent, all activity is complete and all inboxes empty");
+
+fn qa_tasks() -> [(Read, u64, u64, bool); 8] {
+    use super::qa::{A, A1, A2, C, CODER, DIRECTOR, REVIEWER, T};
+    [
+        (Read::QaDirectorEnded, DIRECTOR, 0, true),
+        (Read::QaOwnerEnded, A, DIRECTOR, true),
+        (Read::QaSubownerEnded, A1, A, true),
+        (Read::QaTesterEnded, T, A1, true),
+        (Read::QaNextEnded, A2, A, true),
+        (Read::QaChangeEnded, C, A1, false),
+        (Read::QaCoderEnded, CODER, C, true),
+        (Read::QaReviewerEnded, REVIEWER, C, true),
+    ]
+}
+fn qa_named_tools(observed: &Observed, read: Read, name: &str) -> Vec<(u64, Value, String, String)> {
+    waiting_tools(observed, read).into_iter().filter(|(_, _, tool, _)| tool == name).collect()
+}
+fn qa_heard<'a>(observed: &'a Observed, read: Read, from: u64, words: &str) -> Vec<&'a Value> {
+    check_activity(observed, read)
+        .into_iter()
+        .filter(|r| number(r, "/line/heard/from/task") == Some(from) && text(r, "/line/heard/words") == words)
+        .collect()
+}
+fn qa_live(observed: &Observed, read: Read, task: u64) -> bool {
+    let doc = task_document(observed, read);
+    number(doc, "/chip/task") == Some(task)
+        && doc["result"].is_null()
+        && matches!(text(doc, "/chip/phase"), "running" | "idle")
+}
+fn qa_message(observed: &Observed) -> bool {
+    use super::qa::{A, A1, M1_REPORT};
+    let tools = qa_named_tools(observed, Read::QaSubownerEnded, "message");
+    let heard = qa_m1_heard(observed);
+    M1_REPORT.lines().count() == 10
+        && tools.len() == 1
+        && tools.iter().all(|(at, args, _, out)| {
+            args == &serde_json::json!({"target":A,"form":"words","words":M1_REPORT})
+                && out == "Message 1 sent"
+                && check_activity(observed, Read::QaSubownerEnded).iter().all(|r| {
+                    r.pointer("/line/run_ended").is_none() || number(r, "/position").is_some_and(|end| end > *at)
+                })
+        })
+        && heard.len() == 1
+        && text(heard[0], "/line/words/kind") == "words"
+        && plan_deliveries(observed, Agent::QaOwner, M1_REPORT) == 1
+        && qa_live(observed, Read::QaSubownerBefore, A1)
+}
+fn qa_next(observed: &Observed) -> bool {
+    use super::qa::{A1, A2, DIRECTOR, M1_REPORT, NEXT_SPEC, T};
+    let delegates = qa_named_tools(observed, Read::QaOwnerEnded, "delegate");
+    let next: Vec<_> = delegates.iter().filter(|(_, _, _, out)| out == &format!("Delegated tasks: {A2}")).collect();
+    let heard = qa_m1_heard(observed);
+    let relay = qa_named_tools(observed, Read::QaOwnerEnded, "message");
+    let rows = check_activity(observed, Read::QaOwnerEnded);
+    let on_input = next.len() == 1
+        && heard.len() == 1
+        && next.iter().all(|(at, args, _, _)| {
+            args["batch"].as_array().is_some_and(|b| b.len() == 1 && b[0]["spec"]["words"] == NEXT_SPEC)
+                && number(heard[0], "/position").is_some_and(|input| {
+                    input < *at
+                        && rows.iter().all(|r| {
+                            !number(r, "/position").is_some_and(|p| input < p && p < *at)
+                                || r.pointer("/line/run_ended").is_none()
+                        })
+                })
+        });
+    on_input
+        && delegates.len() == 2
+        && relay.len() == 1
+        && relay.iter().all(|(_, args, _, out)| {
+            args["target"] == DIRECTOR
+                && args["form"] == "words"
+                && args["words"] == format!("A1's M1 report:\n{M1_REPORT}")
+                && out == "Message 2 sent"
+        })
+        && plan_deliveries(observed, Agent::QaDirector, M1_REPORT) == 1
+        && batch_writing(observed, Read::QaNextWriting, A2, Read::QaNextEnded)
+        && qa_live(observed, Read::QaSubownerLive, A1)
+        && batch_writing(observed, Read::QaTesterLive, T, Read::QaTesterEnded)
+        && check_activity(observed, Read::QaTesterLive).iter().all(|r| r.pointer("/line/run_ended").is_none())
+        && qa_named_tools(observed, Read::QaNextEnded, "finish").len() == 1
+        && waiting_raw_tools(observed, Read::QaNextEnded).iter().all(|c| text(c, "/tool") == "finish")
+}
+fn qa_authority(observed: &Observed) -> bool {
+    use super::qa::{C, DIRECTOR, STATUS_CONTEXT, T, TESTER_SPEC};
+    use skein_fake_forge_domain::Observation;
+    let t = task_document(observed, Read::QaTesterEnded);
+    let batches = qa_named_tools(observed, Read::QaSubownerEnded, "delegate");
+    let testers: Vec<_> = batches.iter().filter(|(_, _, _, out)| out == &format!("Delegated tasks: {T}")).collect();
+    let denied = plan_tool_results(observed, Agent::QaTester, b"effect_forge");
+    number(t, "/authority/authority/tools") == Some(0)
+        && t.pointer("/authority/authority/grants") == Some(&serde_json::json!([]))
+        && number(t, "/authority/authority/delegation/tasks") == Some(0)
+        && number(t, "/authority/authority/delegation/depth") == Some(0)
+        && testers.len() == 1
+        && testers.iter().all(|(_, args, _, _)| {
+            args["batch"].as_array().is_some_and(|b| {
+                b.len() == 1
+                    && b[0]["spec"]["words"] == TESTER_SPEC
+                    && b[0]["authority"]["tools"] == 0
+                    && b[0]["authority"]["grants"] == serde_json::json!([])
+                    && b[0]["contract"] == serde_json::json!({"kind":"report","words":128})
+            })
+        })
+        && denied.len() == 1
+        && denied.iter().all(|(_, args, out)| {
+            args["repository"] == serde_json::json!({"forge":1,"repository":crate::forge::ID})
+                && args["resource"] == serde_json::json!({"kind":"repository"})
+                && args["write"]["kind"] == "status"
+                && args["write"]["context"] == STATUS_CONTEXT
+                && contains(out, "Authority refused:")
+                && contains(out, "tool family")
+        })
+        && waiting_raw_tools(observed, Read::QaTesterEnded)
+            .iter()
+            .all(|c| matches!(text(c, "/tool"), "effect_forge" | "finish"))
+        && observed.kit.records.iter().all(|r| {
+            if let Observation::Reported { context, .. } = r {
+                context.as_ref() != STATUS_CONTEXT.as_bytes()
+            } else if let Observation::Moved { repository, branch, to,.. } = r {
+                branch.as_ref() == format!("temper/{DIRECTOR}/c{C}").as_bytes()
+                    || (branch.as_ref() == b"main" && observed.kit.records.iter().any(|r| {
+                        matches!(r, Observation::Merged {repository:repo,commit,..} if repo == repository && commit == to)
+                    }))
+            } else if let Observation::Deleted {branch,..} = r {
+                branch.as_ref() == format!("temper/{DIRECTOR}/c{C}").as_bytes()
+            } else if let Observation::Opened { branches: Some(branches), .. } = r {
+                branches.head.as_ref() == format!("temper/{DIRECTOR}/c{C}").as_bytes()
+            } else {
+                true
+            }
+        })
+}
+fn qa_landing(observed: &Observed) -> bool {
+    use super::qa::{A1, C, CHANGE_SPEC, DIRECTOR, QA_TEST, QA_TEST_PATH, T, TEST_REPORT};
+    use skein_fake_forge_domain::{Observation, api};
+    let change = task_document(observed, Read::QaChangeEnded);
+    let delegates = qa_named_tools(observed, Read::QaSubownerEnded, "delegate");
+    let changes: Vec<_> = delegates.iter().filter(|(_, _, _, out)| out == &format!("Delegated tasks: {C}")).collect();
+    let merges: Vec<_> = observed
+        .kit
+        .records
+        .iter()
+        .enumerate()
+        .filter_map(|(at, r)| {
+            let Observation::Merged { repository, number, base, head, commit, .. } = r else { return None };
+            Some((at, repository, number, base, head, commit))
+        })
+        .collect();
+    let writes = qa_named_tools(observed, Read::QaCoderEnded, "write");
+    text(task_document(observed, Read::QaTesterEnded), "/result/value/report/bytes") == TEST_REPORT
+        && TEST_REPORT == format!("{QA_TEST_PATH}\n{QA_TEST}")
+        && waiting_delivery(observed, Read::QaSubownerEnded, T, TEST_REPORT, Agent::QaSubowner)
+        && changes.len() == 1
+        && changes.iter().all(|(at, args, _, _)| {
+            args["batch"].as_array().is_some_and(|b| {
+                b.len() == 1
+                    && waiting_batch_member(&b[0], crate::forge::ID, CHANGE_SPEC, QA_TEST_PATH)
+                    && b[0]["spec"]["inputs"] == serde_json::json!([T])
+            }) && qa_heard(observed, Read::QaSubownerEnded, T, TEST_REPORT)
+                .iter()
+                .any(|r| number(r, "/position").is_some_and(|p| p < *at))
+        })
+        && change.pointer("/spec/specification/inputs") == Some(&serde_json::json!([T]))
+        && number(change, "/requester/task") == Some(A1)
+        && waiting_parameters(change, crate::forge::ID, QA_TEST_PATH, 6)
+        && waiting_delivery(
+            observed,
+            Read::QaSubownerEnded,
+            C,
+            text(change, "/result/value/change/words/bytes"),
+            Agent::QaSubowner,
+        )
+        && writes.len() == 1
+        && writes[0].1 == serde_json::json!({"path":QA_TEST_PATH,"content":QA_TEST})
+        && !(super::fixture_6_8().setup)().tree.iter().any(|f| f.path.as_ref() == QA_TEST_PATH.as_bytes())
+        && observed.kit.main.get(QA_TEST_PATH.as_bytes()).is_some_and(|words| words == QA_TEST.as_bytes())
+        && merges.len() == 1
+        && observed.kit.pulls.len() == 1
+        && observed.kit.pulls == pull_digest(&observed.kit.records)
+        && merges.iter().all(|(at, repo, pull, base, head, commit)| {
+            let green = observed.kit.records[..*at].iter().rev().find_map(|r| {
+                let Observation::Reported { repository, commit, context, state, .. } = r else { return None };
+                (repository == *repo && commit == *head && context.as_ref() == b"check").then_some(*state)
+            }) == Some(api::Check::Passed);
+            let p = &observed.kit.pulls[0];
+            repo.as_ref() == super::KIT.as_bytes()
+                && base.as_ref() == b"main"
+                && green
+                && observed.kit.merged_green
+                && p.branch.as_slice() == format!("temper/{DIRECTOR}/c{C}").as_bytes()
+                && p.number == **pull
+                && p.pushed == Some(**head)
+                && p.opened == **head
+                && p.merged_head == Some(**head)
+                && p.landed == Some(**commit)
+                && p.merged
+                && !p.closed
+                && number(change, "/result/value/change/part/key/number") == Some(**pull)
+                && text(change, "/result/value/change/words/bytes") == direction_commit(**commit)
+                && waiting_review(observed, Read::QaReviewerEnded, C, **head)
+        })
+}
+fn qa_ended(observed: &Observed) -> bool {
+    use super::qa::{A, A1, A2, DIRECTOR_REPORT, NEXT_REPORT, OWNER_REPORT, SUBOWNER_REPORT};
+    let tasks_done = qa_tasks().iter().all(|(read, task, parent, agent)| {
+        let doc = task_document(observed, *read);
+        number(doc, "/chip/task") == Some(*task)
+            && number(doc, "/project") == Some(PROJECT)
+            && number(doc, "/spec_revision/value") == Some(0)
+            && (if *parent == 0 {
+                number(doc, "/requester/person") == Some(1)
+            } else {
+                number(doc, "/requester/task") == Some(*parent)
+            })
+            && (if *agent {
+                number(doc, "/chip/executor/agent/charter") == Some(1)
+            } else {
+                doc.pointer("/chip/executor/procedure") == Some(&serde_json::json!({"connector":1,"kind":2}))
+                    && check_activity(observed, *read)
+                        .iter()
+                        .all(|r| r.pointer("/line/run_began").is_none() && r.pointer("/line/run_ended").is_none())
+            })
+            && text(doc, "/chip/phase") == "ended"
+            && doc.pointer("/result/ending/task/done").is_some_and(Value::is_object)
+            && doc["delegates"] == serde_json::json!([])
+            && waiting_page(observed, *read, *task)
+            && (!agent || batch_done(observed, *read, *task))
+            && document(observed, *read).pointer("/activity/rows").and_then(Value::as_array).is_some_and(|rows| {
+                rows.iter().all(|r| {
+                    r.pointer("/event/owner/source/line/turn").is_none()
+                        || r.pointer("/event/owner/decoded/turn/decoded/cut") == Some(&Value::Bool(false))
+                })
+            })
+    });
+    let reports = [
+        (Read::QaNextEnded, NEXT_REPORT),
+        (Read::QaSubownerEnded, SUBOWNER_REPORT),
+        (Read::QaOwnerEnded, OWNER_REPORT),
+        (Read::QaDirectorEnded, DIRECTOR_REPORT),
+    ]
+    .iter()
+    .all(|(read, report)| text(task_document(observed, *read), "/result/value/report/bytes") == *report);
+    let inbox = document(observed, Read::QaInboxEnded);
+    let after = document(observed, Read::QaInboxAfter);
+    let roots = document(observed, Read::QaRootsEnded);
+    tasks_done
+        && reports
+        && number(task_document(observed, Read::QaOwnerEnded), "/goal") == Some(A)
+        && waiting_delivery(observed, Read::QaOwnerEnded, A1, SUBOWNER_REPORT, Agent::QaOwner)
+        && waiting_delivery(observed, Read::QaOwnerEnded, A2, NEXT_REPORT, Agent::QaOwner)
+        && waiting_delivery(observed, Read::QaDirectorEnded, A, OWNER_REPORT, Agent::QaDirector)
+        && [inbox, after].iter().all(|d| d["needs"]["cut"] == false && d["needs"]["rows"] == serde_json::json!([]))
+        && after["needs"]["after"].is_null()
+        && roots["live"] == serde_json::json!([])
+        && roots["live_after"].is_null()
+        && roots.pointer("/ended/rows/rows") == Some(&serde_json::json!([]))
+        && roots.pointer("/ended/rows/after") == Some(&Value::Null)
+        && roots.pointer("/ended/rows/cut") == Some(&Value::Bool(false))
+}
+
+#[must_use]
+pub fn step_6_8(observed: &Observed) -> Vec<Miss> {
+    let mut misses = Vec::new();
+    for (met, promise, what) in [
+        (
+            qa_message(observed),
+            QA_MESSAGE,
+            "A1's numbered words message and unique delivery must precede any A1 run end",
+        ),
+        (qa_next(observed), QA_NEXT, "A's same-run delegation, report relay and the three live documents must agree"),
+        (
+            qa_authority(observed),
+            QA_AUTHORITY,
+            "T's narrowed authority, one denied status and no forge write/pull/push",
+        ),
+        (
+            qa_landing(observed),
+            QA_ADD,
+            "T's actual result is c's spec input and c's sole green, reviewed landing adds the exact test",
+        ),
+        (
+            qa_ended(observed),
+            QA_ENDED,
+            "the named cast, complete journals, unique results, empty delegates, root list and inbox",
+        ),
+    ] {
+        step_check(&mut misses, "6.8", met, promise, what);
+    }
+    misses
+}
+
+fn qa_m1_heard(observed: &Observed) -> Vec<&Value> {
+    check_activity(observed, Read::QaOwnerEnded)
+        .into_iter()
+        .filter(|r| {
+            number(r, "/line/words/by/task") == Some(super::qa::A1)
+                && number(r, "/line/words/message") == Some(1)
+                && text(r, "/line/words/words") == super::qa::M1_REPORT
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod milestone_tests {
+    use super::{
+        batch_tests::{input, journal, told, tool},
+        *,
+    };
+    use crate::case::qa::A;
+    use crate::case::qa::*;
+    use serde_json::json;
+
+    fn empty() -> Observed {
+        Observed {
+            documents: BTreeMap::new(),
+            observed_at: BTreeMap::new(),
+            told: Vec::new(),
+            commands: Vec::new(),
+            kit: Kit { records: Vec::new(), main: BTreeMap::new(), merged_green: false, pulls: Vec::new() },
+        }
+    }
+    fn committed(task: u64, position: u64, name: &str, args: &Value, output: &str) -> Value {
+        let part = |text: &str| json!({"text":text,"from":0,"bytes_left":0});
+        json!({"event":{"owner":{"source":{"task":task,"position":position,"line":{"turn":{"attempt":1,"turn":position}}},
+        "decoded":{"turn":{"decoded":{"cut":false,"messages":[
+            {"speaker":"assistant","blocks":[{"call":{"number":1,"tool":name,"failed":false,
+                "input":part(&args.to_string()),"outcome":part(output)}}]},
+            {"speaker":"person","blocks":[{"result":{"call":1,"failed":false,"summary":part(output)}}]}
+        ]}}}}}})
+    }
+    fn message() -> Observed {
+        let mut o = empty();
+        o.documents.insert(Read::QaSubownerBefore, json!({"task":{"chip":{"task":A1,"phase":"idle"},"result":null}}));
+        o.documents.insert(
+            Read::QaSubownerEnded,
+            json!({"activity":{"rows":[
+                {"event":{"owner":{"source":{"position":4,"line":{"run_ended":{"end":"finished"}}}}}},
+                committed(A1,3,"message",&json!({"target":A,"form":"words","words":M1_REPORT}),"Message 1 sent")
+            ]}}),
+        );
+        o.documents.insert(
+            Read::QaOwnerEnded,
+            json!({"activity":journal(A,&[
+                json!({"words":{"message":1,"by":{"task":A1},"kind":"words","words":M1_REPORT}})
+            ])}),
+        );
+        o.told.push(told(Agent::QaOwner, &[input(M1_REPORT)]));
+        o
+    }
+    #[test]
+    fn m1_message_requires_exact_words_one_delivery_and_no_prior_run_end() {
+        let o = message();
+        assert!(qa_message(&o));
+        let mut wrong = o.clone();
+        wrong.documents.get_mut(&Read::QaOwnerEnded).expect("owner")["activity"]["rows"][0]["event"]["owner"]["source"]
+            ["line"]["words"]["kind"] = json!("question");
+        assert!(!qa_message(&wrong));
+        let mut ended = o.clone();
+        ended.documents.get_mut(&Read::QaSubownerEnded).expect("subowner")["activity"]["rows"][0]["event"]["owner"]["source"]
+            ["position"] = json!(2);
+        assert!(!qa_message(&ended));
+        let mut twice = o.clone();
+        twice.told.push(told(Agent::QaOwner, &[input("fresh conversation"), input(M1_REPORT)]));
+        assert!(!qa_message(&twice));
+        let mut done = o;
+        done.documents.get_mut(&Read::QaSubownerBefore).expect("live")["task"]["chip"]["phase"] = json!("ended");
+        assert!(!qa_message(&done));
+    }
+    fn authority() -> Observed {
+        let mut o = empty();
+        o.documents.insert(
+            Read::QaTesterEnded,
+            json!({"task":{"authority":{"authority":{
+            "tools":0,"grants":[],"delegation":{"tasks":0,"depth":0}}}},"activity":{"rows":[]}}),
+        );
+        o.documents.insert(
+            Read::QaSubownerEnded,
+            json!({"activity":{"rows":[committed(A1,2,"delegate",&json!({"batch":[{
+            "spec":{"words":TESTER_SPEC},"authority":{"tools":0,"grants":[]},"contract":{"kind":"report","words":128}
+        }]}),"Delegated tasks: 4")]}}),
+        );
+        o.told.push(told(
+            Agent::QaTester,
+            &tool(
+                "status",
+                "effect_forge",
+                &json!({
+                    "repository":{"forge":1,"repository":crate::forge::ID},"resource":{"kind":"repository"},
+                    "write":{"kind":"status","context":STATUS_CONTEXT}
+                }),
+                "Authority refused: tool family; ",
+            ),
+        ));
+        o
+    }
+    #[test]
+    fn tester_authority_and_denial_are_both_required_and_a_forge_write_is_rejected() {
+        let o = authority();
+        assert!(qa_authority(&o));
+        for (field, value) in [("tools", json!(1)), ("grants", json!([{"kind":8}]))] {
+            let mut wide = o.clone();
+            wide.documents.get_mut(&Read::QaTesterEnded).expect("tester")["task"]["authority"]["authority"][field] =
+                value;
+            assert!(!qa_authority(&wide));
+        }
+        let mut no_denial = o.clone();
+        no_denial.told.clear();
+        assert!(!qa_authority(&no_denial));
+        let mut wrote = o;
+        wrote.kit.records.push(skein_fake_forge_domain::Observation::Reported {
+            repository: crate::case::KIT.as_bytes().into(),
+            commit: 1,
+            context: STATUS_CONTEXT.as_bytes().into(),
+            state: skein_fake_forge_domain::api::Check::Passed,
+            by: 1,
+        });
+        assert!(!qa_authority(&wrote));
     }
 }

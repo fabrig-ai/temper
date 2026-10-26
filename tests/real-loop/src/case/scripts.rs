@@ -1677,3 +1677,125 @@ pub fn step_6_6_rules() -> Box<[Box<[Rule]>]> {
         Box::new([]),
     ])
 }
+
+// Act 3, step 6.8 (domain/testing.md, 5.3).
+#[must_use]
+pub fn step_6_8(forge: SocketAddr) -> Box<[Script]> {
+    use super::qa::{
+        A, CHANGE_SPEC, DIRECTOR, DIRECTOR_REPORT, M1_REPORT, NEXT_HOLD, NEXT_REPORT, NEXT_SPEC, OWNER_HOLD,
+        OWNER_REPORT, OWNER_SPEC, QA_TEST, QA_TEST_PATH, STATUS_CONTEXT, SUBOWNER_REPORT, SUBOWNER_SPEC, T,
+        TEST_REPORT, TESTER_HOLD, TESTER_SPEC,
+    };
+    let mut owner = direction_owner(forge, OWNER_SPEC, 80, 0, 6);
+    owner["authority"]["tools"] = 3.into();
+    owner["authority"]["delegation"]["depth"] = 4.into();
+    let mut subowner = direction_owner(forge, SUBOWNER_SPEC, 50, 0, 4);
+    subowner.as_object_mut().expect("subowner").remove("tracked");
+    subowner["authority"]["tools"] = 3.into();
+    let mut tester = batch_member(Agent::QaTester, 10, 0, 0, super::A1_DEADLINE);
+    tester["spec"]["words"] = TESTER_SPEC.into();
+    let mut next = batch_member(Agent::QaNext, 10, 0, 0, super::A1_DEADLINE);
+    next["spec"]["words"] = NEXT_SPEC.into();
+    let mut change = direction_change(forge, CHANGE_SPEC, QA_TEST_PATH, 2);
+    change["spec"]["inputs"] = json!([T]);
+    let on_message = call(b"delegate", &json!({"batch":[next]}));
+    let relay = then_wait(
+        call(b"message", &json!({"target":DIRECTOR,"form":"words","words":format!("A1's M1 report:\n{M1_REPORT}")})),
+        "M2 admitted; M1 QA continues.",
+    );
+    Box::new([
+        Script {
+            cue: Agent::QaDirector.cue().into(),
+            turns: Box::new([
+                then_wait(call(b"delegate", &json!({"batch":[owner]})), "A owns M1 and M2."),
+                report(DIRECTOR_REPORT),
+                wait("A is still working."),
+            ]),
+        },
+        Script {
+            cue: Agent::QaOwner.cue().into(),
+            turns: Box::new([
+                then_wait(call(b"delegate", &json!({"batch":[subowner]})), "A1 owns M1."),
+                batch_held(OWNER_HOLD, on_message),
+                report(OWNER_REPORT),
+                wait("A1's QA continues."),
+                relay,
+            ]),
+        },
+        Script {
+            cue: Agent::QaSubowner.cue().into(),
+            turns: Box::new([
+                call(b"message", &json!({"target":A,"form":"words","words":M1_REPORT})),
+                then_wait(call(b"delegate", &json!({"batch":[tester]})), "T tests M1."),
+                then_wait(call(b"delegate", &json!({"batch":[change]})), "c lands T's test."),
+                report(SUBOWNER_REPORT),
+                wait("QA's change is still working."),
+            ]),
+        },
+        Script {
+            cue: Agent::QaTester.cue().into(),
+            turns: Box::new([
+                batch_held(
+                    TESTER_HOLD,
+                    call(
+                        b"effect_forge",
+                        &json!({
+                            "repository":{"forge":1,"repository":crate::forge::ID},"resource":{"kind":"repository"},
+                            "write":{"kind":"status","commit":super::draft_commit(),"context":STATUS_CONTEXT,"check":"passed"}
+                        }),
+                    ),
+                ),
+                report(TEST_REPORT),
+            ]),
+        },
+        Script { cue: Agent::QaNext.cue().into(), turns: Box::new([batch_held(NEXT_HOLD, report(NEXT_REPORT))]) },
+        Script {
+            cue: Agent::QaCoder.cue().into(),
+            turns: Box::new([finish_change(
+                call(b"write", &json!({"path":QA_TEST_PATH,"content":QA_TEST})),
+                "M1 QA",
+                "Land T's regression test.",
+            )]),
+        },
+        Script {
+            cue: Agent::Review.cue().into(),
+            turns: Box::new([call(
+                b"finish",
+                &json!({"form":"verdict","label":"1","text":REVIEWED,"fields":{},"items":[]}),
+            )]),
+        },
+    ])
+}
+
+#[must_use]
+pub fn step_6_8_rules() -> Box<[Box<[Rule]>]> {
+    use super::qa::{A2, C, M1_REPORT, OWNER_REPORT, SUBOWNER_REPORT, T};
+    let table = |entries: &[(&str, u32)]| -> Box<[Rule]> {
+        entries.iter().map(|(cue, turn)| Rule { cue: cue.as_bytes().into(), turn: *turn }).collect()
+    };
+    Box::new([
+        table(&[(OWNER_REPORT, 1), (CROSSED, 1), (DELEGATED, 2), (BEGIN, 0), ("", 2)]),
+        table(&[
+            (SUBOWNER_REPORT, 2),
+            (CROSSED, 2),
+            (M1_REPORT, 1),
+            (&format!("{DELEGATED}{A2}"), 4),
+            (DELEGATED, 3),
+            (BEGIN, 0),
+            ("", 3),
+        ]),
+        table(&[
+            (&format!("Result from task {C}:"), 3),
+            (CROSSED, 3),
+            (&format!("Result from task {T}:"), 2),
+            ("Message 1 sent", 1),
+            (DELEGATED, 4),
+            (BEGIN, 0),
+            ("", 4),
+        ]),
+        Box::new([]),
+        Box::new([]),
+        Box::new([]),
+        Box::new([]),
+    ])
+}

@@ -176,6 +176,21 @@ pub enum Read {
     CapSubownerFirst,
     CapOwnerFirst,
     CapDirectorFirst,
+    QaSubownerBefore,
+    QaNextWriting,
+    QaSubownerLive,
+    QaTesterLive,
+    QaDirectorEnded,
+    QaOwnerEnded,
+    QaSubownerEnded,
+    QaTesterEnded,
+    QaNextEnded,
+    QaChangeEnded,
+    QaCoderEnded,
+    QaReviewerEnded,
+    QaInboxEnded,
+    QaInboxAfter,
+    QaRootsEnded,
 }
 // Provisioning's key call does not count as a story act. The director's
 // ended wait starts first; its delegates' ended documents are read before
@@ -1311,6 +1326,90 @@ pub fn step_6_6() -> Vec<calls::Step> {
     for task in [DIRECTOR, A1, E1, REPIN, E1_CODER, E1_REVIEWER, REPIN_CODER, REPIN_REVIEWER] {
         steps.push(call(D1, argv!["task", number(task), "--activity", "32", "--json"]));
     }
+    steps.push(call(D1, argv!["tasks", "--project", number(PROJECT), "--ended", "--json"]));
+    steps
+}
+
+// 6.8: release steps do not occupy ctl call positions.
+const QA_SIGN_IN: usize = 0;
+const QA_ADOPT: usize = QA_SIGN_IN + 1;
+const QA_CHAT: usize = QA_ADOPT + 1;
+const QA_DIRECTOR_REPLIED: usize = QA_CHAT + 1;
+const QA_OWNER_REPLIED: usize = QA_DIRECTOR_REPLIED + 1;
+const QA_TESTER_WRITING: usize = QA_OWNER_REPLIED + 1;
+const QA_OWNER_WRITING: usize = QA_TESTER_WRITING + 1;
+const QA_SUBOWNER_BEFORE: usize = QA_OWNER_WRITING + 1;
+const QA_NEXT_CREATED: usize = QA_SUBOWNER_BEFORE + 1;
+const QA_NEXT_WRITING: usize = QA_NEXT_CREATED + 1;
+const QA_SUBOWNER_LIVE: usize = QA_NEXT_WRITING + 1;
+const QA_TESTER_LIVE: usize = QA_SUBOWNER_LIVE + 1;
+const QA_NEXT_ENDED: usize = QA_TESTER_LIVE + 1;
+const QA_DIRECTOR_ENDED: usize = QA_NEXT_ENDED + 1;
+const QA_FINAL: usize = QA_DIRECTOR_ENDED + 1;
+const QA_INBOX: usize = QA_FINAL + 8;
+const QA_INBOX_AFTER: usize = QA_INBOX + 1;
+const QA_ROOTS: usize = QA_INBOX_AFTER + 1;
+pub const READS_6_8: &[(Read, usize)] = &[
+    (Read::QaSubownerBefore, QA_SUBOWNER_BEFORE),
+    (Read::QaNextWriting, QA_NEXT_WRITING),
+    (Read::QaSubownerLive, QA_SUBOWNER_LIVE),
+    (Read::QaTesterLive, QA_TESTER_LIVE),
+    (Read::QaDirectorEnded, QA_FINAL),
+    (Read::QaOwnerEnded, QA_FINAL + 1),
+    (Read::QaSubownerEnded, QA_FINAL + 2),
+    (Read::QaTesterEnded, QA_FINAL + 3),
+    (Read::QaNextEnded, QA_FINAL + 4),
+    (Read::QaChangeEnded, QA_FINAL + 5),
+    (Read::QaCoderEnded, QA_FINAL + 6),
+    (Read::QaReviewerEnded, QA_FINAL + 7),
+    (Read::QaInboxEnded, QA_INBOX),
+    (Read::QaInboxAfter, QA_INBOX_AFTER),
+    (Read::QaRootsEnded, QA_ROOTS),
+];
+
+#[must_use]
+pub fn step_6_8() -> Vec<calls::Step> {
+    use super::qa::{A, A1, A2, C, CODER, DIRECTOR, NEXT_HOLD, OWNER_HOLD, PERSON, REVIEWER, T, TESTER_HOLD};
+    let mut steps = vec![
+        sign_in(D1),
+        call(
+            D1,
+            argv![
+                "adopt",
+                "--project",
+                number(PROJECT),
+                "--owner",
+                "acme",
+                "--name",
+                "app",
+                "--landing",
+                "main",
+                "--no-home",
+                "--key",
+                "qa-adopt"
+            ],
+        ),
+        call(D1, argv!["chat", "--project", number(PROJECT), "--key", "qa", PERSON]),
+        call(D1, argv!["wait", "task", number(DIRECTOR), "--until", "replied"]),
+        call(D1, argv!["wait", "task", number(A1), "--until", "replied"]),
+        calls::until(D1, argv!["task", number(T), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        calls::until(D1, argv!["task", number(A), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        call(D1, argv!["task", number(A1), "--activity", "32", "--json"]),
+        calls::release_hold(OWNER_HOLD),
+        call(D1, argv!["wait", "task", number(A), "--until", "phase:idle"]),
+        calls::until(D1, argv!["task", number(A2), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        call(D1, argv!["task", number(A1), "--activity", "32", "--json"]),
+        call(D1, argv!["task", number(T), "--activity", "32", "--json"]),
+        calls::release_hold(NEXT_HOLD),
+        call(D1, argv!["wait", "task", number(A2), "--until", "ended"]),
+        calls::release_hold(TESTER_HOLD),
+        call(D1, argv!["wait", "task", number(DIRECTOR), "--until", "ended"]),
+    ];
+    for task in [DIRECTOR, A, A1, T, A2, C, CODER, REVIEWER] {
+        steps.push(call(D1, argv!["task", number(task), "--activity", "32", "--json"]));
+    }
+    steps.push(call(D1, argv!["inbox", "--after", "00", "--json"]));
+    steps.push(call(D1, argv!["inbox", "--after", calls::inbox_after(QA_INBOX), "--json"]));
     steps.push(call(D1, argv!["tasks", "--project", number(PROJECT), "--ended", "--json"]));
     steps
 }

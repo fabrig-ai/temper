@@ -150,6 +150,12 @@ pub enum Agent {
     CapOwner,
     CapSubowner,
     CapImplementer,
+    QaDirector,
+    QaOwner,
+    QaSubowner,
+    QaTester,
+    QaNext,
+    QaCoder,
 }
 impl Agent {
     #[must_use]
@@ -219,6 +225,12 @@ impl Agent {
             Self::CapOwner => b"@case_cap_owner",
             Self::CapSubowner => b"@case_cap_subowner",
             Self::CapImplementer => b"@case_cap_implementer",
+            Self::QaDirector => b"@case_qa_director",
+            Self::QaOwner => b"@case_qa_owner",
+            Self::QaSubowner => b"@case_qa_subowner",
+            Self::QaTester => b"@case_qa_tester",
+            Self::QaNext => b"@case_qa_next",
+            Self::QaCoder => b"@case_qa_coder",
         }
     }
 }
@@ -1278,5 +1290,86 @@ pub fn fixture_6_6() -> forge::Fixture {
             }
             landing::admit(value);
         },
+    }
+}
+
+// Act 3, step 6.8 (domain/testing.md, 5.3).
+pub mod qa {
+    pub const DIRECTOR: u64 = 1;
+    pub const A: u64 = 2;
+    pub const A1: u64 = 3;
+    pub const T: u64 = 4;
+    pub const A2: u64 = 5;
+    pub const C: u64 = 6;
+    pub const CODER: u64 = 7;
+    pub const REVIEWER: u64 = 8;
+    pub const PERSON: &str = "@case_qa_director Delegate A for M1's end, M2's start and QA; report when done.";
+    pub const OWNER_SPEC: &str =
+        "@case_qa_owner Delegate A1, start M2's sub-owner on its M1 message, and pass that report to the director.";
+    pub const SUBOWNER_SPEC: &str = "@case_qa_subowner Message A at M1's end, stay for QA, delegate a tester then land its test through your change.";
+    pub const NEXT_SPEC: &str = "@case_qa_next M2's sub-owner: report admission only; do no work here.";
+    pub const TESTER_SPEC: &str =
+        "@case_qa_tester Report one adversarial test as path and content; try one forge status without authority.";
+    pub const CHANGE_SPEC: &str = "@case_qa_coder Land the test at tests/qa.rs from T's result, your named spec input.";
+    pub const M1_REPORT: &str = "M1 ended.\nDesign followed.\nChanges landed.\nCI green.\nReviews passed.\nSTATUS updated.\nNo blocker.\nM2 may start.\nQA follows.\nA1 stays live.";
+    pub const QA_TEST_PATH: &str = "tests/qa.rs";
+    pub const QA_TEST: &str = "#[test]\nfn regression() { assert_eq!(2 + 2, 4); }\n";
+    pub const TEST_REPORT: &str = "tests/qa.rs\n#[test]\nfn regression() { assert_eq!(2 + 2, 4); }\n";
+    pub const SUBOWNER_REPORT: &str = "A1 closes M1 after its change lands T's test.";
+    pub const NEXT_REPORT: &str = "A2 admitted for M2; no work performed.";
+    pub const OWNER_REPORT: &str = "A reports M1 closed after QA and M2's sub-owner admitted.";
+    pub const DIRECTOR_REPORT: &str = "The director reports M1's end, M2's start and QA's test landed through A1.";
+    pub const OWNER_HOLD: &[u8] = b"case-6-8-owner";
+    pub const TESTER_HOLD: &[u8] = b"case-6-8-tester";
+    pub const NEXT_HOLD: &[u8] = b"case-6-8-next";
+    pub const STATUS_CONTEXT: &str = "tester-without-authority";
+}
+
+#[must_use]
+pub fn fixture_6_8() -> forge::Fixture {
+    forge::Fixture {
+        setup: || {
+            let mut setup = (fixture().setup)();
+            setup.checks.cue =
+                Some(api::Cue::File { path: qa::QA_TEST_PATH.as_bytes().into(), green: qa::QA_TEST.as_bytes().into() });
+            setup
+        },
+        configure: |value, agent, forge| {
+            (fixture().configure)(value, agent, forge);
+            // c adds its input result to three ancestors and its own result;
+            // coder/reviewer have four ancestors and a result. Small's four
+            // store joins cannot read these; use standard's sixteen, as 6.2.
+            value["engine"]["limits"]["profile"] = "standard".into();
+            value["workers"][0]["limits"]["profile"] = "standard".into();
+            value["application"]["limits"]["overrides"]["forge.named_calls"] = 128.into();
+            value["application"]["limits"]["overrides"]["root.journal.deliveries"] = 1097.into();
+            value["application"]["limits"]["overrides"]["root.journal.held"] = 3291.into();
+            // Role -> director -> A -> A1 -> c -> coder: the role's
+            // depth six yields the director's five, as 6.2's fixture does.
+            value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 6.into();
+            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+                project["policy"]["ceiling"]["delegation"]["depth"] = 6.into();
+                project["policy"]["roles"][0]["authority"]["delegation"]["depth"] = 6.into();
+            }
+            // Eight tasks, with A adding one ancestor over 6.6's smoke.
+            // Keep each batch singleton and serialize each response's calls.
+            value["engine"]["limits"]["overrides"]["documents.lines"] = 4.into();
+            agent["profile"]["declared"]["calls_per_response"] = 1.into();
+            value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 1.into();
+            value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();
+            value["workers"][0]["limits"]["overrides"]["hub.accounts"] = 2.into();
+            // A reserves A1 (50), A2 (10), and its run's ten; the director
+            // reserves A (80) and its run. All remain below the base ceiling 100.
+            value["engine"]["templates"][0]["budget"] = json!({"as_allowed":100});
+            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+                project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 100.into();
+            }
+            let story_ms = crate::PATIENCE.as_nanos().div_euclid(1_000_000);
+            for name in ["poll_ms", "poll_max_ms"] {
+                value["application"]["limits"]["overrides"][format!("forge.client.{name}")] = (story_ms + 1).into();
+            }
+            landing::admit(value);
+        },
+        ..fixture()
     }
 }
