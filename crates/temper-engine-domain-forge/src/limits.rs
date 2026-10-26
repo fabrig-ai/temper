@@ -163,6 +163,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<skein_lib::Token, crate::capabilities::Pending>::worst_case(l.repositories)?)?
         .checked_add(u64::from(l.repositories).checked_mul(u64::from(l.client.answer_bytes))?)?
         .checked_add(Map::<u64, crate::domain::Outboxed>::worst_case(l.entries)?)?
+        .checked_add(u64::from(l.entries).checked_mul(u64::try_from(size_of::<crate::Unfinished>()).ok()?)?)?
         .checked_add(Map::<crate::NamedCall, crate::CallPayload>::worst_case(l.named_calls)?)?
         .checked_add(u64::from(l.named_calls).checked_mul(u64::from(l.client.answer_bytes))?)?
         .checked_add(Map::<u64, crate::ProposedEffect>::worst_case(l.tasks)?)?
