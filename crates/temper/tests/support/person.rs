@@ -23,7 +23,7 @@ impl Face for ReplyFace<'_> {
         if find.target == Find::named(skein_ui::Role::Heading { level: 3 }, b"replied").target
             && let [scope @ Target::Role { role: skein_ui::Role::Item, .. }] = find.within.as_ref()
         {
-            let item = Find { within: Box::new([]), target: scope.clone() };
+            let item = Find { within: Box::new([]), target: scope.clone(), nth: 0 };
             for node in self.tree.nodes().iter().filter(|node| node.role == skein_ui::Role::Item) {
                 let Some(mut face) = TreeFace::subtree(self.tree, node.id) else { continue };
                 // A descendant Item matching the title does not qualify this root.
