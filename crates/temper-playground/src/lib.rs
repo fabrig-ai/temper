@@ -8,10 +8,33 @@ mod shell;
 mod signalled;
 mod startup;
 mod story;
+mod visitor;
 mod world;
 
 pub use story::{A, STORIES, Story};
+pub use visitor::{
+    VISITOR_ANSWER, VISITOR_COOKIE, VISITOR_COOKIES, VISITOR_DUTIES, VISITOR_EXCHANGES, VISITOR_PIECE, VISITOR_REQUEST,
+};
 pub use world::world;
+
+/// The world's process types and its visitor (playground.md, 3).
+pub struct Playground;
+impl skein_playground::slices::Composition for Playground {
+    type Process = Process;
+    type Machine = Machine;
+
+    fn visitor(process: &mut Process) -> Option<&mut skein_playground::visitor::Visitor> {
+        match process {
+            Process::Visitor(visitor) => Some(visitor),
+            Process::Service(_)
+            | Process::Agent(_)
+            | Process::Git(_)
+            | Process::Shell(_)
+            | Process::Llm(_)
+            | Process::Forge(_) => None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests;
@@ -38,6 +61,7 @@ pub const SH: &[u8] = b"/bin/sh";
 
 /// A process of the playground's world (playground.md, 4).
 pub enum Process {
+    Visitor(Box<skein_playground::visitor::Visitor>),
     Service(Box<Service>),
     Agent(Box<Signalled<PipeHost<smith_agent_shell::Agent>>>),
     Git(Box<temper_fake_git_hosted::Git<temper_fake_git_hosted::Typed>>),
@@ -48,6 +72,7 @@ pub enum Process {
 impl Process {
     fn host(&self) -> &dyn Host {
         match self {
+            Self::Visitor(h) => h.as_ref(),
             Self::Service(h) => h.as_ref(),
             Self::Agent(h) => h.as_ref(),
             Self::Git(h) => h.as_ref(),
@@ -58,6 +83,7 @@ impl Process {
     }
     fn host_mut(&mut self) -> &mut dyn Host {
         match self {
+            Self::Visitor(h) => h.as_mut(),
             Self::Service(h) => h.as_mut(),
             Self::Agent(h) => h.as_mut(),
             Self::Git(h) => h.as_mut(),

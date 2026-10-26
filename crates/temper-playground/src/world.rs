@@ -117,6 +117,7 @@ pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Ma
     );
     world.spawn(|| Process::Llm(Box::new(Signalled::new(model(), None))));
     world.spawn(|| Process::Forge(Box::new(Signalled::new(peer, None).after_iteration(identities))));
+    world.spawn(|| Process::Visitor(Box::new(crate::visitor::visitor(story))));
     world
 }
 fn service(inherited: &Inherited) -> Process {
