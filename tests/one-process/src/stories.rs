@@ -273,25 +273,13 @@ pub(crate) fn configure(value: &mut serde_json::Value) {
         })
         .collect();
     let kinds = serde_json::json!([{"kind":"charter","number":fixtures::CHARTER_NUMBER},{"kind":"procedure","number":fixtures::PROCEDURE_CODE}]);
-    let mut ceiling = value["engine"]["rules"]["ceiling"].clone();
+    let mut ceiling = value["engine"]["projects"][0]["policy"]["ceiling"].clone();
     ceiling["tools"] = fixtures::PRODUCER_TOOLS.into();
     ceiling["grants"] = grants.into();
     ceiling["delegation"]["kinds"] = kinds;
     ceiling["delegation"]["depth"] = fixtures::AUTHORITY_DEPTH.into();
-    value["engine"]["rules"]["ceiling"] = ceiling.clone();
-    value["engine"]["rules"]["implies"] = fixtures::IMPLICATIONS
-        .into_iter()
-        .map(|implies| serde_json::json!({"connector":fixtures::FORGE_CONNECTOR,"kind":fixtures::GRANT_KINDS[0],"implies":implies}))
-        .collect::<Vec<_>>()
-        .into();
-    value["engine"]["rules"]["maximum_run_spend"] = fixtures::PRODUCER_SPEND.into();
     value["engine"]["projects"][0]["policy"]["ceiling"] = ceiling.clone();
     value["engine"]["projects"][0]["policy"]["roles"][0]["authority"] = ceiling;
-    for name in ["inspect", "modify", "shell"] {
-        value["engine"]["charters"][0][name] = true.into();
-    }
-    value["engine"]["charters"][0]["turns"] = fixtures::CHARTER_TURNS.into();
-    value["engine"]["charters"][0]["spend"] = fixtures::PRODUCER_SPEND.into();
     for (name, count) in fixtures::ENGINE_OVERRIDES {
         value["engine"]["limits"]["overrides"][name] = count.into();
     }
@@ -440,7 +428,7 @@ impl skein_shell::Host for Shell {
     }
 }
 
-/// Wider repository stories retain the document path pending deployment-only bootstrap.
+/// Chat-only seeds fit the stock ceiling; repository seeds use wider own defaults.
 pub(crate) fn uses_stock() -> bool {
     STORY.with(|slot| matches!(slot.get(), Story::Chat { .. } | Story::ChatReadThenWait { .. }))
 }
@@ -450,19 +438,56 @@ pub(crate) fn setup_settings(enabled: bool) {
     SETTINGS.with(|slot| slot.set(enabled));
 }
 pub(crate) fn needs_settings() -> bool {
-    uses_stock() && SETTINGS.with(std::cell::Cell::get)
+    SETTINGS.with(std::cell::Cell::get)
 }
 pub(crate) fn settings_file() -> Vec<u8> {
     let document: serde_json::Value = serde_json::from_slice(&fixtures::document()).expect("deployment JSON");
     let stock = crate::settings::stock(&document);
-    let item = if STORY.with(|slot| matches!(slot.get(), Story::ChatReadThenWait { .. })) {
-        let mut charter = stock["charter"].clone();
-        charter["waiting"] = (u64::from(fixtures::CHAT_WAIT_MS) * 1_000_000).into();
-        crate::settings::item("charter", 1, charter)
+    // This world's restart smoke changes its 1 s Own wait to 500 ms through ctl.
+    let mut charter = stock["charter"].clone();
+    charter["waiting"] = (u64::from(fixtures::CHAT_WAIT_MS) * 1_000_000 / 2).into();
+    serde_json::to_vec(&serde_json::json!({"items":[crate::settings::item("charter", 1, charter)]}))
+        .expect("settings FILE")
+}
+
+/// The service's typed defaults, starting from the binary's stock and the document's models.
+pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Given {
+    let engine = crate::settings::configuration(document);
+    let mut defaults = temper_service::stock::defaults(&engine.llm);
+    let read_wait = STORY.with(|slot| matches!(slot.get(), Story::ChatReadThenWait { .. }));
+    if read_wait {
+        defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(u64::from(fixtures::CHAT_WAIT_MS));
     } else {
-        let mut template = stock["template"].clone();
-        template["flags"]["ended_by"] = "result".into();
-        crate::settings::item("template", 1, template)
-    };
-    serde_json::to_vec(&serde_json::json!({"items":[item]})).expect("settings FILE")
+        defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Result;
+    }
+    if !uses_stock() {
+        let seed = engine.projects.first().expect("repository seed");
+        defaults.rules.ceiling = seed.policy.ceiling.clone();
+        defaults.rules.maximum_run_spend = fixtures::PRODUCER_SPEND;
+        let pairs = fixtures::IMPLICATIONS.map(|implies| jig_domain_authority::Implication {
+            connector: fixtures::FORGE_CONNECTOR,
+            kind: fixtures::GRANT_KINDS[0],
+            implies,
+        });
+        defaults.rules.implies = jig_domain_authority::Implies::new(Box::new(pairs), 2).expect("fixture implications");
+        defaults
+            .policies
+            .insert(
+                1,
+                jig_domain_core::ConfiguredPolicy {
+                    policy: seed.policy.clone(),
+                    permissions: seed.roles.clone(),
+                    templates: seed.templates.clone(),
+                },
+            )
+            .expect("existing policy slot");
+        let charter = &mut defaults.charters[0];
+        charter.policy.inspect = true;
+        charter.policy.modify = true;
+        charter.policy.shell = true;
+        charter.policy.agents = false;
+        charter.policy.turns = fixtures::CHARTER_TURNS;
+        charter.spend = fixtures::PRODUCER_SPEND;
+    }
+    temper_service::stock::Given::Own(Box::new(defaults))
 }

@@ -123,6 +123,7 @@ fn fixture() -> crate::forge::Fixture {
         configure: |value, agent, address| {
             crate::landing::configure(value, agent, address);
             value["application"]["webhooks"] = Value::Null;
+            crate::fixtures::own_policy(value);
             value["application"]["forges"][0]["webhook_secret"] = Value::Null;
             value["engine"]["rules"]["ceiling"]["grants"] = json!([]);
             value["engine"]["projects"][0]["policy"]["ceiling"]["grants"] = json!([]);
