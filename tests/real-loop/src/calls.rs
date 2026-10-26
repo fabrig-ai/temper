@@ -113,13 +113,38 @@ pub enum Step {
 #[derive(Clone, Copy, Debug)]
 pub enum ReadCondition {
     Contains(&'static [u8]),
-    LimitedTask { task: u64, account: u64, source: u64 },
+    LimitedTask {
+        task: u64,
+        account: u64,
+        source: u64,
+    },
+    /// An open writing attempt on this task. Unmet documents resume a native
+    /// subject watch through `watch_after`, rather than repeating a task read.
+    WritingTask {
+        task: u64,
+    },
 }
 impl ReadCondition {
     #[must_use]
     pub fn matches(self, stdout: &[u8]) -> bool {
         match self {
             Self::Contains(bytes) => occurrences(stdout, bytes) != 0,
+            Self::WritingTask { task } => {
+                let Ok(value) = serde_json::from_slice::<serde_json::Value>(stdout) else { return false };
+                let value = value.get("task").filter(|task| task.is_object()).unwrap_or(&value);
+                value.pointer("/chip/task").and_then(serde_json::Value::as_u64) == Some(task)
+                    && value.pointer("/chip/phase").and_then(serde_json::Value::as_str) == Some("running")
+                    && value.pointer("/chip/details/owner/details/observation/work").and_then(serde_json::Value::as_str)
+                        == Some("writing")
+                    && value
+                        .pointer("/chip/details/owner/phase/active/running/attempt")
+                        .and_then(serde_json::Value::as_u64)
+                        .is_some_and(|attempt| {
+                            value.pointer("/chip/details/owner/details/attempt").and_then(serde_json::Value::as_u64)
+                                == Some(attempt)
+                        })
+                    && value.get("result").is_some_and(serde_json::Value::is_null)
+            }
             Self::LimitedTask { task, account, source } => {
                 let Ok(value) = serde_json::from_slice::<serde_json::Value>(stdout) else { return false };
                 value.pointer("/chip/task").and_then(serde_json::Value::as_u64) == Some(task)
@@ -132,6 +157,23 @@ impl ReadCondition {
                         .is_some()
             }
         }
+    }
+    /// Continue from the exact subject version just observed. `wait --since`
+    /// checks the current version on subscription, including changes between
+    /// commands, then sleeps on the service watch until that version changes.
+    #[must_use]
+    pub fn watch_after(self, stdout: &[u8]) -> Option<Vec<Box<[u8]>>> {
+        let Self::WritingTask { task } = self else { return None };
+        let value: serde_json::Value = serde_json::from_slice(stdout).expect("watched task JSON");
+        let value = value.get("task").filter(|task| task.is_object()).unwrap_or(&value);
+        assert_eq!(value.pointer("/chip/task").and_then(serde_json::Value::as_u64), Some(task));
+        let digest = value["digest"].as_str().expect("watched task digest");
+        Some(
+            ["wait", "task", &task.to_string(), "--since", digest, "--json"]
+                .into_iter()
+                .map(|word| word.as_bytes().into())
+                .collect(),
+        )
     }
 }
 /// Follow the installation or manifest link printed by a completed ctl call.
@@ -219,6 +261,16 @@ pub fn until(at: Dir, argv: Argv, holds: &'static [u8], early: &'static [u8]) ->
 #[must_use]
 pub fn until_matching(at: Dir, argv: Argv, holds: ReadCondition, early: &'static [u8]) -> Step {
     Step::Until { at, argv, holds, early }
+}
+/// Wait for the named task's own writing attempt, retaining its genuine JSON.
+#[must_use]
+pub fn writing_task(at: Dir, task: u64) -> Step {
+    until_matching(
+        at,
+        crate::argv!["wait", "task", number(task), "--until", "phase:running", "--json"],
+        ReadCondition::WritingTask { task },
+        b"\"task\"",
+    )
 }
 #[must_use]
 pub fn start(at: Dir, argv: Argv) -> Step {
@@ -524,6 +576,13 @@ impl Caller {
             | Step::Contended { .. } => panic!("command step"),
         };
         let mut words = vec![fixtures::directory(&self.scratch, *at).as_os_str().as_bytes().into()];
+        if let Step::Until { holds, .. } = &self.steps[self.next]
+            && let Some(index) = self.current
+            && let Some(watch) = holds.watch_after(&self.calls[index].stdout)
+        {
+            words.extend(watch);
+            return words;
+        }
         for arg in &argv.0 {
             words.push(match arg {
                 Arg::Lit(word) => word.as_bytes().into(),
@@ -1036,6 +1095,73 @@ mod read_condition_tests {
     use super::*;
     use serde_json::json;
 
+    fn writing() -> serde_json::Value {
+        json!({"chip":{"task":8,"phase":"running","details":{"owner":{
+            "phase":{"active":{"running":{"attempt":9}}},
+            "details":{"attempt":9,"observation":{"work":"writing"}}}}},
+            "result":null,"digest":"0123456789abcdef",
+            "lineage_chips":[{"task":4,"phase":"running","details":{"owner":{
+                "details":{"observation":{"work":"writing"}}}}}]})
+    }
+    #[test]
+    fn writing_task_rejects_an_ancestors_work_and_requires_its_own_open_attempt() {
+        let condition = ReadCondition::WritingTask { task: 8 };
+        let good = writing();
+        for value in [&good, &json!({"task":good,"met":true})] {
+            assert!(condition.matches(&serde_json::to_vec(value).expect("JSON")));
+        }
+        // Captured failure: reviewer 8 was due, with no attempt/observation;
+        // the old substring accepted B's writing chip in lineage_chips.
+        let mut due = good.clone();
+        due["chip"]["phase"] = json!("due");
+        due["chip"]["details"]["owner"]["phase"]["active"] = json!("due");
+        due["chip"]["details"]["owner"]["details"]["attempt"] = json!(null);
+        due["chip"]["details"]["owner"]["details"]["observation"] = json!(null);
+        let bytes = serde_json::to_vec(&due).expect("JSON");
+        assert!(ReadCondition::Contains(b"\"work\":\"writing\"").matches(&bytes));
+        assert!(!condition.matches(&bytes));
+        for (path, wrong) in [
+            ("/chip/task", json!(4)),
+            ("/chip/phase", json!("claimed")),
+            ("/chip/details/owner/details/observation/work", json!("preparing")),
+            ("/chip/details/owner/details/attempt", json!(10)),
+            ("/chip/details/owner/phase/active/running/attempt", json!(null)),
+            ("/result", json!({"ended":"finished"})),
+        ] {
+            let mut value = good.clone();
+            *value.pointer_mut(path).expect("field") = wrong;
+            assert!(!condition.matches(&serde_json::to_vec(&value).expect("JSON")), "{path}");
+        }
+    }
+    #[test]
+    fn writing_task_watches_each_observed_digest_and_retains_the_matching_response() {
+        let mut caller = Caller::new(vec![writing_task(D1, 8)], PathBuf::new(), Fd::new(0));
+        let words = |caller: &Caller| caller.words().into_iter().skip(1).collect::<Vec<_>>();
+        let expected = |args: &[&str]| args.iter().map(|a| a.as_bytes().into()).collect::<Vec<Box<[u8]>>>();
+        assert_eq!(words(&caller), expected(&["wait", "task", "8", "--until", "phase:running", "--json"]));
+        caller.advance(Time::from_nanos(1));
+        for (when, digest) in [(2, "0123456789abcdef"), (4, "fedcba9876543210")] {
+            let mut value = writing();
+            value["digest"] = json!(digest);
+            value["chip"]["details"]["owner"]["details"]["observation"]["work"] = json!("preparing");
+            caller.running[0] = None;
+            caller.calls[0].exit = Some(Exit::Code(0));
+            caller.calls[0].stdout = serde_json::to_vec(&json!({"task":value,"met":true})).expect("JSON");
+            assert_eq!(words(&caller), expected(&["wait", "task", "8", "--since", digest, "--json"]));
+            caller.advance(Time::from_nanos(when));
+            assert_eq!(caller.next, 0);
+        }
+        let stdout = serde_json::to_vec(&json!({"task":writing(),"met":true})).expect("JSON");
+        caller.running[0] = None;
+        caller.calls[0].exit = Some(Exit::Code(0));
+        caller.calls[0].stdout = stdout.clone();
+        caller.calls[0].observed_at = Some(Wall::from_nanos(6));
+        caller.advance(Time::from_nanos(7));
+        assert_eq!(caller.next, 1);
+        assert_eq!(caller.calls.len(), 1);
+        assert_eq!(caller.calls[0].stdout, stdout);
+        assert_eq!(caller.calls[0].observed_at, Some(Wall::from_nanos(6)));
+    }
     fn limited() -> Vec<u8> {
         serde_json::to_vec_pretty(&json!({"chip":{"task":crate::case::A,"phase":"due"},
             "run_wait":{"account":{"account":crate::case::FIRST_ACCOUNT,"source":0,

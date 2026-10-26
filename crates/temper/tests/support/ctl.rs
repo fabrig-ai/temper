@@ -581,13 +581,19 @@ impl Calls {
                 self.ends.push(ended);
                 self.observed_at.push(Some(self.wall));
             }
-            Action::Until(call, condition) => {
+            Action::Until(mut call, condition) => {
                 if condition.matches(&ended.stdout) {
                     self.ends.push(ended);
                     self.observed_at.push(Some(self.wall));
                 } else {
+                    let next = if let Some(watch) = condition.watch_after(&ended.stdout) {
+                        call.arguments = watch;
+                        now
+                    } else {
+                        now.saturating_add(PACE)
+                    };
                     self.action = Some(Action::Until(call, condition));
-                    self.retry = Some(now.saturating_add(PACE));
+                    self.retry = Some(next);
                 }
             }
             Action::Visit => panic!("a visit has no child"),
@@ -1064,6 +1070,26 @@ mod read_condition_tests {
         child.ended.exit = Some(Exit::Code(0));
         child.ended.stdout = stdout.to_vec();
         child
+    }
+    #[test]
+    fn process_writing_task_resubscribes_from_the_subject_digest_without_a_poll_delay() {
+        let mut calls = Calls::new(Fd::new(0), Vec::new(), None, None);
+        calls.action = Some(Action::Until(
+            Call::new(&["wait", "task", "8", "--until", "phase:running", "--json"]),
+            ReadCondition::WritingTask { task: 8 },
+        ));
+        calls.child = Some(completed(
+            br#"{"task":{"chip":{"task":8,"phase":"running"},"digest":"0123456789abcdef"},"met":true}"#,
+        ));
+        let now = Time::from_nanos(1);
+        calls.finish(now);
+        assert!(calls.ends.is_empty());
+        assert_eq!(calls.retry, Some(now));
+        let Some(Action::Until(call, _)) = &calls.action else { panic!("task watch") };
+        assert_eq!(
+            call.arguments,
+            Call::new(&["wait", "task", "8", "--since", "0123456789abcdef", "--json"]).arguments
+        );
     }
     #[test]
     fn process_until_retains_matching_bytes_and_their_completion_wall() {

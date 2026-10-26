@@ -584,11 +584,11 @@ pub fn step_5_2() -> Vec<calls::Step> {
         call(D1, argv!["wait", "task", number(BOWNER), "--until", "replied"]),
         // The documents establish the case's in-flight work before Stop.
         // The fake Pieces keep each run writing until its release below.
-        calls::until(D1, argv!["task", number(IMPLEMENTER), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        calls::writing_task(D1, IMPLEMENTER),
         // h1 exists after B's reply; its review is created asynchronously.
         // Wait for its live delegate card before reading the review's document.
         calls::until(D1, argv!["task", number(H1), "--json"], Agent::Review.cue(), b"\"task\""),
-        calls::until(D1, argv!["task", number(H1_REVIEWER), "--json"], b"\"work\":\"writing\"", b"\"task\""),
+        calls::writing_task(D1, H1_REVIEWER),
         calls::until(
             D1,
             argv!["task", number(HELPER), "--activity", "32", "--json"],
