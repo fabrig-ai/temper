@@ -58,6 +58,7 @@ fn initialize(directory: &Path) -> (SocketAddr, SocketAddr, SocketAddr) {
         .output()
         .expect("initialize the shipped registration");
     assert!(initialized.status.success(), "{}", String::from_utf8_lossy(&initialized.stderr));
+    support::own_listener_files(directory);
     let path = directory.join("temper.json");
     let mut value = read(&path);
     let taken: Vec<SocketAddr> = [
@@ -65,6 +66,7 @@ fn initialize(directory: &Path) -> (SocketAddr, SocketAddr, SocketAddr) {
         "/application/webhooks/listener/socket",
         "/application/demo/llm/listen/socket",
         "/application/setup/0/mode/fake/listen/socket",
+        "/application/setup/1/mode/owned/listen/socket",
     ]
     .iter()
     .map(|pointer| {

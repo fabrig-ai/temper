@@ -185,7 +185,7 @@ fn a_box_on_a_fresh_init_reaches_serves_link_with_forge_3_dormant() {
         .expect("init command");
     assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
     // init's ports are fixed when free; tests run side by side, so each listener moves to a drawn one.
-    move_listeners(scratch.path());
+    support::own_listener_files(scratch.path());
     let ended =
         support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, skein_lib::Duration::from_secs(6));
     let diagnostic = String::from_utf8_lossy(&ended.stderr);
@@ -199,50 +199,6 @@ fn a_box_on_a_fresh_init_reaches_serves_link_with_forge_3_dormant() {
         assert!(!scratch.path().join(absent).exists(), "{absent}: {diagnostic}");
     }
     scratch.remove();
-}
-/// Move each listener a fresh init names to a drawn loopback port, in both of its documents.
-fn move_listeners(directory: &std::path::Path) {
-    let read = |name: &str| -> serde_json::Value {
-        serde_json::from_slice(&std::fs::read(directory.join(name)).expect("init's document")).expect("JSON")
-    };
-    let mut deployment = read("temper.json");
-    let application = &deployment["application"];
-    let named = [
-        &application["clients"]["listener"]["socket"],
-        &application["forges"][0]["api"]["socket"],
-        &application["forges"][2]["api"]["socket"],
-        &application["demo"]["llm"]["listen"]["socket"],
-        &application["webhooks"]["listener"]["socket"],
-    ]
-    .map(|socket| socket.as_str().expect("init's socket").to_owned());
-    let drawn = support::free_addresses::<5>(&[]);
-    let moves: Vec<_> = named.into_iter().zip(drawn.map(|address| address.to_string())).collect();
-    let mut agent = read("agent.json");
-    for (name, value) in [("temper.json", &mut deployment), ("agent.json", &mut agent)] {
-        replace_sockets(value, &moves);
-        support::write_private(&directory.join(name), &serde_json::to_vec(value).expect("JSON"));
-    }
-}
-
-/// Each string naming a moved socket, alone or as an `http://` URL, names its new one.
-fn replace_sockets(value: &mut serde_json::Value, moves: &[(String, String)]) {
-    match value {
-        serde_json::Value::String(text) => {
-            for (before, after) in moves {
-                if text == before {
-                    text.clone_from(after);
-                } else if text.strip_prefix("http://") == Some(before.as_str()) {
-                    *text = format!("http://{after}");
-                } else {
-                    continue;
-                }
-                break;
-            }
-        }
-        serde_json::Value::Array(items) => items.iter_mut().for_each(|item| replace_sockets(item, moves)),
-        serde_json::Value::Object(items) => items.values_mut().for_each(|item| replace_sockets(item, moves)),
-        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
-    }
 }
 #[test]
 fn a_fake_entrys_handover_is_read_privately_and_checked_before_serve_starts() {

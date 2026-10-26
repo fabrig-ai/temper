@@ -3301,6 +3301,7 @@ fn a_default_box_with_a_sign_in_registration_starts_without_dns() {
     }
     let initialized = init.output().expect("initialize the default document without resolving names");
     assert!(initialized.status.success(), "{}", String::from_utf8_lossy(&initialized.stderr));
+    support::own_listener_files(&paths[0]);
     // Smith also resolves the agent's endpoints at preflight. Supply local endpoint
     // facts there so this regression reaches accounts_runtime; forge defaults stay intact.
     let agent_path = paths[0].join("agent.json");
@@ -3561,6 +3562,7 @@ fn a_story_box_and_its_steps_die_when_the_test_process_is_killed() {
         .output()
         .expect("init");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    support::own_listener_files(scratch.path());
     let child = Command::new(std::env::current_exe().expect("test binary"))
         .args(["--exact", "a_story_box_and_its_steps_die_when_the_test_process_is_killed", "--nocapture"])
         .env(CHILD, scratch.path())

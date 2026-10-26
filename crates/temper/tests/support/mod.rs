@@ -56,6 +56,65 @@ pub fn free_addresses<const N: usize>(taken: &[SocketAddr]) -> [SocketAddr; N] {
     addresses
 }
 
+/// Gives every listener an init-made document names a kernel-drawn
+/// address, so that no story depends on init's preferred ports.
+pub fn own_listeners(document: &mut serde_json::Value) {
+    fn replace(value: &mut serde_json::Value, moves: &[(String, String)]) {
+        match value {
+            serde_json::Value::String(text) => {
+                for (before, after) in moves {
+                    if text == before {
+                        text.clone_from(after);
+                    } else if text.strip_prefix("http://") == Some(before.as_str()) {
+                        *text = format!("http://{after}");
+                    } else {
+                        continue;
+                    }
+                    break;
+                }
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(|item| replace(item, moves)),
+            serde_json::Value::Object(items) => items.values_mut().for_each(|item| replace(item, moves)),
+            serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+        }
+    }
+
+    let old = [
+        "/application/clients/listener/socket",
+        "/application/setup/1/mode/owned/listen/socket",
+        "/application/setup/0/mode/fake/listen/socket",
+        "/application/demo/llm/listen/socket",
+        "/application/webhooks/listener/socket",
+    ]
+    .map(|pointer| {
+        document.pointer(pointer).expect("init listener").as_str().expect("socket string").parse().expect("socket")
+    });
+    let drawn = free_addresses::<5>(&old);
+    let moves: Vec<_> =
+        old.into_iter().zip(drawn).map(|(before, after)| (before.to_string(), after.to_string())).collect();
+    replace(document, &moves);
+}
+
+/// Move an initialized deployment's listeners and its agent's matching demo endpoint together.
+pub fn own_listener_files(directory: &Path) {
+    let path = directory.join("temper.json");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("init document")).expect("JSON");
+    own_listeners(&mut document);
+    let agent_path = directory.join("agent.json");
+    let mut agent: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&agent_path).expect("init agent")).expect("JSON");
+    let demo = agent["endpoints"]
+        .as_array_mut()
+        .expect("agent endpoints")
+        .iter_mut()
+        .find(|endpoint| endpoint["number"] == 3)
+        .expect("init demo endpoint");
+    demo["address"] = document["application"]["demo"]["llm"]["listen"]["socket"].clone();
+    write_private(&path, &serde_json::to_vec(&document).expect("deployment JSON"));
+    write_private(&agent_path, &serde_json::to_vec(&agent).expect("agent JSON"));
+}
+
 pub enum Forge<'a> {
     Unreached,
     Throwaway { forgejo: &'a Path, api: std::net::SocketAddr, git: String },

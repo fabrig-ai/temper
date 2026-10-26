@@ -29,7 +29,7 @@ pub(super) static ACCESS: LazyLock<Box<[u8]>> = LazyLock::new(|| {
 const SECOND_ANSWER: &[u8] = b"More words from the plan.";
 const CLOSING_ANSWER: &[u8] = b"The plan chat is now closed.";
 
-/// Initialize the shipped document once; only the issuer addresses and LLM endpoint move.
+/// Initialize the shipped document once; give its listeners and fake peers private addresses.
 #[must_use]
 pub fn configuration(directory: &Path) -> oauth::Peer {
     let initialized = std::process::Command::new(skein_scratch::paths::binary("temper"))
@@ -47,10 +47,21 @@ pub fn configuration(directory: &Path) -> oauth::Peer {
 /// Point an initialized config directory at the issuer and the existing TLS fake.
 #[must_use]
 pub fn patch_configuration(directory: &Path) -> oauth::Peer {
-    let [address] = super::free_addresses(&[]);
-    let origin = format!("http://{address}");
+    super::own_listener_files(directory);
     let path = directory.join("temper.json");
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("init document")).expect("JSON");
+    let taken = [
+        "/application/clients/listener/socket",
+        "/application/webhooks/listener/socket",
+        "/application/demo/llm/listen/socket",
+        "/application/setup/0/mode/fake/listen/socket",
+        "/application/setup/1/mode/owned/listen/socket",
+    ]
+    .map(|pointer| {
+        value.pointer(pointer).expect("init listener").as_str().expect("socket string").parse().expect("socket")
+    });
+    let [address] = super::free_addresses(&taken);
+    let origin = format!("http://{address}");
     let provider = &mut value["engine"]["llm"]["providers"][0];
     assert_eq!(provider["number"], 1);
     let sign_in = &mut provider["sources"]["sign_in"];

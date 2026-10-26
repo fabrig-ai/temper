@@ -34,6 +34,7 @@ fn write(directory: &Path, value: &Value) {
 }
 
 fn boxed(directory: &Path) {
+    support::own_listener_files(directory);
     let ended = support::boxed::run(directory, None, support::boxed::Plan::Stop, WITHIN);
     assert!(support::printed_link(&ended.stdout).is_some(), "box reaches sign-in");
     assert_eq!(ended.exit, Some(Exit::Code(0)), "box stops cleanly");
@@ -156,6 +157,7 @@ fn a_box_on_inits_document_leaves_the_asked_forge_and_cache_absent() {
         .output()
         .expect("init");
     assert!(output.status.success());
+    support::own_listener_files(&config);
     let command = skein_world::end_to_end::Command {
         program: skein_scratch::paths::binary("temper"),
         arguments: std::iter::once("box".into()).chain(flags).collect(),
@@ -270,6 +272,7 @@ fn qa_box_drain_does_not_report_its_own_pipe_as_closed() {
     // protocol/forge.md 2.8: pipe failure is named once; serve's own end is the box's to make.
     let scratch = support::Scratch::startup("qa-m2-box-drain");
     init(scratch.path());
+    support::own_listener_files(scratch.path());
     let ended = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, WITHIN);
     assert!(support::printed_link(&ended.stdout).is_some(), "box reaches sign-in");
     assert_eq!(ended.exit, Some(Exit::Code(0)));

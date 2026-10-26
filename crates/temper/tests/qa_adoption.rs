@@ -198,6 +198,7 @@ fn a_running_box_adopts_every_seeded_repository_before_connecting() {
     let output =
         Command::new(skein_scratch::paths::binary("temper")).arg("init").args(&flags).output().expect("run init");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    support::own_listener_files(scratch.path());
     let path = scratch.path().join("temper.json");
     let mut document: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("document")).expect("JSON");
     document["application"]["setup"][0]["mode"]["fake"]["repositories"]
@@ -251,6 +252,7 @@ fn old_form_one_sided_hook_wiring_is_refused_before_a_fake_connects() {
             .output()
             .expect("run init");
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        support::own_listener_files(scratch.path());
         let path = scratch.path().join("temper.json");
         let mut document: serde_json::Value =
             serde_json::from_slice(&fs::read(&path).expect("document")).expect("JSON");
@@ -286,6 +288,7 @@ fn the_default_box_prepares_adopts_and_hands_over_the_link() {
         .output()
         .expect("run init");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    support::own_listener_files(scratch.path());
     let outcome = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, Duration::from_secs(10));
     assert_eq!(outcome.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&outcome.stderr));
     assert!(support::printed_link(&outcome.stdout).is_some(), "seed must finish and hand over the sign-in link");

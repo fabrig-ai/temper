@@ -111,6 +111,7 @@ impl Fixture {
         let cache = scratch.path().join("shared cache");
         let initialized = command(scratch.path(), "init", flags(&config, &data, &cache));
         drained(initialized.exit, initialized.left.as_deref(), &initialized.stderr);
+        support::own_listener_files(&config);
 
         // The ordinary gate embeds no bundle. Supply only the bounded file shape,
         // not WASM or a policy detector: runtime does not inspect navigation policy.
@@ -119,24 +120,6 @@ impl Fixture {
         let mut document = read_json(&config.join("temper.json"));
         document["application"]["clients"]["bundle"] = json!(browser);
 
-        // Init releases its preferred ports. Give the two live listeners fresh
-        // addresses, using the public harness, so independent QA cases do not
-        // compete for the preferred clients/webhooks ports.
-        let old: [SocketAddr; 2] = [
-            document["application"]["clients"]["listener"]["socket"]
-                .as_str()
-                .expect("clients socket")
-                .parse()
-                .expect("clients address"),
-            document["application"]["webhooks"]["listener"]["socket"]
-                .as_str()
-                .expect("webhooks socket")
-                .parse()
-                .expect("webhooks address"),
-        ];
-        let fresh = support::free_addresses::<2>(&old);
-        document["application"]["clients"]["listener"] = json!({"socket": fresh[0].to_string()});
-        document["application"]["webhooks"]["listener"] = json!({"socket": fresh[1].to_string()});
         write_json(&config.join("temper.json"), &document);
 
         // Synthetic source records and program-login state must neither change
