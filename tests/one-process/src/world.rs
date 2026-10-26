@@ -48,6 +48,7 @@ pub(crate) enum Phase {
     SignIn,
     Drain,
     Restart,
+    Open,
     Fault { cut: skein_world::Cut, before: u32 },
 }
 #[derive(Default)]
@@ -68,6 +69,7 @@ pub struct Pushed {
     pub parents: Vec<u64>,
 }
 thread_local! {
+    static STARTUP: RefCell<Option<crate::deployment::Startup>> = const { RefCell::new(None) };
     static STORE: RefCell<Option<Rc<RefCell<Store>>>> = const { RefCell::new(None) };
     static PROGRESS: RefCell<Progress> = RefCell::new(Progress::default());
 }
@@ -87,6 +89,7 @@ pub(crate) struct ServiceHost {
     pub(crate) submitted: u32,
     pub(crate) before_iteration: u32,
     codec: jig_protocol_store::codec::Limits,
+    names: Box<[jig_domain_core::settings::ModelName]>,
     families: temper_protocol_store::Bounds,
 }
 impl Host for ServiceHost {
@@ -102,7 +105,7 @@ impl Host for ServiceHost {
         self.commits.extend(self.store.borrow_mut().observe(
             &mut self.capture.events,
             &self.codec,
-            fixtures::store_names(),
+            &self.names,
             &self.families,
         ));
         temper_service::iterate(&mut self.service, now, wall);
@@ -563,23 +566,32 @@ fn person_failed(step: u32, why: &skein_fake_person::Why, wire: &referee::client
 fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
     let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
-    let mut service = temper_service::startup::startup_with(
-        &fixtures::document(),
-        // Simulated fixture paths stay relative to their inherited roots.
-        &jig_protocol_config::Directories::working(),
-        &fixtures::files(),
-        &fixtures::agent(),
-        &fixtures::seeds(),
-        None,
-        temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() },
-        fixtures::forges(),
-        &stories::given(&serde_json::from_slice(&fixtures::document()).expect("deployment JSON")),
-    )
-    .expect("one-process startup");
+    let mut service = STARTUP.with(|slot| {
+        let slot = slot.borrow();
+        let startup = slot.as_ref().expect("phase startup inputs");
+        temper_service::startup::startup_with(
+            &startup.configuration,
+            // Simulated fixture paths stay relative to their inherited roots.
+            &jig_protocol_config::Directories::working(),
+            &startup.files(),
+            &fixtures::agent(),
+            &fixtures::seeds(),
+            None,
+            temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() },
+            fixtures::forges(),
+            &stories::given(&serde_json::from_slice(&startup.configuration).expect("deployment JSON")),
+        )
+        .expect("one-process startup")
+    });
     service.adopt_store(root, 1000).expect("deployment store");
     service.adopt_signals(inherited.signal).expect("service signal");
     let mut capture = Capture::default();
     capture.root(root);
+    let (codec, names) = STARTUP.with(|slot| {
+        let slot = slot.borrow();
+        let bytes = &slot.as_ref().expect("phase inputs").configuration;
+        (fixtures::codec_for(bytes), fixtures::names_for(bytes))
+    });
     let families =
         temper_protocol_store::bounds(&temper_service::limits::profile(temper_service::limits::Profile::Small).forge)
             .expect("application codec bounds");
@@ -595,7 +607,8 @@ fn service(inherited: &Inherited) -> Proc {
         cut_before: None,
         submitted: 0,
         before_iteration: 0,
-        codec: fixtures::codec(),
+        codec,
+        names,
         families,
     }))
 }
@@ -901,13 +914,29 @@ fn run_phase(
     settings: Settings,
     scenario: Story,
     phase: Phase,
-    mut disk: skein_fake_machine::Machine,
+    disk: skein_fake_machine::Machine,
     previous: Store,
     run: Rc<RefCell<referee::Run>>,
 ) -> (Outcome, skein_fake_machine::Machine, Store) {
+    let (outcome, disk, store, _) = run_phase_with_startup(settings, scenario, phase, disk, previous, run, None);
+    (outcome, disk, store)
+}
+fn run_phase_with_startup(
+    settings: Settings,
+    scenario: Story,
+    phase: Phase,
+    mut disk: skein_fake_machine::Machine,
+    previous: Store,
+    run: Rc<RefCell<referee::Run>>,
+    startup: Option<crate::deployment::Startup>,
+) -> (Outcome, skein_fake_machine::Machine, Store, crate::deployment::Startup) {
     stories::set(scenario);
     stories::setup_settings(phase);
-    write_settings(&mut disk);
+    let startup = startup.unwrap_or_else(crate::deployment::Startup::fixture);
+    STARTUP.with(|slot| *slot.borrow_mut() = Some(startup));
+    if !matches!(phase, Phase::Open) {
+        write_settings(&mut disk);
+    }
     PROGRESS.with(|progress| *progress.borrow_mut() = Progress::default());
     let client = matches!(phase, Phase::Story | Phase::SignIn | Phase::Drain).then(|| disk.reopen_root(2));
     let store = Rc::new(RefCell::new(previous));
@@ -942,7 +971,7 @@ fn run_phase(
             world.spawn_restartable(vec![], fake_forge);
             world.cut(0, before, cut);
         }
-        Phase::Restart => {
+        Phase::Restart | Phase::Open => {
             world.spawn(|| Proc::Peer(Box::new(SignalHost::new(stories::provider(scenario), None))));
             world.spawn(|| Proc::Forge(Box::new(SignalHost::new(peer(), None))));
         }
@@ -958,20 +987,7 @@ fn run_phase(
     if matches!(scenario, Story::Adopt) {
         observed_forge.borrow().require_hooks(stories::ADOPT_HOOKS);
     }
-    let signed_in = outcome
-        .procs
-        .iter()
-        .filter_map(|proc| match proc {
-            Proc::Client(person) => Some(person.signed_in),
-            Proc::Service(_)
-            | Proc::Agent(_)
-            | Proc::Git(_)
-            | Proc::Shell(_)
-            | Proc::Peer(_)
-            | Proc::Forge(_)
-            | Proc::Ctl(_) => None,
-        })
-        .sum();
+    let signed_in = signed_in(&outcome.procs);
     let chats_answered = if matches!(scenario, Story::ChatReadThenWait { .. }) {
         u32::from(referee::chat_waited(&store.borrow()))
     } else {
@@ -1004,8 +1020,66 @@ fn run_phase(
         adoption_pending_at_restart: run.borrow().pending_adoption,
     };
     drop(run);
-    (result, std::mem::replace(&mut outcome.machine.0, machine::fresh()), records)
+    let startup = STARTUP.with(|slot| slot.borrow_mut().take().expect("phase inputs"));
+    (result, std::mem::replace(&mut outcome.machine.0, machine::fresh()), records, startup)
 }
 
 #[cfg(test)]
 mod tests;
+
+/// A stopped one-process story, retaining its machine and exact startup inputs.
+pub struct World {
+    disk: skein_fake_machine::Machine,
+    startup: crate::deployment::Startup,
+    pub outcome: Outcome,
+}
+impl World {
+    #[must_use]
+    pub fn run(settings: Settings, story: Story) -> Self {
+        let (outcome, disk, _, startup) = run_phase_with_startup(
+            settings,
+            story,
+            Phase::Story,
+            machine::fresh(),
+            Store::new(),
+            Rc::new(RefCell::new(referee::Run::default())),
+            None,
+        );
+        Self { disk, startup, outcome }
+    }
+    /// Capture all entries after every process has drained (protocol/README.md, 9).
+    #[must_use]
+    pub fn deployment(&mut self) -> crate::deployment::Deployment {
+        crate::deployment::Deployment::capture(&mut self.disk, &self.startup)
+    }
+}
+/// Lay a kept deployment on a fresh machine and run startup, then drain.
+#[must_use]
+pub fn over(deployment: &crate::deployment::Deployment, settings: Settings) -> World {
+    let (outcome, disk, _, startup) = run_phase_with_startup(
+        settings,
+        Story::Chat { words: b"Hello" },
+        Phase::Open,
+        deployment.machine(),
+        Store::over(deployment),
+        Rc::new(RefCell::new(referee::Run::default())),
+        Some(deployment.startup()),
+    );
+    World { disk, startup, outcome }
+}
+
+fn signed_in(procs: &[Proc]) -> u32 {
+    procs
+        .iter()
+        .filter_map(|proc| match proc {
+            Proc::Client(person) => Some(person.signed_in),
+            Proc::Service(_)
+            | Proc::Agent(_)
+            | Proc::Git(_)
+            | Proc::Shell(_)
+            | Proc::Peer(_)
+            | Proc::Forge(_)
+            | Proc::Ctl(_) => None,
+        })
+        .sum()
+}

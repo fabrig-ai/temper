@@ -294,6 +294,7 @@ impl skein_world::Referee<Proc> for Referee {
                 snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
             }
             crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
+            crate::world::Phase::Open => self.handed,
             crate::world::Phase::Fault { .. } => {
                 self.run.borrow().restarts > 0
                     && self.cold.is_none()
@@ -456,7 +457,7 @@ impl skein_world::Referee<Proc> for Referee {
     }
     fn passed(&self) -> bool {
         self.done.is_some()
-            && (matches!(self.phase, crate::world::Phase::Restart)
+            && (matches!(self.phase, crate::world::Phase::Restart | crate::world::Phase::Open)
                 || self.signed_in
                     && (self.released
                         || !matches!(self.phase, crate::world::Phase::Story)
