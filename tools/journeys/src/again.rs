@@ -9,7 +9,7 @@ use skein_fake_person_browser::{
     harness::{Harness, Names, Outcome, Output, Play, Printed, Sent, Setup},
 };
 use skein_lib::{Duration, Time};
-use skein_ui::Act;
+use skein_ui::{Act, Role};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -52,7 +52,7 @@ pub fn again(journeys: &Path, name: &str, paths: &Paths) -> Result<(), Refusal> 
         name: name.to_owned(),
         steps,
         at: 0,
-        phase: Phase::Start,
+        phase: Phase::Opening,
         since: None,
         missing_since: None,
         refusal: None,
@@ -87,6 +87,7 @@ pub fn starting(journeys: &Path, name: &str) -> Result<Vec<Step>, Refusal> {
 }
 
 enum Phase {
+    Opening,
     Start,
     Download { after: usize, earlier: Option<Vec<u8>> },
     Gap { earlier: Vec<u8>, until: Time },
@@ -134,6 +135,15 @@ impl Walker {
     fn progress(&mut self, face: &mut BrowserFace<'_>, now: Time) -> Result<Next<Box<[u8]>>, Refusal> {
         self.deadline(now)?;
         match std::mem::replace(&mut self.phase, Phase::Finished) {
+            Phase::Opening => {
+                self.since.get_or_insert(now);
+                // A module's load event can precede its asynchronous wasm start.
+                // The first main region is drawn after the recorder's keys are installed.
+                match face.find(&Find::named(Role::Main, b"")) {
+                    Found::Node(_) => self.save(face, None),
+                    Found::Pending | Found::Absent => self.phase = Phase::Opening,
+                }
+            }
             Phase::Start => {
                 self.since.get_or_insert(now);
                 self.save(face, None);
