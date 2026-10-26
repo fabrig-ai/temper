@@ -9,6 +9,69 @@ use skein_lib::List;
 
 const REFUSED_TEMPLATE: u32 = 7;
 
+fn transcript_document(bytes: u32) -> Box<[u8]> {
+    let document = fixtures::document();
+    let document = core::str::from_utf8(&document).unwrap();
+    let previous = fixtures::startup_agent().limits.bodies.turn_body;
+    let needle = format!("\"root.loads.transcript_bytes\":{previous}");
+    assert_eq!(document.matches(&needle).count(), 1);
+    document.replace(&needle, &format!("\"root.loads.transcript_bytes\":{bytes}")).into_bytes().into_boxed_slice()
+}
+
+#[test]
+fn startup_admits_a_frame_exactly_at_the_profile_page_ceiling() {
+    let document = transcript_document(1_590_046);
+    crate::startup(
+        &document,
+        &config::Directories::working(),
+        &fixtures::files(),
+        &fixtures::startup_agent(),
+        &fixtures::seeds(),
+        None,
+        fixtures::worker_runtime(),
+        fixtures::forge_runtime(),
+    )
+    .expect("a whole frame exactly at Small's page ceiling starts");
+    let opened = crate::store_limits(&document, &config::Directories::working()).unwrap();
+    assert_eq!(opened.store.store.page.bytes, 1_590_110);
+}
+
+#[test]
+fn startup_names_a_frame_one_byte_past_the_profile_page_ceiling() {
+    let document = transcript_document(1_590_047);
+    let expected = b"application.limits.overrides.root.loads.transcript_bytes: its turn's transcript frame, 1590111 bytes, needs a store page of 1590111 bytes, past the profile's ceiling of 1590110 bytes (transcript bound 1590047 bytes)\n";
+    let named = crate::named(&document, &config::Directories::working()).unwrap_err();
+    assert_eq!(lines(&named).as_ref(), expected);
+    let opened = crate::store_limits(&document, &config::Directories::working()).unwrap_err();
+    assert_eq!(lines(&opened).as_ref(), expected);
+}
+
+#[test]
+fn startup_names_a_transcript_past_the_codec_ceiling() {
+    let document = transcript_document(8_388_609);
+    let found = crate::named(&document, &config::Directories::working()).unwrap_err();
+    assert_eq!(
+        lines(&found).as_ref(),
+        b"application.limits.overrides.root.loads.transcript_bytes: 8388609 bytes, past the transcript codec's ceiling of 8388608\n"
+    );
+}
+
+#[test]
+fn startup_names_map_sizing_without_inventing_a_records_bound() {
+    let mut engine = fixtures::engine();
+    engine.jig.limits.store.store.key = 0;
+    let mut problems = Problems::empty();
+    crate::startup::checks::records(&engine.jig, &engine.limits, &[], &mut problems);
+    assert_eq!(problems.problems.len(), 1);
+    let What::StoreMap(jig_protocol_store::sizes::SizeRefusal::Key { needs, has: 0 }) =
+        problems.problems.get(0).unwrap().what
+    else {
+        panic!("the map's key admission is the only cause: {problems:?}");
+    };
+    assert!(needs > 0);
+    assert!(lines(&problems).starts_with(b"engine.limits.store: the store's map key, "));
+}
+
 #[test]
 fn startup_checks_the_effective_codec_envelope_before_generic_sizing() {
     let jig = config::profile(config::Profile::Small);
