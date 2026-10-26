@@ -341,6 +341,7 @@ fn add_releases(name: &top::Name, rows: &mut List<(&'static str, top::Stored)>) 
                 root: 2,
                 ending,
                 close_pull: Some(3),
+                comment: Some(Box::from(b"cancel reason".as_slice())),
                 pending: Some((4, Some(name.clone()))),
                 failed: true,
                 effects_settled: true,

@@ -9,17 +9,15 @@ use temper_real_loop_world::{
 };
 
 #[test]
-fn a_new_direction_cancels_x3_under_its_closed_pull_and_bs_landing_news_waits_for_its_release_with_an_overlap_wake_and_no_closing_comment()
+fn a_new_direction_cancels_x3_under_its_closed_pull_and_bs_landing_news_waits_for_its_release_with_an_overlap_wake_and_a_closing_comment()
  {
     // B's planned change makes a1's overlapping landing wake it, while its
     // hold still defers the next run until Release, with the news told once.
     // A follows delivered input: its current-head CI wakes wait for the
     // amendment, and its extra parked run is included in the full journal.
     // Leaves out the kept branch: domain/forge.md 8.6 deletes it; its closed
-    // pull keeps the commits. Leaves out the closing comment, a finding in
-    // the director's backlog: crates/temper-engine-domain-forge/src/domain.rs:3049
-    // writes Close, then DeleteBranch at :3088; tests/engine/forge/tests/simulation.rs:1295
-    // checks those two writes alone. Leaves out x3 past its cap: a running
+    // pull keeps the commits, with A's reason posted once before it closes.
+    // Leaves out x3 past its cap: a running
     // task's deadline never fires (jig's crates/jig-domain-tasks/src/domain.rs:698
     // and crates/jig-domain-core/src/run.rs:121; case_5_3.rs).
     // Leaves out enforced grants (draft/temper-on-temper.md 6.7): A's grant is

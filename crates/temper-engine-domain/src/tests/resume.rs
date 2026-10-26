@@ -480,3 +480,12 @@ fn authenticated_read_bytes_are_configured_and_counted() {
     limits.loads.read_bytes = 0;
     assert!(crate::worst_case(&limits).is_none());
 }
+
+#[test]
+fn startup_requires_room_for_the_cancellation_reason() {
+    let mut limits = super::resume_fixture::limits();
+    limits.forge.client.op_bytes = limits.tasks.result_bytes;
+    assert!(crate::worst_case(&limits).is_some(), "the exact reason bound fits");
+    limits.forge.client.op_bytes -= 1;
+    assert!(crate::worst_case(&limits).is_none(), "a reason past the forge byte bound is refused");
+}

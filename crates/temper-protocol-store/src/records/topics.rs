@@ -190,7 +190,7 @@ pub(super) fn encode_landed(commit: api::Commit, task: u64) -> w::Landed {
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
 pub(super) fn encode_release(value: &d::ReleaseRow) -> w::ReleaseRow {
-    let d::ReleaseRow { task, root, ending, close_pull, pending, failed, effects_settled, releasing } = value;
+    let d::ReleaseRow { task, root, ending, close_pull, comment, pending, failed, effects_settled, releasing } = value;
     let pending = match pending {
         Some((entry, name)) => {
             let name = match name {
@@ -208,6 +208,7 @@ pub(super) fn encode_release(value: &d::ReleaseRow) -> w::ReleaseRow {
             root: *root,
             ending: encode_ending(*ending),
             close_pull: *close_pull,
+            comment: comment.clone(),
             pending_release: pending,
             failed: *failed,
             effects_settled: *effects_settled,
@@ -222,6 +223,7 @@ pub(super) fn decode_release(value: w::ReleaseRow, bounds: &Bounds) -> Result<d:
         root,
         ending,
         close_pull,
+        comment,
         pending_release: pending,
         failed,
         effects_settled,
@@ -243,6 +245,7 @@ pub(super) fn decode_release(value: w::ReleaseRow, bounds: &Bounds) -> Result<d:
         root,
         ending: decode_ending(ending),
         close_pull,
+        comment,
         pending,
         failed,
         effects_settled,

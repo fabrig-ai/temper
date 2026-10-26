@@ -728,22 +728,38 @@ fn a_held_effect_asked_again_is_looked_for_first_even_with_an_otherwise_full_out
     );
 }
 
+fn settling_release(comment: Option<Box<[u8]>>) -> ReleaseRow {
+    ReleaseRow {
+        task: 7,
+        root: 7,
+        ending: ReleaseEnding::Done,
+        close_pull: None,
+        comment,
+        pending: None,
+        failed: false,
+        effects_settled: false,
+        releasing: false,
+    }
+}
+
+#[test]
+fn a_release_payload_counts_its_comment_and_pending_branch() {
+    const COMMENT_BYTES: u64 = 3; // "why".
+    // "why" plus two 16-byte segment boxes and "temper" + "7".
+    const COMMENT_AND_BRANCH_BYTES: u64 = 42;
+    let mut row = settling_release(Some(Box::from(b"why".as_slice())));
+    assert_eq!(stored_bytes(&Stored::Release(row.clone())), Some(COMMENT_BYTES));
+    row.pending = Some((20, Some(run_branch(b"7"))));
+    assert_eq!(stored_bytes(&Stored::Release(row)), Some(COMMENT_AND_BRANCH_BYTES));
+}
+
 #[test]
 fn closing_a_task_settles_its_held_effect_not_made_and_frees_its_room() {
     let mut d = held_creation();
     for number in 12..19 {
         outputs(&mut d, Event::Enqueue { entry: status(number, 8) });
     }
-    let row = ReleaseRow {
-        task: 7,
-        root: 7,
-        ending: ReleaseEnding::Done,
-        close_pull: None,
-        pending: None,
-        failed: false,
-        effects_settled: false,
-        releasing: false,
-    };
+    let row = settling_release(None);
     assert_eq!(
         outputs(&mut d, Event::SettleEffects { task: 7, root: 7, ending: ReleaseEnding::Done }).as_ref(),
         &[
@@ -854,7 +870,10 @@ fn a_release_waits_for_its_lost_writers_reread_even_after_restart() {
             outputs(&mut d, Event::Lost { task: 9, attempt: 1 });
             let (mut call, _) = fixtures::next_call(&mut d);
             assert_eq!(d.hold(&name).unwrap().writer, Some(Writer::Lost { task: 9, attempt: 1 }));
-            let closing = outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Done, entry: 20 });
+            let closing = outputs(
+                &mut d,
+                Event::Release { task: 7, root: 7, ending: ReleaseEnding::Done, reason: None, entry: 20 },
+            );
             assert!(!closing.contains(&Request::ReleaseFailed { task: 7 }), "wait for the reread");
             if restart {
                 let hold = d.hold(&name).unwrap().clone();
@@ -953,7 +972,8 @@ fn a_lost_writers_read_answered_not_connected_is_asked_again_when_its_forge_conn
 fn a_release_waits_for_its_lost_writers_read_until_its_forge_connects() {
     let mut d = restarted_lost_writer();
     fixtures::answer_next(&mut d, Err(skein_forge::api::Error::NotConnected));
-    let closing = outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Cancelled, entry: 20 });
+    let closing =
+        outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Cancelled, reason: None, entry: 20 });
     assert!(!closing.contains(&Request::ReleaseFailed { task: 7 }));
     assert!(!closing.contains(&Request::Released { task: 7 }));
     assert!(outputs(&mut d, Event::ContinueRelease { task: 7, entry: 20 }).is_empty());
@@ -1032,7 +1052,8 @@ fn a_release_waits_while_its_lost_writer_is_waiting_for_read_room() {
     ready(&mut d);
     // Branch temper/10 sorts first; its comparison waits for call room.
     branch_at(&mut d, 1, 4);
-    let closing = outputs(&mut d, Event::Release { task: 10, root: 10, ending: ReleaseEnding::Done, entry: 20 });
+    let closing =
+        outputs(&mut d, Event::Release { task: 10, root: 10, ending: ReleaseEnding::Done, reason: None, entry: 20 });
     assert!(!closing.contains(&Request::ReleaseFailed { task: 10 }));
     ready(&mut d);
     ready(&mut d);
@@ -1065,7 +1086,8 @@ fn a_release_still_fails_for_a_running_writer_or_a_lost_writer_without_a_read() 
                 record: Stored::Hold(Hold { name: run_branch(b"7"), task: 7, writer: Some(writer), drift: None }),
             },
         );
-        let closing = outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Done, entry: 20 });
+        let closing =
+            outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Done, reason: None, entry: 20 });
         assert!(closing.contains(&Request::ReleaseFailed { task: 7 }));
     }
 }

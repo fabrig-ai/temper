@@ -4115,7 +4115,7 @@ mod misread_tests {
 }
 
 // Act 2, step 5.4 (domain/testing.md, 5.3)
-/// The forge's pull lifecycle; comments are outside this step's promises.
+/// The forge's pull lifecycle, beside its ordered comment observations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pull {
     pub repository: Vec<u8>,
@@ -4358,6 +4358,7 @@ fn direction_pulls(observed: &Observed, misses: &mut Vec<Miss>) {
         DIRECTION_CANCELLED,
         "only x3 and a1 must open pulls; x3's unmerged pull must close and its branch be deleted at its opening head",
     );
+    direction_closing_comment(observed, misses);
     let produced = task_document(observed, Read::X3Produced);
     step_check(
         misses,
@@ -4370,6 +4371,56 @@ fn direction_pulls(observed: &Observed, misses: &mut Vec<Miss>) {
             && x3.is_some_and(|pull| pull.pushed == Some(pull.opened)),
         DIRECTION_CANCELLED,
         "x3's coder must finish a change, whose pull opens at its observed pushed head",
+    );
+}
+
+fn direction_comment_says(body: &[u8], reason: &[u8]) -> bool {
+    let Some(key) = skein_forge::marker::decode(b"temper", body) else { return false };
+    skein_forge::marker::encode(b"temper", &key, reason, u32::MAX).as_deref() == Some(body)
+}
+
+fn direction_closing_comment(observed: &Observed, misses: &mut Vec<Miss>) {
+    use super::{KIT, X3_CANCEL_REASON, X3_PULL_NUMBER};
+    use skein_fake_forge_domain::Observation;
+    let comments: Vec<_> = observed
+        .kit
+        .records
+        .iter()
+        .enumerate()
+        .filter_map(|(at, record)| {
+            if let Observation::Commented { repository, number, body, .. } = record
+                && repository.as_ref() == KIT.as_bytes()
+                && *number == X3_PULL_NUMBER
+            {
+                Some((at, body.as_ref()))
+            } else {
+                None
+            }
+        })
+        .collect();
+    let closed = observed.kit.records.iter().position(|record| {
+        matches!(record,
+        Observation::Closed { repository, number, .. }
+            if repository.as_ref() == KIT.as_bytes() && *number == X3_PULL_NUMBER)
+    });
+    let reason = X3_CANCEL_REASON.as_bytes();
+    step_check(
+        misses,
+        "5.4",
+        comments.iter().filter(|(_, body)| direction_comment_says(body, reason)).count() == 1
+            && closed.is_some_and(|closed| {
+                comments
+                    .iter()
+                    .rev()
+                    .find(|(at, _)| *at < closed)
+                    .is_some_and(|(_, body)| direction_comment_says(body, reason))
+            })
+            && comments
+                .iter()
+                .filter(|(_, body)| direction_comment_says(body, reason))
+                .all(|(at, _)| closed.is_some_and(|closed| *at < closed)),
+        DIRECTION_CANCELLED,
+        "x3's last comment before closing must say A's cancel reason, once",
     );
 }
 
@@ -4774,7 +4825,7 @@ mod direction_tests {
                 told(Agent::OverlapOwner, &[input("Begin B's work."), input(&news)]),
             ],
             kit: Kit {
-                records: Vec::new(),
+                records: forge_records(),
                 main: BTreeMap::from([(B_FILE.as_bytes().to_vec(), STORY_WORDS.as_bytes().to_vec())]),
                 merged_green: true,
                 pulls: vec![
@@ -5236,6 +5287,14 @@ mod direction_tests {
                 by: 1,
             });
             if task == X3 {
+                records.push(Observation::Commented {
+                    repository: repository.clone(),
+                    number,
+                    id: 1,
+                    body: skein_forge::marker::encode(b"temper", b"reason-key", X3_CANCEL_REASON.as_bytes(), u32::MAX)
+                        .expect("comment"),
+                    by: 1,
+                });
                 records.push(Observation::Closed { repository: repository.clone(), number, by: 1 });
             } else {
                 records.push(Observation::Merged {
@@ -5250,6 +5309,40 @@ mod direction_tests {
             records.push(Observation::Deleted { repository: repository.clone(), branch, at: commit, by: 1 });
         }
         records
+    }
+
+    #[test]
+    fn the_closing_reason_must_be_exact_once_and_last_before_close() {
+        use skein_fake_forge_domain::Observation;
+        for mutation in 0..5 {
+            let mut observed = met();
+            let records = &mut observed.kit.records;
+            match mutation {
+                0 => {
+                    records.remove(2);
+                }
+                1 => {
+                    if let Observation::Commented { body, .. } = &mut records[2] {
+                        *body = b"wrong reason".as_slice().into();
+                    }
+                }
+                2 => {
+                    records.insert(3, records[2].clone());
+                }
+                3 => {
+                    records.swap(2, 3);
+                }
+                4 => {
+                    let mut later = records[2].clone();
+                    if let Observation::Commented { body, .. } = &mut later {
+                        *body = b"a later comment".as_slice().into();
+                    }
+                    records.insert(3, later);
+                }
+                _ => unreachable!(),
+            }
+            assert!(!step_5_4(&observed).is_empty(), "comment mutation {mutation}");
+        }
     }
 
     #[test]
@@ -5280,30 +5373,30 @@ mod direction_tests {
                 }
                 2 => records.swap(0, 1),
                 3 => {
-                    if let Observation::Closed { number, .. } = &mut records[2] {
+                    if let Observation::Closed { number, .. } = &mut records[3] {
                         *number = 99;
                     }
                 }
                 4 => {
-                    if let Observation::Deleted { at, .. } = &mut records[3] {
+                    if let Observation::Deleted { at, .. } = &mut records[4] {
                         *at = 99;
                     }
                 }
                 5 => {
-                    if let Observation::Merged { head, .. } = &mut records[6] {
+                    if let Observation::Merged { head, .. } = &mut records[7] {
                         *head = 99;
                     }
                 }
                 6 => {
-                    if let Observation::Merged { commit, .. } = &mut records[6] {
+                    if let Observation::Merged { commit, .. } = &mut records[7] {
                         *commit = 99;
                     }
                 }
                 7 => {
-                    records.remove(4);
+                    records.remove(5);
                 }
                 8 => {
-                    if let Observation::Opened { branches: Some(branches), .. } = &mut records[5] {
+                    if let Observation::Opened { branches: Some(branches), .. } = &mut records[6] {
                         branches.commit = 99;
                     }
                 }

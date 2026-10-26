@@ -473,6 +473,8 @@ pub struct ReleaseRow {
     pub root: u64,
     pub ending: ReleaseEnding,
     pub close_pull: Option<u64>,
+    /// The cancel's reason, still to be posted on its pull before it closes.
+    pub comment: Option<Box<[u8]>>,
     pub pending: Option<(u64, Option<Name>)>,
     pub failed: bool,
     /// All effects issued before cleanup have settled.
@@ -1078,6 +1080,7 @@ pub enum Event {
         task: u64,
         root: u64,
         ending: ReleaseEnding,
+        reason: Option<Box<[u8]>>,
         entry: u64,
     },
     /// Continue a release after one of its outbox effects settles.

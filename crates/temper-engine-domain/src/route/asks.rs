@@ -129,10 +129,12 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
         }
         core::Ask::Release { task, root, ending, entry } => {
             if connector == domain.config.forge_connector {
+                let reason = release_reason(domain, task, &ending);
                 domain.work.push(Work::Forge(forge::Event::Release {
                     task,
                     root,
                     ending: forge_release_ending(ending),
+                    reason,
                     entry,
                 }));
             }
@@ -366,5 +368,24 @@ fn step_made(domain: &mut Domain, task: u64, step: u64, child: Option<u64>) {
         && let Some(child) = child
     {
         domain.work.push(Work::Forge(forge::Event::Delegated { task, child, kind }));
+    }
+}
+
+/// The task owns its bounded ending until connector release settles.
+fn release_reason(domain: &Domain, task: u64, ending: &tasks::Ending) -> Option<Box<[u8]>> {
+    match ending {
+        tasks::Ending::Cancelled { .. } => {}
+        tasks::Ending::Done(_) | tasks::Ending::Failed { .. } => return None,
+    }
+    let task = domain.core.tasks.task(task)?;
+    let closing = match &task.phase {
+        tasks::Phase::Closing(closing) | tasks::Phase::Held { was: tasks::Was::Closing(closing), .. } => closing,
+        tasks::Phase::Waiting | tasks::Phase::Active(_) | tasks::Phase::Held { .. } | tasks::Phase::Ended(_) => {
+            return None;
+        }
+    };
+    match &closing.ending {
+        tasks::Ending::Cancelled { reason, .. } => Some(reason.clone()),
+        tasks::Ending::Done(_) | tasks::Ending::Failed { .. } => None,
     }
 }

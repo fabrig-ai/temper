@@ -385,6 +385,35 @@ impl World {
         self.forge_env.limits.latency_min = delay;
         self.forge_env.limits.latency_max = delay;
     }
+    /// Stop with the forge's reply still pending delivery to the connector.
+    pub fn run_until_posted(&mut self) {
+        let end = self.env.now.saturating_add(Duration::from_secs(5));
+        for _ in 0..20_000 {
+            if self.to_top.iter().any(|(_, event)| {
+                matches!(
+                    event,
+                    top::Event::Client(skein_forge_client::Event::Answered {
+                        result: Ok(skein_forge::api::Answer::Commented(_)),
+                        ..
+                    })
+                )
+            }) {
+                return;
+            }
+            assert!(self.iterate(end), "post must reach the forge before the horizon");
+        }
+        panic!("post did not settle at the forge");
+    }
+
+    pub fn observations(&mut self) -> Vec<forge::Observation> {
+        let mut records = Vec::new();
+        while let Some(record) = self.forge.pop_observation() {
+            records.push(record);
+        }
+        assert_eq!(self.forge.observations_lost(), 0);
+        records
+    }
+
     pub fn restart(&mut self) {
         self.generation += 1;
         self.top = top::Domain::new(

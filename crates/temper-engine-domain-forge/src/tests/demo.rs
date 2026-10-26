@@ -38,8 +38,10 @@ fn only_the_durable_demo_end_retires_restart_observations() {
             // Complete replacement sets must never revive historical watches.
             outputs(&mut d, Event::Names { task: 8, resources: Box::new([run_branch(b"7")]) });
             outputs(&mut d, Event::Unnamed { task: 8 });
-            let released =
-                outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Cancelled, entry: 20 });
+            let released = outputs(
+                &mut d,
+                Event::Release { task: 7, root: 7, ending: ReleaseEnding::Cancelled, reason: None, entry: 20 },
+            );
             assert!(released.contains(&Request::Released { task: 7 }), "{case}: local release: {released:?}");
             assert!(d.hold(&run_branch(b"7")).is_none(), "{case}: hold erased");
             for request in ready(&mut d) {

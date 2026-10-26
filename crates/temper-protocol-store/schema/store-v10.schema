@@ -45,7 +45,7 @@ record Landed { commit: fixed 32 task: u64 }
 # 04.2: family 14, Release.
 enum ReleaseEnding { done, failed, cancelled }
 record PendingRelease { entry: u64 name: option Name }
-record ReleaseRow { task: u64 root: u64 ending: ReleaseEnding close_pull: option u64 pending_release: option PendingRelease failed: bool effects_settled: bool releasing: bool }
+record ReleaseRow { task: u64 root: u64 ending: ReleaseEnding close_pull: option u64 comment: option bytes 1048576 pending_release: option PendingRelease failed: bool effects_settled: bool releasing: bool }
 
 # 04.3a: writes, conditions, proposed effects and outbox entries.
 enum Verdict { approve, request_changes, comment }

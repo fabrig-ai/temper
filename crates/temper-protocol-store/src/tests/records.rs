@@ -840,3 +840,26 @@ fn demo_end_acts_round_trip_with_their_keys() {
         assert_eq!(records::row(&key, &records::encode(&row), &bounds), Ok(row));
     }
 }
+
+#[test]
+fn release_comments_decode_only_within_the_deployment_byte_bound() {
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    for (bytes, fits) in [(fixtures::LIMITS.client.op_bytes, true), (fixtures::LIMITS.client.op_bytes + 1, false)] {
+        let mut comment = skein_lib::List::with_capacity(bytes);
+        for _ in 0..bytes {
+            comment.push(b'x').expect("fixture bytes");
+        }
+        let row = forge::Stored::Release(forge::ReleaseRow {
+            task: 1,
+            root: 1,
+            ending: forge::ReleaseEnding::Cancelled,
+            close_pull: Some(3),
+            comment: Some(comment.into_boxed()),
+            pending: None,
+            failed: false,
+            effects_settled: true,
+            releasing: true,
+        });
+        assert_eq!(records::decode(&records::encode(&row), &bounds).is_ok(), fits, "{bytes}");
+    }
+}

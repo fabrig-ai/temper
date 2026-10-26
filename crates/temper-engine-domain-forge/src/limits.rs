@@ -194,6 +194,8 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<u64, bool>::worst_case(l.changes)?)?
         .checked_add(Map::<u64, crate::settle::Settle>::worst_case(l.changes)?)?
         .checked_add(Map::<u64, crate::ReleaseRow>::worst_case(l.tasks)?)?
+        // A cancel reason is bounded by jig result_bytes, checked against op_bytes by the root.
+        .checked_add(u64::from(l.tasks).checked_mul(u64::from(l.client.op_bytes))?)?
         .checked_add(u64::from(l.tasks).checked_mul(u64::from(l.name_bytes))?)?
         .checked_add(issue_payload(l)?)?
         .checked_add(Map::<skein_lib::Token, crate::adoption::PendingAdoption>::worst_case(l.adoptions)?)?

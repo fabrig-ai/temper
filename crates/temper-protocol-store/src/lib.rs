@@ -59,6 +59,7 @@ pub fn bounds(forge: &temper_engine_domain_forge::Limits) -> Option<Bounds> {
         open_pull_body: forge.client.op_bytes,
         open_pull_head: forge.client.op_bytes,
         open_pull_base: forge.client.op_bytes,
+        release_row_comment_some: forge.client.op_bytes,
         post_key: forge.client.op_bytes,
         post_body: forge.client.op_bytes,
         post_review_key: forge.client.op_bytes,

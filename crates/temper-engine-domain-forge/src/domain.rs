@@ -493,7 +493,11 @@ impl Domain {
         forges: &[crate::Configured],
         under_box: bool,
     ) -> Result<Domain, skein_forge::api::Error> {
-        if crate::worst_case(l).is_none() {
+        if crate::worst_case(l).is_none()
+            || (crate::purpose::EffectPurpose::Release { task: 0, resource: Box::from(b"reason".as_slice()) })
+                .key(&config.namespace, l.client.op_bytes)
+                .is_none()
+        {
             return Err(skein_forge::api::Error::TooLarge);
         }
         let mut configured = Map::with_capacity(l.client.repositories);
@@ -1288,7 +1292,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         }
         Event::ReleaseChange { task } => release_change(d, task, out),
         Event::SettleEffects { task, root, ending } => settle_effects(d, env, task, root, ending, out),
-        Event::Release { task, root, ending, entry } => release(d, env, task, root, ending, entry, out),
+        Event::Release { task, root, ending, reason, entry } => release(d, env, task, root, ending, reason, entry, out),
         Event::ContinueRelease { task, entry } => continue_release(d, env, task, entry, out),
         Event::ReleaseProjection { goal } => release_projection(d, goal, out),
         Event::Committed { entry } => committed(d, env, entry, out),
@@ -2989,6 +2993,7 @@ fn settle_effects(
         }
         if row.ending != ending {
             row.ending = ending;
+            row.releasing = false;
             row.close_pull = match d.changes.get(&task) {
                 Some(change) => change.pull,
                 None => None,
@@ -3016,6 +3021,7 @@ fn settle_effects(
             } else {
                 None
             },
+            comment: None,
             pending: None,
             failed: false,
             effects_settled: false,
@@ -3065,15 +3071,23 @@ fn settle_prior_effects(d: &mut Domain, task: u64, out: &mut Queue<Request>) {
     emit(out, Request::EffectsSettled { task });
 }
 
+#[expect(clippy::too_many_arguments, reason = "cleanup receives the closing task and its bounded cancel reason")]
 fn release(
     d: &mut Domain,
     env: &Env<Limits>,
     task: u64,
     root: u64,
     ending: ReleaseEnding,
+    reason: Option<Box<[u8]>>,
     entry: u64,
     out: &mut Queue<Request>,
 ) {
+    if let Some(reason) = &reason
+        && reason.len() > usize::try_from(env.limits.client.op_bytes).expect("u32 fits usize")
+    {
+        emit(out, Request::ReleaseFailed { task });
+        return;
+    }
     if let Some(row) = d.releases.get_mut(&task) {
         if row.root != root || (row.ending != ending && ending != ReleaseEnding::Cancelled) {
             emit(out, Request::ReleaseFailed { task });
@@ -3081,6 +3095,7 @@ fn release(
         }
         if row.ending != ending {
             row.ending = ending;
+            row.releasing = false;
             row.close_pull = match d.changes.get(&task) {
                 Some(change) => change.pull,
                 None => None,
@@ -3089,6 +3104,9 @@ fn release(
         if row.failed {
             row.failed = false;
         }
+        if !row.releasing && ending == ReleaseEnding::Cancelled && row.close_pull.is_some() {
+            row.comment = reason;
+        }
         row.releasing = true;
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Release(row.clone()) });
     } else {
@@ -3096,7 +3114,7 @@ fn release(
             emit(out, Request::ReleaseFailed { task });
             return;
         }
-        let row = ReleaseRow {
+        let mut row = ReleaseRow {
             task,
             root,
             ending,
@@ -3108,11 +3126,15 @@ fn release(
             } else {
                 None
             },
+            comment: None,
             pending: None,
             failed: false,
             effects_settled: true,
             releasing: true,
         };
+        if ending == ReleaseEnding::Cancelled && row.close_pull.is_some() {
+            row.comment = reason;
+        }
         d.releases.insert(task, row.clone()).expect("release capacity checked");
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Release(row) });
     }
@@ -3141,7 +3163,7 @@ fn continue_release(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, ou
                 return;
             };
             let repository = change.repository;
-            let write = skein_forge::api::Write::Close { number };
+            let write = release_pull_write(&row, &d.namespace, number, &env.limits);
             enqueue_release(d, env, &mut row, entry, repository, write, None, out);
             return;
         }
@@ -3218,6 +3240,19 @@ fn continue_release(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, ou
     unreachable!("every release pass removes a hold or completes");
 }
 
+fn release_pull_write(row: &ReleaseRow, namespace: &[u8], number: u64, limits: &Limits) -> skein_forge::api::Write {
+    match &row.comment {
+        Some(body) => {
+            let key =
+                crate::purpose::EffectPurpose::Release { task: row.task, resource: Box::from(b"reason".as_slice()) }
+                    .key(namespace, limits.client.op_bytes)
+                    .expect("release key fits the checked operation bound");
+            skein_forge::api::Write::Post { number, key, body: body.clone() }
+        }
+        None => skein_forge::api::Write::Close { number },
+    }
+}
+
 #[expect(clippy::too_many_arguments, reason = "one cleanup effect carries its durable entry and held resource")]
 fn enqueue_release(
     d: &mut Domain,
@@ -3266,23 +3301,29 @@ fn release_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outc
     let Some(task) = owner else { return };
     let mut row = d.releases.get(&task).expect("selected release").clone();
     let (_, resource) = row.pending.take().expect("selected pending release");
-    match outcome {
-        skein_forge_client::Outcome::Made { .. } => match resource {
-            Some(name) => {
-                d.holds.remove(&name);
-                emit(out, Request::Erase { key: Key::Hold(name) });
+    if resource.is_none() && row.comment.is_some() {
+        // A permanent post failure must not prevent the pull from closing.
+        // Uncertain/queued outcomes returned above keep the reason and keyed entry.
+        row.comment = None;
+    } else {
+        match outcome {
+            skein_forge_client::Outcome::Made { .. } => match resource {
+                Some(name) => {
+                    d.holds.remove(&name);
+                    emit(out, Request::Erase { key: Key::Hold(name) });
+                }
+                None => row.close_pull = None,
+            },
+            skein_forge_client::Outcome::Failed(_)
+            | skein_forge_client::Outcome::Raced { .. }
+            | skein_forge_client::Outcome::Held
+            | skein_forge_client::Outcome::Withdrawn => {
+                row.failed = true;
+                emit(out, Request::ReleaseFailed { task });
             }
-            None => row.close_pull = None,
-        },
-        skein_forge_client::Outcome::Failed(_)
-        | skein_forge_client::Outcome::Raced { .. }
-        | skein_forge_client::Outcome::Held
-        | skein_forge_client::Outcome::Withdrawn => {
-            row.failed = true;
-            emit(out, Request::ReleaseFailed { task });
-        }
-        skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {
-            unreachable!("uncertain returned above")
+            skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {
+                unreachable!("uncertain returned above")
+            }
         }
     }
     d.releases.insert(task, row.clone()).expect("replaces release");

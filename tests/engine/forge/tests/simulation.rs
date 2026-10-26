@@ -1096,7 +1096,7 @@ fn closing_a_landed_change_deletes_its_branch_before_releasing_the_task() {
     };
     world.event(top::Event::Hold { task: 51, resource: name.clone(), from: None });
     world.take_seen();
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Done, entry: 10 });
+    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Done, reason: None, entry: 10 });
     assert!(world.stored().contains_key(&top::Key::Release(51)));
     assert!(world.stored().contains_key(&top::Key::Entry(10)));
     assert!(!world.seen().iter().any(|request| matches!(request, top::Request::Released { task: 51 })));
@@ -1123,7 +1123,13 @@ fn a_failed_childs_branch_is_kept_for_its_root_then_deleted_when_the_root_closes
     world.event(top::Event::Hold { task: 51, resource: name.clone(), from: None });
     world.take_seen();
     world.event(top::Event::SettleEffects { task: 51, root: 50, ending: top::ReleaseEnding::Failed });
-    world.event(top::Event::Release { task: 51, root: 50, ending: top::ReleaseEnding::Failed, entry: 10 });
+    world.event(top::Event::Release {
+        task: 51,
+        root: 50,
+        ending: top::ReleaseEnding::Failed,
+        reason: None,
+        entry: 10,
+    });
     assert!(world.seen().iter().any(|request| matches!(request,
         top::Request::Retained { task: 51, root: 50, resource } if *resource == name
     )));
@@ -1132,7 +1138,7 @@ fn a_failed_childs_branch_is_kept_for_its_root_then_deleted_when_the_root_closes
     ));
     assert_eq!(world.writes(), 0);
     world.event(top::Event::SettleEffects { task: 50, root: 50, ending: top::ReleaseEnding::Done });
-    world.event(top::Event::Release { task: 50, root: 50, ending: top::ReleaseEnding::Done, entry: 11 });
+    world.event(top::Event::Release { task: 50, root: 50, ending: top::ReleaseEnding::Done, reason: None, entry: 11 });
     assert!(world.stored().contains_key(&top::Key::Entry(11)));
     world.event(top::Event::Committed { entry: 11 });
     world.run_for(5);
@@ -1181,7 +1187,7 @@ fn prior_effects_settle_before_cleanup_can_delete_a_held_resource() {
     assert!(world.seen().iter().any(|request| matches!(request, top::Request::EffectsSettled { task: 51 })));
     assert!(world.stored().contains_key(&top::Key::Hold(name.clone())));
     assert!(!world.stored().contains_key(&top::Key::Entry(10)));
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Done, entry: 11 });
+    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Done, reason: None, entry: 11 });
     assert!(matches!(
         world.stored().get(&top::Key::Entry(11)),
         Some(top::Stored::Entry {
@@ -1240,11 +1246,17 @@ fn cancellation_during_release_retargets_the_durable_cleanup() {
     };
     world.event(top::Event::Hold { task: 51, resource: name, from: None });
     world.event(top::Event::SettleEffects { task: 51, root: 51, ending: top::ReleaseEnding::Done });
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Done, entry: 11 });
+    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Done, reason: None, entry: 11 });
     assert!(world.stored().contains_key(&top::Key::Entry(11)));
     world.take_seen();
     world.event(top::Event::SettleEffects { task: 51, root: 51, ending: top::ReleaseEnding::Cancelled });
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Cancelled, entry: 12 });
+    world.event(top::Event::Release {
+        task: 51,
+        root: 51,
+        ending: top::ReleaseEnding::Cancelled,
+        reason: None,
+        entry: 12,
+    });
     assert!(
         matches!(world.stored().get(&top::Key::Release(51)), Some(top::Stored::Release(row)) if row.ending == top::ReleaseEnding::Cancelled)
     );
@@ -1295,9 +1307,17 @@ fn a_ci_subscription_reads_its_head_and_restarts_without_repeating_old_news() {
     ));
 }
 
-#[test]
-fn cancelling_a_change_closes_its_pull_before_deleting_its_branch() {
-    let mut world = World::new(93);
+const CANCEL_REASON: &[u8] = b"The new direction defers this work.";
+const RELEASE_TASK: u64 = 51;
+
+fn release_reason_key() -> Box<[u8]> {
+    top::purpose::EffectPurpose::Release { task: RELEASE_TASK, resource: Box::from(b"reason".as_slice()) }
+        .key(b"world", temper_engine_forge_world::LIMITS.client.op_bytes)
+        .expect("reason key fits")
+}
+
+/// A cancelled change owns one pull and its pushed branch.
+fn cancelled_pull(world: &mut World) -> u64 {
     world.adopt();
     world.produce(b"temper/51");
     let pull = world.open_pull(b"temper/51", b"main");
@@ -1309,30 +1329,132 @@ fn cancelling_a_change_closes_its_pull_before_deleting_its_branch() {
         repository: REPO.repository,
         what: top::What::Branch(Box::new([Box::from(&b"temper"[..]), Box::from(&b"51"[..])])),
     };
-    world.event(top::Event::Hold { task: 51, resource: name, from: None });
+    world.event(top::Event::Hold { task: RELEASE_TASK, resource: name, from: None });
     world.take_seen();
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Cancelled, entry: 10 });
-    assert!(
-        matches!(world.stored().get(&top::Key::Entry(10)), Some(top::Stored::Entry { entry: skein_forge_client::Entry { effect: skein_forge_client::Effect { write: skein_forge::api::Write::Close { number }, .. }, .. }, held: false }) if *number == pull)
-    );
+    world.observations();
+    pull
+}
+
+fn cancel_pull(world: &mut World, reason: &[u8]) {
+    world.event(top::Event::Release {
+        task: RELEASE_TASK,
+        root: RELEASE_TASK,
+        ending: top::ReleaseEnding::Cancelled,
+        reason: Some(Box::from(reason)),
+        entry: 10,
+    });
     world.event(top::Event::Committed { entry: 10 });
+}
+
+fn finish_cancel(world: &mut World) {
+    // The reason's terminal allows the close, then the branch deletion.
+    for entry in [11, 12] {
+        world.event(top::Event::ContinueRelease { task: RELEASE_TASK, entry });
+        world.event(top::Event::Committed { entry });
+        world.run_for(5);
+    }
+    world.event(top::Event::ContinueRelease { task: RELEASE_TASK, entry: 13 });
+    assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: RELEASE_TASK })));
+}
+
+#[test]
+fn cancelling_a_change_comments_its_reason_then_closes_its_pull_and_deletes_its_branch() {
+    use skein_forge::api::{Op, Write};
+    let mut world = World::new(93);
+    let pull = cancelled_pull(&mut world);
+    world.take_calls();
+    cancel_pull(&mut world, CANCEL_REASON);
     world.run_for(5);
-    world.event(top::Event::ContinueRelease { task: 51, entry: 11 });
-    assert!(matches!(
-        world.stored().get(&top::Key::Entry(11)),
-        Some(top::Stored::Entry {
-            entry: skein_forge_client::Entry {
-                effect: skein_forge_client::Effect { write: skein_forge::api::Write::DeleteBranch { .. }, .. },
-                ..
-            },
-            held: false,
+    finish_cancel(&mut world);
+    let writes: Vec<_> = world
+        .take_calls()
+        .into_iter()
+        .filter_map(|op| match op {
+            Op::Write(write) => Some(write),
+            Op::Read(_) => None,
         })
-    ));
-    world.event(top::Event::Committed { entry: 11 });
+        .collect();
+    let key = release_reason_key();
+    assert_eq!(
+        writes,
+        vec![
+            Write::Post { number: pull, key, body: Box::from(CANCEL_REASON) },
+            Write::Close { number: pull },
+            Write::DeleteBranch { branch: Box::from(b"temper/51".as_slice()) },
+        ]
+    );
+    assert_eq!(world.writes(), 3);
+}
+
+#[test]
+fn a_restart_after_the_reason_is_posted_posts_it_once() {
+    use skein_fake_forge_domain::Observation;
+    let mut world = World::new(93);
+    let pull = cancelled_pull(&mut world);
+    cancel_pull(&mut world, CANCEL_REASON);
+    world.run_until_posted();
+    assert!(matches!(world.stored().get(&top::Key::Release(RELEASE_TASK)),
+        Some(top::Stored::Release(row)) if row.comment.as_deref() == Some(CANCEL_REASON) && row.pending.is_some()));
+    world.restart();
+    world.run_for(60);
+    finish_cancel(&mut world);
+    let comments: Vec<_> = world
+        .observations()
+        .into_iter()
+        .filter_map(
+            |record| if let Observation::Commented { number, body, .. } = record { Some((number, body)) } else { None },
+        )
+        .collect();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].0, pull);
+    // The independent forge retains the protocol's embedded identity marker.
+    let key = release_reason_key();
+    assert_eq!(comments[0].1, temper_engine_forge_world::translate::keyed(&key, CANCEL_REASON));
+    assert_eq!(world.writes(), 3);
+}
+
+#[test]
+fn a_permanently_failed_reason_post_still_closes_and_releases() {
+    let mut world = World::new(93);
+    cancelled_pull(&mut world);
+    world.permission(skein_fake_forge_domain::api::Permission::Read);
+    cancel_pull(&mut world, CANCEL_REASON);
     world.run_for(5);
-    world.event(top::Event::ContinueRelease { task: 51, entry: 12 });
-    assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: 51 })));
-    assert_eq!(world.writes(), 2);
+    assert!(matches!(world.stored().get(&top::Key::Release(RELEASE_TASK)),
+        Some(top::Stored::Release(row)) if row.comment.is_none() && !row.failed && row.close_pull.is_some()));
+    world.permission(skein_fake_forge_domain::api::Permission::Write);
+    finish_cancel(&mut world);
+}
+
+#[test]
+fn releases_without_a_cancelled_pull_post_no_reason() {
+    for ending in [top::ReleaseEnding::Cancelled, top::ReleaseEnding::Done, top::ReleaseEnding::Failed] {
+        let mut world = World::new(93);
+        world.adopt();
+        if ending != top::ReleaseEnding::Cancelled {
+            world.produce(b"temper/51");
+            let pull = world.open_pull(b"temper/51", b"main");
+            let mut row = change_row();
+            row.pull = Some(pull);
+            world.event(top::Event::Change { row });
+        }
+        world.take_calls();
+        world.event(top::Event::Release {
+            task: RELEASE_TASK,
+            root: RELEASE_TASK,
+            ending,
+            reason: Some(Box::from(CANCEL_REASON)),
+            entry: 10,
+        });
+        world.run_for(5);
+        assert!(
+            !world
+                .take_calls()
+                .iter()
+                .any(|op| matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Post { .. })))
+        );
+        assert!(world.seen().iter().any(|request| matches!(request, top::Request::Released { task: RELEASE_TASK })));
+    }
 }
 
 /// A change watches its branch and its pull (domain/forge.md 5.1): the Closed
@@ -1361,7 +1483,13 @@ fn watched_change(world: &mut World) -> (u64, top::Name) {
 fn a_cancelled_change_watching_its_pull_deletes_its_branch_past_its_own_close() {
     let mut world = World::new(94);
     let (pull, _) = watched_change(&mut world);
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Cancelled, entry: 10 });
+    world.event(top::Event::Release {
+        task: 51,
+        root: 51,
+        ending: top::ReleaseEnding::Cancelled,
+        reason: None,
+        entry: 10,
+    });
     world.event(top::Event::Committed { entry: 10 });
     // Past the Close's outcome, the pull's keep reads it Closed.
     world.run_for(60);
@@ -1391,7 +1519,13 @@ fn a_cancelled_change_watching_its_pull_deletes_its_branch_past_its_own_close() 
 fn another_partys_close_during_a_cancel_is_taken_as_the_cancels_own() {
     let mut world = World::new(96);
     let (pull, _) = watched_change(&mut world);
-    world.event(top::Event::Release { task: 51, root: 51, ending: top::ReleaseEnding::Cancelled, entry: 10 });
+    world.event(top::Event::Release {
+        task: 51,
+        root: 51,
+        ending: top::ReleaseEnding::Cancelled,
+        reason: None,
+        entry: 10,
+    });
     // The change is ending: a close before temper's own needs no hold.
     world.close(pull);
     world.run_for(60);

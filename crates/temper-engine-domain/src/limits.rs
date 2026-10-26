@@ -287,6 +287,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         || limits.journal.result_bytes < limits.brief.brief_bytes
         || limits.journal.deliveries < limits.brief.sections
         || limits.journal.deliveries < limits.tasks.saved_resources
+        || limits.forge.client.op_bytes < limits.tasks.result_bytes
         || limits.journal.result_bytes < limits.tasks.result_bytes
         || limits.journal.result_bytes < limits.people.words
         || limits.people.inbox_entries == 0

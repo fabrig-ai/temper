@@ -444,10 +444,17 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             }
             Some(held)
         }
-        Stored::Release(row) => match &row.pending {
-            Some((_, Some(resource))) => name(resource),
-            Some((_, None)) | None => Some(0),
-        },
+        Stored::Release(row) => {
+            let comment = match &row.comment {
+                Some(comment) => bytes(comment)?,
+                None => 0,
+            };
+            let pending = match &row.pending {
+                Some((_, Some(resource))) => name(resource)?,
+                Some((_, None)) | None => 0,
+            };
+            comment.checked_add(pending)
+        }
     }
 }
 
