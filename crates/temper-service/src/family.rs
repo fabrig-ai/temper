@@ -404,17 +404,25 @@ fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge])
         if forge.number != panel.forge {
             continue;
         }
-        let Some(web) = &forge.web else { return Some(Box::default()) };
-        let mut web = web.as_ref();
-        while web.last() == Some(&b'/') {
-            web = web.get(..web.len().checked_sub(1)?).expect("trailing slash");
+        let mut base = match forge.kind {
+            crate::settings::Kind::GitHub => match &forge.web {
+                Some(web) => web.as_ref(),
+                None => return Some(Box::default()),
+            },
+            crate::settings::Kind::Forgejo => forge.git.as_ref(),
+        };
+        if base.is_empty() {
+            return Some(Box::default());
+        }
+        while base.last() == Some(&b'/') {
+            base = base.get(..base.len().checked_sub(1)?).expect("trailing slash");
         }
         let route = match forge.kind {
             crate::settings::Kind::GitHub => b"/pull/".as_slice(),
             crate::settings::Kind::Forgejo => b"/pulls/".as_slice(),
         };
         let digits = Decimal::of(number);
-        let length = web
+        let length = base
             .len()
             .checked_add(1)?
             .checked_add(panel.owner.len())?
@@ -422,13 +430,13 @@ fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge])
             .checked_add(panel.name.len())?
             .checked_add(route.len())?
             .checked_add(digits.as_bytes().len())?;
-        // An address past its bound is left out, as with no `web`, so one long
+        // An address past its bound is left out, as with no base, so one long
         // owner and name never fail the delivery (client/forge.md, 9.2).
         if length > usize::try_from(wire::ADDRESS_BYTES).expect("u32 fits usize") {
             return Some(Box::default());
         }
         let mut writer = Writer::new(length);
-        for part in [web, b"/", &panel.owner, b"/", &panel.name, route, digits.as_bytes()] {
+        for part in [base, b"/", &panel.owner, b"/", &panel.name, route, digits.as_bytes()] {
             writer.put(part).ok()?;
         }
         return Some(writer.finish());

@@ -179,6 +179,7 @@ pub struct Evidence {
     pub delegation: String,
     pub producer: String,
     pub page: String,
+    pub panel: super::Ended,
 }
 #[must_use]
 pub fn live(config: &Path, data: &Path, client: &Path) -> Evidence {
@@ -207,6 +208,7 @@ pub fn live_for(config: &Path, data: &Path, client: &Path, task: Task) -> Eviden
         delegation: turns(client, &task.chat.to_string()),
         producer: turns(client, &task.producer.to_string()),
         page: change_page(config, client, task.change),
+        panel: super::ctl::alone(client, Call::new(&["change", &task.change.to_string(), "--json"])),
     }
 }
 
@@ -301,7 +303,10 @@ pub fn change_page(config: &Path, client: &Path, task: u64) -> String {
 /// Both boxes must expose the same landed change, its producer and head's CI.
 pub fn assert_task(run: &str, calls: &[super::Ended], stderr: &str, evidence: &Evidence) {
     use skein_io::kernel::Exit;
-    let Evidence { delegation, producer, page, .. } = evidence;
+    let Evidence { delegation, producer, page, panel, .. } = evidence;
+    assert_eq!(panel.exit, Some(Exit::Code(0)), "{run}: {}", String::from_utf8_lossy(&panel.stderr));
+    let panel = super::ctl::json(panel);
+    assert_eq!(panel["pull"]["address"], format!("http://{}/work/hello/pulls/1", evidence.address), "{run}: {panel}");
     eprintln!("{run} producer's committed calls: {producer}");
     eprintln!("{run} change page: {page}");
     eprintln!("{run} first task's committed calls: {delegation}");
