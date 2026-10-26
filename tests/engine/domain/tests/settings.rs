@@ -230,6 +230,10 @@ fn a_stored_project_policy_at_the_byte_bound_is_admitted() {
 }
 
 fn deployment_without_projects() -> Driver {
+    deployment_at_stock(false)
+}
+
+fn deployment_at_stock(seeded: bool) -> Driver {
     let mut config = walking::config(SEED);
     let llm = jig_protocol_config::Llm {
         endpoints: Box::new([]),
@@ -239,9 +243,18 @@ fn deployment_without_projects() -> Driver {
     };
     config.core.defaults = temper_service::stock::defaults(&llm);
     config.core.connectors = Box::new([1]);
-    config.core.seed_projects = Box::new([]);
-    config.core.owners[0].project = people::DEPLOYMENT;
+    if seeded {
+        config.core.seed_projects[0].policy =
+            config.core.defaults.policies.get(&POLICY_NUMBER).expect("stock policy").clone();
+    } else {
+        config.core.owners[0].project = people::DEPLOYMENT;
+        config.core.seed_projects = Box::new([]);
+    }
     let mut limits = walking::limits();
+    if seeded {
+        // A whole stock ceiling carries its ten grants in the owner's keyed edit.
+        limits.people.amendment_bytes = 1024;
+    }
     // Stock policy 1 holds ten grants and three executor kinds.
     limits.authority.grants = 16;
     limits.authority.executors = 4;
@@ -528,4 +541,80 @@ fn a_stored_change_that_no_longer_checks_refuses_the_start() {
             changed: true
         })
     );
+}
+
+#[test]
+fn a_seeded_project_is_widened_after_the_rules_are() {
+    let mut driver = deployment_at_stock(true);
+    let session = driver.session();
+    let policy_key = Key::Core(core::Key::People(people::Key::Policy(1)));
+    let Some(Record::Core(core::Record::People(people::Stored::Policy { value, .. }))) =
+        driver.store.rows.get(&policy_key)
+    else {
+        panic!("seeded policy committed")
+    };
+    let original = value.clone();
+    // A seeded project's first period comes from the application's period source.
+    driver.send(Event::Party(PartyInput::Period { project: 1, period: 1, budget: original.period_spend, next: None }));
+    driver.settle();
+    let widened = authority::Tools(1023);
+    assert_ne!(original.ceiling.tools, widened.0);
+    let llm = jig_protocol_config::Llm {
+        endpoints: Box::new([]),
+        models: walking::models(),
+        descriptions: Box::new([None]),
+        providers: Box::new([]),
+    };
+    let mut rules = temper_service::stock::defaults(&llm).rules;
+    assert_eq!(original.ceiling.tools, rules.ceiling.tools.0, "the seeded project starts at the stock rules");
+    rules.ceiling.tools = widened;
+    change(
+        &mut driver,
+        1,
+        40,
+        s::Item { setting: s::Setting::Rules, edit: s::Edit::Set(s::Value::Rules(Box::new(rules))) },
+    );
+    assert_eq!(head(&driver).number, 2);
+    let mut ceiling = original.ceiling.clone();
+    ceiling.tools = widened.0;
+    let mut role = original.roles[0].clone();
+    role.authority.tools = widened.0;
+    for (key, edit) in [
+        (41, people::PolicyChange::Ceiling { ceiling: ceiling.clone() }),
+        (42, people::PolicyChange::Role(role.clone())),
+    ] {
+        driver.delivered.clear();
+        driver.send(Event::Party(PartyInput::Ask {
+            reply_to: ReplyTo::new(Token::new(u64::from(key))),
+            sign_in: session,
+            key: [key; 16],
+            models: Box::new([]),
+            ask: people::Ask::ChangePolicy { project: 1, change: edit },
+        }));
+        driver.settle();
+        assert!(
+            driver.delivered.iter().any(|delivery| matches!(
+                delivery,
+                Delivery::WebReply { reply: people::Reply::Outcome(people::Outcome::PolicyChanged { project: 1 }), .. }
+            )),
+            "the project owner changes its copied policy"
+        );
+    }
+    let Some(Record::Core(core::Record::People(people::Stored::Policy { value, .. }))) =
+        driver.store.rows.get(&policy_key)
+    else {
+        panic!("widened policy committed")
+    };
+    assert_eq!(value.ceiling, ceiling);
+    assert_eq!(value.roles[0], role);
+    driver.send(Event::Party(PartyInput::Ask {
+        reply_to: ReplyTo::new(Token::new(43)),
+        sign_in: session,
+        key: [43; 16],
+        models: Box::new([]),
+        ask: walking::chat(1, b"Use the widened authority"),
+    }));
+    driver.pump();
+    let task = driver.task(1).unwrap_or_else(|| panic!("the widened project admits the task: {:?}", driver.delivered));
+    assert_eq!(task.authority.tools.0, widened.0);
 }
