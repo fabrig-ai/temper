@@ -17,4 +17,4 @@ pub mod help;
 
 pub mod wait;
 
-pub(crate) mod settings_file;
+pub mod settings_file;

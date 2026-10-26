@@ -21,12 +21,14 @@ mod json;
 mod nested;
 mod notes;
 mod reference;
+mod settings;
 mod start;
 
 pub use answers::answer;
-pub use calls::{call, tools};
+pub use calls::{call, call_configured, tools};
 pub use finish::{ChangeResource, Terminal, result, turn};
 pub use reference::reference;
+pub use settings::{settings_answer, settings_text};
 pub use start::{charter, model, section, start};
 
 fn decimal(bytes: &[u8], member: &'static [u8]) -> Result<u64, Problem> {
