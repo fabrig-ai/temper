@@ -77,6 +77,9 @@ pub fn outcome(value: &owner::ApplicationOutcome) -> forge::Answer {
             // temper-07 adds the wire's own not_installed reason.
             owner::AdoptionRefusal::NotInstalled | owner::AdoptionRefusal::NoAccess => forge::Reason::NoAccess,
             owner::AdoptionRefusal::Refused => forge::Reason::Refused,
+            owner::AdoptionRefusal::AnotherProject => forge::Reason::AnotherProject,
+            owner::AdoptionRefusal::HomeHeld => forge::Reason::HomeHeld,
+            owner::AdoptionRefusal::PrefixOccupied => forge::Reason::PrefixOccupied,
             owner::AdoptionRefusal::InFlight => forge::Reason::InFlight,
             owner::AdoptionRefusal::TooLarge => forge::Reason::TooLarge,
             owner::AdoptionRefusal::Unreachable => forge::Reason::Unreachable,

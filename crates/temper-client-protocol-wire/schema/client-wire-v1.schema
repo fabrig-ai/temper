@@ -100,7 +100,7 @@ record Adopted { forge: u16 repository: u32 owner: bytes 1024 name: bytes 1024 r
 # jig-client-protocol-wire's Refusal, encoded at jig's VERSION; 16777209 so
 # that Answer at its ceiling fits jig's Owned.record (16777216).
 record CoreRefused { refusal: bytes 16777209 }
-enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer }
+enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer, another_project, home_held, prefix_occupied }
 record ForgeRefused { reason: ForgeReason }
 enum ForgeRefusal { role, no_such_forge, not_taken, connected, not_connected, busy, no_key, first_is_bot }
 record ConnectRefused { why: ForgeRefusal }

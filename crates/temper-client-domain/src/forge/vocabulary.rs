@@ -90,6 +90,9 @@ pub enum Reason {
     TooLarge,
     Unreachable,
     InvalidAnswer,
+    AnotherProject,
+    HomeHeld,
+    PrefixOccupied,
 }
 
 /// The adoption's terminal, as the routing decoded it.

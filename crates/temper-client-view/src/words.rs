@@ -659,8 +659,8 @@ pub enum Word {
 // A task document's reading line and seven lasting read ends (client/README.md, 3.5).
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
-const PHRASES: u32 = 1162;
-const SEGMENTS: u32 = 2033;
+const PHRASES: u32 = 1165;
+const SEGMENTS: u32 = 2040;
 const ALL: [Word; 594] = [
     Word::WelcomeYourModel,
     Word::BrandChats,

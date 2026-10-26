@@ -96,7 +96,7 @@ Read the connected App's installations, then accept one already made, with no br
   temper ctl DIRECTORY forge-accept 2 1
   temper ctl DIRECTORY repositories 2 --installation 1 --page 1
   temper ctl DIRECTORY adopt --project 1 --forge 2 --owner OWNER --name NAME --landing main --key github-adopt
-Use the installation id from forges and the owner/name from repositories.
+Use the installation id from forges and the owner/name from repositories; add --no-home if Forgejo is already home, or choose a new project.
 An unaccepted installation says not accepted; read-only mode says kept: the App is read-only.
 Without read-only, reconcile uninstalls a stray once older than an installation link's lifetime: accept it first.
 Or install on another account by opening the printed address on the engine's machine:

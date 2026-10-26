@@ -36,7 +36,12 @@ fn a_second_home_is_refused_by_the_forge_connector() {
     world.person(person, first);
     assert_eq!(world.run(Until::Done).verdict, Verdict::Passed);
     let mut steps = fixtures::adopt(b"acme", b"second");
-    steps.push(Step::See { find: Find::text(b"The forge connector refused it: another project writes acme/second, the project has a home already, or branches under temper/ are not this deployment's."), within: fixtures::WITHIN });
+    steps.push(Step::See {
+        find: Find::text(
+            b"The project has a home already. Adopt this repository without making it home, or choose a new project.",
+        ),
+        within: fixtures::WITHIN,
+    });
     world.person(person, steps);
     let outcome = world.run(Until::Done);
     assert_eq!(outcome.verdict, Verdict::Passed, "{outcome:?}");

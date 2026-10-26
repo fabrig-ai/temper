@@ -89,8 +89,8 @@ fn read(kind: &[u8], value: &Value) -> Result<api::Read, Problem> {
             attempt: api::JobAttempt {
                 head: commit(value.required(b"head")?, b"head")?,
                 run: positive_number(value, b"run")?,
-                job: positive_number(value, b"job")?,
-                attempt: u32::try_from(positive_number(value, b"attempt")?).or(Err(Problem::Range(b"attempt")))?,
+                job: value.required(b"job")?.number(b"job")?,
+                attempt: value.required(b"attempt")?.small(b"attempt")?,
             },
             max_bytes: max_bytes(value)?,
         }),

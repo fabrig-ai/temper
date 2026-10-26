@@ -46,7 +46,7 @@ pub fn adopted() -> v1::Adopted {
     .expect("adopted repository")
 }
 
-pub fn outcome_rows() -> [v1::Outcome; 17] {
+pub fn outcome_rows() -> [v1::Outcome; 20] {
     let limits = limits();
     let original = adopted().into_parts();
     let mut contexts = List::with_capacity(1);
@@ -75,6 +75,9 @@ pub fn outcome_rows() -> [v1::Outcome; 17] {
         forge_refused(v1::ForgeReason::TooLarge),
         forge_refused(v1::ForgeReason::Unreachable),
         forge_refused(v1::ForgeReason::InvalidAnswer),
+        forge_refused(v1::ForgeReason::AnotherProject),
+        forge_refused(v1::ForgeReason::HomeHeld),
+        forge_refused(v1::ForgeReason::PrefixOccupied),
         v1::Outcome::Unknown,
         v1::Outcome::SettingUp,
         set_up_refused(v1::SetUpRefusal::NotOffered),

@@ -88,6 +88,9 @@ fn each_forge_refusal_exits_2_in_its_words() {
         (w::ForgeReason::NotFound, b"No repository o/n on forge 1 that temper's forge user can see.\n".as_slice()),
         (w::ForgeReason::NoAccess, b"temper's forge user may not read o/n on forge 1.\n".as_slice()),
         (w::ForgeReason::Refused, b"The forge connector refused it: another project writes o/n, the project has a home already, or branches under temper/ are not this deployment's.\n".as_slice()),
+        (w::ForgeReason::AnotherProject, b"Another project writes o/n. Adopt it as context to read it, or use the project that writes it.\n".as_slice()),
+        (w::ForgeReason::HomeHeld, b"The project has a home already. Adopt this repository without making it home, or choose a new project.\n  temper ctl DIRECTORY adopt --project 1 --forge 1 --owner o --name n --landing main --role owned --prefix temper/ --no-home --key NEW-KEY\n".as_slice()),
+        (w::ForgeReason::PrefixOccupied, b"Branches under temper/ are not this deployment's. Choose an unused branch prefix.\n  temper ctl DIRECTORY adopt --project 1 --forge 1 --owner o --name n --landing main --role owned --prefix UNUSED-PREFIX/ --key NEW-KEY\n".as_slice()),
         (w::ForgeReason::InFlight, b"o/n is being adopted already; try again when that ends.\n".as_slice()),
         (w::ForgeReason::TooLarge, b"A field is past the forge's bounds, or the forge's repositories are full.\n".as_slice()),
         (w::ForgeReason::Unreachable, b"Forge 1 did not answer; nothing was adopted. Try again.\n".as_slice()),
@@ -333,4 +336,37 @@ fn a_saved_setup_request_is_not_restored_as_an_adoption() {
     root.deliver(c::Delivery::Me(Box::new(fixtures::me(fixtures::PARTY))));
     root.adopt_outcome(fixtures::RESTORED_PREFIX, client::Outcome::Unknown);
     assert!(root.kept_lines.is_empty(), "a setup request has no adoption outcome to print");
+}
+
+#[test]
+fn admission_conflicts_have_distinct_json_reasons() {
+    for (reason, expected) in [
+        (w::ForgeReason::AnotherProject, b"{\"forge_refused\":{\"reason\":\"another_project\"}}".as_slice()),
+        (w::ForgeReason::HomeHeld, b"{\"forge_refused\":{\"reason\":\"home_held\"}}".as_slice()),
+        (w::ForgeReason::PrefixOccupied, b"{\"forge_refused\":{\"reason\":\"prefix_occupied\"}}".as_slice()),
+    ] {
+        let (mut root, call) = fixtures::adopt_root(fixtures::JSON_FLAG);
+        root.adoption_answer(call, fixtures::forge_refused(reason));
+        let printed = root.answer(call).expect("refused durably");
+        assert_eq!((printed.status, printed.stderr.as_ref()), (2, expected));
+    }
+}
+
+#[test]
+fn a_retry_keeps_the_adoptions_nondefault_options_and_quotes_arguments() {
+    let (mut root, call) = fixtures::adopt_root(&[
+        "--forge",
+        "2",
+        "--role",
+        "fork",
+        "--no-home",
+        "--no-ci",
+        "--check",
+        "3",
+        "--prefix",
+        "old'/",
+    ]);
+    root.adoption_answer(call, fixtures::forge_refused(w::ForgeReason::HomeHeld));
+    let printed = root.answer(call).expect("refused durably");
+    assert!(skein_lib::bytes::find(&printed.stderr, b"adopt --project 1 --forge 2 --owner o --name n --landing main --role fork --prefix 'old'\\''/' --no-home --no-ci --check 3 --key NEW-KEY").is_some());
 }

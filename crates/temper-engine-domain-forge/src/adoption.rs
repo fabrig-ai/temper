@@ -139,6 +139,15 @@ pub(crate) fn adopted(d: &mut Domain, out: &mut Queue<Request>, reply_to: Token,
     out.push(Request::Adopted { reply_to, result });
 }
 
+// The core's part still sees the provider-shaped refusal; the application
+// retains the admission decision, which the provider's Error cannot express.
+fn refused(d: &mut Domain, out: &mut Queue<Request>, request: Token, why: AdoptionRefusal) {
+    adopted(d, out, request, Err(api::Error::Refused));
+    if let Some(pending) = d.application.pending.get_mut(&request) {
+        pending.observed = Some(ApplicationOutcome::ForgeRefused(why));
+    }
+}
+
 pub(crate) fn answered(
     d: &mut Domain,
     env: &Env<Limits>,
@@ -230,7 +239,7 @@ pub(crate) fn adopt(d: &mut Domain, env: &Env<Limits>, reply_to: Token, out: &mu
         && existing.project != request.project
         && request.role != Role::Context
     {
-        adopted(d, out, reply_to, Err(api::Error::Refused));
+        refused(d, out, reply_to, AdoptionRefusal::AnotherProject);
         return;
     }
     if request.home && request.role == Role::Context {
@@ -260,7 +269,7 @@ pub(crate) fn adopt(d: &mut Domain, env: &Env<Limits>, reply_to: Token, out: &mu
                 && existing.provider != repository
                 && !d.forge_ended(existing.provider.forge)
             {
-                adopted(d, out, reply_to, Err(api::Error::Refused));
+                refused(d, out, reply_to, AdoptionRefusal::HomeHeld);
                 return;
             }
         }
@@ -342,7 +351,7 @@ pub(crate) fn adoption_read(
             Ok(api::Answer::Branches(branches)) => {
                 for branch in branches {
                     if branch.starts_with(&pending.request.prefix) && !owns_branch(d, repository, &branch) {
-                        adopted(d, out, owner, Err(api::Error::Refused));
+                        refused(d, out, owner, AdoptionRefusal::PrefixOccupied);
                         return;
                     }
                 }

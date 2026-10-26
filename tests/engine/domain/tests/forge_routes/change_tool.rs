@@ -504,3 +504,30 @@ fn an_omitted_file_limit_uses_the_engine_read_bound() {
     let rendered = temper_engine_smith::answer(&answer);
     assert!(rendered.text().windows(b"contents".len()).any(|part| part == b"contents"), "{:?}", rendered.text());
 }
+
+#[test]
+fn a_decoded_job_zero_read_reaches_the_fake_and_is_answered() {
+    let (mut world, chat) = chat_world(true);
+    let input = smith_domain_run::HostInput::attested(br#"{"head":"0000000000000000000000000000000000000000","run":1,"job":0,"attempt":0,"max_bytes":32}"#.as_slice().into()).expect("bounded input");
+    let temper_engine_smith::Decoded::Call(call) = temper_engine_smith::call(
+        smith_domain_run::CallName { activation: chat.attempt, completion: 1, position: 1 },
+        b"read_job",
+        &input,
+    )
+    .expect("job zero decodes") else {
+        panic!("read call")
+    };
+    assert!(
+        matches!(&call.tool, engine::Tool::ReadNamed { read: skein_forge::api::Read::Job { attempt, .. }, .. } if attempt.job == 0 && attempt.run == 1 && attempt.attempt == 0)
+    );
+    let before = world.forge_calls;
+    let event = world.protocol.call(Token::new(7), chat.task, chat.attempt, 93, call);
+    world.send(event);
+    world.until(Until::Read);
+    assert!(world.forge_calls > before, "read reaches the independent fake");
+    // The pinned fake assigns API job ids from 1; its UI's index 0 is not
+    // an API id. It must answer MissingJob, never silently read job 1.
+    assert!(
+        matches!(world.answers.as_slice(), [engine::CallAnswer::ForgeRead(result)] if result.as_ref() == &Err(skein_forge::api::Error::MissingJob))
+    );
+}

@@ -216,9 +216,11 @@ Forge 2 is already configured. For an existing App and installation,
 follow `temper help github`, sections 11 and 12: set shared-App
 read-only mode before starting, connect with the private key, accept
 the installation and adopt its repository. No browser is needed for
-that path. Use the adopted project's number and name the GitHub
-repository in section 6's chat; follow its change through CI and
-landing with the same calls.
+that path. The box's Forgejo repository is already the project's home:
+add `--no-home` when adopting GitHub into that project, or use a new
+project to make GitHub its home. Use the adopted project's number and
+name the GitHub repository in section 6's chat; follow its change
+through CI and landing with the same calls.
 
 ## 9. Trying the welcome with nothing real
 

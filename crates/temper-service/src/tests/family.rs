@@ -308,6 +308,9 @@ fn each_outcome_is_encoded_as_the_forge_familys_answer() {
         ("too large", forge::AdoptionRefusal::TooLarge, w::ForgeReason::TooLarge),
         ("unreachable", forge::AdoptionRefusal::Unreachable, w::ForgeReason::Unreachable),
         ("invalid", forge::AdoptionRefusal::InvalidAnswer, w::ForgeReason::InvalidAnswer),
+        ("another project", forge::AdoptionRefusal::AnotherProject, w::ForgeReason::AnotherProject),
+        ("home held", forge::AdoptionRefusal::HomeHeld, w::ForgeReason::HomeHeld),
+        ("prefix occupied", forge::AdoptionRefusal::PrefixOccupied, w::ForgeReason::PrefixOccupied),
     ] {
         let w::Outcome::ForgeRefused(answer) = encoded(Some(forge::ApplicationOutcome::ForgeRefused(input))) else {
             panic!("{row}: forge refusal")

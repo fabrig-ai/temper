@@ -552,6 +552,9 @@ pub fn answer(
                             forge::AdoptionRefusal::TooLarge => w::ForgeReason::TooLarge,
                             forge::AdoptionRefusal::Unreachable => w::ForgeReason::Unreachable,
                             forge::AdoptionRefusal::InvalidAnswer => w::ForgeReason::InvalidAnswer,
+                            forge::AdoptionRefusal::AnotherProject => w::ForgeReason::AnotherProject,
+                            forge::AdoptionRefusal::HomeHeld => w::ForgeReason::HomeHeld,
+                            forge::AdoptionRefusal::PrefixOccupied => w::ForgeReason::PrefixOccupied,
                         },
                     },
                 )

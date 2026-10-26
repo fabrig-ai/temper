@@ -217,6 +217,11 @@ pub(super) fn outcome(
                 forge::Reason::Refused => {
                     words::text(words, builder, Word::Refused, &[name, Hole::Name(prefix.text.clone())]);
                 }
+                forge::Reason::AnotherProject => words::text(words, builder, Word::AnotherProject, &[name]),
+                forge::Reason::HomeHeld => words::text(words, builder, Word::HomeHeld, &[]),
+                forge::Reason::PrefixOccupied => {
+                    words::text(words, builder, Word::PrefixOccupied, &[Hole::Name(prefix.text.clone())]);
+                }
                 forge::Reason::InFlight => words::text(words, builder, Word::InFlight, &[name]),
                 forge::Reason::TooLarge => words::text(words, builder, Word::TooLarge, &[]),
                 forge::Reason::Unreachable => words::text(words, builder, Word::Unreachable, &[number]),

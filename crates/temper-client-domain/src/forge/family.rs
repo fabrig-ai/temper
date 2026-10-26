@@ -103,6 +103,9 @@ pub fn answer(record: &jig_client::Family, limits: &w::Limits, link: &link::Limi
             w::ForgeReason::TooLarge => forge::Reason::TooLarge,
             w::ForgeReason::Unreachable => forge::Reason::Unreachable,
             w::ForgeReason::InvalidAnswer => forge::Reason::InvalidAnswer,
+            w::ForgeReason::AnotherProject => forge::Reason::AnotherProject,
+            w::ForgeReason::HomeHeld => forge::Reason::HomeHeld,
+            w::ForgeReason::PrefixOccupied => forge::Reason::PrefixOccupied,
         }),
         w::Outcome::Unknown => forge::Answer::Unknown,
         w::Outcome::Page(_)

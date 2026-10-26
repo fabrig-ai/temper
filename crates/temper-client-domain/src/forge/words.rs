@@ -56,10 +56,13 @@ pub enum Word {
     Runs,
     RunsWithoutRunner,
     Password,
+    AnotherProject,
+    HomeHeld,
+    PrefixOccupied,
 }
 use HoleKind::{Name, Number};
 pub type Row = (Word, &'static [&'static [u8]], &'static [HoleKind]);
-pub const ROWS: [Row; 51] = [
+pub const ROWS: [Row; 54] = [
     (Word::Title, &[b"Adopt a repository into ", b""], &[Name]),
     (Word::TitleNumber, &[b"Adopt a repository into project ", b""], &[Number]),
     (Word::Forge, &[b"Forge number"], &[]),
@@ -119,11 +122,14 @@ pub const ROWS: [Row; 51] = [
     (Word::Runs, &[b"Forgejo ", b" and its runner ", b", on this machine. CI jobs run here, as you."], &[Name, Name]),
     (Word::RunsWithoutRunner, &[b"Forgejo ", b", on this machine, with no runner."], &[Name]),
     (Word::Password, &[b"Your first password is in ", b". Forgejo asks you to change it when you sign in."], &[Name]),
+    (Word::AnotherProject, &[b"Another project writes ", b". Adopt it as context to read it, or use the project that writes it."], &[Name]),
+    (Word::HomeHeld, &[b"The project has a home already. Adopt this repository without making it home, or choose a new project."], &[]),
+    (Word::PrefixOccupied, &[b"Branches under ", b" are not this deployment's. Choose an unused branch prefix."], &[Name]),
 ];
 fn phrase_id(connector: u16, index: usize) -> PhraseId {
     PhraseId {
         owner: owner(connector),
-        number: u16::try_from(index).expect("51 phrases").checked_add(1000).expect("phrase id fits"),
+        number: u16::try_from(index).expect("54 phrases").checked_add(1000).expect("phrase id fits"),
     }
 }
 pub fn extend(connector: u16, text: u32, shapes: &mut List<PhraseShape>, phrases: &mut List<Phrase>) {
@@ -170,9 +176,10 @@ pub fn name_bytes(word: Word, index: usize, text: u32) -> u32 {
                 256
             }
         }
-        Word::InFlight | Word::Unknown => 513,
-        Word::NoSuchForge | Word::Unreachable | Word::InvalidAnswer => 256,
-        Word::TitleNumber
+        Word::InFlight | Word::Unknown | Word::AnotherProject => 513,
+        Word::PrefixOccupied | Word::NoSuchForge | Word::Unreachable | Word::InvalidAnswer => 256,
+        Word::HomeHeld
+        | Word::TitleNumber
         | Word::Forge
         | Word::Owner
         | Word::Name

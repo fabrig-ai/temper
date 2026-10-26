@@ -678,7 +678,7 @@ fn the_adoption_is_keyed_as_ctls_and_retried_once_without_home() {
     );
     let (attempt, _, _) = sent(out);
     let refused = w::Outcome::ForgeRefused(
-        w::ForgeRefused::new(&w::CEILINGS, w::ForgeRefusedParts { reason: w::ForgeReason::Refused }).unwrap(),
+        w::ForgeRefused::new(&w::CEILINGS, w::ForgeRefusedParts { reason: w::ForgeReason::HomeHeld }).unwrap(),
     );
     let (attempt, key, w::Request::Adopt(adoption)) = sent(reply(&mut root, attempt, refused.clone())) else {
         panic!("retry")
@@ -693,7 +693,7 @@ fn the_adoption_is_keyed_as_ctls_and_retried_once_without_home() {
     }
     assert_eq!(
         root.forge().set_up().unwrap().adoption.as_ref().unwrap().outcome,
-        Some(forge::Answer::ForgeRefused(forge::Reason::Refused))
+        Some(forge::Answer::ForgeRefused(forge::Reason::HomeHeld))
     );
     assert!(deliver_first(&mut root, watch, connected(), made()).is_empty());
 }

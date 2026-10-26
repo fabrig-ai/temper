@@ -575,7 +575,10 @@ fn accept_refusal(pending: &Pending, why: &w::ForgeReason, out: &mut Text) {
         w::ForgeReason::Unreachable => out.put(b"GitHub did not answer: try again\n"),
         // The refusal carries its reason alone, not the deployment's configured capacity.
         w::ForgeReason::TooLarge => out.put(b"temper's accepted installation set is full\n"),
-        w::ForgeReason::InvalidAnswer => out.put(b"GitHub answered what temper did not expect\n"),
+        w::ForgeReason::AnotherProject
+        | w::ForgeReason::HomeHeld
+        | w::ForgeReason::PrefixOccupied
+        | w::ForgeReason::InvalidAnswer => out.put(b"GitHub answered what temper did not expect\n"),
         w::ForgeReason::NoSuchForge => out.put(b"no such forge\n"),
         w::ForgeReason::Refused => out.put(b"refused\n"),
         w::ForgeReason::InFlight => out.put(b"in flight\n"),
@@ -592,5 +595,8 @@ fn forge_reason_name(why: &w::ForgeReason) -> &'static [u8] {
         w::ForgeReason::TooLarge => b"too_large",
         w::ForgeReason::Unreachable => b"unreachable",
         w::ForgeReason::InvalidAnswer => b"invalid_answer",
+        w::ForgeReason::AnotherProject => b"another_project",
+        w::ForgeReason::HomeHeld => b"home_held",
+        w::ForgeReason::PrefixOccupied => b"prefix_occupied",
     }
 }

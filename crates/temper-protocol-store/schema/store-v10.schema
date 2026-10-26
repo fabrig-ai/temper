@@ -178,7 +178,7 @@ record IssueRow { goal: u64 repository: Repository state: Projected number: opti
 record ApplicationAdopted { repository: Repository owner: bytes 4096 name: bytes 4096 role: Role home: bool kinds: Kinds protection: RepositoryProtection }
 # Ceiling: jig-protocol-store people_v13::Refusal::worst_case_bytes(&people_v13::CEILINGS).
 record CoreRefused { refusal: bytes 517 holds jig-store-people Refusal }
-enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer, not_installed }
+enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer, not_installed, another_project, home_held, prefix_occupied }
 record ForgeRefused { reason: ForgeReason }
 enum ApplicationOutcome { adopted: ApplicationAdopted, core_refused: CoreRefused, forge_refused: ForgeRefused }
 record Application { token: u64 until: u64 outcome: ApplicationOutcome }
