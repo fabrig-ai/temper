@@ -252,6 +252,7 @@ fn task_text(
     if let Some(instructions) = &task.instructions {
         instruction_words::text(instructions, out);
     }
+    task_settings::text(task.settings.as_ref(), out);
     dependencies::text(task, me, book, out);
     llm::text_wait(task.run_wait, out);
     out.put(b"\nwaiting on: ");
@@ -580,4 +581,5 @@ mod clock;
 mod dependencies;
 mod instruction_words;
 mod result_words;
+mod task_settings;
 use result_words::text as result_text;

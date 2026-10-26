@@ -3765,6 +3765,21 @@ fn temper_ctl_move_to_newest() {
         Step::Mark("An owner reads the newest settings revision"),
         Step::Run(Call::sign_in()),
         Step::Run(Call::new(&["settings", "--json"])),
+        Step::Mark("A ctl-created agent chat records the newest settings revision"),
+        Step::Run(Call::new(&[
+            "chat",
+            "--project",
+            "1",
+            "--key",
+            "settings-chat",
+            "Inspect my settings revision",
+            "--json",
+        ])),
+        Step::Then(Box::new(|calls| {
+            let created = support::ctl::json(&calls[2]);
+            let task = created["outcome"]["done"]["owner"]["created"]["first"].as_u64().expect("created chat");
+            Call::new(&["task", &task.to_string()])
+        })),
         Step::Mark("Moving the newest revision answers no tasks moved or left behind"),
         Step::Then(Box::new(|calls| {
             Call::new(&["move-to-newest", &support::ctl::newest(&calls[1]).to_string(), "--key", "move-newest"])
@@ -3785,15 +3800,17 @@ fn temper_ctl_move_to_newest() {
     ];
     let seen = support::ctl::run(Story::new(scratch.path(), steps));
     let calls = &seen.calls;
-    ctl_assert_success(&calls[..4]);
+    ctl_assert_success(&calls[..6]);
     let newest = support::ctl::newest(&calls[1]);
-    assert_eq!(calls[2].stdout, format!("moved 0 tasks to revision {newest}\n").as_bytes());
+    let task = String::from_utf8_lossy(&calls[3].stdout);
+    assert!(task.lines().any(|line| line == format!("settings: revision {newest}")), "{task}");
+    assert_eq!(calls[4].stdout, format!("moved 0 tasks to revision {newest}\n").as_bytes());
     assert_eq!(
-        calls[3].stdout.trim_ascii_end(),
+        calls[5].stdout.trim_ascii_end(),
         format!("{{\"newest\":{newest},\"moved\":0,\"stayed\":0}}").as_bytes()
     );
-    assert_eq!(calls[4].exit, Some(Exit::Code(2)));
-    assert!(calls[4].stdout.is_empty());
-    assert_eq!(calls[4].stderr.as_slice(), b"move-to-newest: No visible object with that name\n");
+    assert_eq!(calls[6].exit, Some(Exit::Code(2)));
+    assert!(calls[6].stdout.is_empty());
+    assert_eq!(calls[6].stderr.as_slice(), b"move-to-newest: No visible object with that name\n");
     scratch.remove();
 }

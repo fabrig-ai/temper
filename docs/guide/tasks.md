@@ -41,6 +41,35 @@ A wait is more specific than a pause with no explanation. You may see
 stuck: it may need another task, resources, delegates, your answer or
 news before it can go on.
 
+## Settings revision
+
+Read a task to see the settings revision its runs use for their charter.
+These examples use task 41 and the signed-in client directory `me`:
+
+```sh
+temper ctl me task 41
+temper ctl me task 41 --json
+```
+
+For an agent task, the text includes a line after its instructions:
+
+```text
+settings: revision 7
+```
+
+When a live run was prepared under another revision, the line adds
+`its run on 6`. When the newest revision differs, it adds `newest 9`.
+Each suffix follows a middle dot separator. Between runs, the line
+omits the run number and keeps the newest number when it differs.
+An ended agent task retains its settings line. A procedure's or a
+person's task prints no settings line. Read `temper help settings` for
+held revisions and the current limits of `move-to-newest`.
+
+With `--json`, the task object includes
+`"settings":{"task":7,"run":6,"newest":9}`. The `run` member is null
+when no different live run revision is supplied; `settings` is null
+for a procedure's or a person's task.
+
 ## Goals
 
 A goal is a tracked task with a numeric priority. Tracking is
