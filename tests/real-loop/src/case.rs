@@ -1,6 +1,6 @@
 //! The reference case's cast, accounts and first kit tree (domain/testing.md, 5.3).
 use crate::{fixtures, forge, landing};
-use serde_json::json;
+use serde_json::{Value, json};
 use skein_fake_forge_domain::{self as domain, api};
 
 pub mod acts;
@@ -341,6 +341,18 @@ pub fn fixture_placed() -> forge::Fixture {
     }
 }
 
+// Keep two calls, payload 4,096 and output 8,192. Window 262,144 gives
+// final A = 1,320,403 and F(A) = 1,320,467, within Small's 1,590,110-byte
+// page ceiling; the old 1,048,576-token window required a 1,792,326-byte frame.
+fn small_two_call_window(value: &mut Value, agent: &mut Value) {
+    for model in value["engine"]["llm"]["models"].as_array_mut().expect("engine models") {
+        model["window"] = 262_144.into();
+    }
+    for model in agent["endpoints"][0]["models"].as_array_mut().expect("agent models") {
+        model["window"] = 262_144.into();
+    }
+}
+
 #[must_use]
 pub fn fixture_4_4() -> forge::Fixture {
     forge::Fixture {
@@ -349,6 +361,7 @@ pub fn fixture_4_4() -> forge::Fixture {
             // The survey's delegate and wait share one completion. Its
             // resumed script then cannot collide with the model-change recap.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
+            small_two_call_window(value, agent);
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
         },
         ..fixture()
@@ -379,6 +392,7 @@ pub fn fixture_check() -> forge::Fixture {
             }
             // Announce placement and wait in one completion, with serial tools.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
+            small_two_call_window(value, agent);
             agent["profile"]["policy"]["parallel_tools"] = 1.into();
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             // The opener's checkout needs an LLM grant and an application git
@@ -751,6 +765,7 @@ pub fn fixture_5_4() -> forge::Fixture {
             (fixture().configure)(value, agent, forge);
             // Delegate/amend/cancel and their wait share one LLM completion.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
+            small_two_call_window(value, agent);
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             // Read all three spec parameters, including the planned path (name 6).
             value["engine"]["limits"]["overrides"]["documents.lines"] = 3.into();
@@ -1018,6 +1033,7 @@ pub fn fixture_6_5() -> forge::Fixture {
             // The base eight-task allowance holds this five-task tree.
             // landing.projects is empty: no repository or change is adopted.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
+            small_two_call_window(value, agent);
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();
             value["engine"]["templates"][0]["budget"] = json!({"as_allowed":45});
@@ -1164,6 +1180,7 @@ pub fn fixture_6_7() -> forge::Fixture {
             // 1 spent + A1's 22 + run reserve 10. A1 needs 22 = a5's 10
             // + one opening completion + next run reserve 10, with one spare. No landing projects are used.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
+            small_two_call_window(value, agent);
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();
             value["engine"]["templates"][0]["budget"] = json!({"as_allowed":64});
