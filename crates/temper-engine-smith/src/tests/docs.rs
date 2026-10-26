@@ -127,14 +127,14 @@ fn read_docs_answers_both_members_or_neither_as_an_error() {
 #[test]
 fn read_docs_rejects_wrong_member_types_and_ranges_before_semantic_errors() {
     let cases: &[(&[u8], Problem)] = &[
-        (br#"{"topic":3}"#, Problem::Type),
-        (br#"{"search":3}"#, Problem::Type),
-        (br#"{"topic":"box","from":"0"}"#, Problem::Type),
-        (br#"{"topic":"box","from":-1}"#, Problem::Range),
-        (br#"{"topic":"box","from":4294967296}"#, Problem::Range),
-        (br#"{"topic":"box","from":0.5}"#, Problem::Range),
-        (br#"{"topic":"box","search":3}"#, Problem::Type),
-        (br#"{"search":"box","from":-1}"#, Problem::Range),
+        (br#"{"topic":3}"#, Problem::Type(b"topic")),
+        (br#"{"search":3}"#, Problem::Type(b"search")),
+        (br#"{"topic":"box","from":"0"}"#, Problem::Type(b"from")),
+        (br#"{"topic":"box","from":-1}"#, Problem::Range(b"from")),
+        (br#"{"topic":"box","from":4294967296}"#, Problem::Range(b"from")),
+        (br#"{"topic":"box","from":0.5}"#, Problem::Range(b"from")),
+        (br#"{"topic":"box","search":3}"#, Problem::Type(b"search")),
+        (br#"{"search":"box","from":-1}"#, Problem::Range(b"from")),
     ];
     for (json, problem) in cases {
         assert_eq!(decoded(b"read_docs", json).unwrap_err(), *problem);

@@ -69,6 +69,7 @@ pub(crate) fn checked_call(mut body: Call, limits: &Limits) -> Call {
         | Tool::Introduce { .. }
         | Tool::Subscribe { .. }
         | Tool::SubscribeForge { .. }
+        | Tool::ReadNamed { .. }
         | Tool::ReadForge { .. }
         | Tool::EffectForge { .. }
         | Tool::Unsubscribe { .. }
@@ -95,6 +96,7 @@ pub(crate) fn checked_call(mut body: Call, limits: &Limits) -> Call {
             | Tool::Introduce { .. }
             | Tool::Subscribe { .. }
             | Tool::SubscribeForge { .. }
+            | Tool::ReadNamed { .. }
             | Tool::ReadForge { .. }
             | Tool::EffectForge { .. }
             | Tool::Unsubscribe { .. }
@@ -134,6 +136,7 @@ pub(crate) fn call_needs_input(tool: &Tool) -> bool {
         | Tool::Introduce { .. }
         | Tool::Subscribe { .. }
         | Tool::SubscribeForge { .. }
+        | Tool::ReadNamed { .. }
         | Tool::ReadForge { .. }
         | Tool::EffectForge { .. }
         | Tool::Unsubscribe { .. }
@@ -231,6 +234,7 @@ pub(crate) fn call_shape(tool: &Tool, limits: &tasks::Limits) -> Option<tasks::R
         | Tool::Introduce { .. }
         | Tool::Subscribe { .. }
         | Tool::SubscribeForge { .. }
+        | Tool::ReadNamed { .. }
         | Tool::ReadForge { .. }
         | Tool::EffectForge { .. }
         | Tool::Unsubscribe { .. }
@@ -312,7 +316,7 @@ pub(crate) fn tool_kind(tool: &Tool) -> Option<jig_domain_core::ToolKind> {
         Tool::EffectForge { .. } => jig_domain_core::ToolKind::Effect,
         Tool::Note { entry, .. } => jig_domain_core::ToolKind::Note { scope: entry.scope.clone() },
         Tool::Recall { by, .. } => jig_domain_core::ToolKind::Recall { by: by.clone() },
-        Tool::ReadForge { .. } => jig_domain_core::ToolKind::Read,
+        Tool::ReadNamed { .. } | Tool::ReadForge { .. } => jig_domain_core::ToolKind::Read,
         Tool::Unavailable
         | Tool::Rejected(_)
         | Tool::RejectedMessage(_)
@@ -377,6 +381,7 @@ pub(crate) fn keep_connector_answer(
         | CallAnswer::SubscriptionRefused(_)
         | CallAnswer::Delegated(_)
         | CallAnswer::DelegationDenied { .. }
+        | CallAnswer::ReadRepositoryRefused { .. }
         | CallAnswer::ChangeRefused { .. }
         | CallAnswer::DelegationRefused(_)
         | CallAnswer::NoteWritten { .. }

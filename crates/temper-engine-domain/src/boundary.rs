@@ -123,6 +123,9 @@ pub enum Tool {
     Recall { by: jig_domain_notes::Recall, page: u32 },
     /// Queue one checked forge write with a root-derived idempotency key.
     EffectForge { repository: skein_forge::api::Repository, resource: forge::What, write: Box<skein_forge::api::Write> },
+    /// A host read resolved in its project before resource authority admission.
+    /// A zero file/job `max_bytes` asks for the configured read limit.
+    ReadNamed { repository: Option<Box<[u8]>>, read: skein_forge::api::Read },
     /// Read one adopted forge resource through the connector's bounded fresh lane.
     ReadForge { repository: skein_forge::api::Repository, read: skein_forge::api::Read },
     /// Ask a covering ancestor or person to carry one action the caller cannot take alone.

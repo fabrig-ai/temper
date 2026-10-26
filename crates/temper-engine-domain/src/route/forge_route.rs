@@ -1765,6 +1765,41 @@ pub(crate) fn change_repositories(domain: &Domain, project: u32) -> Box<[Box<[u8
     names.into_boxed()
 }
 
+/// Resolve a run's repository name before checking authority on the read's resource.
+pub(crate) fn named_repository(
+    domain: &Domain,
+    project: u32,
+    named: Option<&[u8]>,
+) -> Result<forge::Repository, tasks::Refusal> {
+    let repositories = domain.forge.readable_repositories(project);
+    let mut chosen = None;
+    for repository in &repositories {
+        let fits = match named {
+            Some(named) => repository_name(repository).as_ref() == named,
+            None => repositories.len() == 1,
+        };
+        if fits {
+            if chosen.is_some() {
+                return Err(tasks::Refusal::Unknown);
+            }
+            chosen = Some(*repository);
+        }
+    }
+    match chosen {
+        Some(repository) => Ok(repository.clone()),
+        None => Err(tasks::Refusal::Unknown),
+    }
+}
+
+pub(crate) fn read_repositories(domain: &Domain, project: u32) -> Box<[Box<[u8]>]> {
+    let repositories = domain.forge.readable_repositories(project);
+    let mut names = List::with_capacity(u32::try_from(repositories.len()).expect("bounded repositories"));
+    for repository in &repositories {
+        names.push(repository_name(repository)).expect("bounded repositories");
+    }
+    names.into_boxed()
+}
+
 /// Expand a chat's request; ordinary delegation shape and authority admission
 /// still decide the resulting batch by its original call name.
 pub(crate) fn chat_change(

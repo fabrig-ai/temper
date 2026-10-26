@@ -214,6 +214,8 @@ fn writable_repositories_include_only_the_requested_project() {
     let (domain, _) = two_forges();
     assert_eq!(domain.forge.writable_repositories(5).len(), 2);
     assert!(domain.forge.writable_repositories(1).is_empty());
+    assert!(domain.forge.readable_repositories(1).is_empty());
+    assert_eq!(domain.forge.readable_repositories(5).len(), 2);
 }
 
 #[test]
@@ -234,6 +236,7 @@ fn writable_repositories_exclude_context_and_missing_push() {
         );
     }
     assert!(domain.forge.writable_repositories(5).is_empty());
+    assert_eq!(domain.forge.readable_repositories(5).len(), 2);
 }
 
 #[test]
@@ -267,6 +270,7 @@ fn writable_repositories_exclude_an_ended_forge() {
     let repositories = domain.forge.writable_repositories(5);
     assert_eq!(repositories.len(), 1);
     assert_eq!(repositories[0].provider.forge, 3);
+    assert_eq!(domain.forge.readable_repositories(5).len(), 1);
 }
 
 fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
