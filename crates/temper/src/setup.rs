@@ -14,8 +14,12 @@ pub(crate) struct Deployment {
     pub demo: Option<temper_fake::demo::Demo>,
 }
 
-pub(crate) fn check(bytes: &[u8], directories: &config::Directories) -> Result<Deployment, String> {
-    let named = temper_service::named(bytes, directories)
+pub(crate) fn check_with(
+    bytes: &[u8],
+    directories: &config::Directories,
+    given: &temper_service::stock::Given,
+) -> Result<Deployment, String> {
+    let named = temper_service::startup::named_with(bytes, directories, given)
         .map_err(|why| String::from_utf8_lossy(&temper_service::startup::lines(&why)).into_owned())?;
     let document = config::document(
         bytes,
@@ -99,6 +103,9 @@ pub(crate) fn check(bytes: &[u8], directories: &config::Directories) -> Result<D
     }
     let limits = box_limits(&named.overrides)?;
     Ok(Deployment { named, checked, limits, demo })
+}
+pub(crate) fn check(bytes: &[u8], directories: &config::Directories) -> Result<Deployment, String> {
+    check_with(bytes, directories, &temper_service::stock::Given::Stock)
 }
 
 fn box_limits(overrides: &[(Box<[u8]>, u64)]) -> Result<temper_box::limits::Limits, String> {

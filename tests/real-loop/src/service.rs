@@ -118,7 +118,8 @@ impl ServiceHost {
         }
         let roots = Self::directories(&path, cluster.is_some());
         let config = std::fs::read(roots.document()).expect("standalone document");
-        let mut envelope = temper::envelope_in(&roots, &config).expect("standalone admission envelope");
+        let mut envelope =
+            temper::envelope_in_with(&roots, &config, &fixtures::given(&path)).expect("standalone admission envelope");
         // The deferred document names port 0 in its LLM, API and git addresses.
         // Each kernel-assigned port can add four decimal digits at preparation.
         if github.is_some() {
@@ -340,8 +341,11 @@ impl Host for ServiceHost {
                     shape.write(self.path.parent().expect("cluster scratch"));
                 }
             }
-            let mut service = temper::prepare_in(&Self::directories(&self.path, self.cluster.is_some()))
-                .expect("standalone preparation");
+            let mut service = temper::prepare_in_with(
+                &Self::directories(&self.path, self.cluster.is_some()),
+                &fixtures::given(&self.path),
+            )
+            .expect("standalone preparation");
             if self.cluster.is_some() {
                 assert!(service.worst_case() <= self.envelope.0, "cluster fits admission");
                 assert!(service.operations() <= self.envelope.1, "cluster operations fit admission");

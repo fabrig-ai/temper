@@ -66,6 +66,7 @@ fn fixture() -> forge::Fixture {
         configure: |value, agent, forge| {
             (landing::fixture().configure)(value, agent, forge);
             value["engine"]["rules"]["ceiling"]["tools"] = 3.into();
+            temper_real_loop_world::fixtures::own_policy(value);
             value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 5.into();
             for project in value["engine"]["projects"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 3.into();

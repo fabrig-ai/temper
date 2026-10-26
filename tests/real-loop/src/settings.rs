@@ -54,3 +54,25 @@ pub fn item(kind: &str, number: u32, value: Value) -> Value {
     item["set"] = value;
     item
 }
+
+/// Parse only startup configuration; the caller supplies typed defaults afterwards.
+#[must_use]
+pub fn configuration(deployment: &Value) -> jig_protocol_config::Engine {
+    let mut value = deployment["engine"].clone();
+    for member in ["charters", "templates", "policies", "rules"] {
+        value.as_object_mut().expect("engine").remove(member);
+    }
+    let bytes = serde_json::to_vec(&value).expect("engine JSON");
+    let document = jig_protocol_config::document(
+        &bytes,
+        &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 65_536, depth: 32 },
+    )
+    .expect("engine document");
+    jig_protocol_config::engine(
+        &document,
+        0,
+        &jig_protocol_config::Directories::working(),
+        jig_protocol_config::Defaults::Passed,
+    )
+    .expect("startup configuration")
+}

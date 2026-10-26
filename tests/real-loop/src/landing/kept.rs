@@ -24,6 +24,7 @@ pub fn fixture() -> crate::forge::Fixture {
                 value["engine"]["limits"]["overrides"][name] = 2.into();
             }
             admit(value);
+            crate::fixtures::own_policy(value);
         },
         ..crate::forge::fixture()
     }

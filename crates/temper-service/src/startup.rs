@@ -38,12 +38,13 @@ pub fn setup_files(checked: &temper_forge_setup::check::Checked) -> Box<[config:
     files.into_boxed()
 }
 /// The same bounded read request is served before admission and by the running host.
-pub fn handover_reads(
+pub fn handover_reads_with(
     document: &[u8],
     directories: &config::Directories,
     checked: &temper_forge_setup::check::Checked,
+    given: &crate::stock::Given,
 ) -> Result<Box<[crate::HandoverRead]>, Problems> {
-    let parsed = load(document, directories, false)?.1.expect("checked engine");
+    let parsed = load_with(document, directories, false, given)?.1.expect("checked engine");
     let mut reads = List::with_capacity(u32::try_from(checked.records_only.len()).expect("checked forges"));
     for entry in &checked.setup.entries {
         // temper-15 removes old forms; their existing file reads stay above.
@@ -59,6 +60,13 @@ pub fn handover_reads(
         }
     }
     Ok(reads.into_boxed())
+}
+pub fn handover_reads(
+    document: &[u8],
+    directories: &config::Directories,
+    checked: &temper_forge_setup::check::Checked,
+) -> Result<Box<[crate::HandoverRead]>, Problems> {
+    handover_reads_with(document, directories, checked, &crate::stock::Given::Stock)
 }
 fn setup_path(index: usize) -> Path {
     Path::root()
@@ -137,8 +145,15 @@ fn nearest(document: &skein_json::Document) -> Shape {
     if member(document, *first, b"socket").is_some() { Shape::EngineAlone } else { Shape::Standalone }
 }
 /// Read and check the shape before opening any named file.
+pub fn shape_with(
+    input: &[u8],
+    directories: &config::Directories,
+    given: &crate::stock::Given,
+) -> Result<Shape, Problems> {
+    Ok(load_with(input, directories, true, given)?.0)
+}
 pub fn shape(input: &[u8], directories: &config::Directories) -> Result<Shape, Problems> {
-    Ok(load(input, directories, true)?.0)
+    shape_with(input, directories, &crate::stock::Given::Stock)
 }
 fn finish_shape(document: &skein_json::Document, object: read::Object, path: &Path, problems: &mut Problems) {
     let mut found = config::Problems::empty();
@@ -352,15 +367,16 @@ fn problem(path: Path, what: What) -> Problems {
 fn indexed(index: usize) -> Path {
     Path::root().member(b"workers").child(Segment::Index(u32::try_from(index).expect("bounded workers")))
 }
-/// Parse jig's engine member and give it its defaults: temper's stock when none of
-/// `charters`, `templates`, `policies` and `rules` is named; the document's while
-/// it still names one (the transitional first slice of protocol/configuration.md, 13.6).
+/// Parse jig's engine member and pass the supplied defaults when no settings member
+/// is named. A legacy document naming one keeps its own defaults and ignores Given
+/// (the transitional first slice of protocol/configuration.md, 13.6).
 /// # Errors
 /// The document's problems at its paths under `engine`.
-pub fn engine(
+pub fn engine_with(
     document: &skein_json::Document,
     at: u32,
     directories: &config::Directories,
+    given: &crate::stock::Given,
 ) -> Result<config::Engine, config::Problems> {
     let mut object = match read::Object::new(document, at) {
         Ok(object) => object,
@@ -383,21 +399,39 @@ pub fn engine(
             problems.push(Path::root().member(b"llm").member(b"models"), config::What::Bound);
             return Err(problems);
         }
-        let defaults = crate::stock::defaults(&engine.llm);
+        let defaults = given.defaults(&engine.llm);
         config::pass(&mut engine, defaults)?;
     }
     Ok(engine)
 }
-fn parse(input: &[u8], directories: &config::Directories) -> Result<Parsed, Problems> {
-    load(input, directories, true)?.1.ok_or(problem(Path::root().member(b"engine"), What::Standalone))
+pub fn engine(
+    document: &skein_json::Document,
+    at: u32,
+    directories: &config::Directories,
+) -> Result<config::Engine, config::Problems> {
+    engine_with(document, at, directories, &crate::stock::Given::Stock)
 }
+fn parse_with(
+    input: &[u8],
+    directories: &config::Directories,
+    given: &crate::stock::Given,
+) -> Result<Parsed, Problems> {
+    load_with(input, directories, true, given)?.1.ok_or(problem(Path::root().member(b"engine"), What::Standalone))
+}
+
+#[cfg(test)]
+fn parse(input: &[u8], directories: &config::Directories) -> Result<Parsed, Problems> {
+    parse_with(input, directories, &crate::stock::Given::Stock)
+}
+
 // Readers need the typed document alone. Startup also checks cross-part and
 // raw-path constraints here, preserving the order of its accumulated problems.
 #[expect(clippy::too_many_lines, reason = "one load pass accumulates all cross-part diagnostics")]
-fn load(
+fn load_with(
     input: &[u8],
     directories: &config::Directories,
     check_start: bool,
+    given: &crate::stock::Given,
 ) -> Result<(Shape, Option<Parsed>), Problems> {
     let length = u32::try_from(input.len()).or(Err(problem(Path::root(), What::Jig(config::What::Bound))))?;
     let document =
@@ -428,7 +462,7 @@ fn load(
     }
     problems.append(found, &root);
     let engine = match engine_at {
-        Some(at) => match engine(&document, at, directories) {
+        Some(at) => match engine_with(&document, at, directories, given) {
             Ok(mut engine) => {
                 engine.limits.clients.watches_per_stream = temper_engine_domain::WATCHES_PER_STREAM;
                 Some(engine)
@@ -566,6 +600,13 @@ fn load(
         }),
     ))
 }
+fn load(
+    input: &[u8],
+    directories: &config::Directories,
+    check_start: bool,
+) -> Result<(Shape, Option<Parsed>), Problems> {
+    load_with(input, directories, check_start, &crate::stock::Given::Stock)
+}
 fn all_files(parsed: &Parsed) -> Box<[config::File]> {
     let engine = config::files(&parsed.engine);
     let worker = match parsed.workers.first() {
@@ -598,8 +639,12 @@ fn all_files(parsed: &Parsed) -> Box<[config::File]> {
     files.into_boxed()
 }
 /// Parse every member before the binary reads any named file.
-pub fn named(document: &[u8], directories: &config::Directories) -> Result<Named, Problems> {
-    let parsed = parse(document, directories)?;
+pub fn named_with(
+    document: &[u8],
+    directories: &config::Directories,
+    given: &crate::stock::Given,
+) -> Result<Named, Problems> {
+    let parsed = parse_with(document, directories, given)?;
     let files = all_files(&parsed);
     Ok(Named {
         files,
@@ -628,6 +673,9 @@ pub fn named(document: &[u8], directories: &config::Directories) -> Result<Named
             None => None,
         },
     })
+}
+pub fn named(document: &[u8], directories: &config::Directories) -> Result<Named, Problems> {
+    named_with(document, directories, &crate::stock::Given::Stock)
 }
 fn check_files(parsed: &Parsed, files: &settings::Files) -> Result<(), Problems> {
     let mut problems = Problems::empty();
@@ -769,7 +817,7 @@ pub fn memory_requirements(
     clippy::too_many_lines,
     reason = "one checked startup pass preserves diagnostic order beside resolved setup and runtime facts"
 )]
-fn checked_start(
+fn checked_start_with(
     document: &[u8],
     directories: &config::Directories,
     files: &settings::Files,
@@ -778,8 +826,9 @@ fn checked_start(
     accounts: Option<&AccountsRuntime>,
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
+    given: &crate::stock::Given,
 ) -> Result<CheckedStart, Problems> {
-    let mut parsed = parse(document, directories)?;
+    let mut parsed = parse_with(document, directories, given)?;
     let agent = match parsed.workers.first() {
         Some(_) => Some(agent.ok_or(problem(indexed(0).member(b"agent"), What::Agent))?),
         None => None,
@@ -956,6 +1005,19 @@ fn checked_start(
         forges: prepared_forges,
     })
 }
+#[expect(clippy::too_many_arguments, reason = "the Stock entry retains the existing startup inputs")]
+fn checked_start(
+    document: &[u8],
+    directories: &config::Directories,
+    files: &settings::Files,
+    agent: Option<&settings::Agent>,
+    seeds: &settings::Seeds,
+    accounts: Option<&AccountsRuntime>,
+    forges: List<crate::ForgeRuntime>,
+    setup: Option<&temper_forge_setup::check::Checked>,
+) -> Result<CheckedStart, Problems> {
+    checked_start_with(document, directories, files, agent, seeds, accounts, forges, setup, &crate::stock::Given::Stock)
+}
 fn read_instructions(core: &mut jig_domain_core::Config, files: &settings::Files) {
     for charter in &mut core.defaults.charters {
         if let Some(contents) = files.contents(&charter.policy.instructions) {
@@ -965,6 +1027,32 @@ fn read_instructions(core: &mut jig_domain_core::Config, files: &settings::Files
 }
 /// Build the engine and worker together from the parsed document and read files.
 #[expect(clippy::too_many_arguments, reason = "startup receives the same directories as named plus the runtime facts")]
+pub fn startup_with(
+    document: &[u8],
+    directories: &config::Directories,
+    files: &settings::Files,
+    agent: &settings::Agent,
+    seeds: &settings::Seeds,
+    accounts: Option<AccountsRuntime>,
+    runtime: WorkerRuntime,
+    forges: List<crate::ForgeRuntime>,
+    given: &crate::stock::Given,
+) -> Result<Service, Problems> {
+    with_setup_given(
+        document,
+        directories,
+        files,
+        Some(agent),
+        seeds,
+        accounts,
+        Some(runtime),
+        forges,
+        None,
+        false,
+        given,
+    )
+}
+#[expect(clippy::too_many_arguments, reason = "the Stock entry retains the existing startup inputs")]
 pub fn startup(
     document: &[u8],
     directories: &config::Directories,
@@ -975,11 +1063,11 @@ pub fn startup(
     runtime: WorkerRuntime,
     forges: List<crate::ForgeRuntime>,
 ) -> Result<Service, Problems> {
-    with_setup(document, directories, files, Some(agent), seeds, accounts, Some(runtime), forges, None, false)
+    startup_with(document, directories, files, agent, seeds, accounts, runtime, forges, &crate::stock::Given::Stock)
 }
 /// Build the standalone service with the binary's checked, resolved forge setup.
 #[expect(clippy::too_many_arguments, reason = "startup receives the checked setup beside the same runtime facts")]
-pub fn with_setup(
+pub fn with_setup_given(
     document: &[u8],
     directories: &config::Directories,
     files: &settings::Files,
@@ -990,9 +1078,10 @@ pub fn with_setup(
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
     under_box: bool,
+    given: &crate::stock::Given,
 ) -> Result<Service, Problems> {
     let CheckedStart { engine, worker, requirements, io, forges, not_set_up } =
-        checked_start(document, directories, files, agent, seeds, accounts.as_ref(), forges, setup)?;
+        checked_start_with(document, directories, files, agent, seeds, accounts.as_ref(), forges, setup, given)?;
     let mut problems = Problems::empty();
     let worker_memory = if let Some(worker) = &worker { worker.jig.memory } else { 0 };
     checks::memory(
@@ -1032,6 +1121,33 @@ pub fn with_setup(
         }
         Err(found) => Err(Problems::jig(found, &Path::root())),
     }
+}
+#[expect(clippy::too_many_arguments, reason = "the Stock entry retains the existing startup inputs")]
+pub fn with_setup(
+    document: &[u8],
+    directories: &config::Directories,
+    files: &settings::Files,
+    agent: Option<&settings::Agent>,
+    seeds: &settings::Seeds,
+    accounts: Option<AccountsRuntime>,
+    runtime: Option<WorkerRuntime>,
+    forges: List<crate::ForgeRuntime>,
+    setup: Option<&temper_forge_setup::check::Checked>,
+    under_box: bool,
+) -> Result<Service, Problems> {
+    with_setup_given(
+        document,
+        directories,
+        files,
+        agent,
+        seeds,
+        accounts,
+        runtime,
+        forges,
+        setup,
+        under_box,
+        &crate::stock::Given::Stock,
+    )
 }
 
 fn prepare_forges(

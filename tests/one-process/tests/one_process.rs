@@ -9,6 +9,7 @@ fn a_signal_mid_run_drains_and_the_next_start_settles_the_claims() {
     assert!(outcome.drained);
     assert_eq!(outcome.restarts, 1);
     assert_eq!(outcome.claims_settled_at_restart, 1);
+    assert_eq!(outcome.settings_revision, 2, "the hosted ctl change is retained");
 }
 #[test]
 fn a_secret_in_a_root_fails_the_referee_naming_it() {
