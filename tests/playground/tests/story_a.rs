@@ -3,6 +3,7 @@ use skein_lib::{Duration, Wall};
 use skein_ui::Role;
 use temper_client_shell_web::limits;
 use temper_playground::{A, VISITOR_ANSWER, VISITOR_EXCHANGES, VISITOR_PIECE};
+use temper_playground_world::story_a;
 use temper_playground_world::walk::{Outcome, Walk};
 
 const START: Wall = Wall::from_nanos(1_700_000_000_000_000_000);
@@ -34,4 +35,11 @@ fn the_visitors_limits_are_the_web_clients() {
     assert_eq!(VISITOR_EXCHANGES, limits::EXCHANGES + 1);
     assert_eq!(VISITOR_ANSWER, limits::BODY_BYTES);
     assert_eq!(VISITOR_PIECE, limits::PIECE);
+}
+
+#[test]
+fn story_a_lands_the_csv_change_and_answers_the_other_two() {
+    let mut walk = Walk::new(&A, SEED, START);
+    let outcome = walk.run(story_a::whole());
+    assert_eq!(outcome, Outcome::Done, "{:?}", walk.tree());
 }
