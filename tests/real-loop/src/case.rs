@@ -293,6 +293,9 @@ pub fn fixture() -> forge::Fixture {
             }
             fixtures::own_policy(value);
             value["world_settings"]["case"] = true.into();
+            // These stories budget ten-unit runs and their nested delegates;
+            // their own cap keeps those purses independent of the binary's K.
+            value["world_settings"]["maximum_run_spend"] = 10.into();
             value["engine"]["limits"]["overrides"]["people.projects"] = 2.into();
             value["engine"]["limits"]["overrides"]["authority.projects"] = 2.into();
             value["engine"]["limits"]["overrides"]["tasks.funders"] = 4.into();
