@@ -68,6 +68,7 @@ pub struct Store {
     drivers: [Driver; 3],
     pub(crate) submitted: Queue<Submit>,
     pub(crate) opened: bool,
+    pub(crate) open_requested: bool,
     pub(crate) pending_generation: bool,
     /// The installation's identifier: the drawn one until the store opens,
     /// then the one it keeps (jig's store.md 4.4).
@@ -244,6 +245,7 @@ impl Store {
             drivers,
             submitted: Queue::with_capacity(room),
             opened: false,
+            open_requested: false,
             pending_generation: false,
             installation,
             adopted: false,
@@ -559,6 +561,7 @@ impl Store {
                         && !self.drivers[2].handles.is_empty()
                         && let Some(fd) = self.root.take()
                     {
+                        self.open_requested = true;
                         self.ask(protocol::Request::Open {
                             owner: Token::new(1),
                             root: protocol::Root { token: Token::new(1), fd },

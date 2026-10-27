@@ -14,12 +14,16 @@ pub struct Host {
     wait_probe: bool,
     listening_clients: bool,
     wait_reported: bool,
+    startup_reported: String,
     now: Time,
 }
 impl Host {
     #[must_use]
     pub fn new(service: Service, directories: Directories) -> Self {
         let store = directories.data.clone();
+        if std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some() {
+            eprintln!("R8 host entry: pid={}", std::process::id());
+        }
         Self {
             service,
             directories,
@@ -29,6 +33,7 @@ impl Host {
             wait_probe: std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some(),
             listening_clients: false,
             wait_reported: false,
+            startup_reported: String::new(),
             now: Time::ZERO,
         }
     }
@@ -72,6 +77,13 @@ impl skein_shell::Host for Host {
         Some(Exit::Code(code))
     }
     fn drain(&mut self) {
+        if self.wait_probe {
+            let startup = self.service.startup_state();
+            if self.startup_reported != startup {
+                eprintln!("R8 startup: {startup}");
+                self.startup_reported = startup;
+            }
+        }
         while let Some(read) = self.service.take_handover_read() {
             let answer = read_handover(&read);
             self.service.handover_read(read.forge, read.run, answer);
@@ -83,6 +95,9 @@ impl skein_shell::Host for Host {
         while let Some(note) = self.service.listening().pop() {
             if matches!(&note, temper_service::Note::Listening { listener: temper_service::Listening::Clients, .. }) {
                 self.listening_clients = true;
+                if self.wait_probe {
+                    eprintln!("R8 clients listener armed: {}", self.service.wait_state());
+                }
             }
             let lines = note_line(note);
             eprint!("{lines}");
@@ -120,12 +135,8 @@ impl skein_shell::Host for Host {
         }
         if self.wait_probe {
             self.service.check_wait_boundary(self.now);
-            if self.listening_clients && !self.wait_reported && !self.service.work_pending(self.now) {
-                eprintln!(
-                    "R8 first wait after listening: deadline={:?}; {}",
-                    self.service.next_deadline(),
-                    self.service.wait_state()
-                );
+            if !self.wait_reported && !self.service.work_pending(self.now) {
+                eprintln!("R8 first wait: deadline={:?}; {}", self.service.next_deadline(), self.service.wait_state());
                 self.wait_reported = true;
             }
         }

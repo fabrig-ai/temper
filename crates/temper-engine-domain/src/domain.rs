@@ -43,6 +43,7 @@ pub struct Domain {
     scratch: Queue<Request>,
     pub(crate) config: RootConfig,
     pub(crate) core: Core,
+    pub(crate) restart_seen: u16,
     pub(crate) journal: Journal,
     pub(crate) stop_pending: bool,
     pub(crate) door_pass: bool,
@@ -342,6 +343,7 @@ impl Domain {
             core_header_loaded: false,
             restored_commits: None,
             core,
+            restart_seen: 0,
             brief_connectors: Slab::with_capacity(
                 limits
                     .brief
@@ -416,6 +418,12 @@ impl Domain {
     #[must_use]
     pub fn restart_step(&self) -> Option<jig_domain_core::RestartStep> {
         self.core.restart_step()
+    }
+
+    /// Startup steps reached, including synchronous steps between shell passes.
+    #[must_use]
+    pub const fn restart_steps(&self) -> u16 {
+        self.restart_seen
     }
 
     /// Decisions open only after the core's restart script completes.

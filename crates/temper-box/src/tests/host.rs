@@ -284,6 +284,24 @@ fn an_exited_serve_loses_its_answers_and_gets_fresh_pipes() {
 }
 
 #[test]
+fn a_serve_restarts_when_its_requests_pipe_closes_before_its_exit() {
+    let mut harness = Harness::with_stubborn(&[long(b"serve", &[b"never"])], true);
+    harness.run_until_idle();
+    let pid = harness.hosted.get(harness.serve_index()).unwrap().pid;
+    harness.close_requests();
+    harness.run_until_idle();
+    harness.sim.finish_service(pid, Exit::Signal(6));
+    harness.run_until_idle();
+    harness.sim.advance_to(harness.sim.now().saturating_add(Duration::from_millis(500)));
+    harness.run_until_idle();
+    assert_eq!(harness.spawn_times(b"serve").len(), 2, "the closed old requests pipe cannot hold a fresh spawn");
+    harness.terminate();
+    assert_eq!(harness.run_to_end(), Exit::Code(0));
+    harness.sim.assert_quiescent(harness.pid);
+    harness.sim.assert_no_open_fds(harness.pid);
+}
+
+#[test]
 fn a_serve_that_does_not_read_holds_the_next_ask_until_replies_are_written() {
     for buffer in [8, 16] {
         let mut harness = Harness::buffered(grouped_steps(), &[], true, buffer);

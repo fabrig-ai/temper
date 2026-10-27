@@ -163,6 +163,7 @@ pub struct Service {
     orders: Queue<Order>,
     order_walls: Queue<Wall>,
     memory: u64,
+    restart_trace: Option<u16>,
 }
 impl Service {
     /// Checks the policy limits and adopts the binary's descriptors.
@@ -266,6 +267,7 @@ impl Service {
             orders: Queue::with_capacity(capacity),
             order_walls: Queue::with_capacity(capacity),
             memory,
+            restart_trace: None,
         })
     }
     fn room(&self, bound: io::MaxOut) -> bool {
@@ -765,6 +767,7 @@ impl Service {
     }
     fn children(&mut self) {
         self.withdrawn();
+        self.trace_restart();
         let failure = self.failure;
         let deferred = !self.deferred.is_empty();
         for step in 0..self.children.len() {
@@ -828,6 +831,7 @@ impl Service {
             if state.spawn && settled && self.logs.takes() && failure.is_none() && !withdraw_queued(&self.orders, step)
             {
                 state.spawn = false;
+                self.restart_trace = None;
                 state.tail.reset();
                 self.serial = self.serial.checked_add(1).expect("spawn serial");
                 let owner = Token::new(self.serial);
@@ -854,6 +858,58 @@ impl Service {
                     },
                 });
             }
+        }
+    }
+    fn trace_restart(&mut self) {
+        if !self.logs.takes()
+            || !self.settings.environment.iter().any(|entry| entry.as_ref() == b"TEMPER_R8_WAIT_CHECK=1")
+        {
+            return;
+        }
+        for (step, state) in self.children.iter().enumerate() {
+            if !state.spawn || self.steps[step].step.name() != self.settings.serve.as_ref() {
+                continue;
+            }
+            let flags = [
+                state.stdin.is_none(),
+                state.ready_settled(),
+                state.pipes[0].token.is_none(),
+                state.pipes[0].lines.is_empty(),
+                state.pipes[0].reading,
+                state.pipes[1].token.is_none(),
+                state.pipes[1].lines.is_empty(),
+                state.pipes[1].reading,
+                self.closing_control[0].is_none(),
+                self.closing_control[1].is_none(),
+                state.owner.is_some(),
+                state.process.is_some(),
+                self.failure.is_some(),
+                withdraw_queued(&self.orders, step),
+            ];
+            // Observe only a blocked gate: do not insert a log write before
+            // an otherwise runnable spawn and change its completion ordering.
+            if flags[0] && flags[1] && flags[2] && flags[3] && flags[5] && flags[6] && flags[8] && flags[9] {
+                return;
+            }
+            let mut signature = 0;
+            for (bit, value) in flags.iter().enumerate() {
+                if *value {
+                    signature |= 1 << bit;
+                }
+            }
+            if self.restart_trace == Some(signature) {
+                return;
+            }
+            self.restart_trace = Some(signature);
+            self.logs.put(Piece {
+                step,
+                wall: self.env.wall,
+                bytes: alloc::format!(
+                    "R8 box spawn gate: stdin_settled={}; ready_settled={}; stdout=[closed={}, empty={}, reading={}]; stderr=[closed={}, empty={}, reading={}]; control_closed=[{},{}]; owner={}; process={}; failure={}; withdraw={}",
+                    flags[0], flags[1], flags[2], flags[3], flags[4], flags[5], flags[6], flags[7], flags[8], flags[9], flags[10], flags[11], flags[12], flags[13]
+                ).into_bytes().into_boxed_slice(),
+            });
+            return;
         }
     }
     fn notice_room(&self) -> bool {

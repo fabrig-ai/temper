@@ -312,6 +312,19 @@ pub(crate) fn restart_request(
     if domain.core.stopping() {
         return;
     }
+    if let jig_domain_core::RestartRequest::Step(step) = &request {
+        use jig_domain_core::RestartStep;
+        domain.restart_seen |= match step {
+            RestartStep::LoadCore => 1,
+            RestartStep::LoadInbox => 2,
+            RestartStep::RestoreConnector { .. } => 4,
+            RestartStep::Switch => 8,
+            RestartStep::AdoptRuns => 16,
+            RestartStep::ReadAfresh { .. } => 32,
+            RestartStep::SettleOutbox { .. } => 64,
+            RestartStep::Open => 128,
+        };
+    }
     match request {
         jig_domain_core::RestartRequest::Idle => {}
         jig_domain_core::RestartRequest::Settings { .. }

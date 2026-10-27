@@ -54,6 +54,34 @@ enum BoxOutput {
 // Existing reservation for setup/forge handoffs beside a root routing pass.
 const SETUP_ROUTING_HEADROOM: u32 = 2;
 impl Service {
+    /// Secret-free startup milestones retained across one shell iteration.
+    #[must_use]
+    pub fn startup_state(&self) -> alloc::string::String {
+        let Some(engine) = &self.engine else {
+            return alloc::string::String::from("worker-only");
+        };
+        let mut steps = alloc::string::String::new();
+        for (bit, step) in
+            ["LoadCore", "LoadInbox", "RestoreConnector", "Switch", "AdoptRuns", "ReadAfresh", "SettleOutbox", "Open"]
+                .iter()
+                .enumerate()
+        {
+            if engine.domain.restart_steps() & (1 << bit) != 0 {
+                use core::fmt::Write as _;
+                write!(steps, " {step}").expect("startup steps format");
+            }
+        }
+        alloc::format!(
+            "store_open_requested={}; store_open_result={}; end={:?}; root_steps=[{} ]; current={:?}; mark_committed={}",
+            engine.store.open_requested,
+            engine.store.opened,
+            engine.end,
+            steps,
+            engine.domain.restart_step(),
+            engine.store.component.mark_durable()
+        )
+    }
+
     /// Secret-free owner state at the shell's wait boundary, for restart probes.
     #[must_use]
     pub fn wait_state(&self) -> alloc::string::String {

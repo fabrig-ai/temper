@@ -559,6 +559,7 @@ fn listeners_refusal(why: skein_shell::ListenersRefusal) -> String {
     }
 }
 fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
+    r8_startup("serve entry");
     let listeners = skein_shell::inherited_listeners().map_err(listeners_refusal)?;
     let requests = 3 + i32::try_from(listeners.len()).expect("bounded inherited listeners");
     let answers = requests + 1;
@@ -569,7 +570,9 @@ fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
             }
         }
     }
+    r8_startup("inherited descriptors checked");
     let bytes = directories.read()?;
+    r8_startup("configuration read; prepare entering");
     let mut owned = listeners.iter().map(|(fd, _)| *fd).collect::<Vec<_>>();
     let prepared = prepare_with_limits(directories, &bytes, &mut owned, boxed, &service::stock::Given::Stock);
     let (mut service, store, line_bytes) = match prepared {
@@ -579,6 +582,7 @@ fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
             return Err(why);
         }
     };
+    r8_startup("prepare returned");
     for (fd, addr) in listeners {
         if let Err(fd) = service.adopt_listener(fd, addr) {
             close(owned);
@@ -606,9 +610,17 @@ fn serve(directories: &Directories, boxed: bool) -> Result<Exit, String> {
             return Err(why);
         }
     };
+    r8_startup("kernel opened; host entering");
     let mut host = Host::new(service, directories.clone());
     host.store = store;
-    Ok(skein_shell::drive(&mut kernel, &Clock::new(), &mut host))
+    let exit = skein_shell::drive(&mut kernel, &Clock::new(), &mut host);
+    r8_startup("host returned");
+    Ok(exit)
+}
+fn r8_startup(step: &str) {
+    if std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some() {
+        eprintln!("R8 startup: {step}; pid={}", std::process::id());
+    }
 }
 /// The effective user's passwd login; forge commands preserve lookup refusals.
 pub(crate) fn login(user: u32) -> Result<Box<[u8]>, String> {

@@ -4045,13 +4045,19 @@ fn assert_held_reviewers(calls: &[support::Ended], hold: ReviewHold) {
 #[derive(Clone, Copy)]
 struct RestartProbe {
     imported: bool,
+    completed_export_only: bool,
     cut_start: bool,
     shared_cache: bool,
     hold: ReviewHold,
 }
 
-const RESTART_CONTROL: RestartProbe =
-    RestartProbe { imported: false, cut_start: false, shared_cache: false, hold: ReviewHold::AfterCall };
+const RESTART_CONTROL: RestartProbe = RestartProbe {
+    imported: false,
+    completed_export_only: false,
+    cut_start: false,
+    shared_cache: false,
+    hold: ReviewHold::AfterCall,
+};
 
 // R8: the same owned deployment must answer ctl after a settled stop with its review held.
 #[test]
@@ -4067,6 +4073,11 @@ fn a_restart_over_an_imported_then_exported_account_answers_ctl() {
 #[test]
 fn a_restart_after_a_cut_at_listening_answers_ctl() {
     held_review_restart(RestartProbe { imported: true, cut_start: true, ..RESTART_CONTROL });
+}
+
+#[test]
+fn an_imported_account_exports_after_its_two_budget_held_reviews() {
+    held_review_restart(RestartProbe { imported: true, completed_export_only: true, ..RESTART_CONTROL });
 }
 
 #[test]
@@ -4175,7 +4186,7 @@ fn held_review_restart(probe: RestartProbe) {
         Step::Run(Call::new(&["task", "8", "--json"])),
         Step::Run(Call::new(&["change", "6", "--json"])),
     ]);
-    if !probe.imported {
+    if !probe.imported || probe.completed_export_only {
         steps.push(Step::Run(Call::new(&[
             "export",
             "1",
@@ -4183,7 +4194,7 @@ fn held_review_restart(probe: RestartProbe) {
         ])));
     }
     let stop = || {
-        if probe.imported {
+        if probe.imported && !probe.completed_export_only {
             let value: serde_json::Value =
                 serde_json::from_slice(&std::fs::read(paths[0].join("temper.json")).expect("fixture configuration"))
                     .expect("fixture configuration JSON");
@@ -4216,6 +4227,10 @@ fn held_review_restart(probe: RestartProbe) {
     assert_held_reviewers(&first.calls, probe.hold);
     if probe.imported {
         assert!(!scratch.path().join("incoming-account.move").exists(), "the deployed account came through import");
+    }
+    if probe.completed_export_only {
+        scratch.remove();
+        return;
     }
     let mut scripts = scripts;
     for script in &mut scripts {

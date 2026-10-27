@@ -529,6 +529,24 @@ impl Harness {
         self.sim.reap(child.pid, &mut completes);
         assert_eq!(completes.pop().unwrap().result, Ok(Done::Count(u32::try_from(line.len()).unwrap())));
     }
+    pub fn close_requests(&mut self) {
+        let index = self.serve_index();
+        let child = self.hosted.get_mut(index).expect("live serve");
+        let fd = child.output.take().expect("serve requests pipe");
+        let mut descriptors = List::with_capacity(u32::try_from(child.descriptors.len()).unwrap());
+        for descriptor in &child.descriptors {
+            if *descriptor != fd {
+                descriptors.push(*descriptor).unwrap();
+            }
+        }
+        child.descriptors = descriptors.into_boxed();
+        let mut submissions = Queue::with_capacity(1);
+        submissions.push(Submit { op: Token::new(103), kind: Op::Close { fd } });
+        self.sim.submit(child.pid, &mut submissions);
+        let mut completions = Queue::with_capacity(1);
+        self.sim.reap(child.pid, &mut completions);
+        assert_eq!(completions.pop().unwrap().result, Ok(Done::Nothing));
+    }
     pub fn read_reply(&mut self, most: u32) -> Box<[u8]> {
         let child = self.hosted.get(self.serve_index()).unwrap();
         self.read_pipe(child.pid, child.input.unwrap(), most)
