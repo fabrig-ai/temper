@@ -154,8 +154,8 @@ fn reviewer(llm: &jig_protocol_config::Llm) -> Charter {
     value
 }
 fn grants() -> Box<[authority::Grant]> {
-    let mut grants = List::with_capacity(10);
-    for kind in [1, 2, 3, 4, 7, 8, 10, 11, 12, 13] {
+    let mut grants = List::with_capacity(16);
+    for kind in [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17] {
         grants
             .push(authority::Grant {
                 connector: FORGE,
@@ -165,7 +165,7 @@ fn grants() -> Box<[authority::Grant]> {
                     last: authority::Last::Open(Box::default()),
                 },
             })
-            .expect("ten stock forge grants");
+            .expect("stock forge grants");
     }
     grants.into_boxed()
 }
@@ -180,6 +180,7 @@ fn ceiling(ceiling_spend: u64) -> authority::Authority {
                 authority::Executor::Charter(2),
                 authority::Executor::Charter(4),
                 authority::Executor::Procedure(2),
+                authority::Executor::Procedure(3),
             ]),
             tasks: 18,
             depth: 4,

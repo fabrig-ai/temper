@@ -346,3 +346,22 @@ fn the_reviewer_keeps_the_coding_run_with_read_only_workspace_families() {
         assert!(authority.delegation.kinds.contains(&jig_domain_authority::Executor::Charter(4)));
     }
 }
+
+#[test]
+fn stock_and_init_admit_the_landing_procedure_and_its_effects() {
+    let document = generated();
+    let engine_bytes = fixtures::value(&document, b"engine");
+    let engine = fixtures::parse_engine(&engine_bytes);
+    let defaults = crate::stock::defaults(&engine.llm);
+    let core = config::core(&engine, [1; 16], 7);
+    for ceiling in [
+        &defaults.rules.ceiling,
+        &defaults.policies.get(&1).unwrap().policy.ceiling,
+        &core.seed_projects[0].policy.policy.ceiling,
+    ] {
+        assert!(ceiling.delegation.kinds.contains(&jig_domain_authority::Executor::Procedure(3)));
+        for kind in [3, 4, 6, 9, 12, 15, 16, 17] {
+            assert!(ceiling.grants.iter().any(|grant| grant.kind == kind), "kind {kind}");
+        }
+    }
+}
