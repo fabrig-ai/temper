@@ -1,0 +1,24 @@
+# temper ctl change
+
+Kind: reference
+
+Changes: read a change's way to landing.
+
+## change show
+
+```
+change show TASK [--project PROJECT] [--since DIGEST] [--until CONDITION] [--timeout DURATION]
+  TASK (task): a number from 1 to 18446744073709551615; required. The change task's number
+  --project PROJECT: a project's name or number; optional. Its project; the task's when absent
+  --since DIGEST: a digest, as a read prints it; optional. Wait until it differs from the read that printed DIGEST
+  --until CONDITION: one of pull, ci:pending, ci:passed, ci:failed, held, landed or changed; optional. Wait until it holds: pull, ci:pending, ci:passed, ci:failed, held, landed, or changed
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long a wait lasts; 300 seconds when absent, at most 3600
+Read a change's way to landing: its pull request, CI and step
+Prints: `change N`, its repository, branch and landing branch, its pull request, step and CI at its head, and a digest
+--json: the record change.
+Key: none.
+Until it lands, it prints `next: temper ctl DIR change show TASK
+--until landed`; landed, its merge commit. A task with no change
+fails, `no change panel for task N` (exit 2). The forge holds its
+diff, reviews and logs: read them there.
+```
