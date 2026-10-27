@@ -449,10 +449,12 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
         queue_repairs,
         producing_charter,
         review_charter,
+        result,
     } = value;
     w::ChangeRow::new(
         &w::CEILINGS,
         w::ChangeRowParts {
+            result: encode_result(result),
             task: *task,
             repository: names::encode_repository(*repository),
             branch: branch.clone(),
@@ -525,8 +527,10 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         queue_repairs,
         producing_charter,
         review_charter,
+        result,
     } = value.into_parts();
     top::ChangeRow {
+        result: decode_result(result),
         task,
         repository: names::decode_repository(repository),
         branch,
@@ -658,4 +662,37 @@ fn decode_gate_failures(values: List<w::GateFailure>) -> Box<[d::GateFailure]> {
         result.push(d::GateFailure { number, count }).expect("same count");
     }
     result.into_boxed()
+}
+
+fn encode_result_text(value: &top::ResultText) -> w::ResultText {
+    w::ResultText::new(&w::CEILINGS, w::ResultTextParts { bytes: value.bytes.clone(), cut: value.cut }).expect(FITS)
+}
+fn decode_result_text(value: w::ResultText) -> top::ResultText {
+    let w::ResultTextParts { bytes, cut } = value.into_parts();
+    top::ResultText { bytes, cut }
+}
+fn encode_result(value: &top::ChangeResult) -> w::ChangeResult {
+    w::ChangeResult::new(
+        &w::CEILINGS,
+        w::ChangeResultParts {
+            head: value.head,
+            checks: encode_result_text(&value.checks),
+            failed: encode_result_text(&value.failed),
+            repairs: encode_result_text(&value.repairs),
+            repair_count: value.repair_count,
+            reviews: encode_result_text(&value.reviews),
+        },
+    )
+    .expect(FITS)
+}
+fn decode_result(value: w::ChangeResult) -> top::ChangeResult {
+    let w::ChangeResultParts { head, checks, failed, repairs, repair_count, reviews } = value.into_parts();
+    top::ChangeResult {
+        head,
+        checks: decode_result_text(checks),
+        failed: decode_result_text(failed),
+        repairs: decode_result_text(repairs),
+        repair_count,
+        reviews: decode_result_text(reviews),
+    }
 }

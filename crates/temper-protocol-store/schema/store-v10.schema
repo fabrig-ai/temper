@@ -167,7 +167,9 @@ record GateFailure { number: u64 count: u32 }
 record GateRemark { number: u64 head: fixed 32 words: bytes 1048576 }
 record Change { task: u64 state: ChangeState gates: list 1024 Gate clean: list 1024 fixed 32 repairs: u32 resolutions: u32 updates: u32 since: u64 ready_since: option u64 owns_turn: bool last_head: option fixed 32 gate_failures: list 1024 GateFailure released: option ChangeHold }
 record ChangeCi { head: fixed 32 status: ChangeStatus }
-record ChangeRow { task: u64 repository: Repository branch: bytes 4096 base: bytes 4096 title: bytes 1048576 body: bytes 1048576 priority: u32 change: Change ci: option ChangeCi pull: option u64 pending: option u64 effect: EffectResult delegate: option DelegateRef delegate_status: ChangeStatus verdicts: list 1024 GateReport gate_remarks: list 1024 GateRemark drift: option ChangeHold base_repair: bool queue_repair: option u64 queue_repairs: u32 producing_charter: u32 review_charter: u32 }
+record ResultText { bytes: bytes 1048576 cut: u64 }
+record ChangeResult { head: option fixed 32 checks: ResultText failed: ResultText repairs: ResultText repair_count: u64 reviews: ResultText }
+record ChangeRow { result: ChangeResult task: u64 repository: Repository branch: bytes 4096 base: bytes 4096 title: bytes 1048576 body: bytes 1048576 priority: u32 change: Change ci: option ChangeCi pull: option u64 pending: option u64 effect: EffectResult delegate: option DelegateRef delegate_status: ChangeStatus verdicts: list 1024 GateReport gate_remarks: list 1024 GateRemark drift: option ChangeHold base_repair: bool queue_repair: option u64 queue_repairs: u32 producing_charter: u32 review_charter: u32 }
 # 04.4ac: goal issue projections and the root-authorized desired view.
 enum Phase { waiting, active, settling, held, done, failed, cancelled }
 record PlanItem { text: text 65536 phase: Phase }

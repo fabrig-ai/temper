@@ -166,6 +166,7 @@ fn changed(task: u64, repository: Repository, pull: Option<u64>, head: Option<[u
         delegate: None,
         delegate_status: change::Status::Passed,
         verdicts: Box::new([]),
+        result: d::ChangeResult::empty(),
         gate_remarks: Box::new([]),
         drift: None,
         base_repair: false,

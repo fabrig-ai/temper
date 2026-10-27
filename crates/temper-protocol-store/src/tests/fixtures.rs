@@ -749,6 +749,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         delegate: Some((18, Delegate::Gate { number: 19, head: [20; 32] })),
         delegate_status: Status::Passed,
         verdicts: Box::new([GateReport { number: 21, head: [22; 32], status: Status::Failed }]),
+        result: top::ChangeResult::empty(),
         gate_remarks: Box::new([top::GateRemark { number: 23, head: [24; 32], words: Box::new([25]) }]),
         drift: Some(Hold::BranchMoved),
         base_repair: true,

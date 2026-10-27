@@ -36,6 +36,7 @@ pub fn change_row() -> top::ChangeRow {
         delegate: None,
         delegate_status: change::Status::Unknown,
         verdicts: Box::new([]),
+        result: top::ChangeResult::empty(),
         gate_remarks: Box::new([]),
         drift: None,
         base_repair: false,

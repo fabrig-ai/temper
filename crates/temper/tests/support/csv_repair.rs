@@ -49,6 +49,7 @@ pub fn llm(config: &Path) -> super::boxed::CtlLlm {
     let mut scripts = first_repository::csv_scripts().into_vec();
     let Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else { panic!("delegate") };
     let mut delegate: Value = serde_json::from_slice(arguments).expect("delegate JSON");
+    delegate["batch"][0]["contract"]["words"] = 512.into();
     delegate["batch"][0]["spec"]["words"] = "@hello-readme Add CSV export to playground/widget".into();
     *arguments = serde_json::to_vec(&delegate).expect("delegate JSON").into_boxed_slice();
     // Use the shared CSV implementation, writing only src/main.rs at H1.
@@ -376,4 +377,24 @@ pub fn assert_briefs(model: &super::forge_land::Seen, landed: &Value) {
     for text in ["src/main.rs", "changes/1.md", "After:\n", "fruit,count", NOTE.trim()] {
         assert!(diff.contains(text), "review diff includes {text}: {review}");
     }
+    let mut received = String::new();
+    for query in &model.requests {
+        if String::from_utf8_lossy(&query.system).contains("@first-repository") {
+            for message in &query.messages {
+                if message.role == skein_fake_llm_domain::api::Role::User {
+                    for part in &message.parts {
+                        if let skein_fake_llm_domain::api::Part::Text { text } = part {
+                            received.push_str(&String::from_utf8_lossy(text));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let head = landed["head"].as_str().expect("landed head");
+    assert!(received.contains(&format!("checks at {head}:")), "requester received checks: {received}");
+    assert!(received.contains("/ check (pull_request) passed"), "{received}");
+    assert!(received.contains("/ changes (pull_request) passed"), "{received}");
+    assert!(received.contains("repairs: 1: CI failed: / changes (pull_request)"), "{received}");
+    assert!(received.contains(&format!("reviews: approved at {head}")), "{received}");
 }

@@ -300,7 +300,9 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
                 && row.task == change
             {
                 assert_eq!(row.change.repairs, 2);
-                if matches!(row.change.state, temper_engine_domain_forge_change::State::Landed { .. }) {
+                if matches!(row.change.state, temper_engine_domain_forge_change::State::Landed { .. })
+                    && driver.store.rows.contains_key(&Key::Core(core::Key::Tasks(tasks::Key::Ended(change))))
+                {
                     return;
                 }
             }
@@ -415,7 +417,16 @@ pub(super) fn story() {
     repair_change(&mut driver, &first, 46);
     assert!(assigned(&driver, second).is_none(), "D2 still waits until its coordinator ends");
     finish(&mut driver, &first, tasks::TaskResult::Report { words: b"D1 landed".as_slice().into() });
-    let second = assigned(&driver, second).expect("D2 follows D1");
+    // The extra head-context reads can exhaust this tiny forge's rate window;
+    // D1's branch release must settle before its dependent can be assigned.
+    for _ in 0..30 {
+        if assigned(&driver, second).is_some() {
+            break;
+        }
+        driver.fire_at(Duration::from_nanos(driver.env.now.as_nanos() + 1_000_000_000));
+        driver.pump();
+    }
+    let second = assigned(&driver, second).expect("D2 follows D1's settled ending");
     repair_change(&mut driver, &second, 47);
     finish(&mut driver, &second, tasks::TaskResult::Report { words: b"D2 landed".as_slice().into() });
     assert_eq!(driver.store.header().tasks, 14, "chat, advisor, coordinators, procedures and eight workers");

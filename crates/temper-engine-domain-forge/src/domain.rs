@@ -1347,7 +1347,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                 save_change(d, out, saved);
             }
         }
-        Event::Delegated { task, child, kind } => delegated(d, task, child, kind, out),
+        Event::Delegated { task, child, kind } => delegated(d, env, task, child, kind, out),
         Event::DelegateRefused { task, child } => delegate_refused(d, env, task, child, out),
         Event::DelegateResult { task, child, status, failed, cancelled, words } => {
             delegate_result(d, env, task, child, status, failed, cancelled, &words, out);
@@ -2275,11 +2275,21 @@ fn register_change(d: &mut Domain, env: &Env<Limits>, row: ChangeRow, out: &mut 
     save_queue_change(d, env, None, row, out);
 }
 
-fn delegated(d: &mut Domain, task: u64, child: u64, kind: change::Delegate, out: &mut Queue<Request>) {
+fn delegated(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    task: u64,
+    child: u64,
+    kind: change::Delegate,
+    out: &mut Queue<Request>,
+) {
     let Some(row) = d.changes.get_mut(&task) else {
         emit(out, Request::Refused { task });
         return;
     };
+    if let change::Delegate::Repair(why) = kind {
+        row.result.repaired(why, row.change.last_head, env.limits.client.answer_bytes);
+    }
     row.delegate = Some((child, kind));
     row.delegate_status = change::Status::Unknown;
     let saved = row.clone();
@@ -2342,6 +2352,20 @@ fn delegate_result(
     row.delegate_status = status;
     match kind {
         change::Delegate::Gate { number, head } => {
+            let verdict: &[u8] = if cancelled {
+                b"cancelled"
+            } else if failed {
+                b"failed"
+            } else if status == change::Status::Passed {
+                b"approved"
+            } else {
+                b"changes requested"
+            };
+            for gate in &row.change.gates {
+                if gate.number == number && gate.kind == change::GateKind::Agent {
+                    row.result.reviewed(&head, verdict, env.limits.client.answer_bytes);
+                }
+            }
             // A result racing the CI cancellation is no verdict or review failure.
             let cancelling = row.change.state == (change::State::CancellingGates { head });
             if cancelled || cancelling {
@@ -2557,23 +2581,29 @@ fn step_read(
                 );
                 return;
             };
-            if required.is_empty()
-                && let Some(pull) = &pending.pull
-                && pull.commit == commit
-            {
-                pending.ci = status(pull.ci);
-                keep_panel_ci(d, pending.task, change::Ci { head: commit, status: pending.ci }, out);
-                pending.stage = StepStage::BaseCi;
-                let Some(base_tip) = pending.base_tip else { unreachable!("base read") };
-                skein_forge::api::Read::Checks { commit: base_tip }
-            } else {
-                skein_forge::api::Read::Checks { commit }
-            }
+            skein_forge::api::Read::Checks { commit }
         }
         StepStage::Ci => {
             match result {
-                Ok(skein_forge::api::Answer::Checks(rows)) => pending.ci = status(crate::ci::fold(&rows, required)),
-                Ok(_) | Err(_) => pending.ci = change::Status::Unknown,
+                Ok(skein_forge::api::Answer::Checks(rows)) => {
+                    pending.ci = match &pending.pull {
+                        Some(pull) if required.is_empty() && Some(pull.commit) == pending.branch => status(pull.ci),
+                        Some(_) | None => status(crate::ci::fold(&rows, required)),
+                    };
+                    if let Some(head) = pending.branch
+                        && let Some(row) = d.changes.get_mut(&pending.task)
+                        && row.result.checked(head, &rows, env.limits.client.answer_bytes)
+                    {
+                        let saved = row.clone();
+                        emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(saved) });
+                    }
+                }
+                Ok(_) | Err(_) => {
+                    pending.ci = match &pending.pull {
+                        Some(pull) if required.is_empty() && Some(pull.commit) == pending.branch => status(pull.ci),
+                        Some(_) | None => change::Status::Unknown,
+                    };
+                }
             }
             if let Some(head) = pending.branch {
                 keep_panel_ci(d, pending.task, change::Ci { head, status: pending.ci }, out);

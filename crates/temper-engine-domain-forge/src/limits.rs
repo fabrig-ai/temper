@@ -198,6 +198,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(u64::from(l.changes).checked_mul(u64::from(l.change_policy.gates))?.checked_mul(
             u64::try_from(size_of::<crate::GateRemark>()).ok()?.checked_add(u64::from(l.client.answer_bytes))?,
         )?)?
+        .checked_add(u64::from(l.changes).checked_mul(u64::from(l.client.answer_bytes).checked_mul(4)?)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingStep>::worst_case(l.changes)?)?
         .checked_add(Map::<u64, crate::IssueRow>::worst_case(l.issues)?)?
         .checked_add(Map::<u64, skein_lib::Wall>::worst_case(l.issues)?)?
