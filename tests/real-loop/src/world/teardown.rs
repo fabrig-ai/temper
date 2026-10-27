@@ -52,6 +52,7 @@ fn startup(
         Proc::Llm(Box::new(Llm {
             peer: llm::peer(llm::scripted(Box::new([]))).expect("deferred LLM"),
             scripts: Some(|_| Box::new([])),
+            recipe: None,
             rules: None,
             cue: false,
             release: None,
