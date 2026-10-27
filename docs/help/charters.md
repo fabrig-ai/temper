@@ -20,9 +20,9 @@ a finite task comes from the task, not the charter's number. Read
 The default chat charter is 1 and the default coding charter is 2.
 Both default to 8 turns and 120 seconds, with a finishing reserve of
 1 turn and 60 seconds. Their default waiting and call timeout are
-10 seconds, with resuming enabled and default spend of K = 4C deployment
-units. C is one worst-case completion of the first configured model,
-priced at startup (`temper help budget`). They use workers and enable
+10 seconds, with resuming enabled and default spend of K deployment
+units: 4C, C one worst-case completion of the first configured model
+priced at startup, or 32 if that is more (`temper help budget`). They use workers and enable
 inspection, modification and agents; local shell use is off by default. Read the current values:
 
 ```sh
