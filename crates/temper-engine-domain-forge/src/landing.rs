@@ -17,6 +17,7 @@ type KeyAt = (api::Commit, policy::Key);
 #[derive(Debug)]
 pub(crate) struct State {
     pub(crate) rows: Map<u64, LandingRow>,
+    pub(crate) due: Map<u64, Wall>,
     pub(crate) receipts: Map<ReceiptKey, Receipt>,
     pub(crate) projects: Map<u32, (change::Way, Box<[RepositoryGates]>)>,
     pub(crate) pending: Map<Token, Pending>,
@@ -65,6 +66,7 @@ impl State {
         let slots = slots(l).expect("landing bounds checked");
         Self {
             rows: Map::with_capacity(l.landings),
+            due: Map::with_capacity(l.landings),
             receipts: Map::with_capacity(receipt_slots(l).expect("receipt bounds")),
             projects: Map::with_capacity(l.judge_projects),
             pending: Map::with_capacity(l.landings),
@@ -177,6 +179,17 @@ impl Domain {
             return Err(LandingRefusal::Landings);
         }
         Ok(())
+    }
+    /// The top owns each landing's bounded retry deadline (domain/landing.md, 4.2).
+    pub fn wait_landing(&mut self, env: &Env<Limits>, task: u64, until: Option<Wall>) {
+        let until = match until {
+            Some(until) => until,
+            None => Wall::from_nanos(env.wall.as_nanos().saturating_add(env.limits.client.poll.as_nanos())),
+        };
+        self.landing.due.insert(task, until).expect("one deadline per admitted landing");
+    }
+    pub fn offered_landing(&mut self, task: u64) {
+        self.landing.due.remove(&task);
     }
     #[must_use]
     pub fn landing(&self, task: u64) -> Option<&LandingRow> {
@@ -1463,6 +1476,7 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(member_facts.checked_mul(2)?)?
         .checked_add(u64::from(slots).checked_mul(u64::try_from(size_of::<ReceiptKey>()).ok()?.checked_add(32)?)?)?;
     Map::<u64, LandingRow>::worst_case(l.landings)?
+        .checked_add(Map::<u64, Wall>::worst_case(l.landings)?)?
         .checked_add(rows.checked_mul(4)?)?
         .checked_add(Map::<ReceiptKey, Receipt>::worst_case(receipt_slots(l)?)?)?
         .checked_add(u64::from(receipt_slots(l)?).checked_mul(32 + 2048)?)?
@@ -1686,6 +1700,7 @@ fn retire_finished(d: &mut Domain, out: &mut Queue<Request>) -> bool {
         return false;
     };
     d.landing.rows.remove(&task);
+    d.landing.due.remove(&task);
     for member in 0..d.landing.limits.landing_members {
         d.landing.results.remove(&(task, u16::try_from(member).expect("member position"), 0, 5));
         for gate in 0..d.landing.limits.gates {
