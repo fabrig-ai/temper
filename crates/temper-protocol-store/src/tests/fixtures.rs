@@ -722,6 +722,8 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         body: Box::new([5]),
         priority: -6,
         change: Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: 1,
             state,
             gates: Box::new([Gate {
