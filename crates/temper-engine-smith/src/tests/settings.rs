@@ -192,20 +192,20 @@ fn settings_inbox_outcomes_keep_the_revision_and_rejection_reason() {
 #[test]
 fn settings_pages_price_escapes_cut_long_lines_and_keep_utf8_offsets() {
     let quoted = "\"".repeat(800);
-    let first = crate::settings::page(quoted.as_bytes(), 0).expect("quoted text");
+    let first = settings_form::page::page(quoted.as_bytes(), 0).expect("quoted text");
     assert_eq!(first.as_ref(), format!("{}\nnext: 768\n", "\"".repeat(768)).as_bytes());
-    let last = crate::settings::page(quoted.as_bytes(), 768).expect("last quoted page");
+    let last = settings_form::page::page(quoted.as_bytes(), 768).expect("last quoted page");
     assert_eq!(last.as_ref(), format!("{}\nend\n", "\"".repeat(32)).as_bytes());
     let unicode = format!("{}λ", "x".repeat(1535));
-    let page = crate::settings::page(unicode.as_bytes(), 0).expect("UTF-8 boundary cut");
+    let page = settings_form::page::page(unicode.as_bytes(), 0).expect("UTF-8 boundary cut");
     assert!(page.ends_with(b"next: 1535\n"));
     assert_eq!(
-        crate::settings::page(unicode.as_bytes(), 1535).expect("last character").as_ref(),
+        settings_form::page::page(unicode.as_bytes(), 1535).expect("last character").as_ref(),
         "λ\nend\n".as_bytes()
     );
-    assert_eq!(crate::settings::page(unicode.as_bytes(), 1536), Err(Problem::Range(b"from")));
+    assert_eq!(settings_form::page::page(unicode.as_bytes(), 1536), Err(settings_form::page::Error::Offset));
     let lines = format!("short\n{}", "q".repeat(1800));
-    assert_eq!(crate::settings::page(lines.as_bytes(), 0).expect("line cut").as_ref(), b"short\nnext: 6\n");
+    assert_eq!(settings_form::page::page(lines.as_bytes(), 0).expect("line cut").as_ref(), b"short\nnext: 6\n");
 }
 
 #[test]
@@ -222,4 +222,165 @@ fn a_large_settings_decoder_error_is_bounded_host_feedback() {
     assert!(error);
     assert!(body.len() <= smith_domain_run::HostAnswer::CAPACITY);
     assert!(body.starts_with(b"settings file item 1:"));
+}
+
+#[test]
+fn settings_neutral_form_preserves_ctls_bounds() {
+    let neutral = settings_form::Limits::standard();
+    let ctl = temper_client_tools::limits::tools();
+    assert_eq!(neutral.ask_bytes, ctl.ask_bytes);
+    assert_eq!(neutral.result_bytes, ctl.result_bytes);
+    assert_eq!(neutral.text, ctl.text);
+    assert_eq!(neutral.settings.change_settings_items, ctl.settings.change_settings_items, "change_settings_items");
+    assert_eq!(neutral.settings.charter_alternatives, ctl.settings.charter_alternatives, "charter_alternatives");
+    assert_eq!(neutral.settings.charter_instructions, ctl.settings.charter_instructions, "charter_instructions");
+    assert_eq!(neutral.settings.field_rule_name, ctl.settings.field_rule_name, "field_rule_name");
+    assert_eq!(neutral.settings.llm_choice_subagents, ctl.settings.llm_choice_subagents, "llm_choice_subagents");
+    assert_eq!(
+        neutral.settings.model_effort_effort_some, ctl.settings.model_effort_effort_some,
+        "model_effort_effort_some"
+    );
+    assert_eq!(neutral.settings.model_effort_model, ctl.settings.model_effort_model, "model_effort_model");
+    assert_eq!(neutral.settings.model_set_names_names, ctl.settings.model_set_names_names, "model_set_names_names");
+    assert_eq!(
+        neutral.settings.model_set_names_names_item, ctl.settings.model_set_names_names_item,
+        "model_set_names_names_item"
+    );
+    assert_eq!(neutral.settings.owner_authority_grants, ctl.settings.owner_authority_grants, "owner_authority_grants");
+    assert_eq!(
+        neutral.settings.owner_authority_note_resources, ctl.settings.owner_authority_note_resources,
+        "owner_authority_note_resources"
+    );
+    assert_eq!(neutral.settings.owner_delegation_kinds, ctl.settings.owner_delegation_kinds, "owner_delegation_kinds");
+    assert_eq!(
+        neutral.settings.owner_part_key_path_value, ctl.settings.owner_part_key_path_value,
+        "owner_part_key_path_value"
+    );
+    assert_eq!(
+        neutral.settings.owner_part_key_path_value_item, ctl.settings.owner_part_key_path_value_item,
+        "owner_part_key_path_value_item"
+    );
+    assert_eq!(
+        neutral.settings.owner_pattern_end_exact_value, ctl.settings.owner_pattern_end_exact_value,
+        "owner_pattern_end_exact_value"
+    );
+    assert_eq!(
+        neutral.settings.owner_pattern_end_open_value, ctl.settings.owner_pattern_end_open_value,
+        "owner_pattern_end_open_value"
+    );
+    assert_eq!(neutral.settings.owner_pattern_segments, ctl.settings.owner_pattern_segments, "owner_pattern_segments");
+    assert_eq!(
+        neutral.settings.owner_pattern_segments_item, ctl.settings.owner_pattern_segments_item,
+        "owner_pattern_segments_item"
+    );
+    assert_eq!(neutral.settings.rules_implies, ctl.settings.rules_implies, "rules_implies");
+    assert_eq!(neutral.settings.rules_requirements, ctl.settings.rules_requirements, "rules_requirements");
+    assert_eq!(
+        neutral.settings.setting_model_effort_some, ctl.settings.setting_model_effort_some,
+        "setting_model_effort_some"
+    );
+    assert_eq!(neutral.settings.setting_model_efforts, ctl.settings.setting_model_efforts, "setting_model_efforts");
+    assert_eq!(
+        neutral.settings.setting_model_efforts_item, ctl.settings.setting_model_efforts_item,
+        "setting_model_efforts_item"
+    );
+    assert_eq!(neutral.settings.setting_model_name, ctl.settings.setting_model_name, "setting_model_name");
+    assert_eq!(
+        neutral.settings.setting_model_program_some, ctl.settings.setting_model_program_some,
+        "setting_model_program_some"
+    );
+    assert_eq!(
+        neutral.settings.setting_policy_permissions, ctl.settings.setting_policy_permissions,
+        "setting_policy_permissions"
+    );
+    assert_eq!(
+        neutral.settings.setting_policy_projections, ctl.settings.setting_policy_projections,
+        "setting_policy_projections"
+    );
+    assert_eq!(
+        neutral.settings.setting_policy_requirements, ctl.settings.setting_policy_requirements,
+        "setting_policy_requirements"
+    );
+    assert_eq!(neutral.settings.setting_policy_roles, ctl.settings.setting_policy_roles, "setting_policy_roles");
+    assert_eq!(
+        neutral.settings.setting_policy_templates, ctl.settings.setting_policy_templates,
+        "setting_policy_templates"
+    );
+    assert_eq!(
+        neutral.settings.task_contract_document_approval_state, ctl.settings.task_contract_document_approval_state,
+        "task_contract_document_approval_state"
+    );
+    assert_eq!(
+        neutral.settings.task_contract_document_verdict_choices, ctl.settings.task_contract_document_verdict_choices,
+        "task_contract_document_verdict_choices"
+    );
+    assert_eq!(neutral.settings.verdict_choice_fields, ctl.settings.verdict_choice_fields, "verdict_choice_fields");
+}
+#[test]
+fn settings_neutral_reads_preserve_ctls_bounds() {
+    let neutral = settings_form::Limits::standard();
+    let ctl = temper_client_tools::limits::tools();
+    assert_eq!(neutral.settings.owned_record, ctl.settings.owned_record, "owned_record");
+    assert_eq!(
+        neutral.settings.revision_document_items, ctl.settings.revision_document_items,
+        "revision_document_items"
+    );
+    assert_eq!(neutral.settings.revision_row_items, ctl.settings.revision_row_items, "revision_row_items");
+    assert_eq!(neutral.settings.revisions_page_rows, ctl.settings.revisions_page_rows, "revisions_page_rows");
+    assert_eq!(neutral.settings.settings_document_held, ctl.settings.settings_document_held, "settings_document_held");
+    assert_eq!(
+        neutral.settings.settings_document_pending, ctl.settings.settings_document_pending,
+        "settings_document_pending"
+    );
+    assert_eq!(
+        neutral.settings.settings_document_settings, ctl.settings.settings_document_settings,
+        "settings_document_settings"
+    );
+}
+#[test]
+fn settings_refusals_keep_ctls_words_without_a_client_dependency() {
+    use jig_domain_people::{Lack, LimitKind, Malformed, Refusal as R};
+    for (core, client) in [
+        (R::Stale { newest: 3 }, c::Refusal::Stale(c::RefusalStale { newest: 3 })),
+        (
+            R::NotWellFormed { at: 0, why: Malformed::SettingsUnchanged },
+            c::Refusal::Malformed { at: 0, why: c::Malformed::SettingsUnchanged },
+        ),
+        (
+            R::Authority { lacking: Lack::Approver, proposable: None },
+            c::Refusal::Authority { lacking: c::Lacking::Approver, proposable: Some(false) },
+        ),
+        (
+            R::Limit { which: LimitKind::SettingsProposals },
+            c::Refusal::Limit { which: c::Limit::Admission { which: c::AdmissionLimit::SettingsProposals } },
+        ),
+    ] {
+        assert_eq!(
+            crate::settings::refusal(&core),
+            temper_client_tools::jig::render::settings_refusal(&client, temper_client_tools::limits::TEXT)
+        );
+    }
+    for (core, client) in [
+        (jig_domain_people::SettingFault::Shape, c::SettingFault::Shape),
+        (jig_domain_people::SettingFault::Count, c::SettingFault::Count),
+        (jig_domain_people::SettingFault::Reference, c::SettingFault::Reference),
+        (jig_domain_people::SettingFault::Rules, c::SettingFault::Rules),
+        (jig_domain_people::SettingFault::Budget, c::SettingFault::Budget),
+        (jig_domain_people::SettingFault::Grace, c::SettingFault::Grace),
+        (jig_domain_people::SettingFault::Owner, c::SettingFault::Owner),
+    ] {
+        let core =
+            R::NotWellFormed { at: 2, why: Malformed::Settings { setting: s::Setting::Charter(1), fault: core } };
+        let client = c::Refusal::Malformed {
+            at: 2,
+            why: c::Malformed::Settings(c::MalformedSettings {
+                setting: c::Setting::Charter(c::SettingNumber { number: 1 }),
+                fault: client,
+            }),
+        };
+        assert_eq!(
+            crate::settings::refusal(&core),
+            temper_client_tools::jig::render::settings_refusal(&client, temper_client_tools::limits::TEXT)
+        );
+    }
 }

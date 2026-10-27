@@ -17,4 +17,5 @@ pub mod help;
 
 pub mod wait;
 
+mod settings_adapter;
 pub mod settings_file;
