@@ -284,6 +284,12 @@ pub(crate) fn step(
     if d.stopping {
         return;
     }
+    if let Some(row) = d.landing.rows.get(&task)
+        && row.landing.phase == policy::Phase::Cancelled
+    {
+        emit(out, Request::LandingDecision { task, decision: policy::Decision::Cancel, entry: None, evidence: None });
+        return;
+    }
     let mut existing = None;
     for (token, pending) in &d.landing.pending {
         if pending.task == task {
@@ -1466,10 +1472,11 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
             .ok()?
             .checked_add(u64::from(l.client.inbox).checked_mul(u64::try_from(size_of::<api::Review>()).ok()?)?)?
             .checked_add(u64::from(l.change_policy.gates).checked_mul(256)?)?
-            .checked_add(u64::from(l.change_policy.clean_heads).checked_mul(32)?)?,
+            .checked_add(u64::from(l.change_policy.clean_heads).checked_mul(32)?)?
+            .checked_add(u64::try_from(size_of::<change::State>()).ok()?.checked_mul(16)?)?,
     )?;
     let pending = trees
-        .checked_add(evidence)?
+        .checked_add(evidence.checked_mul(3)?)?
         .checked_add(walker)?
         .checked_add(u64::from(l.key_entries).checked_mul(64 + u64::from(l.name_bytes))?)?
         .checked_add(u64::from(l.key_path_bytes).checked_mul(3)?)?
@@ -1757,12 +1764,27 @@ impl Domain {
             api::Write::Merge { head, .. } => {
                 let change = self.changes.get(&member.change)?;
                 let mut parts = List::with_capacity(self.landing.limits.authority_segments);
-                for part in change.base.split(is_slash) {
-                    parts.push(Box::from(part)).ok()?;
+                let mut start = 0;
+                for (index, byte) in change.base.iter().enumerate() {
+                    if *byte == b'/' {
+                        parts.push(Box::from(change.base.get(start..index)?)).ok()?;
+                        start = index.checked_add(1)?;
+                    }
                 }
+                parts.push(Box::from(change.base.get(start..)?)).ok()?;
                 (4, crate::What::Branch(parts.into_boxed()), *head)
             }
-            _ => return None,
+            api::Write::CreateIssue { .. }
+            | api::Write::Post { .. }
+            | api::Write::OpenPull { .. }
+            | api::Write::Review { .. }
+            | api::Write::Edit { .. }
+            | api::Write::SetReviewers { .. }
+            | api::Write::Close { .. }
+            | api::Write::Reopen { .. }
+            | api::Write::Update { .. }
+            | api::Write::CreateBranch { .. }
+            | api::Write::DeleteBranch { .. } => return None,
         };
         let (form, recovery) = crate::effect_shape(kind)?;
         Some((kept.repository, what, crate::AgentEffect { effect: kept.effect.clone(), kind, state, form, recovery }))
@@ -1794,6 +1816,62 @@ fn matches_entry(d: &Domain, task: u64, entry: u64) -> bool {
     }
 }
 
-fn is_slash(byte: &u8) -> bool {
-    *byte == b'/'
+/// Cancellation removes a member; cancelling a landing leaves its changes live.
+pub(crate) fn closing(d: &mut Domain, task: u64, ending: crate::ReleaseEnding, out: &mut Queue<Request>) {
+    if ending != crate::ReleaseEnding::Cancelled {
+        return;
+    }
+    if let Some(mut row) = d.landing.rows.get(&task).cloned() {
+        row.landing.phase = policy::Phase::Cancelled;
+        d.landing.due.remove(&task);
+        for member in &row.landing.members {
+            if let Some(change) = d.changes.get_mut(&member.change) {
+                change.change.landing = None;
+                emit(out, Request::Save { record: Stored::Change(change.clone()), release: None, read_afresh: None });
+                emit(out, Request::WakeProcedure { task: member.change });
+            }
+        }
+        let project = row.landing.project;
+        save(d, row, out);
+        assign_turn(d, project, out);
+        wake_project_ready(d, project, out);
+    } else if let Some(change) = d.changes.get(&task)
+        && let Some(landing) = change.change.landing
+    {
+        let Some(mut row) = d.landing.rows.get(&landing).cloned() else { return };
+        if matches_terminal(&row.landing.phase) {
+            return;
+        }
+        let mut members = List::with_capacity(d.landing.limits.landing_members);
+        let mut asks = List::with_capacity(d.landing.limits.landing_members);
+        for (index, member) in row.landing.members.iter().enumerate() {
+            if member.change != task {
+                members.push(member.clone()).expect("bounded members");
+                asks.push(*row.asks.get(index).expect("member ask")).expect("bounded asks");
+            }
+        }
+        row.landing.members = members.into_boxed();
+        row.asks = asks.into_boxed();
+        row.landing.phase =
+            if row.landing.members.is_empty() { policy::Phase::Cancelled } else { policy::Phase::Preparing };
+        let change = d.changes.get_mut(&task).expect("cancelled member");
+        change.change.landing = None;
+        emit(out, Request::Save { record: Stored::Change(change.clone()), release: None, read_afresh: None });
+        let project = row.landing.project;
+        save(d, row, out);
+        emit(out, Request::WakeProcedure { task: landing });
+        assign_turn(d, project, out);
+    }
+}
+
+fn wake_project_ready(d: &Domain, project: u32, out: &mut Queue<Request>) {
+    for (task, row) in &d.changes {
+        if row.change.landing.is_none()
+            && let change::State::Ready { .. } = row.change.state
+            && let Some(repository) = d.repositories.get(&row.repository)
+            && repository.project == project
+        {
+            emit(out, Request::WakeProcedure { task: *task });
+        }
+    }
 }
