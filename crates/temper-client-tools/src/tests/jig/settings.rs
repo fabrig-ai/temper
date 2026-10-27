@@ -388,6 +388,7 @@ fn settings_change_outcomes_name_the_revision_and_refusal_facts() {
     assert_eq!(root.answer(call).expect("changed").stdout.as_ref(), b"revision 6\n");
     for (refusal, expected) in [
         (c::Refusal::Stale(c::RefusalStale { newest: 6 }), "stale; newest revision 6"),
+        (c::Refusal::Forgotten(c::RefusalForgotten { oldest: 3 }), "forgotten; oldest kept revision 3"),
         (
             c::Refusal::Malformed {
                 at: 1,
@@ -1426,6 +1427,96 @@ fn revision_renderings_keep_each_replaced_state() {
             );
             assert_eq!(answer.status, 0);
             golden(&format!("settings_replaced_{index}_{}", if json { "json" } else { "text" }), &answer.stdout);
+        }
+    }
+}
+
+#[test]
+fn restore_parses_revision_reason_and_requires_a_key() {
+    for argv in [
+        vec!["revision", "restore", "7", "because", "--key", "restore-7"],
+        vec!["revision", "restore", "7", "--key", "restore-7"],
+    ] {
+        let call = fixtures::call(&argv);
+        assert_eq!(call.tool, rows::RESTORE_AT);
+        assert_eq!(fixtures::back(&call), fixtures::owned(&argv));
+    }
+    for argv in [
+        vec!["restore"],
+        vec!["restore", "7", "--key", "r"],
+        vec!["revision", "restore", "seven", "--key", "r"],
+        vec!["revision", "restore", "7"],
+        vec!["revision", "restore", "4294967296", "--key", "r"],
+    ] {
+        assert!(fixtures::parse(&argv).is_err(), "{argv:?}");
+    }
+}
+#[test]
+fn restore_sends_the_revision_and_renders_the_proposal_and_omissions() {
+    for omitted in [false, true] {
+        for json in [false, true] {
+            let mut root = fixtures::signed_in(fixtures::PARTY);
+            let call = root.submit_prepared(
+                fixtures::call(&["revision", "restore", "7", "because", "--key", "restore-7"]),
+                json,
+                None,
+            );
+            let (_, _, jig_client::Ask::Jig(ask)) = root.sends.get(&call).expect("restore request") else {
+                panic!("jig ask")
+            };
+            assert_eq!(ask.as_ref(), &c::Ask::Restore(c::Restore { revision: 7, reason: words("because") }));
+            assert_eq!(root.sent_name(call), Some(fixtures::named("restore-7")));
+            let left_out =
+                list(if omitted { vec![c::ApplicationSetting { kind: 8, scope: 9, number: 10 }] } else { vec![] });
+            root.done(call, c::Outcome::Restored(c::OutcomeRestored { proposal: 11, to: 7, left_out }));
+            let printed = root.answer(call).expect("restore answer");
+            assert_eq!(printed.status, 0);
+            golden(
+                &format!(
+                    "restore_{}_{}",
+                    if omitted { "omitted" } else { "whole" },
+                    if json { "json" } else { "text" }
+                ),
+                &printed.stdout,
+            );
+        }
+    }
+}
+
+#[test]
+fn revision_show_records_set_over_value_default_reset_and_removal() {
+    let (setting, mut value) = values().remove(1);
+    let previous = value.clone();
+    let c::SettingValue::Template(template) = &mut value else { panic!("template fixture") };
+    template.name = c::DocumentText::complete(words("New template name"));
+    for (name, edit, replaced) in [
+        (
+            "set_over_value",
+            c::RevisionEdit::Set(c::SettingSet { value: value.clone() }),
+            c::RevisionReplaced::Value(c::SettingSet { value: previous.clone() }),
+        ),
+        (
+            "set_over_default",
+            c::RevisionEdit::Set(c::SettingSet { value: value.clone() }),
+            c::RevisionReplaced::Default,
+        ),
+        ("reset", c::RevisionEdit::Reset, c::RevisionReplaced::Value(c::SettingSet { value: previous.clone() })),
+        ("removal", c::RevisionEdit::Removed, c::RevisionReplaced::Value(c::SettingSet { value: previous.clone() })),
+    ] {
+        for json in [false, true] {
+            let mut argv = vec!["revision", "show", "5"];
+            if json {
+                argv.push("--json");
+            }
+            let answer = read(
+                &argv,
+                c::ReadValue::Revision(Box::new(c::RevisionAnswer::Revision(c::RevisionDocument {
+                    head: head(c::RevisionDecider::Party(c::RevisionParty { number: 2 })),
+                    items: list([c::RevisionItem { setting, edit: edit.clone(), replaced: replaced.clone() }]),
+                }))),
+            );
+            assert_eq!(answer.status, 0);
+            golden(&format!("revision_{name}_{}", if json { "json" } else { "text" }), &answer.stdout);
         }
     }
 }

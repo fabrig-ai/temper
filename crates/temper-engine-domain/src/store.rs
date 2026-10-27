@@ -639,7 +639,10 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                         action: jig_domain_people::Action::Settings { .. },
                         reason,
                         ..
-                    } => u64::try_from(reason.len()).ok(),
+                    }
+                    | jig_domain_people::Ask::Move { reason, .. }
+                    | jig_domain_people::Ask::Cancel { reason, .. }
+                    | jig_domain_people::Ask::Restore { reason, .. } => u64::try_from(reason.len()).ok(),
                     jig_domain_people::Ask::Propose {
                         action: jig_domain_people::Action::Amend { amendment, .. },
                         reason,
@@ -690,9 +693,6 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                     }
                     jig_domain_people::Ask::Say { words, .. }
                     | jig_domain_people::Ask::AnswerQuestion { words, .. } => u64::try_from(words.len()).ok(),
-                    jig_domain_people::Ask::Move { reason, .. } | jig_domain_people::Ask::Cancel { reason, .. } => {
-                        u64::try_from(reason.len()).ok()
-                    }
                     jig_domain_people::Ask::ChangeSettings { .. }
                     | jig_domain_people::Ask::MoveToNewest { .. }
                     | jig_domain_people::Ask::Withdraw { .. }
@@ -898,6 +898,9 @@ fn model_context_bytes(models: &[Box<[u8]>]) -> Option<u64> {
 pub(crate) fn program_answer_bytes(outcome: &jig_domain_people::Outcome) -> Option<u64> {
     use jig_domain_people::Outcome;
     match outcome {
+        Outcome::Restored { left_out, .. } => u64::try_from(left_out.len())
+            .ok()?
+            .checked_mul(u64::try_from(size_of::<jig_domain_people::ApplicationSetting>()).ok()?),
         Outcome::Refused(jig_domain_people::Refusal::Full { tasks, .. }) => {
             u64::try_from(tasks.len()).ok()?.checked_mul(u64::try_from(size_of::<u64>()).ok()?)
         }

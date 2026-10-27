@@ -826,3 +826,25 @@ pub const PROJECT_FUND: Tool = Tool {
     area: 1,
     notes: b"An owner's chats are funded from their pool, and pools reserve from the project's period. Raise both with two calls: project fund PROJECT AMOUNT first, then project fund PROJECT AMOUNT --role ROLE. A role's raise past the period's room is refused, exit 2, naming what the period has left. A cut keeps each budget at what it has used. A key replay prints the original edit, then today's balances marked now:. JSON has answer (project, optional role, period_spend) and now (the project read).\n",
 };
+
+/// New rows append to preserve durable call identities.
+pub const RESTORE_AT: u8 = 55;
+pub const RESTORE: Tool = Tool {
+    name: b"revision restore",
+    line: b"Propose the settings as revision REVISION left them, to the owners",
+    prints: b"`proposed restoring revision R as proposal P/K, to the owners`, then the settings of temper's kinds it leaves out",
+    result: b"restore",
+    forms: &[&[
+        positional(
+            b"revision",
+            b"REVISION",
+            Kind::NumberRange { min: 0, max: 4_294_967_295 },
+            Required,
+            b"The revision whose settings to put back",
+        ),
+        positional(b"reason", b"REASON", Kind::Text, Optional, b"Why; empty when absent"),
+    ]],
+    keyed: Keyed::Required,
+    area: 1,
+    notes: b"Read the proposal with proposal show P/K; an owner decides it\nwith proposal decide, as any proposal of settings.\n",
+};

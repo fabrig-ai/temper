@@ -26,6 +26,7 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::MOVE_TO_NEWEST_AT), "help_revision_advance"),
     (Some(jig::rows::PROJECT_SHOW_AT), "help_project_show"),
     (Some(jig::rows::PROJECT_FUND_AT), "help_project_fund"),
+    (Some(jig::rows::RESTORE_AT), "help_revision_restore"),
 ];
 #[test]
 fn the_help_is_the_page_ctl_then_the_tools() {
@@ -104,6 +105,7 @@ const USAGES: &[&[u8]] = &[
     b"task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]\n",
     b"project show PROJECT\n",
     b"project fund PROJECT AMOUNT [--role ROLE] --key KEY\n",
+    b"revision restore REVISION [REASON] --key KEY\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {
