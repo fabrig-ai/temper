@@ -151,12 +151,12 @@ pub(crate) fn chip_phase(latest: &mut client::Latest, phase: c::OwnerChipPhase) 
     *current = phase;
 }
 
-pub(crate) const WAIT_TASK: &[&str] = &["wait", "task", TASK_CALL[2]];
-pub(crate) const WAIT_TREE: &[&str] = &[WAIT_TASK[0], "tree", TASK_CALL[2]];
-pub(crate) const WAIT_RUN: &[&str] = &[WAIT_TASK[0], "run", TASK_CALL[2]];
-pub(crate) const WAIT_ME: &[&str] = &[WAIT_TASK[0], "me"];
-pub(crate) const WAIT_INBOX: &[&str] = &[WAIT_TASK[0], INBOX_CALL[0]];
-pub(crate) const WAIT_TASKS: &[&str] = &[WAIT_TASK[0], "tasks", TASKS_CALL[2], TASKS_CALL[3]];
+pub(crate) const WAIT_TASK: &[&str] = TASK_CALL;
+pub(crate) const WAIT_TREE: &[&str] = &["task", "tree", TASK_CALL[2]];
+pub(crate) const WAIT_RUN: &[&str] = &["task", "run", TASK_CALL[2]];
+pub(crate) const WAIT_ME: &[&str] = ME_CALL;
+pub(crate) const WAIT_INBOX: &[&str] = INBOX_CALL;
+pub(crate) const WAIT_TASKS: &[&str] = TASKS_CALL;
 /// One second exposes before/at deadline behavior without any real-time wait.
 pub(crate) const WAIT_SPAN: skein_lib::Duration = skein_lib::Duration::from_secs(1);
 pub(crate) const SHORT_TIMEOUT: &[&str] = &["--timeout", "1s"];
@@ -170,7 +170,14 @@ pub(crate) fn task_watch() -> client::Watchable {
 pub(crate) fn waiting_call(argv: &[&str], flags: &[&str]) -> (Harness, u32) {
     let mut root = signed_in(PARTY);
     let argv = extended(argv, flags);
-    let argv = extended(argv.as_slice(), &["--json"]);
+    let argv = extended(
+        argv.as_slice(),
+        if argv.as_slice().contains(&"--since") || argv.as_slice().contains(&"--until") {
+            &["--json"]
+        } else {
+            &["--until", "changed", "--json"]
+        },
+    );
     let call = root.submit(argv.as_slice());
     (root, call)
 }
@@ -354,6 +361,14 @@ fn first_digest(bytes: &[u8]) -> Box<[u8]> {
 pub(crate) fn plain_wait(flags: &[&str]) -> (Harness, u32) {
     let mut root = signed_in(PARTY);
     let argv = extended(WAIT_TASK, flags);
+    let argv = extended(
+        argv.as_slice(),
+        if argv.as_slice().contains(&"--since") || argv.as_slice().contains(&"--until") {
+            &[]
+        } else {
+            &["--until", "changed"]
+        },
+    );
     let call = root.submit(argv.as_slice());
     (root, call)
 }

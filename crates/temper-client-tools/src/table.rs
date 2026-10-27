@@ -36,7 +36,6 @@ pub const GROUPS: &[Group] = &[
     Group { name: b"settings", line: b"The settings: read them, change them, or propose a change to their owners" },
     Group { name: b"revision", line: b"Settings revisions: read one or the history, move running work to the newest" },
     Group { name: b"playground", line: b"The playground: start the demo" },
-    Group { name: b"wait", line: b"" },
 ];
 pub const TOOLS: &[&Tool] = &[
     &rows::ME,
@@ -55,7 +54,7 @@ pub const TOOLS: &[&Tool] = &[
     &rows::RELEASE,
     &rows::STOP,
     &rows::CANCEL,
-    &crate::forges::WAIT,
+    &rows::TREE,
     &crate::adopt::ROW,
     &rows::SIGN_IN,
     &rows::SIGN_OUT,
@@ -121,6 +120,15 @@ pub fn refusal(why: Usage, words: &[&[u8]], out: &mut skein_lib::Writer) -> Resu
             out.put(b"; temper ctl help ")?;
             out.put(group)?;
             out.put(b" lists them")
+        }
+        Usage::Timeout => out.put(b"--timeout needs --since or --until"),
+        Usage::WaitPart { tool, argument } => {
+            let row = TOOLS.get(usize::from(tool)).ok_or(skein_lib::Overflow)?;
+            let args = row.forms.first().ok_or(skein_lib::Overflow)?;
+            let spec = args.get(usize::from(argument)).ok_or(skein_lib::Overflow)?;
+            out.put(row.name)?;
+            out.put(b" waits on its subject alone: drop --")?;
+            out.put(spec.name)
         }
         Usage::AmendmentRevision => out.put(b"task amend needs --rev REV"),
         Usage::Tool

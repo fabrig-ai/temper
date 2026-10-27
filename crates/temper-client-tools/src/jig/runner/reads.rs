@@ -123,6 +123,7 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
             read(runner, &mut reading, 1, what, out);
         }
         rows::SETTINGS_AT..=rows::REVISIONS_AT => settings_start(runner, &mut reading, out),
+        rows::TREE_AT => watch(runner, &mut reading, 3, c::Subject::Tree { task, window: env.limits.rows }, out),
         7 => watch(runner, &mut reading, 4, c::Subject::Run { task, turn: None, offset: 0 }, out),
         _ => unreachable!("read tool"),
     }
