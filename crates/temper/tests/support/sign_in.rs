@@ -347,6 +347,7 @@ struct AnswerJudge {
 }
 impl Referee<Process> for AnswerJudge {
     fn act(&mut self, _now: Time, procs: &mut [Process]) {
+        use ctl::{Call, Step};
         // Go and See must finish before authorization can complete the sign-in.
         const SIGNING_SEEN: u32 = 2;
         let Process::Calls(calls) = &procs[1] else { panic!("ctl calls") };
@@ -396,16 +397,9 @@ impl Referee<Process> for AnswerJudge {
             let revision = exceeded_hold(&calls.ends()[8], self.allowance);
             assert_eq!(model_requests(procs), 1, "one model request before release");
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl calls") };
-            calls.push(ctl::Step::Run(ctl::Call::new(&[
-                "task",
-                "release",
-                "1",
-                "--hold",
-                &revision.to_string(),
-                "--json",
-            ])));
-            calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--until", "held", "--json"])));
-            calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--json"])));
+            calls.push(Step::Run(Call::new(&["task", "release", "1", "--hold", &revision.to_string(), "--json"])));
+            calls.push(Step::Run(Call::new(&["task", "show", "1", "--until", "held", "--json"])));
+            calls.push(Step::Run(Call::new(&["task", "show", "1", "--json"])));
             calls.release();
             self.plan = PlanChat::Released;
         }
@@ -419,20 +413,13 @@ impl Referee<Process> for AnswerJudge {
             if chat["activity"]["before"].is_null() {
                 // ctl reads a chat through its watch, which an ended chat ends: read
                 // the whole conversation, then Close.
-                calls.push(ctl::Step::Run(ctl::Call::new(&[
-                    "chat",
-                    "close",
-                    "1",
-                    "--key",
-                    "close-plan-chat",
-                    "--json",
-                ])));
-                calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--until", "ended", "--json"])));
+                calls.push(Step::Run(Call::new(&["chat", "close", "1", "--key", "close-plan-chat", "--json"])));
+                calls.push(Step::Run(Call::new(&["task", "show", "1", "--until", "ended", "--json"])));
                 calls.release();
                 self.conversation_read = true;
             } else {
                 let before = chat["activity"]["before"]["value"].as_str().expect("older conversation cursor");
-                calls.push(ctl::Step::Run(ctl::Call::new(&["chat", "show", "1", "--before", before, "--json"])));
+                calls.push(Step::Run(Call::new(&["chat", "show", "1", "--before", before, "--json"])));
             }
         }
         let Process::Calls(calls) = &procs[1] else { panic!("ctl calls") };
