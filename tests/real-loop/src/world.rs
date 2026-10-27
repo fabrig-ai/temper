@@ -127,6 +127,7 @@ pub(crate) fn run(
         engine_stopping: false,
         stopping: false,
         finished: false,
+        failure: None,
         armed: false,
         wake: None,
         forge: None,
@@ -215,6 +216,7 @@ pub(crate) fn run_forge(
         engine_stopping: false,
         stopping: false,
         finished: false,
+        failure: None,
         armed: false,
         wake: None,
         forge: Some(state.clone()),
@@ -332,11 +334,17 @@ struct Judge {
     stopping: bool,
     armed: bool,
     finished: bool,
+    failure: Option<Failure>,
     wake: Option<Time>,
     forge: Option<std::rc::Rc<std::cell::RefCell<Option<forge::State>>>>,
     github: Option<crate::github::State>,
     llm_history: LlmHistory,
     children: Children,
+}
+
+struct Failure {
+    message: String,
+    settled: bool,
 }
 
 /// Hosted children append during a pass; killed children are removed between passes.
@@ -469,6 +477,25 @@ impl LlmHistory {
     }
 }
 impl Judge {
+    fn finish_peers(&mut self, peer: &mut Llm, children: &mut [Proc]) {
+        peer.scripts = None;
+        peer.shutdown();
+        for proc in children.iter_mut() {
+            match proc {
+                Proc::Forge(forge) => forge.shutdown(),
+                Proc::Issuer(issuer) => issuer.shutdown(),
+                Proc::Llm(_)
+                | Proc::Service(_)
+                | Proc::Caller(_)
+                | Proc::Ctl(_)
+                | Proc::Terminal(_)
+                | Proc::Agent(_)
+                | Proc::Git(_)
+                | Proc::GitRoute(_) => {}
+            }
+        }
+        self.children.finish(children);
+    }
     fn worker_actions(&mut self, caller_end: usize, caller: &Caller, workers: &mut [Proc]) {
         if let Some(name) = caller.adding_worker() {
             let position = worker_position(workers, name).expect("configured worker");
@@ -501,6 +528,9 @@ impl Judge {
 impl Referee<Proc> for Judge {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         self.wake = None;
+        if self.failure.is_some() {
+            return;
+        }
         let engine_index = procs.iter().position(|proc| matches!(proc, Proc::Service(_))).expect("engine root");
         let caller_end = 3;
         let (roots, children) = procs.split_at_mut(caller_end);
@@ -567,6 +597,17 @@ impl Referee<Proc> for Judge {
         {
             caller.released = true;
         }
+        if !caller.released && service.is_empty() {
+            self.failure = Some(Failure { message: service.early_exit(engine_index), settled: false });
+            caller.shutdown();
+            for (position, worker) in workers.iter().enumerate() {
+                if !worker.is_empty() {
+                    self.controls.signal(caller_end + position, ServiceSignal::Terminate);
+                }
+            }
+            self.finish_peers(peer, children);
+            return;
+        }
         if let Some(call) = caller.watching {
             service.arm_watch(call);
             caller.watched = service.delivered();
@@ -582,18 +623,16 @@ impl Referee<Proc> for Judge {
             self.controls.signal(engine_index, ServiceSignal::Terminate);
             self.engine_stopping = true;
         }
-        if service.is_empty() && !self.finished {
-            peer.shutdown();
-            for proc in children.iter_mut() {
-                if let Proc::Issuer(issuer) = proc {
-                    issuer.shutdown();
-                }
-            }
-            self.children.finish(children);
+        if service.is_empty() && caller.is_empty() && !self.finished {
+            self.finish_peers(peer, children);
             self.finished = true;
         }
     }
     fn observe(&mut self, now: Time, procs: &[Proc]) {
+        if let Some(failure) = &mut self.failure {
+            failure.settled = procs.iter().all(Host::is_empty);
+            return;
+        }
         let [Proc::Llm(peer), Proc::Service(service), Proc::Caller(caller), ..] = procs else {
             panic!("root admission order")
         };
@@ -663,7 +702,7 @@ impl Referee<Proc> for Judge {
                 && workers.iter().all(|proc| matches!(proc, Proc::Service(worker) if !worker_started(worker) || worker.linked() > 0)))
             || (caller.watching.is_some() && (!service.watching() || service.delivered() && !caller.watched))
             || (caller.is_empty() && self.children.settled(children) && !self.stopping)
-            || (service.is_empty() && !self.finished)
+            || (service.is_empty() && !self.finished && (!caller.released || caller.is_empty()))
         {
             self.wake = Some(now);
         }
@@ -672,10 +711,11 @@ impl Referee<Proc> for Judge {
         self.wake
     }
     fn overdue(&self, _now: Time) -> Option<String> {
-        None
+        // Reporting waits only for the hosts' io closes, never the story's patience.
+        self.failure.as_ref().filter(|failure| failure.settled).map(|failure| failure.message.clone())
     }
     fn passed(&self) -> bool {
-        self.finished
+        self.finished && self.failure.is_none()
     }
 }
 
@@ -777,6 +817,7 @@ fn cluster_judge(
         engine_stopping: false,
         stopping: false,
         finished: false,
+        failure: None,
         armed: false,
         wake: None,
         forge,
@@ -1052,3 +1093,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod teardown;

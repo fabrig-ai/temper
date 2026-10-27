@@ -37,7 +37,7 @@ pub mod open;
 mod program_login;
 mod setup;
 mod worker_alone;
-pub use host::Host;
+pub use host::{Host, ending as service_ending};
 pub const USAGE: &str = "usage: temper init [DIRECTORIES] | temper serve [DIRECTORIES] [--box] | temper agent AGENT.json | temper program-login [DIRECTORIES] NAME | temper open DIRECTORY LINK_OR_ADDRESS | temper forge fetch [DIRECTORIES] FORGE | temper forge prepare [DIRECTORIES] FORGE | temper forge run [DIRECTORIES] FORGE forgejo|runner | temper forge reconcile [DIRECTORIES] FORGE | temper forge sign-in [DIRECTORIES] FORGE | temper box [DIRECTORIES] [--echo none|steps] | temper box [DIRECTORIES] --fake-backends [--bundle DIR] | temper fake llm --document FILE [--ready PREFIX] [--seed N] | temper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge check [DIRECTORIES] N OBSERVATIONS STORE | temper fake oauth --document FILE [--ready PREFIX] [--seed N] | temper fake git ARGS... | temper ctl DIRECTORY TOOL [ARGUMENT...] | temper ctl help [TOOL] | temper help [NAME | --search WORDS...]";
 const CONFIG_BYTES: u32 = 1 << 20;
 

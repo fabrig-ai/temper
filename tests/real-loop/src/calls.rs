@@ -377,6 +377,7 @@ enum Recording {
     Fixture,
     Story,
 }
+#[expect(clippy::struct_excessive_bools, reason = "admission, shutdown, directory probe and watch are independent")]
 pub(crate) struct Caller {
     recording: Recording,
     pub(crate) github_app: Option<u64>,
@@ -386,6 +387,7 @@ pub(crate) struct Caller {
     kept: Option<skein_lib::Secret>,
     pub(crate) returned: Vec<crate::issuer::Returned>,
     pub(crate) released: bool,
+    closing: bool,
     pub(crate) advanced: Cell<bool>,
     pub(crate) hold_released: Cell<bool>,
     pub(crate) added: Cell<bool>,
@@ -522,6 +524,7 @@ impl Caller {
             kept: None,
             returned: Vec::with_capacity(visits),
             released: false,
+            closing: false,
             advanced: Cell::new(false),
             hold_released: Cell::new(false),
             added: Cell::new(false),
@@ -849,11 +852,25 @@ impl Caller {
         if !self.terminal.finish(&mut self.submissions) {
             return;
         }
-        if self.running.iter().all(Option::is_none)
-            && let Some(fd) = self.root.take()
-        {
+        if self.running.iter().any(Option::is_some) || self.probing {
+            return;
+        }
+        if let Some((_, fd)) = self.probe.take() {
             self.submit(usize::MAX, Op::Close { fd });
         }
+        if let Some(fd) = self.root.take() {
+            self.submit(usize::MAX, Op::Close { fd });
+        }
+    }
+    /// End a caller whose service stopped before admitting its story.
+    pub(crate) fn shutdown(&mut self) {
+        self.closing = true;
+    }
+    fn can_finish(&self) -> bool {
+        (self.root.is_some() || self.probe.is_some())
+            && !self.probing
+            && self.running.iter().all(Option::is_none)
+            && self.terminal.finish_ready()
     }
     pub(crate) fn setup(&self) -> bool {
         self.recording == Recording::Fixture
@@ -1086,9 +1103,7 @@ impl Caller {
             Some(Step::Authorize | Step::Return) => self.visit.as_ref().is_none_or(|visit| visit.done),
             Some(Step::Browse { .. }) => self.browser.as_ref().is_none_or(|browser| browser.done),
             Some(Step::Terminal(act)) => self.terminal.ready(act, self.links.get()),
-            Some(Step::EndsLeaving(_)) => {
-                self.root.is_some() && self.running.iter().all(Option::is_none) && self.terminal.finish_ready()
-            }
+            Some(Step::EndsLeaving(_)) | None => self.can_finish(),
             Some(Step::FixtureReady) => self.running.iter().all(Option::is_none),
             Some(Step::StopWorker { .. } | Step::StartWorker { .. }) => self.worker_ready.get(),
             Some(Step::Advance | Step::Push { .. }) => self.advanced.get(),
@@ -1106,7 +1121,6 @@ impl Caller {
                 self.current.is_none_or(|i| self.running[i].as_ref().is_some_and(|r| r.started))
             }
             Some(_) => self.current.is_none_or(|i| self.running[i].is_none()),
-            None => self.root.is_some() && self.running.iter().all(Option::is_none) && self.terminal.finish_ready(),
         }
     }
 }
@@ -1116,7 +1130,9 @@ impl Host for Caller {
             self.complete(complete, now, wall);
         }
         self.settle();
-        if self.released {
+        if self.closing {
+            self.finish();
+        } else if self.released {
             if let Some(spawn) = self.command.take() {
                 self.launch(now, 0, spawn);
             } else {
@@ -1131,7 +1147,8 @@ impl Host for Caller {
         &mut self.submissions
     }
     fn work_pending(&self, _now: Time) -> bool {
-        !self.completions.is_empty() || self.released && self.can_advance()
+        !self.completions.is_empty()
+            || if self.closing { self.can_finish() } else { self.released && self.can_advance() }
     }
     fn next_deadline(&self) -> Option<Time> {
         None
@@ -1140,7 +1157,7 @@ impl Host for Caller {
         None
     }
     fn is_empty(&self) -> bool {
-        self.released
+        (self.released || self.closing)
             && self.root.is_none()
             && self.probe.is_none()
             && self.owners.is_empty()
@@ -1163,6 +1180,29 @@ pub(crate) use recorded::Recorded;
 mod read_condition_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn an_unreleased_caller_closes_its_root_and_probe_without_running_commands() {
+        let root = Fd::new(3);
+        let probe = Fd::new(4);
+        let mut caller = Caller::new(vec![sign_in(D1)], PathBuf::new(), root);
+        caller.probe = Some((D1, probe));
+        caller.shutdown();
+        assert!(caller.work_pending(Time::ZERO), "shutdown must schedule its closes without release");
+        caller.iterate(Time::ZERO, Wall::from_nanos(0));
+        for fd in [probe, root] {
+            assert!(!caller.is_empty(), "every close needs its completion");
+            let submit = caller.submissions.pop().expect("descriptor close");
+            assert!(matches!(submit.kind, Op::Close { fd: closing } if closing == fd));
+            caller.completions.push(Complete { op: submit.op, kind: submit.kind, result: Ok(Done::Nothing) });
+            caller.iterate(Time::ZERO, Wall::from_nanos(0));
+        }
+        assert!(caller.is_empty());
+        assert!(!caller.work_pending(Time::ZERO));
+        assert!(caller.submissions.is_empty());
+        assert!(caller.calls.is_empty(), "the story never started");
+        assert!(!caller.released, "shutdown is independent of admission");
+    }
 
     fn writing() -> serde_json::Value {
         json!({"chip":{"task":8,"phase":"running","details":{"owner":{

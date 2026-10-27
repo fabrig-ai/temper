@@ -113,7 +113,9 @@ fn remove_handover(remove: &temper_service::HandoverRemoval) -> Result<(), i32> 
     }
 }
 
-fn ending(
+/// The terminal stderr and status shared by the shell and its real-loop host.
+#[must_use]
+pub fn ending(
     end: Option<&End>,
     output_failed: bool,
     _directories: &Directories,
