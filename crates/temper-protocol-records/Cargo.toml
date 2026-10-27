@@ -19,5 +19,9 @@ skein-forge-setup = { workspace = true, optional = true }
 skein-forge-connection = { workspace = true, optional = true }
 jig-protocol-config = { workspace = true, optional = true }
 
+[dev-dependencies]
+skein-codegen.workspace = true
+skein-scratch.workspace = true
+
 [lints]
 workspace = true

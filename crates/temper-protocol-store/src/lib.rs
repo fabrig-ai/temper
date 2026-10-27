@@ -2,7 +2,11 @@
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 extern crate alloc;
+#[path = "../patches/mod.rs"]
+pub mod patches;
 use alloc::boxed::Box;
+mod patch_set;
+pub use patch_set::APPLICATION;
 pub mod keys;
 pub mod records;
 #[rustfmt::skip]

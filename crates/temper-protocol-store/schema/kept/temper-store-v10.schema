@@ -1,0 +1,203 @@
+family temper-store 10
+
+# 04.2: values the families share (protocol/store.md, 2 and 3).
+record Repository { forge: u16 repository: u32 }
+record Number { number: u64 }
+record Commit { commit: fixed 32 }
+# Names carry their own byte length inside each framed piece.
+record Segment { name: bytes 4096 }
+record AnswerName { name: bytes 1048576 }
+# A branch's segments: limit 8 x forge.name_bytes, including both lengths.
+record Segments { segments: bytes 65536 pieces Segment }
+enum What { repository, branch: Segments, pull: Number, issue: Number }
+record Name { forge: u16 repository: u32 what: What }
+enum ItemState { open, closed }
+enum Ci { none, pending, passed, failed }
+# The contexts: one piece; limit client.answer_bytes + 8 x client.rows.
+enum Bypass { never, pulls_only, always }
+record Protection { branch: bytes 1048576 contexts: bytes 2097152 pieces AnswerName approvals: u32 dismiss_stale: bool queue: bool signatures: bool linear: bool code_owners: bool bypass: Bypass }
+record Settings { default_branch: bytes 1048576 merge: bool squash: bool rebase: bool }
+
+# 04.2: family 2, Repository (forge::Repository).
+enum Role { owned, adopted, fork, context }
+record Kinds { read: bool push: bool open: bool land: bool review: bool status: bool comment: bool issue: bool branch: bool }
+enum RepositoryProtection { unknown, absent, rule: Protection }
+record Adopted { project: u32 home: bool provider: Repository host: bytes 4096 owner: bytes 4096 name: bytes 4096 prefix: bytes 4096 role: Role ci: bool checks: list 1024 u32 kinds: Kinds protection: RepositoryProtection settings: Settings }
+# 04.2: family 3, Hold.
+record RunWriter { task: u64 attempt: u64 }
+enum Writer { run: RunWriter, lost: RunWriter, entry: Number }
+record BranchDrift { expected: fixed 32 observed: option fixed 32 }
+record Retargeted { number: u64 before: bytes 4096 after: bytes 4096 }
+enum DriftChange { branch: BranchDrift, pull_closed: Number, retargeted: Retargeted }
+record Drift { at: u64 change: DriftChange }
+record Hold { name: Name task: u64 writer: option Writer drift: option Drift }
+# 04.2: family 4, Names.
+record Names { task: u64 resources: list 1024 Name }
+# 04.2: family 5, Subscription (forge::Subscriber).
+record LandingsTopic { repository: Repository branch: bytes 4096 }
+record CiTopic { repository: Repository head: fixed 32 }
+record NumberTopic { repository: Repository number: u64 }
+enum Topic { landings: LandingsTopic, ci: CiTopic, pull: NumberTopic, participation: NumberTopic }
+record Subscriber { task: u64 number: u64 topic: Topic own_change: option u64 goal_tasks: option list 65536 u64 paths: list 1024 bytes 4096 }
+# 04.2: families 6 to 9.
+record BranchHead { name: Name commit: fixed 32 owned: bool }
+record PullState { name: Name head: fixed 32 ci: Ci state: ItemState }
+record CiState { repository: Repository head: fixed 32 status: Ci }
+record Landed { commit: fixed 32 task: u64 }
+# 04.2: family 14, Release.
+enum ReleaseEnding { done, failed, cancelled }
+record PendingRelease { entry: u64 name: option Name }
+record ReleaseRow { task: u64 root: u64 ending: ReleaseEnding close_pull: option u64 comment: option bytes 1048576 pending_release: option PendingRelease failed: bool effects_settled: bool releasing: bool }
+
+# 04.3a: writes, conditions, proposed effects and outbox entries.
+enum Verdict { approve, request_changes, comment }
+enum Check { pending, passed, failed }
+record CreateIssue { key: bytes 1048576 title: bytes 1048576 body: bytes 1048576 }
+record OpenPull { title: bytes 1048576 body: bytes 1048576 head: bytes 1048576 base: bytes 1048576 }
+record Post { number: u64 key: bytes 1048576 body: bytes 1048576 }
+record PostReview { number: u64 key: bytes 1048576 verdict: Verdict body: bytes 1048576 }
+record Edit { number: u64 title: option bytes 1048576 body: option bytes 1048576 }
+record SetReviewers { number: u64 reviewers: list 65536 u64 }
+record MergeWrite { number: u64 head: fixed 32 }
+record SetStatus { commit: fixed 32 context: bytes 1048576 status: Check }
+record CreateBranch { branch: bytes 1048576 commit: fixed 32 }
+record DeleteBranch { branch: bytes 1048576 }
+enum Write { create_issue: CreateIssue, open_pull: OpenPull, post: Post, review: PostReview, edit: Edit, set_reviewers: SetReviewers, close: Number, reopen: Number, merge: MergeWrite, update: Number, status: SetStatus, create_branch: CreateBranch, delete_branch: DeleteBranch }
+record MergeCondition { base: bytes 1048576 }
+record UpdateCondition { head: fixed 32 base: fixed 32 }
+enum Condition { none, merge: MergeCondition, update: UpdateCondition, review: Commit }
+record Effect { write: Write condition: Condition }
+record Position { at: u64 comment: u64 review: u64 review_page: u32 }
+record Attempt { sent: u64 deadline: u64 wall: u64 expires: u64 }
+record Entry { number: u64 task: u64 repository: Repository effect: Effect start: option Position attempt: option Attempt failures: u32 queued: bool }
+record EntryRow { entry: Entry held: bool }
+record ProposedEffect { number: u64 resource: What entry: Entry }
+
+# 04.3b: named effects, errors and reads without answer-item pieces.
+record RateLimited { after: duration }
+enum Error { unavailable, timeout, rate_limited: RateLimited, forbidden, missing, missing_job, too_large, empty, full, exists, nothing_to_merge, closed, stale, conflict, protected, refused, invalid_answer, busy, not_installed }
+record ErrorValue { error: Error }
+enum Made { created: Number, commented: Number, reviewed: Number, merged: Commit, updated: Commit, branch: Commit, set }
+record OutcomeMade { made: Made found: bool }
+record OutcomeRaced { made: Made why: Error }
+enum Outcome { made: OutcomeMade, failed: ErrorValue, raced: OutcomeRaced, uncertain, held, withdrawn, queued }
+enum Permission { none, read, write, admin }
+enum BranchCreation { created, exists }
+record Pull { reviewers: list 65536 u64 number: u64 state: ItemState head: bytes 1048576 base: bytes 1048576 commit: fixed 32 base_commit: option fixed 32 merged: option fixed 32 mergeable: bool ci: Ci }
+record JobAttempt { head: fixed 32 run: u64 job: u64 attempt: u32 }
+record Step { number: u32 name: bytes 1048576 }
+record JobAnswer { attempt: JobAttempt step: option Step log: bytes 1048576 truncated: bool }
+record FileAnswer { head: fixed 32 path: bytes 1048576 bytes: bytes 1048576 truncated: bool }
+record BranchesAnswer { branches: bytes 2097152 pieces AnswerName }
+record ProtectionAnswer { protection: option Protection }
+record PermissionValue { permission: Permission }
+record BranchCreationValue { creation: BranchCreation }
+
+# 04.3ca: item summaries, comments and reviews in answer pieces.
+enum Kind { issue, pull }
+enum Provenance { original, revised, unknown }
+record Summary { labels: bytes 2097152 pieces AnswerName number: u64 kind: Kind state: ItemState author: u64 key: option bytes 1048576 title: bytes 1048576 body: bytes 1048576 updated: u64 }
+record Comment { id: u64 provenance: Provenance author: u64 created: u64 revision: u64 key: option bytes 1048576 body: bytes 1048576 }
+record Review { id: u64 provenance: Provenance revision: u64 author: u64 verdict: Verdict commit: fixed 32 key: option bytes 1048576 body: bytes 1048576 at: u64 official: bool }
+record ItemsAnswer { items: bytes 2097152 pieces Summary more: bool now: u64 }
+record ItemAnswer { item: Summary comments: bytes 2097152 pieces Comment more: bool }
+record ReviewsAnswer { reviews: bytes 2097152 pieces Review more: bool }
+
+# 04.3cb: the rest of the forge's answer items and families.
+record Status { at: u64 context: bytes 1048576 verdict: Check description: bytes 1048576 url: bytes 1048576 job: option JobAttempt }
+record Remark { id: u64 author: u64 path: bytes 1048576 line: u32 body: bytes 1048576 }
+record File { path: bytes 1048576 before: option bytes 1048576 after: option bytes 1048576 }
+record Collaborator { user: u64 permission: Permission }
+record StatusesAnswer { ci: Ci statuses: bytes 2097152 pieces Status more: bool }
+record RemarksAnswer { remarks: bytes 2097152 pieces Remark more: bool }
+record PullFilesAnswer { head: fixed 32 files: bytes 2097152 pieces File more: bool }
+record CompareAnswer { before: fixed 32 after: fixed 32 contains_before: bool files: bytes 2097152 pieces File commits: list 65536 fixed 32 }
+record ChecksAnswer { statuses: bytes 2097152 pieces Status }
+record CollaboratorsAnswer { collaborators: list 65536 Collaborator more: bool }
+record Located { repository: u32 }
+enum Answer { items: ItemsAnswer, item: ItemAnswer, pull: Pull, reviews: ReviewsAnswer, statuses: StatusesAnswer, remarks: RemarksAnswer, commit: Commit, branches: BranchesAnswer, pull_files: PullFilesAnswer, compare: CompareAnswer, checks: ChecksAnswer, job: JobAnswer, file: FileAnswer, protection: ProtectionAnswer, settings: Settings, collaborators: CollaboratorsAnswer, permission: PermissionValue, created: Number, commented: Number, reviewed: Number, merged: Commit, branch: BranchCreationValue, done, located: Located, queued }
+record AnswerValue { answer: Answer }
+enum ReadResult { answer: boxed AnswerValue, error: ErrorValue }
+record CallRead { result: ReadResult }
+record CallEffect { entry: u64 deadline: u64 outcome: option Outcome }
+enum CallPayload { effect: CallEffect, refused: ErrorValue, read: CallRead }
+record NamedCall { task: u64 attempt: u64 completion: u32 position: u32 }
+record Call { key: NamedCall answer: CallPayload }
+
+# 04.4aa: the client's durable working set.
+record LiveBranch { branch: bytes 4096 }
+enum LiveWhat { repository, branch: LiveBranch, pull: Number, issue: Number }
+record LiveResource { repository: Repository what: LiveWhat }
+record Watch { resource: LiveResource participating: bool }
+record Delivery { id: u64 revision: u64 }
+enum Echo { comment: Number, review: Number }
+record Cached { item: option Summary pull: option Pull tip: option fixed 32 }
+record LiveRecord { watch: Watch position: Position listed: u64 comment_after: u64 comment_page: u32 comment_scanning: bool comment_repair: bool review_page: u32 comments: list 65536 Delivery reviews: list 65536 Delivery cached: Cached pushed: option fixed 32 echoes: list 65536 Echo }
+record RepositoryRecord { repository: Repository mark: option u64 clock: u64 }
+enum ClientValue { live: boxed LiveRecord, repository: RepositoryRecord }
+record ClientRow { value: ClientValue }
+
+# 04.4ab: change procedures and flattened held states.
+enum ChangeStatus { unknown, pending, passed, failed }
+enum Freshness { exact, clean }
+enum GateKind { agent, person, check }
+enum ChangeHold { stalled, repairs, resolutions, updates, branch_moved, branch_missing, pull_closed, retargeted, failed, rejected }
+enum EffectResult { none, pending, made, conflict, failed }
+enum Repair { ci, gate: Number, semantic }
+record RepairValue { why: Repair }
+record DelegateGate { number: u64 head: fixed 32 }
+enum Delegate { produce, repair: RepairValue, resolve: Commit, gate: DelegateGate }
+record DelegateRef { task: u64 request: Delegate }
+record Producing { requested: bool }
+record ChangeHead { head: fixed 32 }
+record Reopening { requested: bool retarget: bool }
+record Gating { head: fixed 32 asked: list 1024 u64 }
+record ReadyHead { head: fixed 32 ready_since: u64 }
+record Updating { from: fixed 32 base: fixed 32 ready_since: u64 }
+record Resolving { requested: bool base: fixed 32 }
+record Repairing { requested: bool why: Repair }
+record LandedChange { merge: fixed 32 }
+enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange }
+record ChangeState { live: ChangeLive holds: list 8 ChangeHold }
+record Gate { number: u64 kind: GateKind blocking: bool freshness: Freshness eager: bool }
+record GateReport { number: u64 head: fixed 32 status: ChangeStatus }
+record GateFailure { number: u64 count: u32 }
+record GateRemark { number: u64 head: fixed 32 words: bytes 1048576 }
+record Change { task: u64 state: ChangeState gates: list 1024 Gate clean: list 1024 fixed 32 repairs: u32 resolutions: u32 updates: u32 since: u64 ready_since: option u64 owns_turn: bool last_head: option fixed 32 gate_failures: list 1024 GateFailure }
+record ChangeRow { task: u64 repository: Repository branch: bytes 4096 base: bytes 4096 title: bytes 1048576 body: bytes 1048576 priority: u32 change: Change pull: option u64 pending: option u64 effect: EffectResult delegate: option DelegateRef delegate_status: ChangeStatus verdicts: list 1024 GateReport gate_remarks: list 1024 GateRemark drift: option ChangeHold base_repair: bool queue_repair: option u64 queue_repairs: u32 }
+# 04.4ac: goal issue projections and the root-authorized desired view.
+enum Phase { waiting, active, settling, held, done, failed, cancelled }
+record PlanItem { text: text 65536 phase: Phase }
+record Lifecycle { task: u64 position: u64 }
+record TaskRevision { task: u64 revision: u64 }
+enum MilestoneKey { lifecycle: Lifecycle, task_revision: TaskRevision, plan_accepted, revision: Number, change_landed: Number, change_held: Number, report: Number, finished }
+record Milestone { key: MilestoneKey text: text 65536 }
+record GoalView { phase: Phase goal: u64 repository: u64 title: text 65536 goal_text: text 65536 plan: list 1024 PlanItem milestones: list 1024 Milestone finished: option text 65536 }
+record Projected { opened: bool digest: option fixed 32 last_body: option u64 body_revision: u64 milestones: list 1024 MilestoneKey closed: bool }
+record IssueRow { goal: u64 repository: Repository state: Projected number: option u64 pending: option u64 before: option Projected failed: bool desired: option GoalView }
+# 02.4: family 15, the retained application outcome.
+record ApplicationAdopted { repository: Repository owner: bytes 4096 name: bytes 4096 role: Role home: bool kinds: Kinds protection: RepositoryProtection }
+# Ceiling: jig-protocol-store people_v13::Refusal::worst_case_bytes(&people_v13::CEILINGS).
+record CoreRefused { refusal: bytes 517 holds jig-store-people Refusal }
+enum ForgeReason { no_such_forge, not_found, no_access, refused, in_flight, too_large, unreachable, invalid_answer, not_installed, another_project, home_held, prefix_occupied }
+record ForgeRefused { reason: ForgeReason }
+enum ApplicationOutcome { adopted: ApplicationAdopted, core_refused: CoreRefused, forge_refused: ForgeRefused }
+record Application { token: u64 until: u64 outcome: ApplicationOutcome }
+# Family 16: each forge's writer, before restored effects (protocol/store.md, 2).
+record ForgeWriter { forge: u16 author: u64 }
+
+# Family 17: the demo's state (protocol/store.md, 2; protocol/setup.md, 8.4).
+enum DemoState { running, ended }
+record Demo { forge: u16 state: DemoState }
+# Family 18: first Google subject for a folded member address (protocol/sign-in.md, 5).
+record Binding { address: bytes 254 subject: bytes 255 }
+# Family 19: the end's acts, kept until a saved answer (protocol/setup.md, 8.4).
+record DemoClose { project: u32 task: u64 }
+record DemoRemoveAccount { account: u32 }
+enum DemoActKind { close: DemoClose, remove_account: DemoRemoveAccount }
+record DemoAct { key: fixed 16 act: DemoActKind }
+# Family 21: writes with a committed attempt (protocol/store.md, 2).
+# Key family 20 is reserved for Setting, still design-only. Value tags are codec-local.
+record Flight { task: u64 entry: u64 }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight }
+versioned record Row { value: Value }

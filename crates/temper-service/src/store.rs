@@ -12,6 +12,47 @@ use skein_io::{
 use skein_lib::{Duration, Env, Map, Queue, Time, Token, Wall};
 use temper_engine_domain as root;
 use temper_engine_domain_forge as forge;
+/// The four real owners admitted at every shell open (jig's store.md, 10.3).
+pub const PATCH_SETS: protocol::PatchSets = protocol::PatchSets {
+    sets: &[
+        protocol::PatchSet {
+            owner: protocol::Owner::Skein,
+            name: skein_oauth::OWNER,
+            patches: skein_oauth::patches::PATCHES,
+            fresh: None,
+            families: &[protocol::KeptFamily {
+                name: skein_oauth::FAMILY,
+                texts: skein_oauth::patches::kept::skein_oauth::TEXTS,
+                map: protocol::KeptMap::Secrets,
+                keys: &[],
+                frames: None,
+                flights: &[],
+            }],
+        },
+        protocol::PatchSet {
+            owner: protocol::Owner::Smith,
+            name: smith_transcript::OWNER,
+            patches: smith_transcript::patches::PATCHES,
+            fresh: Some(smith_transcript::FRESH_WINDOWS),
+            families: &[protocol::KeptFamily {
+                name: smith_transcript::FAMILY,
+                texts: smith_transcript::patches::kept::smith_transcript::TEXTS,
+                map: protocol::KeptMap::Store,
+                keys: &[],
+                frames: Some(smith_transcript::ROOT),
+                flights: &[],
+            }],
+        },
+        protocol::JIG,
+        temper_protocol_store::APPLICATION,
+    ],
+};
+
+fn with_patch_sets(mut component: protocol::Store) -> protocol::Store {
+    component.patch_sets(PATCH_SETS);
+    component
+}
+
 /// The wires this engine speaks to its workers (jig's protocol/store.md,
 /// 5.3; temper's protocol/README.md, 9).
 pub const WIRES: [protocol::Wire; 4] = [
@@ -211,12 +252,12 @@ impl Store {
             [&mut store.io, &mut secrets.io, &mut transcripts.io],
             u64::from_le_bytes(*installation.first_chunk::<8>().expect("installation seed")),
         );
-        let mut component = protocol::Store::on_directory(
+        let mut component = with_patch_sets(protocol::Store::on_directory(
             limits,
             temper_protocol_store::application(&application.forge).expect("checked application sizes"),
             models,
             seeded,
-        );
+        ));
         assert!(component.wires(&WIRES), "valid engine wires before open");
         Self {
             #[cfg(test)]
