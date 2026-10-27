@@ -558,6 +558,28 @@ const fn source_failure(reason: host::SourceFailure) -> fleet::SourceFailure {
     }
 }
 
+fn settings_decision_words(outcome: tasks::SettingsOutcome, reason: &[u8]) -> Box<[u8]> {
+    let number = Decimal::of(match outcome {
+        tasks::SettingsOutcome::Accepted { revision } => u64::from(revision),
+        tasks::SettingsOutcome::Stale { newest } => u64::from(newest),
+        tasks::SettingsOutcome::Rejected => 0,
+    });
+    let parts: [&[u8]; 3] = match outcome {
+        tasks::SettingsOutcome::Accepted { .. } => [b"accepted: revision ", number.as_bytes(), b" made"],
+        tasks::SettingsOutcome::Rejected => [b"rejected: ", reason, b""],
+        tasks::SettingsOutcome::Stale { .. } => [b"withdrawn as stale: the newest is ", number.as_bytes(), b""],
+    };
+    let mut size = 0_usize;
+    for part in parts {
+        size = size.checked_add(part.len()).expect("bounded inbox words");
+    }
+    let mut out = Writer::new(size);
+    for part in parts {
+        out.put(part).expect("measured inbox words");
+    }
+    out.finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -773,32 +795,4 @@ mod tests {
         assert_eq!(hello.bounds.inbox, bounds.inbox);
         assert_eq!(hello.bounds.unacknowledged, bounds.unacknowledged);
     }
-}
-
-fn settings_decision_words(outcome: tasks::SettingsOutcome, reason: &[u8]) -> Box<[u8]> {
-    let mut text: List<Box<[u8]>> = List::with_capacity(4);
-    match outcome {
-        tasks::SettingsOutcome::Accepted { revision } => {
-            text.push(Box::from(b"accepted: revision ".as_slice())).expect("four pieces");
-            text.push(Box::from(Decimal::of(u64::from(revision)).as_bytes())).expect("four pieces");
-            text.push(Box::from(b" made".as_slice())).expect("four pieces");
-        }
-        tasks::SettingsOutcome::Rejected => {
-            text.push(Box::from(b"rejected: ".as_slice())).expect("four pieces");
-            text.push(Box::from(reason)).expect("four pieces");
-        }
-        tasks::SettingsOutcome::Stale { newest } => {
-            text.push(Box::from(b"withdrawn as stale: the newest is ".as_slice())).expect("four pieces");
-            text.push(Box::from(Decimal::of(u64::from(newest)).as_bytes())).expect("four pieces");
-        }
-    }
-    let mut size = 0_usize;
-    for part in &text {
-        size = size.checked_add(part.len()).expect("bounded inbox words");
-    }
-    let mut out = Writer::new(size);
-    for part in &text {
-        out.put(part).expect("measured inbox words");
-    }
-    out.finish()
 }

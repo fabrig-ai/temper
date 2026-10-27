@@ -26,7 +26,7 @@ pub enum HostDelivery {
         to: ReplyTo,
         answer: Box<jig_domain_core::SettingsAnswer>,
         from: u32,
-        requested: Option<u32>,
+        requested: Option<u64>,
     },
     Render {
         to: ReplyTo,
@@ -59,9 +59,18 @@ pub(crate) struct Flight {
 #[derive(Debug)]
 pub(crate) enum FlightRender {
     Plain,
-    Settings { from: u32, requested: Option<u32> },
+    Settings { from: u32, requested: Option<u64> },
     Amended(crate::Changed),
     Change(Box<ChangeChoice>),
+}
+
+impl FlightRender {
+    fn is_settings_read(&self) -> bool {
+        match self {
+            Self::Settings { .. } => true,
+            Self::Plain | Self::Amended(_) | Self::Change(_) => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -107,7 +116,7 @@ pub(crate) fn decoded(domain: &mut Domain, env: &Env<Limits>, decision: &mut Dec
     // for room is answered busy, and its run asks it again after a backoff
     // (jig's `domain/engine.md`, 5.1).
     let invalid = body.completion == 0 || !super::current_proof(domain, key.task, key.attempt);
-    let reading = matches!(body.tool, crate::Tool::Settings { .. });
+    let reading = crate::translate::is_settings_read(&body.tool);
     let busy = !reading
         && (domain.core.pending_calls.contains_key(&key)
             || (!domain.core.call_parts.contains_key(&key)
@@ -131,7 +140,7 @@ pub(crate) fn decoded(domain: &mut Domain, env: &Env<Limits>, decision: &mut Dec
     }
     let render = if let crate::Tool::Settings { from, read } = &body.tool {
         let requested = match read {
-            jig_domain_core::SettingsRead::Revision { number } => Some(*number),
+            jig_domain_core::SettingsRead::Revision { number } => Some(u64::from(*number)),
             jig_domain_core::SettingsRead::Inventory
             | jig_domain_core::SettingsRead::Setting { .. }
             | jig_domain_core::SettingsRead::Revisions { .. } => None,
@@ -162,7 +171,9 @@ pub(crate) fn render(domain: &mut Domain, limits: &Limits, decision: &mut Decisi
     // A flight dropped with its call has no host left to answer.
     let Some(flight) = domain.host_calls.get(&right) else { return };
     let key = flight.key.expect("decoded typed call");
-    if let Some(call) = domain.core.call_settled.get(&key).cloned() {
+    if !flight.render.is_settings_read()
+        && let Some(call) = domain.core.call_settled.get(&key).cloned()
+    {
         drop(domain.host_calls.remove(&right));
         settled(domain, limits, decision, to, call);
         return;
@@ -213,10 +224,15 @@ pub(crate) fn rendered(domain: &mut Domain, to: ReplyTo, answer: SettledAnswer) 
         return;
     };
     let mut call = SettledCall { serial: 0, tool: flight.tool, answer };
-    let recorded = domain.core.call_parts.contains_key(&key);
-    let answer_bytes = match super::call_answer(domain, key) {
-        Some(answer) => crate::store::call_answer_bytes(&answer),
-        None => Some(0),
+    let reading = flight.render.is_settings_read();
+    let recorded = !reading && domain.core.call_parts.contains_key(&key);
+    let answer_bytes = if reading {
+        Some(0)
+    } else {
+        match super::call_answer(domain, key) {
+            Some(answer) => crate::store::call_answer_bytes(&answer),
+            None => Some(0),
+        }
     };
     let fits = call.valid(&super::core_limits(&domain.limits))
         && match answer_bytes {
