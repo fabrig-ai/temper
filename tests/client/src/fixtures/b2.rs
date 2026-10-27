@@ -1,5 +1,5 @@
 //! Roadmap B2 (wave 2), retaining the first-edition fixture (domain/testing.md, 5.3).
-//! B2 maps to draft/reference-case.md, 4.1 and 4.2 (domain/testing.md, 2.7).
+//! B2's advisor maps to draft/reference-case.md, 5.1 (domain/testing.md, 2.7).
 use super::{
     DELEGATE_COMPLETION, Joint, QUESTION_WORKER, SEED, delegate_turn, domain_limits, engine, make_goal_with_delegation,
     report_task, tasks,
