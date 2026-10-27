@@ -1729,11 +1729,13 @@ fn outcome_facts(
             if let Some(kept) = d.entries.get(&entry) {
                 let change = match d.landing.rows.get(&task) {
                     Some(row) => {
-                        let saved = row
-                            .entries
-                            .iter()
-                            .find(|saved| saved.entry == entry)
-                            .expect("landing merge retains its member entry");
+                        let mut saved = None;
+                        for candidate in &row.entries {
+                            if candidate.entry == entry {
+                                saved = Some(*candidate);
+                            }
+                        }
+                        let saved = saved.expect("landing merge retains its member entry");
                         row.landing.members.get(usize::from(saved.member)).expect("saved landing member").change
                     }
                     None => task,

@@ -10,7 +10,8 @@ use temper_engine_domain_forge_tiers::{Blame, Failures};
 use temper_protocol_store::{keys, records};
 
 fn golden(name: &str, row: Stored) {
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     let bytes = records::encode(&row);
     let path = skein_scratch::paths::package().join("../../crates/temper-protocol-store/golden").join(name);
     if std::env::var_os("SKEIN_CODEGEN_WRITE").is_some_and(|value| value == "1") {
@@ -47,7 +48,7 @@ fn verification_verdicts_keep_cleared_and_many_failures() {
         let Stored::Verification(mut row) = verification::smallest() else { panic!("fixture verification") };
         row.tiers[0].verdict = Some(TierVerdict { run: 1, blame });
         let row = Stored::Verification(row);
-        let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("bounds");
+        let bounds = temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("bounds");
         assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
     }
 }
@@ -61,7 +62,7 @@ fn verification_refuses_each_field_one_past_its_runtime_bound() {
         temper_engine_domain_forge::Limits { failing_tests: fixture::LIMITS.failing_tests - 1, ..fixture::LIMITS },
         temper_engine_domain_forge::Limits { test_id_bytes: fixture::LIMITS.test_id_bytes - 1, ..fixture::LIMITS },
     ] {
-        let bounds = temper_protocol_store::bounds(&limits).expect("smaller bounds");
+        let bounds = temper_protocol_store::bounds(&limits, limits.client.op_bytes).expect("smaller bounds");
         assert_eq!(records::decode(&bytes, &bounds), Err(temper_protocol_store::Undecodable));
     }
 }
@@ -76,7 +77,7 @@ fn verification_keys_use_family_26_and_require_the_whole_key() {
         assert_eq!(keys::decode(&bytes[..length], &fixture::LIMITS), None);
     }
     let row = verification::smallest();
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("bounds");
+    let bounds = temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("bounds");
     let other = keys::encode(&Key::Verification { repository: verification::REPOSITORY, commit: [9; 32] }, u32::MAX)
         .expect("key fits");
     assert_eq!(records::row(&other, &records::encode(&row), &bounds), Err(temper_protocol_store::Undecodable));
@@ -96,7 +97,7 @@ fn tier_ranges_and_tests_refuse_one_past_each_runtime_bound() {
         temper_engine_domain_forge::Limits { failing_tests: fixture::LIMITS.failing_tests - 1, ..fixture::LIMITS },
         temper_engine_domain_forge::Limits { test_id_bytes: fixture::LIMITS.test_id_bytes - 1, ..fixture::LIMITS },
     ] {
-        let bounds = temper_protocol_store::bounds(&limits).expect("bounds");
+        let bounds = temper_protocol_store::bounds(&limits, limits.client.op_bytes).expect("bounds");
         assert_eq!(records::decode(&bytes, &bounds), Err(temper_protocol_store::Undecodable));
     }
 }

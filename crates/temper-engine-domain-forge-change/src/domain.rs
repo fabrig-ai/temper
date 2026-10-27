@@ -25,11 +25,8 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
 }
 
 fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: &Limits) -> Stepped {
-    match change.state {
-        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => {
-            return verified(change.clone(), merge, facts.verification, standing.cancelled);
-        }
-        _ => {}
+    if let Some(merge) = landed_merge(&change.state) {
+        return verified(change.clone(), merge, facts.verification, standing.cancelled);
     }
     let mut next = change.clone();
     if change.gates.len() > usize::try_from(limits.gates).expect("u32 fits usize")
@@ -64,10 +61,13 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         | State::Repairing { .. }
         | State::Landing { .. } => false,
     };
-    if let Pull::Merged { commit } = facts.pull {
-        next.state = State::Landed { merge: commit };
-        next.released = None;
-        return verified(next, commit, facts.verification, standing.cancelled);
+    match facts.pull {
+        Pull::Merged { commit } => {
+            next.state = State::Landed { merge: commit };
+            next.released = None;
+            return verified(next, commit, facts.verification, standing.cancelled);
+        }
+        Pull::Missing | Pull::Open { .. } | Pull::Closed => {}
     }
     if standing.cancelled {
         next.state = State::Ended;
@@ -121,6 +121,28 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Ended | State::Held { .. } => {
             unreachable!("terminal states returned above")
         }
+    }
+}
+
+fn landed_merge(state: &State) -> Option<[u8; 32]> {
+    match state {
+        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => Some(*merge),
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Recreating { .. }
+        | State::Reopening { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Ready { .. }
+        | State::Preparing { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Held { .. }
+        | State::Ended => None,
     }
 }
 

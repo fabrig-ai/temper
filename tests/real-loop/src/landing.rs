@@ -60,6 +60,7 @@ pub fn fixture() -> crate::forge::Fixture {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "one landing fixture keeps its authority and dependent bounds together")]
 pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     // Reference-case callbacks also call this directly, before adding their
     // wider policy. The final writer retains defaults only for those projects.
