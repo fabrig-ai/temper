@@ -143,7 +143,7 @@ fn temper_ctl_help_prints_the_page_ctl_then_the_tools() {
     assert_eq!(ended.exit, Some(Exit::Code(0)));
     let page = temper_docs::find(b"ctl").expect("ctl page").text.as_bytes();
     let tools = ended.stdout.strip_prefix(page).expect("the page ctl first");
-    assert!(tools.starts_with(b"me\n"));
+    assert!(tools.starts_with(b"sign-in  Sign in with the link the deployment printed\n"));
     assert_eq!(ended.stderr, b"");
     scratch.remove();
 }
@@ -2084,7 +2084,7 @@ fn demo_bot(config: &std::path::Path, root: &std::path::Path) -> u64 {
 fn demo_landed(config: &std::path::Path, root: &std::path::Path) {
     use std::collections::BTreeMap;
     let private = root.join("private");
-    let call = support::ctl::Call::bare(&[private.to_str().expect("client path"), "task", "2"]);
+    let call = support::ctl::Call::bare(&[private.to_str().expect("client path"), "task", "show", "2"]);
     let ended = support::ctl::alone(root, call);
     assert_eq!(ended.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&ended.stderr));
     let task = String::from_utf8(ended.stdout).expect("change read");

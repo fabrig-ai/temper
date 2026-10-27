@@ -309,7 +309,7 @@ impl Judge {
                 self.panel = Some(panel);
                 let words = String::from_utf8_lossy(&calls.ends()[3].stdout);
                 assert!(words.contains("result: Landed · pull request #1 · merge commit "), "{words}");
-                assert!(words.contains("next: temper ctl DIR change show 2 --until landed"), "{words}");
+                assert!(words.contains("next: temper ctl DIR change show 2\n"), "{words}");
                 let packet = ctl::json(calls.ends().last().expect("landed change"));
                 assert_eq!(packet["task"]["chip"]["phase"], "ended");
                 assert_eq!(packet["task"]["result"]["value"]["change"]["kind"], 1);

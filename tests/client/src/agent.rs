@@ -158,7 +158,7 @@ fn released_tasks(printed: &Printed) -> Vec<u64> {
         .skip_while(|line| *line != "acts:")
         .skip(1)
         .take_while(|line| line.starts_with("  "))
-        .filter_map(|line| line.strip_prefix("  release "))
+        .filter_map(|line| line.strip_prefix("  task release "))
         .map(|line| line.split_ascii_whitespace().next().expect("release task").parse().expect("task number"))
         .collect()
 }
