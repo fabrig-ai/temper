@@ -80,3 +80,20 @@ fn a_history_key_is_the_framed_forty_five_bytes() {
     assert_eq!(purpose.key(&[7; 16], 45).as_deref(), Some(HISTORY_KEY.as_slice()));
     assert_eq!(purpose.key(&[7; 16], 44), None);
 }
+
+#[test]
+fn a_tier_purpose_is_thirty_bytes_in_field_order() {
+    const IDENTITY_BYTES: usize = 30; // after-landing.md, 10: tag + repository + tier + run + operation + part.
+    const EXPECTED: [u8; IDENTITY_BYTES] = [
+        8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 0x17, 0x18, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+        0x28, 0x31, 0x41, 0x42,
+    ];
+    let purpose = EffectPurpose::Tier {
+        repository: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        tier: 0x1718,
+        run: 0x2122_2324_2526_2728,
+        operation: 0x31,
+        part: 0x4142,
+    };
+    assert_eq!(purpose.identity().as_deref(), Some(EXPECTED.as_slice()));
+}

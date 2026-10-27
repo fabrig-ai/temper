@@ -240,6 +240,17 @@
                 "value": ""
               }
             },
+{
+              "connector": 1,
+              "kind": 9,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
             {
               "connector": 1,
               "kind": 10,
@@ -355,6 +366,17 @@
                   "value": ""
                 }
               },
+{
+                "connector": 1,
+                "kind": 9,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
               {
                 "connector": 1,
                 "kind": 10,
@@ -413,6 +435,10 @@
                 {
                   "kind": "procedure",
                   "number": 2
+                },
+{
+                  "kind": "procedure",
+                  "number": 4
                 }
               ],
               "tasks": 8,
@@ -500,6 +526,17 @@
                       "value": ""
                     }
                   },
+{
+                    "connector": 1,
+                    "kind": 9,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
                   {
                     "connector": 1,
                     "kind": 10,
@@ -558,6 +595,10 @@
                     {
                       "kind": "procedure",
                       "number": 2
+                    },
+{
+                      "kind": "procedure",
+                      "number": 4
                     }
                   ],
                   "tasks": 8,

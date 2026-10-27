@@ -528,6 +528,9 @@ impl Protocol {
                 | top::Request::GoalTopic { .. }
                 | top::Request::GoalUntopic { .. }
                 | top::Request::ProjectionFailed { .. }
+                | top::Request::TierRun { .. }
+                | top::Request::TierEffect { .. }
+                | top::Request::TierDecision { .. }
                 | top::Request::ChangeDecision { .. }
                 | top::Request::News { .. }
                 | top::Request::Read { .. }
@@ -666,6 +669,7 @@ fn key(row: &top::Stored) -> top::Key {
         top::Stored::Demo(row) => top::Key::Demo(row.forge),
         top::Stored::Binding { address, .. } => top::Key::Binding(address.clone()),
         top::Stored::DemoAct(row) => top::Key::DemoAct(row.key),
+        top::Stored::Tier(row) => top::Key::Tier { repository: row.repository, tier: row.tier.clone() },
         top::Stored::Verification(row) => top::Key::Verification { repository: row.repository, commit: row.commit },
         top::Stored::Flight { task, entry } => top::Key::Flight { task: *task, entry: *entry },
         top::Stored::Release(row) => top::Key::Release(row.task),

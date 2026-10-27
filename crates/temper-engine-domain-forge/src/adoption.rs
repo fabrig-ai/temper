@@ -443,7 +443,7 @@ fn adoption_collaborators(
                     out,
                 );
             } else {
-                finish_adoption(d, owner, pending, out);
+                finish_adoption(d, env, owner, pending, out);
             }
         }
         Ok(_) => adopted(d, out, owner, Err(api::Error::InvalidAnswer)),
@@ -451,7 +451,13 @@ fn adoption_collaborators(
     }
 }
 
-fn finish_adoption(d: &mut Domain, owner: Token, pending: PendingAdoption, out: &mut Queue<Request>) {
+fn finish_adoption(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    owner: Token,
+    pending: PendingAdoption,
+    out: &mut Queue<Request>,
+) {
     let Some(permission) = pending.permission else { unreachable!("permission read before collaborators") };
     let Some(settings) = pending.settings else { unreachable!("settings read before collaborators") };
     let writable = match permission {
@@ -486,6 +492,8 @@ fn finish_adoption(d: &mut Domain, owner: Token, pending: PendingAdoption, out: 
         settings,
     };
     d.repositories.insert(row.provider, row.clone()).expect("adoption capacity checked");
+    crate::tiers::watch(d, env, out);
+    crate::tiers::start_due(d, env, row.provider, out);
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Repository(row.clone()) });
     // The forges row lists its adoptions (client/forge.md, 5.4).
     emit(out, Request::MarkedForges);

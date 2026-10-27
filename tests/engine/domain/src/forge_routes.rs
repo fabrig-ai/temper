@@ -310,6 +310,7 @@ impl World {
                         authority::Grant { kind: 10, ..grant.clone() },
                         authority::Grant { kind: 11, ..grant.clone() },
                         authority::Grant { kind: 12, ..grant.clone() },
+                        authority::Grant { kind: 9, ..grant.clone() },
                     ])
                 } else {
                     Box::new([grant.clone(), effect_grant.clone()])
@@ -354,8 +355,11 @@ impl World {
                     assert!(config.landing.projects.insert(1, landing).is_ok());
                 }
                 if with_change {
-                    rules.ceiling.delegation.kinds =
-                        Box::new([authority::Executor::Charter(1), authority::Executor::Procedure(2)]);
+                    rules.ceiling.delegation.kinds = Box::new([
+                        authority::Executor::Charter(1),
+                        authority::Executor::Procedure(2),
+                        authority::Executor::Procedure(4),
+                    ]);
                     rules.ceiling.delegation.tasks = 12;
                     rules.ceiling.delegation.depth = 4;
                 }

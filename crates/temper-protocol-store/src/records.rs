@@ -8,6 +8,7 @@ mod api;
 mod application;
 mod change;
 mod client;
+mod tiers;
 mod verification;
 #[cfg(test)]
 pub(crate) use api::encode_error;
@@ -40,6 +41,7 @@ pub fn encode(value: &d::Stored) -> Box<[u8]> {
             w::Binding::new(&w::CEILINGS, w::BindingParts { address: address.clone(), subject: subject.clone() })
                 .expect(FITS),
         ),
+        d::Stored::Tier(row) => w::Value::Tier(tiers::encode(row)),
         d::Stored::Verification(row) => w::Value::Verification(verification::encode(row)),
         d::Stored::Flight { task, entry } => {
             w::Value::Flight(w::Flight::new(&w::CEILINGS, w::FlightParts { task: *task, entry: *entry }).expect(FITS))
@@ -102,6 +104,7 @@ pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
             }
             d::Stored::Binding { address, subject }
         }
+        w::Value::Tier(row) => d::Stored::Tier(tiers::decode(row)?),
         w::Value::Verification(row) => d::Stored::Verification(verification::decode(row)?),
         w::Value::Flight(row) => {
             let w::FlightParts { task, entry } = row.into_parts();
@@ -172,6 +175,14 @@ pub fn row(key: &[u8], value: &[u8], bounds: &Bounds) -> Result<d::Stored, Undec
 
 pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
     Some(w::Limits {
+        tier_row_tier: d::CHECK_NAME_BYTES,
+        tier_row_pending: forge.changes.checked_mul(2)?.checked_add(1)?,
+        tier_run_landings: forge.changes.checked_mul(2)?.checked_add(1)?,
+        tier_finding_blamed: forge.changes.checked_mul(2)?.checked_add(1)?,
+        tier_finding_flakes: forge.failing_tests,
+        tier_record_flakes: forge.failing_tests,
+        tier_flake_test: forge.test_id_bytes,
+        tier_tests_tests: forge.failing_tests,
         verification_changes: forge.changes,
         verification_tiers: forge.tiers,
         tier_verification_tier: d::CHECK_NAME_BYTES,
