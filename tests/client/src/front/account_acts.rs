@@ -14,28 +14,39 @@ pub const PROVIDER: u32 = 17;
 pub const SMALL_ROWS: u32 = 2;
 #[must_use]
 pub fn fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 2, None, false, WelcomeForge::None, false)
+    fixture_root(seed, Tools::Off, 2, None, false, WelcomeForge::None, false)
 }
 #[must_use]
 pub fn plan_fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 2, None, true, WelcomeForge::None, false)
+    fixture_root(seed, Tools::Off, 2, None, true, WelcomeForge::None, false)
 }
 #[must_use]
 pub fn tools_fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, true, 2, None, false, WelcomeForge::None, false)
+    fixture_root(seed, Tools::On, 2, None, false, WelcomeForge::None, false)
+}
+/// An owner's small initial pool and room to double the project's spend, configured before startup.
+#[must_use]
+pub fn tools_fixture_with_spend(seed: u64, spend: u64) -> (Joint, Root) {
+    fixture_root(seed, Tools::Spend(spend), 2, None, false, WelcomeForge::None, false)
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tools {
+    Off,
+    On,
+    Spend(u64),
 }
 #[must_use]
 pub fn small_rows_fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 3, Some(SMALL_ROWS), false, WelcomeForge::None, false)
+    fixture_root(seed, Tools::Off, 3, Some(SMALL_ROWS), false, WelcomeForge::None, false)
 }
 #[must_use]
 pub fn welcome_fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 2, None, false, WelcomeForge::Connected, false)
+    fixture_root(seed, Tools::Off, 2, None, false, WelcomeForge::Connected, false)
 }
 /// The first-run forge is owned by the box; the test scripts its connection rows.
 #[must_use]
 pub fn forge_fixture(seed: u64) -> (Joint, Root) {
-    let (mut front, root) = fixture_root(seed, false, 2, None, false, WelcomeForge::Owned, false);
+    let (mut front, root) = fixture_root(seed, Tools::Off, 2, None, false, WelcomeForge::Owned, false);
     // The scripted box's Create makes the first repository available to Adopt.
     front.engine.forge = Some(temper_engine_domain_world::forge_stand::ForgeStand::with(&[
         (b"acme", b"shop", 7),
@@ -54,7 +65,7 @@ enum WelcomeForge {
 }
 #[must_use]
 pub fn program_fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 2, None, false, WelcomeForge::None, true)
+    fixture_root(seed, Tools::Off, 2, None, false, WelcomeForge::None, true)
 }
 #[must_use]
 pub fn empty_fixture(seed: u64) -> (Joint, Root) {
@@ -112,13 +123,18 @@ fn demo_providers(config: &mut engine::Config) {
 #[expect(clippy::too_many_lines, reason = "one complete client fixture with its configured forge fields")]
 fn fixture_root(
     seed: u64,
-    tools: bool,
+    tools: Tools,
     own_accounts: u32,
     rows: Option<u32>,
     plan: bool,
     forge: WelcomeForge,
     program: bool,
 ) -> (Joint, Root) {
+    let spend = match tools {
+        Tools::Spend(spend) => Some(spend),
+        Tools::Off | Tools::On => None,
+    };
+    let tools = tools != Tools::Off;
     let surviving_projects = forge == WelcomeForge::DemoWithProjects;
     let forge = if surviving_projects { WelcomeForge::Demo { running: true, github: false } } else { forge };
     let welcome = forge != WelcomeForge::None;
@@ -159,6 +175,11 @@ fn fixture_root(
             config.core.defaults.charters.get_mut(0).expect("fixture charter").policy.alternatives = Box::new([model]);
             config.core.settings.llm_providers.providers.get_mut(0).expect("fixture provider").models =
                 Box::new([Box::from(b"scripted".as_slice()), Box::from(b"effort-model".as_slice())]);
+        }
+        if let Some(spend) = spend {
+            let policy = &mut config.core.seed_projects[0].policy.policy;
+            policy.roles[0].period_spend = spend;
+            config.core.defaults.rules.period_spend = policy.period_spend.checked_mul(2).expect("fixture spend fits");
         }
         config.under_box |= forge_setup;
         if welcome {
@@ -390,7 +411,7 @@ pub fn account_chat(front: &mut Joint, account: u32) -> u64 {
 pub fn demo_fixture(seed: u64, state: &temper_client_protocol_wire::v1::DemoState) -> (Joint, Root) {
     fixture_root(
         seed,
-        false,
+        Tools::Off,
         2,
         None,
         false,
@@ -402,7 +423,7 @@ pub fn demo_fixture(seed: u64, state: &temper_client_protocol_wire::v1::DemoStat
 /// The playground plus two real projects; ordinary demo fixtures keep their single project.
 #[must_use]
 pub fn demo_fixture_with_projects(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 2, None, false, WelcomeForge::DemoWithProjects, false)
+    fixture_root(seed, Tools::Off, 2, None, false, WelcomeForge::DemoWithProjects, false)
 }
 
 fn demo_surviving_projects(config: &mut engine::Config, limits: &mut engine::Limits) {
@@ -430,7 +451,7 @@ fn demo_surviving_projects(config: &mut engine::Config, limits: &mut engine::Lim
 /// `NotStarted` beside an unconnected pasted GitHub App, before any installation.
 #[must_use]
 pub fn demo_github_fixture(seed: u64) -> (Joint, Root) {
-    fixture_root(seed, false, 2, None, false, WelcomeForge::Demo { running: false, github: true }, false)
+    fixture_root(seed, Tools::Off, 2, None, false, WelcomeForge::Demo { running: false, github: true }, false)
 }
 
 fn demo_answer(running: bool) -> temper_client_protocol_wire::v1::DemoAnswer {

@@ -170,4 +170,5 @@ account  LLM accounts: read them, connect one, manage its keys and sources, move
 model  Models: read those your party may use
 settings  The settings: read them, change them, or propose a change to their owners
 revision  Settings revisions: read one or the history, move running work to the newest
+project  Projects: read their periods and pools, set their spend per period
 playground  The playground: start the demo
