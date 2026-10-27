@@ -80,6 +80,8 @@ pub fn opening_row() -> ChangeRow {
         priority: 1,
         ci: None,
         change: change::Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: CHANGE,
             state: change::State::Opening { requested: true },
             gates: Box::new([]),
