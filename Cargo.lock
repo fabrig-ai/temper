@@ -267,12 +267,12 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 [[package]]
 name = "jig-boundary"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 
 [[package]]
 name = "jig-channel-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-protocol-world",
@@ -324,7 +324,7 @@ dependencies = [
 [[package]]
 name = "jig-client"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-domain",
  "jig-client-protocol-link",
@@ -335,7 +335,7 @@ dependencies = [
 [[package]]
 name = "jig-client-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -343,7 +343,7 @@ dependencies = [
 [[package]]
 name = "jig-client-fake-person-browser"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "base64",
  "skein-fake-person",
@@ -355,7 +355,7 @@ dependencies = [
 [[package]]
 name = "jig-client-protocol-http"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-protocol-link",
  "skein-http",
@@ -365,7 +365,7 @@ dependencies = [
 [[package]]
 name = "jig-client-protocol-link"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-domain",
  "jig-client-protocol-wire",
@@ -377,7 +377,7 @@ dependencies = [
 [[package]]
 name = "jig-client-protocol-wire"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-codec",
  "skein-lib",
@@ -386,7 +386,7 @@ dependencies = [
 [[package]]
 name = "jig-client-protocol-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-domain",
@@ -430,7 +430,7 @@ dependencies = [
 [[package]]
 name = "jig-client-scripted-engine"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-domain",
  "jig-client-view",
@@ -440,7 +440,7 @@ dependencies = [
 [[package]]
 name = "jig-client-shell-native"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-protocol-http",
@@ -453,7 +453,7 @@ dependencies = [
 [[package]]
 name = "jig-client-shell-web"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-protocol-http",
  "jig-client-view",
@@ -468,7 +468,7 @@ dependencies = [
 [[package]]
 name = "jig-client-test-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-test-protocol-wire",
@@ -480,7 +480,7 @@ dependencies = [
 [[package]]
 name = "jig-client-test-kit"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-test-domain",
@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "jig-client-test-protocol-wire"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-test-connector",
  "skein-codec",
@@ -502,7 +502,7 @@ dependencies = [
 [[package]]
 name = "jig-client-test-records"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-protocol-wire",
@@ -513,7 +513,7 @@ dependencies = [
 [[package]]
 name = "jig-client-test-view"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-domain",
@@ -526,7 +526,7 @@ dependencies = [
 [[package]]
 name = "jig-client-view"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "skein-codec",
@@ -537,7 +537,7 @@ dependencies = [
 [[package]]
 name = "jig-client-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client",
  "jig-client-domain",
@@ -574,7 +574,7 @@ dependencies = [
 [[package]]
 name = "jig-conformance"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-fake-store",
  "jig-test-system",
@@ -585,7 +585,7 @@ dependencies = [
 [[package]]
 name = "jig-core-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-test-records",
  "jig-conformance",
@@ -617,7 +617,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-accounts"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-workers",
  "skein-lib",
@@ -626,7 +626,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-authority"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -634,7 +634,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-brief"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -642,7 +642,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-core"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-accounts",
  "jig-domain-authority",
@@ -658,7 +658,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-fleet"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-workers",
  "skein-lib",
@@ -667,7 +667,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-host"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -675,7 +675,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-notes"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -683,7 +683,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-people"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -691,7 +691,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-tasks"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -699,7 +699,7 @@ dependencies = [
 [[package]]
 name = "jig-domain-views"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -707,12 +707,12 @@ dependencies = [
 [[package]]
 name = "jig-domain-workers"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 
 [[package]]
 name = "jig-fake-parties"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -720,12 +720,12 @@ dependencies = [
 [[package]]
 name = "jig-fake-store"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 
 [[package]]
 name = "jig-fake-workers"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -733,7 +733,7 @@ dependencies = [
 [[package]]
 name = "jig-people-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-people",
  "sha2",
@@ -744,7 +744,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-accounts"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-accounts",
  "skein-codec",
@@ -756,7 +756,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-charter"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "sha2",
  "skein-lib",
@@ -768,7 +768,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-config"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-protocol-wire",
  "jig-domain-accounts",
@@ -798,7 +798,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-engine-clients"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-protocol-wire",
  "jig-domain-accounts",
@@ -818,7 +818,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-engine-clients-http"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-protocol-wire",
  "jig-protocol-engine-clients",
@@ -829,7 +829,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-engine-workers"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-host",
  "jig-protocol-worker-wire",
@@ -842,7 +842,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-store"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-accounts",
  "jig-domain-authority",
@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-tools"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-authority",
  "jig-domain-core",
@@ -874,7 +874,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-transcript"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-domain",
  "skein-lib",
@@ -884,7 +884,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-worker-link"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-host",
  "jig-protocol-worker-wire",
@@ -896,7 +896,7 @@ dependencies = [
 [[package]]
 name = "jig-protocol-worker-wire"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-channel",
  "skein-codec",
@@ -906,7 +906,7 @@ dependencies = [
 [[package]]
 name = "jig-tasks-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-tasks",
  "skein-lib",
@@ -916,7 +916,7 @@ dependencies = [
 [[package]]
 name = "jig-test-connector"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "skein-lib",
 ]
@@ -924,7 +924,7 @@ dependencies = [
 [[package]]
 name = "jig-test-connector-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-test-connector",
  "jig-test-system",
@@ -935,7 +935,7 @@ dependencies = [
 [[package]]
 name = "jig-test-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-accounts",
  "jig-domain-authority",
@@ -955,7 +955,7 @@ dependencies = [
 [[package]]
 name = "jig-test-service"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-client-protocol-wire",
  "jig-client-test-protocol-wire",
@@ -1000,7 +1000,7 @@ dependencies = [
 [[package]]
 name = "jig-test-store"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-core",
  "jig-domain-notes",
@@ -1017,7 +1017,7 @@ dependencies = [
 [[package]]
 name = "jig-test-store-files"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-conformance",
  "jig-domain-core",
@@ -1035,7 +1035,7 @@ dependencies = [
 [[package]]
 name = "jig-test-system"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-test-connector",
 ]
@@ -1043,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "jig-test-worker"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/jig.git#e3d7e4322243728dca3dc6c3cd78a5afd47994cb"
+source = "git+https://github.com/fabrig-dev/jig.git#516152f142d07fd79272690ee42862658ce18f39"
 dependencies = [
  "jig-domain-host",
  "skein-lib",
@@ -1279,7 +1279,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 [[package]]
 name = "skein-browser"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-json",
  "skein-lib",
@@ -1288,7 +1288,7 @@ dependencies = [
 [[package]]
 name = "skein-channel"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1296,7 +1296,7 @@ dependencies = [
 [[package]]
 name = "skein-codec"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1304,7 +1304,7 @@ dependencies = [
 [[package]]
 name = "skein-codegen"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-codec",
  "skein-fail-stop",
@@ -1313,12 +1313,12 @@ dependencies = [
 [[package]]
 name = "skein-fail-stop"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 
 [[package]]
 name = "skein-fake-channel"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-channel",
  "skein-lib",
@@ -1327,12 +1327,12 @@ dependencies = [
 [[package]]
 name = "skein-fake-checkout"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 
 [[package]]
 name = "skein-fake-forge-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1340,7 +1340,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-forge-github"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fake-forge-domain",
  "skein-fake-forge-protocol",
@@ -1354,7 +1354,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-forge-protocol"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fake-forge-domain",
  "skein-forge",
@@ -1366,7 +1366,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-llm-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1374,7 +1374,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-llm-protocol"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fake-llm-domain",
  "skein-http",
@@ -1386,7 +1386,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-machine"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-io",
  "skein-lib",
@@ -1396,7 +1396,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-oauth"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-json",
  "skein-lib",
@@ -1407,7 +1407,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-peers"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "rustls",
  "skein-fake-forge-domain",
@@ -1427,7 +1427,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-person"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
  "skein-ui",
@@ -1436,7 +1436,7 @@ dependencies = [
 [[package]]
 name = "skein-fake-person-browser"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-browser",
  "skein-fake-peers",
@@ -1454,7 +1454,7 @@ dependencies = [
 [[package]]
 name = "skein-forge"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-json",
  "skein-lib",
@@ -1463,7 +1463,7 @@ dependencies = [
 [[package]]
 name = "skein-forge-client"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-forge",
  "skein-lib",
@@ -1472,7 +1472,7 @@ dependencies = [
 [[package]]
 name = "skein-forge-connection"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-forge",
  "skein-http",
@@ -1485,7 +1485,7 @@ dependencies = [
 [[package]]
 name = "skein-forge-machine-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fake-forge-domain",
  "skein-fake-forge-github",
@@ -1505,7 +1505,7 @@ dependencies = [
 [[package]]
 name = "skein-forge-setup"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-forge",
  "skein-http",
@@ -1518,12 +1518,12 @@ dependencies = [
 [[package]]
 name = "skein-heap"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 
 [[package]]
 name = "skein-http"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1531,7 +1531,7 @@ dependencies = [
 [[package]]
 name = "skein-io"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1539,7 +1539,7 @@ dependencies = [
 [[package]]
 name = "skein-json"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1547,7 +1547,7 @@ dependencies = [
 [[package]]
 name = "skein-kv"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-io",
  "skein-lib",
@@ -1556,12 +1556,12 @@ dependencies = [
 [[package]]
 name = "skein-lib"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 
 [[package]]
 name = "skein-llm"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-http",
  "skein-json",
@@ -1571,7 +1571,7 @@ dependencies = [
 [[package]]
 name = "skein-llm-connection"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-io",
  "skein-lib",
@@ -1582,7 +1582,7 @@ dependencies = [
 [[package]]
 name = "skein-llm-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fake-llm-domain",
  "skein-fake-llm-protocol",
@@ -1595,7 +1595,7 @@ dependencies = [
 [[package]]
 name = "skein-oauth"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-codec",
  "skein-json",
@@ -1606,7 +1606,7 @@ dependencies = [
 [[package]]
 name = "skein-oauth-accounts"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-http",
  "skein-io",
@@ -1618,7 +1618,7 @@ dependencies = [
 [[package]]
 name = "skein-oauth-issuer"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-json",
  "skein-lib",
@@ -1628,12 +1628,12 @@ dependencies = [
 [[package]]
 name = "skein-scratch"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 
 [[package]]
 name = "skein-shell"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "io-uring",
  "libc",
@@ -1644,7 +1644,7 @@ dependencies = [
 [[package]]
 name = "skein-sim"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-io",
  "skein-lib",
@@ -1653,7 +1653,7 @@ dependencies = [
 [[package]]
 name = "skein-sim-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-io",
  "skein-lib",
@@ -1664,7 +1664,7 @@ dependencies = [
 [[package]]
 name = "skein-throwaway-forgejo"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fail-stop",
  "skein-forge",
@@ -1678,7 +1678,7 @@ dependencies = [
 [[package]]
 name = "skein-tls"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "ring",
  "rustls",
@@ -1688,7 +1688,7 @@ dependencies = [
 [[package]]
 name = "skein-tls-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "rustls",
  "skein-heap",
@@ -1701,7 +1701,7 @@ dependencies = [
 [[package]]
 name = "skein-ui"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-lib",
 ]
@@ -1709,7 +1709,7 @@ dependencies = [
 [[package]]
 name = "skein-ui-bundle"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-fail-stop",
  "skein-lib",
@@ -1719,7 +1719,7 @@ dependencies = [
 [[package]]
 name = "skein-ui-text"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-io",
  "skein-lib",
@@ -1729,7 +1729,7 @@ dependencies = [
 [[package]]
 name = "skein-ui-web"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "js-sys",
  "skein-lib",
@@ -1741,7 +1741,7 @@ dependencies = [
 [[package]]
 name = "skein-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#be6e4070d780d4328be51745e100f0fabd1b126f"
+source = "git+https://github.com/fabrig-dev/skein.git#622bb50dcc7180db979e15e8365b977b7c67a601"
 dependencies = [
  "skein-heap",
  "skein-io",
@@ -1760,7 +1760,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 [[package]]
 name = "smith-agent-process-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "serde",
  "serde_json",
@@ -1802,7 +1802,7 @@ dependencies = [
 [[package]]
 name = "smith-agent-service"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-channel",
  "skein-http",
@@ -1825,7 +1825,7 @@ dependencies = [
 [[package]]
 name = "smith-agent-shell"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "libc",
  "serde",
@@ -1853,7 +1853,7 @@ dependencies = [
 [[package]]
 name = "smith-agent-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-fake-checkout",
  "skein-fake-llm-domain",
@@ -1869,7 +1869,7 @@ dependencies = [
 [[package]]
 name = "smith-channel"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-channel",
  "skein-codec",
@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "smith-charter"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-codec",
  "skein-lib",
@@ -1888,7 +1888,7 @@ dependencies = [
 [[package]]
 name = "smith-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
  "smith-domain-run",
@@ -1899,7 +1899,7 @@ dependencies = [
 [[package]]
 name = "smith-domain-run"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
  "smith-charter",
@@ -1908,7 +1908,7 @@ dependencies = [
 [[package]]
 name = "smith-domain-session"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
  "smith-domain-tools",
@@ -1917,7 +1917,7 @@ dependencies = [
 [[package]]
 name = "smith-domain-tools"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
 ]
@@ -1925,7 +1925,7 @@ dependencies = [
 [[package]]
 name = "smith-events"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-json",
  "skein-lib",
@@ -1934,7 +1934,7 @@ dependencies = [
 [[package]]
 name = "smith-fake-claude"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "serde",
  "serde_json",
@@ -1948,7 +1948,7 @@ dependencies = [
 [[package]]
 name = "smith-host-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
  "smith-domain",
@@ -1957,7 +1957,7 @@ dependencies = [
 [[package]]
 name = "smith-host-protocol"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-channel",
  "skein-io",
@@ -1974,7 +1974,7 @@ dependencies = [
 [[package]]
 name = "smith-host-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-fake-llm-domain",
  "skein-fake-machine",
@@ -1991,7 +1991,7 @@ dependencies = [
 [[package]]
 name = "smith-inline-agent"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
  "smith-domain",
@@ -2001,7 +2001,7 @@ dependencies = [
 [[package]]
 name = "smith-local-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-lib",
  "smith-domain",
@@ -2013,7 +2013,7 @@ dependencies = [
 [[package]]
 name = "smith-local-process-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "serde",
  "serde_json",
@@ -2059,7 +2059,7 @@ dependencies = [
 [[package]]
 name = "smith-local-protocol"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-codec",
  "skein-io",
@@ -2079,7 +2079,7 @@ dependencies = [
 [[package]]
 name = "smith-local-service"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-channel",
  "skein-http",
@@ -2105,7 +2105,7 @@ dependencies = [
 [[package]]
 name = "smith-local-shell"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "serde",
  "serde_json",
@@ -2140,7 +2140,7 @@ dependencies = [
 [[package]]
 name = "smith-local-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-fake-checkout",
  "skein-fake-llm-domain",
@@ -2157,7 +2157,7 @@ dependencies = [
 [[package]]
 name = "smith-machine-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-fake-machine",
  "skein-io",
@@ -2172,7 +2172,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-channel"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-channel",
  "skein-lib",
@@ -2187,7 +2187,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-llm"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-io",
  "skein-json",
@@ -2202,7 +2202,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-machine"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-io",
  "skein-json",
@@ -2213,7 +2213,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-program"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-io",
  "skein-json",
@@ -2226,7 +2226,7 @@ dependencies = [
 [[package]]
 name = "smith-session-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-fake-checkout",
  "skein-fake-llm-domain",
@@ -2244,7 +2244,7 @@ dependencies = [
 [[package]]
 name = "smith-tools-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-fake-checkout",
  "skein-io",
@@ -2257,7 +2257,7 @@ dependencies = [
 [[package]]
 name = "smith-transcript"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#4d0a2381313eabed189dcda314232ca6c009a79b"
+source = "git+https://github.com/fabrig-dev/smith.git#4d3d706acf5c4d11aabd41975b5bc7ca7d1e97ba"
 dependencies = [
  "skein-codec",
  "skein-lib",
