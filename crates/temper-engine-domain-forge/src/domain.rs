@@ -150,6 +150,7 @@ pub struct Domain {
     pub(crate) tiers: Map<u32, Box<[crate::RepositoryTiers]>>,
     pub(crate) tier_settings: Map<u32, crate::TierSettings>,
     pub(crate) tier_rows: Map<(skein_forge::api::Repository, Box<[u8]>), crate::TierRow>,
+    pub(crate) tier_walks: Map<(skein_forge::api::Repository, Box<[u8]>), crate::tiers::Walk>,
     pub(crate) tier_follows: Map<(skein_forge::api::Repository, Box<[u8]>), crate::runs::Follow>,
     pub(crate) tier_reads: Map<Token, (skein_forge::api::Repository, Box<[u8]>)>,
     pub(crate) tier_config_limits: Limits,
@@ -578,8 +579,15 @@ impl Domain {
             tier_limits: (l.repositories, l.tiers),
             tier_settings: Map::with_capacity(l.judge_projects),
             tier_rows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier rows bound")),
+            tier_walks: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier walks bound")),
             tier_follows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier follows bound")),
-            tier_reads: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier reads bound")),
+            tier_reads: Map::with_capacity(
+                l.repositories
+                    .checked_mul(l.tiers)
+                    .expect("tier reads bound")
+                    .checked_mul(2)
+                    .expect("walk and follower"),
+            ),
             tier_config_limits: *l,
             lost: Map::with_capacity(l.holds),
             pending_ci: Map::with_capacity(l.subscriptions),

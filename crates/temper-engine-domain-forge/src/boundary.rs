@@ -803,11 +803,20 @@ pub struct TierRow {
     pub repository: skein_forge::api::Repository,
     pub tier: Box<[u8]>,
     pub record: temper_engine_domain_forge_tiers::Record,
-    pub pending: Box<[temper_engine_domain_forge_tiers::Landing]>,
+    pub pending: Box<[TierLanding]>,
+    /// The first observed tip, kept apart from the growing landing range.
+    pub baseline: Option<TierLanding>,
     pub task: Option<u64>,
     pub branch: TierBranch,
     pub flight: Option<TierFlight>,
     pub result: Option<TierResult>,
+}
+/// A landing waiting for its bounded filtered-tree key. A commit fallback is
+/// saved as `Some(commit)` so recovery never repeats a failed walk.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TierLanding {
+    pub commit: skein_forge::api::Commit,
+    pub key: Option<[u8; 32]>,
 }
 /// Dispatch window and writes still to make. The run is rediscovered after restart.
 #[derive(Clone, PartialEq, Eq, Debug)]

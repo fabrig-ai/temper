@@ -235,7 +235,8 @@ record TierFlight { next: option u64 entry: u64 start: option u64 since: option 
 record TierJudgement { number: u64 tip: fixed 32 key: fixed 32 finding: TierFinding }
 record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
 record TierResult { verdict: TierJudgement run: ReceiptRun received: bool status: TierBranch }
-record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierLanding task: option u64 branch: TierBranch flight: option TierFlight result: option TierResult }
+record TierPending { commit: fixed 32 key: option Commit }
+record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierPending baseline: option TierPending task: option u64 branch: TierBranch flight: option TierFlight result: option TierResult }
 # Families 23 and 24: landing state and receipts (domain/landing.md, 12).
 record LandingAt { at: u64 }
 enum LandingPlace { waiting, preparing, proving, proved: LandingAt, turn: LandingAt, landed, cancelled }
