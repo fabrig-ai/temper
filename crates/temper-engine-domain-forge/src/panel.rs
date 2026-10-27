@@ -17,6 +17,8 @@ pub const MARKED: u32 = 32;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum PanelStep {
     Ended,
+    Ready { landing: Option<u64> },
+    Preparing { landing: Option<u64> },
     Producing,
     Opening,
     Recreating,
@@ -45,6 +47,8 @@ pub struct PanelUsed {
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Panel {
+    pub way: change::Way,
+    pub in_landing: Option<u64>,
     pub task: u64,
     pub forge: u16,
     pub owner: Box<[u8]>,
@@ -75,7 +79,9 @@ impl Panel {
                 PanelStep::Queued { place, ahead } => {
                     *place > 0 && ahead.len() <= usize::try_from(PANEL_AHEAD).expect("u32 fits usize")
                 }
-                PanelStep::Producing
+                PanelStep::Ready { .. }
+                | PanelStep::Preparing { .. }
+                | PanelStep::Producing
                 | PanelStep::Opening
                 | PanelStep::Recreating
                 | PanelStep::Reopening
@@ -117,8 +123,8 @@ impl Domain {
             change::State::Reopening { .. } => PanelStep::Reopening,
             change::State::Checking { .. } => PanelStep::Checking,
             change::State::Gating { .. } | change::State::CancellingGates { .. } => PanelStep::Gating,
-            // landing.md 3: the top's task
-            change::State::Ready { .. } | change::State::Preparing { .. } => return None,
+            change::State::Ready { .. } => PanelStep::Ready { landing: row.change.landing },
+            change::State::Preparing { .. } => PanelStep::Preparing { landing: row.change.landing },
             change::State::Queued { .. } => {
                 let (place, ahead) = queue_place(self, row, now, limits);
                 PanelStep::Queued { place, ahead }
@@ -161,6 +167,8 @@ impl Domain {
             Some(_) | None => change::Status::Unknown,
         };
         let panel = Panel {
+            way: row.change.way,
+            in_landing: row.change.landing,
             task,
             forge: row.repository.forge,
             owner: repository.owner.clone(),
