@@ -333,7 +333,11 @@ pub fn config_with_project_room(seed: u64, projects: u32) -> engine::Config {
             // The forge is the deployment's one connector.
             connectors: Box::new([0]),
         },
-        landing: engine::LandingPolicy { deployment: Box::new([]), projects: skein_lib::Map::with_capacity(1) },
+        landing: engine::LandingPolicy {
+            deployment: Box::new([]),
+            projects: skein_lib::Map::with_capacity(1),
+            landings: skein_lib::Map::with_capacity(1),
+        },
         forge: skein_forge_client::Config {
             namespace: Box::from(&b"root"[..]),
             writers: Box::new([skein_forge_client::Writer { forge: 1, author: 1 }]),
