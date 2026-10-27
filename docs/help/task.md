@@ -49,15 +49,16 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
 - **Held:** a held task runs no more until someone decides. Its hold
   has a reason (out of tries, stopped, its deadline passed, an
   insufficient budget, an effect whose outcome is uncertain, among
-  others) and a revision of its own. Releasing it runs it again;
+  others) and a revision of its own; a hold a party placed is theirs to
+  release (temper help hold). Releasing it runs it again;
   leaving it held, or passing it up to the next holder of authority,
   are the other decisions. Only an uncertain effect asks whether to
   repeat it. `task show` prints `held:` and its reason, then `way
   out:`, what to mend and the call that releases it: `task release
   TASK --hold REV`.
-- **Stopped:** stopping holds the task and every task below it, those
-  made later included, and ends their runs; releasing the stopped task
-  runs them all again.
+- **Stopped:** stopping places a hold of yours over the task and every
+  task below it, those made later included, and ends their runs;
+  releasing the stopped task runs them all again (temper help hold).
 - **Cancelled:** cancelling ends the task and its tree: at once, or
   after a grace the canceller gives, in which its run may finish. A
   task that has ended refuses a cancel, saying how it ended; the same
@@ -91,7 +92,8 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   `task tree` and `task run` wait with `--until` or `--since`.
 - **Acting:** the acts `task show` lists under `acts:`, among them
   `task message`, `task answer`, `task amend`, `task stop`, `task
-  cancel`, `task release`, `task decide` and `proposal decide`; an act
+  cancel`, `task release`, `hold lift`, `task decide` and `proposal
+  decide`; an act
   marked `(no tool)` has no ctl tool yet.
 - **temper's runs** act on their delegates with the host tools
   `delegate`, `change`, `goal`, `amend`, `message`, `cancel`, `release`,
