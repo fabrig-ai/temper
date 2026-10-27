@@ -45,13 +45,14 @@ impl Host for Observed {
                 .peer
                 .observations()
                 .iter()
-                .find_map(|record| match record {
-                    skein_fake_peers::forge::Observation::Head { call, .. }
-                        if call.method == skein_http::Method::Post =>
+                .find_map(|record| {
+                    if let skein_fake_peers::forge::Observation::Head { call, .. } = record
+                        && call.method == skein_http::Method::Post
                     {
                         Some(call.target.as_ref())
+                    } else {
+                        None
                     }
-                    _ => None,
                 })
                 .expect("first manifest post");
             let state = target.strip_prefix(b"/settings/apps/new?state=").expect("manifest state");
