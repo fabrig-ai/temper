@@ -122,10 +122,10 @@ fn landing_deadline_wakes_once_and_an_offered_step_clears_it() {
     assert_eq!(d.next_wall_deadline(), Some(env().wall));
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     fire(&mut d, &env(), &mut out);
-    let mut wakes = 0;
+    let mut wakes = 0_u32;
     while let Some(request) = out.pop() {
         if request == (Request::WakeProcedure { task: 61 }) {
-            wakes += 1;
+            wakes = wakes.checked_add(1).expect("bounded wake count");
         }
     }
     assert_eq!(wakes, 1);
