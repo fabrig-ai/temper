@@ -79,6 +79,8 @@ pub fn opening_row() -> ChangeRow {
         body: Box::new([]),
         priority: 1,
         change: change::Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: CHANGE,
             state: change::State::Opening { requested: true },
             gates: Box::new([]),
