@@ -1214,6 +1214,21 @@ fn finish_flight(d: &mut Domain, key: &ReceiptKey, out: &mut Queue<Request>) {
         }
     }
 }
+/// A turn's merge belongs to its member's change; its effect is the landing's
+/// (domain/forge.md, 7.3; domain/landing.md, 8).
+pub(crate) fn merged_owner(d: &Domain, task: u64, entry: u64) -> u64 {
+    let Some(row) = d.landing.rows.get(&task) else {
+        return task;
+    };
+    for item in &row.entries {
+        if item.entry == entry {
+            assert_eq!(item.operation, Operation::Merge, "merged outcome belongs to a merge entry");
+            return row.landing.members.get(usize::from(item.member)).expect("merge's saved member").change;
+        }
+    }
+    unreachable!("landing merge has a saved member entry");
+}
+
 /// Preserve a settled dispatch entry until its run ends: its start window
 /// is required to reconstruct a Dispatched proof after restart (landing.md, 15).
 pub(crate) fn outcome(

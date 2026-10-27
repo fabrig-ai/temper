@@ -1694,6 +1694,7 @@ fn outcome_facts(
             }
         }
         skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Merged(commit), .. } => {
+            let task = crate::landing::merged_owner(d, task, entry);
             if d.landed.len() < env.limits.landings.max(env.limits.changes) || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");
                 emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Landed { commit, task } });
