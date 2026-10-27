@@ -132,6 +132,21 @@ struct Driver {
 }
 
 impl Driver {
+    fn new(store: &Path, client: &Path) -> Self {
+        Self {
+            binary: skein_scratch::paths::binary("temper"),
+            store: store.into(),
+            client: client.into(),
+            sequence: 0,
+            until: now().saturating_add(Duration::from_secs(300)),
+            phase: "setup",
+            requested: None,
+            api: String::new(),
+            header: PathBuf::new(),
+            project: String::new(),
+        }
+    }
+
     fn execute(&mut self, mut command: Command, input: Option<&str>, keep: bool) -> Result<Vec<u8>, String> {
         let number = self.sequence;
         self.sequence += 1;
@@ -222,7 +237,9 @@ impl Driver {
     fn wait(&mut self, args: &[&str], condition: &str) -> Result<Value, String> {
         let left = self.until.saturating_since(now()).as_nanos() / 1_000_000;
         require(left > 0, &format!("phase {} exceeded its bound", self.phase))?;
-        let timeout = format!("{left}ms");
+        // ctl accepts whole seconds. The child is still killed at this
+        // driver's exact millisecond deadline, including its final fraction.
+        let timeout = left.div_ceil(1_000).to_string();
         let args: Vec<_> = args.iter().copied().chain(["--until", condition, "--timeout", &timeout]).collect();
         let value = self.ctl(&args, None)?;
         require(value["met"] == true, &format!("phase {}: unmet {condition}", self.phase))?;
@@ -317,19 +334,9 @@ impl Driver {
         let revision = self.ctl(&["settings", "show"], None)?["newest"].as_u64().ok_or("settings revision")?;
         let rules = self.ctl(&["settings", "show", "rules"], None)?;
         let policy = self.ctl(&["settings", "show", "policy", "1"], None)?;
-        let mut r = rules["value"].clone();
-        let mut p = policy["value"].clone();
-        r["ceiling"]["budget"]["spend"] = 207_552.into();
-        r["period_spend"] = 449_696.into();
-        p["ceiling"]["budget"]["spend"] = 207_552.into();
-        p["period_spend"] = 449_696.into();
-        p["roles"][0]["authority"]["budget"]["spend"] = 207_552.into();
-        p["roles"][0]["period_spend"] = 415_104.into();
+        require(rules["revision"] == revision && policy["revision"] == revision, "same settings revision")?;
         let file = self.store.join("funds.json");
-        write_json(
-            &file,
-            &json!({"items":[{"setting":rules["setting"],"set":r}, {"setting":policy["setting"],"set":p}]}),
-        );
+        write_json(&file, &funds_document(&rules, &policy)?);
         self.ctl(
             &[
                 "settings",
@@ -344,6 +351,34 @@ impl Driver {
         )?;
         Ok(())
     }
+}
+
+/// Edit only numeric members present in ctl's values, preserving the rest of
+/// the revision's settings document (walk 1, step 3).
+pub fn funds_document(rules: &Value, policy: &Value) -> Result<Value, String> {
+    fn spend(value: &mut Value, pointer: &str, amount: u64) -> Result<(), String> {
+        let field = value.pointer_mut(pointer).ok_or_else(|| format!("funds: missing {pointer}"))?;
+        require(field.is_u64(), &format!("funds: {pointer} is not a spend"))?;
+        *field = amount.into();
+        Ok(())
+    }
+    require(rules["setting"] == json!({"kind":"rules"}), "funds: rules selector")?;
+    require(policy["setting"] == json!({"kind":"policy","number":1}), "funds: policy selector")?;
+    let mut r = rules["value"].clone();
+    let mut p = policy["value"].clone();
+    for value in [&mut r, &mut p] {
+        spend(value, "/ceiling/spend", 207_552)?;
+        spend(value, "/period_spend", 449_696)?;
+    }
+    let role = p["roles"]
+        .as_array()
+        .ok_or("funds: policy roles")?
+        .iter()
+        .position(|role| role["number"] == 0)
+        .ok_or("funds: role 0")?;
+    spend(&mut p, &format!("/roles/{role}/authority/spend"), 207_552)?;
+    spend(&mut p, &format!("/roles/{role}/period_spend"), 415_104)?;
+    Ok(json!({"items":[{"setting":rules["setting"],"set":r}, {"setting":policy["setting"],"set":p}]}))
 }
 
 fn quote(path: &Path) -> String {
@@ -403,18 +438,7 @@ pub fn green_light() {
     let client = store.join("client");
     fs::create_dir(&client).expect("fresh client");
     fs::set_permissions(&client, fs::Permissions::from_mode(0o700)).expect("private client");
-    let mut driver = Driver {
-        binary: skein_scratch::paths::binary("temper"),
-        store: store.clone(),
-        client,
-        sequence: 0,
-        until: now().saturating_add(Duration::from_secs(300)),
-        phase: "setup",
-        requested: None,
-        api: String::new(),
-        header: paths[1].join("forge-3/person_read.header"),
-        project: String::new(),
-    };
+    let mut driver = Driver::new(&store, &client);
     return_hook(&driver.binary, &store, &driver.client, &account);
     let mut boxed = Command::new("setsid")
         .arg(&driver.binary)
@@ -440,7 +464,7 @@ pub fn green_light() {
         super::super::live::notice(&format!("LOGIN NOT BACK: {message}; box retained for recovery"));
         panic!("LOGIN NOT BACK: {message}; box retained for recovery");
     }
-    super::super::live::notice("MUST login exported to its original path; stat regular, nonempty, 0600");
+    super::super::live::notice("MUST login at its original path; stat regular, nonempty, 0600");
     let stopped = stop_box(&mut boxed);
     let result = result.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
     result.unwrap_or_else(|message| {
@@ -460,6 +484,23 @@ fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Va
         std::thread::sleep(std::time::Duration::from_millis(20));
     };
     driver.ctl(&["sign-in", "-"], Some(&link))?;
+    setup_tools(driver)?;
+    let output = fs::read_to_string(driver.store.join("box.err")).map_err(|e| e.to_string())?;
+    let baseline = setup_observer(driver, paths, &output)?;
+    driver.ctl(&["account", "import", account.to_str().ok_or("held path")?, "--key", "connect-plan"], None)?;
+    let accounts = driver.wait(&["account", "list"], "usable")?;
+    require(
+        accounts["accounts"]["party"]
+            .as_array()
+            .is_some_and(|rows| rows.len() == 1 && rows[0]["provider"] == 1 && rows[0]["plan"] == true),
+        "fresh box holds one ChatGPT plan for the return hook",
+    )?;
+    Ok(baseline)
+}
+
+/// All ordinary ctl setup before importing the held account, shared by the
+/// live walk and the process proof with the existing fake model.
+fn setup_tools(driver: &mut Driver) -> Result<(), String> {
     driver.funds()?;
     driver.ctl(&["forge", "setup", "3", "--playground", "--key", "rung-forge"], None)?;
     driver.wait(&["forge", "list"], "settled")?;
@@ -481,7 +522,14 @@ fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Va
         .ok_or("playground project")?
         .to_string();
     driver.project.clone_from(&project);
-    let output = fs::read_to_string(driver.store.join("box.err")).map_err(|e| e.to_string())?;
+    driver.ctl(&["project", "fund", &project, "449696", "--key", "rung-project-funds"], None)?;
+    driver.ctl(&["project", "fund", &project, "415104", "--role", "0", "--key", "rung-role-funds"], None)?;
+    let charter = driver.ctl(&["settings", "show", "charter", "1"], None)?;
+    require(charter["value"]["model"]["name"] == "gpt-6.1-sol", "QA charter uses sol")?;
+    Ok(())
+}
+
+fn setup_observer(driver: &mut Driver, paths: &[PathBuf; 3], output: &str) -> Result<Value, String> {
     driver.api = output
         .lines()
         .find_map(|line| line.split_once("Forge 3 (Forgejo): api ").map(|(_, api)| api.trim().to_owned()))
@@ -502,16 +550,6 @@ fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Va
         "person's read header from the box",
     )?;
     driver.header = printed_header.into();
-    let charter = driver.ctl(&["settings", "show", "charter", "1"], None)?;
-    require(charter["value"]["model"]["name"] == "gpt-6.1-sol", "QA charter uses sol")?;
-    driver.ctl(&["account", "import", account.to_str().ok_or("held path")?, "--key", "connect-plan"], None)?;
-    let accounts = driver.wait(&["account", "list"], "usable")?;
-    require(
-        accounts["accounts"]["party"]
-            .as_array()
-            .is_some_and(|rows| rows.len() == 1 && rows[0]["provider"] == 1 && rows[0]["plan"] == true),
-        "fresh box holds one ChatGPT plan for the return hook",
-    )?;
     super::super::live::notice(
         "SETUP sol high output=32000; engine memory=derived-before-start worker memory=3700000000000; rules/policy ceiling=207552 period=449696 role period=415104",
     );
@@ -521,6 +559,81 @@ fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Va
     require(baseline.as_array().is_some_and(|b| b.len() == 1 && b[0]["name"] == "main"), "fresh main alone")?;
     driver.forge("raw/src/main.rs?ref=main")?;
     Ok(baseline)
+}
+
+/// Process-tier proof of the live setup through its last pre-import read.
+/// The ordinary harness supervises the existing TLS fake; no account is added
+/// and no real provider is contacted. The shared steps still use real Forgejo.
+pub fn offline_setup(root: &Path) {
+    use super::super::{
+        boxed,
+        ctl::{Call, Step},
+    };
+    use skein_io::kernel::Exit;
+    use std::{cell::RefCell, rc::Rc};
+    let paths = ["config", "data", "cache"].map(|name| root.join(name));
+    deployment(&paths);
+    let _issuer = super::super::sign_in::patch_configuration(&paths[0]);
+    let peer = super::super::sign_in::plan_peer(Box::new([]));
+    peer.configure(&paths[0]);
+    let _ = super::cache_forgejo_binaries(&paths[2]);
+    let driver = Rc::new(RefCell::new(Driver::new(root, &root.join("client"))));
+    let tools = driver.clone();
+    let prepared = Rc::new(RefCell::new(Ok(())));
+    let tool_result = prepared.clone();
+    let outcome = boxed::run_ctl_with_llm(
+        root,
+        super::deployment_flags(&paths),
+        root,
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Then(Box::new(move |_| {
+                *tool_result.borrow_mut() = setup_tools(&mut tools.borrow_mut());
+                // Return to the harness so it drains setup's printed forge paths
+                // before handing the captured stderr to the observer checkpoint.
+                Call::new(&["me", "--json"])
+            })),
+        ],
+        boxed::BOX_DEADLINE,
+        |stderr| -> Result<(), String> {
+            prepared.borrow().clone()?;
+            let mut driver = driver.borrow_mut();
+            setup_observer(&mut driver, &paths, std::str::from_utf8(stderr).map_err(|e| e.to_string())?)?;
+            let accounts = driver.ctl(&["account", "list"], None)?;
+            require(accounts["accounts"]["party"] == json!([]), "no account imported by the offline setup")?;
+            let project = driver.project.clone();
+            let project = driver.ctl(&["project", "show", &project], None)?;
+            require(
+                project["policy"]["period_spend"] == 449_696
+                    && project["current_period"]["numbers"]["budget"] == 449_696,
+                "project policy and open period funded",
+            )?;
+            require(
+                project["policy"]["roles"].as_array().is_some_and(|roles| {
+                    roles.iter().any(|role| {
+                        role["number"] == 0
+                            && role["period_spend"] == 415_104
+                            && role["authority"]["authority"]["spend"] == 207_552
+                            && role["authority"]["cut"] == false
+                    })
+                }),
+                "role 0 authority and pool funded",
+            )?;
+            require(project["cut"] == false && project["configured_pools_cut"] == false, "whole project funding read")?;
+            Ok(())
+        },
+        boxed::CtlLlm { expected_exits: Vec::new(), peer, on_link: Box::new(|| {}) },
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    assert_eq!(outcome.exit, Some(Exit::Code(0)), "box stop: {stderr}");
+    assert_eq!(outcome.left, Some(vec![]), "no surviving children: {stderr}");
+    for call in &outcome.calls {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
+    }
+    assert_eq!(outcome.calls.len(), 2, "sign-in and setup checkpoint");
+    outcome.checked.expect("pre-import checkpoint").expect("all pre-import setup passed");
+    assert!(outcome.model.expect("fake model observations").requests.is_empty(), "no model call before import");
+    eprintln!("OFFLINE B0 setup passed through account-import boundary, zero model requests; box drained");
 }
 
 fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(), String> {
