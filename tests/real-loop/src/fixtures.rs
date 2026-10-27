@@ -554,6 +554,7 @@ pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -
     if flags["case"] == true {
         crate::case::defaults::apply(&mut defaults, flags, stock_period_spend);
     }
+    crate::case2::defaults(&mut defaults, flags);
     temper_service::stock::Given::Own(Box::new(defaults))
 }
 
