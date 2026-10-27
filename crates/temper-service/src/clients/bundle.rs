@@ -12,6 +12,11 @@ use skein_lib::{
 #[expect(clippy::disallowed_macros, reason = "a fixed page compiled in, not data read at run time")]
 pub const NO_BUNDLE_PAGE: &[u8] = include_bytes!("no-bundle.html");
 
+/// Digest-directory files are cached permanently (client/browser.md, 2.2).
+pub(crate) const FILE_CACHE_CONTROL: &[u8] = b"public, max-age=31536000, immutable";
+/// The page is revalidated on each visit (client/browser.md, 2.2).
+pub(crate) const PAGE_CACHE_CONTROL: &[u8] = b"no-cache";
+
 /// A bundle path's bound (jig's testing/jig-test/src/bundle.rs).
 pub const NAME_BYTES: u32 = 1024;
 /// The digest directory's name: sixteen lowercase hex digits.
@@ -217,12 +222,12 @@ impl Clients {
             Answer::Busy => 503,
         };
         match answer {
-            Answer::File => field(&mut headers, b"Cache-Control", b"public, max-age=31536000, immutable"),
+            Answer::File => field(&mut headers, b"Cache-Control", FILE_CACHE_CONTROL),
             Answer::Page | Answer::Root | Answer::NotModified => {
-                field(&mut headers, b"Cache-Control", b"no-cache");
+                field(&mut headers, b"Cache-Control", PAGE_CACHE_CONTROL);
                 field(&mut headers, b"ETag", &self.bundle.as_ref().expect("revalidated bundle").etag);
             }
-            Answer::NoBundle => field(&mut headers, b"Cache-Control", b"no-cache"),
+            Answer::NoBundle => field(&mut headers, b"Cache-Control", PAGE_CACHE_CONTROL),
             Answer::NotFound | Answer::NotAllowed | Answer::Busy => {}
         }
         let response = http::Response {

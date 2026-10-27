@@ -58,4 +58,12 @@ target/debug/skein-ui-bundle \
     --files "$shell/files" \
     --noscript "$noscript" "$@" \
     --out "$out" >&2
+if "$playground"; then
+    bundle=$(sed -n 's|.*src="\(/bundle/[0-9a-f]\{16\}/\)boot.js".*|\1|p' "$out/index.html")
+    if [ -z "$bundle" ]; then
+        echo 'scripts/bundle.sh: playground page holds no bundle prefix' >&2
+        exit 1
+    fi
+    sed "s|{bundle}|$bundle|g" "$shell/playground/headers" >"$out/headers"
+fi
 echo "$(cd "$out" && pwd)"

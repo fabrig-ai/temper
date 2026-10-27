@@ -31,6 +31,8 @@ def check(out):
     page = (out / "index.html").read_text()
     assert "{bundle}" not in page, "page markers replaced"
     assert page == (shell / "playground/index.html").read_text().replace("{bundle}", prefix), "playground page"
+    headers = (out / "headers").read_text()
+    assert headers == (shell / "playground/headers").read_text().replace("{bundle}", prefix), "playground headers"
 
     modules = ("temper_client_shell_web", "temper_playground")
     stylesheets = ("skein-ui.css", "temper.css", "task-pages.css", "playground.css")
@@ -49,7 +51,7 @@ def check(out):
             expected.add(name)
             assert (directory / name).read_bytes() == source.read_bytes(), name
     actual = {path.relative_to(out).as_posix() for path in out.rglob("*") if path.is_file()}
-    wanted = {"index.html"} | {f"{directory.name}/{name}" for name in expected}
+    wanted = {"index.html", "headers"} | {f"{directory.name}/{name}" for name in expected}
     assert actual == wanted, f"file list: missing {wanted - actual}, extra {actual - wanted}"
 
     references = References()

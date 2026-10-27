@@ -31,3 +31,38 @@ pub(crate) fn add(response: &mut Response) {
     }
     response.headers = headers.into_boxed();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[expect(clippy::disallowed_macros, reason = "compare the static hosting template with the service's policy")]
+    fn the_playground_headers_are_the_page_policy_with_workers() {
+        use crate::clients::bundle::{FILE_CACHE_CONTROL, PAGE_CACHE_CONTROL};
+
+        let template = include_str!("../../../temper-client-shell-web/playground/headers");
+        let mut headers = List::with_capacity(7);
+        for line in template.lines() {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (path, field) = line.split_once(' ').expect("PATH NAME: VALUE");
+            let (name, value) = field.split_once(": ").expect("NAME: VALUE");
+            headers.push((path, name.as_bytes(), value.as_bytes())).expect("only policy and cache fields");
+        }
+        assert_eq!(headers.len(), 7, "exactly five policy fields and two cache fields");
+        for (at, (name, value)) in FIELDS.iter().enumerate() {
+            let (path, actual_name, actual_value) = headers.get(u32::try_from(at).unwrap()).expect("policy field");
+            assert_eq!(*path, "/*");
+            assert_eq!(actual_name, name);
+            if *name == b"Content-Security-Policy" {
+                assert_eq!(actual_value.strip_suffix(b"; worker-src 'self'"), Some(*value));
+            } else {
+                assert_eq!(actual_value, value);
+            }
+        }
+        assert_eq!(headers.get(5), Some(&("/*", b"Cache-Control".as_slice(), PAGE_CACHE_CONTROL)));
+        assert_eq!(headers.get(6), Some(&("{bundle}*", b"Cache-Control".as_slice(), FILE_CACHE_CONTROL)));
+    }
+}

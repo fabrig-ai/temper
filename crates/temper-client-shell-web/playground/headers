@@ -1,0 +1,9 @@
+# Playground response headers; the site's host maps these paths to its answers.
+# A later, more specific path replaces the same header from an earlier line.
+/* Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; worker-src 'self'
+/* X-Content-Type-Options: nosniff
+/* Cross-Origin-Opener-Policy: same-origin
+/* Cross-Origin-Resource-Policy: same-origin
+/* Referrer-Policy: no-referrer
+/* Cache-Control: no-cache
+{bundle}* Cache-Control: public, max-age=31536000, immutable

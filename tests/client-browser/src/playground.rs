@@ -27,6 +27,10 @@ pub(crate) fn download(root: &Path) -> (u64, u64) {
                 pending.push(entry.path());
             } else {
                 assert!(kind.is_file(), "playground entry must be a regular file");
+                // Hosting configuration is shipped beside the page, but never fetched by it.
+                if entry.path() == root.join("headers") {
+                    continue;
+                }
                 files.push(entry.path());
             }
         }
