@@ -26,7 +26,7 @@ priced at startup (`temper help budget`). They use workers and enable
 inspection, modification and agents; local shell use is off by default. Read the current values:
 
 ```sh
-temper ctl me setting charter 1 --json
+temper ctl me settings show charter 1 --json
 ```
 
 Here and below, `me` is your client directory. Use the charter number
@@ -44,7 +44,7 @@ client calls this **Using the default model**.
 Read the authorized model names for your project, here project 1:
 
 ```sh
-temper ctl me models --project 1
+temper ctl me model list --project 1
 ```
 
 A charter can name only configured models. Permitting a model in a
@@ -65,7 +65,7 @@ template; the chat command has no template picker. Read its current
 whole value:
 
 ```sh
-temper ctl me setting template 1 --json
+temper ctl me settings show template 1 --json
 ```
 
 The default goal template is 2. It asks its creator for an executor,
@@ -74,7 +74,7 @@ choice is optional. Read the current value before relying on those
 defaults:
 
 ```sh
-temper ctl me setting template 2 --json
+temper ctl me settings show template 2 --json
 ```
 
 The goal template's existence does not give ctl a goal-creation
@@ -112,7 +112,7 @@ depth 4. Template 1 leaves its chat 13 lifetime descendants. Read the
 current ceiling:
 
 ```sh
-temper ctl me setting rules --json
+temper ctl me settings show rules --json
 ```
 
 A role or task can have narrower permission. Local shell use also
@@ -132,7 +132,7 @@ particular, policy 1 is not a way to read or change project 1's own
 policy. Read the reusable policy, if your deployment offers it:
 
 ```sh
-temper ctl me setting policy 1 --json
+temper ctl me settings show policy 1 --json
 ```
 
 A deployment can start with `engine.projects` and
@@ -142,7 +142,7 @@ owner raises the rules and policy 1 together in one settings change,
 then makes the project from policy 1.
 
 The deployment rules supply ceilings, period spend, per-run spend
-floor and cap, and requirements. Read them with `setting rules` as
+floor and cap, and requirements. Read them with `settings show rules` as
 shown above. The setting kinds you can name are `charter N`,
 `template N`, `policy N` and unnumbered `rules`; use a real setting
 number in place of `N`.
@@ -156,9 +156,9 @@ proposals. An admitted stored change does not need a restart.
 A charter change reaches tasks and delegates made after the change.
 An existing agent task's later runs keep the charter from its recorded
 settings revision until it moves. An owner can move running work with
-`move-to-newest`; a conversation moves at its next run. A run already
+`revision advance`; a conversation moves at its next run. A run already
 going keeps the instructions it received. While older work holds a
-revision, read that charter with `setting charter` and `--revision`,
+revision, read that charter with `settings show charter` and `--revision`,
 as shown in `temper help settings`.
 
 A changed charter must name configured models, leave turns and time
@@ -167,7 +167,7 @@ reserve. A larger charter must still fit the host that will run it;
 acceptance alone does not prove an existing host can satisfy a
 larger request.
 
-Save the current whole value with `setting ... --json` before editing
+Save the current whole value with `settings show ... --json` before editing
 it. The setting contains inline instructions, model objects and
 durations in nanoseconds. Charters, templates, numbered policies and
 rules do not go in `temper.json`; there are no charter instruction
