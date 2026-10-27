@@ -40,7 +40,7 @@ pub(crate) fn agent(spawn: &Spawn, inherited: &Inherited) -> Proc {
     ))
 }
 pub(crate) fn roots(spawn: &Spawn) -> Vec<StartupRoot> {
-    let configuration = Path::new(std::ffi::OsStr::from_bytes(&spawn.args[1]));
+    let configuration = Path::new(std::ffi::OsStr::from_bytes(&spawn.args[2]));
     let configuration = smith_agent_shell::config::read(configuration).expect("agent programs root");
     configuration
         .programs

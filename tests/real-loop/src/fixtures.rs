@@ -473,7 +473,29 @@ pub fn given(directory: &Path) -> temper_service::stock::Given {
     } else {
         serde_json::json!({})
     };
-    own_defaults(&deployment, &flags)
+    let mut given = own_defaults(&deployment, &flags);
+    if crate::claude::configured(directory) {
+        let temper_service::stock::Given::Own(defaults) = &mut given else {
+            panic!("the real loop supplies its own defaults")
+        };
+        let engine = crate::settings::configuration(&deployment);
+        let model = engine
+            .llm
+            .models
+            .iter()
+            .position(|model| model.name.as_ref() == b"fake-claude")
+            .expect("program fixture model");
+        defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Requester;
+        defaults.templates[0].llm = Some(jig_domain_tasks::LlmChoice {
+            account: None,
+            main: jig_domain_tasks::ModelEffort {
+                model: u8::try_from(model).expect("configured model index"),
+                effort: None,
+            },
+            subagents: Box::new([]),
+        });
+    }
+    given
 }
 
 /// Common real-loop defaults, with a wider fixture's own seeded policy when requested.
