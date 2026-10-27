@@ -1521,12 +1521,16 @@ forge's connector, which judges them (jig's `domain/engine.md`, 17.5):
 - **Never pinned.** Every merge is judged by the rules as they are
   then, whatever revision its change was made in: what work may do is
   always current (`../draft/configuring.md`, section 4).
-- **The forge's charter is read when a change is made.** The forge
+- **The forge's charters are read when a change is made.** The forge
   reads its own kind 3, as it holds it, and the root grants the
-  change's procedure delegation to that charter. The change keeps it: its producing, its
-  repairs, its resolutions and its agents' and checks' gates run under
-  the charter it was made with, and a newer forge's charter reaches the
-  changes made after it (`../domain/root.md`, section 6).
+  change's procedure delegation to both of its charters. The change
+  keeps their numbers on its row: its producing, its repairs, its
+  resolutions and its checks' gates run under the change's charter it
+  was made with (number 1), its agents' gates, the reviews, under the
+  review charter it was made with (number 2; the stock's charter 4,
+  fixed by the binary, until 13.6's step 2), and a newer charter of
+  either reaches the changes made after it (`../domain/root.md`,
+  section 6).
 
 ### 13.3 How the landing rules are enforced
 
