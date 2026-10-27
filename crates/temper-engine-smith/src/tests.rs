@@ -1366,8 +1366,8 @@ fn a_proposed_release_names_the_placed_hold_and_its_revision() {
     ] {
         assert_eq!(decided(b"propose", json), Err(Problem::Missing(field)));
     }
-    assert!(decided(b"propose", br#"{"action":"release","task":41,"hold":0,"revision":1,"reason":"x"}"#).is_err());
-    assert!(decided(b"propose", br#"{"action":"release","task":41,"hold":12,"revision":0,"reason":"x"}"#).is_err());
+    decided(b"propose", br#"{"action":"release","task":41,"hold":0,"revision":1,"reason":"x"}"#).unwrap_err();
+    decided(b"propose", br#"{"action":"release","task":41,"hold":12,"revision":0,"reason":"x"}"#).unwrap_err();
 }
 
 #[test]
