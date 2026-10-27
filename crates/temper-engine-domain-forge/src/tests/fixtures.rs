@@ -104,6 +104,8 @@ pub fn opening_row() -> ChangeRow {
         base_repair: false,
         queue_repair: None,
         queue_repairs: 0,
+        producing_charter: 2,
+        review_charter: 4,
     }
 }
 

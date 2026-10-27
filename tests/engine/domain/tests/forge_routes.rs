@@ -1075,7 +1075,7 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once() {
         .values()
         .filter_map(|stored| match stored {
             Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row) | tasks::Stored::Ended(row)))
-                if row.spec.words.as_ref() == b"Review this change at the named head" =>
+                if row.spec.words.starts_with(b"Review this change at the named head\n") =>
             {
                 Some(row.number)
             }
@@ -1218,7 +1218,7 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once_and_merges() {
         .values()
         .filter_map(|stored| match stored {
             Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row) | tasks::Stored::Ended(row)))
-                if row.spec.words.as_ref() == b"Review this change at the named head" =>
+                if row.spec.words.starts_with(b"Review this change at the named head\n") =>
             {
                 Some(row.number)
             }

@@ -110,7 +110,10 @@ fn change_expands_the_only_repository_field_by_field() {
             })
             .collect::<Box<[_]>>()
     );
-    assert_eq!(row.authority.delegation.kinds.as_ref(), &[tasks::AuthorityExecutor::Charter(1)]);
+    assert_eq!(
+        row.authority.delegation.kinds.as_ref(),
+        &[tasks::AuthorityExecutor::Charter(1), tasks::AuthorityExecutor::Charter(4)]
+    );
     assert_eq!(row.authority.delegation.tasks, 4);
     assert_eq!(row.authority.delegation.depth, 2.min(parent.authority.delegation.depth - 1));
     assert_eq!(
@@ -208,8 +211,11 @@ fn change_with_an_unknown_repository_names_the_available_one() {
 
 #[test]
 fn change_accepts_a_second_change_within_the_chats_task_allotment() {
-    let (mut world, chat) =
-        configured_chat(100, Box::new([people::Executor::Charter(1), people::Executor::Procedure(2)]), 7);
+    let (mut world, chat) = configured_chat(
+        100,
+        Box::new([people::Executor::Charter(1), people::Executor::Charter(4), people::Executor::Procedure(2)]),
+        7,
+    );
     assert!(matches!(change(&mut world, &chat, 93, None, b"First fix"), engine::CallAnswer::Delegated(_)));
     assert!(matches!(change(&mut world, &chat, 94, None, b"Second fix"), engine::CallAnswer::Delegated(_)));
 }
@@ -247,8 +253,11 @@ fn change_without_procedure_permission_gets_delegates_executor_denial() {
 
 #[test]
 fn change_without_task_capacity_gets_delegates_tasks_denial() {
-    let (mut world, chat) =
-        configured_chat(100, Box::new([people::Executor::Charter(1), people::Executor::Procedure(2)]), 0);
+    let (mut world, chat) = configured_chat(
+        100,
+        Box::new([people::Executor::Charter(1), people::Executor::Charter(4), people::Executor::Procedure(2)]),
+        0,
+    );
     assert!(
         matches!(change(&mut world, &chat, 93, None, b"Small fix"), engine::CallAnswer::DelegationDenied { findings, .. } if findings.contains(&authority::Finding::Tasks { source: authority::Source::Task }))
     );
@@ -256,8 +265,11 @@ fn change_without_task_capacity_gets_delegates_tasks_denial() {
 
 #[test]
 fn change_with_one_task_left_is_refused_as_the_tree_limit() {
-    let (mut world, chat) =
-        configured_chat(100, Box::new([people::Executor::Charter(1), people::Executor::Procedure(2)]), 1);
+    let (mut world, chat) = configured_chat(
+        100,
+        Box::new([people::Executor::Charter(1), people::Executor::Charter(4), people::Executor::Procedure(2)]),
+        1,
+    );
     assert!(
         matches!(change(&mut world, &chat, 93, None, b"Small fix"), engine::CallAnswer::DelegationRefused(problem) if problem.why == tasks::Refusal::Tree)
     );
@@ -280,8 +292,11 @@ fn change_with_one_level_left_is_refused_as_the_depth_limit() {
 
 #[test]
 fn change_with_half_the_remainder_at_minimum_is_refused_as_funding() {
-    let (mut world, chat) =
-        configured_chat(62, Box::new([people::Executor::Charter(1), people::Executor::Procedure(2)]), 11);
+    let (mut world, chat) = configured_chat(
+        62,
+        Box::new([people::Executor::Charter(1), people::Executor::Charter(4), people::Executor::Procedure(2)]),
+        11,
+    );
     let row = live(&world, chat.task);
     assert_eq!(
         (row.numbers.budget - row.numbers.reserved - row.numbers.spent - row.numbers.spent_below) / 2,

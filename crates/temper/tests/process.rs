@@ -1186,6 +1186,7 @@ fn a_first_run_answers_on_the_demo() {
 
 /// domain/testing.md, 2.6; protocol/setup.md, 13.4, "A first run set up for real".
 #[test]
+#[expect(clippy::too_many_lines, reason = "one owned-forge story follows CI, review, landing and restart")]
 fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_lands_and_survives_restart() {
     use skein_forge::forgejo::pin::VERSION;
     use std::{fs, os::unix::fs::PermissionsExt};
@@ -1258,6 +1259,25 @@ fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_la
             assert_eq!(panel["head"], pending["head"], "land exactly the reviewed head");
             assert_eq!(panel["gates"][0]["verdict"], "approved");
             assert!(evidence.producer.contains("--csv"), "the coder wrote widget's CSV implementation");
+            let model = ended.model.as_ref().expect("the scripted model was observed");
+            let review_instructions = include_bytes!("../../temper-service/src/stock/review.txt");
+            let reviews: Vec<_> = model
+                .requests
+                .iter()
+                .filter(|query| {
+                    query
+                        .system
+                        .windows(b"Review this change at the named head".len())
+                        .any(|part| part == b"Review this change at the named head")
+                })
+                .collect();
+            assert!(!reviews.is_empty(), "the reviewer reached the model");
+            for query in reviews {
+                assert!(
+                    query.system.windows(review_instructions.len()).any(|part| part == review_instructions),
+                    "the reviewer reads review.txt's whole instructions"
+                );
+            }
             csv_landing = Some(identity);
         } else {
             assert_eq!(Some(identity), csv_landing, "the same landing survives restart");

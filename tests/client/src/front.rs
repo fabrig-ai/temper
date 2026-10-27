@@ -550,7 +550,8 @@ impl Joint {
             assert!(config.landing.projects.insert(1, landing).is_ok());
             let mut rules = config.core.defaults.rules.clone();
             let mut policy = config.core.seed_projects[0].policy.policy.clone();
-            rules.ceiling.delegation.kinds = Box::new([a::Executor::Charter(1), a::Executor::Procedure(2)]);
+            rules.ceiling.delegation.kinds =
+                Box::new([a::Executor::Charter(1), a::Executor::Charter(4), a::Executor::Procedure(2)]);
             rules.ceiling.delegation.depth = 2;
             // This pushed-branch path needs read, push, open, land and its goal's issue.
             let grants: Box<[a::Grant]> = [1, 2, 3, 4, 8]
@@ -579,7 +580,7 @@ impl Joint {
             limits.authority.roles = 3;
             limits.authority.requirements = 8;
             limits.authority.facts = 8;
-            limits.authority.executors = 2;
+            limits.authority.executors = 3;
             limits.authority.grants = 7;
             limits.authority.segments = 8;
             limits.authority.segment_bytes = 64;
@@ -595,7 +596,13 @@ impl Joint {
             // A gate's brief spec includes its branch and hexadecimal head.
             limits.tasks.spec_bytes = 128;
             limits.tasks.contract_choices = 2;
-            limits.tasks.executor_kinds = 2;
+            limits.tasks.executor_kinds = 3;
+            limits.tasks.charters = 4;
+            let mut reviewer = config.core.defaults.charters[0].clone();
+            reviewer.number = 4;
+            reviewer.policy.modify = false;
+            reviewer.policy.agents = false;
+            config.core.defaults.charters = Box::new([config.core.defaults.charters[0].clone(), reviewer]);
             limits.tasks.authority_grants = 5;
             limits.tasks.authority_segments = 9;
             limits.tasks.authority_bytes = 512;
@@ -623,7 +630,7 @@ impl Joint {
             config.core.defaults.rules = domain.rules().clone();
             (config, limits)
         });
-        Self::with_engine(seed, limits, Store::new(), [bootstrap, config], &engine_limits, SLOTS)
+        Self::with_engine(seed, limits, Store::with_limits(&engine_limits), [bootstrap, config], &engine_limits, SLOTS)
     }
     fn with_engine(
         seed: u64,
