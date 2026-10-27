@@ -116,10 +116,11 @@ pub const PROPOSAL: &str = "t1/3";
 #[must_use]
 pub fn step_8_1(forge: SocketAddr) -> Box<[Script]> {
     let opening = scripts(&CAST, forge);
-    let mut result = Vec::with_capacity(2 * CAST.members.len() - 1);
+    let mut result = Vec::with_capacity(2 * CAST.members.len());
     for (at, mut script) in opening.into_vec().into_iter().enumerate() {
         if at == 0 {
-            let mut turns = script.turns.into_vec();
+            let mut turns = Vec::with_capacity(script.turns.len() + 3);
+            turns.extend(script.turns);
             turns.extend([
                 tool(b"release", &json!({"target":CAST.number("P"),"revision":HOLD_REVISION}), "Try resuming P."),
                 tool(
@@ -131,6 +132,7 @@ pub fn step_8_1(forge: SocketAddr) -> Box<[Script]> {
                 tool(b"wait", &json!({}), "The release waits for the person."),
             ]);
             script.turns = turns.into_boxed_slice();
+            result.push(Script { cue: checkpoint(&CAST.members[at]).into_bytes().into(), turns: script.turns.clone() });
         } else {
             // The saved transcript distinguishes a resumed run from the initial
             // Begin; both continue at the same held writing turn.
@@ -145,7 +147,7 @@ pub fn step_8_1(forge: SocketAddr) -> Box<[Script]> {
 }
 #[must_use]
 pub fn step_8_1_rules() -> Box<[Box<[Rule]>]> {
-    let mut result = Vec::with_capacity(2 * CAST.members.len() - 1);
+    let mut result = Vec::with_capacity(2 * CAST.members.len());
     for (at, member) in CAST.members.iter().enumerate() {
         let mut writing = 1;
         for child in CAST.members {
@@ -157,8 +159,6 @@ pub fn step_8_1_rules() -> Box<[Box<[Rule]>]> {
             {
                 rules.push(Rule { cue: cue.as_bytes().into(), turn: u32::try_from(turn).expect("turn count") });
             }
-        } else {
-            result.push(Box::<[Rule]>::default());
         }
         let mut next = 2;
         for child in CAST.members {
@@ -171,7 +171,22 @@ pub fn step_8_1_rules() -> Box<[Box<[Rule]>]> {
             }
         }
         rules.push(Rule { cue: b"Begin the work your brief describes.".as_slice().into(), turn: 0 });
-        rules.push(Rule { cue: Box::new([]), turn: 1 });
+        rules.push(Rule { cue: b"hold: Hold".as_slice().into(), turn: 1 });
+        rules.push(Rule {
+            cue: Box::new([]),
+            turn: u32::try_from(if at == 0 { writing + 3 } else { writing }).expect("turn count"),
+        });
+        if at == 0 {
+            let mut resumed = rules.clone();
+            for rule in &mut resumed {
+                if rule.cue.as_ref() == b"Begin the work your brief describes." {
+                    rule.turn = u32::try_from(writing + 3).expect("director's final wait");
+                }
+            }
+            result.push(resumed.into_boxed_slice());
+        } else {
+            result.push(Box::<[Rule]>::default());
+        }
         result.push(rules.into_boxed_slice());
     }
     result.into_boxed_slice()

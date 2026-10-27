@@ -143,6 +143,8 @@ pub fn step_8_1_p_and_its_implementers_held_by_the_persons_stop(cast: &Cast, obs
         || placed["revision"] != HOLD_REVISION
         || placed["owner"]["person"] != 1
         || placed["lifted"] != false
+        || placed["mode"] != "stop"
+        || placed["scope"] != serde_json::json!({"task":cast.number("P")})
     {
         return false;
     }
@@ -161,17 +163,28 @@ pub fn step_8_1_p_and_its_implementers_held_by_the_persons_stop(cast: &Cast, obs
             return false;
         };
         let initial = observed.task(member.name).pointer("/chip/details/owner/details/attempt");
-        let mut cancelled = false;
+        let run = observed.document(Read::RunStopped(member.name));
+        if run["task"] != cast.number(member.name) || run.get("attempt") != Some(&Value::Null) {
+            return false;
+        }
+        let mut ended = false;
         for row in rows {
-            let end = &row["line"]["run_ended"];
-            if Some(&end["attempt"]) == initial && end["end"] == "cancelled" {
-                if end["spent"] != 0 {
-                    return false;
+            let end = &row["event"]["owner"]["source"]["line"]["run_ended"];
+            if Some(&end["attempt"]) == initial {
+                // The public run read proves Stop has retired the live attempt.
+                // Some host endings are reported as failures by the adapter;
+                // when the journal identifies cancellation, it spends no try.
+                if end["end"] == "cancelled" {
+                    for class in ["agent", "run", "transient", "permanent", "invalid", "lost"] {
+                        if held["hold"]["owner"]["tries"][class] != 0 {
+                            return false;
+                        }
+                    }
                 }
-                cancelled = true;
+                ended = true;
             }
         }
-        if !cancelled {
+        if !ended {
             return false;
         }
     }
@@ -211,6 +224,9 @@ pub fn step_8_1_the_proposal_waits_in_the_persons_inbox(cast: &Cast, observed: &
         || proposal.pointer("/action/release/task").and_then(Value::as_u64) != Some(cast.number("P"))
         || proposal.pointer("/action/release/hold/reason/placed/hold") != held.pointer("/hold/owner/reason/placed/hold")
         || proposal.pointer("/action/release/hold/revision") != held.pointer("/hold/owner/revision")
+        || proposal.pointer("/action/release/hold/placed/hold") != held.pointer("/hold/placed/hold")
+        || proposal.pointer("/action/release/hold/placed/revision") != held.pointer("/hold/placed/revision")
+        || proposal["reason"]["bytes"] != super::scripts::RELEASE_REASON
     {
         return false;
     }
@@ -224,9 +240,16 @@ pub fn step_8_1_the_proposal_waits_in_the_persons_inbox(cast: &Cast, observed: &
     if found != 1 {
         return false;
     }
-    // This fresh deployment has one person. No cast task gets this proposal;
-    // the supplied waiting holder names that person alone, never a role.
-    for member in cast.members {
+    // This deployment has one person. The exact waiting holder is its sole
+    // recipient; the director lists its authored proposal, the children none.
+    if proposal["waiting"]["holder"] != serde_json::json!({"person":{"value":1}}) {
+        return false;
+    }
+    let director = task_at(observed, Read::Waiting(cast.members[0].name));
+    if director["proposals"] != serde_json::json!([proposal["key"]]) {
+        return false;
+    }
+    for member in &cast.members[1..] {
         let Some(proposals) = task_at(observed, Read::Waiting(member.name))["proposals"].as_array() else {
             return false;
         };
@@ -259,7 +282,9 @@ fn transcript_kept(before: &Query, resumed: &Query) -> bool {
         }
         let mut found = false;
         for next in remaining.by_ref() {
-            if next == message {
+            // Recovery can append guidance to the last tool-output message;
+            // every original part and its role must still match in order.
+            if next.role == message.role && next.parts.starts_with(&message.parts) {
                 found = true;
                 break;
             }
