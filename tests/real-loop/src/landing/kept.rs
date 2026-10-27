@@ -15,7 +15,6 @@ pub fn fixture() -> crate::forge::Fixture {
         setup: super::fixture().setup,
         configure: |value, agent, forge| {
             (super::fixture().configure)(value, agent, forge);
-            value["engine"]["rules"]["ceiling"]["tools"] = 5.into();
             for project in value["engine"]["projects"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 5.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = 5.into();
@@ -23,8 +22,8 @@ pub fn fixture() -> crate::forge::Fixture {
             for name in ["tasks.batch", "authority.batch"] {
                 value["engine"]["limits"]["overrides"][name] = 2.into();
             }
-            admit(value);
             crate::fixtures::own_policy(value);
+            admit(value);
         },
         ..crate::forge::fixture()
     }

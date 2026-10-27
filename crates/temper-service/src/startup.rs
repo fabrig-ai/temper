@@ -367,9 +367,8 @@ fn problem(path: Path, what: What) -> Problems {
 fn indexed(index: usize) -> Path {
     Path::root().member(b"workers").child(Segment::Index(u32::try_from(index).expect("bounded workers")))
 }
-/// Parse jig's engine member and pass the supplied defaults when no settings member
-/// is named. A legacy document naming one keeps its own defaults and ignores Given
-/// (the transitional first slice of protocol/configuration.md, 13.6).
+/// Parse jig's engine member and pass the supplied defaults, refusing document
+/// settings members (protocol/configuration.md, 13.5 and 13.6).
 /// # Errors
 /// The document's problems at its paths under `engine`.
 pub fn engine_with(
@@ -378,30 +377,14 @@ pub fn engine_with(
     directories: &config::Directories,
     given: &crate::stock::Given,
 ) -> Result<config::Engine, config::Problems> {
-    let mut object = match read::Object::new(document, at) {
-        Ok(object) => object,
-        Err(what) => {
-            let mut problems = config::Problems::empty();
-            problems.push(Path::root(), what);
-            return Err(problems);
-        }
-    };
-    let mut defaults = config::Defaults::Passed;
-    for member in [b"charters".as_slice(), b"templates", b"policies", b"rules"] {
-        if object.member(document, member).is_some() {
-            defaults = config::Defaults::Document;
-        }
+    let mut engine = config::engine(document, at, directories, config::Defaults::Passed)?;
+    if engine.llm.models.is_empty() {
+        let mut problems = config::Problems::empty();
+        problems.push(Path::root().member(b"llm").member(b"models"), config::What::Bound);
+        return Err(problems);
     }
-    let mut engine = config::engine(document, at, directories, defaults)?;
-    if defaults == config::Defaults::Passed {
-        if engine.llm.models.is_empty() {
-            let mut problems = config::Problems::empty();
-            problems.push(Path::root().member(b"llm").member(b"models"), config::What::Bound);
-            return Err(problems);
-        }
-        let defaults = given.defaults(&engine.llm);
-        config::pass(&mut engine, defaults)?;
-    }
+    let defaults = given.defaults(&engine.llm);
+    config::pass(&mut engine, defaults)?;
     Ok(engine)
 }
 pub fn engine(
@@ -911,10 +894,7 @@ fn checked_start_with(
     if !problems.is_empty() {
         return Err(problems);
     }
-    let mut core = config::core(&parsed.engine, seeds.deployment, seeds.seed);
-    if parsed.engine.defaults == config::Defaults::Document {
-        read_instructions(&mut core, files);
-    }
+    let core = config::core(&parsed.engine, seeds.deployment, seeds.seed);
     if let Some(agent) = agent {
         checks::admission(&core, &parsed.engine, agent, &mut problems);
         checks::agent_answer(agent, &mut problems);
@@ -1017,13 +997,6 @@ fn checked_start(
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<CheckedStart, Problems> {
     checked_start_with(document, directories, files, agent, seeds, accounts, forges, setup, &crate::stock::Given::Stock)
-}
-fn read_instructions(core: &mut jig_domain_core::Config, files: &settings::Files) {
-    for charter in &mut core.defaults.charters {
-        if let Some(contents) = files.contents(&charter.policy.instructions) {
-            charter.policy.instructions = Box::from(contents);
-        }
-    }
 }
 /// Build the engine and worker together from the parsed document and read files.
 #[expect(clippy::too_many_arguments, reason = "startup receives the same directories as named plus the runtime facts")]

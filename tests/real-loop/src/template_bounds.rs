@@ -125,7 +125,6 @@ fn fixture() -> crate::forge::Fixture {
             value["application"]["webhooks"] = Value::Null;
             crate::fixtures::own_policy(value);
             value["application"]["forges"][0]["webhook_secret"] = Value::Null;
-            value["engine"]["rules"]["ceiling"]["grants"] = json!([]);
             value["engine"]["projects"][0]["policy"]["ceiling"]["grants"] = json!([]);
             value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["grants"] = json!([]);
             value["engine"]["projects"][0]["policy"]["projections"] = json!([]);
@@ -149,7 +148,6 @@ fn fixture() -> crate::forge::Fixture {
             // Five delegates and the root's goal operation fit the same admission.
             value["engine"]["limits"]["overrides"]["people.operations"] = 6.into();
             let kinds = json!([{"kind":"charter","number":1},{"kind":"role","number":0}]);
-            value["engine"]["rules"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
             value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
             value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds;
             fixtures::turn_bounds::apply(value, fixtures::turn_bounds::turn_body(agent));

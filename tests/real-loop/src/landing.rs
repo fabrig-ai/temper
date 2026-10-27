@@ -56,17 +56,10 @@ pub fn fixture() -> crate::forge::Fixture {
 }
 
 pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
-    // Reference-case callbacks also call this directly, before adding their
-    // wider policy. The final writer retains defaults only for those projects.
-    crate::fixtures::document_defaults(value);
     let grant = |kind| json!({"connector":1,"kind":kind,"pattern":{"segments":["forge",forge.to_string()],"last":"open","value":"acme"}});
     let grants =
         json!([grant(1), grant(2), grant(3), grant(4), grant(7), grant(8), grant(10), grant(11), grant(12), grant(13)]);
     let authority = json!({"tools":1,"grants":grants,"delegation":{"kinds":[{"kind":"charter","number":1},{"kind":"procedure","number":2}],"tasks":8,"depth":4},"budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]});
-    if value["engine"].get("rules").is_some() {
-        value["engine"]["rules"]["ceiling"] = authority.clone();
-        value["engine"]["rules"]["maximum_run_spend"] = 10.into();
-    }
     value["engine"]["projects"][0]["policy"]["ceiling"] = authority.clone();
     value["engine"]["projects"][0]["policy"]["roles"][0]["authority"] = authority;
     value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = 40.into();
@@ -77,13 +70,6 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     for project in value["engine"]["projects"].as_array_mut().expect("projects").iter_mut().skip(1) {
         project["policy"] = policy.clone();
     }
-    // forge-setup's new project is made from policy 1, which must sit under the ceiling too.
-    if let Some(policies) = value["engine"].get_mut("policies").and_then(Value::as_array_mut) {
-        for configured in policies {
-            configured["policy"] = policy.clone();
-        }
-    }
-    let charters = if value["engine"].get("charters").is_some() { 1 } else { 2 };
     let limits = value["engine"]["limits"]["overrides"].as_object_mut().expect("engine overrides");
     for (name, size) in [
         ("people.operations", 5),
@@ -92,7 +78,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
         ("documents.chips", 2),
         ("tasks.project_tasks", 8),
         ("tasks.tree_tasks", 8),
-        ("tasks.charters", charters),
+        ("tasks.charters", 2),
         ("tasks.message_bytes", 4094),
         ("people.words", 512),
         ("tasks.authority_bytes", 512),
@@ -106,12 +92,12 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
         ("tasks.authority_segments", 9),
         ("tasks.hold_segments", 8),
         ("tasks.saved_resources", 4),
-        ("authority.grants", 12),
+        ("authority.grants", 16),
         ("authority.segments", 8),
         ("authority.roles", 1),
         // CI, up-to-date and the review gate each produce one requirement.
         ("authority.requirements", 3),
-        ("notes.scopes", 15),
+        ("notes.scopes", 32),
         ("brief.briefs", 2),
         ("brief.sections", 4),
         ("fleet.attempts", 2),
@@ -129,15 +115,6 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     limits["core.call_answer_bytes"] = 4096.into();
     limits["hub.event_bytes"] = 4094.into();
     limits["tasks.message_bytes"] = 4096.into();
-    if value["engine"].get("charters").is_some() {
-        let charter = &mut value["engine"]["charters"][0];
-        for flag in ["inspect", "modify", "agents"] {
-            charter[flag] = true.into();
-        }
-        charter["turns"] = 8.into();
-        charter["time_ms"] = 120_000.into();
-        charter["reserve_time_ms"] = 60000.into();
-    }
     agent["profile"]["declared"]["tool_payload"] = 4096.into();
     agent["profile"]["policy"]["max_turns"] = 8.into();
     agent["profile"]["policy"]["check_timeout"] = 1000.into();
@@ -153,7 +130,7 @@ pub(crate) fn admit(value: &Value) {
     )
     .expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
-    let given = if value["world_settings"]["case"] == true {
+    let given = if value["world_settings"]["own_policy"] == true {
         crate::fixtures::own_defaults(value, &value["world_settings"])
     } else {
         temper_service::stock::Given::Stock

@@ -116,20 +116,14 @@ fn each_charter_offers_every_configured_model() {
     }
 }
 #[test]
-fn the_document_members_are_refused_naming_temper_ctl_settings() {
+fn each_member_is_refused_at_startup_naming_temper_ctl_settings() {
     let init = generated();
     for member in ["charters", "templates", "policies", "rules"] {
         let original = fixtures::value(&init, b"engine");
         let mut engine = format!("{{\"{member}\":null,").into_bytes();
         engine.extend_from_slice(&original[1..]);
         let document = fixtures::with(&init, b"engine", &engine);
-        let parsed =
-            config::document(&document, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 })
-                .unwrap();
-        let at = config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"engine").unwrap();
-        let found = config::engine(&parsed, at, &config::Directories::working(), config::Defaults::Passed).unwrap_err();
-        let mut problems = crate::startup::Problems::empty();
-        problems.append(found, &config::Path::root().member(b"engine"));
+        let problems = crate::startup::named(&document, &config::Directories::working()).unwrap_err();
         assert_eq!(problems.problems.len(), 1);
         assert_eq!(
             crate::startup::lines(&problems).as_ref(),
@@ -149,42 +143,30 @@ fn stock_startup_requires_a_model_before_building_its_charters() {
 }
 
 #[test]
-fn the_transition_keeps_the_documents_own_defaults() {
-    let legacy = [
-        br#"{"charters":[{
-            "number":1,"instructions":"charters/chat.txt","model":"small","alternatives":[],
-            "hosts":"workers","waiting_ms":10000,"resume":true,"turns":8,"time_ms":120000,
-            "reserve_turns":1,"reserve_time_ms":60000,"spend":20,"inspect":true,"modify":true,
-            "shell":false,"agents":true,"call_timeout_ms":10000
-        }],"templates":[],"policies":[],"rules":{
-            "ceiling":{"tools":1,"grants":[],
-                "delegation":{"kinds":[{"kind":"charter","number":1}],"tasks":8,"depth":4},
-                "budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]},
-            "period_spend":100,"minimum_run_spend":1,"maximum_run_spend":10,"implies":[],"requirements":[]
-        },"#
-        .as_slice(),
-        &fixtures::ENGINE[1..],
-    ]
-    .concat();
-    let document = fixtures::with(br#"{"engine":{}}"#, b"engine", &legacy);
-    let document = fixtures::with(&document, b"engine.charters[0].turns", b"9");
-    let parsed =
-        config::document(&document, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 }).unwrap();
-    let at = config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"engine").unwrap();
-    let engine = crate::startup::engine(&parsed, at, &config::Directories::working()).unwrap();
-    assert_eq!(engine.defaults, config::Defaults::Document);
-    assert_eq!(engine.charters[0].policy.turns, 9, "the document's edit survives the transition");
-    let mut own = crate::stock::defaults(&engine.llm);
-    own.charters[0].policy.turns = 1;
-    let own = crate::startup::engine_with(
-        &parsed,
-        at,
-        &config::Directories::working(),
-        &crate::stock::Given::Own(Box::new(own)),
-    )
-    .unwrap();
-    assert_eq!(own.charters[0].policy.turns, 9, "Document ignores Given::Own too");
-    assert!(config::files(&engine).iter().any(|file| file.path.ends_with(b"charters/chat.txt")));
+fn a_worlds_own_defaults_cannot_restore_document_members() {
+    let init = generated();
+    let stock = engine(&init);
+    let mut own = crate::stock::defaults(&stock.llm);
+    own.charters[0].policy.turns = 9;
+    let given = crate::stock::Given::Own(Box::new(own));
+    for member in ["charters", "templates", "policies", "rules"] {
+        let original = fixtures::value(&init, b"engine");
+        let mut engine = format!("{{\"{member}\":null,").into_bytes();
+        engine.extend_from_slice(&original[1..]);
+        let document = fixtures::with(&init, b"engine", &engine);
+        let parsed =
+            config::document(&document, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 })
+                .unwrap();
+        let at = config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"engine").unwrap();
+        let found = crate::startup::engine_with(&parsed, at, &config::Directories::working(), &given).unwrap_err();
+        let mut problems = crate::startup::Problems::empty();
+        problems.append(found, &config::Path::root().member(b"engine"));
+        assert_eq!(problems.problems.len(), 1);
+        assert_eq!(
+            crate::startup::lines(&problems).as_ref(),
+            format!("engine.{member}: settings live in the store; read them with temper ctl settings\n").as_bytes()
+        );
+    }
 }
 
 #[test]
