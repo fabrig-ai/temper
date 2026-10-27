@@ -20,5 +20,5 @@ mod change;
 
 mod words;
 
-mod printed;
 mod landing;
+mod printed;
