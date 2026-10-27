@@ -1,4 +1,5 @@
 proposal tN/K|pN/K
+  P/K (proposal): a proposal, tN/K or pN/K; required. Typed proposer and proposal number
 Read a proposal, with its review for settings
-Result: proposal
-  proposal: Typed proposer and proposal number
+--json: the record proposal.
+Key: none.

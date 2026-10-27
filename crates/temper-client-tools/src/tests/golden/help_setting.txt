@@ -1,8 +1,9 @@
 setting charter|template|policy N [--revision R]
+  charter|template|policy (kind): one of charter, template or policy; required. Setting kind
+  N (number): a number from 0 to 4294967295; required. Setting number
+  --revision R: a number from 0 to 4294967295; optional. Held charter revision; newest by default
 setting rules
+  rules (kind): one of rules; required. Deployment rules
 Read one setting's value whole; JSON values feed change-settings
-Result: setting
-  kind: Setting kind
-  number: Setting number
-  revision: Held charter revision; newest by default
-  kind: Deployment rules
+--json: the record setting.
+Key: none.

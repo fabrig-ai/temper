@@ -1,12 +1,13 @@
 decide tN/K|pN/K accept|reject|pass-up [REASON] [--running stays|moves] [--key NAME]
+  P/K (proposal): a proposal, tN/K or pN/K; required. Typed proposer and proposal number
+  OUTCOME (outcome): one of accept, reject or pass-up; required. Decision
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Reason
+  --running stays|moves: one of stays or moves; optional. Running work stays by default
 decide N --hold R release|leave|pass-up [REASON] [--key NAME]
+  N (task): a number; required. Task number
+  --hold R: a number; required. Hold revision
+  OUTCOME (outcome): one of release, leave or pass-up; required. Decision
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Reason
 Decide a proposal or an escalation
-Result: decide
-  proposal: Typed proposer and proposal number
-  outcome: Decision
-  reason: Reason
-  running: Running work stays by default
-  task: Task number
-  hold: Hold revision
-  outcome: Decision
-  reason: Reason
+--json: the record decide.
+Key: --key NAME, optional.

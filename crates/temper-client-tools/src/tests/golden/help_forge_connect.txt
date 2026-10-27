@@ -1,21 +1,22 @@
 forge-connect F github-app ID FILE --key NAME
+  F (forge): a number from 1 to 65535; required. Forge number
+  github-app (way): one of github-app; required. An existing GitHub App
+  ID (id): a number from 1 to 18446744073709551615; required. GitHub App id
+  FILE (file): a file; required. Private PEM key file; at most 4089 bytes
 forge-connect F github --key NAME
+  F (forge): a number from 1 to 65535; required. Forge number
+  github (way): one of github; required. Create a GitHub App from temper's manifest
 forge-connect F forgejo FILE --key NAME
+  F (forge): a number from 1 to 65535; required. Forge number
+  forgejo (way): one of forgejo; required. Not offered yet
+  FILE (file): text, at most 1048576 bytes; required. Not offered yet; no file is read
 forge-connect F forgejo-admin FILE [--first ORG/NAME] [--project P] [--label L] --key NAME
+  F (forge): a number from 1 to 65535; required. Forge number
+  forgejo-admin (way): one of forgejo-admin; required. A Forgejo site admin
+  FILE (file): a file; required. Private admin token file; at most 4089 bytes
+  --first ORG/NAME: text, at most 1048576 bytes; optional. Make the first repository
+  --project P: a project's name or number; optional. Project name or number; default a new project named NAME
+  --label L: text, at most 1048576 bytes; optional. Runner label; default docker
 Connect GitHub or Forgejo as its admin
-Result: forge-connect
-  forge: Forge number
-  way: An existing GitHub App
-  id: GitHub App id
-  file: Private PEM key file; at most 4089 bytes
-  forge: Forge number
-  way: Create a GitHub App from temper's manifest
-  forge: Forge number
-  way: Not offered yet
-  file: Not offered yet; no file is read
-  forge: Forge number
-  way: A Forgejo site admin
-  file: Private admin token file; at most 4089 bytes
-  first: Make the first repository
-  project: Project name or number; default a new project named NAME
-  label: Runner label; default docker
+--json: the record forge-connect.
+Key: --key NAME, required.

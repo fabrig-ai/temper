@@ -1,0 +1,8 @@
+task N [--tree] [--activity K] [--run]
+  N (task): a number; required. Task number
+  --tree: a switch. Include the live tree
+  --activity K: a count from 1 to 32; optional. Latest activity lines
+  --run: a switch. Include the live run
+Read a task and selected related documents
+--json: the record task.
+Key: none.

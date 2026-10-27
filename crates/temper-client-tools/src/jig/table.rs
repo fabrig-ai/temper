@@ -14,15 +14,21 @@ pub struct Limits {
     pub wait: Duration,
     pub wait_most: Duration,
 }
+/// A tool's notes are at most this many bytes (client/tools.md, 5.1).
+pub const NOTES_BYTES: usize = 1_024;
 /// A tool and each of its argument forms, tried in order.
 #[derive(Debug)]
 pub struct Tool {
     pub name: &'static [u8],
     pub line: &'static [u8],
+    /// What it prints, one line.
+    pub prints: &'static [u8],
     pub result: &'static [u8],
     pub forms: &'static [&'static [Argument]],
     pub keyed: Keyed,
     pub area: u8,
+    /// What this tool alone does beyond its line; lines end with `\n`.
+    pub notes: &'static [u8],
 }
 #[derive(Debug)]
 pub struct Argument {

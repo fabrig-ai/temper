@@ -1,6 +1,7 @@
 close N [--move D]... [--reason TEXT] --key NAME
+  N (task): a number; required. Task number
+  --move D: a number; repeated, at most 8. Delegate to move to the party
+  --reason TEXT: text, at most 1048576 bytes, or - to read stdin; optional. Reason, empty by default
 Close a chat and cancel or move its delegates
-Result: close
-  task: Task number
-  move: Delegate to move to the party
-  reason: Reason, empty by default
+--json: the record close.
+Key: --key NAME, required.

@@ -1,4 +1,5 @@
 forge-install F [--key NAME]
+  F (forge): a number from 1 to 65535; required. Forge number
 Print a fresh GitHub App installation link
-Result: forge-install
-  forge: Forge number
+--json: the record forge-install.
+Key: --key NAME, optional.

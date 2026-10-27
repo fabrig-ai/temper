@@ -1,6 +1,7 @@
 pending
 List requests kept in the store
-Result: pending
+--json: the record pending.
+Key: none.
 Reads only the store: no lock, client or send.
 Rows: operation, party N, first sending in wall-time words or not sent.
 chat, party 3, not sent

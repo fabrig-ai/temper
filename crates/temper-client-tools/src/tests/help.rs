@@ -2,6 +2,7 @@ use super::fixtures;
 use crate::{jig, table};
 use skein_lib::List;
 const GOLDENS: &[(Option<u8>, &str)] = &[
+    (Some(3), "help_task"),
     (Some(12), "help_decide"),
     (Some(10), "help_close"),
     (Some(16), "help_wait"),
@@ -153,8 +154,8 @@ fn each_derivation_names_every_tool() {
     assert_eq!(list, &*expected.finish(), "the list has exactly the table's rows");
 }
 
-const CHAT_READ: &[u8] = b"chat N [--before C]\nRead a conversation from its end\nResult: chat\n  task: Task number\n  before: Continue before this cursor\n";
-const CHAT_CREATE: &[u8] = b"chat --project P TEXT [--model M] [--effort E] --key NAME\nStart a chat\nResult: chat_create\n  project: Project name or number\n  text: Opening words\n  model: Configured model name\n  effort: Effort offered by that model\n";
+const CHAT_READ: &[u8] = b"chat N [--before C]\n  N (task): a number; required. Task number\n  --before C: a cursor, as a read prints it; optional. Continue before this cursor\nRead a conversation from its end\n--json: the record chat.\nKey: none.\n";
+const CHAT_CREATE: &[u8] = b"chat --project P TEXT [--model M] [--effort E] --key NAME\n  --project P: a project's name or number; required. Project name or number\n  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. Opening words\n  --model M: text, at most 1048576 bytes, or - to read stdin; optional. Configured model name\n  --effort E: text, at most 1048576 bytes, or - to read stdin; optional. Effort offered by that model\nStart a chat\n--json: the record chat_create.\nKey: --key NAME, required.\n";
 #[test]
 fn help_includes_each_later_row_of_its_name() {
     // The table's read-chat and create-chat rows, in its published order.
@@ -196,4 +197,81 @@ fn every_call_line_of_the_task_settings_topic_parses() {
         }
     }
     assert_eq!(calls, 15);
+}
+
+pub(super) const RECORD: jig::table::Tool = jig::table::Tool {
+    name: b"fixture",
+    line: b"Read a task",
+    prints: b"task N",
+    result: b"task",
+    forms: &[
+        &[
+            jig::table::positional(
+                b"task",
+                b"N",
+                jig::table::Kind::Number,
+                jig::table::Occurs::Required,
+                b"Task number",
+            ),
+            jig::table::flag(
+                b"activity",
+                b"K",
+                jig::table::Kind::Count,
+                jig::table::Occurs::Optional,
+                b"Latest activity lines",
+            ),
+            jig::table::switch(b"tree", b"Include the live tree"),
+            jig::table::repeated(b"word", b"K", jig::table::Kind::Word { set: &[b"a", b"b", b"c"] }, 2, b"Words"),
+        ],
+        &[
+            jig::table::positional(
+                b"text",
+                b"TEXT",
+                jig::table::Kind::Text,
+                jig::table::Occurs::Required,
+                b"Words to send",
+            ),
+            jig::table::flag(
+                b"until",
+                b"K",
+                jig::table::Kind::NamedNumber {
+                    words: &[b"settled"],
+                    prefixes: &[b"connected:", b"made:"],
+                    min: 1,
+                    max: 65535,
+                },
+                jig::table::Occurs::Optional,
+                b"Condition",
+            ),
+            jig::table::flag(b"timeout", b"D", jig::table::Kind::Duration, jig::table::Occurs::Optional, b"Timeout"),
+        ],
+    ],
+    keyed: jig::table::Keyed::Optional,
+    area: 1,
+    notes: b"First note.\nSecond note.\n",
+};
+const RECORD_FORMS: &[u8] = b"fixture N [--activity K] [--tree] [--word a|b|c]... [--key NAME]\n  N (task): a number; required. Task number\n  --activity K: a count from 1 to 32; optional. Latest activity lines\n  --tree: a switch. Include the live tree\n  --word K: one of a, b or c; repeated, at most 2. Words\nfixture TEXT [--until K] [--timeout D] [--key NAME]\n  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. Words to send\n  --until K: one of settled, connected:N or made:N with N from 1 to 65535; optional. Condition\n  --timeout D: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. Timeout\n";
+#[test]
+fn a_tools_record_reads_as_written() {
+    let mut expected = RECORD_FORMS.to_vec();
+    expected.extend_from_slice(b"Read a task\nPrints: task N\n--json: the record task.\nKey: --key NAME, optional.\nFirst note.\nSecond note.\n");
+    let mut out = skein_lib::Writer::new(expected.len());
+    jig::help::tool(&RECORD, &crate::limits::tools(), &mut out).expect("fixture record fits");
+    assert_eq!(&*out.finish(), expected);
+}
+#[test]
+fn an_empty_prints_and_notes_are_left_out() {
+    let record = jig::table::Tool { prints: b"", notes: b"", ..RECORD };
+    let mut expected = RECORD_FORMS.to_vec();
+    expected.extend_from_slice(b"Read a task\n--json: the record task.\nKey: --key NAME, optional.\n");
+    let mut out = skein_lib::Writer::new(expected.len());
+    jig::help::tool(&record, &crate::limits::tools(), &mut out).expect("fixture record fits");
+    assert_eq!(&*out.finish(), expected);
+}
+#[test]
+fn each_row_keeps_its_notes_within_their_bound() {
+    for row in table::TOOLS {
+        assert!(row.notes.len() <= jig::table::NOTES_BYTES, "{row:?}");
+        assert!(row.notes.is_empty() || row.notes.ends_with(b"\n"), "{row:?}");
+    }
 }

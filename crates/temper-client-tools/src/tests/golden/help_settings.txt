@@ -1,3 +1,4 @@
 settings
 Read the settings, held revisions and pending proposals
-Result: settings
+--json: the record settings.
+Key: none.

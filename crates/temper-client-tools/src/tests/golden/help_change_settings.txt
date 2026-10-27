@@ -1,6 +1,7 @@
 change-settings FILE --against R [--running stays|moves] --key NAME
+  FILE (items): a file, at most 1048576 bytes; required. JSON items file, or - for stdin
+  --against R: a number from 0 to 4294967295; required. Newest revision read
+  --running stays|moves: one of stays or moves; optional. Running work stays by default
 Change deployment settings in one keyed decision
-Result: change_settings
-  items: JSON items file, or - for stdin
-  against: Newest revision read
-  running: Running work stays by default
+--json: the record change_settings.
+Key: --key NAME, required.

@@ -7,6 +7,7 @@ use crate::jig::table::{
 pub const ROW: Tool = Tool {
     name: b"adopt",
     line: b"Adopt a repository",
+    prints: b"",
     result: b"adopt",
     forms: &[&[
         flag(b"project", b"P", Kind::Project { empty: false }, Required, b"Project name or number"),
@@ -22,4 +23,5 @@ pub const ROW: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 1,
+    notes: b"",
 };

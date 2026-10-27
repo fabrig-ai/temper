@@ -98,6 +98,7 @@ fn a_project_is_a_number_or_a_name() {
 const STDIN_PAIR: Tool = Tool {
     name: b"pair",
     line: b"",
+    prints: b"",
     result: b"",
     forms: &[&[
         positional(b"first", b"FILE", Kind::File, Occurs::Required, b""),
@@ -105,6 +106,7 @@ const STDIN_PAIR: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 1,
+    notes: b"",
 };
 #[test]
 fn a_second_stdin_is_a_usage_error() {
@@ -356,6 +358,7 @@ fn text_is_bounded_for_argv_and_typed_calls() {
 const BOUNDED: Tool = Tool {
     name: b"bounded",
     line: b"",
+    prints: b"",
     result: b"",
     forms: &[&[
         crate::jig::table::flag(b"range", b"N", Kind::NumberRange { min: 2, max: 4 }, Occurs::Optional, b""),
@@ -377,6 +380,7 @@ const BOUNDED: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 1,
+    notes: b"",
 };
 #[test]
 fn bound_is_what_the_parser_accepts() {

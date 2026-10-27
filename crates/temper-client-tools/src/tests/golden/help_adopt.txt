@@ -1,13 +1,14 @@
 adopt --project P [--forge F] --owner O --name N --landing B [--role owned|fork|context] [--prefix X] [--no-home] [--no-ci] [--check G]... --key NAME
+  --project P: a project's name or number; required. Project name or number
+  --forge F: a number from 0 to 65535; optional. Forge number, within u16
+  --owner O: text, at most 1048576 bytes, or - to read stdin; required. Repository owner
+  --name N: text, at most 1048576 bytes, or - to read stdin; required. Repository name
+  --landing B: text, at most 1048576 bytes, or - to read stdin; required. Landing branch
+  --role ROLE: one of owned, fork or context; optional. Repository role
+  --prefix X: text, at most 1048576 bytes, or - to read stdin; optional. Branch prefix
+  --no-home: a switch. Do not make the repository home
+  --no-ci: a switch. Do not use forge CI
+  --check G: a number; repeated, at most 8. Gate number
 Adopt a repository
-Result: adopt
-  project: Project name or number
-  forge: Forge number, within u16
-  owner: Repository owner
-  name: Repository name
-  landing: Landing branch
-  role: Repository role
-  prefix: Branch prefix
-  no-home: Do not make the repository home
-  no-ci: Do not use forge CI
-  check: Gate number
+--json: the record adopt.
+Key: --key NAME, required.

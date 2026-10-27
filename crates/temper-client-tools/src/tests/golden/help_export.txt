@@ -1,5 +1,6 @@
 export ACCOUNT FILE
+  ACCOUNT (account): a number; required. Account number
+  FILE (file): a file; required. New private record file; never stdin
 Move a signed-in account out to a new private file, synced before written
-Result: export
-  account: Account number
-  file: New private record file; never stdin
+--json: the record export.
+Key: none.

@@ -26,6 +26,7 @@ use temper_client_protocol_wire::{self as wire, v1 as w};
 pub const READ: Tool = Tool {
     name: b"change",
     line: b"Read a change's way to landing: its pull request, CI and step",
+    prints: b"",
     result: b"change",
     forms: &[&[
         positional(b"task", b"N", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
@@ -33,6 +34,7 @@ pub const READ: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 6,
+    notes: b"",
 };
 pub const WAIT_FORM: &[jig::table::Argument] = &[
     positional(b"subject", b"change", Kind::Word { set: &[b"change"] }, Required, b"A change's panel"),

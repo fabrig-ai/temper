@@ -1,4 +1,5 @@
 import FILE --key NAME
+  FILE (file): a file; required. Private record file; never stdin
 Move a record in from a private file, then remove the spent file
-Result: import
-  file: Private record file; never stdin
+--json: the record import.
+Key: --key NAME, required.

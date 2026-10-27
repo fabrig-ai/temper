@@ -1,16 +1,17 @@
 amend N [--rev R] [--priority P | --untracked] [--deadline T | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency M]... [--no-dependencies] [--model M [--effort E]] REASON [--key NAME]
+  N (task): a number; required. Task number
+  --rev R: a number; optional. Shown spec revision; none for a tracked task's priority alone
+  --priority P: a number; optional. Track the task at this priority
+  --untracked: a switch. Stop tracking the task
+  --deadline T: text, at most 1048576 bytes; optional. New deadline, as 2026-10-24T17:00Z
+  --no-deadline: a switch. Remove the deadline
+  --instructions FILE: a file, at most 1048576 bytes; optional. File of the whole instructions, or -; empty for none
+  --spec FILE: a file, at most 1048576 bytes; optional. File of the spec's words, or -
+  --dependency M: a number; repeated, at most 32. A dependency; repeated, the whole list
+  --no-dependencies: a switch. Remove every dependency
+  --model M: text, at most 1048576 bytes, or - to read stdin; optional. Configured model name
+  --effort E: text, at most 1048576 bytes, or - to read stdin; optional. Effort offered by that model
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Reason for the amendment
 Amend a task: each change named, the rest kept
-Result: amend
-  task: Task number
-  rev: Shown spec revision; none for a tracked task's priority alone
-  priority: Track the task at this priority
-  untracked: Stop tracking the task
-  deadline: New deadline, as 2026-10-24T17:00Z
-  no-deadline: Remove the deadline
-  instructions: File of the whole instructions, or -; empty for none
-  spec: File of the spec's words, or -
-  dependency: A dependency; repeated, the whole list
-  no-dependencies: Remove every dependency
-  model: Configured model name
-  effort: Effort offered by that model
-  reason: Reason for the amendment
+--json: the record amend.
+Key: --key NAME, optional.

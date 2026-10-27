@@ -7,14 +7,17 @@ use crate::jig::table::{
 pub const READ: Tool = Tool {
     name: b"forges",
     line: b"Read the deployment's forges",
+    prints: b"",
     result: b"forges",
     forms: &[&[]],
     keyed: Keyed::Never,
     area: 6,
+    notes: b"",
 };
 pub const SET_UP: Tool = Tool {
     name: b"forge-setup",
     line: b"Set up an owned Forgejo here",
+    prints: b"",
     result: b"forge-setup",
     forms: &[&[
         positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"Forge number"),
@@ -31,10 +34,12 @@ pub const SET_UP: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 6,
+    notes: b"",
 };
 pub const CONNECT: Tool = Tool {
     name: b"forge-connect",
     line: b"Connect GitHub or Forgejo as its admin",
+    prints: b"",
     result: b"forge-connect",
     forms: &[
         &[
@@ -87,18 +92,22 @@ pub const CONNECT: Tool = Tool {
     ],
     keyed: Keyed::Required,
     area: 6,
+    notes: b"",
 };
 pub const INSTALL: Tool = Tool {
     name: b"forge-install",
     line: b"Print a fresh GitHub App installation link",
+    prints: b"",
     result: b"forge-install",
     forms: &[&[positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"Forge number")]],
     keyed: Keyed::Optional,
     area: 6,
+    notes: b"",
 };
 pub const ACCEPT: Tool = Tool {
     name: b"forge-accept",
     line: b"Accept an existing GitHub App installation",
+    prints: b"",
     result: b"forge-accept",
     forms: &[&[
         positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"Forge number"),
@@ -112,10 +121,12 @@ pub const ACCEPT: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 6,
+    notes: b"",
 };
 pub const REPOSITORIES: Tool = Tool {
     name: b"repositories",
     line: b"Read one page of reachable repositories",
+    prints: b"",
     result: b"repositories",
     forms: &[&[
         positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"Forge number"),
@@ -130,20 +141,24 @@ pub const REPOSITORIES: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 6,
+    notes: b"",
 };
 mod connection;
 mod repositories;
 pub const DEMO_START: Tool = Tool {
     name: b"demo-start",
     line: b"Start the playground; run again to finish what is not done",
+    prints: b"",
     result: b"demo-start",
     forms: &[&[]],
     keyed: Keyed::Optional,
     area: 6,
+    notes: b"",
 };
 pub const WAIT: Tool = Tool {
     name: b"wait",
     line: b"Wait for a subject's change or condition",
+    prints: b"",
     result: b"wait",
     forms: &[
         *jig::rows::WAIT.forms.first().expect("base wait form"),
@@ -163,6 +178,7 @@ pub const WAIT: Tool = Tool {
     ],
     keyed: Keyed::Never,
     area: 1,
+    notes: b"",
 };
 
 use crate::{
