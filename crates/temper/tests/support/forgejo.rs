@@ -298,9 +298,9 @@ impl Throwaway {
 }
 
 pub fn tier_authority(value: &mut Value) {
-    // The four extra ceiling grants and procedure 4 make this fixture's
-    // serialized policy 4216 bytes, including the smaller person allotment.
-    value["engine"]["limits"]["overrides"]["core.policy_bytes"] = 4216.into();
+    // The four extra ceiling grants, reviewer Charter 4 and procedure 4 make
+    // this fixture's serialized policy 4232 bytes, including the smaller person allotment.
+    value["engine"]["limits"]["overrides"]["core.policy_bytes"] = 4232.into();
     for project in value["engine"]["projects"].as_array_mut().expect("projects") {
         // Keep the project's 100 units; leave two capped 10-unit tier
         // reservations outside the person's pool.
