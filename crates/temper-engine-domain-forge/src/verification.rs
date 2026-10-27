@@ -49,7 +49,7 @@ impl Domain {
 }
 
 pub(crate) fn valid_name(name: &[u8]) -> bool {
-    if name.is_empty() || name.len() > usize::try_from(crate::CHECK_NAME_BYTES).expect("u32 fits usize") {
+    if name.is_empty() || name.len() > crate::CHECK_NAME_BYTES {
         return false;
     }
     for byte in name {
@@ -210,14 +210,14 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let tiers = u64::from(l.tiers).checked_mul(
         u64::try_from(size_of::<TierVerification>())
             .ok()?
-            .checked_add(u64::from(crate::CHECK_NAME_BYTES))?
+            .checked_add(u64::try_from(crate::CHECK_NAME_BYTES).ok()?)?
             .checked_add(tests)?,
     )?;
     let path = u64::from(l.name_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?;
     let tier = u64::try_from(size_of::<Tier>())
         .ok()?
-        .checked_add(u64::from(crate::CHECK_NAME_BYTES).checked_mul(2)?)?
-        .checked_add(u64::from(crate::WORKFLOW_BYTES))?
+        .checked_add(u64::try_from(crate::CHECK_NAME_BYTES).ok()?.checked_mul(2)?)?
+        .checked_add(u64::try_from(crate::WORKFLOW_BYTES).ok()?)?
         .checked_add(u64::from(l.ignored_paths).checked_mul(path)?)?;
     let configured = u64::from(l.repositories).checked_mul(
         u64::try_from(size_of::<RepositoryTiers>()).ok()?.checked_add(u64::from(l.tiers).checked_mul(tier)?)?,
