@@ -396,6 +396,58 @@ pub fn refused(output: &Output, why: &str) {
     assert_eq!(String::from_utf8_lossy(&output.stderr), format!("account export: {why}\n"));
 }
 
+/// Leave the real CLI's export durably moving, with Written held off the engine.
+/// Reuse the QA relay: no moved record or client credential is inspected.
+#[must_use]
+pub fn export_pending(directory: &Path, upstream: SocketAddr, account: u32, file: &Path) -> serde_json::Value {
+    let client = directory.join("client");
+    let relay = Relay::start(upstream);
+    super::write_private(&client.join("address"), format!("http://{}\n", relay.address).as_bytes());
+    let gate = relay.arm(2, Boundary::BeforeRequest);
+    let child = Command::new(skein_scratch::paths::binary("temper"))
+        .arg("ctl")
+        .arg(&client)
+        .args(["account", "export"])
+        .arg(account.to_string())
+        .arg(file)
+        .current_dir(directory)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("pending fixture export");
+    let export = Running { child: Some(child), tool: "export".into() };
+    gate.wait();
+    assert!(fs::metadata(file).expect("synced fixture move file").len() > 0, "record reached the CLI before Written");
+    export.terminate();
+    assert_eq!(export.finish().status.code(), Some(143), "stop the CLI while its Written is held");
+    gate.release(false);
+    super::write_private(&client.join("address"), format!("http://{upstream}\n").as_bytes());
+    drop(relay);
+    let output = Command::new(skein_scratch::paths::binary("temper"))
+        .arg("ctl")
+        .arg(&client)
+        .args(["account", "list", "--json"])
+        .current_dir(directory)
+        .env_clear()
+        .output()
+        .expect("pending account read");
+    success(&output);
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("pending accounts JSON");
+    let rows = value["accounts"]["party"].as_array().expect("fixture accounts");
+    let row = rows.iter().find(|row| row["number"] == account).expect("export keeps its account until Written");
+    assert!(
+        row["sources"]
+            .as_array()
+            .expect("fixture sources")
+            .iter()
+            .any(|source| source["kind"] == "sign_in" && source["state"]["kind"] == "moving"),
+        "the source is held moving before SIGTERM: {row}"
+    );
+    value
+}
+
 #[derive(Clone, Copy)]
 pub enum Boundary {
     BeforeRequest,

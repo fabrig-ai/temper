@@ -14,6 +14,7 @@ jig-domain-fleet.workspace = true
 jig-client.workspace = true
 serde_json.workspace = true
 temper-service.workspace = true
+temper-forge-setup.workspace = true
 temper-client-shell-terminal.workspace = true
 temper-client-domain.workspace = true
 temper-engine-domain.workspace = true

@@ -63,6 +63,55 @@ enum BoxOutput {
 // Existing reservation for setup/forge handoffs beside a root routing pass.
 const SETUP_ROUTING_HEADROOM: u32 = 2;
 impl Service {
+    /// Payload-free closure and queue state at the shell's wait boundary.
+    #[must_use]
+    #[expect(clippy::manual_map, reason = "the step subset uses explicit matches")]
+    pub fn wait_state(&self) -> crate::diagnostics::Wait {
+        use crate::diagnostics::{Wait, WaitEngine, WaitOwner};
+        Wait {
+            engine: match &self.engine {
+                Some(engine) => Some(WaitEngine {
+                    restart: engine.domain.restart_step(),
+                    mark_durable: engine.store.component.mark_durable(),
+                    store_closed: engine.store.closed(),
+                    clients: WaitOwner { closed: engine.clients.closed, io: engine.clients.io.len() },
+                    workers: WaitOwner { closed: engine.workers.closed(), io: engine.workers.io.len() },
+                    setup: WaitOwner { closed: engine.setup.closed, io: engine.setup.io.len() },
+                    setup_above: engine.setup.above.len(),
+                    forge: WaitOwner { closed: engine.forge.closed, io: engine.forge.io.len() },
+                    forge_above: engine.forge.above.len(),
+                    accounts: match &engine.accounts {
+                        Some(accounts) => Some(accounts.wait_state()),
+                        None => None,
+                    },
+                }),
+                None => None,
+            },
+            worker_empty: match &self.worker {
+                Some(worker) => worker.is_empty(),
+                None => true,
+            },
+            signals_closing: self.signals_closing,
+            operations: self.kernel.has_operations(),
+            submissions: self.submissions.len(),
+        }
+    }
+
+    /// Check the real ring's empty, unbounded wait shape without another iteration.
+    pub fn check_wait_boundary(&self, now: Time) {
+        assert!(
+            self.is_empty()
+                || self.work_pending(now)
+                || self.next_deadline().is_some()
+                || self.kernel.has_operations()
+                || !self.submissions.is_empty(),
+            "service would wait forever with nothing in flight: end={:?}; state={:?}; pending={:?}",
+            self.end(),
+            self.wait_state(),
+            self.pending(now)
+        );
+    }
+
     /// The engine domain, for a world to inspect before requesting shutdown.
     #[must_use]
     pub fn engine_domain(&self) -> Option<&temper_engine_domain::Domain> {

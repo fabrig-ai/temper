@@ -1,5 +1,15 @@
 use super::*;
 #[test]
+fn a_restart_over_a_live_change_answers_a_person() {
+    let settings = fixtures::calm(fixtures::SEED);
+    let run = Rc::new(RefCell::new(referee::Run::default()));
+    let (_, disk, store) =
+        run_phase(settings, Story::HeldChange, Phase::Story, machine::fresh(), Store::new(), run.clone());
+    let (outcome, _, _) = run_phase(settings, Story::HeldChange, Phase::SignIn, disk, store, run);
+    assert_eq!(outcome.signed_in, 1);
+}
+
+#[test]
 fn an_adoption_saves_a_pending_window_before_the_engine_commit() {
     let setup = Rc::new(RefCell::new(referee::Run::default()));
     let (outcome, _, _) =

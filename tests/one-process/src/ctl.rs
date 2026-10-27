@@ -51,7 +51,12 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
         files,
     )
     .expect("shipped ctl limits");
-    Recorded { host, wire: crate::referee::client::Wire::default(), seen: 0 }
+    Recorded {
+        host,
+        wire: crate::referee::client::Wire::default(),
+        seen: 0,
+        sign_in: spawn.args.get(1).is_some_and(|word| word.as_ref() == b"sign-in"),
+    }
 }
 
 pub(crate) struct Caller {
@@ -173,12 +178,17 @@ impl Host for Caller {
             self.output.clear();
             self.error.clear();
         }
-        if self.at >= 2 {
+        let steps = 2;
+        if self.at >= steps {
             self.finished = true;
             return;
         }
         let words: &[&[u8]] = if self.at == 0 {
             &[b"/client/private", b"sign-in", b"-"]
+        } else if crate::stories::held_change() && !crate::stories::first_start() {
+            &[b"/client/private", b"settings", b"show", b"--json"]
+        } else if crate::stories::held_change() {
+            &[b"/client/private", b"forge", b"list", b"--until", b"connected:1"]
         } else {
             &[
                 b"/client/private",
@@ -236,11 +246,14 @@ pub(crate) struct Recorded {
     host: OneShot,
     wire: crate::referee::client::Wire,
     seen: usize,
+    sign_in: bool,
 }
 impl Host for Recorded {
     fn iterate(&mut self, now: Time, wall: Wall) {
         for complete in self.host.completions().iter() {
-            self.wire.complete(complete);
+            if self.sign_in {
+                self.wire.complete(complete);
+            }
         }
         for event in &self.wire.received[self.seen..] {
             if let crate::referee::client::Received::SignedIn(party) = event {

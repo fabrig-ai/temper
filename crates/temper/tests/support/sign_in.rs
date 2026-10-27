@@ -96,9 +96,24 @@ pub fn patch_configuration(directory: &Path) -> oauth::Peer {
 /// Recreate the fake issuer on its recorded address without changing the deployment.
 #[must_use]
 pub fn restart_issuer(directory: &Path) -> oauth::Peer {
+    restarted_issuer(directory, false)
+}
+
+/// Recreate a provider that already issued the fixture's client registration.
+/// A restarted fake otherwise forgets it and rejects a moved account's refresh.
+#[must_use]
+pub fn restart_issued_issuer(directory: &Path) -> oauth::Peer {
+    restarted_issuer(directory, true)
+}
+
+fn restarted_issuer(directory: &Path, issued: bool) -> oauth::Peer {
     let value: serde_json::Value =
         serde_json::from_slice(&fs::read(directory.join("temper.json")).expect("patched document")).expect("JSON");
-    let registration = &value["engine"]["llm"]["providers"][0]["sources"]["sign_in"];
+    let mut registration = value["engine"]["llm"]["providers"][0]["sources"]["sign_in"].clone();
+    if issued {
+        // Known fixture identity, never a credential read from a deployment.
+        registration["client"] = "issued-client".into();
+    }
     let address = registration["issuer"]
         .as_str()
         .expect("patched issuer")
@@ -109,7 +124,7 @@ pub fn restart_issuer(directory: &Path) -> oauth::Peer {
     // The fixture permits a varying callback port; no second sign-in is asked.
     let redirect = format!("http://127.0.0.1:0/{}", registration["redirect_path"].as_str().expect("callback path"));
     let listener = std::net::TcpListener::bind(address).expect("restart issuer listener");
-    issuer(listener, registration, redirect.as_bytes())
+    issuer(listener, &registration, redirect.as_bytes())
 }
 
 pub(super) fn issuer(

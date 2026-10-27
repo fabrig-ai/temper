@@ -26,6 +26,7 @@ pub enum Story {
     Adoption,
     Adopt,
     Merge,
+    HeldChange,
 }
 #[derive(Debug)]
 pub struct Outcome {
@@ -86,13 +87,37 @@ pub(crate) struct ServiceHost {
     pub(crate) cut_before: Option<u32>,
     pub(crate) submitted: u32,
     pub(crate) before_iteration: u32,
+    in_flight: std::collections::BTreeSet<skein_lib::Token>,
+    now: Time,
     codec: jig_protocol_store::codec::Limits,
     families: temper_protocol_store::Bounds,
 }
 impl Host for ServiceHost {
+    fn drain(&mut self) {
+        while let Some(read) = self.service.take_handover_read() {
+            let value =
+                stories::first_start().then(|| skein_lib::Secret::new(crate::restart_control::ADMIN_TOKEN.into()));
+            self.service.handover_read(read.forge, read.run, Ok(value));
+        }
+        while let Some(remove) = self.service.take_handover_removal() {
+            self.service.handover_removed(remove.forge, remove.run, Ok(()));
+        }
+        assert!(
+            self.service.is_empty()
+                || self.service.work_pending(self.now)
+                || self.service.next_deadline().is_some()
+                || !self.in_flight.is_empty(),
+            "service would wait forever with nothing in flight: end={:?}; state={:?}; pending={:?}",
+            self.service.end(),
+            self.service.wait_state(),
+            self.service.pending(self.now)
+        );
+    }
     fn iterate(&mut self, now: Time, wall: Wall) {
+        self.now = now;
         self.before_iteration = self.submitted;
         for complete in self.service.completions().iter() {
+            assert!(self.in_flight.remove(&complete.op), "completion has an operation in flight");
             if let Some(bound) = hooks_address(&mut self.bound_hooks, complete) {
                 self.hooks = Some(bound);
             }
@@ -107,6 +132,7 @@ impl Host for ServiceHost {
         ));
         temper_service::iterate(&mut self.service, now, wall);
         for submit in self.service.submissions().iter() {
+            assert!(self.in_flight.insert(submit.op), "one operation per token");
             self.capture.pending(&submit.kind);
         }
         self.submitted += self.service.submissions().len();
@@ -248,6 +274,8 @@ impl Person {
             ],
             Story::Adoption => stories::adoption_person(),
             Story::Adopt | Story::Merge => stories::person(),
+            Story::HeldChange if stories::first_start() => stories::person(),
+            Story::HeldChange => Vec::new(),
         };
         let mut offset = PROGRESS.with(|progress| progress.borrow().at);
         if matches!(scenario, Story::Adoption) && offset < fixtures::ADOPTION_REPLY_STEP {
@@ -288,7 +316,7 @@ impl Person {
     pub(crate) fn sign_in(&mut self, link: &[u8]) {
         assert!(self.client.is_none(), "one printed link");
         self.printed_link = link.into();
-        if stories::needs_settings() {
+        if stories::needs_settings() || stories::held_change() {
             self.setup = Some(crate::ctl::Caller::new(self.root.expect("client parent"), link));
             return;
         }
@@ -563,16 +591,19 @@ fn person_failed(step: u32, why: &skein_fake_person::Why, wire: &referee::client
 fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
     let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
-    let mut service = temper_service::startup::startup_with(
+    let setup = stories::held_change().then(|| crate::restart_control::checked_setup(&fixtures::document()));
+    let mut service = temper_service::startup::with_setup_given(
         &fixtures::document(),
         // Simulated fixture paths stay relative to their inherited roots.
         &jig_protocol_config::Directories::working(),
         &fixtures::files(),
-        &fixtures::agent(),
+        Some(&fixtures::agent()),
         &fixtures::seeds(),
         None,
-        temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() },
+        Some(temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() }),
         fixtures::forges(),
+        setup.as_ref(),
+        None,
         &stories::given(&serde_json::from_slice(&fixtures::document()).expect("deployment JSON")),
     )
     .expect("one-process startup");
@@ -597,6 +628,8 @@ fn service(inherited: &Inherited) -> Proc {
         cut_before: None,
         submitted: 0,
         before_iteration: 0,
+        in_flight: std::collections::BTreeSet::new(),
+        now: Time::ZERO,
         codec: fixtures::codec(),
         families,
     }))
@@ -761,15 +794,19 @@ fn transport() -> temper_fake_git_hosted::Typed {
     SHARED.with(|shared| shared.borrow().as_ref().expect("world's forge").clone())
 }
 fn peer() -> Peer {
-    Peer::new(
+    let mut peer = Peer::new(
         fixtures::FORGE,
         fixtures::peer_limits(),
-        temper_fake_git_hosted::fixtures::table(b"acme/app", None),
+        stories::forge_table(),
         fixtures::forge_limits(),
         transport().forge,
         fixtures::SEED,
     )
-    .expect("forge peer")
+    .expect("forge peer");
+    if stories::held_change() {
+        crate::restart_control::setup_peer(&mut peer);
+    }
+    peer
 }
 
 fn fake_forge(inherited: &Inherited) -> Proc {
@@ -899,6 +936,13 @@ fn settings_revision(records: &Store) -> u32 {
         .unwrap_or(0)
 }
 
+fn forge_for_run(run: &Rc<RefCell<referee::Run>>, scenario: Story) -> temper_fake_git_hosted::Typed {
+    let transport = run.borrow().forge.clone().unwrap_or_else(|| stories::forge(scenario));
+    if matches!(scenario, Story::HeldChange) {
+        run.borrow_mut().forge = Some(transport.clone());
+    }
+    transport
+}
 fn run_phase(
     settings: Settings,
     scenario: Story,
@@ -916,7 +960,7 @@ fn run_phase(
     STORE.with(|cell| {
         *cell.borrow_mut() = Some(store.clone());
     });
-    let transport = stories::forge(scenario);
+    let transport = forge_for_run(&run, scenario);
     let observed_forge = Rc::new(RefCell::new(referee::forge::Forge::new(transport.clone(), scenario)));
     share(Some(transport.clone()));
     let mut world = skein_world::World::new_controlled(settings.seed, settings.config, Memory::Unchecked, |controls| {
