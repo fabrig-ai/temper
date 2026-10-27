@@ -583,8 +583,11 @@ impl World {
         self.produce_file(branch, b"file", b"change");
     }
     pub fn produce_on(&mut self, branch: &[u8], base: &[u8]) {
+        self.produce_on_file(branch, base, b"file");
+    }
+    pub fn produce_on_file(&mut self, branch: &[u8], base: &[u8], path: &[u8]) {
         self.external(raw::Op::Git(raw::Git::Create { branch: branch.into(), commit: self.branch(base) }), 2);
-        self.push_file(branch, b"file", b"change");
+        self.push_file(branch, path, b"change");
     }
     pub fn produce_file(&mut self, branch: &[u8], path: &[u8], content: &[u8]) {
         self.external(raw::Op::Git(raw::Git::Create { branch: Box::from(branch), commit: 1 }), 2);
