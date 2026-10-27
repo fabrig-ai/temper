@@ -38,8 +38,7 @@ welcome() {
     call wait heading 'Connect a forge' --exact --timeout 120
 }
 forge() {
-    call wait link 'Use an App of your own ›' --exact --timeout 120
-    call press link 'Use an App of your own ›' --exact
+    call go '/welcome?at=forge&forge=2'
     call wait heading 'An App of your own' --exact --timeout 120
     printf '1\n' | call type 'text field' 'App id' --exact
     call type 'text field' 'Private key' --exact < "$5"

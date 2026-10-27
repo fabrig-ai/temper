@@ -147,7 +147,6 @@ pub enum Word {
     ForgeAll,
     ForgeConnectGitHub,
     ForgeConnectApp,
-    ForgeUseApp,
     ForgeAppLabel,
     ForgeInstallAnother,
     ForgeInstall,
@@ -653,9 +652,9 @@ pub enum Word {
 // A task document's reading line and seven lasting read ends (client/README.md, 3.5).
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
-const PHRASES: u32 = 1159;
-const SEGMENTS: u32 = 2028;
-const ALL: [Word; 588] = [
+const PHRASES: u32 = 1158;
+const SEGMENTS: u32 = 2027;
+const ALL: [Word; 587] = [
     Word::WelcomeYourModel,
     Word::BrandChats,
     Word::ForgeHereVersionDetails,
@@ -789,7 +788,6 @@ const ALL: [Word; 588] = [
     Word::ForgeAll,
     Word::ForgeConnectGitHub,
     Word::ForgeConnectApp,
-    Word::ForgeUseApp,
     Word::ForgeAppLabel,
     Word::ForgeInstallAnother,
     Word::ForgeInstall,
@@ -1391,7 +1389,6 @@ impl Word {
             Self::ForgeInstall => 1793,
             Self::ForgeInstallAnother => 1794,
             Self::ForgeAppLabel => 1795,
-            Self::ForgeUseApp => 1796,
             Self::ForgeConnectApp => 1737,
             Self::ForgeAppDescription => 1738,
             Self::ForgeAppId => 1739,
@@ -2246,7 +2243,6 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::ForgeInstall => (&[b"Install on GitHub"], &[]),
         Word::ForgeInstallAnother => (&[b"Install on another account"], &[]),
         Word::ForgeAppLabel => (&[b"temper\xe2\x80\x99s App"], &[]),
-        Word::ForgeUseApp => (&[b"Use an App of your own \xe2\x80\xba"], &[]),
         Word::ForgeConnectApp => (&[b"Connect an App of your own"], &[]),
         Word::ForgeAppDescription => (&[b"Its id, and its private key as GitHub gives it."], &[]),
         Word::ForgeAppId => (&[b"App id"], &[]),
