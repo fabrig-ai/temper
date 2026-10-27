@@ -762,7 +762,9 @@ impl World {
                 engine::HostDelivery::Render { to, answer, .. } => {
                     engine::WorkerInput::RenderedHostCall { to, answer: link::render(&answer) }
                 }
-                other @ engine::HostDelivery::Answer { .. } => panic!("unscripted delivery answer: {other:?}"),
+                other @ (engine::HostDelivery::Settings { .. } | engine::HostDelivery::Answer { .. }) => {
+                    panic!("unscripted delivery answer: {other:?}")
+                }
             },
             engine::Request::Worker(engine::WorkerRequest::ReadResult { payload, outcome }) => {
                 engine::WorkerInput::ResultRead { payload, end: link::end(&outcome) }
