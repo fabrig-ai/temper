@@ -25,6 +25,7 @@ pub struct Person {
     header: String,
 }
 impl Person {
+    #[must_use]
     pub fn new(root: &Path) -> Self {
         let config: Value = serde_json::from_slice(&fs::read(root.join("temper.json")).expect("configuration"))
             .expect("configuration JSON");
@@ -39,6 +40,7 @@ impl Person {
             header: root.join("forge-3/person_write.header").to_str().expect("header path").into(),
         }
     }
+    #[must_use]
     pub fn request(&self, method: &str, route: &str, body: Option<Value>, status: u16) -> Value {
         let body = body.map(|body| body.to_string());
         let (received, value) = first_repository::header_request(
@@ -51,6 +53,7 @@ impl Person {
         assert_eq!(received, status, "{method} {route}: {value}");
         value
     }
+    #[must_use]
     pub fn get(&self, route: &str) -> Value {
         self.request("GET", route, None, 200)
     }
@@ -60,7 +63,7 @@ impl Person {
         let mut out = skein_lib::Writer::new(usize::try_from(size).expect("base64 fits"));
         base64::encode(Alphabet::Standard, content, &mut out).expect("base64 file");
         let encoded = out.finish();
-        self.request(
+        let _ = self.request(
             "POST",
             &format!("contents/{path}"),
             Some(json!({
@@ -70,6 +73,7 @@ impl Person {
             201,
         );
     }
+    #[must_use]
     pub fn contents(&self, path: &str) -> Vec<u8> {
         let file = self.get(&format!("contents/{path}?ref=main"));
         let encoded: Vec<_> = file["content"]
@@ -86,6 +90,7 @@ pub struct Setup {
     pub project: u64,
     pub repository: u64,
 }
+#[must_use]
 pub fn configure_repository(root: &Path) -> Setup {
     let person = Person::new(root);
     person.add("check.sh", b"test -s README.md\n");
@@ -122,6 +127,7 @@ const PERIOD_IN_K: u64 = 48;
 
 /// Leave policy 1's projects spend for landing tasks, applying against the newest
 /// revision read from the inventory and preserving the policy's other members.
+#[must_use]
 pub fn fund_landings(root: &Path, policy: &super::Ended, inventory: &super::Ended) -> ctl::Call {
     let file = root.join("landing-settings.json");
     ctl::setting_change_file(&file, policy, |value| {
@@ -151,6 +157,7 @@ pub struct Evidence {
     pub readme: Vec<u8>,
     pub notes: Vec<u8>,
 }
+#[must_use]
 pub fn evidence(root: &Path, setup: &Setup, change: u64) -> Evidence {
     let list = ctl::alone(
         root,
@@ -187,4 +194,11 @@ pub fn evidence(root: &Path, setup: &Setup, change: u64) -> Evidence {
         notes: person.contents("notes.txt"),
         main,
     }
+}
+
+/// Real process-tier elapsed time, using the same monotonic shell clock as its worlds.
+#[must_use]
+pub fn elapsed(clock: &skein_shell::Clock, began: skein_lib::Time) -> String {
+    let nanos = clock.now().now.saturating_since(began).as_nanos();
+    format!("{}.{:03}s", nanos / 1_000_000_000, nanos / 1_000_000 % 1_000)
 }
