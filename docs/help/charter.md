@@ -15,9 +15,10 @@ the task reads its charter, whole:
 - its tools in the workspace: to inspect, to modify, to run a shell, to
   open sub-agents;
 - its host families, `tools`: which of temper's tool families its runs
-  are offered, where their task's authority holds them too. The stock
-  charters 1 and 2 name every family but settings; the reviewer's,
-  charter 4, the read family alone;
+  are offered, where their task's authority holds them too. Of the
+  stock charters, the chat's, charter 1, names every family but
+  settings; the forge's, charter 2, the read and message families; the
+  reviewer's, charter 4, the read family alone;
 - the hosts that may run it: the deployment's workers, the engine, or
   both;
 - a run's limits: its turns and time, a reserve of each for finishing,
