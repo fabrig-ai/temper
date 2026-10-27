@@ -290,6 +290,7 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             | change::State::Recreating { .. }
             | change::State::Reopening { .. }
             | change::State::Checking { .. }
+            | change::State::CancellingGates { .. }
             | change::State::Queued { .. }
             | change::State::First { .. }
             | change::State::Updating { .. }

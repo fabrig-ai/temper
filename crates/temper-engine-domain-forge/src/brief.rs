@@ -168,6 +168,7 @@ pub(super) fn brief_pull(
         | change::State::Opening { .. }
         | change::State::Recreating { .. }
         | change::State::Reopening { .. }
+        | change::State::CancellingGates { .. }
         | change::State::Checking { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
@@ -596,6 +597,7 @@ pub(super) fn brief_ci(
         | change::State::First { .. }
         | change::State::Updating { .. }
         | change::State::Gating { .. }
+        | change::State::CancellingGates { .. }
         | change::State::Resolving { .. }
         | change::State::Landing { .. }
         | change::State::Ended

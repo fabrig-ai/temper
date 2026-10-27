@@ -47,6 +47,7 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         | State::Reopening { .. }
         | State::Checking { .. }
         | State::Gating { .. }
+        | State::CancellingGates { .. }
         | State::Queued { .. }
         | State::First { .. }
         | State::Updating { .. }
@@ -90,6 +91,7 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
             | State::Opening { .. }
             | State::Checking { .. }
             | State::Gating { .. }
+            | State::CancellingGates { .. }
             | State::Queued { .. }
             | State::First { .. }
             | State::Updating { .. }
@@ -113,6 +115,7 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         }
         State::Checking { head } => checking(next, *head, facts, standing, now, limits),
         State::Gating { head, asked } => gating(next, *head, asked, facts, now, limits),
+        State::CancellingGates { head } => cancelling_gates(next, *head, facts, now, limits),
         State::Queued { head, ready_since } => queued(next, *head, *ready_since, facts),
         State::First { head, ready_since } => first(next, *head, *ready_since, facts, now, limits),
         State::Updating { from, base, ready_since: _ } => updating(next, *from, *base, facts, standing, now, limits),
@@ -145,6 +148,7 @@ pub fn released(change: &Change, now: Wall) -> Change {
         | State::Reopening { .. }
         | State::Checking { .. }
         | State::Gating { .. }
+        | State::CancellingGates { .. }
         | State::Queued { .. }
         | State::First { .. }
         | State::Updating { .. }
@@ -223,6 +227,7 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts) -> Stepped
                 | State::Recreating { .. }
                 | State::Reopening { .. }
                 | State::Checking { .. }
+                | State::CancellingGates { .. }
                 | State::Updating { .. }
                 | State::Resolving { .. }
                 | State::Repairing { .. }
@@ -454,6 +459,14 @@ fn gating(mut change: Change, head: [u8; 32], asked: &[u64], facts: &Facts, now:
     if facts.branch != Some(head) {
         return hold(change, Hold::BranchMoved);
     }
+    if facts.ci.head == head && facts.ci.status == Status::Failed {
+        if facts.live_gate == Some(head) {
+            change.state = State::CancellingGates { head };
+            return Stepped { change, decision: Decision::CancelGates { head } };
+        }
+        let why = if change.clean.is_empty() { Repair::Ci } else { Repair::Semantic };
+        return repair_due(change, why, facts, now, limits);
+    }
     for failure in &change.gate_failures {
         if failure.count >= 2 {
             for gate in &change.gates {
@@ -462,10 +475,6 @@ fn gating(mut change: Change, head: [u8; 32], asked: &[u64], facts: &Facts, now:
                 }
             }
         }
-    }
-    if facts.ci.head == head && facts.ci.status == Status::Failed {
-        let why = if change.clean.is_empty() { Repair::Ci } else { Repair::Semantic };
-        return repair_due(change, why, facts, now, limits);
     }
     let ci_passed = facts.ci.head == head && facts.ci.status == Status::Passed;
     let mut waiting_gate = false;
@@ -482,6 +491,10 @@ fn gating(mut change: Change, head: [u8; 32], asked: &[u64], facts: &Facts, now:
                 }
             },
             Status::Unknown if !asked.contains(&gate.number) => {
+                // The top owns one delegate slot: retain it until that gate ends.
+                if facts.live_gate.is_some() {
+                    return waiting(change, now, limits);
+                }
                 let mut collected = List::with_capacity(limits.gates);
                 for number in asked {
                     collected.push(*number).expect("asked gates fit the limit");
@@ -513,6 +526,17 @@ fn gating(mut change: Change, head: [u8; 32], asked: &[u64], facts: &Facts, now:
         change.state = State::Queued { head, ready_since: since };
     }
     Stepped { change, decision: Decision::Ready }
+}
+
+fn cancelling_gates(change: Change, head: [u8; 32], facts: &Facts, now: Wall, limits: &Limits) -> Stepped {
+    if facts.branch != Some(head) {
+        return hold(change, Hold::BranchMoved);
+    }
+    if facts.live_gate == Some(head) {
+        return waiting(change, now, limits);
+    }
+    let why = if change.clean.is_empty() { Repair::Ci } else { Repair::Semantic };
+    repair_due(change, why, facts, now, limits)
 }
 
 fn queued(mut change: Change, head: [u8; 32], ready_since: Wall, facts: &Facts) -> Stepped {

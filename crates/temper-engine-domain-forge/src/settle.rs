@@ -135,6 +135,7 @@ pub(crate) fn cap(
                 | change::State::Reopening { .. }
                 | change::State::Checking { .. }
                 | change::State::Gating { .. }
+                | change::State::CancellingGates { .. }
                 | change::State::Queued { .. }
                 | change::State::Updating { .. }
                 | change::State::Resolving { .. }
@@ -165,6 +166,7 @@ pub(crate) fn cap(
         change::Decision::Wait { until: None }
         | change::Decision::None
         | change::Decision::Delegate(_)
+        | change::Decision::CancelGates { .. }
         | change::Decision::Effect(_)
         | change::Decision::Ready
         | change::Decision::QueueRepair
