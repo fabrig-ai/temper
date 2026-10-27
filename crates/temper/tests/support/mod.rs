@@ -42,19 +42,23 @@ use std::{fs, net::SocketAddr, os::unix::fs::PermissionsExt, path::Path};
 /// Two equal listeners fail temper-forge-setup's `check.rs:112`.
 #[must_use]
 pub fn free_addresses<const N: usize>(taken: &[SocketAddr]) -> [SocketAddr; N] {
-    let mut addresses = [SocketAddr::from(([127, 0, 0, 1], 0)); N];
-    let mut listeners = Vec::new();
-    let mut drawn = 0;
-    while drawn < N {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("free socket");
-        let address = listener.local_addr().expect("socket address");
-        listeners.push(listener);
-        if !taken.contains(&address) {
-            addresses[drawn] = address;
-            drawn += 1;
+    reserve_listeners::<N>(taken).each_ref().map(|listener| listener.local_addr().expect("socket address"))
+}
+
+/// Distinct listeners held until their in-process consumers take ownership.
+#[must_use]
+pub fn reserve_listeners<const N: usize>(taken: &[SocketAddr]) -> [std::net::TcpListener; N] {
+    let mut skipped = Vec::new();
+    std::array::from_fn(|_| {
+        loop {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("free socket");
+            let address = listener.local_addr().expect("socket address");
+            if !taken.contains(&address) {
+                break listener;
+            }
+            skipped.push(listener);
         }
-    }
-    addresses
+    })
 }
 
 /// Gives every listener an init-made document names a kernel-drawn

@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use skein_throwaway_forgejo::{Instance, Outgoing, Token};
 use std::{
     fs,
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener},
     path::{Path, PathBuf},
 };
 use temper_real_loop_world::landing;
@@ -33,7 +33,19 @@ impl Throwaway {
 
     #[must_use]
     pub fn start_with_job_sleep(scratch: &Scratch, sleep_seconds: u64) -> Self {
-        let mut fixture = Self::start_bare(scratch);
+        Self::start_bare(scratch).with_repository(scratch, sleep_seconds)
+    }
+
+    /// Keep the test's delivery receiver bound before configuring Forgejo's hook.
+    #[must_use]
+    pub fn start_receiving(scratch: &Scratch) -> (Self, TcpListener) {
+        let [listener] = super::reserve_listeners(&[]);
+        let address = listener.local_addr().expect("delivery receiver address");
+        let fixture = Self::start_bare_with_webhooks(scratch, Some(address)).with_repository(scratch, 60);
+        (fixture, listener)
+    }
+
+    fn with_repository(mut self, scratch: &Scratch, sleep_seconds: u64) -> Self {
         let began = skein_shell::Clock::new().now().now;
         let reconciled = owned::reconcile(scratch.path(), 1);
         assert_eq!(reconciled.status.code(), Some(0), "{}", String::from_utf8_lossy(&reconciled.stderr));
@@ -42,18 +54,28 @@ impl Throwaway {
             "reconcile within its bound"
         );
         stage("reconcile", began);
-        let person = person_token(&fixture.instance);
-        let repository = repository(&fixture.instance, &person, sleep_seconds);
-        owned::adopt(scratch.path(), &fixture.instance, &person, fixture.webhooks);
-        fixture.person = Some(person);
-        fixture.repository = Some(repository);
-        fixture
+        let person = person_token(&self.instance);
+        let repository = repository(&self.instance, &person, sleep_seconds);
+        owned::adopt(scratch.path(), &self.instance, &person, self.webhooks);
+        self.person = Some(person);
+        self.repository = Some(repository);
+        self
     }
 
     /// The pinned server and runner with their original administrator, before Reconcile or adoption.
     #[must_use]
     pub fn start_bare(scratch: &Scratch) -> Self {
+        Self::start_bare_with_webhooks(scratch, None)
+    }
+
+    fn start_bare_with_webhooks(scratch: &Scratch, webhooks: Option<SocketAddr>) -> Self {
         let address = owned::tier_configuration(scratch.path());
+        if let Some(webhooks) = webhooks {
+            let path = scratch.path().join("temper.json");
+            let mut config: Value = serde_json::from_slice(&fs::read(&path).expect("configuration")).expect("JSON");
+            config["application"]["webhooks"]["listener"]["socket"] = webhooks.to_string().into();
+            write_private(&path, &serde_json::to_vec(&config).expect("webhooks configuration"));
+        }
         let running = owned::start(scratch.path());
         let pid = running.id();
         let began = skein_shell::Clock::new().now().now;
@@ -185,11 +207,6 @@ impl Throwaway {
     #[must_use]
     pub fn repository(&self) -> u64 {
         self.repository.expect("fixture repository")
-    }
-    /// The configured address, held only by the test or the running service.
-    #[must_use]
-    pub fn webhooks(&self) -> SocketAddr {
-        self.webhooks.expect("webhooks configured")
     }
     /// The reconciled secret, without its optional final line feed.
     #[must_use]

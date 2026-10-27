@@ -748,8 +748,13 @@ fn temper_open_adopts_a_repository_by_commands() {
 #[test]
 fn a_push_is_delivered_signed_with_the_secret_reconcile_drew() {
     let scratch = support::Scratch::new("hook_delivery");
-    let forgejo = support::forgejo::Throwaway::start(&scratch);
-    let listener = std::net::TcpListener::bind(forgejo.webhooks()).expect("nothing holds the address");
+    let (forgejo, listener) = support::forgejo::Throwaway::start_receiving(&scratch);
+    assert_eq!(
+        std::net::TcpListener::bind(listener.local_addr().expect("delivery address"))
+            .expect_err("receiver held")
+            .kind(),
+        std::io::ErrorKind::AddrInUse
+    );
     forgejo.push("hook.txt");
     let delivery = loop {
         let delivery = support::webhooks::receive(&listener, support::WITHIN);

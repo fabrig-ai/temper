@@ -60,7 +60,8 @@ pub fn patch_configuration(directory: &Path) -> oauth::Peer {
     .map(|pointer| {
         value.pointer(pointer).expect("init listener").as_str().expect("socket string").parse().expect("socket")
     });
-    let [address] = super::free_addresses(&taken);
+    let [listener] = super::reserve_listeners(&taken);
+    let address = listener.local_addr().expect("issuer address");
     let origin = format!("http://{address}");
     let provider = &mut value["engine"]["llm"]["providers"][0];
     assert_eq!(provider["number"], 1);
@@ -89,7 +90,7 @@ pub fn patch_configuration(directory: &Path) -> oauth::Peer {
     agent["endpoints"][0]["trust_der"] = serde_json::json!(directory.join("root.der"));
     super::write_private(&agent_path, &serde_json::to_vec(&agent).expect("agent JSON"));
     super::write_private(&directory.join("root.der"), skein_tls_world::pki::ROOT);
-    issuer(address, &registration, redirect.as_bytes())
+    issuer(listener, &registration, redirect.as_bytes())
 }
 
 /// Recreate the fake issuer on its recorded address without changing the deployment.
@@ -103,14 +104,21 @@ pub fn restart_issuer(directory: &Path) -> oauth::Peer {
         .expect("patched issuer")
         .strip_prefix("http://")
         .expect("local plaintext issuer")
-        .parse()
+        .parse::<std::net::SocketAddr>()
         .expect("issuer socket");
     // The fixture permits a varying callback port; no second sign-in is asked.
     let redirect = format!("http://127.0.0.1:0/{}", registration["redirect_path"].as_str().expect("callback path"));
-    issuer(address, registration, redirect.as_bytes())
+    let listener = std::net::TcpListener::bind(address).expect("restart issuer listener");
+    issuer(listener, registration, redirect.as_bytes())
 }
 
-pub(super) fn issuer(address: std::net::SocketAddr, registration: &serde_json::Value, redirect: &[u8]) -> oauth::Peer {
+pub(super) fn issuer(
+    listener: std::net::TcpListener,
+    registration: &serde_json::Value,
+    redirect: &[u8],
+) -> oauth::Peer {
+    use std::os::fd::{AsRawFd, IntoRawFd};
+    let address = listener.local_addr().expect("issuer address");
     let bytes =
         |member: &str| -> Box<[u8]> { registration[member].as_str().expect("registration member").as_bytes().into() };
     let profile = jig_protocol_config::profile::profile(jig_protocol_config::profile::Profile::Small);
@@ -187,6 +195,8 @@ pub(super) fn issuer(address: std::net::SocketAddr, registration: &serde_json::V
         retry_after: Duration::ZERO,
     })
     .expect("one fake grant");
+    peer.adopt_listener(skein_io::kernel::Fd::new(listener.as_raw_fd()), address).expect("held issuer listener");
+    let _ = listener.into_raw_fd();
     peer
 }
 

@@ -127,11 +127,13 @@ pub fn run(directory: &Path) {
     let clock = skein_shell::Clock::new();
     let whole = clock.now().now;
     let forge = super::owned::tier_configuration(directory);
-    let [temper, google] = super::free_addresses(&[forge]);
+    let [temper] = super::free_addresses(&[forge]);
+    let [listener] = super::reserve_listeners(&[forge, temper]);
+    let google = listener.local_addr().expect("issuer address");
     configure(directory, &forge.to_string(), &temper.to_string(), &google.to_string());
     let registration = json!({"issuer":format!("http://{google}"),"authorization":format!("http://{google}/auth"),"token":format!("http://{google}/token"),"revocation":format!("http://{google}/revoke"),"keys":format!("http://{google}/keys"),"client":"temper-test","scopes":[]});
     let _google =
-        super::sign_in::issuer(google, &registration, format!("http://{temper}/sign-in/google/return").as_bytes());
+        super::sign_in::issuer(listener, &registration, format!("http://{temper}/sign-in/google/return").as_bytes());
     let prepared = super::owned::prepare(directory, 1);
     success(&prepared);
     let instructions = command(directory).output().expect("sign-in instructions");
