@@ -1023,6 +1023,7 @@ fn released_into(
         | Delivery::Procedure { .. }
         | Delivery::Assigned { .. }
         | Delivery::Forges { .. }
+        | Delivery::ForgeDocument { .. }
         | Delivery::Panel { .. }
         | Delivery::Application { .. }
         | Delivery::WebReply { .. }
