@@ -76,7 +76,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     };
     let grants =
         json!([grant(1), grant(2), grant(3), grant(4), grant(7), grant(8), grant(10), grant(11), grant(12), grant(13)]);
-    let authority = json!({"tools":1,"grants":grants,"delegation":{"kinds":[{"kind":"charter","number":1},{"kind":"procedure","number":2}],"tasks":8,"depth":4},"budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]});
+    let authority = json!({"tools":1,"grants":grants,"delegation":{"kinds":[{"kind":"charter","number":1},{"kind":"charter","number":4},{"kind":"procedure","number":2}],"tasks":8,"depth":4},"budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]});
     if value["engine"].get("rules").is_some() {
         value["engine"]["rules"]["ceiling"] = authority.clone();
         value["engine"]["rules"]["maximum_run_spend"] = 10.into();
@@ -98,7 +98,18 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
             configured["policy"] = policy.clone();
         }
     }
-    let charters = if value["engine"].get("charters").is_some() { 1 } else { 4 };
+    if let Some(charters) = value["engine"]["charters"].as_array_mut() {
+        // The legacy document is staged only for fixture callbacks and admission.
+        // Its review executor has the same inspection-only policy as the stock.
+        if !charters.iter().any(|charter| charter["number"] == 4) {
+            let mut reviewer = charters[0].clone();
+            reviewer["number"] = 4.into();
+            reviewer["modify"] = false.into();
+            reviewer["agents"] = false.into();
+            reviewer["shell"] = false.into();
+            charters.push(reviewer);
+        }
+    }
     let limits = value["engine"]["limits"]["overrides"].as_object_mut().expect("engine overrides");
     for (name, size) in [
         ("people.operations", 5),
@@ -108,7 +119,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
         ("documents.chips", 2),
         ("tasks.project_tasks", 8),
         ("tasks.tree_tasks", 8),
-        ("tasks.charters", charters),
+        ("tasks.charters", 4),
         ("tasks.message_bytes", 4094),
         ("people.words", 512),
         ("tasks.authority_bytes", 512),
@@ -293,7 +304,7 @@ fn delegate_input(authority: ChangeAuthority<'_>, repository: u64, coding_words:
         }
         None => json!({"connector":1,"kind":kind,"segments":["forge"],"terminal":"open","last":""}),
     };
-    json!({"batch":[{"executor":{"kind":"procedure","connector":1,"code":2},"spec":{"words":coding_words,"parameters":[{"name":1,"kind":"resource","connector":1,"resource":repository},{"name":2,"kind":"bytes","value":"main"}]},"contract":{"kind":"change","connector":1,"change_kind":1,"words":128},"authority":{"tools":1,"grants":[grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],"delegation":{"kinds":[{"kind":"agent","number":authority.coding_kind}],"tasks":4,"depth":2},"budget":{"spend":10},"notes":0}}]})
+    json!({"batch":[{"executor":{"kind":"procedure","connector":1,"code":2},"spec":{"words":coding_words,"parameters":[{"name":1,"kind":"resource","connector":1,"resource":repository},{"name":2,"kind":"bytes","value":"main"}]},"contract":{"kind":"change","connector":1,"change_kind":1,"words":128},"authority":{"tools":1,"grants":[grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],"delegation":{"kinds":[{"kind":"agent","number":authority.coding_kind},{"kind":"agent","number":4}],"tasks":4,"depth":2},"budget":{"spend":10},"notes":0}}]})
 }
 
 fn readme_text<'a>(readme: &'a [u8], edit: &[u8]) -> (&'a str, String) {
