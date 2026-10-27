@@ -92,6 +92,42 @@ fn generated() -> (engine::Config, engine::Limits) {
     )
 }
 
+fn sign_in_owner(driver: &mut Driver) {
+    driver.send(Event::Party(PartyInput::SignedIn {
+        held: None,
+        reply_to: ReplyTo::new(Token::new(900)),
+        identity: people::Identity {
+            key: people::IdentityKey { provider: 1, subject: b"owner-a".as_slice().into() },
+            login: b"ada".as_slice().into(),
+            name: b"Ada".as_slice().into(),
+        },
+    }));
+}
+
+#[test]
+fn real_init_offers_its_owner_a_chat_with_all_three_procedures() {
+    let (config, limits) = generated();
+    let mut driver = Driver::cold(Store::with_limits(&limits), config, &limits);
+    driver.settle();
+    sign_in_owner(&mut driver);
+    driver.settle();
+    const READ: Token = Token::new(901);
+    driver.send(Event::Party(PartyInput::Read {
+        reply_to: ReplyTo::new(READ), sign_in: driver.session(), read: core::reads::Read::Frame,
+    }));
+    driver.settle();
+    let document = driver.delivered.iter().rev().find_map(|delivery| {
+        let Delivery::Read { reply, answer: core::reads::Answer::Document(document) } = delivery else { return None };
+        (*reply == ReplyTo::new(READ)).then_some(document)
+    }).expect("owner's frame");
+    let core::documents::Document::Frame(frame) = document.as_ref() else { panic!("frame") };
+    let project = frame.projects.iter().find(|project| project.project == 1).expect("seed project");
+    let offered = project.creating.as_ref().expect("owner may start a chat");
+    let core::acts::Bounds::Create { procedures, charters, .. } = &offered.within else { panic!("create bounds") };
+    assert_eq!(procedures.iter().map(|procedure| procedure.code).collect::<Vec<_>>(), vec![2, 3, 4]);
+    assert_eq!(charters.as_slice(), &[1, 2, 4]);
+}
+
 fn policies(driver: &Driver) -> Vec<(u32, people::PolicyValue)> {
     driver
         .store
@@ -167,15 +203,7 @@ fn real_init_policy_fits_with_two_long_github_repositories() {
     driver.settle();
     let before = policies(&driver);
     assert_eq!(before, vec![(1, snapshot.clone())]);
-    driver.send(Event::Party(PartyInput::SignedIn {
-        held: None,
-        reply_to: ReplyTo::new(Token::new(900)),
-        identity: people::Identity {
-            key: people::IdentityKey { provider: 1, subject: b"owner-a".as_slice().into() },
-            login: b"ada".as_slice().into(),
-            name: b"Ada".as_slice().into(),
-        },
-    }));
+    sign_in_owner(&mut driver);
     driver.send(Event::Forge(Box::new(forge::Event::Connection {
         forge: 2,
         state: forge::Connection::Connected { id: 1, login: b"app[bot]".as_slice().into() },
