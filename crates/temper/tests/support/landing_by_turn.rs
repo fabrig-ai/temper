@@ -142,6 +142,7 @@ pub struct Evidence {
     pub show: super::Ended,
     pub panel: super::Ended,
     pub change: super::Ended,
+    pub task: super::Ended,
     pub main: Value,
     pub pull: Value,
     pub commit: Value,
@@ -168,6 +169,7 @@ pub fn evidence(root: &Path, setup: &Setup, change: u64) -> Evidence {
     let show = ctl::alone(root, ctl::Call::new(&["landing", "show", &landing]));
     let panel = ctl::alone(root, ctl::Call::new(&["landing", "show", &landing, "--json"]));
     let change = ctl::alone(root, ctl::Call::new(&["change", "show", &change.to_string()]));
+    let task = ctl::alone(root, ctl::Call::new(&["task", "show", &landing, "--json"]));
     let person = Person::new(root);
     let main = person.get("branches/main");
     let head = main["commit"]["id"].as_str().expect("main tip");
@@ -176,6 +178,7 @@ pub fn evidence(root: &Path, setup: &Setup, change: u64) -> Evidence {
         show,
         panel,
         change,
+        task,
         pull: person.get("pulls/1"),
         commit: person.get(&format!("git/commits/{head}")),
         runs: person.get(&format!("actions/runs?head_sha={head}&limit=100")),
