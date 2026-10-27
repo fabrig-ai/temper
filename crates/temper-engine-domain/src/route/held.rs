@@ -1,6 +1,6 @@
 //! The core's held outputs, each released after its decision commits
 //! (jig's `domain/root.md`, 4; `testing/jig-test-domain/src/routes.rs`).
-use super::{Decision, Delivery, Domain, Env, Limits, Read, Token, emit, forge_route, host_route, relay_call};
+use super::{Decision, Delivery, Domain, Env, Limits, Read, Token, Work, emit, forge_route, host_route, relay_call};
 use crate::Range;
 use crate::assemble::take_payload;
 use crate::boundary::Payload;
@@ -190,8 +190,8 @@ pub(crate) fn held(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisi
     }
 }
 
-// LoadFailed makes the core retry a pending brief immediately. Archive pressure
-// must yield to a later iteration, when earlier reads can finish and reclaim.
+// The core defers a brief's LoadFailed to Due without counting a refusal.
+// Let it yield until a later iteration can reclaim the archive slots.
 pub(crate) fn notes_load(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -203,7 +203,10 @@ pub(crate) fn notes_load(
         Ok(id) => {
             Delivery::Load { waiter: id.token(), range: Range::Core(crate::CoreRange::Notes(range)), after: None }
         }
-        Err(_) => Delivery::NotesLoad { owner, range },
+        Err(_) => {
+            domain.work.push(Work::Core(core::Event::Notes(jig_domain_notes::Event::LoadFailed { owner })));
+            return;
+        }
     };
     emit(decision, &env.limits, delivery);
 }
@@ -229,10 +232,13 @@ mod tests {
                 range: jig_domain_notes::Range::Lines { scope: jig_domain_notes::Scope::Deployment, after: None },
             },
         );
-        assert!(domain.work.is_empty(), "a full archive must not synchronously fail and retry the same notes load");
-        let retry = delivery(&mut domain, &env.limits, decision);
-        let Delivery::NotesLoad { owner, range } = retry else { panic!("pending notes load") };
+        let Some(Work::Core(core::Event::Notes(jig_domain_notes::Event::LoadFailed { owner }))) = domain.work.pop()
+        else {
+            panic!("the core must yield the pending notes preparation");
+        };
         assert_eq!(owner, Token::new(1));
+        assert!(domain.work.is_empty(), "one pressure event, with no root-owned retry");
+        let range = jig_domain_notes::Range::Lines { scope: jig_domain_notes::Scope::Deployment, after: None };
         for id in reads.into_boxed() {
             domain.archive_reads.get_mut(id).unwrap().take();
             domain.archive_reads.retire(id);
