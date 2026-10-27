@@ -33,9 +33,10 @@ Its steps, as `step:` prints them:
   forge, which merges the base in;
 - `resolving`: an agent resolves a conflict with the base and pushes
   the merge commit;
-- `repairing`: an agent repairs it, after CI failed at its head, a
-  gate asked for changes, or the base broke it; the change is checked
-  again;
+- `repairing`: an agent repairs it, after CI failed at its head (a
+  review still running there is cancelled first), a gate asked for
+  changes, or the base broke it, its brief holding the failed check
+  and the end of its log; the change is checked again;
 - `landing`, then `landed`: temper merges it, and `change show` names
   the merge commit.
 
