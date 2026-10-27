@@ -1,0 +1,10 @@
+landing show TASK [--project PROJECT]
+  TASK (task): a number from 1 to 18446744073709551615; required. The landing task's number
+  --project PROJECT: a project's name or number; optional. Its project; the task's when absent
+Read a landing: its members, their candidates, each gate's proof and the turn
+Prints: `landing TASK`, its project and phase, each member's change, pull request, candidate and gates, and the turn
+--json: the record landing.
+Key: none.
+A landing lands its changes by turn: each gate is proved by a receipt
+of its key, then main is fast-forwarded to each candidate. A task with
+no landing fails, `no landing for task TASK` (exit 2).
