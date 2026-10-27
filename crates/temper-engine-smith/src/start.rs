@@ -165,7 +165,8 @@ pub fn charter(assignment: &engine::Assignment) -> run::Charter {
             agents: policy.agents,
             host_tools: crate::calls::tools_for(
                 policy.call_timeout,
-                tasks::Tools(policy.tools.0 & assignment.run.authority.tools.0),
+                tasks::Tools(policy.tools.0),
+                assignment.run.authority.tools,
             ),
         },
         outcome,
