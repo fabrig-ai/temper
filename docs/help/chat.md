@@ -17,6 +17,14 @@ A chat is a conversation between a party and an agent in a project: an untracked
   asks for it with the host tool `change`: a change task, its
   delegate, writes it, opens its pull request and lands it, and the
   chat hears its result (temper help task).
+- **Work agreed first.** Asked to agree a plan before anything is
+  changed, the chat's run never calls `change`: it starts a goal with
+  `goal` and the party's words (temper help goal), and says a question
+  will wait in the party's inbox. The goal asks its plan with
+  `message`; the question waits in the party's inbox; the party
+  answers it there (`answer`), the chat relays the answer to the goal,
+  and only then does the goal call `change`. The chat says what
+  landed.
 
 ## How it changes
 
@@ -43,7 +51,7 @@ A chat is a conversation between a party and an agent in a project: an untracked
   show` on its task with `--until replied` returns once it has
   answered or waits on someone; `task tree` shows the change tasks it
   started.
-- **temper's runs** in a chat use the host tools `change`,
+- **temper's runs** in a chat use the host tools `change`, `goal`,
   `delegate` and `message`, and read these pages with `read_docs`.
 
 ## Limits

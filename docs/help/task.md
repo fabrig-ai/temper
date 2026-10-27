@@ -16,7 +16,10 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   delegate's result reaches its parent, which its run hears as its
   rules for waking say. A change task is a delegate run by the forge,
   whose result is a change landed (temper help box); it starts with
-  half of what its parent has left to spend.
+  half of what its parent has left to spend. A change asks no one,
+  and neither do the agents it delegates: a question or words sent to
+  it by a task are answered that a change takes none, naming its
+  requester; a party's words to it are taken unanswered.
 - **Its parts,** each read on its own: its tree (its live
   delegates), its activity (what happened, a line each, newest last),
   its turns (each step of a run: the model's words, its calls and
@@ -81,7 +84,7 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   cancel`, `task release`, `task decide` and `proposal decide`; an act
   marked `(no tool)` has no ctl tool yet.
 - **temper's runs** act on their delegates with the host tools
-  `delegate`, `change`, `amend`, `message`, `cancel`, `release`,
+  `delegate`, `change`, `goal`, `amend`, `message`, `cancel`, `release`,
   `subscribe`, `introduce`, `decide_escalation` and `propose`.
 
 ## Limits
