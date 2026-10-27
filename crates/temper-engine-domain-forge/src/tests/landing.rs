@@ -107,3 +107,20 @@ fn landing_merge_carries_coherent_evidence_and_veto_withdraws_it() {
     outputs(&mut d, Event::Committed { entry: 91 });
     assert!(ready(&mut d).iter().all(|request| !matches!(request, Request::Call { op: Op::Write(_), .. })));
 }
+
+#[test]
+fn landing_deadline_wakes_once_and_an_offered_step_clears_it() {
+    let mut d = landing_fixture();
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    d.wait_landing(&env(), 61, Some(env().wall));
+    assert_eq!(d.next_wall_deadline(), Some(env().wall));
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    fire(&mut d, &env(), &mut out);
+    assert!(std::iter::from_fn(|| out.pop()).any(|request| request == Request::WakeProcedure { task: 61 }));
+    assert_eq!(d.next_wall_deadline(), None);
+    d.wait_landing(&env(), 61, None);
+    d.offered_landing(61);
+    assert_eq!(d.next_wall_deadline(), None);
+}
