@@ -228,6 +228,7 @@ pub(super) fn world(w: World, address: Address, then: Then) -> (Domain, Option<T
                             continue;
                         }
                         w::Watch::Change(subject) => subject,
+                        w::Watch::Landing(_) | w::Watch::Landings(_) => continue,
                     };
                     if let Some(panel) = change_panel(w, subject.task()) {
                         for up in [
@@ -506,6 +507,8 @@ fn change_panel(w: World, task: u64) -> Option<temper_client_protocol_wire::v1::
         w::ChangePanel::new(
             &l,
             w::ChangePanelParts {
+                way: w::Way::Queue,
+                in_landing: None,
                 task,
                 forge: 1,
                 owner: Box::from(b"acme".as_slice()),

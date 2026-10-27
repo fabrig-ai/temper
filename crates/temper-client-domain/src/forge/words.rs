@@ -613,9 +613,14 @@ pub enum ChangeWord {
     Separator,
     EndedLine,
     AuthorityHold,
+    ReadyLine,
+    ReadyAloneLine,
+    PrepareLine,
+    HeldReady,
+    HeldPreparing,
 }
 pub type ChangeRow = (ChangeWord, &'static [&'static [u8]], &'static [HoleKind]);
-pub const CHANGES: [ChangeRow; 89] = [
+pub const CHANGES: [ChangeRow; 94] = [
     (ChangeWord::Tag, &[b"Change \xc2\xb7 Task ", b""], &[Number]),
     (ChangeWord::Pull, &[b"PR #", b" \xc2\xb7 "], &[Number]),
     (ChangeWord::NoPull, &[b"No pull request yet \xc2\xb7 "], &[]),
@@ -705,6 +710,11 @@ pub const CHANGES: [ChangeRow; 89] = [
     (ChangeWord::NotRead, &[b"Not read since the restart"], &[]),
     (ChangeWord::EndedLine, &[b"Change ended."], &[]),
     (ChangeWord::AuthorityHold, &[b"", b""], &[Name]),
+    (ChangeWord::ReadyLine, &[b"Ready: its landing, task ", b", lands it."], &[Number]),
+    (ChangeWord::ReadyAloneLine, &[b"Ready: waiting for room for its landing."], &[]),
+    (ChangeWord::PrepareLine, &[b"Being rebased onto ", b" for its landing."], &[Name]),
+    (ChangeWord::HeldReady, &[b"ready"], &[]),
+    (ChangeWord::HeldPreparing, &[b"preparing"], &[]),
 ];
 impl ChangeWord {
     #[must_use]
@@ -724,6 +734,7 @@ impl ChangeWord {
 }
 /// Byte bounds of the change's named holes; number holes carry no bytes.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "exhaustive change vocabulary with its name bounds")]
 pub fn change_name_bytes(word: ChangeWord, index: usize) -> u32 {
     match word {
         ChangeWord::Repository => {
@@ -735,10 +746,10 @@ pub fn change_name_bytes(word: ChangeWord, index: usize) -> u32 {
         }
         ChangeWord::QueueSt | ChangeWord::QueueNd | ChangeWord::QueueRd | ChangeWord::QueueTh if index == 1 => 256,
         ChangeWord::Held if index == 0 => 18,
-        ChangeWord::FirstLine | ChangeWord::UpdateLine | ChangeWord::ResolveLine | ChangeWord::RepairSemantic => 256,
+        ChangeWord::PrepareLine | ChangeWord::FirstLine | ChangeWord::UpdateLine | ChangeWord::ResolveLine | ChangeWord::RepairSemantic => 256,
         ChangeWord::AuthorityHold | ChangeWord::Held => 512,
         ChangeWord::LandedLine => 7,
-        ChangeWord::QueueSt
+        ChangeWord::ReadyLine | ChangeWord::ReadyAloneLine | ChangeWord::HeldReady | ChangeWord::HeldPreparing | ChangeWord::QueueSt
         | ChangeWord::QueueNd
         | ChangeWord::QueueRd
         | ChangeWord::QueueTh
