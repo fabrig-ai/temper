@@ -134,7 +134,7 @@ fn an_endpoint_or_model_missing_from_the_agent_is_named() {
             true,
             b"engine.llm.endpoints[0]: not in the agent's configuration under the same name\n".as_slice(),
         ),
-        ("model", true, false, b"charter 1.model: not in the agent's configuration under the same name\ncharter 2.model: not in the agent's configuration under the same name\n"),
+        ("model", true, false, b"charter 1.model: not in the agent's configuration under the same name\ncharter 2.model: not in the agent's configuration under the same name\ncharter 4.model: not in the agent's configuration under the same name\n"),
     ] {
         let mut agent = fixtures::startup_agent();
         if !endpoints {
@@ -500,7 +500,7 @@ fn agent_model_bounds_are_checked_under_the_configured_name() {
         checks::agent(&engine, &agent, &mut problems);
         assert_eq!(
             &*lines(&problems),
-            b"charter 1.model: not in the agent's configuration under the same name\ncharter 2.model: not in the agent's configuration under the same name\n"
+            b"charter 1.model: not in the agent's configuration under the same name\ncharter 2.model: not in the agent's configuration under the same name\ncharter 4.model: not in the agent's configuration under the same name\n"
         );
     }
 }
