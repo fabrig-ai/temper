@@ -123,6 +123,9 @@ pub(super) fn encode(value: &d::Answer) -> w::Answer {
             w::Answer::Collaborators(encode_collaborators_answer(collaborators, *more))
         }
 
+        d::Answer::Runs { .. } | d::Answer::Run(_) | d::Answer::Tree { .. } => {
+            unreachable!("queue does not persist Actions or tree answers")
+        }
         d::Answer::Items { items, more, now } => w::Answer::Items(encode_items_answer(items, *more, *now)),
         d::Answer::Item { item, comments, more } => w::Answer::Item(encode_item_answer(item, comments, *more)),
         d::Answer::Reviews { reviews, more } => w::Answer::Reviews(encode_reviews_answer(reviews, *more)),

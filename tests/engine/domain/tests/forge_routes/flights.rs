@@ -93,6 +93,8 @@ fn a_forge_write_in_flight_keeps_its_row_until_settled() {
                     commit: translate::commit(1),
                     context: Box::from(b"flight-test".as_slice()),
                     check: skein_forge::api::Check::Passed,
+                    description: Box::new([]),
+                    link: Box::new([]),
                 },
                 condition: Condition::None,
             },
