@@ -6,7 +6,7 @@ use skein_lib::{List, Wall};
 pub struct Draft {
     revision: c::Revision,
     tracked: c::Tracking,
-    spec: Option<c::Specification>,
+    spec: c::SpecificationDocument,
     authority: Option<c::OwnerAuthority>,
     instructions: Option<c::DocumentText>,
     dependencies: List<u64>,
@@ -37,7 +37,7 @@ impl Draft {
         Self {
             revision: task.spec_revision,
             tracked,
-            spec: task.spec.whole(),
+            spec: task.spec.clone(),
             authority: task.authority.whole(),
             instructions: task.instructions.clone(),
             dependencies,
@@ -84,13 +84,15 @@ impl Draft {
         self.change.instructions = if same { None } else { Some(text) };
     }
     pub fn words(&mut self, words: c::Text) -> Result<(), Cut> {
-        let base = self.spec.as_ref().ok_or(Cut::Spec)?;
-        self.change.spec = if words == base.words {
+        // Old words may be cut: they are replaced whole at the shown revision.
+        // Preserve parameters and inputs only when those were supplied whole.
+        let mut replacement = self.spec.clone();
+        replacement.specification.words = c::DocumentText::complete(words.clone());
+        let replacement = replacement.whole().ok_or(Cut::Spec)?;
+        self.change.spec = if !self.spec.specification.words.cut && words == self.spec.specification.words.bytes {
             None
         } else {
-            let mut spec = base.clone();
-            spec.words = words;
-            Some(spec)
+            Some(replacement)
         };
         Ok(())
     }

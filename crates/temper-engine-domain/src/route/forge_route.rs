@@ -1740,7 +1740,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 title: context.spec.words.clone(),
                 body: match body {
                     Some(body) => body,
-                    None => Box::new([]),
+                    None => context.spec.words.clone(),
                 },
                 priority,
                 change: forge_change::Change {

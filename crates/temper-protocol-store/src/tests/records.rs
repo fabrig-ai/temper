@@ -4,7 +4,7 @@ use temper_engine_domain_forge as forge;
 
 #[test]
 fn each_family_of_names_holds_and_topics_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for (name, row) in fixtures::names_holds_and_topics() {
         let bytes = records::encode(&row);
         assert_eq!(records::decode(&bytes, &bounds), Ok(row), "{name}");
@@ -12,7 +12,7 @@ fn each_family_of_names_holds_and_topics_round_trips_unchanged() {
 }
 #[test]
 fn a_truncated_row_fails_to_decode() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for (name, row) in fixtures::names_holds_and_topics() {
         let bytes = records::encode(&row);
         for length in 0..bytes.len() {
@@ -34,12 +34,12 @@ fn a_branch_past_name_bytes_fails_to_decode() {
         drift: None,
     });
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
 }
 #[test]
 fn bounds_take_each_limit_from_its_source() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let limits = bounds.limits();
     for (name, value, expected) in [
         // Two four-byte lengths per segment, at most name_bytes empty segments.
@@ -56,12 +56,12 @@ fn bounds_take_each_limit_from_its_source() {
 fn bounds_refuse_sources_past_schema_ceilings() {
     let mut larger = fixtures::LIMITS;
     larger.name_bytes = v10::CEILINGS.adopted_host.checked_add(1).expect("one past ceiling");
-    assert_eq!(crate::bounds(&larger), None);
+    assert_eq!(crate::bounds(&larger, fixtures::LIMITS.client.op_bytes), None);
 }
 
 #[test]
 fn each_write_of_an_entry_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for (name, write) in fixtures::writes() {
         for condition in fixtures::conditions() {
             for held in [false, true] {
@@ -74,7 +74,7 @@ fn each_write_of_an_entry_round_trips_unchanged() {
 }
 #[test]
 fn a_proposed_effect_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let row = forge::Stored::ProposedEffect(forge::ProposedEffect {
         number: 1,
         resource: forge::What::Branch(Box::new([Box::new([0_u8, 255])])),
@@ -90,7 +90,7 @@ fn a_proposed_effect_round_trips_unchanged() {
 fn outbox_decoding_refuses_fields_past_their_bounds() {
     use skein_forge::api::Write;
     use skein_forge_client::Condition;
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let rows = [
         ("reviewer count", Write::SetReviewers { number: 1, reviewers: Box::new([1; 9]) }),
         ("operation bytes", Write::Post { number: 1, key: Box::new([]), body: Box::new([1; 513]) }),
@@ -104,7 +104,7 @@ fn outbox_decoding_refuses_fields_past_their_bounds() {
 
 #[test]
 fn each_named_call_payload_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for payload in &fixtures::payloads() {
         let row = fixtures::named_call(payload.clone());
         let bytes = records::encode(&row);
@@ -128,7 +128,7 @@ fn an_answer_piece_past_its_limit_fails_to_decode() {
     let answer = skein_forge::api::Answer::Branches(Box::new([Box::new([0_u8; 4125])]));
     let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
 }
 #[test]
@@ -141,13 +141,13 @@ fn a_full_answer_at_the_fixture_limits_fits_its_pieces() {
     let answer = skein_forge::api::Answer::Branches(branches.into_boxed());
     let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Ok(row));
 }
 
 #[test]
 fn each_item_answer_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for answer in fixtures::item_answers() {
         let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
         let bytes = records::encode(&row);
@@ -156,7 +156,7 @@ fn each_item_answer_round_trips_unchanged() {
 }
 #[test]
 fn malformed_answer_item_pieces_fail_to_decode() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let cases: [(&str, Box<[u8]>); 3] = [
         ("unfinished length", Box::new([0, 0, 0])),
         ("item shorter than length", Box::new([0, 0, 0, 1])),
@@ -177,13 +177,13 @@ fn answer_item_counts_past_rows_fail_to_decode() {
         skein_forge::api::Answer::Items { items: items.into_boxed(), more: false, now: skein_lib::Time::from_nanos(1) };
     let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
 }
 
 #[test]
 fn each_remaining_answer_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for answer in fixtures::remaining_answers() {
         let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
         let bytes = records::encode(&row);
@@ -193,7 +193,7 @@ fn each_remaining_answer_round_trips_unchanged() {
 #[test]
 fn fixed_answer_lists_past_their_counts_fail_to_decode() {
     use skein_forge::api::{Answer, Collaborator, Permission};
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let mut collaborators = skein_lib::List::with_capacity(9);
     for user in 0_u64..9 {
         collaborators.push(Collaborator { user, permission: Permission::Write }).expect("fixture room");
@@ -220,7 +220,7 @@ fn fixed_answer_lists_past_their_counts_fail_to_decode() {
 
 #[test]
 fn each_client_row_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for row in &fixtures::client_rows() {
         let bytes = records::encode(row);
         assert_eq!(records::decode(&bytes, &bounds), Ok(row.clone()));
@@ -229,7 +229,7 @@ fn each_client_row_round_trips_unchanged() {
 #[test]
 fn client_list_counts_take_their_domain_bounds() {
     use skein_forge_client::{Delivery, Echo, Stored, What};
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let mut echoes = fixtures::live(What::Issue(1));
     echoes.echoes = Box::new([Echo::Comment(1); 9]);
     let mut comments = fixtures::live(What::Issue(1));
@@ -252,13 +252,13 @@ fn a_cached_summary_key_uses_the_answer_byte_bound() {
     live.cached.item = Some(summary);
     let row = forge::Stored::Client(Stored::Live(live));
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Ok(row));
 }
 
 #[test]
 fn a_change_in_each_state_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for state in &fixtures::change_states() {
         let row = forge::Stored::Change(fixtures::change_row(state.clone()));
         let bytes = records::encode(&row);
@@ -267,7 +267,7 @@ fn a_change_in_each_state_round_trips_unchanged() {
 }
 #[test]
 fn a_negative_priority_round_trips_unchanged() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for priority in [-1_i32, i32::MIN, 0_i32, i32::MAX] {
         let mut row = fixtures::change_row(temper_engine_domain_forge_change::State::Landed { merge: [1; 32] });
         row.priority = priority;
@@ -294,13 +294,13 @@ fn eight_wrapping_holds_keep_their_order_at_the_schema_ceiling() {
     }
     let row = forge::Stored::Change(fixtures::change_row(state));
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Ok(row));
 }
 #[test]
 fn each_change_delegate_round_trips_unchanged() {
     use temper_engine_domain_forge_change::{Delegate, Repair, State};
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for delegate in [
         Delegate::Produce,
         Delegate::Repair(Repair::Ci),
@@ -320,7 +320,7 @@ fn each_change_delegate_round_trips_unchanged() {
 #[test]
 fn an_issue_row_with_its_desired_view_round_trips_unchanged() {
     use temper_engine_domain_forge_issues::{Phase, Projected};
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for phase in
         [Phase::Waiting, Phase::Active, Phase::Settling, Phase::Held, Phase::Done, Phase::Failed, Phase::Cancelled]
     {
@@ -368,7 +368,7 @@ fn every_family_encodes_and_decodes_to_itself() {
         ),
         ("issue", forge::Stored::Issue(fixtures::issue_row())),
     ];
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for (name, row) in fixtures::names_holds_and_topics().into_iter().chain(remaining) {
         let bytes = records::encode(&row);
         assert_eq!(records::decode(&bytes, &bounds), Ok(row), "{name}");
@@ -376,7 +376,7 @@ fn every_family_encodes_and_decodes_to_itself() {
 }
 #[test]
 fn issue_fields_use_their_domain_limits_at_and_past_each_bound() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for (name, field, limit) in [
         ("title", 0_u8, 128_usize),
         ("goal", 1, 512),
@@ -675,7 +675,7 @@ fn application_outcomes() -> Box<[forge::ApplicationOutcome]> {
 }
 #[test]
 fn every_application_outcome_preserves_its_complete_record() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for outcome in application_outcomes() {
         let row = application(outcome);
         let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("key");
@@ -691,7 +691,7 @@ fn every_application_outcome_preserves_its_complete_record() {
 }
 #[test]
 fn application_decoding_refuses_malformed_refusal_facts() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for refusal in [Box::from([255]), Box::from([2]), Box::from([9, 0])] {
         let value = v10::CoreRefused::new(&v10::CEILINGS, v10::CoreRefusedParts { refusal }).expect("small piece");
         let application = v10::Application::new(
@@ -707,7 +707,7 @@ fn application_decoding_refuses_malformed_refusal_facts() {
 
 #[test]
 fn an_application_adopted_name_past_its_bound_fails_to_decode() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     let forge::Stored::Repository(row) = fixtures::adopted(forge::Protection::Absent) else {
         panic!("repository fixture")
     };
@@ -734,13 +734,13 @@ fn a_job_steps_name_past_its_limit_fails_to_decode() {
     };
     let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
     let bytes = records::encode(&row);
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("Fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("Fixture limits fit");
     assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
 }
 
 #[test]
 fn forge_writers_round_trip_with_the_v6_golden_bytes() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for (forge, author) in [(0, 1), (1, 42), (u16::MAX, u64::MAX)] {
         let row = forge::Stored::Writer(skein_forge_client::Writer { forge, author });
         let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("writer key");
@@ -760,7 +760,7 @@ fn forge_writers_round_trip_with_the_v6_golden_bytes() {
 
 #[test]
 fn demo_states_round_trip_and_refuse_a_mismatched_key() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for forge in [0, 1, u16::MAX] {
         for state in [forge::DemoState::Running, forge::DemoState::Ended] {
             let row = forge::Stored::Demo(forge::Demo { forge, state });
@@ -779,7 +779,7 @@ fn demo_states_round_trip_and_refuse_a_mismatched_key() {
 
 #[test]
 fn binding_rows_round_trip_at_the_field_bounds() {
-    let bounds = crate::bounds(&fixtures::LIMITS).unwrap();
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     // protocol/sign-in.md, 3.1 and 5: address <=254, subject <=255 bytes.
     let mut longest_address = [b'a'; 254];
     longest_address[252] = b'@';
@@ -802,7 +802,7 @@ fn binding_rows_round_trip_at_the_field_bounds() {
 #[test]
 fn binding_decoder_refuses_noncanonical_addresses() {
     use crate::v10 as w;
-    let bounds = crate::bounds(&fixtures::LIMITS).unwrap();
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     for address in [b"Sam@example.com".as_slice(), b"no-at", b"@b", b"a@@b", b"a@ b"] {
         let binding = w::Binding::new(
             &w::CEILINGS,
@@ -836,7 +836,7 @@ fn embedded_people_refusals_changed_at_store_nine() {
 
 #[test]
 fn demo_end_acts_round_trip_with_their_keys() {
-    let bounds = crate::bounds(&fixtures::LIMITS).unwrap();
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     for act in [
         forge::DemoActKind::Close { project: u32::MAX, task: u64::MAX },
         forge::DemoActKind::RemoveAccount { account: u32::MAX },
@@ -851,7 +851,7 @@ fn demo_end_acts_round_trip_with_their_keys() {
 
 #[test]
 fn release_comments_decode_only_within_the_deployment_byte_bound() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for (bytes, fits) in [(fixtures::LIMITS.client.op_bytes, true), (fixtures::LIMITS.client.op_bytes + 1, false)] {
         let mut comment = skein_lib::List::with_capacity(bytes);
         for _ in 0..bytes {
@@ -874,7 +874,7 @@ fn release_comments_decode_only_within_the_deployment_byte_bound() {
 
 #[test]
 fn flight_rows_keep_both_key_fields_and_refuse_a_disagreeing_key() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for (task, entry) in [(0, 0), (7, 11), (u64::MAX, u64::MAX)] {
         let row = forge::Stored::Flight { task, entry };
         let bytes = records::encode(&row);
@@ -888,7 +888,7 @@ fn flight_rows_keep_both_key_fields_and_refuse_a_disagreeing_key() {
 #[test]
 fn review_failure_counts_take_the_gate_bound() {
     use temper_engine_domain_forge_change::{GateFailure, State};
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for count in [fixtures::LIMITS.change_policy.gates, fixtures::LIMITS.change_policy.gates + 1] {
         let mut row = fixtures::change_row(State::Checking { head: [1; 32] });
         let mut failures = skein_lib::List::with_capacity(count);
@@ -904,4 +904,18 @@ fn review_failure_counts_take_the_gate_bound() {
             assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
         }
     }
+}
+
+#[test]
+fn change_record_words_use_the_task_bound_instead_of_operation_bytes() {
+    const SPEC_BYTES: u32 = 2048;
+    let mut change = fixtures::change_row(temper_engine_domain_forge_change::State::Producing { requested: false });
+    change.title = Box::new([b'x'; 2048]);
+    change.body = change.title.clone();
+    let row = forge::Stored::Change(change);
+    let bytes = records::encode(&row);
+    let bounds = crate::bounds(&fixtures::LIMITS, SPEC_BYTES).unwrap();
+    assert_eq!(records::decode(&bytes, &bounds), Ok(row));
+    let smaller = crate::bounds(&fixtures::LIMITS, SPEC_BYTES - 1).unwrap();
+    assert_eq!(records::decode(&bytes, &smaller), Err(crate::Undecodable));
 }

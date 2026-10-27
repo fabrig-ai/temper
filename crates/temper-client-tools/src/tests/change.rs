@@ -158,7 +158,7 @@ fn checking_text_and_json_name_pull_head_gates_bounds_and_same_digest() {
 fn landed_and_held_repair_panels_keep_whole_facts() {
     for json in [false, true] {
         let limits = f::limits_root();
-        let answer = change::print(Some(&panel(landed())), json, None, b"", &limits);
+        let answer = change::print(Some(&panel(landed())), json, None, b"", &limits, None);
         assert_eq!(answer.status, 0);
         contains(&answer.stdout, b"2222222222222222222222222222222222222222");
         assert!(skein_lib::bytes::find(&answer.stdout, b"next:").is_none());
@@ -179,7 +179,8 @@ fn landed_and_held_repair_panels_keep_whole_facts() {
                 .unwrap(),
             )
             .unwrap();
-        let answer = change::print(Some(&w::ChangePanel::new(&w::CEILINGS, parts).unwrap()), json, None, b"", &limits);
+        let answer =
+            change::print(Some(&w::ChangePanel::new(&w::CEILINGS, parts).unwrap()), json, None, b"", &limits, None);
         if json {
             contains(&answer.stdout, br#""repair":"ci","hold":"stalled","runs":7"#);
             contains(&answer.stdout, br#""gates":[{"number":1,"kind":"review","blocks":true,"verdict":"pending"}]"#);
@@ -205,6 +206,7 @@ fn a_read_of_an_unknown_panel_exits_two() {
     let mut root = f::signed_in(f::PARTY);
     let call = root.submit(&["change", "show", "2", "--project", "1"]);
     end_panel(&mut root, call, c::WatchEnd::Unknown);
+    serve(&mut root, call, false, false);
     let answer = root.answer(call).unwrap();
     assert_eq!(answer.status, 2);
     contains(&answer.stderr, b"no change panel for task 2");
@@ -294,7 +296,7 @@ fn an_unmet_final_panel_or_a_task_without_a_change_keeps_its_last_panel() {
 #[test]
 fn since_and_condition_both_must_hold_and_timeout_keeps_last_digest() {
     let mut root = f::signed_in(f::PARTY);
-    let answer = change::print(Some(&panel(w::Step::Checking)), true, None, b"", &root.limits);
+    let answer = change::print(Some(&panel(w::Step::Checking)), true, None, b"", &root.limits, None);
     let marker = b"\"digest\":\"";
     let start = skein_lib::bytes::find(&answer.stdout, marker).unwrap() + marker.len();
     let digest = &answer.stdout[start..start + 16];
@@ -405,4 +407,85 @@ fn changed_with_since_waits_for_a_panel_change_after_the_baseline() {
     }
     deliver(&mut root, panel(w::Step::Checking));
     assert_eq!(root.answer(call).unwrap().status, 0);
+}
+
+#[test]
+fn a_change_held_before_registration_names_the_hold_instead_of_a_missing_panel() {
+    for json in [false, true] {
+        let mut root = f::signed_in(f::PARTY);
+        let call = root.submit_prepared(f::call(&["change", "show", "2", "--project", "1"]), json, None);
+        end_panel(&mut root, call, c::WatchEnd::Unknown);
+        root.serve(call, f::task_result(f::held_task(task(false, false), c::HoldCategory::Effects)));
+        let answer = root.answer(call).unwrap();
+        assert_eq!(answer.status, 2);
+        contains(&answer.stderr, b"held before registration: Effects need a decision");
+    }
+}
+
+#[test]
+fn a_panels_held_reviewer_says_held_with_its_reason() {
+    for waiting in [false, true] {
+        let mut root = f::signed_in(f::PARTY);
+        let argv = if waiting {
+            &["change", "show", "2", "--project", "1", "--until", "landed", "--timeout", "1s"][..]
+        } else {
+            &["change", "show", "2", "--project", "1"][..]
+        };
+        let call = root.submit(argv);
+        let mut parts = panel(w::Step::Gating).into_parts();
+        parts.runs = Some(8);
+        root.serving = Some(call);
+        deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+        root.serving = None;
+        assert!(root.answer(call).is_none(), "read the reviewer's state before naming it");
+        root.serve(call, f::task_result(f::held_task(f::goal(8, c::WaitsOn::Nothing), c::HoldCategory::Budget)));
+        if waiting {
+            assert!(root.answer(call).is_none(), "held review is not landed");
+            root.now = root.now.checked_add(Duration::from_secs(1)).unwrap();
+            root.fire();
+        }
+        let answer = root.answer(call).unwrap();
+        assert_eq!(answer.status, if waiting { 3 } else { 0 });
+        contains(&answer.stdout, b"held: task 8 (Insufficient activation budget)");
+        assert!(skein_lib::bytes::find(&answer.stdout, b"running: task 8").is_none());
+    }
+}
+
+#[test]
+fn a_landing_wait_observes_a_reviewer_held_after_its_first_read() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "landed", "--timeout", "1s"]);
+    let mut parts = panel(w::Step::Gating).into_parts();
+    parts.runs = Some(8);
+    root.serving = Some(call);
+    deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+    root.serving = None;
+    root.serve(call, f::task_result(f::goal(8, c::WaitsOn::Nothing)));
+    root.deliver_subject(
+        &client::Watchable::Jig(c::Subject::Task { task: 8 }),
+        c::Delivery::Task(Box::new(f::held_task(f::goal(8, c::WaitsOn::Nothing), c::HoldCategory::Budget))),
+    );
+    assert!(root.answer(call).is_none());
+    root.now = root.now.checked_add(Duration::from_secs(1)).unwrap();
+    root.fire();
+    let answer = root.answer(call).unwrap();
+    assert_eq!(answer.status, 3);
+    contains(&answer.stdout, b"held: task 8 (Insufficient activation budget)");
+    assert!(skein_lib::bytes::find(&answer.stdout, b"running: task 8").is_none());
+}
+
+#[test]
+fn a_refused_reviewer_watch_ends_the_landing_wait() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "landed", "--timeout", "1s"]);
+    let mut parts = panel(w::Step::Gating).into_parts();
+    parts.runs = Some(8);
+    root.serving = Some(call);
+    deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+    root.serving = None;
+    root.serve(call, f::task_result(f::goal(8, c::WaitsOn::Nothing)));
+    root.end(call, &client::Watchable::Jig(c::Subject::Task { task: 8 }), c::WatchEnd::NotAllowed);
+    let answer = root.answer(call).unwrap();
+    assert_eq!(answer.status, 2);
+    contains(&answer.stderr, b"not_allowed");
 }

@@ -36,6 +36,7 @@ pub mod resources;
 mod settle;
 #[cfg(test)]
 mod tests;
+pub mod text;
 mod topics;
 pub use boundary::*;
 pub use brief::{HOME_SECTION_BYTES, hex, home_access_reason};

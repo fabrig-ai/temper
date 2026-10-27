@@ -14,6 +14,7 @@ mod boundary;
 mod domain;
 #[cfg(test)]
 mod tests;
+pub mod text;
 
 pub use boundary::{
     Decision, Effect, GoalView, Key, Limits, Milestone, MilestoneKey, Phase, PlanItem, Projected, Projection,
