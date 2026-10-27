@@ -158,7 +158,7 @@ fn project_fund_sends_project_spend_and_role_spend() {
     }
 }
 #[test]
-fn project_fund_prints_the_period_then_the_roles_pools() {
+fn project_fund_prints_the_edit_then_the_period_and_roles_pools() {
     for role in [false, true] {
         let mut root = f::signed_in(f::PARTY);
         let mut argv = vec!["project", "fund", "1", "200", "--key", "fund"];
@@ -172,9 +172,9 @@ fn project_fund_prints_the_period_then_the_roles_pools() {
         let printed = root.answer(call).unwrap();
         assert_eq!(printed.status, 0);
         let expected = if role {
-            "period 3: budget 100, left 40\npool, party 1 alice: budget 100, left 40\n"
+            "role 0: spend per period 200\nnow: period 3: budget 100, left 40\nnow: pool, party 1 alice: budget 100, left 40\n"
         } else {
-            "period 3: budget 100, left 40\n"
+            "project 1: spend per period 200\nnow: period 3: budget 100, left 40\n"
         };
         assert_eq!(printed.stdout.as_ref(), expected.as_bytes());
     }
@@ -243,4 +243,115 @@ fn project_fund_json_reads_the_committed_ledgers() {
     assert_eq!(printed.status, 0);
     f::unique_keys(&printed.stdout).expect("valid JSON with unique keys");
     f::check_golden("project_fund_json", &printed.stdout);
+}
+
+#[test]
+fn a_spent_pool_refusal_names_the_project_role_and_remedy() {
+    for pool_known in [false, true] {
+        let mut root = f::chat_root(100, f::SEED);
+        let mut me = f::chat_me(100);
+        if pool_known {
+            let mut pool = project().pools.get(0).unwrap().clone();
+            pool.numbers = c::OwnerNumbers { budget: 114, reserved: 0, spent: 114, spent_below: 0 };
+            pool.left = 0;
+            me.projects.get_mut(0).unwrap().pool = Some(pool);
+        }
+        root.deliver(c::Delivery::Me(Box::new(me)));
+        let call = root.submit(f::CREATE_CHAT_CALL);
+        root.answered(call, spent_pool_refusal());
+        let printed = root.answer(call).unwrap();
+        assert_eq!(printed.status, 2);
+        let numbers = if pool_known { " has 0 left; budget 114" } else { " is spent" };
+        assert_eq!(
+            String::from_utf8_lossy(&printed.stderr),
+            format!(
+                "chat start: refused: your pool in project 1{numbers}\nread it: project show 1\nraise it: project fund 1 AMOUNT --role 0, and first the project's if its period has no room: project fund 1 AMOUNT\n"
+            )
+        );
+    }
+}
+fn spent_pool_refusal() -> c::Answer {
+    c::Answer::Refused {
+        refusal: c::Refusal::Authority { lacking: c::Lacking::Budget { needed: 1, left: 0 }, proposable: None },
+        at: None,
+    }
+}
+#[test]
+fn a_spent_pool_json_preserves_the_engine_refusal() {
+    let mut root = f::chat_root(100, f::SEED);
+    let call = root.submit(f::extended(f::CREATE_CHAT_CALL, &["--json"]).as_slice());
+    root.answered(call, spent_pool_refusal());
+    let printed = root.answer(call).unwrap();
+    assert_eq!(printed.status, 2);
+    assert_eq!(printed.stderr.as_ref(), br#"{"operation":"chat","outcome":{"refused":{"refusal":{"authority":{"lacking":{"budget":{"needed":1,"left":0}},"proposable":null}},"at":null}},"task":null,"to":null}"#);
+}
+#[test]
+fn project_fund_replays_the_edit_with_todays_balances() {
+    for (role, json) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut root = f::signed_in(f::PARTY);
+        let mut argv = vec!["project", "fund", "1", "200", "--key", "first"];
+        if role {
+            argv.extend(["--role", "0"]);
+        }
+        if json {
+            argv.push("--json");
+        }
+        let first = root.submit(&argv);
+        root.done(first, c::Outcome::Owner(c::OwnerOutcome::PolicyChanged { project: 1 }));
+        root.serve(first, c::ReadResult::Value(c::ReadValue::OwnerProject(Box::new(project()))));
+        let original = root.answer(first).unwrap().stdout.clone();
+        let mut changed = argv.clone();
+        changed[3] = "300";
+        changed[5] = "second";
+        let next = root.submit(&changed);
+        root.done(next, c::Outcome::Owner(c::OwnerOutcome::PolicyChanged { project: 1 }));
+        let mut today = project();
+        today.current_period.as_mut().unwrap().left = 17;
+        today.pools.get_mut(0).unwrap().left = 9;
+        root.serve(next, c::ReadResult::Value(c::ReadValue::OwnerProject(Box::new(today.clone()))));
+        let replay = root.submit(&argv);
+        root.done(replay, c::Outcome::Owner(c::OwnerOutcome::PolicyChanged { project: 1 }));
+        root.serve(replay, c::ReadResult::Value(c::ReadValue::OwnerProject(Box::new(today))));
+        let answer = root.answer(replay).unwrap();
+        assert_eq!(answer.status, 0);
+        let text = String::from_utf8_lossy(&answer.stdout);
+        if json {
+            f::unique_keys(&answer.stdout).expect("valid replay JSON");
+            let edit = if role {
+                r#"{"project":1,"role":0,"period_spend":200}"#
+            } else {
+                r#"{"project":1,"period_spend":200}"#
+            };
+            let prefix = format!("{{\"answer\":{edit},\"now\":");
+            assert!(text.starts_with(&prefix), "{text}");
+            assert!(String::from_utf8_lossy(&original).starts_with(&prefix));
+            assert!(text.contains(r#""left":17"#), "{text}");
+            if role {
+                assert!(text.contains(r#""left":9"#), "{text}");
+            }
+        } else {
+            let first_line = skein_lib::bytes::find(&original, b"\n").expect("edit line");
+            assert_eq!(&answer.stdout[..=first_line], &original[..=first_line]);
+            assert!(text.contains("now: period 3: budget 100, left 17\n"), "{text}");
+            if role {
+                assert!(text.contains("now: pool, party 1 alice: budget 100, left 9\n"), "{text}");
+            }
+        }
+    }
+}
+
+#[test]
+fn project_fund_marks_missing_period_and_cut_flags_as_current_reads() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["project", "fund", "1", "0", "--key", "cut"]);
+    root.done(call, c::Outcome::Owner(c::OwnerOutcome::PolicyChanged { project: 1 }));
+    let mut current = project();
+    current.current_period = None;
+    current.cut = true;
+    current.configured_pools_cut = true;
+    root.serve(call, c::ReadResult::Value(c::ReadValue::OwnerProject(Box::new(current))));
+    assert_eq!(
+        root.answer(call).unwrap().stdout.as_ref(),
+        b"project 1: spend per period 0\nnow: period: none open\nnow: project: cut\nnow: configured pools: cut\n"
+    );
 }

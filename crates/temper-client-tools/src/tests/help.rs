@@ -279,3 +279,33 @@ fn each_row_says_what_it_does_and_prints() {
         }
     }
 }
+
+#[test]
+fn the_project_reference_is_what_the_table_renders() {
+    let mut project = None;
+    for group in table::GROUPS {
+        if group.name == b"project" {
+            project = Some(group);
+            break;
+        }
+    }
+    let group = project.expect("project group");
+    let mut measured = skein_lib::Writer::new(temper_docs::PAGE_BYTES);
+    crate::help::reference(group, &mut measured).expect("project reference fits");
+    let mut out = skein_lib::Writer::new(measured.written());
+    crate::help::reference(group, &mut out).expect("project reference measured");
+    let rendered = out.finish();
+    let path = std::path::Path::new("../../docs/help/reference/ctl-project.md");
+    let write = match std::env::var_os("SKEIN_CODEGEN_WRITE") {
+        Some(value) => value == "1",
+        None => false,
+    };
+    if write {
+        std::fs::write(path, &rendered).expect("write project reference");
+    }
+    assert_eq!(
+        std::fs::read(path).expect("project reference"),
+        rendered.as_ref(),
+        "regenerate with SKEIN_CODEGEN_WRITE=1 and this test"
+    );
+}

@@ -6,7 +6,7 @@ use jig_client::{Answered, Ask, Outcome, contract as c};
 use skein_json::writer::Encoder;
 #[derive(Debug)]
 pub(crate) struct Operation {
-    pub project_fund: Option<u32>,
+    pub project: Option<u32>,
     pub revision: Option<u32>,
     pub exported: Option<(u32, u32)>,
     pub file: Option<Box<[u8]>>,
@@ -120,7 +120,7 @@ impl Operation {
             },
         };
         Self {
-            project_fund: funding_project(ask),
+            project: funding_project(ask),
             revision: if let Ask::Jig(ask) = ask {
                 if let c::Ask::MoveToNewest(value) = ask.as_ref() { Some(value.revision) } else { None }
             } else {
@@ -143,7 +143,8 @@ impl Operation {
 }
 fn funding_project(ask: &Ask) -> Option<u32> {
     if let Ask::Jig(ask) = ask
-        && let c::Ask::ChangePolicy {
+        && let c::Ask::Create { project, .. }
+        | c::Ask::ChangePolicy {
             project,
             edit: c::PolicyEdit::ProjectSpend { .. } | c::PolicyEdit::RoleSpend { .. },
         } = ask.as_ref()
@@ -328,7 +329,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
             }
             out.put(operation.word);
         }
-        c::Answer::Refused { refusal, .. } => refused_text(operation, refusal, limits, out),
+        c::Answer::Refused { refusal, .. } => refused_text(operation, refusal, me, limits, out),
     }
     out.put(b"\n");
 }
@@ -664,7 +665,7 @@ fn moved_in(account: u32, renewed: bool, out: &mut Text) {
     }
 }
 
-fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, out: &mut Text) {
+fn refused_text(operation: &Operation, refusal: &c::Refusal, me: Option<&c::Me>, limits: &Limits, out: &mut Text) {
     if operation.word == b"close"
         && ended_refusal(refusal, operation.ended_chat)
         && let Some(task) = operation.task
@@ -675,7 +676,8 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
         return;
     }
     if let (Some(project), c::Refusal::Authority { lacking: c::Lacking::Budget { needed, left }, .. }) =
-        (operation.project_fund, refusal)
+        (operation.project, refusal)
+        && operation.word == b"project fund"
     {
         out.put(b"refused: the period has ");
         out.number(*left);
@@ -684,6 +686,12 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
         out.put(b"; raise the project's first: project fund ");
         out.number(u64::from(project));
         out.put(b" AMOUNT");
+        return;
+    }
+    if let (Some(project), c::Refusal::Authority { lacking: c::Lacking::Budget { left: 0, .. }, .. }) =
+        (operation.project, refusal)
+    {
+        spent_pool(operation, project, me, out);
         return;
     }
     out.put(operation.tool_name());
@@ -702,6 +710,56 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
             None => out.put(operation.tool_name()),
         }
     }
+}
+
+// Me carries the pool ledger, but no role policy spend: a cut can make
+// those different, so never call the pool budget the role's spend limit.
+fn spent_pool(operation: &Operation, project: u32, me: Option<&c::Me>, out: &mut Text) {
+    let mut membership = None;
+    if let Some(me) = me {
+        for held in &me.projects {
+            if held.project == project {
+                membership = Some(held);
+                break;
+            }
+        }
+    }
+    out.put(operation.tool_name());
+    out.put(b": refused: your pool in project ");
+    out.number(u64::from(project));
+    let pool = match membership {
+        Some(held) => held.pool.as_ref(),
+        None => None,
+    };
+    match pool {
+        Some(pool) => {
+            out.put(b" has ");
+            out.number(pool.left);
+            out.put(b" left; budget ");
+            out.number(pool.numbers.budget);
+        }
+        None => out.put(b" is spent"),
+    }
+    out.put(b"\nread it: project show ");
+    out.number(u64::from(project));
+    if let Some(held) = membership {
+        let role = match held.role {
+            c::HeldRole::Owner => 0,
+            c::HeldRole::Maintainer => 1,
+            c::HeldRole::Member => 2,
+            c::HeldRole::Observer => 3,
+            c::HeldRole::Policy { role } => role,
+        };
+        out.put(b"\nraise it: project fund ");
+        out.number(u64::from(project));
+        out.put(b" AMOUNT --role ");
+        out.number(u64::from(role));
+        out.put(b", and first the project's if its period has no room: project fund ");
+    } else {
+        out.put(b"\nraise the project's if its period has no room: project fund ");
+    }
+    out.number(u64::from(project));
+    out.put(b" AMOUNT");
 }
 
 fn proposal_project(ask: &Ask) -> Option<u32> {

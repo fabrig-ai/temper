@@ -14,7 +14,7 @@ pub(super) fn text(
     out: &mut Text,
 ) {
     if call.tool == rows::PROJECT_FUND_AT {
-        funded(project, number(call, 2), out);
+        funded(project, call, out);
     } else {
         out.put(b"project ");
         out.number(u64::from(project.number));
@@ -37,12 +37,18 @@ pub(super) fn text(
         }
     }
     if project.cut {
+        if call.tool == rows::PROJECT_FUND_AT {
+            out.put(b"now: ");
+        }
         out.put(b"project: cut\n");
     }
     if call.tool == rows::PROJECT_SHOW_AT && project.policy.cut {
         out.put(b"policy: cut\n");
     }
     if project.configured_pools_cut {
+        if call.tool == rows::PROJECT_FUND_AT {
+            out.put(b"now: ");
+        }
         out.put(b"configured pools: cut\n");
     }
     if call.tool == rows::PROJECT_SHOW_AT
@@ -100,11 +106,26 @@ pub(super) fn pool_role(project: &c::OwnerProject, pool: &c::PoolLedger, role: u
     }
     false
 }
-fn funded(project: &c::OwnerProject, role: Option<u64>, out: &mut Text) {
+fn funded(project: &c::OwnerProject, call: &Call, out: &mut Text) {
+    let role = number(call, 2);
+    match role {
+        Some(role) => {
+            out.put(b"role ");
+            out.number(role);
+        }
+        None => {
+            out.put(b"project ");
+            out.number(u64::from(project.number));
+        }
+    }
+    out.put(b": spend per period ");
+    out.number(number(call, 1).expect("fund amount"));
+    out.put(b"\nnow: ");
     period(project.current_period.as_ref(), true, out);
     if let Some(role) = role {
         for pool in &project.pools {
             if pool_role(project, pool, role) {
+                out.put(b"now: ");
                 pool_text(project, pool, true, out);
             }
         }

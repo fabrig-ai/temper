@@ -8,6 +8,27 @@ use jig_client::contract as c;
 use skein_json::writer::Encoder;
 
 pub(super) fn encode(project: &c::OwnerProject, call: &Call, out: &mut Encoder, budget: &mut Cut) {
+    if call.tool == rows::PROJECT_FUND_AT {
+        out.object_start();
+        out.key(b"answer");
+        out.object_start();
+        out.key(b"project");
+        out.unsigned(u64::from(project.number));
+        if let Some(role) = number(call, 2) {
+            out.key(b"role");
+            out.unsigned(role);
+        }
+        out.key(b"period_spend");
+        out.unsigned(number(call, 1).expect("fund amount"));
+        out.object_end();
+        out.key(b"now");
+    }
+    snapshot(project, call, out, budget);
+    if call.tool == rows::PROJECT_FUND_AT {
+        out.object_end();
+    }
+}
+fn snapshot(project: &c::OwnerProject, call: &Call, out: &mut Encoder, budget: &mut Cut) {
     out.object_start();
     out.key(b"number");
     out.unsigned(u64::from(project.number));
