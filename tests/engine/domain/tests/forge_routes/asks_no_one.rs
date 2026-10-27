@@ -167,7 +167,7 @@ fn replies_past_the_batch_are_capped() {
     let (mut world, chat, producer, _) = change_world(true, PASSES, None);
     let change = change_task(&world, producer.task);
     let batch = world.env.limits.tasks.batch;
-    assert!(batch + 1 <= world.env.limits.tasks.inbox_messages, "the tiny inbox fits one past the batch");
+    assert!(batch < world.env.limits.tasks.inbox_messages, "the tiny inbox fits one past the batch");
     assert!(world.store.pending.is_empty());
     let mut header = world.store.header();
     let mut row = Box::new(live_task(&world, change).clone());
