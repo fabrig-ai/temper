@@ -1307,3 +1307,25 @@ pub fn failed_ci_with_delayed_brief() -> (World, u64, u64) {
     world.send(event);
     (world, chat.task, producer.task)
 }
+
+/// A merged change keeps its commit while verifying, red, or cleared.
+#[must_use]
+pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_forge::api::Commit> {
+    use temper_engine_domain_forge_change::State;
+    match state {
+        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => Some(*merge),
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Recreating { .. }
+        | State::Reopening { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Held { .. } => None,
+    }
+}
