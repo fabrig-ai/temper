@@ -318,21 +318,21 @@ impl Joint {
     /// Chats end only when their requester closes them.
     #[must_use]
     pub fn open_chats(seed: u64, limits: client::Limits) -> Joint {
-        Self::open_chats_with_program(seed, limits, false)
+        Self::open_chats_with_refused_hello(seed, limits, false)
     }
-    /// This host can only run the chat's model through a program.
+    /// This worker names an unconfigured position, so the engine refuses its hello.
     #[must_use]
-    pub fn open_chats_on_a_program(seed: u64, limits: client::Limits) -> Joint {
-        Self::open_chats_with_program(seed, limits, true)
+    pub fn open_chats_with_a_refused_hello(seed: u64, limits: client::Limits) -> Joint {
+        Self::open_chats_with_refused_hello(seed, limits, true)
     }
-    fn open_chats_with_program(seed: u64, limits: client::Limits, program: bool) -> Joint {
+    fn open_chats_with_refused_hello(seed: u64, limits: client::Limits, refuse_hello: bool) -> Joint {
         let configs = std::array::from_fn(|_| {
             let mut config = walking::config(seed);
             config.core.defaults.templates =
                 temper_engine_domain_world::fixtures::templates_ending(jig_domain_tasks::EndedBy::Requester);
             config
         });
-        Self::with_engine_on_program(seed, &limits, Store::new(), configs, &engine_limits(), 1, program)
+        Self::with_engine_with_refused_hello(seed, &limits, Store::new(), configs, &engine_limits(), 1, refuse_hello)
     }
     /// The small profile carries a whole turn while an activity page can size it.
     #[must_use]
@@ -633,16 +633,16 @@ impl Joint {
         engine_limits: &engine::Limits,
         slots: u32,
     ) -> Self {
-        Self::with_engine_on_program(seed, limits, store, configs, engine_limits, slots, false)
+        Self::with_engine_with_refused_hello(seed, limits, store, configs, engine_limits, slots, false)
     }
-    fn with_engine_on_program(
+    fn with_engine_with_refused_hello(
         seed: u64,
         limits: &client::Limits,
         store: Store,
         configs: [engine::Config; 2],
         engine_limits: &engine::Limits,
         slots: u32,
-        program: bool,
+        refuse_hello: bool,
     ) -> Self {
         let mut transport = Transport::new(jig_client::contract::VersionRange {
             first: jig_client_protocol_wire::VERSION,
@@ -663,14 +663,17 @@ impl Joint {
             .collect();
         let mut hello =
             temper_engine_domain_world::protocol::hello_slots(fixtures::QUESTION_WORKER, slots, Box::new([]));
-        let engine::Event::Worker(engine::WorkerInput::Link { link: engine::Link::Hello { hello: value, .. }, .. }) =
-            &mut hello
+        let engine::Event::Worker(engine::WorkerInput::Link {
+            link: engine::Link::Hello { worker, hello: value }, ..
+        }) = &mut hello
         else {
             unreachable!("worker hello")
         };
         value.bounds.models = worker_models;
-        if program {
-            value.bounds.program_endpoints = Box::new([walking::charter().policy.model.endpoint]);
+        if refuse_hello {
+            // The fixture configures only worker zero.
+            const UNCONFIGURED_WORKER: u32 = 7;
+            *worker = UNCONFIGURED_WORKER;
         }
         let mut engine = Driver::with_repositories(store, configs, engine_limits, fixtures::REPOSITORIES);
         engine.send(hello);
@@ -703,7 +706,7 @@ impl Joint {
             hold_demo_read: false,
             held_demo_reads: VecDeque::new(),
             park_runs: false,
-            settles_with_a_deadline_armed: program,
+            settles_with_a_deadline_armed: refuse_hello,
             keyed_fault: None,
             reads: 0,
             read_loads: BTreeSet::new(),
@@ -1211,7 +1214,7 @@ impl Joint {
                 }
             }
             self.engine.advance(true);
-            // The refused Open chat keeps the fleet's placement deadline armed.
+            // The refused hello keeps the fleet's placement deadline armed.
             if (self.engine.root.quiescent() || (self.settles_with_a_deadline_armed && step == 199))
                 && self.engine.events.is_empty()
                 && self.engine.store.pending.is_empty()
