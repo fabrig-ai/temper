@@ -556,3 +556,60 @@ fn a_closed_chat_does_not_replace_an_activity_refusal_with_an_empty_conversation
     assert_eq!(answer.status, 2);
     assert!(answer.stdout.is_empty());
 }
+
+#[test]
+fn a_budget_held_task_explains_how_to_run_or_cancel_it() {
+    use jig_client::contract as c;
+    let (mut root, call, mut task) = fixtures::task_read();
+    task.hold = Some(c::TaskHold::Document(Box::new(c::Hold {
+        revision: c::Revision { value: fixtures::HOLD },
+        reason: c::HoldReason::Budget { spent: 3, limit: 4 },
+        before: c::Phase::Idle,
+        since: skein_lib::Wall::EPOCH,
+        result: None,
+        spend: skein_lib::List::with_capacity(0),
+    })));
+    task.chip.phase = c::Phase::Held;
+    root.serve(call, fixtures::task_result(task));
+    let answer = root.answer(call).expect("held task answered");
+    assert_eq!(answer.status, 0);
+    assert!(skein_lib::bytes::find(&answer.stdout,
+        b"Insufficient activation budget. A release alone holds it again: give the task more budget (task amend 41 with a larger budget, or decide its budget proposal), then release it; or cancel it.").is_some(), "{:?}", answer.stdout);
+}
+
+#[test]
+fn budget_held_owner_tasks_and_inbox_rows_share_the_recovery_words() {
+    use jig_client::contract as c;
+    let mut latest = fixtures::chat_at(fixtures::TASK, c::RunStage::Idle, None);
+    let mut task = fixtures::task_in(&mut latest).clone();
+    task.chip.phase = c::Phase::Held;
+    let c::ChipPhase::Owner { phase, .. } = task.chip.details.as_mut() else { panic!("owner chip") };
+    *phase = c::OwnerChipPhase::Held { reason: c::HoldCategory::Budget, revision: fixtures::HOLD };
+    task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+        circle: None,
+        account: None,
+        source: None,
+        reason: c::HoldCategory::Budget,
+        revision: fixtures::HOLD,
+        before: c::OwnerPriorPhase::Active(c::RunStage::Idle),
+        escalation: None,
+        tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
+        hold_wait_since: None,
+    })));
+    let mut page = fixtures::owner_first_window(1, false).0;
+    page.rows.get_mut(0).unwrap().task = c::OwnerTaskLink::Live(task.chip.clone());
+    for (argv, result) in [
+        (fixtures::TASK_CALL, fixtures::task_result(task)),
+        (fixtures::INBOX_CALL, ReadResult::Value(c::ReadValue::OwnerInbox(Box::new(page)))),
+    ] {
+        let (mut root, call) = fixtures::read_call(argv);
+        root.serve(call, result);
+        if argv == fixtures::INBOX_CALL {
+            root.serve(call, fixtures::inbox_rows(c::InboxReadGroup::Updates, 0, false));
+        }
+        let answer = root.answer(call).expect("held task or inbox answered");
+        assert_eq!(answer.status, 0);
+        assert!(skein_lib::bytes::find(&answer.stdout,
+            b"Insufficient activation budget. A release alone holds it again: give the task more budget (task amend 41 with a larger budget, or decide its budget proposal), then release it; or cancel it.").is_some(), "{:?}", answer.stdout);
+    }
+}

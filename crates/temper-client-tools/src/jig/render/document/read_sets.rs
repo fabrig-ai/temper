@@ -14,7 +14,7 @@ pub(super) fn text(
 ) {
     let call = &reading.called.call;
     if call.tool == 1 {
-        super::super::lists::inboxes(reading, limits, out);
+        super::super::lists::inboxes(reading, limits, book, out);
         return;
     }
     if let Some(thread) = &reading.thread {

@@ -427,6 +427,20 @@ fn an_unnamed_read_with_two_repositories_names_both() {
 }
 
 #[test]
+fn an_empty_repository_name_reads_the_only_repository_and_refuses_two() {
+    let (mut world, chat) = chat_world(true);
+    let answer = named_read(&mut world, &chat, 93, b"read_branch", br#"{"repository":"","branch":"main"}"#);
+    assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
+    let (mut world, chat) = several_repositories();
+    let answer = named_read(&mut world, &chat, 93, b"read_pull", br#"{"repository":"","number":1}"#);
+    assert!(
+        matches!(answer, engine::CallAnswer::ReadRepositoryRefused { named: None, ref repositories }
+        if repositories.as_ref() == [Box::from(b"org/repo".as_slice()), Box::from(b"org/extra".as_slice())]),
+        "{answer:?}"
+    );
+}
+
+#[test]
 fn a_read_with_an_unknown_name_names_the_project_repositories() {
     let (mut world, chat) = chat_world(true);
     let answer = named_read(&mut world, &chat, 93, b"read_branch", br#"{"repository":"org/missing","branch":"main"}"#);
@@ -505,6 +519,9 @@ fn a_chat_read_pull_for_reaches_the_fake_forge_through_named_routing() {
     let rendered = temper_engine_smith::answer(&answer);
     assert!(!rendered.error());
     assert!(rendered.text().starts_with(b"Pull 1 head work commit "), "{:?}", rendered.text());
+    let answer = named_read(&mut world, &chat, 94, b"read_pull", br#"{"repository":"","number":1}"#);
+    assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
+    assert!(!temper_engine_smith::answer(&answer).error());
 }
 
 #[test]
