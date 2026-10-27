@@ -673,6 +673,14 @@ pub struct RepositoryGates {
     pub repository: skein_forge::api::Repository,
     pub gates: Box<[landing::Gate]>,
 }
+/// Why a landing cannot be made (domain/landing.md, 12).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LandingRefusal {
+    Landings,
+    Members,
+    Repository,
+    Way,
+}
 /// Family 23, committed together with its task's decision (domain/landing.md, 12).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LandingRow {
