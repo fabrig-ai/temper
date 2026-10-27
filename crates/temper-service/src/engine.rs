@@ -1,4 +1,5 @@
 //! One root input per pass, with store answers always accepted (protocol/README.md, 6).
+mod diagnostics;
 use crate::{End, route, stop, store::route::Up};
 use alloc::boxed::Box;
 use skein_lib::{Env, List, Queue, Time, Wall};

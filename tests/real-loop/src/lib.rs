@@ -20,6 +20,7 @@ pub const PATIENCE: skein_lib::Duration = skein_lib::Duration::from_secs(20);
 mod agent;
 pub mod calls;
 pub mod ending;
+mod patience;
 pub mod service;
 mod world;
 pub use skein_io::kernel::Exit;

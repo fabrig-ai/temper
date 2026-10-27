@@ -429,6 +429,139 @@ fn reads_settings(step: &Step) -> bool {
     false
 }
 impl Caller {
+    pub(crate) fn describe_pending(&self) -> String {
+        use std::fmt::Write;
+        let mut out = format!(
+            "caller step={} call={:?} setup={} calls={} released={}\n",
+            self.next,
+            self.current,
+            self.setup(),
+            self.calls.len(),
+            self.released
+        );
+        let step = self.steps.get(self.next);
+        match step {
+            Some(Step::Call { argv, .. } | Step::Start { argv, .. } | Step::Until { argv, .. }) => {
+                let words = self.diagnostic_argv(argv);
+                writeln!(out, "caller script argv={words:?}").expect("string writer");
+                if let Some(Step::Until { holds, .. }) = step {
+                    if let ReadCondition::Contains(bytes) = holds {
+                        writeln!(out, "caller waits_for=stdout containing {:?}", String::from_utf8_lossy(bytes))
+                            .expect("string writer");
+                    } else {
+                        writeln!(out, "caller waits_for={holds:?}; native digest continuation").expect("string writer");
+                    }
+                } else {
+                    writeln!(out, "caller waits_for=ctl response and exit: {}", words.join(" "))
+                        .expect("string writer");
+                }
+            }
+            Some(Step::SignIn { .. } | Step::SameParty { .. }) => {
+                out.push_str("caller argv=[sign-in] waits_for=sign-in response and exit\n");
+            }
+            Some(Step::Join { call }) => {
+                writeln!(out, "caller waits_for=exit of call {call}").expect("string writer");
+            }
+            Some(Step::Watching { call }) => {
+                writeln!(out, "caller waits_for=service watch delivery for call {call}").expect("string writer");
+            }
+            Some(Step::Browse { call }) => {
+                writeln!(out, "caller waits_for=browser completion for call {call}").expect("string writer");
+            }
+            Some(Step::Held { name }) => {
+                writeln!(out, "caller waits_for=held request {:?}", String::from_utf8_lossy(name))
+                    .expect("string writer");
+            }
+            Some(Step::ReleaseHold { name }) => {
+                writeln!(out, "caller waits_for=LLM hold release {:?}", String::from_utf8_lossy(name))
+                    .expect("string writer");
+            }
+            Some(Step::StopWorker { name } | Step::StartWorker { name } | Step::AddWorker { name }) => {
+                writeln!(out, "caller waits_for=worker transition {name}").expect("string writer");
+            }
+            Some(Step::Contended { calls }) => {
+                writeln!(out, "caller waits_for=contended calls {calls:?}").expect("string writer");
+            }
+            Some(Step::Kill { call }) => {
+                writeln!(out, "caller waits_for=kill call {call}").expect("string writer");
+            }
+            Some(Step::Terminal(_)) => out.push_str("caller waits_for=terminal act (input omitted)\n"),
+            Some(Step::Authorize | Step::Return) => out.push_str("caller waits_for=issuer visit\n"),
+            Some(Step::Probe { .. } | Step::Release { .. }) => out.push_str("caller waits_for=directory lock\n"),
+            Some(Step::Advance | Step::Push { .. }) => out.push_str("caller waits_for=forge advance\n"),
+            Some(Step::FixtureReady) => out.push_str("caller waits_for=fixture provisioning\n"),
+            Some(Step::EndsLeaving(_)) | None => {
+                out.push_str("caller waits_for=remaining calls and owned operations to settle\n");
+            }
+        }
+        if let Some(index) = self.current
+            && let Some(call) = self.calls.get(index)
+        {
+            writeln!(
+                out,
+                "caller call={index} tries={} exit={:?} stdout_bytes={} stderr_bytes={} pending_operations={}",
+                call.tries,
+                call.exit,
+                call.stdout.len(),
+                call.stderr.len(),
+                self.running.get(index).and_then(Option::as_ref).map_or(0, |running| running.pending)
+            )
+            .expect("string writer");
+        }
+        out
+    }
+
+    fn diagnostic_argv(&self, argv: &Argv) -> Vec<String> {
+        argv.0
+            .iter()
+            .map(|arg| match arg {
+                Arg::Lit(word) => (*word).to_owned(),
+                Arg::Number(number) => number.to_string(),
+                Arg::File(name) => self.scratch.join(name).display().to_string(),
+                Arg::GithubApp => {
+                    self.github_app.map_or_else(|| "<GitHub App not observed>".into(), |app| app.to_string())
+                }
+                Arg::Task(index) => self
+                    .calls
+                    .get(*index)
+                    .and_then(|call| std::str::from_utf8(&call.stdout).ok())
+                    .and_then(|text| text.split_once("done: task "))
+                    .and_then(|(_, tail)| tail.split(|c: char| !c.is_ascii_digit()).next())
+                    .and_then(|number| number.parse::<u64>().ok())
+                    .map_or_else(|| format!("<task from call {index}>"), |number| number.to_string()),
+                Arg::Delegate(index) => self
+                    .calls
+                    .get(*index)
+                    .and_then(|call| serde_json::from_slice::<serde_json::Value>(&call.stdout).ok())
+                    .and_then(|value| {
+                        let root = value.pointer("/tree/root/task")?.as_u64()?;
+                        value
+                            .pointer("/tree/rows")?
+                            .as_array()?
+                            .iter()
+                            .find(|row| row["parent"] == root)?
+                            .pointer("/chip/task")?
+                            .as_u64()
+                    })
+                    .map_or_else(|| format!("<delegate from call {index}>"), |task| task.to_string()),
+                Arg::Digest(index) => self
+                    .diagnostic_pointer(*index, &["/task/digest", "/digest"])
+                    .unwrap_or_else(|| format!("<digest from call {index}>")),
+                Arg::ActivityBefore(index) => self
+                    .diagnostic_pointer(*index, &["/activity/before/value", "/before/value"])
+                    .unwrap_or_else(|| format!("<activity cursor from call {index}>")),
+                Arg::InboxAfter(index) => self
+                    .diagnostic_pointer(*index, &["/needs/after/value"])
+                    .map_or_else(|| format!("<inbox cursor from call {index}>"), |cursor| format!("00{cursor}")),
+            })
+            .collect()
+    }
+
+    fn diagnostic_pointer(&self, index: usize, paths: &[&str]) -> Option<String> {
+        let value: serde_json::Value = serde_json::from_slice(&self.calls.get(index)?.stdout).ok()?;
+        paths.iter().find_map(|path| value.pointer(path)?.as_str().map(str::to_owned))
+    }
+
     pub(crate) fn leftovers(&self) -> &'static [crate::ending::Leftover] {
         if let Some(Step::EndsLeaving(leftovers)) = self.steps.last() { leftovers } else { &[] }
     }

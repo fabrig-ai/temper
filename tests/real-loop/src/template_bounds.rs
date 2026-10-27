@@ -12,7 +12,7 @@ use skein_world::{
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 enum Proc {
-    Llm { peer: Box<skein_fake_peers::llm::Peer>, release: bool },
+    Llm { peer: Box<skein_fake_peers::llm::Peer>, release: bool, pending_streak: crate::patience::PendingStreak },
     Hosted(crate::world::Proc),
     Page { caller: Box<calls::Caller>, path: PathBuf, root: Fd, pending: Option<PageCommand> },
 }
@@ -45,7 +45,11 @@ impl Proc {
 }
 impl Host for Proc {
     fn iterate(&mut self, now: Time, wall: skein_lib::Wall) {
-        if let Self::Llm { peer, release } = self
+        if let Self::Hosted(proc) = self {
+            proc.iterate(now, wall);
+            return;
+        }
+        if let Self::Llm { peer, release, .. } = self
             && std::mem::take(release)
         {
             // The release name is allocated under the peer's own heap meter.
@@ -68,8 +72,12 @@ impl Host for Proc {
             **caller = calls::Caller::new(steps, path.clone(), *root);
             caller.released = true;
         }
+        let pending = self.host().work_pending(now);
+        if let Self::Llm { pending_streak, .. } = self {
+            pending_streak.observe(pending);
+        }
         let host = self.host_mut();
-        if host.work_pending(now)
+        if pending
             || !host.completions().is_empty()
             || host.next_deadline().is_some_and(|deadline| deadline <= now)
             || host.next_policy_deadline().is_some_and(|deadline| deadline <= now)
@@ -242,7 +250,7 @@ pub struct Seen {
     pub delegates: Vec<u64>,
     pub task: Option<Value>,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Stage {
     Activity,
     Tree,
@@ -250,6 +258,7 @@ enum Stage {
     Done,
 }
 struct Judge {
+    patience: crate::patience::Patience,
     started: Option<Time>,
     controls: Controls,
     seen: Rc<RefCell<Seen>>,
@@ -358,8 +367,31 @@ impl Judge {
         }
     }
 }
+impl Judge {
+    fn describe_pending(&self, now: Time, procs: &mut [Proc]) -> String {
+        let mut report = format!(
+            "temper bounds judge overdue: stage={:?} page={} stopping={} finished={}\n",
+            self.stage, self.current, self.stopping, self.finished
+        );
+        for (id, proc) in procs.iter_mut().enumerate() {
+            match proc {
+                Proc::Hosted(host) => crate::patience::describe(id, host, now, &mut report),
+                Proc::Llm { peer, pending_streak, .. } => {
+                    crate::patience::llm(id, peer, pending_streak.passes(), now, &mut report);
+                }
+                Proc::Page { caller, .. } => crate::patience::caller(id, caller, now, &mut report),
+            }
+        }
+        report
+    }
+}
 impl Referee<Proc> for Judge {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
+        if self.patience.due(now) {
+            let report = self.describe_pending(now, procs);
+            self.patience.capture(report);
+            crate::patience::fail_overdue::<Proc, _>(self, now);
+        }
         self.wake = None;
         self.started.get_or_insert(now);
         assert!(
@@ -468,10 +500,10 @@ impl Referee<Proc> for Judge {
         }
     }
     fn next_deadline(&self) -> Option<Time> {
-        [self.wake, self.deadline].into_iter().flatten().min()
+        [self.wake, self.deadline, self.patience.deadline()].into_iter().flatten().min()
     }
     fn overdue(&self, _now: Time) -> Option<String> {
-        None
+        self.patience.overdue()
     }
     fn passed(&self) -> bool {
         self.finished
@@ -482,8 +514,10 @@ impl Referee<Proc> for Judge {
 pub fn run(seen: &Rc<RefCell<Seen>>) {
     use calls::{D1, call, sign_in};
     let scratch = crate::Scratch::new("template-bounds");
+    let patience = crate::PATIENCE;
     let mut world = World::new_controlled_checked(|controls| Judge {
         controls,
+        patience: crate::patience::Patience::new(patience),
         started: None,
         seen: seen.clone(),
         path: scratch.path().into(),
@@ -498,6 +532,7 @@ pub fn run(seen: &Rc<RefCell<Seen>>) {
     world.spawn(|| Proc::Llm {
         peer: Box::new(llm::peer(llm::scripted(scripts())).expect("scripted peer")),
         release: false,
+        pending_streak: crate::patience::PendingStreak::default(),
     });
     world.spawn_signals(|signals| {
         Proc::Hosted(Service(Box::new(ServiceHost::configured(scratch.path().into(), signals, Some(fixture()), false))))
@@ -563,7 +598,7 @@ pub fn run(seen: &Rc<RefCell<Seen>>) {
         },
         agent::roots,
     );
-    let outcome = world.run(&skein_shell::Clock::new(), crate::PATIENCE);
+    let outcome = world.run(&skein_shell::Clock::new(), patience);
     let Proc::Llm { peer, .. } = &outcome.procs[0] else { panic!("LLM") };
     seen.borrow_mut().completions = peer
         .observations()

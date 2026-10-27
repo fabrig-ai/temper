@@ -367,6 +367,38 @@ impl Service {
                     None => false,
                 }
     }
+    /// Snapshot current readiness without advancing any component or exposing payloads.
+    /// Only diagnostics callers pay for walking and copying the pending event tags.
+    #[must_use]
+    #[expect(clippy::manual_map, reason = "the step subset uses explicit matches")]
+    pub fn pending(&self, now: Time) -> crate::diagnostics::Pending {
+        crate::diagnostics::Pending {
+            work_pending: self.work_pending(now),
+            worker_runs: self.worker_runs(),
+            io_ready: self.io.is_ready(),
+            io_due: self.io.is_due(now),
+            completions: self.completions.len(),
+            told: self.told.len(),
+            raw_submissions: self.raw_submissions.len(),
+            ended: self.end().is_some(),
+            signals: self.signals.is_some(),
+            signals_closing: self.signals_closing,
+            box_pipe_pending: self.end().is_some()
+                && match &self.box_pipe {
+                    Some(pipe) => pipe.state != BoxPipeState::Closing,
+                    None => false,
+                },
+            engine: match &self.engine {
+                Some(engine) => Some(engine.pending(now)),
+                None => None,
+            },
+            worker: match &self.worker {
+                Some(worker) => Some(worker.pending(now)),
+                None => None,
+            },
+        }
+    }
+
     /// A first call drains; another aborts, keeping a failure's reason.
     pub fn shutdown(&mut self) {
         if let Some(engine) = &mut self.engine {

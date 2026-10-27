@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 extern crate alloc;
 use alloc::boxed::Box;
+pub mod diagnostics;
 pub mod forge;
 pub use forge::ForgeRuntime;
 pub mod limits;

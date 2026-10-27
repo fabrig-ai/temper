@@ -1,5 +1,6 @@
 //! One worker root and its channels, with values below the domain (jig's
 //! protocol/service.md, 6).
+mod diagnostics;
 use crate::{
     identities::IdentityTable,
     settings::{Agent, Files},
