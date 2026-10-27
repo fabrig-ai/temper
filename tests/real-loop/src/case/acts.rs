@@ -9,6 +9,9 @@ use crate::{
 pub enum Read {
     BEndedEarlier,
     ImplementerRunning,
+    ImplementerHeld,
+    H1Held,
+    H1ReviewerHeld,
     H1Running,
     HelperEnded,
     BHeld,
@@ -539,19 +542,22 @@ pub fn step_5_3() -> Vec<calls::Step> {
 }
 
 // Act 2, step 5.2 (domain/testing.md, 5.3)
-const B_ENDED_5_2: usize = 16;
+const B_ENDED_5_2: usize = 21;
 pub const READS_5_2: &[(Read, usize)] = &[
     (Read::ImplementerRunning, 5),
     (Read::H1Running, 7),
     (Read::HelperEnded, 8),
     (Read::BHeld, 11),
-    (Read::ImplementerEnded, 12),
-    (Read::H1Ended, 13),
-    (Read::BStillHeld, 14),
+    (Read::ImplementerHeld, 12),
+    (Read::H1Held, 13),
+    (Read::H1ReviewerHeld, 14),
+    (Read::BStillHeld, 15),
+    (Read::ImplementerEnded, 19),
+    (Read::H1Ended, 20),
     (Read::BEnded, B_ENDED_5_2),
-    (Read::BEndedEarlier, 17),
-    (Read::OwnerEnded, 18),
-    (Read::PauseEnded, 19),
+    (Read::BEndedEarlier, 22),
+    (Read::OwnerEnded, 23),
+    (Read::PauseEnded, 24),
 ];
 
 #[must_use]
@@ -604,6 +610,29 @@ pub fn step_5_2() -> Vec<calls::Step> {
             b"\"phase\":\"held\"",
             b"\"task\"",
         ),
+        calls::until(
+            D1,
+            argv!["task", number(IMPLEMENTER), "--activity", "32", "--json"],
+            b"\"phase\":\"held\"",
+            b"\"task\"",
+        ),
+        calls::until(D1, argv!["task", number(H1), "--activity", "32", "--json"], b"\"phase\":\"held\"", b"\"task\""),
+        calls::until(
+            D1,
+            argv!["task", number(H1_REVIEWER), "--activity", "32", "--json"],
+            b"\"phase\":\"held\"",
+            b"\"task\"",
+        ),
+        call(D1, argv!["task", number(BOWNER), "--activity", "32", "--json"]),
+        // Complete the cancelled model responses before the new attempts use
+        // the peer, then release the new responses once they are writing.
+        calls::release_hold(IMPLEMENTER_HOLD),
+        calls::release_hold(REVIEW_HOLD),
+        call(D1, argv!["release", number(BOWNER), "--hold", number(B_HOLD), "--key", "release-b"]),
+        // The cancelled response's fake hold is not the resumed response's.
+        // Observe both new runs writing before releasing their scripted replies.
+        calls::writing_task(D1, IMPLEMENTER),
+        calls::writing_task(D1, H1_REVIEWER),
         calls::release_hold(IMPLEMENTER_HOLD),
         calls::release_hold(REVIEW_HOLD),
         calls::until(
@@ -613,8 +642,6 @@ pub fn step_5_2() -> Vec<calls::Step> {
             b"\"task\"",
         ),
         calls::until(D1, argv!["task", number(H1), "--activity", "32", "--json"], b"\"phase\":\"ended\"", b"\"task\""),
-        call(D1, argv!["task", number(BOWNER), "--activity", "32", "--json"]),
-        call(D1, argv!["release", number(BOWNER), "--hold", number(B_HOLD), "--key", "release-b"]),
         calls::until(
             D1,
             argv!["task", number(BOWNER), "--activity", "32", "--json"],
