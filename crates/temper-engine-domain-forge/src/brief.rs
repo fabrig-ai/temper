@@ -57,6 +57,7 @@ pub(crate) struct BriefFetch {
     next_check: u32,
     max_job_bytes: u32,
     words: BriefWords,
+    ci: Option<crate::brief_ci::Section>,
 }
 
 #[derive(Debug)]
@@ -198,6 +199,7 @@ pub(super) fn brief_pull(
         next_check: 0,
         max_job_bytes: 0,
         words,
+        ci: None,
     };
     domain.brief_fetches.insert(call, fetch).expect("brief read room checked");
     out.push(Request::BriefClient {
@@ -372,12 +374,10 @@ pub(crate) fn brief_answer(
             next_remarks(&mut fetch)
         }
         Ok(skein_forge::api::Answer::Checks(checks)) if fetch.stage == BriefStage::Checks => {
+            let count = u32::try_from(checks.len()).expect("bounded check list");
+            fetch.ci = Some(crate::brief_ci::Section::new(fetch.head, count, fetch.bytes));
             fetch.checks = checks;
-            let next = next_failed_job(&mut fetch);
-            if next.is_none() {
-                append(&mut fetch.words, b"Repair the failed check.\n");
-            }
-            next
+            next_failed_job(&mut fetch)
         }
         answer if fetch.stage == BriefStage::Job => {
             match answer {
@@ -393,19 +393,14 @@ pub(crate) fn brief_answer(
                     } else {
                         append(&mut fetch.words, b"No step failed. End of the job's log:\n");
                     }
-                    if truncated {
-                        append(&mut fetch.words, b"[log truncated before this]\n");
-                    }
-                    append(&mut fetch.words, &log);
-                    append(&mut fetch.words, b"\n");
+                    keep_check(&mut fetch, log, truncated);
                 }
-                Ok(_) | Err(_) => append(&mut fetch.words, b"[job log could not be read]\n"),
+                Ok(_) | Err(_) => {
+                    append(&mut fetch.words, b"[job log could not be read]\n");
+                    keep_check(&mut fetch, Box::new([]), false);
+                }
             }
-            let next = next_failed_job(&mut fetch);
-            if next.is_none() {
-                append(&mut fetch.words, b"Repair the failed check.\n");
-            }
-            next
+            next_failed_job(&mut fetch)
         }
         Ok(_) | Err(_) => {
             crate::held::ready(domain, fetch.owner, BriefRead::Failed, out);
@@ -416,6 +411,8 @@ pub(crate) fn brief_answer(
         let repository = fetch.repository;
         domain.brief_fetches.insert(owner, fetch).expect("same brief read room");
         out.push(Request::BriefClient { event: skein_forge_client::Event::Read { owner, repository, read } });
+    } else if let Some(ci) = fetch.ci {
+        crate::held::ready_ci(domain, fetch.owner, ci, fetch.bytes, out);
     } else {
         let read = brief_part(&fetch.words, fetch.parts, fetch.bytes);
         crate::held::ready(domain, fetch.owner, read, out);
@@ -471,6 +468,10 @@ fn next_failed_job(fetch: &mut BriefFetch) -> Option<skein_forge::api::Read> {
         if status.check != skein_forge::api::Check::Failed {
             continue;
         }
+        if fetch.ci.as_ref().expect("CI fetch").has_omissions() {
+            fetch.ci.as_mut().expect("CI fetch").omit();
+            continue;
+        }
         append(&mut fetch.words, b"Failed check: ");
         append(&mut fetch.words, &status.context);
         append(&mut fetch.words, b"\nDescription: ");
@@ -490,10 +491,24 @@ fn next_failed_job(fetch: &mut BriefFetch) -> Option<skein_forge::api::Read> {
                     .expect("positive divisor");
                 return Some(skein_forge::api::Read::Job { attempt, max_bytes: share.max(1).min(fetch.max_job_bytes) });
             }
-            Some(_) | None => append(&mut fetch.words, b"[no pinned job log for this head]\n"),
+            Some(_) | None => {
+                append(&mut fetch.words, b"[no pinned job log for this head]\n");
+                keep_check(fetch, Box::new([]), false);
+            }
         }
     }
     None
+}
+
+/// Keep a whole check head; an oversized head ends the admitted prefix.
+fn keep_check(fetch: &mut BriefFetch, log: Box<[u8]>, truncated: bool) {
+    let words = core::mem::replace(&mut fetch.words, BriefWords::with_capacity(fetch.bytes, false));
+    let ci = fetch.ci.as_mut().expect("CI fetch");
+    if words.left > 0 {
+        ci.omit();
+    } else {
+        ci.push(words.bytes.into_boxed(), log, truncated);
+    }
 }
 
 pub(super) fn brief_reviews(
@@ -543,6 +558,7 @@ pub(super) fn brief_reviews(
         next_check: 0,
         max_job_bytes: 0,
         words,
+        ci: None,
     };
     domain.brief_fetches.insert(call, fetch).expect("brief read room checked");
     out.push(Request::BriefClient {
@@ -594,10 +610,7 @@ pub(super) fn brief_ci(
         return Some(BriefRead::Failed);
     }
     let repository = row.repository;
-    let mut words = BriefWords::with_capacity(bytes, true);
-    append(&mut words, b"Repair the failed check at change head ");
-    append_hex(&mut words, &head.0[..8]);
-    append(&mut words, b". Push a new head and wait for checks there.\n");
+    let words = BriefWords::with_capacity(bytes, false);
     let call = Token::new(owner.raw() | (1_u64 << 61_u32) | (1_u64 << 59_u32));
     let fetch = BriefFetch {
         owner,
@@ -618,6 +631,7 @@ pub(super) fn brief_ci(
         next_check: 0,
         max_job_bytes,
         words,
+        ci: None,
     };
     domain.brief_fetches.insert(call, fetch).expect("brief read room checked");
     out.push(Request::BriefClient {

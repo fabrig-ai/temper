@@ -290,8 +290,8 @@ const ROOT: Root = Root {
             task: 4608,
             // Dependencies section's bytes, from the root world.
             dependencies: 128,
-            // CI section's bytes, from the root world.
-            ci: 128,
+            // CI section: a failed job's last lines, with five failed checks sharing.
+            ci: 4096,
             // Reviews section's bytes, from the root world.
             reviews: 128,
             // A review receives a pull's title, body, files and diff, within the
