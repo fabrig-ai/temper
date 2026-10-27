@@ -238,6 +238,7 @@ fn the_golden_story_is_deterministic() {
     assert_eq!(ledger.effects, again.effects);
     assert_eq!(ledger.calls, again.calls);
     assert_eq!(ledger.requests, again.requests);
+    assert_eq!(ledger.answers, again.answers);
 }
 
 #[test]
