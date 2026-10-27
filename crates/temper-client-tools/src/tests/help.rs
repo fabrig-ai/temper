@@ -263,9 +263,7 @@ fn expected_record(ending: &[u8]) -> Box<[u8]> {
 fn each_row_says_what_it_does_and_prints() {
     for row in table::TOOLS {
         assert!(!row.line.is_empty(), "{row:?}");
-        if row.name != jig::rows::HELP.name {
-            assert!(!row.prints.is_empty(), "{row:?}");
-        }
+        assert!(!row.prints.is_empty(), "{row:?}");
         for form in row.forms {
             for argument in *form {
                 if row.name != jig::rows::HELP.name {
