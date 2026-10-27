@@ -81,6 +81,19 @@ fn limits_take_each_bound_from_its_source_field() {
             connect_stopped_why: crate::CONNECT_WHY_BYTES,
             stopped_reason: 16,
             pull_address: crate::ADDRESS_BYTES,
+            receipted_address: 2048,
+            gate_proof_name: 32,
+            member_owner: 1024,
+            member_name: 1024,
+            member_branch: 1024,
+            member_landing: 1024,
+            member_gates: 8,
+            landing_panel_members: 8,
+            landing_line_changes: 8,
+            landing_line_repositories: 8,
+            landing_line_repositories_item: 2048,
+            landing_line_landed: 8,
+            landings_panel_landings: 64,
             queued_ahead: crate::TASKS_AHEAD,
             change_panel_owner: 16,
             change_panel_name: 16,
@@ -940,4 +953,44 @@ fn first_label_accepts_64_bytes_and_refuses_one_more() {
         first_with_label(filled(65)),
         Err(v1::Problem { path: v1::Path::FirstRepositoryLabel, reason: skein_codec::Reason::Bound })
     );
+}
+
+#[test]
+#[expect(clippy::disallowed_macros, reason = "committed wire goldens are test inputs")]
+fn landing_panels_round_trip_smallest_and_full_goldens() {
+    for bytes in [
+        include_bytes!("../golden/record_landing_panel_smallest.bin").as_slice(),
+        include_bytes!("../golden/record_landing_panel_full.bin").as_slice(),
+    ] {
+        let panel = crate::decode_landing_panel(bytes, &v1::CEILINGS).expect("landing golden");
+        assert_eq!(crate::landing_panel(&panel).as_ref(), bytes);
+        assert_eq!(crate::decode_landing_panel(&fixtures::trailing(bytes), &v1::CEILINGS), None);
+    }
+}
+#[test]
+#[expect(clippy::disallowed_macros, reason = "committed wire goldens are test inputs")]
+fn landings_panels_round_trip_smallest_and_full_goldens() {
+    for bytes in [
+        include_bytes!("../golden/record_landings_panel_smallest.bin").as_slice(),
+        include_bytes!("../golden/record_landings_panel_full.bin").as_slice(),
+    ] {
+        let panel = crate::decode_landings_panel(bytes, &v1::CEILINGS).expect("landings golden");
+        assert_eq!(crate::landings_panel(&panel).as_ref(), bytes);
+        assert_eq!(crate::decode_landings_panel(&fixtures::trailing(bytes), &v1::CEILINGS), None);
+    }
+}
+#[test]
+fn landing_watches_round_trip_without_trailing_bytes() {
+    let limits = fixtures::limits();
+    for watch in [
+        v1::Watch::Landing(v1::LandingSubject::new(&limits, v1::LandingSubjectParts { task: 61 }).expect("task")),
+        v1::Watch::Landings(
+            v1::LandingsSubject::new(&limits, v1::LandingsSubjectParts { project: 1, ended: true }).expect("project"),
+        ),
+    ] {
+        let watching = v1::Watching::new(&limits, v1::WatchingParts { watch }).expect("watch");
+        let bytes = crate::watching(&watching);
+        assert_eq!(crate::decode_watching(&bytes, &limits), Some(watching));
+        assert_eq!(crate::decode_watching(&fixtures::trailing(&bytes), &limits), None);
+    }
 }
