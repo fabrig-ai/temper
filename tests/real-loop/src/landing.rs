@@ -146,7 +146,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     admit(value);
 }
 
-pub(crate) fn admit(value: &Value) {
+fn limits(value: &Value) -> (jig_protocol_config::Limits, temper_service::limits::Limits) {
     let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(
         &bytes,
@@ -166,13 +166,34 @@ pub(crate) fn admit(value: &Value) {
         temper_service::limits::apply(&mut own, name.as_bytes(), number.as_u64().expect("limit number"))
             .expect("application override");
     }
-    let root = temper_service::limits::engine(&jig.limits, &own).expect("engine root admits the fixture");
+    (jig.limits, own)
+}
+
+/// Match the root's complete synchronous route, including a placed subtree stop.
+pub(crate) fn size_journal_writes(value: &mut Value) {
+    let (jig, own) = limits(value);
+    let core = &jig.core;
+    let route = jig_domain_tasks::max_out(&core.tasks) * 8
+        + jig_domain_people::max_out(&core.people) * 4
+        + core.people.pending * 2
+        + jig_domain_fleet::max_out(&core.fleet) * 4
+        + temper_engine_domain_forge::max_out(&own.forge)
+        + core.tasks.tasks
+        + 4;
+    let settings = jig_domain_core::settings::writes_worst_case(core).expect("fixture settings writes");
+    value["application"]["limits"]["overrides"]["root.journal.writes"] =
+        own.root.journal.writes.max(route.max(settings) + core.call_records).into();
+}
+
+pub(crate) fn admit(value: &Value) {
+    let (jig, own) = limits(value);
+    let root = temper_service::limits::engine(&jig, &own).expect("engine root admits the fixture");
     jig_protocol_store::sizes::check(
-        &jig.limits.core,
+        &jig.core,
         &temper_protocol_store::application(&root.forge).expect("application sizes"),
         &temper_engine_domain::journal_limits(&root.journal),
-        &jig.limits.store.store,
-        jig.limits.store.orphan_erases,
+        &jig.store.store,
+        jig.store.orphan_erases,
     )
     .expect("store admits the fixture");
 }
