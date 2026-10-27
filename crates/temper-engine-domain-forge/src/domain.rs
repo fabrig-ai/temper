@@ -1349,8 +1349,8 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         }
         Event::Delegated { task, child, kind } => delegated(d, task, child, kind, out),
         Event::DelegateRefused { task, child } => delegate_refused(d, env, task, child, out),
-        Event::DelegateResult { task, child, status, failed, words } => {
-            delegate_result(d, env, task, child, status, failed, &words, out);
+        Event::DelegateResult { task, child, status, failed, cancelled, words } => {
+            delegate_result(d, env, task, child, status, failed, cancelled, &words, out);
         }
         Event::StepChange { task, entry, heard, gates, queue_repair_active, kept } => {
             step_change(d, env, StepInput { task, entry, heard, gates, queue_repair_active, kept }, out);
@@ -2329,6 +2329,7 @@ fn delegate_result(
     child: u64,
     status: change::Status,
     failed: bool,
+    cancelled: bool,
     words: &[u8],
     out: &mut Queue<Request>,
 ) {
@@ -2341,6 +2342,12 @@ fn delegate_result(
     row.delegate_status = status;
     match kind {
         change::Delegate::Gate { number, head } => {
+            // A result racing the CI cancellation is no verdict or review failure.
+            let cancelling = row.change.state == (change::State::CancellingGates { head });
+            if cancelled || cancelling {
+                save_change(out, row.clone());
+                return;
+            }
             let report = change::GateReport { number, head, status };
             let mut verdicts = List::with_capacity(env.limits.change_policy.gates);
             for old in &row.verdicts {
@@ -2676,6 +2683,7 @@ pub(crate) fn queue_ready(d: &Domain, row: &ChangeRow, l: &Limits) -> (List<chan
             | change::State::Reopening { .. }
             | change::State::Checking { .. }
             | change::State::Gating { .. }
+            | change::State::CancellingGates { .. }
             | change::State::Updating { .. }
             | change::State::Resolving { .. }
             | change::State::Repairing { .. }
@@ -2782,6 +2790,7 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
             decision @ (change::Decision::None
             | change::Decision::Wait { .. }
             | change::Decision::Delegate(_)
+            | change::Decision::CancelGates { .. }
             | change::Decision::Ready
             | change::Decision::QueueRepair
             | change::Decision::Finish { .. }
@@ -2819,6 +2828,7 @@ fn in_queue(state: &change::State) -> bool {
         | change::State::Reopening { .. }
         | change::State::Checking { .. }
         | change::State::Gating { .. }
+        | change::State::CancellingGates { .. }
         | change::State::Updating { .. }
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
@@ -2900,6 +2910,10 @@ fn change_facts(
             None => change::Status::Unknown,
         },
         gates: pending.gates.clone(),
+        live_gate: match row.delegate {
+            Some((_, change::Delegate::Gate { head, .. })) => Some(head),
+            Some(_) | None => None,
+        },
         writer_taken,
         drift: if retargeted { Some(change::Hold::Retargeted) } else { row.drift },
         first: queue_first(d, row, env.wall, &env.limits),

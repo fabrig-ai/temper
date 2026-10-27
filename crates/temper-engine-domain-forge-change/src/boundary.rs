@@ -147,6 +147,8 @@ pub enum State {
     Checking { head: Commit },
     /// Required gates are sought on the checked head.
     Gating { head: Commit, asked: Box<[u64]> },
+    /// CI failed; cancelled gate delegates must end before repair is funded.
+    CancellingGates { head: Commit },
     /// The change is ready, waiting its turn.
     Queued { head: Commit, ready_since: Wall },
     /// The change owns the queue through an update and landing.
@@ -220,6 +222,8 @@ pub struct Facts {
     pub contains_base: Status,
     pub mergeable: Status,
     pub gates: Box<[GateReport]>,
+    /// The head of the top's outstanding gate delegate, until its terminal result.
+    pub live_gate: Option<Commit>,
     pub writer_taken: bool,
     pub drift: Option<Hold>,
     pub first: bool,
@@ -308,6 +312,8 @@ pub enum Decision {
     Delegate(Delegate),
     /// Commit one effect to the top's outbox.
     Effect(Effect),
+    /// Cancel live gate delegates at the head whose CI failed.
+    CancelGates { head: Commit },
     /// Tell the top this change is ready to queue.
     Ready,
     /// Ask the top for the branch's one queue repair.

@@ -43,6 +43,7 @@ fn facts() -> Facts {
         contains_base: Status::Passed,
         mergeable: Status::Passed,
         gates: Box::new([]),
+        live_gate: None,
         writer_taken: false,
         drift: None,
         first: false,
@@ -297,6 +298,7 @@ fn generated_phase_cells_decide_the_same_from_the_same_snapshot() {
         State::Reopening { requested: true, retarget: false },
         State::Checking { head: HEAD },
         State::Gating { head: HEAD, asked: Box::new([]) },
+        State::CancellingGates { head: HEAD },
         State::Queued { head: HEAD, ready_since: at(0) },
         State::First { head: HEAD, ready_since: at(0) },
         State::Updating { from: HEAD, base: BASE, ready_since: at(0) },
@@ -560,4 +562,87 @@ fn a_bare_authority_release_holds_again_and_a_funded_one_retries() {
         let retry = decide(&funded.change, &f, &h);
         assert_eq!(retry.decision, Decision::Delegate(Delegate::Produce));
     }
+}
+
+#[test]
+fn ci_failing_while_a_review_runs_cancels_it_then_repairs() {
+    let c = change(State::Gating { head: HEAD, asked: Box::new([9]) });
+    let mut f = facts();
+    f.ci.status = Status::Failed;
+    f.live_gate = Some(HEAD);
+    let cancelled = decide(&c, &f, &heard());
+    assert_eq!(cancelled.decision, Decision::CancelGates { head: HEAD });
+    assert_eq!(cancelled.change.state, State::CancellingGates { head: HEAD });
+    assert_eq!(cancelled.change.repairs, 0);
+    let waiting = decide(&cancelled.change, &f, &heard());
+    assert_eq!(waiting.decision, Decision::Wait { until: Some(at(30)) });
+    assert_eq!(waiting.change.repairs, 0);
+    f.live_gate = None;
+    let repair = decide(&waiting.change, &f, &heard());
+    assert_eq!(repair.decision, Decision::Delegate(Delegate::Repair(Repair::Ci)));
+    assert_eq!(repair.change.repairs, 1);
+    let again = decide(&repair.change, &f, &heard());
+    assert_eq!(again.decision, Decision::Wait { until: Some(at(31)) });
+    assert_eq!(again.change.repairs, 1);
+}
+
+#[test]
+fn ci_failing_with_no_live_gate_repairs_at_once() {
+    let c = change(State::Gating { head: HEAD, asked: Box::new([]) });
+    let mut f = facts();
+    f.ci.status = Status::Failed;
+    let repair = decide(&c, &f, &heard());
+    assert_eq!(repair.decision, Decision::Delegate(Delegate::Repair(Repair::Ci)));
+    assert_eq!(repair.change.repairs, 1);
+}
+
+#[test]
+fn a_live_gate_keeps_its_delegate_slot_until_it_ends() {
+    let mut c = change(State::Gating { head: HEAD, asked: Box::new([9]) });
+    let gate = Gate { number: 9, kind: GateKind::Agent, blocking: true, freshness: Freshness::Exact, eager: false };
+    c.gates = Box::new([gate, Gate { number: 10, ..gate }]);
+    let mut f = facts();
+    f.live_gate = Some(HEAD);
+    let waiting = decide(&c, &f, &heard());
+    assert_eq!(waiting.decision, Decision::Wait { until: Some(at(30)) });
+    assert_eq!(waiting.change.state, c.state);
+    f.live_gate = None;
+    f.gates = Box::new([GateReport { number: 9, head: HEAD, status: Status::Passed }]);
+    let second = decide(&waiting.change, &f, &heard());
+    assert_eq!(second.decision, Decision::Delegate(Delegate::Gate { number: 10, head: HEAD }));
+}
+
+#[test]
+fn cancelled_gates_preserve_the_semantic_repair_and_its_bound() {
+    let mut c = change(State::Gating { head: HEAD, asked: Box::new([9]) });
+    c.clean = Box::new([BASE]);
+    let mut f = facts();
+    f.ci.status = Status::Failed;
+    f.live_gate = Some(HEAD);
+    let cancelled = decide(&c, &f, &heard());
+    f.live_gate = None;
+    let repair = decide(&cancelled.change, &f, &heard());
+    assert_eq!(repair.decision, Decision::Delegate(Delegate::Repair(Repair::Semantic)));
+    c.repairs = LIMITS.repairs;
+    let cancelled = decide(&c, &Facts { live_gate: Some(HEAD), ..f.clone() }, &heard());
+    let held = decide(&cancelled.change, &f, &heard());
+    assert_eq!(held.decision, Decision::Hold(Hold::Repairs));
+    assert_eq!(held.change.repairs, LIMITS.repairs);
+}
+
+#[test]
+fn a_live_advisory_gate_does_not_hold_a_green_head() {
+    let mut c = change(State::Gating { head: HEAD, asked: Box::new([9]) });
+    c.gates = Box::new([Gate {
+        number: 9,
+        kind: GateKind::Agent,
+        blocking: false,
+        freshness: Freshness::Exact,
+        eager: false,
+    }]);
+    let mut f = facts();
+    f.live_gate = Some(HEAD);
+    assert_eq!(decide(&c, &f, &heard()).decision, Decision::Ready);
+    f.ci.status = Status::Failed;
+    assert_eq!(decide(&c, &f, &heard()).decision, Decision::CancelGates { head: HEAD });
 }

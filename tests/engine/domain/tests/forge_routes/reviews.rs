@@ -973,3 +973,132 @@ fn ended_result(world: &World, task: u64) -> &tasks::TaskResult {
     let tasks::Phase::Ended(tasks::Ending::Done(result)) = &row.phase else { panic!("successful task") };
     result
 }
+
+#[test]
+#[expect(clippy::too_many_lines, reason = "the funding story spans cancellation, repair, fresh review and landing")]
+fn a_review_at_a_head_whose_ci_fails_is_cancelled_and_the_repair_is_funded() {
+    use temper_engine_domain_forge_change::{State, Status};
+    const H1: u64 = 2;
+    let world = World::configured_policy(true, true, false, 1000, Gate { agent: true, ..Gate::default() }, None);
+    let (mut world, _, producer, branch) =
+        temper_engine_domain_world::forge_routes::change_world_funded(world, Change::default(), 10);
+    world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
+    let first_head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, FILE, CONTENT, 1)
+        .expect("producer pushed H1");
+    let event = world.protocol.answer(
+        CHANNEL,
+        producer.task,
+        producer.attempt,
+        3,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"pushed".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    let first_review = next_assignment(&mut world, 2);
+    let change = requester(&world, first_review.task);
+    assert_eq!(first_head, H1);
+    assert_review_head(&world, &first_review, translate::commit(first_head));
+    assert_eq!(live_task(&world, change).numbers, tasks::Numbers { budget: 10, spent: 0, spent_below: 3, reserved: 7 });
+    assert_eq!(live_task(&world, first_review.task).numbers.budget, 7);
+    world.external(
+        1,
+        raw::Op::Write(raw::Write::Status {
+            commit: first_head,
+            context: b"build".as_slice().into(),
+            state: raw::Check::Failed,
+        }),
+    );
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if change_row(&world, change).change.state == (State::CancellingGates { head: translate::commit(first_head) }) {
+            break;
+        }
+    }
+    let row = change_row(&world, change);
+    assert_eq!(row.change.state, State::CancellingGates { head: translate::commit(first_head) });
+    assert_eq!(row.change.repairs, 0);
+    assert_eq!(world.assigned.len(), 3, "no repair while the review holds its funds");
+    let tasks::Phase::Closing(closing) = &live_task(&world, first_review.task).phase else {
+        panic!("review was not cancelled: {:?}", live_task(&world, first_review.task).phase);
+    };
+    let tasks::Ending::Cancelled { reason, .. } = &closing.ending else { panic!("cancelled review") };
+    assert!(reason.windows(b"CI failed at head".len()).any(|part| part == b"CI failed at head"));
+    // The worker drains only now. Even a racing approval is discarded on this failed head.
+    let event = world.protocol.answer(
+        CHANNEL,
+        first_review.task,
+        first_review.attempt,
+        0,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Verdict { code: 1, fields: Box::new([]), words: b"approved".as_slice().into() },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    let repair = next_assignment(&mut world, 3);
+    assert!(matches!(live_task(&world, repair.task).contract, tasks::Contract::Change { .. }));
+    assert_eq!(live_task(&world, repair.task).numbers.budget, 7, "cancelled reservation funds the repair");
+    let row = change_row(&world, change);
+    assert_eq!(row.change.repairs, 1);
+    assert!(row.verdicts.is_empty());
+    assert!(row.change.gate_failures.is_empty(), "cancellation uses no failed-review retry");
+    let second_head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, FILE, b"repaired", 1)
+        .expect("repair pushed H2");
+    assert_ne!(second_head, first_head);
+    let event = world.protocol.answer(
+        CHANNEL,
+        repair.task,
+        repair.attempt,
+        0,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"repaired".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    let second_review = next_assignment(&mut world, 4);
+    assert_review_head(&world, &second_review, translate::commit(second_head));
+    assert_ne!(first_review.task, second_review.task);
+    let event = world.protocol.answer(
+        CHANNEL,
+        second_review.task,
+        second_review.attempt,
+        0,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Verdict { code: 1, fields: Box::new([]), words: b"approved".as_slice().into() },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if world.merges == 1 {
+            break;
+        }
+    }
+    assert_eq!(world.merges, 1, "H2 lands after its fresh review");
+    let row = change_row(&world, change);
+    assert_eq!(row.change.repairs, 1);
+    assert!(row.change.gate_failures.is_empty());
+    assert!(
+        row.verdicts
+            .iter()
+            .all(|report| report.head == translate::commit(second_head) && report.status == Status::Passed)
+    );
+}
