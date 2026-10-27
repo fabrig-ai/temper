@@ -5,7 +5,7 @@ use skein_lib::List;
 use temper_engine_domain_forge as d;
 use temper_engine_domain_forge_tiers::{Blame, Failures};
 
-fn encode_failures(value: &Failures) -> w::Failures {
+pub(super) fn encode_failures(value: &Failures) -> w::Failures {
     match value {
         Failures::Many => w::Failures::Many,
         Failures::Tests(tests) => {
@@ -20,7 +20,7 @@ fn encode_failures(value: &Failures) -> w::Failures {
     }
 }
 
-fn encode_blame(value: &Blame) -> w::Blame {
+pub(super) fn encode_blame(value: &Blame) -> w::Blame {
     match value {
         Blame::Cleared => w::Blame::Cleared,
         Blame::Owns(failures) => w::Blame::Owns(
@@ -74,7 +74,7 @@ pub(super) fn encode(row: &d::Verification) -> w::Verification {
     .expect(FITS)
 }
 
-fn decode_failures(value: w::Failures) -> Result<Failures, Undecodable> {
+pub(super) fn decode_failures(value: w::Failures) -> Result<Failures, Undecodable> {
     Ok(match value {
         w::Failures::Many => Failures::Many,
         w::Failures::Tests(tests) => {
@@ -93,7 +93,7 @@ fn decode_failures(value: w::Failures) -> Result<Failures, Undecodable> {
     })
 }
 
-fn decode_blame(value: w::Blame) -> Result<Blame, Undecodable> {
+pub(super) fn decode_blame(value: w::Blame) -> Result<Blame, Undecodable> {
     Ok(match value {
         w::Blame::Cleared => Blame::Cleared,
         w::Blame::Owns(value) => Blame::Owns(decode_failures(value.into_parts().failures)?),

@@ -392,6 +392,7 @@ impl World {
                         authority::Grant { kind: 10, ..grant.clone() },
                         authority::Grant { kind: 11, ..grant.clone() },
                         authority::Grant { kind: 12, ..grant.clone() },
+                        authority::Grant { kind: 9, ..grant.clone() },
                     ])
                 } else {
                     Box::new([grant.clone(), effect_grant.clone()])
@@ -441,6 +442,7 @@ impl World {
                         authority::Executor::Charter(2),
                         authority::Executor::Charter(4),
                         authority::Executor::Procedure(2),
+                        authority::Executor::Procedure(4),
                     ]);
                     rules.ceiling.delegation.tasks = 12;
                     rules.ceiling.delegation.depth = 4;
