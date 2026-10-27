@@ -82,7 +82,7 @@ fn the_tier_task_first_creates_its_branch_at_the_tip() {
     let entry = d.entries.get(&OPEN).expect("branch outbox");
     assert_eq!(
         entry.entry.effect.write,
-        skein_forge::api::Write::CreateBranch { branch: b"temper/tier/browser.1".as_slice().into(), commit: BASE }
+        api::Write::CreateBranch { branch: b"temper/tier/browser.1".as_slice().into(), commit: BASE }
     );
     assert_eq!(fixtures::browser(&d).branch, TierBranch::Pending { entry: OPEN });
     let mut identity = None;
@@ -181,7 +181,15 @@ fn a_made_branch_is_not_emitted_again_after_restore() {
     row.branch = TierBranch::Made;
     outputs(&mut d, Event::Restore { record: Stored::Tier(row) });
     let out = outputs(&mut d, Event::StepTier { task: CHANGE, entry: OPEN });
-    assert_eq!(out.as_ref(), &[Request::TierDecision { task: CHANGE, decision: TierDecision::Wait }]);
+    let mut created = false;
+    for request in &out {
+        if let Request::TierEffect { entry, .. } = request
+            && let api::Write::CreateBranch { .. } = entry.effect.write
+        {
+            created = true;
+        }
+    }
+    assert!(!created);
 }
 
 #[test]
@@ -218,4 +226,274 @@ fn tier_runs(out: &Queue<Request>) -> skein_lib::List<(u64, [u8; 32])> {
         }
     }
     runs
+}
+
+use skein_forge::api;
+const TIER_TASK: u64 = 61; // distinct from the two range members, CHANGE and OPEN.
+const DISPATCH: u64 = 21;
+const STATUS: u64 = 22;
+const RETRY: u64 = 23;
+const RUN_ID: u64 = 71;
+const READ_OWNER: Token = Token::new(101);
+
+fn made_branch() -> Domain {
+    let mut d = fixtures::tiered();
+    d.project_tiers(fixtures::PROJECT, fixtures::tier_settings(), fixtures::repository_tiers(&[BROWSER]));
+    fixtures::tier_baseline(&mut d);
+    outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: TIER_TASK });
+    d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap().branch = TierBranch::Made;
+    d
+}
+fn dispatch(d: &mut Domain, entry: u64) -> Box<[Request]> {
+    let out = outputs(d, Event::StepTier { task: TIER_TASK, entry });
+    if let Some(saved) = d.entries.get_mut(&entry) {
+        saved.entry.start = Some(skein_forge_client::Position { at: env().now, comment: 0, review: 0, review_page: 1 });
+        let mut ignored = Queue::with_capacity(max_out(&LIMITS));
+        crate::tiers::outcome(
+            d,
+            entry,
+            skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Set, found: false },
+            &mut ignored,
+        );
+        d.entries.remove(&entry);
+    }
+    out
+}
+fn dispatched() -> Domain {
+    let mut d = made_branch();
+    dispatch(&mut d, DISPATCH);
+    d
+}
+fn workflow(d: &Domain, conclusion: api::Conclusion, step: Option<u32>) -> api::Run {
+    api::Run {
+        id: RUN_ID,
+        number: 1,
+        workflow: b"tier.yml".as_slice().into(),
+        commit: fixtures::browser(d).record.run.as_ref().unwrap().tip,
+        event: api::Event::Dispatch,
+        actor: 7,
+        state: api::RunState::Completed,
+        conclusion: Some(conclusion),
+        url: b"https://forge/run/71".as_slice().into(),
+        created: env().now,
+        jobs: match step {
+            Some(number) => Box::new([api::RunJob {
+                id: 81,
+                name: b"test".as_slice().into(),
+                attempt: 1,
+                state: api::RunState::Completed,
+                conclusion: Some(api::Conclusion::Failure),
+                step: Some(api::Step { number, name: b"step".as_slice().into() }),
+                steps: 3,
+            }]),
+            None => Box::new([]),
+        },
+    }
+}
+fn answer(d: &mut Domain, answer: api::Answer) -> Queue<Request> {
+    d.tier_reads.insert(READ_OWNER, (REPO, BROWSER.into())).unwrap();
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::answered(d, &env(), READ_OWNER, Ok(answer), &mut out);
+    out
+}
+fn completed(d: &mut Domain, conclusion: api::Conclusion, step: Option<u32>) {
+    let run = workflow(d, conclusion, step);
+    answer(d, api::Answer::Runs { runs: Box::new([run.clone()]), more: false });
+    answer(d, api::Answer::Run(run));
+}
+fn judged(d: &mut Domain) -> Box<[Request]> {
+    dispatch(d, STATUS);
+    outputs(d, Event::StepTier { task: TIER_TASK, entry: RETRY })
+}
+fn lost(d: &mut Domain) {
+    d.tier_follows.get_mut(&(REPO, BROWSER.into())).unwrap().since = Some(Time::ZERO);
+    answer(d, api::Answer::Runs { runs: Box::new([]), more: false });
+}
+fn effect_write(out: &[Request]) -> &api::Write {
+    for request in out {
+        if let Request::TierEffect { entry, .. } = request {
+            return &entry.effect.write;
+        }
+    }
+    unreachable!("the step made an effect")
+}
+fn tier_decision(out: &[Request]) -> Option<&TierDecision> {
+    for request in out {
+        if let Request::TierDecision { decision, .. } = request {
+            return Some(decision);
+        }
+    }
+    None
+}
+
+#[test]
+fn a_made_branch_dispatches_the_tiers_workflow_with_its_inputs() {
+    const HEX_TIP: &[u8] = b"0404040404040404040404040404040404040404040404040404040404040404";
+    let mut d = made_branch();
+    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: DISPATCH });
+    assert_eq!(
+        effect_write(&out),
+        &api::Write::Dispatch {
+            workflow: b"tier.yml".as_slice().into(),
+            branch: b"temper/tier/browser.1".as_slice().into(),
+            inputs: Box::new([
+                api::Input { name: b"temper_commit".as_slice().into(), value: HEX_TIP.into() },
+                api::Input { name: b"temper_key".as_slice().into(), value: HEX_TIP.into() }
+            ]),
+        }
+    );
+}
+#[test]
+fn a_passed_run_judges_green_clears_its_range_and_wakes_its_changes() {
+    let mut d = made_branch();
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::landed(&mut d, REPO, MERGE, CHANGE, &mut out);
+    crate::verification::landed(&mut d, REPO, HEAD, OPEN, &mut out);
+    let row = d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap();
+    let run = row.record.run.as_mut().unwrap();
+    run.tip = HEAD;
+    run.landings =
+        Box::new([policy::Landing { commit: MERGE, key: MERGE }, policy::Landing { commit: HEAD, key: HEAD }]);
+    dispatch(&mut d, DISPATCH);
+    completed(&mut d, api::Conclusion::Success, None);
+    judged(&mut d);
+    assert_eq!(
+        crate::verification::verification(&d, REPO, MERGE),
+        temper_engine_domain_forge_change::Verification::Cleared
+    );
+    assert_eq!(
+        crate::verification::verification(&d, REPO, HEAD),
+        temper_engine_domain_forge_change::Verification::Cleared
+    );
+    assert!(d.procedure_wakes.contains_key(&CHANGE));
+    assert!(d.procedure_wakes.contains_key(&OPEN));
+}
+#[test]
+fn a_lost_run_is_retried_by_a_new_dispatch() {
+    let mut d = dispatched();
+    lost(&mut d);
+    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let api::Write::Dispatch { .. } = effect_write(&out) else { panic!("new dispatch after loss") };
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 1);
+}
+#[test]
+fn a_failed_job_of_the_set_up_is_rerun() {
+    let mut d = dispatched();
+    completed(&mut d, api::Conclusion::Failure, Some(0));
+    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    assert_eq!(
+        effect_write(&out),
+        &api::Write::Rerun { attempt: api::JobAttempt { head: BASE, run: RUN_ID, job: 81, attempt: 1 } }
+    );
+}
+#[test]
+fn a_third_fault_holds_the_task() {
+    let mut d = dispatched();
+    lost(&mut d);
+    dispatch(&mut d, RETRY);
+    lost(&mut d);
+    dispatch(&mut d, DISPATCH);
+    lost(&mut d);
+    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: STATUS });
+    assert_eq!(out.as_ref(), &[Request::TierDecision { task: TIER_TASK, decision: TierDecision::Held }]);
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 3);
+    assert!(d.landing.receipts.is_empty());
+}
+#[test]
+fn a_failed_run_is_a_fault_until_its_report_is_read() {
+    let mut d = dispatched();
+    completed(&mut d, api::Conclusion::Failure, Some(1));
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 1);
+    assert!(fixtures::browser(&d).result.is_none());
+    assert!(d.landing.receipts.is_empty());
+}
+#[test]
+fn a_whole_run_makes_a_receipt_and_a_rerun_none() {
+    let mut d = dispatched();
+    completed(&mut d, api::Conclusion::Success, None);
+    judged(&mut d);
+    let key =
+        ReceiptKey { project: fixtures::PROJECT, repository: REPO, check: Check::Tier(BROWSER.into()), key: BASE };
+    assert!(d.receipt(&key).unwrap().passed);
+    assert_eq!(d.receipt(&key).unwrap().run.id, RUN_ID);
+}
+#[test]
+fn a_passed_receipt_at_the_tip_judges_with_no_branch_or_dispatch() {
+    let mut d = fixtures::tiered();
+    d.project_tiers(fixtures::PROJECT, fixtures::tier_settings(), fixtures::repository_tiers(&[BROWSER]));
+    let key =
+        ReceiptKey { project: fixtures::PROJECT, repository: REPO, check: Check::Tier(BROWSER.into()), key: BASE };
+    d.landing
+        .receipts
+        .insert(
+            key,
+            Receipt {
+                passed: true,
+                failures: Some(policy::Failures::Tests(Box::new([]))),
+                candidate: BASE,
+                ended: env().wall,
+                run: ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() },
+            },
+        )
+        .unwrap();
+    let start = fixtures::tier_baseline(&mut d);
+    outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: TIER_TASK });
+    let posted = dispatch(&mut d, STATUS);
+    let done = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    assert_eq!(tier_runs(&start).len(), 1);
+    let api::Write::Status { check, .. } = effect_write(&posted) else { panic!("receipt posts one status") };
+    assert_eq!(*check, api::Check::Passed);
+    let Some(TierDecision::Done { words }) = tier_decision(&done) else { panic!("receipt task finishes") };
+    assert_eq!(words.as_ref(), b"Tier browser run 1 at 040404040404 judged by receipt: green, 0 landings cleared");
+    let mut receipt = false;
+    for request in &done {
+        if let Request::Save { record: Stored::Receipt { .. }, .. } = request {
+            receipt = true;
+        }
+    }
+    assert!(!receipt);
+    assert_eq!(fixtures::browser(&d).branch, TierBranch::Absent);
+}
+#[test]
+fn the_next_run_starts_at_the_newest_tip_when_one_ends() {
+    let mut d = dispatched();
+    fixtures::tier_move(&mut d, MERGE, None);
+    fixtures::tier_move(&mut d, HEAD, None);
+    completed(&mut d, api::Conclusion::Success, None);
+    let done = judged(&mut d);
+    let mut next = None;
+    for request in &done {
+        if let Request::TierRun { number, tip, .. } = request {
+            next = Some((*number, *tip));
+        }
+    }
+    assert_eq!(next, Some((2, HEAD)));
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().landings.len(), TWO_TIERS);
+}
+#[test]
+fn a_restart_mid_run_finds_its_run_again_and_judges_it() {
+    let d = dispatched();
+    let row = fixtures::browser(&d).clone();
+    let mut restored = made_branch();
+    outputs(&mut restored, Event::Restore { record: Stored::Tier(row) });
+    crate::tiers::rebuild(&mut restored);
+    completed(&mut restored, api::Conclusion::Success, None);
+    let done = judged(&mut restored);
+    let Some(TierDecision::Done { .. }) = tier_decision(&done) else { panic!("restored run finishes") };
+    assert_eq!(fixtures::browser(&restored).record.sequence, 1);
+}
+
+#[test]
+fn a_third_refused_dispatch_holds_the_task() {
+    let mut d = made_branch();
+    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: DISPATCH });
+    let mut out: Box<[Request]> = Box::new([]);
+    for (failed, next) in [(DISPATCH, RETRY), (RETRY, STATUS), (STATUS, DISPATCH)] {
+        let mut ignored = Queue::with_capacity(max_out(&LIMITS));
+        crate::tiers::outcome(&mut d, failed, skein_forge_client::Outcome::Failed(api::Error::Missing), &mut ignored);
+        d.entries.remove(&failed);
+        out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: next });
+    }
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 3);
+    assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
 }

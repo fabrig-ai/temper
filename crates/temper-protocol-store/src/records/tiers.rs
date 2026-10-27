@@ -137,6 +137,7 @@ fn decode_run(run: w::TierRun) -> Result<p::Run, Undecodable> {
     Ok(p::Run { number, tip, key, landings, part, faults })
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches")]
+#[expect(clippy::too_many_lines, reason = "one complete durable tier row translation")]
 pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     let mut flakes = List::with_capacity(u32::try_from(row.record.flakes.len()).expect(FITS));
     for flake in &row.record.flakes {
@@ -173,6 +174,71 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
             w::TierBranch::Pending(w::Number::new(&w::CEILINGS, w::NumberParts { number: entry }).expect(FITS))
         }
     };
+    let flight = match &row.flight {
+        Some(f) => {
+            let mut pending = List::with_capacity(u32::try_from(f.pending.len()).expect(FITS));
+            for attempt in &f.pending {
+                pending.push(super::answers::encode_job_attempt(attempt)).expect(FITS);
+            }
+            Some(
+                w::TierFlight::new(
+                    &w::CEILINGS,
+                    w::TierFlightParts {
+                        next: match f.next {
+                            Some(at) => Some(at.as_nanos()),
+                            None => None,
+                        },
+                        entry: f.entry,
+                        start: match f.start {
+                            Some(at) => Some(at.as_nanos()),
+                            None => None,
+                        },
+                        since: match f.since {
+                            Some(at) => Some(at.as_nanos()),
+                            None => None,
+                        },
+                        waiting: f.waiting,
+                        fault: f.fault,
+                        pending,
+                    },
+                )
+                .expect(FITS),
+            )
+        }
+        None => None,
+    };
+    let result = match &row.result {
+        Some(r) => Some(
+            w::TierResult::new(
+                &w::CEILINGS,
+                w::TierResultParts {
+                    verdict: w::TierJudgement::new(
+                        &w::CEILINGS,
+                        w::TierJudgementParts {
+                            number: r.verdict.number,
+                            tip: r.verdict.tip,
+                            key: r.verdict.key,
+                            finding: encode_finding(&p::Finding {
+                                failing: r.verdict.failing.clone(),
+                                flakes: r.verdict.flakes.clone(),
+                                blamed: r.verdict.landings.clone(),
+                            }),
+                        },
+                    )
+                    .expect(FITS),
+                    run: w::ReceiptRun::new(
+                        &w::CEILINGS,
+                        w::ReceiptRunParts { id: r.run.id, number: r.run.number, url: r.run.url.clone() },
+                    )
+                    .expect(FITS),
+                    received: r.received,
+                    status: encode_branch(r.status),
+                },
+            )
+            .expect(FITS),
+        ),
+        None => None,
+    };
     w::TierRow::new(
         &w::CEILINGS,
         w::TierRowParts {
@@ -182,12 +248,19 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
             pending: encode_landings(&row.pending),
             task: row.task,
             branch,
+            flight,
+            result,
         },
     )
     .expect(FITS)
 }
+#[expect(
+    clippy::too_many_lines,
+    clippy::manual_map,
+    reason = "one durable row translation validates the related operation states without callbacks"
+)]
 pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
-    let w::TierRowParts { repository, tier, record, pending, task, branch } = row.into_parts();
+    let w::TierRowParts { repository, tier, record, pending, task, branch, flight, result } = row.into_parts();
     if tier.is_empty() {
         return Err(Undecodable);
     }
@@ -224,6 +297,69 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         w::TierBranch::Made => d::TierBranch::Made,
         w::TierBranch::Pending(n) => d::TierBranch::Pending { entry: n.into_parts().number },
     };
+    let flight = match flight {
+        Some(f) => {
+            let w::TierFlightParts { next, entry, start, since, waiting, fault, pending } = f.into_parts();
+            let mut jobs = List::with_capacity(pending.len());
+            for attempt in pending.into_boxed() {
+                jobs.push(super::answers::decode_job_attempt(attempt)).expect(FITS);
+            }
+            Some(d::TierFlight {
+                next: match next {
+                    Some(at) => Some(skein_lib::Time::from_nanos(at)),
+                    None => None,
+                },
+                entry,
+                start: match start {
+                    Some(at) => Some(skein_lib::Time::from_nanos(at)),
+                    None => None,
+                },
+                since: match since {
+                    Some(at) => Some(skein_lib::Time::from_nanos(at)),
+                    None => None,
+                },
+                waiting,
+                fault,
+                pending: jobs.into_boxed(),
+            })
+        }
+        None => None,
+    };
+    let result = match result {
+        Some(r) => {
+            let w::TierResultParts { verdict, run, received, status } = r.into_parts();
+            let w::TierJudgementParts { number, tip, key, finding } = verdict.into_parts();
+            let finding = decode_finding(finding)?;
+            let w::ReceiptRunParts { id, number: run_number, url } = run.into_parts();
+            Some(d::TierResult {
+                verdict: p::Verdict {
+                    number,
+                    tip,
+                    key,
+                    failing: finding.failing,
+                    flakes: finding.flakes,
+                    landings: finding.blamed,
+                },
+                run: d::ReceiptRun { id, number: run_number, url },
+                received,
+                status: decode_branch(status),
+            })
+        }
+        None => None,
+    };
+    if (flight.is_some() && (run.is_none() || task.is_none())) || (result.is_some() && run.is_none()) {
+        return Err(Undecodable);
+    }
+    if let Some(result) = &result {
+        let run = run.as_ref().ok_or(Undecodable)?;
+        if result.verdict.number != run.number
+            || result.verdict.tip != run.tip
+            || result.verdict.key != run.key
+            || result.verdict.landings.len() != run.landings.len()
+        {
+            return Err(Undecodable);
+        }
+    }
     Ok(d::TierRow {
         repository: names::decode_repository(repository),
         tier,
@@ -237,5 +373,24 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         pending: decode_landings(pending),
         task,
         branch,
+        flight,
+        result,
     })
+}
+
+fn encode_branch(branch: d::TierBranch) -> w::TierBranch {
+    match branch {
+        d::TierBranch::Absent => w::TierBranch::Absent,
+        d::TierBranch::Made => w::TierBranch::Made,
+        d::TierBranch::Pending { entry } => {
+            w::TierBranch::Pending(w::Number::new(&w::CEILINGS, w::NumberParts { number: entry }).expect(FITS))
+        }
+    }
+}
+fn decode_branch(branch: w::TierBranch) -> d::TierBranch {
+    match branch {
+        w::TierBranch::Absent => d::TierBranch::Absent,
+        w::TierBranch::Made => d::TierBranch::Made,
+        w::TierBranch::Pending(entry) => d::TierBranch::Pending { entry: entry.into_parts().number },
+    }
 }
