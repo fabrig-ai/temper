@@ -616,7 +616,9 @@ impl Calls {
         }
     }
     fn start(&mut self, call: Call, started: bool) {
-        let kind = if call.arguments.first().is_some_and(|word| word.as_ref() == b"adopt") {
+        let kind = if call.arguments.first().is_some_and(|word| word.as_ref() == b"repository")
+            && call.arguments.get(1).is_some_and(|word| word.as_ref() == b"adopt")
+        {
             CallKind::Adoption
         } else {
             CallKind::Ordinary
