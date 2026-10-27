@@ -81,20 +81,8 @@ impl skein_shell::Host for Host {
                 matches!(&note, temper_service::Note::Listening { listener: temper_service::Listening::Clients, .. });
             let lines = note_line(note);
             eprint!("{lines}");
-            if self.wait_check
-                && clients
-                && let Some(marker) = std::env::var_os("TEMPER_R8_CUT_AT_LISTEN")
-            {
-                // Process-tier fault: abort exactly one start after announcing
-                // the clients' listener, before submitting this turn's operations.
-                match std::fs::OpenOptions::new().write(true).create_new(true).open(marker) {
-                    Ok(marker) => {
-                        drop(marker);
-                        std::process::abort();
-                    }
-                    Err(why) if why.kind() == io::ErrorKind::AlreadyExists => (),
-                    Err(why) => panic!("listen cut marker: {why}"),
-                }
+            if self.wait_check && clients {
+                crate::restart_fault::cut_at_listen();
             }
         }
         while let Some(note) = self.service.notes().pop() {
