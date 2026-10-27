@@ -322,6 +322,7 @@ fn delivery_packet(
         | Delivery::DemoNote { .. }
         | Delivery::Application { .. }
         | Delivery::Forges { .. }
+        | Delivery::ForgeDocument { .. }
         | Delivery::Panel { .. }
         | Delivery::SourceSignedOut { .. }
         | Delivery::Result { .. }
