@@ -30,7 +30,8 @@ pub fn fake_deployment(paths: &[PathBuf; 3]) -> oauth::Peer {
     sign_in::patch_configuration(&paths[0])
 }
 
-fn initialize(paths: &[PathBuf; 3]) {
+/// Run the shipped init on a story's three fresh private directories.
+pub fn initialize(paths: &[PathBuf; 3]) {
     for path in paths {
         fs::create_dir(path).expect("fresh deployment directory");
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).expect("private deployment directory");
@@ -1193,13 +1194,13 @@ impl LiveModel<'_> {
 
 fn declared_program<'a>(value: &'a serde_json::Value, name: &str) -> Result<&'a serde_json::Value, String> {
     let accounts = value["accounts"]["party"].as_array().ok_or("person's accounts missing")?;
-    require(accounts.iter().all(|account| account["provider"] == 2), "only the Claude Code provider has an account")?;
     accounts
         .iter()
         .find(|account| {
-            account["sources"].as_array().is_some_and(|sources| {
-                sources.iter().any(|source| source["kind"] == "program" && source["name"] == name)
-            })
+            account["provider"] == 2
+                && account["sources"].as_array().is_some_and(|sources| {
+                    sources.iter().any(|source| source["kind"] == "program" && source["name"] == name)
+                })
         })
         .ok_or_else(|| "held Claude Code account missing".to_owned())
 }
@@ -1220,15 +1221,21 @@ pub fn program_verification(login: &std::path::Path, accounts: &serde_json::Valu
     .collect())
 }
 
-/// Write the ordinary provider and agent configuration; inspect no login entry.
-/// A single program model makes both stock charters choose it at startup.
+/// Follow docs/help/box.md, step 1's Claude Code jq commands: replace `OpenAI`
+/// with Anthropic first, keeping the demo and init's other fields. Inspect no login entry.
 pub fn configure_live_model(config: &std::path::Path, model: LiveModel<'_>, executable: &std::path::Path) {
     let LiveModel::ClaudeCode { login } = model else { return };
     let path = config.join("temper.json");
     let agent_path = config.join("agent.json");
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("deployment")).expect("JSON");
     let mut agent: serde_json::Value = serde_json::from_slice(&fs::read(&agent_path).expect("agent")).expect("JSON");
-    let mut endpoint = agent["endpoints"][0].clone();
+    let mut endpoint = agent["endpoints"]
+        .as_array()
+        .expect("agent endpoints")
+        .iter()
+        .find(|endpoint| endpoint["name"] == "openai")
+        .expect("init OpenAI endpoint")
+        .clone();
     endpoint["name"] = "claude".into();
     endpoint["number"] = 2.into();
     endpoint["dialect"] = 2.into();
@@ -1236,29 +1243,49 @@ pub fn configure_live_model(config: &std::path::Path, model: LiveModel<'_>, exec
     endpoint["program"] = "claude_code".into();
     endpoint["address"] = "api.anthropic.com:443".into();
     endpoint["server_name"] = "api.anthropic.com".into();
-    endpoint["models"][0]["name"] = model.name().into();
-    let mut declared = value["engine"]["llm"]["models"][0].clone();
+    let mut agent_model = endpoint["models"][0].clone();
+    agent_model["name"] = model.name().into();
+    endpoint["models"] = serde_json::json!([agent_model]);
+    let mut declared = value["engine"]["llm"]["models"]
+        .as_array()
+        .expect("engine models")
+        .iter()
+        .find(|model| model["endpoint"] == "openai")
+        .expect("init OpenAI model")
+        .clone();
     declared["name"] = model.name().into();
     declared["endpoint"] = "claude".into();
-    let mut route = value["engine"]["llm"]["endpoints"][0].clone();
+    let mut route = value["engine"]["llm"]["endpoints"]
+        .as_array()
+        .expect("engine endpoints")
+        .iter()
+        .find(|endpoint| endpoint["name"] == "openai")
+        .expect("init OpenAI endpoint")
+        .clone();
     for key in ["name", "number", "dialect", "provider", "program", "server_name"] {
         route[key] = endpoint[key].clone();
     }
-    route["transport"] = "tls".into();
     route["address"] = serde_json::json!({"host":"api.anthropic.com", "port":443});
-    value["engine"]["llm"] = serde_json::json!({
-        "providers":[{"name":"anthropic", "number":2, "signed_in_plan":false,
-            "manage_usage":"https://claude.ai/settings/usage", "models":[model.name()],
-            "sources":{"programs":["claude_code"]}}],
-        "endpoints":[route], "models":[declared]
+    let provider = serde_json::json!({"name":"anthropic", "number":2, "signed_in_plan":false,
+        "manage_usage":"https://claude.ai/settings/usage", "models":[model.name()],
+        "sources":{"programs":["claude_code"]}
     });
-    // The demo's LLM binding requires its own provider. This sitting uses
-    // only the held program provider and never offers the demo.
-    value["application"]["demo"] = serde_json::Value::Null;
-    agent["endpoints"] = serde_json::json!([endpoint]);
-    agent["programs"] = serde_json::json!({"claude_code":{
+    for (table, field, replacement) in
+        [("providers", "name", provider), ("endpoints", "name", route), ("models", "endpoint", declared)]
+    {
+        let entries = value["engine"]["llm"][table].as_array_mut().expect("init LLM table");
+        entries.retain(|entry| entry[field] != "openai");
+        entries.insert(0, replacement);
+    }
+    let endpoints = agent["endpoints"].as_array_mut().expect("agent endpoints");
+    endpoints.retain(|endpoint| endpoint["name"] != "openai");
+    endpoints.insert(0, endpoint);
+    if agent["programs"].is_null() {
+        agent["programs"] = serde_json::json!({});
+    }
+    agent["programs"]["claude_code"] = serde_json::json!({
         "path":executable, "directory":login.parent().expect("held login parent")
-    }});
+    });
     super::write_private(&path, &serde_json::to_vec(&value).expect("live configuration"));
     super::write_private(&agent_path, &serde_json::to_vec(&agent).expect("live agent"));
 }
