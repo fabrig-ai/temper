@@ -29,6 +29,8 @@ temper runs software work for people: agents take tasks on the repositories of a
 - temper help ctl: the command line through which an agent works in a
   deployment for a person: calls, keys, kept requests, waits, exit
   statuses.
+- temper help landing: how a project that lands by turn lands a
+  change: its candidate, its gates proved by receipts, the turn.
 
 ## The guides
 
