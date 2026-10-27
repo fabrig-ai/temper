@@ -105,10 +105,12 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
         assert_eq!(call.exit, Some(Exit::Code(0)), "{}; box: {stderr}", String::from_utf8_lossy(&call.stderr));
     }
     let evidence = second.checked.unwrap_or_else(|| panic!("landing and forge evidence missing; box: {stderr}"));
-    for call in [&evidence.list, &evidence.show, &evidence.panel, &evidence.change] {
+    for call in [&evidence.list, &evidence.show, &evidence.panel, &evidence.change, &evidence.task] {
         assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
     }
     let panel = ctl::json(&evidence.panel);
+    let stored = ctl::json(&evidence.task);
+    eprintln!("owned turn stored landing budget: {}", stored["budget"]);
     assert_eq!(panel["phase"], "landed", "{panel}");
     let member = &panel["members"][0];
     let candidate = member["candidate"].as_str().expect("candidate");
@@ -136,13 +138,13 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     let runs: Vec<&Value> = runs.iter().filter(|run| run["workflow_id"] == "gate.yaml").collect();
     assert_eq!(runs.len(), 1, "one gate dispatch at the candidate: {}", evidence.runs);
     assert_eq!(runs[0]["id"], run);
-    assert_eq!(runs[0]["head_sha"], commit);
+    assert_eq!(runs[0]["commit_sha"], commit);
     assert_eq!(runs[0]["trigger_event"], "workflow_dispatch");
     assert_eq!(runs[0]["trigger_user"]["login"], "temper");
     let key = gate["key"].as_str().expect("gate key");
     let statuses = evidence.status["statuses"].as_array().expect("commit statuses");
     let status = statuses.iter().find(|status| status["context"] == "temper/gate/gate").expect("gate status");
-    assert_eq!(status["state"], "success");
+    assert_eq!(status["status"], "success");
     assert_eq!(status["description"], format!("key {} passed", &key[..16]));
     assert_eq!(status["target_url"], receipt["address"]);
     let show = String::from_utf8(evidence.show.stdout).expect("landing text");
@@ -151,7 +153,11 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     assert!(change.contains(&format!("way: turn · landing task {}", panel["task"])), "{change}");
     eprintln!(
         "turn landing evidence: {}",
-        json!({"landing":panel["task"], "candidate":commit, "gate_run":runs[0], "gate_status":status, "merge":evidence.pull["merge_commit_sha"]})
+        json!({"landing":panel["task"], "candidate":commit,
+            "gate_run":{"id":runs[0]["id"], "commit_sha":runs[0]["commit_sha"],
+                "trigger_event":runs[0]["trigger_event"], "trigger_user":runs[0]["trigger_user"]["login"],
+                "status":runs[0]["status"]},
+            "gate_status":status, "merge":evidence.pull["merge_commit_sha"]})
     );
     scratch.remove();
     eprintln!("owned turn story wall time: {:.3}s", began.elapsed().as_secs_f64());
