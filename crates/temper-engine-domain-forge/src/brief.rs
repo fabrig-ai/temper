@@ -118,12 +118,6 @@ pub fn hex(byte: u8) -> [u8; 2] {
     [high, low]
 }
 
-fn append_hex(out: &mut BriefWords, bytes: &[u8]) {
-    for byte in bytes {
-        append(out, &hex(*byte));
-    }
-}
-
 pub(crate) fn brief_part(words: &BriefWords, parts: u32, bytes: u32) -> BriefRead {
     if parts == 0 {
         return BriefRead::Failed;
