@@ -54,6 +54,7 @@ pub(super) fn run(data: &Path, records: &[(u64, Box<[u8]>)], load: bool) -> Resu
     let [store, secrets, transcripts] = &mut drivers;
     let seeded = protocol::seed([&mut store.io, &mut secrets.io, &mut transcripts.io], 0);
     let mut component = protocol::Store::on_directory(&limits, application, &[], seeded);
+    component.patch_sets(temper_service::store::PATCH_SETS);
     assert!(component.wires(&temper_service::store::WIRES));
     let mut host = StoreHost {
         store: component,
@@ -324,7 +325,8 @@ impl skein_shell::Host for StoreHost {
             && self.completions.is_empty()
     }
     fn worst_case(&self) -> u64 {
-        protocol::worst_case(&self.limits).expect("fixture store bound")
+        protocol::worst_case_with_patches(&self.limits, &temper_service::store::PATCH_SETS)
+            .expect("fixture store bound")
     }
     fn operations(&self) -> u32 {
         OPERATIONS
