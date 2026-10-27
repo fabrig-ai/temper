@@ -487,7 +487,7 @@ fn project_landing(
     document: &Document,
     path: &Path,
     limits: &temper_engine_domain_forge::Limits,
-    forges: &[Forge],
+    forges: &[super::Forge],
     problems: &mut Problems,
 ) -> Option<engine::ProjectLanding> {
     let by = optional_word(object, document, b"by", b"queue", path, problems);
@@ -532,7 +532,7 @@ fn project_landing(
                         found = true;
                         read::form(
                             by != engine::Way::Turn || forge.kind != crate::settings::Kind::GitHub,
-                            path.member(b"forge"),
+                            path.member(b"repository"),
                             problems,
                         );
                     }
