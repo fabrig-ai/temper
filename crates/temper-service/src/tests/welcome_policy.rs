@@ -113,13 +113,22 @@ fn real_init_offers_its_owner_a_chat_with_all_three_procedures() {
     driver.settle();
     const READ: Token = Token::new(901);
     driver.send(Event::Party(PartyInput::Read {
-        reply_to: ReplyTo::new(READ), sign_in: driver.session(), read: core::reads::Read::Frame,
+        reply_to: ReplyTo::new(READ),
+        sign_in: driver.session(),
+        read: core::reads::Read::Frame,
     }));
     driver.settle();
-    let document = driver.delivered.iter().rev().find_map(|delivery| {
-        let Delivery::Read { reply, answer: core::reads::Answer::Document(document) } = delivery else { return None };
-        (*reply == ReplyTo::new(READ)).then_some(document)
-    }).expect("owner's frame");
+    let document = driver
+        .delivered
+        .iter()
+        .rev()
+        .find_map(|delivery| {
+            let Delivery::Read { reply, answer: core::reads::Answer::Document(document) } = delivery else {
+                return None;
+            };
+            (*reply == ReplyTo::new(READ)).then_some(document)
+        })
+        .expect("owner's frame");
     let core::documents::Document::Frame(frame) = document.as_ref() else { panic!("frame") };
     let project = frame.projects.iter().find(|project| project.project == 1).expect("seed project");
     let offered = project.creating.as_ref().expect("owner may start a chat");
