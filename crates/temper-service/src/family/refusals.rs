@@ -153,6 +153,17 @@ fn role(value: p::Role, limits: &w::Limits) -> Result<w::HeldRole, w::Problem> {
 }
 fn lack(value: p::Lack, limits: &w::Limits) -> Result<w::Lacking, w::Problem> {
     Ok(match value {
+        p::Lack::HoldOwner { hold, owner } => {
+            let owner = match owner {
+                p::HoldOwner::Party { person } => {
+                    w::HoldOwner::Party(w::HoldOwnerParty::new(limits, w::HoldOwnerPartyParts { person })?)
+                }
+                p::HoldOwner::Task { task } => {
+                    w::HoldOwner::Task(w::HoldOwnerTask::new(limits, w::HoldOwnerTaskParts { task })?)
+                }
+            };
+            w::Lacking::HoldOwner(w::LackingHoldOwner::new(limits, w::LackingHoldOwnerParts { hold, owner })?)
+        }
         p::Lack::Approver => w::Lacking::Approver,
         p::Lack::Funding => w::Lacking::Funding,
         p::Lack::Tool => w::Lacking::Tool,
@@ -255,6 +266,9 @@ fn moved(value: p::Moved, limits: &w::Limits) -> Result<w::Refusal, w::Problem> 
             let reason =
                 Some(w::CurrentHold::Reason(w::CurrentHoldReason::new(limits, w::CurrentHoldReasonParts { value })?));
             (revision, w::Moved::Hold(w::MovedHold::new(limits, w::MovedHoldParts { reason })?))
+        }
+        p::Moved::PlacedHold { revision } => {
+            (revision, w::Moved::PlacedHold(w::MovedPlacedHold::new(limits, w::MovedPlacedHoldParts { revision })?))
         }
         p::Moved::Spec { revision } => (revision, w::Moved::Spec),
         p::Moved::Person { revision } => (revision, w::Moved::PersonTask),

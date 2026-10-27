@@ -279,12 +279,12 @@ pub const RELEASE: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 1,
-    notes: b"",
+    notes: b"A task a party's hold holds is theirs to release, or a role's above\ntheirs: task show says whether you may. Releasing the stopped task\nitself lifts its hold, with every task the hold holds.\n",
 };
 pub const LIFT: Tool = Tool {
     name: b"hold lift",
     line: b"Lift a placed hold you may lift",
-    prints: b"",
+    prints: b"`done: hold N lifted, COUNT released`",
     result: b"lift",
     forms: &[&[
         positional(b"hold", b"HOLD", Kind::Number, Required, b"Hold number, as task show prints it"),
@@ -293,17 +293,17 @@ pub const LIFT: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 1,
-    notes: b"",
+    notes: b"Only the hold's owner, or a party whose role ranks above theirs,\nlifts it. Lifted alone, the tasks it holds stay held, each\nreleased with task release; with --with-tasks, every task it\nholds that nothing else holds runs again. A lift moves the hold's\nrevision.\n",
 };
 pub const STOP: Tool = Tool {
     name: b"task stop",
-    line: b"Stop a task's run and hold it",
+    line: b"Hold a task and every task below it, stopping their runs",
     prints: b"`done: task N, stop`",
     result: b"stop",
     forms: &[&[positional(b"task", b"TASK", Kind::Number, Required, b"The task's number")]],
     keyed: Keyed::Optional,
     area: 1,
-    notes: b"The task stays held until task release lifts the hold or task\ncancel ends it.\n",
+    notes: b"The stop is a placed hold of yours over the task's subtree. The\ntasks stay held until task release of the stopped task lifts it,\nhold lift lifts it, or task cancel ends them.\n",
 };
 pub const CANCEL: Tool = Tool {
     name: b"task cancel",
