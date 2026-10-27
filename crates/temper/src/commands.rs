@@ -114,7 +114,7 @@ pub const COMMANDS: [Row; 20] = [
             },
         ],
         settings: &[&directories::SETTINGS, &box_command::ECHO_SETTINGS],
-        notes: "Steps run in order, each restarted when it exits, and stop in reverse order. Its stdout is temper serve's sign-in links, each line whole; its stderr, what --echo chooses; each step logs under the data directory.",
+        notes: "Steps run in order, each restarted when it exits until it has exited too often within its window, when the box gives up, stops the others and exits 1; they stop in reverse order. Its stdout is temper serve's sign-in links, each line whole; its stderr, what --echo chooses; each step logs under the data directory.",
         transition: false,
     },
     Row {

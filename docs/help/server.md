@@ -100,7 +100,10 @@ Forgejo's own output; `serve` prints its sign-in link,
 `https://temper.example.com/jig/v1/sign-in/link?secret=` and its
 secret, and on stderr `listening clients 127.0.0.1:8367`.
 
-If not: a refused start names its member, file or address. A forge
+If not: a refused start names its member, file or address, or what
+reading `DATA` back refused (`temper serve: restore KIND: REASON`,
+`temper serve: restart refused during STEP`): keep `DATA` as it is and
+report that line as a finding. A forge
 not prepared: `serve`'s stderr says
 `temper serve: forge 1: Not connected: prepare it with` the command;
 run `prepare`, then start the engine again.

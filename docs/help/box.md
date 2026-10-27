@@ -75,7 +75,12 @@ its memory names by how many bytes the whole worst case passes
 `engine.memory_bytes`, from any value, the box's two pipes included:
 raise it by that once and start again. `--box: the box's pipes need ...`: the pipes lack what
 the line names (memory, socket slots, or a nonzero
-`application.limits.overrides.box.line_bytes`); give it.
+`application.limits.overrides.box.line_bytes`); give it. A start
+whose stored state is refused prints, in place of a sign-in link,
+`temper serve: restore KIND: REASON` or
+`temper serve: restart refused during STEP`; the box starts serve
+again a few times, each saying the same, then gives up and exits 1:
+keep `DATA` as it is and report the line as a finding.
 
 ## 3. Sign in
 

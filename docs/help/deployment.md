@@ -78,8 +78,12 @@ help settings).
 - **ctl rides a restart:** a wait reconnects within the link's
   deadline, and a kept request is sent again under its key (temper
   help ctl).
-- **A refused start changes nothing,** and its line names the member or
-  file at fault, such as a secret file readable by others.
+- **A refused start says why:** its line names the member or file at
+  fault, such as a secret file readable by others, or what reading the
+  stored state back refused: `temper serve: restore KIND: REASON` or
+  `temper serve: restart refused during STEP`. A configuration refused
+  changes nothing; a stored state refused is a finding: keep `DATA` as
+  it is and report the line.
 
 ## Acting on it
 
