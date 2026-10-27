@@ -465,7 +465,18 @@ fn runtime_project_root() -> (Domain, Env<Limits>) {
     limits.authority.projects = 2;
     limits.people.projects = 3;
     limits.journal.writes = crate::limits::route_bound(&limits).unwrap().checked_add(limits.call_records).unwrap();
-    signed_in_root(super::resume_fixture::root_with_config_and_limits(configured, &limits), Some(people::Role::Owner))
+    let (mut domain, env) = signed_in_root(
+        super::resume_fixture::root_with_config_and_limits(configured, &limits),
+        Some(people::Role::Owner),
+    );
+    // The restart fixture checks restored children; complete the tasks child's switch
+    // before testing runtime project creation and its first period.
+    let _requests = jig_domain_core::step(
+        &mut domain.core,
+        &crate::limits::environment_core(&env),
+        jig_domain_core::Event::Tasks(jig_domain_tasks::Event::Restored),
+    );
+    (domain, env)
 }
 
 fn make_project(name: &str) -> Event {
@@ -533,6 +544,8 @@ fn make_project_copies_policy_one_and_the_root_hears_it_only_after_commit() {
     assert!(heard && answered);
     assert_eq!(domain.core.projects.as_slice(), &[1, 2]);
     assert_eq!(domain.core.people.role(1, 2), Some(people::Role::Owner));
+    assert_eq!(domain.core.period(2), 1, "the new project's first period is open");
+    assert!(domain.core.connector_repair_authority(2).is_some(), "the first period grants repair authority");
     assert!(domain.core.repair_seed(2).is_some(), "the new project's first period can fund deployment work");
 }
 
