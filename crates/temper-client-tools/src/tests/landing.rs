@@ -300,11 +300,11 @@ fn landing_calls_round_trip_and_reject_waits_and_zero_tasks() {
 }
 #[test]
 fn help_landing() {
-    f::check_golden("help_landing", &f::help(Some(52)));
+    f::check_golden("help_landing_show", &f::help(Some(53)));
 }
 #[test]
 fn help_landings() {
-    f::check_golden("help_landings", &f::help(Some(53)));
+    f::check_golden("help_landing_list", &f::help(Some(54)));
 }
 
 #[test]
@@ -427,7 +427,7 @@ fn contains(bytes: &[u8], part: &str) -> bool {
 fn an_invalid_direct_call_prints_invalid_landing_call() {
     for json in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let mut call = f::call(&["landing", "61"]);
+        let mut call = f::call(&["landing", "show", "61"]);
         *call.values.get_mut(0).unwrap() = Some(jig::call::Values::One(jig::call::Value::Number(0)));
         let number = root.submit_prepared(call, json, None);
         let answer = root.answer(number).unwrap();
@@ -443,9 +443,10 @@ fn an_invalid_direct_call_prints_invalid_landing_call() {
 
 #[test]
 fn a_refused_landing_or_landings_watch_prints_not_allowed() {
-    for (argv, task) in
-        [(&["landing", "61", "--project", "1"][..], Some(61)), (&["landings", "--project", "1"][..], None)]
-    {
+    for (argv, task) in [
+        (&["landing", "show", "61", "--project", "1"][..], Some(61)),
+        (&["landing", "list", "--project", "1"][..], None),
+    ] {
         for json in [false, true] {
             let mut root = f::signed_in(f::PARTY);
             let call = root.submit_prepared(f::call(argv), json, None);
