@@ -160,7 +160,7 @@ impl ReadCondition {
             }
         }
     }
-    /// Continue from the exact subject version just observed. `wait --since`
+    /// Continue from the exact subject version just observed. `task show --since`
     /// checks the current version on subscription, including changes between
     /// commands, then sleeps on the service watch until that version changes.
     #[must_use]
@@ -171,7 +171,7 @@ impl ReadCondition {
         assert_eq!(value.pointer("/chip/task").and_then(serde_json::Value::as_u64), Some(task));
         let digest = value["digest"].as_str().expect("watched task digest");
         Some(
-            ["wait", "task", &task.to_string(), "--since", digest, "--json"]
+            ["task", "show", &task.to_string(), "--since", digest, "--json"]
                 .into_iter()
                 .map(|word| word.as_bytes().into())
                 .collect(),
@@ -273,7 +273,7 @@ pub fn until_matching(at: Dir, argv: Argv, holds: ReadCondition, early: &'static
 pub fn writing_task(at: Dir, task: u64) -> Step {
     until_matching(
         at,
-        crate::argv!["wait", "task", number(task), "--until", "phase:running", "--json"],
+        crate::argv!["task", "show", number(task), "--until", "phase:running", "--json"],
         ReadCondition::WritingTask { task },
         b"\"task\"",
     )
@@ -416,7 +416,7 @@ pub(crate) struct Caller {
     input: Box<[u8]>,
 }
 fn is_settings(argv: &Argv) -> bool {
-    matches!(argv.0.first(), Some(Arg::Lit("change-settings")))
+    matches!(argv.0.as_slice(), [Arg::Lit("settings"), Arg::Lit("apply"), ..])
 }
 impl Caller {
     pub(crate) fn leftovers(&self) -> &'static [crate::ending::Leftover] {
@@ -488,7 +488,10 @@ impl Caller {
         // is consumed here; the story keeps its original named call positions.
         steps.insert(
             position + 1,
-            call(at, crate::argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "fixture-llm"]),
+            call(
+                at,
+                crate::argv!["account", "add-key", "1", file("fixture.key"), "--deployment", "--key", "fixture-llm"],
+            ),
         );
         steps.insert(position + 2, Step::FixtureReady);
         let calls = 1;
@@ -1207,7 +1210,7 @@ mod read_condition_tests {
         let mut caller = Caller::new(vec![writing_task(D1, 8)], PathBuf::new(), Fd::new(0));
         let words = |caller: &Caller| caller.words().into_iter().skip(1).collect::<Vec<_>>();
         let expected = |args: &[&str]| args.iter().map(|a| a.as_bytes().into()).collect::<Vec<Box<[u8]>>>();
-        assert_eq!(words(&caller), expected(&["wait", "task", "8", "--until", "phase:running", "--json"]));
+        assert_eq!(words(&caller), expected(&["task", "show", "8", "--until", "phase:running", "--json"]));
         caller.advance(Time::from_nanos(1));
         for (when, digest) in [(2, "0123456789abcdef"), (4, "fedcba9876543210")] {
             let mut value = writing();
@@ -1216,7 +1219,7 @@ mod read_condition_tests {
             caller.running[0] = None;
             caller.calls[0].exit = Some(Exit::Code(0));
             caller.calls[0].stdout = serde_json::to_vec(&json!({"task":value,"met":true})).expect("JSON");
-            assert_eq!(words(&caller), expected(&["wait", "task", "8", "--since", digest, "--json"]));
+            assert_eq!(words(&caller), expected(&["task", "show", "8", "--since", digest, "--json"]));
             caller.advance(Time::from_nanos(when));
             assert_eq!(caller.next, 0);
         }
@@ -1278,7 +1281,12 @@ mod read_condition_tests {
     #[test]
     fn real_loop_until_retries_initial_due_and_retains_exact_matching_response() {
         let mut caller = Caller::new(
-            vec![until_matching(D1, crate::argv!["task", number(crate::case::A), "--json"], condition(), b"ended")],
+            vec![until_matching(
+                D1,
+                crate::argv!["task", "show", number(crate::case::A), "--json"],
+                condition(),
+                b"ended",
+            )],
             PathBuf::new(),
             Fd::new(0),
         );
@@ -1306,7 +1314,8 @@ mod read_condition_tests {
     }
     #[test]
     fn real_loop_completion_uses_its_wall_input() {
-        let mut caller = Caller::new(vec![call(D1, crate::argv!["accounts", "--json"])], PathBuf::new(), Fd::new(0));
+        let mut caller =
+            Caller::new(vec![call(D1, crate::argv!["account", "list", "--json"])], PathBuf::new(), Fd::new(0));
         caller.advance(Time::from_nanos(1));
         caller.owners.insert(Token::new(100), 0);
         caller.complete(

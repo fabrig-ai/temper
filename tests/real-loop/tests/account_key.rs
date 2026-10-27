@@ -35,11 +35,11 @@ fn a_private_file_key_reaches_the_chats_llm() {
         || {
             vec![
                 sign_in(D1),
-                call(D1, argv!["add-key", "1", file("llm.key"), "--deployment", "--key", "smoke-llm"]),
-                call(D1, argv!["rank", number(ADDED_ACCOUNT), "1"]),
-                call(D1, argv!["wait", "accounts", "--until", "usable"]),
-                call(D1, argv!["chat", "--project", "1", scripts::WORDS, "--key", "key-chat"]),
-                call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
+                call(D1, argv!["account", "add-key", "1", file("llm.key"), "--deployment", "--key", "smoke-llm"]),
+                call(D1, argv!["account", "rank", number(ADDED_ACCOUNT), "1"]),
+                call(D1, argv!["account", "list", "--until", "usable"]),
+                call(D1, argv!["chat", "start", "--project", "1", scripts::WORDS, "--key", "key-chat"]),
+                call(D1, argv!["task", "show", task(CHAT), "--until", "replied"]),
             ]
         },
     );

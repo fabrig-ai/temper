@@ -25,14 +25,14 @@ fn two_acts_on_one_directory_take_its_lock_in_turn() {
             vec![
                 sign_in(D1),
                 probe(D1),
-                start(D1, argv!["chat", "--project", fixtures::PROJECT, "--key", FIRST_NAME, scripts::WORDS]),
-                start(D1, argv!["chat", "--project", fixtures::PROJECT, "--key", SECOND_NAME, scripts::WORDS]),
+                start(D1, argv!["chat", "start", "--project", fixtures::PROJECT, "--key", FIRST_NAME, scripts::WORDS]),
+                start(D1, argv!["chat", "start", "--project", fixtures::PROJECT, "--key", SECOND_NAME, scripts::WORDS]),
                 contended(&[FIRST, SECOND]),
                 release(D1),
                 join(FIRST),
                 join(SECOND),
-                until(D1, argv!["chat", task(FIRST)], scripts::REPLY, scripts::EARLY),
-                until(D1, argv!["chat", task(SECOND)], scripts::REPLY, scripts::EARLY),
+                until(D1, argv!["chat", "show", task(FIRST)], scripts::REPLY, scripts::EARLY),
+                until(D1, argv!["chat", "show", task(SECOND)], scripts::REPLY, scripts::EARLY),
             ]
         },
     );

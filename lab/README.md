@@ -25,7 +25,7 @@ wait and run time, coding charter 2's shell access, and chat template 1's cap
 of 50. S, H, P, cluster-web and look-live apply that FILE with a `settings`
 action immediately after their owner signs in and before the story. Canonical
 `cluster/` stays actionless: its native process harness signs in and applies
-`cluster/settings.json` through `temper ctl change-settings` before the first
+`cluster/settings.json` through `temper ctl settings apply` before the first
 chat. Both paths change against the fresh deployment's revision 1. The
 charters' ordinary instructions come from the binary's stock; no instruction
 files are copied into a deployment.
@@ -77,7 +77,7 @@ only change is `cost` set to `temper-m1-calibration`.
 (3.1), the ground on real backends with no driver, account or model: a
 fresh `temper box` with one owned Forgejo from the lab's `forgejo` and
 `forgejo-runner` programs on the kept `forgejo` port. Its seed signs in by
-the box's link, runs `ctl forge-setup 1` and does the person's first act
+the box's link, runs `ctl forge setup 1` and does the person's first act
 with Forgejo's CLI. Its `ground` check judges the forge connected,
 `work/hello` adopted into `hello` and the starter workflow's first run green
 on Forgejo's Actions, from ctl's documents and the forge's API. The class is
@@ -85,8 +85,8 @@ on Forgejo's Actions, from ctl's documents and the forge's API. The class is
 seeds, free (2026-10-24).
 
 [live-0b/](live-0b/README.md) is rung 0b: 0a with the lab's held ChatGPT
-record, `chatgpt`, moved in by `ctl import`, one chat turn whose reply the
-`chat` check reads, and the record moved out by the release's `ctl export`
+record, `chatgpt`, moved in by `ctl account import`, one chat turn whose reply the
+`chat` check reads, and the record moved out by the release's `ctl account export`
 for the runner to give back. Its meter reads temper's spend. temper's run
 cap, the charter's 280 units, is the stop while a turn runs. It was rehearsed
 without a model on the real stack (a fake LLM, a junk held record); its paid
@@ -530,9 +530,9 @@ Each `{artifact.temper} ctl` action is `draft/qa-lab.md`'s, 5.1. In order:
 | Action | Its argv | Its stdin | For |
 |---|---|---|---|
 | `sign-in` | `{artifact.temper} ctl {dir.client} sign-in -` | `http://{proc.engine.ready.link}` | the owner signs in by serve's printed link, which spends it |
-| `settings` | `{artifact.temper} ctl {dir.client} change-settings {experiment}/settings.json --against 1 --key lab-settings` | | the study's settings, after owner sign-in |
-| `add-key` | `{artifact.temper} ctl {dir.client} add-key 1 {proc.llm.dir}/llm.key --deployment --key cluster-web-llm` | | the fake model's key |
-| `usable` | `{artifact.temper} ctl {dir.client} wait accounts --until usable --timeout 200` | | the account usable |
+| `settings` | `{artifact.temper} ctl {dir.client} settings apply {experiment}/settings.json --against 1 --key lab-settings` | | the study's settings, after owner sign-in |
+| `add-key` | `{artifact.temper} ctl {dir.client} account add-key 1 {proc.llm.dir}/llm.key --deployment --key cluster-web-llm` | | the fake model's key |
+| `usable` | `{artifact.temper} ctl {dir.client} account list --until usable --timeout 200` | | the account usable |
 | `relink` | `/bin/sh {experiment}/relink {artifact.temper} {dir.spent}` | the spent link again | serve refuses it and prints a fresh one, the action's awaited line: `{"process": "engine", "stream": "stdout", "prefix": "http://", "capture": "link"}` (the lab's `lab.md`, 4.5) |
 | `browser-sign-in` | `{runner}/hand/sign-in {proc.browser.ready.address}` | `http://{action.relink.link}` | the browser opens the fresh link |
 | `signed-in` | `{runner}/hand/browse {proc.browser.ready.address} wait heading Chats --exact --timeout 120` | | the chats page, signed in |

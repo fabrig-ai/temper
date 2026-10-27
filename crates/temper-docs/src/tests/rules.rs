@@ -156,10 +156,9 @@ fn a_capital_word_after_temper_help_is_no_link() {
 
 #[test]
 fn placeholders_are_the_set_or_declared_by_the_walk() {
-    placeholders(&fixture(Kind::Concept, "```\ntemper ctl DIR task TASK\n```\n")).expect("set");
-    fails(placeholders, &fixture(Kind::Concept, "```\ntemper ctl DIR task N\n```\n"), "placeholder N");
-    let text =
-        "## Before you start\n- `OWNER` is the owner.\n## 1. Act\n```\ntemper ctl DIR adopt --owner OWNER\n```\n";
+    placeholders(&fixture(Kind::Concept, "```\ntemper ctl DIR task show TASK\n```\n")).expect("set");
+    fails(placeholders, &fixture(Kind::Concept, "```\ntemper ctl DIR task show N\n```\n"), "placeholder N");
+    let text = "## Before you start\n- `OWNER` is the owner.\n## 1. Act\n```\ntemper ctl DIR repository adopt --owner OWNER\n```\n";
     placeholders(&fixture(Kind::Walk, text)).expect("declared");
     placeholders(&fixture(Kind::Walk, leaked(text.replace("OWNER", "N")))).expect("one-byte declaration");
     fails(
@@ -167,9 +166,9 @@ fn placeholders_are_the_set_or_declared_by_the_walk() {
         &fixture(Kind::Walk, leaked(text.replace("- `OWNER` is the owner.\n", ""))),
         "placeholder OWNER",
     );
-    placeholders(&fixture(Kind::Concept, "OWNER in prose\n```\ntemper ctl DIR task taskTASK\n```\n"))
+    placeholders(&fixture(Kind::Concept, "OWNER in prose\n```\ntemper ctl DIR task show taskTASK\n```\n"))
         .expect("prose or mixed case");
-    placeholders(&fixture(Kind::Guide, "```\ntemper ctl DIRECTORY task N\n```\n")).expect("guides exempt");
+    placeholders(&fixture(Kind::Guide, "```\ntemper ctl DIRECTORY task show N\n```\n")).expect("guides exempt");
 }
 
 #[test]

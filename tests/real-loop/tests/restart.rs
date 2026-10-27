@@ -28,7 +28,7 @@ fn a_restarted_service_keeps_the_chat_with_its_reply() {
             items[0]["set"]["waiting"] = 2_000_000.into();
             steps.extend(fixtures::change_settings(D1, "restart-settings", items));
             steps.push(chat);
-            steps.push(until(D1, argv!["chat", task(CHAT)], scripts::REPLY, scripts::EARLY));
+            steps.push(until(D1, argv!["chat", "show", task(CHAT)], scripts::REPLY, scripts::EARLY));
             steps
         },
     );
@@ -39,9 +39,9 @@ fn a_restarted_service_keeps_the_chat_with_its_reply() {
         move || {
             vec![
                 sign_in(D1),
-                call(D1, argv!["chat", number(chat)]),
-                call(D1, argv!["settings", "--json"]),
-                call(D1, argv!["setting", "charter", "1", "--json"]),
+                call(D1, argv!["chat", "show", number(chat)]),
+                call(D1, argv!["settings", "show", "--json"]),
+                call(D1, argv!["settings", "show", "charter", "1", "--json"]),
             ]
         },
     );

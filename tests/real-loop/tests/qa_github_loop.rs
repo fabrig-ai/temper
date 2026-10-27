@@ -10,7 +10,21 @@ use temper_real_loop_world::{
 fn adopt(owner: &'static str, name: &'static str, key: &'static str) -> Step {
     call(
         D1,
-        argv!["adopt", "--project", "1", "--owner", owner, "--name", name, "--landing", "main", "--key", key, "--json"],
+        argv![
+            "repository",
+            "adopt",
+            "--project",
+            "1",
+            "--owner",
+            owner,
+            "--name",
+            name,
+            "--landing",
+            "main",
+            "--key",
+            key,
+            "--json"
+        ],
     )
 }
 
@@ -21,8 +35,8 @@ fn no_agents(_: SocketAddr) -> Box<[Script]> {
 fn account() -> Vec<Step> {
     vec![
         sign_in(D1),
-        call(D1, argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "qa-llm"]),
-        call(D1, argv!["wait", "accounts", "--until", "usable"]),
+        call(D1, argv!["account", "add-key", "1", file("fixture.key"), "--deployment", "--key", "qa-llm"]),
+        call(D1, argv!["account", "list", "--until", "usable"]),
     ]
 }
 
@@ -115,8 +129,8 @@ fn read_succeeded(ran: &Ran) {
 
 fn read_steps(mut steps: Vec<Step>) -> Vec<Step> {
     let chat = steps.len();
-    steps.push(call(D1, argv!["chat", "--project", "1", "--key", "read", "@qa_read Read the README"]));
-    steps.push(call(D1, argv!["wait", "task", task(chat), "--until", "replied"]));
+    steps.push(call(D1, argv!["chat", "start", "--project", "1", "--key", "read", "@qa_read Read the README"]));
+    steps.push(call(D1, argv!["task", "show", task(chat), "--until", "replied"]));
     steps
 }
 
@@ -132,16 +146,16 @@ fn push_run() -> Ran {
         let mut steps = account();
         steps.extend([
             adopt("acme", "app", "installed"),
-            call(D1, argv!["chat", "--project", "1", "--key", "push", "@forge_chat Make one small edit"]),
-            call(D1, argv!["wait", "task", task(PUSH_CHAT), "--until", "replied"]),
+            call(D1, argv!["chat", "start", "--project", "1", "--key", "push", "@forge_chat Make one small edit"]),
+            call(D1, argv!["task", "show", task(PUSH_CHAT), "--until", "replied"]),
             // Fresh deployment: chat T1, change T2, coder T3. The coder's
             // terminal follows its delivery, without waiting for review/landing.
             // The procedure creates its coder after the chat can already park;
             // discover it before opening a watch on that task.
-            until(D1, argv!["task", number(PROCEDURE), "--tree", "--json"], b"\"task\":3", b"\"task\":2"),
-            call(D1, argv!["wait", "task", delegate(CODER_SEEN), "--until", "ended", "--json"]),
+            until(D1, argv!["task", "show", number(PROCEDURE), "--tree", "--json"], b"\"task\":3", b"\"task\":2"),
+            call(D1, argv!["task", "show", delegate(CODER_SEEN), "--until", "ended", "--json"]),
             call(D1, argv!["me", "--json"]),
-            call(D1, argv!["task", number(CODER), "--json"]),
+            call(D1, argv!["task", "show", number(CODER), "--json"]),
             calls::ends_leaving(&[temper_real_loop_world::ending::Leftover {
                 task: PROCEDURE,
                 may_be: &[

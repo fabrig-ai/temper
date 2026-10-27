@@ -73,6 +73,7 @@ fn adopt() -> calls::Step {
     calls::call(
         D1,
         argv![
+            "repository",
             "adopt",
             "--project",
             "1",
@@ -136,11 +137,11 @@ fn old_chat() -> world::Ran {
         || {
             vec![
                 calls::sign_in(D1),
-                calls::call(D1, argv!["chat", "--project", "1", "--key", "old-chat", "@old Wait for a home"]),
-                calls::call(D1, argv!["wait", "task", "1", "--until", "replied"]),
+                calls::call(D1, argv!["chat", "start", "--project", "1", "--key", "old-chat", "@old Wait for a home"]),
+                calls::call(D1, argv!["task", "show", "1", "--until", "replied"]),
                 adopt(),
-                calls::call(D1, argv!["message", "1", "Read the home now", "--key", "wake-old"]),
-                calls::call(D1, argv!["wait", "task", "1", "--until", "replied"]),
+                calls::call(D1, argv!["task", "message", "1", "Read the home now", "--key", "wake-old"]),
+                calls::call(D1, argv!["task", "show", "1", "--until", "replied"]),
             ]
         },
     )
@@ -201,8 +202,8 @@ fn a_chat_created_after_home_adoption_gets_a_writable_run_branch() {
             vec![
                 calls::sign_in(D1),
                 adopt(),
-                calls::call(D1, argv!["chat", "--project", "1", "--key", "new-chat", "@new Read the home"]),
-                calls::call(D1, argv!["wait", "task", "1", "--until", "replied"]),
+                calls::call(D1, argv!["chat", "start", "--project", "1", "--key", "new-chat", "@new Read the home"]),
+                calls::call(D1, argv!["task", "show", "1", "--until", "replied"]),
             ]
         },
     );

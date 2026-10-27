@@ -141,7 +141,14 @@ impl Observed {
                 step
                 && let Some(calls::Arg::Lit(command)) = argv.0.first()
             {
-                self.commands.push((*command).into());
+                let name = if let Some(calls::Arg::Lit(verb)) = argv.0.get(1)
+                    && !matches!(*command, "me" | "inbox" | "sign-in" | "sign-out" | "pending" | "help")
+                {
+                    format!("{command} {verb}")
+                } else {
+                    String::from(*command)
+                };
+                self.commands.push(name);
             }
         }
         self
@@ -814,10 +821,10 @@ pub fn step_4_5_limited(observed: &Observed) -> Vec<Miss> {
             "A's result timestamp must be past the reset",
         ),
         (
-            observed.commands.iter().position(|command| command == "chat").is_some_and(|chat| {
+            observed.commands.iter().position(|command| command == "chat start").is_some_and(|chat| {
                 observed.commands[chat + 1..]
                     .iter()
-                    .all(|command| matches!(command.as_str(), "wait" | "task" | "accounts"))
+                    .all(|command| matches!(command.as_str(), "task show" | "account list"))
             }),
             ACCOUNT_WAIT,
             "no person's act may follow the chat, including retry or replace-key",
@@ -965,7 +972,8 @@ mod account_tests {
                 "sources":[{"number":0,"usable":false,"state":{"kind":"later","until":RESET}}]}]}}),
         );
         observed.documents.get_mut(&Read::AEnded).expect("ended")["task"]["result"]["at"] = (RESET + 1).into();
-        observed.commands = ["chat", "wait", "wait", "task", "accounts", "task"].map(String::from).into();
+        observed.commands =
+            ["chat start", "task show", "task show", "task show", "account list", "task show"].map(String::from).into();
         observed.told = vec![told(Agent::A, HELD_A_SPEC, 0), told(Agent::A, HELD_A_SPEC, 0)];
         observed
     }
@@ -1016,7 +1024,7 @@ mod account_tests {
         observed.documents.remove(&Read::Limited);
         observed.documents.get_mut(&Read::AEnded).expect("ended")["task"]["result"]["at"] = RESET.into();
         observed.documents.get_mut(&Read::AEnded).expect("ended")["task"]["kept_account"] = Value::Null;
-        observed.commands.push("retry".into());
+        observed.commands.push("account retry".into());
         observed.told.last_mut().expect("resumed").words = Box::new([]);
         let misses = step_4_5_limited(&observed);
         assert_eq!(misses.len(), MISSES);
@@ -7397,16 +7405,16 @@ fn budget_inbox(observed: &Observed, misses: &mut Vec<Miss>) {
             && commands
                 .iter()
                 .position(|c| *c == "inbox")
-                .zip(commands.iter().position(|c| *c == "answer"))
+                .zip(commands.iter().position(|c| *c == "task answer"))
                 .is_some_and(|(read, answer)| read < answer)
             && commands
                 .iter()
-                .position(|c| *c == "answer")
+                .position(|c| *c == "task answer")
                 .zip(commands.iter().rposition(|c| *c == "inbox"))
                 .is_some_and(|(answer, read)| answer < read)
-            && commands.iter().filter(|c| **c == "answer").count() == 1,
+            && commands.iter().filter(|c| **c == "task answer").count() == 1,
         BUDGET_INBOX,
-        "the read before ctl answer must hold A's sole question, absent in the final inbox read",
+        "the read before ctl task answer must hold A's sole question, absent in the final inbox read",
     );
 }
 
@@ -7623,8 +7631,24 @@ mod budget_tests {
             documents: BTreeMap::new(),
             told: Vec::new(),
             commands: vec![
-                "sign-in", "chat", "wait", "wait", "wait", "inbox", "answer", "task", "task", "wait", "task", "task",
-                "task", "task", "task", "task", "task", "inbox",
+                "sign-in",
+                "chat start",
+                "task show",
+                "task show",
+                "task show",
+                "inbox",
+                "task answer",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "inbox",
             ]
             .into_iter()
             .map(str::to_owned)
@@ -7960,7 +7984,7 @@ mod budget_tests {
                         json!([{}]);
                 }
                 2 => observed.commands.swap(5, 6),
-                3 => observed.commands.push("answer".into()),
+                3 => observed.commands.push("task answer".into()),
                 4 => observed.documents.get_mut(&Read::BudgetAsked).expect("inbox")["needs"]["cut"] = json!(true),
                 5 => {
                     observed.documents.get_mut(&Read::BudgetInboxAnswered).expect("inbox")["needs"]["cut"] =
@@ -10359,8 +10383,25 @@ fn waiting_release(observed: &Observed, misses: &mut Vec<Miss>) {
             && owner_tools.iter().filter(|(_, _, tool, _)| tool == "delegate").count() == 1
             && observed.commands
                 == [
-                    "adopt", "adopt", "chat", "wait", "wait", "task", "task", "task", "task", "wait", "task", "task",
-                    "task", "task", "task", "task", "task", "task", "tasks",
+                    "repository adopt",
+                    "repository adopt",
+                    "chat start",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task show",
+                    "task list",
                 ],
         WAITING_RELEASE,
         "repin's first coder starts after dependency completion with revision zero and no targeted relay",
@@ -10828,8 +10869,25 @@ mod waiting_tests {
             documents: documents(),
             told: queries,
             commands: [
-                "adopt", "adopt", "chat", "wait", "wait", "task", "task", "task", "task", "wait", "task", "task",
-                "task", "task", "task", "task", "task", "task", "tasks",
+                "repository adopt",
+                "repository adopt",
+                "chat start",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task show",
+                "task list",
             ]
             .map(str::to_owned)
             .into(),

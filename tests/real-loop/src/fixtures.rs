@@ -236,7 +236,7 @@ pub fn signed_chat(key: &'static str) -> Vec<crate::calls::Step> {
         calls::{D1, call, sign_in},
         scripts,
     };
-    vec![sign_in(D1), call(D1, argv!["chat", "--project", PROJECT, "--key", key, scripts::WORDS])]
+    vec![sign_in(D1), call(D1, argv!["chat", "start", "--project", PROJECT, "--key", key, scripts::WORDS])]
 }
 
 /// Both directories ask for the same named request.
@@ -287,7 +287,7 @@ pub fn change_settings(at: crate::calls::Dir, key: &'static str, items: serde_js
     });
     vec![crate::calls::call(
         at,
-        crate::argv!["change-settings", crate::calls::file("settings.json"), "--against", "1", "--key", key],
+        crate::argv!["settings", "apply", crate::calls::file("settings.json"), "--against", "1", "--key", key],
     )]
 }
 // A step factory runs immediately before Caller construction, under its heap meter.

@@ -323,7 +323,7 @@ impl Judge {
                     drop(seen);
                     self.stage = Stage::Tree;
                     self.deadline = Some(now.saturating_add(Duration::from_secs(2)));
-                    self.next(procs, &["task", "1", "--tree"], false);
+                    self.next(procs, &["task", "show", "1", "--tree"], false);
                 }
             }
             Stage::Tree => {
@@ -369,7 +369,7 @@ impl Referee<Proc> for Judge {
             if self.stopping {
                 "service shutdown did not finish within one second"
             } else {
-                "task 1 --tree did not answer within one second"
+                "task show 1 --tree did not answer within one second"
             }
         );
         let Proc::Llm { peer, .. } = &procs[0] else { panic!("LLM") };
@@ -510,17 +510,17 @@ pub fn run(seen: &Rc<RefCell<Seen>>) {
                 Proc::Hosted(Caller(Box::new(calls::Caller::provisioned(
                     vec![
                         sign_in(D1),
-                        call(D1, crate::argv!["chat", "--project", "1", "--key", "bounds", "@bounds-root"]),
+                        call(D1, crate::argv!["chat", "start", "--project", "1", "--key", "bounds", "@bounds-root"]),
                         // The next model query carries both committed delegate results.
                         // Hold its wait response until this live task watch is delivered.
                         calls::advance(),
-                        calls::start(D1, crate::argv!["wait", "task", "3", "--until", "ended", "--json"]),
+                        calls::start(D1, crate::argv!["task", "show", "3", "--until", "ended", "--json"]),
                         calls::watching(2),
                         calls::join(2),
-                        call(D1, crate::argv!["task", "4", "--json"]),
-                        call(D1, crate::argv!["task", "5", "--json"]),
-                        call(D1, crate::argv!["task", "6", "--json"]),
-                        call(D1, crate::argv!["activity", "3", "--json"]),
+                        call(D1, crate::argv!["task", "show", "4", "--json"]),
+                        call(D1, crate::argv!["task", "show", "5", "--json"]),
+                        call(D1, crate::argv!["task", "show", "6", "--json"]),
+                        call(D1, crate::argv!["task", "activity", "3", "--json"]),
                         calls::ends_leaving(&[crate::ending::Leftover {
                             task: 4,
                             may_be: &[crate::ending::Left::Due],

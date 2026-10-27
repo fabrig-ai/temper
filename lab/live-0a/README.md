@@ -28,14 +28,14 @@ the lab's longer paths.
 The seed:
 
 - signs in by the link;
-- runs `ctl forge-setup 1` (`seed/forge-setup`), which prepares the forge,
+- runs `ctl forge setup 1` (`seed/forge-setup`), which prepares the forge,
   makes the project `hello` and adopts `work/hello` as its home, and keeps
   the answer in the run's `ground` directory;
 - does the person's own act at first sign-in (`seed/person`). Forgejo's CLI,
   on the run's work path, unsets `ada`'s must-change-password and makes her a
   `read:repository` token. The token is 0600 and never printed.
 
-The live collections are `temper` (ctl's `forges --json`, `me --json` and
+The live collections are `temper` (ctl's `forge list --json`, `me --json` and
 forge 1's picker page) and `forge` (the forge's API with ada's token). The
 forge collection polls `work/hello`'s Actions runs until the first has
 finished, then keeps the runs, main's combined status and the repository.

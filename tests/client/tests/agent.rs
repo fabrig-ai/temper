@@ -26,7 +26,7 @@ fn chat(park_runs: bool) -> (World<Temper, Joint>, ClientId, u64, Printed) {
         world.front().park_runs = true;
     }
     let agent = fixtures::agent(&mut world);
-    let printed = call(&mut world, agent, &[b"chat", b"--project", b"1", b"--key", b"hello", b"Hello"]);
+    let printed = call(&mut world, agent, &[b"chat", b"start", b"--project", b"1", b"--key", b"hello", b"Hello"]);
     let task = fixtures::done_task(&printed);
     (world, agent, task, printed)
 }
@@ -37,7 +37,7 @@ fn assert_chat(printed: &Printed, task: u64) {
 
 fn wait_for_reply(world: &mut World<Temper, Joint>, agent: ClientId, task: u64) -> Printed {
     let task = task.to_string();
-    call(world, agent, &[b"wait", b"task", task.as_bytes(), b"--until", b"replied"])
+    call(world, agent, &[b"task", b"show", task.as_bytes(), b"--until", b"replied"])
 }
 
 #[test]
@@ -58,7 +58,8 @@ fn a_message_is_followed_by_its_reply_waited_for() {
     let (mut world, agent, task, started) = chat(true);
     wait_for_reply(&mut world, agent, task);
     let first_attempt = world.front().engine.task(task).expect("live chat").attempt;
-    let printed = call(&mut world, agent, &[b"message", task.to_string().as_bytes(), b"More", b"--key", b"more"]);
+    let printed =
+        call(&mut world, agent, &[b"task", b"message", task.to_string().as_bytes(), b"More", b"--key", b"more"]);
     let reply = wait_for_reply(&mut world, agent, task);
     assert_chat(&started, task);
     assert_eq!((printed.status, printed.stdout.as_ref()), (0, format!("done: task {task}, message\n").as_bytes()));
@@ -76,12 +77,12 @@ fn a_chat_the_agent_closes_ends() {
     let (mut world, agent, task, started) = chat(true);
     wait_for_reply(&mut world, agent, task);
     world.front().park_runs = false;
-    let closed = call(&mut world, agent, &[b"close", task.to_string().as_bytes(), b"--key", b"bye"]);
+    let closed = call(&mut world, agent, &[b"chat", b"close", task.to_string().as_bytes(), b"--key", b"bye"]);
     let number =
-        fixtures::give(&mut world, agent, &[b"wait", b"task", task.to_string().as_bytes(), b"--until", b"ended"]);
+        fixtures::give(&mut world, agent, &[b"task", b"show", task.to_string().as_bytes(), b"--until", b"ended"]);
     // The later point read crosses the same client's wire after its watch.
     // Its answer is an event barrier while the closing run is still held here.
-    let current = call(&mut world, agent, &[b"task", task.to_string().as_bytes()]);
+    let current = call(&mut world, agent, &[b"task", b"show", task.to_string().as_bytes()]);
     assert_eq!(current.status, 0, "{current:?}");
     assert!(world.root(agent).agent().printed(number).is_none(), "watch waits before the run ends");
     let attempt = world.front().engine.task(task).expect("closing chat").attempt;
@@ -125,7 +126,7 @@ fn a_chat_the_agent_closes_ends() {
     };
     assert_eq!(words.as_ref(), b"Closed by the run");
     assert!(world.front().engine.task(task).is_none(), "live task name was retired");
-    let late = call(&mut world, agent, &[b"wait", b"task", task.to_string().as_bytes(), b"--until", b"ended"]);
+    let late = call(&mut world, agent, &[b"task", b"show", task.to_string().as_bytes(), b"--until", b"ended"]);
     assert_eq!(late.status, 0, "{late:?}");
     assert_eq!(late.stdout, printed.stdout, "late wait prints the same real final report");
     assert!(late.stderr.is_empty(), "{late:?}");
@@ -144,6 +145,7 @@ fn a_repository_the_agent_adopts_is_held_by_the_engine() {
         &mut world,
         agent,
         &[
+            b"repository",
             b"adopt",
             b"--project",
             b"1",
@@ -167,10 +169,10 @@ fn a_held_task_the_agent_releases_from_the_printed_act_runs_again() {
     let mut world = fixtures::world(fixtures::SEED);
     let (_goal, held) = fixtures::goal_with_held_delegate(world.front());
     let agent = fixtures::agent(&mut world);
-    let printed = call(&mut world, agent, &[b"task", held.to_string().as_bytes()]);
-    let mut words = fixtures::printed_act(&printed.stdout, b"release");
+    let printed = call(&mut world, agent, &[b"task", b"show", held.to_string().as_bytes()]);
+    let mut words = fixtures::printed_act(&printed.stdout, b"task release");
     for word in &mut words {
-        if word.as_ref() == b"NAME" {
+        if word.as_ref() == b"KEY" {
             *word = Box::from(*b"release");
         }
     }

@@ -25,11 +25,11 @@ fn a_large_turns_rows_overlap_the_page_bound() {
 #[test]
 fn a_large_turn_in_a_chat_prints_as_its_size_line() {
     let (mut world, agent, task, (attempt, number)) = agent_chat();
-    let call = fixtures::give(&mut world, agent, &[b"chat", task.to_string().as_bytes()]);
+    let call = fixtures::give(&mut world, agent, &[b"chat", b"show", task.to_string().as_bytes()]);
     let printed = fixtures::answered(&mut world, agent, call);
     assert_eq!(printed.status, 0, "{printed:?}");
     let stdout = std::str::from_utf8(&printed.stdout).expect("chat UTF-8");
-    assert!(stdout.contains(&format!("read with: turn {task} {attempt}.{number}\n")), "{stdout}");
+    assert!(stdout.contains(&format!("read with: task turn {task} {attempt}.{number}\n")), "{stdout}");
 }
 
 // The 24 KiB text crosses PART=16 KiB, needing exactly two printed reads.
@@ -39,7 +39,7 @@ fn a_large_turn_is_read_whole_by_its_parts() {
     let (mut world, agent, task, (attempt, number)) = agent_chat();
     let turn = format!("{attempt}.{number}");
     let (text, reads) =
-        fixtures::read_whole(&mut world, agent, &[b"turn", task.to_string().as_bytes(), turn.as_bytes()]);
+        fixtures::read_whole(&mut world, agent, &[b"task", b"turn", task.to_string().as_bytes(), turn.as_bytes()]);
     assert_eq!(reads, TURN_READS);
     // session_turn sequence 1 emits b' ' + 1, one byte for each text position.
     assert_eq!(text, vec![b'!'; fixtures::LARGE_TURN_TEXT]);
@@ -58,7 +58,7 @@ fn a_turn_past_64_kib_commits_and_is_read_whole_with_the_configured_allowance() 
     let (text, reads) = fixtures::read_whole(
         &mut world,
         agent,
-        &[b"turn", task.to_string().as_bytes(), format!("{attempt}.{number}").as_bytes()],
+        &[b"task", b"turn", task.to_string().as_bytes(), format!("{attempt}.{number}").as_bytes()],
     );
     assert_eq!(reads, TURN_READS);
     assert_eq!(text, vec![b'!'; fixtures::LARGE_TURN_TEXT]);

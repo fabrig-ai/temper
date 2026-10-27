@@ -21,17 +21,17 @@ model carries the same unit and window.
 The seed inserts `settings` after 0a's sign-in and before its forge setup
 and person actions, then adds:
 
-- `import` (`seed/import`): `ctl import {held.chatgpt} --key lab-import`,
+- `import` (`seed/import`): `ctl account import {held.chatgpt} --key lab-import`,
   which moves the record in and removes the file. The account's number,
   from `moved in: account N`, is kept in the run's `ground/account`.
-- `usable`: `ctl wait accounts --until usable --timeout 200`.
+- `usable`: `ctl account list --until usable --timeout 200`.
 - `chat` (`seed/chat`): in the project `hello`, one chat with the key
   `ground-chat`, asking for one short sentence and no delegation. It
-  waits until the chat has replied, then keeps `ctl chat N --json` in
+  waits until the chat has replied, then keeps `ctl chat show N --json` in
   `ground/chat.json`.
 
 The release, `export` (`release/export`), runs
-`ctl export ACCOUNT {held.chatgpt}` with the kept number, which writes the
+`ctl account export ACCOUNT {held.chatgpt}` with the kept number, which writes the
 record back for the runner to return (the lab's `lab.md`, 4.8). If no account
 was imported, it runs nothing and fails, and the untouched file is given
 back.
@@ -43,7 +43,7 @@ temper's own run cap, 280, is what stops a turn while it runs.
 
 The checks are 0a's `ground` and `chat`. `chat` fails `no-reply` when no
 assistant message in the conversation has a text block with words in it
-(`wait --until replied` alone is also met by a failed run). It is undecided
+(`task show --until replied` alone is also met by a failed run). It is undecided
 when the conversation cannot be read.
 
 The class is `temper-live-0b-calibration` (0a's calibration bounds,
