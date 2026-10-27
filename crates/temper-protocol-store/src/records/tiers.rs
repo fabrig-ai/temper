@@ -356,6 +356,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
                 },
                 waiting,
                 fault,
+                report: None,
                 pending: jobs.into_boxed(),
             })
         }
@@ -379,6 +380,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
                 run: d::ReceiptRun { id, number: run_number, url },
                 received,
                 status: decode_branch(status),
+                applied: false,
             })
         }
         None => None,
@@ -416,6 +418,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         },
         task,
         branch,
+        probe: None,
         flight,
         result,
     })

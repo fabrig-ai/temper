@@ -1126,6 +1126,9 @@ fn add_kit(fake: &mut forge::Domain, config: &forge::Config) {
 fn workflows(turn: bool, tier: bool) -> Box<[raw::Workflow]> {
     if turn {
         Box::new([raw::Workflow {
+            fails: Box::new([]),
+            report: None,
+            select: None,
             file: b"gate.yml".as_slice().into(),
             jobs: Box::new([b"test".as_slice().into()]),
             latency_min: Duration::from_secs(2),
@@ -1136,6 +1139,9 @@ fn workflows(turn: bool, tier: bool) -> Box<[raw::Workflow]> {
         }])
     } else if tier {
         Box::new([raw::Workflow {
+            fails: Box::new([]),
+            report: None,
+            select: None,
             file: b"browser.yml".as_slice().into(),
             jobs: Box::new([b"browser".as_slice().into()]),
             latency_min: Duration::from_secs(90),

@@ -808,6 +808,8 @@ pub struct TierRow {
     pub baseline: Option<TierLanding>,
     pub task: Option<u64>,
     pub branch: TierBranch,
+    /// The current or just-ended probe's branch, retained until deleted.
+    pub probe: Option<TierProbeBranch>,
     pub flight: Option<TierFlight>,
     pub result: Option<TierResult>,
 }
@@ -827,6 +829,8 @@ pub struct TierFlight {
     pub since: Option<skein_lib::Time>,
     pub waiting: bool,
     pub fault: bool,
+    /// The part ended failed; read its report again after a cold restart.
+    pub report: Option<ReceiptRun>,
     pub pending: Box<[skein_forge::api::JobAttempt]>,
 }
 /// A terminal observation, committed before the verdict's status is admitted.
@@ -836,6 +840,13 @@ pub struct TierResult {
     pub run: ReceiptRun,
     pub received: bool,
     pub status: TierBranch,
+    /// The verdict is saved even if deleting a branch subsequently holds the task.
+    pub applied: bool,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierProbeBranch {
+    pub landing: u32,
+    pub branch: TierBranch,
 }
 /// Durable progress of the run's branch.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
