@@ -89,6 +89,8 @@ pub struct StoryLimits {
     pub spec_bytes: Option<u32>,
     pub result_bytes: Option<u32>,
     pub forge_charter: Option<u32>,
+    /// Configure one after-landing tier for this story.
+    pub tier: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -221,7 +223,7 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members } = timing;
+        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members, tier } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -237,6 +239,37 @@ impl World {
             }
             limits.journal.writes += (people::max_out(&limits.people) - people::max_out(&walking::limits().people)) * 4;
             let mut config = walking::config(71);
+            if tier {
+                let mut landings = skein_lib::Map::with_capacity(limits.authority.projects);
+                landings
+                    .insert(
+                        1,
+                        engine::ProjectLanding {
+                            by: engine::Way::Queue,
+                            repositories: Box::new([engine::RepositoryChecks {
+                                repository: forge_world::REPO,
+                                gates: Box::new([]),
+                                tiers: Box::new([engine::TierCheck {
+                                    name: b"fuzzy".as_slice().into(),
+                                    workflow: b"fuzzy.yml".as_slice().into(),
+                                    ignored: Box::new([]),
+                                    artifact: b"report".as_slice().into(),
+                                    format: temper_engine_domain_forge_tiers::Format::Lines,
+                                }]),
+                            }]),
+                            after: engine::AfterLanding {
+                                verdict: temper_engine_domain_forge_tiers::Settings {
+                                    retries: 2,
+                                    suspects: temper_engine_domain_forge_tiers::Suspects::Bisect,
+                                },
+                                bound: Duration::from_secs(7200),
+                                pause_on_red: false,
+                            },
+                        },
+                    )
+                    .expect("one configured project");
+                config.landing.landings = landings;
+            }
             if approval.is_some() || agent_gate || owner_gate {
                 limits.authority.roles = 3;
             }
