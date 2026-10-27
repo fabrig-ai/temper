@@ -998,6 +998,12 @@ fn forge_identity(
 /// The starter is private. Mint an independent, read-only oracle credential on
 /// this disposable forge, rather than reading temper's stored credentials.
 fn oracle_token(paths: &[PathBuf; 3], first: bool) -> String {
+    scoped_token(paths, first, "temper", "read:repository,read:issue")
+}
+
+/// A separate fixture credential, never one of temper's stored credentials.
+#[must_use]
+pub(super) fn scoped_token(paths: &[PathBuf; 3], first: bool, login: &str, scopes: &str) -> String {
     use std::{
         io::Read,
         process::{Command, Stdio},
@@ -1014,7 +1020,7 @@ fn oracle_token(paths: &[PathBuf; 3], first: bool) -> String {
             "user",
             "generate-access-token",
             "--username",
-            "temper",
+            login,
             "--token-name",
             &format!(
                 "live-oracle-{}-{}-{}",
@@ -1023,7 +1029,7 @@ fn oracle_token(paths: &[PathBuf; 3], first: bool) -> String {
                 skein_shell::Clock::new().now().now.as_nanos()
             ),
             "--scopes",
-            "read:repository,read:issue",
+            scopes,
             "--raw",
         ])
         .env_clear()

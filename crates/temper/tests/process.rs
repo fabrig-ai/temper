@@ -1390,6 +1390,43 @@ fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_la
     scratch.remove();
 }
 
+/// domain/testing.md, 2.6; domain/forge.md, 8.4: real CI output reaches a repair.
+#[test]
+fn a_csv_change_fails_the_persons_gate_is_repaired_and_lands_on_the_owned_forge() {
+    use support::csv_repair;
+    let scratch = support::Scratch::new("forgejo-csv-repair");
+    let (paths, flags) = first_run_directories(&scratch);
+    let _cached = cache_forgejo_binaries(&paths[2]);
+    let began = skein_shell::Clock::new().now().now;
+    let ended = support::boxed::run_ctl_with_llm(
+        scratch.path(),
+        support::boxed::echo_steps(flags),
+        scratch.path(),
+        csv_repair::steps(&paths, scratch.path(), began),
+        support::forge_land::OWNED_ALLOWANCE.saturating_add(Duration::from_secs(60)),
+        || csv_repair::landed(&paths, scratch.path(), began),
+        csv_repair::llm(&paths[0]),
+    );
+    let stderr = String::from_utf8_lossy(&ended.stderr);
+    assert_eq!(ended.exit, Some(Exit::Code(0)), "box drained: {stderr}");
+    assert_eq!(ended.left, Some(Vec::new()), "no process outlived the box: {stderr}");
+    for call in &ended.calls {
+        assert_eq!(
+            call.exit,
+            Some(Exit::Code(0)),
+            "stdout {}; stderr {}; box {stderr}",
+            String::from_utf8_lossy(&call.stdout),
+            String::from_utf8_lossy(&call.stderr)
+        );
+    }
+    assert!(ended.checked.is_some(), "landing phase was reached: {stderr}");
+    csv_repair::assert_briefs(
+        ended.model.as_ref().expect("fake model observations"),
+        ended.checked.as_ref().expect("landing"),
+    );
+    scratch.remove();
+}
+
 /// domain/testing.md, 2.7: the live story moves in only a private held record.
 #[test]
 fn a_held_chatgpt_record_is_admitted_only_as_a_private_regular_file_never_named() {
