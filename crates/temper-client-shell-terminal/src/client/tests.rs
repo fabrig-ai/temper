@@ -385,3 +385,65 @@ fn the_deadline_takes_the_earlier_policy_or_view_time_from_the_same_clocks() {
         );
     }
 }
+
+#[test]
+fn a_chat_keeps_its_activity_read_through_local_exchange_pressure() {
+    use jig_client::{Asker, Handle, Message, Readable, Request, contract as c};
+    let mut host = fixtures::loaded_chat();
+    let mut occupied = 0_u32;
+    let mut old_activity = None;
+    while let Some(request) = host.out.pop() {
+        if let domain::Request::Client { request: Request::Exchange { exchange, message, .. } } = request {
+            occupied += 1;
+            if let Message::Read(bytes) = message {
+                let owned = jig_client_protocol_wire::Owned::decode(
+                    &jig_client_protocol_wire::CEILINGS,
+                    &mut skein_lib::Reader::new(&bytes),
+                )
+                .expect("read envelope");
+                if owned.owner() == &jig_client_protocol_wire::Owner::Jig {
+                    let read = jig_client_protocol_wire::Read::decode(
+                        &jig_client_protocol_wire::CEILINGS,
+                        &mut skein_lib::Reader::new(owned.record()),
+                    )
+                    .expect("jig read");
+                    if matches!(read, jig_client_protocol_wire::Read::Activity(_)) {
+                        assert!(old_activity.replace(exchange).is_none());
+                    }
+                }
+            }
+        }
+    }
+    for slot in occupied..crate::limits::EXCHANGES {
+        host.event(domain::Event::Client {
+            event: jig_client::Event::Read {
+                handle: Handle { asker: Asker::JIG, number: 100 + u64::from(slot) },
+                read: Readable::Jig(c::Read::Project { project: 1 }),
+            },
+        });
+        let Some(domain::Request::Client { request: Request::Exchange { .. } }) = host.out.pop() else {
+            panic!("fill one native exchange slot")
+        };
+        assert!(host.out.is_empty());
+    }
+    let handle = host.root.pages().chat().expect("chat").activity;
+    host.event(domain::Event::Client {
+        event: jig_client::Event::Read {
+            handle,
+            read: Readable::Jig(c::Read::Activity { task: fixtures::TASK, before: None }),
+        },
+    });
+    assert!(host.out.is_empty(), "local pressure emits no failed page or exchange");
+    assert!(host.root.pages().chat().expect("chat").thread.reading.is_some(), "the page keeps its demand");
+    let old = old_activity.expect("initial activity exchange occupies a slot");
+    host.transport(jig_client::Event::Reply { exchange: old, message: fixtures::activity_answer(true) });
+    assert!(host.root.pages().chat().expect("chat").thread.lines.rows.is_empty(), "the superseded answer is fenced");
+    let (current, _) = fixtures::activity_read(&mut host);
+    assert_ne!(current, old, "the slot release admits the pending read");
+    host.transport(jig_client::Event::Reply { exchange: current, message: fixtures::activity_answer(true) });
+    let chat = host.root.pages().chat().expect("chat");
+    assert_eq!(chat.thread.lines.rows.len(), 1);
+    assert_eq!(chat.thread.loaded, 1);
+    assert!(chat.thread.reading.is_none(), "the actual activity answer completed the demand");
+    assert!(fixtures::activity_reads(&mut host).is_empty(), "the demand was sent only once");
+}
