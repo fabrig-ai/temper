@@ -485,7 +485,7 @@ fn approve(world: &mut World, reviewer: &engine::Assignment) {
 fn assert_lands(world: &mut World, task: u64) {
     for _ in 0..MAX_TICKS {
         world.tick();
-        if matches!(change_row(world, task).change.state, temper_engine_domain_forge_change::State::Landed { .. }) {
+        if merged(&change_row(world, task).change.state).is_some() {
             assert_eq!(world.merges, 1);
             return;
         }

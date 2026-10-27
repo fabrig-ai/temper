@@ -297,7 +297,7 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
                 && row.task == change
             {
                 assert_eq!(row.change.repairs, 2);
-                if matches!(row.change.state, temper_engine_domain_forge_change::State::Landed { .. }) {
+                if temper_engine_domain_world::forge_routes::merged(&row.change.state).is_some() {
                     return;
                 }
             }
