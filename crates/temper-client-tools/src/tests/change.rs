@@ -12,6 +12,8 @@ fn panel(step: w::Step) -> w::ChangePanel {
     w::ChangePanel::new(
         &w::CEILINGS,
         w::ChangePanelParts {
+            way: w::Way::Queue,
+            in_landing: None,
             task: 2,
             forge: 3,
             owner: b"qa".as_slice().into(),
@@ -340,5 +342,52 @@ fn a_held_wait_and_a_wait_without_a_condition_use_the_panel_facts() {
     deliver(&mut root, panel(w::Step::Checking));
     assert!(root.answer(call).is_none(), "repeated digest is no change");
     deliver(&mut root, panel(w::Step::Gating));
+    assert_eq!(root.answer(call).unwrap().status, 0);
+}
+
+#[test]
+fn ready_and_preparing_text_names_the_way_and_landing() {
+    let member = w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap();
+    for (name, step) in
+        [("change_ready", w::Step::Ready(member.clone())), ("change_preparing", w::Step::Preparing(member))]
+    {
+        let mut parts = panel(step).into_parts();
+        parts.way = w::Way::Turn;
+        parts.in_landing = Some(61);
+        let panel = w::ChangePanel::new(&w::CEILINGS, parts).unwrap();
+        let answer = change::print(Some(&panel), false, None, b"", &f::limits_root());
+        assert_eq!(answer.status, 0);
+        f::check_golden(name, &answer.stdout);
+    }
+}
+#[test]
+fn a_queue_change_prints_no_way_line() {
+    let answer = change::print(Some(&panel(w::Step::Checking)), false, None, b"", &f::limits_root());
+    assert_eq!(answer.status, 0);
+    assert!(skein_lib::bytes::find(&answer.stdout, b"way:").is_none());
+}
+#[test]
+fn a_turn_change_waiting_for_room_prints_its_way_alone() {
+    let mut parts =
+        panel(w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: None }).unwrap()))
+            .into_parts();
+    parts.way = w::Way::Turn;
+    let panel = w::ChangePanel::new(&w::CEILINGS, parts).unwrap();
+    let answer = change::print(Some(&panel), false, None, b"", &f::limits_root());
+    contains(&answer.stdout, b"step: ready\nway: turn\nhead ");
+}
+#[test]
+fn ready_and_preparing_wait_for_landed() {
+    let member = w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap();
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "landed"]);
+    for step in [w::Step::Ready(member.clone()), w::Step::Preparing(member)] {
+        let mut parts = panel(step).into_parts();
+        parts.way = w::Way::Turn;
+        parts.in_landing = Some(61);
+        deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+        assert!(root.answer(call).is_none());
+    }
+    deliver(&mut root, panel(landed()));
     assert_eq!(root.answer(call).unwrap().status, 0);
 }
