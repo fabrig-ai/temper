@@ -57,6 +57,7 @@ fn a_table_record_saved_then_kept_comes_back_the_same() {
 #[test]
 fn the_native_limits_pass_each_worst_case() {
     let limits = limits::native();
+    assert_eq!(limits.client.client.domain.authority, 14);
     let (view, forge) = limits::view(&limits).expect("usable view");
     let root = client::worst_case(&limits.client).expect("usable root");
     let view = temper_client_view::worst_case(&view, &limits.client, &forge).expect("usable view");
