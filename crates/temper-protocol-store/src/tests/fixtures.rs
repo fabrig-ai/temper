@@ -57,6 +57,9 @@ pub const LIMITS: top::Limits = top::Limits {
     trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
+    tiers: 2,
+    failing_tests: 16,
+    test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
     client: CLIENT,
@@ -148,7 +151,7 @@ fn client_key(random: &mut Rng) -> skein_forge_client::Key {
 #[expect(clippy::disallowed_macros, reason = "property inputs number canonical member addresses")]
 pub fn key(random: &mut Rng) -> top::Key {
     let number = random.next_u64();
-    match random.below(23) {
+    match random.below(24) {
         0 => top::Key::Call(top::NamedCall {
             task: number,
             attempt: random.next_u64(),
@@ -176,7 +179,7 @@ pub fn key(random: &mut Rng) -> top::Key {
         19 => top::Key::DemoAct([u8::try_from(random.below(256)).expect("byte"); 16]),
         20 => top::Key::Flight { task: number, entry: random.next_u64() },
         21 => top::Key::Landing(number),
-        _ => top::Key::Receipt(top::ReceiptKey {
+        22 => top::Key::Receipt(top::ReceiptKey {
             project: u32::try_from(random.below(4_294_967_296)).expect("u32"),
             repository: repository(random),
             check: if random.below(2) == 0 {
@@ -186,6 +189,7 @@ pub fn key(random: &mut Rng) -> top::Key {
             },
             key: commit(random),
         }),
+        _ => top::Key::Verification { repository: repository(random), commit: commit(random) },
     }
 }
 pub fn core_keys() -> [jig_domain_core::Key; 4] {
@@ -789,7 +793,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
     use temper_engine_domain_forge_change::{Hold, Repair, State};
-    let mut states = List::with_capacity(18);
+    let mut states = List::with_capacity(20);
     for state in [
         State::Producing { requested: true },
         State::Opening { requested: false },
@@ -805,6 +809,8 @@ pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
         State::Landing { head: [15; 32] },
         State::Landed { merge: [16; 32] },
         State::Ended,
+        State::Red { merge: [16; 32] },
+        State::Cleared { merge: [16; 32] },
         State::Repairing { requested: false, why: Repair::Ci },
         State::Repairing { requested: true, why: Repair::Semantic },
     ] {

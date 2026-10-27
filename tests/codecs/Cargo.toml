@@ -22,6 +22,7 @@ skein-forge-setup.workspace = true
 temper-engine-domain-forge.workspace = true
 skein-forge-client.workspace = true
 temper-engine-domain-forge-change.workspace = true
+temper-engine-domain-forge-tiers = { path = "../../crates/temper-engine-domain-forge-tiers" }
 temper-engine-domain-forge-issues.workspace = true
 jig-client-protocol-wire.workspace = true
 temper-client-protocol-wire.workspace = true

@@ -228,6 +228,12 @@ fn encode_live(value: &d::State) -> w::ChangeLive {
         d::State::Landing { head } => {
             w::ChangeLive::Landing(w::ChangeHead::new(&w::CEILINGS, w::ChangeHeadParts { head: *head }).expect(FITS))
         }
+        d::State::Red { merge } => {
+            w::ChangeLive::Red(w::LandedChange::new(&w::CEILINGS, w::LandedChangeParts { merge: *merge }).expect(FITS))
+        }
+        d::State::Cleared { merge } => w::ChangeLive::Cleared(
+            w::LandedChange::new(&w::CEILINGS, w::LandedChangeParts { merge: *merge }).expect(FITS),
+        ),
         d::State::Landed { merge } => w::ChangeLive::Landed(
             w::LandedChange::new(&w::CEILINGS, w::LandedChangeParts { merge: *merge }).expect(FITS),
         ),
@@ -293,6 +299,8 @@ fn decode_live(value: w::ChangeLive) -> d::State {
             let w::ChangeHeadParts { head } = value.into_parts();
             d::State::Landing { head }
         }
+        w::ChangeLive::Red(value) => d::State::Red { merge: value.into_parts().merge },
+        w::ChangeLive::Cleared(value) => d::State::Cleared { merge: value.into_parts().merge },
         w::ChangeLive::Landed(value) => {
             let w::LandedChangeParts { merge } = value.into_parts();
             d::State::Landed { merge }

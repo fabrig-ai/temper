@@ -41,6 +41,7 @@ mod settle;
 mod tests;
 pub mod text;
 mod topics;
+mod verification;
 pub use boundary::*;
 pub use brief::{HOME_SECTION_BYTES, hex, home_access_reason};
 pub use domain::{Domain, fire, max_out, resume, step, tag, untag, writer};
@@ -245,6 +246,7 @@ pub fn stored_key(row: &Stored) -> Key {
         Stored::Binding { address, .. } => Key::Binding(address.clone()),
         Stored::DemoAct(row) => Key::DemoAct(row.key),
         Stored::Flight { task, entry } => Key::Flight { task: *task, entry: *entry },
+        Stored::Verification(row) => Key::Verification { repository: row.repository, commit: row.commit },
     }
 }
 /// Checked payload bytes of one connector record for its parent's store page.
@@ -308,7 +310,7 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             | change::State::Repairing { .. }
             | change::State::Landing { .. }
             | change::State::Ended
-            | change::State::Landed { .. } => Some(0),
+            | change::State::Landed { .. } | change::State::Red { .. } | change::State::Cleared { .. } => Some(0),
         }
     }
     match record {
@@ -477,6 +479,7 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             }
             Some(held)
         }
+        Stored::Verification(row) => verification::stored_bytes(row),
         Stored::Release(row) => {
             let comment = match &row.comment {
                 Some(comment) => bytes(comment)?,

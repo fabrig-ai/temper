@@ -165,10 +165,14 @@ pub enum State {
     Repairing { requested: bool, why: Repair },
     /// A merge at the named head is outstanding.
     Landing { head: Commit },
-    /// The pull request merged at this commit.
+    /// Merged at this commit, and verifying (domain/after-landing.md, 6).
     Landed { merge: Commit },
     /// The task ended after its outstanding effects and holdings settled.
     Ended,
+    /// Merged at this commit, and red in a tier: waiting for a repair to pass its failures.
+    Red { merge: Commit },
+    /// Merged at this commit and cleared: the result is given.
+    Cleared { merge: Commit },
     /// No write is made until a release lifts this cause.
     Held { was: Box<State>, why: Hold },
 }
@@ -232,12 +236,24 @@ pub enum Ask {
     Repair { gate: u16, candidate: Commit },
 }
 
+/// A landing's verification after landing (domain/after-landing.md, 5.3 and 6), as the top reads it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Verification {
+    /// Not cleared in every tier of its repository, and red in none.
+    Verifying,
+    /// Red in a tier by failures blamed on it, not yet repaired.
+    Red,
+    /// Cleared in every tier of its repository: at once in a repository with none.
+    Cleared,
+}
+
 /// Fresh forge and queue facts gathered by the top.
 #[expect(clippy::struct_excessive_bools, reason = "independent root-supplied facts")]
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Facts {
     /// Its landing's current request; absent under queue.
     pub ask: Option<Ask>,
+    pub verification: Verification,
     pub branch: Option<Commit>,
     pub expected_base: Commit,
     pub pull: Pull,

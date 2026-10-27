@@ -176,6 +176,8 @@ pub(super) fn brief_pull(
         | change::State::Landing { .. }
         | change::State::Ended
         | change::State::Landed { .. }
+        | change::State::Red { .. }
+        | change::State::Cleared { .. }
         | change::State::Held { .. } => PullMode::Other,
     };
     let words = BriefWords::with_capacity(bytes, false);
@@ -559,6 +561,8 @@ pub(super) fn brief_ci(
         | change::State::Landing { .. }
         | change::State::Ended
         | change::State::Landed { .. }
+        | change::State::Red { .. }
+        | change::State::Cleared { .. }
         | change::State::Held { .. } => false,
     };
     if !repairing

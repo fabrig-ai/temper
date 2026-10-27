@@ -16,6 +16,7 @@ mod reconcile;
 mod runs;
 mod stopping;
 mod views;
+mod verification;
 use alloc::boxed::Box;
 use skein_lib::{Duration, Env, Queue, Time, Token, Wall};
 
@@ -76,6 +77,9 @@ const LIMITS: Limits = Limits {
     trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
+    tiers: 2,
+    failing_tests: 16,
+    test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
     issue_policy: temper_engine_domain_forge_issues::Limits {

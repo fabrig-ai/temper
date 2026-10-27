@@ -29,6 +29,9 @@ pub const LIMITS: forge::Limits = forge::Limits {
     trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
+    tiers: 2,
+    failing_tests: 16,
+    test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
     client: skein_forge_client::Limits {

@@ -256,3 +256,110 @@ pub fn finish_open(d: &mut Domain) -> Box<[Request]> {
         }),
     )
 }
+
+/// The merge commit differs from both parents.
+pub const MERGE: skein_forge::api::Commit = [5; 32];
+pub const PROJECT: u32 = 5;
+pub const BROWSER: &[u8] = b"browser";
+pub const FUZZY: &[u8] = b"fuzzy";
+
+pub fn repository_tiers(names: &[&[u8]]) -> Box<[RepositoryTiers]> {
+    let mut tiers = skein_lib::List::with_capacity(u32::try_from(names.len()).expect("fixture names"));
+    for name in names {
+        tiers.push(Tier { name: Box::from(*name) }).expect("fixture names");
+    }
+    Box::new([RepositoryTiers { repository: REPO, tiers: tiers.into_boxed() }])
+}
+
+pub fn verifying() -> Domain {
+    use temper_engine_domain_forge_change as change;
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    d.project_tiers(PROJECT, repository_tiers(&[BROWSER, FUZZY]));
+    let mut row = opening_row();
+    row.change.state = change::State::Landed { merge: MERGE };
+    row.pending = None;
+    row.effect = change::EffectResult::Made;
+    outputs(&mut d, Event::Restore { record: Stored::Change(row) });
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::landed(&mut d, REPO, MERGE, CHANGE, &mut out);
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    d
+}
+
+pub fn verification_step(d: &mut Domain) -> Box<[Request]> {
+    use temper_engine_domain_forge_change as change;
+    outputs(
+        d,
+        Event::StepChange {
+            task: CHANGE,
+            entry: OPEN,
+            heard: change::Heard {
+                delegate: change::Status::Passed,
+                effect: change::EffectResult::Made,
+                released: false,
+                cancelled: false,
+            },
+            gates: Box::new([]),
+            queue_repair_active: false,
+            kept: false,
+        },
+    )
+}
+
+pub fn judge(d: &mut Domain, tier: &[u8], blame: temper_engine_domain_forge_tiers::Blame) -> Box<[Request]> {
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::judged(d, REPO, tier, OPEN, &[(MERGE, blame)], &mut out);
+    let mut requests = skein_lib::List::with_capacity(out.len());
+    while let Some(request) = out.pop() {
+        requests.push(request).expect("sized to output");
+    }
+    requests.into_boxed()
+}
+
+/// A committed merge entry, through the client's ordinary find and make.
+pub fn merged(tiers: bool) -> (Domain, Box<[Request]>) {
+    use skein_forge::api::{Answer, Write};
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    if tiers {
+        d.project_tiers(PROJECT, repository_tiers(&[BROWSER, FUZZY]));
+    }
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    let entry = skein_forge_client::Entry {
+        number: OPEN,
+        task: CHANGE,
+        repository: REPO,
+        effect: skein_forge_client::Effect {
+            write: Write::Merge { number: 1, head: HEAD },
+            condition: skein_forge_client::Condition::Merge { base: Box::from(b"main".as_slice()) },
+        },
+        start: None,
+        attempt: None,
+        failures: 0,
+        queued: false,
+    };
+    outputs(&mut d, Event::Enqueue { entry });
+    let committed = outputs(&mut d, Event::Committed { entry: OPEN });
+    let clocked = answer_after(&mut d, &committed, Answer::Items { items: Box::new([]), more: false, now: env().now });
+    let checked = answer_after(&mut d, &clocked, Answer::Pull(open_pull()));
+    let made = answer_after(&mut d, &checked, Answer::Merged(MERGE));
+    let mut pull = open_pull();
+    pull.state = skein_forge::api::State::Closed;
+    pull.merged = Some(MERGE);
+    let requests = answer_after(&mut d, &made, Answer::Pull(pull));
+    (d, requests)
+}
+
+fn answer_after(d: &mut Domain, requests: &[Request], result: skein_forge::api::Answer) -> Box<[Request]> {
+    for request in requests {
+        if let Request::Call { call, .. } = request {
+            return answer(d, *call, Ok(result));
+        }
+    }
+    answer_next(d, Ok(result))
+}

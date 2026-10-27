@@ -166,7 +166,7 @@ record Resolving { requested: bool base: fixed 32 }
 record Repairing { requested: bool why: Repair }
 record LandedChange { merge: fixed 32 }
 record Preparing { from: fixed 32 main: fixed 32 ready_since: u64 }
-enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange, ended, ready: ReadyHead, preparing: Preparing }
+enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange, red: LandedChange, cleared: LandedChange, ended, ready: ReadyHead, preparing: Preparing }
 record ChangeState { live: ChangeLive holds: list 8 ChangeHold }
 record Gate { number: u64 kind: GateKind blocking: bool freshness: Freshness eager: bool }
 record GateReport { number: u64 head: fixed 32 status: ChangeStatus }
@@ -235,5 +235,15 @@ record ReceiptKey { project: u32 repository: Repository check_name: ReceiptCheck
 record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
 record Receipt { passed: bool run: ReceiptRun candidate: fixed 32 ended: u64 }
 record ReceiptRow { key: ReceiptKey receipt: Receipt }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow }
+# Family 26: verification of one landing (domain/after-landing.md, 10).
+# Families 23–25 remain reserved for Landing, Receipt and Tier.
+record FailingTest { test_id: bytes 4096 }
+record FailedTests { tests: list 1024 FailingTest }
+enum Failures { tests: FailedTests, many }
+record BlamedFailures { failures: Failures }
+enum Blame { cleared, owns: BlamedFailures, suspect: BlamedFailures }
+record TierVerdict { run: u64 blame: Blame }
+record TierVerification { tier: bytes 32 verdict: option TierVerdict repaired: option fixed 32 }
+record Verification { repository: Repository commit: fixed 32 changes: list 65536 u64 tiers: list 32 TierVerification }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, verification: Verification }
 versioned record Row { value: Value }

@@ -2649,6 +2649,7 @@ dependencies = [
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-tiers",
  "temper-protocol-records",
  "temper-protocol-store",
  "temper-protocol-worker-wire",
@@ -2734,6 +2735,7 @@ dependencies = [
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
  "temper-engine-domain-forge-landing",
+ "temper-engine-domain-forge-tiers",
 ]
 
 [[package]]
@@ -2756,7 +2758,6 @@ name = "temper-engine-domain-forge-landing"
 version = "0.0.0"
 dependencies = [
  "skein-lib",
- "skein-test-kit",
 ]
 
 [[package]]
@@ -3119,6 +3120,7 @@ dependencies = [
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
  "temper-engine-domain-forge-landing",
+ "temper-engine-domain-forge-tiers",
 ]
 
 [[package]]
