@@ -394,6 +394,7 @@ pub struct CtlOutcome<T> {
     pub visits: Vec<Vec<super::sign_in_browser::Hop>>,
 }
 struct CtlJudge<'a, F, T> {
+    fail_on_panic: Option<()>,
     expected_exits: Vec<(usize, u8)>,
     release_answers: Option<usize>,
     face: Option<super::forge_land::FaceProcs>,
@@ -473,8 +474,8 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
                 self.visit = Visit::Handed;
             }
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl") };
-            if !failed {
-                self.reply.as_mut().expect("face reply reads").advance(calls, &mut self.expected_exits);
+            if !failed && let Some(reply) = &mut self.reply {
+                reply.advance(calls, &mut self.expected_exits);
             }
         }
         if let Some(index) = self.tab {
@@ -515,6 +516,9 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
             let expected = self.expected_exits.iter().find(|(at, _)| *at == index).map_or(0, |(_, code)| *code);
             call.exit != Some(Exit::Code(expected))
         });
+        let failed = failed
+            || self.fail_on_panic.is_some()
+                && binary.stderr().windows(b"panicked at".len()).any(|part| part == b"panicked at");
         let expired = now >= self.deadline;
         if expired
             && !self.stopping
@@ -620,6 +624,54 @@ enum CtlModel {
     None,
     Llm(Box<CtlLlm>),
     Face(Box<super::forge_land::CtlFace>),
+    Account(Box<AccountProbe>),
+}
+/// Process-tier account restart controls and a one-shot listener fault.
+pub struct AccountProbe {
+    pub face: super::forge_land::Face,
+    pub cut_after_listening: Option<PathBuf>,
+}
+/// Drive a caller's steps with a signed-in fake account, without a reply sketch.
+#[must_use]
+pub fn run_ctl_with_account<T>(
+    directory: &Path,
+    flags: Vec<String>,
+    client_root: &Path,
+    steps: Vec<super::ctl::Step>,
+    deadline: Duration,
+    check: impl FnOnce() -> T,
+    face: super::forge_land::Face,
+) -> CtlOutcome<T> {
+    run_ctl_with_account_probe(
+        directory,
+        flags,
+        client_root,
+        steps,
+        deadline,
+        check,
+        AccountProbe { face, cut_after_listening: None },
+    )
+}
+#[must_use]
+pub fn run_ctl_with_account_probe<T>(
+    directory: &Path,
+    flags: Vec<String>,
+    client_root: &Path,
+    steps: Vec<super::ctl::Step>,
+    deadline: Duration,
+    check: impl FnOnce() -> T,
+    probe: AccountProbe,
+) -> CtlOutcome<T> {
+    run_ctl_peers(
+        directory,
+        flags,
+        client_root,
+        steps,
+        deadline,
+        |_| check(),
+        CtlPeers { expected_exits: Vec::new(), model: CtlModel::Account(Box::new(probe)) },
+    )
+    .0
 }
 /// Drive the first task without changing the box's template or demo.
 #[must_use]
@@ -665,6 +717,17 @@ pub fn run_ctl_with_face<T>(
     );
     (outcome, seen.expect("face observations"))
 }
+fn account_environment(probe: bool, cut: Option<&Path>) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    let mut environment = vec![("PATH".into(), "/usr/bin:/bin".into())];
+    if probe {
+        environment.push(("TEMPER_R8_WAIT_CHECK".into(), "1".into()));
+    }
+    if let Some(marker) = cut {
+        environment.push(("TEMPER_R8_CUT_AT_LISTEN".into(), marker.as_os_str().to_owned()));
+    }
+    environment
+}
+
 fn run_ctl_peers<T>(
     directory: &Path,
     flags: Vec<String>,
@@ -674,12 +737,19 @@ fn run_ctl_peers<T>(
     check: impl FnOnce(&[u8]) -> T,
     peers: CtlPeers,
 ) -> (CtlOutcome<T>, Option<super::forge_land::Seen>) {
+    let account_probe = matches!(&peers.model, CtlModel::Account(_));
+    let cut = match &peers.model {
+        CtlModel::Account(probe) => probe.cut_after_listening.clone(),
+        CtlModel::None | CtlModel::Llm(_) | CtlModel::Face(_) => None,
+    };
+    let fail_on_panic = account_probe.then_some(());
     let (peer, on_link, face, reply) = match peers.model {
         CtlModel::Llm(llm) => (Some(llm.peer), Some(llm.on_link), None, None),
         CtlModel::Face(story) => {
             (None, None, Some(story.face), Some(super::forge_land::Reply::new(story.first, story.reply)))
         }
         CtlModel::None => (None, None, None, None),
+        CtlModel::Account(probe) => (None, None, Some(probe.face), None),
     };
     if let Some(super::forge_land::Face::Fake { peer, .. }) = &face {
         let config = flags.windows(2).find(|pair| pair[0] == "--config").expect("explicit config directory");
@@ -697,7 +767,7 @@ fn run_ctl_peers<T>(
             // Real repository stories, including a fake box's owned Forgejo,
             // need init to discover system git for their first chat's checkout.
             environment: if on_link.is_some() || face.is_some() || fake_backends {
-                vec![("PATH".into(), "/usr/bin:/bin".into())]
+                account_environment(account_probe, cut.as_deref())
             } else {
                 Vec::new()
             },
@@ -714,7 +784,9 @@ fn run_ctl_peers<T>(
     fds.push(root);
     let checked = Cell::new(None);
     let visits = Cell::new(Vec::new());
+    let follow_reply = reply.is_some();
     let mut world = real::World::new(CtlJudge {
+        fail_on_panic,
         expected_exits: peers.expected_exits,
         release_answers: None,
         face: face.as_ref().map(|_| super::forge_land::FaceProcs { issuer: 2, visitor: 3, peer: 4 }),
@@ -738,7 +810,7 @@ fn run_ctl_peers<T>(
     world.spawn_with_fds(binary.descriptors(), || Process::Binary(Box::new(binary)));
     world.spawn_with_fds(fds, || {
         let mut calls = super::ctl::Calls::new(root, steps, Some(&streams), None).with_box_stderr();
-        if face.is_some() {
+        if follow_reply {
             calls.hold();
         }
         Process::Calls(Box::new(calls))

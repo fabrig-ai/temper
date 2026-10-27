@@ -2,6 +2,7 @@
 pub mod fixtures;
 mod machine;
 pub mod referee;
+mod restart_control;
 mod stories;
 pub mod world;
 

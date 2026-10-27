@@ -412,6 +412,12 @@ impl Domain {
         self.core.restart_failure()
     }
 
+    /// The restart owner currently awaiting its terminal, for startup probes.
+    #[must_use]
+    pub fn restart_step(&self) -> Option<jig_domain_core::RestartStep> {
+        self.core.restart_step()
+    }
+
     /// Decisions open only after the core's restart script completes.
     #[must_use]
     pub fn ready(&self) -> bool {

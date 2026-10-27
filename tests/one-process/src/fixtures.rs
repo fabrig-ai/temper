@@ -188,6 +188,11 @@ pub(crate) fn files() -> temper_service::settings::Files {
     entries
         .push((b"secrets/forge-1.webhook-secret".as_slice().into(), Secret::new(HOOK_SECRET.into())))
         .expect("webhook secret file");
+    if crate::stories::held_change() && crate::stories::first_start() {
+        entries
+            .push((b"forge-1/admin_token".as_slice().into(), Secret::new(crate::restart_control::ADMIN_TOKEN.into())))
+            .expect("fixture handover");
+    }
     temper_service::settings::Files { entries }
 }
 pub(crate) fn seeds() -> temper_service::settings::Seeds {

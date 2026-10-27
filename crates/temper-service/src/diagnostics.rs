@@ -117,3 +117,51 @@ pub enum LinkEvent {
     Cancel,
     Grant,
 }
+
+/// Closure and queue ownership beside the shell's unbounded wait decision.
+#[derive(Debug)]
+pub struct Wait {
+    pub engine: Option<WaitEngine>,
+    pub worker_empty: bool,
+    pub signals_closing: bool,
+    pub operations: bool,
+    pub submissions: u32,
+}
+
+#[derive(Debug)]
+pub struct WaitEngine {
+    pub restart: Option<jig_domain_core::RestartStep>,
+    pub mark_durable: bool,
+    pub store_closed: bool,
+    pub clients: WaitOwner,
+    pub workers: WaitOwner,
+    pub setup: WaitOwner,
+    pub setup_above: u32,
+    pub forge: WaitOwner,
+    pub forge_above: u32,
+    pub accounts: Option<WaitAccounts>,
+}
+
+#[derive(Debug)]
+pub struct WaitOwner {
+    pub closed: bool,
+    pub io: u32,
+}
+
+#[derive(Debug)]
+#[expect(clippy::struct_excessive_bools, reason = "each flag names an independent account lifecycle or readiness term")]
+pub struct WaitAccounts {
+    pub driver: bool,
+    pub loading: bool,
+    pub early: u32,
+    pub moves: u32,
+    pub finishes: u32,
+    pub keys: u32,
+    pub events: u32,
+    pub inventory_active: bool,
+    pub inventory_work: bool,
+    pub above: u32,
+    pub io: u32,
+    pub closed: bool,
+    pub empty: bool,
+}

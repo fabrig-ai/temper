@@ -38,6 +38,8 @@ enum LifeState {
 pub struct ServiceHost {
     pub(crate) pending_streak: crate::patience::PendingStreak,
     restartable: bool,
+    wait_check: bool,
+    now: Time,
     lives: Vec<Life>,
     state: LifeState,
     in_flight: usize,
@@ -148,6 +150,8 @@ impl ServiceHost {
         Self {
             pending_streak: crate::patience::PendingStreak::default(),
             restartable,
+            wait_check: std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some(),
+            now: Time::ZERO,
             lives: Vec::with_capacity(if restartable { LIVES } else { 0 }),
             state: LifeState::First,
             in_flight: 0,
@@ -393,7 +397,15 @@ impl ServiceHost {
     }
 }
 impl Host for ServiceHost {
+    fn drain(&mut self) {
+        if self.wait_check
+            && let Some(service) = &self.service
+        {
+            service.check_wait_boundary(self.now);
+        }
+    }
     fn iterate(&mut self, now: Time, wall: Wall) {
+        self.now = now;
         if self.state == LifeState::Restarting {
             self.begin_next_life();
         }
