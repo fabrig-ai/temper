@@ -222,6 +222,11 @@ fn chat_in(config: [engine::Config; 2]) -> (Driver, engine::Assignment) {
     }));
     driver.pump();
     let chat = assigned(&driver, 1).expect("stock chat assigned");
+    assert_eq!(
+        chat.run.policy.instructions.as_ref(),
+        include_bytes!("../../../../../crates/temper-service/src/stock/chat.txt"),
+        "the chat reports a landed change as its result says it"
+    );
     assert_eq!(chat.run.policy.model, box_model());
     assert_eq!(chat.run.budget, K);
     assert_eq!(driver.task(chat.task).expect("chat").numbers.budget, 24 * K);
@@ -373,6 +378,11 @@ pub(super) fn story() {
         panic!("coordinators admitted");
     };
     let first = assigned(&driver, made[0].task).expect("D1");
+    assert_eq!(
+        first.run.policy.instructions.as_ref(),
+        include_bytes!("../../../../../crates/temper-service/src/stock/chat.txt"),
+        "the goal reports a landed change as its result says it"
+    );
     let second = made[1].task;
     assert!(assigned(&driver, second).is_none(), "D2 waits with worker capacity free");
     let engine::CallAnswer::Sent { message: question } = call(
