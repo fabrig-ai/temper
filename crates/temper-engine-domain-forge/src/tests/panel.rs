@@ -351,13 +351,13 @@ fn ending_a_change_saves_its_last_ci_without_an_extra_write() {
             entry: fixtures::OPEN,
         },
     );
-    let mut saves = skein_lib::List::with_capacity(LIMITS.changes);
+    let mut records = skein_lib::List::with_capacity(LIMITS.changes);
     for request in requests {
         if let Request::Save { record: Stored::Change(row), .. } = request {
-            saves.push(row).expect("fixture changes fit");
+            records.push(row).expect("fixture changes fit");
         }
     }
-    let [saved] = saves.as_slice() else { panic!("the finish's one change save") };
+    let [saved] = records.as_slice() else { panic!("the finish's one change save") };
     assert_eq!(saved.change.state, change::State::Ended);
     assert_eq!(saved.ci, Some(read));
     assert_eq!(panel(&with_row(saved.clone())).ci, change::Status::Failed);

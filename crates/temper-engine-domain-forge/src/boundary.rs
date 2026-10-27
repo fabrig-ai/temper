@@ -640,7 +640,22 @@ pub struct ChangeRow {
 }
 impl ChangeRow {
     pub(crate) fn terminal(&self) -> bool {
-        matches!(self.change.state, change::State::Landed { .. } | change::State::Ended)
+        match self.change.state {
+            change::State::Landed { .. } | change::State::Ended => true,
+            change::State::Producing { .. }
+            | change::State::Opening { .. }
+            | change::State::Recreating { .. }
+            | change::State::Reopening { .. }
+            | change::State::Checking { .. }
+            | change::State::Gating { .. }
+            | change::State::Queued { .. }
+            | change::State::First { .. }
+            | change::State::Updating { .. }
+            | change::State::Resolving { .. }
+            | change::State::Repairing { .. }
+            | change::State::Landing { .. }
+            | change::State::Held { .. } => false,
+        }
     }
 }
 /// One gate's explanation, retained with its verdict for a repair brief.
