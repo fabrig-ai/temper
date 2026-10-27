@@ -18,8 +18,8 @@
   --temper-red-pale: #f9ece9;
   --temper-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
-/* .terminal-brand: the wordmark's one self-hosted face. */
-@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url(files/fonts/dm-sans-700-latin.woff2) format('woff2'); }
+/* The wordmark's bundled DejaVu Sans Bold face. */
+@font-face { font-family: 'DejaVu Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url(files/fonts/dejavu-sans-700-latin.woff2) format('woff2'); }
 /* body.terminal-pages: the terminal sheets' canvas and type. */
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--temper-canvas); color: var(--temper-ink); font: 12px/1.58 var(--temper-mono); letter-spacing: -.015em; }
@@ -35,7 +35,7 @@ a { color: inherit; text-decoration: none; }
 .temper-project-empty { margin: 0; color: #5f5a52; white-space: nowrap; }
 .temper-menu > .temper-project-empty { padding: 7px 9px; font-size: 12px; }
 /* .terminal-brand and .terminal-divider: decorative mask and rule. */
-.temper-brand { display: flex; align-items: center; gap: 8px; margin: 0; font: 700 16px/1 'DM Sans', ui-sans-serif, system-ui, sans-serif; letter-spacing: -.045em; white-space: nowrap; }
+.temper-brand { display: flex; align-items: center; gap: 8px; margin: 0; font: 700 16px/1 'DejaVu Sans', ui-sans-serif, system-ui, sans-serif; letter-spacing: -.045em; white-space: nowrap; }
 .temper-brand::before { content: ''; width: 19px; height: 19px; flex: none; background: var(--temper-accent); mask: url(files/brand.svg) center / contain no-repeat; }
 .temper-brand::after { content: ''; width: 1px; height: 17px; margin-left: 8px; background: #d9d2c8; flex: none; display: none; }
 /* .terminal-nav and .terminal-count: quiet links and current page. */

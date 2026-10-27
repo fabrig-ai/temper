@@ -1,2 +1,2 @@
-Source: https://fonts.gstatic.com/s/dmsans/v17/rP2Yp2ywxg089UriI5-g7M8btVsD8CnTrLu0-K4.woff2
-DM Sans 4.004 (Google Fonts v17), optical size 9..40, weight 700, latin; SHA-256: 4f7589ff0a15e48f6e848d44252d4b6229f045376a449ab8ed501f699ebccca2
+Source: Debian fonts-dejavu-core 2.37-9, /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf (https://dejavu-fonts.github.io/); SHA-256: e2ea0660bb4a28bc19d5e8f5e9280e789753bd3c23065e5742d920bae7398dc4
+DejaVu Sans 2.37, weight 700, latin (the range of the DM Sans it replaces), subset by fontTools 4.67.0: pyftsubset DejaVuSans-Bold.ttf --unicodes='U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD' --layout-features='*' --name-IDs='*' --notdef-outline --flavor=woff2; SHA-256: c41ab51cfae9bd97c0ee15e707fff1f0d9214f98f0c507de8d292651422f68a0
