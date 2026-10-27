@@ -2208,15 +2208,16 @@ fn change_delegate(
         .ok()?;
     parameters.push(tasks::Parameter::Bytes { name: 2, value: row.base.clone() }).ok()?;
     parameters.push(tasks::Parameter::Bytes { name: 3, value: row.branch.clone() }).ok()?;
+    let change_contract = tasks::Contract::Change {
+        connector: domain.config.forge_connector,
+        kind: 2,
+        words: env.limits.tasks.result_bytes,
+    };
     let (executor, words, contract) = match kind {
         forge_change::Delegate::Produce => (
             tasks::Executor::Agent { charter: row.producing_charter },
             produce_words(&row.title, &row.base, &row.branch, env.limits.tasks.spec_bytes),
-            tasks::Contract::Change {
-                connector: domain.config.forge_connector,
-                kind: 2,
-                words: env.limits.tasks.result_bytes,
-            },
+            change_contract,
         ),
         forge_change::Delegate::Repair(why) => {
             let words: &[u8] = match why {
@@ -2226,26 +2227,14 @@ fn change_delegate(
                 // landing.md 3: the top's task
                 forge_change::Repair::Landing { .. } => return None,
             };
-            (
-                tasks::Executor::Agent { charter: row.producing_charter },
-                Box::from(words),
-                tasks::Contract::Change {
-                    connector: domain.config.forge_connector,
-                    kind: 2,
-                    words: env.limits.tasks.result_bytes,
-                },
-            )
+            (tasks::Executor::Agent { charter: row.producing_charter }, Box::from(words), change_contract)
         }
         forge_change::Delegate::Resolve { base } => {
             parameters.push(tasks::Parameter::Bytes { name: 6, value: commit_text(&base) }).ok()?;
             (
                 tasks::Executor::Agent { charter: row.producing_charter },
                 Box::from(&b"Resolve the merge conflict and push the merge commit"[..]),
-                tasks::Contract::Change {
-                    connector: domain.config.forge_connector,
-                    kind: 2,
-                    words: env.limits.tasks.result_bytes,
-                },
+                change_contract,
             )
         }
         forge_change::Delegate::Gate { number, head } => {
@@ -2595,6 +2584,25 @@ fn ready_change(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool {
     again
 }
 
+fn wait_change_decision(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    task: u64,
+    until: Option<skein_lib::Wall>,
+) -> ProcedureStep {
+    let row = domain.forge.change(task).expect("waiting change");
+    if row.change.way == forge_change::Way::Turn
+        && let forge_change::State::Ready { .. } = row.change.state
+    {
+        if row.change.landing.is_none() {
+            start_landing(domain, env, task);
+        }
+    } else {
+        domain.forge.wait_change(&super::environment_forge(env), task, until);
+    }
+    ProcedureStep::new(StepEnd::Wait)
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
     if connector != domain.config.forge_connector || code != CHANGE_CODE {
@@ -2652,19 +2660,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects))
             }
         }
-        forge_change::Decision::Wait { until } => {
-            let row = domain.forge.change(task).expect("waiting change");
-            if row.change.way == forge_change::Way::Turn
-                && let forge_change::State::Ready { .. } = row.change.state
-            {
-                if row.change.landing.is_none() {
-                    start_landing(domain, env, task);
-                }
-            } else {
-                domain.forge.wait_change(&super::environment_forge(env), task, until);
-            }
-            ProcedureStep::new(StepEnd::Wait)
-        }
+        forge_change::Decision::Wait { until } => wait_change_decision(domain, env, task, until),
         forge_change::Decision::None | forge_change::Decision::Effect(_) | forge_change::Decision::Cancel => {
             ProcedureStep::new(StepEnd::Wait)
         }
