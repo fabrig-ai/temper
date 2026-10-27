@@ -1,4 +1,4 @@
-//! Commit spelling shared by change results and host answers.
+//! Commit spelling shared by forge briefs, change results and host answers.
 use alloc::boxed::Box;
 use skein_lib::List;
 
@@ -16,7 +16,7 @@ pub fn commit_text(commit: &skein_forge::api::Commit) -> Box<[u8]> {
     }
     let mut out = List::with_capacity(64);
     for byte in commit.get(..length).expect("a commit has 20 or 32 bytes") {
-        for digit in temper_engine_domain_forge::hex(*byte) {
+        for digit in crate::hex(*byte) {
             out.push(digit).expect("commit digits fit");
         }
     }

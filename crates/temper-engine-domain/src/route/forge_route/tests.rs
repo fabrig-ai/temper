@@ -595,3 +595,19 @@ fn expected_landing(line: &[u8]) -> Box<[u8]> {
     writer.put(line).unwrap();
     writer.finish()
 }
+
+#[test]
+fn a_review_never_starts_with_a_cut_pull_identity() {
+    let row = change_row(Some(42));
+    let identity = b"Review this change at the named head\nPull request: #42\nBranch: temper/7\nBase: main\nHead: abcdef0123456789abcdef0123456789abcdef01\n";
+    let head = commit_text(&SHA1);
+    let parameters = [
+        super::tasks::Parameter::Bytes { name: 2, value: row.base.clone() },
+        super::tasks::Parameter::Bytes { name: 3, value: row.branch.clone() },
+        super::tasks::Parameter::Bytes { name: 8, value: head },
+    ];
+    let bound = u32::try_from(identity.len() + row.base.len() + row.branch.len() + COMMITS[0].1.len()).unwrap();
+    assert_eq!(super::review_words(&row, &SHA1, &parameters, bound).unwrap().as_ref(), identity);
+    assert!(super::review_words(&row, &SHA1, &parameters, bound - 1).is_none());
+    assert!(super::review_words(&change_row(None), &SHA1, &parameters, bound).is_none());
+}

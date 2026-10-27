@@ -117,6 +117,44 @@ fn a_change_keeps_its_producing_and_review_charters_after_configuration_changes(
     assert_eq!(change_row(&world, change).review_charter, 4);
 }
 
+/// domain/forge.md, 8.3: the review names its subject before the pull section.
+#[test]
+fn a_gate_reviews_a_named_pull_with_its_whole_section_at_a_sha1_head() {
+    let (world, reviewer, head) = review_world();
+    assert_eq!(&head[20..], &[0; 12]);
+    let change = change_row(&world, requester(&world, reviewer.task));
+    let number = change.pull.expect("opened pull");
+    let identity = format!(
+        "Pull request: #{number}\nBranch: {}\nBase: main\nHead: {}\n",
+        core::str::from_utf8(&change.branch).expect("branch"),
+        core::str::from_utf8(&engine::commit_text(&head)).expect("SHA-1"),
+    );
+    assert!(core::str::from_utf8(task_brief(&reviewer)).expect("task brief").contains(&identity));
+    let task_at = reviewer
+        .sections
+        .iter()
+        .position(|part| part.kind == engine::BriefKind::Core(jig_domain_brief::Core::Task))
+        .expect("task section");
+    let pull_at = reviewer
+        .sections
+        .iter()
+        .position(|part| part.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Pull))
+        .expect("pull section");
+    assert!(task_at < pull_at);
+    let engine::BriefBody::Text(words) = &reviewer.sections[pull_at].body else {
+        panic!("pull section must be readable: {:?}", reviewer.sections[pull_at]);
+    };
+    let words = core::str::from_utf8(words).expect("pull text");
+    for expected in
+        ["Title: Small fix", "Body:", "Files and diff:", "File: file", "After:\nreview this diff", "Against base:"]
+    {
+        assert!(words.contains(expected), "missing {expected}: {words}");
+    }
+    let rendered = temper_engine_smith::charter(&reviewer);
+    assert!(rendered.brief.sections[task_at].text.windows(identity.len()).any(|part| part == identity.as_bytes()));
+    assert!(rendered.brief.sections[pull_at].text.windows(CONTENT.len()).any(|part| part == CONTENT));
+}
+
 #[test]
 fn a_changes_reviewer_reads_its_own_pull() {
     let (mut world, reviewer, head) = review_world();

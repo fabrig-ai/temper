@@ -2240,7 +2240,7 @@ fn change_delegate(
             gate_authority(domain, env, &mut authority, gate.kind)?;
             (
                 gate_executor(row, gate.kind),
-                review_words(&row.title, parameters.as_slice(), env.limits.tasks.spec_bytes),
+                review_words(row, &head, parameters.as_slice(), env.limits.tasks.spec_bytes)?,
                 tasks::Contract::Verdict {
                     choices: Box::new([
                         tasks::Verdict {
@@ -2305,7 +2305,13 @@ fn gate_authority(
     Some(())
 }
 
-fn review_words(title: &[u8], parameters: &[tasks::Parameter], bound: u32) -> Box<[u8]> {
+/// domain/forge.md, 8.3: identity precedes the change's words and pull section.
+fn review_words(
+    row: &forge::ChangeRow,
+    head: &skein_forge::api::Commit,
+    parameters: &[tasks::Parameter],
+    bound: u32,
+) -> Option<Box<[u8]>> {
     // The spec's byte bound includes its base, branch and named head.
     let mut room = bound;
     for parameter in parameters {
@@ -2314,12 +2320,29 @@ fn review_words(title: &[u8], parameters: &[tasks::Parameter], bound: u32) -> Bo
         }
     }
     let mut words = List::with_capacity(room);
-    append(
-        &mut words,
-        b"Review this change at the named head\nVerdict 1 approves; verdict 2 requests changes. Change: ",
-    );
-    append(&mut words, title);
-    words.into_boxed()
+    let number = skein_lib::Decimal::of(row.pull?);
+    let head = commit_text(head);
+    let identity: [&[u8]; 9] = [
+        b"Review this change at the named head\nPull request: #",
+        number.as_bytes(),
+        b"\nBranch: ",
+        &row.branch,
+        b"\nBase: ",
+        &row.base,
+        b"\nHead: ",
+        &head,
+        b"\n",
+    ];
+    for part in identity {
+        // The identity is required; a too-small spec cannot start an unnamed review.
+        if part.len() > usize::try_from(words.room()).expect("bounded spec room") {
+            return None;
+        }
+        append(&mut words, part);
+    }
+    append(&mut words, b"Verdict 1 approves; verdict 2 requests changes. Change: ");
+    append(&mut words, &row.title);
+    Some(words.into_boxed())
 }
 
 fn produce_words(title: &[u8], base: &[u8], branch: &[u8], bound: u32) -> Box<[u8]> {

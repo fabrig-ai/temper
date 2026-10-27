@@ -50,6 +50,7 @@ pub(crate) struct BriefFetch {
     base: Option<skein_forge::api::Commit>,
     comparison: Option<(skein_forge::api::Commit, skein_forge::api::Commit)>,
     changed: Box<[Box<[u8]>]>,
+    file_page: u32,
     review_ids: Box<[u64]>,
     next_review: u32,
     checks: Box<[skein_forge::api::Status]>,
@@ -190,6 +191,7 @@ pub(super) fn brief_pull(
         base: None,
         comparison: None,
         changed: Box::new([]),
+        file_page: 1,
         review_ids: Box::new([]),
         next_review: 0,
         checks: Box::new([]),
@@ -226,7 +228,7 @@ pub(crate) fn brief_answer(
                 PullMode::Conflict(_) => append(&mut fetch.words, b"Resolve the conflict from change head "),
                 PullMode::Semantic(_) => append(&mut fetch.words, b"Repair after the base merged into change head "),
             }
-            append_hex(&mut fetch.words, &fetch.head.0);
+            append(&mut fetch.words, &crate::commit_text(&fetch.head.0));
             append(&mut fetch.words, b"\nTitle: ");
             append(&mut fetch.words, &item.title);
             append(&mut fetch.words, b"\nBody: ");
@@ -240,10 +242,13 @@ pub(crate) fn brief_answer(
             fetch.stage = BriefStage::Files;
             Some(skein_forge::api::Read::PullFiles { number: fetch.item.number, head: fetch.head.0, page: 1 })
         }
-        Ok(skein_forge::api::Answer::PullFiles { head, files, .. })
+        Ok(skein_forge::api::Answer::PullFiles { head, files, more })
             if fetch.stage == BriefStage::Files && head == fetch.head.0 =>
         {
-            append(&mut fetch.words, b"Files and diff:\n");
+            if fetch.file_page == 1 {
+                append(&mut fetch.words, b"Files and diff:\n");
+            }
+            let nonempty = !files.is_empty();
             let mut changed = List::with_capacity(u32::try_from(files.len()).expect("bounded file list"));
             for file in files {
                 changed.push(file.path.clone()).expect("sized from bounded file list");
@@ -260,6 +265,29 @@ pub(crate) fn brief_answer(
                 append(&mut fetch.words, b"\n");
             }
             fetch.changed = changed.into_boxed();
+            // A review needs each page's contents. Every nonempty page consumes
+            // section room, so the byte bound also bounds these sequential reads.
+            let review = match fetch.mode {
+                PullMode::Review => true,
+                PullMode::Conflict(_) | PullMode::Semantic(_) | PullMode::Other => false,
+            };
+            if review && more {
+                if nonempty && fetch.words.bytes.room() > 0 {
+                    fetch.file_page = fetch.file_page.checked_add(1).expect("pages bounded by section bytes");
+                    let read = skein_forge::api::Read::PullFiles {
+                        number: fetch.item.number,
+                        head: fetch.head.0,
+                        page: fetch.file_page,
+                    };
+                    let repository = fetch.repository;
+                    domain.brief_fetches.insert(owner, fetch).expect("same brief read room");
+                    out.push(Request::BriefClient {
+                        event: skein_forge_client::Event::Read { owner, repository, read },
+                    });
+                    return true;
+                }
+                append(&mut fetch.words, b"[more files omitted]\n");
+            }
             let comparison = match fetch.mode {
                 PullMode::Review | PullMode::Other => match fetch.base {
                     Some(base) => Some((base, fetch.head.0)),
@@ -287,7 +315,7 @@ pub(crate) fn brief_answer(
                 PullMode::Conflict(_) | PullMode::Semantic(_) => {
                     append(&mut fetch.words, b"What landed in the base:\n");
                     for commit in commits {
-                        append_hex(&mut fetch.words, &commit);
+                        append(&mut fetch.words, &crate::commit_text(&commit));
                         append(&mut fetch.words, b"\n");
                     }
                     for file in files {
@@ -508,6 +536,7 @@ pub(super) fn brief_reviews(
         base: None,
         comparison: None,
         changed: Box::new([]),
+        file_page: 1,
         review_ids: Box::new([]),
         next_review: 0,
         checks: Box::new([]),
@@ -582,6 +611,7 @@ pub(super) fn brief_ci(
         base: None,
         comparison: None,
         changed: Box::new([]),
+        file_page: 1,
         review_ids: Box::new([]),
         next_review: 0,
         checks: Box::new([]),
