@@ -106,13 +106,9 @@ If not: `missing or nonexecutable adapter`: build `fake-claude`
 beside `temper`, as `Before you start` says. `not in current init
 shape`: `CONFIG` was changed after `temper init`; start again from
 empty directories. `retained documents must be private files`: an
-effective document lost its mode; `chmod 600` it. A start refused for
-its memory names by how many bytes the whole worst case passes
-`engine.memory_bytes`, from any value, the box's two pipes included:
-raise it by that once and start again. `--box: the box's pipes need ...`: the pipes lack what
-the line names (memory, socket slots, or a nonzero
-`application.limits.overrides.box.line_bytes`); give it. A start
-whose stored state is refused prints, in place of a sign-in link,
+effective document lost its mode; `chmod 600` it. A memory refusal
+names the whole deficit, pipes included: raise `engine.memory_bytes`
+by it. A start whose stored state is refused prints, in place of a sign-in link,
 `temper serve: restore KIND: REASON` or
 `temper serve: restart refused during STEP`; the box starts serve
 again a few times, each saying the same, then gives up and exits 1:
