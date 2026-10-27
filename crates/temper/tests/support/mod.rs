@@ -6,6 +6,7 @@ pub mod boxed;
 pub mod case;
 pub mod cluster;
 pub mod configuration;
+pub mod csv_repair;
 pub mod ctl;
 pub mod fetch;
 pub mod first_repository;

@@ -31,7 +31,7 @@ pub fn playground_llm(config: &Path) -> CtlLlm {
     scripts[1].turns = turns.into_boxed_slice();
     model(config, scripts.into_boxed_slice())
 }
-fn model(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
+pub(super) fn model(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
     let config = config.to_path_buf();
     let peer = super::fake_llm(scripts);
     let address = peer.address();
@@ -51,7 +51,7 @@ fn model(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
         }),
     }
 }
-fn call(name: &[u8], value: &Value) -> Turn {
+pub(super) fn call(name: &[u8], value: &Value) -> Turn {
     Turn {
         lines: Box::new([Line::Call {
             name: name.into(),
@@ -154,6 +154,10 @@ pub fn review_script() -> Script {
 /// Exercise init's landing rule with the playground's CSV request on real git.
 #[must_use]
 pub fn csv_llm(config: &Path) -> CtlLlm {
+    model(config, csv_scripts())
+}
+
+pub(super) fn csv_scripts() -> Box<[Script]> {
     let mut scripts = scripts();
     scripts[0].cue = b"Add CSV export to widget".as_slice().into();
     let Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else { panic!("delegate call") };
@@ -194,7 +198,7 @@ pub fn csv_llm(config: &Path) -> CtlLlm {
     );
     read.lines = lines.into_boxed_slice();
     scripts[2].turns = Box::new([read, verdict]);
-    model(config, scripts)
+    scripts
 }
 
 /// Capture the pending review before allowing the scripted verdict to finish.
@@ -238,7 +242,7 @@ pub fn csv_task_steps(root: &Path) -> Vec<Step> {
             assert_eq!(charter["value"]["modify"], false);
             Call::new(&["change", "show", "2", "--json"])
         })),
-        Step::ReleaseLlm(b"csv-review"),
+        Step::ReleaseLlm { name: b"csv-review", cue: b"Review this change at the named head" },
         Step::Until(Call::new(&["change", "show", "2", "--json"]), br#""verdict":"approved""#),
         Step::Then(Box::new(|calls| {
             let approved = super::ctl::json(calls.last().expect("approved panel"));
