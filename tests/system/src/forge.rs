@@ -60,7 +60,7 @@ impl World {
         passes: u32,
         approval: Option<engine::Freshness>,
     ) -> Self {
-        let [(bootstrap, limits), (config, _)] = std::array::from_fn(|_| {
+        let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
             limits.people.amendment_bytes =
                 jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.people.amendment_bytes;
@@ -255,6 +255,8 @@ impl World {
         fake::grant(&mut fake, b"org/repo", 2, raw::Permission::Write);
         fake::grant(&mut fake, b"org/repo", 7, raw::Permission::Read);
         let fake_env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: fake_config };
+        // Size journal writes from the placed subtree's complete child route.
+        limits.journal.writes = limits.journal.writes.max(walking::writes(&limits));
         let store = temper_engine_domain_world::fixtures::restored_store(bootstrap, &limits);
         Self {
             creating: jig_core_world::fixtures::Creating::new(&config.core, limits.tasks.tree_tasks),

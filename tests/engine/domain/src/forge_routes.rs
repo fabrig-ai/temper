@@ -398,6 +398,8 @@ impl World {
         if let Some(documents) = documents {
             limits.documents = paths::document_limits(documents, &limits);
         }
+        // Size journal writes from the placed subtree's complete child route.
+        limits.journal.writes = limits.journal.writes.max(walking::writes(&limits));
         // Keep the world's broad page bounds and align its message codec with the root.
         let mut store_limits = temper_engine_domain_world::store::widest();
         store_limits.people.words = limits.people.words;
