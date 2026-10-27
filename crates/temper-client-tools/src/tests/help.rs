@@ -2,6 +2,8 @@ use super::fixtures;
 use crate::{jig, table};
 use skein_lib::List;
 const GOLDENS: &[(Option<u8>, &str)] = &[
+    (Some(52), "help_landing"),
+    (Some(53), "help_landings"),
     (Some(3), "help_task"),
     (Some(12), "help_decide"),
     (Some(10), "help_close"),
@@ -96,6 +98,8 @@ const USAGES: &[&[u8]] = &[
     b"change N [--project P]\n",
     b"forge-accept F I [--key NAME]\n",
     b"move-to-newest R --key NAME\n",
+    b"landing N [--project P]\n",
+    b"landings --project P [--ended]\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {
