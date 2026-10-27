@@ -1,2 +1,5 @@
 /* The current step in ink, not the accent: the accent is all but --temper-red, and beside the done steps' green it read as a step gone wrong. */
 .temper-flow-step[aria-current] { border-color: var(--temper-ink); color: var(--temper-ink); }
+
+/* The welcome's forge choices: a card's link beside its button, as the welcome's foot keeps its links in a row. */
+.temper-welcome .temper-flow-choice > .temper-flow-actions { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 16.33px; }
