@@ -14,6 +14,7 @@ pub(crate) struct Operation {
     pub tool: Option<&'static crate::jig::table::Tool>,
     pub account: Option<Account>,
     pub task: Option<u64>,
+    pub ended_chat: bool,
     pub to: Option<c::Recipient>,
     pub party: Option<u64>,
     pub retry: Option<Box<[u8]>>,
@@ -125,6 +126,7 @@ impl Operation {
             tool: None,
             account: None,
             task,
+            ended_chat: false,
             to: None,
             party: None,
             retry: None,
@@ -625,7 +627,7 @@ fn moved_in(account: u32, renewed: bool, out: &mut Text) {
 
 fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, out: &mut Text) {
     if operation.word == b"close"
-        && matches!(refusal, c::Refusal::Ended { .. })
+        && ended_refusal(refusal, operation.ended_chat)
         && let Some(task) = operation.task
     {
         out.put(b"chat ");
@@ -708,5 +710,34 @@ fn moved_text(operation: &Operation, value: &c::OutcomeMovedToNewest, out: &mut 
         out.number(u64::from(value.stayed));
         out.put(if value.stayed == 1 { b" could not, and finishes on " } else { b" could not, and finish on " });
         out.number(u64::from(operation.revision.expect("move request's revision")));
+    }
+}
+
+fn ended_refusal(refusal: &c::Refusal, archived: bool) -> bool {
+    match refusal {
+        c::Refusal::Ended { .. } => true,
+        c::Refusal::Unknown => archived,
+        c::Refusal::Stale(_)
+        | c::Refusal::Full(_)
+        | c::Refusal::AccountMove { .. }
+        | c::Refusal::SignInRedirect { .. }
+        | c::Refusal::Circle { .. }
+        | c::Refusal::Dependency { .. }
+        | c::Refusal::Kept { .. }
+        | c::Refusal::Account { .. }
+        | c::Refusal::NoEscalationHolder
+        | c::Refusal::Provider
+        | c::Refusal::Malformed { .. }
+        | c::Refusal::Role { .. }
+        | c::Refusal::Taken { .. }
+        | c::Refusal::NotWaiting
+        | c::Refusal::NoFurther
+        | c::Refusal::Authority { .. }
+        | c::Refusal::Limit { .. }
+        | c::Refusal::Moved { .. }
+        | c::Refusal::NameTaken
+        | c::Refusal::NotOffered
+        | c::Refusal::KeyConflict
+        | c::Refusal::Llm { .. } => false,
     }
 }
