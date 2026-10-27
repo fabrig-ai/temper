@@ -419,20 +419,20 @@ impl World {
                     paths::add_reader(&mut policy);
                 }
                 if turn {
-                    limits.authority.grants = 16;
-                    limits.tasks.authority_grants = 16;
-                    limits.authority.executors = 3;
-                    limits.tasks.executor_kinds = 3;
+                    limits.authority.grants = 14;
+                    limits.tasks.authority_grants = 14;
+                    limits.authority.executors = 5;
+                    limits.tasks.executor_kinds = 5;
                     limits.tasks.result_bytes = 256;
                     limits.journal.run_bytes = 32768;
                     if let Some(slots) = landing_members {
                         limits.forge.landing_members = slots;
                     }
-                    let mut grants = List::with_capacity(16);
+                    let mut grants = List::with_capacity(14);
                     for grant in &rules.ceiling.grants {
                         grants.push(grant.clone()).expect("ceiling grants");
                     }
-                    for kind in [6, 9, 15, 16, 17] {
+                    for kind in [6, 9, 16, 17] {
                         grants.push(authority::Grant { kind, ..grant.clone() }).expect("landing grants");
                     }
                     rules.ceiling.grants = grants.into_boxed();
@@ -440,6 +440,7 @@ impl World {
                         authority::Executor::Charter(1),
                         authority::Executor::Procedure(2),
                         authority::Executor::Procedure(3),
+                        authority::Executor::Procedure(4),
                     ]);
                     policy.ceiling = rules.ceiling.clone();
                     let rule = engine::LandingRule {
