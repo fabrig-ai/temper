@@ -31,26 +31,14 @@ pub const READ: Tool = Tool {
     forms: &[&[
         positional(b"task", b"TASK", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Word { set: &[b"pull", b"ci:pending", b"ci:passed", b"ci:failed", b"held", b"landed", b"changed"] }, Optional, b"Wait until it holds: pull, ci:pending, ci:passed, ci:failed, held, landed, or changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
     ]],
     keyed: Keyed::Never,
     area: 6,
     notes: b"Until it lands, it prints `next: temper ctl DIRECTORY wait change N\n--until landed`; landed, its merge commit. A task with no change\nfails, `no change panel for task N` (exit 2). The forge holds its\ndiff, reviews and logs: read them there.\n",
 };
-pub const WAIT_FORM: &[jig::table::Argument] = &[
-    positional(b"subject", b"change", Kind::Word { set: &[b"change"] }, Required, b"A change's way to landing"),
-    positional(b"task", b"TASK", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
-    flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
-    flag(b"since", b"DIGEST", Kind::Digest, Optional, b"The digest of your last read of the change"),
-    flag(
-        b"until",
-        b"pull|ci:pending|ci:passed|ci:failed|held|landed",
-        Kind::Word { set: &[b"pull", b"ci:pending", b"ci:passed", b"ci:failed", b"held", b"landed"] },
-        Optional,
-        b"pull: its pull request opened; ci:STATE: CI at its head in that state; held: a hold on it; landed: merged",
-    ),
-    flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long to wait; 300 seconds when absent"),
-];
-
 #[derive(Debug)]
 pub(crate) struct Changes {
     calls: BTreeMap<u32, Watching>,
@@ -95,7 +83,7 @@ impl Changes {
 }
 pub(crate) fn owns(call: &jig::call::Call) -> bool {
     let name = crate::table::TOOLS.get(usize::from(call.tool)).expect("parsed tool").name;
-    name == READ.name || (name == b"wait" && call.form == 2)
+    name == READ.name
 }
 pub(crate) fn call(state: &mut Changes, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
     if called.value.is_some() || jig::argv::check(crate::table::TOOLS, &called.call, &env.limits.tools).is_err() {
@@ -103,13 +91,13 @@ pub(crate) fn call(state: &mut Changes, client: &Client, env: &Env<Limits>, call
         out.push(Out::Printed { number: called.number, printed });
         return;
     }
-    let waiting = crate::table::TOOLS.get(usize::from(called.call.tool)).expect("parsed tool").name == b"wait";
-    let task = number(&called.call, usize::from(waiting)).expect("checked task");
-    let since = match value(&called.call, 3) {
+    let waiting = jig::call::waiting(&READ, &called.call);
+    let task = number(&called.call, 0).expect("checked task");
+    let since = match value(&called.call, 2) {
         Some(Value::Digest(bytes)) if waiting => Some(Digest::from_bytes(*bytes)),
         _ => None,
     };
-    let deadline = match value(&called.call, 5) {
+    let deadline = match value(&called.call, 4) {
         Some(Value::Duration(duration)) if waiting => {
             Some(env.now.checked_add(*duration).unwrap_or(Time::from_nanos(u64::MAX)))
         }
@@ -157,7 +145,7 @@ pub(crate) fn ready(state: &mut Changes, client: &Client, env: &Env<Limits>, out
         let Some(number) = next else { break };
         let watch = state.calls.get_mut(&number).expect("active change");
         watch.started = true;
-        let project = value(&watch.called.call, if watch.waiting { 2 } else { 1 });
+        let project = value(&watch.called.call, 1);
         watch.project = match project {
             Some(Value::Project(jig::call::Project::Number(n))) => Some(*n),
             Some(Value::Project(jig::call::Project::Name(name))) => {
@@ -427,9 +415,10 @@ fn delivered(watch: &mut Watching, env: &Env<Limits>) -> Option<jig::Printed> {
     let Some(digest) = digest(panel, &env.limits) else {
         return Some(render::failure(b"result limit", watch.called.json, 1));
     };
-    let condition = match value(&watch.called.call, 4) {
+    let condition = match value(&watch.called.call, 3) {
         Some(Value::Word(word)) => {
-            let Kind::Word { set } = WAIT_FORM.get(4).expect("condition argument").kind else {
+            let Kind::Word { set } = READ.forms.first().expect("read form").get(3).expect("condition argument").kind
+            else {
                 unreachable!("condition words")
             };
             Some(*set.get(usize::from(*word)).expect("checked condition"))
@@ -437,6 +426,7 @@ fn delivered(watch: &mut Watching, env: &Env<Limits>) -> Option<jig::Printed> {
         _ => None,
     };
     let holds = match condition {
+        Some(b"changed") => Some(watch.first.is_some() && jig::wait::met(watch.since, watch.first, digest, None)),
         Some(b"pull") => Some(panel.pull().is_some()),
         Some(b"ci:pending") => Some(*panel.ci() == w::Ci::Pending),
         Some(b"ci:passed") => Some(*panel.ci() == w::Ci::Passed),

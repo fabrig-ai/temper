@@ -83,12 +83,7 @@ pub(super) fn valid(
             };
             true
         }
-        Kind::Subject => {
-            let Value::Subject(_) = value else {
-                return Err(Usage::Kind { argument });
-            };
-            true
-        }
+
         Kind::Tool => {
             let Value::Tool(id) = value else {
                 return Err(Usage::Kind { argument });
@@ -183,7 +178,6 @@ pub(crate) fn decode(table: &[&Tool], kind: Kind, bounds: Bound, word: &[u8]) ->
             Value::Digest(digest)
         }
         Kind::Condition => Value::Condition(subject::parse(word)?),
-        Kind::Subject => return None,
         Kind::Tool => Value::Tool(super::tool_index(table, word)?),
     })
 }
@@ -283,6 +277,7 @@ pub(crate) fn encode(table: &[&Tool], kind: Kind, value: &Value) -> Result<Box<[
         Value::Digest(digest) => hexadecimal(digest)?,
         Value::Condition(condition) => {
             let bytes: &[u8] = match condition {
+                Condition::Changed => b"changed",
                 Condition::Waiting => b"waiting",
                 Condition::Usable => b"usable",
                 Condition::Settled => b"settled",
@@ -301,7 +296,7 @@ pub(crate) fn encode(table: &[&Tool], kind: Kind, value: &Value) -> Result<Box<[
             };
             Box::from(bytes)
         }
-        Value::Subject(_) | Value::Switch => return Err(Unwritten::NoForm),
+        Value::Switch => return Err(Unwritten::NoForm),
         Value::Tool(id) => Box::from(table.get(usize::from(*id)).ok_or(Unwritten::NoForm)?.name),
     })
 }

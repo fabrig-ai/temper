@@ -1,6 +1,5 @@
 //! Watch subjects and their conditions (tools contract, 5.4).
 use super::{argv::Usage, call::Call};
-use alloc::boxed::Box;
 use jig_client::contract::Phase;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Subject {
@@ -10,10 +9,11 @@ pub enum Subject {
     Task(u64),
     Tree(u64),
     Run(u64),
-    Tasks(Box<Call>),
+    Tasks,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Condition {
+    Changed,
     Waiting,
     Usable,
     Settled,
@@ -24,23 +24,6 @@ pub enum Condition {
     Replied,
     Phase(Phase),
 }
-/// Every phase, in its vocabulary order; help filters this with `live`.
-pub(crate) const PHASES: &[Phase] = &[
-    Phase::Waiting,
-    Phase::Idle,
-    Phase::Due,
-    Phase::Preparing,
-    Phase::Claimed,
-    Phase::Running,
-    Phase::BackingOff,
-    Phase::Active,
-    Phase::Closing,
-    Phase::Held,
-    Phase::Ended,
-    Phase::Done,
-    Phase::Failed,
-    Phase::Cancelled,
-];
 /// Parse a condition for its subject; terminal phases name `--until ended`.
 pub fn condition(subject: &Subject, word: &[u8]) -> Result<Condition, Usage> {
     let value = parse(word).ok_or(Usage::Condition)?;
@@ -50,7 +33,8 @@ pub fn condition(subject: &Subject, word: &[u8]) -> Result<Condition, Usage> {
 #[must_use]
 pub fn takes(subject: &Subject, condition: &Condition) -> bool {
     match (subject, condition) {
-        (Subject::Accounts, Condition::Usable | Condition::Settled)
+        (_, Condition::Changed)
+        | (Subject::Accounts, Condition::Usable | Condition::Settled)
         | (Subject::Me, Condition::Waiting)
         | (Subject::Inbox, Condition::Waiting | Condition::Updates)
         | (Subject::Task(_), Condition::Ended | Condition::WaitingOnMe | Condition::Held | Condition::Replied)
@@ -61,6 +45,7 @@ pub fn takes(subject: &Subject, condition: &Condition) -> bool {
 }
 pub(super) fn parse(word: &[u8]) -> Option<Condition> {
     Some(match word {
+        b"changed" => Condition::Changed,
         b"waiting" => Condition::Waiting,
         b"usable" => Condition::Usable,
         b"settled" => Condition::Settled,
@@ -131,4 +116,18 @@ pub(crate) fn live(phase: Phase) -> bool {
         | Phase::Held => true,
         Phase::Ended | Phase::Done | Phase::Failed | Phase::Cancelled => false,
     }
+}
+
+pub(crate) fn of(call: &Call) -> Option<Subject> {
+    use super::{call, rows};
+    Some(match call.tool {
+        rows::ME_AT => Subject::Me,
+        rows::ACCOUNTS_AT => Subject::Accounts,
+        rows::INBOX_AT => Subject::Inbox,
+        rows::TASK_AT => Subject::Task(call::number(call, 0)?),
+        rows::TREE_AT => Subject::Tree(call::number(call, 0)?),
+        rows::RUN_AT => Subject::Run(call::number(call, 0)?),
+        rows::TASKS_AT => Subject::Tasks,
+        _ => return None,
+    })
 }

@@ -75,7 +75,7 @@ pub fn class(call: &Call) -> Class {
         Class::Pending
     } else if tool.name == rows::HELP.name {
         Class::Help
-    } else if tool.name == rows::WAIT.name {
+    } else if temper_client_tools::jig::call::waiting(tool, call) {
         Class::Wait
     } else {
         Class::Read

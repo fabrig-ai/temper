@@ -78,10 +78,10 @@ fn forge_calls_round_trip_through_argv_json_and_help() {
         &["forge", "setup", "3"],
         &["forge", "setup", "3", "--key", "setup"],
         &["forge", "setup", "3", "--org", "team", "--repository", "widget", "--project", "shop"],
-        &["wait", "forges", "--until", "made:3"],
+        &["forge", "list", "--until", "made:3"],
         &["forge", "setup", "3", "--project", ""],
-        &["wait", "forges", "--until", "settled"],
-        &["wait", "forges", "--since", "0123456789abcdef", "--until", "connected:3", "--timeout", "2s"],
+        &["forge", "list", "--until", "settled"],
+        &["forge", "list", "--since", "0123456789abcdef", "--until", "connected:3", "--timeout", "2s"],
     ] {
         let call = f::call(argv);
         assert_eq!(f::printed(&call), Parsed::Call { call: call.clone(), json: false });
@@ -95,16 +95,16 @@ fn forge_calls_round_trip_through_argv_json_and_help() {
         &["forge", "setup", "oops"],
         &["forge", "setup", "65536"],
         &["forge", "setup", "0"],
-        &["wait", "forges", "--until", "busy"],
-        &["wait", "forges", "--until", "made:x"],
-        &["wait", "forges", "--until", "made:0"],
-        &["wait", "forges", "--until", "made:65536"],
-        &["wait", "forges", "--until", "made:"],
-        &["wait", "forges", "--until", "connected:x"],
-        &["wait", "forges", "--until", "connected:65536"],
-        &["wait", "forges", "--until", "connected:0"],
-        &["wait", "forges", "--until", "connected:"],
-        &["wait", "forges", "--until", "connected:18446744073709551616"],
+        &["forge", "list", "--until", "busy"],
+        &["forge", "list", "--until", "made:x"],
+        &["forge", "list", "--until", "made:0"],
+        &["forge", "list", "--until", "made:65536"],
+        &["forge", "list", "--until", "made:"],
+        &["forge", "list", "--until", "connected:x"],
+        &["forge", "list", "--until", "connected:65536"],
+        &["forge", "list", "--until", "connected:0"],
+        &["forge", "list", "--until", "connected:"],
+        &["forge", "list", "--until", "connected:18446744073709551616"],
     ] {
         assert!(f::parse(argv).is_err(), "{argv:?}");
     }
@@ -212,7 +212,7 @@ fn the_read_closes_after_its_first_document_and_refuses_invalid_bytes() {
 #[test]
 fn a_wait_follows_each_setup_step_and_releases_the_watch_and_timer() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "forges", "--until", "settled"]);
+    let call = root.submit(&["forge", "list", "--until", "settled"]);
     let limits = forge::wire_limits(&root.limits.domain.forge).unwrap();
     for step in [None, Some(w::SetUpStep::Prepare), Some(w::SetUpStep::Run)] {
         deliver(
@@ -239,14 +239,14 @@ fn since_uses_the_read_digest_and_plain_wait_requires_a_change() {
         let printed = root.answer(read).unwrap();
         let digest = f::last_digest(&printed.stdout);
         let flags = if until { &["--until", "settled"][..] } else { &[] };
-        let call = root.wait_since(&["wait", "forges"], flags, &digest);
+        let call = root.wait_since(&["forge", "list"], flags, &digest);
         deliver(&mut root, record(w::Connection::NotSetUp));
         assert!(root.answer(call).is_none());
         deliver(&mut root, record(w::Connection::NotConnected));
         assert_eq!(root.answer(call).unwrap().status, 0);
     }
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "forges"]);
+    let call = root.submit(&["forge", "list", "--until", "changed"]);
     deliver(&mut root, record(w::Connection::NotSetUp));
     assert!(root.answer(call).is_none());
     deliver(&mut root, record(w::Connection::NotSetUp));
@@ -257,7 +257,7 @@ fn since_uses_the_read_digest_and_plain_wait_requires_a_change() {
 #[test]
 fn timeout_prints_the_current_document_and_watch_refusals_keep_their_status() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "forges", "--until", "connected:3", "--timeout", "1s", "--json"]);
+    let call = root.submit(&["forge", "list", "--until", "connected:3", "--timeout", "1s", "--json"]);
     deliver(&mut root, record(w::Connection::NotSetUp));
     root.now = root.now.checked_add(Duration::from_secs(1)).unwrap();
     root.fire();
@@ -268,7 +268,7 @@ fn timeout_prints_the_current_document_and_watch_refusals_keep_their_status() {
     assert_eq!(root.closed.len(), 1);
     for (end, status) in [(c::WatchEnd::NotAllowed, 2), (c::WatchEnd::Unknown, 2)] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["wait", "forges", "--until", "settled"]);
+        let call = root.submit(&["forge", "list", "--until", "settled"]);
         let token = root.watch_token(&forge::forges::watch(&root.limits.domain.forge).unwrap());
         root.client(client::Event::Up { up: client::Up::WatchEnded { watch: token, end } });
         assert_eq!(root.answer(call).unwrap().status, status);
@@ -360,9 +360,9 @@ fn all_children_share_the_call_budget_and_timeouts_release_it() {
     let mut calls = List::with_capacity(root.limits.tools.rows);
     for at in 0..root.limits.tools.rows {
         let argv = if at % 2 == 0 {
-            &["wait", "forges", "--timeout", "1s"][..]
+            &["forge", "list", "--timeout", "1s", "--until", "changed"][..]
         } else {
-            &["wait", "accounts", "--timeout", "1s"]
+            &["account", "list", "--timeout", "1s", "--until", "changed"]
         };
         calls.push(root.submit(argv)).unwrap();
     }
@@ -572,7 +572,7 @@ fn setup_failure_names_the_creation_or_box_step_and_exits_one() {
 #[test]
 fn made_wait_requires_the_named_forges_first_repository_to_be_made() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "forges", "--until", "made:3"]);
+    let call = root.submit(&["forge", "list", "--until", "made:3"]);
     for first in [None, Some(first_record(w::FirstState::Making))] {
         deliver(
             &mut root,
@@ -759,7 +759,7 @@ fn forges_json_names_installations_and_the_last_connect_end() {
 
 fn settled_wait_with_installations(count: u32) {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "forges", "--until", "settled", "--json"]);
+    let call = root.submit(&["forge", "list", "--until", "settled", "--json"]);
     let limits = forge::wire_limits(&root.limits.domain.forge).unwrap();
     let mut installations = List::with_capacity(count);
     for id in 1..=count {
@@ -1116,4 +1116,19 @@ fn playground_setup_rejects_org_or_repository_before_sending() {
         assert_eq!(root.answer(call).unwrap().status, 1);
         assert!(root.nothing_sent(), "a usage error must send no request");
     }
+}
+
+#[test]
+fn changed_with_since_waits_for_a_forge_change_after_the_baseline() {
+    let mut root = f::signed_in(f::PARTY);
+    let read = root.submit(&["forge", "list", "--json"]);
+    deliver(&mut root, record(w::Connection::NotConnected));
+    let digest = f::last_digest(&root.answer(read).unwrap().stdout);
+    let call = root.wait_since(&["forge", "list"], &["--until", "changed"], &digest);
+    for connection in [w::Connection::NotSetUp, w::Connection::NotConnected] {
+        deliver(&mut root, record(connection));
+        assert!(root.answer(call).is_none());
+    }
+    deliver(&mut root, record(w::Connection::NotSetUp));
+    assert_eq!(root.answer(call).unwrap().status, 0);
 }

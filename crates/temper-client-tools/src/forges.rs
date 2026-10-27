@@ -10,7 +10,28 @@ pub const READ: Tool = Tool {
     prints:
         b"A line per forge, `forge F`, its kind, mode and connection, its App and installations, then `digest: forges`",
     result: b"forges",
-    forms: &[&[]],
+    forms: &[&[
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(
+            b"until",
+            b"CONDITION",
+            Kind::NamedNumber {
+                words: &[b"settled", b"changed"],
+                prefixes: &[b"connected:", b"made:"],
+                min: 1,
+                max: 65535,
+            },
+            Optional,
+            b"Wait until it holds: settled, connected:FORGE, made:FORGE, or changed",
+        ),
+        flag(
+            b"timeout",
+            b"DURATION",
+            Kind::Duration,
+            Optional,
+            b"How long a wait lasts; 300 seconds when absent, at most 3600",
+        ),
+    ]],
     keyed: Keyed::Never,
     area: 6,
     notes: b"An installation not yet accepted prints the `forge-accept F I`\nthat accepts it.\n",
@@ -156,31 +177,6 @@ pub const DEMO_START: Tool = Tool {
     area: 6,
     notes: b"It returns once the playground runs. A failed start names its step,\nthe fakes, the account, the adoption or the forge, and the same\ncall again finishes it. `refused: not offered` (exit 2): this\ndeployment has no playground.\n",
 };
-pub const WAIT: Tool = Tool {
-    name: b"wait",
-    line: b"Wait for a subject to change or to meet a condition",
-    prints: b"The subject as its read prints it, then `met`, or `not met: timeout` or `not met: ended` with exit 3",
-    result: b"wait",
-    forms: &[
-        *jig::rows::WAIT.forms.first().expect("base wait form"),
-        &[
-            positional(b"subject", b"forges", Kind::Word { set: &[b"forges"] }, Required, b"The deployment's forges"),
-            flag(b"since", b"DIGEST", Kind::Digest, Optional, b"The digest of your last read of forges"),
-            flag(
-                b"until",
-                b"CONDITION",
-                Kind::NamedNumber { words: &[b"settled"], prefixes: &[b"connected:", b"made:"], min: 1, max: 65535 },
-                Optional,
-                b"settled: none setting up or connecting; connected:F: forge F connected; made:F: forge F's first repository made",
-            ),
-            flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long to wait; 300 seconds when absent"),
-        ],
-        crate::change::WAIT_FORM,
-    ],
-    keyed: Keyed::Never,
-    area: 1,
-    notes: b"With `--since`, it waits for the subject to differ from that read;\nwith `--until`, for the condition; with both, for both; with\nneither, for the subject's next change.\nSubjects and their conditions:\n  me: waiting\n  inbox: waiting, updates\n  task N: ended, waiting-on-me, held, replied, phase:PHASE\n  tree N, run N: ended\n  accounts: usable, settled\n  tasks and its read's arguments, but --after and --ended: none\n  forges, change N: as their forms say\nended covers done, failed and cancelled; phase: names a live phase.\nwaiting-on-me covers the task's tree. replied holds once the task\nwaits on someone, holds, closes or ends. settled counts a failed\nconnection as settled.\n",
-};
 
 use crate::{
     jig::{
@@ -303,7 +299,6 @@ pub(crate) fn owns(call: &jig::call::Call) -> bool {
         || name == INSTALL.name
         || name == ACCEPT.name
         || name == REPOSITORIES.name
-        || (name == WAIT.name && call.form == 1)
 }
 fn live(client: &Client) -> bool {
     let Some(doc) = client.document(Handle { asker: crate::root::RUNNER.asker(), number: 0 }) else { return false };
@@ -385,13 +380,13 @@ fn send(state: &mut Forges, client: &Client, env: &Env<Limits>, called: Called, 
         state.pending.insert(key, SettingUp { intent, called: Some(called) });
         out.push(Out::Client { event: Event::Send { key, name, request } });
     } else {
-        let waiting = crate::table::TOOLS.get(usize::from(called.call.tool)).expect("parsed tool").name == WAIT.name;
-        let since = match value(&called.call, 1) {
+        let waiting = jig::call::waiting(&READ, &called.call);
+        let since = match value(&called.call, 0) {
             Some(Value::Digest(bytes)) => Some(Digest::from_bytes(*bytes)),
             _ => None,
         };
         let deadline = if waiting {
-            let Some(Value::Duration(timeout)) = value(&called.call, 3) else { unreachable!("checked timeout") };
+            let Some(Value::Duration(timeout)) = value(&called.call, 2) else { unreachable!("checked timeout") };
             Some(env.now.checked_add(*timeout).unwrap_or(Time::from_nanos(u64::MAX)))
         } else {
             None
@@ -591,11 +586,12 @@ fn changed(state: &mut Forges, client: &Client, env: &Env<Limits>, handle: Handl
         complete(state, handle, printed, out);
         return;
     };
-    let condition = match value(&watch.called.call, 2) {
+    let condition = match value(&watch.called.call, 1) {
         Some(Value::Text(bytes)) => Some(bytes.as_ref()),
         _ => None,
     };
     let verdict = match condition {
+        Some(b"changed") => Some(watch.first.is_some() && jig::wait::met(watch.since, watch.first, digest, None)),
         Some(condition) => Some(holds(&rows, condition)),
         None => None,
     };

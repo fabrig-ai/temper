@@ -147,6 +147,9 @@ fn tree_cut(tree: &c::OwnerTree, project: Option<u32>, book: &Phrasebook, out: &
         None,
         None,
         Some(Values::One(Value::Number(tree.root.task))),
+        None,
+        None,
+        None,
     ]);
     write_call(&Call { tool: 2, form: 0, values, key: None }, out);
     out.put(b"\n");

@@ -1,0 +1,10 @@
+forge list [--since DIGEST] [--until CONDITION] [--timeout DURATION]
+  --since DIGEST: a digest, as a read prints it; optional. Wait until it differs from the read that printed DIGEST
+  --until CONDITION: one of settled, changed, connected:N or made:N with N from 1 to 65535; optional. Wait until it holds: settled, connected:FORGE, made:FORGE, or changed
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long a wait lasts; 300 seconds when absent, at most 3600
+Read the deployment's forges
+Prints: A line per forge, `forge F`, its kind, mode and connection, its App and installations, then `digest: forges`
+--json: the record forges.
+Key: none.
+An installation not yet accepted prints the `forge-accept F I`
+that accepts it.
