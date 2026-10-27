@@ -336,7 +336,13 @@ pub const ACCOUNTS: Tool = Tool {
     forms: &[&[
         flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
         flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: usable, settled, or changed"),
-        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
+        flag(
+            b"timeout",
+            b"DURATION",
+            Kind::Duration,
+            Optional,
+            b"How long a wait lasts; 300 seconds when absent, at most 3600",
+        ),
     ]],
     keyed: Keyed::Never,
     area: 5,

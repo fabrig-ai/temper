@@ -8,7 +8,7 @@ Read a change's way to landing: its pull request, CI and step
 Prints: `change N`, its repository, branch and landing branch, its pull request, step and CI at its head, and a digest
 --json: the record change.
 Key: none.
-Until it lands, it prints `next: temper ctl DIRECTORY wait change N
+Until it lands, it prints `next: temper ctl DIR change show TASK
 --until landed`; landed, its merge commit. A task with no change
 fails, `no change panel for task N` (exit 2). The forge holds its
 diff, reviews and logs: read them there.

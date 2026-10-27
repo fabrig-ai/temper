@@ -122,6 +122,11 @@ pub fn refusal(why: Usage, words: &[&[u8]], out: &mut skein_lib::Writer) -> Resu
             out.put(b" lists them")
         }
         Usage::Timeout => out.put(b"--timeout needs --since or --until"),
+        Usage::TerminalPhase { phase } => {
+            out.put(b"--until phase:")?;
+            out.put(crate::jig::subject::phase_word(phase))?;
+            out.put(b" never holds: a task's watch ends with the task; use --until ended")
+        }
         Usage::WaitPart { tool, argument } => {
             let row = TOOLS.get(usize::from(tool)).ok_or(skein_lib::Overflow)?;
             let args = row.forms.first().ok_or(skein_lib::Overflow)?;
