@@ -262,7 +262,10 @@ pub fn run(log: Log) -> Outcome {
             git,
             agents: 8,
             children: 8,
-            operations: agents.service.limits.routes + 1 + agents.service.limits.domain.run.directories + 1 + 1,
+            operations: temper_playground::agent_operations(
+                agents.service.limits.routes,
+                agents.service.limits.domain.run.directories,
+            ),
         },
     );
     let deployment: serde_json::Value = serde_json::from_slice(A.deployment).expect("story deployment");

@@ -786,7 +786,14 @@ pub(crate) struct Programs {
 }
 impl Programs {
     fn terminal() -> Self {
-        Self { agent, git, agents: fixtures::AGENTS, children: 1, operations: fixtures::agent_limits().routes + 3 }
+        let limits = fixtures::agent_limits();
+        Self {
+            agent,
+            git,
+            agents: fixtures::AGENTS,
+            children: 1,
+            operations: temper_playground::agent_operations(limits.routes, limits.domain.run.directories),
+        }
     }
 }
 pub(crate) fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>, programs: &Programs) {

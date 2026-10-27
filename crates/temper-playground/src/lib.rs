@@ -40,7 +40,7 @@ impl skein_playground::slices::Composition for Playground {
 #[cfg(test)]
 mod tests;
 
-pub use agent::agent;
+pub use agent::{agent, agent_operations};
 pub use machine::Machine;
 pub use peers::{ForgeStart, LlmStart, forge, llm};
 pub use service::{Service, Start};
