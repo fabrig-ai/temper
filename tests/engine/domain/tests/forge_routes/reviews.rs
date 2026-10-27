@@ -176,7 +176,7 @@ fn a_changes_grants_name_its_repository_alone() {
                 }
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("adopted repository");
     other.provider.repository = 3;
@@ -259,7 +259,7 @@ fn change_row(world: &World, task: u64) -> &forge_top::ChangeRow {
                 forge_top::Stored::Change(row) if row.task == task => Some(row),
                 _ => None,
             },
-            Record::Core(_) => None,
+            Record::Core(_) | Record::Delivery { .. } => None,
         })
         .expect("durable change")
 }
