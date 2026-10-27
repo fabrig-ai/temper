@@ -5,7 +5,7 @@ use crate::jig::table::{
     Tool, flag, positional, switch,
 };
 pub const READ: Tool = Tool {
-    name: b"forges",
+    name: b"forge list",
     line: b"Read the deployment's forges",
     prints:
         b"A line per forge, `forge F`, its kind, mode and connection, its App and installations, then `digest: forges`",
@@ -16,17 +16,17 @@ pub const READ: Tool = Tool {
     notes: b"An installation not yet accepted prints the `forge-accept F I`\nthat accepts it.\n",
 };
 pub const SET_UP: Tool = Tool {
-    name: b"forge-setup",
+    name: b"forge setup",
     line: b"Set up the owned Forgejo on this machine, with a first repository",
     prints: b"`setting up`, then, once Forgejo runs, the adoption of its first repository",
     result: b"forge-setup",
     forms: &[&[
-        positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The owned Forgejo's forge number"),
-        flag(b"org", b"O", Kind::Literal, Optional, b"The organization; work when absent"),
-        flag(b"repository", b"R", Kind::Literal, Optional, b"The first repository; hello when absent"),
+        positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The owned Forgejo's forge number"),
+        flag(b"org", b"ORG", Kind::Literal, Optional, b"The organization; work when absent"),
+        flag(b"repository", b"REPOSITORY", Kind::Literal, Optional, b"The first repository; hello when absent"),
         flag(
             b"project",
-            b"P",
+            b"PROJECT",
             Kind::Project { empty: true },
             Optional,
             b"Adopt into this project; a new project named after the repository when absent",
@@ -38,13 +38,13 @@ pub const SET_UP: Tool = Tool {
     notes: b"It waits up to 300 seconds while the box fetches, prepares and\nstarts Forgejo and its runner, then adopts the repository as the\nproject's home, landing on main, with CI. Past the wait, it prints\nthe forges and `not met: timeout` (exit 3): wait on forges, then\nread them. `refused: not under the box` (exit 2): the deployment is\nno box, and the refusal names the commands to run instead.\n",
 };
 pub const CONNECT: Tool = Tool {
-    name: b"forge-connect",
+    name: b"forge connect",
     line: b"Connect GitHub through an App, or a Forgejo as its site admin",
     prints: b"`connecting`, then the wait to make; for github, the address to open in a browser",
     result: b"forge-connect",
     forms: &[
         &[
-            positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
+            positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
             positional(
                 b"way",
                 b"github-app",
@@ -52,11 +52,11 @@ pub const CONNECT: Tool = Tool {
                 Required,
                 b"An App of your own, or one another owns",
             ),
-            positional(b"id", b"ID", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The App's id"),
+            positional(b"id", b"APP", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The App's id"),
             positional(b"file", b"FILE", Kind::File, Required, b"The private file of the App's PEM key"),
         ],
         &[
-            positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
+            positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
             positional(
                 b"way",
                 b"github",
@@ -66,12 +66,12 @@ pub const CONNECT: Tool = Tool {
             ),
         ],
         &[
-            positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The Forgejo's forge number"),
+            positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The Forgejo's forge number"),
             positional(b"way", b"forgejo", Kind::Word { set: &[b"forgejo"] }, Required, b"Not offered yet"),
             positional(b"file", b"FILE", Kind::Literal, Required, b"Not offered yet; no file is read"),
         ],
         &[
-            positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The Forgejo's forge number"),
+            positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The Forgejo's forge number"),
             positional(
                 b"way",
                 b"forgejo-admin",
@@ -80,15 +80,15 @@ pub const CONNECT: Tool = Tool {
                 b"As the Forgejo's site admin",
             ),
             positional(b"file", b"FILE", Kind::File, Required, b"The private file of the admin's token"),
-            flag(b"first", b"ORG/NAME", Kind::Literal, Optional, b"Make this first repository, ORG/NAME"),
+            flag(b"first", b"ORG/REPOSITORY", Kind::Literal, Optional, b"Make this first repository, ORG/NAME"),
             flag(
                 b"project",
-                b"P",
+                b"PROJECT",
                 Kind::Project { empty: false },
                 Optional,
                 b"Adopt it into this project; a new one named after it when absent",
             ),
-            flag(b"label", b"L", Kind::Literal, Optional, b"The runner's label; docker when absent"),
+            flag(b"label", b"LABEL", Kind::Literal, Optional, b"The runner's label; docker when absent"),
         ],
     ],
     keyed: Keyed::Required,
@@ -96,25 +96,25 @@ pub const CONNECT: Tool = Tool {
     notes: b"The key or token file holds 1 to 4089 bytes after one final\nnewline is trimmed. An App another owns is set read-only in the\nconfiguration before the start (temper help github). Then `wait\nforges --until connected:F`, or, after a browser, `--until\nsettled`. With `--first`, it goes on to make and adopt that\nrepository, and prints its project. `connected already` (exit 2):\nthe forge holds a key, which this build cannot replace.\n",
 };
 pub const INSTALL: Tool = Tool {
-    name: b"forge-install",
+    name: b"forge install",
     line: b"Print a fresh link that installs GitHub's App on another account",
     prints: b"`Open this address in a browser on the engine's machine:`, the address, then `wait forges --until settled`",
     result: b"forge-install",
-    forms: &[&[positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number")]],
+    forms: &[&[positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number")]],
     keyed: Keyed::Optional,
     area: 6,
     notes: b"An installation made through this link is accepted. One made on\nGitHub without it is accepted with `forge-accept`.\n",
 };
 pub const ACCEPT: Tool = Tool {
-    name: b"forge-accept",
+    name: b"forge accept",
     line: b"Accept a GitHub App installation made already",
     prints: b"`accepted: installation I on forge F`, then the repositories call to make",
     result: b"forge-accept",
     forms: &[&[
-        positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
+        positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
         positional(
             b"installation",
-            b"I",
+            b"INSTALLATION",
             Kind::NumberRange { min: 1, max: u64::MAX },
             Required,
             b"The installation's id, as forges prints it",
@@ -125,20 +125,20 @@ pub const ACCEPT: Tool = Tool {
     notes: b"It needs no browser, and an installation accepted already answers\nthe same. `GitHub has no installation I of this App` (exit 2): read\nforges for the ids.\n",
 };
 pub const REPOSITORIES: Tool = Tool {
-    name: b"repositories",
+    name: b"forge repositories",
     line: b"Read a page of the repositories a forge reaches",
     prints: b"A line per repository, `OWNER/NAME`, whether private, its id and its owner's id, then the next page's call or `No more repositories follow.`",
     result: b"repositories",
     forms: &[&[
-        positional(b"forge", b"F", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The forge's number"),
+        positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"The forge's number"),
         flag(
             b"installation",
-            b"I",
+            b"INSTALLATION",
             Kind::NumberRange { min: 1, max: u64::MAX },
             Optional,
             b"Only this accepted installation, by its id",
         ),
-        flag(b"page", b"N", Kind::NumberRange { min: 1, max: 4_294_967_295 }, Optional, b"The page, from 1; 1 when absent"),
+        flag(b"page", b"PAGE", Kind::NumberRange { min: 1, max: 4_294_967_295 }, Optional, b"The page, from 1; 1 when absent"),
     ]],
     keyed: Keyed::Never,
     area: 6,
@@ -147,7 +147,7 @@ pub const REPOSITORIES: Tool = Tool {
 mod connection;
 mod repositories;
 pub const DEMO_START: Tool = Tool {
-    name: b"demo-start",
+    name: b"playground start",
     line: b"Start the playground; run it again to finish what is not done",
     prints: b"`running`",
     result: b"demo-start",
@@ -168,7 +168,7 @@ pub const WAIT: Tool = Tool {
             flag(b"since", b"DIGEST", Kind::Digest, Optional, b"The digest of your last read of forges"),
             flag(
                 b"until",
-                b"settled|connected:F|made:F",
+                b"CONDITION",
                 Kind::NamedNumber { words: &[b"settled"], prefixes: &[b"connected:", b"made:"], min: 1, max: 65535 },
                 Optional,
                 b"settled: none setting up or connecting; connected:F: forge F connected; made:F: forge F's first repository made",

@@ -134,7 +134,9 @@ pub fn call(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>,
         finish(called, printed, out);
         return;
     }
-    if called.value.is_some() != (called.call.tool == 26 || called.call.tool == 27 || importing) {
+    if called.value.is_some()
+        != (called.call.tool == rows::ADD_KEY_AT || called.call.tool == rows::REPLACE_KEY_AT || importing)
+    {
         let printed = render::failure(b"key file must be supplied only for add-key or replace-key", called.json, 1);
         finish(called, printed, out);
         return;
@@ -155,29 +157,36 @@ fn live(runner: &Runner, client: &Client) -> bool {
 }
 fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, called: Called, out: &mut Queue<Out>) {
     match called.call.tool {
-        0 => {
+        rows::ME_AT => {
             let Some(document) = client.document(runner.me()) else { return };
             let Some(Latest::Jig(Delivery::Me(me))) = document.latest else { return };
             let printed =
                 render::me(me, called.json, &env.limits, runner.parts.expect("host supplies part vocabulary"));
             finish(called, printed, out);
         }
-        1..=7
-        | 22
-        | 23
-        | 25
-        | 27..=30
-        | 33
+        rows::INBOX_AT..=rows::RUN_AT
+        | rows::ACCOUNTS_AT
+        | rows::MODELS_AT
+        | rows::DISCONNECT_AT
+        | rows::REPLACE_KEY_AT..=rows::RETRY_AT
+        | rows::VERIFY_AT
         | rows::EXPORT_AT
         | rows::SETTINGS_AT..=rows::REVISIONS_AT
         | rows::PROPOSAL_AT => {
             reads::start(runner, client, env, called, out);
         }
-        24 | 26 | 32 | rows::IMPORT_AT => accounts::start(runner, client, env, called, out),
-        8..=15 | 31 | rows::CHANGE_SETTINGS_AT | rows::PROPOSE_SETTINGS_AT | rows::MOVE_TO_NEWEST_AT => {
+        rows::CONNECT_AT | rows::ADD_KEY_AT | rows::DECLARE_AT | rows::IMPORT_AT => {
+            accounts::start(runner, client, env, called, out);
+        }
+        rows::CHAT_CREATE_AT..=rows::CANCEL_AT
+        | rows::TASK_DECIDE_AT
+        | rows::AMEND_AT
+        | rows::CHANGE_SETTINGS_AT
+        | rows::PROPOSE_SETTINGS_AT
+        | rows::MOVE_TO_NEWEST_AT => {
             acts::start(runner, client, env, called, out);
         }
-        16 => wait::start(runner, client, env, called, out),
+        rows::WAIT_AT => wait::start(runner, client, env, called, out),
         _ => {
             let printed = render::failure(b"call not supported", called.json, 1);
             finish(called, printed, out);

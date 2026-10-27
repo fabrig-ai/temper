@@ -16,11 +16,12 @@ pub(crate) const TURN: u32 = 7;
 pub(crate) const TURN_MESSAGES: u32 = 1;
 /// One block exercises a part bound; zero would never reach that bound.
 pub(crate) const TURN_BLOCKS: u32 = 1;
-pub(crate) const TASKS_CALL: &[&str] = &["tasks", "--project", "1"];
-pub(crate) const ENDED_CALL: &[&str] = &[TASKS_CALL[0], TASKS_CALL[1], "shop", "--ended", "--after", "1122"];
-pub(crate) const TURN_CALL: &[&str] = &["turn", TASK_CALL[1], "3.7"];
-pub(crate) const ACTIVITY_CALL: &[&str] = &["activity", TASK_CALL[1]];
-pub(crate) const CHAT_CALL: &[&str] = &["chat", TASK_CALL[1]];
+pub(crate) const TASKS_CALL: &[&str] = &["task", "list", "--project", "1"];
+pub(crate) const ENDED_CALL: &[&str] =
+    &[TASKS_CALL[0], TASKS_CALL[1], TASKS_CALL[2], "shop", "--ended", "--after", "1122"];
+pub(crate) const TURN_CALL: &[&str] = &["task", "turn", TASK_CALL[2], "3.7"];
+pub(crate) const ACTIVITY_CALL: &[&str] = &["task", "activity", TASK_CALL[2]];
+pub(crate) const CHAT_CALL: &[&str] = &["chat", "show", TASK_CALL[2]];
 /// Two distinct kept turns make losing either conversation entry observable.
 pub(crate) const KEPT_TURNS: &[&[u8]] = &[b"First kept turn", b"Second kept turn"];
 pub(crate) fn kept_conversation() -> c::ReadResult {
@@ -51,9 +52,10 @@ pub(crate) fn kept_conversation() -> c::ReadResult {
         after: None,
     })))
 }
-pub(crate) const RUN_CALL: &[&str] = &["run", TASK_CALL[1]];
+pub(crate) const RUN_CALL: &[&str] = &["task", "run", TASK_CALL[2]];
 pub(crate) const INBOX_CALL: &[&str] = &["inbox"];
-pub(crate) const COMPOSITE_CALL: &[&str] = &[TASK_CALL[0], TASK_CALL[1], "--tree", "--activity", ONE_ROW, "--run"];
+pub(crate) const COMPOSITE_CALL: &[&str] =
+    &[TASK_CALL[0], TASK_CALL[1], TASK_CALL[2], "--tree", "--activity", ONE_ROW, "--run"];
 pub(crate) fn cursor() -> c::Cursor {
     c::Cursor::new(Box::from([0x11, 0x22]), WORDS).expect("opaque cursor")
 }
@@ -204,7 +206,7 @@ pub(crate) fn composite_call(argv: &[&str]) -> (Harness, u32) {
 /// A follow-up begins at the exact part bound, where the remaining byte starts.
 const PART_OFFSET: &str = "16384";
 pub(crate) const TURN_NEXT_CALL: &[&str] =
-    &[TURN_CALL[0], TURN_CALL[1], TURN_CALL[2], "--part", "1", "--from", PART_OFFSET];
+    &[TURN_CALL[0], TURN_CALL[1], TURN_CALL[2], TURN_CALL[3], "--part", "1", "--from", PART_OFFSET];
 pub(crate) const WRONG_INBOX_GROUP: &[&str] = &[INBOX_CALL[0], "--kind", "questions", "--after", "011122"];
 
 /// Two blocks retain the call input, its outcome, and a distinct result summary.
@@ -260,8 +262,8 @@ pub(crate) const FULL_NEEDS: u32 = crate::limits::ROWS;
 pub(crate) const LIMITED_ROWS: u32 = 2;
 pub(crate) const UPDATES_START_CALL: &[&str] = &[INBOX_CALL[0], "--after", "01"];
 pub(crate) const LIMITED_ACTIVITY_CALL: &[&str] =
-    &[ACTIVITY_CALL[0], ACTIVITY_CALL[1], "--before", "1122", "--limit", ONE_ROW];
-pub(crate) const LIMITED_TASK_CALL: &[&str] = &[TASK_CALL[0], TASK_CALL[1], "--activity", ONE_ROW];
+    &[ACTIVITY_CALL[0], ACTIVITY_CALL[1], ACTIVITY_CALL[2], "--before", "1122", "--limit", ONE_ROW];
+pub(crate) const LIMITED_TASK_CALL: &[&str] = &[TASK_CALL[0], TASK_CALL[1], TASK_CALL[2], "--activity", ONE_ROW];
 pub(crate) fn activity_words() -> c::ReadResult {
     let mut rows = List::with_capacity(LIMITED_ROWS);
     for index in 0..LIMITED_ROWS {
@@ -304,7 +306,7 @@ fn turn_words(bytes: &[u8]) -> c::Text {
     c::Text::new(bytes.into(), WORDS).expect("bounded turn words")
 }
 
-pub(crate) const TURN_JSON_CALL: &[&str] = &[TURN_CALL[0], TURN_CALL[1], TURN_CALL[2], "--json"];
+pub(crate) const TURN_JSON_CALL: &[&str] = &[TURN_CALL[0], TURN_CALL[1], TURN_CALL[2], TURN_CALL[3], "--json"];
 
 fn activity_party() -> c::Party {
     let party = me(PARTY).party;

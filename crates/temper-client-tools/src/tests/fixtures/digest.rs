@@ -130,7 +130,7 @@ pub(crate) fn non_subject_reads() -> [(List<&'static str>, c::ReadResult); NON_S
     [
         (extended(INBOX_CALL, &["--project", "shop"]), inbox_page(true)),
         (extended(INBOX_CALL, &["--kind", "questions"]), inbox_page(true)),
-        (extended(INBOX_CALL, &["--root", TASK_CALL[1]]), inbox_page(true)),
+        (extended(INBOX_CALL, &["--root", TASK_CALL[2]]), inbox_page(true)),
         (extended(INBOX_CALL, &["--after", "001122"]), inbox_page(true)),
         (extended(TASKS_CALL, &["--after", "1122"]), task_page_with_cursor()),
         (extended(TASKS_CALL, &["--ended"]), ended_page()),

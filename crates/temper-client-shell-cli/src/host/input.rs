@@ -18,18 +18,15 @@ impl OneShot {
                 self.read_input();
             }
             Parsed::Call { call, json } if self.class == Class::Help => {
-                let selected = call.values.iter().find_map(|slot| match slot {
-                    Some(Values::One(Value::Tool(index))) => Some(*index),
-                    _ => None,
-                });
-                let bytes = if let Some(index) = selected.filter(|_| *json) {
+                let selected = help::selection(call).expect("checked help selection");
+                let bytes = if let (help::Selection::Tool(index), true) = (selected, *json) {
                     jig::json::write_tool(TOOLS[usize::from(index)], &self.root_env.limits.tools).expect("help record")
                 } else {
                     let mut out =
                         skein_lib::Writer::new(usize::try_from(self.root_env.limits.tools.text).expect("help bound"));
-                    help::text(selected, &mut out).expect("help fits text window");
+                    help::selected(selected, &mut out).expect("help fits text window");
                     let mut exact = skein_lib::Writer::new(out.written());
-                    help::text(selected, &mut exact).expect("measured help");
+                    help::selected(selected, &mut exact).expect("measured help");
                     exact.finish()
                 };
                 self.output.push(false, bytes);
@@ -83,7 +80,7 @@ impl OneShot {
                     if specs.iter().zip(call.values.iter()).any(|(spec, value)| {
                         spec.kind == Kind::File && matches!(value, Some(Values::One(Value::File(_) | Value::Stdin)))
                     }) {
-                        self.fail(b"usage: temper ctl DIRECTORY TOOL [ARGUMENT...]");
+                        self.fail(temper_client_tools::table::USAGE);
                         return;
                     }
                     self.class = arguments::class(&call);
@@ -91,8 +88,8 @@ impl OneShot {
                     self.call = Some(Parsed::Call { call, json });
                     self.prepare_start();
                 }
-                Err(jig::argv::Usage::AmendmentRevision) => self.fail(b"amend needs --rev R"),
-                Err(_) => self.fail(b"usage: temper ctl DIRECTORY TOOL [ARGUMENT...]"),
+                Err(jig::argv::Usage::AmendmentRevision) => self.fail(b"task amend needs --rev REV"),
+                Err(_) => self.fail(temper_client_tools::table::USAGE),
             },
             Parsed::Call { call, json } if arguments::key_file(&call).is_some() => {
                 let stripped = if call.tool == temper_client_tools::jig::rows::IMPORT_AT {
@@ -157,7 +154,7 @@ impl OneShot {
                 reason.strip_prefix(b"key file").unwrap_or(reason.strip_prefix(b"record file").unwrap_or(reason)),
             );
             self.fail(&message);
-        } else if TOOLS[usize::from(call.tool)].name == b"forge-connect" {
+        } else if TOOLS[usize::from(call.tool)].name == b"forge connect" {
             let mut message = reason.to_vec();
             message.extend_from_slice(b": ");
             message.extend_from_slice(arguments::key_file(call).expect("key file"));
@@ -224,7 +221,7 @@ fn text_file_index(call: &jig::call::Call) -> Option<usize> {
 }
 fn text_file(call: &jig::call::Call) -> Option<(u8, &[u8])> {
     let name = TOOLS[usize::from(call.tool)].name;
-    if name != b"amend" && name != b"change-settings" && name != b"propose-settings" {
+    if name != b"task amend" && name != b"settings apply" && name != b"settings propose" {
         return None;
     }
     for (index, slot) in call.values.iter().enumerate() {
@@ -256,7 +253,7 @@ mod tests {
     #[test]
     fn amend_reads_instructions_from_a_file() {
         let mut frame =
-            amendment(&["amend", "41", "--rev", "7", "--instructions", "/instructions/link-file", "because"]);
+            amendment(&["task", "amend", "41", "--rev", "7", "--instructions", "/instructions/link-file", "because"]);
         frame.link = WORDS;
         frame.drain();
         assert_eq!(text(&frame, 6), b"Run the checks\n");
@@ -264,7 +261,7 @@ mod tests {
     }
     #[test]
     fn amend_reads_instructions_from_stdin() {
-        let mut frame = amendment(&["amend", "41", "--rev", "7", "--instructions", "-", "because"]);
+        let mut frame = amendment(&["task", "amend", "41", "--rev", "7", "--instructions", "-", "because"]);
         frame.input = WORDS;
         frame.drain();
         assert_eq!(text(&frame, 6), b"Run the checks\n");
@@ -272,7 +269,7 @@ mod tests {
     #[test]
     fn amend_sends_empty_instructions() {
         let mut frame =
-            amendment(&["amend", "41", "--rev", "7", "--instructions", "/instructions/link-file", "because"]);
+            amendment(&["task", "amend", "41", "--rev", "7", "--instructions", "/instructions/link-file", "because"]);
         frame.link = b"\n";
         frame.drain();
         assert_eq!(text(&frame, 6), b"");
@@ -280,6 +277,7 @@ mod tests {
     #[test]
     fn amend_loads_both_files_from_their_own_parents() {
         let mut frame = amendment(&[
+            "task",
             "amend",
             "41",
             "--rev",
@@ -300,6 +298,7 @@ mod tests {
     #[test]
     fn amend_loads_a_file_and_stdin_before_directory() {
         let mut frame = amendment(&[
+            "task",
             "amend",
             "41",
             "--rev",
@@ -319,7 +318,7 @@ mod tests {
     #[test]
     fn amend_call_carries_both_texts_inline() {
         let mut frame = amendment(&["--call", "call.json"]);
-        frame.link = br#"{"tool":"amend","arguments":{"task":41,"rev":7,"instructions":"Run\n","spec":"Build","reason":"because"}}"#;
+        frame.link = br#"{"tool":"task amend","arguments":{"task":41,"rev":7,"instructions":"Run\n","spec":"Build","reason":"because"}}"#;
         frame.drain();
         assert_eq!(text(&frame, 6), b"Run\n");
         assert_eq!(text(&frame, 7), b"Build");
@@ -328,15 +327,24 @@ mod tests {
     #[test]
     fn a_json_amend_without_revision_has_the_specific_usage_error() {
         let mut frame = amendment(&["--call", "call.json"]);
-        frame.link = br#"{"tool":"amend","arguments":{"task":41,"instructions":"Run","reason":"because"}}"#;
+        frame.link = br#"{"tool":"task amend","arguments":{"task":41,"instructions":"Run","reason":"because"}}"#;
         frame.drain();
-        assert_eq!(frame.stderr(), b"temper ctl: amend needs --rev R\n");
+        assert_eq!(frame.stderr(), b"temper ctl: task amend needs --rev REV\n");
         assert!(!frame.opened(b"directory"));
     }
     #[test]
     fn the_old_spec_revision_form_asks_for_rev() {
         assert_eq!(
-            crate::arguments::parse(&[b"amend", b"41", b"--spec", b"8", b"--model", b"chosen-model", b"because"]),
+            crate::arguments::parse(&[
+                b"task",
+                b"amend",
+                b"41",
+                b"--spec",
+                b"8",
+                b"--model",
+                b"chosen-model",
+                b"because"
+            ]),
             Err(jig::argv::Usage::AmendmentRevision)
         );
     }
@@ -354,8 +362,9 @@ mod settings_input_tests {
     }
     #[test]
     fn settings_acts_read_their_file_before_directory() {
-        for tool in ["change-settings", "propose-settings"] {
-            let mut frame = Frame::read(&[tool, "/settings/link-file", "--against", "5", "--key", "change"]);
+        for tool in ["apply", "propose"] {
+            let mut frame =
+                Frame::read(&["settings", tool, "/settings/link-file", "--against", "5", "--key", "change"]);
             frame.absent = true;
             frame.link = ITEMS;
             frame.drain();
@@ -364,8 +373,8 @@ mod settings_input_tests {
     }
     #[test]
     fn settings_acts_read_their_items_from_stdin() {
-        for tool in ["change-settings", "propose-settings"] {
-            let mut frame = Frame::read(&[tool, "-", "--against", "5", "--key", "change"]);
+        for tool in ["apply", "propose"] {
+            let mut frame = Frame::read(&["settings", tool, "-", "--against", "5", "--key", "change"]);
             frame.absent = true;
             frame.input = ITEMS;
             frame.drain();
@@ -375,11 +384,10 @@ mod settings_input_tests {
     #[test]
     fn settings_acts_name_their_file_byte_bound_for_files_and_stdin() {
         static OVERSIZED: [u8; 1_048_577] = [b' '; 1_048_577];
-        for (tool, path) in ["change-settings", "propose-settings"]
-            .into_iter()
-            .flat_map(|tool| ["-", "/settings/link-file"].map(|path| (tool, path)))
+        for (tool, path) in
+            ["apply", "propose"].into_iter().flat_map(|tool| ["-", "/settings/link-file"].map(|path| (tool, path)))
         {
-            let mut frame = Frame::read(&[tool, path, "--against", "5", "--key", "change"]);
+            let mut frame = Frame::read(&["settings", tool, path, "--against", "5", "--key", "change"]);
             frame.absent = true;
             frame.input = &OVERSIZED;
             frame.link = &OVERSIZED;

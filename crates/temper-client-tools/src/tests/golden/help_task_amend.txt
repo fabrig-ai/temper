@@ -1,0 +1,22 @@
+task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency TASK]... [--no-dependencies] [--model MODEL [--effort EFFORT]] REASON [--key KEY]
+  TASK (task): a number; required. The task's number
+  --rev REV: a number; optional. The spec revision the task prints; not needed for its priority alone
+  --priority PRIORITY: a number; optional. Track it at this priority
+  --untracked: a switch. Stop tracking it
+  --deadline TIME: text, at most 1048576 bytes; optional. Its new deadline, as 2026-10-24T17:00Z
+  --no-deadline: a switch. Remove its deadline
+  --instructions FILE: a file, at most 1048576 bytes; optional. A file of its whole instructions, or -; an empty file removes them
+  --spec FILE: a file, at most 1048576 bytes; optional. A file of its spec's words, or -
+  --dependency TASK: a number; repeated, at most 32. A task it waits on; repeated, the whole list
+  --no-dependencies: a switch. Remove every dependency
+  --model MODEL: text, at most 1048576 bytes, or - to read stdin; optional. A model the task may use, as models lists it
+  --effort EFFORT: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why
+Amend a task: each control you name is replaced, the rest kept
+Prints: `done: task N, amend`, or `proposed: P/K, to RECIPIENT` when another party must agree
+--json: the record amend.
+Key: --key KEY, optional.
+A task whose spec moved since your read fails with `read again:
+task N`. Each file is read before anything is sent, one final
+newline trimmed, at most 32768 bytes of UTF-8. An amendment that
+changes nothing fails (exit 1).

@@ -111,7 +111,7 @@ fn every_command_line_in_the_pages_parses() {
                 ctl += 1;
                 match crate::ctl::parse(&arguments[1..]) {
                     Ok((_, Parsed::Call { .. } | Parsed::File { .. })) => Ok(()),
-                    Err(why) => Err(why.to_string()),
+                    Err(why) => Err(why),
                 }
             } else {
                 binary += 1;
@@ -131,12 +131,12 @@ fn every_command_line_in_the_pages_parses() {
 #[test]
 fn page_commands_keep_quoted_arguments_and_replace_only_capital_words() {
     assert_eq!(
-        command_words("temper ctl DIR message TASK 'two words' --key KEY # comment").expect("words"),
-        ["temper", "ctl", "1", "message", "1", "two words", "--key", "1"]
+        command_words("temper ctl DIR task message TASK 'two words' --key KEY # comment").expect("words"),
+        ["temper", "ctl", "1", "task", "message", "1", "two words", "--key", "1"]
     );
     assert_eq!(
-        command_words("  temper ctl DIR decide PROPOSAL accept \"two words\"").expect("words"),
-        ["temper", "ctl", "1", "decide", "t1/1", "accept", "two words"]
+        command_words("  temper ctl DIR proposal decide PROPOSAL accept \"two words\"").expect("words"),
+        ["temper", "ctl", "1", "proposal", "decide", "t1/1", "accept", "two words"]
     );
     for ending in
         ["# comment", "#don't parse quotes", "| cat", "|| cat", "> file", ">> file", "< file", "&& next", "; next"]
@@ -149,13 +149,14 @@ fn page_commands_keep_quoted_arguments_and_replace_only_capital_words() {
 #[test]
 fn only_whole_unquoted_separator_words_cut_a_page_command() {
     assert_eq!(
-        command_words("temper ctl DIR forge-connect 2 github-app 12345 <slug>.private-key.pem --key github-app")
+        command_words("temper ctl DIR forge connect 2 github-app 12345 <slug>.private-key.pem --key github-app")
             .expect("words"),
         [
             "temper",
             "ctl",
             "1",
-            "forge-connect",
+            "forge",
+            "connect",
             "2",
             "github-app",
             "12345",

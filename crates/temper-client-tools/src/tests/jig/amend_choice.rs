@@ -103,28 +103,28 @@ fn amend_requires_an_offer() {
 #[test]
 fn amend_requires_a_change() {
     assert_eq!(
-        f::parse(&["amend", "41", "--rev", "7", "because"]),
+        f::parse(&["task", "amend", "41", "--rev", "7", "because"]),
         Err(crate::jig::argv::Usage::Missing { argument: 2 })
     );
 }
 #[test]
 fn amend_requires_a_revision_for_a_model_change() {
     assert_eq!(
-        f::parse(&["amend", "41", "--model", "chosen-model", "because"]),
+        f::parse(&["task", "amend", "41", "--model", "chosen-model", "because"]),
         Err(crate::jig::argv::Usage::AmendmentRevision)
     );
 }
 #[test]
 fn amend_requires_a_reason() {
     assert_eq!(
-        f::parse(&["amend", "41", "--rev", "7", "--model", "chosen-model"]),
+        f::parse(&["task", "amend", "41", "--rev", "7", "--model", "chosen-model"]),
         Err(crate::jig::argv::Usage::Missing { argument: 12 })
     );
 }
 #[test]
 fn amend_refuses_an_unknown_model() {
     let (mut root, call) = f::send_choice_amend(
-        &["amend", "41", "--rev", "7", "--model", "unknown", "because"],
+        &["task", "amend", "41", "--rev", "7", "--model", "unknown", "because"],
         f::choice_task(c::Admission::Allowed),
     );
     assert!(root.sends.is_empty());
@@ -134,7 +134,7 @@ fn amend_refuses_an_unknown_model() {
 #[test]
 fn amend_refuses_an_unknown_effort() {
     let (mut root, call) = f::send_choice_amend(
-        &["amend", "41", "--rev", "7", "--model", "chosen-model", "--effort", "unknown", "because"],
+        &["task", "amend", "41", "--rev", "7", "--model", "chosen-model", "--effort", "unknown", "because"],
         f::choice_task(c::Admission::Allowed),
     );
     assert!(root.sends.is_empty());
@@ -167,7 +167,7 @@ fn a_named_amend_sends_the_callers_key() {
 #[test]
 fn an_unnamed_amend_draws_a_key() {
     let (root, call) = f::send_choice_amend(
-        &["amend", "41", "--rev", "7", "--model", "chosen-model", "--effort", "high", "because"],
+        &["task", "amend", "41", "--rev", "7", "--model", "chosen-model", "--effort", "high", "because"],
         f::choice_task(c::Admission::Allowed),
     );
     assert_eq!(root.sent_name(call), Some(*root.saved.get(&call).expect("drawn key saved")));
@@ -281,7 +281,7 @@ fn amend_requires_an_effort_for_a_model_with_efforts() {
     let mut task = f::choice_task(c::Admission::Allowed);
     task.llm.as_mut().expect("prior choice").main = f::model_effort(f::MODEL_NAME, Some(f::EFFORT_NAME));
     let (mut root, call) =
-        f::send_choice_amend(&["amend", "41", "--rev", "7", "--model", "chosen-model", "because"], task);
+        f::send_choice_amend(&["task", "amend", "41", "--rev", "7", "--model", "chosen-model", "because"], task);
     assert!(root.sends.is_empty());
     let answer = root.answer(call).expect("usage error");
     assert_eq!((answer.status, answer.stderr.as_ref()), (1, b"effort required: chosen-model\n".as_slice()));

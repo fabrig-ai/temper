@@ -59,63 +59,63 @@ pub(crate) fn owned(words: &[&str]) -> Box<[Box<[u8]>]> {
 pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["me"],
     &["inbox"],
-    &["tasks", "--project", "shop"],
-    &["task", "41"],
-    &["chat", "41"],
-    &["activity", "41"],
-    &["turn", "41", "3.7"],
-    &["run", "41"],
+    &["task", "list", "--project", "shop"],
+    &["task", "show", "41"],
+    &["chat", "show", "41"],
+    &["task", "activity", "41"],
+    &["task", "turn", "41", "3.7"],
+    &["task", "run", "41"],
     CREATE_CHAT_CALL,
-    &["message", "41", "hello", "--key", "say-hello"],
+    &["task", "message", "41", "hello", "--key", "say-hello"],
     CLOSE_CALL,
-    &["answer", "41", "3", "yes"],
-    &["decide", "t41/3", "accept"],
-    &["decide", "41", "release", "--hold", "2"],
-    &["release", "41", "--hold", "2"],
+    &["task", "answer", "41", "3", "yes"],
+    &["proposal", "decide", "t41/3", "accept"],
+    &["task", "decide", "41", "release", "--hold", "2"],
+    &["task", "release", "41", "--hold", "2"],
     STOP_CALL,
-    &["cancel", "41", "finished"],
+    &["task", "cancel", "41", "finished"],
     &["wait", "me"],
     ADOPTION,
     &["sign-in", "-"],
     &["sign-out"],
     &["pending"],
     &["help"],
-    &["accounts"],
-    &["models"],
-    &["connect", "9", "--key", "connect"],
-    &["disconnect", "43"],
-    &["add-key", "9", "key-file", "--key", "add"],
-    &["replace-key", "43", "key-file"],
-    &["forget", "43"],
-    &["rank", "43", "1"],
-    &["retry", "43"],
-    &["amend", "41", "--rev", "7", "--model", "chosen-model", "because"],
-    &["declare", "9", "helper", "work-login", "--key", "declare"],
-    &["verify", "43"],
-    &["forges"],
-    &["forge-setup", "3"],
-    &["demo-start"],
-    &["forge-connect", "3", "github-app", "4242", "app.pem", "--key", "app"],
-    &["forge-connect", "3", "github", "--key", "app"],
-    &["forge-connect", "3", "forgejo", "tokens", "--key", "app"],
-    &["forge-connect", "3", "forgejo-admin", "token", "--key", "admin"],
-    &["forge-install", "3"],
-    &["repositories", "3"],
+    &["account", "list"],
+    &["model", "list"],
+    &["account", "connect", "9", "--key", "connect"],
+    &["account", "disconnect", "43"],
+    &["account", "add-key", "9", "key-file", "--key", "add"],
+    &["account", "replace-key", "43", "key-file"],
+    &["account", "forget", "43"],
+    &["account", "rank", "43", "1"],
+    &["account", "retry", "43"],
+    &["task", "amend", "41", "--rev", "7", "--model", "chosen-model", "because"],
+    &["account", "declare", "9", "helper", "work-login", "--key", "declare"],
+    &["account", "verify", "43"],
+    &["forge", "list"],
+    &["forge", "setup", "3"],
+    &["playground", "start"],
+    &["forge", "connect", "3", "github-app", "4242", "app.pem", "--key", "app"],
+    &["forge", "connect", "3", "github", "--key", "app"],
+    &["forge", "connect", "3", "forgejo", "tokens", "--key", "app"],
+    &["forge", "connect", "3", "forgejo-admin", "token", "--key", "admin"],
+    &["forge", "install", "3"],
+    &["forge", "repositories", "3"],
     &["wait", "forges"],
     &["wait", "change", "2"],
-    &["change", "2"],
-    &["export", "43", "record"],
-    &["import", "record", "--key", "move-in"],
-    &["settings"],
-    &["setting", "charter", "3"],
-    &["setting", "rules"],
-    &["revision", "5"],
-    &["revisions"],
-    &["change-settings", "FILE", "--against", "5", "--key", "settings-5"],
-    &["propose-settings", "FILE", "--against", "5", "--key", "proposal-5"],
-    &["proposal", "p73/7"],
-    &["forge-accept", "3", "1"],
-    &["move-to-newest", "7", "--key", "move-7"],
+    &["change", "show", "2"],
+    &["account", "export", "43", "record"],
+    &["account", "import", "record", "--key", "move-in"],
+    &["settings", "show"],
+    &["settings", "show", "charter", "3"],
+    &["settings", "show", "rules"],
+    &["revision", "show", "5"],
+    &["revision", "list"],
+    &["settings", "apply", "FILE", "--against", "5", "--key", "settings-5"],
+    &["settings", "propose", "FILE", "--against", "5", "--key", "proposal-5"],
+    &["proposal", "show", "p73/7"],
+    &["forge", "accept", "3", "1"],
+    &["revision", "advance", "7", "--key", "move-7"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -133,8 +133,20 @@ pub(crate) fn adoption() -> crate::jig::call::Call {
 }
 
 /// Required adoption fields and its named key, shared by form tests.
-pub(crate) const ADOPTION: &[&str] =
-    &["adopt", "--project", "shop", "--owner", "o", "--name", "n", "--landing", "main", "--key", "adopt-repo"];
+pub(crate) const ADOPTION: &[&str] = &[
+    "repository",
+    "adopt",
+    "--project",
+    "shop",
+    "--owner",
+    "o",
+    "--name",
+    "n",
+    "--landing",
+    "main",
+    "--key",
+    "adopt-repo",
+];
 
 pub(crate) fn from_json(bytes: &[u8]) -> crate::jig::call::Call {
     json(bytes).expect("fixture JSON call")
@@ -205,9 +217,9 @@ pub(crate) const TASK: u64 = 41;
 /// A second task makes call correlation observable out of order.
 pub(crate) const OTHER_TASK: u64 = TASK + 1;
 /// Shared argv keeps the first task's identity in one fixture.
-pub(crate) const TASK_CALL: &[&str] = &["task", "41"];
+pub(crate) const TASK_CALL: &[&str] = &["task", "show", "41"];
 /// A second concurrent read must have another document identity.
-pub(crate) const OTHER_TASK_CALL: &[&str] = &["task", "42"];
+pub(crate) const OTHER_TASK_CALL: &[&str] = &["task", "show", "42"];
 /// The live frame read in both output forms.
 pub(crate) const ME_CALL: &[&str] = &["me"];
 /// A fixed deterministic client seed, independent of every call's prefix.
@@ -503,7 +515,16 @@ impl Harness {
             self.json_calls.insert(self.next);
         }
         let count = match call.tool {
-            1 | 2 | 4 | 5 | 6 | 9..=15 | 31 | 42..=45 | crate::jig::rows::PROPOSAL_AT => SINGLE_READ,
+            1
+            | 2
+            | 4
+            | 5
+            | 6
+            | 9..=15
+            | crate::jig::rows::TASK_DECIDE_AT
+            | 31
+            | 42..=45
+            | crate::jig::rows::PROPOSAL_AT => SINGLE_READ,
             3 => {
                 if crate::jig::call::number(&call, 2).is_some() {
                     COMPOSITE_READS
@@ -639,7 +660,7 @@ pub(crate) fn task_read() -> (Harness, u32, c::Task) {
     (root, call, goal(TASK, waiting_on_me()))
 }
 /// The same task is requested in JSON without repeating its command.
-pub(crate) const TASK_JSON_CALL: &[&str] = &[TASK_CALL[0], TASK_CALL[1], "--json"];
+pub(crate) const TASK_JSON_CALL: &[&str] = &[TASK_CALL[0], TASK_CALL[1], TASK_CALL[2], "--json"];
 
 pub(crate) fn read_call(argv: &[&str]) -> (Harness, u32) {
     let mut root = signed_in(PARTY);
@@ -695,3 +716,11 @@ mod choices;
 pub(crate) use choices::*;
 mod dependencies;
 pub(crate) use dependencies::*;
+
+pub(super) fn selected_help(selection: crate::help::Selection) -> Box<[u8]> {
+    let mut measured = skein_lib::Writer::new(usize::try_from(crate::limits::TEXT).expect("text fits"));
+    crate::help::selected(selection, &mut measured).expect("help fits window");
+    let mut exact = skein_lib::Writer::new(measured.written());
+    crate::help::selected(selection, &mut exact).expect("measured help");
+    exact.finish()
+}

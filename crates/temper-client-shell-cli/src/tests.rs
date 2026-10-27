@@ -508,7 +508,7 @@ fn close_kept_line() {
 
 #[test]
 fn a_drawn_key_is_resent_from_directory() {
-    let words = &[b"stop".as_slice(), b"7"];
+    let words = &[b"task", b"stop".as_slice(), b"7"];
     let mut first = fixtures::Disk::act_words_with(words, fixtures::small_store(&[]));
     first.sign_in_then_deliver_me();
     first.advance_past(crate::limits::DEADLINE);
@@ -521,6 +521,7 @@ fn a_drawn_key_is_resent_from_directory() {
 fn adopt_is_an_act() {
     let mut f = fixtures::Disk::act_words_with(
         &[
+            b"repository",
             b"adopt",
             b"--project",
             b"shop",
@@ -597,13 +598,8 @@ fn help_opens_nothing() {
         assert!(f.no_directory(), "{words:?}");
         let parsed = crate::arguments::parse(words).expect("help call");
         let temper_client_tools::jig::call::Parsed::Call { call, json } = parsed else { unreachable!() };
-        let selected = call.values.iter().find_map(|v| match v {
-            Some(temper_client_tools::jig::call::Values::One(temper_client_tools::jig::call::Value::Tool(n))) => {
-                Some(*n)
-            }
-            _ => None,
-        });
-        let expected = if let Some(n) = selected.filter(|_| json) {
+        let selected = temper_client_tools::help::selection(&call).expect("help selection");
+        let expected = if let (temper_client_tools::help::Selection::Tool(n), true) = (selected, json) {
             temper_client_tools::jig::json::write_tool(
                 temper_client_tools::table::TOOLS[usize::from(n)],
                 &temper_client_tools::limits::tools(),
@@ -611,9 +607,9 @@ fn help_opens_nothing() {
             .expect("JSON help")
         } else {
             let mut out = skein_lib::Writer::new(temper_client_tools::limits::TEXT as usize);
-            temper_client_tools::help::text(selected, &mut out).expect("help");
+            temper_client_tools::help::selected(selected, &mut out).expect("help");
             let mut exact = skein_lib::Writer::new(out.written());
-            temper_client_tools::help::text(selected, &mut exact).expect("measured help");
+            temper_client_tools::help::selected(selected, &mut exact).expect("measured help");
             exact.finish()
         };
         assert_eq!(f.stdout(), expected.as_ref(), "{words:?}");
@@ -622,7 +618,7 @@ fn help_opens_nothing() {
 #[test]
 fn call_stdin_cannot_also_give_text() {
     let mut f = fixtures::Frame::read(&["--call", "-"]);
-    f.input = br#"{"tool":"chat","arguments":{"project":"shop","text":"-","key":"start-chat"}}"#;
+    f.input = br#"{"tool":"chat start","arguments":{"project":"shop","text":"-","key":"start-chat"}}"#;
     f.drain();
     assert_eq!(f.exit(), Some(Exit::Code(1)));
     assert!(f.no_directory());
@@ -633,7 +629,10 @@ fn usage_exits_1_before_directory_opens() {
     f.input = br#"{"tool":"unknown","arguments":{}}"#;
     f.drain();
     assert_eq!(f.exit(), Some(Exit::Code(1)));
-    assert_eq!(f.stderr(), b"temper ctl: usage: temper ctl DIRECTORY TOOL [ARGUMENT...]\n");
+    assert_eq!(
+        f.stderr(),
+        b"temper ctl: usage: temper ctl DIR GROUP VERB [ARGUMENT...]; temper ctl help GROUP VERB prints one tool\n"
+    );
     assert!(f.no_directory());
 }
 #[test]
@@ -652,7 +651,11 @@ fn a_call_read_from_a_file_that_names_a_file_is_usage() {
         f.link = call;
         f.drain();
         assert_eq!(f.exit(), Some(Exit::Code(1)), "{call:?}");
-        assert_eq!(f.stderr(), b"temper ctl: usage: temper ctl DIRECTORY TOOL [ARGUMENT...]\n", "{call:?}");
+        assert_eq!(
+            f.stderr(),
+            b"temper ctl: usage: temper ctl DIR GROUP VERB [ARGUMENT...]; temper ctl help GROUP VERB prints one tool\n",
+            "{call:?}"
+        );
         assert!(!f.opened(b"directory"), "{call:?}");
     }
 }
@@ -662,13 +665,16 @@ fn a_call_read_from_stdin_that_names_a_file_is_usage() {
     f.input = SIGN_IN_FILE_CALL;
     f.drain();
     assert_eq!(f.exit(), Some(Exit::Code(1)));
-    assert_eq!(f.stderr(), b"temper ctl: usage: temper ctl DIRECTORY TOOL [ARGUMENT...]\n");
+    assert_eq!(
+        f.stderr(),
+        b"temper ctl: usage: temper ctl DIR GROUP VERB [ARGUMENT...]; temper ctl help GROUP VERB prints one tool\n"
+    );
     assert!(f.no_directory());
 }
 #[test]
 fn text_dash_reads_stdin() {
     let mut f = fixtures::Frame::act_words_with(
-        &[b"chat", b"-", b"--project", b"shop", b"--key", b"start-chat"],
+        &[b"chat", b"start", b"-", b"--project", b"shop", b"--key", b"start-chat"],
         fixtures::small_store(&[]),
     );
     f.input = b"hello";

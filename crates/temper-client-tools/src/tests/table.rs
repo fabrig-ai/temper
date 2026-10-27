@@ -9,16 +9,16 @@ use skein_lib::List;
 const READS: &[&[&str]] = &[
     &["me"],
     &["inbox", "--project", "shop", "--kind", "replies", "--root", "41"],
-    &["tasks", "--project", "3", "--label", "chat", "--tracked", "--order", "priority"],
-    &["tasks", "--project", "3"],
-    &["task", "41", "--tree", "--activity", "5", "--run"],
-    &["chat", "41", "--before", "0a1b"],
-    &["activity", "41", "--limit", "32"],
-    &["turn", "41", "3.7", "--part", "2", "--from", "16384"],
-    &["run", "41"],
-    &["accounts"],
-    &["models"],
-    &["models", "--project", "shop"],
+    &["task", "list", "--project", "3", "--label", "chat", "--tracked", "--order", "priority"],
+    &["task", "list", "--project", "3"],
+    &["task", "show", "41", "--tree", "--activity", "5", "--run"],
+    &["chat", "show", "41", "--before", "0a1b"],
+    &["task", "activity", "41", "--limit", "32"],
+    &["task", "turn", "41", "3.7", "--part", "2", "--from", "16384"],
+    &["task", "run", "41"],
+    &["account", "list"],
+    &["model", "list"],
+    &["model", "list", "--project", "shop"],
 ];
 #[test]
 fn each_read_parses_into_its_call_and_prints_back() {
@@ -40,7 +40,7 @@ fn each_host_tool_parses_into_its_call_and_prints_back() {
     }
 }
 const UNKNOWN: &[(&[&str], Usage)] = &[
-    (&["absent"], Usage::Tool),
+    (&["absent"], Usage::NoGroup { at: 0 }),
     (&["me", "--kind", "replies"], Usage::Unknown { at: 0 }),
     (&["me", "extra"], Usage::Extra { at: 0 }),
     (&["inbox", "--no-project"], Usage::Unknown { at: 0 }),
@@ -52,12 +52,12 @@ fn an_unknown_tool_or_argument_is_a_usage_error() {
     }
 }
 const MISSING: &[(&[&str], Usage)] = &[
-    (&["tasks"], Usage::Missing { argument: 0 }),
-    (&["task"], Usage::Missing { argument: 0 }),
-    (&["turn", "41"], Usage::Missing { argument: 1 }),
+    (&["task", "list"], Usage::Missing { argument: 0 }),
+    (&["task", "show"], Usage::Missing { argument: 0 }),
+    (&["task", "turn", "41"], Usage::Missing { argument: 1 }),
     (&["inbox", "--root"], Usage::Missing { argument: 2 }),
     (&["inbox", "--root", "41", "--root", "42"], Usage::Twice { argument: 2 }),
-    (&["task", "41", "--tree", "--tree"], Usage::Twice { argument: 1 }),
+    (&["task", "show", "41", "--tree", "--tree"], Usage::Twice { argument: 1 }),
 ];
 #[test]
 fn a_missing_or_repeated_argument_is_a_usage_error() {
@@ -66,17 +66,17 @@ fn a_missing_or_repeated_argument_is_a_usage_error() {
     }
 }
 const INVALID: &[(&[&str], Usage)] = &[
-    (&["task", "x"], Usage::Kind { argument: 0 }),
-    (&["task", "18446744073709551616"], Usage::Kind { argument: 0 }),
-    (&["tasks", "--project", "4294967296"], Usage::Kind { argument: 0 }),
-    (&["tasks", "--project", "3", "--order", "ended"], Usage::Kind { argument: 5 }),
-    (&["tasks", "--project", "3", "--order", "changed"], Usage::Kind { argument: 5 }),
+    (&["task", "show", "x"], Usage::Kind { argument: 0 }),
+    (&["task", "show", "18446744073709551616"], Usage::Kind { argument: 0 }),
+    (&["task", "list", "--project", "4294967296"], Usage::Kind { argument: 0 }),
+    (&["task", "list", "--project", "3", "--order", "ended"], Usage::Kind { argument: 5 }),
+    (&["task", "list", "--project", "3", "--order", "changed"], Usage::Kind { argument: 5 }),
     (&["inbox", "--kind", "other"], Usage::Kind { argument: 1 }),
-    (&["chat", "41", "--before", "AB"], Usage::Kind { argument: 1 }),
-    (&["chat", "41", "--before", "a"], Usage::Kind { argument: 1 }),
-    (&["turn", "41", "3.4294967296"], Usage::Kind { argument: 1 }),
-    (&["activity", "41", "--limit", "33"], Usage::Rows { argument: 2 }),
-    (&["activity", "41", "--limit", "0"], Usage::Rows { argument: 2 }),
+    (&["chat", "show", "41", "--before", "AB"], Usage::Kind { argument: 1 }),
+    (&["chat", "show", "41", "--before", "a"], Usage::Kind { argument: 1 }),
+    (&["task", "turn", "41", "3.4294967296"], Usage::Kind { argument: 1 }),
+    (&["task", "activity", "41", "--limit", "33"], Usage::Rows { argument: 2 }),
+    (&["task", "activity", "41", "--limit", "0"], Usage::Rows { argument: 2 }),
 ];
 #[test]
 fn a_value_outside_its_kind_or_rows_is_a_usage_error() {
@@ -88,7 +88,7 @@ fn a_value_outside_its_kind_or_rows_is_a_usage_error() {
 fn a_project_is_a_number_or_a_name() {
     for (word, project) in [("3", Project::Number(3)), ("shop", Project::Name(Box::from(*b"shop")))] {
         assert_eq!(
-            fixtures::call(&["tasks", "--project", word]).values[0],
+            fixtures::call(&["task", "list", "--project", word]).values[0],
             Some(Values::One(Value::Project(project))),
             "{word}"
         );
@@ -130,7 +130,7 @@ fn call_and_json_are_the_hosts_options() {
 }
 #[test]
 fn tasks_default_to_number_and_unwritten_orders_are_refused() {
-    let mut call = fixtures::call(&["tasks", "--project", "3"]);
+    let mut call = fixtures::call(&["task", "list", "--project", "3"]);
     assert_eq!(call.values[5], Some(Values::One(Value::Order(QueryOrder::Number))));
     for order in [QueryOrder::Changed, QueryOrder::Ended] {
         call.values[5] = Some(Values::One(Value::Order(order)));
@@ -142,18 +142,18 @@ fn tasks_default_to_number_and_unwritten_orders_are_refused() {
     }
 }
 const ACTS: &[&[&str]] = &[
-    &["chat", "hello", "--project", "shop", "--key", "start-chat"],
-    &["message", "41", "hello", "--key", "say-hello"],
-    &["message", "41", "-", "--key", "stdin"],
-    &["close", "41", "--move", "2", "--move", "3", "--reason", "done", "--key", "close-chat"],
-    &["answer", "41", "3", "yes"],
-    &["answer", "41", "3", "yes", "--key", "answer"],
-    &["decide", "t41/3", "accept", "yes"],
-    &["decide", "p3/17", "reject"],
-    &["decide", "41", "leave", "later", "--hold", "2"],
-    &["release", "41", "--hold", "2", "--again"],
-    &["stop", "41", "--key", "stop"],
-    &["cancel", "41", "finished", "--grace", "60"],
+    &["chat", "start", "hello", "--project", "shop", "--key", "start-chat"],
+    &["task", "message", "41", "hello", "--key", "say-hello"],
+    &["task", "message", "41", "-", "--key", "stdin"],
+    &["chat", "close", "41", "--move", "2", "--move", "3", "--reason", "done", "--key", "close-chat"],
+    &["task", "answer", "41", "3", "yes"],
+    &["task", "answer", "41", "3", "yes", "--key", "answer"],
+    &["proposal", "decide", "t41/3", "accept", "yes"],
+    &["proposal", "decide", "p3/17", "reject"],
+    &["task", "decide", "41", "leave", "later", "--hold", "2"],
+    &["task", "release", "41", "--hold", "2", "--again"],
+    &["task", "stop", "41", "--key", "stop"],
+    &["task", "cancel", "41", "finished", "--grace", "60"],
 ];
 #[test]
 fn each_act_parses_into_its_call_and_prints_back() {
@@ -164,10 +164,10 @@ fn each_act_parses_into_its_call_and_prints_back() {
     }
 }
 const KEY_REQUIRED: &[&[&str]] = &[
-    &["chat", "hello", "--project", "shop"],
-    &["message", "41", "hello"],
-    &["close", "41"],
-    &["adopt", "--project", "shop", "--owner", "o", "--name", "n", "--landing", "main"],
+    &["chat", "start", "hello", "--project", "shop"],
+    &["task", "message", "41", "hello"],
+    &["chat", "close", "41"],
+    &["repository", "adopt", "--project", "shop", "--owner", "o", "--name", "n", "--landing", "main"],
 ];
 #[test]
 fn a_keyed_act_without_its_key_is_a_usage_error() {
@@ -175,42 +175,38 @@ fn a_keyed_act_without_its_key_is_a_usage_error() {
         assert_eq!(fixtures::parse(words), Err(Usage::Key), "{words:?}");
     }
     for key in ["", "Bad", "a_b"] {
-        assert_eq!(fixtures::parse(&["message", "41", "hello", "--key", key]), Err(Usage::Key), "{key}");
+        assert_eq!(fixtures::parse(&["task", "message", "41", "hello", "--key", key]), Err(Usage::Key), "{key}");
     }
-    assert_eq!(fixtures::parse(&["stop", "41", "--key", "one", "--key", "two"]), Err(Usage::Key));
+    assert_eq!(fixtures::parse(&["task", "stop", "41", "--key", "one", "--key", "two"]), Err(Usage::Key));
 }
-const KEY_NEVER: &[&[&str]] = &[
-    &["me", "--key", "key"],
-    &["inbox", "--key", "key"],
-    &["tasks", "--project", "shop", "--key", "key"],
-    &["task", "41", "--key", "key"],
-    &["chat", "41", "--key", "key"],
-    &["activity", "41", "--key", "key"],
-    &["turn", "41", "3.7", "--key", "key"],
-    &["run", "41", "--key", "key"],
-    &["wait", "me", "--key", "key"],
-    &["sign-in", "file", "--key", "key"],
-    &["sign-out", "--key", "key"],
-    &["pending", "--key", "key"],
-    &["help", "--key", "key"],
+const KEY_NEVER: &[(&[&str], u16)] = &[
+    (&["me", "--key", "key"], 0),
+    (&["inbox", "--key", "key"], 0),
+    (&["task", "list", "--project", "shop", "--key", "key"], 2),
+    (&["task", "show", "41", "--key", "key"], 1),
+    (&["chat", "show", "41", "--key", "key"], 1),
+    (&["task", "activity", "41", "--key", "key"], 1),
+    (&["task", "turn", "41", "3.7", "--key", "key"], 2),
+    (&["task", "run", "41", "--key", "key"], 1),
+    (&["wait", "me", "--key", "key"], 1),
+    (&["sign-in", "file", "--key", "key"], 1),
+    (&["sign-out", "--key", "key"], 0),
+    (&["pending", "--key", "key"], 0),
+    (&["help", "--key", "key"], 0),
 ];
 #[test]
 fn a_key_on_a_read_wait_or_host_tool_is_a_usage_error() {
-    for words in KEY_NEVER {
+    for (words, at) in KEY_NEVER {
         let error = fixtures::parse(words).expect_err("unkeyed tool");
-        assert_eq!(
-            error,
-            Usage::Unknown { at: u16::try_from(words.len().checked_sub(3).unwrap()).unwrap() },
-            "{words:?}"
-        );
+        assert_eq!(error, Usage::Unknown { at: *at }, "{words:?}");
     }
 }
 #[test]
 fn close_takes_an_optional_reason() {
     for (words, reason) in [
-        (&["close", "41", "--key", "close"][..], None),
+        (&["chat", "close", "41", "--key", "close"][..], None),
         (
-            &["close", "41", "--reason", "done", "--key", "close"][..],
+            &["chat", "close", "41", "--reason", "done", "--key", "close"][..],
             Some(Values::One(Value::Text(Box::from(*b"done")))),
         ),
     ] {
@@ -218,11 +214,11 @@ fn close_takes_an_optional_reason() {
     }
 }
 const DECISIONS: &[(&[&str], u8)] = &[
-    (&["decide", "t41/3", "accept"], 0),
-    (&["decide", "p3/17", "pass-up"], 0),
-    (&["decide", "41", "release", "--hold", "2"], 1),
-    (&["decide", "41", "leave", "--hold", "2"], 1),
-    (&["decide", "41", "pass-up", "--hold", "2"], 1),
+    (&["proposal", "decide", "t41/3", "accept"], 0),
+    (&["proposal", "decide", "p3/17", "pass-up"], 0),
+    (&["task", "decide", "41", "release", "--hold", "2"], 0),
+    (&["task", "decide", "41", "leave", "--hold", "2"], 0),
+    (&["task", "decide", "41", "pass-up", "--hold", "2"], 0),
 ];
 #[test]
 fn decides_two_forms_parse_by_their_arguments() {
@@ -232,11 +228,11 @@ fn decides_two_forms_parse_by_their_arguments() {
     }
     for (word, proposer, number) in [("t41/3", Proposer::Task(41), 3), ("p3/17", Proposer::Party(3), 17)] {
         assert_eq!(
-            fixtures::call(&["decide", word, "accept"]).values[0],
+            fixtures::call(&["proposal", "decide", word, "accept"]).values[0],
             Some(Values::One(Value::Proposal(ProposalKey { proposer, number })))
         );
     }
-    assert_eq!(fixtures::parse(&["decide", "3/17", "accept"]), Err(Usage::Kind { argument: 0 }));
+    assert_eq!(fixtures::parse(&["proposal", "decide", "3/17", "accept"]), Err(Usage::Kind { argument: 0 }));
 }
 #[test]
 fn adopts_flags_parse_and_its_absent_flags_stay_absent() {
@@ -245,6 +241,7 @@ fn adopts_flags_parse_and_its_absent_flags_stay_absent() {
         assert_eq!(call.values[index], None, "slot {index}");
     }
     let words = &[
+        "repository",
         "adopt",
         "--project",
         "3",
@@ -272,6 +269,7 @@ fn adopts_flags_parse_and_its_absent_flags_stay_absent() {
     assert_eq!(fixtures::back(&fixtures::call(words)), fixtures::owned(words));
     assert_eq!(
         fixtures::parse(&[
+            "repository",
             "adopt",
             "--project",
             "3",
@@ -294,7 +292,7 @@ const REPEATS_MOST: u32 = 8;
 #[test]
 fn repeated_moves_and_checks_stop_at_their_bound() {
     for (base, flag, argument) in
-        [(&["close", "41", "--key", "close"][..], "--move", 1), (fixtures::ADOPTION, "--check", 9)]
+        [(&["chat", "close", "41", "--key", "close"][..], "--move", 1), (fixtures::ADOPTION, "--check", 9)]
     {
         for count in [REPEATS_MOST, REPEATS_MOST.checked_add(1).unwrap()] {
             let mut words = List::with_capacity(32);
@@ -316,15 +314,15 @@ fn repeated_moves_and_checks_stop_at_their_bound() {
 }
 #[test]
 fn a_text_flag_keeps_json_as_its_value() {
-    let call = fixtures::call(&["close", "41", "--reason", "--json", "--key", "close"]);
+    let call = fixtures::call(&["chat", "close", "41", "--reason", "--json", "--key", "close"]);
     assert_eq!(call.values[2], Some(Values::One(Value::Text(Box::from(*b"--json")))));
     assert_eq!(fixtures::printed(&call), Parsed::Call { call, json: false });
 }
 
 const LITERAL_TEXT: &[&[&str]] = &[
-    &["message", "41", "--key", "literal", "--", "--json"],
-    &["chat", "--project", "shop", "--key", "literal", "--", "--words"],
-    &["decide", "41", "leave", "--hold", "2", "--", "--reason"],
+    &["task", "message", "41", "--key", "literal", "--", "--json"],
+    &["chat", "start", "--project", "shop", "--key", "literal", "--", "--words"],
+    &["task", "decide", "41", "leave", "--hold", "2", "--", "--reason"],
 ];
 #[test]
 fn a_literal_positional_keeps_its_marker_after_the_flags() {
@@ -340,8 +338,8 @@ fn text_is_bounded_for_argv_and_typed_calls() {
     let mut limits = crate::limits::tools();
     limits.ask_bytes = ASK_BYTES;
     for (text, result) in [("ok", Ok(())), ("bad", Err(Usage::Long { argument: 1 }))] {
-        let words: &[&[u8]] = &[b"message", b"41", text.as_bytes(), b"--key", b"text"];
-        let call = fixtures::call(&["message", "41", text, "--key", "text"]);
+        let words: &[&[u8]] = &[b"task", b"message", b"41", text.as_bytes(), b"--key", b"text"];
+        let call = fixtures::call(&["task", "message", "41", text, "--key", "text"]);
         assert_eq!(
             match argv::parse(crate::table::TOOLS, words, &limits) {
                 Ok(_) => Ok(()),

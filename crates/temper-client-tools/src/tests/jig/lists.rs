@@ -119,8 +119,8 @@ fn task_labels_use_jigs_label_numbers() {
 #[test]
 fn a_kept_activity_is_parked_in_text_and_preserved_in_json() {
     for (argv, expected) in [
-        (&["activity", "41"][..], b"parked".as_slice()),
-        (&["activity", "41", "--json"][..], br#""kept":{"attempt":7,"pending":[]}"#),
+        (&["task", "activity", "41"][..], b"parked".as_slice()),
+        (&["task", "activity", "41", "--json"][..], br#""kept":{"attempt":7,"pending":[]}"#),
     ] {
         let c::ReadResult::Value(c::ReadValue::Activity(mut page)) = fixtures::activity_words() else {
             panic!("activity")
@@ -155,15 +155,18 @@ fn a_met_notice_keeps_its_dependency_and_removal_flag_in_json() {
         }),
         decoded: None,
     };
-    let printed =
-        fixtures::read_answer(&["activity", "41", "--json"], c::ReadResult::Value(c::ReadValue::Activity(page)));
+    let printed = fixtures::read_answer(
+        &["task", "activity", "41", "--json"],
+        c::ReadResult::Value(c::ReadValue::Activity(page)),
+    );
     assert!(skein_lib::bytes::find(&printed.stdout, br#""met":{"dependency":12,"removed":true}"#).is_some());
 }
 
 #[test]
 fn parent_tasks_keep_the_other_query_keys_and_continuation() {
     let argv = [
-        "tasks",
+        "task",
+        "list",
         "--project",
         "3",
         "--label",
@@ -198,7 +201,7 @@ fn parent_tasks_keep_the_other_query_keys_and_continuation() {
     assert_eq!(fixtures::back(&fixtures::call(&argv)), fixtures::owned(&argv));
     for bad in ["x", "-1", "18446744073709551616"] {
         assert_eq!(
-            fixtures::parse(&["tasks", "--project", "3", "--parent", bad]),
+            fixtures::parse(&["task", "list", "--project", "3", "--parent", bad]),
             Err(crate::jig::argv::Usage::Kind { argument: 7 })
         );
     }
@@ -207,14 +210,14 @@ fn parent_tasks_keep_the_other_query_keys_and_continuation() {
 #[test]
 fn help_tasks_describes_parent() {
     let bytes = fixtures::help(Some(2));
-    assert!(skein_lib::bytes::find(&bytes, b"[--parent N]").is_some());
+    assert!(skein_lib::bytes::find(&bytes, b"[--parent TASK]").is_some());
     assert!(skein_lib::bytes::find(&bytes, b"Only this task's delegates").is_some());
 }
 
 fn tree_answer(folded: bool) -> crate::jig::Printed {
     use jig_client::{Latest, Watchable};
     use skein_lib::List;
-    let (mut root, call) = fixtures::read_call(&["task", "41", "--tree"]);
+    let (mut root, call) = fixtures::read_call(&["task", "show", "41", "--tree"]);
     let mut task = fixtures::goal(41, c::WaitsOn::Nothing);
     task.chip.title = fixtures::document_text(b"Root");
     let Latest::Jig(c::Delivery::OwnerTree(mut tree)) = fixtures::owner_tree_at(task.chip.clone()) else {
@@ -282,10 +285,12 @@ fn an_activity_page_cut_before_its_first_row_reads_on() {
     page.cut = true;
     page.before = Some(fixtures::cursor());
     let printed =
-        fixtures::read_answer(&["activity", "41"], c::ReadResult::Value(c::ReadValue::Activity(page.clone())));
+        fixtures::read_answer(&["task", "activity", "41"], c::ReadResult::Value(c::ReadValue::Activity(page.clone())));
     assert_eq!(printed.stdout, fixtures::golden("activity_empty_cut"));
-    let printed =
-        fixtures::read_answer(&["activity", "41", "--json"], c::ReadResult::Value(c::ReadValue::Activity(page)));
+    let printed = fixtures::read_answer(
+        &["task", "activity", "41", "--json"],
+        c::ReadResult::Value(c::ReadValue::Activity(page)),
+    );
     for field in
         [br#""cut":true"#.as_slice(), br#""before":{"value":"1122"}"#, br#""read_on":"activity 41 --before 1122""#]
     {
