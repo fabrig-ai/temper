@@ -19,7 +19,7 @@
         "core.run_bytes": 4096,
         "core.templates": 2,
         "documents.chips": 2,
-        "documents.lines": 2,
+        "documents.lines": 3,
         "documents.rows": 32,
         "documents.text_bytes": 128,
         "fleet.attempts": 2,
