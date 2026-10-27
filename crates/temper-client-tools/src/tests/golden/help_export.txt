@@ -1,6 +1,13 @@
 export ACCOUNT FILE
-  ACCOUNT (account): a number; required. Account number
-  FILE (file): a file; required. New private record file; never stdin
-Move a signed-in account out to a new private file, synced before written
+  ACCOUNT (account): a number; required. The account's number, as accounts prints it
+  FILE (file): a file; required. The new file; nothing may be there
+Move a signed-in account out to a new private file
+Prints: `moved out: account N to FILE`
 --json: the record export.
 Key: none.
+It takes no --key. It creates FILE, mode 0600, before sending
+anything, writes and syncs the account's record, and only then
+tells the engine; the account then leaves this deployment. A
+failure before that removes FILE, and the engine keeps the account
+and cancels the move at its deadline: export again after it.
+Import FILE, as it is, on the deployment it moves to.

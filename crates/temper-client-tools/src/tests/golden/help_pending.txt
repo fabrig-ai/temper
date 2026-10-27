@@ -1,11 +1,10 @@
 pending
-List requests kept in the store
+List the requests DIR keeps, without reaching the engine
+Prints: A line per kept request, `OP, party N, first sent T` or `OP, party N, not sent`; nothing when DIR keeps none
 --json: the record pending.
 Key: none.
-Reads only the store: no lock, client or send.
-Rows: operation, party N, first sending in wall-time words or not sent.
-chat, party 3, not sent
-{"pending":[{"operation":"chat","party":3,"first_sent":null}],"unread":2}
-2 kept records these tools cannot read; a call that sends drops them
-Unread records are counted, never listed; exit 0.
-An invalid store: DIRECTORY's store cannot be read (exit 1).
+It reads DIR's store alone: it takes no lock, signs in to nothing
+and sends nothing. Records these tools cannot read are counted,
+never listed: `N kept records these tools cannot read; a call that
+sends drops them`, with exit 0. A store that cannot be read exits
+1.

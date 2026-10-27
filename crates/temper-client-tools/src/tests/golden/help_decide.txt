@@ -1,13 +1,16 @@
 decide tN/K|pN/K accept|reject|pass-up [REASON] [--running stays|moves] [--key NAME]
-  P/K (proposal): a proposal, tN/K or pN/K; required. Typed proposer and proposal number
-  OUTCOME (outcome): one of accept, reject or pass-up; required. Decision
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Reason
-  --running stays|moves: one of stays or moves; optional. Running work stays by default
+  P/K (proposal): a proposal, tN/K or pN/K; required. The proposal, as the inbox prints it
+  OUTCOME (outcome): one of accept, reject or pass-up; required. The decision
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Why; sent with reject alone
+  --running stays|moves: one of stays or moves; optional. For a settings proposal: running work stays on its revision, or moves to the new one; stays when absent
 decide N --hold R release|leave|pass-up [REASON] [--key NAME]
-  N (task): a number; required. Task number
-  --hold R: a number; required. Hold revision
-  OUTCOME (outcome): one of release, leave or pass-up; required. Decision
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Reason
-Decide a proposal or an escalation
+  N (task): a number; required. The held task's number
+  --hold R: a number; required. The hold's revision, as the task prints it
+  OUTCOME (outcome): one of release, leave or pass-up; required. The decision
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Why; sent with leave alone
+Decide a proposal, or the escalation of a held task
+Prints: `done: decide`, or `decided first:`, by whom, how and when, if it was decided already
 --json: the record decide.
 Key: --key NAME, optional.
+A decision made already, by your party or another, answers
+`decided first:` with exit 0 and changes nothing.

@@ -1,7 +1,11 @@
 close N [--move D]... [--reason TEXT] --key NAME
-  N (task): a number; required. Task number
-  --move D: a number; repeated, at most 8. Delegate to move to the party
-  --reason TEXT: text, at most 1048576 bytes, or - to read stdin; optional. Reason, empty by default
-Close a chat and cancel or move its delegates
+  N (task): a number; required. The chat's task number
+  --move D: a number; repeated, at most 8. A live delegate to move to your party
+  --reason TEXT: text, at most 1048576 bytes, or - to read stdin; optional. Why; empty when absent
+Close a chat: move the delegates you name to your party, cancel the rest
+Prints: `done: task N, close`
 --json: the record close.
 Key: --key NAME, required.
+Every live delegate that `--move` does not name is cancelled with
+the chat. A `--move` naming no live delegate fails, `move is not a
+live delegate` (exit 1).

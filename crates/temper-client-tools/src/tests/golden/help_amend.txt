@@ -1,17 +1,22 @@
 amend N [--rev R] [--priority P | --untracked] [--deadline T | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency M]... [--no-dependencies] [--model M [--effort E]] REASON [--key NAME]
-  N (task): a number; required. Task number
-  --rev R: a number; optional. Shown spec revision; none for a tracked task's priority alone
-  --priority P: a number; optional. Track the task at this priority
-  --untracked: a switch. Stop tracking the task
-  --deadline T: text, at most 1048576 bytes; optional. New deadline, as 2026-10-24T17:00Z
-  --no-deadline: a switch. Remove the deadline
-  --instructions FILE: a file, at most 1048576 bytes; optional. File of the whole instructions, or -; empty for none
-  --spec FILE: a file, at most 1048576 bytes; optional. File of the spec's words, or -
-  --dependency M: a number; repeated, at most 32. A dependency; repeated, the whole list
+  N (task): a number; required. The task's number
+  --rev R: a number; optional. The spec revision the task prints; not needed for its priority alone
+  --priority P: a number; optional. Track it at this priority
+  --untracked: a switch. Stop tracking it
+  --deadline T: text, at most 1048576 bytes; optional. Its new deadline, as 2026-10-24T17:00Z
+  --no-deadline: a switch. Remove its deadline
+  --instructions FILE: a file, at most 1048576 bytes; optional. A file of its whole instructions, or -; an empty file removes them
+  --spec FILE: a file, at most 1048576 bytes; optional. A file of its spec's words, or -
+  --dependency M: a number; repeated, at most 32. A task it waits on; repeated, the whole list
   --no-dependencies: a switch. Remove every dependency
-  --model M: text, at most 1048576 bytes, or - to read stdin; optional. Configured model name
-  --effort E: text, at most 1048576 bytes, or - to read stdin; optional. Effort offered by that model
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Reason for the amendment
-Amend a task: each change named, the rest kept
+  --model M: text, at most 1048576 bytes, or - to read stdin; optional. A model the task may use, as models lists it
+  --effort E: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why
+Amend a task: each control you name is replaced, the rest kept
+Prints: `done: task N, amend`, or `proposed: P/K, to RECIPIENT` when another party must agree
 --json: the record amend.
 Key: --key NAME, optional.
+A task whose spec moved since your read fails with `read again:
+task N`. Each file is read before anything is sent, one final
+newline trimmed, at most 32768 bytes of UTF-8. An amendment that
+changes nothing fails (exit 1).

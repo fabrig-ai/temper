@@ -1,34 +1,37 @@
 wait SUBJECT [--since DIGEST] [--until CONDITION] [--timeout DURATION]
-  SUBJECT (subject): a subject; required. Watch subject
-  --since DIGEST: a digest, as a read prints it; optional. Wait for a different digest
-  --until CONDITION: a condition; optional. Wait for a condition
-  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. Timeout, 300 seconds by default
+  SUBJECT (subject): a subject; required. What to watch, from the list below
+  --since DIGEST: a digest, as a read prints it; optional. The digest of your last read of the subject
+  --until CONDITION: a condition; optional. A condition of the subject, from the list below
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long to wait; 300 seconds when absent
 wait forges [--since DIGEST] [--until settled|connected:F|made:F] [--timeout DURATION]
   forges (subject): one of forges; required. The deployment's forges
-  --since DIGEST: a digest, as a read prints it; optional. Wait past this digest
-  --until settled|connected:F|made:F: one of settled, connected:N or made:N with N from 1 to 65535; optional. settled: none setting up or connecting; connected:F: forge F connected; made:F: first repository made
-  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. At most 3600 seconds; default 300 seconds
+  --since DIGEST: a digest, as a read prints it; optional. The digest of your last read of forges
+  --until settled|connected:F|made:F: one of settled, connected:N or made:N with N from 1 to 65535; optional. settled: none setting up or connecting; connected:F: forge F connected; made:F: forge F's first repository made
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long to wait; 300 seconds when absent
 wait change N [--project P] [--since DIGEST] [--until pull|ci:pending|ci:passed|ci:failed|held|landed] [--timeout DURATION]
-  change (subject): one of change; required. A change's panel
+  change (subject): one of change; required. A change's way to landing
   N (task): a number from 1 to 18446744073709551615; required. The change task's number
-  --project P: a project's name or number; optional. Its project; default the task's
-  --since DIGEST: a digest, as a read prints it; optional. Wait past this digest
-  --until pull|ci:pending|ci:passed|ci:failed|held|landed: one of pull, ci:pending, ci:passed, ci:failed, held or landed; optional. The panel's condition
-  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. At most 3600 seconds; default 300 seconds
-Wait for a subject's change or condition
+  --project P: a project's name or number; optional. Its project; the task's when absent
+  --since DIGEST: a digest, as a read prints it; optional. The digest of your last read of the change
+  --until pull|ci:pending|ci:passed|ci:failed|held|landed: one of pull, ci:pending, ci:passed, ci:failed, held or landed; optional. pull: its pull request opened; ci:STATE: CI at its head in that state; held: a hold on it; landed: merged
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long to wait; 300 seconds when absent
+Wait for a subject to change or to meet a condition
+Prints: The subject as its read prints it, then `met`, or `not met: timeout` or `not met: ended` with exit 3
 --json: the record wait.
 Key: none.
-Subjects and --until conditions:
+With `--since`, it waits for the subject to differ from that read;
+with `--until`, for the condition; with both, for both; with
+neither, for the subject's next change.
+Subjects and their conditions:
   me: waiting
-  inbox: waiting|updates (no subject flags)
-  task N: ended|waiting-on-me|held|replied|phase:<phase>
-  tree N: ended
-  run N: ended
-  accounts: usable|settled
-  tasks: no condition; its read arguments except --after and --ended
+  inbox: waiting, updates
+  task N: ended, waiting-on-me, held, replied, phase:PHASE
+  tree N, run N: ended
+  accounts: usable, settled
+  tasks and its read's arguments, but --after and --ended: none
+  forges, change N: as their forms say
+ended covers done, failed and cancelled; phase: names a live phase.
+waiting-on-me covers the task's tree. replied holds once the task
+waits on someone, holds, closes or ends. settled counts a failed
+connection as settled.
 Live phases: waiting|idle|due|preparing|claimed|running|backing-off|active|closing|held
-Use --until ended for done, failed, cancelled or ended; terminal phase conditions are usage errors.
-waiting-on-me covers the task's tree. An ended task answers with its ended read.
---since is the matching read's digest of the watched document, not its cursor.
---since and --until together require both change and condition.
-Timeout: 300 seconds by default, at most 3600 seconds.

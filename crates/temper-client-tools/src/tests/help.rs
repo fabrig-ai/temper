@@ -154,8 +154,8 @@ fn each_derivation_names_every_tool() {
     assert_eq!(list, &*expected.finish(), "the list has exactly the table's rows");
 }
 
-const CHAT_READ: &[u8] = b"chat N [--before C]\n  N (task): a number; required. Task number\n  --before C: a cursor, as a read prints it; optional. Continue before this cursor\nRead a conversation from its end\n--json: the record chat.\nKey: none.\n";
-const CHAT_CREATE: &[u8] = b"chat --project P TEXT [--model M] [--effort E] --key NAME\n  --project P: a project's name or number; required. Project name or number\n  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. Opening words\n  --model M: text, at most 1048576 bytes, or - to read stdin; optional. Configured model name\n  --effort E: text, at most 1048576 bytes, or - to read stdin; optional. Effort offered by that model\nStart a chat\n--json: the record chat_create.\nKey: --key NAME, required.\n";
+const CHAT_READ: &[u8] = b"chat N [--before C]\n  N (task): a number; required. The chat's task number\n  --before C: a cursor, as a read prints it; optional. The cursor a page printed, to read further back\nRead a chat's conversation from its end\nPrints: The conversation, oldest line first: each turn's words, each run's start and end, then `read on with: chat N --before C` or `no more`\n--json: the record chat.\nKey: none.\nEach page is older than the one before it. A run still writing\nadds its words so far.\n";
+const CHAT_CREATE: &[u8] = b"chat --project P TEXT [--model M] [--effort E] --key NAME\n  --project P: a project's name or number; required. The project\n  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. The opening words\n  --model M: text, at most 1048576 bytes, or - to read stdin; optional. A model the chat may use, as models lists it\n  --effort E: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers\nStart a chat in a project\nPrints: `done: task N, chat`, or `proposed: P/K, to RECIPIENT` when another party must agree\n--json: the record chat_create.\nKey: --key NAME, required.\nThe chat's template chooses its model unless `--model` names one;\n`--effort` needs `--model`, and a model that declares efforts needs\n`--effort`. A chat past what your party may start, but within what\nit may propose, is proposed (exit 0). `chat not offered` and `chat\nexceeds offered bounds` (exit 1): your party may not start it.\nThen `wait task N --until replied`.\n";
 #[test]
 fn help_includes_each_later_row_of_its_name() {
     // The table's read-chat and create-chat rows, in its published order.
@@ -279,4 +279,17 @@ fn expected_record(ending: &[u8]) -> Box<[u8]> {
     expected.put(RECORD_FORMS).expect("forms");
     expected.put(ending).expect("ending");
     expected.finish()
+}
+
+#[test]
+fn each_row_says_what_it_does_and_prints() {
+    for row in table::TOOLS {
+        assert!(!row.line.is_empty(), "{row:?}");
+        assert!(!row.prints.is_empty(), "{row:?}");
+        for form in row.forms {
+            for argument in *form {
+                assert!(!argument.line.is_empty(), "{row:?}: {argument:?}");
+            }
+        }
+    }
 }

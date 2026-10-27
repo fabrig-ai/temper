@@ -1,5 +1,6 @@
 revisions [--before R]
-  --before R: a number from 0 to 4294967295; optional. Read before this revision
-Read history newest first, a page at a time
+  --before R: a number from 0 to 4294967295; optional. Older than this revision
+Read the settings' history, newest first, a page at a time
+Prints: Each revision's head and its items' edits, then `read on: revisions --before R`, `no older revisions` or `older revisions were forgotten`
 --json: the record revisions.
 Key: none.

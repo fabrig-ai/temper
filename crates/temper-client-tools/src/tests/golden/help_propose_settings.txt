@@ -1,7 +1,10 @@
 propose-settings FILE [REASON] --against R --key NAME
-  FILE (items): a file, at most 1048576 bytes; required. JSON items file, or - for stdin
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Reason
-  --against R: a number from 0 to 4294967295; required. Newest revision read
-Propose a change of deployment settings to its owners
+  FILE (items): a file, at most 1048576 bytes; required. The settings file, JSON, or -
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Why; empty when absent
+  --against R: a number from 0 to 4294967295; required. The newest revision you read
+Propose a change of the settings to the deployment's owners
+Prints: `proposed: pN/K, to RECIPIENT`
 --json: the record propose_settings.
 Key: --key NAME, required.
+The file is change-settings'. Read the proposal with `proposal
+pN/K`.

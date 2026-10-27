@@ -1,5 +1,8 @@
 proposal tN/K|pN/K
-  P/K (proposal): a proposal, tN/K or pN/K; required. Typed proposer and proposal number
-Read a proposal, with its review for settings
+  P/K (proposal): a proposal, tN/K or pN/K; required. The proposal, tN/K or pN/K
+Read a proposal; for settings, what each item would change
+Prints: `proposal P/K` and its action, its reason, and, for settings, each item now and as it would be
 --json: the record proposal.
 Key: none.
+A decided proposal prints how it was decided. Decide a live one
+with `decide`.

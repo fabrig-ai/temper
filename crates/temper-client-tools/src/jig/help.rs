@@ -223,7 +223,7 @@ fn argument_bound(argument: &Argument, limits: &Limits, out: &mut Writer) -> Res
 }
 
 fn wait(out: &mut Writer) -> Result<(), Overflow> {
-    out.put(b"Subjects and --until conditions:\n  me: waiting\n  inbox: waiting|updates (no subject flags)\n  task N: ended|waiting-on-me|held|replied|phase:<phase>\n  tree N: ended\n  run N: ended\n  accounts: usable|settled\n  tasks: no condition; its read arguments except --after and --ended\nLive phases: ")?;
+    out.put(b"Live phases: ")?;
     let mut separator = b"".as_slice();
     for phase in super::subject::PHASES {
         if super::subject::live(*phase) {
@@ -232,5 +232,5 @@ fn wait(out: &mut Writer) -> Result<(), Overflow> {
             separator = b"|";
         }
     }
-    out.put(b"\nUse --until ended for done, failed, cancelled or ended; terminal phase conditions are usage errors.\nwaiting-on-me covers the task's tree. An ended task answers with its ended read.\n--since is the matching read's digest of the watched document, not its cursor.\n--since and --until together require both change and condition.\nTimeout: 300 seconds by default, at most 3600 seconds.\n")
+    out.put(b"\n")
 }

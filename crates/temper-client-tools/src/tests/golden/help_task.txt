@@ -1,8 +1,14 @@
 task N [--tree] [--activity K] [--run]
-  N (task): a number; required. Task number
-  --tree: a switch. Include the live tree
-  --activity K: a count from 1 to 32; optional. Latest activity lines
-  --run: a switch. Include the live run
-Read a task and selected related documents
+  N (task): a number; required. The task's number
+  --tree: a switch. Add its live tree of delegates
+  --activity K: a count from 1 to 32; optional. Add its latest K lines of activity
+  --run: a switch. Add its live run
+Read a task: its state, what it waits on, and the acts you may take
+Prints: `task N`, its kind, phase, project and tracking, its fields, `acts:` and a digest; each part asked for after it, with its own digest
 --json: the record task.
 Key: none.
+`acts:` lists the calls the engine offers your party, ready to copy.
+An act marked `(no tool)` has no ctl tool yet; one followed by a
+colon and a reason is refused as it stands; one marked `proposed
+to` asks another party first. A change task adds `next: temper ctl
+DIRECTORY change N`. An ended task prints its result.

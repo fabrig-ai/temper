@@ -1,5 +1,10 @@
 import FILE --key NAME
-  FILE (file): a file; required. Private record file; never stdin
-Move a record in from a private file, then remove the spent file
+  FILE (file): a file; required. The private file export wrote
+Move an account in from the file export wrote, then remove the file
+Prints: `moved in: account N`
 --json: the record import.
 Key: --key NAME, required.
+The file holds 1 to 131072 bytes, read whole. It is removed once
+the engine holds the account, and kept otherwise: the same call
+with the same key and file gets the first answer. A record of a
+newer form asks for a newer temper.
