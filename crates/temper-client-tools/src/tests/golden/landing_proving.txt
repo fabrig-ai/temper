@@ -1,0 +1,7 @@
+landing 61 · project 1 · proving
+member: change 51 · work/hello on forge 1 · temper/51 into main
+  pull request #3 · http://127.0.0.1:3000/work/hello/pulls/3
+  candidate 1111111111111111111111111111111111111111111111111111111111111111 on main 2222222222222222222222222222222222222222222222222222222222222222
+  gate gate, blocking: key 3333333333333333, dispatched (try 1), run 7
+turn: free
+preparations: 1 · stale proofs: 0
