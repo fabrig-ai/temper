@@ -4445,6 +4445,7 @@ fn changed(
             | skein_forge::api::Answer::Runs { .. }
             | skein_forge::api::Answer::Run(_)
             | skein_forge::api::Answer::Tree { .. }
+            | skein_forge::api::Answer::Commits { .. }
             | skein_forge::api::Answer::Queued
             | skein_forge::api::Answer::Branch(_)
             | skein_forge::api::Answer::Done,
