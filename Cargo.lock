@@ -2732,6 +2732,7 @@ dependencies = [
  "skein-lib",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-landing",
 ]
 
 [[package]]
@@ -2746,6 +2747,13 @@ name = "temper-engine-domain-forge-issues"
 version = "0.0.0"
 dependencies = [
  "sha2",
+ "skein-lib",
+]
+
+[[package]]
+name = "temper-engine-domain-forge-landing"
+version = "0.0.0"
+dependencies = [
  "skein-lib",
 ]
 
@@ -2806,6 +2814,7 @@ dependencies = [
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-landing",
 ]
 
 [[package]]
@@ -3100,6 +3109,7 @@ dependencies = [
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-landing",
 ]
 
 [[package]]
