@@ -7,9 +7,9 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
 ## What it is
 
 - **A goal is a task that is tracked,** at a priority, a number;
-  any task can be one, a delegate among them. `task` prints its
+  any task can be one, a delegate among them. `task show` prints its
   tracking as `priority P`, and an untracked task's as `untracked`.
-- **Its plan** is its tree of delegates: `task` prints it in one line,
+- **Its plan** is its tree of delegates: `task show` prints it in one line,
   `plan:` and how many live delegates run, wait or are held below.
 - **The goal template,** template 2 in the stock settings, makes a
   tracked task at priority 1.
@@ -26,16 +26,17 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
 
 ## What temper guarantees
 
-- **The listing's order:** `tasks` ordered by priority lists the lower
+- **The listing's order:** `task list` ordered by priority lists the lower
   number first, then by task number.
 - **No interruption:** a new priority does not stop or restart a run
   in progress.
 
 ## Acting on it
 
-- **ctl:** `tasks` lists a project's goals, tracked alone and ordered
-  by priority; `task` reads one; `amend` changes its priority or its
-  tracking; `decide` accepts a proposal that makes one.
+- **ctl:** `task list` lists a project's goals, tracked alone and
+  ordered by priority; `task show` reads one; `task amend` changes its
+  priority or its tracking; `proposal decide` accepts a proposal that
+  makes one.
 - **temper's runs** make goals with `delegate` and reprioritise
   their delegates with `amend`.
 

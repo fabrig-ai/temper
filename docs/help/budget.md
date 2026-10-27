@@ -28,7 +28,7 @@ A budget is what a task may spend, in units its models' prices make of their usa
   person's chat may spend 24K, and the ceilings and a project's period
   48K. On `temper init`'s box C is 1,057 units, so a run draws 2,114 to
   4,228. The stock charters give 8 turns and 120 seconds, with a
-  reserve of 1 turn and 60 seconds; `setting` reads the current ones.
+  reserve of 1 turn and 60 seconds; `settings show` reads the current ones.
 
 ## How it changes
 
@@ -45,7 +45,7 @@ A budget is what a task may spend, in units its models' prices make of their usa
   fails as a run fails: retried with a growing pause, then held, out
   of tries. A task without enough for its next run is held for its
   budget, one past its deadline for its deadline, which comes first
-  when both hold; `task` prints `Held`, and its record names the
+  when both hold; `task show` prints `Held`, and its record names the
   reason.
 - **The period spent:** nothing more in the project is funded. Raising
   the period spend afterwards does not refill it; a project made after
@@ -66,13 +66,14 @@ A budget is what a task may spend, in units its models' prices make of their usa
 
 ## Acting on it
 
-- **ctl:** `task` shows a task's spend, its budget and its funding;
-  `me` prints what is left of your pool in each project; `setting`
-  reads the rules' run cap and floor, a charter's turns, and policy
-  1's period spend, which a new project takes; `change-settings`
-  changes policy 1; `decide` accepts a proposal that widens a task's
-  authority; `amend` changes a deadline; `release` lifts a budget's
-  or a deadline's hold once its cause is mended.
+- **ctl:** `task show` shows a task's spend, its budget and its
+  funding; `me` prints what is left of your pool in each project;
+  `settings show` reads the rules' run cap and floor, a charter's
+  turns, and policy 1's period spend, which a new project takes;
+  `settings apply` changes policy 1; `proposal decide` accepts a
+  proposal that widens a task's authority; `task amend` changes a
+  deadline; `task release` lifts a budget's or a deadline's hold once
+  its cause is mended.
 - **temper's runs** give a delegate its budget with `delegate`, raise
   it with `amend` within their own, and ask for more with `propose`.
 
@@ -86,5 +87,5 @@ A budget is what a task may spend, in units its models' prices make of their usa
   period spend is raised: what it funded is all the project gets.
   temper has no weekly budget.
 - temper has no ctl tool that reads a project's own period or
-  changes its own policy: `setting` reads policy 1, which only new
+  changes its own policy: `settings show` reads policy 1, which only new
   projects copy.

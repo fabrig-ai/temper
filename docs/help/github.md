@@ -20,8 +20,8 @@ Connect a box to GitHub through a GitHub App, accept or make its installation, a
 - `APP`: the App's id, from its page on GitHub. On fake backends, the
   box prints `box: GitHub own App id 1, key file FILE`: `APP` is 1 and
   `FILE` that file.
-- `OWNER`: the repository's owner, as `repositories` prints it.
-- `NAME`: the repository's name, as `repositories` prints it.
+- `OWNER`: the repository's owner, as `forge repositories` prints it.
+- `NAME`: the repository's name, as `forge repositories` prints it.
 - `REQUEST`: a file of the words that ask for a change in it.
 - `CHANGE`: the change task's number, as the chat's tree lists it.
 
@@ -69,16 +69,16 @@ If not: as temper help box says in its steps 2 and 3.
 An App that exists, its key read from `FILE`:
 
 ```
-temper ctl DIR forge-connect 2 github-app APP FILE --key KEY
-temper ctl DIR wait forges --until connected:2
+temper ctl DIR forge connect 2 github-app APP FILE --key KEY
+temper ctl DIR forge list --until connected:2
 ```
 
 temper's App, made from its manifest: open the address it prints in
 a browser on the engine's machine, create the App, then install it:
 
 ```
-temper ctl DIR forge-connect 2 github --key KEY
-temper ctl DIR wait forges --until settled
+temper ctl DIR forge connect 2 github --key KEY
+temper ctl DIR forge list --until settled
 ```
 
 Expect: `connecting`; the wait prints the forges, the first line
@@ -89,41 +89,41 @@ If not: `credential file must contain 1 to 4089 bytes` or a key
 file's mode (exit 1): mend `FILE`, then the same call with the same
 key. `connected already` (exit 2): forge 2 holds a key, which this
 build cannot replace. An App short of a permission or an event
-connects, and `forges` names what it lacks: grant it in the App's
+connects, and `forge list` names what it lacks: grant it in the App's
 settings on GitHub.
 
 ## 4. Accept an installation
 
-An installation made already, by its id as `forges` lists it:
+An installation made already, by its id as `forge list` lists it:
 
 ```
-temper ctl DIR forges
-temper ctl DIR forge-accept 2 INSTALLATION
+temper ctl DIR forge list
+temper ctl DIR forge accept 2 INSTALLATION
 ```
 
 Or a new one, on another account, through a browser on the engine's
 machine; on fake backends, any HTTP client completes it:
 
 ```
-temper ctl DIR forge-install 2 --key KEY
-temper ctl DIR wait forges --until settled
+temper ctl DIR forge install 2 --key KEY
+temper ctl DIR forge list --until settled
 ```
 
 Expect: `accepted: installation INSTALLATION on forge 2`, then the
-`repositories` call to make; or the forges, the new installation
+`forge repositories` call to make; or the forges, the new installation
 listed, then `met`.
 
 If not: `GitHub has no installation INSTALLATION of this App` (exit
-2): read `forges` for its ids. On fake backends, the installation
+2): read `forge list` for its ids. On fake backends, the installation
 listed right after the connect answers so: install through
-`forge-install` instead. Without read-only mode, an installation not
+`forge install` instead. Without read-only mode, an installation not
 accepted is uninstalled at the next reconcile: accept it first.
 
 ## 5. Adopt a repository
 
 ```
-temper ctl DIR repositories 2 --installation INSTALLATION
-temper ctl DIR adopt --project PROJECT --forge 2 --owner OWNER --name NAME --landing main --no-home --key KEY
+temper ctl DIR forge repositories 2 --installation INSTALLATION
+temper ctl DIR repository adopt --project PROJECT --forge 2 --owner OWNER --name NAME --landing main --no-home --key KEY
 ```
 
 `--landing` names the branch changes land on. `--no-home` keeps the
@@ -144,8 +144,8 @@ does not reach it; grant it to the App on GitHub's installation page.
 Name `OWNER/NAME` in the request:
 
 ```
-temper ctl DIR chat --project PROJECT - --key KEY < REQUEST
-temper ctl DIR wait change CHANGE --until landed --timeout 3600
+temper ctl DIR chat start --project PROJECT - --key KEY < REQUEST
+temper ctl DIR change show CHANGE --until landed --timeout 3600
 ```
 
 The chat's tree names the change task, as temper help box says in its

@@ -189,8 +189,8 @@ members stay. Before the stop, export each account whose source is
 `sign_in` and `granted` to a file the reset keeps:
 
 ```
-temper ctl DIR accounts
-temper ctl DIR export ACCOUNT FILE
+temper ctl DIR account list
+temper ctl DIR account export ACCOUNT FILE
 ```
 
 Then stop the units; install the new binary and documents; remove
@@ -199,7 +199,7 @@ data but `secrets/`; start Forgejo, the engine, the worker and the
 runner; sign in again (step 6); then:
 
 ```
-temper ctl DIR import FILE --key KEY
+temper ctl DIR account import FILE --key KEY
 ```
 
 Expect: `moved out: account ACCOUNT to FILE`; after the start,
@@ -212,6 +212,7 @@ its key again. A worker's document from an older `temper init` stops the
 worker's start at `agent.arguments`,
 `"agent" is now "internal", "agent"`: write them
 `["internal", "agent", PATH]`, `PATH` its `agent.configuration`.
+A running build from before 10-27 answers `account list` with ctl's usage line (exit 1): before the stop, use its own names, `accounts` and `export`.
 
 ## Clean up
 

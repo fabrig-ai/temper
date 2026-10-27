@@ -9,7 +9,7 @@ A chat is a conversation between a party and an agent in a project: an untracked
 - **A chat is a task** labelled `chat`, made from its project's chat
   template, template 1: its charter, its budget rule and its model.
   It is untracked, has no deadline, and keeps its transcript.
-- **Its conversation** is what `chat` reads: each turn's words, from
+- **Its conversation** is what `chat show` reads: each turn's words, from
   the party and from the agent, and each run's start and end.
 - **A reply is not a result.** The agent's words answer the party,
   and the chat goes on: it ends only when its party closes it.
@@ -34,20 +34,21 @@ A chat is a conversation between a party and an agent in a project: an untracked
   it at the next turn's boundary.
 - **Each delegate decided at the close:** none is left without an
   owner; the ones not moved are cancelled with the chat.
-- **The transcript stays** after the close, and `chat` reads it.
+- **The transcript stays** after the close, and `chat show` reads it.
 
 ## Acting on it
 
-- **ctl:** `chat` starts one in a project and reads one; `message`
-  sends it words; `close` ends it; `wait` on its task returns once it
-  has answered or waits on someone; `task` with its tree shows the
-  change tasks it started.
+- **ctl:** `chat start` starts one in a project and `chat show` reads
+  one; `task message` sends it words; `chat close` ends it; `task
+  show` on its task with `--until replied` returns once it has
+  answered or waits on someone; `task tree` shows the change tasks it
+  started.
 - **temper's runs** in a chat use the host tools `change`,
   `delegate` and `message`, and read these pages with `read_docs`.
 
 ## Limits
 
-- temper does not let ctl choose a chat's template: `chat` uses the
+- temper does not let ctl choose a chat's template: `chat start` uses the
   project's chat template.
 - temper does not promise a final summary before the close's grace
   ends.

@@ -219,7 +219,7 @@ impl Tier {
             command(&["sign-in", "-"], Stdin::Printed, None),
             Step::Exited { code: 0, within: WITHIN },
             command(
-                &["forge-connect", "1", "github", "--key", "github-connect"],
+                &["forge", "connect", "1", "github", "--key", "github-connect"],
                 Stdin::Closed,
                 Some(Opens {
                     prefix: b"http://127.0.0.1:".as_slice().into(),

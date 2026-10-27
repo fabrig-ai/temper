@@ -93,7 +93,7 @@ a new link: sign in with it.
 `PROJECT` is 1 on a new box, as `me` lists it.
 
 ```
-temper ctl DIR forge-setup 3 --org work --repository hello --project PROJECT --key KEY
+temper ctl DIR forge setup 3 --org work --repository hello --project PROJECT --key KEY
 ```
 
 Expect: `setting up`, then `Adopted work/hello on forge 3 as owned.`
@@ -101,8 +101,8 @@ and `It is the project's home.`
 
 If not: past 300 seconds it prints the forges and `not met: timeout`
 (exit 3) while the box still fetches Forgejo: run `temper ctl DIR
-wait forges --until made:3`, then go on. A failed fetch or start
-shows in `temper ctl DIR forges`, with its reason.
+forge list --until made:3`, then go on. A failed fetch or start
+shows in `temper ctl DIR forge list`, with its reason.
 
 ## 5. Give the model an account
 
@@ -112,27 +112,27 @@ wrote; `me` lists the providers.
 A login exported from another deployment:
 
 ```
-temper ctl DIR import FILE --key KEY
+temper ctl DIR account import FILE --key KEY
 ```
 
 A provider's sign-in, opened in a browser on this machine; on fake
 backends, any HTTP client completes it:
 
 ```
-temper ctl DIR connect PROVIDER --key KEY
+temper ctl DIR account connect PROVIDER --key KEY
 ```
 
 An API key from a private file; on fake backends, the model key file
 the box printed:
 
 ```
-temper ctl DIR add-key PROVIDER FILE --deployment --key KEY
+temper ctl DIR account add-key PROVIDER FILE --deployment --key KEY
 ```
 
 Then:
 
 ```
-temper ctl DIR wait accounts --until usable
+temper ctl DIR account list --until usable
 ```
 
 Expect: `moved in: account N`, the address to open, or `done:
@@ -146,9 +146,9 @@ finish it; open the address again, then wait again.
 ## 6. Ask for a change
 
 ```
-temper ctl DIR chat --project PROJECT - --key KEY < REQUEST
-temper ctl DIR wait task TASK --until replied
-temper ctl DIR task TASK --tree
+temper ctl DIR chat start --project PROJECT - --key KEY < REQUEST
+temper ctl DIR task show TASK --until replied
+temper ctl DIR task show TASK --tree
 ```
 
 `TASK` is the chat's number, which the first call prints. The tree
@@ -165,20 +165,20 @@ more than the project allows your party: read `me`.
 ## 7. Follow the change to its landing
 
 ```
-temper ctl DIR wait change CHANGE --until landed --timeout 3600
-temper ctl DIR change CHANGE
+temper ctl DIR change show CHANGE --until landed --timeout 3600
+temper ctl DIR change show CHANGE
 ```
 
 The change waits for CI to pass at its head; the starter workflow
 passes. Read its diff, reviews, CI runs and logs on the forge, at the
-pull request `change` prints.
+pull request `change show` prints.
 
 Expect: the change's panel, its first line `change CHANGE ·
 work/hello on forge 3 · `, its branch and `into main`, then `met`;
-`change` then names its step, `landed`, and its merge commit.
+`change show` then names its step, `landed`, and its merge commit.
 
 If not: `not met: timeout` (exit 3): read `temper ctl DIR change
-CHANGE` and `temper ctl DIR task CHANGE --tree` for its step, its
+show CHANGE` and `temper ctl DIR task show CHANGE --tree` for its step, its
 hold and its acts, act on them, and wait again.
 
 ## 8. Export the account, then stop
@@ -186,8 +186,8 @@ hold and its acts, act on them, and wait again.
 On real backends, move a signed-in account out before the stop:
 
 ```
-temper ctl DIR accounts
-temper ctl DIR export ACCOUNT FILE
+temper ctl DIR account list
+temper ctl DIR account export ACCOUNT FILE
 ```
 
 `ACCOUNT` is the account whose source is `sign_in`, `granted`;

@@ -13,7 +13,7 @@ Connect a deployment to a Forgejo it does not run, as its site admin, so that te
   the bot's access and the repository's hook. Owned: temper runs the
   Forgejo itself; on a box, temper help box says how in its step 4,
   and on a server, temper help server. Connected, a bot's tokens given
-  by hand, is not offered: `forge-connect FORGE forgejo` is refused.
+  by hand, is not offered: `forge connect FORGE forgejo` is refused.
 - **The admin's token** in `FILE`: regular, owned by you, mode 0600,
   made in a site admin's settings with the scopes `write:admin`,
   `read:user` and `write:repository`.
@@ -21,7 +21,7 @@ Connect a deployment to a Forgejo it does not run, as its site admin, so that te
   forge that changes its number is a new forge.
 - `ORG`: the organization of the first repository temper makes.
 - `NAME`: that repository's name.
-- `OWNER`: another repository's owner, as `repositories` prints it.
+- `OWNER`: another repository's owner, as `forge repositories` prints it.
 - `REPOSITORY`: that repository's name.
 - **On fake backends,** the box's Forgejo elsewhere is forge 4,
   configured managed already: skip step 1. The box prints `box:
@@ -65,8 +65,8 @@ If not: as temper help box says in its steps 2 and 3.
 ## 3. Connect as its admin
 
 ```
-temper ctl DIR forge-connect FORGE forgejo-admin FILE --first ORG/NAME --key KEY
-temper ctl DIR wait forges --until made:FORGE
+temper ctl DIR forge connect FORGE forgejo-admin FILE --first ORG/NAME --key KEY
+temper ctl DIR forge list --until made:FORGE
 ```
 
 `--first` makes the first repository in a new project named after
@@ -81,17 +81,17 @@ If not: `credential file must contain 1 to 4089 bytes`, or a key
 file's mode (exit 1): mend `FILE`, then the same call with the same
 key. A token without `write:repository` connects, and the adoption
 says that scope is missing: give it, then connect again. `LOGIN is
-not temper's bot` (in `forges`): a user of that login exists; add
+not temper's bot` (in `forge list`): a user of that login exists; add
 `temper:bot` to its full name on Forgejo, then connect again.
 
 ## 4. Adopt another repository
 
 ```
-temper ctl DIR repositories FORGE
-temper ctl DIR adopt --project PROJECT --forge FORGE --owner OWNER --name REPOSITORY --landing main --key KEY
+temper ctl DIR forge repositories FORGE
+temper ctl DIR repository adopt --project PROJECT --forge FORGE --owner OWNER --name REPOSITORY --landing main --key KEY
 ```
 
-`repositories` lists every repository the admin sees; `PROJECT` is
+`forge repositories` lists every repository the admin sees; `PROJECT` is
 the project step 3 printed.
 
 Expect: a line per repository, `OWNER/REPOSITORY`; then `Adopted
