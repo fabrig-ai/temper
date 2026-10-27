@@ -361,6 +361,10 @@ pub(crate) fn result_event(domain: &mut Domain, payload: Token, end: tasks::End)
 fn end(ending: &host::Ending) -> tasks::End {
     match ending {
         host::Ending::Refused(host::Refusal::Busy) => tasks::End::Refused,
+        host::Ending::Refused(host::Refusal::Invalid(host::Invalid::Start {
+            cause: host::StartCause::HostPart { bound },
+            ..
+        })) => tasks::End::Exceeded(tasks::Exceeded { bound: tasks::Bound::HostPart, value: *bound }),
         host::Ending::Refused(host::Refusal::Invalid(_)) => tasks::End::Failed(tasks::Class::Invalid),
         host::Ending::Parked { .. } => tasks::End::Parked,
         host::Ending::Failed { failure: host::Failure::Run(host::RunFailure::Exceeded(exceeded)), .. } => {

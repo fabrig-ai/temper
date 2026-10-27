@@ -1378,3 +1378,11 @@ fn goal_decodes_words_and_an_optional_advisor() {
 
 #[path = "tests/settings.rs"]
 mod settings;
+
+#[test]
+fn a_host_part_refusal_keeps_the_bound_in_a_hold() {
+    let terminal =
+        result(run::Answer::Refused(run::Refusal::Invalid(run::Invalid::HostPart { bound: 33419 })), None).unwrap();
+    assert_eq!(terminal.end, tasks::End::Exceeded(tasks::Exceeded { bound: tasks::Bound::HostPart, value: 33419 }));
+    assert_eq!((terminal.cumulative, terminal.turns), (0, 0));
+}

@@ -611,3 +611,32 @@ fn an_items_hold_names_the_call_declaration_and_other_bounds_keep_their_way_out(
         assert!(skein_lib::bytes::find(&answer.stdout, expected).is_some());
     }
 }
+
+#[test]
+fn a_host_part_hold_keeps_smiths_reason_bound_and_charter_remedy() {
+    let mut latest = f::chat_at(f::TASK, c::RunStage::Idle, None);
+    let mut task = f::held_task(
+        f::task_in(&mut latest).clone(),
+        c::HoldCategory::Exceeded(c::Exceeded { bound: c::Bound::HostPart, value: 33419 }),
+    );
+    let c::ChipPhase::Owner { details, .. } = task.chip.details.as_mut() else { panic!("owner fixture") };
+    details.executor = c::OwnerExecutor::Agent { charter: 217 };
+    let answer = f::read_answer(f::TASK_CALL, f::task_result(task));
+    assert_eq!(answer.status, 0);
+    assert!(
+        skein_lib::bytes::find(&answer.stdout, b"held: smith refused its host part, past its bound of 33419 bytes\n")
+            .is_some()
+    );
+    assert!(
+        skein_lib::bytes::find(
+            &answer.stdout,
+            concat!(
+                "fix first: charter 217's runs pass smith's host part; narrow its tools, ",
+                "or undo the settings change that grew them (settings show charter 217)\n",
+                "way out: task release 41 --hold 9\n",
+            )
+            .as_bytes(),
+        )
+        .is_some()
+    );
+}
