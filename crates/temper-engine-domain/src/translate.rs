@@ -39,6 +39,8 @@ pub struct Config {
 pub(crate) struct RootConfig {
     pub(crate) forge_connector: u16,
     pub(crate) forge_charter: u32,
+    #[expect(dead_code, reason = "retained for the landing procedures built next (domain/landing.md, 13.1)")]
+    pub(crate) landings: Map<u32, ProjectLanding>,
 }
 
 /// Typed forge landing policy retained by the application for policy snapshots.
@@ -46,6 +48,52 @@ pub(crate) struct RootConfig {
 pub struct LandingPolicy {
     pub deployment: Box<[LandingRule]>,
     pub projects: Map<u32, Box<[LandingRule]>>,
+    /// Each project's way, checks and after-landing settings.
+    pub landings: Map<u32, ProjectLanding>,
+}
+
+/// How one project lands, and what it checks before and after (protocol/configuration.md, 3).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ProjectLanding {
+    pub by: Way,
+    pub repositories: Box<[RepositoryChecks]>,
+    pub after: AfterLanding,
+}
+/// A project's landing way (domain/landing.md, 2).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Way {
+    Queue,
+    Turn,
+}
+/// One repository's test gates and tiers, each in document order.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RepositoryChecks {
+    pub repository: skein_forge::api::Repository,
+    pub gates: Box<[GateCheck]>,
+    pub tiers: Box<[TierCheck]>,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct GateCheck {
+    pub name: Box<[u8]>,
+    pub workflow: Box<[u8]>,
+    pub ignored: Box<[Box<[u8]>]>,
+    pub blocking: bool,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierCheck {
+    pub name: Box<[u8]>,
+    pub workflow: Box<[u8]>,
+    pub ignored: Box<[Box<[u8]>]>,
+    /// The artifact its run uploads, and its file's format (domain/after-landing.md, 2).
+    pub artifact: Box<[u8]>,
+    pub format: temper_engine_domain_forge_tiers::Format,
+}
+/// A project's after-landing settings (domain/after-landing.md, 11).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct AfterLanding {
+    pub verdict: temper_engine_domain_forge_tiers::Settings,
+    pub bound: skein_lib::Duration,
+    pub pause_on_red: bool,
 }
 
 pub(crate) fn environment_forge(env: &Env<Limits>) -> Env<forge::Limits> {

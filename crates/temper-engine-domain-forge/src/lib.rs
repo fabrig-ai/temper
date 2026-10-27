@@ -39,6 +39,9 @@ mod tests;
 mod topics;
 mod verification;
 pub use boundary::*;
+/// A gate's or a tier's workflow file name (domain/landing.md, 12).
+pub const WORKFLOW_BYTES: u32 = 255;
+
 pub use brief::{HOME_SECTION_BYTES, hex, home_access_reason};
 pub use domain::{Domain, fire, max_out, resume, step, tag, untag, writer};
 pub use gates::{GateCandidate, GateLast, GatePattern, GatePolicy, GateTemplate};

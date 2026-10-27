@@ -290,7 +290,21 @@ impl Domain {
         )
         .expect("landing gate templates bounded");
         assert!(forge.gate_policy(gate_policy, &limits.forge), "forge owns bounded landing templates");
-        let root_config = RootConfig { forge_connector, forge_charter: config.forge_charter };
+        for (&project, landing) in &config.landing.landings {
+            let mut repositories = List::with_capacity(limits.forge.repositories);
+            for repository in &landing.repositories {
+                let mut tiers = List::with_capacity(limits.forge.tiers);
+                for tier in &repository.tiers {
+                    tiers.push(forge::Tier { name: tier.name.clone() }).expect("parsed tier bound");
+                }
+                repositories
+                    .push(forge::RepositoryTiers { repository: repository.repository, tiers: tiers.into_boxed() })
+                    .expect("parsed repository bound");
+            }
+            assert!(forge.project_tiers(project, repositories.into_boxed()), "project tier table bounded");
+        }
+        let root_config =
+            RootConfig { forge_connector, forge_charter: config.forge_charter, landings: config.landing.landings };
         let mut core = Core::new(config.core, &core_limits(limits))?;
         let core_env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: core_limits(limits) };
         let configured = jig_domain_core::step(

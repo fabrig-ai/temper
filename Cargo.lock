@@ -2687,6 +2687,7 @@ dependencies = [
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-tiers",
 ]
 
 [[package]]
@@ -2764,6 +2765,7 @@ dependencies = [
  "temper-engine-domain",
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
+ "temper-engine-domain-forge-tiers",
  "temper-engine-forge-world",
  "temper-engine-smith",
  "temper-protocol-store",
@@ -3197,6 +3199,7 @@ dependencies = [
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-tiers",
  "temper-engine-domain-world",
  "temper-engine-smith",
  "temper-forge-setup",

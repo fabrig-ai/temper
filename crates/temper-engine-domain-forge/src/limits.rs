@@ -42,6 +42,10 @@ pub struct Limits {
     pub landings: u32,
     /// Tiers per repository (domain/after-landing.md, 2).
     pub tiers: u32,
+    /// Test gates per repository (domain/landing.md, 13.1).
+    pub gates: u32,
+    /// Ignored paths per gate or tier (domain/landing.md, 6.1).
+    pub ignored_paths: u32,
     /// Failing tests named by one run (domain/after-landing.md, 4).
     pub failing_tests: u32,
     /// Bytes of one test id.
@@ -65,7 +69,9 @@ pub struct Limits {
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "one checked sum of the connector owners and retained payloads")]
 pub fn worst_case(l: &Limits) -> Option<u64> {
-    if l.repositories == 0
+    if l.gates == 0
+        || l.ignored_paths == 0
+        || l.repositories == 0
         || l.tasks == 0
         || l.holds == 0
         || l.subscriptions == 0

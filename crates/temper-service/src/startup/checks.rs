@@ -628,6 +628,18 @@ fn index_of(numbers: &[u32], number: u32) -> usize {
     }
     index
 }
+/// Copy startup policy into the root admission check with the same bounds.
+fn copy_landing(policy: &domain::LandingPolicy) -> domain::LandingPolicy {
+    let mut projects = Map::with_capacity(policy.projects.capacity());
+    for (&project, rules) in &policy.projects {
+        projects.insert(project, rules.clone()).expect("the same capacity");
+    }
+    let mut landings = Map::with_capacity(policy.landings.capacity());
+    for (&project, landing) in &policy.landings {
+        landings.insert(project, landing.clone()).expect("the same capacity");
+    }
+    domain::LandingPolicy { deployment: policy.deployment.clone(), projects, landings }
+}
 /// What the root's construction asserts, refused before it is made, each
 /// naming the configuration that breaks it (domain/root.md, 6).
 #[expect(clippy::manual_map, reason = "the strict subset uses explicit matches")]
@@ -639,11 +651,7 @@ pub fn root(
     limits: &domain::Limits,
     problems: &mut Problems,
 ) {
-    let mut projects = Map::with_capacity(engine.landing.projects.capacity());
-    for (&project, rules) in &engine.landing.projects {
-        projects.insert(project, rules.clone()).expect("the same capacity");
-    }
-    let landing = domain::LandingPolicy { deployment: engine.landing.deployment.clone(), projects };
+    let landing = copy_landing(&engine.landing);
     let (forge, identities) = crate::forge::config(engine, seeds.deployment);
     let config = domain::Config {
         demo: match &engine.demo {

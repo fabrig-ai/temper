@@ -328,7 +328,11 @@ pub fn config_with_project_room(seed: u64, projects: u32) -> engine::Config {
             // The forge is the deployment's one connector.
             connectors: Box::new([0]),
         },
-        landing: engine::LandingPolicy { deployment: Box::new([]), projects: skein_lib::Map::with_capacity(1) },
+        landing: engine::LandingPolicy {
+            deployment: Box::new([]),
+            projects: skein_lib::Map::with_capacity(1),
+            landings: skein_lib::Map::with_capacity(1),
+        },
         forge: skein_forge_client::Config {
             namespace: Box::from(&b"root"[..]),
             writers: Box::new([skein_forge_client::Writer { forge: 1, author: 1 }]),
@@ -459,6 +463,10 @@ const FORGE_LIMITS: forge::Limits = forge::Limits {
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
+    // Test gates per repository (domain/landing.md, 13.1).
+    gates: 2,
+    // Ignored paths per gate or tier (domain/landing.md, 6.1).
+    ignored_paths: 4,
     failing_tests: 16,
     test_id_bytes: 256,
     brief_sections: 32,

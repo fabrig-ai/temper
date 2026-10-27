@@ -3141,3 +3141,38 @@ fn a_stop_waits_for_a_sent_merge_to_be_proved() {
     assert!(world.unsettled.is_empty());
     assert_eq!(world.merges, 1);
 }
+
+#[test]
+fn a_change_landed_where_its_project_names_a_tier_gives_no_result_yet() {
+    // Existing change stories settle within 600 ticks; allow its terminal routing too.
+    const SETTLE_TICKS: u32 = 600;
+    let world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { tier: true, ..StoryLimits::default() },
+    );
+    let (mut world, _chat, producer, branch) =
+        change_world_in(world, Change { no_ci: false, owner_gate: false, tracked: false });
+    let tasks::Party::Task(change) = live_task(&world, producer.task).requester else {
+        panic!("producer belongs to its change");
+    };
+    reviews::produce(&mut world, &producer, &branch);
+    for _ in 0..SETTLE_TICKS {
+        world.tick();
+    }
+    assert_eq!(world.merges, 1);
+    assert!(world.store.rows.values().any(|stored| matches!(stored,
+        Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(row)
+            if merged(&row.change.state).is_some()))));
+    assert!(
+        !matches!(live_task(&world, change).phase, tasks::Phase::Ended(_)),
+        "verification keeps the change task live"
+    );
+    assert!(!matches!(world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(change)))),
+        Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row))))
+            if matches!(row.phase, tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Change { .. })))));
+}

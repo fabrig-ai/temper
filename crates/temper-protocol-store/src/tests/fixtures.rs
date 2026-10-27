@@ -51,6 +51,10 @@ pub const LIMITS: top::Limits = top::Limits {
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
+    // Test gates per repository (domain/landing.md, 13.1).
+    gates: 2,
+    // Ignored paths per gate or tier (domain/landing.md, 6.1).
+    ignored_paths: 4,
     failing_tests: 16,
     test_id_bytes: 256,
     brief_sections: 32,

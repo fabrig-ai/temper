@@ -2287,3 +2287,212 @@ fn owned_startup_details_keep_the_runner_pin_and_directory_path_and_managed_has_
     settings.setup[0].entry.mode = Mode::Managed { admin_token: Some(b"/fake/admin-token".as_slice().into()) };
     assert!(application::configured(&settings)[0].owned.is_none());
 }
+
+// The application fixture seeds project 1 and forge 1.
+const LANDING_PROJECT: u32 = 1;
+const PROJECT_CHECKS: &[u8] = br#"[{"project":1,"rules":[],"by":"turn","gates":[{"forge":1,"repository":7,"gates":[{"name":"focused","workflow":"check.yml","ignored":["docs","a/b"],"blocking":true}],"tiers":[{"name":"fuzzy","workflow":"fuzzy.yml","ignored":["notes"],"artifact":"failures","format":"junit"},{"name":"browser","workflow":"browser.yml","ignored":[],"artifact":"tests","format":"lines"}]}],"tier_retries":3,"verification_bound_ms":9000,"suspects":"tell_all","pause_on_red":true}]"#;
+fn landing_checks_input() -> Box<[u8]> {
+    fixtures::with(fixtures::APPLICATION, b"landing.projects", PROJECT_CHECKS)
+}
+fn parsed_project(input: &[u8]) -> temper_engine_domain::ProjectLanding {
+    let jig = fixtures::engine().jig;
+    let (members, problems) = application(input, &jig);
+    assert_eq!(lines(&problems).as_ref(), b"");
+    let mut landing = members.unwrap().landing;
+    landing.landings.remove(&LANDING_PROJECT).unwrap()
+}
+#[test]
+fn a_landing_project_with_no_new_member_takes_every_default() {
+    use temper_engine_domain::{AfterLanding, ProjectLanding, Way};
+    use temper_engine_domain_forge_tiers::{Settings, Suspects};
+    assert_eq!(
+        parsed_project(fixtures::APPLICATION),
+        ProjectLanding {
+            by: Way::Queue,
+            repositories: Box::new([]),
+            after: AfterLanding {
+                verdict: Settings { retries: 2, suspects: Suspects::Bisect },
+                bound: skein_lib::Duration::from_millis(7_200_000),
+                pause_on_red: false
+            }
+        }
+    );
+}
+#[test]
+fn a_projects_gates_and_tiers_are_read_in_order() {
+    use temper_engine_domain::{GateCheck, RepositoryChecks, TierCheck, Way};
+    use temper_engine_domain_forge_tiers::Format;
+    let project = parsed_project(&landing_checks_input());
+    assert_eq!(project.by, Way::Turn);
+    assert_eq!(
+        project.repositories.as_ref(),
+        [RepositoryChecks {
+            repository: skein_forge::api::Repository { forge: 1, repository: 7 },
+            gates: Box::new([GateCheck {
+                name: b"focused".as_slice().into(),
+                workflow: b"check.yml".as_slice().into(),
+                ignored: Box::new([b"docs".as_slice().into(), b"a/b".as_slice().into()]),
+                blocking: true
+            }]),
+            tiers: Box::new([
+                TierCheck {
+                    name: b"fuzzy".as_slice().into(),
+                    workflow: b"fuzzy.yml".as_slice().into(),
+                    ignored: Box::new([b"notes".as_slice().into()]),
+                    artifact: b"failures".as_slice().into(),
+                    format: Format::Junit
+                },
+                TierCheck {
+                    name: b"browser".as_slice().into(),
+                    workflow: b"browser.yml".as_slice().into(),
+                    ignored: Box::new([]),
+                    artifact: b"tests".as_slice().into(),
+                    format: Format::Lines
+                },
+            ]),
+        }]
+    );
+}
+#[test]
+fn after_landing_settings_are_read() {
+    use temper_engine_domain::AfterLanding;
+    use temper_engine_domain_forge_tiers::{Settings, Suspects};
+    assert_eq!(
+        parsed_project(&landing_checks_input()).after,
+        AfterLanding {
+            verdict: Settings { retries: 3, suspects: Suspects::TellAll },
+            bound: skein_lib::Duration::from_millis(9000),
+            pause_on_red: true,
+        }
+    );
+}
+#[test]
+fn a_repository_with_no_checks_and_checks_with_no_ignored_paths_take_defaults() {
+    let input = fixtures::with(&landing_checks_input(), b"landing.projects[0].gates", br#"[{"forge":1,"repository":7},{"forge":1,"repository":8,"gates":[{"name":"check","workflow":"check.yml","blocking":false}],"tiers":[{"name":"tier","workflow":"tier.yml","artifact":"report","format":"lines"}]}]"#);
+    let project = parsed_project(&input);
+    assert!(project.repositories[0].gates.is_empty());
+    assert!(project.repositories[0].tiers.is_empty());
+    assert!(project.repositories[1].gates[0].ignored.is_empty());
+    assert!(project.repositories[1].tiers[0].ignored.is_empty());
+}
+type CheckBoundRow = (&'static [u8], Box<str>, &'static str);
+fn check_bound_rows(extra: u32) -> Box<[CheckBoundRow]> {
+    use temper_engine_domain_forge::{CHECK_NAME_BYTES, WORKFLOW_BYTES};
+    let limits = crate::limits::profile(crate::limits::Profile::Small).forge;
+    let gates: Box<[_]> = (0..limits.gates.checked_add(extra).unwrap())
+        .map(|index| format!(r#"{{"name":"gate{index}","workflow":"check.yml","blocking":false}}"#))
+        .collect();
+    let tiers: Box<[_]> = (0..limits.tiers.checked_add(extra).unwrap())
+        .map(|index| format!(r#"{{"name":"tier{index}","workflow":"tier.yml","artifact":"report","format":"lines"}}"#))
+        .collect();
+    let ignored: Box<[_]> = (0..limits.ignored_paths.checked_add(extra).unwrap()).map(|_| r#""docs""#).collect();
+    let repositories: Box<[_]> = (0..limits.repositories.checked_add(extra).unwrap())
+        .map(|index| format!(r#"{{"forge":1,"repository":{index}}}"#))
+        .collect();
+    let name_bytes = usize::try_from(CHECK_NAME_BYTES.checked_add(extra).unwrap()).unwrap();
+    let workflow_bytes = usize::try_from(WORKFLOW_BYTES.checked_add(extra).unwrap()).unwrap();
+    let path_bytes = usize::try_from(limits.name_bytes.checked_add(extra).unwrap()).unwrap();
+    Box::new([
+        (b"landing.projects[0].gates[0].tiers", format!("[{}]", tiers.join(",")).into_boxed_str(), "gates[0].tiers"),
+        (b"landing.projects[0].gates[0].gates", format!("[{}]", gates.join(",")).into_boxed_str(), "gates[0].gates"),
+        (
+            b"landing.projects[0].gates[0].gates[0].ignored",
+            format!("[{}]", ignored.join(",")).into_boxed_str(),
+            "gates[0].gates[0].ignored",
+        ),
+        (
+            b"landing.projects[0].gates[0].gates[0].name",
+            format!("\"{}\"", "n".repeat(name_bytes)).into_boxed_str(),
+            "gates[0].gates[0].name",
+        ),
+        (
+            b"landing.projects[0].gates[0].gates[0].workflow",
+            format!("\"{}\"", "w".repeat(workflow_bytes)).into_boxed_str(),
+            "gates[0].gates[0].workflow",
+        ),
+        (
+            b"landing.projects[0].gates[0].gates[0].ignored[0]",
+            format!("\"{}\"", "p".repeat(path_bytes)).into_boxed_str(),
+            "gates[0].gates[0].ignored[0]",
+        ),
+        (
+            b"landing.projects[0].gates[0].tiers[0].artifact",
+            format!("\"{}\"", "a".repeat(name_bytes)).into_boxed_str(),
+            "gates[0].tiers[0].artifact",
+        ),
+        (b"landing.projects[0].gates", format!("[{}]", repositories.join(",")).into_boxed_str(), "gates"),
+    ])
+}
+
+#[test]
+fn each_bound_of_an_entry_refuses_one_past_it() {
+    let jig = fixtures::engine().jig;
+    for (member, value, line) in check_bound_rows(1) {
+        let (members, problems) = application(&fixtures::with(&landing_checks_input(), member, value.as_bytes()), &jig);
+        assert!(members.is_none(), "{line}");
+        assert_eq!(
+            lines(&problems).as_ref(),
+            format!("application.landing.projects[0].{line}: past its bound\n").as_bytes()
+        );
+    }
+}
+#[test]
+fn each_bound_of_an_entry_takes_its_bound() {
+    let jig = fixtures::engine().jig;
+    for (member, value, line) in check_bound_rows(0) {
+        let (members, problems) = application(&fixtures::with(&landing_checks_input(), member, value.as_bytes()), &jig);
+        assert_eq!(lines(&problems).as_ref(), b"", "{line}");
+        assert!(members.is_some(), "{line}");
+    }
+}
+#[test]
+fn malformed_checks_are_refused() {
+    let jig = fixtures::engine().jig;
+    for (member, value, line, reason) in [
+        ("gates[0].gates[0].name", r#""a/b""#, "gates[0].gates[0].name", "invalid form"),
+        ("gates[0].gates[0].name", r#""""#, "gates[0].gates[0].name", "invalid form"),
+        ("gates[0].tiers[0].name", r#""focused""#, "gates[0].tiers[0].name", "must be unique"),
+        ("gates[0].tiers[1].name", r#""fuzzy""#, "gates[0].tiers[1].name", "must be unique"),
+        ("gates[0].gates[0].workflow", r#""a/b""#, "gates[0].gates[0].workflow", "invalid form"),
+        ("gates[0].gates[0].workflow", r#""""#, "gates[0].gates[0].workflow", "invalid form"),
+        ("gates[0].gates[0].ignored[0]", r#""/docs""#, "gates[0].gates[0].ignored[0]", "invalid form"),
+        ("gates[0].gates[0].ignored[0]", r#""docs/""#, "gates[0].gates[0].ignored[0]", "invalid form"),
+        ("gates[0].gates[0].ignored[0]", r#""a//b""#, "gates[0].gates[0].ignored[0]", "invalid form"),
+        ("gates[0].gates[0].ignored[0]", r#""a/./b""#, "gates[0].gates[0].ignored[0]", "invalid form"),
+        ("gates[0].gates[0].ignored[0]", r#""../x""#, "gates[0].gates[0].ignored[0]", "invalid form"),
+        ("gates[0].gates[0].ignored[0]", r#""""#, "gates[0].gates[0].ignored[0]", "invalid form"),
+        ("gates[0].tiers[0].artifact", r#""""#, "gates[0].tiers[0].artifact", "invalid form"),
+        ("gates[0].tiers[0].artifact", r#""a/b""#, "gates[0].tiers[0].artifact", "invalid form"),
+        ("gates[0].tiers[0].format", r#""xml""#, "gates[0].tiers[0].format", "invalid form"),
+        ("by", r#""merge""#, "by", "invalid form"),
+        ("suspects", r#""all""#, "suspects", "invalid form"),
+        (
+            "gates",
+            r#"[{"forge":1,"repository":7},{"forge":1,"repository":7}]"#,
+            "gates[1].repository",
+            "must be unique",
+        ),
+        ("gates[0].forge", "2", "gates[0].forge", "unknown reference"),
+    ] {
+        let input = fixtures::with(
+            &landing_checks_input(),
+            format!("landing.projects[0].{member}").as_bytes(),
+            value.as_bytes(),
+        );
+        let (members, problems) = application(&input, &jig);
+        assert!(members.is_none(), "{member}");
+        assert_eq!(
+            lines(&problems).as_ref(),
+            format!("application.landing.projects[0].{line}: {reason}\n").as_bytes(),
+            "{member}"
+        );
+    }
+}
+#[test]
+fn turn_into_a_github_repository_is_refused() {
+    let jig = fixtures::engine().jig;
+    let input = github_input(core::str::from_utf8(&landing_checks_input()).unwrap());
+    let (members, problems) = application(input.as_bytes(), &jig);
+    assert!(members.is_none());
+    assert_eq!(lines(&problems).as_ref(), b"application.landing.projects[0].gates[0].forge: invalid form\n");
+}
