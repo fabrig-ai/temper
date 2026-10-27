@@ -894,6 +894,7 @@ impl World {
             | Delivery::ReadLoad { .. }
             | Delivery::Drained
             | Delivery::Restart(_)
+            | Delivery::NotesLoad { .. }
             | Delivery::Load { .. }
             | Delivery::CarriedUnused { .. }) => panic!("unscripted released delivery: {other:?}"),
         }
