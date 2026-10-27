@@ -44,7 +44,11 @@ pub const ENGINE: &[u8] = br#"{
 "providers": [{"number": 1, "kind": "link"}, {"number": 2, "kind": "deployment"}],
 "connectors": [1],
 "memory_bytes": 1152921504606846976,
-"projects": [{"number": 1, "roles": [{"connector": 1, "permission": 1, "role": 0}],
+"projects": [{"number": 1, "policy": 1}]
+}"#;
+
+// Jig's inline input is retained only to exercise policy decoding and typed guards.
+pub const INLINE_PROJECTS: &[u8] = br#"[{"number": 1, "roles": [{"connector": 1, "permission": 1, "role": 0}],
 "policy": {"templates": [], "escalation_role": 0, "period_spend": 100, "projections": [], "requirements": [],
 "ceiling": {"tools": 1, "grants": [],
 "delegation": {"kinds": [{"kind": "charter", "number": 1}], "tasks": 8, "depth": 4},
@@ -53,8 +57,7 @@ pub const ENGINE: &[u8] = br#"{
 "authority": {"tools": 1, "grants": [],
 "delegation": {"kinds": [{"kind": "charter", "number": 1}], "tasks": 8, "depth": 4},
 "budget": {"spend": 100, "deadline_unix_seconds": null}, "notes": 0, "note_resources": []}}]
-}}]
-}"#;
+}}]"#;
 
 pub fn engine() -> settings::Engine {
     let jig = parse_engine(ENGINE);
@@ -114,7 +117,7 @@ pub fn parse_engine(bytes: &[u8]) -> jig_protocol_config::Engine {
 /// Startup guards keep the small policy bound; they never make the core.
 pub fn guard_engine() -> settings::Engine {
     let mut settings = engine();
-    settings.jig.limits.core.policy_bytes = 512;
+    settings.jig.limits.core.policy_bytes = 4096;
     settings
 }
 
@@ -930,8 +933,8 @@ pub fn clients() -> crate::clients::Clients {
 mod startup;
 pub use startup::{
     APPLICATION, demo_application, demo_service, document, engine_alone_document, files, owned_worker_agent,
-    owned_worker_alone_document, parsed, startup_agent, value, webhook_document, with, without, without_settings,
-    worker_alone_document, worker_runtime,
+    owned_worker_alone_document, parsed, startup_agent, value, webhook_document, with, without, worker_alone_document,
+    worker_runtime,
 };
 pub fn forge_runtime() -> skein_lib::List<crate::ForgeRuntime> {
     let mut runtime = skein_lib::List::with_capacity(1);

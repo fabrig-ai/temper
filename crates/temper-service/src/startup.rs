@@ -465,6 +465,25 @@ fn load_with(
     }
     Ok((shape, parsed))
 }
+// Temper seeds name settings; jig also serves callers that accept inline policies.
+fn inline_seed_policies(document: &skein_json::Document, engine: u32, problems: &mut Problems) {
+    let Some(projects) = member(document, engine, b"projects") else { return };
+    let Ok(projects) = read::list(document, projects, document.len()) else { return };
+    for (index, project) in projects.iter().enumerate() {
+        if let Some(policy) = member(document, *project, b"policy")
+            && document.token(policy).expect("policy token").kind == skein_json::document::Kind::ObjectStart
+        {
+            problems.push(
+                Path::root()
+                    .member(b"engine")
+                    .member(b"projects")
+                    .child(Segment::Index(u32::try_from(index).expect("bounded projects")))
+                    .member(b"policy"),
+                What::InlineSeedPolicy,
+            );
+        }
+    }
+}
 #[expect(clippy::too_many_lines, reason = "one load pass accumulates all cross-part diagnostics")]
 fn load_document(
     document: &skein_json::Document,
@@ -494,6 +513,13 @@ fn load_document(
         whole.finish(document, &root, &mut found);
     }
     problems.append(found, &root);
+    if let Some(at) = engine_at {
+        let before = problems.problems.len();
+        inline_seed_policies(document, at, &mut problems);
+        if problems.problems.len() != before {
+            return Err(problems);
+        }
+    }
     let engine = match engine_at {
         Some(at) => match engine_checked(document, at, directories, given) {
             Ok(mut engine) => {

@@ -163,7 +163,7 @@ pub(crate) fn write(path: &Path, address: SocketAddr, clients: SocketAddr, fixtu
             grant["pattern"]["value"] = address.to_string().into();
         }
     };
-    for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+    for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
         broaden(&mut project["policy"]["ceiling"]["grants"]);
         broaden(&mut project["policy"]["roles"][0]["authority"]["grants"]);
         broaden(&mut project["policy"]["projections"]);

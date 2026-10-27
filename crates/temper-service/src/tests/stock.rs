@@ -148,6 +148,17 @@ fn each_member_is_refused_at_startup_naming_temper_ctl_settings() {
 }
 
 #[test]
+fn an_inline_seed_policy_is_refused_naming_its_path() {
+    let document = fixtures::with(&generated(), b"engine.projects", fixtures::INLINE_PROJECTS);
+    let problems = crate::startup::named(&document, &config::Directories::working()).unwrap_err();
+    assert_eq!(problems.problems.len(), 1);
+    assert_eq!(
+        crate::startup::lines(&problems).as_ref(),
+        b"engine.projects[0].policy: name a policy, policy: 1; change it with temper ctl settings apply\n"
+    );
+}
+
+#[test]
 fn stock_startup_requires_a_model_before_building_its_charters() {
     let mut document = generated();
     for path in [b"engine.llm.providers".as_slice(), b"engine.llm.endpoints", b"engine.llm.models"] {

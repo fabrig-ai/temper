@@ -64,7 +64,7 @@ pub fn fixture() -> forge::Fixture {
             crate::fixtures::requester(value);
             value["world_settings"]["maximum_run_spend"] = 32.into();
             value["world_settings"]["cap"] = 1000.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 let policy = &mut project["policy"];
                 policy["period_spend"] = 1000.into();
                 policy["roles"][0]["period_spend"] = 1000.into();

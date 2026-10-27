@@ -144,6 +144,7 @@ fn encode(scripts: &[Script], rules: &[Box<[Rule]>]) -> Value {
 /// Bring the cluster fixture's combined document to tests/real-loop/src/fixtures.rs's base
 /// before applying the case fixture once, as that world's cluster does.
 fn base(value: &mut Value) {
+    temper_real_loop_world::settings::stage_policies(value);
     for member in ["charters", "templates", "policies", "rules"] {
         value["engine"].as_object_mut().expect("engine").remove(member);
     }

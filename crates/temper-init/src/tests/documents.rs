@@ -1,7 +1,7 @@
 use super::fixtures::{self, DIRECTORIES, cases, content, parse, text};
 use crate::{files, template};
 use serde_json::{Value, json};
-use skein_lib::{Stack, bytes};
+use skein_lib::bytes;
 
 fn set(value: &mut Value, path: &str, replacement: Value) {
     *value.pointer_mut(path).expect("the member exists in the owned example") = replacement;
@@ -9,36 +9,6 @@ fn set(value: &mut Value, path: &str, replacement: Value) {
 
 fn every_forge() -> Value {
     json!({"segments": ["forge"], "last": "open", "value": ""})
-}
-
-fn replace_org_patterns(document: &mut Value) -> u32 {
-    let org = json!({"segments": ["forge", "127.0.0.1:3000"], "last": "open", "value": "acme"});
-    let mut pending = Stack::with_capacity(4096);
-    pending.push(document).expect("the root fits");
-    let mut replaced = 0_u32;
-    for _ in 0..4096_u32 {
-        let Some(value) = pending.pop() else { break };
-        if *value == org {
-            *value = every_forge();
-            replaced = replaced.checked_add(1).expect("the owned example's pattern count fits");
-            continue;
-        }
-        match value {
-            Value::Array(items) => {
-                for item in items {
-                    pending.push(item).expect("the owned example fits the traversal bound");
-                }
-            }
-            Value::Object(members) => {
-                for member in members.values_mut() {
-                    pending.push(member).expect("the owned example fits the traversal bound");
-                }
-            }
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
-        }
-    }
-    assert!(pending.is_empty(), "every owned example member was visited");
-    replaced
 }
 
 #[test]
@@ -133,10 +103,7 @@ fn the_default_is_the_owned_example_so_edited() {
                 }
             }
         }
-        assert_eq!(replace_org_patterns(&mut expected), 30, "{row}");
         expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(12_288_u32);
-        expected["engine"]["projects"][0]["policy"] = json!(1_u32);
-        expected["engine"]["projects"][0].as_object_mut().unwrap().remove("roles");
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.output"] = json!(82_u32);

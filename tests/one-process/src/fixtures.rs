@@ -103,6 +103,11 @@ pub(crate) fn client_limits() -> temper_client_shell_terminal::limits::Limits {
     limits
 }
 pub(crate) fn document() -> Vec<u8> {
+    let mut value = world_document();
+    value.as_object_mut().expect("deployment").remove("world_settings");
+    serde_json::to_vec(&value).expect("deployment JSON")
+}
+pub(crate) fn world_document() -> serde_json::Value {
     let mut value: serde_json::Value = serde_json::from_slice(&channel::engine_document()).expect("engine JSON");
     value.as_object_mut().expect("object").remove("service");
     let worker: serde_json::Value = serde_json::from_slice(channel::WORKER_DOCUMENT).expect("worker JSON");
@@ -133,12 +138,13 @@ pub(crate) fn document() -> Vec<u8> {
         "setup":[],"demo":null,"sign_in":null,"landing":{"deployment":[],"projects":[]},"charter":1,
         "limits":{"profile":"small","overrides":{"checkout.name_bytes":256,"checkout.repositories":2,"checkout.message_bytes":4096,"forge.name_bytes":64,"forge.resources_per_task":2,"git_component.stdout_bytes":2048}},
         "workers":[{"root":"worker","git":"/usr/bin/git"}]});
+    crate::settings::stage_policies(&mut value);
     crate::stories::configure(&mut value);
     for member in ["charters", "templates", "policies", "rules"] {
         value["engine"].as_object_mut().expect("engine").remove(member);
     }
     if crate::stories::uses_stock() {
-        for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        for project in value["world_settings"]["policies"].as_array_mut().expect("world policies") {
             project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
             for role in project["policy"]["roles"].as_array_mut().expect("roles") {
                 role["authority"]["delegation"]["depth"] = 4.into();
@@ -166,7 +172,7 @@ pub(crate) fn document() -> Vec<u8> {
     value["engine"]["limits"]["overrides"]["authority.projects"] = 2.into();
     value["engine"]["limits"]["overrides"]["tasks.funders"] = 4.into();
     turn_bounds::apply(&mut value, agent().limits.bodies.turn_body);
-    serde_json::to_vec(&value).expect("deployment JSON")
+    value
 }
 pub(crate) fn files() -> temper_service::settings::Files {
     let mut entries = List::with_capacity(10);
