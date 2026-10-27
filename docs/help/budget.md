@@ -14,9 +14,11 @@ A budget is what a task may spend, in units its models' prices make of their usa
 - **A task's budget** is the spend its authority allows, and its
   deadline, a wall time, where it has one.
 - **A project's period** funds all of its work: temper may spend up
-  to N units in it, N the project's period spend. Its one period opens
-  at the project's making and never renews; `project fund PROJECT
-  AMOUNT` sets N, and resizes the open period with it at once.
+  to N units in it, N the project's period spend. Its first period
+  opens at the project's making, and each period lasts a week: at its
+  next start the next opens, full, at the period spend its policy holds
+  then. `project fund PROJECT AMOUNT` sets N, and resizes the open
+  period with it at once.
 - **Funding** comes from a person's pool, carved from the project's
   period up to their role's period spend, from an ancestor task, or
   from a recurring task.
@@ -48,7 +50,7 @@ A budget is what a task may spend, in units its models' prices make of their usa
   when both hold; `task show` prints `Held`, and its record names the
   reason.
 - **The period spent:** nothing more in the project is funded until
-  it is raised. `project fund PROJECT AMOUNT` raises the project's
+  the next period opens, or until it is raised. `project fund PROJECT AMOUNT` raises the project's
   period spend, and the open period's budget with it. A person's chats
   are funded from their pool, which their role's period spend sizes and
   which reserves from the period, so raise the role's next: `project
@@ -90,9 +92,10 @@ A budget is what a task may spend, in units its models' prices make of their usa
   accepted proposal or an amendment within its funder's authority.
 - temper does not refill a task when settings change: a new run cap
   applies to later runs.
-- temper does not renew a project's period: what its period spend
-  allows, raised or not, is all the project gets. temper has no weekly
-  budget.
+- A period lasts a week, from the project's first; the week is not a
+  setting. An unspent period is not carried over, and what an old one
+  reserved stays its own. A deployment stopped past a next start opens
+  one period when it starts, from then: `temper help weekly-budget`.
 - ctl changes a project's own policy in its spends alone (`project
   fund`); `settings show` reads policy 1, which only new projects
   copy.

@@ -73,12 +73,14 @@ to date with its base, a gate, and approvals.
 
 ## Limits
 
-- temper may spend, for a project, its period spend: its one period
-  never renews. `project fund PROJECT AMOUNT` raises it, the open
+- temper may spend, for a project, its period spend a week: each week
+  a new period opens, full, at the spend its policy holds then
+  (`temper help weekly-budget`). `project fund PROJECT AMOUNT` raises it, the open
   period's budget at once; with `--role ROLE` it raises a role's, which
   each of its parties' pools takes, and a role's raise the period has no
   room for is refused, naming what the period has left. When it is
-  spent, nothing more in the project is funded until it is raised. A
+  spent, nothing more in the project is funded until the next week, or
+  until it is raised. A
   project made after a change of `policy 1` starts with the new period
   spend.
 - temper does not change a project's own policy through settings; ctl
