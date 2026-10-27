@@ -66,7 +66,7 @@ pub(super) fn text(
             }
             c::Delivery::OwnerInbox(inbox) => {
                 for row in inbox.needs.as_slice().iter().chain(inbox.updates.as_slice()).take(most) {
-                    super::super::lists::object(row.card_key(), out);
+                    super::super::lists::owner_inbox_row(row, book, out);
                 }
             }
             c::Delivery::Run(_) => super::super::activity::run(delivery, None, out),

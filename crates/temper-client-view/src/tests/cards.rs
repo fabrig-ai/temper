@@ -51,7 +51,7 @@ const HOLDS: [(c::HoldCategory, &[u8]); 6] = [
 fn numbered_hold_reasons_keep_the_documents_supplied_identity() {
     for (reason, expected) in HOLDS {
         let mut builder = Builder::new(&fixtures::tree_limits());
-        crate::cards::hold(&mut builder, &reason, &fixtures::words());
+        crate::cards::hold(&mut builder, OTHER_TASK, &reason, &fixtures::words());
         assert_eq!(fixtures::text(&builder.finish()).as_ref(), expected);
     }
 }
@@ -363,4 +363,26 @@ fn a_non_batch_proposal_keeps_its_deciding_facts() {
     assert!(skein_lib::bytes::find(&fixtures::text(&tree), b"Make a goal").is_some());
     assert!(skein_lib::bytes::find(&fixtures::text(&tree), b"Make task 9 yours").is_some());
     assert!(fixtures::find(&tree, skein_ui::Role::Term, b"Landing").is_none());
+}
+
+#[test]
+fn a_budget_held_card_names_the_task_to_amend_and_explains_release() {
+    let mut task = fixtures::task::document();
+    task.chip.task = OTHER_TASK;
+    task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+        circle: None,
+        account: None,
+        source: None,
+        reason: c::HoldCategory::Budget,
+        revision: 1,
+        before: c::OwnerPriorPhase::Active(c::RunStage::Idle),
+        escalation: None,
+        tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
+        hold_wait_since: None,
+    })));
+    let mut builder = Builder::new(&fixtures::tree_limits());
+    crate::cards::proposal(&mut builder, &c::ReadValue::Task(Box::new(task)), &fixtures::words(), 4);
+    let text = fixtures::text(&builder.finish());
+    assert!(skein_lib::bytes::find(&text,
+        b"Insufficient activation budget. A release alone holds it again: give the task more budget (amend 12 with a larger budget, or decide its budget proposal), then release it; or cancel it.").is_some(), "{text:?}");
 }

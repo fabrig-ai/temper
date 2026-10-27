@@ -133,11 +133,30 @@ pub fn world_with_long_turns(seed: u64) -> World<Temper, Joint> {
     world_with(seed, Joint::with_long_turns(seed, &domain_limits()))
 }
 
+/// Jig's referee checks decision text, independently of the application's view
+/// phrase shapes. Keep its complete jig vocabulary, replacing only the funding
+/// decision that temper renders differently. Held cards use the view's own book.
+#[must_use]
+pub fn decision_words() -> skein_ui::phrases::Language {
+    let mut language = jig_client::words::english();
+    let funds = jig_client::words::Word::Decision(jig_client::words::DecisionWord::Funds).id();
+    for phrase in view::words::jig_language().phrases {
+        if phrase.id == funds {
+            for target in &mut language.phrases {
+                if target.id == funds {
+                    *target = phrase.clone();
+                }
+            }
+        }
+    }
+    language
+}
+
 fn world_with(seed: u64, front: Joint) -> World<Temper, Joint> {
     let mut world = World::new(
         Settings {
             seed,
-            words: view::words::jig_language(),
+            words: decision_words(),
             heap_bytes_per_client: 64 * 1024 * 1024,
             iterations: 4096,
             ..Settings::default()

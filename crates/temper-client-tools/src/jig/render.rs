@@ -159,8 +159,9 @@ impl Part<'_> {
         }
     }
 }
-/// Application vocabulary for parts and changes, borrowed for this step alone.
+/// Application vocabulary for enum phrases, parts and changes, borrowed for this step alone.
 pub trait Parts: core::fmt::Debug {
+    fn phrasebook(&self, text: u32) -> skein_ui::phrases::Phrasebook;
     fn task_next(&self, task: &contract::Task, out: &mut Text);
     fn owner_part(&self, part: &contract::OwnerPart, out: &mut Text);
     fn part(&self, part: &contract::Part, out: &mut Text);

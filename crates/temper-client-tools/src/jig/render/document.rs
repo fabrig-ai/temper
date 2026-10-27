@@ -76,7 +76,7 @@ pub(crate) fn print(
         encode(&document, limits, digest, &mut write);
         write.finish()
     } else {
-        let book = phrasebook(limits.text);
+        let book = vocabulary.phrasebook(limits.text);
         let mut measure = Text::measure();
         text(&document, &book, limits, vocabulary, &mut measure);
         let structural = measure.structural();
@@ -282,7 +282,22 @@ fn task_text(
             out.put(b"\n");
         }
     }
+    if let Some(jig_client::contract::TaskHold::Owner(hold)) = &task.hold
+        && hold.reason == jig_client::contract::HoldCategory::Budget
+    {
+        budget_hold_text(task.chip.task, book, out);
+    }
+    if let Some(jig_client::contract::TaskHold::Document(hold)) = &task.hold
+        && let jig_client::contract::HoldReason::Budget { .. } = hold.reason
+    {
+        budget_hold_text(task.chip.task, book, out);
+    }
     acts::text(task, me, book, out);
+}
+pub(super) fn budget_hold_text(task: u64, book: &Phrasebook, out: &mut Text) {
+    let word = Word::hold(&jig_client::contract::HoldCategory::Budget);
+    out.put(&book.say(0, word.id(), &[skein_ui::phrases::Hole::Number(task)]).expect("budget hold phrase").text);
+    out.put(b"\n");
 }
 fn requester(value: OwnerRequester, me: Option<&Me>, out: &mut Text) {
     match value {
