@@ -504,3 +504,86 @@ fn an_authority_hold_prints_its_precise_cause_in_text_and_json() {
         contains(&printed.stdout, reason);
     }
 }
+
+// The QA change's panel names a reviewer that remains held through restart.
+const REVIEWER: u64 = 8;
+// QA's 12 s condition timeout is shorter than the link's 30 s deadline.
+const RESTART_TIMEOUT: Duration = Duration::from_secs(12);
+fn reviewing(root: &mut f::Harness, call: u32) {
+    let mut parts = panel(w::Step::Gating).into_parts();
+    parts.runs = Some(REVIEWER);
+    root.serving = Some(call);
+    deliver(root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+    root.serving = None;
+}
+fn reviewing_call(argv: &[&str]) -> (f::Harness, u32) {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(argv);
+    reviewing(&mut root, call);
+    (root, call)
+}
+fn stop_panel(root: &mut f::Harness, call: u32) {
+    let token = root.watch_token(&change::subject(2, 1, &root.limits));
+    root.serving = Some(call);
+    root.client(client::Event::Up { up: client::Up::WatchEnded { watch: token, end: c::WatchEnd::Stopping } });
+    root.serving = None;
+}
+#[test]
+fn a_change_wait_keeps_its_panel_when_a_restart_cuts_its_read() {
+    let (mut root, call) =
+        reviewing_call(&["change", "show", "2", "--project", "1", "--until", "landed", "--timeout", "12s"]);
+    stop_panel(&mut root, call);
+    root.serve(call, c::ReadResult::None(c::ReadNone::Unreachable));
+    let answer = match root.answer(call) {
+        Some(answer) => Some((answer.status, answer.stderr)),
+        None => None,
+    };
+    assert_eq!(answer, None);
+    root.now = root.now.saturating_add(RESTART_TIMEOUT);
+    root.serving = Some(call);
+    root.fire();
+    let answer = root.answer(call).expect("condition timeout answers");
+    assert_eq!(answer.status, 3);
+    contains(&answer.stdout, b"step: gating");
+    contains(&answer.stdout, b"not met: timeout");
+    assert!(answer.stderr.is_empty());
+}
+#[test]
+fn a_stopping_panel_does_not_read_its_stale_reviewer() {
+    let (mut root, call) = reviewing_call(&["change", "show", "2", "--project", "1", "--until", "landed"]);
+    root.serve(call, f::task_result(f::held_task(f::goal(REVIEWER, c::WaitsOn::Nothing), c::HoldCategory::Budget)));
+    stop_panel(&mut root, call);
+    assert!(root.reads.is_empty(), "a stopping watch is no new panel delivery");
+}
+
+#[test]
+fn a_retried_reviewer_read_keeps_its_target_and_hold() {
+    let (mut root, call) =
+        reviewing_call(&["change", "show", "2", "--project", "1", "--until", "landed", "--timeout", "12s"]);
+    root.serve(call, c::ReadResult::None(c::ReadNone::Unreachable));
+    root.now = root.now.saturating_add(root.limits.domain.client.domain.backoff.first);
+    root.serving = Some(call);
+    root.fire();
+    root.serving = None;
+    assert_eq!(root.reads[&call].1, c::Read::Task { task: REVIEWER });
+    root.serve(call, f::task_result(f::held_task(f::goal(REVIEWER, c::WaitsOn::Nothing), c::HoldCategory::Budget)));
+    root.now = root.now.saturating_add(RESTART_TIMEOUT);
+    root.fire();
+    let answer = root.answer(call).expect("condition timeout");
+    assert_eq!(answer.status, 3);
+    contains(&answer.stdout, b"held: task 8 (Insufficient activation budget)");
+}
+#[test]
+fn reviewer_read_refusals_keep_their_ordinary_status_and_line() {
+    for (why, status, line) in [
+        (c::ReadNone::Unknown, 2, b"unknown\n".as_slice()),
+        (c::ReadNone::Busy, 1, b"busy\n"),
+        (c::ReadNone::SignedOut, 1, b"signed out\n"),
+    ] {
+        let (mut root, call) = reviewing_call(&["change", "show", "2", "--project", "1"]);
+        root.serve(call, c::ReadResult::None(why));
+        let answer = root.answer(call).expect("read refusal");
+        assert_eq!(answer.status, status);
+        assert_eq!(answer.stderr.as_ref(), line);
+    }
+}

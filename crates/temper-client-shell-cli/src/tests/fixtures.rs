@@ -15,6 +15,7 @@ macro_rules! encode {
         writer.finish()
     }};
 }
+pub mod changes;
 pub mod local;
 pub mod moves;
 pub mod recovery;
@@ -85,6 +86,8 @@ pub struct Frame {
     watch: Option<u64>,
     wait_task: Option<u64>,
     stopping: Option<()>,
+    change: bool,
+    read_unreachable: bool,
     stream: Option<Fd>,
     stdout: Vec<u8>,
     next_socket: i32,
@@ -183,6 +186,8 @@ impl Frame {
             watch: None,
             wait_task: None,
             stopping: None,
+            change: false,
+            read_unreachable: false,
             stream: None,
             stdout: Vec::new(),
             next_socket: 100,
@@ -631,7 +636,11 @@ impl Frame {
                 if matches!(open.subject().owner(), w::Owner::Family(_)) {
                     self.wait_task = Some(open.watch());
                     self.reply(fd, &encode!(w::OpenAnswer::Admitted));
-                    self.deliver_setup(false);
+                    if self.change {
+                        self.deliver_change();
+                    } else {
+                        self.deliver_setup(false);
+                    }
                     return;
                 }
                 let subject = w::Subject::decode(&w::CEILINGS, &mut skein_lib::Reader::new(open.subject().record()))

@@ -83,6 +83,14 @@ impl Frame {
         &self.acts
     }
     pub(super) fn read_task(&mut self, fd: Fd) {
+        if self.read_unreachable {
+            self.sockets
+                .get_mut(&fd)
+                .expect("read socket")
+                .reply
+                .extend(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n");
+            return;
+        }
         let lim = jig_client_test_records::limits();
         let mut parts = jig_client_test_records::task_record().into_parts();
         parts.project = 3;

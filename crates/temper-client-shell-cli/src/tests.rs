@@ -951,3 +951,49 @@ fn a_cold_setup_past_its_allowance_names_the_forges_and_timeout() {
         assert!(f.stderr().is_empty());
     }
 }
+
+#[test]
+fn a_change_wait_retries_not_ready_reads_to_the_link_deadline() {
+    let mut f = fixtures::Engine::change_wait("60s");
+    f.change_task_not_ready();
+    f.advance_live(fixtures::waits::BEFORE_DEADLINE);
+    assert_eq!(f.exit(), None, "{}", String::from_utf8_lossy(f.stderr()));
+    assert_eq!(f.stderr(), b"");
+    f.advance_live(limits::native().root.domain.client.domain.backoff.first);
+    assert_eq!(f.exit(), Some(Exit::Code(1)));
+    assert_eq!(f.stderr(), b"temper ctl: the engine at http://127.0.0.1:4000 did not answer within 30 s\n");
+}
+#[test]
+fn a_change_wait_rides_a_stopping_engine_to_its_timeout() {
+    let mut f = fixtures::Engine::change_wait("12s");
+    f.engine_stopping();
+    f.engine_restarted();
+    f.advance_live(fixtures::changes::TIMEOUT);
+    assert_eq!(f.exit(), Some(Exit::Code(3)), "{}", String::from_utf8_lossy(f.stderr()));
+    assert_eq!(f.stderr(), b"");
+    assert!(f.stdout().ends_with(b"not met: timeout\n"));
+    assert!(
+        f.stdout()
+            .windows(b"held: its wait stalled at gating".len())
+            .any(|part| part == b"held: its wait stalled at gating")
+    );
+}
+#[test]
+fn a_recovered_change_read_releases_the_link_deadline() {
+    let mut f = fixtures::Engine::change_wait("60s");
+    f.change_task_not_ready();
+    f.change_task_ready();
+    f.advance_live(fixtures::waits::LONG_LIVE);
+    assert_eq!(f.exit(), None, "{}", String::from_utf8_lossy(f.stderr()));
+    assert_eq!(f.stderr(), b"");
+}
+#[test]
+fn a_stopping_engine_ends_a_change_wait_at_the_link_deadline() {
+    let mut f = fixtures::Engine::change_wait("60s");
+    f.engine_stopping();
+    f.advance_past(fixtures::waits::BEFORE_DEADLINE);
+    assert_eq!(f.exit(), None);
+    f.advance_past(limits::native().root.domain.client.domain.backoff.first);
+    assert_eq!(f.exit(), Some(Exit::Code(1)));
+    assert_eq!(f.stderr(), b"temper ctl: the engine at http://127.0.0.1:4000 did not answer within 30 s\n");
+}

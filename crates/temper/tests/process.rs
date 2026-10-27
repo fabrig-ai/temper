@@ -4584,6 +4584,7 @@ fn restart_deployment(paths: &[std::path::PathBuf; 3]) -> skein_fake_peers::oaut
 enum ReviewHold {
     BeforeCall,
     AfterCall,
+    AcrossRestart,
 }
 
 // Each review completion spends one fake unit. Twice the landing helper's
@@ -4656,7 +4657,7 @@ fn assert_held_reviewers(calls: &[support::Ended], hold: ReviewHold) {
                     "review never began a run: {reviewer}"
                 );
             }
-            ReviewHold::AfterCall => {
+            ReviewHold::AfterCall | ReviewHold::AcrossRestart => {
                 assert_eq!(reviewer["hold"]["owner"]["reason"], "budget", "budget hold: {reviewer}");
                 assert!(spent > 0, "review ran: {reviewer}");
             }
@@ -4674,6 +4675,11 @@ struct RestartProbe {
 
 const RESTART_CONTROL: RestartProbe =
     RestartProbe { imported: false, cut_start: false, shared_cache: false, hold: ReviewHold::AfterCall };
+
+#[test]
+fn a_change_wait_rides_a_clean_engine_restart_to_its_timeout() {
+    held_review_restart("restart-change-wait", RestartProbe { hold: ReviewHold::AcrossRestart, ..RESTART_CONTROL });
+}
 
 // The same owned deployment must answer ctl after a settled stop with its review held.
 #[test]
@@ -4815,35 +4821,46 @@ fn held_review_restart(case: &str, probe: RestartProbe) {
         Step::Until(Call::new(&["task", "show", "4", "--json"]), b"\"phase\":\"held\""),
         Step::Run(Call::new(&["task", "show", "4", "--json"])),
         Step::Run(Call::new(&["change", "show", "2", "--json"])),
-        Step::Run(Call::new(&[
-            "chat",
-            "start",
-            "--project",
-            "1",
-            "--key",
-            "restart-second",
-            "@second-chat Request another change",
-            "--json",
-        ])),
-        Step::Run(Call::new(&["task", "show", "5", "--until", "replied", "--timeout", "120s", "--json"])),
-        Step::Run(Call::new(&["change", "show", "6", "--until", "ci:passed", "--timeout", "120s", "--json"])),
     ]);
-    if matches!(probe.hold, ReviewHold::BeforeCall) {
-        steps.push(Step::Until(Call::new(&["task", "show", "8", "--json"]), b"\"phase\":\"due\""));
-        steps.push(Step::Run(Call::new(&["task", "stop", "8"])));
+    if !matches!(probe.hold, ReviewHold::AcrossRestart) {
+        steps.extend([
+            Step::Run(Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                "1",
+                "--key",
+                "restart-second",
+                "@second-chat Request another change",
+                "--json",
+            ])),
+            Step::Run(Call::new(&["task", "show", "5", "--until", "replied", "--timeout", "120s", "--json"])),
+            Step::Run(Call::new(&["change", "show", "6", "--until", "ci:passed", "--timeout", "120s", "--json"])),
+        ]);
+        if matches!(probe.hold, ReviewHold::BeforeCall) {
+            steps.push(Step::Until(Call::new(&["task", "show", "8", "--json"]), b"\"phase\":\"due\""));
+            steps.push(Step::Run(Call::new(&["task", "stop", "8"])));
+        }
+        steps.extend([
+            Step::Until(Call::new(&["task", "show", "8", "--json"]), b"\"phase\":\"held\""),
+            Step::Run(Call::new(&["task", "show", "8", "--json"])),
+            Step::Run(Call::new(&["change", "show", "6", "--json"])),
+        ]);
     }
-    steps.extend([
-        Step::Until(Call::new(&["task", "show", "8", "--json"]), b"\"phase\":\"held\""),
-        Step::Run(Call::new(&["task", "show", "8", "--json"])),
-        Step::Run(Call::new(&["change", "show", "6", "--json"])),
-    ]);
-    if !probe.imported {
+    if !probe.imported && !matches!(probe.hold, ReviewHold::AcrossRestart) {
         steps.push(Step::Run(Call::new(&[
             "account",
             "export",
             "1",
             scratch.path().join("exported-login").to_str().expect("scratch path"),
         ])));
+    }
+    if matches!(probe.hold, ReviewHold::AcrossRestart) {
+        steps.extend([
+            Step::Start(Call::new(&["change", "show", "2", "--until", "landed", "--timeout", "12s"])),
+            Step::RestartEngine,
+            Step::Join,
+        ]);
     }
     let stop = || {
         if probe.imported {
@@ -4874,8 +4891,22 @@ fn held_review_restart(case: &str, probe: RestartProbe) {
         support::forge_land::fake_face(issuer, scripts.clone()),
     );
     assert_eq!(first.exit, Some(Exit::Code(0)), "first: {}", String::from_utf8_lossy(&first.stderr));
-    ctl_assert_success(&first.calls);
+    if matches!(probe.hold, ReviewHold::AcrossRestart) {
+        let (wait, setup) = first.calls.split_last().expect("started change wait");
+        ctl_assert_success(setup);
+        assert_eq!(wait.exit, Some(Exit::Code(3)), "{}", String::from_utf8_lossy(&wait.stderr));
+        assert!(wait.stderr.is_empty());
+        let panel = String::from_utf8_lossy(&wait.stdout);
+        assert!(panel.contains("held: task 4") && panel.contains("not met: timeout"), "{panel}");
+        assert!(String::from_utf8_lossy(&first.stderr).contains("restarting"), "engine restarted");
+    } else {
+        ctl_assert_success(&first.calls);
+    }
     assert!(first.checked.is_some(), "all initial steps completed: {}", String::from_utf8_lossy(&first.stderr));
+    if matches!(probe.hold, ReviewHold::AcrossRestart) {
+        scratch.remove();
+        return;
+    }
     assert_held_reviewers(&first.calls, probe.hold);
     if probe.imported {
         assert!(!scratch.path().join("incoming-account.move").exists(), "the deployed account came through import");

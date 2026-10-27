@@ -433,9 +433,20 @@ impl OneShot {
         if self.status.is_some() {
             return;
         }
+        self.client_link();
+    }
+    fn client_link(&mut self) {
         let link = self.root.client().link().state;
+        let reading = self.root.change_read_pending();
+        if self.waiting == Waiting::Condition && self.call.is_none() {
+            if reading && self.until.is_none() {
+                self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+            } else if !reading && link == jig_client::Link::Live {
+                self.until = None;
+            }
+        }
         if link != self.link {
-            if self.waiting == Waiting::Condition && self.call.is_none() && link == jig_client::Link::Live {
+            if self.waiting == Waiting::Condition && self.call.is_none() && link == jig_client::Link::Live && !reading {
                 self.until = None;
             } else if self.link == jig_client::Link::Live && self.until.is_none() {
                 self.until = Some(self.env.now.saturating_add(limits::DEADLINE));

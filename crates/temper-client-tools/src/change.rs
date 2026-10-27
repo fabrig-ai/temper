@@ -49,6 +49,26 @@ enum PanelState {
     Missing,
 }
 #[derive(Debug)]
+enum Reading {
+    Idle,
+    Pending(Handle),
+    Retry(Time),
+}
+impl Reading {
+    fn active(&self) -> bool {
+        match self {
+            Self::Idle => false,
+            Self::Pending(_) | Self::Retry(_) => true,
+        }
+    }
+    fn handle(&self) -> Option<Handle> {
+        match self {
+            Self::Pending(handle) => Some(*handle),
+            Self::Idle | Self::Retry(_) => None,
+        }
+    }
+}
+#[derive(Debug)]
 struct Watching {
     called: Called,
     task: u64,
@@ -58,7 +78,7 @@ struct Watching {
     first: Option<Digest>,
     deadline: Option<Time>,
     panel: Option<Handle>,
-    read: Option<Handle>,
+    read: Reading,
     task_watch: Option<Handle>,
     activity: Option<u64>,
     final_panel: bool,
@@ -78,10 +98,27 @@ impl Changes {
     pub(crate) fn calls(&self) -> usize {
         self.calls.len()
     }
+    pub(crate) fn reading(&self) -> bool {
+        for watch in self.calls.values() {
+            if watch.read.active() {
+                return true;
+            }
+        }
+        false
+    }
     pub(crate) fn next_deadline(&self) -> Option<Time> {
         let mut next = None;
         for call in self.calls.values() {
-            if let Some(deadline) = call.deadline {
+            for deadline in [
+                call.deadline,
+                match call.read {
+                    Reading::Retry(at) => Some(at),
+                    Reading::Idle | Reading::Pending(_) => None,
+                },
+            ]
+            .into_iter()
+            .flatten()
+            {
                 next = Some(match next {
                     Some(old) => deadline.min(old),
                     None => deadline,
@@ -124,7 +161,7 @@ pub(crate) fn call(state: &mut Changes, client: &Client, env: &Env<Limits>, call
             first: None,
             deadline,
             panel: None,
-            read: None,
+            read: Reading::Idle,
             task_watch: None,
             activity: None,
             final_panel: false,
@@ -215,15 +252,15 @@ pub(crate) fn subject(task: u64, project: u32, limits: &Limits) -> Watchable {
 fn read_task(watch: &mut Watching, out: &mut Queue<Out>) {
     watch.run_read = None;
     let handle = handle(watch);
-    watch.read = Some(handle);
+    watch.read = Reading::Pending(handle);
     out.push(Out::Client { event: Event::Read { handle, read: Readable::Jig(c::Read::Task { task: watch.task }) } });
 }
 fn read_run(watch: &mut Watching, run: u64, out: &mut Queue<Out>) {
-    if watch.read.is_some() {
+    if watch.read.active() {
         return;
     }
     let handle = handle(watch);
-    watch.read = Some(handle);
+    watch.read = Reading::Pending(handle);
     watch.run_read = Some(run);
     out.push(Out::Client { event: Event::Read { handle, read: Readable::Jig(c::Read::Task { task: run }) } });
 }
@@ -416,7 +453,14 @@ fn read_page(
 ) -> Option<jig::Printed> {
     let Some(run) = watch.run_read.take() else { return task_read(watch, page, client, env, out) };
     let Readout::Jig(c::ReadResult::Value(value)) = page else {
-        return Some(render::failure(b"could not read the change's task", watch.called.json, 2));
+        return Some(render::read(
+            page,
+            client,
+            Handle { asker: crate::root::RUNNER.asker(), number: 0 },
+            watch.called.json,
+            &env.limits.tools,
+            &crate::root::Parts,
+        ));
     };
     let Some((task, _)) = render::read_task(value) else {
         return Some(render::failure(b"unexpected task document", watch.called.json, 1));
@@ -456,7 +500,7 @@ fn panel_changed(
     out: &mut Queue<Out>,
 ) -> Option<jig::Printed> {
     let doc = client.document(handle)?;
-    if (doc.state == State::Opening || doc.state == State::Behind) && doc.latest.is_none() {
+    if doc.state == State::Opening || doc.state == State::Behind {
         return None;
     }
     let panel = match doc.latest {
@@ -518,15 +562,24 @@ pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told
     let Some(watch) = state.calls.get_mut(&number) else { return };
     let mut printed = None;
     match told {
-        Told::Page { page, .. } if watch.read == Some(handle) => {
-            watch.read = None;
-            printed = read_page(watch, page, client, env, out);
+        Told::Page { page, .. } if watch.read.handle() == Some(handle) => {
+            watch.read = Reading::Idle;
+            if watch.waiting && *page == Readout::Jig(c::ReadResult::None(c::ReadNone::Unreachable)) {
+                // A read cut by a restart (including a not-ready HTTP answer)
+                // keeps its target. The host owns the link deadline and its line.
+                watch.read = Reading::Retry(env.now.saturating_add(env.limits.domain.client.domain.backoff.first));
+            } else {
+                printed = read_page(watch, page, client, env, out);
+            }
         }
         Told::Changed { .. } if watch.panel == Some(handle) => {
             printed = panel_changed(watch, client, env, handle, out);
         }
         Told::Changed { .. } if run_handle(watch) == Some(handle) => {
             let Some(doc) = client.document(handle) else { return };
+            if doc.state == State::Opening || doc.state == State::Behind {
+                return;
+            }
             if let Some(Latest::Jig(c::Delivery::Task(task))) = doc.latest {
                 let (_, run) = watch.run_watch.expect("run watch");
                 if task.chip.task == run {
@@ -551,6 +604,9 @@ pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told
         }
         Told::Changed { .. } if watch.task_watch == Some(handle) => {
             let Some(doc) = client.document(handle) else { return };
+            if doc.state == State::Opening || doc.state == State::Behind {
+                return;
+            }
             if let Some(Latest::Jig(c::Delivery::Task(task))) = doc.latest {
                 if task.chip.task != watch.task {
                     printed = Some(render::failure(b"unexpected task document", watch.called.json, 1));
@@ -656,6 +712,18 @@ pub(crate) fn fire(state: &mut Changes, env: &Env<Limits>, out: &mut Queue<Out>)
             watch.run_hold.as_deref(),
         );
         complete(state, number, printed, out);
+    }
+    for watch in state.calls.values_mut() {
+        if let Reading::Retry(at) = watch.read
+            && at <= env.now
+        {
+            let run = watch.run_read;
+            watch.read = Reading::Idle;
+            match run {
+                Some(run) => read_run(watch, run, out),
+                None => read_task(watch, out),
+            }
+        }
     }
 }
 

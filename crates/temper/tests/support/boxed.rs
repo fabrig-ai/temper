@@ -398,6 +398,7 @@ struct CtlJudge<'a, F, T> {
     expected_exits: Vec<(usize, u8)>,
     release_answers: Option<usize>,
     next_release: Option<Time>,
+    restart_at: Option<Time>,
     face: Option<super::forge_land::FaceProcs>,
     visit: Visit,
     tab: Option<usize>,
@@ -471,12 +472,37 @@ fn release_llm(calls: &mut super::ctl::Calls, peers: &mut [Process], release_ans
         peer.release(name).expect("release scripted review");
     }
 }
+fn restart_engine(
+    calls: &mut super::ctl::Calls,
+    binary: &mut Binary,
+    now: Time,
+    restart_at: &mut Option<Time>,
+    expected_exits: &mut Vec<(usize, u8)>,
+) {
+    if calls.restarting_engine() {
+        // Let the started caller enter its wait before stopping the engine.
+        // This is an action's schedule, not a failure deadline.
+        let at = *restart_at.get_or_insert(now.saturating_add(Duration::from_secs(1)));
+        if now >= at {
+            let engine = find(&binary.tree_status().live_pids, &skein_scratch::paths::binary("temper"), b"serve")
+                .expect("box engine");
+            let status = std::process::Command::new("/usr/bin/kill")
+                .args(["-TERM", &engine.to_string()])
+                .status()
+                .expect("stop engine");
+            assert!(status.success(), "engine accepts a clean stop");
+            let index = calls.engine_restarting();
+            expected_exits.push((index, 3));
+            *restart_at = None;
+        }
+    }
+}
 impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
     fn act(&mut self, now: Time, procs: &mut [Process]) {
         let Process::Calls(calls) = &procs[1] else { panic!("ctl") };
         let failed = calls.ends().iter().enumerate().any(|(index, call)| {
             let expected = self.expected_exits.iter().find(|(at, _)| *at == index).map_or(0, |(_, code)| *code);
-            call.exit != Some(Exit::Code(expected))
+            call.exit.is_some() && call.exit != Some(Exit::Code(expected))
         });
         if let Some(face) = &self.face {
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl") };
@@ -519,6 +545,7 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         }
         let (drivers, peers) = procs.split_at_mut(2);
         let [Process::Binary(binary), Process::Calls(calls)] = drivers else { panic!("box and ctl") };
+        restart_engine(calls, binary, now, &mut self.restart_at, &mut self.expected_exits);
         release_llm(calls, peers, &mut self.release_answers);
         // A release before the response reaches its hold changes nothing.
         // Keep driving it even when the held peer has no io or timer ready
@@ -533,7 +560,7 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         // The box's stderr may end a call: judge the calls again after it.
         let failed = calls.ends().iter().enumerate().any(|(index, call)| {
             let expected = self.expected_exits.iter().find(|(at, _)| *at == index).map_or(0, |(_, code)| *code);
-            call.exit != Some(Exit::Code(expected))
+            call.exit.is_some() && call.exit != Some(Exit::Code(expected))
         });
         let failed = failed
             || self.fail_on_panic.is_some()
@@ -591,7 +618,7 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         } else if self.stopping {
             Some(self.cleanup_deadline)
         } else {
-            Some(self.next_release.map_or(self.deadline, |release| release.min(self.deadline)))
+            [Some(self.deadline), self.next_release, self.restart_at].into_iter().flatten().min()
         }
     }
     fn overdue(&self, _now: Time) -> Option<String> {
@@ -820,6 +847,7 @@ fn run_ctl_peers<T>(
         expected_exits: peers.expected_exits,
         release_answers: None,
         next_release: None,
+        restart_at: None,
         face: face.as_ref().map(|_| super::forge_land::FaceProcs { issuer: 2, visitor: 3, peer: 4 }),
         visit: Visit::AwaitingAddress,
         tab: tab.then_some(2),

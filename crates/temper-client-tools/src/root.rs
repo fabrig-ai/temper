@@ -130,6 +130,12 @@ impl Root {
     pub fn client(&self) -> &Client {
         &self.client
     }
+    /// A change's supplemental read is outstanding, including retry after a
+    /// restart. A condition wait's host keeps its link deadline while this holds.
+    #[must_use]
+    pub fn change_read_pending(&self) -> bool {
+        self.changes.reading()
+    }
     #[must_use]
     pub fn kept(&self) -> u32 {
         self.runner.kept(&self.client)
