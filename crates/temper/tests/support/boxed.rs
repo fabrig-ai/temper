@@ -397,6 +397,7 @@ struct CtlJudge<'a, F, T> {
     fail_on_panic: Option<()>,
     expected_exits: Vec<(usize, u8)>,
     release_answers: Option<usize>,
+    next_release: Option<Time>,
     face: Option<super::forge_land::FaceProcs>,
     visit: Visit,
     tab: Option<usize>,
@@ -429,7 +430,8 @@ fn report_face_stop(calls: &super::ctl::Calls, stderr: &[u8], failed: bool, expi
     eprintln!("face box stderr: {}", String::from_utf8_lossy(stderr));
 }
 fn release_llm(calls: &mut super::ctl::Calls, peers: &mut [Process], release_answers: &mut Option<usize>) {
-    let Some(name) = calls.llm_release() else { return };
+    use skein_fake_peers::llm::Observation;
+    let Some((name, cue)) = calls.llm_release() else { return };
     let peer = peers
         .iter_mut()
         .find_map(|proc| match proc {
@@ -442,13 +444,26 @@ fn release_llm(calls: &mut super::ctl::Calls, peers: &mut [Process], release_ans
             | Process::Visitor(_) => None,
         })
         .expect("scripted model owns the hold");
-    let answered = peer
-        .observations()
-        .iter()
-        .filter(|event| matches!(event, skein_fake_peers::llm::Observation::Answered { .. }))
-        .count();
-    let before = *release_answers.get_or_insert(answered);
-    if answered > before {
+    let observations = peer.observations();
+    let before = *release_answers.get_or_insert(observations.len());
+    let answered = observations.iter().enumerate().skip(before).any(|(index, event)| {
+        let Observation::Answered { connection: Some(connection), .. } = event else { return false };
+        observations[..index]
+            .iter()
+            .rev()
+            .find_map(|event| {
+                if let Observation::Query { connection: queried, query } = event
+                    && queried == connection
+                {
+                    Some(skein_lib::bytes::find(&query.system, cue).is_some())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(false)
+    });
+    if answered {
+        eprintln!("scripted response released: {}", String::from_utf8_lossy(name));
         calls.llm_released();
         *release_answers = None;
     } else {
@@ -505,6 +520,10 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         let (drivers, peers) = procs.split_at_mut(2);
         let [Process::Binary(binary), Process::Calls(calls)] = drivers else { panic!("box and ctl") };
         release_llm(calls, peers, &mut self.release_answers);
+        // A release before the response reaches its hold changes nothing.
+        // Keep driving it even when the held peer has no io or timer ready
+        // (domain/testing.md, 2.6, the scripts' process cadence).
+        self.next_release = calls.llm_release().map(|_| now.saturating_add(Duration::from_millis(20)));
         if printed_link(calls.stdout()).is_some()
             && let Some(on_link) = self.on_link.take()
         {
@@ -527,8 +546,9 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
             eprintln!("last unmet ctl read: {}", String::from_utf8_lossy(&read.stdout));
         }
         if !self.stopping && (calls.idle() || failed || expired || binary.exit_status().is_some()) {
-            if self.face.is_some() {
+            if self.face.is_some() || failed || expired {
                 report_face_stop(calls, binary.stderr(), failed, expired);
+                eprintln!("pending scripted release: {:?}", calls.llm_release());
             }
             if calls.idle() && !failed && !expired && binary.exit_status().is_none() {
                 self.checked.set(Some(self.check.take().expect("one live check")(binary.stderr())));
@@ -566,7 +586,13 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         }
     }
     fn next_deadline(&self) -> Option<Time> {
-        (!self.settled).then_some(if self.stopping { self.cleanup_deadline } else { self.deadline })
+        if self.settled {
+            None
+        } else if self.stopping {
+            Some(self.cleanup_deadline)
+        } else {
+            Some(self.next_release.map_or(self.deadline, |release| release.min(self.deadline)))
+        }
     }
     fn overdue(&self, _now: Time) -> Option<String> {
         None
@@ -789,6 +815,7 @@ fn run_ctl_peers<T>(
         fail_on_panic,
         expected_exits: peers.expected_exits,
         release_answers: None,
+        next_release: None,
         face: face.as_ref().map(|_| super::forge_land::FaceProcs { issuer: 2, visitor: 3, peer: 4 }),
         visit: Visit::AwaitingAddress,
         tab: tab.then_some(2),
