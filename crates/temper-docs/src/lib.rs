@@ -382,6 +382,13 @@ pub static PAGES: [Page; 45] = [
         text: include_str!("../../../docs/help/reference/ctl-revision.md"),
     },
     Page {
+        name: "ctl-project",
+        kind: Kind::Reference,
+        title: "temper ctl project",
+        summary: "Projects: read their periods and pools, set their spend per period.",
+        text: include_str!("../../../docs/help/reference/ctl-project.md"),
+    },
+    Page {
         name: "ctl-playground",
         kind: Kind::Reference,
         title: "temper ctl playground",
