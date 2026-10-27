@@ -261,7 +261,11 @@ fn entry() -> d::Stored {
             task: 4,
             repository: REPO,
             effect: Effect {
-                write: ForgeWrite::Merge { number: 1, head: skein_fake_forge_protocol::routes::object(2).bytes },
+                write: ForgeWrite::Merge {
+                    number: 1,
+                    head: skein_fake_forge_protocol::routes::object(2).bytes,
+                    how: skein_forge::api::MergeHow::Style,
+                },
                 condition: Condition::None,
             },
             start: None,
