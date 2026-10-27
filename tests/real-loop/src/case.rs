@@ -246,8 +246,8 @@ pub fn kit_tree() -> Box<[api::File]> {
     tree.into_boxed_slice()
 }
 
-// The seeded first repository's object spelling; derived again in the test below.
-const DRAFT_COMMIT: &str = "910a2dec89025cc1000000000000000100000000000000000000000000000000";
+// The seeded first repository's SHA-1 spelling; derived again in the test below.
+const DRAFT_COMMIT: &str = "910a2dec89025cc1000000000000000100000000";
 
 #[must_use]
 pub fn draft_commit() -> String {
@@ -266,7 +266,8 @@ mod identity_tests {
         let first = domain::repository(&mut domain, &config, (fixture().setup)());
         let object = skein_fake_forge_protocol::routes::object(first);
         let mut words = String::new();
-        for byte in object.bytes {
+        assert!(object.bytes[20..].iter().all(|byte| *byte == 0), "seeded repository uses SHA-1");
+        for byte in &object.bytes[..20] {
             use std::fmt::Write;
             write!(words, "{byte:02x}").expect("commit hex");
         }

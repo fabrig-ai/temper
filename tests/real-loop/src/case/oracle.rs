@@ -4570,7 +4570,7 @@ fn direction_news(observed: &Observed, misses: &mut Vec<Miss>) {
         news.len() == 1
             && news.first().is_some_and(|row| {
                 let words = text(row, "/line/heard/words");
-                let suffix = landing.get(..8).map(|head| format!(" -> {head}"));
+                let suffix = landing.lines().next().map(|commit| format!(" -> {commit}"));
                 direction_news_identity(&rows, row)
                     && number(row, "/line/heard/from/task") == Some(OVERLAP_OWNER)
                     && number(row, "/line/heard/hits") == Some(1)
@@ -4805,7 +4805,7 @@ mod direction_tests {
         documents.get_mut(&Read::PlannedRunning).expect("h1")["task"]["spec"] = json!({"specification":{
             "parameters":[{"bytes":{"name":6,"value":{"bytes":B_FILE,"cut":false}}}]
         }});
-        let news = format!("forge landing 12345678 -> {}", &direction_commit(9)[..8]);
+        let news = format!("forge landing {} -> {}", direction_commit(8), direction_commit(9));
         let rows: Vec<_> = [
             json!({"run_began":{"attempt":1}}),
             json!({"run_ended":{"attempt":1,"end":"parked","spent":1}}),
@@ -4879,7 +4879,7 @@ mod direction_tests {
 
     fn met() -> Observed {
         let documents = documents();
-        let news = format!("forge landing 12345678 -> {}", &direction_commit(9)[..8]);
+        let news = format!("forge landing {} -> {}", direction_commit(8), direction_commit(9));
         let amendment = tool(
             "amend",
             "amend",
