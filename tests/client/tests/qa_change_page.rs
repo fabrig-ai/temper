@@ -160,6 +160,11 @@ fn a_change_prepared_by_the_existing_engine_driver_shows_its_current_line() {
     let step = value.step().clone();
     let page = text(&world, client);
     let line = match step {
+        w::Step::Ready(ref ready) => match ready.landing() {
+            Some(_) => "Ready: its landing, task ",
+            None => "Ready: waiting for room for its landing.",
+        },
+        w::Step::Preparing(_) => "Being rebased onto main for its landing.",
         w::Step::Producing => "Producing its branch.",
         w::Step::Opening => "Opening its pull request.",
         w::Step::Recreating => "Making its branch again at the head temper last knew.",

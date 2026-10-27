@@ -41,6 +41,7 @@ pub struct Root {
     adopter: crate::forge::Adopter,
     forges: crate::forges::Forges,
     changes: crate::change::Changes,
+    landings: crate::landing::Landings,
     next: Option<u32>,
     recovery: crate::recovery::Recovery,
     bounds: Bounds,
@@ -102,6 +103,7 @@ impl Root {
             adopter: crate::forge::Adopter::new(),
             forges: crate::forges::Forges::new(),
             changes: crate::change::Changes::new(),
+            landings: crate::landing::Landings::new(),
             next: Some(1),
             recovery: crate::recovery::Recovery::new(),
             bounds: limits.bounds(),
@@ -177,6 +179,8 @@ pub fn step(root: &mut Root, env: &Env<Limits>, event: Event, out: &mut Queue<Re
                 .expect("bounded calls")
                 .checked_add(root.forges.calls())
                 .expect("bounded calls")
+                .checked_add(root.landings.calls())
+                .expect("bounded calls")
                 .checked_add(root.changes.calls())
                 .expect("bounded calls");
             if active >= usize::try_from(env.limits.tools.rows).expect("rows fit") {
@@ -190,7 +194,9 @@ pub fn step(root: &mut Root, env: &Env<Limits>, event: Event, out: &mut Queue<Re
                 let forge = crate::table::TOOLS.get(usize::from(call.tool)).expect("parsed tool").name
                     == crate::adopt::ROW.name;
                 let called = runner::Called { number, call_number, call, json, value };
-                if crate::change::owns(&called.call) {
+                if crate::landing::owns(&called.call) {
+                    crate::landing::call(&mut root.landings, &root.client, env, called, &mut child);
+                } else if crate::change::owns(&called.call) {
                     crate::change::call(&mut root.changes, &root.client, env, called, &mut child);
                 } else if crate::forges::owns(&called.call) {
                     crate::forges::call(&mut root.forges, &root.client, env, called, &mut child);
@@ -347,6 +353,7 @@ fn route_owner(
                 | Told::Ended { .. }
                 | Told::Page { .. } => {}
             }
+            crate::landing::told(&mut root.landings, &root.client, env, &told, child);
             crate::change::told(&mut root.changes, &root.client, env, &told, child);
             crate::forges::told(&mut root.forges, &root.client, env, &told, child);
             crate::forge::told(&mut root.adopter, &env.limits, told, child);
@@ -354,6 +361,7 @@ fn route_owner(
         Some(Owner::Pages) | None => out.push(Request::Fact { fact: temper_client_domain::Fact::UnknownAsker }),
     }
     if me_changed {
+        crate::landing::ready(&mut root.landings, &root.client, env, child);
         crate::change::ready(&mut root.changes, &root.client, env, child);
         crate::forge::ready(&mut root.adopter, &root.client, &env.limits, child);
         crate::forges::ready(&mut root.forges, &root.client, env, child);
