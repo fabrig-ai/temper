@@ -371,6 +371,7 @@ fn a_budget_held_card_names_the_task_to_amend_and_explains_release() {
     let mut task = fixtures::task::document();
     task.chip.task = OTHER_TASK;
     task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+        placed: None,
         circle: None,
         account: None,
         source: None,
