@@ -2279,7 +2279,8 @@ fn change_delegate(
 
 /// What the producer is not to do: the change task does the rest of the landing.
 const PRODUCE_SCOPE: &[u8] = b"The host pushes what you deliver; the change task opens the pull request, \
-waits for CI and merges it. Finish with your change once it is checked.";
+waits for CI and merges it. Finish with your change once it is checked. \
+Report the branch and head you produced; only the change task reports landing after merge.";
 
 /// The producer's brief: the change's words, then its scope, if the spec's
 /// bound has room for both beside its branches; the words alone otherwise.

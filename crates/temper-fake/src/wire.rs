@@ -36,6 +36,7 @@ pub(crate) fn forge_limits() -> forgejo::Limits {
 }
 pub(crate) fn llm_limits() -> provider::Limits {
     let native = skein_llm::openai::Limits {
+        calls_per_response: 1,
         request: l::LLM_REQUEST_BYTES,
         retained: l::LLM_REQUEST_BYTES,
         strings: l::LLM_REQUEST_BYTES,

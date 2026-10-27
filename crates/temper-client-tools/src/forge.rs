@@ -602,6 +602,11 @@ pub(crate) fn change_kind(connector: u16, kind: u16, out: &mut Text) {
     }
 }
 pub(crate) fn change(kind: u16, resource: &c::OwnerPart, words: &c::DocumentText, out: &mut Text) {
+    if kind != 1 {
+        out.put(if kind == 2 { b"Pushed" } else { b"Completed" });
+        out.result_words(words.bytes());
+        return;
+    }
     out.put(b"Landed");
     if let Some(commit) = temper_client_domain::pages::delegation::merge_commit(words.bytes()) {
         out.put(b" \xc2\xb7 ");

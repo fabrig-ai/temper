@@ -41,6 +41,9 @@ pub(crate) fn text(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
 fn recovery(hold: &c::TaskHold) -> &'static [u8] {
     match hold {
         c::TaskHold::Owner(hold) => match hold.reason {
+            c::HoldCategory::Exceeded(value) if value.bound == c::Bound::Items => {
+                b"reduce calls per response or raise agent.json's calls_per_response, then "
+            }
             c::HoldCategory::Exceeded(_) => b"reduce the request or raise its configured allowance, then ",
             c::HoldCategory::Budget => b"",
             c::HoldCategory::Deadline => b"amend the task's deadline, then ",

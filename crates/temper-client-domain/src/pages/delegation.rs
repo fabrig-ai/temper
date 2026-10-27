@@ -85,7 +85,7 @@ pub fn facts(task: &c::Task) -> Facts<'_> {
     ));
     if state == State::Done
         && kind == Kind::Change
-        && let Some(c::ResultValue::Change { .. }) = value
+        && let Some(c::ResultValue::Change { kind: 1, .. }) = value
     {
         state = State::Landed;
     }

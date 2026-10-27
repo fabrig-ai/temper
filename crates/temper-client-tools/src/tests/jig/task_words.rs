@@ -579,3 +579,35 @@ fn a_held_tasks_text_keeps_the_effect_source_supplied_by_the_read() {
             .is_some()
     );
 }
+
+#[test]
+fn push_results_never_label_a_head_as_a_landed_merge() {
+    for words in [b"branch temper/1/c2 at abcdef".as_slice(), MERGE] {
+        let answer = delegate_answer(ended(
+            delegate(),
+            c::Ending::Done,
+            Some(c::ResultValue::Change { kind: 2, part: part(), words: f::document_text(words) }),
+        ));
+        assert!(skein_lib::bytes::find(&answer.stdout, b"result: Pushed").is_some());
+        assert!(skein_lib::bytes::find(&answer.stdout, b"Landed").is_none());
+        assert!(skein_lib::bytes::find(&answer.stdout, b"merge commit").is_none());
+        assert!(skein_lib::bytes::find(&answer.stdout, words).is_some());
+    }
+}
+
+#[test]
+fn an_items_hold_names_the_call_declaration_and_other_bounds_keep_their_way_out() {
+    for bound in [c::Bound::Items, c::Bound::History] {
+        let task = f::held_task(
+            f::goal(f::TASK, c::WaitsOn::Nothing),
+            c::HoldCategory::Exceeded(c::Exceeded { bound, value: 4 }),
+        );
+        let answer = f::read_answer(f::TASK_CALL, f::task_result(task));
+        let expected = if bound == c::Bound::Items {
+            b"way out: reduce calls per response or raise agent.json's calls_per_response, then task release 41 --hold 9".as_slice()
+        } else {
+            b"way out: reduce the request or raise its configured allowance, then task release 41 --hold 9"
+        };
+        assert!(skein_lib::bytes::find(&answer.stdout, expected).is_some());
+    }
+}

@@ -941,3 +941,35 @@ fn a_change_below_a_runs_reserve_holds_naming_it() {
         false,
     );
 }
+
+#[test]
+fn a_producers_result_is_a_push_while_gating_and_only_the_change_reports_a_landing() {
+    let (mut world, _, producer, branch) = change_world_with_gate(false, 1000, None, true);
+    let change = requester(&world, producer.task);
+    assert!(matches!(live_task(&world, producer.task).contract, tasks::Contract::Change { kind: 2, .. }));
+    produce(&mut world, &producer, &branch);
+    let reviewer = next_assignment(&mut world, 2);
+    assert!(matches!(change_row(&world, change).change.state, temper_engine_domain_forge_change::State::Gating { .. }));
+    assert_eq!(world.merges, 0);
+    let push = ended_result(&world, producer.task).clone();
+    assert!(matches!(&push, tasks::TaskResult::Change { kind: 2, words, .. }
+        if words.as_ref() == b"pushed" && !words.windows(6).any(|word| word.eq_ignore_ascii_case(b"landed"))));
+    approve(&mut world, &reviewer);
+    assert_lands(&mut world, change);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+    }
+    assert_eq!(ended_result(&world, producer.task), &push);
+    assert!(matches!(ended_result(&world, change), tasks::TaskResult::Change { kind: 1, words, .. }
+        if words.split(|byte| *byte == b'\n').next().is_some_and(|line| line.len() == 32 && line.iter().all(u8::is_ascii_hexdigit))));
+}
+
+fn ended_result(world: &World, task: u64) -> &tasks::TaskResult {
+    let key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(task)));
+    let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row)))) = world.store.rows.get(&key)
+    else {
+        panic!("ended task {task}")
+    };
+    let tasks::Phase::Ended(tasks::Ending::Done(result)) = &row.phase else { panic!("successful task") };
+    result
+}

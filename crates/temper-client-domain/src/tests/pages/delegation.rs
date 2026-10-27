@@ -235,3 +235,16 @@ fn merge_commits_are_whole_lowercase_hex_ids_of_at_least_seven_bytes() {
         assert_eq!(delegation::merge_commit(words), expected);
     }
 }
+
+#[test]
+fn a_push_result_keeps_its_words_and_never_becomes_a_landed_card() {
+    let mut task = f::change();
+    task.result_contract = c::TaskContractDocument::Change { connector: 0, kind: 2, words: 128 };
+    let mut value = f::change_value(MERGE);
+    let c::ResultValue::Change { kind, .. } = &mut value else { panic!("change result") };
+    *kind = 2;
+    task.result = Some(c::TaskResult::Ending(Box::new(c::OwnerChipEnding::Done(value))));
+    let facts = delegation::facts(&task);
+    assert_eq!(facts.state, State::Done);
+    assert_eq!(facts.said, Some(Said::Words(MERGE)));
+}
