@@ -79,8 +79,13 @@ fn wait(world: &mut World, done: impl Fn(&World) -> bool) -> Result<(), Violatio
         ),
     })
 }
-fn landed(world: &World) -> bool {
-    change_row(&world.store).is_some_and(|row| matches!(row.change.state, change::State::Landed { .. }))
+fn merged(world: &World) -> bool {
+    change_row(&world.store).is_some_and(|row| {
+        matches!(
+            row.change.state,
+            change::State::Landed { .. } | change::State::Red { .. } | change::State::Cleared { .. }
+        )
+    })
 }
 fn review(world: &mut World) -> Result<(), Violation> {
     wait(world, |world| change_row(&world.store).is_some_and(|row| row.pull.is_some()))?;
@@ -137,9 +142,9 @@ fn positive_change(world: &mut World, repair: bool) -> Result<(), Violation> {
         scenarios::wake(world, child)?;
         world.drain()?;
     }
-    require(!landed(world), "change merged before its head was reviewed")?;
+    require(!merged(world), "change merged before its head was reviewed")?;
     review(world)?;
-    wait(world, landed)?;
+    wait(world, merged)?;
     require(
         world.systems.effects.iter().filter(|effect| effect.kind == 4 && effect.applied).count() == 1,
         "change was not merged exactly once",
@@ -209,7 +214,7 @@ fn lost_merge(world: &mut World) -> Result<(), Violation> {
     require(!world.systems.uncertain.is_empty(), "lost merge supplied no outside uncertainty evidence")?;
     let head = world.systems.domain.branch(b"org/repo", b"main").expect("landed main");
     world.crash()?;
-    wait(world, landed)?;
+    wait(world, merged)?;
     require(world.systems.domain.branch(b"org/repo", b"main") == Some(head), "restart changed the merged head")?;
     require(
         world.systems.effects.iter().filter(|effect| effect.kind == 4 && effect.applied).count() == 1,
