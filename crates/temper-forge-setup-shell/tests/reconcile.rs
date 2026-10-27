@@ -4,6 +4,24 @@ use skein_shell::Clock;
 use support::{ADMIN, Peer};
 use temper_forge_setup_shell::reconcile::{bound, reconcile};
 
+#[test]
+fn a_reserved_peer_holds_its_address_until_it_serves() {
+    let peer = Peer::reserve();
+    assert_eq!(
+        std::net::TcpListener::bind(peer.address()).expect_err("reserved peer address stays held").kind(),
+        std::io::ErrorKind::AddrInUse
+    );
+    let settings = support::settings(peer.address());
+    std::thread::scope(|scope| {
+        let server = scope.spawn(|| peer.serve_after(0, &[(401, b"deleted")]));
+        let refused = reconcile(settings, &Clock::new()).expect_err("reserved peer answers");
+        assert_eq!(refused.line(), "temper forge reconcile: forge 1: admin temper-admin: HTTP 401\n");
+        let heard = server.join().expect("peer thread");
+        assert_eq!(heard.requests.len(), 1);
+        assert_eq!(heard.requests[0].line, "GET /api/v1/user HTTP/1.1");
+    });
+}
+
 fn done(settings: temper_forge_setup_shell::reconcile::Settings, peer: Peer) {
     const BOT: &[u8] = br#"{"id":42,"login":"temper-bot","is_admin":false,"full_name":"temper:bot"}"#;
     for file in ["api_token", "git_token"] {
@@ -78,6 +96,7 @@ fn the_admins_token_is_sent_as_a_token_header() {
 fn a_run_ends_at_its_deadline_when_nothing_answers() {
     let peer = Peer::reserve();
     let mut settings = support::settings(peer.address());
+    drop(peer); // This story has no listener; the reserved peers above serve their held sockets.
     settings.given.limits.deadline = Duration::from_millis(300); // A short wait keeps the host test focused.
     let refused = reconcile(settings, &Clock::new()).expect_err("no peer");
     assert_eq!(refused.line(), "temper forge reconcile: forge 1: Forgejo did not answer within 300 ms\n");

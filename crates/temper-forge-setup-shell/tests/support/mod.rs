@@ -94,7 +94,7 @@ pub fn settings(address: std::net::SocketAddr) -> temper_forge_setup_shell::reco
     }
 }
 pub struct Peer {
-    address: std::net::SocketAddr,
+    listener: std::net::TcpListener,
 }
 pub struct Heard {
     pub requests: Vec<Received>,
@@ -107,16 +107,16 @@ impl Peer {
     #[must_use]
     pub fn reserve() -> Self {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("free port");
-        Self { address: listener.local_addr().expect("address") }
+        Self { listener }
     }
     #[must_use]
     pub fn address(&self) -> std::net::SocketAddr {
-        self.address
+        self.listener.local_addr().expect("address")
     }
     pub fn serve_after(self, ms: u64, replies: &[(u16, &[u8])]) -> Heard {
         use std::io::{Read, Write};
         std::thread::sleep(std::time::Duration::from_millis(ms));
-        let listener = std::net::TcpListener::bind(self.address).expect("peer binds");
+        let listener = self.listener;
         listener.set_nonblocking(true).expect("nonblocking accept");
         let clock = skein_shell::Clock::new();
         let mut requests = Vec::new();
