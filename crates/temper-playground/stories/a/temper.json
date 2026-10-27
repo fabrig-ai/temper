@@ -554,6 +554,7 @@
         "program": "/opt/temper/bin/temper",
         "configuration": "/opt/temper/agent.json",
         "arguments": [
+          "internal",
           "agent",
           "/opt/temper/agent.json"
         ]
@@ -772,7 +773,7 @@
                               "depth": 2
                             },
                             "budget": {
-                              "spend": 10
+                              "spend": 21140
                             },
                             "notes": 0
                           }
