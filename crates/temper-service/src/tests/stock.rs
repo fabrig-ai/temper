@@ -179,7 +179,8 @@ fn a_worlds_own_defaults_cannot_restore_document_members() {
         assert_eq!(problems.problems.len(), 1);
         assert_eq!(
             crate::startup::lines(&problems).as_ref(),
-            format!("engine.{member}: settings live in the store; read them with temper ctl settings\n").as_bytes()
+            format!("engine.{member}: settings live in the store; read them with temper ctl DIR settings show\n")
+                .as_bytes()
         );
     }
 }
