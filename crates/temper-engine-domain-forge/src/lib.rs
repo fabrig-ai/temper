@@ -137,8 +137,8 @@ pub fn describe_agent_effect(
             EffectForm::Creation,
             *resource == What::Issue(number) || *resource == What::Pull(number),
         ),
-        skein_forge::api::Write::Status { commit, context, check } => (
-            skein_forge::api::Write::Status { commit, context, check },
+        skein_forge::api::Write::Status { commit, context, check, description, link } => (
+            skein_forge::api::Write::Status { commit, context, check, description, link },
             6,
             commit,
             EffectForm::Set,
@@ -153,6 +153,8 @@ pub fn describe_agent_effect(
         | skein_forge::api::Write::Merge { .. }
         | skein_forge::api::Write::Update { .. }
         | skein_forge::api::Write::CreateBranch { .. }
+        | skein_forge::api::Write::Dispatch { .. }
+        | skein_forge::api::Write::Rerun { .. }
         | skein_forge::api::Write::DeleteBranch { .. } => return Err(skein_forge::api::Error::Forbidden),
     };
     let access = effect_access(repository, resource, kind);
@@ -509,6 +511,8 @@ pub fn describe_projection_effect(
         | skein_forge::api::Write::Merge { .. }
         | skein_forge::api::Write::Update { .. }
         | skein_forge::api::Write::CreateBranch { .. }
+        | skein_forge::api::Write::Dispatch { .. }
+        | skein_forge::api::Write::Rerun { .. }
         | skein_forge::api::Write::DeleteBranch { .. } => return None,
     };
     let recovery = match skein_forge_client::recovery(write) {
