@@ -73,13 +73,13 @@ fn plan_text_uses_the_body_bound_without_changing_the_format() {
     let old_view = crate::v10::GoalView::worst_case_bytes(&before).expect("old view size");
     let new_view = crate::v10::GoalView::worst_case_bytes(&after).expect("new view size");
     assert_eq!(new_view - old_view, EXTRA_PLAN_BYTES);
-    // The schema's fixed framing plus the measured view; ChangeRow still dominates Row.
+    // The schema's fixed framing plus the measured view; TierRow dominates Row.
     assert_eq!(old_view, 5238);
     assert_eq!(new_view, 7286);
     assert_eq!(crate::v10::IssueRow::worst_case_bytes(&before), Some(5657));
     assert_eq!(crate::v10::IssueRow::worst_case_bytes(&after), Some(7705));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&before), Some(5888));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&after), Some(7936));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(35_977));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(35_977));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(175_879));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(175_879));
 }

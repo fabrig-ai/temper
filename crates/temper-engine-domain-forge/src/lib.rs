@@ -44,10 +44,6 @@ mod tiers;
 mod topics;
 mod verification;
 pub use boundary::*;
-pub use tiers::branch as tier_branch;
-/// A gate's or a tier's workflow file name (domain/landing.md, 12).
-pub const WORKFLOW_BYTES: u32 = 255;
-
 pub use brief::{HOME_SECTION_BYTES, hex, home_access_reason};
 pub use domain::{Domain, fire, max_out, resume, step, tag, untag, writer};
 pub use gates::{GateCandidate, GateLast, GatePattern, GatePolicy, GateTemplate};
@@ -59,6 +55,7 @@ pub use limits::{
 pub use panel::{MARKED, PANEL_AHEAD, PANEL_GATES, PANEL_NAME_BYTES, Panel, PanelGate, PanelStep, PanelUsed};
 pub use temper_engine_domain_forge_landing::{CHECK_NAME_BYTES, WORKFLOW_BYTES};
 pub use temper_engine_domain_forge_landing::{Hold as LandingHold, Phase as LandingPhase};
+pub use tiers::branch as tier_branch;
 pub use views::{
     Document, GateProof, LandingGate, LandingLine, LandingMember, LandingView, LandingsView, landings_subject,
 };
