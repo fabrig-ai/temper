@@ -246,3 +246,22 @@ fn startup_refuses_stock_budget_overflow_before_constructing_defaults() {
     let found = crate::named(&document, &config::Directories::working()).unwrap_err();
     assert_eq!(crate::startup::lines(&found).as_ref(), b"engine.llm.models[0].prices: past its bound\n");
 }
+
+#[test]
+fn the_reviewer_keeps_the_coding_run_with_read_only_workspace_families() {
+    let engine = engine(&generated());
+    let defaults = crate::stock::defaults(&engine.llm);
+    let mut expected = defaults.charters[1].clone();
+    expected.number = 4;
+    expected.policy.instructions = include_bytes!("../stock/review.txt").as_slice().into();
+    expected.policy.modify = false;
+    expected.policy.agents = false;
+    assert_eq!(defaults.charters[2], expected);
+    for authority in [
+        &defaults.rules.ceiling,
+        &defaults.policies.get(&1).expect("policy 1").policy.ceiling,
+        &defaults.policies.get(&1).expect("policy 1").policy.roles[0].authority,
+    ] {
+        assert!(authority.delegation.kinds.contains(&jig_domain_authority::Executor::Charter(4)));
+    }
+}
