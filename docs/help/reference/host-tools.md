@@ -62,7 +62,7 @@ A write.
 
 ## release
 
-Lift a held delegate's hold, naming the hold's revision. For an effect held uncertain, say whether to make it again.
+Release a held delegate, naming its hold revision. One a party's hold holds is theirs to release: propose it.
 
 A write.
 
@@ -124,13 +124,14 @@ A write.
 
 ## propose
 
-Propose an act beyond your authority, with a reason, to the holder who may accept it: a batch, a forge effect, an amendment, a release or a widening.
+Ask the covering holder to act beyond your authority. A release from a party's hold names task, hold and the hold's revision, and waits for its owner.
 
 A write.
 
 - `action`: one of `batch`, `effect`, `amend`, `widen` or `release`; required. The act; each takes the members named for it below.
 - `task`: an integer of at least 1; optional. For amend, widen and release: the task's number.
-- `revision`: an integer of at least 0; optional. For amend: its spec revision, as you last read it.
+- `revision`: an integer of at least 0; optional. The spec revision you last saw, for amend; the hold's revision, for release.
+- `hold`: an integer of at least 1; optional.
 - `batch`: a list; optional. For batch: the tasks, as delegate's batch.
 - `amendment`: an object; optional. For amend: what changes, as amend's amendment.
 - `authority`: an object; optional. For widen: the authority wanted, whole.

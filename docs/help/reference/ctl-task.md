@@ -134,6 +134,9 @@ Lift a task's hold
 Prints: `done: task N, release`
 --json: the record release.
 Key: --key KEY, optional.
+A task a party's hold holds is theirs to release, or a role's above
+theirs: task show says whether you may. Releasing the stopped task
+itself lifts its hold, with every task the hold holds.
 ```
 
 ## task stop
@@ -141,12 +144,13 @@ Key: --key KEY, optional.
 ```
 task stop TASK [--key KEY]
   TASK (task): a number; required. The task's number
-Stop a task's run and hold it
+Hold a task and every task below it, stopping their runs
 Prints: `done: task N, stop`
 --json: the record stop.
 Key: --key KEY, optional.
-The task stays held until task release lifts the hold or task
-cancel ends it.
+The stop is a placed hold of yours over the task's subtree. The
+tasks stay held until task release of the stopped task lifts it,
+hold lift lifts it, or task cancel ends them.
 ```
 
 ## task cancel
