@@ -325,6 +325,9 @@ const TWO_PUSHES: usize = 2;
 // Main starts green; the coder removes its heading, and the repair restores it.
 const BROKEN: &str = "Broken by temper.\n";
 const REPAIR_CUE: &[u8] = b"Repair the failed CI on the change branch";
+// Producer and repair spend six units; four left holds the review at B2's floor.
+// Six plus working room above that floor fits in the next power of two, sixteen.
+const REPAIR_CHANGE_SPEND: u64 = 16;
 
 fn repair_fixture() -> github::Fixture {
     let mut fixture = github::fixture();
@@ -455,6 +458,10 @@ fn repair_scripts(at: std::net::SocketAddr) -> Box<[skein_fake_llm_domain::api::
     use serde_json::json;
     use skein_fake_llm_domain::api::{Finish, Line, Script, Turn};
     let mut scripts = landing::scripts(at, u64::from(github::REPOSITORY), landing::README).into_vec();
+    let Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else { panic!("change delegation") };
+    let mut delegate: Value = serde_json::from_slice(arguments).expect("delegate JSON");
+    delegate["batch"][0]["authority"]["budget"]["spend"] = REPAIR_CHANGE_SPEND.into();
+    *arguments = serde_json::to_vec(&delegate).expect("delegate JSON").into();
     // The shared exchange delegates enough authority for producer, repair and review.
     scripts[1].turns[1].lines = Box::new([Line::Call {
         name: b"edit".as_slice().into(),
