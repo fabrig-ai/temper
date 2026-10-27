@@ -111,6 +111,7 @@ pub enum Step {
     Maintainer {
         scratch: PathBuf,
         directory: &'static str,
+        project: u32,
     },
     /// Make a project from the owner's changed policy 1 through the public client wire.
     Project {
@@ -834,9 +835,10 @@ impl Calls {
                 }
             }
             Some(Step::Member { scratch, directory }) => self.make_member(&scratch, directory),
-            Some(Step::Maintainer { scratch, directory }) => {
+            Some(Step::Maintainer { scratch, directory, project }) => {
                 let root = skein_shell::open_root(&scratch).expect("maintainer fixture root");
-                self.member = Some(member::Member::maintainer(root, &scratch, &scratch.join("client"), directory));
+                self.member =
+                    Some(member::Member::maintainer(root, &scratch, &scratch.join("client"), directory, project));
             }
             Some(Step::Project { scratch, client, name, number }) => self.make_project(&scratch, &client, name, number),
             Some(Step::Open { directory, until }) => {

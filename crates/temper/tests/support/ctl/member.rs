@@ -26,6 +26,7 @@ pub struct Member {
     owner: Option<Secret>,
     made: Option<(u64, Secret)>,
     role: c::HeldRole,
+    service_project: u32,
     project: Option<(&'static str, u32)>,
     key: client::Key,
     phase: Phase,
@@ -36,6 +37,9 @@ pub struct Member {
 }
 impl Member {
     pub fn new(root: Fd, base: &Path, owner: &Path, directory: &str) -> Self {
+        Self::seeded(root, base, owner, directory, SEED)
+    }
+    fn seeded(root: Fd, base: &Path, owner: &Path, directory: &str, seed: u64) -> Self {
         let address = std::fs::read(owner.join("address")).expect("fixture owner address");
         let host = std::str::from_utf8(&address)
             .expect("fixture address text")
@@ -49,15 +53,16 @@ impl Member {
         super::super::write_private(&member.join("address"), &address);
         let bounds = temper_client_shell_cli::limits::native();
         let mut shell = Shell::new(temper_client_shell_cli::limits::settings(engine, directory.as_bytes().into()));
-        shell.adopt(root, skein_shell::effective_user(), SEED);
+        shell.adopt(root, skein_shell::effective_user(), seed);
         Self {
             shell,
-            client: client::Client::new(&bounds.root.domain.client, SEED).expect("native client bounds"),
+            client: client::Client::new(&bounds.root.domain.client, seed).expect("native client bounds"),
             out: Queue::with_capacity(client::max_out(&bounds.root.domain.client)),
             owner: Some(token),
             made: None,
             project: None,
             role: c::HeldRole::Member,
+            service_project: PROJECT,
             key: KEY,
             phase: Phase::ConfirmingOwner,
             closing: false,
@@ -66,9 +71,13 @@ impl Member {
             names: std::collections::BTreeMap::new(),
         }
     }
-    pub fn maintainer(root: Fd, base: &Path, owner: &Path, directory: &str) -> Self {
-        let mut host = Self::new(root, base, owner, directory);
+    pub fn maintainer(root: Fd, base: &Path, owner: &Path, directory: &str, project: u32) -> Self {
+        // A distinct client seed keeps its generated act name separate from
+        // the project provisioner's first act in this same deployment.
+        let mut host = Self::seeded(root, base, owner, directory, SEED + 1);
+        host.key = client::Key { asker: client::Asker::JIG, number: 3 };
         host.role = c::HeldRole::Maintainer;
+        host.service_project = project;
         host
     }
     pub fn project(root: Fd, base: &Path, owner: &Path, name: &'static str, number: u32) -> Self {
@@ -151,7 +160,7 @@ impl Member {
                     policy: 1,
                 },
                 None => c::Ask::MakeService {
-                    project: PROJECT,
+                    project: self.service_project,
                     name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
                     role: self.role,
                 },
