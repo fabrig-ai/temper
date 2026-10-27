@@ -505,7 +505,7 @@ fn a_cancel_ends_every_held_cause_unless_the_change_landed() {
         let mut f = facts();
         f.pull = Pull::Merged { commit: MERGE };
         let landed = decide(&c, &f, &h);
-        assert_eq!(landed.change.state, State::Landed { merge: MERGE });
+        assert_eq!(landed.change.state, State::Cleared { merge: MERGE });
         assert_eq!(landed.decision, Decision::Finish { merge: MERGE });
     }
 }

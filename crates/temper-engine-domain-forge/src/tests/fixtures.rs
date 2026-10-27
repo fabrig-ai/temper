@@ -306,6 +306,8 @@ pub fn verification_step(d: &mut Domain) -> Box<[Request]> {
             task: CHANGE,
             entry: OPEN,
             heard: change::Heard {
+                lacking: None,
+                spend: None,
                 delegate: change::Status::Passed,
                 effect: change::EffectResult::Made,
                 released: false,

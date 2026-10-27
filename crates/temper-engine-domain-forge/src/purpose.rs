@@ -39,9 +39,19 @@ pub enum EffectPurpose {
         purpose: u16,
     },
     /// One part of a goal's projection.
-    Projection { goal: u64, part: u8, number: u64 },
+    Projection {
+        goal: u64,
+        part: u8,
+        number: u64,
+    },
     /// A tier run's operation (domain/after-landing.md, 10).
-    Tier { repository: [u8; 16], tier: u16, run: u64, operation: u8, part: u16 },
+    Tier {
+        repository: [u8; 16],
+        tier: u16,
+        run: u64,
+        operation: u8,
+        part: u16,
+    },
     /// Cleanup of a task's named resource.
     Release {
         task: u64,

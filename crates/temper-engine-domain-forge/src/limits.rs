@@ -50,10 +50,7 @@ pub struct Limits {
     pub trees_in_flight: u32,
     /// Tiers per repository (domain/after-landing.md, 2).
     pub tiers: u32,
-    /// Test gates per repository (domain/landing.md, 13.1).
-    pub gates: u32,
-    /// Ignored paths per gate or tier (domain/landing.md, 6.1).
-    pub ignored_paths: u32,
+
     /// Failing tests named by one run (domain/after-landing.md, 4).
     pub failing_tests: u32,
     /// Bytes of one test id.

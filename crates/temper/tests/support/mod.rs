@@ -572,7 +572,7 @@ impl ChatJudge<'_> {
                     eprintln!("change task ended: {task}");
                 } else {
                     self.next_read =
-                        Some(ctl::Call::new(&["task", &change.to_string(), "--json"]).in_directory("private"));
+                        Some(ctl::Call::new(&["task", "show", &change.to_string(), "--json"]).in_directory("private"));
                 }
             } else {
                 let live = document
@@ -590,7 +590,7 @@ impl ChatJudge<'_> {
                 });
                 if let Some(change) = self.change {
                     self.next_read =
-                        Some(ctl::Call::new(&["task", &change.to_string(), "--json"]).in_directory("private"));
+                        Some(ctl::Call::new(&["task", "show", &change.to_string(), "--json"]).in_directory("private"));
                     self.read_due = true;
                 } else if let Some(next) = document["read_on"].as_str() {
                     // Follow the CLI's continuation as arguments, retaining JSON.
@@ -600,13 +600,15 @@ impl ChatJudge<'_> {
                     self.read_due = true;
                 } else if !self.ended_inventory {
                     self.ended_inventory = true;
-                    self.next_read =
-                        Some(ctl::Call::new(&["tasks", "--project", "1", "--ended", "--json"]).in_directory("private"));
+                    self.next_read = Some(
+                        ctl::Call::new(&["task", "list", "--project", "1", "--ended", "--json"])
+                            .in_directory("private"),
+                    );
                     self.read_due = true;
                 } else {
                     self.ended_inventory = false;
                     self.next_read =
-                        Some(ctl::Call::new(&["tasks", "--project", "1", "--json"]).in_directory("private"));
+                        Some(ctl::Call::new(&["task", "list", "--project", "1", "--json"]).in_directory("private"));
                 }
             }
         }
@@ -817,7 +819,10 @@ fn native_settings_setup(directory: &Path, wait_forge: bool) -> Vec<ctl::Step> {
         })),
     ];
     if wait_forge {
-        steps.push(Step::Until(Call::new(&["forges", "--json"]).in_directory("private"), b"\"state\":\"connected\""));
+        steps.push(Step::Until(
+            Call::new(&["forge", "list", "--json"]).in_directory("private"),
+            b"\"state\":\"connected\"",
+        ));
     }
     steps
 }
@@ -856,7 +861,7 @@ fn run_story(
         poll: clock.now().now,
         merged: false,
         read_calls: NATIVE_SETUP_CALLS + usize::from(matches!(ending, Ending::Change)),
-        next_read: Some(ctl::Call::new(&["tasks", "--project", "1", "--json"]).in_directory("private")),
+        next_read: Some(ctl::Call::new(&["task", "list", "--project", "1", "--json"]).in_directory("private")),
         read_due: true,
         ended_inventory: false,
         change: None,

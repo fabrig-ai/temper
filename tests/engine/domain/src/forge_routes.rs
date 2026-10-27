@@ -648,7 +648,13 @@ impl World {
             fake_config.limits.branches = 5;
         }
         fake_config.limits.workflows = u32::from(turn || tier);
-        fake_config.limits.workflow_runs = if turn { 8 } else if tier { 4 } else { 0 };
+        fake_config.limits.workflow_runs = if turn {
+            8
+        } else if tier {
+            4
+        } else {
+            0
+        };
         let mut fake = fake::Domain::new(&fake_config, 71);
         fake::repository(
             &mut fake,

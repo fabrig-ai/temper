@@ -551,7 +551,7 @@ impl World {
 /// A tierless change can already be cleared when the world observes its merge.
 fn landed(state: &temper_engine_domain_forge_change::State) -> bool {
     use temper_engine_domain_forge_change::State;
-    matches!(state, State::Landed { .. } | State::Cleared { .. })
+    matches!(state, State::Landed { .. } | State::Red { .. } | State::Cleared { .. })
 }
 
 mod stories;

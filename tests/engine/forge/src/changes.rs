@@ -153,6 +153,7 @@ pub fn merged(state: &change::State) -> Option<skein_forge::api::Commit> {
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
         | change::State::Landing { .. }
+        | change::State::Ended
         | change::State::Held { .. } => None,
     }
 }

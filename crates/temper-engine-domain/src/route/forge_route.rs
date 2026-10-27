@@ -466,7 +466,10 @@ fn describe_agent(
     for (_, flight) in &domain.forge_effects {
         match flight {
             EffectFlight::Call { .. } => staged = staged.saturating_add(1),
-            EffectFlight::Procedure { .. } | EffectFlight::Landing { .. } | EffectFlight::Tier { .. } | EffectFlight::Projection { .. } => {}
+            EffectFlight::Procedure { .. }
+            | EffectFlight::Landing { .. }
+            | EffectFlight::Tier { .. }
+            | EffectFlight::Projection { .. } => {}
         }
     }
     if !domain.forge.effect_room(&env.limits.forge, staged) {
@@ -3603,7 +3606,10 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     }));
                 }
                 Some(
-                    EffectFlight::Procedure { .. } | EffectFlight::Tier { .. } | EffectFlight::Landing { .. } | EffectFlight::Projection { .. },
+                    EffectFlight::Procedure { .. }
+                    | EffectFlight::Tier { .. }
+                    | EffectFlight::Landing { .. }
+                    | EffectFlight::Projection { .. },
                 )
                 | None => {
                     unreachable!("agent effect proposal was described")
@@ -3651,7 +3657,11 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     assert!(kept.number == entry && kept.task == task, "admitted projection entry");
                     domain.work.push(Work::Forge(forge::Event::KeepProjection { row: *row, entry: kept }));
                 }
-                Some(EffectFlight::Procedure { entry: kept, .. } | EffectFlight::Landing { entry: kept, .. } | EffectFlight::Tier { entry: kept, .. }) => {
+                Some(
+                    EffectFlight::Procedure { entry: kept, .. }
+                    | EffectFlight::Landing { entry: kept, .. }
+                    | EffectFlight::Tier { entry: kept, .. },
+                ) => {
                     assert!(kept == entry, "core releases the described procedure entry");
                 }
                 None => {}
@@ -3793,7 +3803,9 @@ fn judge_effect(
             )
         }
         Some(EffectFlight::Landing { evidence: None, .. }) => (authority::Verdict::Refuse, false),
-        Some(EffectFlight::Call { .. } | EffectFlight::Tier { .. } | EffectFlight::Projection { .. }) | None => (authority::Verdict::Wait, false),
+        Some(EffectFlight::Call { .. } | EffectFlight::Tier { .. } | EffectFlight::Projection { .. }) | None => {
+            (authority::Verdict::Wait, false)
+        }
     }
 }
 
