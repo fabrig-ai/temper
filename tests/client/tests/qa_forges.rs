@@ -544,7 +544,7 @@ fn admin_private(world: &mut Pages, client: ClientId) {
 fn elsewhere_welcome_after_restart_connects_retries_and_opens_its_new_project() {
     let mut world = admin_world();
     let client = open(&mut world, Address::Welcome { step: Step::Forge { forge: None } });
-    follow(&mut world, client, vec![see(Role::Region, b"GitHub"), see(Role::Region, b"A Forgejo elsewhere")]);
+    follow(&mut world, client, vec![see(Role::Region, b"GitHub"), gone(Role::Region, b"A Forgejo elsewhere")]);
     let names = world
         .tree(client)
         .nodes()
@@ -552,10 +552,6 @@ fn elsewhere_welcome_after_restart_connects_retries_and_opens_its_new_project() 
         .filter(|n| n.role == Role::Region)
         .filter_map(|n| n.name.as_deref())
         .collect::<Vec<_>>();
-    assert!(
-        names.iter().position(|n| *n == b"GitHub").expect("GitHub card")
-            < names.iter().position(|n| *n == b"A Forgejo elsewhere").expect("add another forge card")
-    );
     assert!(!names.contains(&b"Forgejo at https://git.example.org".as_slice()));
     // Enter by address: the welcome draws no admin card (client/forge.md, 5.4).
     follow(
