@@ -152,6 +152,7 @@ impl Referee {
     }
     /// Page visits end through their log, rather than terminal person evidence.
     pub(crate) fn with_page(mut self, driver: crate::replay::Driver) -> Self {
+        crate::replay::policy(&mut self.rules.borrow_mut().policy);
         self.page = Some(driver);
         self
     }

@@ -111,6 +111,32 @@ thread_local! {
 pub(crate) fn issued() -> Vec<(&'static str, Box<[u8]>)> {
     CONTEXT.with(|context| context.borrow().as_ref().map_or_else(Vec::new, |context| context.issued.clone()))
 }
+/// Scenario authority comes from startup documents, before the root exists.
+/// Keep the referee's checks and liveness bounds; replace terminal fixture facts.
+pub(crate) fn policy(policy: &mut jig_conformance::referee::Policy) {
+    CONTEXT.with(|context| {
+        let context = context.borrow();
+        let context = context.as_ref().expect("replay context");
+        let named =
+            temper_service::named(&context.start.service.document, &jig_protocol_config::Directories::working())
+                .expect("story's scenario authority");
+        let defaults = temper_service::stock::defaults(&named.llm);
+        policy.deployment = jig_core_world::observations::scope(&defaults.rules.ceiling);
+        policy.projects.clear();
+        policy.people.clear();
+        policy.projections.clear();
+        for project in &named.projects {
+            let scope = jig_core_world::observations::scope(&project.policy.ceiling);
+            policy.projects.insert(project.number, scope);
+            // The printed link signs in the story's first owner, in role zero.
+            let role = project.policy.roles.iter().find(|role| role.number == 0).expect("story owner's role");
+            policy.people.insert((project.number, 1), jig_core_world::observations::scope(&role.authority));
+            let mut projection = project.policy.ceiling.clone();
+            projection.grants.clone_from(&project.policy.projections);
+            policy.projections.insert(project.number, jig_core_world::observations::scope(&projection).grants);
+        }
+    });
+}
 fn service(inherited: &Inherited) -> Proc {
     CONTEXT.with(|context| {
         let context = context.borrow();
@@ -129,6 +155,7 @@ fn service(inherited: &Inherited) -> Proc {
                 families: temper_protocol_store::bounds(&limits.forge).expect("story's application codec bounds"),
                 names: jig_protocol_store::codec::names(&named.llm.models),
                 agent: start.agent.limits.bodies,
+                settings: 1,
             },
             true,
         )

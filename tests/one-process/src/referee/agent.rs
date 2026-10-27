@@ -27,13 +27,20 @@ impl std::fmt::Debug for Record {
 pub(crate) struct Wire {
     pipes: BTreeMap<i32, (bool, i32, Vec<u8>)>,
     limits: smith_channel::Limits,
+    deployment: [u8; 16],
+    settings: u32,
     store: std::rc::Rc<std::cell::RefCell<super::Store>>,
     runs: BTreeMap<i32, (u64, u64)>,
     pub events: Vec<Observed>,
 }
 impl Wire {
-    pub(crate) fn new(store: std::rc::Rc<std::cell::RefCell<super::Store>>, limits: smith_channel::Limits) -> Self {
-        Self { pipes: BTreeMap::new(), limits, store, runs: BTreeMap::new(), events: Vec::new() }
+    pub(crate) fn new(
+        store: std::rc::Rc<std::cell::RefCell<super::Store>>,
+        limits: smith_channel::Limits,
+        deployment: [u8; 16],
+        settings: u32,
+    ) -> Self {
+        Self { pipes: BTreeMap::new(), limits, deployment, settings, store, runs: BTreeMap::new(), events: Vec::new() }
     }
     pub fn complete(&mut self, complete: &Complete) {
         match (&complete.kind, &complete.result) {
@@ -97,7 +104,7 @@ impl Wire {
                     temper_engine_domain::Record::Core(jig_domain_core::Record::Core(
                         jig_domain_core::CoreRecord::RunProof(proof),
                     )) if proof.attempt == start.activation()
-                        && Some(identity(proof.task, proof.conversation)) == *start.identity() =>
+                        && Some(identity(self.deployment, proof.task, proof.conversation)) == *start.identity() =>
                     {
                         Some(proof)
                     }
@@ -113,10 +120,7 @@ impl Wire {
                 conversation: proof.conversation,
                 resumed: !start.transcript().is_empty(),
                 budget: charter.budget().spend(),
-                // Chat setup applies one change against revision 1 before
-                // starting work; restarts retain it. Repository stories use 1.
-                // Smith's Start carries no settings-revision metadata.
-                settings: if crate::stories::uses_stock() { 2 } else { 1 },
+                settings: self.settings,
             });
             let task = proof.task;
             drop(store);
@@ -145,9 +149,8 @@ impl Wire {
     }
 }
 
-fn identity(task: u64, conversation: u64) -> [u8; 16] {
-    let bytes =
-        [crate::fixtures::seeds().deployment.as_slice(), &task.to_be_bytes(), &conversation.to_be_bytes()].concat();
+fn identity(deployment: [u8; 16], task: u64, conversation: u64) -> [u8; 16] {
+    let bytes = [deployment.as_slice(), &task.to_be_bytes(), &conversation.to_be_bytes()].concat();
     let digest = skein_io::digest::digest(&bytes);
     [digest.0[0].to_be_bytes(), digest.0[1].to_be_bytes()].concat().try_into().expect("sixteen identity bytes")
 }

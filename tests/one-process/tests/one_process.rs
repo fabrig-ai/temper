@@ -81,3 +81,12 @@ fn a_session_log_of_the_welcome_replays_under_the_referee() {
     assert!(outcome.drained);
     assert!(outcome.commits > 0, "the referee observed real durable commits");
 }
+
+#[test]
+fn story_a_log_replays_under_the_referee() {
+    let log = skein_ui_web::bridge::log::read(include_bytes!("../../playground/fixtures/story-a.log"))
+        .expect("story A session log");
+    let outcome = temper_one_process_world::replay::run(log);
+    assert!(outcome.drained);
+    assert!(outcome.commits > 0, "the referee observed real durable commits");
+}
