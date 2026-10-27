@@ -23,6 +23,7 @@ pub const GROUPS: &[Group] = &[
     Group { name: b"chat", line: b"Chats: start one, read its conversation, close it" },
     Group { name: b"proposal", line: b"Proposals: read one, decide it" },
     Group { name: b"change", line: b"Changes: read a change's way to landing" },
+    Group { name: b"landing", line: b"Landings: read one or a project's landings" },
     Group { name: b"repository", line: b"Repositories: adopt one into a project" },
     Group {
         name: b"forge",
@@ -91,6 +92,8 @@ pub const TOOLS: &[&Tool] = &[
     &crate::forges::ACCEPT,
     &rows::MOVE_TO_NEWEST,
     &rows::TASK_DECIDE,
+    &crate::landing::READ,
+    &crate::landing::LIST,
 ];
 pub fn parse(words: &[&[u8]]) -> Result<Parsed, Usage> {
     argv::parse(TOOLS, words, &crate::limits::tools())
