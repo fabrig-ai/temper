@@ -9,6 +9,39 @@ use std::{
 };
 
 #[test]
+fn a_rung_reads_created_chats_waited_changes_and_both_child_sets_in_ctls_forms() {
+    use serde_json::json;
+    use support::forge_land::rung::{child_rows, created_chat, waited};
+    // Native chat-start outcome from the failed live run: top-level task is
+    // null, and the owner's actual created range supplies the number.
+    let created = json!({"operation":"chat","task":null,"to":null,
+        "outcome":{"done":{"owner":{"created":{"first":7,"last":7,"given":{"task":7,"amount":207_552}}}}}});
+    assert_eq!(created_chat(&created), Ok(7));
+    assert!(created_chat(&json!({"task":7})).is_err(), "an operation target is not creation evidence");
+    let panel = json!({"task":3,"pull":{"number":2},"head":"abc","gates":[]});
+    let change = json!({"change":panel,"met":true});
+    assert_eq!(waited(&["change", "show", "3"], change), Ok(panel));
+    assert!(waited(&["change", "show", "3"], json!({"met":true})).is_err());
+    assert!(waited(&["change", "show", "3"], json!({"met":false})).is_err());
+    let task = json!({"task":{"chip":{"task":2},"digest":"abc"},"met":true});
+    assert_eq!(waited(&["task", "show", "2"], task.clone()), Ok(task));
+    let accounts = json!({"accounts":{"party":[]},"met":true});
+    assert_eq!(waited(&["account", "list"], accounts.clone()), Ok(accounts));
+    let live = json!({"live":[{"chip":{"task":3}}],"live_after":null,"ended":"none"});
+    let ended = json!({"live":[],"live_after":null,
+        "ended":{"rows":{"rows":[{"chip":{"task":4}}],"after":null,"cut":false}}});
+    let rows = child_rows(&live, &ended).expect("both sets");
+    assert_eq!(rows, vec![json!({"chip":{"task":3}}), json!({"chip":{"task":4}})]);
+    assert_eq!(child_rows(&live, &json!({"ended":"none"})).expect("no ended children").len(), 1);
+    let mut cut = ended;
+    cut["ended"]["rows"]["cut"] = true.into();
+    assert!(child_rows(&live, &cut).is_err(), "a partial set cannot prove no change");
+    let mut more = live;
+    more["live_after"] = json!({"value":"aa"});
+    assert!(child_rows(&more, &cut).is_err(), "an unread live child cannot disappear");
+}
+
+#[test]
 fn rung_b0s_live_configuration_is_admitted_without_an_account_or_backend() {
     use std::os::unix::ffi::OsStrExt;
     let scratch = support::Scratch::startup("rung-b0-admission");

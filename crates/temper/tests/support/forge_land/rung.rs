@@ -46,6 +46,46 @@ pub fn ctl_json(bytes: &[u8]) -> Result<Value, String> {
     last.ok_or_else(|| "ctl returned no JSON document".into())
 }
 
+/// `render/outcome.rs` and `document/act_answers.rs`: the top-level `task`
+/// names an operation target, not the task created by the owner's chat act.
+pub fn created_chat(value: &Value) -> Result<u64, String> {
+    let created = &value["outcome"]["done"]["owner"]["created"];
+    let first = created["first"].as_u64().ok_or("chat created.first missing")?;
+    require(created["last"] == first && first != 0, "one chat created")?;
+    Ok(first)
+}
+
+/// `change.rs::json` wraps waited panels; accounts keep their specialized
+/// flat envelope, while Jig's other waits retain their named subject.
+pub fn waited(args: &[&str], value: Value) -> Result<Value, String> {
+    require(value["met"] == true, "wait condition unmet")?;
+    if args.starts_with(&["change", "show"]) {
+        let panel = value.get("change").filter(|v| v.is_object()).ok_or("waited change panel missing")?;
+        Ok(panel.clone())
+    } else {
+        Ok(value)
+    }
+}
+
+/// `read_queries.rs::encode_task_page` keeps live and ended reads separate;
+/// `EndedGroup::Rows` adds its own rows object around the ended page.
+pub fn child_rows(live: &Value, ended: &Value) -> Result<Vec<Value>, String> {
+    require(live["live_after"].is_null(), "whole live child set")?;
+    let mut rows = live["live"].as_array().ok_or("live children missing")?.clone();
+    match &ended["ended"] {
+        Value::String(none) if none == "none" => {}
+        Value::Object(group) => {
+            let page = group.get("rows").ok_or("ended page missing")?;
+            require(page["after"].is_null() && page["cut"] == false, "whole ended child set")?;
+            rows.extend(page["rows"].as_array().ok_or("ended children missing")?.iter().cloned());
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_) => {
+            return Err("ended children group missing".into());
+        }
+    }
+    Ok(rows)
+}
+
 /// The guide's init and the existing owned-forge fixture, with QA's model/room
 /// recipe (qa.md, 3; configuration.md, 13.8), before the first start.
 pub fn deployment(paths: &[PathBuf; 3]) {
@@ -242,8 +282,7 @@ impl Driver {
         let timeout = left.div_ceil(1_000).to_string();
         let args: Vec<_> = args.iter().copied().chain(["--until", condition, "--timeout", &timeout]).collect();
         let value = self.ctl(&args, None)?;
-        require(value["met"] == true, &format!("phase {}: unmet {condition}", self.phase))?;
-        Ok(value)
+        waited(&args, value).map_err(|error| format!("phase {}: {condition}: {error}", self.phase))
     }
 
     /// Activity is a paged public read. Do not mistake a cut first page for the
@@ -277,17 +316,9 @@ impl Driver {
 
     fn children(&mut self, parent: &str) -> Result<Vec<Value>, String> {
         let project = self.project.clone();
-        let read = self.ctl(&["task", "list", "--project", &project, "--parent", parent, "--ended"], None)?;
-        require(read["live_after"].is_null(), "whole live child set")?;
-        let ended = &read["ended"]["rows"];
-        require(ended["after"].is_null() && ended["cut"] == false, "whole ended child set")?;
-        Ok(read["live"]
-            .as_array()
-            .ok_or("live children missing")?
-            .iter()
-            .chain(ended["rows"].as_array().ok_or("ended children missing")?)
-            .cloned()
-            .collect())
+        let live = self.ctl(&["task", "list", "--project", &project, "--parent", parent], None)?;
+        let ended = self.ctl(&["task", "list", "--project", &project, "--parent", parent, "--ended"], None)?;
+        child_rows(&live, &ended)
     }
 
     fn conversation(&mut self, chat: &str) -> Result<String, String> {
@@ -657,7 +688,7 @@ fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(),
         ],
         None,
     )?;
-    let chat = created["task"].as_u64().ok_or("chat task number")?.to_string();
+    let chat = created_chat(&created)?.to_string();
     driver.wait(&["inbox"], "waiting")?;
     driver.met(40_480);
     driver.phase("person's answer sent", 186_660);
