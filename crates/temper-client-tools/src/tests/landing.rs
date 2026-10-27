@@ -300,11 +300,11 @@ fn landing_calls_round_trip_and_reject_waits_and_zero_tasks() {
 }
 #[test]
 fn help_landing() {
-    f::check_golden("help_landing_show", &f::help(Some(53)));
+    f::check_golden("help_landing_show", &f::help(Some(55)));
 }
 #[test]
 fn help_landings() {
-    f::check_golden("help_landing_list", &f::help(Some(54)));
+    f::check_golden("help_landing_list", &f::help(Some(56)));
 }
 
 #[test]
