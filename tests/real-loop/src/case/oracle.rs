@@ -2563,7 +2563,8 @@ fn pause_stop(observed: &Observed, misses: &mut Vec<Miss>) {
             "5.2",
             text(task, "/chip/phase") == "held"
                 && number(task, "/hold/owner/revision") == Some(B_HOLD)
-                && number(task, "/hold/owner/reason/placed/hold").is_some_and(|hold| hold != 0),
+                && number(task, "/hold/owner/reason/placed/hold").is_some_and(|hold| hold != 0)
+                && number(task, "/hold/owner/reason/placed/hold") == number(held, "/hold/owner/reason/placed/hold"),
             PERSON_STOP,
             "B must stay held at the person's Stop revision",
         );
@@ -3040,6 +3041,9 @@ mod pause_tests {
         let mut early = passing.clone();
         early.documents.get_mut(&Read::BEnded).expect("ended")["activity"]["rows"][3]["event"]["owner"]["source"]["line"]
             ["decided"]["revision"] = 99.into();
+        let mut changed_hold = passing.clone();
+        changed_hold.documents.get_mut(&Read::BStillHeld).expect("still held")["task"]["hold"]["owner"]["reason"]["placed"]
+            ["hold"] = json!(99);
         let mut a_held = passing.clone();
         a_held.documents.get_mut(&Read::OwnerEnded).expect("A")["task"]["hold"] = json!({"owner":{}});
         let mut a_released = passing.clone();
@@ -3060,6 +3064,7 @@ mod pause_tests {
             ["source"]["position"] = 13.into();
         for (label, observed) in [
             ("red", red),
+            ("changed hold", changed_hold),
             ("missing file", missing_file),
             ("early", early),
             ("A held", a_held),
@@ -4594,7 +4599,8 @@ fn direction_news(observed: &Observed, misses: &mut Vec<Miss>) {
             "5.4",
             text(doc, "/chip/phase") == "held"
                 && number(doc, "/hold/owner/revision") == Some(OVERLAP_HOLD_REVISION)
-                && number(doc, "/hold/owner/reason/placed/hold").is_some_and(|hold| hold != 0),
+                && number(doc, "/hold/owner/reason/placed/hold").is_some_and(|hold| hold != 0)
+                && number(doc, "/hold/owner/reason/placed/hold") == number(held, "/hold/owner/reason/placed/hold"),
             DIRECTION_NEWS,
             format_args!("{read:?}: B must remain held at the person's Stop"),
         );
@@ -5187,6 +5193,10 @@ mod direction_tests {
     #[test]
     fn descendants_must_share_bs_hold_without_advancing_or_finishing() {
         let passing = met();
+        let mut changed = passing.clone();
+        changed.documents.get_mut(&Read::DirectionBPending).expect("still held")["task"]["hold"]["owner"]["reason"]["placed"]
+            ["hold"] = json!(99);
+        assert!(!step_5_4(&changed).is_empty(), "B keeps the same hold until release");
         for read in [Read::PlannedHeld, Read::PlannedCoderHeld] {
             for (path, replacement) in [
                 ("/task/chip/phase", json!("running")),
