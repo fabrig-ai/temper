@@ -79,7 +79,8 @@ fn limits() -> engine::Limits {
     limits.tasks.run_inbox = 8;
     limits.tasks.authority_grants = 16;
     limits.tasks.executor_kinds = 8;
-    limits.tasks.authority_bytes = 64;
+    // The stock's read plus six change grants narrow to eight repository patterns (200 bytes).
+    limits.tasks.authority_bytes = 256;
     limits.tasks.authority_segments = 8;
     limits.tasks.contract_choices = 2;
     limits.authority.segments = 8;
