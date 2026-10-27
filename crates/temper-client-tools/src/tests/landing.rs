@@ -371,7 +371,9 @@ fn unknown_task_and_malformed_panels_finish_the_read_and_close_the_watch() {
     root.pending_reads.push(1);
     let call = root.submit(&["landing", "show", "61"]);
     root.serve(call, c::ReadResult::Value(c::ReadValue::Task(Box::new(f::goal(60, c::WaitsOn::Nothing)))));
-    assert_eq!(root.answer(call).unwrap().status, 1);
+    let answer = root.answer(call).unwrap();
+    assert_eq!(answer.status, 1);
+    assert_eq!(answer.stderr.as_ref(), b"unexpected task document\n");
     for wrong_task in [false, true] {
         let mut root = f::signed_in(f::PARTY);
         let call = root.submit(&["landing", "show", "61", "--project", "1"]);
@@ -386,7 +388,9 @@ fn unknown_task_and_malformed_panels_finish_the_read_and_close_the_watch() {
         };
         let subject = landing::subject(Some(61), 1, false, &root.limits);
         deliver(&mut root, subject, bytes);
-        assert_eq!(root.answer(call).unwrap().status, 1);
+        let answer = root.answer(call).unwrap();
+        assert_eq!(answer.status, 1);
+        assert_eq!(answer.stderr.as_ref(), b"unexpected landing document\n");
         assert_eq!(root.watches.len(), 1);
     }
 }
@@ -399,10 +403,52 @@ fn panel_printing_refuses_one_byte_past_the_text_window() {
         limits.tools.text = u32::try_from(answer.stdout.len()).unwrap();
         assert_eq!(landing::print(&panel, json, &limits).status, 0);
         limits.tools.text = limits.tools.text.checked_sub(1).unwrap();
-        assert_eq!(landing::print(&panel, json, &limits).status, 1);
+        let answer = landing::print(&panel, json, &limits);
+        assert_eq!(answer.status, 1);
+        assert!(contains(&answer.stderr, "result limit"));
     }
 }
 
 fn contains(bytes: &[u8], part: &str) -> bool {
     skein_lib::bytes::find(bytes, part.as_bytes()).is_some()
+}
+
+#[test]
+fn an_invalid_direct_call_prints_invalid_landing_call() {
+    for json in [false, true] {
+        let mut root = f::signed_in(f::PARTY);
+        let mut call = f::call(&["landing", "61"]);
+        *call.values.get_mut(0).unwrap() = Some(jig::call::Values::One(jig::call::Value::Number(0)));
+        let number = root.submit_prepared(call, json, None);
+        let answer = root.answer(number).unwrap();
+        assert_eq!(answer.status, 1);
+        assert!(answer.stdout.is_empty());
+        assert_eq!(
+            answer.stderr.as_ref(),
+            if json { b"{\"error\":\"invalid landing call\"}".as_slice() } else { b"invalid landing call\n" }
+        );
+        assert_eq!(root.watches.len(), 1, "only me remains watched");
+    }
+}
+
+#[test]
+fn a_refused_landing_or_landings_watch_prints_not_allowed() {
+    for (argv, task) in
+        [(&["landing", "61", "--project", "1"][..], Some(61)), (&["landings", "--project", "1"][..], None)]
+    {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let call = root.submit_prepared(f::call(argv), json, None);
+            let subject = landing::subject(task, 1, false, &root.limits);
+            root.end(call, &subject, c::WatchEnd::NotAllowed);
+            let answer = root.answer(call).unwrap();
+            assert_eq!(answer.status, 2);
+            assert!(answer.stdout.is_empty());
+            assert_eq!(
+                answer.stderr.as_ref(),
+                if json { b"{\"error\":\"not_allowed\"}".as_slice() } else { b"not_allowed\n" }
+            );
+            assert_eq!(root.watches.len(), 1, "only me remains watched");
+        }
+    }
 }
