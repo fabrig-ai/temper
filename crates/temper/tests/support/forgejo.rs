@@ -11,6 +11,8 @@ use temper_real_loop_world::landing;
 pub type BranchHead = (Box<[u8]>, Box<[u8]>);
 // The landing story gathers its agent's brief before the person's next command.
 const BRIEF_GATHER_MS: u64 = 5000;
+// A read's page size only; exhaust the list before asserting absence.
+const PAGE_LIMIT: u32 = 50;
 
 /// The owned Forgejo of domain/testing.md 2.6, prepared, run and reconciled
 /// by temper's commands with its runner, attached through skein's `Instance`,
@@ -33,7 +35,7 @@ impl Throwaway {
 
     #[must_use]
     pub fn start_with_job_sleep(scratch: &Scratch, sleep_seconds: u64) -> Self {
-        Self::start_bare(scratch).with_repository(scratch, sleep_seconds)
+        Self::start_bare(scratch).with_repository(scratch, sleep_seconds, false)
     }
 
     /// Keep the test's delivery receiver bound before configuring Forgejo's hook.
@@ -41,11 +43,16 @@ impl Throwaway {
     pub fn start_receiving(scratch: &Scratch) -> (Self, TcpListener) {
         let [listener] = super::reserve_listeners(&[]);
         let address = listener.local_addr().expect("delivery receiver address");
-        let fixture = Self::start_bare_with_webhooks(scratch, Some(address)).with_repository(scratch, 60);
+        let fixture = Self::start_bare_with_webhooks(scratch, Some(address)).with_repository(scratch, 60, false);
         (fixture, listener)
     }
 
-    fn with_repository(mut self, scratch: &Scratch, sleep_seconds: u64) -> Self {
+    #[must_use]
+    pub fn start_with_tier(scratch: &Scratch) -> Self {
+        Self::start_bare(scratch).with_repository(scratch, 60, true)
+    }
+
+    fn with_repository(mut self, scratch: &Scratch, sleep_seconds: u64, tier: bool) -> Self {
         let began = skein_shell::Clock::new().now().now;
         let reconciled = owned::reconcile(scratch.path(), 1);
         assert_eq!(reconciled.status.code(), Some(0), "{}", String::from_utf8_lossy(&reconciled.stderr));
@@ -55,7 +62,7 @@ impl Throwaway {
         );
         stage("reconcile", began);
         let person = person_token(&self.instance);
-        let repository = repository(&self.instance, &person, sleep_seconds);
+        let repository = repository(&self.instance, &person, sleep_seconds, tier);
         owned::adopt(scratch.path(), &self.instance, &person, self.webhooks);
         self.person = Some(person);
         self.repository = Some(repository);
@@ -144,6 +151,62 @@ impl Throwaway {
         assert_eq!(response.status, 200, "job status");
         let status: Value = serde_json::from_slice(&response.body).expect("status JSON");
         status["state"].as_str().expect("job state").into()
+    }
+    #[must_use]
+    pub fn merge_commit(&self, pull: u64) -> String {
+        let response = self.get(&format!("pulls/{pull}"));
+        assert_eq!(response.status, 200, "merged pull");
+        let pull: Value = serde_json::from_slice(&response.body).expect("pull JSON");
+        pull["merge_commit_sha"].as_str().expect("merge commit").into()
+    }
+    #[must_use]
+    pub fn workflow_runs(&self, workflow: &str) -> Vec<Value> {
+        let mut runs = Vec::new();
+        for page in 1.. {
+            let response = self.get(&format!("actions/runs?page={page}&limit={PAGE_LIMIT}"));
+            assert_eq!(response.status, 200, "workflow runs");
+            let value: Value = serde_json::from_slice(&response.body).expect("runs JSON");
+            let entries = value["workflow_runs"].as_array().expect("workflow runs");
+            if entries.is_empty() {
+                break;
+            }
+            for run in entries {
+                eprintln!(
+                    "forge run: {}",
+                    json!({"id":run["id"], "workflow":run["workflow_id"], "commit":run["commit_sha"],
+                        "event":run["event"], "status":run["status"],
+                        "user":run["trigger_user"]["login"], "user_id":run["trigger_user"]["id"]})
+                );
+            }
+            runs.extend(entries.iter().filter(|run| run["workflow_id"] == workflow).cloned());
+        }
+        runs
+    }
+    #[must_use]
+    pub fn commit_statuses(&self, commit: &str) -> Value {
+        let response = self.get(&format!("commits/{commit}/status"));
+        assert_eq!(response.status, 200, "commit statuses");
+        serde_json::from_slice(&response.body).expect("statuses JSON")
+    }
+    #[must_use]
+    pub fn branches_with_prefix(&self, prefix: &str) -> Vec<String> {
+        let mut names = Vec::new();
+        for page in 1.. {
+            let response = self.get(&format!("branches?page={page}&limit={PAGE_LIMIT}"));
+            assert_eq!(response.status, 200, "branch list by prefix");
+            let value: Value = serde_json::from_slice(&response.body).expect("branches JSON");
+            let entries = value.as_array().expect("branches");
+            if entries.is_empty() {
+                break;
+            }
+            for branch in entries {
+                let name = branch["name"].as_str().expect("branch name");
+                if name.starts_with(prefix) {
+                    names.push(name.into());
+                }
+            }
+        }
+        names
     }
     #[must_use]
     pub fn main_readme(&self) -> Vec<u8> {
@@ -306,7 +369,7 @@ fn person_token(instance: &Instance) -> Token {
     stage("person", began);
     Token::new(value["sha1"].as_str().expect("person token").into())
 }
-fn repository(instance: &Instance, person: &Token, sleep_seconds: u64) -> u64 {
+fn repository(instance: &Instance, person: &Token, sleep_seconds: u64, tier: bool) -> u64 {
     let began = skein_shell::Clock::new().now().now;
     request(instance, person, "POST", "/api/v1/orgs", &json!({"username":"acme","visibility":"private"}), 201);
     let value = request(
@@ -321,7 +384,11 @@ fn repository(instance: &Instance, person: &Token, sleep_seconds: u64) -> u64 {
     // The hinted job sleeps 5 s, outlasting its overridden 3 s settle window
     // (protocol/setup.md 13.4).
     let check = format!("test ! -e slow || sleep {sleep_seconds}\ntest -s README.md\n");
-    for (path, content) in [("check.sh", check.as_str()), (".forgejo/workflows/check.yaml", WORKFLOW)] {
+    let mut files = vec![("check.sh", check.as_str()), (".forgejo/workflows/check.yaml", WORKFLOW)];
+    if tier {
+        files.extend([("tier.sh", "test -s README.md\n"), (".forgejo/workflows/tier.yaml", TIER_WORKFLOW)]);
+    }
+    for (path, content) in files {
         let length = skein_lib::base64::encoded_len(
             skein_lib::base64::Alphabet::Standard,
             u32::try_from(content.len()).expect("workflow length"),
@@ -353,6 +420,25 @@ jobs:
           auth=$(printf 'x-access-token:%s' "${{ github.token }}" | base64 -w0)
           git -c "http.extraHeader=Authorization: basic $auth" clone "${{ github.server_url }}/${{ github.repository }}.git" .
           git checkout "${{ github.sha }}" && sh check.sh
+"#;
+const TIER_WORKFLOW: &str = r#"on:
+  workflow_dispatch:
+    inputs:
+      temper_commit:
+        required: true
+      temper_key:
+        required: true
+      temper_tests:
+        required: false
+        default: ''
+jobs:
+  tier:
+    runs-on: temper-host
+    steps:
+      - run: |
+          auth=$(printf 'x-access-token:%s' "${{ github.token }}" | base64 -w0)
+          git -c "http.extraHeader=Authorization: basic $auth" clone "${{ github.server_url }}/${{ github.repository }}.git" .
+          git checkout "${{ inputs.temper_commit }}" && sh tier.sh
 "#;
 
 // E4 observes a distinct managed deployment beside this owned fixture.

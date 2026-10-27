@@ -131,6 +131,14 @@ pub(super) fn write_private(path: &Path, bytes: &[u8]) {
     fs::set_permissions(path, fs::Permissions::from_mode(0o600)).expect("private fixture");
 }
 pub fn configuration(directory: &Path, forge: &Forge<'_>) {
+    configure(directory, forge, None);
+}
+
+pub fn configuration_with_tier(directory: &Path, forge: &Forge<'_>, repository: u64) {
+    configure(directory, forge, Some(repository));
+}
+
+fn configure(directory: &Path, forge: &Forge<'_>, tier_repository: Option<u64>) {
     assert!(Path::new("/usr/bin/git").is_file(), "/usr/bin/git is required");
     for name in ["accounts", "secrets", "state"] {
         fs::create_dir_all(directory.join(name)).expect("deployment directory");
@@ -151,6 +159,13 @@ pub fn configuration(directory: &Path, forge: &Forge<'_>) {
     write_private(&directory.join("agent.json"), &agent);
     let mut value: serde_json::Value = serde_json::from_slice(&value).expect("deployment JSON");
     forgejo::configuration(directory, forge, &mut value);
+    if let Some(repository) = tier_repository {
+        value["application"]["landing"]["projects"][0]["gates"] = serde_json::json!([{
+            "forge": value["application"]["forges"][0]["number"],
+            "repository": repository,
+            "tiers": [{"name":"browser", "workflow":"tier.yaml", "artifact":"report", "format":"lines"}]
+        }]);
+    }
     write_private(&directory.join("temper.json"), &serde_json::to_vec(&value).expect("deployment JSON"));
 }
 
