@@ -721,6 +721,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         title: Box::new([4]),
         body: Box::new([5]),
         priority: -6,
+        ci: None,
         change: Change {
             task: 1,
             state,

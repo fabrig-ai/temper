@@ -144,6 +144,7 @@ fn changed(task: u64, repository: Repository, pull: Option<u64>, head: Option<[u
         title: b"change".as_slice().into(),
         body: Box::new([]),
         priority: 0,
+        ci: None,
         change: change::Change {
             task,
             state: change::State::Landed { merge: routes::object(99).bytes },

@@ -1743,6 +1743,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                     None => Box::new([]),
                 },
                 priority,
+                ci: None,
                 change: forge_change::Change {
                     task,
                     state: forge_change::State::Producing { requested: false },

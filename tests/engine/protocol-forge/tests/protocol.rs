@@ -15,6 +15,7 @@ fn change_row() -> top::ChangeRow {
         title: Box::from(&b"Small fix"[..]),
         body: Box::from(&b"Fix the file"[..]),
         priority: 1,
+        ci: None,
         change: change::Change {
             task: 51,
             state: change::State::Producing { requested: false },

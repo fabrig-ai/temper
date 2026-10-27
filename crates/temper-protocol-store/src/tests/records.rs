@@ -266,6 +266,28 @@ fn a_change_in_each_state_round_trips_unchanged() {
     }
 }
 #[test]
+fn terminal_change_ci_round_trips_with_or_without_an_observation() {
+    use temper_engine_domain_forge_change::{Ci, State, Status};
+    const HEAD: skein_forge::api::Commit = [15; 32]; // change_row's last_head.
+    const MERGE: skein_forge::api::Commit = [1; 32];
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    for state in [State::Landed { merge: MERGE }, State::Ended] {
+        for ci in [
+            None,
+            Some(Ci { head: HEAD, status: Status::Unknown }),
+            Some(Ci { head: HEAD, status: Status::Pending }),
+            Some(Ci { head: HEAD, status: Status::Passed }),
+            Some(Ci { head: HEAD, status: Status::Failed }),
+        ] {
+            let mut change = fixtures::change_row(state.clone());
+            change.ci = ci;
+            let row = forge::Stored::Change(change);
+            let bytes = records::encode(&row);
+            assert_eq!(records::decode(&bytes, &bounds), Ok(row));
+        }
+    }
+}
+#[test]
 fn a_negative_priority_round_trips_unchanged() {
     let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
     for priority in [-1_i32, i32::MIN, 0_i32, i32::MAX] {

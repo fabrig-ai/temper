@@ -1348,7 +1348,8 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             {
                 row.queue_repair = Some(repair);
                 row.queue_repairs = row.queue_repairs.saturating_add(1);
-                save_change(out, row.clone());
+                let saved = row.clone();
+                save_change(d, out, saved);
             }
         }
         Event::Delegated { task, child, kind } => delegated(d, task, child, kind, out),
@@ -2288,7 +2289,8 @@ fn delegated(d: &mut Domain, task: u64, child: u64, kind: change::Delegate, out:
     };
     row.delegate = Some((child, kind));
     row.delegate_status = change::Status::Unknown;
-    save_change(out, row.clone());
+    let saved = row.clone();
+    save_change(d, out, saved);
 }
 
 fn delegate_refused(d: &mut Domain, env: &Env<Limits>, task: u64, child: u64, out: &mut Queue<Request>) {
@@ -2379,7 +2381,8 @@ fn delegate_result(
         }
         change::Delegate::Produce | change::Delegate::Repair(_) | change::Delegate::Resolve { .. } => {}
     }
-    save_change(out, row.clone());
+    let saved = row.clone();
+    save_change(d, out, saved);
 }
 
 fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Queue<Request>) {
@@ -3054,7 +3057,7 @@ fn change_outcome(
         row.drift = Some(change::Hold::PullClosed);
     }
     let saved = row.clone();
-    save_change(out, saved.clone());
+    save_change(d, out, saved.clone());
     if pull_closed {
         let branch = skein_forge_client::Resource {
             repository: saved.repository,
@@ -4540,7 +4543,8 @@ fn drift(
                 crate::DriftChange::PullClosed { .. } => change::Hold::PullClosed,
                 crate::DriftChange::Retargeted { .. } => change::Hold::Retargeted,
             });
-            save_change(out, row.clone());
+            let saved = row.clone();
+            save_change(d, out, saved);
         }
     }
 }
@@ -4839,8 +4843,26 @@ fn settled_projection(d: &Domain, goal: u64, out: &mut Queue<Request>) {
     }
 }
 
+/// Capture terminal CI in the save already ending the change; a later save
+/// without a fresh read keeps the observation restored with the row.
+fn retain_terminal_ci(d: &mut Domain, row: &mut ChangeRow) {
+    if !row.terminal() {
+        return;
+    }
+    let read = match d.panel_ci.get(&row.task) {
+        Some(read) if Some(read.head) == row.change.last_head => Some(*read),
+        Some(_) | None => row.ci,
+    };
+    row.ci = match read {
+        Some(read) if Some(read.head) == row.change.last_head => Some(read),
+        Some(_) | None => None,
+    };
+    d.changes.get_mut(&row.task).expect("saved change is retained").ci = row.ci;
+}
+
 /// Every saved record invalidates its own panel (domain/forge.md, 8.8).
-fn save_change(out: &mut Queue<Request>, row: ChangeRow) {
+fn save_change(d: &mut Domain, out: &mut Queue<Request>, mut row: ChangeRow) {
+    retain_terminal_ci(d, &mut row);
     let task = row.task;
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(row) });
     emit(out, Request::Marked { tasks: Box::new([task]) });
@@ -4848,15 +4870,15 @@ fn save_change(out: &mut Queue<Request>, row: ChangeRow) {
 
 /// Include the nearest affected followers when a saved row changes its queue order.
 fn save_queue_change(
-    d: &Domain,
+    d: &mut Domain,
     env: &Env<Limits>,
     before: Option<change::Ready>,
-    row: ChangeRow,
+    mut row: ChangeRow,
     out: &mut Queue<Request>,
 ) {
     let after = crate::panel::ready(&row);
     if before == after {
-        save_change(out, row);
+        save_change(d, out, row);
         return;
     }
     let (ready, repair) = queue_ready(d, &row, &env.limits);
@@ -4900,6 +4922,7 @@ fn save_queue_change(
         tasks.push(next.task).expect("nearest follower room");
         previous = Some(next);
     }
+    retain_terminal_ci(d, &mut row);
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(row) });
     emit(out, Request::Marked { tasks: tasks.into_boxed() });
 }

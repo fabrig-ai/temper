@@ -320,6 +320,49 @@ fn ci_replacements_mark_once_and_repeated_reads_are_inert() {
     assert_eq!(panel(&d).ci, change::Status::Unknown);
 }
 
+#[test]
+fn terminal_panel_rejects_a_saved_verdict_at_another_head() {
+    for state in [change::State::Landed { merge: fixtures::BASE }, change::State::Ended] {
+        let mut row = fixtures::opening_row();
+        row.change.state = state;
+        row.ci = Some(change::Ci { head: fixtures::BASE, status: change::Status::Passed });
+        assert_eq!(panel(&with_row(row)).ci, change::Status::Unknown);
+    }
+}
+
+#[test]
+fn ending_a_change_saves_its_last_ci_without_an_extra_write() {
+    let mut row = fixtures::opening_row();
+    row.pending = None;
+    let mut d = with_row(row);
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    let read = change::Ci { head: fixtures::HEAD, status: change::Status::Failed };
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    domain::keep_panel_ci(&mut d, fixtures::CHANGE, read, &mut out);
+    let requests = outputs(
+        &mut d,
+        Event::Release {
+            task: fixtures::CHANGE,
+            root: fixtures::CHANGE,
+            ending: ReleaseEnding::Cancelled,
+            reason: None,
+            entry: fixtures::OPEN,
+        },
+    );
+    let mut saves = skein_lib::List::with_capacity(LIMITS.changes);
+    for request in requests {
+        if let Request::Save { record: Stored::Change(row), .. } = request {
+            saves.push(row).expect("fixture changes fit");
+        }
+    }
+    let [saved] = saves.as_slice() else { panic!("the finish's one change save") };
+    assert_eq!(saved.change.state, change::State::Ended);
+    assert_eq!(saved.ci, Some(read));
+    assert_eq!(panel(&with_row(saved.clone())).ci, change::Status::Failed);
+}
+
 /// The parent commits every save; replaying them in order restores each key's
 /// last value without copying any of the connector's volatile working set.
 fn commit_panel_records(records: &mut skein_lib::List<Stored>, requests: Box<[Request]>) {

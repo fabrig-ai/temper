@@ -78,6 +78,7 @@ pub fn opening_row() -> ChangeRow {
         title: Box::from(b"Small fix".as_slice()),
         body: Box::new([]),
         priority: 1,
+        ci: None,
         change: change::Change {
             task: CHANGE,
             state: change::State::Opening { requested: true },

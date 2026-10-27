@@ -949,6 +949,8 @@ mod memory_figures;
 // and retained demo record also flow into the root and Service layouts.
 // The rebased small profile retains 32 applications rather than four: each
 // adds one 32-byte Application reference (28 * 32 = 896 root heap bytes).
+// F5 keeps terminal CI in ChangeRow: its optional head/verdict grows row-bearing
+// engine queues and store/system envelopes; the live panel_ci map is unchanged.
 fn memory_figure(
     name: &str,
     terms: &temper_service::startup::MemoryTerms,

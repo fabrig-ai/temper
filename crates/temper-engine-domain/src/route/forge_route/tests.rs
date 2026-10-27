@@ -311,6 +311,7 @@ fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
         title: Box::from(b"Change".as_slice()),
         body: Box::new([]),
         priority: 0,
+        ci: None,
         change: change::Change {
             task: 7,
             state: change::State::Producing { requested: false },

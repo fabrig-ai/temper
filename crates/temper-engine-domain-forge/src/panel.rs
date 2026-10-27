@@ -153,7 +153,8 @@ impl Domain {
                 .push(PanelGate { number: gate.number, kind: gate.kind, blocking: gate.blocking, verdict })
                 .expect("admitted panel gates");
         }
-        let ci = match self.panel_ci.get(&task) {
+        let read = if row.terminal() { row.ci.as_ref() } else { self.panel_ci.get(&task) };
+        let ci = match read {
             Some(read) if Some(read.head) == head => read.status,
             Some(_) | None => change::Status::Unknown,
         };
