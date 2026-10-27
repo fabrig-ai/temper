@@ -2314,7 +2314,7 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::WelcomeWantDone => (&[b" you want it done, and it happens."], &[]),
         Word::WelcomePlayground => (&[b"Try the playground"], &[]),
         Word::WelcomePlaygroundDescription => (&[b"A built-in scripted model and forge. Get a taste of how temper feels."], &[]),
-        Word::WelcomePlaygroundCost => (&[b"Fully offline, no costs or external services. \xc2\xb7 Ready at once"], &[]),
+        Word::WelcomePlaygroundCost => (&[b"Fully offline \xc2\xb7 Ready at once"], &[]),
         Word::WelcomeSetup => (&[b"Set up temper"], &[]),
         Word::WelcomeSetupDescription => (&[b"Your forge: GitHub or Forgejo"], &[]),
         Word::WelcomeSetupTime => (&[b"About five minutes"], &[]),
