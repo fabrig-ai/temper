@@ -343,7 +343,7 @@ fn check(
         object,
         document,
         b"name",
-        u32::try_from(CHECK_NAME_BYTES).expect("check name bound"),
+        u32::try_from(CHECK_NAME_BYTES).expect("check name bound fits u32"),
         path,
         problems,
     );
@@ -351,7 +351,7 @@ fn check(
         object,
         document,
         b"workflow",
-        u32::try_from(WORKFLOW_BYTES).expect("workflow bound"),
+        u32::try_from(WORKFLOW_BYTES).expect("workflow bound fits u32"),
         path,
         problems,
     );
@@ -431,7 +431,7 @@ fn repository_checks(
                 &mut object,
                 document,
                 b"artifact",
-                u32::try_from(CHECK_NAME_BYTES).expect("check name bound"),
+                u32::try_from(CHECK_NAME_BYTES).expect("artifact name bound fits u32"),
                 &path,
                 problems,
             );
