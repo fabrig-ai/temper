@@ -2562,9 +2562,6 @@ fn gate_executor(row: &forge::ChangeRow, kind: forge_change::GateKind) -> tasks:
     }
 }
 
-/// Admit one project-funded repair of a broken landing branch. The owner row
-/// records its identity in the same root decision as the new task.
-
 /// Deployment-owned tier runs use the project's connector-repair seed.
 fn start_tier_run(
     domain: &mut Domain,
@@ -2614,14 +2611,8 @@ fn append_tier_words(words: &mut List<u8>, tier: &[u8], number: u64) -> bool {
             return false;
         }
     }
-    let branch = forge::tier_branch(&[], number);
-    let mut from = 0;
-    for (at, byte) in branch.iter().enumerate() {
-        if *byte == b'/' {
-            from = at;
-        }
-    }
-    for byte in &branch[from + 1..] {
+    let digits = decimal(number);
+    for byte in &digits {
         if words.push(*byte).is_err() {
             return false;
         }
@@ -2630,8 +2621,9 @@ fn append_tier_words(words: &mut List<u8>, tier: &[u8], number: u64) -> bool {
 }
 
 pub(crate) fn start_tier(domain: &mut Domain, _env: &Env<Limits>, context: &tasks::RunContext) -> bool {
-    if !matches!(context.requester, tasks::Party::Deployment { .. }) {
-        return false;
+    match context.requester {
+        tasks::Party::Deployment { .. } => {}
+        tasks::Party::Task(_) | tasks::Party::Person(_) => return false,
     }
     let Some(row) = domain.forge.tier_task(context.task) else { return false };
     let Some(run) = &row.record.run else { return false };
@@ -2648,12 +2640,14 @@ pub(crate) fn start_tier(domain: &mut Domain, _env: &Env<Limits>, context: &task
         match parameter {
             tasks::Parameter::Resource { name: 1, connector, resource } => {
                 repository = *connector == domain.config.forge_connector
-                    && *resource == forge::tag(row.repository.forge, row.repository.repository)
+                    && *resource == forge::tag(row.repository.forge, row.repository.repository);
             }
             tasks::Parameter::Bytes { name: 3, value } => branch = *value == expected_branch,
             tasks::Parameter::Bytes { name: 10, value } => tier = *value == row.tier,
             tasks::Parameter::Number { name: 11, value } => number = *value == run.number,
-            _ => return false,
+            tasks::Parameter::Number { .. } | tasks::Parameter::Bytes { .. } | tasks::Parameter::Resource { .. } => {
+                return false;
+            }
         }
     }
     if !(repository && branch && tier && number) {
@@ -2722,6 +2716,7 @@ fn describe_tier_effect(
     })
 }
 
+/// Admit a project-funded repair of a broken landing branch.
 fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool {
     let Some(row) = domain.forge.change(task) else { return false };
     if let Some((_, repair)) = domain.forge.queue_repair(row.repository, &row.base)
