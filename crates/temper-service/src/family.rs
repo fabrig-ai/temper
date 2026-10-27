@@ -338,6 +338,11 @@ pub fn panel(value: forge::Panel, forges: &[crate::settings::Forge], limits: &w:
     let record = w::ChangePanel::new(
         limits,
         w::ChangePanelParts {
+            way: match value.way {
+                change::Way::Queue => w::Way::Queue,
+                change::Way::Turn => w::Way::Turn,
+            },
+            in_landing: value.in_landing,
             task: value.task,
             forge: value.forge,
             owner: value.owner,
@@ -372,6 +377,12 @@ fn used(value: forge::PanelUsed, limits: &w::Limits) -> Option<w::Used> {
 fn panel_step(value: forge::PanelStep, limits: &w::Limits) -> Option<w::Step> {
     Some(match value {
         forge::PanelStep::Ended => w::Step::Ended,
+        forge::PanelStep::Ready { landing } => {
+            w::Step::Ready(w::InLanding::new(limits, w::InLandingParts { landing }).ok()?)
+        }
+        forge::PanelStep::Preparing { landing } => {
+            w::Step::Preparing(w::InLanding::new(limits, w::InLandingParts { landing }).ok()?)
+        }
         forge::PanelStep::Producing => w::Step::Producing,
         forge::PanelStep::Opening => w::Step::Opening,
         forge::PanelStep::Recreating => w::Step::Recreating,
