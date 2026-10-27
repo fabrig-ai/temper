@@ -1,0 +1,8 @@
+landings --project P [--ended]
+  --project P: a project's name or number; required. The project
+  --ended: a switch. Also the landings that ended
+List a project's landings, the turn's holder first, then newest first
+Prints: `landings of project P`, the turn, and a line per landing: its task, phase, changes and repositories
+--json: the record landings.
+Key: none.
+Without --ended, the live landings alone. `landing N` reads one.
