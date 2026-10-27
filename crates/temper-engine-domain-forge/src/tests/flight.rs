@@ -25,7 +25,7 @@ fn a_merge_in_the_forges_queue_keeps_its_flight_until_the_merge_is_proved() {
     let mut domain = domain();
     let mut entry = held_issue();
     entry.effect = skein_forge_client::Effect {
-        write: skein_forge::api::Write::Merge { number: 1, head: HEAD },
+        write: skein_forge::api::Write::Merge { number: 1, head: HEAD, how: skein_forge::api::MergeHow::Style },
         condition: skein_forge_client::Condition::Merge { base: Box::from(b"main".as_slice()) },
     };
     entry.queued = true;
