@@ -213,7 +213,7 @@ fn a_small_fix_made_in_a_smith_chat_lands_through_the_fake_forge() {
         if world.store.rows.values().any(|stored| {
             matches!(stored,
                 Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(change)
-                    if matches!(change.change.state, temper_engine_domain_forge_change::State::Landed { .. }))
+                    if landed(&change.change.state))
             )
         }) {
             break;
@@ -221,7 +221,7 @@ fn a_small_fix_made_in_a_smith_chat_lands_through_the_fake_forge() {
     }
     assert!(world.store.rows.values().any(|stored| matches!(stored,
         Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(change)
-            if matches!(change.change.state, temper_engine_domain_forge_change::State::Landed { .. }))
+            if landed(&change.change.state))
     )));
 }
 
@@ -349,7 +349,7 @@ fn a_smith_change_with_failed_ci_is_repaired_reviewed_and_landed() {
         if world.store.rows.values().any(|stored| {
             matches!(stored,
                 Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(change)
-                    if matches!(change.change.state, temper_engine_domain_forge_change::State::Landed { .. }))
+                    if landed(&change.change.state))
             )
         }) {
             break;
@@ -357,7 +357,7 @@ fn a_smith_change_with_failed_ci_is_repaired_reviewed_and_landed() {
     }
     assert!(world.store.rows.values().any(|stored| matches!(stored,
         Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(change)
-            if matches!(change.change.state, temper_engine_domain_forge_change::State::Landed { .. })
+            if landed(&change.change.state)
                 && change.change.repairs == 1)
     )));
 }
