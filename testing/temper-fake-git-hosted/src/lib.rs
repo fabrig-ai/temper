@@ -12,6 +12,7 @@ pub fn start(inherited: &Inherited) -> Start {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("git worker root").1;
     let mut owned: BTreeSet<_> = inherited.pipes.iter().map(|(_, fd)| *fd).collect();
     owned.insert(inherited.signal);
+    owned.extend(inherited.dir);
     owned.extend(inherited.roots.iter().chain(&inherited.appends).map(|(_, fd)| *fd));
     Start { root, pipes: inherited.pipes.clone().into(), owned: owned.into_iter().collect() }
 }

@@ -150,6 +150,7 @@ impl Disk {
         let mut spawn = fixtures::spawn_of(command);
         spawn.dir = scenario.at.clone().into();
         let inherited = Inherited {
+            dir: None,
             roots: vec![(b"worker".as_slice().into(), descriptor(self.machine.reopen_root(0)))],
             appends: Vec::new(),
             pipes: vec![(0, Fd::new(10_000)), (1, Fd::new(10_001)), (2, Fd::new(10_002))],

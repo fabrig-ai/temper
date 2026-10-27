@@ -6,6 +6,8 @@ use skein_sim_world::Inherited;
 
 /// What temper serve reads at its start, handed over as values.
 pub struct Start {
+    /// The configured worker path, also used to name hosted agents' base.
+    pub worker_path: Box<[u8]>,
     pub document: Box<[u8]>,
     pub files: temper_service::settings::Files,
     pub agent: temper_service::settings::Agent,
@@ -58,7 +60,7 @@ impl Service {
             Some(&start.agent),
             &start.seeds,
             None,
-            Some(temper_service::WorkerRuntime { root: worker, path: b"/worker".as_slice().into() }),
+            Some(temper_service::WorkerRuntime { root: worker, path: start.worker_path.clone() }),
             forges,
             Some(&setup),
             false,

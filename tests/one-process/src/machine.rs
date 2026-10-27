@@ -3,6 +3,13 @@ use skein_lib::Queue;
 pub(crate) use temper_playground::Signalled as SignalHost;
 pub(crate) struct Machine(pub temper_playground::Machine);
 impl skein_world::Machine for Machine {
+    fn open_beneath(
+        &mut self,
+        root: skein_sim::Handle,
+        path: &[u8],
+    ) -> Option<Result<skein_sim::Handle, skein_io::kernel::Error>> {
+        self.0.open_beneath(root, path)
+    }
     fn open_root(&mut self, path: &[u8]) -> Result<skein_sim::Handle, skein_io::kernel::Error> {
         if path == b"client" {
             return Ok(skein_sim::Handle::new(self.0.disk().reopen_root(2).raw()));

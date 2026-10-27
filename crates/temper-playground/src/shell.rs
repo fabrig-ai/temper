@@ -35,11 +35,10 @@ impl Shell {
             let target = target.trim().as_bytes();
             (!target.is_empty() && !target.contains(&b'/') && target != b"..").then_some((text, target))
         });
-        let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("shell worker root").1;
+        let root = inherited.dir.expect("the playground machine opens the shell's spawn directory beneath its root");
         let mut jobs = std::collections::VecDeque::new();
         let (content, target, code) = if let Some((text, target)) = edit {
-            let path = [spawn.dir.as_ref(), b"/", target].concat();
-            jobs.push_back(Op::Open { root, path: path.into(), how: OpenHow::WriteNoFollow });
+            jobs.push_back(Op::Open { root, path: target.into(), how: OpenHow::WriteNoFollow });
             ([text.as_bytes(), b"\n"].concat().into(), target.to_vec(), 0)
         } else {
             let error = inherited.pipes.iter().find(|(child, _)| *child == 2).expect("shell stderr").1;
@@ -51,6 +50,7 @@ impl Shell {
             (Box::new([]) as Box<[u8]>, Vec::new(), 127)
         };
         let mut owned: std::collections::BTreeSet<_> = inherited.roots.iter().map(|(_, fd)| *fd).collect();
+        owned.insert(root);
         owned.extend(inherited.pipes.iter().map(|(_, fd)| *fd));
         owned.insert(inherited.signal);
         Self {

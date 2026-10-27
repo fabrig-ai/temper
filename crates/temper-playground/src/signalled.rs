@@ -1,10 +1,10 @@
-//! Factories close unused startup signal descriptors before running their host.
+//! Factories close unused startup descriptors before running their host.
 use skein_io::kernel::{Complete, Fd, Op, Submit};
 use skein_lib::{Queue, Time, Token, Wall};
 use skein_shell::Host;
 use std::ops::{Deref, DerefMut};
 const CLOSE: Token = Token::new(u64::MAX);
-/// A host that closes the startup signal source it does not use.
+/// A host that closes one startup descriptor it does not use.
 pub struct Signalled<H> {
     host: H,
     signal: Option<Fd>,
@@ -12,7 +12,7 @@ pub struct Signalled<H> {
     after_iteration: Option<fn(&mut H)>,
 }
 impl<H> Signalled<H> {
-    /// Wraps a host and its optional unused startup signal.
+    /// Wraps a host and its optional unused startup signal or launch directory.
     #[must_use]
     pub fn new(host: H, signal: Option<Fd>) -> Self {
         Self { host, signal, closing: false, after_iteration: None }
@@ -43,7 +43,7 @@ impl<H: Host> Host for Signalled<H> {
         for _ in 0..self.host.completions().len() {
             let complete = self.host.completions().pop().expect("completion count");
             if complete.op == CLOSE {
-                complete.result.expect("startup signal close");
+                complete.result.expect("unused startup descriptor close");
                 self.signal = None;
             } else {
                 self.host.completions().push(complete);
@@ -83,9 +83,9 @@ impl<H: Host> Host for Signalled<H> {
         self.host.worst_case()
     }
     fn exit(&self) -> Option<skein_io::kernel::Exit> {
-        self.host.exit()
+        if self.is_empty() { self.host.exit() } else { None }
     }
     fn operations(&self) -> u32 {
-        self.host.operations() + 1
+        self.host.operations() + u32::from(self.signal.is_some() || self.closing)
     }
 }

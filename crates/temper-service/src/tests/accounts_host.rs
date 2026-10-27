@@ -416,12 +416,12 @@ fn missing_registration_runtime_is_refused_before_start() {
 }
 #[test]
 fn overflowing_account_bounds_are_refused_before_start() {
-    const LAST_ACCOUNT_COUNT: u32 = 536_835_027;
+    const LAST_ACCOUNT_COUNT: u32 = 390_439_394;
     let (config, _) = registered();
     let mut overflow = config.limits.driver;
     overflow.accounts = u32::MAX;
     overflow.client.document.record_bytes = u32::MAX;
-    // With schema-bounded moved records and 64 queue slots this is the final account count
+    // With the legacy JIGM record allowance and 64 queue slots this is the final account count
     // whose driver records, moves, finishes, tree nodes and queued payloads fit in u64.
     overflow.accounts = LAST_ACCOUNT_COUNT;
     assert!(worst_case(&overflow, 64, config.limits.store.secrets.page.rows).is_some());

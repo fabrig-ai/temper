@@ -1,15 +1,14 @@
 //! Disk roots and cuts of the playground machine.
 use skein_lib::Queue;
-/// The fake machine's disk and its state, worker and prepared agent roots.
+/// The fake machine's disk and its named state and worker roots.
 pub struct Machine {
     disk: skein_fake_machine::Machine,
-    prepared: Box<[u8]>,
 }
 impl Machine {
-    /// Opens prepared beneath the worker root when it exists, else the worker root.
+    /// Wraps the disk whose roots the selectors name.
     #[must_use]
-    pub fn new(disk: skein_fake_machine::Machine, prepared: &[u8]) -> Self {
-        Self { disk, prepared: prepared.into() }
+    pub fn new(disk: skein_fake_machine::Machine) -> Self {
+        Self { disk }
     }
     /// The disk, for a caller that lays or observes its files.
     pub fn disk(&mut self) -> &mut skein_fake_machine::Machine {
@@ -40,20 +39,19 @@ impl Machine {
     }
 }
 impl skein_sim_world::Machine for Machine {
+    fn open_beneath(
+        &mut self,
+        root: skein_sim::Handle,
+        path: &[u8],
+    ) -> Option<Result<skein_sim::Handle, skein_io::kernel::Error>> {
+        Some(
+            self.disk
+                .open(skein_fake_machine::Opened::new(root.raw()), path, skein_fake_machine::How::Directory)
+                .map(|opened| skein_sim::Handle::new(opened.raw()))
+                .map_err(skein_fake_machine::kernel_error),
+        )
+    }
     fn open_root(&mut self, path: &[u8]) -> Result<skein_sim::Handle, skein_io::kernel::Error> {
-        if path == b"agent" {
-            let worker = self.disk.reopen_root(1);
-            // The parent has no workspace; repository runs adopt its prepared directory.
-            let root = match self.disk.open(worker, &self.prepared, skein_fake_machine::How::Directory) {
-                Ok(root) => {
-                    self.disk.close(worker);
-                    root
-                }
-                Err(skein_fake_machine::Refusal::NotFound) => worker,
-                Err(why) => panic!("prepared agent directory: {why:?}"),
-            };
-            return Ok(skein_sim::Handle::new(root.raw()));
-        }
         let index = match path {
             b"state" => 0,
             b"worker" => 1,

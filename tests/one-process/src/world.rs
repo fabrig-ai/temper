@@ -26,6 +26,7 @@ pub enum Story {
     ChatReadThenWait { words: &'static [u8] },
     Adoption,
     Adopt,
+    TwoChanges,
     Merge,
 }
 #[derive(Debug)]
@@ -41,6 +42,7 @@ pub struct Outcome {
     pub claims_settled_at_restart: u32,
     pub adoptions_answered: u32,
     pub adoption_pending_at_restart: bool,
+    pub workspaces: Vec<Box<[u8]>>,
 }
 #[derive(Clone, Copy)]
 pub(crate) enum Phase {
@@ -66,6 +68,7 @@ pub struct Pushed {
     pub branch: Box<[u8]>,
     pub commit: u64,
     pub parents: Vec<u64>,
+    pub tree: std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
 }
 thread_local! {
     static STORE: RefCell<Option<Rc<RefCell<Store>>>> = const { RefCell::new(None) };
@@ -235,7 +238,7 @@ impl Person {
                 Step::See { find: Find::text(fixtures::ANSWER), within: CHAT_WITHIN },
             ],
             Story::Adoption => stories::adoption_person(),
-            Story::Adopt | Story::Merge => stories::person(),
+            Story::Adopt | Story::TwoChanges | Story::Merge => stories::person(),
         };
         let mut offset = PROGRESS.with(|progress| progress.borrow().at);
         if matches!(scenario, Story::Adoption) && offset < fixtures::ADOPTION_REPLY_STEP {
@@ -552,6 +555,7 @@ fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
     let service = temper_playground::Service::start(
         &temper_playground::Start {
+            worker_path: stories::worker_path().into(),
             document: fixtures::document().into_boxed_slice(),
             files: fixtures::files(),
             agent: fixtures::agent(),
@@ -601,6 +605,9 @@ fn agent(_spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
         fixtures::SEED,
         101,
     ))))
+}
+fn agent_roots(spawn: &skein_io::kernel::Spawn) -> Vec<skein_world::StartupRoot> {
+    temper_playground::agent_roots(spawn, stories::worker_path())
 }
 fn git(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Proc {
     Proc::Playground(Process::Git(Box::new(temper_playground::git(spawn, inherited, transport()))))
@@ -738,7 +745,8 @@ fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>
             program: crate::ctl::PROGRAM.into(),
             make: |spawn, inherited| Proc::Ctl(Box::new(crate::ctl::host(spawn, inherited))),
             instances: 1,
-            operations: skein_io::operations(&limits.io).expect("ctl operations") * 2 + 5,
+            // The launch-directory wrapper owns one additional close.
+            operations: skein_io::operations(&limits.io).expect("ctl operations") * 2 + 6,
         },
         crate::ctl::roots,
     );
@@ -747,18 +755,27 @@ fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>
             program: temper_playground::AGENT.into(),
             make: agent,
             instances: fixtures::AGENTS,
-            operations: fixtures::agent_limits().routes + 3,
+            operations: fixtures::agent_limits()
+                .routes
+                .checked_add(3)
+                // smith reserves one hosted open per permitted requested root.
+                .and_then(|count| count.checked_add(fixtures::agent_limits().domain.run.directories))
+                // Close the additional inherited launch directory.
+                .and_then(|count| count.checked_add(1))
+                .expect("hosted agent operations"),
         },
-        temper_playground::agent_roots,
+        agent_roots,
     );
     world.host_roots(
         skein_world::HostedProgram { program: temper_playground::GIT.into(), make: git, instances: 1, operations: 1 },
         temper_playground::worker_roots,
     );
-    world.host_roots(
-        skein_world::HostedProgram { program: temper_playground::SH.into(), make: shell, instances: 1, operations: 1 },
-        temper_playground::agent_roots,
-    );
+    world.host(skein_world::HostedProgram {
+        program: temper_playground::SH.into(),
+        make: shell,
+        instances: 1,
+        operations: 1,
+    });
 }
 fn deliveries(procs: &[Proc]) -> Vec<Delivery> {
     procs
@@ -856,7 +873,7 @@ fn run_phase(
     let mut world = skein_world::World::new_controlled(settings.seed, settings.config, Memory::Unchecked, |controls| {
         referee::Referee::new(controls, store.clone(), scenario, observed_forge.clone(), run.clone(), phase)
     })
-    .with_machine(Machine(temper_playground::Machine::new(disk, fixtures::PREPARED_REPOSITORY)));
+    .with_machine(Machine(temper_playground::Machine::new(disk)));
     host_programs(&mut world);
     world.spawn_restartable(
         vec![
@@ -933,9 +950,21 @@ fn run_phase(
         claims_settled_at_restart: run.borrow().settled,
         adoptions_answered: u32::try_from(run.borrow().answers.len()).expect("adoption answers"),
         adoption_pending_at_restart: run.borrow().pending_adoption,
+        workspaces: workspace_paths(&records),
     };
     drop(run);
     (result, std::mem::replace(outcome.machine.0.disk(), machine::fresh()), records)
+}
+
+fn workspace_paths(store: &Store) -> Vec<Box<[u8]>> {
+    store
+        .agent_records
+        .iter()
+        .filter_map(|record| {
+            if let referee::agent::Record::Start { workspace, .. } = record { workspace.as_ref() } else { None }
+        })
+        .flat_map(|workspace| workspace.directories().iter().map(|directory| directory.path().into()))
+        .collect()
 }
 
 #[cfg(test)]

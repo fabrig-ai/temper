@@ -51,7 +51,11 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
         files,
     )
     .expect("shipped ctl limits");
-    Recorded { host, wire: crate::referee::client::Wire::default(), seen: 0 }
+    Recorded {
+        host: temper_playground::Signalled::new(host, inherited.dir),
+        wire: crate::referee::client::Wire::default(),
+        seen: 0,
+    }
 }
 
 pub(crate) struct Caller {
@@ -232,7 +236,7 @@ impl Host for Caller {
 
 /// Observe actual sign-in bytes before starting the native person on its saved token.
 pub(crate) struct Recorded {
-    host: OneShot,
+    host: temper_playground::Signalled<OneShot>,
     wire: crate::referee::client::Wire,
     seen: usize,
 }
