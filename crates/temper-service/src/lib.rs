@@ -43,15 +43,16 @@ mod start_refusal;
 mod stop;
 pub use start_refusal::refused_start;
 mod tools;
+pub use temper_engine_domain::loads::{Failure as LoadFailure, Kind as RestoreRangeKind, RestoreFailure};
 /// How the service ended (protocol/README.md, 6).
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum End {
     Drained,
     Aborted,
     Stopped(Stop),
 }
 /// Why the service stopped; failed startup names its configuration paths.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Stop {
     /// A full encoded transcript frame exceeded the page bound before data IO.
     FrameTooLarge {
@@ -64,6 +65,12 @@ pub enum Stop {
         number: u64,
     },
     Start(Problems),
+    /// A startup page failed its store load or root validation.
+    RestoreLoad(RestoreFailure),
+    /// The restart refused a known step without a more specific child failure.
+    RestoreStep {
+        step: jig_domain_core::RestartStep,
+    },
     /// A child refused restored records before the store switch.
     Unresolved {
         child: jig_domain_core::RestoreChild,

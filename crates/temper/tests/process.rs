@@ -70,6 +70,62 @@ fn held_listener_stops_serve(listener: &str, expected: &str) {
 }
 
 #[test]
+fn the_box_finishes_its_restart_policy_after_a_refused_restore() {
+    let scratch = support::Scratch::new("refused_restore_box");
+    support::configuration(scratch.path(), &support::Forge::Unreached);
+    let first = refused_restore_serve(scratch.path(), support::boxed::Plan::Stop);
+    assert_eq!(first.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&first.stderr));
+    let path = scratch.path().join("temper.json");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("fake configuration")).expect("configuration JSON");
+    document["engine"]["projects"] = serde_json::json!([]);
+    let hooks = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("fixture webhook address");
+    document["application"]["webhooks"] =
+        serde_json::json!({"listener":{"socket":hooks.local_addr().expect("webhooks address").to_string()}});
+    drop(hooks);
+    // The old stored policy is larger; this start has no seed policies.
+    const REFUSED_POLICY_BYTES: u32 = 512; // The stored stock policy exceeds this existing read bound.
+    document["engine"]["limits"]["overrides"]["core.policy_bytes"] = REFUSED_POLICY_BYTES.into();
+    std::fs::write(path, serde_json::to_vec(&document).expect("configuration JSON")).expect("fake configuration");
+    let alone = refused_restore_serve(scratch.path(), support::boxed::Plan::Exit);
+    let alone_stderr = String::from_utf8_lossy(&alone.stderr);
+    assert_eq!(alone.exit, Some(Exit::Code(1)), "{alone_stderr}");
+    assert!(
+        alone_stderr.contains("temper serve: settings.binary's default.policy[1].shape: invalid form"),
+        "{alone_stderr}"
+    );
+    let ended = support::boxed::run_echo_steps(scratch.path(), None, support::boxed::Plan::Exit, BOX_DEADLINE);
+    let stderr = String::from_utf8_lossy(&ended.stderr);
+    // The shipped generic supervisor allows five restarts, then gives up.
+    const ATTEMPTS: usize = 6;
+    assert_eq!(ended.exit, Some(Exit::Code(1)), "{stderr}");
+    assert_eq!(ended.left, Some(Vec::new()), "{stderr}");
+    assert_eq!(
+        stderr.matches("temper serve: settings.binary's default.policy[1].shape: invalid form").count(),
+        ATTEMPTS,
+        "{stderr}"
+    );
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+    assert!(stderr.contains("giving up"), "{stderr}");
+    scratch.remove();
+}
+
+fn refused_restore_serve(directory: &std::path::Path, plan: support::boxed::Plan) -> support::boxed::Outcome {
+    use skein_world::end_to_end::Command;
+    support::boxed::run_command(
+        Command {
+            program: skein_scratch::paths::binary("temper"),
+            arguments: std::iter::once("serve".into()).chain(support::configuration::flags(directory)).collect(),
+            directory: directory.into(),
+            environment: Vec::new(),
+        },
+        None,
+        plan,
+        BOX_DEADLINE,
+    )
+}
+
+#[test]
 fn a_temper_told_to_stop_with_a_sign_in_under_way_ends_at_once() {
     let scratch = support::Scratch::new("sign_in_stop");
     let issuer = support::sign_in::configuration(scratch.path());

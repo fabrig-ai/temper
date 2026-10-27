@@ -293,7 +293,17 @@ impl skein_world::Referee<Proc> for Referee {
         if crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();
         }
+        if matches!(self.phase, crate::world::Phase::Refused) {
+            if service.service.end().is_some() {
+                self.done = Some(());
+                for proc in other {
+                    shutdown_peer(proc);
+                }
+            }
+            return;
+        }
         let complete = match self.phase {
+            crate::world::Phase::Refused => unreachable!("refused starts send no shutdown signal"),
             crate::world::Phase::SignIn => {
                 other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
             }
@@ -467,7 +477,7 @@ impl skein_world::Referee<Proc> for Referee {
     }
     fn passed(&self) -> bool {
         self.done.is_some()
-            && (matches!(self.phase, crate::world::Phase::Restart)
+            && (matches!(self.phase, crate::world::Phase::Restart | crate::world::Phase::Refused)
                 || self.signed_in
                     && (self.released
                         || !matches!(self.phase, crate::world::Phase::Story)

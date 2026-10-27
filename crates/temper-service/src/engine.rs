@@ -119,7 +119,7 @@ impl Engine {
             }
     }
     fn release_pending(&self) -> bool {
-        self.ready || self.settled_revision != Some(self.domain.revision())
+        self.end.is_none() && (self.ready || self.settled_revision != Some(self.domain.revision()))
     }
     pub(crate) fn step(&mut self, event: root::Event) {
         let watcher = watcher(&event);
@@ -193,6 +193,17 @@ impl Engine {
     }
     pub(crate) fn abort_if_ended(&mut self) {
         if self.end.is_some() {
+            // An ended owner owes no root continuation. Late component terminals
+            // still close their IO, but cannot release another domain decision.
+            self.ready = false;
+            self.settled_revision = Some(self.domain.revision());
+            self.pending = None;
+            for _ in 0..self.events.len() {
+                let _event = self.events.pop();
+            }
+            for _ in 0..self.requests.len() {
+                let _request = self.requests.pop();
+            }
             self.setup.close();
         }
         if self.end.is_some() && self.forge.room(1) {

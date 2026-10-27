@@ -27,6 +27,10 @@ pub struct Service {
     box_pipe: Option<BoxPipe>,
     signals: Option<Token>,
     signals_closing: bool,
+    // Keep the generational handles even after claim: a failed restore must
+    // close any listener whose component never reached its Listen.
+    held_listeners: List<Token>,
+    listeners_closing: u32,
     bytes: u64,
     memory_limit: u64,
     links: Queue<Box<[u8]>>,
@@ -91,6 +95,8 @@ impl Service {
                 Some(worker) => worker.is_empty(),
                 None => true,
             },
+            held_listeners: self.held_listeners.len(),
+            listener_closes: self.listeners_closing,
             signals_closing: self.signals_closing,
             operations: self.kernel.has_operations(),
             submissions: self.submissions.len(),
@@ -305,6 +311,8 @@ impl Service {
             box_pipe: None,
             signals: None,
             signals_closing: false,
+            held_listeners: List::with_capacity(io_limits.sockets),
+            listeners_closing: 0,
             bytes: bytes.checked_add(worker_bytes).ok_or(start_problem(b"memory_bytes", What::Bound))?,
             links: Queue::with_capacity(queue),
         })
@@ -348,6 +356,8 @@ impl Service {
             box_pipe: None,
             signals: None,
             signals_closing: false,
+            held_listeners: List::with_capacity(io_limits.sockets),
+            listeners_closing: 0,
             bytes,
             links: Queue::with_capacity(queue),
         })
@@ -427,6 +437,7 @@ impl Service {
             || !self.completions.is_empty()
             || !self.told.is_empty()
             || !self.raw_submissions.is_empty()
+            || self.end().is_some() && self.listeners_closing < self.held_listeners.len()
             || self.end().is_some() && self.signals.is_some() && !self.signals_closing
             || self.end().is_some()
                 && match &self.box_pipe {
@@ -517,8 +528,14 @@ impl Service {
     /// Adopt a held listener before the first down pass (protocol/setup.md, 7.1).
     /// A Listen for its address claims it; refusal leaves the descriptor with the caller.
     pub fn adopt_listener(&mut self, fd: Fd, addr: core::net::SocketAddr) -> Result<(), Fd> {
+        if self.held_listeners.room() == 0 {
+            return Err(fd);
+        }
         match self.io.adopt_listener(fd, addr) {
-            Ok(_) => Ok(()),
+            Ok(entity) => {
+                self.held_listeners.push(entity).expect("one handle per admitted listener");
+                Ok(())
+            }
             Err(fd) => Err(fd),
         }
     }
@@ -877,6 +894,16 @@ pub fn iterate(service: &mut Service, now: Time, wall: Wall) {
     service.io.reclaim();
 }
 fn close_sources(service: &mut Service) {
+    if service.end().is_some() {
+        for _ in service.listeners_closing..service.held_listeners.len() {
+            if service.raw_submissions.room() < io::MAX_OUT_DOWN.submissions {
+                break;
+            }
+            let entity = *service.held_listeners.get(service.listeners_closing).expect("held listener");
+            service.listeners_closing += 1;
+            io::down(&mut service.io, &service.io_env, io::Request::Close { entity }, &mut service.raw_submissions);
+        }
+    }
     if service.end().is_some()
         && !service.signals_closing
         && service.raw_submissions.room() >= io::MAX_OUT_DOWN.submissions
@@ -943,6 +970,13 @@ fn route_events(service: &mut Service) {
             if let io::Event::Closed { .. } = event {
                 service.signals = None;
             }
+            continue;
+        }
+        if matches!(event, io::Event::Closed { .. })
+            && service.held_listeners.iter().any(|entity| Some(*entity) == owner)
+        {
+            // An unclaimed listener's token owns Closed. Once claimed, its
+            // component's owner receives that terminal through the normal route.
             continue;
         }
         if let Some(pipe) = &service.box_pipe
@@ -1099,6 +1133,7 @@ fn memory(
     )?;
     let system = handover_diagnostics(settings, queue, events)?
         .checked_add(u64::try_from(size_of::<Service>()).ok()?)?
+        .checked_add(List::<Token>::worst_case(io.sockets)?)?
         .checked_add(List::<(u32, u64)>::worst_case(root.authority.projects)?)?
         .checked_add(List::<temper_engine_domain::Unsettled>::worst_case(root.forge.entries)?)?
         .checked_add(Queue::<temper_engine_domain::Event>::worst_case(events)?)?
@@ -1242,6 +1277,7 @@ pub(crate) fn worker_process_memory_terms(
         worker_alone_operations(&worker.jig.limits.io, crate::worker_settings::operations(&limits.git_component)?)?;
     let system = u64::try_from(size_of::<Service>())
         .ok()?
+        .checked_add(List::<Token>::worst_case(worker.jig.limits.io.sockets)?)?
         .checked_add(Queue::<Complete>::worst_case(queue)?)?
         .checked_add(Queue::<Submit>::worst_case(queue)?)?
         .checked_add(Queue::<Submit>::worst_case(operations)?)?

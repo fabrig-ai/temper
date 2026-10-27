@@ -122,6 +122,10 @@ pub(crate) fn hooks(engine: &mut Engine) {
 /// Preserve jig's named settings failure in the ordinary startup diagnostics.
 pub(crate) fn root(engine: &mut Engine) {
     use jig_domain_core::RestartRequest;
+    if let Some(failure) = engine.domain.restore_load_failure() {
+        engine.end = Some(End::Stopped(Stop::RestoreLoad(failure)));
+        return;
+    }
     if engine.domain.restore_failure().is_none()
         && let Some(why) = engine.domain.forge_restore_failure()
     {
@@ -137,7 +141,15 @@ pub(crate) fn root(engine: &mut Engine) {
         Some(RestartRequest::ProjectPolicy { project }) => project_policy_problem(project),
         Some(RestartRequest::HeldPastLimit { which, held, limit }) => held_limit_problem(which, held, limit),
         Some(RestartRequest::UnheldRevision { task, revision }) => unheld_revision_problem(task, revision),
-        Some(RestartRequest::Step(_) | RestartRequest::Idle | RestartRequest::Refused { .. }) | None => {
+        Some(RestartRequest::Refused { step }) => {
+            engine.end = Some(End::Stopped(Stop::RestoreStep { step }));
+            return;
+        }
+        Some(RestartRequest::Step(_) | RestartRequest::Idle) | None => {
+            if let Some(step) = engine.domain.restart_failure() {
+                engine.end = Some(End::Stopped(Stop::RestoreStep { step }));
+                return;
+            }
             unavailable(engine, b"deployment");
             return;
         }

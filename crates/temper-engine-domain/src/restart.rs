@@ -148,6 +148,7 @@ pub(crate) fn load_outputs(
             loads::Request::Loaded { waiter, rows, next, cut } => {
                 if waiter == Token::new(u64::MAX) {
                     if cut.is_some() {
+                        domain.load_failure = Some(loads::Failure::Bytes);
                         let _refused = domain.core.restart_refuse();
                         out.push(Request::Stop);
                     } else {
@@ -179,8 +180,9 @@ pub(crate) fn load_outputs(
                     None => {}
                 }
             }
-            loads::Request::Unloaded { waiter, .. } => {
+            loads::Request::Unloaded { waiter, failure } => {
                 if waiter == Token::new(u64::MAX) {
+                    domain.load_failure = Some(failure);
                     let _refused = domain.core.restart_refuse();
                     out.push(Request::Stop);
                     return;

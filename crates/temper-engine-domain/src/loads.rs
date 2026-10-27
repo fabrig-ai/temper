@@ -65,6 +65,58 @@ pub enum Failure {
     Bytes,
 }
 
+/// The kind of a failed restore range, without its keys or owned records.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind {
+    Deployment,
+    Settings,
+    Accounts,
+    Tasks,
+    RunProofs,
+    People,
+    Calls,
+    EndedRead,
+    TaskResult,
+    Turns,
+    TaskTranscript,
+    Notes,
+    ProposalDecision,
+    TaskProposal,
+    EscalationDecision,
+    Census,
+    Forge,
+}
+
+/// A startup load's terminal failure, retained through the stop notification.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RestoreFailure {
+    pub range: Kind,
+    pub failure: Failure,
+}
+
+pub(crate) fn kind(range: &Range) -> Kind {
+    use crate::CoreRange;
+    match range {
+        Range::Core(CoreRange::Deployment) => Kind::Deployment,
+        Range::Core(CoreRange::Settings) => Kind::Settings,
+        Range::Core(CoreRange::Accounts) => Kind::Accounts,
+        Range::Core(CoreRange::Tasks) => Kind::Tasks,
+        Range::Core(CoreRange::RunProofs) => Kind::RunProofs,
+        Range::Core(CoreRange::People) => Kind::People,
+        Range::Core(CoreRange::Calls) => Kind::Calls,
+        Range::Core(CoreRange::EndedRead { .. }) => Kind::EndedRead,
+        Range::Core(CoreRange::TaskResult { .. }) => Kind::TaskResult,
+        Range::Core(CoreRange::Turns { .. }) => Kind::Turns,
+        Range::Core(CoreRange::TaskTranscript { .. }) => Kind::TaskTranscript,
+        Range::Core(CoreRange::Notes(_)) => Kind::Notes,
+        Range::Core(CoreRange::ProposalDecision { .. }) => Kind::ProposalDecision,
+        Range::Core(CoreRange::TaskProposal { .. }) => Kind::TaskProposal,
+        Range::Core(CoreRange::EscalationDecision { .. }) => Kind::EscalationDecision,
+        Range::Census(_) => Kind::Census,
+        Range::Forge => Kind::Forge,
+    }
+}
+
 /// Store IO and root-waiter handoffs (domain/root.md, section 8).
 /// Every issued load ends once; abandonment retains IO ownership until then.
 #[derive(PartialEq, Eq, Debug)]

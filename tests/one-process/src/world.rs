@@ -38,6 +38,7 @@ pub struct Outcome {
     pub pushed: Vec<Pushed>,
     pub deliveries: Vec<Delivery>,
     pub drained: bool,
+    pub end: Option<temper_service::End>,
     pub restarts: u32,
     pub claims_settled_at_restart: u32,
     pub adoptions_answered: u32,
@@ -49,6 +50,7 @@ pub(crate) enum Phase {
     SignIn,
     Drain,
     Restart,
+    Refused,
     Fault { cut: skein_world::Cut, before: u32 },
 }
 #[derive(Default)]
@@ -68,7 +70,10 @@ pub struct Pushed {
     pub commit: u64,
     pub parents: Vec<u64>,
 }
+// Smaller than the fixture's stored stock policy, while its shape still decodes.
+const REFUSED_POLICY_BYTES: u32 = 512;
 thread_local! {
+    static REFUSE_START: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static STORE: RefCell<Option<Rc<RefCell<Store>>>> = const { RefCell::new(None) };
     static PROGRESS: RefCell<Progress> = RefCell::new(Progress::default());
 }
@@ -89,6 +94,7 @@ pub(crate) struct ServiceHost {
     pub(crate) before_iteration: u32,
     in_flight: std::collections::BTreeSet<skein_lib::Token>,
     now: Time,
+    reserve: Option<crate::box_listener::Listener>,
     codec: jig_protocol_store::codec::Limits,
     families: temper_protocol_store::Bounds,
 }
@@ -116,13 +122,22 @@ impl Host for ServiceHost {
     fn iterate(&mut self, now: Time, wall: Wall) {
         self.now = now;
         self.before_iteration = self.submitted;
-        for complete in self.service.completions().iter() {
+        for _ in 0..self.service.completions().len() {
+            let complete = self.service.completions().pop().expect("completion count");
             assert!(self.in_flight.remove(&complete.op), "completion has an operation in flight");
-            if let Some(bound) = hooks_address(&mut self.bound_hooks, complete) {
+            if complete.op == crate::box_listener::OWNER {
+                if let Some(fd) = self.reserve.as_mut().expect("box listener setup").complete(complete) {
+                    self.service.adopt_listener(fd, crate::box_listener::ADDRESS).expect("held webhook listener");
+                    self.reserve = None;
+                }
+                continue;
+            }
+            if let Some(bound) = hooks_address(&mut self.bound_hooks, &complete) {
                 self.hooks = Some(bound);
             }
-            self.capture.complete(complete);
-            self.wire.complete(complete);
+            self.capture.complete(&complete);
+            self.wire.complete(&complete);
+            self.service.completions().push(complete);
         }
         self.commits.extend(self.store.borrow_mut().observe(
             &mut self.capture.events,
@@ -130,7 +145,11 @@ impl Host for ServiceHost {
             fixtures::store_names(),
             &self.families,
         ));
-        temper_service::iterate(&mut self.service, now, wall);
+        if let Some(reserve) = &mut self.reserve {
+            reserve.submit(self.service.submissions());
+        } else {
+            temper_service::iterate(&mut self.service, now, wall);
+        }
         for submit in self.service.submissions().iter() {
             assert!(self.in_flight.insert(submit.op), "one operation per token");
             self.capture.pending(&submit.kind);
@@ -148,7 +167,10 @@ impl Host for ServiceHost {
         self.service.submissions()
     }
     fn work_pending(&self, now: Time) -> bool {
-        self.service.work_pending(now)
+        match &self.reserve {
+            Some(reserve) => reserve.ready(),
+            None => self.service.work_pending(now),
+        }
     }
     fn next_deadline(&self) -> Option<Time> {
         self.service.next_deadline()
@@ -592,8 +614,17 @@ fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
     let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
     let setup = stories::held_change().then(|| crate::restart_control::checked_setup(&fixtures::document()));
+    let mut document: serde_json::Value = serde_json::from_slice(&fixtures::document()).expect("deployment JSON");
+    if REFUSE_START.with(std::cell::Cell::get) {
+        document["engine"]["projects"] = serde_json::json!([]);
+        document["application"]["webhooks"]["listener"] =
+            serde_json::json!({"socket": crate::box_listener::ADDRESS.to_string()});
+        // No seed policies on this start; its persisted policy exceeds the smaller read bound.
+        document["engine"]["limits"]["overrides"]["core.policy_bytes"] = REFUSED_POLICY_BYTES.into();
+    }
+    let document = serde_json::to_vec(&document).expect("deployment JSON");
     let mut service = temper_service::startup::with_setup_given(
-        &fixtures::document(),
+        &document,
         // Simulated fixture paths stay relative to their inherited roots.
         &jig_protocol_config::Directories::working(),
         &fixtures::files(),
@@ -630,6 +661,7 @@ fn service(inherited: &Inherited) -> Proc {
         before_iteration: 0,
         in_flight: std::collections::BTreeSet::new(),
         now: Time::ZERO,
+        reserve: REFUSE_START.with(std::cell::Cell::get).then(crate::box_listener::Listener::new),
         codec: fixtures::codec(),
         families,
     }))
@@ -952,6 +984,7 @@ fn run_phase(
     run: Rc<RefCell<referee::Run>>,
 ) -> (Outcome, skein_fake_machine::Machine, Store) {
     stories::set(scenario);
+    REFUSE_START.with(|refused| refused.set(matches!(phase, Phase::Refused)));
     stories::setup_settings(phase);
     write_settings(&mut disk);
     PROGRESS.with(|progress| *progress.borrow_mut() = Progress::default());
@@ -988,7 +1021,7 @@ fn run_phase(
             world.spawn_restartable(vec![], fake_forge);
             world.cut(0, before, cut);
         }
-        Phase::Restart => {
+        Phase::Restart | Phase::Refused => {
             world.spawn(|| Proc::Peer(Box::new(SignalHost::new(stories::provider(scenario), None))));
             world.spawn(|| Proc::Forge(Box::new(SignalHost::new(peer(), None))));
         }
@@ -1030,6 +1063,12 @@ fn run_phase(
     let pushed = std::mem::take(&mut observed_forge.borrow_mut().pushed);
     let deliveries = deliveries(&outcome.procs);
     assert!(outcome.procs.iter().all(Host::is_empty), "all processes drain");
+    if matches!(phase, Phase::Refused) {
+        let Proc::Service(service) = &outcome.procs[0] else { panic!("service first") };
+        let pending = service.service.pending(Time::ZERO);
+        assert!(!pending.engine.expect("engine").release_pending, "an ended engine owes no release");
+        assert!(pending.worker.expect("in-process worker").aborted);
+    }
     share(None);
     STORE.with(|cell| {
         *cell.borrow_mut() = None;
@@ -1044,6 +1083,10 @@ fn run_phase(
         pushed,
         deliveries,
         drained: run.borrow().drained,
+        end: outcome
+            .procs
+            .iter()
+            .find_map(|proc| if let Proc::Service(service) = proc { service.service.end().cloned() } else { None }),
         restarts: run.borrow().restarts,
         claims_settled_at_restart: run.borrow().settled,
         adoptions_answered: u32::try_from(run.borrow().answers.len()).expect("adoption answers"),

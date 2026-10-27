@@ -31,9 +31,9 @@ use temper_engine_domain_forge_change as forge_change;
 #[derive(Debug)]
 pub struct Domain {
     revision: u64,
-    /// Retired M1 latch storage, kept for the existing route reset sites.
-    /// Resume readiness is derived from the core and never reads this field.
-    pub(crate) settled: Option<(Time, Wall)>,
+    /// Retired M1 reset marker; readiness never reads it. Keeping the marker
+    /// needs no clock pair beside the retained restore failure.
+    pub(crate) settled: Option<()>,
     pub(crate) settling: crate::settling::Phase,
     #[cfg(test)]
     pub(crate) empty_resumes: u32,
@@ -50,6 +50,7 @@ pub struct Domain {
     pub(crate) door_pass: bool,
     pub(crate) door_count: u32,
     pub(crate) startup_range: Option<Range>,
+    pub(crate) load_failure: Option<loads::Failure>,
     pub(crate) core_header_loaded: bool,
     pub(crate) restored_commits: Option<u64>,
     pub(crate) brief_connectors: Slab<BriefConnector>,
@@ -345,6 +346,7 @@ impl Domain {
             door_pass: false,
             door_count: 0,
             startup_range: None,
+            load_failure: None,
             core_header_loaded: false,
             restored_commits: None,
             core,
@@ -409,6 +411,12 @@ impl Domain {
     #[must_use]
     pub fn restore_failure(&self) -> Option<jig_domain_core::RestartRequest> {
         self.core.restore_failure()
+    }
+
+    /// The failed startup load, retained after the restart script refuses it.
+    #[must_use]
+    pub fn restore_load_failure(&self) -> Option<loads::RestoreFailure> {
+        Some(loads::RestoreFailure { range: loads::kind(self.startup_range.as_ref()?), failure: self.load_failure? })
     }
 
     /// Identify the core's refused restart step, including a live range that

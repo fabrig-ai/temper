@@ -465,3 +465,47 @@ fn a_census_refuses_activity_outside_its_named_questions() {
         assert_eq!(out.pop(), Some(Request::Unloaded { waiter: CENSUS_WAITER, failure: Failure::Range }));
     }
 }
+
+fn first_restore_load() -> (temper_engine_domain_world::direct::Driver, Token) {
+    use temper_engine_domain_world::{direct::Driver, walking};
+    let mut driver = Driver::cold(Store::new(), walking::config(91), &walking::limits());
+    // The direct world's fixed immediate-work horizon.
+    for _ in 0..200 {
+        driver.advance(true);
+        if let Some((owner, _)) = driver.loads.first() {
+            let owner = *owner;
+            driver.events.clear();
+            return (driver, owner);
+        }
+    }
+    panic!("the first restore asks for the deployment header");
+}
+
+#[test]
+fn a_failed_restore_load_retains_its_kind_and_store_failure() {
+    let (mut driver, owner) = first_restore_load();
+    driver.send(root::Event::Store(root::StoreInput::Unloaded { owner }));
+    driver.pump();
+    assert!(driver.stopped);
+    assert_eq!(
+        driver.root.restore_load_failure(),
+        Some(loads::RestoreFailure { range: loads::Kind::Deployment, failure: Failure::Store })
+    );
+}
+
+#[test]
+fn a_malformed_restore_page_retains_its_kind_and_range_failure() {
+    let (mut driver, owner) = first_restore_load();
+    driver.send(root::Event::Store(root::StoreInput::Loaded {
+        owner,
+        rows: Box::new([row(1, 0)]),
+        next: None,
+        texts: None,
+    }));
+    driver.pump();
+    assert!(driver.stopped);
+    assert_eq!(
+        driver.root.restore_load_failure(),
+        Some(loads::RestoreFailure { range: loads::Kind::Deployment, failure: Failure::Range })
+    );
+}

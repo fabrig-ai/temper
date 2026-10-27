@@ -123,6 +123,8 @@ pub enum LinkEvent {
 pub struct Wait {
     pub engine: Option<WaitEngine>,
     pub worker_empty: bool,
+    pub held_listeners: u32,
+    pub listener_closes: u32,
     pub signals_closing: bool,
     pub operations: bool,
     pub submissions: u32,

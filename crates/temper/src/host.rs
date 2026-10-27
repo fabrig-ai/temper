@@ -149,6 +149,23 @@ pub fn ending(
                 found.clone(),
                 &jig_protocol_config::Path::root(),
             )),
+            Stop::RestoreLoad(failed) => {
+                format!("temper serve: restore {}: {}\n", restore_kind(failed.range), load_failure(failed.failure))
+            }
+            Stop::RestoreStep { step } => {
+                use jig_domain_core::RestartStep;
+                let during = match step {
+                    RestartStep::LoadCore => "core restore".into(),
+                    RestartStep::LoadInbox => "inbox census".into(),
+                    RestartStep::RestoreConnector { connector } => format!("connector {connector} restore"),
+                    RestartStep::Switch => "store switch".into(),
+                    RestartStep::AdoptRuns => "run adoption".into(),
+                    RestartStep::ReadAfresh { connector } => format!("connector {connector} refresh"),
+                    RestartStep::SettleOutbox { connector } => format!("connector {connector} outbox settlement"),
+                    RestartStep::Open => "opening decisions".into(),
+                };
+                format!("temper serve: restart refused during {during}\n")
+            }
             Stop::Unresolved { child, records } => {
                 let name = match child {
                     jig_domain_core::RestoreChild::People => "people",
@@ -187,6 +204,40 @@ pub fn ending(
         }
     }
     (lines, u8::from(output_failed || end != Some(&End::Drained)))
+}
+
+fn restore_kind(kind: temper_service::RestoreRangeKind) -> &'static str {
+    use temper_service::RestoreRangeKind as Kind;
+    match kind {
+        Kind::Deployment => "deployment",
+        Kind::Settings => "settings",
+        Kind::Accounts => "accounts",
+        Kind::Tasks => "tasks",
+        Kind::RunProofs => "run proofs",
+        Kind::People => "people",
+        Kind::Calls => "calls",
+        Kind::EndedRead => "ended read position",
+        Kind::TaskResult => "task result",
+        Kind::Turns => "turns",
+        Kind::TaskTranscript => "task transcript",
+        Kind::Notes => "notes",
+        Kind::ProposalDecision => "proposal decision",
+        Kind::TaskProposal => "task proposal",
+        Kind::EscalationDecision => "escalation decision",
+        Kind::Census => "census",
+        Kind::Forge => "forge",
+    }
+}
+fn load_failure(failure: temper_service::LoadFailure) -> &'static str {
+    use temper_service::LoadFailure as Failure;
+    match failure {
+        Failure::Store => "store load failed",
+        Failure::Rows => "too many rows",
+        Failure::Range => "row outside requested range",
+        Failure::Order => "rows out of order",
+        Failure::Cursor => "invalid continuation",
+        Failure::Bytes => "page exceeds byte bound",
+    }
 }
 
 fn note_line(note: temper_service::Note) -> String {
@@ -400,6 +451,21 @@ fn other_endings_keep_their_exit_behavior() {
     let mut problems = jig_protocol_config::Problems::empty();
     problems.push(jig_protocol_config::Path::root().member(b"deployment"), jig_protocol_config::What::Refers);
     for (end, output_failed, expected, code) in [
+        (
+            Some(End::Stopped(Stop::RestoreLoad(temper_service::RestoreFailure {
+                range: temper_service::RestoreRangeKind::Census,
+                failure: temper_service::LoadFailure::Range,
+            }))),
+            false,
+            "temper serve: restore census: row outside requested range\n",
+            1,
+        ),
+        (
+            Some(End::Stopped(Stop::RestoreStep { step: jig_domain_core::RestartStep::LoadInbox })),
+            false,
+            "temper serve: restart refused during inbox census\n",
+            1,
+        ),
         (Some(End::Stopped(Stop::Start(problems))), false, "temper serve: deployment: unknown reference\n", 1),
         (
             Some(End::Stopped(Stop::Unresolved { child: jig_domain_core::RestoreChild::Tasks, records: 3 })),
