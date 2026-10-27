@@ -304,36 +304,117 @@ fn the_claude_launcher_refuses_invalid_held_directories() {
 }
 
 #[test]
-fn a_claude_plan_writes_only_its_program_model() {
-    use std::{fs, path::Path};
-    use support::forge_land::{LiveModel, configure_live_model};
-    let scratch = support::Scratch::new("live-claude-configuration");
-    let config = scratch.path();
-    let (agent, deployment) = support::configuration::documents(config, "/fixture/temper");
-    fs::write(config.join("agent.json"), agent).expect("agent fixture");
-    fs::write(config.join("root.der"), skein_tls_world::pki::ROOT).expect("public trust fixture");
-    fs::write(config.join("temper.json"), deployment).expect("deployment fixture");
-    configure_live_model(
-        config,
-        LiveModel::ClaudeCode { login: Path::new("/held/programs/claude-login") },
+fn a_claude_configuration_starts_on_inits_limits() {
+    use skein_io::kernel::Exit;
+    use skein_lib::Duration;
+    use skein_world::end_to_end::Command;
+    use support::{boxed, forge_land};
+    let (scratch, paths) = initialized_deployment("live-claude-startup");
+    configure_claude(&paths);
+    // Stop at the sign-in line: no person signs in or starts the playground.
+    // There is no login and the configured executable does not exist.
+    let outcome = boxed::run_command(
+        Command {
+            program: skein_scratch::paths::binary("temper"),
+            arguments: std::iter::once("serve".into())
+                .chain(forge_land::deployment_flags(&paths).into_iter().map(Into::into))
+                .collect(),
+            directory: scratch.path().into(),
+            environment: Vec::new(),
+        },
+        None,
+        boxed::Plan::Stop,
+        Duration::from_secs(10), // Startup and pipe drain only, within the focused suite's 30 s.
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    assert!(support::printed_link(&outcome.stdout).is_some(), "serve reaches its sign-in line: {stderr}");
+    assert_eq!(outcome.exit, Some(Exit::Code(0)), "serve drains: {stderr}");
+    assert_eq!(outcome.left, Some(vec![]), "no surviving children: {stderr}");
+    assert!(std::fs::read_dir(paths[1].join("programs")).expect("private programs").next().is_none());
+    scratch.remove();
+}
+
+fn initialized_deployment(case: &str) -> (support::Scratch, [std::path::PathBuf; 3]) {
+    let scratch = support::Scratch::new(case);
+    let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
+    support::forge_land::initialize(&paths);
+    support::own_listener_files(&paths[0]);
+    (scratch, paths)
+}
+
+fn configure_claude(paths: &[std::path::PathBuf; 3]) {
+    use std::{fs, os::unix::fs::DirBuilderExt, path::Path};
+    fs::DirBuilder::new().mode(0o700).create(paths[1].join("programs")).expect("fresh private programs");
+    support::forge_land::configure_live_model(
+        &paths[0],
+        support::forge_land::LiveModel::ClaudeCode { login: &paths[1].join("programs/claude-login") },
         Path::new("/machine/bin/claude"),
     );
+}
+
+#[test]
+fn a_claude_configuration_replaces_openai_and_keeps_the_demo() {
+    use std::fs;
+    // docs/help/box.md, step 1: Claude's fields over init's endpoint and model sizes.
+    let (scratch, paths) = initialized_deployment("live-claude-configuration");
+    let config = &paths[0];
+    let agent_before: Value =
+        serde_json::from_slice(&fs::read(config.join("agent.json")).expect("agent")).expect("JSON");
+    let before: Value =
+        serde_json::from_slice(&fs::read(config.join("temper.json")).expect("deployment")).expect("JSON");
+    configure_claude(&paths);
     let agent: Value = serde_json::from_slice(&fs::read(config.join("agent.json")).expect("agent")).expect("JSON");
-    let deployment = fs::read(config.join("temper.json")).expect("deployment");
-    let value: Value = serde_json::from_slice(&deployment).expect("JSON");
-    assert_eq!(agent["programs"], json!({"claude_code":{"path":"/machine/bin/claude", "directory":"/held/programs"}}));
-    assert_eq!(agent["endpoints"][0]["program"], "claude_code");
-    assert_eq!(agent["endpoints"][0]["provider"], "anthropic");
+    let value: Value =
+        serde_json::from_slice(&fs::read(config.join("temper.json")).expect("deployment")).expect("JSON");
     assert_eq!(
-        value["engine"]["llm"]["providers"],
-        json!([{"name":"anthropic", "number":2, "signed_in_plan":false,
-        "manage_usage":"https://claude.ai/settings/usage", "models":["sonnet"], "sources":{"programs":["claude_code"]}}])
+        agent["programs"],
+        json!({"claude_code":{
+            "path":"/machine/bin/claude", "directory":paths[1].join("programs")
+        }})
     );
-    assert_eq!(value["application"]["demo"], Value::Null);
+    assert_eq!(
+        agent["endpoints"],
+        json!([
+            {"name":"claude", "number":2, "dialect":2, "provider":"anthropic", "program":"claude_code",
+                "address":"api.anthropic.com:443", "transport":"tls", "server_name":"api.anthropic.com",
+                "identity":"plain", "connect":10000, "handshake":10000, "headers":[],
+                "models":[{"name":"sonnet", "prices":{"input":1, "cached":1, "output":1, "unit":1000},
+                    "window":1_048_576, "output":8192, "reasoning_item":65536, "head":60000, "idle":30000}]},
+            agent_before["endpoints"][1]
+        ])
+    );
+    assert_eq!(agent["profile"], agent_before["profile"]);
+    assert_eq!(agent["environment"], agent_before["environment"]);
+    assert_eq!(
+        value["engine"]["llm"],
+        json!({
+            "providers":[{"name":"anthropic", "number":2, "signed_in_plan":false,
+                "manage_usage":"https://claude.ai/settings/usage", "models":["sonnet"],
+                "sources":{"programs":["claude_code"]}}, before["engine"]["llm"]["providers"][1]],
+            "endpoints":[{"name":"claude", "number":2, "dialect":2, "provider":"anthropic", "program":"claude_code",
+                "address":{"host":"api.anthropic.com", "port":443}, "transport":"tls", "server_name":"api.anthropic.com",
+                "headers":[], "connect_ms":10000, "handshake_ms":10000}, before["engine"]["llm"]["endpoints"][1]],
+            "models":[{"name":"sonnet", "endpoint":"claude", "window":1_048_576, "output":8192,
+                "prices":{"input":1, "cached":1, "output":1, "unit":1000}}, before["engine"]["llm"]["models"][1]]
+        })
+    );
+    assert_eq!(value["application"], before["application"], "including init's demo");
+    assert_eq!(value["engine"]["limits"], before["engine"]["limits"]);
+    assert_eq!(value["workers"], before["workers"]);
     let parsed = smith_agent_shell::config::read(&config.join("agent.json")).expect("ordinary agent schema");
-    assert!(
-        parsed.endpoint_programs.values().all(|program| *program == smith_agent_shell::config::ProgramName::ClaudeCode)
+    assert_eq!(
+        parsed.endpoint_programs.into_iter().collect::<Vec<_>>(),
+        [(2, smith_agent_shell::config::ProgramName::ClaudeCode)]
     );
+    eprintln!("Claude agent largest turn: {} bytes", parsed.service.limits.channel.bodies.turn_body);
+    scratch.remove();
+}
+
+#[test]
+fn stock_charters_choose_claude_before_the_demo_model() {
+    let (scratch, paths) = initialized_deployment("live-claude-charters");
+    configure_claude(&paths);
+    let deployment = std::fs::read(paths[0].join("temper.json")).expect("deployment");
     let document = jig_protocol_config::document(
         &deployment,
         &jig_protocol_config::DocumentLimits { bytes: 1 << 20, tokens: 1 << 20, depth: 32 },
@@ -343,12 +424,14 @@ fn a_claude_plan_writes_only_its_program_model() {
         .expect("object")
         .member(&document, b"engine")
         .expect("engine");
-    let engine = temper_service::startup::engine(&document, at, &support::configuration::directories(config).jig())
+    let engine = temper_service::startup::engine(&document, at, &support::configuration::directories(&paths[0]).jig())
         .expect("engine schema");
     let defaults = temper_service::stock::defaults(&engine.llm);
     for charter in &defaults.charters {
-        assert_eq!(charter.policy.model.name.as_ref(), b"sonnet");
-        assert!(charter.policy.alternatives.is_empty());
+        assert_eq!((charter.policy.model.name.as_ref(), charter.policy.model.endpoint), (b"sonnet".as_slice(), 2));
+        let alternatives: Vec<_> =
+            charter.policy.alternatives.iter().map(|model| (model.name.as_ref(), model.endpoint)).collect();
+        assert_eq!(alternatives, [(b"demo".as_slice(), 3)]);
     }
     scratch.remove();
 }
@@ -463,11 +546,11 @@ fn a_claude_account_needs_its_login_usable_on_worker() {
 }
 
 #[test]
-fn a_claude_plan_refuses_foreign_or_unusable_accounts() {
+fn a_claude_plan_refuses_missing_or_unusable_accounts() {
     use support::forge_land::LiveModel;
     let model = LiveModel::ClaudeCode { login: std::path::Path::new("/held/claude-login") };
     for (pointer, value, message) in [
-        ("/accounts/party/0/provider", json!(1), "only the Claude Code provider has an account"),
+        ("/accounts/party/0/provider", json!(1), "held Claude Code account missing"),
         ("/accounts/party/0/sources/0/name", json!("other-login"), "held Claude Code account missing"),
         ("/accounts/party/0/sources/0/usable", json!(false), "held Claude Code source is not usable"),
         ("/accounts/program_hosts/0/connected", json!(false), "held Claude Code login is not usable on the worker"),
@@ -481,4 +564,21 @@ fn a_claude_plan_refuses_foreign_or_unusable_accounts() {
         *accounts.pointer_mut(pointer).expect("fixture field") = value;
         assert_eq!(model.ready(&accounts), Err(message.to_owned()), "{pointer}");
     }
+}
+
+#[test]
+fn a_claude_plan_selects_provider_two_beside_demo_accounts() {
+    use support::forge_land::{LiveModel, program_verification};
+    let login = std::path::Path::new("/held/claude-login");
+    let mut accounts = program_accounts();
+    // The playground's key account, if listed, does not select the held program account.
+    accounts["accounts"]["party"]
+        .as_array_mut()
+        .expect("party accounts")
+        .insert(0, json!({"number":8, "provider":3, "sources":[{"kind":"key", "usable":true}]}));
+    assert_eq!(LiveModel::ClaudeCode { login }.ready(&accounts), Ok(()));
+    assert_eq!(
+        program_verification(login, &accounts).expect("held account verification")[0],
+        ["account", "verify", "7", "--source", "program", "--json"]
+    );
 }
