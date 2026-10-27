@@ -426,6 +426,12 @@ pub(crate) fn setup_items(directory: &Path) -> Option<serde_json::Value> {
     if flags["requester"] != true {
         template["flags"]["ended_by"] = "result".into();
     }
+    if crate::claude::configured(directory) {
+        template["flags"]["ended_by"] = "requester".into();
+        template["llm"] = serde_json::json!({
+            "account":null, "main":{"model":"fake-claude","effort":null}, "subagents":[]
+        });
+    }
     if flags["listed"] == true {
         template["flags"]["listed"] = true.into();
     }
