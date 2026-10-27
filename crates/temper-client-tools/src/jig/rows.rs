@@ -148,7 +148,7 @@ pub const PENDING: Tool = Tool {
 pub const HELP: Tool = Tool {
     name: b"help",
     line: b"Read the page ctl and the groups, a group's tools, or one tool's record",
-    prints: b"",
+    prints: b"The page ctl, then a line per tool; with TOOL, its record",
     result: b"help",
     forms: &[&[
         positional(b"group", b"GROUP", Kind::Literal, Optional, b""),
