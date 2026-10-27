@@ -29,6 +29,9 @@ impl Harness {
         self.answered(call, c::Answer::Done(outcome));
     }
     pub(crate) fn answered(&mut self, call: u32, answer: c::Answer) {
+        if let c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::PolicyChanged { .. })) = &answer {
+            self.pending_reads.push(call);
+        }
         let (attempt, _, _) = self.sends.get(&call).expect("call sent");
         self.client(client::Event::Up {
             up: client::Up::Answer {
