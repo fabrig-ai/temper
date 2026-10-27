@@ -21,7 +21,13 @@ fn holds_no_message(world: &World, task: u64) {
     let message = jig_domain_core::ToolFamilies::JIG.message.0;
     let parent_tools = live_task(world, chat).authority.tools.0;
     assert_ne!(parent_tools & message, 0, "the chat holds Message");
-    assert_eq!(live_task(world, task).authority.tools.0, parent_tools & !message);
+    let task = live_task(world, task);
+    let expected = if task.executor == (tasks::Executor::Agent { charter: 4 }) {
+        parent_tools & jig_domain_core::ToolFamilies::JIG.read.0
+    } else {
+        parent_tools & !message
+    };
+    assert_eq!(task.authority.tools.0, expected);
 }
 
 fn push(world: &mut World, branch: &[u8]) {

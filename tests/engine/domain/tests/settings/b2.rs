@@ -278,7 +278,7 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
         );
         worker = child_run(driver, change);
     }
-    assert_eq!(worker.charter, 2);
+    assert_eq!(worker.charter, 4);
     assert!(matches!(worker.run.contract, tasks::Contract::Verdict { .. }), "one review follows both repairs");
     workers.push(worker.task);
     workers.sort_unstable();

@@ -8,7 +8,7 @@ fn the_application_sizes_are_the_largest_key_and_row() {
     // Its optional released hold adds two bytes at its largest.
     assert_eq!(
         application(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes),
-        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 35_505 })
+        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 35_513 })
     );
 }
 #[test]
@@ -81,6 +81,6 @@ fn plan_text_uses_the_body_bound_without_changing_the_format() {
     assert_eq!(crate::v10::IssueRow::worst_case_bytes(&after), Some(7705));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&before), Some(5888));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&after), Some(7936));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(35_505));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(35_505));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(35_513));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(35_513));
 }

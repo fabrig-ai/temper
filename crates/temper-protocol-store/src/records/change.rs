@@ -405,6 +405,8 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
         base_repair,
         queue_repair,
         queue_repairs,
+        producing_charter,
+        review_charter,
     } = value;
     w::ChangeRow::new(
         &w::CEILINGS,
@@ -440,6 +442,8 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
             base_repair: *base_repair,
             queue_repair: *queue_repair,
             queue_repairs: *queue_repairs,
+            producing_charter: *producing_charter,
+            review_charter: *review_charter,
         },
     )
     .expect(FITS)
@@ -466,6 +470,8 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         base_repair,
         queue_repair,
         queue_repairs,
+        producing_charter,
+        review_charter,
     } = value.into_parts();
     top::ChangeRow {
         task,
@@ -496,6 +502,8 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         base_repair,
         queue_repair,
         queue_repairs,
+        producing_charter,
+        review_charter,
     }
 }
 fn encode_numbers(values: &[u64]) -> List<u64> {

@@ -111,8 +111,8 @@ fn scripts() -> Box<[Script]> {
                             {"name":1,"kind":"resource","connector":1,"resource":repository},
                             {"name":2,"kind":"bytes","value":"main"}]},
                         "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
-                        "authority":{"tools":1,"grants":[grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],
-                            "delegation":{"kinds":[{"kind":"agent","number":2}],"tasks":4,"depth":2},
+                        "authority":{"tools":513,"grants":[grant(1),grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],
+                            "delegation":{"kinds":[{"kind":"agent","number":2},{"kind":"agent","number":4}],"tasks":4,"depth":2},
                             "budget":{"spend":spend},"notes":0}
                     }]}),
                 ),
@@ -228,8 +228,14 @@ pub fn csv_task_steps(root: &Path) -> Vec<Step> {
             let reviewer = super::ctl::json(calls.last().expect("reviewer's task"));
             let pending = super::ctl::json(&calls[calls.len() - 2]);
             assert_eq!(reviewer["chip"]["task"], pending["runs"]);
-            assert_eq!(reviewer["chip"]["executor"], json!({"agent":{"charter":2}}));
+            assert_eq!(reviewer["chip"]["executor"], json!({"agent":{"charter":4}}));
             assert_ne!(reviewer["chip"]["phase"], "ended", "reviewer still runs: {reviewer}");
+            Call::new(&["settings", "show", "charter", "4", "--json"])
+        })),
+        Step::Then(Box::new(|calls| {
+            let charter = super::ctl::json(calls.last().expect("review charter"));
+            assert_eq!(charter["value"]["instructions"], include_str!("../../../temper-service/src/stock/review.txt"));
+            assert_eq!(charter["value"]["modify"], false);
             Call::new(&["change", "show", "2", "--json"])
         })),
         Step::ReleaseLlm(b"csv-review"),

@@ -867,6 +867,7 @@ pub fn goal_with_pushed_change(front: &mut Joint, branch: &[u8]) -> u64 {
     batch[0].flags.conversation = false;
     batch[0].flags.listed = true;
     batch[0].authority.tools = NO_TOOLS;
+    batch[0].authority.delegation.kinds = Box::new([jig_domain_people::Executor::Charter(4)]);
     batch[0].parameters = Box::new([
         jig_domain_people::Parameter::Resource { name: REPOSITORY_PARAMETER, connector, resource: GOAL_REPOSITORY },
         jig_domain_people::Parameter::Bytes { name: 3, value: branch.into() },

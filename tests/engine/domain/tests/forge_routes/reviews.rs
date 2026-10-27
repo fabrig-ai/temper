@@ -75,6 +75,49 @@ pub(super) fn review_world() -> (World, engine::Assignment, [u8; 32]) {
 }
 
 #[test]
+fn a_change_keeps_its_producing_and_review_charters_after_configuration_changes() {
+    let world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate { agent: true, ..Gate::default() },
+        None,
+        StoryLimits { forge_charter: Some(2), ..StoryLimits::default() },
+    );
+    let (mut world, _, producer, branch) = change_world_in(world, Change::default());
+    assert_eq!(producer.charter, 2);
+    let change = requester(&world, producer.task);
+    assert_eq!(change_row(&world, change).producing_charter, 2);
+    assert_eq!(change_row(&world, change).review_charter, 4);
+    world.restart_with_charter(true, true, Some(1));
+    world.until(Until::Ready);
+    let head = produce(&mut world, &producer, &branch);
+    let reviewer = next_assignment(&mut world, 2);
+    assert_eq!(reviewer.charter, 4);
+    assert_review_head(&world, &reviewer, head);
+    assert!(!reviewer.run.policy.modify);
+    assert!(!reviewer.run.policy.agents);
+    let task = live_task(&world, reviewer.task);
+    assert_eq!(task.authority.tools, tasks::Tools(512));
+    assert!(!task.authority.grants.is_empty());
+    assert!(
+        task.authority.grants.iter().all(|grant| grant.connector == 0 && forge_top::READ_KINDS.contains(&grant.kind))
+    );
+    assert!(task.authority.delegation.kinds.is_empty());
+    assert!(task.spec.words.ends_with(b"Small fix"));
+    finish_review(
+        &mut world,
+        &reviewer,
+        tasks::TaskResult::Verdict { code: 2, fields: Box::new([]), words: b"fix the unsafe edge".as_slice().into() },
+    );
+    let repair = next_assignment(&mut world, 3);
+    assert_eq!(repair.charter, 2, "the next producing step uses the change's snapshot");
+    assert_eq!(change_row(&world, change).producing_charter, 2);
+    assert_eq!(change_row(&world, change).review_charter, 4);
+}
+
+#[test]
 fn a_changes_reviewer_reads_its_own_pull() {
     let (mut world, reviewer, head) = review_world();
     let Answer::Pull(pull) =

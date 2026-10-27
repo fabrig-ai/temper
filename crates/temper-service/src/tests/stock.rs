@@ -226,11 +226,13 @@ fn the_transition_keeps_the_documents_own_defaults() {
 fn the_reviewers_words_say_to_fail_when_it_cannot_review() {
     let engine = engine(&single_model());
     let defaults = crate::stock::defaults(&engine.llm);
-    let words = core::str::from_utf8(&defaults.charters[1].policy.instructions).expect("review instructions");
+    let reviewer = defaults.charters.iter().find(|charter| charter.number == 4).expect("review charter");
+    let words = core::str::from_utf8(&reviewer.policy.instructions).expect("review instructions");
     for phrase in [
-        "read its pull request and its files at the named head",
-        "approve it, or request changes with what to change",
-        "If you cannot read them, or cannot judge the change for any other reason",
+        "read its pull request, the files it changes and its checks",
+        "approve it, or request changes, saying what to change and why",
+        "You only read: never edit, push or run anything.",
+        "If you cannot read the change, or cannot judge it for any other reason",
         "finish failed and say why: never request changes for that.",
     ] {
         assert!(words.contains(phrase), "missing review instruction: {phrase}");
