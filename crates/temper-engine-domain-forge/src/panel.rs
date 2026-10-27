@@ -123,7 +123,9 @@ impl Domain {
             change::State::Resolving { .. } => PanelStep::Resolving,
             change::State::Repairing { why, .. } => PanelStep::Repairing(*why),
             change::State::Landing { .. } => PanelStep::Landing,
-            change::State::Landed { merge } => PanelStep::Landed { merge: *merge },
+            change::State::Landed { merge } | change::State::Red { merge } | change::State::Cleared { merge } => {
+                PanelStep::Landed { merge: *merge }
+            }
             change::State::Held { .. } => unreachable!("held steps unwrapped"),
         };
         let head = row.change.last_head;

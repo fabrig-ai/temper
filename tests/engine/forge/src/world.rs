@@ -52,6 +52,9 @@ pub const LIMITS: top::Limits = top::Limits {
     landings: 8,
     judge_projects: 2,
     judge_criteria: 8,
+    tiers: 2,
+    failing_tests: 16,
+    test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
     client: CLIENT,
@@ -255,6 +258,12 @@ impl World {
         self.take_top();
         accepted
     }
+    #[must_use]
+    /// Give the connector the project's configured tiers before changes land.
+    pub fn project_tiers(&mut self, project: u32, repositories: Box<[top::RepositoryTiers]>) -> bool {
+        self.top.project_tiers(project, repositories)
+    }
+
     #[must_use]
     pub fn writer_saves(&self) -> u32 {
         self.writer_saves
@@ -785,6 +794,7 @@ fn key(row: &top::Stored) -> top::Key {
         top::Stored::Demo(row) => top::Key::Demo(row.forge),
         top::Stored::Binding { address, .. } => top::Key::Binding(address.clone()),
         top::Stored::DemoAct(row) => top::Key::DemoAct(row.key),
+        top::Stored::Verification(row) => top::Key::Verification { repository: row.repository, commit: row.commit },
         top::Stored::Flight { task, entry } => top::Key::Flight { task: *task, entry: *entry },
         top::Stored::Release(row) => top::Key::Release(row.task),
         top::Stored::Application { token, .. } => top::Key::Application(*token),

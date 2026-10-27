@@ -141,6 +141,8 @@ pub(crate) fn cap(
                 | change::State::Repairing { .. }
                 | change::State::Landing { .. }
                 | change::State::Landed { .. }
+                | change::State::Red { .. }
+                | change::State::Cleared { .. }
                 | change::State::Held { .. } => false,
             };
             if first

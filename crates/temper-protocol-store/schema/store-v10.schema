@@ -157,7 +157,7 @@ record Updating { from: fixed 32 base: fixed 32 ready_since: u64 }
 record Resolving { requested: bool base: fixed 32 }
 record Repairing { requested: bool why: Repair }
 record LandedChange { merge: fixed 32 }
-enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange }
+enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange, red: LandedChange, cleared: LandedChange }
 record ChangeState { live: ChangeLive holds: list 8 ChangeHold }
 record Gate { number: u64 kind: GateKind blocking: bool freshness: Freshness eager: bool }
 record GateReport { number: u64 head: fixed 32 status: ChangeStatus }
@@ -199,5 +199,15 @@ record DemoAct { key: fixed 16 act: DemoActKind }
 # Family 21: writes with a committed attempt (protocol/store.md, 2).
 # Key family 20 is reserved for Setting, still design-only. Value tags are codec-local.
 record Flight { task: u64 entry: u64 }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight }
+# Family 26: verification of one landing (domain/after-landing.md, 10).
+# Families 23–25 remain reserved for Landing, Receipt and Tier.
+record FailingTest { test_id: bytes 4096 }
+record FailedTests { tests: list 1024 FailingTest }
+enum Failures { tests: FailedTests, many }
+record BlamedFailures { failures: Failures }
+enum Blame { cleared, owns: BlamedFailures, suspect: BlamedFailures }
+record TierVerdict { run: u64 blame: Blame }
+record TierVerification { tier: bytes 32 verdict: option TierVerdict repaired: option fixed 32 }
+record Verification { repository: Repository commit: fixed 32 changes: list 65536 u64 tiers: list 32 TierVerification }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, verification: Verification }
 versioned record Row { value: Value }

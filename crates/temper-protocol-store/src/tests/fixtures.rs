@@ -50,6 +50,9 @@ pub const LIMITS: top::Limits = top::Limits {
     landings: 8,
     judge_projects: 2,
     judge_criteria: 8,
+    tiers: 2,
+    failing_tests: 16,
+    test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
     client: CLIENT,
@@ -141,7 +144,7 @@ fn client_key(random: &mut Rng) -> skein_forge_client::Key {
 #[expect(clippy::disallowed_macros, reason = "property inputs number canonical member addresses")]
 pub fn key(random: &mut Rng) -> top::Key {
     let number = random.next_u64();
-    match random.below(21) {
+    match random.below(22) {
         0 => top::Key::Call(top::NamedCall {
             task: number,
             attempt: random.next_u64(),
@@ -167,7 +170,8 @@ pub fn key(random: &mut Rng) -> top::Key {
         17 => top::Key::Demo(u16::try_from(random.below(65_536)).expect("u16")),
         18 => top::Key::Binding(alloc::format!("member{number}@example.com").into_bytes().into_boxed_slice()),
         19 => top::Key::DemoAct([u8::try_from(random.below(256)).expect("byte"); 16]),
-        _ => top::Key::Flight { task: number, entry: random.next_u64() },
+        20 => top::Key::Flight { task: number, entry: random.next_u64() },
+        _ => top::Key::Verification { repository: repository(random), commit: commit(random) },
     }
 }
 pub fn core_keys() -> [jig_domain_core::Key; 4] {
@@ -756,7 +760,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
     use temper_engine_domain_forge_change::{Hold, Repair, State};
-    let mut states = List::with_capacity(17);
+    let mut states = List::with_capacity(19);
     for state in [
         State::Producing { requested: true },
         State::Opening { requested: false },
@@ -771,6 +775,8 @@ pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
         State::Repairing { requested: true, why: Repair::Gate(14) },
         State::Landing { head: [15; 32] },
         State::Landed { merge: [16; 32] },
+        State::Red { merge: [16; 32] },
+        State::Cleared { merge: [16; 32] },
         State::Repairing { requested: false, why: Repair::Ci },
         State::Repairing { requested: true, why: Repair::Semantic },
     ] {

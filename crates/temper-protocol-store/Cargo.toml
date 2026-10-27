@@ -19,11 +19,14 @@ skein-forge-client.workspace = true
 temper-engine-domain-forge-change.workspace = true
 temper-engine-domain-forge-issues.workspace = true
 
+temper-engine-domain-forge-tiers = { path = "../temper-engine-domain-forge-tiers" }
+
 [dev-dependencies]
 temper-engine-domain.workspace = true
 jig-domain-core.workspace = true
 jig-domain-tasks.workspace = true
 jig-domain-notes.workspace = true
+
 
 [lints]
 workspace = true

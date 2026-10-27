@@ -835,6 +835,59 @@ fn a_change_produced_opened_checked_queued_and_landed() {
 }
 
 #[test]
+fn a_change_landed_where_its_repository_has_a_tier_lives_verifying() {
+    const PROJECT: u32 = 5;
+    const CHANGE: u64 = 51;
+    // The ordinary change story gives the procedure twenty entries to settle its merge.
+    const LAST_ENTRY: u64 = 24;
+    let mut world = World::new(11);
+    world.adopt();
+    assert!(world.project_tiers(
+        PROJECT,
+        Box::new([top::RepositoryTiers {
+            repository: REPO,
+            tiers: Box::new([top::Tier { name: b"browser".as_slice().into() }]),
+        }])
+    ));
+    let branch = top::Name {
+        forge: REPO.forge,
+        repository: REPO.repository,
+        what: top::What::Branch(Box::new([b"temper".as_slice().into(), b"51".as_slice().into()])),
+    };
+    world.event(top::Event::Hold { task: CHANGE, resource: branch.clone(), from: None });
+    world.event(top::Event::Change { row: change_row() });
+    let producing = change_step(&mut world, 2, change::Status::Unknown, Box::new([]));
+    assert_eq!(producing, change::Decision::Delegate(change::Delegate::Produce));
+    world.produce(b"temper/51");
+    let mut merge = None;
+    for entry in 3..LAST_ENTRY {
+        let decision = change_step(&mut world, entry, change::Status::Passed, Box::new([]));
+        assert!(!matches!(decision, change::Decision::Finish { .. }));
+        if let Some(top::Stored::Change(row)) = world.stored().get(&top::Key::Change(CHANGE))
+            && let change::State::Landed { merge: commit } = row.change.state
+        {
+            merge = Some(commit);
+            break;
+        }
+    }
+    let merge = merge.expect("the merge is seen");
+    assert_eq!(change_step(&mut world, LAST_ENTRY, change::Status::Passed, Box::new([])), change::Decision::None);
+    let expected = top::Verification {
+        repository: REPO,
+        commit: merge,
+        changes: Box::new([CHANGE]),
+        tiers: Box::new([top::TierVerification { tier: b"browser".as_slice().into(), verdict: None, repaired: None }]),
+    };
+    assert_eq!(
+        world.stored().get(&top::Key::Verification { repository: REPO, commit: merge }),
+        Some(&top::Stored::Verification(expected))
+    );
+    assert!(world.stored().contains_key(&top::Key::Hold(branch)));
+    assert_eq!(translate::commit(world.branch(b"main")), merge);
+    let _ = world.branch(b"temper/51");
+}
+
+#[test]
 fn a_goal_issue_is_created_only_after_its_outbox_commit() {
     let mut world = World::new(7);
     world.adopt();

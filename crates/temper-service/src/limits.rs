@@ -185,6 +185,12 @@ const FORGE: forge::Limits = forge::Limits {
     judge_projects: 2,
     // Criteria in each judge table, from the engine forge world fixture.
     judge_criteria: 8,
+    // Tiers per repository (domain/after-landing.md, 2).
+    tiers: 2,
+    // Failing tests named by one tier run (domain/after-landing.md, 4).
+    failing_tests: 16,
+    // Bytes of one failing test id (domain/after-landing.md, 4).
+    test_id_bytes: 256,
     // Forge brief sections gathering at once, from the engine forge world fixture.
     brief_sections: 32,
     // Bytes of one gathered forge section: at least the root's brief.read_bytes.

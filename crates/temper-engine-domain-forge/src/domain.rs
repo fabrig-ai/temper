@@ -146,6 +146,9 @@ pub struct Domain {
     named_calls: Map<crate::NamedCall, crate::CallPayload>,
     proposed_effects: Map<u64, crate::ProposedEffect>,
     pub(crate) landed: Map<skein_forge::api::Commit, u64>,
+    pub(crate) verifications: Map<(skein_forge::api::Repository, skein_forge::api::Commit), crate::Verification>,
+    pub(crate) tiers: Map<u32, Box<[crate::RepositoryTiers]>>,
+    pub(crate) tier_limits: (u32, u32),
     landings: Map<Token, PendingLanding>,
     lost: Map<Token, PendingLost>,
     pending_ci: Map<Token, PendingCi>,
@@ -180,7 +183,7 @@ pub struct Domain {
     judge_criteria: u32,
     projection_due: Map<u64, skein_lib::Wall>,
     change_due: Map<u64, skein_lib::Wall>,
-    procedure_wakes: Map<u64, bool>,
+    pub(crate) procedure_wakes: Map<u64, bool>,
     pub(crate) settling: Map<u64, crate::settle::Settle>,
 }
 
@@ -574,6 +577,9 @@ impl Domain {
             named_calls: Map::with_capacity(l.named_calls),
             proposed_effects: Map::with_capacity(l.tasks),
             landed: Map::with_capacity(l.landings),
+            verifications: Map::with_capacity(l.changes),
+            tiers: Map::with_capacity(l.judge_projects),
+            tier_limits: (l.repositories, l.tiers),
             landings: Map::with_capacity(l.landings),
             lost: Map::with_capacity(l.holds),
             pending_ci: Map::with_capacity(l.subscriptions),
@@ -1645,6 +1651,9 @@ fn outcome_facts(
             }
         }
         skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Merged(commit), .. } => {
+            if let Some(kept) = d.entries.get(&entry) {
+                crate::verification::landed(d, kept.entry.repository, commit, task, out);
+            }
             if d.landed.len() < env.limits.landings || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");
                 emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Landed { commit, task } });
@@ -2368,6 +2377,25 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         emit(out, Request::Refused { task });
         return;
     };
+    match row.change.state {
+        change::State::Landed { merge } | change::State::Red { merge } | change::State::Cleared { merge } => {
+            step_verified(d, env, task, merge, heard, out);
+            return;
+        }
+        change::State::Producing { .. }
+        | change::State::Opening { .. }
+        | change::State::Recreating { .. }
+        | change::State::Reopening { .. }
+        | change::State::Checking { .. }
+        | change::State::Gating { .. }
+        | change::State::Queued { .. }
+        | change::State::First { .. }
+        | change::State::Updating { .. }
+        | change::State::Resolving { .. }
+        | change::State::Repairing { .. }
+        | change::State::Landing { .. }
+        | change::State::Held { .. } => {}
+    }
     let mut owner = None;
     for (token, pending) in &d.steps {
         if pending.task == task {
@@ -2429,6 +2457,41 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         skein_forge_client::Event::Read { owner, repository, read: skein_forge::api::Read::Branch { branch } },
         out,
     );
+}
+
+fn step_verified(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    task: u64,
+    merge: skein_forge::api::Commit,
+    heard: change::Heard,
+    out: &mut Queue<Request>,
+) {
+    let mut row = d.changes.get(&task).expect("known change").clone();
+    let facts = change::Facts {
+        verification: crate::verification::verification(d, row.repository, merge),
+        branch: row.change.last_head,
+        expected_base: merge,
+        pull: change::Pull::Merged { commit: merge },
+        ci: change::Ci { head: merge, status: change::Status::Unknown },
+        base_ci: change::Ci { head: merge, status: change::Status::Unknown },
+        base_tip: merge,
+        contains_base: change::Status::Unknown,
+        mergeable: change::Status::Unknown,
+        gates: row.verdicts.clone(),
+        writer_taken: false,
+        drift: row.drift,
+        first: false,
+        may_merge: false,
+        queue_repair_active: false,
+        kept: false,
+        settling: None,
+    };
+    let next = change::step(&row.change, &facts, &heard, env.wall, &env.limits.change_policy);
+    row.change = next.change;
+    d.changes.insert(task, row.clone()).expect("replaces change");
+    emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(row) });
+    emit(out, Request::ChangeDecision { task, decision: next.decision, entry: None, evidence: None });
 }
 
 fn status(ci: skein_forge::api::Ci) -> change::Status {
@@ -2656,6 +2719,8 @@ pub(crate) fn queue_ready(d: &Domain, row: &ChangeRow, l: &Limits) -> (List<chan
             | change::State::Repairing { .. }
             | change::State::Landing { .. }
             | change::State::Landed { .. }
+            | change::State::Red { .. }
+            | change::State::Cleared { .. }
             | change::State::Held { .. } => None,
         };
         if let Some(since) = since {
@@ -2793,6 +2858,8 @@ fn in_queue(state: &change::State) -> bool {
         | change::State::Repairing { .. }
         | change::State::Landing { .. }
         | change::State::Landed { .. }
+        | change::State::Red { .. }
+        | change::State::Cleared { .. }
         | change::State::Held { .. } => false,
     }
 }
@@ -2848,6 +2915,10 @@ fn change_facts(
     };
     let window = crate::settle::window(d, row.task);
     change::Facts {
+        verification: match pull {
+            change::Pull::Merged { commit } => crate::verification::verification(d, row.repository, commit),
+            change::Pull::Missing | change::Pull::Open { .. } | change::Pull::Closed => change::Verification::Cleared,
+        },
         branch: pending.branch,
         expected_base: base_tip,
         pull,
@@ -3345,6 +3416,7 @@ fn continue_release(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, ou
         for topic in &topics {
             unsubscribe(d, task, topic.clone(), out);
         }
+        crate::verification::released(d, task, out);
         unnamed(d, env, task, out);
         d.releases.remove(&task);
         emit(out, Request::Erase { key: Key::Release(task) });
@@ -4370,6 +4442,9 @@ fn restore(d: &mut Domain, env: &Env<Limits>, record: Stored) {
         Stored::Binding { address, subject } => {
             assert!(crate::binding_address(&address) && subject.len() <= 255, "restored binding fields");
             d.bindings.insert(address, subject).expect("restored binding within limits");
+        }
+        Stored::Verification(row) => {
+            d.verifications.insert((row.repository, row.commit), row).expect("restored verification within changes");
         }
         Stored::Flight { task, entry } => {
             // Cross-record reconciliation is the later restart stage (domain/root.md, 9.1).

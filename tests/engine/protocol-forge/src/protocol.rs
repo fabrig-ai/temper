@@ -666,6 +666,7 @@ fn key(row: &top::Stored) -> top::Key {
         top::Stored::Demo(row) => top::Key::Demo(row.forge),
         top::Stored::Binding { address, .. } => top::Key::Binding(address.clone()),
         top::Stored::DemoAct(row) => top::Key::DemoAct(row.key),
+        top::Stored::Verification(row) => top::Key::Verification { repository: row.repository, commit: row.commit },
         top::Stored::Flight { task, entry } => top::Key::Flight { task: *task, entry: *entry },
         top::Stored::Release(row) => top::Key::Release(row.task),
         top::Stored::Application { token, .. } => top::Key::Application(*token),

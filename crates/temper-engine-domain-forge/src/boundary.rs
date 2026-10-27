@@ -673,6 +673,49 @@ pub enum CallPayload {
     Read(Box<Result<skein_forge::api::Answer, skein_forge::api::Error>>),
 }
 
+/// A tier of a repository's, by name for now (domain/after-landing.md, 2).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Tier {
+    pub name: Box<[u8]>,
+}
+
+/// One repository's tiers, in the configuration's order.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RepositoryTiers {
+    pub repository: skein_forge::api::Repository,
+    pub tiers: Box<[Tier]>,
+}
+
+/// A gate's or tier's branch-name-safe word (domain/landing.md, 12).
+pub const CHECK_NAME_BYTES: u32 = 32;
+
+/// Store family 26: one landing temper made and its verification (domain/after-landing.md, 10).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Verification {
+    pub repository: skein_forge::api::Repository,
+    pub commit: skein_forge::api::Commit,
+    /// The change tasks this commit landed, oldest first: one by queue.
+    pub changes: Box<[u64]>,
+    /// The repository's tiers at landing, in configuration order.
+    pub tiers: Box<[TierVerification]>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierVerification {
+    /// The tier's name, at most `CHECK_NAME_BYTES`.
+    pub tier: Box<[u8]>,
+    /// None while verifying; otherwise the run and its verdict on this landing.
+    pub verdict: Option<TierVerdict>,
+    /// The landing whose run passed the failures blamed here (5.3).
+    pub repaired: Option<skein_forge::api::Commit>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierVerdict {
+    pub run: u64,
+    pub blame: temper_engine_domain_forge_tiers::Blame,
+}
+
 /// The connector's durable records, wrapped by the root store.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Stored {
@@ -740,6 +783,7 @@ pub enum Stored {
         task: u64,
         entry: u64,
     },
+    Verification(Verification),
 }
 /// A bounded connector payload awaiting an authority holder's decision.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -782,6 +826,10 @@ pub enum Key {
     Flight {
         task: u64,
         entry: u64,
+    },
+    Verification {
+        repository: skein_forge::api::Repository,
+        commit: skein_forge::api::Commit,
     },
 }
 /// A completed phase of the connector's restart contract.

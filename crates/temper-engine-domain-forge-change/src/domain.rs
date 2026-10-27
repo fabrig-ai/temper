@@ -9,13 +9,42 @@ use skein_lib::{List, Wall};
 
 use crate::{
     Change, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, Heard, Hold,
-    Limits, Pull, Repair, State, Status, Stepped,
+    Limits, Pull, Repair, State, Status, Stepped, Verification,
 };
 
 /// Decide one change from current forge and task facts, independent of its wake.
 #[must_use]
 pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: &Limits) -> Stepped {
     let mut next = change.clone();
+    match change.state {
+        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => {
+            return verified(next, merge, facts.verification, standing.cancelled);
+        }
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Recreating { .. }
+        | State::Reopening { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Held { .. } => {}
+    }
+    match facts.pull {
+        Pull::Merged { commit } => {
+            next.state = State::Landed { merge: commit };
+            return verified(next, commit, facts.verification, standing.cancelled);
+        }
+        Pull::Missing | Pull::Open { .. } | Pull::Closed => {}
+    }
+    unmerged(change, next, facts, standing, now, limits)
+}
+
+fn unmerged(change: &Change, mut next: Change, facts: &Facts, standing: &Heard, now: Wall, limits: &Limits) -> Stepped {
     if change.gates.len() > usize::try_from(limits.gates).expect("u32 fits usize")
         || change.clean.len() > usize::try_from(limits.clean_heads).expect("u32 fits usize")
         || change.gate_failures.len() > usize::try_from(limits.gates).expect("u32 fits usize")
@@ -28,7 +57,9 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         next.gate_failures = Box::new([]);
     }
     match &change.state {
-        State::Landed { merge } => return Stepped { change: next, decision: Decision::Finish { merge: *merge } },
+        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } => {
+            unreachable!("landed states returned first")
+        }
         State::Held { was, why } => {
             if standing.released {
                 return release(next, was, *why, facts, now);
@@ -47,13 +78,6 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         | State::Resolving { .. }
         | State::Repairing { .. }
         | State::Landing { .. } => {}
-    }
-    match facts.pull {
-        Pull::Merged { commit } => {
-            next.state = State::Landed { merge: commit };
-            return Stepped { change: next, decision: Decision::Finish { merge: commit } };
-        }
-        Pull::Missing | Pull::Open { .. } | Pull::Closed => {}
     }
     if standing.cancelled {
         return Stepped { change: next, decision: Decision::Cancel };
@@ -78,6 +102,8 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
             | State::Repairing { .. }
             | State::Landing { .. }
             | State::Landed { .. }
+            | State::Red { .. }
+            | State::Cleared { .. }
             | State::Held { .. } => return hold(next, Hold::PullClosed),
         },
         Pull::Open { base, .. } if base != facts.expected_base && !is_reopening(&change.state) => {
@@ -100,8 +126,25 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         State::Resolving { requested, base } => resolving(next, *requested, *base, facts, standing, now, limits),
         State::Repairing { requested, why } => repairing(next, *requested, *why, facts, standing, now, limits),
         State::Landing { head } => landing(next, *head, standing, now, limits),
-        State::Landed { .. } | State::Held { .. } => unreachable!("terminal states returned above"),
+        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Held { .. } => {
+            unreachable!("terminal states returned above")
+        }
     }
+}
+
+fn verified(mut change: Change, merge: [u8; 32], verification: Verification, cancelled: bool) -> Stepped {
+    let decision = match verification {
+        Verification::Cleared => {
+            change.state = State::Cleared { merge };
+            Decision::Finish { merge }
+        }
+        Verification::Red => {
+            change.state = State::Red { merge };
+            Decision::None
+        }
+        Verification::Verifying => Decision::None,
+    };
+    Stepped { change, decision: if cancelled { Decision::Finish { merge } } else { decision } }
 }
 
 fn is_reopening(state: &State) -> bool {
@@ -119,6 +162,8 @@ fn is_reopening(state: &State) -> bool {
         | State::Repairing { .. }
         | State::Landing { .. }
         | State::Landed { .. }
+        | State::Red { .. }
+        | State::Cleared { .. }
         | State::Held { .. } => false,
     }
 }
@@ -161,7 +206,9 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts, now: Wall)
                 State::Queued { head, .. } | State::First { head, .. } | State::Gating { head, .. } => {
                     State::Gating { head: *head, asked: Box::new([]) }
                 }
-                State::Held { .. } | State::Landed { .. } => unreachable!("held state retains a live predecessor"),
+                State::Held { .. } | State::Landed { .. } | State::Red { .. } | State::Cleared { .. } => {
+                    unreachable!("held state retains a live predecessor")
+                }
                 State::Producing { .. }
                 | State::Opening { .. }
                 | State::Recreating { .. }

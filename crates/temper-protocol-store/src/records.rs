@@ -8,6 +8,7 @@ mod api;
 mod application;
 mod change;
 mod client;
+mod verification;
 #[cfg(test)]
 pub(crate) use api::encode_error;
 mod entries;
@@ -39,6 +40,7 @@ pub fn encode(value: &d::Stored) -> Box<[u8]> {
             w::Binding::new(&w::CEILINGS, w::BindingParts { address: address.clone(), subject: subject.clone() })
                 .expect(FITS),
         ),
+        d::Stored::Verification(row) => w::Value::Verification(verification::encode(row)),
         d::Stored::Flight { task, entry } => {
             w::Value::Flight(w::Flight::new(&w::CEILINGS, w::FlightParts { task: *task, entry: *entry }).expect(FITS))
         }
@@ -100,6 +102,7 @@ pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
             }
             d::Stored::Binding { address, subject }
         }
+        w::Value::Verification(row) => d::Stored::Verification(verification::decode(row)?),
         w::Value::Flight(row) => {
             let w::FlightParts { task, entry } = row.into_parts();
             d::Stored::Flight { task, entry }
@@ -169,6 +172,11 @@ pub fn row(key: &[u8], value: &[u8], bounds: &Bounds) -> Result<d::Stored, Undec
 
 pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
     Some(w::Limits {
+        verification_changes: forge.changes,
+        verification_tiers: forge.tiers,
+        tier_verification_tier: d::CHECK_NAME_BYTES,
+        failed_tests_tests: forge.failing_tests,
+        failing_test_test_id: forge.test_id_bytes,
         answer_name_name: forge.client.answer_bytes,
         binding_address: 254,
         binding_subject: 255,

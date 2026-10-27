@@ -137,6 +137,7 @@ pub fn evidence(forge: u16, rows: &[(Box<[u8]>, Box<[u8]>)], limits: &d::Limits)
             }
             d::Stored::Demo(_)
             | d::Stored::DemoAct(_)
+            | d::Stored::Verification(_)
             | d::Stored::Flight { .. }
             | d::Stored::Call { .. }
             | d::Stored::ProposedEffect(_)

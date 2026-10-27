@@ -40,6 +40,12 @@ pub struct Limits {
     pub bindings: u32,
     pub collaborators: u32,
     pub landings: u32,
+    /// Tiers per repository (domain/after-landing.md, 2).
+    pub tiers: u32,
+    /// Failing tests named by one run (domain/after-landing.md, 4).
+    pub failing_tests: u32,
+    /// Bytes of one test id.
+    pub test_id_bytes: u32,
     /// Project judge tables retained beside committed policy.
     pub judge_projects: u32,
     /// Criteria in each deployment or project judge table.
@@ -174,6 +180,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(
             u64::from(l.tasks).checked_mul(u64::from(l.client.op_bytes).checked_add(u64::from(l.name_bytes))?)?,
         )?
+        .checked_add(crate::verification::worst_case(l)?)?
         .checked_add(Map::<skein_forge::api::Commit, u64>::worst_case(l.landings)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLanding>::worst_case(l.landings)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLost>::worst_case(l.holds)?)?
