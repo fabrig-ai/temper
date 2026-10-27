@@ -1660,3 +1660,159 @@ fn a_fake_forges_panel_has_no_address_and_real_forgejos_keep_theirs() {
         );
     }
 }
+
+fn landing_view() -> forge::LandingView {
+    forge::LandingView {
+        task: 61,
+        project: 7,
+        phase: forge::LandingPhase::Proving,
+        preparation: 2,
+        stale_proofs: 3,
+        turn: Some(62),
+        members: Box::new([forge::LandingMember {
+            change: CHANGE_TASK,
+            forge: 1,
+            owner: Box::from(b"acme".as_slice()),
+            name: Box::from(b"shop".as_slice()),
+            branch: Box::from(b"temper/51".as_slice()),
+            landing: Box::from(b"main".as_slice()),
+            pull: Some(123),
+            base: Some([2; 32]),
+            candidate: Some([3; 32]),
+            landed: None,
+            gates: Box::new([forge::LandingGate {
+                name: Box::from(b"gate".as_slice()),
+                blocking: true,
+                key: Some([4; 32]),
+                faults: 1,
+                proof: forge::GateProof::Passed(forge::ReceiptRun {
+                    id: 7,
+                    number: 3,
+                    url: Box::from(b"https://forge.example/run/7".as_slice()),
+                }),
+            }]),
+        }]),
+    }
+}
+#[test]
+fn a_landing_view_encodes_to_its_panel() {
+    let mut forges = fixtures::forges();
+    forges[0].kind = crate::settings::Kind::Forgejo;
+    forges[0].git = Box::from(b"https://git.example".as_slice());
+    forges[0].web = Some(Box::from(b"https://forge.example".as_slice()));
+    let bytes = family::document(forge::Document::Landing(landing_view()), &forges, &w::CEILINGS).unwrap();
+    let got = wire::decode_landing_panel(&bytes, &w::CEILINGS).unwrap();
+    assert_eq!(
+        (got.task(), got.project(), got.phase(), got.preparation(), got.stale_proofs(), got.turn()),
+        (61, 7, &w::LandingPhase::Proving, 2, 3, &Some(62))
+    );
+    let member = got.members().get(0).unwrap();
+    assert_eq!(
+        (member.change(), member.forge(), member.base(), member.candidate(), member.landed()),
+        (51, 1, &Some([2; 32]), &Some([3; 32]), &None)
+    );
+    assert_eq!(member.owner(), b"acme");
+    assert_eq!(member.name(), b"shop");
+    assert_eq!(member.branch(), b"temper/51");
+    assert_eq!(member.landing(), b"main");
+    assert_eq!(member.pull().as_ref().unwrap().address(), b"https://git.example/acme/shop/pulls/123");
+    let gate = member.gates().get(0).unwrap();
+    assert_eq!(gate.key(), &Some([4; 32]));
+    assert!(gate.blocking());
+    assert_eq!(gate.faults(), 1);
+    let w::Proof::Passed(run) = gate.proof() else { panic!("receipt") };
+    assert_eq!((run.run(), run.number(), run.address()), (7, 3, b"https://forge.example/run/7".as_slice()));
+}
+#[test]
+fn a_landings_view_encodes_to_its_list() {
+    let value = forge::LandingsView {
+        project: 7,
+        turn: Some(61),
+        landings: Box::new([forge::LandingLine {
+            task: 61,
+            phase: forge::LandingPhase::Turn { at: skein_lib::Wall::EPOCH },
+            changes: Box::new([51]),
+            repositories: Box::new([Box::from(b"acme/shop".as_slice())]),
+            landed: Box::new([[3; 32]]),
+        }]),
+    };
+    let bytes = family::document(forge::Document::Landings(value), &[], &w::CEILINGS).unwrap();
+    let got = wire::decode_landings_panel(&bytes, &w::CEILINGS).unwrap();
+    assert_eq!((got.project(), got.turn()), (7, &Some(61)));
+    assert_eq!(got.landings().len(), 1);
+    let row = got.landings().get(0).unwrap();
+    assert_eq!((row.task(), row.phase()), (61, &w::LandingPhase::Turn));
+    assert_eq!(row.changes().as_slice(), &[51]);
+    assert_eq!(row.repositories().as_slice(), &[Box::<[u8]>::from(b"acme/shop".as_slice())]);
+    assert_eq!(row.landed().as_slice(), &[[3; 32]]);
+}
+#[test]
+fn the_landings_subject_names_no_task() {
+    for project in [0, 7, u32::MAX] {
+        for ended in [false, true] {
+            let record = wire::watching(
+                &w::Watching::new(
+                    &w::CEILINGS,
+                    w::WatchingParts {
+                        watch: w::Watch::Landings(
+                            w::LandingsSubject::new(&w::CEILINGS, w::LandingsSubjectParts { project, ended }).unwrap(),
+                        ),
+                    },
+                )
+                .unwrap(),
+            );
+            let got =
+                family::to_root(watch_exchange(wire::FORGE, wire::CLIENT_VERSION, record), &[], None, &w::CEILINGS)
+                    .unwrap();
+            let root::Event::Party(root::PartyInput::Watch {
+                subject: jig_domain_core::documents::Watched::Application { subject, .. },
+                ..
+            }) = got
+            else {
+                panic!("application watch")
+            };
+            assert_eq!(subject.raw(), (1_u64 << 62_u32) | (u64::from(ended) << 32_u32) | u64::from(project));
+            assert!(subject.raw() >= (1_u64 << 62_u32));
+        }
+    }
+    let record = wire::watching(
+        &w::Watching::new(
+            &w::CEILINGS,
+            w::WatchingParts {
+                watch: w::Watch::Landing(
+                    w::LandingSubject::new(&w::CEILINGS, w::LandingSubjectParts { task: 61 }).unwrap(),
+                ),
+            },
+        )
+        .unwrap(),
+    );
+    let got =
+        family::to_root(watch_exchange(wire::FORGE, wire::CLIENT_VERSION, record), &[], None, &w::CEILINGS).unwrap();
+    let root::Event::Party(root::PartyInput::Watch { subject, .. }) = got else { panic!("landing watch") };
+    assert_eq!(
+        subject,
+        jig_domain_core::documents::Watched::Application {
+            scope: people::ApplicationScope::Project(7),
+            connector: wire::FORGE,
+            subject: Token::new(61)
+        }
+    );
+    let record = wire::watching(
+        &w::Watching::new(
+            &w::CEILINGS,
+            w::WatchingParts {
+                watch: w::Watch::Landing(
+                    w::LandingSubject::new(&w::CEILINGS, w::LandingSubjectParts { task: 0 }).unwrap(),
+                ),
+            },
+        )
+        .unwrap(),
+    );
+    let Err(refused) =
+        family::to_root(watch_exchange(wire::FORGE, wire::CLIENT_VERSION, record), &[], None, &w::CEILINGS)
+    else {
+        panic!("zero landing task is refused")
+    };
+    let kit::Event::WatchRefused { watcher, why } = *refused else { panic!("unknown watch") };
+    assert_eq!((watcher, why), (WATCHER, jig_domain_core::WatchRefusal::Unknown));
+}

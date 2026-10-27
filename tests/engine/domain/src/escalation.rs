@@ -801,6 +801,7 @@ impl World {
             | Delivery::DemoNote { .. }
             | Delivery::Application { .. }
             | Delivery::Forges { .. }
+            | Delivery::ForgeDocument { .. }
             | Delivery::Panel { .. }
             | Delivery::WebReply { .. }
             | Delivery::CarriedUnused { .. }

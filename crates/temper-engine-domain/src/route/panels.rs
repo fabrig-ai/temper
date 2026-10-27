@@ -22,7 +22,7 @@ pub(crate) fn document(
         None
     };
     let mut panel = if connector == domain.config.forge_connector {
-        domain.forge.panel(subject.raw(), scope, env.wall, &env.limits.forge)
+        domain.forge.document(subject.raw(), scope, env.wall, &env.limits.forge)
     } else {
         None
     };
@@ -47,7 +47,15 @@ pub(crate) fn document(
                 &env.limits,
                 match forges.take() {
                     Some(forges) => Delivery::Forges { watcher, forges },
-                    None => Delivery::Panel { watcher, panel: Box::new(panel.take().expect("one whole ready panel")) },
+                    None => match panel.take().expect("one whole ready document") {
+                        temper_engine_domain_forge::Document::Change(panel) => {
+                            Delivery::Panel { watcher, panel: Box::new(panel) }
+                        }
+                        document @ (temper_engine_domain_forge::Document::Landing(_)
+                        | temper_engine_domain_forge::Document::Landings(_)) => {
+                            Delivery::ForgeDocument { watcher, document: Box::new(document) }
+                        }
+                    },
                 },
             );
         } else {
