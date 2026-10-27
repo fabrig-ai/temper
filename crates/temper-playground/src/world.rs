@@ -46,7 +46,7 @@ pub struct StoryStart {
     pub forge: u64,
 }
 impl StoryStart {
-    /// The story's state and worker roots, with its prepared repository layout.
+    /// The story's state and worker roots.
     #[must_use]
     pub fn machine(&self) -> Machine {
         Machine::new(Machine::fresh(self.service.user))

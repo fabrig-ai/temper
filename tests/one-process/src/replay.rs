@@ -146,6 +146,7 @@ impl Driver {
 
 struct Context {
     start: StoryStart,
+    bot_login: Box<[u8]>,
     store: Rc<RefCell<Store>>,
     shared: Rc<RefCell<skein_fake_peers::forge::Forge>>,
     table: skein_fake_forge_protocol::Config,
@@ -243,9 +244,7 @@ fn identities(peer: &mut skein_fake_peers::forge::Peer) {
         let mut context = context.borrow_mut();
         let context = context.as_mut().expect("replay context");
         let store = peer.setup_mut();
-        let document: serde_json::Value = serde_json::from_slice(A.deployment).expect("story deployment");
-        let login = document["application"]["setup"][0]["bot"]["login"].as_str().expect("story bot").as_bytes();
-        if let Some(bot) = store.find(login) {
+        if let Some(bot) = store.find(&context.bot_login) {
             let mut users = List::with_capacity(1);
             users.push((bot.id, bot.login.clone())).expect("one bot");
             context.table.users = users;
@@ -307,9 +306,13 @@ fn run_log(log: Log) -> Result<Outcome, Differs> {
     let store = Rc::new(RefCell::new(Store::new()));
     let run = Rc::new(RefCell::new(referee::Run::default()));
     let simulator = start.simulator;
+    let deployment: serde_json::Value = serde_json::from_slice(A.deployment).expect("story deployment");
+    let bot_login =
+        deployment["application"]["setup"][0]["bot"]["login"].as_str().expect("story bot").as_bytes().into();
     CONTEXT.with(|context| {
         *context.borrow_mut() = Some(Context {
             start,
+            bot_login,
             store: store.clone(),
             shared,
             table,
@@ -342,7 +345,6 @@ fn run_log(log: Log) -> Result<Outcome, Differs> {
             roots: agent_roots,
         },
     );
-    let deployment: serde_json::Value = serde_json::from_slice(A.deployment).expect("story deployment");
     let git_path =
         deployment["application"]["setup"][0]["mode"]["fake"]["git"].as_str().expect("story fake git").as_bytes();
     if git_path != temper_playground::GIT {
