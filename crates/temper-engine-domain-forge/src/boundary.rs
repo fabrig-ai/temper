@@ -5,6 +5,7 @@ use alloc::boxed::Box;
 use skein_lib::Token;
 use temper_engine_domain_forge_change as change;
 use temper_engine_domain_forge_issues as issues;
+use temper_engine_domain_forge_landing as landing;
 
 /// A pull request whose context the connector gathers for a run brief.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -666,6 +667,65 @@ impl ChangeRow {
         }
     }
 }
+/// A project's test gates in configuration order (domain/landing.md, 13.1).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RepositoryGates {
+    pub repository: skein_forge::api::Repository,
+    pub gates: Box<[landing::Gate]>,
+}
+/// Family 23, committed together with its task's decision (domain/landing.md, 12).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LandingRow {
+    pub landing: landing::Landing,
+    pub asks: Box<[Option<change::Ask>]>,
+    pub entries: Box<[LandingEntry]>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LandingEntry {
+    pub entry: u64,
+    pub member: u16,
+    pub gate: u16,
+    pub operation: Operation,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Operation {
+    Dispatch,
+    Rerun,
+    Pending,
+    Verdict,
+    Merge,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LandingHeard {
+    pub released: bool,
+    pub cancelled: bool,
+}
+/// Family 24, a result of a run dispatched by temper (domain/landing.md, 6.2).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Receipt {
+    pub passed: bool,
+    pub run: ReceiptRun,
+    pub candidate: skein_forge::api::Commit,
+    pub ended: skein_lib::Wall,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ReceiptRun {
+    pub id: u64,
+    pub number: u64,
+    pub url: Box<[u8]>,
+}
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct ReceiptKey {
+    pub project: u32,
+    pub repository: skein_forge::api::Repository,
+    pub check: Check,
+    pub key: [u8; 32],
+}
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum Check {
+    Gate(Box<[u8]>),
+    Tier(Box<[u8]>),
+}
 /// One gate's explanation, retained with its verdict for a repair brief.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct GateRemark {
@@ -775,6 +835,11 @@ pub enum Stored {
         task: u64,
         entry: u64,
     },
+    Landing(LandingRow),
+    Receipt {
+        key: ReceiptKey,
+        receipt: Receipt,
+    },
 }
 /// A bounded connector payload awaiting an authority holder's decision.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -818,6 +883,8 @@ pub enum Key {
         task: u64,
         entry: u64,
     },
+    Landing(u64),
+    Receipt(ReceiptKey),
 }
 /// A completed phase of the connector's restart contract.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -886,6 +953,14 @@ pub struct Installation {
 /// A parent or child input to the connector top.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Event {
+    Landing {
+        row: LandingRow,
+    },
+    StepLanding {
+        task: u64,
+        entry: u64,
+        heard: LandingHeard,
+    },
     /// The engine stops: finish sent entries without starting another write (domain/forge.md, 6).
     Settle,
     /// A successful conversion kept its App records.
@@ -1223,6 +1298,11 @@ pub enum Event {
 /// The connector's output to the root, including child API calls.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Request {
+    LandingDecision {
+        task: u64,
+        decision: landing::Decision,
+        entry: Option<u64>,
+    },
     /// The client finished sent entries or reached its bound; those without an outcome.
     Settled {
         unfinished: Box<[Unfinished]>,
