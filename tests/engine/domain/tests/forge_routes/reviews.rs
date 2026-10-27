@@ -866,7 +866,6 @@ fn a_bare_release_of_a_change_past_its_tasks_holds_it_again() {
 
 fn change_authority(world: &mut World, task: u64, tasks: Option<u32>, depth: Option<u32>, spend: Option<u64>) {
     let row = live_task(world, task);
-    let revision = row.revisions.spec;
     let mut authority = row.authority.clone();
     if let Some(tasks) = tasks {
         authority.delegation.tasks = tasks;
@@ -877,6 +876,11 @@ fn change_authority(world: &mut World, task: u64, tasks: Option<u32>, depth: Opt
     if let Some(spend) = spend {
         authority.budget.spend = spend;
     }
+    amend_change_authority(world, task, authority);
+}
+
+fn amend_change_authority(world: &mut World, task: u64, authority: tasks::Authority) {
+    let revision = live_task(world, task).revisions.spec;
     // Its existing funder has the unspent allowance; the person's pool is fully
     // allotted to that requester in this small world.
     let parent = world.assigned[0].clone();
@@ -1032,4 +1036,82 @@ fn ended_result(world: &World, task: u64) -> &tasks::TaskResult {
     };
     let tasks::Phase::Ended(tasks::Ending::Done(result)) = &row.phase else { panic!("successful task") };
     result
+}
+
+/// Stop after the producer releases its reservation, before the review is delegated.
+fn before_review() -> (World, u64) {
+    let mut documents = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.documents;
+    // The task read includes the change's grants and its amendment offers.
+    documents.grants = 16;
+    let world =
+        World::configured_policy(true, true, false, 1000, Gate { agent: true, ..Gate::default() }, Some(documents));
+    let (mut world, _, producer, branch) = change_world_in(world, Change::default());
+    let change = requester(&world, producer.task);
+    produce(&mut world, &producer, &branch);
+    let producer_key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(producer.task)));
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if !world.store.rows.contains_key(&producer_key) && live_task(&world, change).numbers.reserved == 0 {
+            assert_eq!(world.assigned.len(), 2, "no review before this cut");
+            return (world, change);
+        }
+    }
+    panic!("producer did not settle its reservation");
+}
+
+fn read_change_task(world: &mut World, change: u64) -> Box<jig_domain_core::documents::Task> {
+    use jig_domain_core::{
+        documents::Document,
+        reads::{Answer, Read},
+    };
+    let Some(Answer::Document(document)) = super::paths::read(world, Read::Task { task: change }) else {
+        panic!("change task read");
+    };
+    let Document::Task(task) = *document else { panic!("task document") };
+    task
+}
+
+#[test]
+fn a_review_without_spend_holds_for_budget_before_delegating() {
+    let (mut world, change) = before_review();
+    let numbers = live_task(&world, change).numbers;
+    change_authority(&mut world, change, None, None, Some(numbers.spent + numbers.spent_below + 1));
+    wait_held(&mut world, change);
+    assert_authority_hold(
+        &world,
+        change,
+        temper_engine_domain_forge_change::AuthorityLack::Spend,
+        b"its spend is below a run's reserve",
+        false,
+    );
+    assert!(change_row(&world, change).pull.is_some(), "the pull opens before review admission");
+    assert_eq!(world.assigned.len(), 2, "no unfunded reviewer is made");
+    let task = read_change_task(&mut world, change);
+    assert_eq!(task.hold.as_ref().map(|hold| hold.reason), Some(tasks::Hold::Budget));
+    assert_eq!(world.merges, 0);
+}
+
+#[test]
+fn a_review_without_charter_authority_is_refused_as_a_batch_without_an_effects_hold() {
+    let (mut world, change) = before_review();
+    let mut authority = live_task(&world, change).authority.clone();
+    authority.delegation.kinds = Box::new([tasks::AuthorityExecutor::Charter(2)]);
+    amend_change_authority(&mut world, change, authority);
+    let mut refused = false;
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        while let Some(fact) = world.root.pop_fact() {
+            if matches!(fact, engine::Fact::StepRefused { task, problem, .. }
+                if task == change && problem.why == tasks::Refusal::Batch)
+            {
+                refused = true;
+            }
+        }
+    }
+    assert!(refused, "the real core refuses the review batch");
+    assert!(change_row(&world, change).pull.is_some());
+    assert_eq!(world.assigned.len(), 2, "no reviewer without charter authority");
+    let task = read_change_task(&mut world, change);
+    assert!(task.hold.is_none(), "batch refusal does not become a dropped forge effect: {:?}", task.hold);
+    assert_eq!(world.merges, 0);
 }
