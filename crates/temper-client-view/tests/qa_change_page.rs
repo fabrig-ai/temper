@@ -1002,7 +1002,8 @@ mod tests {
                 | w::Step::Resolving
                 | w::Step::Repairing(_)
                 | w::Step::Landing
-                | w::Step::Landed(_) => {
+                | w::Step::Landed(_)
+                | w::Step::Ended => {
                     let (root, _) = show(panel_parts(step));
                     let page = text(view(&root).tree().nodes());
                     assert!(page.contains(line), "step's own line {line:?}: {page}");

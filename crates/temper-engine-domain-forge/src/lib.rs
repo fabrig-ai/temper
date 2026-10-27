@@ -292,6 +292,7 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             | change::State::Resolving { .. }
             | change::State::Repairing { .. }
             | change::State::Landing { .. }
+            | change::State::Ended
             | change::State::Landed { .. } => Some(0),
         }
     }

@@ -30,6 +30,7 @@ pub fn slot(step: &w::Step) -> Slots {
             w::Reason::Semantic => 4,
         },
         w::Step::Landing => 5,
+        w::Step::Ended => return Slots { current: None, done: 0 },
         w::Step::Landed(_) => return Slots { current: None, done: 6 },
     };
     Slots { current: Some(current), done: current }
@@ -78,7 +79,8 @@ pub fn queue(step: &w::Step) -> Option<Queue<'_>> {
         | w::Step::Resolving
         | w::Step::Repairing(_)
         | w::Step::Landing
-        | w::Step::Landed(_) => None,
+        | w::Step::Landed(_)
+        | w::Step::Ended => None,
     }
 }
 #[must_use]
@@ -97,6 +99,7 @@ pub const fn ordinal_word(n: u32, bar: bool) -> W {
 #[must_use]
 pub fn line(panel: &w::ChangePanel) -> Said {
     let word = match panel.step() {
+        w::Step::Ended => W::EndedLine,
         w::Step::Producing => W::ProduceLine,
         w::Step::Opening => W::OpenLine,
         w::Step::Recreating => W::RecreateLine,
@@ -148,6 +151,7 @@ pub const fn held_step(step: &w::Step) -> W {
         w::Step::Resolving => W::HeldResolving,
         w::Step::Repairing(_) => W::HeldRepairing,
         w::Step::Landing => W::HeldLanding,
+        w::Step::Ended => W::EndedLine,
         w::Step::Landed(_) => W::HeldLanded,
     }
 }
@@ -274,7 +278,7 @@ impl<'a> Change<'a> {
     pub fn ci(self) -> W {
         match self.panel.ci() {
             w::Ci::Unknown => match self.panel.step() {
-                w::Step::Landed(_) => W::NotRead,
+                w::Step::Landed(_) | w::Step::Ended => W::NotRead,
                 w::Step::Producing
                 | w::Step::Opening
                 | w::Step::Recreating
