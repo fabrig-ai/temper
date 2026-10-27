@@ -25,10 +25,16 @@ pub(crate) struct Driver {
     finished: bool,
     last_input: Time,
     difference: Rc<RefCell<Option<Differs>>>,
+    end: log::End,
+    tail: Vec<Said>,
 }
 impl Driver {
     fn new(log: Log) -> Self {
         let last_input = log.inputs.last().map_or(Time::ZERO, |input| input.stamp.instant);
+        let end = match log.end {
+            log::End::Said(digest) => log::End::Said(digest),
+            log::End::Cut => log::End::Cut,
+        };
         Self {
             feed: Some(Feed::new(log)),
             exchanges: BTreeSet::new(),
@@ -36,6 +42,8 @@ impl Driver {
             finished: false,
             last_input,
             difference: Rc::default(),
+            end,
+            tail: Vec::new(),
         }
     }
     fn enter(&mut self, at: Stamp, visitor: &mut skein_playground::visitor::Visitor) -> Result<(), Differs> {
@@ -69,7 +77,26 @@ impl Driver {
             }
             Report::StreamOpened | Report::StreamPiece { .. } => {}
         }
-        self.feed.as_mut().expect("reports before the visit ends").said(&Said::Report(report));
+        self.said(Said::Report(report));
+    }
+    fn said(&mut self, said: Said) {
+        let feed = self.feed.as_mut().expect("outputs before the visit ends");
+        feed.said(&said);
+        if feed.next().is_none() {
+            self.tail.push(said);
+        }
+    }
+    fn at_end(&self) -> bool {
+        match self.end {
+            log::End::Cut => true,
+            log::End::Said(expected) => {
+                let mut fold = log::Fold::default();
+                for said in &self.tail {
+                    fold.said(said);
+                }
+                fold.take() == expected
+            }
+        }
     }
     /// Called between whole steps: a slice's reports and lines fold apart.
     pub(crate) fn act(&mut self, now: Time, service: &mut ServiceHost, others: &mut [Proc]) -> bool {
@@ -77,7 +104,7 @@ impl Driver {
             return true;
         }
         for line in service.printed.drain(..) {
-            self.feed.as_mut().expect("feed before the visit ends").said(&Said::Line(line));
+            self.said(Said::Line(line));
         }
         let visitor = others
             .iter_mut()
@@ -95,12 +122,12 @@ impl Driver {
             return true;
         }
         if self.feed.as_ref().expect("feed before the visit ends").next().is_none()
-            && self.exchanges.is_empty()
-            && self.streams == 0
+            && (self.at_end() || (self.exchanges.is_empty() && self.streams == 0))
         {
-            // The fixture is a visit ending at its stream's terminal, while the
-            // service is still running. Check its snapshot before teardown:
-            // that teardown's stop was not part of the recorded visit.
+            // A download is a snapshot, possibly with its stream still open.
+            // Its end digest proves the recorded output prefix. A closed visit
+            // also finishes on a differing end, returning the ordinary Differs.
+            // Teardown's later outputs were not part of either recorded visit.
             *self.difference.borrow_mut() = self.feed.take().expect("finish the log once").finish().err();
             self.finished = true;
         }
@@ -365,6 +392,22 @@ mod tests {
         // Omit close: no terminal can finish the visit. The real referee
         // must still wake and fail at the log's end plus its grace.
         let _ = run_log(log);
+    }
+
+    #[test]
+    fn a_browser_named_snapshot_replays_before_its_stream_closes() {
+        let text = std::str::from_utf8(include_bytes!("../../playground/fixtures/welcome.log"))
+            .expect("text log")
+            .replace("native QQ==", "browser-build YQ==");
+        let mut lines: Vec<_> = text.lines().map(str::to_owned).collect();
+        lines.pop().expect("end");
+        let close = lines.pop().expect("close");
+        assert!(close.contains(" close "));
+        let empty: String = log::Fold::default().take().iter().map(|byte| format!("{byte:02x}")).collect();
+        lines.push(format!("end {empty}"));
+        let outcome = run((lines.join("\n") + "\n").as_bytes()).expect("open-stream snapshot replays");
+        assert!(outcome.drained);
+        assert!(outcome.commits > 0);
     }
 
     #[test]
