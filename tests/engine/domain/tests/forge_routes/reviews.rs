@@ -33,7 +33,7 @@ fn read(
     panic!("forge read was not answered");
 }
 
-fn next_assignment(world: &mut World, index: usize) -> engine::Assignment {
+pub(super) fn next_assignment(world: &mut World, index: usize) -> engine::Assignment {
     for _ in 0..MAX_TICKS {
         world.tick();
         if let Some(run) = world.assigned.get(index) {
@@ -67,7 +67,7 @@ fn produce(world: &mut World, producer: &engine::Assignment, branch: &[u8]) -> [
     translate::commit(head)
 }
 
-fn review_world() -> (World, engine::Assignment, [u8; 32]) {
+pub(super) fn review_world() -> (World, engine::Assignment, [u8; 32]) {
     let (mut world, _, producer, branch) = change_world_with_gate(false, 1000, None, true);
     let head = produce(&mut world, &producer, &branch);
     let reviewer = next_assignment(&mut world, 2);
@@ -232,7 +232,7 @@ fn assert_repository_grants(task: u64, authority: &tasks::Authority) {
     }
 }
 
-fn finish_review(world: &mut World, reviewer: &engine::Assignment, result: tasks::TaskResult) {
+pub(super) fn finish_review(world: &mut World, reviewer: &engine::Assignment, result: tasks::TaskResult) {
     let event = world.protocol.answer(
         CHANNEL,
         reviewer.task,

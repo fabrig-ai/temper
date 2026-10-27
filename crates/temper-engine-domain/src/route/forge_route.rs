@@ -2212,9 +2212,27 @@ fn produce_words(title: &[u8], base: &[u8], branch: &[u8], bound: u32) -> Box<[u
     writer.finish()
 }
 
-/// domain/forge.md, 8.1: replies take the same inbox prefix as their step.
-pub(super) fn change_replies(domain: &Domain, env: &Env<Limits>, task: u64) -> Box<[jig_domain_core::StepMessage]> {
+/// Keep the decision's messages first, then fill its remaining room with inbox replies.
+pub(super) fn append_change_replies(
+    domain: &Domain,
+    env: &Env<Limits>,
+    task: u64,
+    decision: ProcedureStep,
+) -> ProcedureStep {
     let mut messages = List::with_capacity(env.limits.tasks.batch);
+    for message in decision.messages {
+        messages.push(message).expect("the decision's messages fit the step batch");
+    }
+    ProcedureStep { messages: change_replies(domain, env, task, messages), ..decision }
+}
+
+/// domain/forge.md, 8.1: replies take the same inbox prefix as their step.
+fn change_replies(
+    domain: &Domain,
+    env: &Env<Limits>,
+    task: u64,
+    mut messages: List<jig_domain_core::StepMessage>,
+) -> Box<[jig_domain_core::StepMessage]> {
     let Some(row) = domain.core.tasks.task(task) else { return messages.into_boxed() };
     let Some(offered) = domain.core.tasks.procedure_offered(task) else { return messages.into_boxed() };
     for word in &row.inbox {
@@ -2400,7 +2418,6 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
         return;
     }
     domain.forge.offered_change(task);
-    let messages = change_replies(domain, env, task);
     let mut again = false;
     let decision = match choice {
         forge_change::Decision::Finish { merge } => {
@@ -2414,7 +2431,12 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                     step,
                     connector,
                     code,
-                    decision: ProcedureStep { messages, ..ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)) },
+                    decision: append_change_replies(
+                        domain,
+                        env,
+                        task,
+                        ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)),
+                    ),
                 }));
                 return;
             };
@@ -2461,7 +2483,12 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                     step,
                     connector,
                     code,
-                    decision: ProcedureStep { messages, ..ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)) },
+                    decision: append_change_replies(
+                        domain,
+                        env,
+                        task,
+                        ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)),
+                    ),
                 }));
                 return;
             };
@@ -2471,12 +2498,17 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 step,
                 connector,
                 code,
-                decision: ProcedureStep { batch: Box::new([delegate]), messages, ..ProcedureStep::new(StepEnd::Wait) },
+                decision: append_change_replies(
+                    domain,
+                    env,
+                    task,
+                    ProcedureStep { batch: Box::new([delegate]), ..ProcedureStep::new(StepEnd::Wait) },
+                ),
             }));
             return;
         }
     };
-    let decision = ProcedureStep { messages, ..decision };
+    let decision = append_change_replies(domain, env, task, decision);
     domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep { task, step, connector, code, decision }));
     if again {
         domain.work.push(Work::Tasks(tasks::Event::WakeProcedure { task }));

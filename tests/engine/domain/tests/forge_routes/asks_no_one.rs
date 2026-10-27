@@ -216,3 +216,73 @@ fn replies_past_the_batch_are_capped() {
         );
     }
 }
+
+#[test]
+fn a_hold_notice_keeps_its_place_before_replies() {
+    use super::reviews::{finish_review, next_assignment, review_world};
+    const FAILURE: &[u8] = b"cannot judge the second review";
+    let (mut world, first, _) = review_world();
+    let change = change_task(&world, first.task);
+    let chat = world.assigned[0].clone();
+    assert_eq!(world.env.limits.tasks.batch, 1);
+    finish_review(&mut world, &first, tasks::TaskResult::Failure { reason: b"cannot read the pull".as_slice().into() });
+    let second = next_assignment(&mut world, 3);
+    finish_review(&mut world, &second, tasks::TaskResult::Failure { reason: FAILURE.into() });
+    for _ in 0..MAX_TICKS {
+        if live_task(&world, change).inbox.iter().any(|word| {
+            word.from == tasks::Party::Task(second.task) && matches!(word.kind, tasks::MessageKind::Result(_))
+        }) {
+            break;
+        }
+        world.tick();
+    }
+    let mut row = Box::new(live_task(&world, change).clone());
+    assert!(
+        row.inbox
+            .iter()
+            .any(|word| word.from == tasks::Party::Task(second.task)
+                && matches!(word.kind, tasks::MessageKind::Result(_))),
+        "second review's failure waits for the change"
+    );
+    // Restore at that committed inbox, before its procedure step commits,
+    // with an ordinary word alongside the failure in the same offered batch.
+    world.store.pending.clear();
+    let mut header = world.store.header();
+    header.messages += 1;
+    let mut inbox = row.inbox.into_vec();
+    inbox.push(tasks::Word {
+        number: header.messages,
+        from: tasks::Party::Task(chat.task),
+        kind: tasks::MessageKind::Words,
+        words: MESSAGE.into(),
+        at: world.env.wall,
+        hits: 1,
+        eligible: true,
+    });
+    row.inbox = inbox.into_boxed_slice();
+    row.last_message = header.messages;
+    world.store.seed(
+        Box::new([
+            Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))),
+            Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(header))),
+        ]),
+        Box::new([]),
+    );
+    // The completed producer and reviews are no longer hosted at the restart.
+    world.assigned.retain(|run| run.task == chat.task);
+    world.restart(false, true);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+    }
+    assert!(matches!(live_task(&world, change).phase, tasks::Phase::Held { why: tasks::Hold::EffectFailed, .. }));
+    let notices = replies(&world, chat.task, change);
+    assert_eq!(notices.len(), 1, "the hold notice uses the sole message slot");
+    assert!(notices[0].words.windows(FAILURE.len()).any(|part| part == FAILURE), "the requester hears why");
+    assert!(live_task(&world, change).inbox.is_empty(), "the word is taken unanswered");
+    while let Some(fact) = world.root.pop_fact() {
+        assert!(
+            !matches!(fact, engine::Fact::StepRefused { task, .. } if task == change),
+            "the step is admitted: {fact:?}"
+        );
+    }
+}
