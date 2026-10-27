@@ -3962,3 +3962,163 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
     assert_eq!(panel["pull"]["address"], format!("http://{}/playground/widget/pulls/1", evidence.address));
     scratch.remove();
 }
+
+fn held_review_restart_scripts() -> Box<[skein_fake_llm_domain::api::Script]> {
+    let mut scripts = temper_real_loop_world::landing::change_scripts(
+        temper_real_loop_world::landing::ChangeAuthority { coding_kind: 2, scope: None },
+        temper_engine_domain_forge::tag(3, 1),
+        b"# hello\n\n",
+        b"Restart review held.\n",
+        b"@first-repository",
+        "@restart-review Append the README line",
+    );
+    let skein_fake_llm_domain::api::Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else {
+        panic!("delegate")
+    };
+    let mut delegate: serde_json::Value = serde_json::from_slice(arguments).expect("delegation JSON");
+    delegate["batch"][0]["authority"]["budget"]["spend"] = 10.into();
+    *arguments = serde_json::to_vec(&delegate).expect("delegation JSON").into();
+    let mut second_scripts = temper_real_loop_world::landing::change_scripts(
+        temper_real_loop_world::landing::ChangeAuthority { coding_kind: 2, scope: None },
+        temper_engine_domain_forge::tag(3, 1),
+        b"# hello\n\n",
+        b"Second restart review held.\n",
+        b"@second-chat",
+        "@second-coder Append the README line",
+    );
+    let skein_fake_llm_domain::api::Line::Call { arguments, .. } = &mut second_scripts[0].turns[0].lines[0] else {
+        panic!("second delegate")
+    };
+    let mut delegate: serde_json::Value = serde_json::from_slice(arguments).expect("second delegation JSON");
+    delegate["batch"][0]["authority"]["budget"]["spend"] = 10.into();
+    *arguments = serde_json::to_vec(&delegate).expect("second delegation JSON").into();
+    let mut scripts =
+        scripts.into_vec().into_iter().chain(second_scripts.into_vec()).collect::<Vec<_>>().into_boxed_slice();
+    for script in &mut scripts {
+        if script.cue.as_ref() == b"Review this change at the named head" {
+            script.turns = vec![
+                skein_fake_llm_domain::api::Turn {
+                    lines: Box::new([skein_fake_llm_domain::api::Line::Call {
+                        name: b"read".as_slice().into(),
+                        arguments: br#"{"path":"README.md"}"#.as_slice().into(),
+                    }]),
+                    finish: skein_fake_llm_domain::api::Finish::ToolCalls,
+                    tokens: 20,
+                };
+                20
+            ]
+            .into_boxed_slice();
+        }
+    }
+    scripts
+}
+
+fn assert_held_reviewers(calls: &[support::Ended]) {
+    for task in [4, 8] {
+        let reviewer = calls
+            .iter()
+            .filter_map(|call| serde_json::from_slice::<serde_json::Value>(&call.stdout).ok())
+            .find(|row| row["chip"]["task"] == task)
+            .expect("review task read");
+        assert_eq!(reviewer["chip"]["phase"], "held", "{reviewer}");
+        assert!(reviewer["hold"]["reason"]["budget"].is_object(), "budget hold: {reviewer}");
+        assert!(
+            reviewer["budget"]["numbers"]["spent"].as_u64().is_some_and(|spent| spent > 0),
+            "review ran: {reviewer}"
+        );
+    }
+}
+
+// R8: the same owned deployment must answer ctl after a settled stop with its review held.
+#[test]
+fn a_restart_over_a_budget_held_review_answers_ctl() {
+    use support::ctl::{Call, Step};
+    let scratch = support::Scratch::new("restart-held-review");
+    let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
+    let issuer = support::forge_land::fake_deployment(&paths);
+    let _cached = cache_forgejo_binaries(&paths[2]);
+    let flags = support::boxed::echo_steps(deployment_flags(&paths));
+    let scripts = held_review_restart_scripts();
+    let mut steps = forgejo_setup_steps("first");
+    steps[4] = Step::Run(Call::new(&["forge-setup", "3", "--org", "work", "--repository", "hello", "--project", "1"]));
+    steps.extend([
+        Step::Run(Call::new(&["connect", "1", "--key", "restart-account"])),
+        Step::Run(Call::new(&["wait", "accounts", "--until", "usable", "--timeout", "10s"])),
+        Step::Run(Call::new(&[
+            "chat",
+            "--project",
+            "1",
+            "--key",
+            "restart-first",
+            "@first-repository Request a change",
+            "--json",
+        ])),
+        Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "120s", "--json"])),
+        Step::Run(Call::new(&["wait", "change", "2", "--until", "ci:passed", "--timeout", "120s", "--json"])),
+        Step::Until(Call::new(&["task", "4", "--json"]), b"\"phase\":\"held\""),
+        Step::Run(Call::new(&["task", "4", "--json"])),
+        Step::Run(Call::new(&["change", "2", "--json"])),
+        Step::Run(Call::new(&[
+            "chat",
+            "--project",
+            "1",
+            "--key",
+            "restart-second",
+            "@second-chat Request another change",
+            "--json",
+        ])),
+        Step::Run(Call::new(&["wait", "task", "5", "--until", "replied", "--timeout", "120s", "--json"])),
+        Step::Run(Call::new(&["wait", "change", "6", "--until", "ci:passed", "--timeout", "120s", "--json"])),
+        Step::Until(Call::new(&["task", "8", "--json"]), b"\"phase\":\"held\""),
+        Step::Run(Call::new(&["task", "8", "--json"])),
+        Step::Run(Call::new(&["change", "6", "--json"])),
+        Step::Run(Call::new(&["export", "1", scratch.path().join("exported-login").to_str().expect("scratch path")])),
+    ]);
+    let first = support::boxed::run_ctl_with_account(
+        scratch.path(),
+        flags.clone(),
+        scratch.path(),
+        steps,
+        BOX_DEADLINE,
+        || (),
+        support::forge_land::fake_face(issuer, scripts.clone()),
+    );
+    assert_eq!(first.exit, Some(Exit::Code(0)), "first: {}", String::from_utf8_lossy(&first.stderr));
+    ctl_assert_success(&first.calls);
+    assert!(first.checked.is_some(), "all initial steps completed: {}", String::from_utf8_lossy(&first.stderr));
+    assert_held_reviewers(&first.calls);
+    let mut scripts = scripts;
+    for script in &mut scripts {
+        if matches!(script.cue.as_ref(), b"@first-repository" | b"@second-chat") {
+            script.turns = Box::new([script.turns[2].clone()]);
+        }
+    }
+    let steps = vec![
+        Step::Run(Call::new(&[
+            "import",
+            scratch.path().join("exported-login").to_str().expect("scratch path"),
+            "--key",
+            "after-restart",
+        ])),
+        Step::Run(Call::new(&["forges", "--json"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+    ];
+    let second = support::boxed::run_ctl_with_account(
+        scratch.path(),
+        flags,
+        scratch.path(),
+        steps,
+        BOX_DEADLINE,
+        || (),
+        support::forge_land::fake_face(support::sign_in::restart_issuer(&paths[0]), scripts),
+    );
+    assert_eq!(second.exit, Some(Exit::Code(0)), "restart: {}", String::from_utf8_lossy(&second.stderr));
+    assert!(second.checked.is_some(), "all restart steps completed: {}", String::from_utf8_lossy(&second.stderr));
+    assert_eq!(second.calls.len(), 3);
+    assert!(
+        second.calls.iter().all(|call| call.exit == Some(Exit::Code(0))),
+        "ctl answers after restart: {}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    scratch.remove();
+}

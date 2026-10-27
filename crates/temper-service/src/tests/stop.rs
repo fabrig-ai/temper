@@ -91,6 +91,76 @@ fn another_component_version_stops_startup() {
 }
 
 #[test]
+fn a_refused_start_closes_every_child_without_an_external_wakeup() {
+    let mut service = fixtures::started();
+    service
+        .engine
+        .as_mut()
+        .unwrap()
+        .store
+        .above
+        .push(jig_protocol_store::Event::OpenRefused { owner: skein_lib::Token::new(1), why: OpenRefusal::Failed });
+    for _ in 0_u32..64 {
+        fixtures::turn(&mut service);
+    }
+    let engine = service.engine.as_ref().unwrap();
+    assert!(
+        service.is_empty(),
+        "end {:?}, setup {} {} {}, forge {} {} {}, store {}, workers {}, clients {} {} {}, accounts {}",
+        engine.end,
+        engine.setup.closed,
+        engine.setup.io.len(),
+        engine.setup.above.len(),
+        engine.forge.closed,
+        engine.forge.io.len(),
+        engine.forge.above.len(),
+        engine.store.closed(),
+        engine.workers.closed(),
+        engine.clients.closed,
+        engine.clients.io.len(),
+        engine.clients.early.len(),
+        engine.accounts.as_ref().is_none_or(crate::accounts::Accounts::is_empty)
+    );
+}
+
+#[test]
+fn a_refused_one_process_start_closes_its_unstarted_worker() {
+    for boxed in [false, true] {
+        let mut stand = fixtures::system::one_process_under_box(boxed);
+        stand
+            .service
+            .engine
+            .as_mut()
+            .unwrap()
+            .store
+            .above
+            .push(jig_protocol_store::Event::OpenRefused { owner: skein_lib::Token::new(1), why: OpenRefusal::Failed });
+        for _ in 0_u32..256 {
+            stand.turn();
+        }
+        let engine = stand.service.engine.as_ref().unwrap();
+        assert!(
+            stand.service.is_empty(),
+            "work {}, end {:?}, setup {} {} {}, forge {} {} {}, store {}, workers {}, clients {} {} {}, accounts {}",
+            stand.service.work_pending(skein_lib::Time::ZERO),
+            engine.end,
+            engine.setup.closed,
+            engine.setup.io.len(),
+            engine.setup.above.len(),
+            engine.forge.closed,
+            engine.forge.io.len(),
+            engine.forge.above.len(),
+            engine.store.closed(),
+            engine.workers.closed(),
+            engine.clients.closed,
+            engine.clients.io.len(),
+            engine.clients.early.len(),
+            engine.accounts.as_ref().is_none_or(crate::accounts::Accounts::is_empty)
+        );
+    }
+}
+
+#[test]
 fn another_core_version_stops_startup() {
     version(Family::Core);
 }

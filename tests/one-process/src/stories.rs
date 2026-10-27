@@ -10,6 +10,9 @@ use temper_fake_checkout::git::Remote;
 
 // One hook per push: the setup's topic push and the agent's change.
 pub(crate) const ADOPT_HOOKS: usize = 2;
+// Two one-token producer turns leave three, below the model's four-token run reserve.
+const REVIEW_ALLOWANCE: u64 = 5;
+const RUN_ALLOWANCE: u64 = 8;
 
 thread_local! { static STORY: std::cell::Cell<Story> = const { std::cell::Cell::new(Story::Chat { words: b"Hello" }) }; }
 pub(crate) fn set(story: Story) {
@@ -100,6 +103,10 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
             .expect("parameters")
             .push(serde_json::json!({"name":fixtures::PARAMETER_NAMES[2],"kind":"bytes","value":std::str::from_utf8(fixtures::MERGE_BRANCH).expect("fixture branch")}));
     }
+    if matches!(story, Story::HeldReview) {
+        // The producer fits; its spend leaves less than another run's allowance.
+        delegate["batch"][0]["authority"]["budget"]["spend"] = REVIEW_ALLOWANCE.into();
+    }
     let delegate = serde_json::to_vec(&delegate).expect("delegate JSON");
     let finish = call(
         b"finish",
@@ -163,8 +170,7 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
         skein_fake_forge_domain::api::Permission::Write,
     );
     let forge = std::rc::Rc::new(std::cell::RefCell::new(skein_fake_peers::forge::Forge::new(domain, config)));
-    let mut transport =
-        temper_fake_git_hosted::Typed::new(forge, &temper_fake_git_hosted::fixtures::table(b"acme/app", None));
+    let mut transport = temper_fake_git_hosted::Typed::new(forge, &forge_table());
     let identity = temper_fake_git_hosted::fixtures::identity();
     transport.authenticate(Some(&(identity.login, identity.token)));
     assert_eq!(
@@ -301,6 +307,52 @@ pub(crate) fn configure(value: &mut serde_json::Value) {
     ] {
         overrides.remove(name);
     }
+    if STORY.with(|slot| matches!(slot.get(), Story::HeldReview)) {
+        let forge = value["application"]["forges"][0].as_object_mut().expect("forge");
+        for name in ["api_token", "user", "webhook_secret", "identity"] {
+            forge.remove(name);
+        }
+        let identity = value["application"]["identities"][0].as_object_mut().expect("identity");
+        identity.remove("token");
+        identity.insert("forge".into(), 1.into());
+        value["application"]["setup"] = serde_json::json!([
+            {"forge":1,"directory":"forge-1","bot":{"login":"worker","email":"worker@example.invalid"},
+             "mode":{"owned":{"forgejo":"fetched","runner":null,"listen":{"socket":"127.0.0.1:3000"},
+                "person":{"login":"person","email":"person@example.invalid"}}}}
+        ]);
+        // The shipped init template and real-loop landing fixture use five
+        // review parameters and the two verdict choices.
+        value["engine"]["limits"]["overrides"]["tasks.parameters"] = 5.into();
+        value["engine"]["limits"]["overrides"]["tasks.contract_choices"] = 2.into();
+        value["application"]["landing"]["deployment"] = serde_json::json!([{
+            "connector": 1, "kind": 4,
+            "pattern": {"segments": ["forge", "127.0.0.1:3000"], "last": "open", "value": "acme"},
+            "enforce": true, "ci": true, "up_to_date": true,
+            "gates": [{"number": 1, "blocking": true, "freshness": "exact"}], "approvals": []
+        }]);
+    }
+}
+
+pub(crate) fn review_held(rows: &BTreeMap<root::Key, root::Record>) -> bool {
+    rows.values().filter(|row| matches!(row,
+        root::Record::Core(jig_domain_core::Record::Tasks(jig_domain_tasks::Stored::Live(task)))
+            if task.spec.words.as_ref() == b"Review this change at the named head"
+                && matches!(task.phase, jig_domain_tasks::Phase::Held { why: jig_domain_tasks::Hold::Budget, .. })
+    )).count() == 1 && rows.values().any(|row| matches!(row,
+        root::Record::Forge { row } if matches!(row.as_ref(), temper_engine_domain_forge::Stored::Change(change)
+            if !change.change.gates.is_empty() && change.change.last_head.is_some())
+    ))
+}
+
+pub(crate) fn held_review() -> bool {
+    STORY.with(|slot| matches!(slot.get(), Story::HeldReview))
+}
+pub(crate) fn forge_table() -> skein_fake_forge_protocol::Config {
+    if held_review() {
+        crate::review_restart::table()
+    } else {
+        temper_fake_git_hosted::fixtures::table(b"acme/app", None)
+    }
 }
 
 /// The scripted shell's echo redirection acts on the inherited machine files.
@@ -433,9 +485,14 @@ pub(crate) fn uses_stock() -> bool {
     STORY.with(|slot| matches!(slot.get(), Story::Chat { .. } | Story::ChatReadThenWait { .. }))
 }
 
+thread_local! { static REVIEW_START: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+pub(crate) fn review_start() -> bool {
+    REVIEW_START.with(std::cell::Cell::get)
+}
 thread_local! { static SETTINGS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 thread_local! { static REVISION: std::cell::Cell<u32> = const { std::cell::Cell::new(1) }; }
 pub(crate) fn setup_settings(phase: crate::world::Phase) {
+    REVIEW_START.with(|slot| slot.set(matches!(phase, crate::world::Phase::Story)));
     SETTINGS.with(|slot| slot.set(matches!(phase, crate::world::Phase::Drain)));
     REVISION.with(|slot| {
         slot.set(if matches!(phase, crate::world::Phase::Drain | crate::world::Phase::Restart) { 2 } else { 1 });
@@ -495,6 +552,11 @@ pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Give
         charter.policy.agents = false;
         charter.policy.turns = fixtures::CHARTER_TURNS;
         charter.spend = fixtures::PRODUCER_SPEND;
+    }
+    if STORY.with(|slot| matches!(slot.get(), Story::HeldReview)) {
+        defaults.charters[0].spend = RUN_ALLOWANCE;
+        defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(u64::from(fixtures::CHAT_WAIT_MS));
+        defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(50) };
     }
     temper_service::stock::Given::Own(Box::new(defaults))
 }
