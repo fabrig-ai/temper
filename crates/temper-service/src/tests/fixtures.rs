@@ -58,7 +58,7 @@ pub const ENGINE: &[u8] = br#"{
 
 pub fn engine() -> settings::Engine {
     let jig = parse_engine(ENGINE);
-    // This typed fixture reaches the core's start; policy 1 needs 2374 bytes.
+    // This typed fixture reaches the core's start; policy 1 needs 2390 bytes.
 
     settings::Engine {
         records_only: Box::new([]),
