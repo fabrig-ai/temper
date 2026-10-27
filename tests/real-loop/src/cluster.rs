@@ -159,11 +159,6 @@ impl Shape {
         }
         fixtures::private(&config.join("temper.json"), &serde_json::to_vec(&document).expect("cluster document"))
             .expect("private cluster document");
-        if data.join("charters/chat.txt").exists() {
-            std::fs::create_dir_all(config.join("charters")).expect("retained charter directory");
-            std::fs::copy(data.join("charters/chat.txt"), config.join("charters/chat.txt"))
-                .expect("configuration charter");
-        }
     }
 }
 
