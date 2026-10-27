@@ -12,6 +12,7 @@ pub mod first_repository;
 pub mod github;
 pub mod github_land;
 pub mod owned;
+pub mod placed_holds;
 pub mod running_revision;
 pub mod terminal;
 pub mod webhooks;

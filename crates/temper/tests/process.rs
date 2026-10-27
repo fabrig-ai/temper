@@ -4066,3 +4066,19 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
     assert_eq!(panel["pull"]["address"], format!("http://{}/playground/widget/pulls/1", evidence.address));
     scratch.remove();
 }
+
+#[test]
+fn temper_ctl_a_stopped_goal_resumes_when_its_owner_accepts_the_coordinators_proposal() {
+    let scratch = support::Scratch::new("ctl_placed_owner_proposal");
+    let (paths, flags) = first_run_directories(&scratch);
+    support::placed_holds::proposal(scratch.path(), &paths[0], flags);
+    scratch.remove();
+}
+
+#[test]
+fn temper_ctl_the_owner_lifts_a_stop_with_its_tasks() {
+    let scratch = support::Scratch::new("ctl_placed_lift");
+    let (paths, flags) = first_run_directories(&scratch);
+    support::placed_holds::lift(scratch.path(), &paths[0], flags);
+    scratch.remove();
+}

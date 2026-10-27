@@ -25,6 +25,7 @@ pub struct Member {
     out: Queue<client::Request>,
     owner: Option<Secret>,
     made: Option<(u64, Secret)>,
+    role: c::HeldRole,
     project: Option<(&'static str, u32)>,
     key: client::Key,
     phase: Phase,
@@ -56,6 +57,7 @@ impl Member {
             owner: Some(token),
             made: None,
             project: None,
+            role: c::HeldRole::Member,
             key: KEY,
             phase: Phase::ConfirmingOwner,
             closing: false,
@@ -63,6 +65,11 @@ impl Member {
             operations: std::collections::BTreeMap::new(),
             names: std::collections::BTreeMap::new(),
         }
+    }
+    pub fn maintainer(root: Fd, base: &Path, owner: &Path, directory: &str) -> Self {
+        let mut host = Self::new(root, base, owner, directory);
+        host.role = c::HeldRole::Maintainer;
+        host
     }
     pub fn project(root: Fd, base: &Path, owner: &Path, name: &'static str, number: u32) -> Self {
         let mut host = Self::new(root, base, owner, "case-project");
@@ -146,7 +153,7 @@ impl Member {
                 None => c::Ask::MakeService {
                     project: PROJECT,
                     name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
-                    role: c::HeldRole::Member,
+                    role: self.role,
                 },
             };
             self.event(
