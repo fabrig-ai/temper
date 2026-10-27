@@ -24,10 +24,6 @@ pub enum HoldWrite {
     Merge,
 }
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "the world injects independent read/write faults alongside gate choices"
-)]
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
     pub root: engine::Domain,
