@@ -290,6 +290,7 @@ fn hold(value: p::HoldReason, limits: &w::Limits) -> Result<w::HoldCategory, w::
                 p::Bound::History => w::Bound::History,
                 p::Bound::Window => w::Bound::Window,
                 p::Bound::Output => w::Bound::Output,
+                p::Bound::HostPart => w::Bound::HostPart,
             };
             w::HoldCategory::Exceeded(w::Exceeded::new(limits, w::ExceededParts { bound, value: value.value })?)
         }
