@@ -101,8 +101,8 @@ webhook_secret <secret>
 
 ```sh
 chmod 600 tokens
-temper ctl me forge-connect 1 forgejo tokens --key forgejo
-temper ctl me wait forges --until settled
+temper ctl me forge connect 1 forgejo tokens --key forgejo
+temper ctl me forge list --until settled
 rm tokens
 ```
 
@@ -164,8 +164,8 @@ On **Forges**, choose **Connect as its admin** and paste the token, or:
 
 ```sh
 chmod 600 admin-token
-temper ctl me forge-connect 1 forgejo-admin admin-token --key forgejo-admin
-temper ctl me wait forges --until settled
+temper ctl me forge connect 1 forgejo-admin admin-token --key forgejo-admin
+temper ctl me forge list --until settled
 rm admin-token
 ```
 
@@ -195,7 +195,7 @@ managed, "admin's token kept".
   list refuses temper's listener delivers no webhook, and polling keeps
   up.
 - **To stop keeping the token,** choose **Forget the admin's token**, or
-  `temper ctl me forge-forget 1`. temper erases it, and the forge is
+  `temper ctl me forge forget 1`. temper erases it, and the forge is
   connected, its bot, tokens and hooks kept. Adopting then grants
   nothing: make the bot a collaborator yourself (section 2). Then delete
   the token on Forgejo.
@@ -208,14 +208,14 @@ Forgejo's and the runner's binaries, the forge's directory, its address
 and your account (`docs/examples/owned.json` is a whole example). `temper box --config C --data D --cache K`
 runs every step below in order; the box's walk is `temper help box`.
 
-For a fresh box, follow `temper help box`: `temper ctl DIR forge-setup
+For a fresh box, follow `temper help box`: `temper ctl DIR forge setup
 3` starts its owned Forgejo and adopts the first repository without a
 browser. Its CI jobs run on the box's runner, on this machine as the
 box's user, with label `temper-host`, without a container. The starter
 workflow only echoes success on pushes to `main` and pull requests;
 your repository's real checks are its own workflow's. With CI on, a
 change waits for a reported pass at its head. Read `temper ctl DIR
-change N` for that CI state, the step, pull request and merge commit.
+change show N` for that CI state, the step, pull request and merge commit.
 
 For an already configured owned forge, the box runs these commands:
 

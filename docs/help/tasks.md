@@ -24,8 +24,8 @@ yours. The first command lists tracked work in project 1 by priority;
 the second reads one task and its tree.
 
 ```sh
-temper ctl me tasks --project 1 --tracked --order priority
-temper ctl me task 41 --tree
+temper ctl me task list --project 1 --tracked --order priority
+temper ctl me task show 41 --tree
 ```
 
 The state tells you where work is: **waiting**, **due to run**,
@@ -47,8 +47,8 @@ Read a task to see the settings revision its runs use for their charter.
 These examples use task 41 and the signed-in client directory `me`:
 
 ```sh
-temper ctl me task 41
-temper ctl me task 41 --json
+temper ctl me task show 41
+temper ctl me task show 41 --json
 ```
 
 For an agent task, the text includes a line after its instructions:
@@ -63,7 +63,7 @@ Each suffix follows a middle dot separator. Between runs, the line
 omits the run number and keeps the newest number when it differs.
 An ended agent task retains its settings line. A procedure's or a
 person's task prints no settings line. Read `temper help settings` for
-held revisions and the current limits of `move-to-newest`.
+held revisions and the current limits of `revision advance`.
 
 With `--json`, the task object includes
 `"settings":{"task":7,"run":6,"newest":9}`. The `run` member is null
@@ -86,7 +86,7 @@ For task 41, already tracked, set priority 2 with a reason and a key
 you choose for this request:
 
 ```sh
-temper ctl me amend 41 --priority 2 urgent --key priority-41
+temper ctl me task amend 41 --priority 2 urgent --key priority-41
 ```
 
 Changing only an already tracked task's priority does not need its
@@ -104,7 +104,7 @@ is an untracked conversation that you end. It has no task deadline
 and keeps its transcript.
 
 ```sh
-temper ctl me chat --project 1 hello --key first-chat
+temper ctl me chat start --project 1 hello --key first-chat
 ```
 
 The creation outcome names the task; it is not the agent's answer.
@@ -112,8 +112,8 @@ Use the returned number in place of 41 to read the conversation or
 send more words:
 
 ```sh
-temper ctl me chat 41
-temper ctl me message 41 investigate --key investigate-41
+temper ctl me chat show 41
+temper ctl me task message 41 investigate --key investigate-41
 ```
 
 An ordinary reply leaves the chat open. A run can park, showing
@@ -137,7 +137,7 @@ is the default chat-template grace; read template 1 to see the
 current value before relying on it:
 
 ```sh
-temper ctl me setting template 1 --json
+temper ctl me settings show template 1 --json
 ```
 
 Close settles what should happen to each live direct delegate, then
@@ -149,7 +149,7 @@ can't be reopened.** Check those choices before confirming.
 To take live delegate 42 into your care while closing chat 41:
 
 ```sh
-temper ctl me close 41 --move 42 --reason finished --key close-41
+temper ctl me chat close 41 --move 42 --reason finished --key close-41
 ```
 
 Use the numbers of the chat and its live direct delegate. The move
@@ -172,11 +172,11 @@ results and replies. The kind filter calls escalations **Held**.
 Read the item to learn which action it asks of you.
 
 A question needs **Answer**, which names both the task and the
-particular question. An ordinary `message` sends words but is a
+particular question. An ordinary `task message` sends words but is a
 separate operation. For question 2 on task 41:
 
 ```sh
-temper ctl me answer 41 2 proceed --key answer-41-2
+temper ctl me task answer 41 2 proceed --key answer-41-2
 ```
 
 A proposal asks someone with more authority to authorize a concrete
@@ -185,7 +185,7 @@ amendment, the before and after authority. You can **Accept**, or
 **Reject with reason**. To accept task 41's proposal 3:
 
 ```sh
-temper ctl me decide t41/3 accept --key accept-41-3
+temper ctl me proposal decide t41/3 accept --key accept-41-3
 ```
 
 A hold has a reason and a revision. Read both before **Release task**;
@@ -193,7 +193,7 @@ you can also **Leave held** or pass an escalation up. Use the current
 hold revision, here 2:
 
 ```sh
-temper ctl me release 41 --hold 2 --key release-41
+temper ctl me task release 41 --hold 2 --key release-41
 ```
 
 An uncertain effect additionally needs your decision about repeating
@@ -210,8 +210,8 @@ the task's tree. Leaving the chat page only stops watching it; it is
 neither of these actions.
 
 ```sh
-temper ctl me stop 41 --key stop-41
-temper ctl me cancel 41 --grace 5s finished --key cancel-41
+temper ctl me task stop 41 --key stop-41
+temper ctl me task cancel 41 --grace 5s finished --key cancel-41
 ```
 
 These are separate choices: use the command for the action you want.
@@ -229,5 +229,5 @@ A chat does not deliver a repository change itself: ask it for the
 change and follow the delegated task. There is no guarantee that a
 final summary arrives before Close cancels the run after its grace.
 
-Read a closed chat in the client: `temper ctl me chat 41` may not show
+Read a closed chat in the client: `temper ctl me chat show 41` may not show
 a chat that has ended.

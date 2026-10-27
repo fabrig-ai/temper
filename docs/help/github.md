@@ -81,8 +81,8 @@ http://127.0.0.1:7100/forges/2/github/manifest?state=<state>
 Or, with `temper ctl`, which prints that link for you to open:
 
 ```sh
-temper ctl me forge-connect 2 github --key github
-temper ctl me wait forges --until settled
+temper ctl me forge connect 2 github --key github
+temper ctl me forge list --until settled
 ```
 
 1. **temper's page** sends temper's manifest to GitHub's form for a new
@@ -157,8 +157,8 @@ in place of `12345`:
 
 ```sh
 chmod 600 <slug>.private-key.pem
-temper ctl me forge-connect 2 github-app 12345 <slug>.private-key.pem --key github-app
-temper ctl me wait forges --until settled
+temper ctl me forge connect 2 github-app 12345 <slug>.private-key.pem --key github-app
+temper ctl me forge list --until settled
 ```
 
 - **temper checks the App with the key:** its id the one you gave, its
@@ -180,7 +180,7 @@ temper ctl me wait forges --until settled
 On the forge's row, choose **Install on another account**, or:
 
 ```sh
-temper ctl me forge-install 2
+temper ctl me forge install 2
 ```
 
 The tab goes to GitHub's install page (`temper ctl` prints its link).
@@ -315,7 +315,7 @@ key, id, permissions and events are still checked. This mode protects
 the App; accepted installations still let temper work on repositories.
 
 ```sh
-temper ctl DIR forges
+temper ctl DIR forge list
 ```
 
 An installation not yet accepted is listed by id with
@@ -339,12 +339,12 @@ new work.
 
 ```sh
 chmod 600 FILE
-temper ctl DIR forge-connect 2 github-app 12345 FILE --key github-app
-temper ctl DIR wait forges --until connected:2
-temper ctl DIR forges
-temper ctl DIR forge-accept 2 67890
-temper ctl DIR repositories 2 --installation 67890
-temper ctl DIR adopt --project 1 --forge 2 --owner OWNER --name NAME --landing main --key github-adopt
+temper ctl DIR forge connect 2 github-app 12345 FILE --key github-app
+temper ctl DIR forge list --until connected:2
+temper ctl DIR forge list
+temper ctl DIR forge accept 2 67890
+temper ctl DIR forge repositories 2 --installation 67890
+temper ctl DIR repository adopt --project 1 --forge 2 --owner OWNER --name NAME --landing main --key github-adopt
 ```
 
 Connect submits the App's key; the wait reports it connected. That

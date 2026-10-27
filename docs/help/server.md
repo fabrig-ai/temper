@@ -60,9 +60,9 @@ document goes to `/var/lib/temper/config/temper.json`.
 
 Temper supplies the stock charters, templates, the policy new projects
 are made from and the rules. Read these settings after signing in with
-`temper ctl me settings`, where `me` is your client directory. An owner
-uses `temper ctl me change-settings` to change them; a member can ask
-with `temper ctl me propose-settings`. Read `temper help settings` for
+`temper ctl me settings show`, where `me` is your client directory. An owner
+uses `temper ctl me settings apply` to change them; a member can ask
+with `temper ctl me settings propose`. Read `temper help settings` for
 the change file, revision and key these commands need.
 
 | Member | Value |
@@ -249,7 +249,7 @@ git diff --stat LIVE NEW -- ':(glob)crates/*/golden*/**'
 - **The clients' and the workers' wires** move with the build: the page
   is embedded in the binary, and the workers are redeployed from the
   same one.
-- **The file `temper ctl export` writes** (section 10) is what crosses a
+- **The file `temper ctl DIR account export` writes** (section 10) is what crosses a
   redeploy. Its two families have no golden directory: jig's moved
   form (`crates/jig-protocol-accounts/src/moved.rs`) and skein's OAuth
   record inside it (`crates/skein-oauth/src/record.rs`), so diff those
@@ -325,23 +325,26 @@ directory of its own, `0700`, made empty each time (`DIR`):
 
    It signs in the first of `engine.owners`. A link spent or expired is
    refused, and temper prints a fresh one: run it again.
-2. **Before the stop,** `temper ctl DIR accounts --json` names each
+
+   A running build from before ctl's regrouping (10-27) takes the old names in step 2: `accounts` for `account list`, `export` for `account export`; `temper ctl help` on it lists them.
+
+2. **Before the stop,** `temper ctl DIR account list --json` names each
    account and its sources. For each with a granted `sign_in` source,
-   `temper ctl DIR export N FILE`, FILE a new path in
+   `temper ctl DIR account export N FILE`, FILE a new path in
    `/var/lib/temper/data/secrets/`, which the reset keeps: it prints
    `moved out: account N to FILE`, FILE `0600`, and the running engine
    has let the account go. Stop then, with nothing in between.
 
-   Read `accounts --json` once before the redeploy begins, too: it is
+   Read `account list --json` once before the redeploy begins, too: it is
    the dry run. Only an account with a granted `sign_in` source crosses.
    A connect not finished is a row of `signing` (its `source`, no
    number), and an account whose sign-in is not granted stays behind
    too. If the account you expect is not there granted, finish its
-   sign-in from **Accounts** first. Don't wait for `temper ctl DIR wait
-   accounts --until settled`: a connect in progress keeps the accounts
+   sign-in from **Accounts** first. Don't wait for `temper ctl DIR account
+   list --until settled`: a connect in progress keeps the accounts
    unsettled until it ends.
 3. **After the start,** sign in again by the new engine's link (step
-   1), then `temper ctl DIR import FILE --key NAME`, NAME a word of `a`
+   1), then `temper ctl DIR account import FILE --key NAME`, NAME a word of `a`
    to `z`, `0` to `9` and `-`: it prints `moved in: account N` and
    removes FILE. Then `temper ctl DIR sign-out`, and remove `DIR`.
 
@@ -350,7 +353,7 @@ check it by `stat` alone, and never print it, copy it off `engine` or
 commit it. Nothing here stops a redeploy; each of these ends is said, and
 an owner signs in to the account again from **Accounts**:
 
-- **the running build has no `export`** (`temper ctl help export`
+- **the running build has no `account export`** (`temper ctl help account export`
   fails): nothing crosses;
 - **an export refused or its record lost on its way:** the engine kept
   the account, and the store loses it; FILE is removed, or, if `temper

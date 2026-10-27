@@ -29,8 +29,8 @@ including revision 5 and proposal p73/7, are examples: replace them
 with the setting, revision, project and proposal you actually read.
 
 ```sh
-temper ctl me settings
-temper ctl me setting charter 1 --json
+temper ctl me settings show
+temper ctl me settings show charter 1 --json
 ```
 
 The inventory shows the newest revision, each setting and its
@@ -45,9 +45,9 @@ read deployment settings or a pending full proposal review.
 Read history and an individual decision with:
 
 ```sh
-temper ctl me revisions
-temper ctl me revisions --before 5
-temper ctl me revision 5
+temper ctl me revision list
+temper ctl me revision list --before 5
+temper ctl me revision show 5
 ```
 
 History comes newest first in bounded pages. `--before 5` asks for
@@ -95,7 +95,7 @@ template 1 to its default:
 {"items":[{"setting":{"kind":"template","number":1},"edit":"reset"}]}
 ```
 
-For a value change, first save `setting ... --json`, as under Reading
+For a value change, first save `settings show ... --json`, as under Reading
 them. Keep its `setting` selector, put its `value` under `set` beside
 that selector in an item, and edit the whole value there. Put the
 item in the file's `items` array. Do not put the read's entire
@@ -112,7 +112,7 @@ After reading revision 5 and preparing your file, choose a key for
 this request:
 
 ```sh
-temper ctl me change-settings settings.json --against 5 --key reset-chat-template-5
+temper ctl me settings apply settings.json --against 5 --key reset-chat-template-5
 ```
 
 A key makes the same request safe to repeat. The same key and the
@@ -142,7 +142,7 @@ inventory shows these revisions and their live holder counts. While
 a revision is held, you can read its whole charter value:
 
 ```sh
-temper ctl me setting charter 3 --revision 5 --json
+temper ctl me settings show charter 3 --revision 5 --json
 ```
 
 An owner can move eligible live agent tasks from a held revision to
@@ -150,7 +150,7 @@ the newest. For example, if revision 5 has two live tasks and the
 newest is 6:
 
 ```sh
-temper ctl me move-to-newest 5 --key move-revision-5
+temper ctl me revision advance 5 --key move-revision-5
 ```
 
 The answer is `moved 2 tasks to revision 6`. If some cannot move, the
@@ -175,14 +175,14 @@ and proposing it does not apply the settings. Give your reason and
 a key for the request:
 
 ```sh
-temper ctl me propose-settings settings.json because --against 5 --key propose-chat-template-5
+temper ctl me settings propose settings.json because --against 5 --key propose-chat-template-5
 ```
 
 The result names a proposal. `p73/7` means party 73's proposal 7.
 With a deployment role, read the proposal before deciding it:
 
 ```sh
-temper ctl me proposal p73/7
+temper ctl me proposal show p73/7
 ```
 
 The review can show the revision it was against, what is newest,
@@ -195,13 +195,13 @@ running choice, even when choosing `stays`, and records the proposal
 identity together with the made revision:
 
 ```sh
-temper ctl me decide p73/7 accept --running stays --key accept-settings-7
+temper ctl me proposal decide p73/7 accept --running stays --key accept-settings-7
 ```
 
 To reject with a reason instead:
 
 ```sh
-temper ctl me decide p73/7 reject because --key reject-settings-7
+temper ctl me proposal decide p73/7 reject because --key reject-settings-7
 ```
 
 Rejection keeps the reason and notifies the proposer. Do not supply

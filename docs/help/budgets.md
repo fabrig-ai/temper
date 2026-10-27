@@ -65,7 +65,7 @@ With those defaults, 1 unit left does not admit a run. A task allowed
 rules rather than assuming those defaults apply to your deployment:
 
 ```sh
-temper ctl me setting rules --json
+temper ctl me settings show rules --json
 ```
 
 A charter supplies turns, time, finishing reserve and default spend.
@@ -74,7 +74,7 @@ and the deployment cap. Its default turn ceiling is 8 turns. Read
 charter 1, or the charter used by your work, for its current values:
 
 ```sh
-temper ctl me setting charter 1 --json
+temper ctl me settings show charter 1 --json
 ```
 
 A run protects a finishing reserve of turns and time. Ordinary work
@@ -111,7 +111,7 @@ numbers for your work. **May spend** describes the permitted amount;
 number to inspect its budget, tree and run:
 
 ```sh
-temper ctl me task 41 --tree --run
+temper ctl me task show 41 --tree --run
 ```
 
 The chat header shows direct spend and its total. A chat row shows
@@ -135,7 +135,7 @@ and revision, fix the cause, then release it using that current hold
 revision. Here the task is 41 and its hold revision is 2:
 
 ```sh
-temper ctl me release 41 --hold 2 --key release-budget-41
+temper ctl me task release 41 --hold 2 --key release-budget-41
 ```
 
 Release does not grant funds or a later deadline. The next run faces
@@ -153,7 +153,7 @@ delegate. The proposal path lets you decide an offered change, not
 enter an arbitrary new allowance. For task 41's proposal 3:
 
 ```sh
-temper ctl me decide t41/3 accept --key allow-budget-3
+temper ctl me proposal decide t41/3 accept --key allow-budget-3
 ```
 
 You can also change settings (`temper help settings`) for later runs:

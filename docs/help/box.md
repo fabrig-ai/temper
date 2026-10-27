@@ -80,8 +80,8 @@ second command prints your party, projects and allowed acts.
 ## 4. Set up your Forgejo and first repository
 
 ```sh
-temper ctl DIR forge-setup 3 --org work --repository hello --project 1
-temper ctl DIR forges
+temper ctl DIR forge setup 3 --org work --repository hello --project 1
+temper ctl DIR forge list
 ```
 
 The setup prints `setting up`, waits for the box to fetch, prepare and
@@ -96,7 +96,7 @@ To try the playground's suggested requests on your own Forgejo, set it
 up with a copy of the playground's repository instead:
 
 ```sh
-temper ctl DIR forge-setup 3 --playground
+temper ctl DIR forge setup 3 --playground
 ```
 
 It makes `playground/widget`, with the playground's `src/main.rs`
@@ -124,8 +124,8 @@ To move a signed-in account from another running deployment, export it
 there first (`temper help server`, section 10), then:
 
 ```sh
-temper ctl DIR import FILE --key model-in
-temper ctl DIR wait accounts --until usable
+temper ctl DIR account import FILE --key model-in
+temper ctl DIR account list --until usable
 ```
 
 Import prints `moved in: account N` and removes the spent FILE. The
@@ -136,8 +136,8 @@ copy its record or run the same login in two deployments.
 Or sign in with ChatGPT, provider 1 in the generated configuration:
 
 ```sh
-temper ctl DIR connect 1 --key model-login
-temper ctl DIR wait accounts --until usable
+temper ctl DIR account connect 1 --key model-login
+temper ctl DIR account list --until usable
 ```
 
 Connect prints a sign-in address; complete that sign-in in a browser.
@@ -149,8 +149,8 @@ with no group or other permissions:
 
 ```sh
 chmod 600 FILE
-temper ctl DIR add-key 1 FILE --deployment --key model-key
-temper ctl DIR wait accounts --until usable
+temper ctl DIR account add-key 1 FILE --deployment --key model-key
+temper ctl DIR account list --until usable
 ```
 
 The key is sent without being printed. Read `accounts` to see the
@@ -166,15 +166,15 @@ For example: append a sentence to `work/hello`'s README, check it, and
 take the change through CI and landing on `main`.
 
 ```sh
-temper ctl DIR chat --project 1 - --key first-change
+temper ctl DIR chat start --project 1 - --key first-change
 ```
 
 It prints the chat's task number. In this example it is 1; substitute
 the number you received:
 
 ```sh
-temper ctl DIR wait task 1 --until replied
-temper ctl DIR task 1 --tree
+temper ctl DIR task show 1 --until replied
+temper ctl DIR task show 1 --tree
 ```
 
 The wait reports a reply; the tree names the change task the chat
@@ -182,9 +182,9 @@ delegated. Read the chat with `temper ctl DIR chat 1` for its words.
 Use the change task's number, here 2, for the next calls:
 
 ```sh
-temper ctl DIR change 2
-temper ctl DIR wait change 2 --until landed
-temper ctl DIR change 2
+temper ctl DIR change show 2
+temper ctl DIR change show 2 --until landed
+temper ctl DIR change show 2
 ```
 
 The panel names the repository, branch and head, the pull request's
@@ -207,8 +207,8 @@ Before stopping a box whose signed-in account you want elsewhere,
 read its account number and export it to a new FILE:
 
 ```sh
-temper ctl DIR accounts --json
-temper ctl DIR export 1 FILE
+temper ctl DIR account list --json
+temper ctl DIR account export 1 FILE
 ```
 
 Replace 1 with the account whose `sign_in` source is granted. Export
@@ -358,7 +358,7 @@ charter instruction files are needed. Read or change the settings as
 above, then adopt it:
 
 ```sh
-temper ctl DIR adopt --project 1 --forge 1 --owner acme --name widget --landing main --key manual-adopt
+temper ctl DIR repository adopt --project 1 --forge 1 --owner acme --name widget --landing main --key manual-adopt
 ```
 
 The answer names the adoption. Continue at section 5 for the model and

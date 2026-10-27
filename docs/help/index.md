@@ -19,8 +19,8 @@ temper runs software work for people: agents take tasks on the repositories of a
 
 - `temper help NAME` prints a page whole; `temper help --search
   WORDS...` finds the sections holding every word.
-- `temper ctl help` prints the page `ctl`, then every tool;
-  `temper ctl help TOOL` prints one tool.
+- `temper ctl help` prints the page `ctl`, then the groups;
+  `temper ctl help GROUP VERB` prints one tool.
 - Read what a call prints first: its acts, an error's remedy. A page
   explains what a call does not.
 
