@@ -1130,7 +1130,7 @@ pub fn app_refusal(why: super::github::Answer, forge: u16) -> Option<Box<[u8]>> 
 #[must_use]
 pub fn app_terminal(forge: u16) -> Box<[u8]> {
     join_words(&[
-        b"Paste the key on this page in a browser, or run temper ctl forge-connect ",
+        b"Paste the key on this page in a browser, or run temper ctl DIR forge connect ",
         skein_lib::Decimal::of(u64::from(forge)).as_bytes(),
         b" github-app ID FILE, FILE the key's file, readable by you alone.",
     ])

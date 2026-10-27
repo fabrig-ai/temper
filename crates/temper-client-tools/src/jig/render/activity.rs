@@ -40,7 +40,7 @@ pub(super) fn read_on(page: &c::ActivityPage, call: &Call, rows: u32) -> Option<
 }
 fn replay(call: &Call, out: &mut Text) {
     if call.tool == 3 {
-        out.put(b"activity ");
+        out.put(b"task activity ");
         out.number(crate::jig::call::number(call, 0).expect("task number"));
     } else {
         let mut call = call.clone();

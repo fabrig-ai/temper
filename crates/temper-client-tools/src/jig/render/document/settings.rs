@@ -153,7 +153,7 @@ pub(super) fn text(value: &c::ReadValue, requested: Option<u64>, limits: &Limits
             }
             match page.next {
                 Some(next) => {
-                    out.put(b"read on: revisions --before ");
+                    out.put(b"read on: revision list --before ");
                     out.number(u64::from(next));
                     out.put(b"\n");
                 }
@@ -343,9 +343,9 @@ fn revision_text(answer: &c::RevisionAnswer, requested: u64, limits: &Limits, ou
                         out.put(b"too large, ");
                         out.number(size.bytes);
                         match item.setting {
-                            c::Setting::Charter(_) => out.put(b" bytes; read with setting "),
+                            c::Setting::Charter(_) => out.put(b" bytes; read with settings show "),
                             c::Setting::Template(_) | c::Setting::Policy(_) | c::Setting::Rules => {
-                                out.put(b" bytes; read current value with setting ");
+                                out.put(b" bytes; read current value with settings show ");
                             }
                         }
                         setting_text(item.setting, out);

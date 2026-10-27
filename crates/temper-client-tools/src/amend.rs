@@ -80,7 +80,7 @@ fn amend_error(task: &c::Task, suffix: &[u8], moved: Option<(u64, u64)>, prefix:
             .expect("separator length")
             .checked_add(skein_lib::Decimal::of(shown).as_bytes().len())
             .expect("shown revision length")
-            .checked_add(b"; read again: task ".len())
+            .checked_add(b"; read again: task show ".len())
             .expect("retry length")
             .checked_add(task_number.as_bytes().len())
             .expect("task length");
@@ -93,7 +93,7 @@ fn amend_error(task: &c::Task, suffix: &[u8], moved: Option<(u64, u64)>, prefix:
         out.put(skein_lib::Decimal::of(now).as_bytes()).expect("revision");
         out.put(b", not ").expect("separator");
         out.put(skein_lib::Decimal::of(shown).as_bytes()).expect("shown revision");
-        out.put(b"; read again: task ").expect("retry");
+        out.put(b"; read again: task show ").expect("retry");
         out.put(skein_lib::Decimal::of(task.chip.task).as_bytes()).expect("task number");
     }
     Failed::Detail(out.finish())

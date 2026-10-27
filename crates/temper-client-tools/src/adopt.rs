@@ -7,7 +7,7 @@ use crate::jig::table::{
 pub const ROW: Tool = Tool {
     name: b"repository adopt",
     line: b"Adopt a forge's repository into a project",
-    prints: b"`Adopted OWNER/NAME on forge F as ROLE.`, whether it is the project's home, and what temper may do there",
+    prints: b"`Adopted OWNER/NAME on forge N as ROLE.`, whether it is the project's home, and what temper may do there",
     result: b"adopt",
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Required, b"The project"),

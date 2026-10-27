@@ -111,7 +111,7 @@ fn text(pending: &Pending, page: &Page, out: &mut Text) {
     }
     if page.more {
         if let Some(next) = pending.page.checked_add(1) {
-            out.put(b"temper ctl DIRECTORY repositories ");
+            out.put(b"temper ctl DIR forge repositories ");
             out.number(u64::from(pending.forge));
             if let Some(installation) = pending.installation {
                 out.put(b" --installation ");

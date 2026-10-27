@@ -1,5 +1,5 @@
 account export ACCOUNT FILE
-  ACCOUNT (account): a number; required. The account's number, as accounts prints it
+  ACCOUNT (account): a number; required. The account's number, as account list prints it
   FILE (file): a file; required. The new file; nothing may be there
 Move a signed-in account out to a new private file
 Prints: `moved out: account N to FILE`
@@ -10,4 +10,4 @@ anything, writes and syncs the account's record, and only then
 tells the engine; the account then leaves this deployment. A
 failure before that removes FILE, and the engine keeps the account
 and cancels the move at its deadline: export again after it.
-Import FILE, as it is, on the deployment it moves to.
+On the deployment it moves to, account import FILE, as it is.

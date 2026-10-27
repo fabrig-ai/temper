@@ -145,7 +145,7 @@ fn connect_prints_the_watch_that_follows_its_address() {
     );
     let printed = root.answer(call).expect("durable start");
     assert_eq!(printed.status, 0);
-    assert!(skein_lib::bytes::find(&printed.stdout, b"wait accounts --until settled").is_some());
+    assert!(skein_lib::bytes::find(&printed.stdout, b"account list --until settled").is_some());
 }
 #[test]
 fn unconfirmed_disconnect_names_the_provider_settings() {
@@ -412,7 +412,7 @@ fn verify_asks_the_supplied_program_source_then_names_the_wait() {
             root.done(call, c::Outcome::Owner(c::OwnerOutcome::AccountChanged));
             let printed = root.answer(call).expect("asked");
             assert_eq!(printed.status, 0);
-            assert!(f::has(&printed, b"wait accounts --until settled"));
+            assert!(f::has(&printed, b"account list --until settled"));
         }
     }
 }
@@ -426,7 +426,7 @@ fn verify_refuses_sources_without_a_program_login_locally() {
         f::deliver_accounts(&mut root, accounts);
         let printed = root.answer(call).expect("local refusal");
         assert_eq!(printed.status, 1);
-        assert!(skein_lib::bytes::find(&printed.stderr, b"verify needs a program source").is_some());
+        assert!(skein_lib::bytes::find(&printed.stderr, b"account verify needs a program source").is_some());
         assert!(root.sends.is_empty());
     }
 }

@@ -10,7 +10,7 @@ use temper_client_domain::forge::{
     forges::{Connection as C, Kind, Mode, Offer, Row, Step},
 };
 use temper_client_protocol_wire::{self as wire, v1 as w};
-fn row(connection: C) -> Row {
+pub(super) fn row(connection: C) -> Row {
     Row {
         number: 3,
         kind: Kind::Forgejo,
@@ -869,7 +869,7 @@ fn human_forges_names_the_app_accounts_unknown_installations_and_their_states() 
     assert!(
         skein_lib::bytes::find(
             &plain.stdout,
-            " · my-app\n  installation 11 · acme\n  installation 22 · suspended · not accepted · uninstalled at the next reconcile · forge-accept 3 22\n".as_bytes(),
+            " · my-app\n  installation 11 · acme\n  installation 22 · suspended · not accepted · uninstalled at the next reconcile · forge accept 3 22\n".as_bytes(),
         )
         .is_some()
     );
