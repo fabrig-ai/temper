@@ -822,7 +822,7 @@ fn a_person_stops_a_run_and_releases_it() {
     assert!(replied(&driver, &people::Outcome::Stopped { task: assignment.task }));
     assert_eq!(cancelled(&driver), [(assignment.task, assignment.attempt)]);
     let row = live(&driver, assignment.task);
-    assert!(matches!(row.phase, tasks::Phase::Held { why: tasks::Hold::StoppedBy { party: 1 }, .. }));
+    assert!(matches!(row.phase, tasks::Phase::Held { why: tasks::Hold::Placed { .. }, .. }));
     driver.answer(Token::new(7), assignment.task, assignment.attempt, 0, tasks::End::Parked, engine::Parts::none());
     driver.settle();
     let revision = live(&driver, assignment.task).revisions.hold;
