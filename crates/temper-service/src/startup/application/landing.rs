@@ -209,7 +209,13 @@ pub(super) fn parse(
                         found = true;
                     }
                 }
-                if !found {
+                // domain/landing.md, 13.1: a turn can configure an adopted
+                // project's restored identity; policy rules still name seeds.
+                let restored_turn = match &landing {
+                    Some(landing) => landing.by == engine::Way::Turn && ats.is_empty(),
+                    None => false,
+                };
+                if !found && !restored_turn {
                     problems.push(path.member(b"project"), What::Jig(config::What::Refers));
                 }
                 if projects.contains_key(&project) {
