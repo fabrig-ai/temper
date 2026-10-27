@@ -240,13 +240,23 @@ impl World {
                 let grant = authority::Grant {
                     connector: 0,
                     kind: 1,
-                    pattern: authority::Pattern {
-                        segments: Box::new([
-                            Box::from(&b"forge"[..]),
-                            Box::from(&b"forge.example"[..]),
-                            Box::from(&b"org"[..]),
-                        ]),
-                        last: authority::Last::Open(Box::from(&b"repo"[..])),
+                    pattern: if with_change {
+                        authority::Pattern {
+                            segments: Box::new([
+                                Box::from(b"forge".as_slice()),
+                                Box::from(b"forge.example".as_slice()),
+                            ]),
+                            last: authority::Last::Open(Box::new([])),
+                        }
+                    } else {
+                        authority::Pattern {
+                            segments: Box::new([
+                                Box::from(&b"forge"[..]),
+                                Box::from(&b"forge.example"[..]),
+                                Box::from(&b"org"[..]),
+                            ]),
+                            last: authority::Last::Open(Box::from(&b"repo"[..])),
+                        }
                     },
                 };
                 let effect_grant = authority::Grant { kind: 8, ..grant.clone() };
@@ -1011,7 +1021,7 @@ pub fn change_world_in(
     };
     let child_authority = tasks::Authority {
         tools: tasks::Tools(1023),
-        grants: [3, 4, 10, 11, 12].map(|kind| tasks::Grant { kind, ..grant.clone() }).into(),
+        grants: [1, 3, 4, 10, 11, 12].map(|kind| tasks::Grant { kind, ..grant.clone() }).into(),
         delegation: tasks::Delegation { kinds: Box::new([tasks::AuthorityExecutor::Charter(1)]), tasks: 4, depth: 1 },
         // Each run's spend must fund its finishing reserve, six with the
         // world's charter (jig a020bf1c): room for five attempts of five.

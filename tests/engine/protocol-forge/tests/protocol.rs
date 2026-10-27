@@ -987,3 +987,65 @@ fn a_pull_watch_swap_reads_through_bytes_but_cannot_rename_a_released_task() {
     );
     world.finish();
 }
+
+#[test]
+fn a_sha1_pull_files_answer_matches_the_requested_head_and_fills_the_review_brief() {
+    use skein_forge::api::{Answer, Read};
+    use temper_engine_forge_world::translate;
+    let mut world = Protocol::new(1352);
+    world.adopt();
+    world.produce_file(b"temper/51", b"review.txt", b"the reviewed contents");
+    let pull = world.open_pull(b"temper/51", b"main");
+    let head = translate::commit(world.branch(b"temper/51"));
+    assert_eq!(&head[20..], &[0; 12], "the fake Forgejo serves SHA-1 heads");
+    let Answer::Pull(observed) = commit_read(&mut world, Read::Pull { number: pull }) else {
+        panic!("pull through bytes")
+    };
+    assert_eq!(observed.commit, head);
+    let Answer::PullFiles { head: observed, files, more } =
+        commit_read(&mut world, Read::PullFiles { number: pull, head, page: 1 })
+    else {
+        panic!("pull files matched by the client")
+    };
+    assert_eq!(observed, head);
+    assert!(!more);
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].path.as_ref(), b"review.txt");
+    assert_eq!(files[0].after.as_deref(), Some(b"the reviewed contents".as_slice()));
+    let mut row = change_row();
+    row.pull = Some(pull);
+    row.change.last_head = Some(head);
+    row.change.state = change::State::Gating { head, asked: Box::new([1]) };
+    world.event(top::Event::Change { row });
+    world.take_seen();
+    let owner = skein_lib::Token::new(1352);
+    world.event(top::Event::GatherBrief {
+        owner,
+        source: top::BriefSource::Pull {
+            item: top::BriefItem { repository: REPO.repository, number: pull },
+            head: top::BriefCommit(head),
+        },
+        parts: 8,
+        bytes: 4096,
+        max_job_bytes: 0,
+    });
+    world.run_for(5);
+    let words = world
+        .take_seen()
+        .into_vec()
+        .into_iter()
+        .find_map(|request| {
+            if let top::Request::BriefReady { owner: found, read: top::BriefRead::Got { bytes, left: 0 } } = request
+                && found == owner
+            {
+                Some(bytes)
+            } else {
+                None
+            }
+        })
+        .expect("the review's complete pull section came through");
+    let words = core::str::from_utf8(&words).expect("review text");
+    assert!(words.contains("Files and diff:"), "{words}");
+    assert!(words.contains("File: review.txt"), "{words}");
+    assert!(words.contains("After:\nthe reviewed contents"), "{words}");
+}

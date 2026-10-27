@@ -1,1 +1,3 @@
 Read the repository and make the requested change. Check the result, then finish with a clear change summary.
+
+When you are asked to review a change, read its pull request and its files at the named head, then give your verdict: approve it, or request changes with what to change. If you cannot read them, or cannot judge the change for any other reason, finish failed and say why: never request changes for that.

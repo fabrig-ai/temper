@@ -14,7 +14,7 @@ fn chat_world(adopt: bool) -> (World, engine::Assignment) {
     (world, chat)
 }
 
-fn change(
+pub(super) fn change(
     world: &mut World,
     chat: &engine::Assignment,
     name: u64,
@@ -56,9 +56,8 @@ fn live(world: &World, task: u64) -> &tasks::TaskRecord {
 fn change_expands_the_only_repository_field_by_field() {
     let (mut world, chat) = chat_world(true);
     let parent = live(&world, chat.task).clone();
-    let engine::CallAnswer::Delegated(made) = change(&mut world, &chat, 93, None, b"Small fix") else {
-        panic!("delegated")
-    };
+    let answer = change(&mut world, &chat, 93, None, b"Small fix");
+    let engine::CallAnswer::Delegated(made) = answer else { panic!("delegated: {answer:?}") };
     let row = live(&world, made[0].task);
     assert_eq!(row.project, parent.project);
     assert_eq!(row.executor, tasks::Executor::Procedure { connector: 0, code: 2 });
@@ -84,12 +83,31 @@ fn change_expands_the_only_repository_field_by_field() {
     assert_eq!(row.authority.tools, parent.authority.tools);
     assert_eq!(
         row.authority.grants,
-        parent
-            .authority
-            .grants
-            .iter()
-            .filter(|grant| grant.connector == 0 && [2, 3, 4, 10, 11, 12].contains(&grant.kind))
-            .cloned()
+        [1, 2, 3, 4, 10, 11, 12]
+            .into_iter()
+            .flat_map(|kind| {
+                let prefix = [b"forge".as_slice(), b"forge.example", b"org"];
+                [
+                    (kind == 1).then(|| tasks::Grant {
+                        connector: 0,
+                        kind,
+                        pattern: tasks::Pattern {
+                            segments: prefix.map(Box::from).into(),
+                            last: tasks::Last::Exact(Box::from(b"repo".as_slice())),
+                        },
+                    }),
+                    Some(tasks::Grant {
+                        connector: 0,
+                        kind,
+                        pattern: tasks::Pattern {
+                            segments: [b"forge".as_slice(), b"forge.example", b"org", b"repo"].map(Box::from).into(),
+                            last: tasks::Last::Open(Box::new([])),
+                        },
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+            })
             .collect::<Box<[_]>>()
     );
     assert_eq!(row.authority.delegation.kinds.as_ref(), &[tasks::AuthorityExecutor::Charter(1)]);

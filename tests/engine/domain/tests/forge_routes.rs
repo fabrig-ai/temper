@@ -30,6 +30,9 @@ mod delegates;
 #[path = "forge_routes/change_tool.rs"]
 mod change_tool;
 
+#[path = "forge_routes/reviews.rs"]
+mod reviews;
+
 #[path = "forge_routes/hints.rs"]
 mod hints;
 

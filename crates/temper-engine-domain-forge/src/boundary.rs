@@ -86,6 +86,8 @@ pub struct Kinds {
     pub issue: bool,
     pub branch: bool,
 }
+/// Forge read grants (domain/forge.md, section 2).
+pub const READ_KINDS: [u16; 1] = [1];
 /// Forge grants needed by the change procedure (domain/forge.md, sections 6 and 8).
 pub const CHANGE_KINDS: [u16; 6] = [2, 3, 4, 10, 11, 12];
 

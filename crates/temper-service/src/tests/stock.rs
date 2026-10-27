@@ -176,3 +176,18 @@ fn the_transition_keeps_the_documents_own_defaults() {
     assert_eq!(engine.charters[0].policy.turns, 9, "the document's edit survives the transition");
     assert!(config::files(&engine).iter().any(|file| file.path.ends_with(b"charters/chat.txt")));
 }
+
+#[test]
+fn the_reviewers_words_say_to_fail_when_it_cannot_review() {
+    let engine = engine(&single_model());
+    let defaults = crate::stock::defaults(&engine.llm);
+    let words = core::str::from_utf8(&defaults.charters[1].policy.instructions).expect("review instructions");
+    for phrase in [
+        "read its pull request and its files at the named head",
+        "approve it, or request changes with what to change",
+        "If you cannot read them, or cannot judge the change for any other reason",
+        "finish failed and say why: never request changes for that.",
+    ] {
+        assert!(words.contains(phrase), "missing review instruction: {phrase}");
+    }
+}

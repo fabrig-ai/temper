@@ -1871,6 +1871,59 @@ pub(crate) fn read_repositories(domain: &Domain, project: u32) -> Box<[Box<[u8]>
     names.into_boxed()
 }
 
+/// Intersect the run's grants with the resources the change reads and writes.
+fn change_grants(
+    domain: &Domain,
+    env: &Env<Limits>,
+    repository: &forge::Repository,
+    held_grants: &[tasks::Grant],
+) -> Result<Box<[tasks::Grant]>, tasks::Refusal> {
+    let name = resource_name(repository, &forge::What::Repository, env.limits.authority.segments)
+        .ok_or(tasks::Refusal::AuthorityShape)?;
+    let exact = tasks::Pattern {
+        segments: Box::from(name.segments.get(..3).expect("repository prefix")),
+        last: tasks::Last::Exact(repository.name.clone()),
+    };
+    let descendants = authority::Pattern { segments: name.segments.clone(), last: authority::Last::Open(Box::new([])) };
+    let mut grants = List::with_capacity(env.limits.tasks.authority_grants);
+    for grant in held_grants {
+        if grant.connector != domain.config.forge_connector
+            || !(forge::CHANGE_KINDS.contains(&grant.kind) || forge::READ_KINDS.contains(&grant.kind))
+        {
+            continue;
+        }
+        // Exact repository and descendant patterns keep sibling repositories out,
+        // even when the chat holds an open forge or repository-name prefix.
+        let held = authority::Pattern {
+            segments: grant.pattern.segments.clone(),
+            last: match &grant.pattern.last {
+                tasks::Last::Exact(bytes) => authority::Last::Exact(bytes.clone()),
+                tasks::Last::Open(bytes) => authority::Last::Open(bytes.clone()),
+            },
+        };
+        // Change writes name branches or pulls; only reads also name the repository itself.
+        if forge::READ_KINDS.contains(&grant.kind)
+            && authority::pattern_covers(&held, &name)
+            && grants.push(tasks::Grant { pattern: exact.clone(), ..grant.clone() }).is_err()
+        {
+            return Err(tasks::Refusal::AuthorityShape);
+        }
+        let pattern = if authority::pattern_at_most(&held, &descendants) {
+            Some(grant.pattern.clone())
+        } else if authority::pattern_at_most(&descendants, &held) {
+            Some(tasks::Pattern { segments: name.segments.clone(), last: tasks::Last::Open(Box::new([])) })
+        } else {
+            None
+        };
+        if let Some(pattern) = pattern
+            && grants.push(tasks::Grant { pattern, ..grant.clone() }).is_err()
+        {
+            return Err(tasks::Refusal::AuthorityShape);
+        }
+    }
+    Ok(grants.into_boxed())
+}
+
 /// Expand a chat's request; ordinary delegation shape and authority admission
 /// still decide the resulting batch by its original call name.
 pub(crate) fn chat_change(
@@ -1917,13 +1970,7 @@ pub(crate) fn chat_change(
         return Err(tasks::Refusal::Funding);
     }
     let mut authority = context.authority.clone();
-    let mut grants = List::with_capacity(u32::try_from(authority.grants.len()).expect("bounded grants"));
-    for grant in &authority.grants {
-        if grant.connector == domain.config.forge_connector && forge::CHANGE_KINDS.contains(&grant.kind) {
-            grants.push(grant.clone()).expect("narrowed grants fit");
-        }
-    }
-    authority.grants = grants.into_boxed();
+    authority.grants = change_grants(domain, env, repository, &authority.grants)?;
     let mut kinds = List::with_capacity(2);
     kinds.push(tasks::AuthorityExecutor::Charter(domain.config.forge_charter)).expect("producer kind");
     let gates =
