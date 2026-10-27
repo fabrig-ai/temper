@@ -65,18 +65,24 @@ to date with its base, a gate, and approvals.
 
 - `temper ctl`: `settings show policy` and `settings show rules` read
   them; `settings apply` and `settings propose` change them.
+- A project's own policy: `project show PROJECT` reads its spends, its
+  open period and its pools; `project fund PROJECT AMOUNT` raises its
+  period spend, and with `--role ROLE` a role's.
 - A task's authority is in `task show`'s result; a proposal asks a holder for
   more than a task has (`temper help proposal`).
 
 ## Limits
 
-- temper may spend in all, for a project, the period spend it was made
-  with: its one period never renews, and raising the period spend
-  afterwards does not refill it. When it is spent, nothing more in the
-  project is funded. A project made after a change of `policy 1` starts
-  with the new period spend.
-- temper does not change a project's own policy through settings, and
-  ctl has no tool to change it.
+- temper may spend, for a project, its period spend: its one period
+  never renews. `project fund PROJECT AMOUNT` raises it, the open
+  period's budget at once; with `--role ROLE` it raises a role's, which
+  each of its parties' pools takes, and a role's raise the period has no
+  room for is refused, naming what the period has left. When it is
+  spent, nothing more in the project is funded until it is raised. A
+  project made after a change of `policy 1` starts with the new period
+  spend.
+- temper does not change a project's own policy through settings; ctl
+  changes its spends alone (`project fund`).
 - temper does not check, when settings change, that a grant's kind, a
   requirement's criterion or a procedure's number is one the forge
   defines.
