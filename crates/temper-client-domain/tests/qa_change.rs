@@ -222,6 +222,8 @@ mod tests {
     }
     fn panel_parts(step: w::Step) -> w::ChangePanelParts {
         w::ChangePanelParts {
+            way: w::Way::Queue,
+            in_landing: None,
             task: TASK,
             forge: FORGE,
             owner: b"acme".as_slice().into(),
@@ -374,7 +376,9 @@ mod tests {
         for step in steps() {
             match step {
                 w::Step::Queued(_) | w::Step::First => (),
-                w::Step::Producing
+                w::Step::Ready(_)
+                | w::Step::Preparing(_)
+                | w::Step::Producing
                 | w::Step::Opening
                 | w::Step::Recreating
                 | w::Step::Reopening
