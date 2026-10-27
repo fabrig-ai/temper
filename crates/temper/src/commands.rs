@@ -183,21 +183,30 @@ pub const COMMANDS: [Row; 20] = [
     Row {
         words: &["ctl"],
         who: Who::Clients,
-        forms: &["DIR TOOL [ARGUMENT...] [--json]", "DIR --call FILE [--json]", "help [TOOL]"],
+        forms: &[
+            "DIR GROUP VERB [ARGUMENT...] [--json]",
+            "DIR me|inbox|sign-in|sign-out|pending [ARGUMENT...] [--json]",
+            "DIR --call FILE [--json]",
+            "help [GROUP [VERB]]",
+        ],
         line: "Act in a deployment as one party, one call a process: the agents' command line.",
         arguments: &[
             Argument {
                 shown: "DIR",
                 line: "ctl's private directory for one deployment and one party: its sign-in, its kept requests and the engine's address.",
             },
-            Argument { shown: "TOOL", line: "A tool's name; temper ctl help lists them." },
+            Argument {
+                shown: "GROUP",
+                line: "A group of tools, a noun of temper's or one of the client's own names; temper ctl help lists them.",
+            },
+            Argument { shown: "VERB", line: "One of the group's tools; temper ctl help GROUP lists them." },
             Argument {
                 shown: "FILE",
-                line: "One call as JSON, {\"tool\": ..., \"arguments\": {...}}, or - for stdin.",
+                line: "One call as JSON, {\"tool\": \"GROUP VERB\", \"arguments\": {...}}, or - for stdin.",
             },
         ],
         settings: &[],
-        notes: "temper ctl help prints how to work through it, then every tool.",
+        notes: "temper ctl help prints how to work through it, then the groups.",
         transition: false,
     },
     Row {

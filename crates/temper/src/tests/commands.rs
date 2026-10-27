@@ -51,9 +51,10 @@ fn every_row_parses_from_an_example() {
         (&["forge", "run"], &["forge", "run", "1", "forgejo"]),
         (&["forge", "sign-in"], &["forge", "sign-in", "1"]),
         (&["forge", "reconcile"], &["forge", "reconcile", "1"]),
-        (&["ctl"], &["ctl", "/ctl", "status", "--json"]),
-        (&["ctl"], &["ctl", "/ctl", "--call", "-", "--json"]),
-        (&["ctl"], &["ctl", "help", "status"]),
+        (&["ctl"], &["ctl", "DIR", "task", "show", "1"]),
+        (&["ctl"], &["ctl", "DIR", "me"]),
+        (&["ctl"], &["ctl", "DIR", "--call", "FILE"]),
+        (&["ctl"], &["ctl", "help", "task", "show"]),
         (&["open"], &["open", "/client", "http://127.0.0.1:7000"]),
         (&["internal", "agent"], &["internal", "agent", "agent.json"]),
         (&["internal", "serve"], &["internal", "serve", "--box"]),
@@ -206,4 +207,50 @@ fn the_page_commands_is_what_the_table_renders() {
         rendered,
         "the page should be:\n{rendered}"
     );
+}
+
+#[test]
+fn every_ctl_group_page_is_what_the_table_renders() {
+    use temper_client_tools::{help, table::GROUPS};
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/help/reference");
+    let expected = GROUPS
+        .iter()
+        .map(|group| format!("ctl-{}", core::str::from_utf8(group.name).expect("group name")))
+        .collect::<Vec<_>>();
+    let mut files = std::fs::read_dir(&directory)
+        .expect("reference directory")
+        .map(|entry| entry.expect("reference file").path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "md"))
+        .map(|path| path.file_stem().expect("page name").to_str().expect("ASCII name").to_owned())
+        .filter(|name| name.starts_with("ctl-"))
+        .collect::<Vec<_>>();
+    files.sort();
+    let mut sorted = expected.clone();
+    sorted.sort();
+    assert_eq!(files, sorted, "the group pages and GROUPS are the same set");
+    let compiled = temper_docs::PAGES
+        .iter()
+        .filter(|page| page.name.starts_with("ctl-"))
+        .map(|page| page.name)
+        .collect::<Vec<_>>();
+    assert_eq!(compiled, expected, "compiled group pages follow GROUPS' order");
+    let commands = temper_docs::PAGES.iter().position(|page| page.name == "commands").expect("commands page");
+    for (index, (group, name)) in GROUPS.iter().zip(&expected).enumerate() {
+        let page = &temper_docs::PAGES[commands + 1 + index];
+        assert_eq!(page.name, name, "group pages immediately follow commands");
+        assert_eq!(page.kind, temper_docs::Kind::Reference, "{name}");
+        let mut measured =
+            skein_lib::Writer::new(usize::try_from(temper_client_tools::limits::TEXT).expect("text bound"));
+        help::reference(group, &mut measured).expect("reference within renderer's text bound");
+        let mut out = skein_lib::Writer::new(measured.written());
+        help::reference(group, &mut out).expect("reference within renderer's text bound");
+        let rendered = String::from_utf8(out.finish().into_vec()).expect("reference UTF-8");
+        assert!(rendered.len() <= temper_docs::PAGE_BYTES, "{name}: {} bytes", rendered.len());
+        assert_eq!(
+            std::fs::read_to_string(directory.join(name).with_extension("md")).expect("group page"),
+            rendered,
+            "{name} should be:\n{rendered}"
+        );
+        assert_eq!(page.text, rendered, "compiled {name} should be:\n{rendered}");
+    }
 }

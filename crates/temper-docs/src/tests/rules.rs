@@ -33,6 +33,11 @@ fn the_table_is_the_directory() {
     let mut previous = None;
     for entry in &PAGES {
         let kind = KINDS.iter().position(|kind| *kind == entry.kind).expect("page kind");
+        if entry.kind == Kind::Reference && entry.name.starts_with("ctl-") {
+            // temper checks these against GROUPS, immediately after commands.
+            assert_eq!(previous.map(|(kind, _)| kind), Some(kind), "{}: reference section", entry.name);
+            continue;
+        }
         let key = (kind, entry.name);
         if let Some(previous) = previous {
             assert!(previous < key, "{}: kind and name order", entry.name);

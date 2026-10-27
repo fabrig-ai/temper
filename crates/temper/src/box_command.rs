@@ -9,7 +9,7 @@ pub(crate) const ECHO_SETTINGS: skein_shell::Settings = skein_shell::Settings {
     table: &[skein_shell::Setting {
         name: "echo",
         value: "none|steps",
-        about: "Show the box's lines alone, or echo its steps too.",
+        about: "Show the box's lines and a failed step's log, or every step's lines too.",
         fallback: skein_shell::Fallback::Text("none"),
     }],
 };
