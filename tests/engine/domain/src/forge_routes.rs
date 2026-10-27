@@ -1709,3 +1709,28 @@ pub fn box_limits() -> engine::Limits {
     let temper = temper_service::limits::profile(temper_service::limits::Profile::Small);
     temper_service::limits::engine(&jig, &temper).expect("coherent box limits")
 }
+
+/// A merged change keeps its commit while verifying, red, or cleared.
+#[must_use]
+pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_forge::api::Commit> {
+    use temper_engine_domain_forge_change::State;
+    match state {
+        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => Some(*merge),
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Recreating { .. }
+        | State::Reopening { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Preparing { .. }
+        | State::Ready { .. }
+        | State::Ended
+        | State::Held { .. } => None,
+    }
+}
