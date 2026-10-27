@@ -364,12 +364,19 @@ fn ended(
 }
 
 fn delivered(transport: &mut Transport, watcher: Token, panel: owner::Panel) -> Option<(ClientId, client::Event)> {
+    delivered_document(transport, watcher, owner::Document::Change(panel))
+}
+fn delivered_document(
+    transport: &mut Transport,
+    watcher: Token,
+    document: owner::Document,
+) -> Option<(ClientId, client::Event)> {
     if !is_application(transport, watcher) {
         return None;
     }
     let route = transport.watch(watcher).expect("original application route").clone();
-    let bytes = temper_service::family::panel(
-        panel,
+    let bytes = temper_service::family::document(
+        document,
         &crate::fixtures::forge_settings(),
         &temper_client_protocol_wire::v1::CEILINGS,
     )
@@ -394,6 +401,7 @@ fn delivered(transport: &mut Transport, watcher: Token, panel: owner::Panel) -> 
 
 /// # Errors
 /// Returns every request belonging to another owner unchanged.
+#[expect(clippy::too_many_lines, reason = "one exhaustive delivery translation, including whole forge documents")]
 pub fn incoming(
     transport: &mut Transport,
     request: engine::Request,
@@ -430,6 +438,7 @@ pub fn incoming(
         )) => return Err(Box::new(request)),
     };
     let (to, body) = match delivery {
+        Delivery::ForgeDocument { watcher, document } => return Ok(delivered_document(transport, watcher, *document)),
         Delivery::Panel { watcher, panel } => return Ok(delivered(transport, watcher, *panel)),
         Delivery::Forges { watcher, forges } => return Ok(delivered_forges(transport, watcher, forges)),
         Delivery::WatchEnded { watcher, why } if is_application(transport, watcher) => {

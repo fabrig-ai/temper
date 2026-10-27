@@ -273,7 +273,19 @@ pub fn to_root(
                             subject: Token::new(subject.task()),
                         }
                     }
-                    w::Watch::Change(_) | w::Watch::Landing(_) | w::Watch::Landings(_) => {
+                    w::Watch::Landing(subject) if subject.task() > 0 => {
+                        jig_domain_core::documents::Watched::Application {
+                            scope,
+                            connector: wire::FORGE,
+                            subject: Token::new(subject.task()),
+                        }
+                    }
+                    w::Watch::Landings(subject) => jig_domain_core::documents::Watched::Application {
+                        scope,
+                        connector: wire::FORGE,
+                        subject: Token::new(forge::landings_subject(subject.project(), subject.ended())),
+                    },
+                    w::Watch::Change(_) | w::Watch::Landing(_) => {
                         return Err(Box::new(kit::Event::WatchRefused {
                             watcher,
                             why: jig_domain_core::WatchRefusal::Unknown,
@@ -418,8 +430,17 @@ fn panel_hold(value: Option<change::Hold>) -> Option<w::Hold> {
 }
 
 fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge]) -> Box<[u8]> {
+    pull_address(panel.forge, &panel.owner, &panel.name, number, forges)
+}
+fn pull_address(
+    forge_number: u16,
+    owner: &[u8],
+    name: &[u8],
+    number: u64,
+    forges: &[crate::settings::Forge],
+) -> Box<[u8]> {
     for forge in forges {
-        if forge.number != panel.forge {
+        if forge.number != forge_number {
             continue;
         }
         if forge.mode == forge::Mode::Fake {
@@ -429,8 +450,7 @@ fn address(panel: &forge::Panel, number: u64, forges: &[crate::settings::Forge])
             crate::settings::Kind::GitHub => forge::Kind::GitHub,
             crate::settings::Kind::Forgejo => forge::Kind::Forgejo,
         };
-        return forge::pull_address(kind, &forge.git, forge.web.as_deref(), &panel.owner, &panel.name, number)
-            .unwrap_or_default();
+        return forge::pull_address(kind, &forge.git, forge.web.as_deref(), owner, name, number).unwrap_or_default();
     }
     Box::default()
 }
@@ -913,4 +933,164 @@ fn admin_stop(stop: forge::AdminStop, limits: &w::Limits) -> Option<w::AdminStop
             .ok()?,
         ),
     })
+}
+
+/// Encode a whole landing document, with deployment addresses at this boundary.
+#[must_use]
+pub fn document(value: forge::Document, forges: &[crate::settings::Forge], limits: &w::Limits) -> Option<Box<[u8]>> {
+    match value {
+        forge::Document::Change(value) => panel(value, forges, limits),
+        forge::Document::Landing(value) => {
+            let mut members = List::with_capacity(u32::try_from(value.members.len()).ok()?);
+            for member in value.members {
+                members.push(landing_member(member, forges, limits)?).ok()?;
+            }
+            let hold = match &value.phase {
+                forge::LandingPhase::Held { why: forge::LandingHold::Faults { member, gate }, .. } => {
+                    Some(w::LandingHold::Faults(
+                        w::HeldFaults::new(limits, w::HeldFaultsParts { member: *member, gate: *gate }).ok()?,
+                    ))
+                }
+                forge::LandingPhase::Waiting
+                | forge::LandingPhase::Preparing
+                | forge::LandingPhase::Proving
+                | forge::LandingPhase::Proved { .. }
+                | forge::LandingPhase::Turn { .. }
+                | forge::LandingPhase::Landed
+                | forge::LandingPhase::Cancelled => None,
+            };
+            let panel = w::LandingPanel::new(
+                limits,
+                w::LandingPanelParts {
+                    task: value.task,
+                    project: value.project,
+                    phase: landing_phase(&value.phase),
+                    hold,
+                    members,
+                    preparation: value.preparation,
+                    stale_proofs: value.stale_proofs,
+                    turn: value.turn,
+                },
+            )
+            .ok()?;
+            Some(wire::landing_panel(&panel))
+        }
+        forge::Document::Landings(value) => {
+            let mut landings = List::with_capacity(u32::try_from(value.landings.len()).ok()?);
+            for line in value.landings {
+                let mut changes = List::with_capacity(u32::try_from(line.changes.len()).ok()?);
+                for change in line.changes {
+                    changes.push(change).ok()?;
+                }
+                let mut repositories = List::with_capacity(u32::try_from(line.repositories.len()).ok()?);
+                for repository in line.repositories {
+                    repositories.push(repository).ok()?;
+                }
+                let mut landed = List::with_capacity(u32::try_from(line.landed.len()).ok()?);
+                for commit in line.landed {
+                    landed.push(commit).ok()?;
+                }
+                landings
+                    .push(
+                        w::LandingLine::new(
+                            limits,
+                            w::LandingLineParts {
+                                task: line.task,
+                                phase: landing_phase(&line.phase),
+                                changes,
+                                repositories,
+                                landed,
+                            },
+                        )
+                        .ok()?,
+                    )
+                    .ok()?;
+            }
+            let panel = w::LandingsPanel::new(
+                limits,
+                w::LandingsPanelParts { project: value.project, turn: value.turn, landings },
+            )
+            .ok()?;
+            Some(wire::landings_panel(&panel))
+        }
+    }
+}
+fn landing_member(
+    member: forge::LandingMember,
+    forges: &[crate::settings::Forge],
+    limits: &w::Limits,
+) -> Option<w::Member> {
+    let pull = match member.pull {
+        Some(number) => Some(
+            w::Pull::new(
+                limits,
+                w::PullParts {
+                    number,
+                    address: pull_address(member.forge, &member.owner, &member.name, number, forges),
+                },
+            )
+            .ok()?,
+        ),
+        None => None,
+    };
+    let mut gates = List::with_capacity(u32::try_from(member.gates.len()).ok()?);
+    for gate in member.gates {
+        let proof = match gate.proof {
+            forge::GateProof::Unkeyed => w::Proof::Unkeyed,
+            forge::GateProof::Keyed => w::Proof::Keyed,
+            forge::GateProof::Waiting => w::Proof::Waiting,
+            forge::GateProof::Dispatched { attempt, run } => {
+                w::Proof::Dispatched(w::Dispatched::new(limits, w::DispatchedParts { attempt, run }).ok()?)
+            }
+            forge::GateProof::Passed(run) => w::Proof::Passed(receipted(run, limits)?),
+            forge::GateProof::Failed(run) => w::Proof::Failed(receipted(run, limits)?),
+        };
+        gates
+            .push(
+                w::GateProof::new(
+                    limits,
+                    w::GateProofParts {
+                        name: gate.name,
+                        blocking: gate.blocking,
+                        key: gate.key,
+                        proof,
+                        faults: gate.faults,
+                    },
+                )
+                .ok()?,
+            )
+            .ok()?;
+    }
+    w::Member::new(
+        limits,
+        w::MemberParts {
+            change: member.change,
+            forge: member.forge,
+            owner: member.owner,
+            name: member.name,
+            branch: member.branch,
+            landing: member.landing,
+            pull,
+            base: member.base,
+            candidate: member.candidate,
+            landed: member.landed,
+            gates,
+        },
+    )
+    .ok()
+}
+fn receipted(run: forge::ReceiptRun, limits: &w::Limits) -> Option<w::Receipted> {
+    w::Receipted::new(limits, w::ReceiptedParts { run: run.id, number: run.number, address: run.url }).ok()
+}
+fn landing_phase(phase: &forge::LandingPhase) -> w::LandingPhase {
+    match phase {
+        forge::LandingPhase::Waiting => w::LandingPhase::Waiting,
+        forge::LandingPhase::Preparing => w::LandingPhase::Preparing,
+        forge::LandingPhase::Proving => w::LandingPhase::Proving,
+        forge::LandingPhase::Proved { .. } => w::LandingPhase::Proved,
+        forge::LandingPhase::Turn { .. } => w::LandingPhase::Turn,
+        forge::LandingPhase::Landed => w::LandingPhase::Landed,
+        forge::LandingPhase::Held { .. } => w::LandingPhase::Held,
+        forge::LandingPhase::Cancelled => w::LandingPhase::Cancelled,
+    }
 }
