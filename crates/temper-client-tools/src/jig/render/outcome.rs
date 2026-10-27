@@ -315,13 +315,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
             out.put(b"revision ");
             out.number(u64::from(changed.revision));
         }
-        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Lifted { hold, released })) => {
-            out.put(b"done: hold ");
-            out.number(*hold);
-            out.put(b" lifted, ");
-            out.number(u64::from(*released));
-            out.put(b" released");
-        }
+        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Lifted { hold, released })) => lifted(*hold, *released, out),
         c::Answer::Done(done) => {
             out.put(b"done: ");
             let task = match done {
@@ -347,6 +341,13 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         c::Answer::Refused { refusal, .. } => refused_text(operation, refusal, me, limits, out),
     }
     out.put(b"\n");
+}
+fn lifted(hold: u64, released: u32, out: &mut Text) {
+    out.put(b"done: hold ");
+    out.number(hold);
+    out.put(b" lifted, ");
+    out.number(u64::from(released));
+    out.put(b" released");
 }
 fn repeated_text(by: u64, at: skein_lib::Wall, choice: c::OwnerProposalChoice, me: Option<&c::Me>, out: &mut Text) {
     out.put(b"decided first: by ");
@@ -477,25 +478,28 @@ fn encode(
         }
     }
     if let Outcome::Answered(Answered::Jig(c::Answer::Refused { refusal, .. })) = outcome {
-        ended_json(operation, refusal, out);
-        if let c::Refusal::Moved { .. } = refusal
-            && let Some(task) = operation.task
-        {
-            let mut measured = Text::measure();
-            read_again(task, &mut measured);
-            let mut write = Text::writing_exact(measured);
-            read_again(task, &mut write);
-            out.key(b"read_again");
-            out.string(&write.finish());
-        }
-        if let c::Refusal::Authority { lacking, proposable: Some(true) } = refusal
-            && !owner_lack(lacking)
-        {
-            out.key(b"propose_instead");
-            out.string(operation.retry.as_deref().unwrap_or(operation.tool_name()));
-        }
+        refused_json(operation, refusal, out);
     }
     out.object_end();
+}
+fn refused_json(operation: &Operation, refusal: &c::Refusal, out: &mut Encoder) {
+    ended_json(operation, refusal, out);
+    if let c::Refusal::Moved { .. } = refusal
+        && let Some(task) = operation.task
+    {
+        let mut measured = Text::measure();
+        read_again(task, &mut measured);
+        let mut write = Text::writing_exact(measured);
+        read_again(task, &mut write);
+        out.key(b"read_again");
+        out.string(&write.finish());
+    }
+    if let c::Refusal::Authority { lacking, proposable: Some(true) } = refusal
+        && !owner_lack(lacking)
+    {
+        out.key(b"propose_instead");
+        out.string(operation.retry.as_deref().unwrap_or(operation.tool_name()));
+    }
 }
 fn read_again(task: u64, out: &mut Text) {
     out.put(b"task show ");
