@@ -28,6 +28,7 @@ pub enum Usage {
     Stdin,
     Key,
     Condition,
+    TerminalPhase { phase: jig_client::contract::Phase },
     Timeout,
     WaitPart { tool: u8, argument: u8 },
     Json,
@@ -392,9 +393,7 @@ fn check_watch(row: &Tool, call: &Call) -> Result<(), Usage> {
     }
     if let Some(Value::Condition(condition)) = super::call::argument(row, call, b"until") {
         let subject = subject::of(call).ok_or(Usage::Condition)?;
-        if !subject::takes(&subject, condition) {
-            return Err(Usage::Condition);
-        }
+        subject::check(&subject, *condition)?;
     }
     Ok(())
 }

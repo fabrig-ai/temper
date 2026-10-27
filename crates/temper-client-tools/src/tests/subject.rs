@@ -153,8 +153,17 @@ fn other_read_flags_are_not_watch_arguments() {
 }
 #[test]
 fn terminal_phases_are_refused_and_ended_is_taken() {
-    for word in ["phase:done", "phase:failed", "phase:cancelled", "phase:ended"] {
-        assert_eq!(subject::condition(&Subject::Task(41), word.as_bytes()), Err(Usage::Condition), "{word}");
+    for (word, phase) in [
+        ("phase:done", Phase::Done),
+        ("phase:failed", Phase::Failed),
+        ("phase:cancelled", Phase::Cancelled),
+        ("phase:ended", Phase::Ended),
+    ] {
+        assert_eq!(
+            subject::condition(&Subject::Task(41), word.as_bytes()),
+            Err(Usage::TerminalPhase { phase }),
+            "{word}"
+        );
     }
     assert_eq!(subject::condition(&Subject::Task(41), b"ended"), Ok(Condition::Ended));
 }
@@ -178,7 +187,7 @@ fn since_and_until_parse_together() {
 fn typed_wait_calls_follow_the_same_subject_condition_and_duration_checks() {
     let base = fixtures::call(&["task", "show", "41", "--until", "ended"]);
     for (slot, value, error) in [
-        (5, Value::Condition(Condition::Phase(Phase::Done)), Usage::Condition),
+        (5, Value::Condition(Condition::Phase(Phase::Done)), Usage::TerminalPhase { phase: Phase::Done }),
         (6, Value::Duration(Duration::from_secs(MOST_SECONDS.checked_add(1).unwrap())), Usage::Rows { argument: 6 }),
         (1, Value::Switch, Usage::WaitPart { tool: 3, argument: 1 }),
     ] {
