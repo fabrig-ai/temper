@@ -14,20 +14,11 @@ fn at(index: usize, path: Path) -> Path {
     path.child(Segment::Index(u32::try_from(index).expect("bounded configuration")))
 }
 fn charter_path(engine: &config::Engine, index: usize) -> Path {
-    if engine.defaults == config::Defaults::Document {
-        return at(index, Path::root().member(b"engine").member(b"charters"));
-    }
     let number = Decimal::of(u64::from(engine.charters.get(index).expect("checked charter index").number));
     let mut name = Writer::new(8_usize.checked_add(number.as_bytes().len()).expect("setting name fits"));
     name.put(b"charter ").expect("setting prefix counted");
     name.put(number.as_bytes()).expect("setting number counted");
     Path::root().member(&name.finish())
-}
-fn rules_path(engine: &config::Engine) -> Path {
-    match engine.defaults {
-        config::Defaults::Document => Path::root().member(b"engine").member(b"rules"),
-        config::Defaults::Passed => Path::root().member(b"rules"),
-    }
 }
 fn own(name: &[u8]) -> Path {
     Path::root().member(b"application").member(b"limits").member(b"overrides").member(name)
@@ -870,7 +861,9 @@ pub fn admission(
                 | AgentShortfall::Unacknowledged => unreachable!("selected charter dimension"),
             }
         }
-        AgentShortfall::Spend => (rules_path(engine).member(b"maximum_run_spend"), bounds.spend, needs.spend),
+        AgentShortfall::Spend => {
+            (Path::root().member(b"rules").member(b"maximum_run_spend"), bounds.spend, needs.spend)
+        }
         AgentShortfall::Message => {
             (engine_path.member(b"limits"), u64::from(bounds.message_bytes), u64::from(needs.message_bytes))
         }
