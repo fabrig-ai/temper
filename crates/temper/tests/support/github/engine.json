@@ -48,7 +48,7 @@
         "tasks.authority_grants": 12,
         "tasks.authority_segments": 9,
         "tasks.batch": 1,
-        "tasks.charters": 2,
+        "tasks.charters": 4,
         "tasks.contract_choices": 2,
         "tasks.delegates": 4,
         "tasks.dependencies": 1,

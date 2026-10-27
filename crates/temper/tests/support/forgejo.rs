@@ -240,7 +240,7 @@ pub fn configuration(directory: &Path, forge: &Forge<'_>, value: &mut Value) {
     }
     landing::configure(value, &mut agent, *api);
     super::configuration::use_stock(value);
-    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
+    value["engine"]["limits"]["overrides"]["tasks.charters"] = 4.into();
     super::configuration::turn_bounds::apply(value, super::configuration::turn_bounds::turn_body(&agent));
     write_private(&path, &serde_json::to_vec(&agent).expect("agent JSON"));
 }
