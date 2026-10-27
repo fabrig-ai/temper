@@ -6,6 +6,11 @@ pub mod kept;
 
 pub const EDIT: &[u8] = b"Changed by temper.\n";
 pub const README: &[u8] = b"# app\n";
+pub const PROGRAM_WORDS: &str = "Land a small change";
+pub const REQUESTED: &str = "Change requested";
+pub const LANDED: &str = "The change landed.";
+const CODING_WORDS: &str = "@coding Fix";
+const REVIEW_WORDS: &str = "Review this change at the named head";
 // A created member owns all ten grants, their segment boxes and executor kinds.
 const MEMBER_BYTES: u32 = 2048;
 
@@ -59,7 +64,16 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     // Reference-case callbacks also call this directly, before adding their
     // wider policy. The final writer retains defaults only for those projects.
     crate::fixtures::document_defaults(value);
-    let grant = |kind| json!({"connector":1,"kind":kind,"pattern":{"segments":["forge",forge.to_string()],"last":"open","value":"acme"}});
+    let grant = |kind| {
+        // A program story is laid before the forge gets its loopback address;
+        // it uses the stock deployment-wide forge scope, as ChangeAuthority::scope=None does.
+        let pattern = if agent["programs"].is_object() {
+            json!({"segments":["forge"],"last":"open","value":""})
+        } else {
+            json!({"segments":["forge",forge.to_string()],"last":"open","value":"acme"})
+        };
+        json!({"connector":1,"kind":kind,"pattern":pattern})
+    };
     let grants =
         json!([grant(1), grant(2), grant(3), grant(4), grant(7), grant(8), grant(10), grant(11), grant(12), grant(13)]);
     let authority = json!({"tools":1,"grants":grants,"delegation":{"kinds":[{"kind":"charter","number":1},{"kind":"procedure","number":2}],"tasks":8,"depth":4},"budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]});
@@ -141,7 +155,9 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     agent["profile"]["declared"]["tool_payload"] = 4096.into();
     agent["profile"]["policy"]["max_turns"] = 8.into();
     agent["profile"]["policy"]["check_timeout"] = 1000.into();
-    agent["endpoints"][0]["models"][0]["output"] = 8192.into();
+    for endpoint in agent["endpoints"].as_array_mut().expect("endpoints") {
+        endpoint["models"][0]["output"] = 8192.into();
+    }
     admit(value);
 }
 
@@ -185,7 +201,7 @@ pub fn scripts(forge: SocketAddr, repository: u64, readme: &[u8]) -> Box<[skein_
         readme,
         EDIT,
         b"@forge_chat",
-        "@coding Fix",
+        CODING_WORDS,
     )
 }
 
@@ -217,15 +233,8 @@ pub fn change_scripts(
         finish: Finish::ToolCalls,
         tokens: 20,
     };
-    let grant = |kind| match authority.scope {
-        Some((forge, org)) => {
-            json!({"connector":1,"kind":kind,"segments":["forge",forge.to_string()],"terminal":"open","last":org})
-        }
-        None => json!({"connector":1,"kind":kind,"segments":["forge"],"terminal":"open","last":""}),
-    };
-    let delegate = json!({"batch":[{"executor":{"kind":"procedure","connector":1,"code":2},"spec":{"words":coding_words,"parameters":[{"name":1,"kind":"resource","connector":1,"resource":repository},{"name":2,"kind":"bytes","value":"main"}]},"contract":{"kind":"change","connector":1,"change_kind":1,"words":128},"authority":{"tools":1,"grants":[grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],"delegation":{"kinds":[{"kind":"agent","number":authority.coding_kind}],"tasks":4,"depth":2},"budget":{"spend":10},"notes":0}}]});
-    let original = std::str::from_utf8(readme).expect("README UTF-8");
-    let changed = format!("{original}{}", std::str::from_utf8(edit).expect("edit UTF-8"));
+    let delegate = delegate_input(authority, repository, coding_words);
+    let (original, changed) = readme_text(readme, edit);
     Box::new([
         Script {
             cue: chat_cue.into(),
@@ -233,13 +242,13 @@ pub fn change_scripts(
                 call(b"delegate", delegate),
                 Turn {
                     lines: Box::new([
-                        Line::Text { text: b"Change requested".as_slice().into() },
+                        Line::Text { text: REQUESTED.as_bytes().into() },
                         Line::Call { name: b"wait".as_slice().into(), arguments: b"{}".as_slice().into() },
                     ]),
                     finish: Finish::ToolCalls,
                     tokens: 20,
                 },
-                call(b"finish", json!({"form":"report","text":"The change landed.","fields":{}})),
+                call(b"finish", json!({"form":"report","text":LANDED,"fields":{}})),
             ]),
         },
         Script {
@@ -247,18 +256,97 @@ pub fn change_scripts(
             turns: Box::new([
                 call(b"read", json!({"path":"README.md"})),
                 call(b"edit", json!({"path":"README.md","edits":[{"old":original,"new":changed}]})),
-                call(
-                    b"finish",
-                    json!({"form":"change","fields":{"title":"Update README","body":"Changed by temper."}}),
-                ),
+                call(b"finish", change_result()),
             ]),
         },
-        Script {
-            cue: b"Review this change at the named head".as_slice().into(),
-            turns: Box::new([call(
-                b"finish",
-                json!({"form":"verdict","label":"1","text":"Checked","fields":{},"items":[]}),
-            )]),
-        },
+        Script { cue: REVIEW_WORDS.as_bytes().into(), turns: Box::new([call(b"finish", verdict())]) },
     ])
+}
+
+fn delegate_input(authority: ChangeAuthority<'_>, repository: u64, coding_words: &str) -> Value {
+    let grant = |kind| match authority.scope {
+        Some((forge, org)) => {
+            json!({"connector":1,"kind":kind,"segments":["forge",forge.to_string()],"terminal":"open","last":org})
+        }
+        None => json!({"connector":1,"kind":kind,"segments":["forge"],"terminal":"open","last":""}),
+    };
+    json!({"batch":[{"executor":{"kind":"procedure","connector":1,"code":2},"spec":{"words":coding_words,"parameters":[{"name":1,"kind":"resource","connector":1,"resource":repository},{"name":2,"kind":"bytes","value":"main"}]},"contract":{"kind":"change","connector":1,"change_kind":1,"words":128},"authority":{"tools":1,"grants":[grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],"delegation":{"kinds":[{"kind":"agent","number":authority.coding_kind}],"tasks":4,"depth":2},"budget":{"spend":10},"notes":0}}]})
+}
+
+fn readme_text<'a>(readme: &'a [u8], edit: &[u8]) -> (&'a str, String) {
+    let original = std::str::from_utf8(readme).expect("README UTF-8");
+    let changed = format!("{original}{}", std::str::from_utf8(edit).expect("edit UTF-8"));
+    (original, changed)
+}
+
+fn change_result() -> Value {
+    json!({"form":"change","fields":{"title":"Update README","body":"Changed by temper."}})
+}
+
+fn verdict() -> Value {
+    json!({"form":"verdict","label":"1","text":"Checked","fields":{},"items":[]})
+}
+
+/// The program twin uses built-in file acts and an Open chat's text replies.
+#[must_use]
+pub fn program_story(repository: u64, readme: &[u8]) -> smith_fake_claude::Story {
+    use smith_fake_claude::{Script, Step, Story, Turn};
+    let call = |tool: &str, input| Step::Call { tool: tool.into(), input };
+    let (original, changed) = readme_text(readme, EDIT);
+    Story {
+        cued: vec![
+            Script {
+                cue: PROGRAM_WORDS.into(),
+                turns: vec![
+                    Turn {
+                        steps: vec![
+                            call(
+                                "delegate",
+                                delegate_input(
+                                    ChangeAuthority { coding_kind: 1, scope: None },
+                                    repository,
+                                    CODING_WORDS,
+                                ),
+                            ),
+                            Step::Text(REQUESTED.into()),
+                        ],
+                        ..Turn::default()
+                    },
+                    Turn { steps: vec![Step::Text(LANDED.into())], ..Turn::default() },
+                ],
+            },
+            Script {
+                cue: CODING_WORDS.into(),
+                turns: vec![Turn {
+                    steps: vec![
+                        Step::Act { tool: "Read".into(), input: json!({"file_path":"README.md"}) },
+                        Step::Act {
+                            tool: "Edit".into(),
+                            input: json!({"file_path":"README.md","old_string":original,"new_string":changed}),
+                        },
+                        call("finish", change_result()),
+                    ],
+                    ..Turn::default()
+                }],
+            },
+            Script {
+                cue: REVIEW_WORDS.into(),
+                turns: vec![Turn { steps: vec![call("finish", verdict())], ..Turn::default() }],
+            },
+        ],
+        ..Story::default()
+    }
+}
+
+/// The same landing path, with every charter defaulting to the program model.
+#[must_use]
+pub fn program_fixture() -> crate::forge::Fixture {
+    crate::forge::Fixture {
+        configure: |value, agent, forge| {
+            (fixture().configure)(value, agent, forge);
+            // Stock charters take their default from the first configured model.
+            value["engine"]["llm"]["models"].as_array_mut().expect("models").swap(0, 1);
+        },
+        ..fixture()
+    }
 }

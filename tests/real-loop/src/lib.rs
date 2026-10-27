@@ -166,6 +166,17 @@ pub fn run_forge(
     steps: impl FnOnce() -> Vec<calls::Step>,
 ) -> Ran {
     let scratch = Scratch::new("real-forge");
+    run_forge_on(scratch, fixture, scripts, steps)
+}
+
+/// Run a forge story on a scratch with a privately laid program source.
+#[must_use]
+pub fn run_forge_on(
+    scratch: Scratch,
+    fixture: forge::Fixture,
+    scripts: fn(std::net::SocketAddr) -> Box<[skein_fake_llm_domain::api::Script]>,
+    steps: impl FnOnce() -> Vec<calls::Step>,
+) -> Ran {
     let outcome = world::run_forge(&scratch, fixture, scripts, None, steps);
     checked(Ran { outcome: Outcome::Forge(outcome), scratch })
 }
