@@ -9,6 +9,13 @@ use crate::{
 pub enum Read {
     Writing(&'static str),
     Task(&'static str),
+    Held(&'static str),
+    RunStopped(&'static str),
+    Inbox,
+    Proposal,
+    Waiting(&'static str),
+    Resumed(&'static str),
+    Parked(&'static str),
 }
 #[must_use]
 pub fn acts(cast: &Cast) -> Vec<calls::Step> {
@@ -109,4 +116,79 @@ pub fn close(cast: &Cast) -> Vec<calls::Step> {
         steps.push(calls::release_hold(member.cue.as_bytes()));
     }
     steps
+}
+
+/// Append 8.1 to the opening checkpoint, then drain the ordinary hour-0 work.
+#[must_use]
+pub fn step_8_1() -> Vec<calls::Step> {
+    let mut steps = acts(&CAST);
+    steps.extend(pause(&CAST));
+    steps.extend(close(&CAST));
+    steps
+}
+fn pause(cast: &Cast) -> Vec<calls::Step> {
+    use super::scripts::{DIRECTION, PROPOSAL};
+    let mut steps = Vec::with_capacity(12 + 7 * cast.members.len());
+    steps.push(call(D1, argv!["task", "stop", number(cast.number("P")), "--key", "case2-stop-p"]));
+    for member in &cast.members[1..] {
+        steps.push(calls::until(
+            D1,
+            argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"],
+            b"\"phase\":\"held\"",
+            b"\"task\"",
+        ));
+        steps.push(call(D1, argv!["task", "run", number(cast.number(member.name)), "--json"]));
+        steps.push(calls::release_hold(member.cue.as_bytes()));
+    }
+    // The director was never stopped. Finish its held response and park before
+    // delivering the person's direction, so the next scripted turn sees it.
+    steps.push(calls::release_hold(cast.members[0].cue.as_bytes()));
+    steps.push(call(D1, argv!["task", "show", number(cast.number("director")), "--until", "phase:idle"]));
+    steps.push(call(
+        D1,
+        argv!["task", "message", number(cast.number("director")), DIRECTION, "--key", "case2-use-slots"],
+    ));
+    steps.push(call(D1, argv!["inbox", "--until", "waiting", "--json"]));
+    steps.push(call(D1, argv!["proposal", "show", PROPOSAL, "--json"]));
+    for member in cast.members {
+        steps.push(call(D1, argv!["task", "show", number(cast.number(member.name)), "--json"]));
+    }
+    steps.push(call(D1, argv!["proposal", "decide", PROPOSAL, "accept", "--key", "case2-accept"]));
+    for member in &cast.members[1..] {
+        steps.push(calls::writing_task(D1, cast.number(member.name)));
+        steps.push(call(D1, argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"]));
+        steps.push(calls::release_hold(member.cue.as_bytes()));
+        steps.push(calls::until(
+            D1,
+            argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"],
+            b"\"phase\":\"idle\"",
+            b"\"task\"",
+        ));
+    }
+    steps
+}
+#[must_use]
+pub fn step_8_1_reads(cast: &Cast) -> Vec<(Read, usize)> {
+    let mut result = reads(cast);
+    let mut at = result.last().expect("opening reads").1 + 2; // Stop follows the last opening read.
+    for member in &cast.members[1..] {
+        result.push((Read::Held(member.name), at));
+        result.push((Read::RunStopped(member.name), at + 1));
+        at += 2;
+    }
+    at += 2; // director idle, direction
+    result.push((Read::Inbox, at));
+    result.push((Read::Proposal, at + 1));
+    at += 2;
+    for member in cast.members {
+        result.push((Read::Waiting(member.name), at));
+        at += 1;
+    }
+    at += 1; // acceptance
+    for member in &cast.members[1..] {
+        result.push((Read::Resumed(member.name), at + 1));
+        result.push((Read::Parked(member.name), at + 2));
+        at += 3;
+    }
+    result
 }
