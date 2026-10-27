@@ -16,6 +16,11 @@ fn each_step_and_held_step_comes_from_the_retained_record() {
     let head = fixtures::HEAD;
     let since = env().wall;
     let rows = [
+        (change::State::Ready { head, ready_since: since }, PanelStep::Ready { landing: None }),
+        (
+            change::State::Preparing { from: head, main: fixtures::BASE, ready_since: since },
+            PanelStep::Preparing { landing: None },
+        ),
         (change::State::Producing { requested: true }, PanelStep::Producing),
         (change::State::Opening { requested: false }, PanelStep::Opening),
         (change::State::Recreating { head }, PanelStep::Recreating),
@@ -45,6 +50,8 @@ fn each_step_and_held_step_comes_from_the_retained_record() {
             let d = with_row(row.clone());
             let got = panel(&d);
             assert_eq!(got.step, step);
+            assert_eq!(got.way, row.change.way);
+            assert_eq!(got.in_landing, row.change.landing);
             assert_eq!(got.hold, hold);
             assert_eq!(got.task, row.task);
             assert_eq!(got.forge, REPO.forge);
@@ -444,4 +451,34 @@ fn landed_panel_keeps_passed_ci_across_a_restart() {
     assert_eq!(after.step, PanelStep::Landed { merge: fixtures::BASE });
     assert_eq!(after.head, Some(fixtures::HEAD));
     assert_eq!((before.ci, after.ci), (change::Status::Passed, change::Status::Passed));
+}
+
+#[test]
+fn a_turn_change_in_ready_has_a_panel_naming_its_landing() {
+    for landing in [None, Some(61)] {
+        let mut row = fixtures::opening_row();
+        row.change.way = change::Way::Turn;
+        row.change.landing = landing;
+        row.change.state = change::State::Ready { head: fixtures::HEAD, ready_since: env().wall };
+        let got = panel(&with_row(row));
+        assert_eq!(got.step, PanelStep::Ready { landing });
+        assert_eq!(got.way, change::Way::Turn);
+        assert_eq!(got.in_landing, landing);
+    }
+}
+#[test]
+fn a_preparing_change_has_a_panel() {
+    for held in [false, true] {
+        let mut row = fixtures::opening_row();
+        row.change.way = change::Way::Turn;
+        row.change.landing = Some(61);
+        let state = change::State::Preparing { from: fixtures::HEAD, main: fixtures::BASE, ready_since: env().wall };
+        row.change.state =
+            if held { change::State::Held { was: Box::new(state), why: change::Hold::Stalled } } else { state };
+        let got = panel(&with_row(row));
+        assert_eq!(got.step, PanelStep::Preparing { landing: Some(61) });
+        assert_eq!(got.way, change::Way::Turn);
+        assert_eq!(got.in_landing, Some(61));
+        assert_eq!(got.hold, if held { Some(change::Hold::Stalled) } else { None });
+    }
 }
