@@ -148,5 +148,5 @@ fn budget_hold_words_name_the_task_and_explain_the_available_actions() {
     let reason = contract::HoldCategory::Budget;
     let number = crate::words::hold_number(73, &reason);
     let text = book.say(0, jig_client::words::Word::hold(&reason).id(), number.as_slice()).unwrap().text;
-    assert_eq!(text.as_ref(), b"Insufficient activation budget. A release alone holds it again: give the task more budget (amend 73 with a larger budget, or decide its budget proposal), then release it; or cancel it.");
+    assert_eq!(text.as_ref(), b"Insufficient activation budget. A release alone holds it again: give the task more budget (task amend 73 with a larger budget, or decide its budget proposal), then release it; or cancel it.");
 }

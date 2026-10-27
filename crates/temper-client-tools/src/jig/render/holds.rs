@@ -88,23 +88,35 @@ fn budget(hold: Option<&c::TaskHold>) -> bool {
     false
 }
 
+fn budget_reason(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
+    let book = vocabulary.phrasebook(4096);
+    let said = book
+        .say(0, Word::hold(&c::HoldCategory::Budget).id(), &[Hole::Number(task.chip.task)])
+        .expect("budget hold phrase");
+    out.put(&said.text);
+}
+
 fn reason(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
-    if budget(task.hold.as_ref()) {
-        let book = vocabulary.phrasebook(4096);
-        let said = book.say(0, Word::hold(&c::HoldCategory::Budget).id(), &[Hole::Number(task.chip.task)]).expect("budget hold phrase");
-        out.put(&said.text);
-        return;
-    }
     match task.hold.as_ref() {
         None => out.put(b"reason unavailable"),
         Some(c::TaskHold::Owner(hold)) => {
-            owner(&hold.reason, out);
+            if budget(task.hold.as_ref()) {
+                budget_reason(task, vocabulary, out);
+            } else {
+                owner(&hold.reason, out);
+            }
             if let Some(source) = &hold.source {
                 out.put(b"; source: ");
                 vocabulary.owner_part(source, out);
             }
         }
-        Some(c::TaskHold::Document(hold)) => detailed(&hold.reason, out),
+        Some(c::TaskHold::Document(hold)) => {
+            if budget(task.hold.as_ref()) {
+                budget_reason(task, vocabulary, out);
+            } else {
+                detailed(&hold.reason, out);
+            }
+        }
     }
 }
 

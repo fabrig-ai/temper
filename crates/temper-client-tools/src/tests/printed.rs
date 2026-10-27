@@ -64,7 +64,14 @@ fn every_printed_call_parses() {
         ("forges installation", crate::forges::print_rows(Some(&[forge]), false, None, &f::limits_root()), 1, 0),
         (
             "change",
-            crate::change::print(Some(&super::change::panel(w::Step::Checking)), false, None, b"", &f::limits_root()),
+            crate::change::print(
+                Some(&super::change::panel(w::Step::Checking)),
+                false,
+                None,
+                b"",
+                &f::limits_root(),
+                None,
+            ),
             1,
             0,
         ),

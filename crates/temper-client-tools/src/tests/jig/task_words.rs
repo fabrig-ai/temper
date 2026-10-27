@@ -574,6 +574,7 @@ fn a_held_tasks_text_keeps_the_effect_source_supplied_by_the_read() {
     assert!(skein_lib::bytes::find(&answer.stdout, b"source: ").is_some());
     assert!(skein_lib::bytes::find(&answer.stdout, b"temper/1/c2").is_some());
     assert!(
-        skein_lib::bytes::find(&answer.stdout, b"review and resolve the effects, then task release 41 --hold 9").is_some()
+        skein_lib::bytes::find(&answer.stdout, b"review and resolve the effects, then task release 41 --hold 9")
+            .is_some()
     );
 }
