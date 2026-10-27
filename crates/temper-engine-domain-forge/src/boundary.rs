@@ -1008,7 +1008,7 @@ pub enum Event {
         bytes: u32,
         max_job_bytes: u32,
     },
-    /// Cut retained words to the brief's allotment, preserving this source's end.
+    /// Cut retained words to the brief's allotment; CI keeps whole check heads and log tails.
     CutBrief {
         section: Token,
         bytes: u32,
