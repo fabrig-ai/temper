@@ -3974,7 +3974,9 @@ fn posting(d: &Domain, entry: u64) -> bool {
             | skein_forge::api::Write::Update { .. }
             | skein_forge::api::Write::CreateBranch { .. }
             | skein_forge::api::Write::DeleteBranch { .. }
-            | skein_forge::api::Write::Status { .. } => false,
+            | skein_forge::api::Write::Status { .. }
+            | skein_forge::api::Write::Dispatch { .. }
+            | skein_forge::api::Write::Rerun { .. } => false,
         },
         None => false,
     }
