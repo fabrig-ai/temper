@@ -217,7 +217,7 @@ impl Engine {
     }
     #[must_use]
     pub fn accounts(&self) -> serde_json::Value {
-        let output = self.call(&["accounts", "--json"], None);
+        let output = self.call(&["account", "list", "--json"], None);
         success(&output);
         serde_json::from_slice(&output.stdout).expect("accounts JSON")
     }
@@ -315,7 +315,7 @@ impl Fixture {
         let issuer = Issuer::start(issuer);
         let a = Engine::start(&a);
         let b = Engine::start(&b);
-        let connected = a.call(&["connect", "1", "--key", "qa-connect"], None);
+        let connected = a.call(&["account", "connect", "1", "--key", "qa-connect"], None);
         success(&connected);
         let ended = super::Ended {
             exit: Some(skein_io::kernel::Exit::Code(0)),

@@ -96,8 +96,8 @@ fn inspect(scratch: &Path, credentials: &[Vec<u8>]) -> (ctl::Seen, serde_json::V
         scratch,
         vec![
             ctl::Step::Run(ctl::Call::sign_in()),
-            ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "15s"])),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "settled", "--timeout", "15s"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
         ],
     ));
     no_secrets(&seen.serve.stdout, credentials);
@@ -385,8 +385,8 @@ fn fake_box(scratch: &Path, client: &str, credentials: &[Vec<u8>]) {
         &directory(scratch, "--data").join(client),
         vec![
             ctl::Step::Run(ctl::Call::sign_in()),
-            ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "15s"])),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "settled", "--timeout", "15s"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
         ],
         support::WITHIN,
         || {
@@ -455,8 +455,8 @@ fn unprepared_owned_forge_is_not_setup_without_box() {
         scratch.path(),
         vec![
             ctl::Step::Run(ctl::Call::sign_in()),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
-            ctl::Step::Run(ctl::Call::new(&["forge-setup", "1"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "setup", "1"])),
         ],
     ));
     assert!(seen.serve.exit == Some(Exit::Code(0)), "unprepared forge prevented a healthy engine stop");
@@ -527,10 +527,10 @@ fn asked_owned_setup_connects_and_box_record_restarts_it() {
         &first_client,
         vec![
             ctl::Step::Run(ctl::Call::sign_in()),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
-            ctl::Step::Run(ctl::Call::new(&["forge-setup", "1"])),
-            ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "30s"])),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "setup", "1"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "settled", "--timeout", "30s"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
         ],
         support::WITHIN,
         || (forge_directory(scratch.path()).join("admin_token").exists(), secrets(scratch.path())),
@@ -563,8 +563,8 @@ fn asked_owned_setup_connects_and_box_record_restarts_it() {
         &second_client,
         vec![
             ctl::Step::Run(ctl::Call::sign_in()),
-            ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "30s"])),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "settled", "--timeout", "30s"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
         ],
         support::WITHIN,
         || forge_directory(scratch.path()).join("admin_token").exists(),
@@ -627,12 +627,12 @@ fn asked_prepare_failure_is_visible_and_can_be_asked_again() {
         &client,
         vec![
             ctl::Step::Run(ctl::Call::sign_in()),
-            ctl::Step::Run(ctl::Call::new(&["forge-setup", "1"])),
-            ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "15s"])),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
-            ctl::Step::Run(ctl::Call::new(&["forge-setup", "1"])),
-            ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "15s"])),
-            ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "setup", "1"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "settled", "--timeout", "15s"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "setup", "1"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "settled", "--timeout", "15s"])),
+            ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])),
         ],
         support::WITHIN,
         || directory(scratch.path(), "--data").join("box/started/1").exists(),

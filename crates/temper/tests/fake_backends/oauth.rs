@@ -149,12 +149,13 @@ impl Referee<cluster::Root> for Judge {
             batch.push(ctl::Step::Run(ctl::Call::sign_in()));
             for arguments in [
                 &["me", "--json"][..],
-                &["connect", "1", "--key", "standalone-sign-in"],
-                &["accounts", "--json"],
-                &["wait", "accounts", "--until", "settled", "--json"],
-                &["accounts", "--json"],
+                &["account", "connect", "1", "--key", "standalone-sign-in"],
+                &["account", "list", "--json"],
+                &["account", "list", "--until", "settled", "--json"],
+                &["account", "list", "--json"],
                 &[
                     "chat",
+                    "start",
                     "--project",
                     "1",
                     "--model",
@@ -164,11 +165,11 @@ impl Referee<cluster::Root> for Judge {
                     "Hello",
                     "--json",
                 ],
-                &["wait", "task", "1", "--until", "replied", "--json"],
-                &["task", "1", "--json"],
-                &["chat", "1", "--json"],
-                &["close", "1", "--key", "close-standalone-chat", "--json"],
-                &["wait", "task", "1", "--until", "ended", "--json"],
+                &["task", "show", "1", "--until", "replied", "--json"],
+                &["task", "show", "1", "--json"],
+                &["chat", "show", "1", "--json"],
+                &["chat", "close", "1", "--key", "close-standalone-chat", "--json"],
+                &["task", "show", "1", "--until", "ended", "--json"],
             ] {
                 batch.push(ctl::Step::Run(ctl::Call::new(arguments)));
             }

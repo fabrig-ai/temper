@@ -36,7 +36,8 @@ pub struct Cluster {
 #[must_use]
 pub fn settings_change(file: &Path) -> super::ctl::Call {
     super::ctl::Call::new(&[
-        "change-settings",
+        "settings",
+        "apply",
         file.to_str().expect("cluster settings FILE path"),
         "--against",
         "1",

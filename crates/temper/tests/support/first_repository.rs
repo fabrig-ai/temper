@@ -167,12 +167,20 @@ pub fn csv_llm(config: &Path) -> CtlLlm {
 #[must_use]
 pub fn csv_task_steps(root: &Path) -> Vec<Step> {
     let mut steps = task_steps(root);
-    steps[2] =
-        Step::Run(Call::new(&["chat", "--project", "2", "--key", "first-hello", "Add CSV export to widget", "--json"]));
+    steps[2] = Step::Run(Call::new(&[
+        "chat",
+        "start",
+        "--project",
+        "2",
+        "--key",
+        "first-hello",
+        "Add CSV export to widget",
+        "--json",
+    ]));
     let found = steps.split_off(5);
     steps.extend([
-        Step::Run(Call::new(&["wait", "change", "2", "--until", "ci:passed", "--timeout", "60s", "--json"])),
-        Step::Until(Call::new(&["change", "2", "--json"]), br#""verdict":"pending""#),
+        Step::Run(Call::new(&["change", "show", "2", "--until", "ci:passed", "--timeout", "60s", "--json"])),
+        Step::Until(Call::new(&["change", "show", "2", "--json"]), br#""verdict":"pending""#),
         Step::Then(Box::new(|calls| {
             let panel = super::ctl::json(calls.last().expect("pending panel"));
             assert_eq!(panel["ci"], "passed", "review follows head CI: {panel}");
@@ -180,7 +188,7 @@ pub fn csv_task_steps(root: &Path) -> Vec<Step> {
             assert_eq!(panel["step"], "gating");
             assert!(panel["merge"].is_null(), "review blocks landing: {panel}");
             let task = panel["runs"].as_u64().expect("the pending gate names its reviewer's task");
-            Call::new(&["task", &task.to_string(), "--json"])
+            Call::new(&["task", "show", &task.to_string(), "--json"])
         })),
         Step::Then(Box::new(|calls| {
             let reviewer = super::ctl::json(calls.last().expect("reviewer's task"));
@@ -188,10 +196,10 @@ pub fn csv_task_steps(root: &Path) -> Vec<Step> {
             assert_eq!(reviewer["chip"]["task"], pending["runs"]);
             assert_eq!(reviewer["chip"]["executor"], json!({"agent":{"charter":2}}));
             assert_ne!(reviewer["chip"]["phase"], "ended", "reviewer still runs: {reviewer}");
-            Call::new(&["change", "2", "--json"])
+            Call::new(&["change", "show", "2", "--json"])
         })),
         Step::ReleaseLlm(b"csv-review"),
-        Step::Until(Call::new(&["change", "2", "--json"]), br#""verdict":"approved""#),
+        Step::Until(Call::new(&["change", "show", "2", "--json"]), br#""verdict":"approved""#),
         Step::Then(Box::new(|calls| {
             let approved = super::ctl::json(calls.last().expect("approved panel"));
             let pending = calls
@@ -201,7 +209,7 @@ pub fn csv_task_steps(root: &Path) -> Vec<Step> {
                 .expect("pending review");
             assert_eq!(approved["head"], pending["head"], "review is approved at the CI head");
             assert_eq!(approved["ci"], "passed");
-            Call::new(&["wait", "change", "2", "--until", "landed", "--timeout", "120s", "--json"])
+            Call::new(&["change", "show", "2", "--until", "landed", "--timeout", "120s", "--json"])
         })),
     ]);
     steps.extend(found);
@@ -236,11 +244,19 @@ fn task_steps_in(root: &Path, task: Task, repository: &str) -> Vec<Step> {
     let key = root.join("llm-key");
     write_private(&key, jig_channel_world::fixtures::KEY);
     vec![
-        Step::Run(Call::new(&["add-key", "1", key.to_str().expect("key path"), "--key", "first-repository-llm"])),
-        Step::Run(Call::new(&["wait", "accounts", "--until", "usable", "--timeout", "10s"])),
+        Step::Run(Call::new(&[
+            "account",
+            "add-key",
+            "1",
+            key.to_str().expect("key path"),
+            "--key",
+            "first-repository-llm",
+        ])),
+        Step::Run(Call::new(&["account", "list", "--until", "usable", "--timeout", "10s"])),
         // forge-setup makes the repository a project of its own (tools.md 5.5).
         Step::Run(Call::new(&[
             "chat",
+            "start",
             "--project",
             &project,
             "--key",
@@ -248,7 +264,7 @@ fn task_steps_in(root: &Path, task: Task, repository: &str) -> Vec<Step> {
             &format!("@first-repository Land a README change in {repository}"),
             "--json",
         ])),
-        Step::Run(Call::new(&["wait", "task", &chat, "--until", "replied", "--timeout", "120s", "--json"])),
+        Step::Run(Call::new(&["task", "show", &chat, "--until", "replied", "--timeout", "120s", "--json"])),
         Step::Mark("first task's reply"),
     ]
     .into_iter()
@@ -266,10 +282,10 @@ pub fn found_steps_for(task: Task) -> Vec<Step> {
     let change = task.change.to_string();
     let producer = task.producer.to_string();
     vec![
-        Step::Run(Call::new(&["wait", "task", &change, "--until", "ended", "--timeout", "120s", "--json"])),
+        Step::Run(Call::new(&["task", "show", &change, "--until", "ended", "--timeout", "120s", "--json"])),
         Step::Mark("first change ended"),
-        Step::Run(Call::new(&["task", &change])),
-        Step::Run(Call::new(&["task", &producer, "--json"])),
+        Step::Run(Call::new(&["task", "show", &change])),
+        Step::Run(Call::new(&["task", "show", &producer, "--json"])),
     ]
 }
 
@@ -282,7 +298,7 @@ pub fn turns(client: &Path, task: &str) -> String {
     let mut words = String::new();
     // The shipped document window may return fewer than --limit rows.
     for _ in 0..32 {
-        let mut arguments = vec!["activity", task, "--limit", "32", "--json"];
+        let mut arguments = vec!["task", "activity", task, "--limit", "32", "--json"];
         if let Some(before) = &before {
             arguments.extend(["--before", before.as_str()]);
         }
@@ -293,7 +309,7 @@ pub fn turns(client: &Path, task: &str) -> String {
             let Some(turn) = row.pointer("/event/owner/source/line/turn") else { continue };
             let name =
                 format!("{}.{}", turn["attempt"].as_u64().expect("attempt"), turn["turn"].as_u64().expect("turn"));
-            let ended = super::ctl::alone(client, Call::new(&["turn", task, &name]));
+            let ended = super::ctl::alone(client, Call::new(&["task", "turn", task, &name]));
             assert_eq!(ended.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&ended.stderr));
             words.push_str(&String::from_utf8(ended.stdout).expect("turn UTF-8"));
         }
@@ -342,7 +358,7 @@ pub fn live_for(config: &Path, data: &Path, client: &Path, task: Task) -> Eviden
         delegation: turns(client, &task.chat.to_string()),
         producer: turns(client, &task.producer.to_string()),
         page: change_page(config, client, task.change),
-        panel: super::ctl::alone(client, Call::new(&["change", &task.change.to_string(), "--json"])),
+        panel: super::ctl::alone(client, Call::new(&["change", "show", &task.change.to_string(), "--json"])),
     }
 }
 

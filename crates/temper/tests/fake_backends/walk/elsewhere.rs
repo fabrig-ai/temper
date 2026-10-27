@@ -46,10 +46,11 @@ pub(super) fn run() {
     let walk = Walk::new("walk-elsewhere-key");
     let admin = walk.sandbox().join("data/forgejo-admin.token");
     let seen = walk.run(vec![
-        Act::Now(Call::new(&["accounts", "--json"])),
-        Act::Now(Call::new(&["forges", "--json"])),
+        Act::Now(Call::new(&["account", "list", "--json"])),
+        Act::Now(Call::new(&["forge", "list", "--json"])),
         Act::Now(Call::new(&[
-            "forge-connect",
+            "forge",
+            "connect",
             "4",
             "forgejo-admin",
             path(&admin),
@@ -59,18 +60,27 @@ pub(super) fn run() {
             "walk-forge",
             "--json",
         ])),
-        Act::Now(Call::new(&["wait", "forges", "--until", "connected:4", "--timeout", "30s"])),
+        Act::Now(Call::new(&["forge", "list", "--until", "connected:4", "--timeout", "30s"])),
         walk.add_key(),
-        Act::Now(Call::new(&["wait", "accounts", "--until", "usable", "--timeout", "10s", "--json"])),
-        Act::Now(Call::new(&["forges", "--json"])),
+        Act::Now(Call::new(&["account", "list", "--until", "usable", "--timeout", "10s", "--json"])),
+        Act::Now(Call::new(&["forge", "list", "--json"])),
         Act::After(Box::new(|seen| {
             assert_ready(seen);
-            Call::new(&["chat", "--project", &adopted_project(seen), "--key", "walk-chat", "Say hello", "--json"])
+            Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                &adopted_project(seen),
+                "--key",
+                "walk-chat",
+                "Say hello",
+                "--json",
+            ])
         })),
         Act::After(Box::new(|seen| {
-            Call::new(&["wait", "task", &chat_task(seen), "--until", "replied", "--timeout", "10s", "--json"])
+            Call::new(&["task", "show", &chat_task(seen), "--until", "replied", "--timeout", "10s", "--json"])
         })),
-        Act::After(Box::new(|seen| Call::new(&["chat", &chat_task(seen), "--json"]))),
+        Act::After(Box::new(|seen| Call::new(&["chat", "show", &chat_task(seen), "--json"]))),
     ]);
     assert_reply(&seen);
     walk.scratch.remove();

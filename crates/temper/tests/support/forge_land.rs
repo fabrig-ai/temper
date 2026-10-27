@@ -241,7 +241,7 @@ impl Reply {
         let last = json(calls.ends().last().expect("reply read"));
         if matches!(self.phase, ReplyPhase::Snapshot) {
             self.snapshot = Some(last["digest"].as_str().expect("task read digest").to_owned());
-            calls.push(Step::Run(Call::new(&["chat", "1", "--json"])));
+            calls.push(Step::Run(Call::new(&["chat", "show", "1", "--json"])));
             self.phase = ReplyPhase::Pages;
             return;
         }
@@ -256,10 +256,10 @@ impl Reply {
                     // Closing adds no work: task 5 must still be unknown.
                     expected_exits.push((calls.ends().len() + 3, 2));
                     for args in [
-                        &["close", "1", "--key", "close-plan", "--json"][..],
-                        &["wait", "task", "1", "--until", "ended", "--timeout", "60s", "--json"],
-                        &["tasks", "--project", FIRST_PROJECT, "--json"],
-                        &["task", "5", "--json"],
+                        &["chat", "close", "1", "--key", "close-plan", "--json"][..],
+                        &["task", "show", "1", "--until", "ended", "--timeout", "60s", "--json"],
+                        &["task", "list", "--project", FIRST_PROJECT, "--json"],
+                        &["task", "show", "5", "--json"],
                     ] {
                         calls.push(Step::Run(Call::new(args)));
                     }
@@ -274,13 +274,13 @@ impl Reply {
         self.replied |=
             serde_json::to_string(&last["activity"]["rows"]).expect("conversation JSON").contains(self.awaited);
         if let Some(before) = last["activity"]["before"]["value"].as_str() {
-            calls.push(Step::Run(Call::new(&["chat", "1", "--before", before, "--json"])));
+            calls.push(Step::Run(Call::new(&["chat", "show", "1", "--before", before, "--json"])));
         } else if !self.replied {
             // 'Change requested' plus wait already meets replied. A snapshot
             // taken before reading the conversation prevents missing its next reply.
             calls.push(Step::Run(Call::new(&[
-                "wait",
                 "task",
+                "show",
                 "1",
                 "--until",
                 "replied",
@@ -290,7 +290,7 @@ impl Reply {
                 "120s",
                 "--json",
             ])));
-            calls.push(Step::Run(Call::new(&["task", "1", "--json"])));
+            calls.push(Step::Run(Call::new(&["task", "show", "1", "--json"])));
             self.phase = ReplyPhase::Snapshot;
         } else {
             calls.push(Step::Run(delegate_page(1, None)));
@@ -301,7 +301,7 @@ impl Reply {
 
 fn delegate_page(parent: u64, after: Option<&str>) -> super::ctl::Call {
     let parent = parent.to_string();
-    let mut args = vec!["tasks", "--project", FIRST_PROJECT, "--parent", &parent, "--ended", "--json"];
+    let mut args = vec!["task", "list", "--project", FIRST_PROJECT, "--parent", &parent, "--ended", "--json"];
     if let Some(after) = after {
         args.extend(["--after", after]);
     }
@@ -393,7 +393,7 @@ pub fn assert_no_live_tasks(value: &serde_json::Value) {
     assert_eq!(value["live"], serde_json::json!([]), "no live tasks in this query: {value}");
     assert!(value["live_after"].is_null(), "all live tasks read");
 }
-/// A project's live roots read: `tasks --project P` without `--ended`.
+/// A project's live roots read: `task list --project PROJECT` without `--ended`.
 pub fn assert_no_live_roots(value: &serde_json::Value) {
     assert_eq!(value["tasks"]["rows"], serde_json::json!([]), "no live root tasks: {value}");
     assert_eq!(value["tasks"]["more"], false, "all live root tasks read: {value}");
@@ -481,15 +481,16 @@ fn change_steps(
     steps.push(Step::Run(Call::new(&["me", "--json"])));
     if first {
         steps.extend([
-            Step::Run(Call::new(&["connect", "1", "--key", "connect-plan"])),
-            Step::Run(Call::new(&["wait", "accounts", "--until", "settled", "--json"])),
+            Step::Run(Call::new(&["account", "connect", "1", "--key", "connect-plan"])),
+            Step::Run(Call::new(&["account", "list", "--until", "settled", "--json"])),
         ]);
     }
     let account_at = setup_calls + if first { 3 } else { 1 };
-    steps.push(Step::Run(Call::new(&["accounts", "--json"])));
+    steps.push(Step::Run(Call::new(&["account", "list", "--json"])));
     if first {
         steps.push(Step::Run(Call::new(&[
             "chat",
+            "start",
             "--project",
             FIRST_PROJECT,
             "--model",
@@ -503,7 +504,7 @@ fn change_steps(
     if first {
         // Chat creation answers before its delegate exists. As in the
         // first-repository story, wait for the chat's initial reply first.
-        steps.push(Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", within, "--json"])));
+        steps.push(Step::Run(Call::new(&["task", "show", "1", "--until", "replied", "--timeout", within, "--json"])));
     }
     let found_at = account_at + 1 + 2 * usize::from(first);
     steps.extend(match ends {
@@ -511,13 +512,13 @@ fn change_steps(
         // The box's referee then waits for the chat's HELD reply to the
         // escalation; a chat refused before each run never gives it.
         Ends::Held => vec![
-            Step::Run(Call::new(&["wait", "task", "2", "--until", "held", "--timeout", within, "--json"])),
-            Step::Run(Call::new(&["task", "2", "--json"])),
+            Step::Run(Call::new(&["task", "show", "2", "--until", "held", "--timeout", within, "--json"])),
+            Step::Run(Call::new(&["task", "show", "2", "--json"])),
         ],
     });
     // The referee holds ctl open, reads and pages the conversation, and
     // follows --since if the procedure's end has not yet reached the chat.
-    steps.push(Step::Run(Call::new(&["task", "1", "--json"])));
+    steps.push(Step::Run(Call::new(&["task", "show", "1", "--json"])));
     (account_at, found_at)
 }
 
@@ -565,17 +566,17 @@ pub fn forgejo_setup_steps(run: &str) -> Vec<super::ctl::Step> {
     let mut steps = vec![Step::Mark("start"), Step::Run(Call::sign_in())];
     if run == "first" {
         steps.extend([
-            Step::Run(Call::new(&["forges"])),
-            Step::Run(Call::new(&["forges", "--json"])),
-            Step::Run(Call::new(&["forge-setup", "3"])),
+            Step::Run(Call::new(&["forge", "list"])),
+            Step::Run(Call::new(&["forge", "list", "--json"])),
+            Step::Run(Call::new(&["forge", "setup", "3"])),
         ]);
     }
     // Real preparation, hashing two releases, runner registration and reconcile
     // take seconds; allow three minutes, plus ten seconds to stop and reap.
     steps.extend([
-        Step::Run(Call::new(&["wait", "forges", "--until", "settled", "--timeout", "180s"])),
-        Step::Run(Call::new(&["forges", "--json"])),
-        Step::Run(Call::new(&["forges"])),
+        Step::Run(Call::new(&["forge", "list", "--until", "settled", "--timeout", "180s"])),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
+        Step::Run(Call::new(&["forge", "list"])),
     ]);
     steps
 }
@@ -762,8 +763,8 @@ pub fn live_account() -> Option<PathBuf> {
 }
 
 /// Admit the held `ChatGPT` record a fresh store's first run moves in: a
-/// regular file only its owner reads, as ctl import's FILE must be. Its words
-/// never name the path, which goes to `import` alone.
+/// regular file only its owner reads, as ctl account import's FILE must be. Its words
+/// never name the path, which goes to `account import` alone.
 pub fn held_account(file: &std::path::Path) -> Result<(), &'static str> {
     use std::os::unix::fs::MetadataExt;
     let metadata = fs::symlink_metadata(file).map_err(|_| "TEMPER_LIVE_ACCOUNT names no file")?;
@@ -781,8 +782,8 @@ pub fn held_account(file: &std::path::Path) -> Result<(), &'static str> {
 #[must_use]
 pub fn printed_command(args: &[String]) -> Vec<String> {
     match args {
-        [import, _file, rest @ ..] if import == "import" => {
-            [import.clone(), "FILE".into()].into_iter().chain(rest.iter().cloned()).collect()
+        [account, import, _file, rest @ ..] if account == "account" && import == "import" => {
+            [account.clone(), import.clone(), "FILE".into()].into_iter().chain(rest.iter().cloned()).collect()
         }
         _ => args.to_vec(),
     }
@@ -1027,32 +1028,32 @@ fn oracle_token(paths: &[PathBuf; 3], first: bool) -> String {
 fn live_commands(fresh: bool, account: Option<&std::path::Path>) -> (Vec<Vec<String>>, usize) {
     let mut commands = vec![vec!["sign-in", "-"]];
     if fresh {
-        commands.extend([vec!["forges"], vec!["forges", "--json"], vec!["forge-setup", "3"]]);
+        commands.extend([vec!["forge", "list"], vec!["forge", "list", "--json"], vec!["forge", "setup", "3"]]);
     }
     commands.extend([
-        vec!["wait", "forges", "--until", "settled", "--timeout", "180s"],
-        vec!["forges", "--json"],
-        vec!["forges"],
+        vec!["forge", "list", "--until", "settled", "--timeout", "180s"],
+        vec!["forge", "list", "--json"],
+        vec!["forge", "list"],
         vec!["me", "--json"],
     ]);
     if fresh {
         commands.extend(match account.map(|file| file.to_str().expect("held account path is UTF-8")) {
             Some(file) => [
-                vec!["import", file, "--key", "connect-plan"],
-                vec!["wait", "accounts", "--until", "usable", "--timeout", "600s", "--json"],
+                vec!["account", "import", file, "--key", "connect-plan"],
+                vec!["account", "list", "--until", "usable", "--timeout", "600s", "--json"],
             ],
             None => [
-                vec!["connect", "1", "--key", "connect-plan"],
-                vec!["wait", "accounts", "--until", "settled", "--timeout", "600s", "--json"],
+                vec!["account", "connect", "1", "--key", "connect-plan"],
+                vec!["account", "list", "--until", "settled", "--timeout", "600s", "--json"],
             ],
         });
     }
     let account = commands.len();
-    commands.push(vec!["accounts", "--json"]);
+    commands.push(vec!["account", "list", "--json"]);
     (commands.into_iter().map(|args| args.into_iter().map(str::to_owned).collect()).collect(), account)
 }
 
-/// The live root task numbers of a `tasks --project P --json` read, whole.
+/// The live root task numbers of a `task list --project PROJECT --json` read, whole.
 pub fn live_roots(read: &serde_json::Value) -> Result<std::collections::BTreeSet<u64>, String> {
     require(read["tasks"]["more"] == false, "whole live root tasks read")?;
     read["tasks"]["rows"]
@@ -1237,7 +1238,7 @@ impl LiveJudge<'_> {
             return Ok(());
         }
         if matches!(self.phase, LivePhase::SettingsChanged) {
-            self.queue(&["tasks", "--project", &self.tasks.project.to_string(), "--json"]);
+            self.queue(&["task", "list", "--project", &self.tasks.project.to_string(), "--json"]);
             self.phase = LivePhase::Roots;
             return Ok(());
         }
@@ -1254,6 +1255,7 @@ impl LiveJudge<'_> {
                 let key = format!("live-chat-{}", now.as_nanos());
                 self.queue(&[
                     "chat",
+                    "start",
                     "--project",
                     &project,
                     "--model",
@@ -1277,9 +1279,9 @@ impl LiveJudge<'_> {
             LivePhase::Waiting => {
                 self.wait_call = Some(calls.ends().len() - 1);
                 if last["met"] == false {
-                    self.queue(&["task", &change, "--json"]);
-                    self.queue(&["tasks", "--project", &project, "--parent", &change, "--json"]);
-                    self.queue(&["accounts", "--json"]);
+                    self.queue(&["task", "show", &change, "--json"]);
+                    self.queue(&["task", "list", "--project", &project, "--parent", &change, "--json"]);
+                    self.queue(&["account", "list", "--json"]);
                     self.phase = LivePhase::Progress;
                 } else {
                     // The person's signal that the change ended; the landing's checks follow.
@@ -1291,8 +1293,8 @@ impl LiveJudge<'_> {
                         last["task"]["chip"]["phase"].as_str().unwrap_or("?")
                     ));
                     self.found_at = calls.ends().len() - 1;
-                    self.queue(&["task", &change]);
-                    self.queue(&["task", &chat, "--json"]);
+                    self.queue(&["task", "show", &change]);
+                    self.queue(&["task", "show", &chat, "--json"]);
                     self.phase = LivePhase::Snapshot;
                 }
             }
@@ -1308,7 +1310,7 @@ impl LiveJudge<'_> {
                 self.snapshot = Some(last["digest"].as_str().ok_or("chat digest missing")?.to_owned());
 
                 self.pages = 0;
-                self.queue(&["chat", &chat, "--json"]);
+                self.queue(&["chat", "show", &chat, "--json"]);
                 self.phase = LivePhase::Pages;
             }
             LivePhase::Pages => self.read_page(calls, &last)?,
@@ -1379,12 +1381,12 @@ impl LiveJudge<'_> {
         if self.plan.first {
             // All fixed setup indices were consumed before these extra reads.
             if self.plan.kept {
-                self.queue(&["tasks", "--project", &self.tasks.project.to_string(), "--json"]);
+                self.queue(&["task", "list", "--project", &self.tasks.project.to_string(), "--json"]);
                 self.phase = LivePhase::Roots;
             } else {
-                self.queue(&["settings", "--json"]);
-                self.queue(&["setting", "charter", "1", "--json"]);
-                self.queue(&["setting", "charter", "2", "--json"]);
+                self.queue(&["settings", "show", "--json"]);
+                self.queue(&["settings", "show", "charter", "1", "--json"]);
+                self.queue(&["settings", "show", "charter", "2", "--json"]);
                 self.phase = LivePhase::Settings;
             }
         } else {
@@ -1411,7 +1413,8 @@ impl LiveJudge<'_> {
         fs::write(&file, serde_json::to_vec(&change).map_err(|error| error.to_string())?)
             .map_err(|error| error.to_string())?;
         self.queue(&[
-            "change-settings",
+            "settings",
+            "apply",
             file.to_str().ok_or("settings FILE path is not UTF-8")?,
             "--against",
             &revision.to_string(),
@@ -1444,8 +1447,8 @@ impl LiveJudge<'_> {
             require_chat_progress(&chat)?;
             require(now < self.wait_until.ok_or("delegate deadline missing")?, "chat did not delegate within 1800s")?;
             self.queue(&[
-                "wait",
                 "task",
+                "show",
                 &self.tasks.chat.to_string(),
                 "--until",
                 "replied",
@@ -1453,7 +1456,7 @@ impl LiveJudge<'_> {
                 "5s",
                 "--json",
             ]);
-            self.queue(&["accounts", "--json"]);
+            self.queue(&["account", "list", "--json"]);
             self.queue_delegates();
         } else {
             require(delegates.len() == 1, "one change delegated by the new chat")?;
@@ -1478,11 +1481,11 @@ impl LiveJudge<'_> {
         self.tools.extend(successful_tools(activity));
         self.replies.extend(replies_after(activity, self.ended_at.ok_or("change end missing")?)?);
         if let Some(before) = activity["before"]["value"].as_str() {
-            self.queue(&["chat", &chat, "--before", before, "--json"]);
+            self.queue(&["chat", "show", &chat, "--before", before, "--json"]);
         } else if self.replies.is_empty() {
             self.queue(&[
-                "wait",
                 "task",
+                "show",
                 &chat,
                 "--until",
                 "replied",
@@ -1492,20 +1495,20 @@ impl LiveJudge<'_> {
                 "5s",
                 "--json",
             ]);
-            self.queue(&["accounts", "--json"]);
-            self.queue(&["task", &chat, "--json"]);
+            self.queue(&["account", "list", "--json"]);
+            self.queue(&["task", "show", &chat, "--json"]);
             self.phase = LivePhase::Snapshot;
         } else {
             self.tasks_at = calls.ends().len();
             for parent in [&chat, &change] {
-                self.queue(&["tasks", "--project", &project, "--parent", parent, "--ended", "--json"]);
+                self.queue(&["task", "list", "--project", &project, "--parent", parent, "--ended", "--json"]);
             }
             if !self.plan.first {
                 let key = format!("close-live-chat-{chat}");
                 for args in [
-                    &["close", &chat, "--key", &key, "--json"][..],
-                    &["wait", "tree", &chat, "--until", "ended", "--timeout", "300s", "--json"],
-                    &["tasks", "--project", &project, "--json"],
+                    &["chat", "close", &chat, "--key", &key, "--json"][..],
+                    &["task", "tree", &chat, "--until", "ended", "--timeout", "300s", "--json"],
+                    &["task", "list", "--project", &project, "--json"],
                 ] {
                     self.queue(args);
                 }
@@ -1608,9 +1611,10 @@ impl LiveJudge<'_> {
 }
 impl LiveJudge<'_> {
     fn queue_delegates(&mut self) {
-        self.queue(&["task", &self.tasks.chat.to_string(), "--json"]);
+        self.queue(&["task", "show", &self.tasks.chat.to_string(), "--json"]);
         self.queue(&[
-            "tasks",
+            "task",
+            "list",
             "--project",
             &self.tasks.project.to_string(),
             "--parent",
@@ -1627,8 +1631,8 @@ impl LiveJudge<'_> {
         let change = self.tasks.change.to_string();
         let left = self.wait_until.ok_or("watch deadline missing")?.saturating_since(now).as_nanos() / 1_000_000_000;
         self.queue(&[
-            "wait",
             "task",
+            "show",
             &change,
             "--until",
             "ended",
@@ -1659,7 +1663,7 @@ impl LiveJudge<'_> {
             return;
         }
         let account = if self.plan.kept || self.account_checked {
-            self.diagnostic(&["accounts", "--json"]).and_then(|read| live_json(&read).ok())
+            self.diagnostic(&["account", "list", "--json"]).and_then(|read| live_json(&read).ok())
         } else {
             None
         };
@@ -1682,14 +1686,16 @@ impl LiveJudge<'_> {
         }
         // Each independent read uses ctl's existing 60s bound. Even an unknown
         // task or a broken read is evidence, never a reason to omit later reads.
-        for args in
-            [&["task", &chat, "--json"][..], &["task", &change, "--json"], &["tasks", "--project", &project, "--json"]]
-        {
+        for args in [
+            &["task", "show", &chat, "--json"][..],
+            &["task", "show", &change, "--json"],
+            &["task", "list", "--project", &project, "--json"],
+        ] {
             self.diagnostic(args);
         }
         let mut before = None::<String>;
         for _ in 0..32 {
-            let mut args = vec!["chat", &chat, "--json"];
+            let mut args = vec!["chat", "show", &chat, "--json"];
             if let Some(cursor) = &before {
                 args.extend(["--before", cursor]);
             }
@@ -1737,7 +1743,7 @@ impl LiveJudge<'_> {
         for index in self.checked..calls.ends().len() {
             let call = &calls.ends()[index];
             if (self.plan.kept || self.account_checked)
-                && self.arguments.get(index).is_some_and(|args| args == &["accounts", "--json"])
+                && self.arguments.get(index).is_some_and(|args| args == &["account", "list", "--json"])
                 && live_json(call).and_then(|value| super::live::ready_account(&value)).is_err()
             {
                 self.fail(KEPT_SIGN_IN_EXPIRED, calls, Some(index));
@@ -1755,7 +1761,10 @@ impl LiveJudge<'_> {
                     break;
                 }
             }
-            let not_yet = self.arguments.get(index).is_some_and(|args| args.first().is_some_and(|arg| arg == "wait"))
+            let not_yet = self
+                .arguments
+                .get(index)
+                .is_some_and(|args| args.iter().any(|arg| matches!(arg.as_str(), "--until" | "--since")))
                 && call.exit == Some(Exit::Code(3));
             if call.exit != Some(Exit::Code(0)) && !not_yet {
                 self.fail("live ctl failed", calls, Some(index));
@@ -2128,7 +2137,7 @@ fn kept_project(client: &std::path::Path, me: &serde_json::Value, pulls: &[serde
         else {
             continue;
         };
-        let read = super::ctl::alone(client, super::ctl::Call::new(&["task", &root.to_string(), "--json"]));
+        let read = super::ctl::alone(client, super::ctl::Call::new(&["task", "show", &root.to_string(), "--json"]));
         require(read.exit == Some(Exit::Code(0)), "kept change read failed")?;
         let task = live_json(&read)?;
         let project = task["project"].as_u64().ok_or("kept change project missing")?;

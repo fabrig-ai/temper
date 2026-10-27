@@ -177,7 +177,8 @@ pub(super) fn change(study: &Value, reads: &[Ended], file: &Path) -> ctl::Call {
     ]);
     write(file, &json!({"items":items}));
     ctl::Call::new(&[
-        "change-settings",
+        "settings",
+        "apply",
         file.to_str().expect("case settings FILE"),
         "--against",
         "1",

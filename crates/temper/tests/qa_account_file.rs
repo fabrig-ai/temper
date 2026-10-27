@@ -24,14 +24,14 @@ fn an_open_terminal_sees_the_move_and_the_tasks_moving_wait() {
 fn an_old_jigm_imports_and_its_next_export_uses_the_new_form() {
     use support::account_move_qa::{Fixture, success};
     let fixture = Fixture::new("qa-old-jigm-conversion");
-    success(&fixture.a().call(&["export", &fixture.number(), fixture.path()], None));
+    success(&fixture.a().call(&["account", "export", &fixture.number(), fixture.path()], None));
     let exported = std::fs::read(&fixture.file).expect("synthetic account export");
     support::write_private(&fixture.file, &old_encoder(&exported));
-    success(&fixture.b.call(&["import", fixture.path(), "--key", "qa-old-jigm"], None));
+    success(&fixture.b.call(&["account", "import", fixture.path(), "--key", "qa-old-jigm"], None));
     assert!(!fixture.file.exists(), "old file spent after adoption");
     let account = fixture.b.account_state("granted");
     let number = account["number"].as_u64().expect("adopted account number").to_string();
-    success(&fixture.b.call(&["export", &number, fixture.path()], None));
+    success(&fixture.b.call(&["account", "export", &number, fixture.path()], None));
     let converted = std::fs::read(&fixture.file).expect("next export");
     let converted_parts = exported_parts(&converted);
     let _record = skein_oauth::decode_record(converted_parts[5], &record_limits())

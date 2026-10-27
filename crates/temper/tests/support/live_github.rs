@@ -21,7 +21,7 @@ use std::{
 const WITHIN: Duration = Duration::from_secs(1200);
 const POLL: Duration = Duration::from_secs(2);
 /// Install links asked while setup is busy, one a poll: the reconcile after a connect is the
-/// engine's own, which `wait forges --until settled` does not cover (client/tools.md, 5.4).
+/// engine's own, which `forge list --until settled` does not cover (client/tools.md, 5.4).
 const BUSY: u32 = 30;
 const REPOSITORY: &str = "temper-probe";
 
@@ -273,7 +273,7 @@ impl Judge<'_> {
     fn install(&mut self, host: &mut cluster::Root) {
         // A key's first answer is replayed (client/tools.md, 7): each ask again draws a fresh key.
         let key = format!("live-install-{}", self.busy);
-        self.one(host, &["forge-install", "1", "--key", &key], Stage::Link);
+        self.one(host, &["forge", "install", "1", "--key", &key], Stage::Link);
     }
     fn elapsed(&self) -> u64 {
         self.now.saturating_since(self.started).as_nanos() / 1_000_000_000
@@ -284,7 +284,7 @@ impl Judge<'_> {
     }
     fn read_landing(&mut self, host: &mut cluster::Root, stage: Stage) {
         let mut reads = github_land::landing_reads();
-        reads.push(ctl::Call::new(&["task", "3", "--json"]));
+        reads.push(ctl::Call::new(&["task", "show", "3", "--json"]));
         self.queue(host, reads);
         self.stage = stage;
     }
@@ -294,6 +294,7 @@ impl Judge<'_> {
             vec![
                 ctl::Call::sign_in(),
                 ctl::Call::new(&[
+                    "account",
                     "add-key",
                     "1",
                     self.members.dir("llm").join("llm.key").to_str().expect("LLM key path"),
@@ -301,9 +302,10 @@ impl Judge<'_> {
                     "--key",
                     "live-llm",
                 ]),
-                ctl::Call::new(&["wait", "accounts", "--until", "usable"]),
+                ctl::Call::new(&["account", "list", "--until", "usable"]),
                 ctl::Call::new(&[
-                    "forge-connect",
+                    "forge",
+                    "connect",
                     "1",
                     "github-app",
                     &self.inputs.app.to_string(),
@@ -311,8 +313,8 @@ impl Judge<'_> {
                     "--key",
                     "live-app",
                 ]),
-                ctl::Call::new(&["wait", "forges", "--until", "connected:1"]),
-                ctl::Call::new(&["wait", "forges", "--until", "settled"]),
+                ctl::Call::new(&["forge", "list", "--until", "connected:1"]),
+                ctl::Call::new(&["forge", "list", "--until", "settled"]),
             ],
         );
         self.stage = Stage::Install;
@@ -381,7 +383,7 @@ impl Judge<'_> {
                 let response = github::request_url(self.clients, "GET", &url, "", b"");
                 assert_eq!(response.status, 200, "setup accepted");
                 self.seen.borrow_mut().outputs.push(response.body);
-                self.one(host, &["forges", "--json"], Stage::Accepted);
+                self.one(host, &["forge", "list", "--json"], Stage::Accepted);
             }
             Stage::Accepted => {
                 let row = Self::row(&ctl::json(&calls.ends()[0]));
@@ -389,6 +391,7 @@ impl Judge<'_> {
                     self.one(
                         host,
                         &[
+                            "repository",
                             "adopt",
                             "--project",
                             "1",
@@ -412,14 +415,23 @@ impl Judge<'_> {
                         Stage::Adopt,
                     );
                 } else {
-                    self.one(host, &["forges", "--json"], Stage::Accepted);
+                    self.one(host, &["forge", "list", "--json"], Stage::Accepted);
                 }
             }
             Stage::Adopt => {
                 assert!(ctl::json(&calls.ends()[0])["adopted"].is_object(), "repository adopted");
                 self.one(
                     host,
-                    &["chat", "--project", "1", "--key", "live-chat", "@forge_chat Make the live probe", "--json"],
+                    &[
+                        "chat",
+                        "start",
+                        "--project",
+                        "1",
+                        "--key",
+                        "live-chat",
+                        "@forge_chat Make the live probe",
+                        "--json",
+                    ],
                     Stage::Chat,
                 );
             }
@@ -427,8 +439,8 @@ impl Judge<'_> {
                 self.queue(
                     host,
                     vec![
-                        ctl::Call::new(&["wait", "task", "1", "--until", "replied"]),
-                        ctl::Call::new(&["wait", "task", "2", "--until", "ended", "--json"]),
+                        ctl::Call::new(&["task", "show", "1", "--until", "replied"]),
+                        ctl::Call::new(&["task", "show", "2", "--until", "ended", "--json"]),
                     ],
                 );
                 self.stage = Stage::Landed;
@@ -438,7 +450,7 @@ impl Judge<'_> {
                 assert_eq!(packet["task"]["chip"]["phase"], "ended");
                 assert_eq!(packet["task"]["result"]["value"]["change"]["kind"], 1);
                 self.seen.borrow_mut().landed = Some(packet["task"]["result"].clone());
-                self.one(host, &["task", "1", "--json"], Stage::Reply);
+                self.one(host, &["task", "show", "1", "--json"], Stage::Reply);
             }
             Stage::Reply => {
                 self.digest = Some(
@@ -447,19 +459,19 @@ impl Judge<'_> {
                         .expect("task digest")
                         .into(),
                 );
-                self.one(host, &["chat", "1", "--json"], Stage::Pages);
+                self.one(host, &["chat", "show", "1", "--json"], Stage::Pages);
             }
             Stage::Pages => {
                 let page = ctl::json(&calls.ends()[0]);
                 self.replied |= page["activity"]["rows"].to_string().contains("The change landed.");
                 if let Some(before) = page["activity"]["before"]["value"].as_str() {
-                    self.one(host, &["chat", "1", "--before", before, "--json"], Stage::Pages);
+                    self.one(host, &["chat", "show", "1", "--before", before, "--json"], Stage::Pages);
                 } else if !self.replied {
                     self.one(
                         host,
                         &[
-                            "wait",
                             "task",
+                            "show",
                             "1",
                             "--until",
                             "replied",
@@ -473,8 +485,8 @@ impl Judge<'_> {
                     self.queue(
                         host,
                         vec![
-                            ctl::Call::new(&["close", "1", "--key", "live-close", "--json"]),
-                            ctl::Call::new(&["wait", "task", "1", "--until", "ended", "--json"]),
+                            ctl::Call::new(&["chat", "close", "1", "--key", "live-close", "--json"]),
+                            ctl::Call::new(&["task", "show", "1", "--until", "ended", "--json"]),
                         ],
                     );
                     self.stage = Stage::Close;
@@ -486,7 +498,7 @@ impl Judge<'_> {
                 if self.accepted(&row) {
                     self.read_landing(host, Stage::After);
                 } else {
-                    self.one(host, &["forges", "--json"], Stage::Reconnected);
+                    self.one(host, &["forge", "list", "--json"], Stage::Reconnected);
                 }
             }
             Stage::Before | Stage::After => self.check_landing(host, calls),
@@ -638,8 +650,8 @@ impl Referee<cluster::Root> for Judge<'_> {
             self.queue(
                 host,
                 vec![
-                    ctl::Call::new(&["wait", "forges", "--until", "connected:1"]),
-                    ctl::Call::new(&["forges", "--json"]),
+                    ctl::Call::new(&["forge", "list", "--until", "connected:1"]),
+                    ctl::Call::new(&["forge", "list", "--json"]),
                 ],
             );
             self.stage = Stage::Reconnected;

@@ -220,7 +220,7 @@ fn a_running_box_adopts_every_seeded_repository_before_connecting() {
             support::write_private(&client.join("private/address"), format!("http://{address}\n").as_bytes());
             support::ctl::alone(
                 &client,
-                support::ctl::Call::bare(&[client.join("private").to_str().expect("client path"), "forges"]),
+                support::ctl::Call::bare(&[client.join("private").to_str().expect("client path"), "forge", "list"]),
             )
         },
     );

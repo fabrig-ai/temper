@@ -77,20 +77,23 @@ impl Existing {
             ExistingStage::Stray => {
                 let text = String::from_utf8_lossy(&calls.ends()[calls.ends().len() - 2].stdout);
                 assert!(text.contains("kept: the App is read-only"), "{text}");
-                assert!(text.contains("forge-accept 1 1"), "{text}");
+                assert!(text.contains("forge accept 1 1"), "{text}");
                 assert!(text.contains("Connecting: no installation accepted yet"), "{text}");
                 let row = Judge::row(&ctl::json(ended));
                 assert_eq!(row["read_only"], true);
                 assert_eq!(row["installations"][0]["stray"], true);
                 self.no_uninstall();
-                self.queue(host, vec![ctl::Call::new(&["forge-accept", "1", "1", "--key", "accept-existing"])]);
+                self.queue(host, vec![ctl::Call::new(&["forge", "accept", "1", "1", "--key", "accept-existing"])]);
                 self.stage = ExistingStage::Accept;
             }
             ExistingStage::Accept => {
                 let text = String::from_utf8_lossy(&ended.stdout);
                 assert!(text.contains("accepted: installation 1 on forge 1"), "{text}");
-                assert!(text.contains("repositories 1 --installation 1"), "{text}");
-                self.queue(host, vec![ctl::Call::new(&["forges"]), ctl::Call::new(&["forges", "--json"])]);
+                assert!(text.contains("forge repositories 1 --installation 1"), "{text}");
+                self.queue(
+                    host,
+                    vec![ctl::Call::new(&["forge", "list"]), ctl::Call::new(&["forge", "list", "--json"])],
+                );
                 self.stage = ExistingStage::Accepted;
             }
             ExistingStage::Accepted => {
@@ -100,7 +103,7 @@ impl Existing {
                 let row = Judge::row(&ctl::json(ended));
                 assert_eq!(row["installations"][0]["stray"], false);
                 assert_eq!(row["state"], "connected");
-                self.queue(host, vec![ctl::Call::new(&["repositories", "1", "--installation", "1"])]);
+                self.queue(host, vec![ctl::Call::new(&["forge", "repositories", "1", "--installation", "1"])]);
                 self.stage = ExistingStage::Repositories;
             }
             ExistingStage::Repositories => {
@@ -111,7 +114,7 @@ impl Existing {
             }
             ExistingStage::Adopt => {
                 assert!(ctl::json(ended)["adopted"].is_object());
-                self.queue(host, vec![ctl::Call::new(&["forge-accept", "1", "999"])]);
+                self.queue(host, vec![ctl::Call::new(&["forge", "accept", "1", "999"])]);
                 self.stage = ExistingStage::Missing;
             }
             ExistingStage::Missing => {
@@ -171,7 +174,8 @@ impl Referee<cluster::Root> for Existing {
                 vec![
                     ctl::Call::sign_in(),
                     ctl::Call::new(&[
-                        "forge-connect",
+                        "forge",
+                        "connect",
                         "1",
                         "github-app",
                         &self.app.as_ref().expect("made App").id.to_string(),
@@ -179,10 +183,10 @@ impl Referee<cluster::Root> for Existing {
                         "--key",
                         "connect-existing",
                     ]),
-                    ctl::Call::new(&["wait", "forges", "--until", "connected:1"]),
-                    ctl::Call::new(&["wait", "forges", "--until", "settled"]),
-                    ctl::Call::new(&["forges"]),
-                    ctl::Call::new(&["forges", "--json"]),
+                    ctl::Call::new(&["forge", "list", "--until", "connected:1"]),
+                    ctl::Call::new(&["forge", "list", "--until", "settled"]),
+                    ctl::Call::new(&["forge", "list"]),
+                    ctl::Call::new(&["forge", "list", "--json"]),
                 ],
             );
             self.stage = ExistingStage::Stray;
