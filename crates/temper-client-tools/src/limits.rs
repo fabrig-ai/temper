@@ -74,11 +74,14 @@ pub fn client() -> client::Limits {
 pub fn tools() -> crate::jig::Limits {
     let preset = client().client;
     let client = preset.domain;
+    let mut settings = jig_client_protocol_link::Limits::new(client, preset.exchanges)
+        .expect("checked host client limits")
+        .wire;
+    // The settings form's executor bound is independent of the client's grant capacity.
+    settings.owner_delegation_kinds = settings_form::Limits::standard().settings.owner_delegation_kinds;
     crate::jig::Limits {
         rows: client.rows,
-        settings: jig_client_protocol_link::Limits::new(client, preset.exchanges)
-            .expect("checked host client limits")
-            .wire,
+        settings,
         program_login: b"temper program-login",
         application: b"temper",
         ask_bytes: client.ask_bytes,
