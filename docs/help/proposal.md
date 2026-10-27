@@ -43,7 +43,8 @@ change, or a start, makes a new revision.
   and policy that stand then.
 - A holder decides only the kinds of proposal their role decides.
 - A proposal of settings is accepted only by an owner of the deployment,
-  with a running choice: running work stays on its revision, or moves.
+  with a running choice: running work stays on its revision, as when no
+  choice is given, or moves.
 - Its proposer reads the outcome with `proposal show`.
 - A decision asked again under its key gets its first answer again. A
   decision of a proposal decided already, by anyone, answers `decided
