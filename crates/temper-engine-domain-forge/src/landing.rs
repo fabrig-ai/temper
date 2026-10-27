@@ -145,6 +145,37 @@ impl Domain {
         }
         self.landing.projects.insert(project, (way, gates)).is_ok()
     }
+    /// Check admission before the root allocates its deployment-funded task.
+    pub fn landing_admits(&self, project: u32, changes: &[u64]) -> Result<(), crate::LandingRefusal> {
+        use crate::LandingRefusal;
+        if self.landing.way(project) != change::Way::Turn {
+            return Err(LandingRefusal::Way);
+        }
+        if changes.is_empty() || changes.len() > usize::try_from(self.landing.limits.landing_members).expect("bound") {
+            return Err(LandingRefusal::Members);
+        }
+        for (index, task) in changes.iter().enumerate() {
+            let row = self.changes.get(task).ok_or(LandingRefusal::Repository)?;
+            let repo = self.repositories.get(&row.repository).ok_or(LandingRefusal::Repository)?;
+            if repo.project != project || row.pull.is_none() || row.change.landing.is_some() {
+                return Err(LandingRefusal::Repository);
+            }
+            for prior in changes.get(..index).expect("preceding members") {
+                if self.changes.get(prior).expect("checked member").repository == row.repository {
+                    return Err(LandingRefusal::Repository);
+                }
+            }
+        }
+        if self.landing.rows.len() == self.landing.limits.landings {
+            for (_, row) in &self.landing.rows {
+                if row.entries.is_empty() && matches_terminal(&row.landing.phase) {
+                    return Ok(());
+                }
+            }
+            return Err(LandingRefusal::Landings);
+        }
+        Ok(())
+    }
     #[must_use]
     pub fn landing(&self, task: u64) -> Option<&LandingRow> {
         self.landing.rows.get(&task)
@@ -176,37 +207,24 @@ fn save(d: &mut Domain, row: LandingRow, out: &mut Queue<Request>) {
 }
 pub(crate) fn register(d: &mut Domain, env: &Env<Limits>, row: LandingRow, out: &mut Queue<Request>) {
     let task = row.landing.task;
-    let mut valid = !d.landing.rows.contains_key(&task)
-        && !row.landing.members.is_empty()
-        && row.landing.members.len() <= usize::try_from(env.limits.landing_members).expect("u32 fits")
-        && row.asks.len() == row.landing.members.len()
-        && row.entries.is_empty();
-    for (index, member) in row.landing.members.iter().enumerate() {
-        let repo = repository(member);
-        let gates = d.landing.gates(row.landing.project, repo);
-        valid &= member.gates.len() == gates.len()
-            && member.gates.len() <= usize::try_from(env.limits.gates).expect("u32 fits");
-        valid &= match d.changes.get(&member.change) {
-            Some(change) => {
-                change.repository == repo && change.pull == Some(member.pull) && change.change.landing.is_none()
-            }
-            None => false,
-        };
-        valid &= match d.repositories.get(&repo) {
-            Some(repo) => repo.project == row.landing.project,
-            None => false,
-        };
-        for prior in row.landing.members.get(..index).expect("preceding positions") {
-            valid &= prior.repository != member.repository && prior.change != member.change;
-        }
+    let mut changes = List::with_capacity(env.limits.landing_members);
+    for member in &row.landing.members {
+        changes.push(member.change).expect("preflighted member count");
+        let change = d.changes.get(&member.change).expect("preflighted member");
+        assert_eq!(change.repository, repository(member), "preflighted repository");
+        assert_eq!(change.pull, Some(member.pull), "preflighted pull");
+        assert_eq!(
+            member.gates.len(),
+            d.landing.gates(row.landing.project, repository(member)).len(),
+            "configured gates"
+        );
     }
-    if !valid || d.landing.way(row.landing.project) != change::Way::Turn {
-        emit(out, Request::Refused { task });
-        return;
-    }
-    if d.landing.rows.len() == env.limits.landings && !retire_finished(d, out) {
-        emit(out, Request::Refused { task });
-        return;
+    d.landing_admits(row.landing.project, changes.as_slice()).expect("root preflighted landing in this decision");
+    assert!(!d.landing.rows.contains_key(&task), "fresh landing task");
+    assert_eq!(row.asks.len(), row.landing.members.len(), "one ask per member");
+    assert!(row.entries.is_empty(), "new landing has no effects");
+    if d.landing.rows.len() == env.limits.landings {
+        assert!(retire_finished(d, out), "preflight found a reclaimable terminal landing");
     }
     for member in &row.landing.members {
         let change = d.changes.get_mut(&member.change).expect("validated member");
@@ -1595,4 +1613,16 @@ fn retire_finished(d: &mut Domain, out: &mut Queue<Request>) -> bool {
     }
     emit(out, Request::Erase { key: Key::Landing(task) });
     true
+}
+
+fn matches_terminal(phase: &policy::Phase) -> bool {
+    match phase {
+        policy::Phase::Landed | policy::Phase::Cancelled => true,
+        policy::Phase::Waiting
+        | policy::Phase::Preparing
+        | policy::Phase::Proving
+        | policy::Phase::Proved { .. }
+        | policy::Phase::Turn { .. }
+        | policy::Phase::Held { .. } => false,
+    }
 }
