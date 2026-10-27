@@ -2,28 +2,28 @@ use crate::{jig::call::Parsed, tests::fixtures as f};
 use jig_client::contract as c;
 use skein_lib::{List, Secret};
 const KEY: &[u8] = b"one-use-private-key";
-const ADD: &[&str] = &["add-key", "9", "key-file", "--deployment", "--key", "add"];
+const ADD: &[&str] = &["account", "add-key", "9", "key-file", "--deployment", "--key", "add"];
 const FORMS: &[&[&str]] = &[
-    &["export", "43", "file"],
-    &["import", "file", "--key", "move-in"],
-    &["connect", "9", "--key", "connect"],
-    &["connect", "0", "--key", "zero-provider"],
-    &["add-key", "0", "file", "--key", "zero-provider"],
-    &["disconnect", "43", "--source", "sign_in"],
+    &["account", "export", "43", "file"],
+    &["account", "import", "file", "--key", "move-in"],
+    &["account", "connect", "9", "--key", "connect"],
+    &["account", "connect", "0", "--key", "zero-provider"],
+    &["account", "add-key", "0", "file", "--key", "zero-provider"],
+    &["account", "disconnect", "43", "--source", "sign_in"],
     ADD,
-    &["add-key", "9", "file", "--account", "43", "--key", "join"],
-    &["replace-key", "43", "file"],
-    &["forget", "0"],
-    &["rank", "0", "1"],
-    &["add-key", "9", "file", "--account", "0", "--key", "k"],
-    &["forget", "43"],
-    &["forget", "43", "--source", "key"],
-    &["rank", "43", "2", "--source", "program"],
-    &["retry", "43"],
-    &["declare", "9", "helper", "work-login", "--key", "declare"],
-    &["declare", "9", "helper", "work-login", "--account", "43", "--key", "join"],
-    &["verify", "43"],
-    &["verify", "43", "--source", "program", "--key", "check"],
+    &["account", "add-key", "9", "file", "--account", "43", "--key", "join"],
+    &["account", "replace-key", "43", "file"],
+    &["account", "forget", "0"],
+    &["account", "rank", "0", "1"],
+    &["account", "add-key", "9", "file", "--account", "0", "--key", "k"],
+    &["account", "forget", "43"],
+    &["account", "forget", "43", "--source", "key"],
+    &["account", "rank", "43", "2", "--source", "program"],
+    &["account", "retry", "43"],
+    &["account", "declare", "9", "helper", "work-login", "--key", "declare"],
+    &["account", "declare", "9", "helper", "work-login", "--account", "43", "--key", "join"],
+    &["account", "verify", "43"],
+    &["account", "verify", "43", "--source", "program", "--key", "check"],
 ];
 #[test]
 fn account_forms_round_trip_through_the_table() {
@@ -36,16 +36,16 @@ fn account_forms_round_trip_through_the_table() {
 #[test]
 fn account_usage_is_refused_before_sending() {
     for words in [
-        &["export", "43", "file", "--key", "forbidden"][..],
-        &["export", "4294967296", "file"],
-        &["export", "43", "-"],
-        &["import", "file"],
-        &["import", "-", "--key", "move-in"],
-        &["connect", "9"],
-        &["add-key", "9", "file"],
-        &["add-key", "9", "-", "--key", "add"],
-        &["rank", "43", "0"],
-        &["retry", "4294967296"],
+        &["account", "export", "43", "file", "--key", "forbidden"][..],
+        &["account", "export", "4294967296", "file"],
+        &["account", "export", "43", "-"],
+        &["account", "import", "file"],
+        &["account", "import", "-", "--key", "move-in"],
+        &["account", "connect", "9"],
+        &["account", "add-key", "9", "file"],
+        &["account", "add-key", "9", "-", "--key", "add"],
+        &["account", "rank", "43", "0"],
+        &["account", "retry", "4294967296"],
     ] {
         assert!(f::parse(words).is_err(), "{words:?}");
     }
@@ -53,14 +53,14 @@ fn account_usage_is_refused_before_sending() {
 #[test]
 fn account_acts_preserve_the_resolved_source() {
     for (words, change) in [
-        (&["forget", "43"][..], c::AccountChange::Remove { account: f::ACCOUNT }),
-        (&["forget", "43", "--source", "key"], c::AccountChange::RemoveKey { source: f::SOURCE }),
-        (&["rank", "43", "2"], c::AccountChange::MoveAccount { account: f::ACCOUNT, place: 1 }),
+        (&["account", "forget", "43"][..], c::AccountChange::Remove { account: f::ACCOUNT }),
+        (&["account", "forget", "43", "--source", "key"], c::AccountChange::RemoveKey { source: f::SOURCE }),
+        (&["account", "rank", "43", "2"], c::AccountChange::MoveAccount { account: f::ACCOUNT, place: 1 }),
         (
-            &["rank", "43", "2", "--source", "key"],
+            &["account", "rank", "43", "2", "--source", "key"],
             c::AccountChange::MoveSource { account: f::ACCOUNT, source: f::SOURCE, place: 1 },
         ),
-        (&["retry", "43"], c::AccountChange::Resume { source: f::SOURCE }),
+        (&["account", "retry", "43"], c::AccountChange::Resume { source: f::SOURCE }),
     ] {
         for owner in [false, true] {
             let mut root = f::account_root(owner);
@@ -83,7 +83,7 @@ fn account_acts_preserve_the_resolved_source() {
 fn ambiguous_sources_are_refused_before_sending() {
     for cut in [false, true] {
         let mut root = f::account_root(false);
-        let call = root.submit(&["retry", "43", "--source", "key"]);
+        let call = root.submit(&["account", "retry", "43", "--source", "key"]);
         let mut accounts = f::accounts();
         let row = accounts.accounts.get_mut(0).expect("row");
         let source = row.sources.get(0).expect("source").clone();
@@ -100,8 +100,12 @@ fn ambiguous_sources_are_refused_before_sending() {
 fn a_key_value_never_enters_the_request_store() {
     for (words, holder, join) in [
         (ADD, c::AccountHolder::Deployment, None),
-        (&["add-key", "9", "file", "--key", "add"][..], c::AccountHolder::Own, None),
-        (&["add-key", "9", "file", "--account", "43", "--key", "add"], c::AccountHolder::Own, Some(f::ACCOUNT)),
+        (&["account", "add-key", "9", "file", "--key", "add"][..], c::AccountHolder::Own, None),
+        (
+            &["account", "add-key", "9", "file", "--account", "43", "--key", "add"],
+            c::AccountHolder::Own,
+            Some(f::ACCOUNT),
+        ),
     ] {
         let mut root = f::account_root(false);
         let call = root.submit_value(words, Some(Secret::new(KEY.into())));
@@ -127,7 +131,7 @@ fn a_key_value_never_enters_the_request_store() {
 #[test]
 fn connect_prints_the_watch_that_follows_its_address() {
     let mut root = f::account_root(false);
-    let call = root.submit(&["connect", "0", "--key", "connect"]);
+    let call = root.submit(&["account", "connect", "0", "--key", "connect"]);
     assert_eq!(
         root.sends.get(&call).expect("configured provider zero").2,
         jig_client::Ask::Jig(Box::new(c::Ask::SignIn { holder: c::AccountHolder::Own, provider: 0 }))
@@ -146,7 +150,7 @@ fn connect_prints_the_watch_that_follows_its_address() {
 #[test]
 fn unconfirmed_disconnect_names_the_provider_settings() {
     let mut root = f::account_root(false);
-    let call = root.submit(&["disconnect", "43"]);
+    let call = root.submit(&["account", "disconnect", "43"]);
     let mut me = f::me(f::PARTY);
     me.providers = f::provider_offers();
     root.deliver(c::Delivery::Me(Box::new(me)));
@@ -201,11 +205,11 @@ fn an_engine_key_refusal_exits_two() {
 #[test]
 fn replacement_draws_an_ephemeral_name() {
     let mut root = f::account_root(false);
-    let call = root.submit_value(&["replace-key", "43", "file"], Some(Secret::new(KEY.into())));
+    let call = root.submit_value(&["account", "replace-key", "43", "file"], Some(Secret::new(KEY.into())));
     f::deliver_accounts(&mut root, f::accounts());
     let first = root.sent_name(call).expect("drawn name");
     root.done(call, c::Outcome::Owner(c::OwnerOutcome::AccountKeyKept { source: f::SOURCE }));
-    let next = root.submit_value(&["replace-key", "43", "file"], Some(Secret::new(KEY.into())));
+    let next = root.submit_value(&["account", "replace-key", "43", "file"], Some(Secret::new(KEY.into())));
     f::deliver_accounts(&mut root, f::accounts());
     assert_ne!(first, root.sent_name(next).expect("second drawn name"));
     assert!(root.saved.is_empty());
@@ -233,7 +237,7 @@ fn source_shorthand_resolves_the_supplied_kind() {
     for (word, kind) in [("sign_in", c::OwnerAccountKind::SignIn), ("program", c::OwnerAccountKind::Program)] {
         for tool in ["disconnect", "forget"] {
             let mut root = f::account_root(false);
-            let call = root.submit(&[tool, "43", "--source", word]);
+            let call = root.submit(&["account", tool, "43", "--source", word]);
             let mut accounts = f::accounts();
             accounts.accounts.get_mut(0).expect("account").sources.get_mut(0).expect("source").kind = kind;
             f::deliver_accounts(&mut root, accounts);
@@ -248,14 +252,15 @@ fn source_shorthand_resolves_the_supplied_kind() {
 #[test]
 fn a_named_replacement_uses_the_supplied_name() {
     let mut root = f::account_root(false);
-    let call = root.submit_value(&["replace-key", "43", "file", "--key", "replacement"], Some(Secret::new(KEY.into())));
+    let call = root
+        .submit_value(&["account", "replace-key", "43", "file", "--key", "replacement"], Some(Secret::new(KEY.into())));
     f::deliver_accounts(&mut root, f::accounts());
     assert_eq!(root.sent_name(call), Some(f::named("replacement")));
 }
 #[test]
 fn account_zero_reaches_its_holder() {
     let mut root = f::account_root(false);
-    let call = root.submit(&["forget", "0"]);
+    let call = root.submit(&["account", "forget", "0"]);
     let mut accounts = f::accounts();
     accounts.accounts.get_mut(0).expect("account").number = 0;
     f::deliver_accounts(&mut root, accounts);
@@ -265,7 +270,7 @@ fn account_zero_reaches_its_holder() {
 fn a_lost_replacement_prints_its_recoverable_name() {
     for envelope in [skein_lib::RequestEnvelope::Again, skein_lib::RequestEnvelope::Lost] {
         let mut root = f::account_root(false);
-        let call = root.submit_value(&["replace-key", "43", "file"], Some(Secret::new(KEY.into())));
+        let call = root.submit_value(&["account", "replace-key", "43", "file"], Some(Secret::new(KEY.into())));
         f::deliver_accounts(&mut root, f::accounts());
         let (attempt, name, _) = root.sends.get(&call).expect("first replacement").clone();
         root.client(jig_client::Event::Up {
@@ -290,9 +295,9 @@ fn declare_validates_the_offer_and_sends_only_the_contract_fields() {
         me.providers = f::provider_offers();
         root.deliver(c::Delivery::Me(Box::new(me)));
         let words = if join {
-            &["declare", "9", "helper", "work-login", "--account", "43", "--key", "declaration"][..]
+            &["account", "declare", "9", "helper", "work-login", "--account", "43", "--key", "declaration"][..]
         } else {
-            &["declare", "9", "helper", "work-login", "--key", "declaration"][..]
+            &["account", "declare", "9", "helper", "work-login", "--key", "declaration"][..]
         };
         let call = root.submit(words);
         let (_, name, ask) = root.sends.get(&call).expect("declaration");
@@ -323,8 +328,8 @@ fn declare_validates_the_offer_and_sends_only_the_contract_fields() {
 #[test]
 fn declare_refuses_unoffered_adapters_and_providers_locally() {
     for words in [
-        &["declare", "9", "absent", "work-login", "--key", "declaration"][..],
-        &["declare", "99", "helper", "work-login", "--key", "declaration"],
+        &["account", "declare", "9", "absent", "work-login", "--key", "declaration"][..],
+        &["account", "declare", "99", "helper", "work-login", "--key", "declaration"],
     ] {
         let mut root = f::account_root(false);
         let mut me = f::me(f::PARTY);
@@ -351,7 +356,7 @@ fn declare_refuses_unchecked_adapters_when_provider_offers_are_cut() {
             me.providers = List::with_capacity(0);
         }
         root.deliver(c::Delivery::Me(Box::new(me)));
-        let call = root.submit(&["declare", "9", "absent", "work-login", "--key", "declaration"]);
+        let call = root.submit(&["account", "declare", "9", "absent", "work-login", "--key", "declaration"]);
         let printed = root.answer(call).expect("local refusal");
         assert_eq!(printed.status, 1);
         assert!(skein_lib::bytes::find(&printed.stderr, b"provider offers cut in me; adapter unchecked").is_some());
@@ -362,22 +367,26 @@ fn declare_refuses_unchecked_adapters_when_provider_offers_are_cut() {
 #[test]
 fn declare_checks_the_portable_name_bound_in_argv_and_json() {
     for name in ["", "UPPER", "with_space ", "../escape", "abcdefghijklmnopqrstuvwxyz1234567"] {
-        f::parse(&["declare", "9", "helper", name, "--key", "k"]).expect_err("invalid portable name");
+        f::parse(&["account", "declare", "9", "helper", name, "--key", "k"]).expect_err("invalid portable name");
     }
     for name in ["a", "-", "abcdefghijklmnopqrstuvwxyz123456"] {
-        let call = f::call(&["declare", "9", "helper", name, "--key", "k"]);
+        let call = f::call(&["account", "declare", "9", "helper", name, "--key", "k"]);
         assert_eq!(f::printed(&call), Parsed::Call { call, json: false });
     }
-    f::parse(&["declare", "9", "helper", "work-login"]).expect_err("declaration needs a key");
-    f::parse(&["declare", "4294967296", "helper", "work-login", "--key", "k"]).expect_err("provider fits u32");
+    f::parse(&["account", "declare", "9", "helper", "work-login"]).expect_err("declaration needs a key");
+    f::parse(&["account", "declare", "4294967296", "helper", "work-login", "--key", "k"])
+        .expect_err("provider fits u32");
 }
 #[test]
 fn verify_asks_the_supplied_program_source_then_names_the_wait() {
     for owner in [false, true] {
         for json in [false, true] {
             let mut root = f::account_root(owner);
-            let words =
-                if json { &["verify", "43", "--source", "program", "--json"][..] } else { &["verify", "43"][..] };
+            let words = if json {
+                &["account", "verify", "43", "--source", "program", "--json"][..]
+            } else {
+                &["account", "verify", "43"][..]
+            };
             let call = root.submit(words);
             let mut accounts = f::accounts();
             accounts.accounts.get_mut(0).expect("account").sources.get_mut(0).expect("source").kind =
@@ -411,7 +420,7 @@ fn verify_asks_the_supplied_program_source_then_names_the_wait() {
 fn verify_refuses_sources_without_a_program_login_locally() {
     for kind in [c::OwnerAccountKind::Key, c::OwnerAccountKind::SignIn, c::OwnerAccountKind::None] {
         let mut root = f::account_root(false);
-        let call = root.submit(&["verify", "43"]);
+        let call = root.submit(&["account", "verify", "43"]);
         let mut accounts = f::accounts();
         accounts.accounts.get_mut(0).expect("account").sources.get_mut(0).expect("source").kind = kind;
         f::deliver_accounts(&mut root, accounts);
@@ -427,7 +436,7 @@ fn forget_with_cut_sources_keeps_the_source_kinds_unknown() {
     for kind in [c::OwnerAccountKind::Key, c::OwnerAccountKind::Program, c::OwnerAccountKind::SignIn] {
         for failed in [false, true] {
             let mut root = f::account_root(false);
-            let call = root.submit(&["forget", "43"]);
+            let call = root.submit(&["account", "forget", "43"]);
             let mut accounts = f::accounts();
             let row = accounts.accounts.get_mut(0).expect("account");
             row.sources.get_mut(0).expect("source").kind = kind;
@@ -498,7 +507,7 @@ fn restored_unconfirmed_sign_out_and_removal_print_the_provider_settings_advice(
 fn mixed_forget_reports_program_hosts_independently_of_sign_in_revocation() {
     for failed in [false, true] {
         let mut root = f::account_root(false);
-        let call = root.submit(&["forget", "43"]);
+        let call = root.submit(&["account", "forget", "43"]);
         let mut accounts = f::accounts();
         let row = accounts.accounts.get_mut(0).expect("account");
         let mut source = row.sources.get(0).expect("source").clone();
@@ -537,7 +546,11 @@ fn confirmed_key_and_sign_in_results_keep_done_in_text_only() {
             for json in [false, true] {
                 let mut root = f::account_root(false);
                 let word = if remove { "forget" } else { "disconnect" };
-                let call = if json { root.submit(&[word, "43", "--json"]) } else { root.submit(&[word, "43"]) };
+                let call = if json {
+                    root.submit(&["account", word, "43", "--json"])
+                } else {
+                    root.submit(&["account", word, "43"])
+                };
                 let mut accounts = f::accounts();
                 accounts.accounts.get_mut(0).expect("account").sources.get_mut(0).expect("source").kind = kind;
                 f::deliver_accounts(&mut root, accounts);
@@ -566,7 +579,11 @@ fn confirmed_key_and_sign_in_results_keep_done_in_text_only() {
 
 #[test]
 fn program_disconnect_and_forget_report_confirmation_or_each_failed_host() {
-    for words in [&["disconnect", "43"][..], &["forget", "43", "--source", "program"], &["forget", "43"]] {
+    for words in [
+        &["account", "disconnect", "43"][..],
+        &["account", "forget", "43", "--source", "program"],
+        &["account", "forget", "43"],
+    ] {
         for confirmed in [false, true] {
             for json in [false, true] {
                 let mut root = f::account_root(false);
@@ -595,7 +612,7 @@ fn program_disconnect_and_forget_report_confirmation_or_each_failed_host() {
                         c::AccountHostFailure { name: b"builder".as_slice().into(), why: c::AccountHostWhy::Failed },
                     ])
                 };
-                let done = if words.len() == 2 && words[0] == "forget" {
+                let done = if words.len() == 3 && words[1] == "forget" {
                     c::OwnerOutcome::AccountRemoved { confirmed, failed_hosts }
                 } else {
                     c::OwnerOutcome::AccountSignedOut { confirmed, failed_hosts }
@@ -628,7 +645,7 @@ fn program_disconnect_and_forget_report_confirmation_or_each_failed_host() {
 fn exports_resolve_the_holder_without_selecting_a_source() {
     for owner in [false, true] {
         let mut root = f::account_root(owner);
-        let call = root.submit(&["export", "43", "record"]);
+        let call = root.submit(&["account", "export", "43", "record"]);
         let mut accounts = f::accounts();
         // Source state and completeness are the engine's policy, not ctl's.
         accounts.accounts.get_mut(0).expect("account").sources = List::with_capacity(0);
@@ -657,7 +674,8 @@ fn exports_resolve_the_holder_without_selecting_a_source() {
 fn imports_carry_the_whole_record_once_as_own_at_the_bound() {
     const RECORD: &[u8] = &[b'r'; 131_072]; // client/tools.md, 12.
     let mut root = f::account_root(false);
-    let call = root.submit_value(&["import", "record", "--key", "move-in"], Some(Secret::new(RECORD.into())));
+    let call =
+        root.submit_value(&["account", "import", "record", "--key", "move-in"], Some(Secret::new(RECORD.into())));
     let (_, _, ask) = root.sends.get(&call).expect("move in sent");
     assert_eq!(
         ask,
@@ -674,7 +692,8 @@ fn imports_refuse_empty_or_oversized_values_before_sending() {
     const TOO_LARGE: &[u8] = &[b'r'; 131_073]; // One beyond client/tools.md, 12.
     for bytes in [b"".as_slice(), TOO_LARGE] {
         let mut root = f::account_root(false);
-        let call = root.submit_value(&["import", "record", "--key", "move-in"], Some(Secret::new(bytes.into())));
+        let call =
+            root.submit_value(&["account", "import", "record", "--key", "move-in"], Some(Secret::new(bytes.into())));
         let printed = root.answer(call).expect("bound failure");
         assert_eq!(printed.status, 1);
         assert_eq!(printed.file, crate::jig::FileEnd::Keep);
@@ -687,7 +706,11 @@ fn exports_wait_for_the_record_acknowledgment_and_render_public_fields() {
     const RECORD: &[u8] = b"opaque-move-record";
     for json in [false, true] {
         let mut root = f::account_root(false);
-        let call = root.submit(if json { &["export", "43", "record", "--json"] } else { &["export", "43", "record"] });
+        let call = root.submit(if json {
+            &["account", "export", "43", "record", "--json"]
+        } else {
+            &["account", "export", "43", "record"]
+        });
         f::deliver_accounts(&mut root, f::accounts());
         let name = root.sent_name(call).expect("move name");
         root.done(
@@ -739,9 +762,9 @@ fn imports_render_the_account_and_renewal_from_the_answer() {
         {
             let mut root = f::account_root(false);
             let words = if json {
-                &["import", "record", "--key", "move-in", "--json"][..]
+                &["account", "import", "record", "--key", "move-in", "--json"][..]
             } else {
-                &["import", "record", "--key", "move-in"]
+                &["account", "import", "record", "--key", "move-in"]
             };
             let call = root.submit_value(words, Some(Secret::new(KEY.into())));
             root.done(call, c::Outcome::Owner(c::OwnerOutcome::AccountMovedIn { account: f::ACCOUNT, renewed }));

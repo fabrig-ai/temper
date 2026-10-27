@@ -23,7 +23,7 @@ pub use recovery::{dropped, kept_chat, other_party, small_store};
 pub const LINK: &[u8] = b"http://127.0.0.1:4000/jig/v1/sign-in/link?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const LINK_FILE: Fd = Fd::new(23);
 pub const FILE_PARENT: Fd = Fd::new(6);
-pub const CHAT: &[&[u8]] = &[b"chat", b"hello", b"--project", b"shop", b"--key", b"start-chat"];
+pub const CHAT: &[&[u8]] = &[b"chat", b"start", b"hello", b"--project", b"shop", b"--key", b"start-chat"];
 const DIRECTORY: Fd = Fd::new(20);
 const ADDRESS: Fd = Fd::new(21);
 const TOKEN: Fd = Fd::new(22);

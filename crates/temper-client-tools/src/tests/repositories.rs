@@ -5,7 +5,9 @@ use temper_client_protocol_wire::{self as wire, v1 as w};
 
 #[test]
 fn repositories_parses_bounds_defaults_and_the_requested_installation_and_page() {
-    for words in [&["repositories", "3"][..], &["repositories", "3", "--installation", "11", "--page", "2"]] {
+    for words in
+        [&["forge", "repositories", "3"][..], &["forge", "repositories", "3", "--installation", "11", "--page", "2"]]
+    {
         let mut root = f::signed_in(f::PARTY);
         let call = root.submit(words);
         let client::Ask::Family { scope: c::Scope::Deployment, record } = &root.sends[&call].2 else {
@@ -16,19 +18,20 @@ fn repositories_parses_bounds_defaults_and_the_requested_installation_and_page()
         let request = wire::decode_requesting(&record.bytes, &bounds).unwrap();
         let w::Request::Reachable(request) = request.into_parts().request else { panic!("reachable") };
         assert_eq!(request.forge(), 3);
-        assert_eq!(*request.installation(), if words.len() == 2 { None } else { Some(11) });
-        assert_eq!(request.page(), if words.len() == 2 { 1 } else { 2 });
+        assert_eq!(*request.installation(), if words.len() == 3 { None } else { Some(11) });
+        assert_eq!(request.page(), if words.len() == 3 { 1 } else { 2 });
     }
     for words in [
-        &["repositories", "0"][..],
-        &["repositories", "65536"],
-        &["repositories", "3", "--page", "0"],
-        &["repositories", "3", "--page", "4294967296"],
-        &["repositories", "3", "--installation", "0"],
+        &["forge", "repositories", "0"][..],
+        &["forge", "repositories", "65536"],
+        &["forge", "repositories", "3", "--page", "0"],
+        &["forge", "repositories", "3", "--page", "4294967296"],
+        &["forge", "repositories", "3", "--installation", "0"],
     ] {
         f::parse(words).expect_err("bound");
     }
-    f::parse(&["repositories", "65535", "--page", "4294967295", "--installation", "18446744073709551615"]).unwrap();
+    f::parse(&["forge", "repositories", "65535", "--page", "4294967295", "--installation", "18446744073709551615"])
+        .unwrap();
 }
 fn page(more: bool) -> w::Outcome {
     let bounds = temper_client_domain::forge::wire_limits(&f::limits_root().domain.forge).unwrap();
@@ -55,7 +58,7 @@ fn page(more: bool) -> w::Outcome {
 fn repositories_prints_rows_ids_privacy_and_the_next_call_or_no_more() {
     for more in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["repositories", "3", "--installation", "11", "--page", "2"]);
+        let call = root.submit(&["forge", "repositories", "3", "--installation", "11", "--page", "2"]);
         root.adoption_answer(call, page(more));
         let printed = root.answer(call).unwrap();
         assert_eq!(printed.status, 0);
@@ -72,7 +75,7 @@ fn repositories_prints_rows_ids_privacy_and_the_next_call_or_no_more() {
 #[test]
 fn repositories_json_keeps_the_page_shape() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit_prepared(f::call(&["repositories", "3"]), true, None);
+    let call = root.submit_prepared(f::call(&["forge", "repositories", "3"]), true, None);
     root.adoption_answer(call, page(true));
     let printed = root.answer(call).unwrap();
     assert_eq!(printed.status, 0);

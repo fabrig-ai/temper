@@ -3,12 +3,12 @@ use jig_client::{self as client, contract as c};
 use skein_lib::{Reader, RequestEnvelope, Secret};
 use temper_client_protocol_wire::{self as wire, v1 as w};
 
-const CONNECT: &[&str] = &["forge-connect", "3", "github-app", "4242", "app.pem", "--key", "app"];
-const ADMIN: &[&str] = &["forge-connect", "3", "forgejo-admin", "token", "--key", "app"];
+const CONNECT: &[&str] = &["forge", "connect", "3", "github-app", "4242", "app.pem", "--key", "app"];
+const ADMIN: &[&str] = &["forge", "connect", "3", "forgejo-admin", "token", "--key", "app"];
 const TOKEN: &[u8] = b"admin-token-placeholder-0123\n\n";
-const MANIFEST: &[&str] = &["forge-connect", "3", "github", "--key", "app"];
-const INSTALL: &[&str] = &["forge-install", "3"];
-const ACCEPT: &[&str] = &["forge-accept", "3", "22"];
+const MANIFEST: &[&str] = &["forge", "connect", "3", "github", "--key", "app"];
+const INSTALL: &[&str] = &["forge", "install", "3"];
+const ACCEPT: &[&str] = &["forge", "accept", "3", "22"];
 // An opaque fake key; neither these step tests nor the shell tests contact a forge.
 const PEM: &[u8] = b"fake-app-pem";
 const AT_BOUND: &[u8] = &[b'p'; 4089];
@@ -36,24 +36,24 @@ fn link() -> w::Outcome {
 fn connect_and_install_check_their_argv_bounds() {
     for forge in ["1", "65535"] {
         for id in ["1", "18446744073709551615"] {
-            let words = &["forge-connect", forge, "github-app", id, "app.pem", "--key", "app"];
+            let words = &["forge", "connect", forge, "github-app", id, "app.pem", "--key", "app"];
             let call = f::call(words);
             assert_eq!(f::back(&call), f::owned(words));
         }
-        f::parse(&["forge-install", forge]).expect("forge bound");
+        f::parse(&["forge", "install", forge]).expect("forge bound");
     }
     for forge in ["0", "65536"] {
-        f::parse(&["forge-connect", forge, "github-app", "1", "app.pem", "--key", "app"]).expect_err("forge bound");
-        f::parse(&["forge-install", forge]).expect_err("forge bound");
+        f::parse(&["forge", "connect", forge, "github-app", "1", "app.pem", "--key", "app"]).expect_err("forge bound");
+        f::parse(&["forge", "install", forge]).expect_err("forge bound");
     }
     for id in ["0", "18446744073709551616"] {
-        f::parse(&["forge-connect", "3", "github-app", id, "app.pem", "--key", "app"]).expect_err("id bound");
+        f::parse(&["forge", "connect", "3", "github-app", id, "app.pem", "--key", "app"]).expect_err("id bound");
     }
     for words in [
-        &["forge-connect", "3", "unknown", "--key", "app"][..],
-        &["forge-connect", "3", "github-app", "1", "app.pem"],
-        &["forge-connect", "3", "github-app", "1", "app.pem", "--key"],
-        &["forge-connect", "3", "github-app", "1", "-", "--key", "app"],
+        &["forge", "connect", "3", "unknown", "--key", "app"][..],
+        &["forge", "connect", "3", "github-app", "1", "app.pem"],
+        &["forge", "connect", "3", "github-app", "1", "app.pem", "--key"],
+        &["forge", "connect", "3", "github-app", "1", "-", "--key", "app"],
     ] {
         f::parse(words).expect_err("invalid call");
     }
@@ -92,7 +92,7 @@ fn connect_refuses_empty_or_oversized_values_before_sending() {
 }
 #[test]
 fn install_sends_no_back_or_value_and_accepts_an_optional_key() {
-    for words in [INSTALL, &["forge-install", "3", "--key", "install"]] {
+    for words in [INSTALL, &["forge", "install", "3", "--key", "install"]] {
         let mut root = f::signed_in(f::PARTY);
         let call = root.submit(words);
         let w::Request::Install(install) = request(&root, call) else { panic!("install") };
@@ -106,7 +106,7 @@ fn install_sends_no_back_or_value_and_accepts_an_optional_key() {
 }
 #[test]
 fn unoffered_ways_exit_two_without_reading_or_sending_a_value() {
-    let words = &["forge-connect", "3", "forgejo", "tokens", "--key", "app"];
+    let words = &["forge", "connect", "3", "forgejo", "tokens", "--key", "app"];
     let mut root = f::signed_in(f::PARTY);
     let call = root.submit(words);
     let printed = root.answer(call).expect("not offered");
@@ -275,7 +275,9 @@ fn manifest_connect_sends_no_back_or_carried_value() {
     assert!(root.carried.is_empty());
     assert_eq!(root.sent_name(call), Some(f::named("app")));
     assert!(root.saved.contains_key(&call));
-    for words in [&["forge-connect", "3", "github", "extra", "--key", "app"][..], &["forge-connect", "3", "github"]] {
+    for words in
+        [&["forge", "connect", "3", "github", "extra", "--key", "app"][..], &["forge", "connect", "3", "github"]]
+    {
         f::parse(words).expect_err("invalid manifest call");
     }
 }
@@ -648,7 +650,7 @@ fn admin_first_refused_as_the_bot_s_login_exits_two_naming_the_remedy() {
 
 #[test]
 fn accept_sends_the_existing_id_without_a_value_and_prints_its_next_call() {
-    for words in [ACCEPT, &["forge-accept", "3", "22", "--key", "accept"]] {
+    for words in [ACCEPT, &["forge", "accept", "3", "22", "--key", "accept"]] {
         for json in [false, true] {
             let mut root = f::signed_in(f::PARTY);
             let call = root.submit_prepared(f::call(words), json, None);
@@ -676,10 +678,10 @@ fn accept_sends_the_existing_id_without_a_value_and_prints_its_next_call() {
         }
     }
     for words in [
-        &["forge-accept", "0", "22"][..],
-        &["forge-accept", "65536", "22"],
-        &["forge-accept", "3", "0"],
-        &["forge-accept", "3", "18446744073709551616"],
+        &["forge", "accept", "0", "22"][..],
+        &["forge", "accept", "65536", "22"],
+        &["forge", "accept", "3", "0"],
+        &["forge", "accept", "3", "18446744073709551616"],
     ] {
         f::parse(words).expect_err("nonzero numbers within bounds");
     }

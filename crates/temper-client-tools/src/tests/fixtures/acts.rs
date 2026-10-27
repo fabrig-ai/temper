@@ -1,8 +1,8 @@
 use super::*;
 /// The shared message's task, words and name establish the engine-key mapping.
-pub(crate) const MESSAGE_CALL: &[&str] = &["message", "41", "Use port 8080", "--key", "port-answer"];
+pub(crate) const MESSAGE_CALL: &[&str] = &["task", "message", "41", "Use port 8080", "--key", "port-answer"];
 /// Optional names can be omitted on stop, unlike a message's required name.
-pub(crate) const STOP_CALL: &[&str] = &["stop", "41"];
+pub(crate) const STOP_CALL: &[&str] = &["task", "stop", "41"];
 /// Kept operations from another party must stay parked while this party is live.
 pub(crate) const OTHER_PARTY: u64 = PARTY + 1;
 pub(crate) fn offered(acts: &[c::ActKind]) -> c::Task {
@@ -67,9 +67,9 @@ pub(crate) const DECIDED_AT: Wall = Wall::from_nanos(50_520_000_000_000);
 /// The proposed recipient differs from both signed-in fixture parties.
 pub(crate) const RECIPIENT: u64 = 91;
 /// Shared keyed create form, with a project whose name is supplied in me.
-pub(crate) const CREATE_CHAT_CALL: &[&str] = &["chat", "hello", "--project", "shop", "--key", "start-chat"];
+pub(crate) const CREATE_CHAT_CALL: &[&str] = &["chat", "start", "hello", "--project", "shop", "--key", "start-chat"];
 /// Shared close form; its reason is absent, as the default promises.
-pub(crate) const CLOSE_CALL: &[&str] = &["close", "41", "--key", "close-chat"];
+pub(crate) const CLOSE_CALL: &[&str] = &["chat", "close", "41", "--key", "close-chat"];
 /// Both live delegates must be covered to distinguish move from cancel.
 pub(crate) const DELEGATES: u32 = 2;
 /// The first delegate is moved; the second must still be cancelled.
@@ -78,9 +78,10 @@ pub(crate) const CANCELLED: u64 = 47;
 /// One slot per named application request being restored.
 const RESTORED: u32 = 1;
 /// Common explicit name for optional-key acts, independent of each process.
-pub(crate) const DECIDE_TASK_CALL: &[&str] = &["decide", "t41/17", "accept", "--key", "act-name"];
-pub(crate) const DECIDE_PARTY_CALL: &[&str] = &["decide", "p73/17", "accept", "--key", "act-name"];
-pub(crate) const DECIDE_ESCALATION_CALL: &[&str] = &["decide", "41", "release", "--hold", "2", "--key", "act-name"];
+pub(crate) const DECIDE_TASK_CALL: &[&str] = &["proposal", "decide", "t41/17", "accept", "--key", "act-name"];
+pub(crate) const DECIDE_PARTY_CALL: &[&str] = &["proposal", "decide", "p73/17", "accept", "--key", "act-name"];
+pub(crate) const DECIDE_ESCALATION_CALL: &[&str] =
+    &["task", "decide", "41", "release", "--hold", "2", "--key", "act-name"];
 /// A move needs a sibling delegate left to cancel; one would miss that distinction.
 pub(crate) const CLOSE_MOVE: &[&str] = &["--move", "43"];
 pub(crate) const CLOSE_REASON_WORDS: &str = "all finished";
@@ -88,19 +89,19 @@ pub(crate) const CLOSE_REASON: &[&str] = &["--reason", CLOSE_REASON_WORDS];
 /// A smaller task number would not match the director's restored-proposal example.
 pub(crate) const KEPT_PROPOSER: u64 = 3;
 /// The changed request differs from the held message under the same name.
-pub(crate) const OTHER_MESSAGE: &[&str] = &["message", "41", "different words", "--key", "port-answer"];
+pub(crate) const OTHER_MESSAGE: &[&str] = &["task", "message", "41", "different words", "--key", "port-answer"];
 /// JSON's extra word is shared by all act-output cases.
 pub(crate) const JSON_FLAG: &[&str] = &["--json"];
 /// Every act form is stable under clocks and seeds; the row carries its arguments.
 pub(crate) const ACT_CALLS: &[&[&str]] = &[
     MESSAGE_CALL,
     CLOSE_CALL,
-    &["answer", "41", "3", "yes", "--key", "act-name"],
+    &["task", "answer", "41", "3", "yes", "--key", "act-name"],
     DECIDE_TASK_CALL,
     DECIDE_ESCALATION_CALL,
-    &["release", "41", "--hold", "2", "--again", "--key", "act-name"],
-    &["stop", "41", "--key", "act-name"],
-    &["cancel", "41", "finished", "--key", "act-name"],
+    &["task", "release", "41", "--hold", "2", "--again", "--key", "act-name"],
+    &["task", "stop", "41", "--key", "act-name"],
+    &["task", "cancel", "41", "finished", "--key", "act-name"],
 ];
 pub(crate) fn chat_me(budget: u64) -> c::Me {
     let mut me = me(PARTY);
@@ -177,13 +178,13 @@ pub(crate) fn act_document(call: &crate::jig::call::Call) -> c::ReadResult {
             acts: task.acts,
             ending: None,
         })),
-        12 if call.form == 0 => {
+        crate::jig::rows::DECIDE_AT => {
             let Some(crate::jig::call::Value::Proposal(key)) = crate::jig::call::value(call, 0) else {
                 panic!("proposal form")
             };
             proposal(key.proposer, &[c::ActKind::Accept, c::ActKind::Reject, c::ActKind::PassUp])
         }
-        12 => c::ReadValue::OwnerEscalation(Box::new(c::OwnerEscalation {
+        crate::jig::rows::TASK_DECIDE_AT => c::ReadValue::OwnerEscalation(Box::new(c::OwnerEscalation {
             acts: task.acts.clone(),
             task: Box::new(task),
         })),

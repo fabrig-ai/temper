@@ -1,4 +1,4 @@
-export ACCOUNT FILE
+account export ACCOUNT FILE
   ACCOUNT (account): a number; required. The account's number, as accounts prints it
   FILE (file): a file; required. The new file; nothing may be there
 Move a signed-in account out to a new private file

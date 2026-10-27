@@ -102,8 +102,10 @@ fn a_document_sized_turn_prints_escaped_tool_names_with_the_shipped_limits() {
             }))
             .expect("calls within shipped block bound");
     }
-    let printed =
-        fixtures::read_answer(&["turn", fixtures::TASK_CALL[1], "3.7", "--json"], fixtures::turn_blocks(blocks));
+    let printed = fixtures::read_answer(
+        &["task", "turn", fixtures::TASK_CALL[2], "3.7", "--json"],
+        fixtures::turn_blocks(blocks),
+    );
 
     assert_eq!(printed.status, 0, "{:?}", printed.stderr);
     let escaped = tool_bytes.checked_mul(limits::ROWS).expect("bounded document");

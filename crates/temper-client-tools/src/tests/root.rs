@@ -28,7 +28,7 @@ fn retained_delivery(root: &mut fixtures::Harness, subject: client::Watchable, d
 #[test]
 fn an_ended_tree_delivery_waits_for_the_tasks_read() {
     for json in [false, true] {
-        let argv = fixtures::extended(&["task", "41", "--tree"], if json { &["--json"] } else { &[] });
+        let argv = fixtures::extended(&["task", "show", "41", "--tree"], if json { &["--json"] } else { &[] });
         let (mut root, call) = fixtures::read_call(argv.as_slice());
         let task = fixtures::ended_task(c::Phase::Done);
         let client::Latest::Jig(delivery) = fixtures::owner_tree_at(task.chip.clone()) else { panic!("owner tree") };
@@ -45,7 +45,7 @@ fn an_ended_tree_delivery_waits_for_the_tasks_read() {
 
 #[test]
 fn a_filled_tree_slot_survives_its_close_while_the_task_read_finishes() {
-    let (mut root, call) = fixtures::read_call(&["task", "41", "--tree"]);
+    let (mut root, call) = fixtures::read_call(&["task", "show", "41", "--tree"]);
     root.deliver_subject(&fixtures::tree_watch(), c::Delivery::Tree(Box::new(fixtures::composite_tree())));
     assert!(root.answer(call).is_none(), "task read is still pending after the tree closes");
     root.serve(call, fixtures::task_result(fixtures::goal(fixtures::TASK, fixtures::waiting_on_me())));

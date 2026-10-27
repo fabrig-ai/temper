@@ -5,6 +5,7 @@ use crate::jig::{
     Limits,
     call::{Call, Value, Values, number, value},
     render::{self, outcome::Operation},
+    rows,
 };
 use alloc::boxed::Box;
 use jig_client::{Client, Event, Handle, Key, Latest, Readable, Readout, contract as c, shapes};
@@ -28,7 +29,7 @@ pub(crate) fn me<'a>(runner: &Runner, client: &'a Client) -> Option<&'a c::Me> {
     }
 }
 pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
-    if called.call.tool == crate::jig::rows::MOVE_TO_NEWEST_AT {
+    if called.call.tool == rows::MOVE_TO_NEWEST_AT {
         let revision = u32::try_from(number(&called.call, 0).expect("revision argument")).expect("revision fits u32");
         prepared(
             runner,
@@ -40,12 +41,10 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
         );
         return;
     }
-    if called.call.tool == crate::jig::rows::CHANGE_SETTINGS_AT
-        || called.call.tool == crate::jig::rows::PROPOSE_SETTINGS_AT
-    {
+    if called.call.tool == rows::CHANGE_SETTINGS_AT || called.call.tool == rows::PROPOSE_SETTINGS_AT {
         let request = match crate::jig::settings_file::request(&called.call, &env.limits) {
             Ok(ask) => {
-                let ask = if called.call.tool == crate::jig::rows::PROPOSE_SETTINGS_AT {
+                let ask = if called.call.tool == rows::PROPOSE_SETTINGS_AT {
                     c::Ask::Propose {
                         project: 0,
                         reason: match words(&called.call, 1, &env.limits) {
@@ -70,7 +69,7 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
         prepared(runner, client, env, called, request, out);
         return;
     }
-    if called.call.tool == 8 {
+    if called.call.tool == rows::CHAT_CREATE_AT {
         let Some(me) = me(runner, client) else { return };
         let ask = chat(&called.call, me, &env.limits);
         prepared(runner, client, env, called, ask, out);
@@ -79,12 +78,12 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
     let call = &called.call;
     let task = number(call, 0).unwrap_or(0);
     let read = match call.tool {
-        12 if call.form == 0 => {
+        rows::DECIDE_AT => {
             let Some(Value::Proposal(proposal)) = value(call, 0) else { unreachable!("proposal form") };
             c::Read::Proposal { proposal: *proposal }
         }
-        12 => c::Read::Escalation { task },
-        11 => c::Read::Question { task, message: number(call, 1).expect("question") },
+        rows::TASK_DECIDE_AT => c::Read::Escalation { task },
+        rows::ANSWER_AT => c::Read::Question { task, message: number(call, 1).expect("question") },
         _ => c::Read::Task { task },
     };
     out.push(Out::Client {
@@ -229,7 +228,7 @@ pub(super) fn page(
         finish(called, printed, out);
         return;
     };
-    if called.call.tool == 31
+    if called.call.tool == rows::AMEND_AT
         && let Readout::Jig(c::ReadResult::Value(c::ReadValue::Task(task))) = &page
     {
         out.push(Out::DraftAmendment { called: Box::new(called), task: task.clone() });
@@ -253,7 +252,7 @@ pub(super) fn page(
     prepared(runner, client, env, called, ask, out);
 }
 fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, project: Option<u32>) -> Prepared {
-    if call.tool == 31 {
+    if call.tool == rows::AMEND_AT {
         return Err(Failed::Fixed(b"unexpected amendment document"));
     }
     let (project, offers) = match document {
@@ -309,9 +308,9 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
     };
     let task = number(call, 0).unwrap_or(0);
     let ask = match call.tool {
-        9 => c::Ask::Message { project, task, words: words(call, 1, limits)? },
-        10 => close(call, document, me, project, limits)?,
-        11 => c::Ask::Answer {
+        rows::MESSAGE_AT => c::Ask::Message { project, task, words: words(call, 1, limits)? },
+        rows::CLOSE_AT => close(call, document, me, project, limits)?,
+        rows::ANSWER_AT => c::Ask::Answer {
             project,
             on: c::AnswerOn::Question {
                 task,
@@ -319,15 +318,15 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
                 words: words(call, 2, limits)?,
             },
         },
-        12 => c::Ask::Decide { project, on: decide(call, task, limits)? },
-        13 => c::Ask::Release {
+        rows::DECIDE_AT | rows::TASK_DECIDE_AT => c::Ask::Decide { project, on: decide(call, task, limits)? },
+        rows::RELEASE_AT => c::Ask::Release {
             project,
             task,
             revision: c::Revision { value: number(call, 1).expect("hold") },
             again: if value(call, 2).is_some() { Some(true) } else { None },
         },
-        14 => c::Ask::Stop { project, task },
-        15 => c::Ask::Cancel {
+        rows::STOP_AT => c::Ask::Stop { project, task },
+        rows::CANCEL_AT => c::Ask::Cancel {
             project,
             task,
             reason: words(call, 2, limits)?,
@@ -341,7 +340,7 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
     Ok((Request::Ask(ask), to))
 }
 fn decide(call: &Call, task: u64, limits: &Limits) -> Result<c::DecideOn, Failed> {
-    Ok(if call.form == 0 {
+    Ok(if call.tool == rows::DECIDE_AT {
         let Some(Value::Proposal(proposal)) = value(call, 0) else { unreachable!("proposal form") };
         c::DecideOn::Proposal {
             proposal: *proposal,
@@ -380,19 +379,19 @@ fn chip_project(chip: &c::Chip) -> Option<u32> {
 }
 fn kind(call: &Call) -> c::ActKind {
     match call.tool {
-        9 => c::ActKind::Message,
-        10 | 15 => c::ActKind::Cancel,
-        11 => c::ActKind::Answer,
-        12 => match value(call, if call.form == 0 { 1 } else { 2 }) {
+        rows::MESSAGE_AT => c::ActKind::Message,
+        rows::CLOSE_AT | rows::CANCEL_AT => c::ActKind::Cancel,
+        rows::ANSWER_AT => c::ActKind::Answer,
+        rows::DECIDE_AT | rows::TASK_DECIDE_AT => match value(call, if call.tool == rows::DECIDE_AT { 1 } else { 2 }) {
             Some(Value::Word(0)) => {
-                if call.form == 0 {
+                if call.tool == rows::DECIDE_AT {
                     c::ActKind::Accept
                 } else {
                     c::ActKind::Release
                 }
             }
             Some(Value::Word(1)) => {
-                if call.form == 0 {
+                if call.tool == rows::DECIDE_AT {
                     c::ActKind::Reject
                 } else {
                     c::ActKind::LeaveHeld
@@ -400,24 +399,24 @@ fn kind(call: &Call) -> c::ActKind {
             }
             _ => c::ActKind::PassUp,
         },
-        13 => c::ActKind::Release,
-        14 => c::ActKind::Stop,
+        rows::RELEASE_AT => c::ActKind::Release,
+        rows::STOP_AT => c::ActKind::Stop,
         _ => unreachable!("act tool"),
     }
 }
 fn decision(call: &Call, limits: &Limits) -> Result<c::Decision, Failed> {
-    let index = if call.form == 0 { 1 } else { 2 };
-    let reason = words(call, if call.form == 0 { 2 } else { 3 }, limits)?;
+    let index = if call.tool == rows::DECIDE_AT { 1 } else { 2 };
+    let reason = words(call, if call.tool == rows::DECIDE_AT { 2 } else { 3 }, limits)?;
     Ok(match value(call, index) {
         Some(Value::Word(0)) => {
-            if call.form == 0 {
+            if call.tool == rows::DECIDE_AT {
                 c::Decision::Accepted
             } else {
                 c::Decision::Released { again: None }
             }
         }
         Some(Value::Word(1)) => {
-            if call.form == 0 {
+            if call.tool == rows::DECIDE_AT {
                 c::Decision::Rejected { reason }
             } else {
                 c::Decision::LeftHeld { reason }
@@ -535,34 +534,38 @@ fn send(
     let mut operation = Operation::of(request);
     operation.to = to;
     operation.exported = exported;
-    if called.call.tool == crate::jig::rows::EXPORT_AT {
+    if called.call.tool == rows::EXPORT_AT {
         let Some(Value::File(file)) = value(&called.call, 1) else { unreachable!("export file") };
         operation.file = Some(file.clone());
     }
     operation.account = account;
-    if called.call.tool != crate::jig::rows::EXPORT_AT
-        && called.call.tool != crate::jig::rows::CHANGE_SETTINGS_AT
-        && called.call.tool != crate::jig::rows::PROPOSE_SETTINGS_AT
+    if called.call.tool != rows::EXPORT_AT
+        && called.call.tool != rows::CHANGE_SETTINGS_AT
+        && called.call.tool != rows::PROPOSE_SETTINGS_AT
     {
         operation.retry = Some(render::outcome::retry(&called.call));
     }
-    if called.call.tool == 26 || called.call.tool == 27 || called.call.tool == crate::jig::rows::IMPORT_AT {
+    if called.call.tool == rows::ADD_KEY_AT
+        || called.call.tool == rows::REPLACE_KEY_AT
+        || called.call.tool == rows::IMPORT_AT
+    {
         operation.value_name.clone_from(&called.call.key);
     }
     if let Some(me) = me(runner, client) {
         operation.party = Some(me.party.number);
     }
     // The compound's public operation is close, rather than its final cancellation.
-    if called.call.tool == 10 {
+    if called.call.tool == rows::CLOSE_AT {
         operation.word = b"close";
     }
-    if (24..=30).contains(&called.call.tool)
-        || called.call.tool == 32
-        || called.call.tool == 33
-        || called.call.tool == crate::jig::rows::EXPORT_AT
-        || called.call.tool == crate::jig::rows::IMPORT_AT
+    if (rows::CONNECT_AT..=rows::RETRY_AT).contains(&called.call.tool)
+        || called.call.tool == rows::DECLARE_AT
+        || called.call.tool == rows::VERIFY_AT
+        || called.call.tool == rows::EXPORT_AT
+        || called.call.tool == rows::IMPORT_AT
     {
-        operation.word = render::outcome::account_tool(called.call.tool).name;
+        // Printed operation words stay unchanged until the calls-rendering task.
+        operation.word = render::outcome::account_word(called.call.tool);
     }
     runner.sent.insert(key, Sent { called, operation, holder, dispatched: false });
     out.push(Out::Client { event });
@@ -591,13 +594,13 @@ pub(super) fn answered(
             };
             sent.operation.to = Some(c::Recipient::Role { project, role: *to });
         }
-        if sent.called.call.tool == crate::jig::rows::EXPORT_AT {
+        if sent.called.call.tool == rows::EXPORT_AT {
             super::moves::answered(runner, client, env, sent, outcome, out);
             return;
         }
         let mut printed =
             render::outcome::print(&sent.operation, outcome, sent.called.json, me(runner, client), &env.limits);
-        if sent.called.call.tool == crate::jig::rows::IMPORT_AT
+        if sent.called.call.tool == rows::IMPORT_AT
             && let jig_client::Outcome::Answered(jig_client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
                 c::OwnerOutcome::AccountMovedIn { .. },
             )))) = outcome
@@ -646,7 +649,7 @@ fn close(call: &Call, document: &c::ReadValue, me: &c::Me, project: u32, limits:
 
 fn draw_name(runner: &mut Runner, called: &mut Called) {
     // Tool 33 draws a key because check_program requires one even when verify omits --key.
-    if (called.value.is_some() || called.call.tool == 33 || called.call.tool == crate::jig::rows::EXPORT_AT)
+    if (called.value.is_some() || called.call.tool == rows::VERIFY_AT || called.call.tool == rows::EXPORT_AT)
         && called.call.key.is_none()
     {
         let mut bytes = [0; 32];

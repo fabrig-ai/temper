@@ -1,0 +1,19 @@
+settings show
+Read the settings, the revisions running work holds, and pending proposals
+Prints: `newest revision R`, each setting and its last revision, the held revisions and their live tasks, and the pending proposals
+--json: the record settings.
+Key: none.
+`setting KIND N --json` prints one value to edit. change-settings
+and propose-settings take the newest revision this prints as
+`--against`.
+settings show charter|template|policy NUMBER [--revision REVISION]
+  charter|template|policy (kind): one of charter, template or policy; required. The setting's kind
+  NUMBER (number): a number from 0 to 4294967295; required. The setting's number
+  --revision REVISION: a number from 0 to 4294967295; optional. Its value at this revision; the newest when absent
+settings show rules
+  rules (kind): one of rules; required. The deployment's rules
+Read one setting's value whole
+Prints: `KIND N, revision R`, or `rules, revision R`, then the value as JSON on one line
+--json: the record setting.
+Key: none.
+The JSON value is what a settings file's `set` takes.

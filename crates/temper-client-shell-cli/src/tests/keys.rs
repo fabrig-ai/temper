@@ -1,6 +1,6 @@
 use super::fixtures;
 use skein_io::kernel::{Error, Exit, Kind, Stat};
-const ADD: &[&[u8]] = &[b"add-key", b"1", b"/linked-parent/link-file", b"--deployment", b"--key", b"key"];
+const ADD: &[&[u8]] = &[b"account", b"add-key", b"1", b"/linked-parent/link-file", b"--deployment", b"--key", b"key"];
 const AT_BOUND: &[u8] = &[b'k'; 4096];
 const OVER_BOUND: &[u8] = &[b'k'; 4097];
 const BOUND_NEWLINE: &[u8] = &{
@@ -88,13 +88,14 @@ fn a_key_file_accepts_its_opened_parent() {
 #[test]
 fn json_cannot_name_a_key_file() {
     let mut f = fixtures::Frame::read(&["--call", "-"]);
-    f.input = br#"{"tool":"add-key","arguments":{"provider":1,"file":"link-file","key":"add"}}"#;
+    f.input = br#"{"tool":"account add-key","arguments":{"provider":1,"file":"link-file","key":"add"}}"#;
     f.drain();
     assert_eq!(f.exit(), Some(Exit::Code(1)));
     assert!(!f.opened(b"directory"));
 }
 
-const APP: &[&[u8]] = &[b"forge-connect", b"3", b"github-app", b"4242", b"/linked-parent/link-file", b"--key", b"app"];
+const APP: &[&[u8]] =
+    &[b"forge", b"connect", b"3", b"github-app", b"4242", b"/linked-parent/link-file", b"--key", b"app"];
 const APP_BOUND: &[u8] = &[b'p'; 4089];
 const APP_OVER: &[u8] = &[b'p'; 4090];
 const APP_NEWLINE: &[u8] = &{
@@ -168,7 +169,8 @@ fn an_app_key_strips_one_final_lf_and_reserves_seven_bytes_for_the_bundle() {
     }
 }
 
-const ADMIN: &[&[u8]] = &[b"forge-connect", b"3", b"forgejo-admin", b"/linked-parent/link-file", b"--key", b"admin"];
+const ADMIN: &[&[u8]] =
+    &[b"forge", b"connect", b"3", b"forgejo-admin", b"/linked-parent/link-file", b"--key", b"admin"];
 const ADMIN_TOKEN: &[u8] = b"admin-token-placeholder-0123";
 
 fn no_admin_token(f: &fixtures::Frame) {

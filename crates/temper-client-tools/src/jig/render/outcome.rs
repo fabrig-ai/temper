@@ -437,23 +437,38 @@ pub(crate) fn newline(bytes: &[u8]) -> Box<[u8]> {
 pub(crate) fn retry(call: &crate::jig::call::Call) -> Box<[u8]> {
     use crate::jig::{argv, rows};
     let tool = match call.tool {
-        8 => &rows::CHAT_CREATE,
-        9 => &rows::MESSAGE,
-        10 => &rows::CLOSE,
-        11 => &rows::ANSWER,
-        12 => &rows::DECIDE,
-        13 => &rows::RELEASE,
-        14 => &rows::STOP,
-        15 => &rows::CANCEL,
-        24..=30 | 32 | 33 | rows::EXPORT_AT | rows::IMPORT_AT => account_tool(call.tool),
-        31 => &rows::AMEND,
+        rows::CHAT_CREATE_AT => &rows::CHAT_CREATE,
+        rows::MESSAGE_AT => &rows::MESSAGE,
+        rows::CLOSE_AT => &rows::CLOSE,
+        rows::ANSWER_AT => &rows::ANSWER,
+        rows::DECIDE_AT => &rows::DECIDE,
+        rows::TASK_DECIDE_AT => &rows::TASK_DECIDE,
+        rows::RELEASE_AT => &rows::RELEASE,
+        rows::STOP_AT => &rows::STOP,
+        rows::CANCEL_AT => &rows::CANCEL,
+        rows::CONNECT_AT..=rows::RETRY_AT | rows::DECLARE_AT | rows::VERIFY_AT | rows::EXPORT_AT | rows::IMPORT_AT => {
+            account_tool(call.tool)
+        }
+        rows::AMEND_AT => &rows::AMEND,
         rows::MOVE_TO_NEWEST_AT => &rows::MOVE_TO_NEWEST,
         _ => unreachable!("act tool"),
     };
+    let name = if call.tool == rows::TASK_DECIDE_AT {
+        b"decide".as_slice()
+    } else if call.tool == rows::CHAT_CREATE_AT {
+        b"chat".as_slice()
+    } else {
+        match crate::jig::table::name_words(tool.name).1 {
+            Some(b"advance") => b"move-to-newest".as_slice(),
+            Some(word) => word,
+            None => tool.name,
+        }
+    };
+    let tool = crate::jig::table::Tool { name, ..*tool };
     let mut call = call.clone();
     call.tool = 0;
     let mut words = skein_lib::List::with_capacity(128);
-    argv::back(&[tool], &call, &mut words).expect("parsed act");
+    argv::back(&[&tool], &call, &mut words).expect("parsed act");
     let mut measure = Text::measure();
     retry_words(words.as_slice(), &mut measure);
     let mut out = Text::writing_exact(measure);
@@ -469,18 +484,22 @@ fn retry_words(words: &[Box<[u8]>], out: &mut Text) {
     }
 }
 
+pub(crate) fn account_word(tool: u8) -> &'static [u8] {
+    crate::jig::table::name_words(account_tool(tool).name).1.expect("account verb")
+}
+
 pub(crate) fn account_tool(tool: u8) -> &'static crate::jig::table::Tool {
     use crate::jig::rows;
     match tool {
-        24 => &rows::CONNECT,
-        25 => &rows::DISCONNECT,
-        26 => &rows::ADD_KEY,
-        27 => &rows::REPLACE_KEY,
-        28 => &rows::FORGET,
-        29 => &rows::RANK,
-        30 => &rows::RETRY,
-        32 => &rows::DECLARE,
-        33 => &rows::VERIFY,
+        rows::CONNECT_AT => &rows::CONNECT,
+        rows::DISCONNECT_AT => &rows::DISCONNECT,
+        rows::ADD_KEY_AT => &rows::ADD_KEY,
+        rows::REPLACE_KEY_AT => &rows::REPLACE_KEY,
+        rows::FORGET_AT => &rows::FORGET,
+        rows::RANK_AT => &rows::RANK,
+        rows::RETRY_AT => &rows::RETRY,
+        rows::DECLARE_AT => &rows::DECLARE,
+        rows::VERIFY_AT => &rows::VERIFY,
         rows::EXPORT_AT => &rows::EXPORT,
         rows::IMPORT_AT => &rows::IMPORT,
         _ => unreachable!("account tool"),

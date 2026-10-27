@@ -49,7 +49,7 @@ fn assert_golden(name: &str, printed: crate::jig::Printed) {
     f::check_golden(name, &printed.stdout);
 }
 fn delegate_answer(result: c::ReadResult) -> crate::jig::Printed {
-    let (mut root, call) = f::read_call(&["task", "2"]);
+    let (mut root, call) = f::read_call(&["task", "show", "2"]);
     let mut me = f::me(f::PARTY);
     me.projects.get_mut(0).expect("project").name = jig_client::contract::DocumentText::complete(
         jig_client::contract::Text::new(b"project 1".as_slice().into(), 64).expect("project name"),
@@ -356,7 +356,7 @@ fn report_activity_names_phase_changes_without_history_positions() {
         before: None,
         after: None,
     })));
-    assert_golden("activity_report", f::read_answer(&["activity", "2"], result));
+    assert_golden("activity_report", f::read_answer(&["task", "activity", "2"], result));
 }
 fn result_text(ending: c::Ending, value: Option<c::ResultValue>, expected: &[u8]) {
     let printed = delegate_answer(ended(delegate(), ending, value));
@@ -509,7 +509,7 @@ fn a_compound_task_read_and_an_ended_wait_share_result_words() {
     root.end(call, &f::task_watch(), c::WatchEnd::SubjectEnded);
     root.serve(call, read.clone());
     assert_eq!(root.answer(call).expect("ended wait").stdout, f::appended(&expected.stdout, b"met\n"));
-    let (mut root, call) = f::read_call(&["task", "41", "--activity", "1"]);
+    let (mut root, call) = f::read_call(&["task", "show", "41", "--activity", "1"]);
     root.serve(call, read);
     root.serve(call, f::activity_words());
     let printed = root.answer(call).expect("compound read");

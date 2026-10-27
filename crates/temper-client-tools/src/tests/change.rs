@@ -100,8 +100,8 @@ fn end_panel(root: &mut f::Harness, call: u32, end: c::WatchEnd) {
 #[test]
 fn change_calls_round_trip_and_reject_other_conditions() {
     for argv in [
-        &["change", "2"][..],
-        &["change", "2", "--project", "shop"],
+        &["change", "show", "2"][..],
+        &["change", "show", "2", "--project", "shop"],
         &[
             "wait",
             "change",
@@ -122,10 +122,10 @@ fn change_calls_round_trip_and_reject_other_conditions() {
         assert_eq!(f::from_json(&jig::json::write_call(crate::table::TOOLS, &call).unwrap()), call);
     }
     for argv in [
-        &["change", "0"][..],
+        &["change", "show", "0"][..],
         &["wait", "change", "2", "--until", "ended"],
         &["wait", "change", "2", "--until", "ci:unknown"],
-        &["change", "2", "--key", "no"],
+        &["change", "show", "2", "--key", "no"],
     ] {
         f::parse(argv).unwrap_err();
     }
@@ -133,7 +133,7 @@ fn change_calls_round_trip_and_reject_other_conditions() {
 #[test]
 fn checking_text_and_json_name_pull_head_gates_bounds_and_same_digest() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["change", "2", "--project", "1"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1"]);
     deliver(&mut root, panel(w::Step::Checking));
     let text = root.answer(call).unwrap();
     assert_eq!(text.status, 0);
@@ -141,7 +141,7 @@ fn checking_text_and_json_name_pull_head_gates_bounds_and_same_digest() {
     contains(&text.stdout, b"pull request #1 \xc2\xb7 http://127.0.0.1:3000/qa/pilot-20261026/pulls/1\nstep: checking\nhead 1111111111111111111111111111111111111111 \xc2\xb7 CI pending\ngates: none\n");
     contains(&text.stdout, b"repairs 0 of 3 \xc2\xb7 resolutions 0 of 3 \xc2\xb7 updates 0 of 5\n");
     contains(&text.stdout, b"next: temper ctl DIRECTORY wait change 2 --until landed\n");
-    let call = root.submit(&["change", "2", "--project", "1", "--json"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--json"]);
     deliver(&mut root, panel(w::Step::Checking));
     let json = root.answer(call).unwrap();
     let expected = br#"{"task":2,"forge":3,"owner":"qa","name":"pilot-20261026","branch":"temper/2-readme","landing":"main","head":"1111111111111111111111111111111111111111","pull":{"number":1,"address":"http://127.0.0.1:3000/qa/pilot-20261026/pulls/1"},"step":"checking","merge":null,"queue":null,"repair":null,"hold":null,"runs":null,"ci":"pending","gates":[],"repairs":{"used":0,"limit":3},"resolutions":{"used":0,"limit":3},"updates":{"used":0,"limit":5}"#;
@@ -193,7 +193,7 @@ fn landed_and_held_repair_panels_keep_whole_facts() {
 fn absent_project_reads_the_task_project_before_opening_the_panel() {
     let mut root = f::signed_in(f::PARTY);
     root.pending_reads.push(1);
-    let call = root.submit(&["change", "2"]);
+    let call = root.submit(&["change", "show", "2"]);
     assert_eq!(root.reads[&call].1, c::Read::Task { task: 2 });
     assert_eq!(root.watches.len(), 1);
     serve(&mut root, call, false, false);
@@ -203,7 +203,7 @@ fn absent_project_reads_the_task_project_before_opening_the_panel() {
 #[test]
 fn a_read_of_an_unknown_panel_exits_two() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["change", "2", "--project", "1"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1"]);
     end_panel(&mut root, call, c::WatchEnd::Unknown);
     let answer = root.answer(call).unwrap();
     assert_eq!(answer.status, 2);

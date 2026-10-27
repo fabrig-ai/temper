@@ -18,13 +18,16 @@ fn every_call_goes_from_argv_to_json_and_back_unchanged() {
 }
 const DECISIONS: &[(&[u8], &[&str])] = &[
     (
-        br#"{"tool":"decide","arguments":{"proposal":"t3/17","outcome":"accept","reason":"yes"}}"#,
-        &["decide", "t3/17", "accept", "yes"],
+        br#"{"tool":"proposal decide","arguments":{"proposal":"t3/17","outcome":"accept","reason":"yes"}}"#,
+        &["proposal", "decide", "t3/17", "accept", "yes"],
     ),
-    (br#"{"tool":"decide","arguments":{"proposal":"p3/17","outcome":"reject"}}"#, &["decide", "p3/17", "reject"]),
     (
-        br#"{"tool":"decide","arguments":{"task":41,"hold":2,"outcome":"release","reason":"yes"}}"#,
-        &["decide", "41", "--hold", "2", "release", "yes"],
+        br#"{"tool":"proposal decide","arguments":{"proposal":"p3/17","outcome":"reject"}}"#,
+        &["proposal", "decide", "p3/17", "reject"],
+    ),
+    (
+        br#"{"tool":"task decide","arguments":{"task":41,"hold":2,"outcome":"release","reason":"yes"}}"#,
+        &["task", "decide", "41", "--hold", "2", "release", "yes"],
     ),
 ];
 #[test]
@@ -32,16 +35,16 @@ fn decides_arguments_are_proposal_or_task_and_hold_then_outcome_and_reason() {
     for (json, words) in DECISIONS {
         assert_eq!(fixtures::from_json(json), fixtures::call(words), "{words:?}");
     }
-    fixtures::json(br#"{"tool":"decide","arguments":{"proposal":"3/17","outcome":"accept"}}"#)
+    fixtures::json(br#"{"tool":"proposal decide","arguments":{"proposal":"3/17","outcome":"accept"}}"#)
         .expect_err("unprefixed proposal refused");
 }
 const UNKNOWN: &[&[u8]] = &[
     br#"{"tool":"me","arguments":{},"extra":1}"#,
     br#"{"tool":"me","tool":"me","arguments":{}}"#,
     br#"{"tool":"me","arguments":{},"arguments":{}}"#,
-    br#"{"tool":"task","arguments":{"task":41,"task":42}}"#,
+    br#"{"tool":"task show","arguments":{"task":41,"task":42}}"#,
     br#"{"tool":"me","arguments":{"extra":1}}"#,
-    br#"{"tool":"task","arguments":{"task":41,"project":"shop"}}"#,
+    br#"{"tool":"task show","arguments":{"task":41,"project":"shop"}}"#,
 ];
 #[test]
 fn an_unknown_member_or_argument_is_a_usage_error() {
@@ -51,14 +54,14 @@ fn an_unknown_member_or_argument_is_a_usage_error() {
 }
 const WRONG: &[&[u8]] = &[
     br#"{"tool":1,"arguments":{}}"#,
-    br#"{"tool":"task","arguments":{"task":"41"}}"#,
-    br#"{"tool":"task","arguments":{"task":4.1}}"#,
-    br#"{"tool":"task","arguments":{"task":-1}}"#,
-    br#"{"tool":"task","arguments":{"task":1e2}}"#,
-    br#"{"tool":"task","arguments":{"task":41,"tree":false}}"#,
-    br#"{"tool":"task","arguments":{"task":41,"tree":"true"}}"#,
-    br#"{"tool":"message","arguments":{"task":41,"text":true,"key":"say"}}"#,
-    br#"{"tool":"close","arguments":{"task":41,"move":2,"key":"close"}}"#,
+    br#"{"tool":"task show","arguments":{"task":"41"}}"#,
+    br#"{"tool":"task show","arguments":{"task":4.1}}"#,
+    br#"{"tool":"task show","arguments":{"task":-1}}"#,
+    br#"{"tool":"task show","arguments":{"task":1e2}}"#,
+    br#"{"tool":"task show","arguments":{"task":41,"tree":false}}"#,
+    br#"{"tool":"task show","arguments":{"task":41,"tree":"true"}}"#,
+    br#"{"tool":"task message","arguments":{"task":41,"text":true,"key":"say"}}"#,
+    br#"{"tool":"chat close","arguments":{"task":41,"move":2,"key":"close"}}"#,
     br#"{"tool":"wait","arguments":{"subject":"me","timeout":"1m"}}"#,
     br#"{"tool":"me","arguments":[]}"#,
     b"[]",
@@ -71,10 +74,10 @@ fn a_value_of_another_json_kind_is_a_usage_error() {
     }
 }
 const CLOSE: &[(&[u8], &[&str])] = &[
-    (br#"{"tool":"close","arguments":{"task":41,"key":"close"}}"#, &["close", "41", "--key", "close"]),
+    (br#"{"tool":"chat close","arguments":{"task":41,"key":"close"}}"#, &["chat", "close", "41", "--key", "close"]),
     (
-        br#"{"tool":"close","arguments":{"reason":"bye","task":41,"key":"close","move":[2,3]}}"#,
-        &["close", "41", "--reason", "bye", "--move", "2", "--move", "3", "--key", "close"],
+        br#"{"tool":"chat close","arguments":{"reason":"bye","task":41,"key":"close","move":[2,3]}}"#,
+        &["chat", "close", "41", "--reason", "bye", "--move", "2", "--move", "3", "--key", "close"],
     ),
 ];
 #[test]
@@ -143,9 +146,9 @@ fn json_wait_arguments_and_conditions_match_argv() {
 }
 #[test]
 fn a_text_from_stdin_is_refused_under_call_stdin() {
-    const INPUT: &[u8] = br#"{"tool":"message","arguments":{"task":41,"text":"-","key":"say"}}"#;
+    const INPUT: &[u8] = br#"{"tool":"task message","arguments":{"task":41,"text":"-","key":"say"}}"#;
     assert_eq!(jig::json::call(table::TOOLS, INPUT, Source::Stdin, &crate::limits::tools()), Err(Usage::Stdin));
-    assert_eq!(fixtures::from_json(INPUT), fixtures::call(&["message", "41", "-", "--key", "say"]));
+    assert_eq!(fixtures::from_json(INPUT), fixtures::call(&["task", "message", "41", "-", "--key", "say"]));
 }
 #[test]
 fn a_document_past_ask_bytes_is_a_usage_error() {
@@ -218,8 +221,9 @@ fn every_json_golden_has_unique_keys() {
 
 #[test]
 fn json_arguments_use_snake_case() {
-    const JSON: &[u8] = br#"{"tool":"adopt","arguments":{"project":"shop","owner":"o","name":"n","landing":"main","no_home":true,"no_ci":true,"check":[1,2],"key":"adopt-repo"}}"#;
+    const JSON: &[u8] = br#"{"tool":"repository adopt","arguments":{"project":"shop","owner":"o","name":"n","landing":"main","no_home":true,"no_ci":true,"check":[1,2],"key":"adopt-repo"}}"#;
     let call = fixtures::call(&[
+        "repository",
         "adopt",
         "--project",
         "shop",
@@ -246,7 +250,7 @@ fn json_arguments_use_snake_case() {
 fn unencodable_argument_bytes_refuse_without_a_partial_record() {
     for words in [
         &[b"sign-in".as_slice(), b"\xff".as_slice()].as_slice(),
-        &[b"message".as_slice(), b"41", b"\xff", b"--key", b"say"].as_slice(),
+        &[b"task", b"message".as_slice(), b"41", b"\xff", b"--key", b"say"].as_slice(),
     ] {
         let jig::call::Parsed::Call { call, .. } = table::parse(words).expect("argv bytes") else {
             panic!("plain call");

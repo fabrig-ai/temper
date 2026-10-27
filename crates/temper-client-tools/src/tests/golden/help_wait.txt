@@ -1,17 +1,17 @@
-wait SUBJECT [--since DIGEST] [--until CONDITION] [--timeout DURATION]
-  SUBJECT (subject): a subject; required. What to watch, from the list below
+wait  [--since DIGEST] [--until CONDITION] [--timeout DURATION]
+   (subject): a subject; required. What to watch, from the list below
   --since DIGEST: a digest, as a read prints it; optional. The digest of your last read of the subject
   --until CONDITION: a condition; optional. A condition of the subject, from the list below
   --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long to wait; 300 seconds when absent
-wait forges [--since DIGEST] [--until settled|connected:F|made:F] [--timeout DURATION]
+wait forges [--since DIGEST] [--until CONDITION] [--timeout DURATION]
   forges (subject): one of forges; required. The deployment's forges
   --since DIGEST: a digest, as a read prints it; optional. The digest of your last read of forges
-  --until settled|connected:F|made:F: one of settled, connected:N or made:N with N from 1 to 65535; optional. settled: none setting up or connecting; connected:F: forge F connected; made:F: forge F's first repository made
+  --until CONDITION: one of settled, connected:N or made:N with N from 1 to 65535; optional. settled: none setting up or connecting; connected:F: forge F connected; made:F: forge F's first repository made
   --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long to wait; 300 seconds when absent
-wait change N [--project P] [--since DIGEST] [--until pull|ci:pending|ci:passed|ci:failed|held|landed] [--timeout DURATION]
+wait change TASK [--project PROJECT] [--since DIGEST] [--until pull|ci:pending|ci:passed|ci:failed|held|landed] [--timeout DURATION]
   change (subject): one of change; required. A change's way to landing
-  N (task): a number from 1 to 18446744073709551615; required. The change task's number
-  --project P: a project's name or number; optional. Its project; the task's when absent
+  TASK (task): a number from 1 to 18446744073709551615; required. The change task's number
+  --project PROJECT: a project's name or number; optional. Its project; the task's when absent
   --since DIGEST: a digest, as a read prints it; optional. The digest of your last read of the change
   --until pull|ci:pending|ci:passed|ci:failed|held|landed: one of pull, ci:pending, ci:passed, ci:failed, held or landed; optional. pull: its pull request opened; ci:STATE: CI at its head in that state; held: a hold on it; landed: merged
   --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long to wait; 300 seconds when absent

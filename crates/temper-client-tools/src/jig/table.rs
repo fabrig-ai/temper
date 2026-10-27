@@ -166,3 +166,64 @@ pub const fn repeated(
 ) -> Argument {
     flag(name, shown, kind, Occurs::Repeated { most }, line)
 }
+
+/// The published vocabulary of argument placeholders.
+pub const PLACEHOLDERS: &[&[u8]] = &[
+    b"TASK",
+    b"PROJECT",
+    b"FORGE",
+    b"INSTALLATION",
+    b"ACCOUNT",
+    b"PROVIDER",
+    b"ADAPTER",
+    b"SOURCE",
+    b"POSITION",
+    b"NAME",
+    b"REVISION",
+    b"REV",
+    b"PROPOSAL",
+    b"QUESTION",
+    b"NUMBER",
+    b"TEMPLATE",
+    b"CURSOR",
+    b"COUNT",
+    b"PART",
+    b"OFFSET",
+    b"PAGE",
+    b"TURN",
+    b"DIGEST",
+    b"CONDITION",
+    b"DURATION",
+    b"TIME",
+    b"PRIORITY",
+    b"MODEL",
+    b"EFFORT",
+    b"AMOUNT",
+    b"OWNER",
+    b"ORG",
+    b"REPOSITORY",
+    b"BRANCH",
+    b"PREFIX",
+    b"GATE",
+    b"LABEL",
+    b"IDS",
+    b"APP",
+    b"ROLE",
+    b"FILE",
+    b"TEXT",
+    b"REASON",
+    b"KEY",
+    b"GROUP",
+    b"VERB",
+];
+
+/// A published name has at most one separating space.
+pub(crate) fn name_words(name: &[u8]) -> (&[u8], Option<&[u8]>) {
+    for (at, byte) in name.iter().enumerate() {
+        if *byte == b' ' {
+            let (group, rest) = name.split_at_checked(at).expect("name position");
+            return (group, rest.strip_prefix(b" "));
+        }
+    }
+    (name, None)
+}
