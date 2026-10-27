@@ -795,6 +795,7 @@ pub(crate) fn delivery_output(delivery: Delivery) -> Request {
         | Delivery::ForgeCommitted { .. }
         | Delivery::Fleet(_)
         | Delivery::Relay { .. }
+        | Delivery::NotesLoad { .. }
         | Delivery::Restart(_)
         | Delivery::Load { .. }
         | Delivery::ReadEscalationDecision { .. }) => Request::ToChild(Released(delivery)),
