@@ -1078,6 +1078,8 @@ fn a_review_at_a_head_whose_ci_fails_is_cancelled_and_the_repair_is_funded() {
             commit: first_head,
             context: b"build".as_slice().into(),
             state: raw::Check::Failed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     for _ in 0..MAX_TICKS {
