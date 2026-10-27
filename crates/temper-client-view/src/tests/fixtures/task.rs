@@ -53,6 +53,7 @@ fn root_with_hold(executor: c::Executor, priority: Option<u32>, held: bool) -> t
             },
         );
         document.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+            placed: None,
             circle: None,
             account: None,
             source: None,

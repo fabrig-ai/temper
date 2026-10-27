@@ -4,7 +4,8 @@ use jig_client::contract as c;
 use skein_json::writer::Encoder;
 
 pub(super) fn text(task: &c::Task, me: Option<&c::Me>, out: &mut Text) {
-    let Some(hold) = task.hold.as_ref().and_then(c::TaskHold::placed) else { return };
+    let Some(holding) = &task.hold else { return };
+    let Some(hold) = holding.placed() else { return };
     out.put(b"\nhold: ");
     out.number(hold.number);
     out.put(b" \xc2\xb7 ");

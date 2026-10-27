@@ -215,9 +215,9 @@ mod tests {
     #[test]
     fn a_notes_load_waits_for_archive_room_without_a_synchronous_failure_loop() {
         let (mut domain, env) = crate::tests::resume_fixture::root();
-        let mut reads = Vec::new();
+        let mut reads = skein_lib::List::with_capacity(env.limits.loads.loads);
         for _ in 0..env.limits.loads.loads {
-            reads.push(domain.archive_reads.insert(Some(Read::Transcript { task: 1 })).unwrap());
+            reads.push(domain.archive_reads.insert(Some(Read::Transcript { task: 1 })).unwrap()).unwrap();
         }
         let mut decision = Decision::new(&env.limits.journal);
         held(
@@ -231,29 +231,30 @@ mod tests {
         );
         assert!(domain.work.is_empty(), "a full archive must not synchronously fail and retry the same notes load");
         let retry = delivery(&mut domain, &env.limits, decision);
-        assert!(matches!(&retry, Delivery::NotesLoad { owner, .. } if *owner == Token::new(1)));
-        for id in reads {
+        let Delivery::NotesLoad { owner, range } = retry else { panic!("pending notes load") };
+        assert_eq!(owner, Token::new(1));
+        for id in reads.into_boxed() {
             domain.archive_reads.get_mut(id).unwrap().take();
             domain.archive_reads.retire(id);
         }
         domain.reclaim();
-        let Delivery::NotesLoad { owner, range } = retry else { unreachable!() };
         let mut decision = Decision::new(&env.limits.journal);
         notes_load(&mut domain, &env, &mut decision, owner, range);
         let Delivery::Load { waiter, range, after } = delivery(&mut domain, &env.limits, decision) else {
             panic!("the deferred load is issued when room returns")
         };
         assert!(after.is_none());
-        assert!(matches!(
+        assert_eq!(
             range,
             Range::Core(crate::CoreRange::Notes(jig_domain_notes::Range::Lines {
                 scope: jig_domain_notes::Scope::Deployment,
-                after: None
+                after: None,
             }))
-        ));
-        assert!(
-            matches!(domain.archive_reads.get(skein_lib::Id::from_token(waiter)), Some(Some(Read::Notes { owner })) if *owner == Token::new(1))
         );
+        let Some(Some(Read::Notes { owner })) = domain.archive_reads.get(skein_lib::Id::from_token(waiter)) else {
+            panic!("issued notes load retains its owner")
+        };
+        assert_eq!(*owner, Token::new(1));
         assert!(domain.work.is_empty());
     }
     fn delivery(domain: &mut Domain, limits: &Limits, decision: Decision) -> Delivery {

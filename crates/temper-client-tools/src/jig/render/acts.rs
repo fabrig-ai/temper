@@ -80,7 +80,8 @@ pub fn text(task: &Task, me: Option<&Me>, book: &Phrasebook, out: &mut Text) {
     }
 }
 fn lift(task: &Task, out: &mut Text) {
-    if let Some(hold) = task.hold.as_ref().and_then(jig_client::contract::TaskHold::placed)
+    if let Some(holding) = &task.hold
+        && let Some(hold) = holding.placed()
         && hold.may_lift
     {
         out.put(b"  hold lift ");
@@ -340,6 +341,9 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
         | Refusal::KeyConflict
         | Refusal::Llm { .. } => {}
     }
+    plain_refusal(why, book, out);
+}
+fn plain_refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
     let word = Word::refusal(why);
     let text = match why {
         Refusal::Stale(_) | Refusal::Full(_) => {
