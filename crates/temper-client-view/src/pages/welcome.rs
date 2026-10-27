@@ -25,7 +25,7 @@ fn paragraph(b: &mut Builder, w: &Words, word: Word, style: skein_ui::Style) {
     b.close();
 }
 fn lead(b: &mut Builder, w: &Words) {
-    paragraph(b, w, Word::WelcomeLead, look::WELCOME_LEAD);
+    paragraph(b, w, Word::WelcomeLead, look::WELCOME_TAGLINE);
     let describe = w.say(Word::WelcomeDescribe, &[]);
     let what = w.say(Word::WelcomeWhat, &[]);
     let want_and = w.say(Word::WelcomeWantAnd, &[]);
