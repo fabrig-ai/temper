@@ -1,9 +1,11 @@
 //! The static page boots its world in a worker and spends that world's printed sign-in link
 //! (playground.md, 2, 6 and 9); the server only supplies the bundle.
 use skein_fake_person::{Face, Find, Found, Next, Step as PersonStep, Target, Why};
-use skein_fake_person_browser::{BrowserFace, Harness, Outcome, Play, Script, Step};
+use skein_fake_person_browser::{BrowserFace, Download, Harness, Outcome, Play, Script, Step};
 use skein_lib::Time;
 use skein_ui::Role;
+use skein_ui_web::bridge::log::{self, End};
+use std::fs;
 use temper_client_browser_world::{ABSENT, Tier, WITHIN};
 use temper_client_domain::Address;
 use temper_playground_world::story_a;
@@ -36,7 +38,49 @@ fn story_a_walks_in_the_browser_playground() {
         Step::Person(PersonStep::Press { find: Find::exactly_named(Role::Option, "100×".as_bytes()) }),
     ];
     steps.extend(story_a::whole().into_vec().into_iter().map(browser_step));
-    run_with_figures(&tier, Script::new(steps.into_boxed_slice()));
+    let mut visit = SessionLog {
+        figures: Figures { script: Script::new(steps.into_boxed_slice()), words: None },
+        press: Script::new(Box::new([Step::Person(PersonStep::Press {
+            find: Find::exactly_named(Role::Button, b"Download the session's log")
+                .within(Box::new([Target::Role { role: Role::Banner, name: b"Playground".as_slice().into() }])),
+        })])),
+        downloaded: None,
+        deadline: None,
+    };
+    let setup = tier.playground_download_setup();
+    let directory = setup.downloads.clone().expect("this visit allows downloads");
+    assert_eq!(Harness::new(setup).run(&mut [&mut visit]), Outcome::Done);
+    check_figures(visit.figures.words.as_deref().expect("frame's figures"));
+    let download = visit.downloaded.expect("the kit reported the completed file");
+    assert_eq!(download.path.parent(), Some(directory.as_path()), "saved in this test's directory");
+    let bytes = fs::read(&download.path).expect("downloaded session log");
+    let log = log::read(&bytes).expect("the browser's session log decodes");
+    assert!(matches!(log.end, End::Said(_)), "the whole visit fits its session log");
+    let build = std::str::from_utf8(&log.build).expect("build's ASCII digest");
+    let bundle = std::path::PathBuf::from(std::env::var_os("TEMPER_TEST_PLAYGROUND").expect("built playground"));
+    let index = fs::read_to_string(bundle.join("index.html")).expect("playground index");
+    assert!(index.contains(&format!("src=\"/bundle/{build}/boot.js\"")), "the log names the shipped bundle");
+    assert_eq!(download.name.as_ref(), format!("temper-playground-{build}.log").as_bytes());
+    assert!(log.start.start.as_nanos() != 0, "the page read its start wall");
+    let first = std::str::from_utf8(&bytes).expect("text log").lines().next().expect("first line");
+    assert_eq!(
+        first,
+        format!("{} {} {build} YQ== {} {}", log::FORMAT, log::VERSION, log.start.seed, log.start.start.as_nanos()),
+        "the first line names the format, build, story, seed and start"
+    );
+    let kept = skein_scratch::paths::target_tmp().join(format!("browser-session-{}.log", log.start.seed));
+    fs::write(&kept, &bytes).expect("keep this replay's evidence");
+    println!("browser session saved: {}", kept.display());
+    println!("browser session header: {first}");
+    println!("browser session: seed={}, bytes={}, inputs={}", log.start.seed, bytes.len(), log.inputs.len());
+    // This real-tier clock only measures the call; it never enters the replayed world.
+    let clock = skein_shell::Clock::new();
+    let started = clock.now().now;
+    let replay = temper_one_process_world::replay::run(&bytes);
+    println!("browser session native replay: {} ns", clock.now().now.as_nanos() - started.as_nanos());
+    let replay = replay.expect("the browser's session log replays natively");
+    assert!(replay.drained);
+    assert!(replay.commits > 0, "the referee observed real durable commits");
 }
 
 #[test]
@@ -83,7 +127,11 @@ fn browser_step(step: PersonStep<Address>) -> Step {
 fn run_with_figures(tier: &Tier, script: Script) {
     let mut story = Figures { script, words: None };
     assert_eq!(Harness::new(tier.playground_setup()).run(&mut [&mut story]), Outcome::Done);
-    let words = std::str::from_utf8(story.words.as_deref().expect("frame's figures")).expect("figures UTF-8");
+    check_figures(story.words.as_deref().expect("frame's figures"));
+}
+
+fn check_figures(bytes: &[u8]) {
+    let words = std::str::from_utf8(bytes).expect("figures UTF-8");
     println!("playground figures: {words}");
     let (memory, slice) = words
         .strip_prefix("The world: ")
@@ -127,5 +175,49 @@ impl Play for Figures {
 
     fn check_deadline(&mut self, face: &mut BrowserFace<'_>, now: Time) {
         self.script.check_deadline(face, now);
+    }
+}
+
+/// After the figures, press the frame's key and wait for the kit's completed file.
+struct SessionLog {
+    figures: Figures,
+    press: Script,
+    downloaded: Option<Download>,
+    deadline: Option<Time>,
+}
+
+impl Play for SessionLog {
+    fn next(&mut self, face: &mut BrowserFace<'_>, now: Time) -> Next<Box<[u8]>> {
+        if self.figures.words.is_none() {
+            match self.figures.next(face, now) {
+                Next::Done => {}
+                next @ (Next::Do(_) | Next::Wait { .. } | Next::Failed { .. }) => return next,
+            }
+        }
+        match self.press.next(face, now) {
+            Next::Done => {}
+            next @ (Next::Do(_) | Next::Wait { .. } | Next::Failed { .. }) => return next,
+        }
+        let deadline = *self.deadline.get_or_insert_with(|| now.saturating_add(WITHIN));
+        if let Some(download) = face.downloads().first() {
+            assert_eq!(face.downloads().len(), 1, "one press saves one log");
+            self.downloaded = Some(download.clone());
+            Next::Done
+        } else {
+            assert!(now < deadline, "the session log download completed within the story's wait");
+            Next::Wait { until: Some(deadline) }
+        }
+    }
+
+    fn at(&self) -> u32 {
+        self.figures.at() + self.press.at()
+    }
+
+    fn check_deadline(&mut self, face: &mut BrowserFace<'_>, now: Time) {
+        self.figures.check_deadline(face, now);
+        self.press.check_deadline(face, now);
+        if let Some(deadline) = self.deadline {
+            assert!(now < deadline, "the session log download completed within the story's wait");
+        }
     }
 }

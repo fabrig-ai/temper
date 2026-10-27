@@ -37,6 +37,9 @@ jig-client-protocol-link.workspace = true
 jig-client-fake-person-browser.workspace = true
 
 [dev-dependencies]
+skein-shell.workspace = true
+temper-one-process-world = { path = "../one-process" }
+skein-ui-web.workspace = true
 temper-playground-world = { path = "../playground" }
 temper-client-domain.workspace = true
 skein-io.workspace = true

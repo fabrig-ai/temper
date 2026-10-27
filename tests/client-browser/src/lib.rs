@@ -148,6 +148,16 @@ impl Tier {
         setup
     }
 
+    /// A playground visit allowed to save its log into this test's own directory.
+    #[must_use]
+    pub fn playground_download_setup(&self) -> Setup<'_> {
+        let mut setup = self.playground_setup();
+        let downloads = self.scratch.path().join("downloads");
+        fs::create_dir(&downloads).expect("this visit's downloads directory");
+        setup.downloads = Some(downloads);
+        setup
+    }
+
     #[must_use]
     pub fn new(name: &str) -> Self {
         let scratch = skein_scratch::Scratch::new(name);

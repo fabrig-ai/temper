@@ -2426,14 +2426,17 @@ dependencies = [
  "skein-lib",
  "skein-oauth",
  "skein-scratch",
+ "skein-shell",
  "skein-sim",
  "skein-tls-world",
  "skein-ui",
  "skein-ui-bundle",
+ "skein-ui-web",
  "skein-world",
  "smith-agent-shell",
  "temper-client-domain",
  "temper-engine-domain",
+ "temper-one-process-world",
  "temper-playground-world",
 ]
 
