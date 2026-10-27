@@ -25,8 +25,8 @@ fn unchanged(tier: &Tier) -> [Step; 3] {
 }
 
 /// One listener is visited as 127.0.0.1 and localhost because the two request proofs need two origins:
-/// the same host on another port can carry its cookie; another host is another site. Framing uses
-/// that same listener's localhost alias, all in one browser/service session.
+/// the same host on another port can carry its cookie; another host is another site. Framing then
+/// uses that same listener directly, all in one browser/service session.
 #[test]
 fn cross_origin_requests_do_nothing_and_a_frame_shows_nothing() {
     let tier = Tier::new("browser-attacks");
@@ -39,14 +39,10 @@ fn cross_origin_requests_do_nothing_and_a_frame_shows_nothing() {
         kind: b"text/html".as_slice().into(),
         body: br##"<!doctype html><title>Attacker aliases</title>
 <a id="forging" href="#">Attack from localhost</a>
-<a id="framing" href="#">Frame from localhost</a>
 <script>
-const url = new URL(location.href);
+const url = new URL('/forging', location.href);
 url.hostname = 'localhost';
-for (const path of ['forging', 'framing']) {
-    url.pathname = '/' + path;
-    document.getElementById(path).href = url.href;
-}
+document.getElementById('forging').href = url.href;
 </script>"##
             .as_slice()
             .into(),
@@ -79,9 +75,7 @@ for (const path of ['forging', 'framing']) {
     steps.extend(unchanged(&tier));
     steps.extend([
         see(live()),
-        aliases(),
-        see(Find::exactly_named(Role::Link, b"Frame from localhost")),
-        press(b"Frame from localhost"),
+        Step::Visit { origin: ATTACKER, path: b"/framing".as_slice().into() },
         trouble(b"frame-ancestors"),
         Step::Person(PersonStep::Gone { find: live(), within: ABSENT }),
     ]);
