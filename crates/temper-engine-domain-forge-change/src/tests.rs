@@ -1,7 +1,7 @@
 //! Procedure cells, queue order and landing-rule agreement.
 use crate::{
     Change, Ci, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, GateReport,
-    Heard, Hold, Limits, Pull, Ready, Repair, State, Status, first, released, step,
+    Heard, Hold, Limits, Pull, Ready, Repair, State, Status, Verification, first, released, step,
 };
 use alloc::boxed::Box;
 use skein_lib::{Duration, Wall};
@@ -37,6 +37,7 @@ fn change(state: State) -> Change {
 fn facts() -> Facts {
     Facts {
         ask: None,
+        verification: Verification::Cleared,
         branch: Some(HEAD),
         expected_base: BASE,
         pull: Pull::Open { head: HEAD, base: BASE },
@@ -155,7 +156,7 @@ fn a_change_is_produced_opened_checked_queued_and_landed() {
     assert_eq!(decide(&eight.change, &f, &heard()).decision, Decision::Wait { until: Some(at(31)) });
     f.pull = Pull::Merged { commit: MERGE };
     let nine = decide(&eight.change, &f, &heard());
-    assert_eq!(nine.change.state, State::Landed { merge: MERGE });
+    assert_eq!(nine.change.state, State::Cleared { merge: MERGE });
     assert_eq!(nine.decision, Decision::Finish { merge: MERGE });
 }
 fn failed_producer() -> (Change, Facts, Heard) {
@@ -728,4 +729,64 @@ fn a_live_advisory_gate_does_not_hold_a_green_head() {
     assert_eq!(decide(&c, &f, &heard()).decision, Decision::Ready);
     f.ci.status = Status::Failed;
     assert_eq!(decide(&c, &f, &heard()).decision, Decision::CancelGates { head: HEAD });
+}
+
+#[test]
+fn a_merge_into_a_repository_with_no_tier_finishes_as_it_is_seen() {
+    let mut f = facts();
+    f.pull = Pull::Merged { commit: MERGE };
+    let next = decide(&change(State::Landing { head: HEAD }), &f, &heard());
+    assert_eq!(next.change.state, State::Cleared { merge: MERGE });
+    assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+}
+
+#[test]
+fn a_merged_change_waits_verifying() {
+    let mut f = facts();
+    f.pull = Pull::Merged { commit: MERGE };
+    f.verification = Verification::Verifying;
+    let next = decide(&change(State::Landing { head: HEAD }), &f, &heard());
+    assert_eq!(next.change.state, State::Landed { merge: MERGE });
+    assert_eq!(next.decision, Decision::None);
+}
+
+#[test]
+fn a_verifying_change_finishes_once_cleared() {
+    let next = decide(&change(State::Landed { merge: MERGE }), &facts(), &heard());
+    assert_eq!(next.change.state, State::Cleared { merge: MERGE });
+    assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+}
+
+#[test]
+fn a_red_change_waits_red_until_cleared() {
+    let mut f = facts();
+    f.verification = Verification::Red;
+    let red = decide(&change(State::Landed { merge: MERGE }), &f, &heard());
+    assert_eq!(red.change.state, State::Red { merge: MERGE });
+    assert_eq!(red.decision, Decision::None);
+    f.verification = Verification::Verifying;
+    let waiting = decide(&red.change, &f, &heard());
+    assert_eq!(waiting.change.state, State::Red { merge: MERGE });
+    assert_eq!(waiting.decision, Decision::None);
+    f.verification = Verification::Cleared;
+    let cleared = decide(&waiting.change, &f, &heard());
+    assert_eq!(cleared.change.state, State::Cleared { merge: MERGE });
+    assert_eq!(cleared.decision, Decision::Finish { merge: MERGE });
+}
+
+#[test]
+fn a_cleared_change_finishes_again_when_stepped_again() {
+    let next = decide(&change(State::Cleared { merge: MERGE }), &facts(), &heard());
+    assert_eq!(next.change.state, State::Cleared { merge: MERGE });
+    assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+}
+
+#[test]
+fn a_cancelled_verifying_change_finishes_with_its_landing() {
+    let mut f = facts();
+    f.verification = Verification::Verifying;
+    for state in [State::Landed { merge: MERGE }, State::Red { merge: MERGE }] {
+        let next = decide(&change(state), &f, &Heard { cancelled: true, ..heard() });
+        assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+    }
 }
