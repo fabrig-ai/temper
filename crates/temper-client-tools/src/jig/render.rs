@@ -88,6 +88,21 @@ impl<'a> Part<'a> {
         }
     }
 }
+pub(crate) fn terminal_phase(phase: contract::Phase) -> bool {
+    match phase {
+        contract::Phase::Ended | contract::Phase::Done | contract::Phase::Failed | contract::Phase::Cancelled => true,
+        contract::Phase::Waiting
+        | contract::Phase::Idle
+        | contract::Phase::Due
+        | contract::Phase::Preparing
+        | contract::Phase::Claimed
+        | contract::Phase::Running
+        | contract::Phase::BackingOff
+        | contract::Phase::Active
+        | contract::Phase::Closing
+        | contract::Phase::Held => false,
+    }
+}
 pub(crate) fn read_task(value: &ReadValue) -> Option<(&contract::Task, Option<&contract::Result>)> {
     if let ReadValue::Task(task) = value {
         return Some((task, None));
