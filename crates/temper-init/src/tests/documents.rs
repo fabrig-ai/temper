@@ -142,6 +142,10 @@ fn the_default_is_the_owned_example_so_edited() {
         expected["engine"]["projects"][0]["policy"]["period_spend"] = json!(202_944_u64);
         expected["engine"]["projects"][0]["policy"]["roles"][0]["period_spend"] = json!(202_944_u64);
         expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = json!(101_472_u64);
+        for authority in ["/engine/projects/0/policy/ceiling", "/engine/projects/0/policy/roles/0/authority"] {
+            expected.pointer_mut(authority).expect("seed authority")["delegation"]["kinds"]
+                .as_array_mut().expect("executor kinds").insert(2, json!({"kind":"charter", "number":4}));
+        }
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
         expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(12_288_u32);
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
