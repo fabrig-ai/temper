@@ -3105,7 +3105,7 @@ fn change_outcome(
     emit(out, Request::ChangeDecision { task, decision: change::Decision::None, entry: None, evidence: None });
 }
 
-/// A release adopts this freshly read head, including the client's drift baseline.
+/// A release adopts an observed head, including the client's drift baseline.
 fn accept_released_branch(
     d: &mut Domain,
     env: &Env<Limits>,
@@ -3144,8 +3144,11 @@ fn release_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<
     for (name, hold) in &d.holds {
         if hold.task == task && hold.drift.is_some() {
             affected.push(name.clone()).expect("at most all held resources");
-            if let Some(crate::Drift { change: crate::DriftChange::Branch { observed: head, .. }, .. }) = &hold.drift {
-                observed = *head;
+            if let Some(drift) = &hold.drift {
+                match &drift.change {
+                    crate::DriftChange::Branch { observed: head, .. } => observed = *head,
+                    crate::DriftChange::PullClosed { .. } | crate::DriftChange::Retargeted { .. } => {}
+                }
             }
         }
     }
@@ -3435,12 +3438,26 @@ fn end_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Requ
             merge = Some(*commit);
         }
     }
-    if !matches!(row.change.state, change::State::Landed { .. }) {
-        row.change.state = match merge {
+    row.change.state = match &row.change.state {
+        change::State::Landed { merge } => change::State::Landed { merge: *merge },
+        change::State::Producing { .. }
+        | change::State::Opening { .. }
+        | change::State::Recreating { .. }
+        | change::State::Reopening { .. }
+        | change::State::Checking { .. }
+        | change::State::Gating { .. }
+        | change::State::Queued { .. }
+        | change::State::First { .. }
+        | change::State::Updating { .. }
+        | change::State::Resolving { .. }
+        | change::State::Repairing { .. }
+        | change::State::Landing { .. }
+        | change::State::Ended
+        | change::State::Held { .. } => match merge {
             Some(merge) => change::State::Landed { merge },
             None => change::State::Ended,
-        };
-    }
+        },
+    };
     row.change.released = None;
     row.change.owns_turn = false;
     row.delegate = None;
