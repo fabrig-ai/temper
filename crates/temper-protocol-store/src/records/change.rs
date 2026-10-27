@@ -134,6 +134,7 @@ fn decode_delegate(value: w::Delegate) -> d::Delegate {
 }
 fn encode_live(value: &d::State) -> w::ChangeLive {
     match value {
+        d::State::Ended => w::ChangeLive::Ended,
         d::State::Producing { requested } => w::ChangeLive::Producing(
             w::Producing::new(&w::CEILINGS, w::ProducingParts { requested: *requested }).expect(FITS),
         ),
@@ -186,6 +187,7 @@ fn encode_live(value: &d::State) -> w::ChangeLive {
 }
 fn decode_live(value: w::ChangeLive) -> d::State {
     match value {
+        w::ChangeLive::Ended => d::State::Ended,
         w::ChangeLive::Producing(value) => {
             let w::ProducingParts { requested } = value.into_parts();
             d::State::Producing { requested }
@@ -314,6 +316,7 @@ pub(super) fn encode_change(value: &d::Change) -> w::Change {
         owns_turn,
         last_head,
         gate_failures,
+        released,
     } = value;
     w::Change::new(
         &w::CEILINGS,
@@ -333,6 +336,10 @@ pub(super) fn encode_change(value: &d::Change) -> w::Change {
             owns_turn: *owns_turn,
             last_head: *last_head,
             gate_failures: encode_gate_failures(gate_failures),
+            released: match released {
+                Some(why) => Some(encode_hold(*why)),
+                None => None,
+            },
         },
     )
     .expect(FITS)
@@ -352,6 +359,7 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
         owns_turn,
         last_head,
         gate_failures,
+        released,
     } = value.into_parts();
     d::Change {
         task,
@@ -369,6 +377,10 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
         owns_turn,
         last_head,
         gate_failures: decode_gate_failures(gate_failures),
+        released: match released {
+            Some(why) => Some(decode_hold(why)),
+            None => None,
+        },
     }
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]

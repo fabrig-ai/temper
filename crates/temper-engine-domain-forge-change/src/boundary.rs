@@ -133,6 +133,8 @@ pub enum State {
     Landing { head: Commit },
     /// The pull request merged at this commit.
     Landed { merge: Commit },
+    /// The task ended after its outstanding effects and holdings settled.
+    Ended,
     /// No write is made until a release lifts this cause.
     Held { was: Box<State>, why: Hold },
 }
@@ -144,8 +146,10 @@ pub struct Change {
     pub state: State,
     pub gates: Box<[Gate]>,
     pub clean: Box<[Commit]>,
-    /// One bounded count per gate; cleared when the head changes.
+    /// One bounded count per gate; cleared when the head changes or the task is released.
     pub gate_failures: Box<[GateFailure]>,
+    /// A lifted hold awaiting the next fresh forge snapshot.
+    pub released: Option<Hold>,
     pub repairs: u32,
     pub resolutions: u32,
     pub updates: u32,

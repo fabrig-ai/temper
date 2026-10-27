@@ -21,5 +21,5 @@ pub use boundary::{
     Change, Ci, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, GateReport,
     Heard, Hold, Limits, Pull, Ready, Repair, State, Status, Stepped,
 };
-pub use domain::{review_failed, step};
+pub use domain::{released, review_failed, step};
 pub use queue::first;

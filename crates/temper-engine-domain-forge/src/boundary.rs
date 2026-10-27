@@ -1102,7 +1102,7 @@ pub enum Event {
         queue_repair_active: bool,
         kept: bool,
     },
-    /// A person released a drift-held change after inspecting the new head.
+    /// A requester or person released a held change.
     ReleaseChange {
         task: u64,
     },

@@ -1,8 +1,8 @@
 //! Procedure cells, queue order and landing-rule agreement.
 #![expect(clippy::trivially_copy_pass_by_ref, reason = "test helper borrows the standing snapshot")]
 use crate::{
-    Change, Ci, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateKind, GateReport, Heard, Hold,
-    Limits, Pull, Ready, Repair, State, Status, first, step,
+    Change, Ci, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, GateReport,
+    Heard, Hold, Limits, Pull, Ready, Repair, State, Status, first, released, step,
 };
 use alloc::boxed::Box;
 use skein_lib::{Duration, Wall};
@@ -23,6 +23,7 @@ fn change(state: State) -> Change {
         gates: Box::new([]),
         clean: Box::new([]),
         gate_failures: Box::new([]),
+        released: None,
         repairs: 0,
         resolutions: 0,
         updates: 0,
@@ -452,4 +453,49 @@ fn each_gate_has_its_own_failure_count() {
         &[crate::GateFailure { number: 9, count: 1 }, crate::GateFailure { number: 10, count: 1 }]
     );
     assert_eq!(decide(&two, &facts(), &heard()).decision, Decision::Delegate(Delegate::Gate { number: 9, head: HEAD }));
+}
+
+#[test]
+fn a_release_resets_failed_review_tries_before_any_forge_read() {
+    let mut c =
+        change(State::Held { was: Box::new(State::Gating { head: HEAD, asked: Box::new([]) }), why: Hold::Failed });
+    c.gate_failures = Box::new([GateFailure { number: 1, count: 2 }]);
+    c.repairs = LIMITS.repairs;
+    let lifted = released(&c, at(5));
+    assert!(!matches!(lifted.state, State::Held { .. }));
+    assert!(lifted.gate_failures.is_empty());
+    assert_eq!(lifted.released, Some(Hold::Failed));
+    assert_eq!(lifted.repairs, 0);
+    assert_eq!(lifted.since, at(5));
+    let decided = step(&lifted, &facts(), &heard(), at(10), &LIMITS);
+    assert_eq!(decided.change.released, None);
+    assert_eq!(decided.change.since, at(5), "a slow read does not restart the release's stall clock");
+}
+
+#[test]
+fn a_cancel_ends_every_held_cause_unless_the_change_landed() {
+    for why in [
+        Hold::Failed,
+        Hold::Repairs,
+        Hold::Rejected,
+        Hold::BranchMoved,
+        Hold::Stalled,
+        Hold::Resolutions,
+        Hold::Updates,
+        Hold::BranchMissing,
+        Hold::PullClosed,
+        Hold::Retargeted,
+    ] {
+        let c = change(State::Held { was: Box::new(State::Gating { head: HEAD, asked: Box::new([]) }), why });
+        let mut h = heard();
+        h.cancelled = true;
+        let ended = decide(&c, &facts(), &h);
+        assert_eq!(ended.decision, Decision::Cancel, "{why:?}");
+        assert_eq!(ended.change.state, State::Ended, "{why:?}");
+        let mut f = facts();
+        f.pull = Pull::Merged { commit: MERGE };
+        let landed = decide(&c, &f, &h);
+        assert_eq!(landed.change.state, State::Landed { merge: MERGE });
+        assert_eq!(landed.decision, Decision::Finish { merge: MERGE });
+    }
 }

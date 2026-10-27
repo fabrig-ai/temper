@@ -1706,6 +1706,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                     gates,
                     clean: Box::new([]),
                     gate_failures: Box::new([]),
+                    released: None,
                     repairs: 0,
                     resolutions: 0,
                     updates: 0,
@@ -1793,7 +1794,15 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
         heard: forge_change::Heard {
             delegate: forge_change::Status::Unknown,
             effect: forge_change::EffectResult::None,
-            released: false,
+            // A held procedure can only run again once jig has lifted its hold.
+            // The forge consumes this before starting any asynchronous reads.
+            released: match (domain.forge.change(task), domain.core.tasks.task(task)) {
+                (Some(change), Some(task)) => {
+                    matches!(change.change.state, forge_change::State::Held { .. })
+                        && task.due_reason == tasks::Why::Released
+                }
+                _ => false,
+            },
             cancelled: false,
         },
         gates: Box::new([]),

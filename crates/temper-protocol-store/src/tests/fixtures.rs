@@ -733,6 +733,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
             }]),
             clean: Box::new([[8; 32], [9; 32]]),
             gate_failures: Box::new([temper_engine_domain_forge_change::GateFailure { number: 7, count: 1 }]),
+            released: Some(Hold::Failed),
             repairs: 10,
             resolutions: 11,
             updates: 12,
@@ -756,7 +757,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
     use temper_engine_domain_forge_change::{Hold, Repair, State};
-    let mut states = List::with_capacity(17);
+    let mut states = List::with_capacity(18);
     for state in [
         State::Producing { requested: true },
         State::Opening { requested: false },
@@ -771,6 +772,7 @@ pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
         State::Repairing { requested: true, why: Repair::Gate(14) },
         State::Landing { head: [15; 32] },
         State::Landed { merge: [16; 32] },
+        State::Ended,
         State::Repairing { requested: false, why: Repair::Ci },
         State::Repairing { requested: true, why: Repair::Semantic },
     ] {
