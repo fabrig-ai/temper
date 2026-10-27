@@ -1,21 +1,21 @@
 /* A goal's additions to the terminal task page (client/README.md, 5.8).
    Loaded after temper.css, on its palette and type (client/browser.md, 2.5). */
 /* .card-top and .tag.outline: the result beside the request's heading. */
-.temper-task-card:has(> .temper-task-contract) { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; column-gap: 18px; }
+.temper-task-card:has(> .temper-task-contract) { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; column-gap: 19.5px; }
 .temper-task-card:has(> .temper-task-contract) > * { flex-basis: 100%; min-width: 0; }
 .temper-task-card:has(> .temper-task-contract) > h2 { flex-basis: auto; }
-.temper-task-card > .temper-task-contract { flex: 0 1 auto; max-width: 100%; margin: 0; padding: 2px 6px; border: 1px solid var(--temper-line); border-radius: 3px; color: #6d695f; /* style.css .tag */ background: transparent; font-size: 10px; font-weight: 600; line-height: 1.58; }
+.temper-task-card > .temper-task-contract { flex: 0 1 auto; max-width: 100%; margin: 0; padding: 2.17px 6.5px; border: 1px solid var(--temper-line); border-radius: 3.25px; color: #6d695f; /* style.css .tag */ background: transparent; font-size: 10.83px; font-weight: 600; line-height: 1.58; }
 /* .tree-row without model/on: name, kind, state and its own spend, one line
    ("N spent") whose width the name gives up. */
-.temper-plan-row:has(> .temper-plan-spend) { grid-template-columns: minmax(0, 1fr) 150px 250px max-content; column-gap: 10px; min-height: 31px; padding: 5px 0; }
+.temper-plan-row:has(> .temper-plan-spend) { grid-template-columns: minmax(0, 1fr) 162.5px 270.83px max-content; column-gap: 10.83px; min-height: 33.58px; padding: 5.42px 0; }
 .temper-plan-row:has(> .temper-plan-spend) > .temper-plan-spend { grid-column: 4; grid-row: 1; text-align: right; color: var(--temper-muted); white-space: nowrap; }
 .temper-plan [role=treeitem] > [role=group] > [role=treeitem] > .temper-plan-row > .temper-plan-spend { padding-left: 0; }
 .temper-plan-row:has(> .temper-plan-spend) > :nth-child(5) { grid-column: 1 / -1; grid-row: 2; }
 /* The dependency list adds words the reference world does not supply. */
-.temper-dependencies { list-style: none; margin: 0 0 7px; padding: 0; font-size: 10px; line-height: 1.58; color: var(--temper-muted); }
+.temper-dependencies { list-style: none; margin: 0 0 7.58px; padding: 0; font-size: 10.83px; line-height: 1.58; color: var(--temper-muted); }
 .temper-dependencies::before { content: attr(aria-label) ": "; }
-.temper-plan [role=treeitem] > [role=group] > [role=treeitem] > .temper-dependencies { margin-left: calc(2ch + 9px); }
-.temper-dependencies > li { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.temper-plan [role=treeitem] > [role=group] > [role=treeitem] > .temper-dependencies { margin-left: calc(2ch + 9.75px); }
+.temper-dependencies > li { display: inline-flex; align-items: baseline; gap: 5.42px; white-space: nowrap; }
 .temper-dependencies > li + li::before { content: ' · ' / ''; white-space: pre; }
 .temper-dependencies p { margin: 0; }
 .temper-dependencies [role=status] { display: inline; width: auto; padding: 0; border-radius: 0; background: transparent; color: var(--temper-muted); font-size: inherit; font-weight: 400; }
@@ -26,11 +26,11 @@
 .temper-dependencies a:hover { color: var(--temper-accent-dark); text-decoration: underline; }
 /* .side-card, .mini-stat, .rule and .kv from the terminal sheets.
    .two-col > aside.stack gives the card one of three desktop columns. */
-.temper-main.temper-page > .temper-task-budget { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: calc((min(1160px, 100% - 48px) - 18px) / 3); margin-left: max(24px, calc((100% - 1160px) / 2)); margin-right: auto; padding: 14px 16px; font-size: 11px; }
-.temper-task-budget > h2 { grid-column: 1 / -1; margin: 0 0 9px; font-size: 12px; font-weight: 700; }
-.temper-task-budget > p { grid-column: 1 / -1; margin: 6px 0 0; color: var(--temper-muted); font-size: 11px; line-height: 1.58; }
-.temper-task-budget > p:first-of-type { margin-top: 0; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--temper-line); }
-.temper-task-budget > [role=term], .temper-task-budget > [role=definition] { min-width: 0; padding: 6px 0; border-bottom: 1px solid #f0ede8; /* style.css .kv */ }
+.temper-main.temper-page > .temper-task-budget { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: calc((min(1256.67px, 100% - 52px) - 19.5px) / 3); margin-left: max(26px, calc((100% - 1256.67px) / 2)); margin-right: auto; padding: 15.17px 17.33px; font-size: 11.92px; }
+.temper-task-budget > h2 { grid-column: 1 / -1; margin: 0 0 9.75px; font-size: 13px; font-weight: 700; }
+.temper-task-budget > p { grid-column: 1 / -1; margin: 6.5px 0 0; color: var(--temper-muted); font-size: 11.92px; line-height: 1.58; }
+.temper-task-budget > p:first-of-type { margin-top: 0; margin-bottom: 13px; padding-bottom: 13px; border-bottom: 1px solid var(--temper-line); }
+.temper-task-budget > [role=term], .temper-task-budget > [role=definition] { min-width: 0; padding: 6.5px 0; border-bottom: 1px solid #f0ede8; /* style.css .kv */ }
 .temper-task-budget > [role=term] { grid-column: 1; color: var(--temper-muted); }
 .temper-task-budget > [role=definition] { grid-column: 2; text-align: right; font-weight: 600; }
 .temper-task-budget > [role=definition] + [role=definition] { padding-top: 0; }
@@ -43,26 +43,26 @@
 .temper-events > li > div > a:hover { text-decoration: underline; }
 /* .tree-row at 1100px: the reference narrows kind, state and spend. */
 @media (max-width: 1100px) {
-  .temper-plan-row:has(> .temper-plan-spend) { grid-template-columns: minmax(0, 1fr) 130px 220px max-content; }
+  .temper-plan-row:has(> .temper-plan-spend) { grid-template-columns: minmax(0, 1fr) 140.83px 238.33px max-content; }
 }
 @media (max-width: 850px) {
-  .temper-main.temper-page > .temper-task-budget { width: calc((100% - 34px - 18px) / 3); margin-left: 17px; }
+  .temper-main.temper-page > .temper-task-budget { width: calc((100% - 36.83px - 19.5px) / 3); margin-left: 18.42px; }
 }
 /* The phone keeps every cell, unlike the reference's hidden kind/model/on;
    the spend sits at the right of the name's line, as the reference's. */
 @media (max-width: 760px) {
-  .temper-plan-row:has(> .temper-plan-spend) { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) max-content; row-gap: 4px; }
+  .temper-plan-row:has(> .temper-plan-spend) { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) max-content; row-gap: 4.33px; }
   .temper-plan-row:has(> .temper-plan-spend) > :first-child { grid-column: 1 / 3; grid-row: 1; }
   .temper-plan-row:has(> .temper-plan-spend) > p:nth-child(2) { grid-column: 1; grid-row: 2; }
   .temper-plan-row:has(> .temper-plan-spend) > [role=status] { grid-column: 2; grid-row: 2; }
   .temper-plan-row:has(> .temper-plan-spend) > .temper-plan-spend { grid-column: 3; grid-row: 1; }
   .temper-plan-row:has(> .temper-plan-spend) > :nth-child(5) { grid-column: 1 / -1; grid-row: 3; }
-  .temper-main.temper-page > .temper-task-budget { width: calc(100% - 28px); margin-left: 14px; }
+  .temper-main.temper-page > .temper-task-budget { width: calc(100% - 30.33px); margin-left: 15.17px; }
 }
 
 /* An agent's task's page (client/README.md, 5.9). */
-.temper-chat:has(> .temper-agent-lineage) > .temper-agent-lineage { flex: none; min-height: 31px; display: flex; align-items: center; gap: 9px; padding: 5px 25px; border-bottom: 1px solid var(--temper-line); color: #989084; font-size: 10px; white-space: nowrap; overflow: hidden; }
-.temper-agent-lineage > div { display: flex; align-items: baseline; gap: 9px; min-width: 0; overflow: hidden; }
+.temper-chat:has(> .temper-agent-lineage) > .temper-agent-lineage { flex: none; min-height: 33.58px; display: flex; align-items: center; gap: 9.75px; padding: 5.42px 27.08px; border-bottom: 1px solid var(--temper-line); color: #989084; font-size: 10.83px; white-space: nowrap; overflow: hidden; }
+.temper-agent-lineage > div { display: flex; align-items: baseline; gap: 9.75px; min-width: 0; overflow: hidden; }
 .temper-agent-lineage > div > p { margin: 0; overflow: hidden; text-overflow: ellipsis; }
 .temper-agent-lineage > div > :first-child { flex: none; }
 .temper-agent-lineage a { color: #8e5542; flex: none; }
@@ -70,103 +70,103 @@
 .temper-agent-lineage a:hover { text-decoration: underline; }
 .temper-agent-lineage > div + div::before { content: "/" / ""; flex: none; }
 .temper-chat:has(> .temper-agent-lineage) .temper-chatbar .temper-status-waiting { color: #8b7957; }
-.temper-chat:has(> .temper-agent-lineage) .temper-chatbar h1 { display: block; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--temper-ink); font-size: 12px; }
+.temper-chat:has(> .temper-agent-lineage) .temper-chatbar h1 { display: block; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--temper-ink); font-size: 13px; }
 /* One scrolling column keeps brief, run, conversation and result in order. */
-.temper-chat:has(> .temper-agent-lineage) > .temper-thread { overflow-y: auto; overflow-x: hidden; padding-top: 18px; scrollbar-width: thin; scrollbar-color: #d9d1c5 transparent; }
+.temper-chat:has(> .temper-agent-lineage) > .temper-thread { overflow-y: auto; overflow-x: hidden; padding-top: 19.5px; scrollbar-width: thin; scrollbar-color: #d9d1c5 transparent; }
 .temper-chat:has(> .temper-agent-lineage) > .temper-thread > [role=log] { flex: none; min-height: 0; padding-top: 0; overflow: visible; }
-.temper-chat .temper-thread > .temper-agent-brief { margin-bottom: 20px; padding: 11px 15px; border-left: 2px solid #d8bba5; background: #f8f5f0; }
-.temper-agent-brief > h2 { margin: 0; color: #a15a43; font-size: 10px; font-weight: 700; line-height: 2.054; letter-spacing: .08em; text-transform: uppercase; }
-.temper-agent-brief p { margin: 5px 0 7px; font-size: 12px; }
-.temper-agent-brief > p:last-of-type { margin: 0; color: #91887c; font-size: 10px; }
-.temper-agent-brief > .temper-dependencies { margin: 7px 0 0; }
+.temper-chat .temper-thread > .temper-agent-brief { margin-bottom: 21.67px; padding: 11.92px 16.25px; border-left: 2.17px solid #d8bba5; background: #f8f5f0; }
+.temper-agent-brief > h2 { margin: 0; color: #a15a43; font-size: 10.83px; font-weight: 700; line-height: 2.054; letter-spacing: .08em; text-transform: uppercase; }
+.temper-agent-brief p { margin: 5.42px 0 7.58px; font-size: 13px; }
+.temper-agent-brief > p:last-of-type { margin: 0; color: #91887c; font-size: 10.83px; }
+.temper-agent-brief > .temper-dependencies { margin: 7.58px 0 0; }
 .temper-agent-brief .temper-dependencies .temper-status-waiting { color: #8b7957; }
-.temper-agent-run > h2 { display: flex; align-items: center; gap: 12px; margin: 0 0 17px; color: #605a51; font-size: 10px; font-weight: 700; line-height: 1.58; letter-spacing: inherit; }
+.temper-agent-run > h2 { display: flex; align-items: center; gap: 13px; margin: 0 0 18.42px; color: #605a51; font-size: 10.83px; font-weight: 700; line-height: 1.58; letter-spacing: inherit; }
 .temper-agent-run > h2::after { content: ''; height: 1px; flex: 1; background: var(--temper-line); }
-.temper-agent-run > p { margin: -11px 0 19px; color: #a39b90; font-size: 10px; }
-.temper-chat:has(> .temper-agent-lineage) .temper-thread > [role=log] ~ .temper-agent-result { width: min(931px, calc(100% - 173px)); margin: 2px max(32px, calc((100% - 1040px) / 2)) 18px auto; padding: 10px 13px; border-left: 2px solid #84a98f; background: #f2f7f1; font-size: 11px; }
-.temper-agent-result > h2 { display: block; margin: 0 0 4px; color: #477b59; font-size: 10px; line-height: 1.58; letter-spacing: .06em; text-transform: uppercase; }
+.temper-agent-run > p { margin: -11.92px 0 20.58px; color: #a39b90; font-size: 10.83px; }
+.temper-chat:has(> .temper-agent-lineage) .temper-thread > [role=log] ~ .temper-agent-result { width: min(1008.58px, calc(100% - 187.42px)); margin: 2.17px max(34.67px, calc((100% - 1126.67px) / 2)) 19.5px auto; padding: 10.83px 14.08px; border-left: 2.17px solid #84a98f; background: #f2f7f1; font-size: 11.92px; }
+.temper-agent-result > h2 { display: block; margin: 0 0 4.33px; color: #477b59; font-size: 10.83px; line-height: 1.58; letter-spacing: .06em; text-transform: uppercase; }
 .temper-agent-result > .temper-details { display: block; margin: 0; padding: 0; border-radius: 0; background: transparent; }
-.temper-agent-result > [role=status] { margin-bottom: 4px; color: #477b59; font-size: 10px; }
+.temper-agent-result > [role=status] { margin-bottom: 4.33px; color: #477b59; font-size: 10.83px; }
 .temper-agent-result p { margin: 0; }
 /* Inline code and provisional text keep the conversation's terminal look. */
-.temper-chat:has(> .temper-agent-lineage) .temper-says :not(pre) > span > code { background: #f4f0ea; padding: 0 3px; border-radius: 3px; font: .92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.temper-chat:has(> .temper-agent-lineage) .temper-says :not(pre) > span > code { background: #f4f0ea; padding: 0 3.25px; border-radius: 3.25px; font: .92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .temper-chat:has(> .temper-agent-lineage) .temper-by-agent:has(> .temper-who > [role=status]) > .temper-who > [role=status] { color: #4c8067; }
 .temper-chat:has(> .temper-agent-lineage) .temper-by-agent:has(> .temper-who > [role=status]) > .temper-says { color: #59534c; }
-.temper-chat:has(> .temper-agent-lineage) .temper-by-agent:has(> .temper-who > [role=status]) > .temper-says > p:last-child::after { content: ''; display: inline-block; width: 5px; height: 12px; margin-left: 2px; background: #aa6a50; vertical-align: -2px; }
+.temper-chat:has(> .temper-agent-lineage) .temper-by-agent:has(> .temper-who > [role=status]) > .temper-says > p:last-child::after { content: ''; display: inline-block; width: 5.42px; height: 13px; margin-left: 2.17px; background: #aa6a50; vertical-align: -2.17px; }
 @media (max-width: 760px) {
-  .temper-chat:has(> .temper-agent-lineage) > .temper-agent-lineage { padding-inline: 16px; }
-  .temper-chat:has(> .temper-agent-lineage) .temper-chatbar { height: auto; min-height: 37px; flex-wrap: wrap; padding-block: 8px; }
+  .temper-chat:has(> .temper-agent-lineage) > .temper-agent-lineage { padding-inline: 17.33px; }
+  .temper-chat:has(> .temper-agent-lineage) .temper-chatbar { height: auto; min-height: 40.08px; flex-wrap: wrap; padding-block: 8.67px; }
   .temper-chat:has(> .temper-agent-lineage) .temper-chatbar > div:first-child { min-width: 0; width: 100%; flex-wrap: nowrap; }
   .temper-chat:has(> .temper-agent-lineage) .temper-chatbar > div:last-child { display: flex; flex-wrap: wrap; }
-  .temper-chat:has(> .temper-agent-lineage) .temper-chatbar h1 { max-width: calc(42vw + 5ch); }
-  .temper-chat:has(> .temper-agent-lineage) .temper-thread > [role=log] ~ .temper-agent-result { width: calc(100% - 102px); margin-right: 16px; }
+  .temper-chat:has(> .temper-agent-lineage) .temper-chatbar h1 { max-width: calc(45.5vw + 5ch); }
+  .temper-chat:has(> .temper-agent-lineage) .temper-thread > [role=log] ~ .temper-agent-result { width: calc(100% - 110.5px); margin-right: 17.33px; }
 }
 @media (max-width: 430px) {
-  .temper-chat:has(> .temper-agent-lineage) .temper-chatbar h1 { max-width: calc(34vw + 3ch); }
-  .temper-chat:has(> .temper-agent-lineage) .temper-thread > [role=log] ~ .temper-agent-result { width: calc(100% - 32px); }
+  .temper-chat:has(> .temper-agent-lineage) .temper-chatbar h1 { max-width: calc(36.83vw + 3ch); }
+  .temper-chat:has(> .temper-agent-lineage) .temper-thread > [role=log] ~ .temper-agent-result { width: calc(100% - 34.67px); }
 }
 
 /* Task acts (client/README.md, 5.11): .page-header and .task-toolbar.
    The header and toolbar are sibling view parts, sharing a desktop row. */
-.temper-main.temper-page:has(> .temper-task-acts) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 25px; }
+.temper-main.temper-page:has(> .temper-task-acts) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 27.08px; }
 .temper-page:has(> .temper-task-acts) > * { grid-column: 1 / -1; }
-.temper-main.temper-page:has(> .temper-task-acts) > .temper-task-heading { grid-column: 1; grid-row: 2; width: auto; margin-left: max(24px, calc((100vw - 1160px) / 2)); margin-right: 0; }
-.temper-main.temper-page > .temper-task-acts { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 7px; width: auto; max-width: 320px; margin: 22px max(24px, calc((100vw - 1160px) / 2)) 19px 0; }
-.temper-task-acts > :is(button, a) { min-height: 28px; margin: 0; padding: 5px 9px; border: 1px solid #dcd5ca; border-radius: 4px; background: var(--temper-paper); color: var(--temper-ink); font: 600 11px/1.35 var(--temper-mono); white-space: nowrap; }
+.temper-main.temper-page:has(> .temper-task-acts) > .temper-task-heading { grid-column: 1; grid-row: 2; width: auto; margin-left: max(26px, calc((108.33vw - 1256.67px) / 2)); margin-right: 0; }
+.temper-main.temper-page > .temper-task-acts { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: center; gap: 7.58px; width: auto; max-width: 346.67px; margin: 23.83px max(26px, calc((108.33vw - 1256.67px) / 2)) 20.58px 0; }
+.temper-task-acts > :is(button, a) { min-height: 30.33px; margin: 0; padding: 5.42px 9.75px; border: 1px solid #dcd5ca; border-radius: 4.33px; background: var(--temper-paper); color: var(--temper-ink); font: 600 11.92px/1.35 var(--temper-mono); white-space: nowrap; }
 .temper-task-acts > :is(button, a):hover { border-color: #c9b7a8; background: #faf7f2; }
 /* .task-toolbar .button: an external link in the toolbar, drawn as its buttons. */
-.temper-task-acts > a { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; }
+.temper-task-acts > a { display: inline-flex; align-items: center; gap: 7.58px; text-decoration: none; }
 .temper-task-acts > .temper-task-danger { color: var(--temper-red); }
 /* Admissions have words in place of buttons; retain their supplied order. */
-.temper-task-acts > p, .temper-task-acts > [role=status] { flex: 0 0 100%; margin: 0; font-size: 11px; line-height: 1.58; overflow-wrap: anywhere; }
+.temper-task-acts > p, .temper-task-acts > [role=status] { flex: 0 0 100%; margin: 0; font-size: 11.92px; line-height: 1.58; overflow-wrap: anywhere; }
 .temper-task-acts > p { color: var(--temper-muted); }
 .temper-task-acts > p[aria-label] { color: var(--temper-ink); font-weight: 600; }
 /* Progress/outcome and the own held card follow the toolbar in its column. */
-.temper-page:has(> .temper-task-heading) > [role=status] { margin-top: 0; margin-bottom: 14px; color: var(--temper-muted); font-size: 11px; overflow-wrap: anywhere; }
-.temper-page > .temper-plan-hold { margin-top: 0; margin-bottom: 19px; }
+.temper-page:has(> .temper-task-heading) > [role=status] { margin-top: 0; margin-bottom: 15.17px; color: var(--temper-muted); font-size: 11.92px; overflow-wrap: anywhere; }
+.temper-page > .temper-plan-hold { margin-top: 0; margin-bottom: 20.58px; }
 /* .agent-steer-note, above the chat's choice line and composer. */
-.temper-chat .temper-composer-area > .temper-agent-steer { width: min(1040px, 100%); margin: 0 auto 6px; color: #91897e; font-size: 10px; line-height: 1.58; }
+.temper-chat .temper-composer-area > .temper-agent-steer { width: min(1126.67px, 100%); margin: 0 auto 6.5px; color: #91897e; font-size: 10.83px; line-height: 1.58; }
 .temper-agent-steer > p { margin: 0; }
 /* A refused Message's reason is a note in the steer note's look, not an outcome (5.11). */
 .temper-composer-area > .temper-agent-steer [role=status].temper-refusal { color: inherit; font-size: inherit; }
-.temper-chat:has(> .temper-agent-lineage) .temper-composer-area > :is(p:not(.temper-agent-steer), [role=status]) { width: min(1040px, 100%); margin: 0 auto 6px; font-size: 11px; overflow-wrap: anywhere; }
+.temper-chat:has(> .temper-agent-lineage) .temper-composer-area > :is(p:not(.temper-agent-steer), [role=status]) { width: min(1126.67px, 100%); margin: 0 auto 6.5px; font-size: 11.92px; overflow-wrap: anywhere; }
 @media (max-width: 850px) {
-  .temper-main.temper-page:has(> .temper-task-acts) > .temper-task-heading { margin-left: 17px; }
-  .temper-main.temper-page > .temper-task-acts { margin-right: 17px; }
+  .temper-main.temper-page:has(> .temper-task-acts) > .temper-task-heading { margin-left: 18.42px; }
+  .temper-main.temper-page > .temper-task-acts { margin-right: 18.42px; }
 }
 @media (max-width: 600px) {
   .temper-main.temper-page:has(> .temper-task-acts) { grid-template-columns: minmax(0, 1fr); }
-  .temper-main.temper-page:has(> .temper-task-acts) > .temper-task-heading { margin-left: 14px; margin-bottom: 0; margin-right: 14px; }
-  .temper-main.temper-page > .temper-task-acts { grid-column: 1; grid-row: 3; max-width: none; margin: 9px 14px 19px; }
+  .temper-main.temper-page:has(> .temper-task-acts) > .temper-task-heading { margin-left: 15.17px; margin-bottom: 0; margin-right: 15.17px; }
+  .temper-main.temper-page > .temper-task-acts { grid-column: 1; grid-row: 3; max-width: none; margin: 9.75px 15.17px 20.58px; }
 }
 
 /* The amendment editor (client/README.md, 5.11), with the mockup's fields and button row. */
-.temper-task-amend { margin: 0 24px 20px; padding: 16px; border: 1px solid var(--temper-line, #dcd5ca); border-radius: 6px; background: var(--temper-paper); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-.temper-task-amend > h2 { flex: 1 0 100%; margin: 0; font: 600 12px/1.4 var(--temper-mono); }
-.temper-task-amend > textarea { flex: 1 0 100%; box-sizing: border-box; min-height: 130px; padding: 9px 11px; border: 1px solid #dcd5ca; border-radius: 4px; font: 12px/1.6 var(--temper-mono); }
-.temper-task-amend > input[type=text] { width: 90px; padding: 7px; border: 1px solid #dcd5ca; border-radius: 4px; }
-.temper-task-amend > button { padding: 7px 11px; border: 1px solid #dcd5ca; border-radius: 4px; font: 600 11px/1.35 var(--temper-mono); }
-.temper-task-amend > p, .temper-task-amend > [role=status] { flex: 1 0 100%; margin: 0; font-size: 12px; overflow-wrap: anywhere; }
-@media (max-width: 600px) { .temper-task-amend { margin-inline: 14px; } }
+.temper-task-amend { margin: 0 26px 21.67px; padding: 17.33px; border: 1px solid var(--temper-line, #dcd5ca); border-radius: 6.5px; background: var(--temper-paper); display: flex; flex-wrap: wrap; gap: 13px; align-items: center; }
+.temper-task-amend > h2 { flex: 1 0 100%; margin: 0; font: 600 13px/1.4 var(--temper-mono); }
+.temper-task-amend > textarea { flex: 1 0 100%; box-sizing: border-box; min-height: 140.83px; padding: 9.75px 11.92px; border: 1px solid #dcd5ca; border-radius: 4.33px; font: 13px/1.6 var(--temper-mono); }
+.temper-task-amend > input[type=text] { width: 97.5px; padding: 7.58px; border: 1px solid #dcd5ca; border-radius: 4.33px; }
+.temper-task-amend > button { padding: 7.58px 11.92px; border: 1px solid #dcd5ca; border-radius: 4.33px; font: 600 11.92px/1.35 var(--temper-mono); }
+.temper-task-amend > p, .temper-task-amend > [role=status] { flex: 1 0 100%; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .temper-task-amend { margin-inline: 15.17px; } }
 
 /* .card.card-pad: the change's panel, containing its supplied parts. */
-.temper-change { margin: 0 24px 22px; padding: 15px 18px; border: 1px solid var(--temper-line); border-radius: 5px; background: var(--temper-paper); min-width: 0; overflow-wrap: anywhere; }
+.temper-change { margin: 0 26px 23.83px; padding: 16.25px 19.5px; border: 1px solid var(--temper-line); border-radius: 5.42px; background: var(--temper-paper); min-width: 0; overflow-wrap: anywhere; }
 /* .tag.accent: the change's identity in the header. */
-.temper-task-heading > .temper-meta:first-of-type > .temper-change-tag:first-child { background: var(--temper-accent-pale); color: var(--temper-accent-dark); padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+.temper-task-heading > .temper-meta:first-of-type > .temper-change-tag:first-child { background: var(--temper-accent-pale); color: var(--temper-accent-dark); padding: 2.17px 6.5px; border-radius: 3.25px; font-size: 10.83px; font-weight: 600; }
 /* .steps: six columns, with the supplied current and completed slots. */
-.temper-change .temper-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; margin: 15px 0; padding: 0; list-style: none; }
+.temper-change .temper-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3.25px; margin: 16.25px 0; padding: 0; list-style: none; }
 /* .step: the quiet slots ahead of the current step. */
-.temper-change .temper-step { border-top: 3px solid var(--temper-line); padding-top: 9px; font-size: 10px; color: var(--temper-muted); }
+.temper-change .temper-step { border-top: 3.25px solid var(--temper-line); padding-top: 9.75px; font-size: 10.83px; color: var(--temper-muted); }
 /* .step.done: completed slots. */
 .temper-change .temper-step-done { border-color: var(--temper-green); color: var(--temper-green); }
 /* .step.current: the supplied current slot. */
 .temper-change .temper-step-current { border-color: var(--temper-accent); color: var(--temper-accent-dark); font-weight: 700; }
 /* .notice: the held step and its reason. */
-.temper-change .temper-change-hold { padding: 11px 14px; border-radius: 4px; background: var(--temper-amber-pale); color: #6f5738; border: 1px solid #ecdfc7; font-size: 11px; line-height: 1.5; }
+.temper-change .temper-change-hold { padding: 11.92px 15.17px; border-radius: 4.33px; background: var(--temper-amber-pale); color: #6f5738; border: 1px solid #ecdfc7; font-size: 11.92px; line-height: 1.5; }
 /* .gate: a name and its verdict in one row. */
-.temper-change .temper-gate { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #f0ede8; /* style.css .gate */ font-size: 11px; }
+.temper-change .temper-gate { display: flex; justify-content: space-between; gap: 13px; padding: 7.58px 0; border-bottom: 1px solid #f0ede8; /* style.css .gate */ font-size: 11.92px; }
 /* .section-heading h3: the two regions inside the change's card. */
-.temper-change > [role=region] > h2 { margin: 23px 0 9px; font-size: 12px; font-weight: 700; line-height: 1.35; }
+.temper-change > [role=region] > h2 { margin: 24.92px 0 9.75px; font-size: 13px; font-weight: 700; line-height: 1.35; }
 /* .gate strong: the name carries the row's weight. */
 .temper-change .temper-gate > p:first-child { font-weight: 700; }
 /* .gate strong.muted: "No other gate.", a name with no verdict. */
@@ -178,8 +178,8 @@
 .temper-change .temper-gate:last-child { border: 0; }
 /* .steps at phone width: three columns in the same order. */
 @media (max-width: 600px) {
-  .temper-change { margin-inline: 14px; }
-  .temper-change .temper-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px; }
+  .temper-change { margin-inline: 15.17px; }
+  .temper-change .temper-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 15.17px; }
 }
 
 .temper-plan-done > .temper-plan-row > :first-child > a { color: var(--temper-muted); }
