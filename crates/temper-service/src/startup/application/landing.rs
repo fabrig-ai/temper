@@ -218,11 +218,13 @@ pub(super) fn parse(
                 if !found && !restored_turn {
                     problems.push(path.member(b"project"), What::Jig(config::What::Refers));
                 }
-                if projects.contains_key(&project) {
+                if projects.contains_key(&project) || landings.contains_key(&project) {
                     problems.push(path.member(b"project"), What::Jig(config::What::Unique));
                 }
                 let rules = rules(document, ats, &path.member(b"rules"), jig, limits, Some(project), problems);
-                projects.insert(project, rules).expect("bounded projects");
+                if found {
+                    projects.insert(project, rules).expect("bounded projects");
+                }
                 if let Some(landing) = landing {
                     landings.insert(project, landing).expect("bounded projects");
                 }
