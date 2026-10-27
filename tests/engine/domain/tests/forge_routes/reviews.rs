@@ -1111,6 +1111,7 @@ fn a_review_at_a_head_whose_ci_fails_is_cancelled_and_the_repair_is_funded() {
     assert_eq!(row.change.repairs, 1);
     assert!(row.verdicts.is_empty());
     assert!(row.change.gate_failures.is_empty(), "cancellation uses no failed-review retry");
+    assert_eq!(live_task(&world, change).made, 4, "producer, cancelled review and repair each count as made");
     let second_head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, FILE, b"repaired", 1)
         .expect("repair pushed H2");
     assert_ne!(second_head, first_head);
