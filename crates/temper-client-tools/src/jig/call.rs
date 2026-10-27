@@ -1,8 +1,5 @@
 //! A table row's typed arguments (tools contract, 5.1).
-use super::{
-    key::Name,
-    subject::{Condition, Subject},
-};
+use super::{key::Name, subject::Condition};
 use alloc::boxed::Box;
 use jig_client::contract::{InboxGroup, ProposalKey, QueryOrder, TurnName};
 /// The client tools' carried key bound (client/tools.md, 12).
@@ -35,7 +32,6 @@ pub enum Value {
     Proposal(ProposalKey),
     Digest([u8; 8]),
     Condition(Condition),
-    Subject(Subject),
     Switch,
     Project(Project),
     Turn(TurnName),
@@ -79,4 +75,19 @@ pub(crate) fn cursor(call: &Call, index: usize) -> Option<jig_client::contract::
         }
         _ => None,
     }
+}
+
+/// Whether this read was asked to wait.
+#[must_use]
+pub fn waiting(row: &super::table::Tool, call: &Call) -> bool {
+    argument(row, call, b"since").is_some() || argument(row, call, b"until").is_some()
+}
+pub(crate) fn argument<'a>(row: &super::table::Tool, call: &'a Call, name: &[u8]) -> Option<&'a Value> {
+    let args = row.forms.get(usize::from(call.form))?;
+    for (index, arg) in args.iter().enumerate() {
+        if arg.name == name {
+            return value(call, index);
+        }
+    }
+    None
 }

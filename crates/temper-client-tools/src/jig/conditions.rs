@@ -24,6 +24,7 @@ pub fn holds(condition: &Condition, facts: &Facts<'_>) -> Option<bool> {
             | Condition::WaitingOnMe
             | Condition::Held
             | Condition::Replied
+            | Condition::Changed
             | Condition::Phase(_) => None,
         },
         c::Delivery::Inbox(inbox) => match condition {
@@ -40,6 +41,7 @@ pub fn holds(condition: &Condition, facts: &Facts<'_>) -> Option<bool> {
             | Condition::WaitingOnMe
             | Condition::Held
             | Condition::Replied
+            | Condition::Changed
             | Condition::Phase(_) => None,
         },
         c::Delivery::OwnerInbox(inbox) => match condition {
@@ -51,6 +53,7 @@ pub fn holds(condition: &Condition, facts: &Facts<'_>) -> Option<bool> {
             | Condition::WaitingOnMe
             | Condition::Held
             | Condition::Replied
+            | Condition::Changed
             | Condition::Phase(_) => None,
         },
         c::Delivery::Task(task) => task_holds(*condition, task, facts.me),
@@ -81,6 +84,7 @@ pub fn holds(condition: &Condition, facts: &Facts<'_>) -> Option<bool> {
             | Condition::WaitingOnMe
             | Condition::Held
             | Condition::Replied
+            | Condition::Changed
             | Condition::Phase(_) => None,
         },
         c::Delivery::OwnerProject(_)
@@ -116,7 +120,9 @@ fn task_holds(condition: Condition, task: &c::Task, me: Option<&c::Me>) -> Optio
                 | ChatStatus::Retrying { .. } => false,
             }
         }
-        Condition::Usable | Condition::Settled | Condition::Waiting | Condition::Updates => return None,
+        Condition::Changed | Condition::Usable | Condition::Settled | Condition::Waiting | Condition::Updates => {
+            return None;
+        }
     })
 }
 /// Terminal chip facts can arrive before a watch's terminal.

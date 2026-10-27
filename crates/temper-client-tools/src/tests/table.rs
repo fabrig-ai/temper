@@ -188,7 +188,7 @@ const KEY_NEVER: &[(&[&str], u16)] = &[
     (&["task", "activity", "41", "--key", "key"], 1),
     (&["task", "turn", "41", "3.7", "--key", "key"], 2),
     (&["task", "run", "41", "--key", "key"], 1),
-    (&["wait", "me", "--key", "key"], 1),
+    (&["me", "--key", "key", "--until", "changed"], 0),
     (&["sign-in", "file", "--key", "key"], 1),
     (&["sign-out", "--key", "key"], 0),
     (&["pending", "--key", "key"], 0),

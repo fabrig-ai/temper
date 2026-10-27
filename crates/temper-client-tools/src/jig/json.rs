@@ -203,12 +203,13 @@ fn decode(
         let value = match found {
             Some(at) => Some(decode_values(table, doc, at, spec, limits)?),
             None if spec.kind == Kind::Order => Some(Values::One(Value::Order(QueryOrder::Number))),
-            None if spec.name == b"timeout" => Some(Values::One(Value::Duration(limits.wait))),
             None => None,
         };
         values.push(value).or(Err(Usage::Json))?;
     }
-    Ok(Decoded { values: values.into_boxed(), key })
+    let mut values = values.into_boxed();
+    argv::defaults(specs, &mut values, limits);
+    Ok(Decoded { values, key })
 }
 fn decode_values(table: &[&Tool], doc: &Document, at: u32, spec: &Argument, limits: &Limits) -> Result<Values, Usage> {
     let Occurs::Repeated { most } = spec.occurs else {
@@ -242,7 +243,6 @@ fn decode_value(table: &[&Tool], doc: &Document, at: u32, spec: &Argument, limit
         | Kind::Proposal
         | Kind::Digest
         | Kind::Condition
-        | Kind::Subject
         | Kind::Project { .. }
         | Kind::Turn
         | Kind::Cursor
@@ -254,27 +254,6 @@ fn decode_value(table: &[&Tool], doc: &Document, at: u32, spec: &Argument, limit
     // Amendment FILE arguments carry their loaded words in a JSON call.
     if spec.kind == Kind::File && (spec.name == b"instructions" || spec.name == b"spec" || spec.name == b"items") {
         return Ok(Value::Text(Box::from(bytes)));
-    }
-    if spec.kind == Kind::Subject {
-        let mut words = List::with_capacity(u32::try_from(bytes.len()).or(Err(Usage::Json))?);
-        let mut start = 0_usize;
-        for at in 0..=bytes.len() {
-            let boundary = match bytes.get(at) {
-                Some(byte) => byte.is_ascii_whitespace(),
-                None => true,
-            };
-            if boundary {
-                if start < at {
-                    words.push(bytes.get(start..at).ok_or(Usage::Json)?).or(Err(Usage::Json))?;
-                }
-                start = at.checked_add(1).ok_or(Usage::Json)?;
-            }
-        }
-        let (subject, outer) = argv::watch(table, words.as_slice(), limits)?;
-        if outer.len() != 1 {
-            return Err(Usage::Json);
-        }
-        return Ok(Value::Subject(subject));
     }
     // JSON durations are integer seconds, never argv's suffixed words.
     if spec.kind == Kind::Duration || kind == JsonKind::Number {
@@ -342,25 +321,6 @@ fn encode_value(table: &[&Tool], spec: &Argument, value: &Value, out: &mut Encod
         Value::Number(n) => out.unsigned(*n),
         Value::Project(crate::jig::call::Project::Number(n)) => out.unsigned(u64::from(*n)),
         Value::Duration(d) => out.unsigned(d.as_nanos().checked_div(1_000_000_000).ok_or(Refusal::Text)?),
-        Value::Subject(subject) => {
-            let mut words = List::with_capacity(256);
-            argv::write_subject(table, subject, &mut words).or(Err(Refusal::Text))?;
-            let mut size = 0_usize;
-            for word in &words {
-                size = size.checked_add(word.len()).ok_or(Refusal::Long)?;
-            }
-            let mut text = Writer::new(
-                size.checked_add(usize::try_from(words.len()).or(Err(Refusal::Long))?.saturating_sub(1))
-                    .ok_or(Refusal::Long)?,
-            );
-            for (index, word) in words.iter().enumerate() {
-                if index != 0 {
-                    text.put(b" ").or(Err(Refusal::Long))?;
-                }
-                text.put(word).or(Err(Refusal::Long))?;
-            }
-            out.string(&text.finish());
-        }
         Value::Word(_)
         | Value::Text(_)
         | Value::Stdin
@@ -435,7 +395,6 @@ fn kind_word(kind: Kind) -> &'static [u8] {
         Kind::Digest => b"digest",
         Kind::NamedNumber { .. } => b"string",
         Kind::Condition => b"condition",
-        Kind::Subject => b"subject",
         Kind::Project { .. } => b"project",
         Kind::Turn => b"turn",
         Kind::Cursor => b"cursor",
@@ -543,7 +502,6 @@ fn encode_argument(spec: &Argument, limits: &Limits, out: &mut Encoder) {
         | Kind::Proposal
         | Kind::Digest
         | Kind::Condition
-        | Kind::Subject
         | Kind::Project { .. }
         | Kind::Turn
         | Kind::Cursor

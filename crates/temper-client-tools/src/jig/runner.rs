@@ -156,6 +156,12 @@ fn live(runner: &Runner, client: &Client) -> bool {
     document.state == State::Live
 }
 fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, called: Called, out: &mut Queue<Out>) {
+    if let Some(row) = rows::watched(called.call.tool)
+        && super::call::waiting(row, &called.call)
+    {
+        wait::start(runner, client, env, called, out);
+        return;
+    }
     match called.call.tool {
         rows::ME_AT => {
             let Some(document) = client.document(runner.me()) else { return };
@@ -186,7 +192,7 @@ fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, call
         | rows::MOVE_TO_NEWEST_AT => {
             acts::start(runner, client, env, called, out);
         }
-        rows::WAIT_AT => wait::start(runner, client, env, called, out),
+        rows::TREE_AT => reads::start(runner, client, env, called, out),
         _ => {
             let printed = render::failure(b"call not supported", called.json, 1);
             finish(called, printed, out);

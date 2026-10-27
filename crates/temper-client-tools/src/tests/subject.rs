@@ -7,29 +7,29 @@ use crate::jig::{
 use jig_client::contract::Phase;
 use skein_lib::Duration;
 const UNTIL: &[(&[&str], bool)] = &[
-    (&["wait", "accounts", "--until", "usable"], true),
-    (&["wait", "accounts", "--until", "settled"], true),
-    (&["wait", "accounts", "--until", "waiting"], false),
-    (&["wait", "me", "--until", "usable"], false),
-    (&["wait", "me", "--until", "waiting"], true),
-    (&["wait", "me", "--until", "ended"], false),
-    (&["wait", "inbox", "--until", "updates"], true),
-    (&["wait", "inbox", "--until", "waiting"], true),
-    (&["wait", "task", "41", "--until", "phase:backing-off"], true),
-    (&["wait", "tree", "41", "--until", "replied"], false),
-    (&["wait", "tree", "41", "--until", "waiting-on-me"], false),
-    (&["wait", "tree", "41", "--until", "ended"], true),
-    (&["wait", "run", "41", "--until", "ended"], true),
-    (&["wait", "run", "41", "--until", "held"], false),
-    (&["wait", "task", "41", "--until", "waiting-on-me"], true),
-    (&["wait", "task", "41", "--until", "held"], true),
-    (&["wait", "task", "41", "--until", "replied"], true),
-    (&["wait", "task", "41", "--until", "phase:done"], false),
-    (&["wait", "task", "41", "--until", "phase:failed"], false),
-    (&["wait", "task", "41", "--until", "phase:cancelled"], false),
-    (&["wait", "task", "41", "--until", "phase:ended"], false),
-    (&["wait", "task", "41", "--until", "ended"], true),
-    (&["wait", "tasks", "--project", "shop", "--until", "ended"], false),
+    (&["account", "list", "--until", "usable"], true),
+    (&["account", "list", "--until", "settled"], true),
+    (&["account", "list", "--until", "waiting"], false),
+    (&["me", "--until", "usable"], false),
+    (&["me", "--until", "waiting"], true),
+    (&["me", "--until", "ended"], false),
+    (&["inbox", "--until", "updates"], true),
+    (&["inbox", "--until", "waiting"], true),
+    (&["task", "show", "41", "--until", "phase:backing-off"], true),
+    (&["task", "tree", "41", "--until", "replied"], false),
+    (&["task", "tree", "41", "--until", "waiting-on-me"], false),
+    (&["task", "tree", "41", "--until", "ended"], true),
+    (&["task", "run", "41", "--until", "ended"], true),
+    (&["task", "run", "41", "--until", "held"], false),
+    (&["task", "show", "41", "--until", "waiting-on-me"], true),
+    (&["task", "show", "41", "--until", "held"], true),
+    (&["task", "show", "41", "--until", "replied"], true),
+    (&["task", "show", "41", "--until", "phase:done"], false),
+    (&["task", "show", "41", "--until", "phase:failed"], false),
+    (&["task", "show", "41", "--until", "phase:cancelled"], false),
+    (&["task", "show", "41", "--until", "phase:ended"], false),
+    (&["task", "show", "41", "--until", "ended"], true),
+    (&["task", "list", "--project", "shop", "--until", "ended"], false),
 ];
 #[test]
 fn a_condition_is_taken_only_where_its_subject_names_it() {
@@ -73,30 +73,40 @@ const TIMEOUTS: &[(&str, u64)] =
 #[test]
 fn a_timeout_defaults_to_300_seconds_and_stops_at_3600() {
     assert_eq!(
-        fixtures::call(&["wait", "me"]).values[3],
+        fixtures::call(&["me", "--until", "changed"]).values[2],
         Some(Values::One(Value::Duration(Duration::from_secs(DEFAULT_SECONDS))))
     );
     for (word, seconds) in TIMEOUTS {
-        let call = fixtures::call(&["wait", "me", "--timeout", word]);
-        assert_eq!(call.values[3], Some(Values::One(Value::Duration(Duration::from_secs(*seconds)))), "{word}");
+        let call = fixtures::call(&["me", "--until", "changed", "--timeout", word]);
+        assert_eq!(call.values[2], Some(Values::One(Value::Duration(Duration::from_secs(*seconds)))), "{word}");
         assert_eq!(fixtures::printed(&call), Parsed::Call { call, json: false }, "{word}");
     }
-    assert_eq!(fixtures::parse(&["wait", "me", "--timeout", "3601"]), Err(Usage::Rows { argument: 3 }));
+    assert_eq!(fixtures::parse(&["me", "--until", "changed", "--timeout", "3601"]), Err(Usage::Rows { argument: 2 }));
     for word in ["-1", "0.5", "1d", "18446744073709551615h"] {
-        assert_eq!(fixtures::parse(&["wait", "me", "--timeout", word]), Err(Usage::Kind { argument: 3 }), "{word}");
+        assert_eq!(
+            fixtures::parse(&["me", "--until", "changed", "--timeout", word]),
+            Err(Usage::Kind { argument: 2 }),
+            "{word}"
+        );
     }
 }
 #[test]
 fn wait_tasks_takes_neither_a_cursor_nor_ended() {
     for words in [
-        &["wait", "tasks", "--project", "shop", "--after", "abcd"][..],
-        &["wait", "tasks", "--project", "shop", "--ended"],
+        &["task", "list", "--project", "shop", "--after", "abcd"][..],
+        &["task", "list", "--project", "shop", "--ended"],
     ] {
-        assert_eq!(fixtures::parse(words), Err(Usage::Unknown { at: 2 }), "{words:?}");
+        let words = fixtures::extended(words, &["--until", "changed"]);
+        match fixtures::parse(words.as_slice()) {
+            Err(Usage::WaitPart { tool: 2, .. }) => {}
+            other => panic!("expected incompatible task-list flag, got {other:?}"),
+        }
     }
     let call = fixtures::call(&[
-        "wait",
-        "tasks",
+        "task",
+        "list",
+        "--until",
+        "changed",
         "--project",
         "shop",
         "--label",
@@ -109,34 +119,40 @@ fn wait_tasks_takes_neither_a_cursor_nor_ended() {
     assert_eq!(fixtures::printed(&call), Parsed::Call { call, json: false });
 }
 const INBOX_FLAGS: &[&[&str]] = &[
-    &["wait", "inbox", "--project", "shop"],
-    &["wait", "inbox", "--kind", "replies"],
-    &["wait", "inbox", "--root", "41"],
-    &["wait", "inbox", "--after", "abcd"],
+    &["inbox", "--project", "shop"],
+    &["inbox", "--kind", "replies"],
+    &["inbox", "--root", "41"],
+    &["inbox", "--after", "abcd"],
 ];
 #[test]
 fn wait_inbox_takes_no_subject_flag() {
     for words in INBOX_FLAGS {
-        assert_eq!(fixtures::parse(words), Err(Usage::Unknown { at: 1 }), "{words:?}");
+        let words = fixtures::extended(words, &["--until", "changed"]);
+        assert!(fixtures::parse(words.as_slice()).is_err(), "{words:?}");
     }
 }
 const READ_FLAGS: &[&[&str]] = &[
-    &["wait", "task", "41", "--tree"],
-    &["wait", "task", "41", "--run"],
-    &["wait", "task", "41", "--activity", "2"],
-    &["wait", "me", "--tree"],
+    &["task", "show", "41", "--tree"],
+    &["task", "show", "41", "--run"],
+    &["task", "show", "41", "--activity", "2"],
+    &["me", "--tree"],
 ];
 #[test]
 fn other_read_flags_are_not_watch_arguments() {
     for words in READ_FLAGS {
-        assert_eq!(fixtures::parse(words), Err(Usage::Unknown { at: 1 }), "{words:?}");
+        let words = fixtures::extended(words, &["--until", "changed"]);
+        assert!(fixtures::parse(words.as_slice()).is_err(), "{words:?}");
     }
-    for words in [&["wait", "chat", "41"][..], &["wait", "activity", "41"], &["wait", "turn", "41", "3.7"]] {
-        assert_eq!(fixtures::parse(words), Err(Usage::Kind { argument: 0 }), "{words:?}");
+    for (words, at) in [
+        (&["chat", "show", "41", "--until", "changed"][..], 1),
+        (&["task", "activity", "41", "--until", "changed"], 1),
+        (&["task", "turn", "41", "3.7", "--until", "changed"], 2),
+    ] {
+        assert_eq!(fixtures::parse(words), Err(Usage::Unknown { at }), "{words:?}");
     }
 }
 #[test]
-fn ended_phase_errors_name_until_ended() {
+fn terminal_phases_are_refused_and_ended_is_taken() {
     for word in ["phase:done", "phase:failed", "phase:cancelled", "phase:ended"] {
         assert_eq!(subject::condition(&Subject::Task(41), word.as_bytes()), Err(Usage::Condition), "{word}");
     }
@@ -147,39 +163,40 @@ const DIGESTS: &[(&str, [u8; 8])] =
 #[test]
 fn since_and_until_parse_together() {
     for (word, digest) in DIGESTS {
-        let call = fixtures::call(&["wait", "me", "--since", word, "--until", "waiting"]);
-        assert_eq!(call.values[1], Some(Values::One(Value::Digest(*digest))), "{word}");
-        assert_eq!(call.values[2], Some(Values::One(Value::Condition(Condition::Waiting))), "{word}");
+        let call = fixtures::call(&["me", "--since", word, "--until", "waiting"]);
+        assert_eq!(call.values[0], Some(Values::One(Value::Digest(*digest))), "{word}");
+        assert_eq!(call.values[1], Some(Values::One(Value::Condition(Condition::Waiting))), "{word}");
         assert_eq!(fixtures::printed(&call), Parsed::Call { call, json: false }, "{word}");
     }
     for word in ["00112233445566", "001122334455667788", "00112233445566AA"] {
-        assert_eq!(fixtures::parse(&["wait", "me", "--since", word]), Err(Usage::Kind { argument: 1 }), "{word}");
+        assert_eq!(fixtures::parse(&["me", "--since", word]), Err(Usage::Kind { argument: 0 }), "{word}");
     }
-    let call = fixtures::call(&["wait", "tasks", "--timeout", "5m", "--project", "shop"]);
+    let call = fixtures::call(&["task", "list", "--until", "changed", "--timeout", "5m", "--project", "shop"]);
     assert_eq!(fixtures::printed(&call), Parsed::Call { call, json: false });
 }
 #[test]
 fn typed_wait_calls_follow_the_same_subject_condition_and_duration_checks() {
-    let base = fixtures::call(&["wait", "task", "41", "--until", "ended"]);
+    let base = fixtures::call(&["task", "show", "41", "--until", "ended"]);
     for (slot, value, error) in [
-        (0, Value::Subject(Subject::Me), Usage::Condition),
-        (2, Value::Condition(Condition::Phase(Phase::Done)), Usage::Condition),
-        (3, Value::Duration(Duration::from_secs(MOST_SECONDS.checked_add(1).unwrap())), Usage::Rows { argument: 3 }),
+        (5, Value::Condition(Condition::Phase(Phase::Done)), Usage::Condition),
+        (6, Value::Duration(Duration::from_secs(MOST_SECONDS.checked_add(1).unwrap())), Usage::Rows { argument: 6 }),
+        (1, Value::Switch, Usage::WaitPart { tool: 3, argument: 1 }),
     ] {
         let mut call = base.clone();
         call.values[slot] = Some(Values::One(value));
         assert_eq!(argv::check(crate::table::TOOLS, &call, &crate::limits::tools()), Err(error), "{slot}");
     }
-    for words in [
-        &["task", "list", "--project", "shop", "--ended"][..],
-        &["task", "list", "--project", "shop", "--after", "abcd"],
-    ] {
-        let mut call = base.clone();
-        call.values[0] = Some(Values::One(Value::Subject(Subject::Tasks(Box::new(fixtures::call(words))))));
+    for (flag, argument) in [("--ended", 4), ("--after", 6)] {
+        let words = if flag == "--ended" {
+            fixtures::extended(&["task", "list", "--project", "shop"], &[flag])
+        } else {
+            fixtures::extended(&["task", "list", "--project", "shop"], &[flag, "abcd"])
+        };
+        let mut call = fixtures::call(words.as_slice());
+        call.values[9] = Some(Values::One(Value::Condition(Condition::Changed)));
         assert_eq!(
             argv::check(crate::table::TOOLS, &call, &crate::limits::tools()),
-            Err(Usage::Condition),
-            "{words:?}"
+            Err(Usage::WaitPart { tool: 2, argument })
         );
     }
 }

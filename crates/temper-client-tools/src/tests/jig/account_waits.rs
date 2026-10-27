@@ -1,7 +1,7 @@
 use crate::tests::fixtures as f;
 use jig_client::contract as c;
 use skein_lib::Time;
-const WAIT_ACCOUNTS: &[&str] = &["wait", "accounts"];
+const WAIT_ACCOUNTS: &[&str] = &["account", "list"];
 
 #[test]
 fn account_waits_recompute_the_same_projection_as_account_reads() {
@@ -71,7 +71,7 @@ fn account_conditions_ignore_deployment_usability_until_the_party_changes() {
 fn a_behind_join_never_answers_from_its_cached_facts() {
     for behind in [&f::ACCOUNT_WATCH, &f::DEPLOYMENT_WATCH] {
         let mut root = f::account_root(true);
-        let call = root.submit(&["wait", "accounts", "--json"]);
+        let call = root.submit(&["account", "list", "--json", "--until", "changed"]);
         let mut party = f::accounts();
         let mut deployment = f::deployment();
         f::deliver_accounts(&mut root, party.clone());
@@ -97,7 +97,7 @@ fn a_behind_join_never_answers_from_its_cached_facts() {
 fn account_timeouts_release_both_watches_without_retaining_a_deadline() {
     for delivered in [false, true] {
         let mut root = f::account_root(true);
-        let call = root.submit(&["wait", "accounts", "--until", "usable", "--timeout", "1", "--json"]);
+        let call = root.submit(&["account", "list", "--until", "usable", "--timeout", "1", "--json"]);
         root.watch_event(&f::ACCOUNT_WATCH, c::WatchEvent::Opened);
         root.watch_event(&f::DEPLOYMENT_WATCH, c::WatchEvent::Opened);
         if delivered {
@@ -116,7 +116,7 @@ fn account_timeouts_release_both_watches_without_retaining_a_deadline() {
 #[test]
 fn account_permission_loss_releases_both_joined_watches() {
     let mut root = f::account_root(true);
-    let call = root.submit(&["wait", "accounts", "--until", "usable"]);
+    let call = root.submit(&["account", "list", "--until", "usable"]);
     root.watch_event(&f::ACCOUNT_WATCH, c::WatchEvent::Opened);
     root.watch_event(&f::DEPLOYMENT_WATCH, c::WatchEvent::Opened);
     root.end(call, &f::DEPLOYMENT_WATCH, c::WatchEnd::NotAllowed);
@@ -145,14 +145,14 @@ fn account_text_waits_append_the_condition_to_read_output() {
     let read = root.submit(&["account", "list"]);
     f::deliver_accounts(&mut root, party.clone());
     let expected = root.answer(read).expect("text read");
-    let wait = root.submit(&["wait", "accounts", "--until", "usable"]);
+    let wait = root.submit(&["account", "list", "--until", "usable"]);
     f::deliver_accounts(&mut root, party);
     assert_eq!(root.answer(wait).expect("text wait").stdout, f::appended(&expected.stdout, b"met\n"));
 }
 
 fn account_condition(condition: &str, usable: bool, settled: bool) -> (f::Harness, u32, c::OwnerAccounts) {
     let mut root = f::account_root(true);
-    let call = root.submit(&["wait", "accounts", "--until", condition, "--json"]);
+    let call = root.submit(&["account", "list", "--until", condition, "--json"]);
     let mut party = f::accounts();
     party.usable = usable;
     party.settled = settled;
@@ -169,7 +169,7 @@ fn me_offer_changes_wake_a_wait() {
         root.deliver(c::Delivery::Me(Box::new(me.clone())));
         let read = root.submit(&["me", "--json"]);
         let before = root.answer(read).expect("me projection");
-        let call = root.wait_since(&["wait", "me"], &[], &f::last_digest(&before.stdout));
+        let call = root.wait_since(&["me"], &[], &f::last_digest(&before.stdout));
         root.deliver(c::Delivery::Me(Box::new(me.clone())));
         assert!(root.answer(call).is_none(), "unchanged offers");
         (me.providers, me.providers_cut, me.key_bytes) = changed_offers(change);

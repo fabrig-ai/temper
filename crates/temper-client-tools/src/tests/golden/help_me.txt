@@ -1,4 +1,7 @@
-me
+me [--since DIGEST] [--until CONDITION] [--timeout DURATION]
+  --since DIGEST: a digest, as a read prints it; optional. Wait until it differs from the read that printed DIGEST
+  --until CONDITION: a condition; optional. Wait until it holds: waiting, or changed
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long a wait lasts; 300 seconds when absent, at most 3600
 Read your party: its projects, what it may start, and what waits on it
 Prints: `party N`, its login and name, its projects and bounds, what waits on it, the requests' retention, the providers it may use, and `digest: me`
 --json: the record me.

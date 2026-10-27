@@ -37,7 +37,7 @@ fn since_compares_the_first_delivery() {
     assert_eq!(root.answer(call).expect("first differs").status, 0);
 }
 #[test]
-fn an_unqualified_wait_uses_its_first_delivery_as_the_baseline() {
+fn until_changed_answers_the_first_change() {
     let (mut root, call) = f::waiting_call(f::WAIT_TASK, &[]);
     root.deliver_subject(&f::task_watch(), f::parked());
     assert!(root.answer(call).is_none());
@@ -173,7 +173,14 @@ fn a_task_watch_ending_reads_how_the_task_ended_before_answering() {
     let mut root = f::signed_in(f::PARTY);
     for phase in f::ENDED_PHASES {
         let argv = f::extended(f::WAIT_TASK, f::UNTIL_ENDED);
-        let argv = f::extended(argv.as_slice(), &["--json"]);
+        let argv = f::extended(
+            argv.as_slice(),
+            if argv.as_slice().contains(&"--until") || argv.as_slice().contains(&"--since") {
+                &["--json"]
+            } else {
+                &["--until", "changed", "--json"]
+            },
+        );
         let call = root.submit(argv.as_slice());
         root.deliver_subject(&f::task_watch(), f::writing_chat());
         root.end(call, &f::task_watch(), c::WatchEnd::SubjectEnded);
@@ -388,7 +395,14 @@ fn a_subject_ending_unmet_keeps_its_last_digest() {
     let mut root = f::signed_in(f::PARTY);
     for flags in [&[][..], f::UNTIL_RUNNING, &["--until", "held"][..]] {
         let argv = f::extended(f::WAIT_TASK, flags);
-        let argv = f::extended(argv.as_slice(), &["--json"]);
+        let argv = f::extended(
+            argv.as_slice(),
+            if argv.as_slice().contains(&"--until") || argv.as_slice().contains(&"--since") {
+                &["--json"]
+            } else {
+                &["--until", "changed", "--json"]
+            },
+        );
         let call = root.submit(argv.as_slice());
         let parked = f::parked();
         let expected = f::subject_json(&crate::jig::render::Part::delivery(&parked).expect("task"));
@@ -412,7 +426,7 @@ fn a_held_wait_ending_before_delivery_invents_no_document() {
 fn a_subject_no_longer_visible_exits_2() {
     let mut root = f::signed_in(f::PARTY);
     for (end, reason) in [(c::WatchEnd::Unknown, b"unknown".as_slice()), (c::WatchEnd::NotAllowed, b"not_allowed")] {
-        let argv = f::extended(f::WAIT_TASK, &["--json"]);
+        let argv = f::extended(f::WAIT_TASK, &["--until", "changed", "--json"]);
         let call = root.submit(argv.as_slice());
         root.end(call, &f::task_watch(), end);
         let answer = root.answer(call).expect("refused");
@@ -425,7 +439,7 @@ fn a_subject_no_longer_visible_exits_2() {
 fn client_watch_failures_exit_1() {
     let mut root = f::signed_in(f::PARTY);
     for end in [c::WatchEnd::SignedOut, c::WatchEnd::NotServed] {
-        let argv = f::extended(f::WAIT_TASK, &["--json"]);
+        let argv = f::extended(f::WAIT_TASK, &["--until", "changed", "--json"]);
         let call = root.submit(argv.as_slice());
         root.end(call, &f::task_watch(), end);
         assert_eq!(root.answer(call).expect("client failure").status, 1);
@@ -526,7 +540,7 @@ fn an_unchanged_ended_delivery_still_waits_for_the_terminal() {
 #[test]
 fn a_client_handle_limit_exits_1() {
     let mut root = f::signed_in_with_handle_limit();
-    let call = root.submit(f::WAIT_TASK);
+    let call = root.submit(f::extended(f::WAIT_TASK, &["--until", "changed"]).as_slice());
     assert_eq!(root.answer(call).expect("client handle limit").status, 1);
     assert_eq!(crate::root::next_deadline(&root.root), None);
 }
@@ -559,5 +573,61 @@ fn an_unknown_watch_without_a_terminal_condition_keeps_status_2() {
         assert!(root.reads.is_empty());
         assert_eq!(root.watches.len(), f::SHARED_WATCHES);
         assert_eq!(crate::root::next_deadline(&root.root), None);
+    }
+}
+
+#[test]
+fn changed_with_since_needs_a_change_after_the_baseline() {
+    let mut root = f::signed_in(f::PARTY);
+    let first = f::writing_chat();
+    let different = f::task_digest(&f::parked()).hex();
+    let call = root.wait_since(f::WAIT_TASK, &["--until", "changed"], &different);
+    root.deliver_subject(&f::task_watch(), first.clone());
+    assert!(root.answer(call).is_none());
+    root.deliver_subject(&f::task_watch(), f::parked());
+    assert!(root.answer(call).is_none(), "changed but equals since");
+    root.deliver_subject(&f::task_watch(), first);
+    assert_eq!(root.answer(call).expect("later delivery differs from since").status, 0);
+}
+#[test]
+fn task_tree_reads_the_tree_alone() {
+    let jig_client::Latest::Jig(c::Delivery::OwnerTree(mut owner)) = f::owner_tree_at(f::parked_task().chip) else {
+        panic!("owner tree")
+    };
+    owner.folded = skein_lib::List::with_capacity(1);
+    owner
+        .folded
+        .push(c::OwnerTreeFold {
+            parent: f::TASK,
+            phases: c::OwnerPhaseCounts { waiting: 1, ..c::OwnerPhaseCounts::ZERO },
+            held_below: 0,
+        })
+        .expect("fold");
+    for tree in [c::Delivery::Tree(Box::new(f::composite_tree())), c::Delivery::OwnerTree(owner)] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let flags = if json { &["--tree", "--json"][..] } else { &["--tree"][..] };
+            let words = f::extended(f::TASK_CALL, flags);
+            let compound = root.submit(words.as_slice());
+            root.serve(compound, f::task_result(f::goal(f::TASK, f::waiting_on_me())));
+            root.deliver_subject(&f::tree_watch(), tree.clone());
+            let compound = root.answer(compound).expect("task and tree");
+            let words = f::extended(f::WAIT_TREE, if json { &["--json"] } else { &[] });
+            let single = root.submit(words.as_slice());
+            assert!(root.reads.is_empty());
+            root.deliver_subject(&f::tree_watch(), tree.clone());
+            let single = root.answer(single).expect("tree alone");
+            assert_eq!(single.status, 0);
+            if json {
+                assert_eq!(single.stdout, f::subject_json(&crate::jig::render::Part::delivery(&tree).expect("tree")));
+                assert!(f::has(&compound, &single.stdout));
+            } else {
+                assert!(single.stdout.starts_with(b"tree:"));
+                assert!(f::has(&single, b"digest: tree "));
+                assert!(compound.stdout.ends_with(&single.stdout));
+                assert!(!f::has(&single, b"met\n"));
+            }
+            assert_eq!(crate::root::next_deadline(&root.root), None);
+        }
     }
 }

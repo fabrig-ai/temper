@@ -4,12 +4,12 @@ use super::{
     Limits,
     call::{Call, Parsed, Source, Value, Values},
     key::Name,
-    subject::{self, Subject},
+    subject,
     table::{Argument, Keyed, Kind, Occurs, Place, Tool, bound},
 };
 use alloc::boxed::Box;
 use jig_client::contract::QueryOrder;
-use skein_lib::{Decimal, List, Overflow, Writer};
+use skein_lib::{List, Overflow, Writer};
 use value::{decode, encode, valid};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Usage {
@@ -28,6 +28,8 @@ pub enum Usage {
     Stdin,
     Key,
     Condition,
+    Timeout,
+    WaitPart { tool: u8, argument: u8 },
     Json,
     AmendmentRevision,
 }
@@ -84,19 +86,8 @@ pub fn parse(table: &[&Tool], words: &[&[u8]], limits: &Limits) -> Result<Parsed
         let tool = u8::try_from(tool).or(Err(Usage::Tool))?;
         for (form, arguments) in row.forms.iter().enumerate() {
             let form = u8::try_from(form).or(Err(Usage::Tool))?;
-            let parsed = if subject_form(arguments) {
-                match watch(table, words, limits) {
-                    Ok((subject, words)) => {
-                        form_values(table, arguments, words.as_slice(), limits, row.keyed, json, Some(subject))
-                    }
-                    Err(failed) => {
-                        error = failed;
-                        continue;
-                    }
-                }
-            } else {
-                form_values(table, arguments, words, limits, row.keyed, json, None)
-            };
+            check_words(row, tool, arguments, words)?;
+            let parsed = form_values(table, arguments, words, limits, row.keyed, json);
             match parsed {
                 Ok(parsed) => {
                     let call = Call { tool, form, values: parsed.values, key: parsed.key };
@@ -164,7 +155,6 @@ fn form_values(
     limits: &Limits,
     keyed: Keyed,
     json: bool,
-    subject: Option<Subject>,
 ) -> Result<Form, Usage> {
     let count = u8::try_from(arguments.len()).or(Err(Usage::Tool))?;
     let mut values = List::with_capacity(u32::from(count));
@@ -221,8 +211,6 @@ fn form_values(
         }
         let value = if spec.place == Place::Switch {
             Value::Switch
-        } else if spec.kind == Kind::Subject {
-            Value::Subject(subject.clone().ok_or(Usage::Kind { argument })?)
         } else {
             let text = if flag {
                 let next = index.checked_add(1).ok_or(Usage::Tool)?;
@@ -250,12 +238,10 @@ fn form_values(
             if argument.kind == Kind::Order {
                 *slot = Some(Values::One(Value::Order(QueryOrder::Number)));
             }
-            if argument.name == b"timeout" {
-                *slot = Some(Values::One(Value::Duration(limits.wait)));
-            }
         }
     }
     result.values = values.into_boxed();
+    defaults(arguments, &mut result.values, limits);
     Ok(result)
 }
 fn repeated(occurs: Occurs) -> bool {
@@ -263,79 +249,6 @@ fn repeated(occurs: Occurs) -> bool {
         Occurs::Repeated { .. } => true,
         Occurs::Required | Occurs::Optional => false,
     }
-}
-/// Separate the watch's words; its task query still uses the table's parser.
-pub(crate) fn watch<'a>(
-    table: &[&Tool],
-    words: &[&'a [u8]],
-    limits: &Limits,
-) -> Result<(Subject, List<&'a [u8]>), Usage> {
-    let (name, rest) = words.split_first().ok_or(Usage::Missing { argument: 0 })?;
-    let count = u32::try_from(words.len()).or(Err(Usage::Tool))?;
-    let mut outer = List::with_capacity(count);
-    outer.push(*name).or(Err(Usage::Tool))?;
-    let (subject, consumed) = match *name {
-        b"me" => (Subject::Me, 0),
-        b"accounts" => (Subject::Accounts, 0),
-        b"inbox" => (Subject::Inbox, 0),
-        b"task" | b"tree" | b"run" => {
-            let number = value::number(rest.first().ok_or(Usage::Missing { argument: 0 })?)
-                .ok_or(Usage::Kind { argument: 0 })?;
-            let subject = match *name {
-                b"task" => Subject::Task(number),
-                b"tree" => Subject::Tree(number),
-                _ => Subject::Run(number),
-            };
-            (subject, 1)
-        }
-        b"tasks" => {
-            let tool = tool_index(table, super::rows::TASKS.name).ok_or(Usage::Tool)?;
-            let row = table.get(usize::from(tool)).ok_or(Usage::Tool)?;
-            let arguments = *row.forms.first().ok_or(Usage::Tool)?;
-            let mut query = List::with_capacity(count);
-            let mut skip = None;
-            for (index, word) in rest.iter().enumerate() {
-                if skip == Some(index) {
-                    continue;
-                }
-                let mut found = None;
-                for argument in arguments {
-                    if word.strip_prefix(b"--") == Some(argument.name) {
-                        found = Some(argument);
-                        break;
-                    }
-                }
-                let target = match found {
-                    Some(_) => &mut query,
-                    None => &mut outer,
-                };
-                target.push(*word).or(Err(Usage::Tool))?;
-                let takes_value = match found {
-                    Some(argument) => {
-                        if argument.name == b"after" || argument.name == b"ended" {
-                            return Err(Usage::Unknown { at: u16::try_from(index).or(Err(Usage::Tool))? });
-                        }
-                        argument.place == Place::Flag
-                    }
-                    None => *word == b"--since" || *word == b"--until" || *word == b"--timeout",
-                };
-                if takes_value {
-                    let next = index.checked_add(1).ok_or(Usage::Tool)?;
-                    target.push(*rest.get(next).ok_or(Usage::Missing { argument: 0 })?).or(Err(Usage::Tool))?;
-                    skip = Some(next);
-                }
-            }
-            let parsed = form_values(table, arguments, query.as_slice(), limits, Keyed::Never, false, None)?;
-            let call = Call { tool, form: 0, values: parsed.values, key: parsed.key };
-            check_values(table, arguments, &call.values, limits)?;
-            return Ok((Subject::Tasks(Box::new(call)), outer));
-        }
-        _ => return Err(Usage::Kind { argument: 0 }),
-    };
-    for word in rest.get(consumed..).ok_or(Usage::Tool)? {
-        outer.push(*word).or(Err(Usage::Tool))?;
-    }
-    Ok((subject, outer))
 }
 /// The same validation is used for typed JSON calls.
 pub fn check(table: &[&Tool], call: &Call, limits: &Limits) -> Result<(), Usage> {
@@ -389,38 +302,99 @@ pub fn check(table: &[&Tool], call: &Call, limits: &Limits) -> Result<(), Usage>
     if tool.name == b"inbox" {
         check_inbox(call)?;
     }
-    if subject_form(args) {
-        let Some(Some(Values::One(Value::Subject(subject)))) = call.values.first() else {
-            return Err(Usage::Condition);
-        };
-        validate_subject(table, subject, limits)?;
-        for slot in &call.values {
-            match slot {
-                Some(Values::One(Value::Condition(condition))) if !subject::takes(subject, condition) => {
-                    return Err(Usage::Condition);
-                }
-                _ => {}
+    check_watch(tool, call)?;
+    Ok(())
+}
+/// Defaults are added only to waiting reads; a bare read has no timer.
+pub(crate) fn defaults(args: &[Argument], values: &mut [Option<Values>], limits: &Limits) {
+    let mut waiting = false;
+    for (arg, value) in args.iter().zip(values.iter()) {
+        waiting |= (arg.name == b"since" || arg.name == b"until") && value.is_some();
+    }
+    if waiting {
+        for (arg, value) in args.iter().zip(values) {
+            if arg.name == b"timeout" && value.is_none() {
+                *value = Some(Values::One(Value::Duration(limits.wait)));
             }
         }
     }
-    Ok(())
 }
-fn validate_subject(table: &[&Tool], subject: &Subject, limits: &Limits) -> Result<(), Usage> {
-    match subject {
-        Subject::Tasks(call) => {
-            let row = table.get(usize::from(call.tool)).ok_or(Usage::Condition)?;
-            if row.name != b"task list" || call.form != 0 || call.key.is_some() {
-                return Err(Usage::Condition);
-            }
-            let args = *row.forms.first().ok_or(Usage::Condition)?;
-            check_values(table, args, &call.values, limits)?;
-            for (argument, value) in args.iter().zip(&call.values) {
-                if (argument.name == b"after" || argument.name == b"ended") && value.is_some() {
-                    return Err(Usage::Condition);
+fn incompatible(row: &Tool, name: &[u8]) -> bool {
+    match row.name {
+        b"inbox" => name == b"project" || name == b"kind" || name == b"root" || name == b"after",
+        b"task show" => name == b"tree" || name == b"activity" || name == b"run",
+        b"task list" => name == b"after" || name == b"ended",
+        _ => false,
+    }
+}
+// Check raw flags before decoding values: even an invalid part's value must
+// name the first incompatible flag in the order the caller supplied it.
+fn check_words(row: &Tool, tool: u8, args: &[Argument], words: &[&[u8]]) -> Result<(), Usage> {
+    let mut watched = false;
+    for arg in args {
+        watched |= arg.name == b"since";
+    }
+    if !watched {
+        return Ok(());
+    }
+    let mut since = false;
+    let mut until = false;
+    let mut timeout = false;
+    let mut part = None;
+    let mut skip = false;
+    for word in words {
+        if skip {
+            skip = false;
+            continue;
+        }
+        if *word == b"--" {
+            break;
+        }
+        let Some(name) = word.strip_prefix(b"--") else { continue };
+        since |= name == b"since";
+        until |= name == b"until";
+        timeout |= name == b"timeout";
+        for (index, arg) in args.iter().enumerate() {
+            if arg.name == name {
+                skip = arg.place == Place::Flag;
+                if part.is_none() && incompatible(row, name) {
+                    part = Some(u8::try_from(index).expect("bounded arguments"));
                 }
+                break;
             }
         }
-        Subject::Me | Subject::Accounts | Subject::Inbox | Subject::Task(_) | Subject::Tree(_) | Subject::Run(_) => {}
+    }
+    if !since && !until {
+        if timeout {
+            return Err(Usage::Timeout);
+        }
+    } else if let Some(argument) = part {
+        return Err(Usage::WaitPart { tool, argument });
+    }
+    Ok(())
+}
+fn check_watch(row: &Tool, call: &Call) -> Result<(), Usage> {
+    let args = row.forms.get(usize::from(call.form)).ok_or(Usage::Tool)?;
+    let mut watched = false;
+    for arg in *args {
+        watched |= arg.name == b"since";
+    }
+    if !watched {
+        return Ok(());
+    }
+    if !super::call::waiting(row, call) {
+        return if super::call::argument(row, call, b"timeout").is_some() { Err(Usage::Timeout) } else { Ok(()) };
+    }
+    for (index, (arg, value)) in args.iter().zip(&call.values).enumerate() {
+        if value.is_some() && incompatible(row, arg.name) {
+            return Err(Usage::WaitPart { tool: call.tool, argument: u8::try_from(index).expect("bounded arguments") });
+        }
+    }
+    if let Some(Value::Condition(condition)) = super::call::argument(row, call, b"until") {
+        let subject = subject::of(call).ok_or(Usage::Condition)?;
+        if !subject::takes(&subject, condition) {
+            return Err(Usage::Condition);
+        }
     }
     Ok(())
 }
@@ -494,7 +468,6 @@ pub fn back(table: &[&Tool], call: &Call, out: &mut List<Box<[u8]>>) -> Result<(
                 continue;
             }
             match slot {
-                Some(Values::One(Value::Subject(subject))) => write_subject(table, subject, out)?,
                 Some(Values::One(value)) => emit(table, argument, value, out)?,
                 Some(Values::Many(values)) => {
                     for value in values {
@@ -526,7 +499,7 @@ pub fn back(table: &[&Tool], call: &Call, out: &mut List<Box<[u8]>>) -> Result<(
 }
 fn escaped_position(args: &[Argument], values: &[Option<Values>], table: &[&Tool]) -> Result<usize, Unwritten> {
     for (index, (argument, slot)) in args.iter().zip(values).enumerate() {
-        if argument.place != Place::Positional || argument.kind == Kind::Subject {
+        if argument.place != Place::Positional {
             continue;
         }
         let Some(values) = slot else {
@@ -540,37 +513,6 @@ fn escaped_position(args: &[Argument], values: &[Option<Values>], table: &[&Tool
         }
     }
     Ok(args.len())
-}
-pub(crate) fn write_subject(table: &[&Tool], subject: &Subject, out: &mut List<Box<[u8]>>) -> Result<(), Unwritten> {
-    let (word, number) = match subject {
-        Subject::Me => (b"me".as_slice(), None),
-        Subject::Accounts => (b"accounts".as_slice(), None),
-        Subject::Inbox => (b"inbox".as_slice(), None),
-        Subject::Task(n) => (b"task".as_slice(), Some(*n)),
-        Subject::Tree(n) => (b"tree".as_slice(), Some(*n)),
-        Subject::Run(n) => (b"run".as_slice(), Some(*n)),
-        Subject::Tasks(call) => {
-            let row = table.get(usize::from(call.tool)).ok_or(Unwritten::NoForm)?;
-            let args = row.forms.get(usize::from(call.form)).ok_or(Unwritten::NoForm)?;
-            if row.name != b"task list" || args.len() != call.values.len() {
-                return Err(Unwritten::NoForm);
-            }
-            push(out, b"tasks")?;
-            for (argument, slot) in args.iter().zip(&call.values) {
-                match slot {
-                    Some(Values::One(value)) => emit(table, argument, value, out)?,
-                    None => {}
-                    Some(Values::Many(_)) => return Err(Unwritten::NoForm),
-                }
-            }
-            return Ok(());
-        }
-    };
-    push(out, word)?;
-    if let Some(n) = number {
-        push(out, Decimal::of(n).as_bytes())?;
-    }
-    Ok(())
 }
 fn emit(table: &[&Tool], argument: &Argument, value: &Value, out: &mut List<Box<[u8]>>) -> Result<(), Unwritten> {
     if *value == Value::Order(QueryOrder::Number) {
@@ -739,13 +681,6 @@ pub fn deadline(text: &[u8]) -> Option<skein_lib::Wall> {
         .checked_add(hour.checked_mul(3600)?)?
         .checked_add(minute.checked_mul(60)?)?;
     Some(skein_lib::Wall::from_nanos(seconds.checked_mul(1_000_000_000)?))
-}
-
-fn subject_form(arguments: &[Argument]) -> bool {
-    match arguments.first() {
-        Some(arg) => arg.kind == Kind::Subject,
-        None => false,
-    }
 }
 
 fn help_valid(table: &[&Tool], call: &Call) -> bool {

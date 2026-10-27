@@ -1,12 +1,12 @@
-task list --project PROJECT [--label chat|goal] [--tracked] [--mine] [--ended] [--order activity|priority] [--after CURSOR] [--parent TASK]
+task list --project PROJECT [--label chat|goal] [--tracked] [--mine] [--ended] [--order activity|priority] [--after CURSOR] [--parent TASK] [--since DIGEST] [--until CONDITION] [--timeout DURATION]
   Read a project's tasks, a line each
-task show TASK [--tree] [--activity COUNT] [--run]
+task show TASK [--tree] [--activity COUNT] [--run] [--since DIGEST] [--until CONDITION] [--timeout DURATION]
   Read a task: its state, what it waits on, and the acts you may take
 task activity TASK [--before CURSOR] [--limit COUNT]
   Read a task's activity from its end
 task turn TASK TURN [--part PART] [--from OFFSET]
   Read one turn of a task's run, part by part
-task run TASK
+task run TASK [--since DIGEST] [--until CONDITION] [--timeout DURATION]
   Read a task's live run: its attempt, its call in flight, its words so far
 task message TASK TEXT --key KEY
   Send words to a task
@@ -18,6 +18,8 @@ task stop TASK [--key KEY]
   Stop a task's run and hold it
 task cancel TASK [--grace DURATION] REASON [--key KEY]
   Cancel a task and its tree
+task tree TASK [--since DIGEST] [--until CONDITION] [--timeout DURATION]
+  Read a task's live tree: the task and each delegate its window holds, a line each
 task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency TASK]... [--no-dependencies] [--model MODEL [--effort EFFORT]] REASON [--key KEY]
   Amend a task: each control you name is replaced, the rest kept
 task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]

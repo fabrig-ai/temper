@@ -84,7 +84,6 @@ pub enum Kind {
     Proposal,
     Digest,
     Condition,
-    Subject,
     Project {
         empty: bool,
     },
@@ -123,7 +122,6 @@ pub fn bound(argument: &Argument, limits: &Limits) -> Bound {
         | Kind::Proposal
         | Kind::Digest
         | Kind::Condition
-        | Kind::Subject
         | Kind::Project { .. }
         | Kind::Turn
         | Kind::Cursor
