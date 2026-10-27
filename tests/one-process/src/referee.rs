@@ -21,6 +21,7 @@ use std::{
 use temper_engine_domain as root;
 #[derive(Default)]
 pub(crate) struct Run {
+    pub(crate) forge: Option<temper_fake_git_hosted::Typed>,
     rules: Option<Rc<RefCell<rules::Referee>>>,
     pub(crate) rows: BTreeMap<root::Key, root::Record>,
     pub(crate) applied: u64,
@@ -77,7 +78,13 @@ impl Referee {
             ..rules::Scope::default()
         };
         let mut implications = BTreeSet::new();
-        if matches!(scenario, crate::world::Story::Adoption | crate::world::Story::Adopt | crate::world::Story::Merge) {
+        if matches!(
+            scenario,
+            crate::world::Story::Adoption
+                | crate::world::Story::Adopt
+                | crate::world::Story::Merge
+                | crate::world::Story::HeldReview
+        ) {
             scope.tools = 3;
             scope.depth = 3;
             scope.executors.insert((1, 2));
@@ -308,6 +315,7 @@ impl skein_world::Referee<Proc> for Referee {
                     forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
                 }
                 crate::world::Story::Merge => self.forge.borrow().complete(),
+                crate::world::Story::HeldReview => crate::stories::review_held(&self.store.borrow().rows),
             },
         };
         if self.done.is_none()
@@ -390,7 +398,7 @@ impl skein_world::Referee<Proc> for Referee {
                         client::Received::Application { key, answer } => {
                             assert!(
                                 matches!(answer, temper_client_domain::forge::Answer::Adopted(_)),
-                                "adoption succeeded"
+                                "adoption succeeded: {answer:?}"
                             );
                             if let Some(old) = self.run.borrow_mut().answers.insert(*key, answer.clone()) {
                                 assert_eq!(&old, answer, "one outcome per adoption key");
@@ -426,6 +434,9 @@ impl skein_world::Referee<Proc> for Referee {
         self.say(now, rules::Observed::Tick);
     }
     fn next_deadline(&self) -> Option<Time> {
+        if matches!(self.story, crate::world::Story::HeldReview) && matches!(self.phase, crate::world::Phase::SignIn) {
+            return None;
+        }
         self.done.is_none().then_some(Time::from_nanos(10_000_000_000))
     }
     fn overdue(&self, now: Time) -> Option<String> {
@@ -462,7 +473,10 @@ impl skein_world::Referee<Proc> for Referee {
                         || !matches!(self.phase, crate::world::Phase::Story)
                         || matches!(
                             self.story,
-                            crate::world::Story::Adoption | crate::world::Story::Adopt | crate::world::Story::Merge
+                            crate::world::Story::Adoption
+                                | crate::world::Story::Adopt
+                                | crate::world::Story::Merge
+                                | crate::world::Story::HeldReview
                         )))
     }
 }

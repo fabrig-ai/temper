@@ -390,6 +390,7 @@ pub struct CtlOutcome<T> {
     pub visits: Vec<Vec<super::sign_in_browser::Hop>>,
 }
 struct CtlJudge<'a, F, T> {
+    fail_on_panic: Option<()>,
     expected_exits: Vec<(usize, u8)>,
     release_answers: Option<usize>,
     face: Option<super::forge_land::FaceProcs>,
@@ -469,8 +470,8 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
                 self.visit = Visit::Handed;
             }
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl") };
-            if !failed {
-                self.reply.as_mut().expect("face reply reads").advance(calls, &mut self.expected_exits);
+            if !failed && let Some(reply) = &mut self.reply {
+                reply.advance(calls, &mut self.expected_exits);
             }
         }
         if let Some(index) = self.tab {
@@ -511,6 +512,9 @@ impl<F: FnOnce() -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
             let expected = self.expected_exits.iter().find(|(at, _)| *at == index).map_or(0, |(_, code)| *code);
             call.exit != Some(Exit::Code(expected))
         });
+        let failed = failed
+            || self.fail_on_panic.is_some()
+                && binary.stderr().windows(b"panicked at".len()).any(|part| part == b"panicked at");
         let expired = now >= self.deadline;
         if expired
             && !self.stopping
@@ -616,6 +620,29 @@ enum CtlModel {
     None,
     Llm(Box<CtlLlm>),
     Face(Box<super::forge_land::CtlFace>),
+    Account(Box<super::forge_land::Face>),
+}
+/// Drive a caller's steps with a signed-in fake account, without a reply sketch.
+#[must_use]
+pub fn run_ctl_with_account<T>(
+    directory: &Path,
+    flags: Vec<String>,
+    client_root: &Path,
+    steps: Vec<super::ctl::Step>,
+    deadline: Duration,
+    check: impl FnOnce() -> T,
+    face: super::forge_land::Face,
+) -> CtlOutcome<T> {
+    run_ctl_peers(
+        directory,
+        flags,
+        client_root,
+        steps,
+        deadline,
+        check,
+        CtlPeers { expected_exits: Vec::new(), model: CtlModel::Account(Box::new(face)) },
+    )
+    .0
 }
 /// Drive the first task without changing the box's template or demo.
 #[must_use]
@@ -670,12 +697,14 @@ fn run_ctl_peers<T>(
     check: impl FnOnce() -> T,
     peers: CtlPeers,
 ) -> (CtlOutcome<T>, Option<super::forge_land::Seen>) {
+    let fail_on_panic = matches!(&peers.model, CtlModel::Account(_)).then_some(());
     let (peer, on_link, face, reply) = match peers.model {
         CtlModel::Llm(llm) => (Some(llm.peer), Some(llm.on_link), None, None),
         CtlModel::Face(story) => {
             (None, None, Some(story.face), Some(super::forge_land::Reply::new(story.first, story.reply)))
         }
         CtlModel::None => (None, None, None, None),
+        CtlModel::Account(face) => (None, None, Some(*face), None),
     };
     if let Some(super::forge_land::Face::Fake { peer, .. }) = &face {
         let config = flags.windows(2).find(|pair| pair[0] == "--config").expect("explicit config directory");
@@ -710,7 +739,9 @@ fn run_ctl_peers<T>(
     fds.push(root);
     let checked = Cell::new(None);
     let visits = Cell::new(Vec::new());
+    let follow_reply = reply.is_some();
     let mut world = real::World::new(CtlJudge {
+        fail_on_panic,
         expected_exits: peers.expected_exits,
         release_answers: None,
         face: face.as_ref().map(|_| super::forge_land::FaceProcs { issuer: 2, visitor: 3, peer: 4 }),
@@ -734,7 +765,7 @@ fn run_ctl_peers<T>(
     world.spawn_with_fds(binary.descriptors(), || Process::Binary(Box::new(binary)));
     world.spawn_with_fds(fds, || {
         let mut calls = super::ctl::Calls::new(root, steps, Some(&streams), None).with_box_stderr();
-        if face.is_some() {
+        if follow_reply {
             calls.hold();
         }
         Process::Calls(Box::new(calls))
