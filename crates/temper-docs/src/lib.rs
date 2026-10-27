@@ -79,7 +79,7 @@ pub struct Page {
 
 /// `index`, then the concepts, walks, recipes, reference pages and guides, each by name.
 #[expect(clippy::disallowed_macros, reason = "pages compile their single Markdown source as static data")]
-pub static PAGES: [Page; 49] = [
+pub static PAGES: [Page; 50] = [
     Page {
         name: "index",
         kind: Kind::Index,
@@ -275,6 +275,13 @@ pub static PAGES: [Page; 49] = [
         title: "A weekly budget",
         summary: "A project spends at most AMOUNT units a week, every week.",
         text: include_str!("../../../docs/help/weekly-budget.md"),
+    },
+    Page {
+        name: "landing",
+        kind: Kind::Concept,
+        title: "landing",
+        summary: "A landing is how a project that lands by turn lands a change: its candidate is proved by each gate's receipt, then its main is fast-forwarded to it.",
+        text: include_str!("../../../docs/help/landing.md"),
     },
     Page {
         name: "commands",

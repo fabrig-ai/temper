@@ -211,6 +211,13 @@ fn help_prints_a_whole_page_and_names_an_unknown_one() {
 }
 
 #[test]
+fn help_prints_the_landing_page() {
+    assert_eq!(
+        help::answer(&configured(&["help", "landing"])).expect("landing page").as_bytes(),
+        include_bytes!("../../../../docs/help/landing.md")
+    );
+}
+#[test]
 fn help_search_names_the_server_section_or_says_nothing_matches() {
     let text = help::answer(&configured(&["help", "--search", "WireGuard"])).expect("WireGuard section");
     assert!(text.lines().any(|line| line.starts_with("server: 5. The workers' host: ")), "{text}");
