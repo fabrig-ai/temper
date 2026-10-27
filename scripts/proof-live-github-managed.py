@@ -397,7 +397,7 @@ class Sitting:
         self.ready_client(link, 'sign-in')
         # The native shell keeps the session; ctl also needs the public engine address.
         private(self.scratch/'client/address', ('http://' + urlsplit(link).netloc + '\n').encode())
-        output = self.ctl('forge-connect', '1', 'github', '--key', 'managed-connect').decode()
+        output = self.ctl('forge', 'connect', '1', 'github', '--key', 'managed-connect').decode()
         url = next(line for line in output.splitlines() if line.startswith('http://'))
         status, _, body = self.page('GET', url)
         require(status == 200)
@@ -415,7 +415,7 @@ class Sitting:
         require(status == 302)
         status, _, body = self.page('GET', headers['Location'])
         require(status == 200 and b'temper has the installation' in body)
-        self.ctl('wait', 'forges', '--until', 'settled')
+        self.ctl('forge', 'list', '--until', 'settled')
         self.mark('Connect, manifest creation and selected installation completed')
 
     def ready_client(self, link, mode):
