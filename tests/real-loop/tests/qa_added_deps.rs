@@ -164,7 +164,7 @@ fn refusal_fixture() -> forge::Fixture {
     fixture.configure = |value, agent, forge| {
         (landing::kept::fixture().configure)(value, agent, forge);
         // The kept fixture grants delegate + amend (5); cancel adds its bit (8).
-        for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
             project["policy"]["ceiling"]["tools"] = 13.into();
             project["policy"]["roles"][0]["authority"]["tools"] = 13.into();
             // The unrelated root and the amender each keep a 64-unit chat purse.

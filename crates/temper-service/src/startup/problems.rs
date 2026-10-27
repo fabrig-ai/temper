@@ -66,6 +66,7 @@ pub enum What {
     Provider,
     Handover,
     MissingNull,
+    InlineSeedPolicy,
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Problem {
@@ -120,6 +121,7 @@ fn put(writer: &mut Writer, length: &mut usize, measuring: bool, bytes: &[u8]) {
 }
 fn words(what: What) -> &'static [u8] {
     match what {
+        What::InlineSeedPolicy => b"name a policy, policy: 1; change it with temper ctl settings apply",
         What::MissingNull => b"missing: null for none",
         What::Standalone => b"standalone takes one worker, joined to the engine by the in-process name \"workers\"",
         What::EngineAlone => b"an engine alone takes no local worker, one plaintext loopback listener and workers with distinct digest paths",
@@ -438,6 +440,7 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
             | What::Escalation
             | What::Provider
             | What::MissingNull
+            | What::InlineSeedPolicy
             | What::Handover => {}
         }
         put(writer, &mut length, measuring, b"\n");

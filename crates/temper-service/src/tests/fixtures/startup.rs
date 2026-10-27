@@ -193,49 +193,6 @@ fn worker_turn_limits() -> String {
 pub fn value(input: &[u8], path: &[u8]) -> Box<[u8]> {
     input[member_span(input, path)].into()
 }
-/// Imported documents keep their source owner's fixture; this derived fixture uses the stock.
-pub fn without_settings(input: &[u8]) -> Box<[u8]> {
-    let mut input = input.to_vec();
-    for (name, path) in [
-        (b"charters".as_slice(), b"engine.charters".as_slice()),
-        (b"templates", b"engine.templates"),
-        (b"policies", b"engine.policies"),
-        (b"rules", b"engine.rules"),
-    ] {
-        let document = jig_protocol_config::document(
-            &input,
-            &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 },
-        )
-        .unwrap();
-        let engine =
-            jig_protocol_config::read::Object::new(&document, 0).unwrap().member(&document, b"engine").unwrap();
-        if jig_protocol_config::read::Object::new(&document, engine).unwrap().member(&document, name).is_none() {
-            continue;
-        }
-        let span = member_span(&input, path);
-        let end_quote = input[..span.start].iter().rposition(|byte| *byte == b'"').unwrap();
-        let start_quote = input[..end_quote].iter().rposition(|byte| *byte == b'"').unwrap();
-        let mut end = span.end;
-        while input.get(end).is_some_and(u8::is_ascii_whitespace) {
-            end = end.checked_add(1).unwrap();
-        }
-        let start = if input.get(end) == Some(&b',') {
-            end = end.checked_add(1).unwrap();
-            start_quote
-        } else {
-            end = span.end;
-            let mut start = start_quote;
-            while start > 0 && input[start.checked_sub(1).unwrap()].is_ascii_whitespace() {
-                start = start.checked_sub(1).unwrap();
-            }
-            assert_eq!(input[start.checked_sub(1).unwrap()], b',');
-            start.checked_sub(1).unwrap()
-        };
-        input.drain(start..end);
-    }
-    input.into_boxed_slice()
-}
-/// Replace a member, including indexed lists, in a parsed configuration.
 pub fn with(input: &[u8], path: &[u8], json: &[u8]) -> Box<[u8]> {
     let json = turn_limits(path, json);
     let span = member_span(input, path);
