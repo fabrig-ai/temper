@@ -184,7 +184,7 @@ pub(super) fn send(
         && called.call.form == 2
     {
         let printed =
-            render::failure(b"forgejo is not offered yet; use forge-connect F github --key NAME", called.json, 2);
+            render::failure(b"forgejo is not offered yet; use forge connect FORGE github --key KEY", called.json, 2);
         finish(called, printed, out);
         return;
     }
@@ -227,7 +227,7 @@ pub(super) fn send(
     let value = called.value.take();
     if value.is_some() != (!install && !manifest) {
         let printed =
-            render::failure(b"forge-connect requires a private key file; forge-install takes no value", called.json, 1);
+            render::failure(b"forge connect requires a private key file; forge install takes no value", called.json, 1);
         finish(called, printed, out);
         return;
     }
@@ -380,7 +380,7 @@ fn text(pending: &Pending, answer: &Answer, kept: bool, limits: &Limits, out: &m
             out.number(*installation);
             out.put(b" on forge ");
             out.number(u64::from(forge));
-            out.put(b"\ntemper ctl DIRECTORY repositories ");
+            out.put(b"\ntemper ctl DIR forge repositories ");
             out.number(u64::from(forge));
             out.put(b" --installation ");
             out.number(*installation);
@@ -390,7 +390,7 @@ fn text(pending: &Pending, answer: &Answer, kept: bool, limits: &Limits, out: &m
         Answer::Connecting => {
             out.put(b"connecting\n");
             if !install && !manifest && pending.first.is_none() {
-                out.put(b"temper ctl DIRECTORY wait forges --until connected:");
+                out.put(b"temper ctl DIR forge list --until connected:");
                 out.number(u64::from(forge));
                 out.put(b"\n");
             }
@@ -398,7 +398,7 @@ fn text(pending: &Pending, answer: &Answer, kept: bool, limits: &Limits, out: &m
         Answer::Link(address) => {
             out.put(b"Open this address in a browser on the engine's machine:\n");
             out.put(address);
-            out.put(b"\ntemper ctl DIRECTORY wait forges --until settled\n");
+            out.put(b"\ntemper ctl DIR forge list --until settled\n");
         }
         Answer::Refused(why) => {
             out.put(domain::connect_refusal(why).1);

@@ -2494,7 +2494,10 @@ fn a_cut_specification_has_an_explanation_and_no_textarea() {
     press_button(&mut root, b"Amend");
     let view = fixtures::page_view(&root);
     assert!(fixtures::find(view.tree(), Role::TextArea, b"Specification").is_none());
-    assert!(contains(view.tree(), b"This task's specification is too long to edit here: use `temper ctl amend`"));
+    assert!(contains(
+        view.tree(),
+        b"This task's specification is too long to edit here: use `temper ctl DIR task amend`"
+    ));
 }
 #[test]
 fn no_change_is_shown_until_an_amendment_is_edited() {

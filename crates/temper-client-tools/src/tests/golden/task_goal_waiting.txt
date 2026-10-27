@@ -4,6 +4,6 @@ requester: you · spent 1.20 of 5.00 · no deadline
 settings: revision 1
 waiting on: you: question of task 42 · 1 waiting
 acts:
-  stop 41 --key NAME
-  cancel 41 REASON --key NAME
+  task stop 41 --key KEY
+  task cancel 41 REASON --key KEY
 digest: task 6a8505a0554a8c31

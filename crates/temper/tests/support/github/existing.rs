@@ -77,7 +77,7 @@ impl Existing {
             ExistingStage::Stray => {
                 let text = String::from_utf8_lossy(&calls.ends()[calls.ends().len() - 2].stdout);
                 assert!(text.contains("kept: the App is read-only"), "{text}");
-                assert!(text.contains("forge-accept 1 1"), "{text}");
+                assert!(text.contains("forge accept 1 1"), "{text}");
                 assert!(text.contains("Connecting: no installation accepted yet"), "{text}");
                 let row = Judge::row(&ctl::json(ended));
                 assert_eq!(row["read_only"], true);

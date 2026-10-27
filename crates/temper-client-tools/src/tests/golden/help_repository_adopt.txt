@@ -10,7 +10,7 @@ repository adopt --project PROJECT [--forge FORGE] --owner OWNER --name REPOSITO
   --no-ci: a switch. Do not use the forge's CI
   --check GATE: a number; repeated, at most 8. A gate, by its number, each once
 Adopt a forge's repository into a project
-Prints: `Adopted OWNER/NAME on forge F as ROLE.`, whether it is the project's home, and what temper may do there
+Prints: `Adopted OWNER/NAME on forge N as ROLE.`, whether it is the project's home, and what temper may do there
 --json: the record adopt.
 Key: --key KEY, required.
 A project has one home; a context repository is read, never

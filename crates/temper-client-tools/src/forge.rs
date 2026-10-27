@@ -390,7 +390,7 @@ fn answer_text(a: &forge::Adoption, answer: &forge::Answer, kept: bool, text: u3
     out.put(b"\n");
 }
 fn adoption_retry(a: &forge::Adoption, no_home: bool, new_prefix: bool, out: &mut Text) {
-    out.put(b"\n  temper ctl DIRECTORY adopt --project ");
+    out.put(b"\n  temper ctl DIR repository adopt --project ");
     out.put(skein_lib::Decimal::of(u64::from(a.project)).as_bytes());
     out.put(b" --forge ");
     out.put(skein_lib::Decimal::of(u64::from(a.forge)).as_bytes());
@@ -421,7 +421,7 @@ fn adoption_retry(a: &forge::Adoption, no_home: bool, new_prefix: bool, out: &mu
         out.put(b" --check ");
         out.put(skein_lib::Decimal::of(u64::from(*check)).as_bytes());
     }
-    out.put(b" --key NEW-KEY");
+    out.put(b" --key KEY");
 }
 
 fn kinds(kinds: forge::Kinds, out: &mut Text) {

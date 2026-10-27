@@ -118,10 +118,10 @@ fn unoffered_ways_exit_two_without_reading_or_sending_a_value() {
 fn connect_and_install_print_their_durable_outcomes() {
     for json in [false, true] {
         for (words, outcome, status, text, structured) in [
-            (CONNECT, w::Outcome::Connecting, 0, b"connecting\ntemper ctl DIRECTORY wait forges --until connected:3\n".as_slice(), br#"{"connecting":{}}"#.as_slice()),
-            (ADMIN, w::Outcome::Connecting, 0, b"connecting\ntemper ctl DIRECTORY wait forges --until connected:3\n".as_slice(), br#"{"connecting":{}}"#.as_slice()),
-            (MANIFEST, link(), 0, b"Open this address in a browser on the engine's machine:\nhttps://forge.invalid/install/app\ntemper ctl DIRECTORY wait forges --until settled\n".as_slice(), br#"{"link":{"address":"https://forge.invalid/install/app"}}"#.as_slice()),
-            (INSTALL, link(), 0, b"Open this address in a browser on the engine's machine:\nhttps://forge.invalid/install/app\ntemper ctl DIRECTORY wait forges --until settled\n", br#"{"link":{"address":"https://forge.invalid/install/app"}}"#),
+            (CONNECT, w::Outcome::Connecting, 0, b"connecting\ntemper ctl DIR forge list --until connected:3\n".as_slice(), br#"{"connecting":{}}"#.as_slice()),
+            (ADMIN, w::Outcome::Connecting, 0, b"connecting\ntemper ctl DIR forge list --until connected:3\n".as_slice(), br#"{"connecting":{}}"#.as_slice()),
+            (MANIFEST, link(), 0, b"Open this address in a browser on the engine's machine:\nhttps://forge.invalid/install/app\ntemper ctl DIR forge list --until settled\n".as_slice(), br#"{"link":{"address":"https://forge.invalid/install/app"}}"#.as_slice()),
+            (INSTALL, link(), 0, b"Open this address in a browser on the engine's machine:\nhttps://forge.invalid/install/app\ntemper ctl DIR forge list --until settled\n", br#"{"link":{"address":"https://forge.invalid/install/app"}}"#),
             (MANIFEST, w::Outcome::Connecting, 1, b"connecting\n".as_slice(), br#"{"connecting":{}}"#.as_slice()),
             (INSTALL, w::Outcome::Connecting, 1, b"connecting\n", br#"{"connecting":{}}"#),
             (INSTALL, w::Outcome::Unknown, 1, b"unknown\n", br#"{"unknown":{}}"#),
@@ -227,7 +227,7 @@ fn an_install_recovers_its_durable_answer_with_its_own_operation_name() {
         let expected = if json {
             b"{\"operation\":\"forge-install\",\"outcome\":{\"link\":{\"address\":\"https://forge.invalid/install/app\"}}}\n".as_slice()
         } else {
-            b"kept: forge-install Open this address in a browser on the engine's machine:\nhttps://forge.invalid/install/app\ntemper ctl DIRECTORY wait forges --until settled\n"
+            b"kept: forge-install Open this address in a browser on the engine's machine:\nhttps://forge.invalid/install/app\ntemper ctl DIR forge list --until settled\n"
         };
         assert_eq!(root.kept_lines.as_slice(), &[Box::<[u8]>::from(expected)]);
     }
@@ -307,7 +307,7 @@ fn admin_connect_carries_item_one_with_the_file_bytes_unchanged() {
         root.adoption_answer(call, w::Outcome::Connecting);
         let printed = root.answer(call).expect("connecting");
         assert_eq!(printed.status, 0);
-        assert_eq!(printed.stdout.as_ref(), b"connecting\ntemper ctl DIRECTORY wait forges --until connected:3\n");
+        assert_eq!(printed.stdout.as_ref(), b"connecting\ntemper ctl DIR forge list --until connected:3\n");
         no_token(&printed);
     }
 }
@@ -672,7 +672,7 @@ fn accept_sends_the_existing_id_without_a_value_and_prints_its_next_call() {
                 if json {
                     br#"{"forge":3,"accepted":22}"#.as_slice()
                 } else {
-                    b"accepted: installation 22 on forge 3\ntemper ctl DIRECTORY repositories 3 --installation 22\n"
+                    b"accepted: installation 22 on forge 3\ntemper ctl DIR forge repositories 3 --installation 22\n"
                 }
             );
         }
@@ -760,7 +760,7 @@ fn an_accept_recovers_its_durable_answer_with_its_own_operation_name() {
         let expected = if json {
             b"{\"operation\":\"forge-accept\",\"outcome\":{\"forge\":3,\"accepted\":22}}\n".as_slice()
         } else {
-            b"kept: forge-accept accepted: installation 22 on forge 3\ntemper ctl DIRECTORY repositories 3 --installation 22\n"
+            b"kept: forge-accept accepted: installation 22 on forge 3\ntemper ctl DIR forge repositories 3 --installation 22\n"
         };
         assert_eq!(root.kept_lines.as_slice(), &[Box::<[u8]>::from(expected)]);
     }
