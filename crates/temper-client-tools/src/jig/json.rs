@@ -3,7 +3,7 @@ use crate::jig::{
     argv::{self, Usage},
     call::{Call, Source, Value, Values},
     key::Name,
-    table::{Argument, Keyed, Kind, Limits, Occurs, Place, Tool, bound},
+    table::{Argument, Bound, Keyed, Kind, Limits, Occurs, Place, Tool, bound},
 };
 use alloc::boxed::Box;
 use jig_client::contract::QueryOrder;
@@ -381,18 +381,24 @@ fn encode_value(table: &[&Tool], spec: &Argument, value: &Value, out: &mut Encod
     Ok(())
 }
 /// All table fields, including every form, for help TOOL --json.
-pub fn write_tool(tool: &Tool) -> Result<Box<[u8]>, Refusal> {
-    let limits = writer::Limits { depth: 5, length: u32::MAX };
-    let mut measured = Encoder::measure(&limits);
-    encode_tool(tool, &mut measured);
+pub fn write_tool(tool: &Tool, limits: &Limits) -> Result<Box<[u8]>, Refusal> {
+    let encoding = writer::Limits { depth: 5, length: u32::MAX };
+    let mut measured = Encoder::measure(&encoding);
+    encode_tool(tool, limits, &mut measured);
     let length = measured_length(measured)?;
-    let mut output = Encoder::write(length, &limits);
-    encode_tool(tool, &mut output);
+    let mut output = Encoder::write(length, &encoding);
+    encode_tool(tool, limits, &mut output);
     Ok(output.finish())
 }
-fn encode_tool(tool: &Tool, out: &mut Encoder) {
+fn encode_tool(tool: &Tool, limits: &Limits, out: &mut Encoder) {
     out.object_start();
-    for (key, text) in [(b"name".as_slice(), tool.name), (b"line", tool.line), (b"result", tool.result)] {
+    for (key, text) in [
+        (b"name".as_slice(), tool.name),
+        (b"line", tool.line),
+        (b"prints", tool.prints),
+        (b"notes", tool.notes),
+        (b"result", tool.result),
+    ] {
         out.key(key);
         out.string(text);
     }
@@ -423,6 +429,8 @@ fn encode_tool(tool: &Tool, out: &mut Encoder) {
             });
             out.key(b"kind");
             out.string(kind_word(spec.kind));
+            out.key(b"bound");
+            encode_bound(bound(spec, limits), out);
             match spec.kind {
                 Kind::Word { set } => {
                     out.key(b"set");
@@ -527,4 +535,30 @@ fn prefixes_json(prefixes: &[&[u8]], out: &mut Encoder) {
         out.string(prefix);
     }
     out.array_end();
+}
+
+fn encode_bound(bound: Bound, out: &mut Encoder) {
+    match bound {
+        Bound::None => out.null(),
+        Bound::Numbers { least, most } => {
+            out.object_start();
+            out.key(b"least");
+            out.unsigned(least);
+            out.key(b"most");
+            out.unsigned(most);
+            out.object_end();
+        }
+        Bound::Bytes { most } => {
+            out.object_start();
+            out.key(b"bytes");
+            out.unsigned(most);
+            out.object_end();
+        }
+        Bound::Seconds { most } => {
+            out.object_start();
+            out.key(b"seconds");
+            out.unsigned(most);
+            out.object_end();
+        }
+    }
 }

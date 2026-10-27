@@ -134,7 +134,7 @@ fn each_derivation_names_every_tool() {
             }
             assert_eq!(count, fixtures::EXAMPLES_PER_FORM, "{tool:?} {form}");
         }
-        let record = jig::json::write_tool(tool).expect("tool record JSON");
+        let record = jig::json::write_tool(tool, &crate::limits::tools()).expect("tool record JSON");
         let prefix_length = b"{\"name\":\""
             .len()
             .checked_add(tool.name.len())

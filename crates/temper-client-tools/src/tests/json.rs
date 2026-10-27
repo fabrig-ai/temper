@@ -166,7 +166,7 @@ fn a_document_past_ask_bytes_is_a_usage_error() {
 #[test]
 fn each_tools_record_is_written_as_json() {
     for tool in table::TOOLS {
-        let json = jig::json::write_tool(tool).expect("a tool record's JSON");
+        let json = jig::json::write_tool(tool, &crate::limits::tools()).expect("a tool record's JSON");
         fixtures::unique_keys(&json).expect("tool JSON has unique keys");
         assert!(skein_lib::bytes::find(&json, tool.name).is_some(), "{tool:?}");
         assert!(skein_lib::bytes::find(&json, br#""forms":["#).is_some(), "{tool:?}");
@@ -252,5 +252,27 @@ fn unencodable_argument_bytes_refuse_without_a_partial_record() {
             panic!("plain call");
         };
         assert_eq!(jig::json::write_call(table::TOOLS, &call), Err(jig::json::Refusal::Text));
+    }
+}
+
+#[test]
+fn the_tool_record_json_carries_prints_notes_and_bounds() {
+    let mut limits = crate::limits::tools();
+    // These differ from the host preset: every rendered bound must use the caller's limits.
+    limits.rows = 7;
+    limits.ask_bytes = 11;
+    limits.wait_most = skein_lib::Duration::from_secs(13);
+    let json = jig::json::write_tool(&super::help::RECORD, &limits).expect("fixture record JSON");
+    fixtures::unique_keys(&json).expect("unique record keys");
+    for member in [
+        br#""prints":"task N""#.as_slice(),
+        br#""notes":"First note.\nSecond note.\n""#,
+        br#""bound":{"least":1,"most":7}"#,
+        br#""bound":{"bytes":11}"#,
+        br#""bound":{"seconds":13}"#,
+        br#""bound":{"least":1,"most":65535}"#,
+        br#""bound":null"#,
+    ] {
+        assert!(skein_lib::bytes::find(&json, member).is_some(), "missing {member:?}");
     }
 }

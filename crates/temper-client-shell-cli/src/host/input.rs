@@ -23,7 +23,7 @@ impl OneShot {
                     _ => None,
                 });
                 let bytes = if let Some(index) = selected.filter(|_| *json) {
-                    jig::json::write_tool(TOOLS[usize::from(index)]).expect("help record")
+                    jig::json::write_tool(TOOLS[usize::from(index)], &self.root_env.limits.tools).expect("help record")
                 } else {
                     let mut out =
                         skein_lib::Writer::new(usize::try_from(self.root_env.limits.tools.text).expect("help bound"));
