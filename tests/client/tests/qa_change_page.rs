@@ -21,7 +21,7 @@ fn change_world() -> (ClientWorld, u64) {
     let world = World::new(
         Settings {
             seed: fixtures::SEED,
-            words: temper_client_view::words::jig_language(),
+            words: fixtures::decision_words(),
             heap_bytes_per_client: 64 * 1024 * 1024,
             ..Settings::default()
         },

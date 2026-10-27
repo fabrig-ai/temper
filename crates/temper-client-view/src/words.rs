@@ -658,7 +658,7 @@ pub enum Word {
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
 const PHRASES: u32 = 1163;
-const SEGMENTS: u32 = 2032;
+const SEGMENTS: u32 = 2034;
 const ALL: [Word; 592] = [
     Word::WelcomeYourModel,
     Word::BrandChats,
@@ -1995,7 +1995,7 @@ fn english_language(
         phrases.push(Phrase { id, forms }).expect("closed phrases fit");
     }
     for word in jig_client::words::ALL {
-        shapes.push(word.shape(text)).expect("jig word shapes fit");
+        shapes.push(temper_client_domain::words::shape(word, text)).expect("jig word shapes fit");
     }
     for phrase in jig_language().phrases {
         phrases.push(phrase).expect("jig words fit");
@@ -2718,28 +2718,7 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
 /// Public jig words with the overrides temper shows and its referee checks.
 #[must_use]
 pub fn jig_language() -> Language {
-    use jig_client::words::{StatusWord, Word as JigWord};
-    let mut language = jig_client::words::english();
-    for phrase in &mut language.phrases {
-        if phrase.id == jig_client::words::Word::Decision(jig_client::words::DecisionWord::Funds).id() {
-            phrase.forms.first_mut().expect("English word has a form").segments = Box::new([
-                Segment::Text(copy_of(b"Funds ")),
-                Segment::Hole { index: 0, kind: HoleKind::Amount },
-                Segment::Text(copy_of(b" from your pool \xc2\xb7 ")),
-                Segment::Hole { index: 1, kind: HoleKind::Amount },
-                Segment::Text(copy_of(b" left, ")),
-                Segment::Hole { index: 2, kind: HoleKind::Amount },
-                Segment::Text(copy_of(b" after")),
-            ]);
-        }
-        let literal =
-            if phrase.id == JigWord::Status(StatusWord::Parked).id() { Some(b"Parked".as_slice()) } else { None };
-        if let Some(literal) = literal {
-            phrase.forms.first_mut().expect("English word has a form").segments =
-                Box::new([Segment::Text(copy_of(literal))]);
-        }
-    }
-    language
+    temper_client_domain::words::english()
 }
 
 fn resource_phrases(connector: u16, joined: u32, shapes: &mut List<PhraseShape>, phrases: &mut List<Phrase>) {

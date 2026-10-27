@@ -270,6 +270,17 @@ fn every_declared_tool_decodes_its_minimum_shape_and_rejects_a_wrong_shape() {
         assert!(found, "tool declared: {name:?}");
         assert!(decoded(name, valid).is_ok(), "valid input for {name:?}");
         assert!(decoded(name, invalid).is_err(), "invalid input for {name:?}");
+        if name.starts_with(b"read_") && *name != b"read_docs" {
+            let start = skein_lib::bytes::find(valid, b"qa/pilot").unwrap();
+            let end = start.checked_add(b"qa/pilot".len()).unwrap();
+            let mut input = skein_lib::Writer::new(valid.len().checked_sub(b"qa/pilot".len()).unwrap());
+            input.put(valid.get(..start).unwrap()).unwrap();
+            input.put(valid.get(end..).unwrap()).unwrap();
+            let engine::Tool::ReadNamed { repository, .. } = decided(name, &input.finish()).unwrap().tool else {
+                panic!("forge read");
+            };
+            assert_eq!(repository, None, "empty name for {name:?}");
+        }
     }
 }
 
@@ -1209,6 +1220,9 @@ fn every_forge_read_declares_its_flat_members_as_json() {
             properties.required(b"repository").unwrap().required(b"type").unwrap().text(b"type").unwrap().as_ref(),
             b"string"
         );
+        let description =
+            properties.required(b"repository").unwrap().required(b"description").unwrap().text(b"description").unwrap();
+        assert!(skein_lib::bytes::find(&description, b"leave it out, or empty").is_some());
         for name in *names {
             let property = properties.required(name).unwrap();
             assert!(!property.required(b"description").unwrap().text(b"description").unwrap().is_empty());

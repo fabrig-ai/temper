@@ -141,7 +141,7 @@ pub(super) fn facts(b: &mut Builder, page: &c::ReadValue, words: &Words, rows: u
             c::OwnerProposalAction::Release { task, hold } => {
                 phrase(b, words, P::ProposalTask, &[Hole::Number(task.number())]);
                 if let Some(hold) = hold {
-                    held(b, hold, words, rows);
+                    held(b, task.number(), hold, words, rows);
                 }
             }
         },
@@ -284,13 +284,13 @@ fn owns(page: &c::ReadValue) -> bool {
 }
 fn task_hold(b: &mut Builder, task: &c::Task, words: &Words, rows: u32) {
     match &task.hold {
-        Some(c::TaskHold::Owner(hold)) => held(b, hold, words, rows),
+        Some(c::TaskHold::Owner(hold)) => held(b, task.chip.task, hold, words, rows),
         Some(c::TaskHold::Document(hold)) => phrase(b, words, P::HoldRevision, &[Hole::Number(hold.revision.value)]),
         None => {}
     }
 }
-fn held(b: &mut Builder, hold: &c::OwnerChipHold, words: &Words, _rows: u32) {
-    super::hold(b, &hold.reason, words);
+fn held(b: &mut Builder, task: u64, hold: &c::OwnerChipHold, words: &Words, _rows: u32) {
+    super::hold(b, task, &hold.reason, words);
     phrase(b, words, P::HoldRevision, &[Hole::Number(hold.revision)]);
 }
 fn proposed(b: &mut Builder, tasks: &skein_lib::List<c::ProposedTask>, words: &Words, rows: u32, own: bool) {

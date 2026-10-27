@@ -16,126 +16,126 @@ struct Spec {
     effect: run::HostEffect,
 }
 
-const ITEMS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"since":{"type":"integer","description":"a time in nanoseconds; defaults to 0","minimum":0,"maximum":18446744073709551615,"default":0},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1},"item_kind":{"type":"string","description":"issue or pull; leave out for both","enum":["issue","pull"]}},"required":[]}"#;
+const ITEMS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"since":{"type":"integer","description":"a time in nanoseconds; defaults to 0","minimum":0,"maximum":18446744073709551615,"default":0},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1},"item_kind":{"type":"string","description":"issue or pull; leave out for both","enum":["issue","pull"]}},"required":[]}"#;
 const ITEMS_SPEC: Spec = Spec {
     name: b"read_items",
     description: b"Read one page of forge items.",
     schema: ITEMS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const ITEM_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"after":{"type":"integer","description":"a comment id; defaults to 0","minimum":0,"maximum":18446744073709551615,"default":0}},"required":["number"]}"#;
+const ITEM_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"after":{"type":"integer","description":"a comment id; defaults to 0","minimum":0,"maximum":18446744073709551615,"default":0}},"required":["number"]}"#;
 const ITEM_SPEC: Spec = Spec {
     name: b"read_item",
     description: b"Read an issue or pull and its comments.",
     schema: ITEM_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const PULL_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615}},"required":["number"]}"#;
+const PULL_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615}},"required":["number"]}"#;
 const PULL_SPEC: Spec = Spec {
     name: b"read_pull",
     description: b"Read a pull request.",
     schema: PULL_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const PULL_FOR_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"head":{"type":"string","description":"a branch name: the pull request's head"},"base":{"type":"string","description":"a branch name: the pull request's base"}},"required":["head","base"]}"#;
+const PULL_FOR_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"head":{"type":"string","description":"a branch name: the pull request's head"},"base":{"type":"string","description":"a branch name: the pull request's base"}},"required":["head","base"]}"#;
 const PULL_FOR_SPEC: Spec = Spec {
     name: b"read_pull_for",
     description: b"Find a pull by head and base.",
     schema: PULL_FOR_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const REVIEWS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["number"]}"#;
+const REVIEWS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["number"]}"#;
 const REVIEWS_SPEC: Spec = Spec {
     name: b"read_reviews",
     description: b"Read reviews on a pull request.",
     schema: REVIEWS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const STATUSES_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"commit":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["commit"]}"#;
+const STATUSES_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"commit":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["commit"]}"#;
 const STATUSES_SPEC: Spec = Spec {
     name: b"read_statuses",
     description: b"Read statuses on a commit.",
     schema: STATUSES_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const REMARKS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"review":{"type":"integer","description":"a review id","minimum":1,"maximum":18446744073709551615},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["number","review"]}"#;
+const REMARKS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"review":{"type":"integer","description":"a review id","minimum":1,"maximum":18446744073709551615},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["number","review"]}"#;
 const REMARKS_SPEC: Spec = Spec {
     name: b"read_remarks",
     description: b"Read review remarks.",
     schema: REMARKS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const BRANCH_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"branch":{"type":"string","description":"a branch name"}},"required":["branch"]}"#;
+const BRANCH_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"branch":{"type":"string","description":"a branch name"}},"required":["branch"]}"#;
 const BRANCH_SPEC: Spec = Spec {
     name: b"read_branch",
     description: b"Read a branch head.",
     schema: BRANCH_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const BRANCHES_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"prefix":{"type":"string","description":"a branch name prefix"}},"required":["prefix"]}"#;
+const BRANCHES_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"prefix":{"type":"string","description":"a branch name prefix"}},"required":["prefix"]}"#;
 const BRANCHES_SPEC: Spec = Spec {
     name: b"read_branches",
     description: b"List branches.",
     schema: BRANCHES_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const PULL_FILES_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"head":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["number","head"]}"#;
+const PULL_FILES_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"number":{"type":"integer","description":"an issue or pull request number","minimum":1,"maximum":18446744073709551615},"head":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":["number","head"]}"#;
 const PULL_FILES_SPEC: Spec = Spec {
     name: b"read_pull_files",
     description: b"Read changed files on a pull.",
     schema: PULL_FILES_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const COMPARE_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"before":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"after":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"}},"required":["before","after"]}"#;
+const COMPARE_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"before":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"after":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"}},"required":["before","after"]}"#;
 const COMPARE_SPEC: Spec = Spec {
     name: b"read_compare",
     description: b"Compare two commits.",
     schema: COMPARE_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const CHECKS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"commit":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"}},"required":["commit"]}"#;
+const CHECKS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"commit":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"}},"required":["commit"]}"#;
 const CHECKS_SPEC: Spec = Spec {
     name: b"read_checks",
     description: b"Read a commit's combined checks.",
     schema: CHECKS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const FILE_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"head":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"path":{"type":"string","description":"a file path in the repository"},"max_bytes":{"type":"integer","description":"the maximum bytes to read; defaults to the read's limit","minimum":1,"maximum":4294967295}},"required":["head","path"]}"#;
+const FILE_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"head":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"path":{"type":"string","description":"a file path in the repository"},"max_bytes":{"type":"integer","description":"the maximum bytes to read; defaults to the read's limit","minimum":1,"maximum":4294967295}},"required":["head","path"]}"#;
 const FILE_SPEC: Spec = Spec {
     name: b"read_file",
     description: b"Read a bounded file at one head.",
     schema: FILE_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const JOB_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"head":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"run":{"type":"integer","description":"a CI run id","minimum":1,"maximum":18446744073709551615},"job":{"type":"integer","description":"a CI job id, which may be 0 on Forgejo","minimum":0,"maximum":18446744073709551615},"attempt":{"type":"integer","description":"a CI attempt number, which may be 0 on Forgejo","minimum":0,"maximum":4294967295},"max_bytes":{"type":"integer","description":"the maximum bytes to read; defaults to the read's limit","minimum":1,"maximum":4294967295}},"required":["head","run","job","attempt"]}"#;
+const JOB_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"head":{"type":"string","description":"a commit id, 40 or 64 lowercase hex digits"},"run":{"type":"integer","description":"a CI run id","minimum":1,"maximum":18446744073709551615},"job":{"type":"integer","description":"a CI job id, which may be 0 on Forgejo","minimum":0,"maximum":18446744073709551615},"attempt":{"type":"integer","description":"a CI attempt number, which may be 0 on Forgejo","minimum":0,"maximum":4294967295},"max_bytes":{"type":"integer","description":"the maximum bytes to read; defaults to the read's limit","minimum":1,"maximum":4294967295}},"required":["head","run","job","attempt"]}"#;
 const JOB_SPEC: Spec = Spec {
     name: b"read_job",
     description: b"Read one bounded CI job log.",
     schema: JOB_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const PROTECTION_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"branch":{"type":"string","description":"a branch name"}},"required":["branch"]}"#;
+const PROTECTION_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"branch":{"type":"string","description":"a branch name"}},"required":["branch"]}"#;
 const PROTECTION_SPEC: Spec = Spec {
     name: b"read_protection",
     description: b"Read branch protection.",
     schema: PROTECTION_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const SETTINGS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"}},"required":[]}"#;
+const SETTINGS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"}},"required":[]}"#;
 const SETTINGS_SPEC: Spec = Spec {
     name: b"read_settings",
     description: b"Read repository settings.",
     schema: SETTINGS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const COLLABORATORS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":[]}"#;
+const COLLABORATORS_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"page":{"type":"integer","description":"a page number, from 1; defaults to 1","minimum":1,"maximum":4294967295,"default":1}},"required":[]}"#;
 const COLLABORATORS_SPEC: Spec = Spec {
     name: b"read_collaborators",
     description: b"Read repository collaborators.",
     schema: COLLABORATORS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const PERMISSION_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave out when it has one"},"user":{"type":"integer","description":"a forge user's id","minimum":1,"maximum":18446744073709551615}},"required":["user"]}"#;
+const PERMISSION_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"owner/name of one of the project's repositories; leave it out, or empty, where the project has one"},"user":{"type":"integer","description":"a forge user's id","minimum":1,"maximum":18446744073709551615}},"required":["user"]}"#;
 const PERMISSION_SPEC: Spec = Spec {
     name: b"read_permission",
     description: b"Read a user's repository permission.",
@@ -233,7 +233,10 @@ pub fn call(name: run::CallName, tool: &[u8], input: &run::HostInput) -> Result<
         | b"read_collaborators"
         | b"read_permission" => engine::Tool::ReadNamed {
             repository: match value.field(b"repository")? {
-                Some(value) => Some(value.text(b"repository")?),
+                Some(value) => {
+                    let name = value.text(b"repository")?;
+                    if name.is_empty() { None } else { Some(name) }
+                }
                 None => None,
             },
             read: forge::read_named(tool, &value)?,
