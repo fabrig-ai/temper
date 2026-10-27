@@ -377,6 +377,8 @@ fn a_change_whose_ci_takes_minutes_lands_without_being_held() {
             commit: head,
             context: Box::from(&b"build"[..]),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     // Main resumes the wait at its stall alarm; the fresh read then sees green.
@@ -460,6 +462,8 @@ fn a_branch_read_sent_before_the_push_and_answered_missing_after_it_does_not_hol
             commit: head,
             context: Box::from(&b"build"[..]),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     for _ in 0..600 {
@@ -740,6 +744,8 @@ fn failed_ci_repair(
                 commit: head,
                 context: Box::from(*context),
                 state: raw::Check::Failed,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
         );
     }
@@ -792,7 +798,13 @@ fn a_failed_ci_repair_brief_names_the_failed_step_and_its_logs_end() {
     let (mut world, _chat, producer, branch) = change_world(false, 0, None);
     world.external(
         1,
-        raw::Op::Write(raw::Write::Status { commit: 1, context: Box::from(&b"build"[..]), state: raw::Check::Passed }),
+        raw::Op::Write(raw::Write::Status {
+            commit: 1,
+            context: Box::from(&b"build"[..]),
+            state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
+        }),
     );
     let repair = failed_ci_repair(&mut world, &producer, &branch, &[b"build"]);
     assert!(
@@ -1068,6 +1080,8 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once() {
             commit: head,
             context: Box::from(&b"pulse"[..]),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     for _ in 0..300 {
@@ -1165,6 +1179,8 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once_and_merges() {
             commit: head,
             context: Box::from(&b"pulse"[..]),
             state: raw::Check::Pending,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     world.send(engine::Event::Forge(Box::new(forge_top::Event::Hint {
@@ -1213,6 +1229,8 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once_and_merges() {
             commit: head,
             context: Box::from(&b"pulse"[..]),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     for _ in 0..300 {
@@ -1439,7 +1457,13 @@ fn an_approval_carries_over_a_clean_update_and_is_asked_again_after_a_repair() {
     let (mut world, _chat, producer, branch) = change_world(false, 0, Some(engine::Freshness::Clean));
     world.external(
         1,
-        raw::Op::Write(raw::Write::Status { commit: 1, context: Box::from(&b"build"[..]), state: raw::Check::Passed }),
+        raw::Op::Write(raw::Write::Status {
+            commit: 1,
+            context: Box::from(&b"build"[..]),
+            state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
+        }),
     );
     assert!(matches!(
         world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 })),
@@ -1453,6 +1477,8 @@ fn an_approval_carries_over_a_clean_update_and_is_asked_again_after_a_repair() {
             commit: first,
             context: Box::from(&b"build"[..]),
             state: raw::Check::Failed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     let event = world.protocol.answer(
@@ -1513,6 +1539,8 @@ fn an_approval_carries_over_a_clean_update_and_is_asked_again_after_a_repair() {
             commit: repaired,
             context: Box::from(&b"build"[..]),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     let event = world.protocol.answer(
@@ -1687,6 +1715,8 @@ fn a_broken_landing_branch_gets_one_deployment_repair_before_waiting_changes_lan
                 commit: 1,
                 context: Box::from(&b"build"[..]),
                 state: raw::Check::Failed,
+                description: Box::new([]),
+                link: Box::new([])
             })
         ),
         raw::Answer::Done
@@ -1971,6 +2001,7 @@ fn a_saved_repository_tag_becomes_a_concrete_checkout_in_the_next_attempt() {
         &mut world.fake,
         &world.fake_env.limits,
         raw::Setup {
+            workflows: Box::new([]),
             id: 3,
             name: Box::from(&b"org/extra"[..]),
             default: Box::from(&b"main"[..]),
@@ -2295,7 +2326,9 @@ fn ci_subscription_story(restart: bool) {
             raw::Op::Write(raw::Write::Status {
                 commit: head,
                 context: Box::from(&b"build"[..]),
-                state: raw::Check::Failed
+                state: raw::Check::Failed,
+                description: Box::new([]),
+                link: Box::new([])
             })
         ),
         raw::Answer::Done

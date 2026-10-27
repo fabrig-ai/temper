@@ -78,6 +78,8 @@ fn effect(world: &mut World, completion: u32, proposal: bool) {
         commit: world.systems.head,
         context: b"conformance".as_slice().into(),
         check: api::Check::Passed,
+        description: Box::new([]),
+        link: Box::new([]),
     };
     let tool = if proposal {
         engine::Tool::Propose {
