@@ -106,12 +106,12 @@ fn sign_in_owner(driver: &mut Driver) {
 
 #[test]
 fn real_init_offers_its_owner_a_chat_with_all_three_procedures() {
+    const READ: Token = Token::new(901);
     let (config, limits) = generated();
     let mut driver = Driver::cold(Store::with_limits(&limits), config, &limits);
     driver.settle();
     sign_in_owner(&mut driver);
     driver.settle();
-    const READ: Token = Token::new(901);
     driver.send(Event::Party(PartyInput::Read {
         reply_to: ReplyTo::new(READ),
         sign_in: driver.session(),
@@ -133,7 +133,7 @@ fn real_init_offers_its_owner_a_chat_with_all_three_procedures() {
     let project = frame.projects.iter().find(|project| project.project == 1).expect("seed project");
     let offered = project.creating.as_ref().expect("owner may start a chat");
     let core::acts::Bounds::Create { procedures, charters, .. } = &offered.within else { panic!("create bounds") };
-    assert_eq!(procedures.iter().map(|procedure| procedure.code).collect::<Vec<_>>(), vec![2, 3, 4]);
+    assert_eq!(procedures.iter().map(|procedure| procedure.code).collect::<Vec<_>>(), [2, 3, 4]);
     assert_eq!(charters.as_slice(), &[1, 2, 4]);
 }
 
