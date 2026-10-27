@@ -273,7 +273,7 @@ pub fn to_root(
                             subject: Token::new(subject.task()),
                         }
                     }
-                    w::Watch::Change(_) => {
+                    w::Watch::Change(_) | w::Watch::Landing(_) | w::Watch::Landings(_) => {
                         return Err(Box::new(kit::Event::WatchRefused {
                             watcher,
                             why: jig_domain_core::WatchRefusal::Unknown,
