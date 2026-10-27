@@ -380,7 +380,14 @@ fn host<R: Referee<Proc>>(
             program: fixtures::AGENT.into(),
             make: agent::agent,
             instances: agents,
-            operations: configuration.service.limits.routes + 3,
+            operations: configuration
+                .service
+                .limits
+                .routes
+                .checked_add(3)
+                // smith reserves one hosted open per permitted requested root.
+                .and_then(|count| count.checked_add(configuration.service.limits.domain.run.directories))
+                .expect("hosted agent operations"),
         },
         agent::roots,
     );

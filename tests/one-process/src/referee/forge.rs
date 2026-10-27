@@ -11,7 +11,7 @@ pub(crate) struct Forge {
     transport: temper_fake_git_hosted::Typed,
     tree: BTreeMap<Vec<u8>, Vec<u8>>,
     pub(crate) pushed: Vec<Pushed>,
-    merge: bool,
+    story: Story,
     edited: bool,
     prepared: bool,
     hooks: Option<std::net::SocketAddr>,
@@ -23,7 +23,7 @@ impl Forge {
             transport,
             tree: BTreeMap::from([(b"conflict.txt".to_vec(), content.to_vec())]),
             pushed: Vec::new(),
-            merge: matches!(story, Story::Merge),
+            story,
             edited: false,
             prepared: false,
             hooks: None,
@@ -40,7 +40,7 @@ impl Forge {
         }
     }
     pub(crate) fn adopted(&mut self) {
-        if self.merge && !self.prepared {
+        if matches!(self.story, Story::Merge) && !self.prepared {
             crate::stories::prepare_merge_branch(&self.transport);
             self.prepared = true;
         }
@@ -60,6 +60,7 @@ impl Forge {
                 self.edited = true;
             }
         }
+        let file_edits = matches!(self.story, Story::TwoChanges);
         let mut forge = self.transport.forge.borrow_mut();
         while let Some(observed) = forge.domain.pop_observation() {
             if let Observation::Merged { repository, head, .. } = &observed {
@@ -72,15 +73,20 @@ impl Forge {
             }
             // Git may create the remote branch at the editor's first committed change.
             // Earlier preparation has no completed agent write.
-            if !self.edited || from == Some(to) || branch == metadata.default_branch {
+            if (!self.edited && !file_edits) || from == Some(to) || branch == metadata.default_branch {
                 continue;
             }
             let object = forge.domain.object(to).expect("observed pushed object");
             let tree: BTreeMap<_, _> =
                 object.tree.iter().map(|(path, bytes)| (path.to_vec(), bytes.to_vec())).collect();
-            assert_eq!(tree, self.tree, "pushed tree is the completed agent edits");
+            if file_edits && tree == self.tree {
+                continue;
+            }
+            if !file_edits {
+                assert_eq!(tree, self.tree, "pushed tree is the completed agent edits");
+            }
             let parents = object.parent.into_iter().chain(object.merge_parent).collect();
-            self.pushed.push(Pushed { branch, commit: to, parents });
+            self.pushed.push(Pushed { branch, commit: to, parents, tree });
         }
     }
     pub(crate) fn hooks_complete(procs: &[Proc], hooks: usize) -> bool {
@@ -102,7 +108,9 @@ impl Forge {
         );
     }
     pub(crate) fn complete(&self) -> bool {
-        self.pushed.iter().any(|push| !self.merge || push.parents == [fixtures::BRANCH_HEAD, fixtures::MOVED_BASE])
+        self.pushed.iter().any(|push| {
+            !matches!(self.story, Story::Merge) || push.parents == [fixtures::BRANCH_HEAD, fixtures::MOVED_BASE]
+        })
     }
 }
 fn green(forge: &skein_fake_peers::forge::Forge, repository: &[u8], head: u64) {

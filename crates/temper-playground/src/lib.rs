@@ -39,7 +39,7 @@ pub const SH: &[u8] = b"/bin/sh";
 /// A process of the playground's world (playground.md, 4).
 pub enum Process {
     Service(Box<Service>),
-    Agent(Box<PipeHost<smith_agent_shell::Agent>>),
+    Agent(Box<Signalled<PipeHost<smith_agent_shell::Agent>>>),
     Git(Box<temper_fake_git_hosted::Git<temper_fake_git_hosted::Typed>>),
     Shell(Box<Shell>),
     Llm(Box<Signalled<skein_fake_peers::llm::Peer>>),
@@ -107,8 +107,8 @@ impl Host for Process {
 pub fn worker_roots(_spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
     vec![StartupRoot { name: b"worker".as_slice().into(), path: b"worker".as_slice().into() }]
 }
-/// The prepared workspace root opened by agents and the restricted shell.
+/// The worker base, named exactly as the worker runtime spells Start paths.
 #[must_use]
-pub fn agent_roots(_spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
-    vec![StartupRoot { name: b"worker".as_slice().into(), path: b"agent".as_slice().into() }]
+pub fn agent_roots(_spawn: &skein_io::kernel::Spawn, worker_path: &[u8]) -> Vec<StartupRoot> {
+    vec![StartupRoot { name: worker_path.into(), path: b"worker".as_slice().into() }]
 }

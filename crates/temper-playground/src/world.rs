@@ -38,6 +38,7 @@ fn draw_id(rng: &mut Rng) -> [u8; 16] {
 }
 struct Context {
     story: &'static Story,
+    worker_path: Box<[u8]>,
     seeds: Seeds,
     printer: Printer,
     shared: Rc<RefCell<skein_fake_peers::forge::Forge>>,
@@ -58,30 +59,36 @@ pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Ma
     let (peer, shared) = temper_fake::forge::peer(&forge_document, &token, seeds.forge).expect("story forge peer");
     let (_, table) = forge_document.seed(seeds.forge);
     let config = skein_sim::Config { wall: start, trace: skein_sim::Trace::Off, ..skein_sim::Config::calm() };
-    let mut world =
-        World::new(seeds.simulator, config).with_machine(Machine::new(Machine::fresh(USER), b"workspaces/0/widget"));
+    let mut world = World::new(seeds.simulator, config).with_machine(Machine::new(Machine::fresh(USER)));
     let printer = world.printer(b"temper", Stream::Output);
-    CONTEXT.with(|context| *context.borrow_mut() = Some(Context { story, seeds, printer, shared, table }));
+    CONTEXT.with(|context| {
+        *context.borrow_mut() =
+            Some(Context { story, worker_path: b"/worker".as_slice().into(), seeds, printer, shared, table });
+    });
     let agents = smith_agent_shell::config::parse(story.agent).expect("story agent");
     world.host_roots(
         HostedProgram {
             program: crate::AGENT.into(),
             make: agent,
             instances: 8,
-            operations: agents.service.limits.routes + 3,
+            operations: agents
+                .service
+                .limits
+                .routes
+                .checked_add(3)
+                // smith reserves one hosted open per permitted requested root.
+                .and_then(|count| count.checked_add(agents.service.limits.domain.run.directories))
+                // Close the additional inherited launch directory.
+                .and_then(|count| count.checked_add(1))
+                .expect("hosted agent operations"),
         },
-        crate::agent_roots,
+        agent_roots,
     );
-    for (program, make, roots) in [
-        (
-            crate::GIT,
-            git as fn(&skein_io::kernel::Spawn, &Inherited) -> Process,
-            crate::worker_roots as skein_sim_world::StartupRoots,
-        ),
-        (crate::SH, shell, crate::agent_roots),
-    ] {
-        world.host_roots(HostedProgram { program: program.into(), make, instances: 8, operations: 1 }, roots);
-    }
+    world.host_roots(
+        HostedProgram { program: crate::GIT.into(), make: git, instances: 8, operations: 1 },
+        crate::worker_roots,
+    );
+    world.host(HostedProgram { program: crate::SH.into(), make: shell, instances: 8, operations: 1 });
     let deployment: serde_json::Value = serde_json::from_slice(story.deployment).expect("story deployment");
     let git_path =
         deployment["application"]["setup"][0]["mode"]["fake"]["git"].as_str().expect("story fake git").as_bytes();
@@ -106,10 +113,16 @@ fn service(inherited: &Inherited) -> Process {
     CONTEXT.with(|context| {
         let context = context.borrow();
         let context = context.as_ref().expect("one world per thread");
-        let start = start(context.story, &context.seeds);
+        let start = start(context.story, &context.seeds, &context.worker_path);
         Process::Service(Box::new(
             Service::start(&start, inherited).with_printer(context.printer.clone()).with_files(&start.files),
         ))
+    })
+}
+fn agent_roots(spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
+    CONTEXT.with(|context| {
+        let context = context.borrow();
+        crate::agent_roots(spawn, &context.as_ref().expect("world context").worker_path)
     })
 }
 fn model() -> skein_fake_peers::llm::Peer {
@@ -167,7 +180,7 @@ fn shell(spawn: &skein_io::kernel::Spawn, inherited: &Inherited) -> Process {
     Process::Shell(Box::new(crate::Shell::new(spawn, inherited)))
 }
 
-fn start(story: &Story, seeds: &Seeds) -> Start {
+fn start(story: &Story, seeds: &Seeds, worker_path: &[u8]) -> Start {
     let llm = temper_fake::llm::Document::decode(story.llm).expect("story LLM");
     let forge = temper_fake::forge::Document::decode(story.forge).expect("story forge");
     let key = temper_fake::credential::credential(seeds.llm, temper_fake::credential::KEY);
@@ -195,6 +208,7 @@ fn start(story: &Story, seeds: &Seeds) -> Start {
         })
         .expect("one forge");
     Start {
+        worker_path: worker_path.into(),
         document: story.deployment.into(),
         files: temper_service::settings::Files { entries },
         agent: agent_settings(story),

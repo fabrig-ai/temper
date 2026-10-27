@@ -409,8 +409,8 @@ fn overflowing_account_bounds_are_refused_before_start() {
     let mut overflow = config.limits.driver;
     overflow.accounts = u32::MAX;
     overflow.client.document.record_bytes = u32::MAX;
-    // The temporary old-form bound with 64 queue slots gives this measured final count.
-    // Driver records, moves, finishes, tree nodes and queued payloads still fit in u64.
+    // With the legacy JIGM record allowance and 64 queue slots this is the final account count
+    // whose driver records, moves, finishes, tree nodes and queued payloads fit in u64.
     overflow.accounts = LAST_ACCOUNT_COUNT;
     assert!(worst_case(&overflow, 64, config.limits.store.secrets.page.rows).is_some());
     overflow.accounts = LAST_ACCOUNT_COUNT + 1;
