@@ -169,6 +169,8 @@ pub(super) fn brief_pull(
         | change::State::Checking { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
         | change::State::Updating { .. }
         | change::State::Repairing { .. }
         | change::State::Landing { .. }
@@ -549,6 +551,8 @@ pub(super) fn brief_ci(
         | change::State::Checking { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
         | change::State::Updating { .. }
         | change::State::Gating { .. }
         | change::State::Resolving { .. }

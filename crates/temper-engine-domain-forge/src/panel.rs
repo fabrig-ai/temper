@@ -117,6 +117,8 @@ impl Domain {
             change::State::Reopening { .. } => PanelStep::Reopening,
             change::State::Checking { .. } => PanelStep::Checking,
             change::State::Gating { .. } => PanelStep::Gating,
+            // landing.md 3: the top's task
+            change::State::Ready { .. } | change::State::Preparing { .. } => return None,
             change::State::Queued { .. } => {
                 let (place, ahead) = queue_place(self, row, now, limits);
                 PanelStep::Queued { place, ahead }
