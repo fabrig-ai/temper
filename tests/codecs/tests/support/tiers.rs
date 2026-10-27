@@ -19,6 +19,8 @@ pub fn smallest() -> Stored {
         pending: Box::new([]),
         task: None,
         branch: TierBranch::Absent,
+        flight: None,
+        result: None,
     })
 }
 pub fn fullest() -> Stored {
@@ -60,5 +62,31 @@ pub fn fullest() -> Stored {
         pending: landings,
         task: Some(51),
         branch: TierBranch::Pending { entry: 11 },
+        flight: Some(temper_engine_domain_forge::TierFlight {
+            next: Some(skein_lib::Time::from_nanos(7)),
+            entry: 11,
+            start: Some(skein_lib::Time::from_nanos(3)),
+            since: Some(skein_lib::Time::from_nanos(4)),
+            waiting: false,
+            fault: false,
+            pending: Box::new([skein_forge::api::JobAttempt { head: TIP, run: 71, job: 81, attempt: 2 }]),
+        }),
+        result: Some(temper_engine_domain_forge::TierResult {
+            verdict: p::Verdict {
+                number: 2,
+                tip: TIP,
+                key: TIP,
+                failing: p::Failures::Many,
+                landings: vec![p::Blame::Cleared; RANGE].into_boxed_slice(),
+                flakes: Box::new([]),
+            },
+            run: temper_engine_domain_forge::ReceiptRun {
+                id: 71,
+                number: 2,
+                url: b"https://forge/run/71".as_slice().into(),
+            },
+            received: false,
+            status: TierBranch::Pending { entry: 12 },
+        }),
     })
 }
