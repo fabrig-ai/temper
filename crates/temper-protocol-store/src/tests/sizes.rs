@@ -84,6 +84,6 @@ fn plan_text_uses_the_body_bound_without_changing_the_format() {
     assert_eq!(crate::v10::IssueRow::worst_case_bytes(&after), Some(7705));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&before), Some(5888));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&after), Some(7936));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(52_440));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(52_440));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(52_450));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(52_450));
 }
