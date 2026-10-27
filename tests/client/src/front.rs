@@ -1181,6 +1181,7 @@ impl Joint {
                     engine::PartyRequest::Deliver(
                         engine::Delivery::Document { watcher, .. }
                         | engine::Delivery::WatchEnded { watcher, .. }
+                        | engine::Delivery::ForgeDocument { watcher, .. }
                         | engine::Delivery::Panel { watcher, .. },
                     )
                     | engine::PartyRequest::WatchRefused { watcher, .. }

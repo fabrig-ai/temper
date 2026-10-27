@@ -226,3 +226,67 @@ fn a_failed_dispatch_still_expires_after_restart() {
     }
     assert!(held, "failed dispatch must reach its bounded retry limit after restart");
 }
+
+#[test]
+fn a_landing_is_read_through_its_watch_while_it_proves_and_after_it_lands() {
+    // The scripted root asks the same document function as the engine's watch route.
+    let mut world = landings::turn_world();
+    world.produce(b"temper/51");
+    world.push_file(b"main", b"base", b"main moved");
+    landings::ready_change(&mut world, CHANGE, b"temper/51");
+    let row = landings::landing_row(world.change(CHANGE));
+    world.event(top::Event::Landing { row });
+    let mut proving = false;
+    for position in 0..20 {
+        let entry = 100 + position * 2;
+        let decision = landings::step_landing(&mut world, LANDING, entry);
+        temper_engine_forge_world::changes::change_step_task(
+            &mut world,
+            CHANGE,
+            entry + 1,
+            change::Status::Passed,
+            Box::new([]),
+            false,
+            false,
+        );
+        if matches!(decision, landing::Decision::Dispatch { .. }) {
+            let top::Document::Landing(view) = world.document(landings::PROJECT, LANDING).expect("landing watch")
+            else {
+                panic!("landing document")
+            };
+            assert_eq!((view.task, view.phase, view.turn), (LANDING, landing::Phase::Proving, None));
+            let member = &view.members[0];
+            assert_eq!(member.change, CHANGE);
+            assert_eq!(member.candidate, Some(translate::commit(world.branch(b"temper/51"))));
+            assert!(member.base.is_some());
+            assert!(matches!(member.gates[0].proof, top::GateProof::Dispatched { attempt: 1, .. }));
+            assert!(member.gates[0].key.is_some());
+            proving = true;
+            break;
+        }
+    }
+    assert!(proving, "the watch saw its dispatched gate before completion");
+    landings::drive_landing(&mut world, LANDING);
+    let top::Document::Landing(view) = world.document(landings::PROJECT, LANDING).expect("ended landing watch") else {
+        panic!("landing document")
+    };
+    assert_eq!(view.phase, landing::Phase::Landed);
+    let member = &view.members[0];
+    assert_eq!(member.landed, member.candidate);
+    assert_eq!(member.landed, Some(translate::commit(world.branch(b"main"))));
+    let top::GateProof::Passed(run) = &member.gates[0].proof else { panic!("receipt run") };
+    assert_eq!(run, &receipt(&world).1.run);
+    for ended in [false, true] {
+        let top::Document::Landings(view) = world
+            .document(landings::PROJECT, top::landings_subject(landings::PROJECT, ended))
+            .expect("project list watch")
+        else {
+            panic!("list document")
+        };
+        assert_eq!(view.turn, None);
+        assert_eq!(view.landings.len(), usize::from(ended));
+        if ended {
+            assert_eq!(view.landings[0].task, LANDING);
+        }
+    }
+}
