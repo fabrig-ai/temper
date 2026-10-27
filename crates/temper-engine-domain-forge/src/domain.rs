@@ -4622,8 +4622,9 @@ fn publish(d: &Domain, topic: Topic, news: News, out: &mut Queue<Request>) {
 )]
 fn updating_entry(d: &Domain, task: u64) -> bool {
     let Some(change) = d.changes.get(&task) else { return false };
+    // domain/landing.md, 5.2: the pending prepare's rebase moves its own branch.
     if !match change.change.state {
-        change::State::Updating { .. } => true,
+        change::State::Updating { .. } | change::State::Preparing { .. } => true,
         _ => false,
     } {
         return false;
