@@ -1116,7 +1116,9 @@ pub fn fixture_6_4() -> forge::Fixture {
                 project["policy"]["roles"][0]["period_spend"] = 26.into();
                 project["policy"]["period_spend"] = 31.into();
             }
-            for (name, size) in [("tasks.tasks", 5), ("tasks.project_tasks", 5), ("tasks.tree_tasks", 6)] {
+            for (name, size) in
+                [("tasks.tasks", 5), ("tasks.exemptions", 5), ("tasks.project_tasks", 5), ("tasks.tree_tasks", 6)]
+            {
                 value["engine"]["limits"]["overrides"][name] = size.into();
             }
             value["application"]["limits"]["overrides"]["forge.change_policy.repairs"] = 1.into();
