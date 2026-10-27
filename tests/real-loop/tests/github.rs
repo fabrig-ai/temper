@@ -103,6 +103,41 @@ fn a_person_connects_their_app_and_a_chats_push_carries_its_installations_token(
     );
 }
 
+// The minimal post-manifest story needs no agent, checkout or adoption.
+#[test]
+fn a_manifest_conversion_installs_once_and_connects_the_forge() {
+    const CONNECT_CALL: usize = 1; // Sign in precedes connect.
+    const SETTLED_CALL: usize = 2; // The browse is not a ctl call.
+    const ONE_INSTALLATION: usize = 1; // The fake's default installation on acme.
+    let fixture = github::Fixture { connected: false, manifest: true, ..github::fixture() };
+    let ran = run_github(
+        fixture,
+        |_| Box::new([]),
+        || {
+            vec![
+                sign_in(D1),
+                call(D1, argv!["forge", "connect", "1", "github", "--key", "manifest-connect"]),
+                browse(CONNECT_CALL),
+                call(D1, argv!["forge", "list", "--until", "settled", "--json"]),
+            ]
+        },
+    );
+    for (index, result) in ran.calls().iter().enumerate() {
+        assert_eq!(result.exit, Some(Exit::Code(0)), "call {index}: {result:?}");
+    }
+    let [visit] = ran.browsed() else { panic!("one manifest visit") };
+    assert_eq!(visit.call, CONNECT_CALL);
+    assert_eq!(visit.hops, [200, 200, 302, 302, 200], "manifest, create, conversion, install and setup");
+    installed(&visit.body);
+    assert_eq!(ran.github().installations.len(), ONE_INSTALLATION);
+    assert_eq!(ran.github().installations[0], (github::INSTALLATION, 10, b"acme".to_vec()));
+    let settled: Value = serde_json::from_slice(&ran.calls()[SETTLED_CALL].stdout).expect("settled forges JSON");
+    let [forge] = settled["forges"]["forges"].as_array().expect("forges rows").as_slice() else { panic!("one forge") };
+    assert_eq!(forge["number"], 1);
+    assert_eq!(forge["state"], "connected");
+    assert_eq!(forge["login"], format!("{}[bot]", visit.app_slug.as_ref().expect("converted App")));
+}
+
 fn steps() -> Vec<temper_real_loop_world::calls::Step> {
     vec![
         sign_in(D1),

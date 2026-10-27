@@ -264,6 +264,10 @@ fn github_ready_picks_adopts_into_a_new_project_and_stays_adopted_after_reload()
             place: d::Place::Address(Address::Welcome { step: Step::Forge { forge: Some(Choice::Forge(1)) } }),
         },
     );
+    assert_eq!(
+        root.person().pages().address(),
+        &Address::Welcome { step: Step::Forge { forge: Some(Choice::Forge(1)) } }
+    );
     let mut picker = view(&root);
     node(&picker, Role::Heading { level: 2 }, b"Choose a repository to start in");
     let row = node(&picker, Role::Choice, b"acme/second");
@@ -292,7 +296,9 @@ fn github_ready_picks_adopts_into_a_new_project_and_stays_adopted_after_reload()
     );
     let adopt = node(&picker, Role::Button, b"Adopt acme/second");
     let action = temper_client_view::act(&mut picker, adopt, skein_ui::Act::Press).expect("adopt");
-    pump(&mut front, &mut root, &mut now, d::Event::Act { action });
+    assert!(pump(&mut front, &mut root, &mut now, d::Event::Act { action }), "adoption moves to Model");
+    assert_eq!(root.person().pages().address(), &Address::Welcome { step: Step::Model { way: None } });
+    node(&view(&root), Role::Heading { level: 1 }, b"Connect a model");
     let held = root.person().forge().picker(1).expect("forge 1's picker");
     assert_eq!(held.starting.as_ref().expect("its start").value.adoption.project, 2);
     assert_eq!(held.adoption.as_ref().expect("its adoption").value.project, 2);
