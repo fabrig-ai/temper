@@ -237,6 +237,27 @@
           "tokens": 47
         }
       ]
+    },
+    {
+      "cue": "Review this change at the named head",
+      "turns": [
+        {
+          "lines": [
+            {
+              "call": "finish",
+              "arguments": {
+                "form": "verdict",
+                "label": "1",
+                "text": "Checked widget CSV export.",
+                "fields": {},
+                "items": []
+              }
+            }
+          ],
+          "finish": "tool_calls",
+          "tokens": 24
+        }
+      ]
     }
   ],
   "otherwise": [
