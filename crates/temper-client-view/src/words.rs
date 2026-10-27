@@ -618,6 +618,7 @@ pub enum Word {
     TaskNotServed,
     TaskGone,
     TaskTooLarge,
+    TaskTooLinked,
     TaskMalformed,
 
     MessageOnceRuns,
@@ -657,9 +658,9 @@ pub enum Word {
 // A task document's reading line and seven lasting read ends (client/README.md, 3.5).
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
-const PHRASES: u32 = 1166;
-const SEGMENTS: u32 = 2043;
-const ALL: [Word; 592] = [
+const PHRASES: u32 = 1167;
+const SEGMENTS: u32 = 2046;
+const ALL: [Word; 593] = [
     Word::WelcomeYourModel,
     Word::BrandChats,
     Word::ForgeHereVersionDetails,
@@ -1250,6 +1251,7 @@ const ALL: [Word; 592] = [
     Word::TaskNotServed,
     Word::TaskGone,
     Word::TaskTooLarge,
+    Word::TaskTooLinked,
     Word::TaskMalformed,
     Word::MessageOnceRuns,
 ];
@@ -1862,6 +1864,7 @@ impl Word {
             Self::TaskNotServed => 2016,
             Self::TaskGone => 2017,
             Self::TaskTooLarge => 2018,
+            Self::TaskTooLinked => 2020,
             Self::TaskMalformed => 2019,
         };
         let owner =
@@ -2624,6 +2627,7 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::TaskNotServed => (&[b"This version of temper cannot read this task."], &[]),
         Word::TaskGone => (&[b"This task is no longer available."], &[]),
         Word::TaskTooLarge => (&[b"This task is too large to read."], &[]),
+        Word::TaskTooLinked => (&[b"Too linked to show: it needs more than ", b" joins in one read."], &[Number]),
         Word::TaskMalformed => (&[b"This task could not be read."], &[]),
 
         Word::Project => (&[b"Project ", b""], &[Number]),

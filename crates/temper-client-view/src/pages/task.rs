@@ -124,6 +124,10 @@ pub(crate) fn main(
 pub(crate) fn reading(b: &mut Builder, page: &task::Task, words: &Words) {
     use task::{DocumentRead, ReadEnd};
     let word = match page.document_read {
+        DocumentRead::Ended { why: ReadEnd::TooLinked { joins }, .. } => {
+            text(b, Role::Status, &words.say(Word::TaskTooLinked, &[Hole::Number(u64::from(joins))]));
+            return;
+        }
         DocumentRead::Ended { why: ReadEnd::Unknown, .. } => Word::TaskUnknown,
         DocumentRead::Ended { why: ReadEnd::NotAllowed, .. } => Word::TaskNotAllowed,
         DocumentRead::Ended { why: ReadEnd::SignedOut, .. } => Word::TaskSignedOut,

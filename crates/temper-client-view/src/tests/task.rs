@@ -4,6 +4,8 @@ use skein_lib::{Decimal, List, Writer};
 use skein_ui::{Builder, Role};
 use temper_client_domain::PlanFilter;
 const TASK: u64 = 9;
+// Small's join bound, supplied as the read refusal fact.
+const READ_JOINS: u32 = 4;
 const CHILD: u64 = 12;
 const PRIORITY: u32 = 1;
 const CHARTER: u32 = 1;
@@ -3211,4 +3213,22 @@ fn a_task_document_replaces_its_reading_status() {
     let tree = fixtures::build(&mut view, &root);
     assert!(fixtures::find(tree, Role::Status, "Reading task 9…".as_bytes()).is_none());
     assert!(fixtures::find(tree, Role::Heading { level: 2 }, b"Task details").is_some());
+}
+
+#[test]
+fn a_too_linked_task_page_says_so() {
+    let (mut root, watch) = unread_task();
+    end_task_read(
+        &mut root,
+        watch,
+        jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::TooLinked { joins: READ_JOINS })),
+    );
+    for words in [fixtures::words(), fixtures::browser_words()] {
+        let mut view = fixtures::view_of(words);
+        let tree = fixtures::build(&mut view, &root);
+        assert!(
+            fixtures::find(tree, Role::Status, b"Too linked to show: it needs more than 4 joins in one read.")
+                .is_some()
+        );
+    }
 }
