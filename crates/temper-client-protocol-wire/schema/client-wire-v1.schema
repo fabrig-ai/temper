@@ -75,9 +75,23 @@ versioned record DemoAnswer { project: u32 forge: u16 provider: u32 owner: bytes
 
 # A change's watched panel (client/README.md, 4.6; client/forge.md, 9.2).
 record ChangeSubject { task: u64 }
-enum Watch { change: ChangeSubject, forges }
-versioned record Watching { watch: Watch }
 record Pull { number: u64 address: bytes 2048 }
+# A landing's watched panel (domain/landing.md, section 14).
+record LandingSubject { task: u64 }
+record LandingsSubject { project: u32 ended: bool }
+enum Watch { change: ChangeSubject, forges, landing: LandingSubject, landings: LandingsSubject }
+enum LandingPhase { waiting, preparing, proving, proved, turn, landed, held, cancelled }
+record Receipted { run: u64 number: u64 address: bytes 2048 }
+record Dispatched { attempt: u16 run: option u64 }
+enum Proof { unkeyed, keyed, dispatched: Dispatched, waiting, passed: Receipted, failed: Receipted }
+record GateProof { name: bytes 32 blocking: bool key: option fixed 32 proof: Proof faults: u32 }
+record Member { change: u64 forge: u16 owner: bytes 1024 name: bytes 1024 branch: bytes 1024 landing: bytes 1024 pull: option Pull base: option fixed 32 candidate: option fixed 32 landed: option fixed 32 gates: list 8 GateProof }
+record HeldFaults { member: u16 gate: u16 }
+enum LandingHold { faults: HeldFaults }
+versioned record LandingPanel { task: u64 project: u32 phase: LandingPhase hold: option LandingHold members: list 8 Member preparation: u16 stale_proofs: u32 turn: option u64 }
+record LandingLine { task: u64 phase: LandingPhase changes: list 8 u64 repositories: list 8 bytes 2048 landed: list 8 fixed 32 }
+versioned record LandingsPanel { project: u32 turn: option u64 landings: list 64 LandingLine }
+versioned record Watching { watch: Watch }
 record Queued { place: u32 ahead: list 64 u64 }
 record GateReason { gate: u64 }
 enum Reason { ci, gate: GateReason, semantic }
