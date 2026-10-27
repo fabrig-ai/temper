@@ -2761,6 +2761,11 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
         }
     }
     crate::settle::observe(d, env, &row, pending.pull.as_ref(), pending.ci, base_tip);
+    if row.change.released == Some(change::Hold::BranchMoved)
+        && let Some(head) = pending.branch
+    {
+        accept_released_branch(d, env, &mut row, head, out);
+    }
     let facts = change_facts(d, env, &row, pending, base_tip);
     let heard = change::Heard {
         effect: if row.pending.is_some() { change::EffectResult::Pending } else { row.effect },
@@ -3100,6 +3105,30 @@ fn change_outcome(
     emit(out, Request::ChangeDecision { task, decision: change::Decision::None, entry: None, evidence: None });
 }
 
+/// A release adopts this freshly read head, including the client's drift baseline.
+fn accept_released_branch(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    row: &mut ChangeRow,
+    head: skein_forge::api::Commit,
+    out: &mut Queue<Request>,
+) {
+    row.drift = None;
+    let resource = skein_forge_client::Resource {
+        repository: row.repository,
+        what: skein_forge_client::What::Branch(row.branch.clone()),
+    };
+    let Some(name) = from_client(&resource, &env.limits) else { return };
+    if let Some(hold) = d.holds.get_mut(&name) {
+        hold.drift = None;
+        save_hold(out, hold.clone());
+    }
+    let head = BranchHead { name: name.clone(), commit: head, owned: true };
+    d.heads.insert(name, head.clone()).expect("the held branch has a head slot");
+    emit(out, Request::Save { read_afresh: None, release: None, record: Stored::BranchHead(head.clone()) });
+    child(d, env, skein_forge_client::Event::Pushed { resource, commit: head.commit }, out);
+}
+
 fn release_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Request>) {
     let Some(row) = d.changes.get_mut(&task) else {
         emit(out, Request::Refused { task });
@@ -3108,18 +3137,28 @@ fn release_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<
     let before = crate::panel::ready(row);
     row.change = change::released(&row.change, env.wall);
     row.drift = None;
-    let saved = row.clone();
-    save_queue_change(d, env, before, saved, out);
+    let mut saved = row.clone();
+    save_queue_change(d, env, before, saved.clone(), out);
     let mut affected = List::with_capacity(d.holds.len());
+    let mut observed = None;
     for (name, hold) in &d.holds {
         if hold.task == task && hold.drift.is_some() {
             affected.push(name.clone()).expect("at most all held resources");
+            if let Some(crate::Drift { change: crate::DriftChange::Branch { observed: head, .. }, .. }) = &hold.drift {
+                observed = *head;
+            }
         }
     }
     for name in &affected {
         let hold = d.holds.get_mut(name).expect("collected held resource");
         hold.drift = None;
         save_hold(out, hold.clone());
+    }
+    if saved.change.released == Some(change::Hold::BranchMoved)
+        && let Some(head) = observed
+    {
+        // A poll may finish before the procedure's fresh snapshot does.
+        accept_released_branch(d, env, &mut saved, head, out);
     }
 }
 
