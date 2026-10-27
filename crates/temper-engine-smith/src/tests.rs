@@ -154,6 +154,21 @@ fn settings_tools_require_the_family_in_both_the_charter_and_authority() {
 }
 
 #[test]
+fn a_read_only_charter_offers_only_the_read_family() {
+    let mut assignment = assignment();
+    assignment.run.policy.tools = jig_domain_core::ToolFamilies::JIG.read;
+    let charter = crate::charter(&assignment);
+    assert_eq!(charter.grants.host_tools.len(), 19);
+    let mut docs = false;
+    for tool in &charter.grants.host_tools {
+        docs |= tool.name.as_ref() == b"read_docs";
+        assert!(tool.name.starts_with(b"read_"));
+        assert_eq!(tool.effect, run::HostEffect::Read);
+    }
+    assert!(docs);
+}
+
+#[test]
 fn a_charters_mode_is_its_tasks_ending() {
     let change = run::outcome::ChangeSpec {
         checks_must_pass: true,

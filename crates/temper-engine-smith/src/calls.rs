@@ -204,19 +204,57 @@ pub(crate) const SPECS: [Spec; 39] = [
 /// The complete host-tool registry, with exact schemas and write effects.
 #[must_use]
 pub fn tools(timeout: Duration) -> Box<[run::HostTool]> {
-    offered_tools(timeout, true)
+    offered_tools(timeout, tasks::Tools(u64::MAX))
 }
 
-/// Settings declarations require the run's settings family. Root authority
-/// still decides each accepted call by its durable name.
-pub(crate) fn tools_for(timeout: Duration, authority: tasks::Tools) -> Box<[run::HostTool]> {
-    offered_tools(timeout, authority.0 & jig_domain_core::ToolFamilies::JIG.settings != 0)
+/// Charters select their named families. Settings additionally requires the
+/// task's authority; the other families retain their existing call-time check.
+pub(crate) fn tools_for(timeout: Duration, charter: tasks::Tools, authority: tasks::Tools) -> Box<[run::HostTool]> {
+    let settings = jig_domain_core::ToolFamilies::JIG.settings;
+    let families = tasks::Tools(charter.0 & (authority.0 | !settings));
+    offered_tools(timeout, families)
 }
 
-fn offered_tools(timeout: Duration, settings: bool) -> Box<[run::HostTool]> {
+fn family(name: &[u8]) -> u64 {
+    let families = jig_domain_core::ToolFamilies::JIG;
+    match name {
+        b"goal" | b"change" | b"delegate" => families.delegate.0,
+        b"message" | b"introduce" => families.message.0,
+        b"amend" | b"cancel" | b"release" => families.control.0,
+        b"decide" | b"decide_escalation" | b"withdraw" => families.decide.0,
+        b"propose" => families.propose.0,
+        b"subscribe" | b"unsubscribe" | b"subscribe_forge" => families.subscribe.0,
+        b"effect_forge" => families.effect.0,
+        b"note" => families.note.0,
+        b"recall" => families.recall.0,
+        b"settings" | b"propose_settings" => families.settings,
+        b"read_items"
+        | b"read_item"
+        | b"read_pull"
+        | b"read_pull_for"
+        | b"read_reviews"
+        | b"read_statuses"
+        | b"read_remarks"
+        | b"read_branch"
+        | b"read_branches"
+        | b"read_pull_files"
+        | b"read_compare"
+        | b"read_checks"
+        | b"read_file"
+        | b"read_job"
+        | b"read_protection"
+        | b"read_settings"
+        | b"read_collaborators"
+        | b"read_permission"
+        | b"read_docs" => families.read.0,
+        _ => unreachable!("every declared host tool has a family"),
+    }
+}
+
+fn offered_tools(timeout: Duration, families: tasks::Tools) -> Box<[run::HostTool]> {
     let mut tools = List::with_capacity(u32::try_from(SPECS.len()).expect("fixed tool list"));
     for spec in SPECS {
-        if !settings && (spec.name == b"settings" || spec.name == b"propose_settings") {
+        if families.0 & family(spec.name) == 0 {
             continue;
         }
         tools
