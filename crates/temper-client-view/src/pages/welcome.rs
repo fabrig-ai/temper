@@ -85,55 +85,18 @@ fn card(b: &mut Builder, w: &Words, title: Word) {
     b.name(&w.say(title, &[]));
     text(b, w, Role::Heading { level: 2 }, title);
 }
-fn setup_description(b: &mut Builder, root: &Domain, w: &Words) {
-    use temper_client_domain::pages::accounts::{self, Way};
+fn setup_description(b: &mut Builder, w: &Words) {
     b.open(Role::Slot);
     b.style(look::WELCOME_SETUP_DESCRIPTION);
     b.open(Role::Paragraph);
     w.text(b, Word::WelcomeSetupDescription, &[]);
     b.close();
-    if let Some(me) = root.pages().me(root.client()) {
-        let ways =
-            accounts::ways(&me.providers, root.forge().demo_provider(), jig_client::contract::AccountHolder::Own);
-        if !ways.is_empty() {
-            b.open(Role::Paragraph);
-            w.text(b, Word::WelcomeYourModel, &[]);
-        }
-        let mut written = false;
-        // Keys form one alternative, with one named key per provider.
-        for way in &ways {
-            let word = match way {
-                Way::SignIn { .. } => Word::WelcomeModelPlan,
-                Way::Program { .. } => Word::WelcomeModelProgram,
-                Way::Key { .. } => continue,
-            };
-            if written {
-                w.text(b, Word::WelcomeModelWayOr, &[]);
-            }
-            let (_, plan) = super::connect_model::names(me, *way);
-            w.text(b, word, &[Hole::Name(crate::choice::shown(plan, w))]);
-            written = true;
-        }
-        let mut key_written = false;
-        for way in &ways {
-            if let Way::Key { .. } = way {
-                if key_written {
-                    w.text(b, Word::WelcomeModelKeysOr, &[]);
-                } else if written {
-                    w.text(b, Word::WelcomeModelWayOr, &[]);
-                }
-                let (brand, _) = super::connect_model::names(me, *way);
-                w.text(b, Word::WelcomeModelKey, &[Hole::Name(crate::choice::shown(brand, w))]);
-                key_written = true;
-            }
-        }
-        if written || key_written {
-            w.text(b, Word::WelcomeModelEnd, &[]);
-            b.close();
-        }
-    }
+    b.open(Role::Paragraph);
+    w.text(b, Word::WelcomeYourModel, &[]);
+    b.close();
     b.close();
 }
+
 #[expect(clippy::too_many_arguments, reason = "welcome composes the forge and accounts flows with their bindings")]
 pub(crate) fn main(
     b: &mut Builder,
@@ -168,7 +131,7 @@ pub(crate) fn main(
                     b.close();
                 }
                 card(b, w, Word::WelcomeSetup);
-                setup_description(b, root, w);
+                setup_description(b, w);
                 paragraph(b, w, Word::WelcomeSetupTime, look::WELCOME_MUTED);
                 go(b, w, bindings, Word::WelcomeSetup, Step::Forge { forge: None });
                 b.close();

@@ -252,7 +252,7 @@ fn the_welcome_step_says_its_words_and_offers_both_cards() {
         "Nothing leaves this machine, and nothing costs. · Ready at once",
         "Try the playground",
         "Set up temper",
-        "Your forge: GitHub, or a Forgejo temper runs on this machine.",
+        "Your forge: GitHub or Forgejo",
         "About five minutes",
         "Set up temper",
         "Started in the playground? Connect your own forge and model whenever you like; the playground then steps aside.",
@@ -956,36 +956,33 @@ pub(super) fn owned_adopted_rows() -> skein_lib::List<w::ForgeRow> {
 }
 
 #[test]
-fn the_setup_card_names_only_the_configured_model_ways() {
+fn the_setup_card_names_supported_models_for_every_provider_catalogue() {
     use jig_client::contract as c;
-    let openai = [b"openai".as_slice()];
-    let both_keys = [b"openai".as_slice(), b"anthropic"];
-    for (signin, key_names, expected) in [
-        (true, [].as_slice(), "Your model: your ChatGPT plan."),
-        (false, openai.as_slice(), "Your model: an OpenAI API key."),
-        (true, openai.as_slice(), "Your model: your ChatGPT plan, or an OpenAI API key."),
-        (false, both_keys.as_slice(), "Your model: an OpenAI API key or an Anthropic API key."),
-    ] {
+    for (sign_in, program, key) in
+        [(true, false, false), (false, true, false), (false, false, true), (false, false, false)]
+    {
         let (mut root, watch, _) = f::root_at(Address::Welcome { step: Step::Welcome }, &f::domain_limits());
         let mut me = root.pages().me(root.client()).unwrap().clone();
-        me.providers = skein_lib::List::with_capacity(2);
-        for (provider, name) in [b"openai".as_slice(), b"anthropic"].into_iter().enumerate() {
-            if (provider == 0 && signin) || key_names.contains(&name) {
-                me.providers
-                    .push(c::ProviderOffer {
-                        provider: u32::try_from(provider).unwrap() + 20,
-                        name: super::connect_model::text(name),
-                        key_bytes: 4096,
-                        sign_in: provider == 0 && signin,
-                        signed_in_plan: true,
-                        key: key_names.contains(&name),
-                        programs: skein_lib::List::with_capacity(0),
-                        programs_cut: false,
-                        none: false,
-                        manage_usage: None,
-                    })
-                    .unwrap();
+        me.providers = skein_lib::List::with_capacity(1);
+        if sign_in || program || key {
+            let mut programs = skein_lib::List::with_capacity(1);
+            if program {
+                programs.push(c::Text::new(Box::from(b"claude_code".as_slice()), 32).unwrap()).unwrap();
             }
+            me.providers
+                .push(c::ProviderOffer {
+                    provider: 20,
+                    name: super::connect_model::text(b"Other model"),
+                    key_bytes: 4096,
+                    sign_in,
+                    signed_in_plan: true,
+                    key,
+                    programs,
+                    programs_cut: false,
+                    none: false,
+                    manage_usage: None,
+                })
+                .unwrap();
         }
         f::root_event(
             &mut root,
@@ -999,15 +996,6 @@ fn the_setup_card_names_only_the_configured_model_ways() {
             },
         );
         for view in [f::page_view(&root), f::browser_page_view(&root)] {
-            let at = view
-                .tree()
-                .nodes()
-                .iter()
-                .position(|n| n.role == Role::Region && n.name.as_deref() == Some(b"Set up temper"))
-                .unwrap();
-            let card = String::from_utf8(f::node_text(view.tree(), at).into_vec()).unwrap();
-            assert!(card.contains(expected), "{card}");
-            assert_eq!(card.matches("Your model:").count(), 1);
             let block = view
                 .tree()
                 .nodes()
@@ -1022,20 +1010,11 @@ fn the_setup_card_names_only_the_configured_model_ways() {
                 .skip(block + 1)
                 .take(usize::try_from(view.tree().nodes()[block].size).unwrap() - 1)
                 .filter(|(_, n)| n.role == Role::Paragraph)
-                .map(|(at, n)| {
-                    assert_eq!(n.role, Role::Paragraph);
-                    f::node_text(view.tree(), at)
-                })
+                .map(|(at, _)| f::node_text(view.tree(), at))
                 .collect();
             assert_eq!(lines.len(), 2);
-            assert!(lines[0].starts_with(b"Your forge:"));
-            assert_eq!(String::from_utf8_lossy(&lines[1]).trim_start(), expected);
-            if !signin {
-                assert!(!card.contains("ChatGPT"));
-            }
-            if key_names.is_empty() {
-                assert!(!card.contains("API key"));
-            }
+            assert_eq!(lines[0].as_ref(), b"Your forge: GitHub or Forgejo");
+            assert_eq!(lines[1].as_ref(), b"Your model: ChatGPT or Claude");
         }
     }
 }
