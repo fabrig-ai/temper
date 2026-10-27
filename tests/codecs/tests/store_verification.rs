@@ -1,6 +1,8 @@
 //! Verification and the change's post-merge states at the v10 baseline.
 #[path = "support/store.rs"]
 mod fixture;
+#[path = "support/tiers.rs"]
+mod tiers;
 #[path = "support/verification.rs"]
 mod verification;
 use temper_engine_domain_forge::{Key, Stored, TierVerdict};
@@ -78,4 +80,23 @@ fn verification_keys_use_family_26_and_require_the_whole_key() {
     let other = keys::encode(&Key::Verification { repository: verification::REPOSITORY, commit: [9; 32] }, u32::MAX)
         .expect("key fits");
     assert_eq!(records::row(&other, &records::encode(&row), &bounds), Err(temper_protocol_store::Undecodable));
+}
+
+#[test]
+fn tier_smallest_and_fullest_rows_have_v10_goldens_and_round_trip() {
+    for (name, row) in [("tier-smallest.bin", tiers::smallest()), ("tier-fullest.bin", tiers::fullest())] {
+        golden(name, row);
+    }
+}
+#[test]
+fn tier_ranges_and_tests_refuse_one_past_each_runtime_bound() {
+    let bytes = records::encode(&tiers::fullest());
+    for limits in [
+        temper_engine_domain_forge::Limits { changes: fixture::LIMITS.changes - 1, ..fixture::LIMITS },
+        temper_engine_domain_forge::Limits { failing_tests: fixture::LIMITS.failing_tests - 1, ..fixture::LIMITS },
+        temper_engine_domain_forge::Limits { test_id_bytes: fixture::LIMITS.test_id_bytes - 1, ..fixture::LIMITS },
+    ] {
+        let bounds = temper_protocol_store::bounds(&limits).expect("bounds");
+        assert_eq!(records::decode(&bytes, &bounds), Err(temper_protocol_store::Undecodable));
+    }
 }

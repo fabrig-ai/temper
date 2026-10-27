@@ -309,13 +309,32 @@ impl Domain {
             for repository in &landing.repositories {
                 let mut tiers = List::with_capacity(limits.forge.tiers);
                 for tier in &repository.tiers {
-                    tiers.push(forge::Tier { name: tier.name.clone() }).expect("parsed tier bound");
+                    tiers
+                        .push(forge::Tier {
+                            name: tier.name.clone(),
+                            workflow: tier.workflow.clone(),
+                            ignored: tier.ignored.clone(),
+                            artifact: tier.artifact.clone(),
+                            format: tier.format,
+                        })
+                        .expect("parsed tier bound");
                 }
                 repositories
                     .push(forge::RepositoryTiers { repository: repository.repository, tiers: tiers.into_boxed() })
                     .expect("parsed repository bound");
             }
-            assert!(forge.project_tiers(project, repositories.into_boxed()), "project tier table bounded");
+            assert!(
+                forge.project_tiers(
+                    project,
+                    forge::TierSettings {
+                        verdict: landing.after.verdict,
+                        bound: landing.after.bound,
+                        pause_on_red: landing.after.pause_on_red
+                    },
+                    repositories.into_boxed()
+                ),
+                "project tier table bounded"
+            );
         }
         let root_config =
             RootConfig { forge_connector, forge_charter: config.forge_charter, landings: config.landing.landings };
