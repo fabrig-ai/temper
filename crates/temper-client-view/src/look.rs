@@ -315,6 +315,8 @@ pub const WELCOME_ACTIONS: Style = Style { owner: owner(), token: 154 };
 pub const REPOSITORY_SELECTED: Style = Style { owner: owner(), token: 155 };
 /// The setup card's forge and model lines in one compact block.
 pub const WELCOME_SETUP_DESCRIPTION: Style = Style { owner: owner(), token: 156 };
+/// The opening welcome’s software factory tagline.
+pub const WELCOME_TAGLINE: Style = Style { owner: owner(), token: 157 };
 /// Native browser elements for the admin group and Model’s definition list.
 pub const ELEMENTS: &[(skein_ui::Owner, skein_ui::Role, Style, &str)] = &[
     (owner(), skein_ui::Role::Region, ADMIN_FIRST, "fieldset"),
@@ -485,6 +487,7 @@ pub const NAMES: Names<'static> = Names {
         b"temper-welcome-actions",
         b"temper-repository-selected",
         b"temper-welcome-setup-description",
+        b"temper-welcome-tagline",
     ],
     regions: &[b"temper-link"],
 };

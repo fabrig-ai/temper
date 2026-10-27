@@ -276,14 +276,14 @@ fn the_welcome_step_says_its_words_and_offers_both_cards() {
     );
 }
 #[test]
-fn the_welcome_lead_has_two_named_paragraphs_and_strong_what_and_how() {
+fn the_welcome_tagline_and_lead_are_named_and_emphasize_what_and_how() {
     let view = f::page_view(&f::welcome_root(Step::Welcome, true));
     let tree = view.tree();
     let first = node(tree, Role::Paragraph, "Reliable, scalable and flexible software factory.");
     let second = node(tree, Role::Paragraph, "You describe what you want and how you want it done, and it happens.");
-    for id in [first, second] {
+    for (id, style) in [(first, crate::look::WELCOME_TAGLINE), (second, crate::look::WELCOME_LEAD)] {
         let paragraph = tree.nodes().iter().find(|n| n.id == id).unwrap();
-        assert!(paragraph.styles.as_slice().contains(&crate::look::WELCOME_LEAD));
+        assert!(paragraph.styles.as_slice().contains(&style));
     }
     let start = tree.nodes().iter().position(|n| n.id == first).unwrap();
     assert_eq!(tree.nodes()[start + usize::try_from(tree.nodes()[start].size).unwrap()].id, second);
