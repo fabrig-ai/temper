@@ -12,12 +12,12 @@ Run a whole deployment on one machine, on loopback, from its configuration to a 
 - **Real or fake backends,** chosen before step 2; a box never mixes
   them. Real: the model is a real account, and the box fetches
   Forgejo and its runner on first use. Fake: GitHub, the model, its
-  sign-in and a Forgejo elsewhere are fakes on loopback, and no one's
-  account is used; Forgejo on this machine stays real. A box on fake
+  sign-in and a Forgejo elsewhere are fakes on loopback, using no
+  one's account; Forgejo on this machine stays real. A box on fake
   backends needs, from a temper checkout,
-  `cargo build -p temper -p temper-fake-claude`, which puts the
-  adapter `fake-claude` beside `temper`, and
-  `scripts/bundle.sh --loopback BUNDLE`.
+  `cargo build -p temper -p temper-fake-claude`, putting
+  `fake-claude` beside `temper`, and `scripts/bundle.sh --loopback
+  BUNDLE`.
 - **The directories:** `CONFIG`, `DATA` and `CACHE`, absolute and
   empty, and `DIR`, private to you. Nothing else may use them.
 - **The model's account,** on real backends, one of: a login exported
@@ -26,8 +26,9 @@ Run a whole deployment on one machine, on loopback, from its configuration to a 
   Claude Code, `claude` on `PATH`, signed in at step 5 or a signed-in
   Claude Code configuration directory you hold.
 - `BUNDLE`: the loopback bundle's directory, on fake backends.
-- `REQUEST`: a file of the words that ask for the change.
+- `REQUEST`: a file of the words asking for the change.
 - `CHANGE`: the change task's number, which step 6 reads.
+- `NAME`: the Claude Code login's name (step 5).
 
 ## 1. Write the configuration
 
@@ -295,14 +296,13 @@ move at its deadline: account export again after it.
 ## Clean up
 
 - `CONFIG`, `DATA` and `CACHE` hold the deployment: start the box
-  again with the same three to resume. On fake backends, removing
+  on the same three to resume. On fake backends, removing
   `DATA/box/fake-backends` resets it.
 - Keep `FILE` from step 8 private until an import on the next
   deployment removes it.
-- Remove a key file once its account is usable, and `DIR` once you
-  are done.
+- Remove a key file once its account is usable; `DIR` when done.
 
 ## Next
 
-- temper help ctl: the loop, keys and exit statuses for every call.
+- temper help ctl: the loop, keys and exit statuses of every call.
 - temper help github: GitHub beside this box's Forgejo.
