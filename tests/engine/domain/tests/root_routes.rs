@@ -377,10 +377,8 @@ fn a_member_starts_a_chat_and_an_observer_is_refused() {
     )));
 }
 
-#[test]
-fn a_person_answers_a_question_its_task_has_already_read() {
-    use jig_domain_core::{documents, reads};
-
+/// A real message commit leaves the parent with an unanswered question.
+fn unanswered_question() -> (Driver, engine::Assignment, u64, engine::Assignment) {
     let (mut driver, parent) = batch_fixture_with(2, 1);
     let child = call_batch(&mut driver, &parent, 2034, Box::new([report_delegate(b"ask", Box::new([]))]))[0];
     let asker = assigned_task(&driver, child);
@@ -394,6 +392,14 @@ fn a_person_answers_a_question_its_task_has_already_read() {
     let Some(engine::CallAnswer::Sent { message: question }) = driver.answered(2035).cloned() else {
         panic!("numbered question committed")
     };
+    (driver, parent, question, asker)
+}
+
+#[test]
+fn a_person_answers_a_question_its_task_has_already_read() {
+    use jig_domain_core::{documents, reads};
+
+    let (mut driver, parent, question, _) = unanswered_question();
     driver.send(protocol::turn(Token::new(7), parent.task, parent.attempt, 1, 1, Some(question), b"read question"));
     driver.settle();
     assert!(!live(&driver, parent.task).inbox.iter().any(|word| word.number == question));
@@ -442,6 +448,69 @@ fn a_person_answers_a_question_its_task_has_already_read() {
             .iter()
             .any(|word| word.kind == (tasks::MessageKind::Answer { question }) && word.from == tasks::Party::Person(1))
     );
+}
+
+#[test]
+fn a_restart_restores_an_unanswered_question_beside_results() {
+    // The existing two-slot, one-level batch fixture: no new capacity.
+    const SLOTS: u32 = 2;
+    const DEPTH: u32 = 1;
+    const POOL: u64 = 500;
+    const RESULT_SPEND: u64 = 10; // The existing report delegate's allotment.
+    let (mut driver, parent, question, asker) = unanswered_question();
+    driver.answer(
+        Token::new(7),
+        asker.task,
+        asker.attempt,
+        0,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: b"asked".as_slice().into() },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    driver.settle();
+    driver.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(2038)),
+        sign_in: driver.session(),
+        key: [211; 16],
+        ask: goal(b"separate result", RESULT_SPEND, 1),
+    }));
+    driver.settle();
+    let result = driver.last_assignment();
+    driver.answer(
+        Token::new(7),
+        result.task,
+        result.attempt,
+        0,
+        tasks::End::Finished { result: tasks::TaskResult::Report { words: REPORT.into() }, cancel_delegates: false },
+        engine::Parts::none(),
+    );
+    driver.settle();
+    let expected = live(&driver, parent.task).question_lines.clone();
+    let rows = driver.store.rows.clone();
+    let (configuration, bounds) = batch_settings(SLOTS, DEPTH, POOL, false, false, false);
+    let [_, configuration] = configuration;
+    // Reopen the durable log, rather than rebuilding it from the typed mirror.
+    driver.store.crash(92);
+    let mut restarted = Driver::cold(driver.store, configuration, &bounds);
+    restarted.pump();
+    assert!(!restarted.stopped, "restart refused its census: {:?}", restarted.root.restart_failure());
+    assert!(restarted.root.ready());
+    assert!(!restarted.stopped);
+    assert_eq!(live(&restarted, parent.task).question_lines, expected);
+    assert!(expected.iter().any(|line| line.message == question && line.answer.is_none()));
+    assert!(
+        rows.values().any(|row| matches!(row,
+            Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Result(row)))
+                if row.party == 1 && row.task == result.task
+        )),
+        "the restart includes the person's durable result index"
+    );
+    assert!(restarted.loads.iter().any(|(_, range)| matches!(range,
+        engine::Range::Census(census) if !census.questions.is_empty() && !census.results.is_empty()
+    )));
 }
 
 #[test]

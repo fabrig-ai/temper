@@ -351,9 +351,9 @@ pub enum CoreRange {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Range {
     Core(CoreRange),
-    /// Ended owners in jig's census index-walk order, with repeats. The
-    /// cursor is the last index key walked, rather than an owner row's key
-    /// (protocol/store.md, section 5).
+    /// Ended owners and unanswered question activity in jig's census walk
+    /// order, with repeats. The cursor is the last index key walked, rather
+    /// than an owner row's key (jig's protocol/store.md, 7.2).
     Census(jig_domain_core::Census),
     Forge,
 }
@@ -371,11 +371,12 @@ impl Range {
         };
         match self {
             Range::Forge => false,
-            // The store joins the census's admitted index rows to the ended
-            // owners they name, and pages those owners in key order.
+            // The store joins result indexes to ended owners, then returns
+            // each unanswered question's exact activity row.
             Range::Census(census) => match core {
                 jig_domain_core::Key::Tasks(jig_domain_tasks::Key::Ended(task)) => *task != 0,
-                jig_domain_core::Key::People(jig_domain_people::Key::EndedRead { .. }) => census.admits(core),
+                jig_domain_core::Key::People(jig_domain_people::Key::EndedRead { .. })
+                | jig_domain_core::Key::Tasks(jig_domain_tasks::Key::Activity { .. }) => census.admits(core),
                 jig_domain_core::Key::Core(_)
                 | jig_domain_core::Key::Tasks(_)
                 | jig_domain_core::Key::People(_)

@@ -404,3 +404,64 @@ fn an_ended_conversation_query_joins_its_owner_and_read_position_after_restart()
     assert_eq!(rows[0].owner.as_ref().map(|owner| owner.number), Some(TASK));
     assert_eq!(next, None);
 }
+
+// The diagnosis's unanswered question identity, already written in tasks v9.
+const QUESTION_TASK: u64 = 6;
+const QUESTION_LINE: u64 = 13;
+const RESULT_PARTY: u64 = 1;
+const CENSUS_WAITER: Token = Token::new(51); // The load fixture's waiter.
+const QUESTION_PAGE: u32 = 1; // One exact question activity row.
+
+fn question_census() -> Range {
+    Range::Census(jig_domain_core::Census {
+        questions: Box::new([(QUESTION_TASK, QUESTION_LINE)]),
+        results: Box::new([jig_domain_core::ReadResults { party: RESULT_PARTY, after: 0 }]),
+    })
+}
+
+fn question_activity(task: u64, position: u64) -> Record {
+    use jig_domain_tasks as tasks;
+    Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Activity(tasks::ActivityLine {
+        task,
+        position,
+        at: Wall::EPOCH,
+        line: tasks::Line::Words {
+            message: 1,
+            by: tasks::Party::Task(7),
+            kind: tasks::MessageKind::Question,
+            words: b"ship?".as_slice().into(),
+        },
+    })))
+}
+
+#[test]
+fn a_census_restores_a_preexisting_question_activity() {
+    let record = question_activity(QUESTION_TASK, QUESTION_LINE);
+    let mut store = Store::new();
+    store.seed(Box::new([record.clone()]), Box::new([]));
+    store.crash(71);
+    let mut loads = Loads::new(&LIMITS);
+    let mut out = Queue::with_capacity(1);
+    let owner = loads::begin(&mut loads, CENSUS_WAITER, question_census(), None, QUESTION_PAGE, &mut out)
+        .expect("question census admitted");
+    out.pop();
+    let (rows, next) = store.page(&question_census(), None, QUESTION_PAGE);
+    loads::loaded(&mut loads, owner, rows, next, &mut out);
+    assert_eq!(
+        out.pop(),
+        Some(Request::Loaded { waiter: CENSUS_WAITER, rows: Box::new([record]), next: None, cut: None })
+    );
+}
+
+#[test]
+fn a_census_refuses_activity_outside_its_named_questions() {
+    for (task, position) in [(QUESTION_TASK, QUESTION_LINE - 1), (QUESTION_TASK + 1, QUESTION_LINE)] {
+        let mut loads = Loads::new(&LIMITS);
+        let mut out = Queue::with_capacity(1);
+        let owner = loads::begin(&mut loads, CENSUS_WAITER, question_census(), None, QUESTION_PAGE, &mut out)
+            .expect("question census admitted");
+        out.pop();
+        loads::loaded(&mut loads, owner, Box::new([question_activity(task, position)]), None, &mut out);
+        assert_eq!(out.pop(), Some(Request::Unloaded { waiter: CENSUS_WAITER, failure: Failure::Range }));
+    }
+}
