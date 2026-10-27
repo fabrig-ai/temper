@@ -572,6 +572,7 @@ fn a_budget_held_task_explains_how_to_run_or_cancel_it() {
     use jig_client::contract as c;
     let (mut root, call, mut task) = fixtures::task_read();
     task.hold = Some(c::TaskHold::Document(Box::new(c::Hold {
+        placed: None,
         revision: c::Revision { value: fixtures::HOLD },
         reason: c::HoldReason::Budget { spent: 3, limit: 4 },
         before: c::Phase::Idle,
@@ -598,6 +599,7 @@ fn budget_held_owner_tasks_and_inbox_rows_share_the_recovery_words() {
     let c::ChipPhase::Owner { phase, .. } = task.chip.details.as_mut() else { panic!("owner chip") };
     *phase = c::OwnerChipPhase::Held { reason: c::HoldCategory::Budget, revision: fixtures::HOLD };
     task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+        placed: None,
         circle: None,
         account: None,
         source: None,
