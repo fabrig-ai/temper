@@ -143,8 +143,8 @@ fn turn_limits(path: &[u8], json: &[u8]) -> Box<[u8]> {
             ("hub.turn_queue_bytes", u64::from(turn) * 8),
             ("core.resume_bytes", u64::from(resume)),
             ("authority.grants", 16),
-            ("authority.executors", 5),
-            ("tasks.executor_kinds", 5),
+            ("authority.executors", 6),
+            ("tasks.executor_kinds", 6),
             ("notes.scopes", 32),
         ]
     } else if path == b"workers[0].limits.overrides" {
