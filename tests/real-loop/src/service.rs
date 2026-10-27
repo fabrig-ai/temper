@@ -58,6 +58,7 @@ pub struct ServiceHost {
     github: Option<crate::github::Fixture>,
     github_seeded: bool,
     clients: Option<SocketAddr>,
+    clients_listener: Option<TcpListener>,
     pub(crate) github_seen: crate::github::Seen,
     cues: Vec<Cue>,
     links: u32,
@@ -92,10 +93,10 @@ impl ServiceHost {
         github: Option<crate::github::Fixture>,
         issuer: Option<SocketAddr>,
     ) -> Self {
-        let clients = github.map(|_| {
-            let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("reserved clients listener");
-            listener.local_addr().expect("reserved clients address")
-        });
+        let clients_listener =
+            github.map(|_| TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("reserved clients listener"));
+        let clients =
+            clients_listener.as_ref().map(|listener| listener.local_addr().expect("reserved clients address"));
         let forge = (fixture.is_none() && github.is_none())
             .then(|| TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("held forge listener"));
         let address = forge
@@ -163,6 +164,7 @@ impl ServiceHost {
             github,
             github_seeded: github.is_none_or(|fixture| !fixture.connected),
             clients,
+            clients_listener,
             github_seen: crate::github::Seen::default(),
             seen: crate::forge::Seen::default(),
             cues: Vec::with_capacity(cue::CUES),
@@ -274,8 +276,22 @@ impl ServiceHost {
             && ((self.fixture.is_none() && self.github.is_none()) || self.forge_address.is_some())
     }
     fn prepare_service(&self) -> temper_service::Service {
-        temper::prepare_in_with(&Self::directories(&self.path, self.cluster.is_some()), &fixtures::given(&self.path))
-            .expect("standalone preparation")
+        use std::os::fd::{AsRawFd, IntoRawFd};
+        let mut service = temper::prepare_in_with(
+            &Self::directories(&self.path, self.cluster.is_some()),
+            &fixtures::given(&self.path),
+        )
+        .expect("standalone preparation");
+        if let Some(listener) = &self.clients_listener {
+            // Keep the original bound across the bootstrap service's shutdown
+            // and the configured App's second start at the same address.
+            let listener = listener.try_clone().expect("clients listener descriptor");
+            service
+                .adopt_listener(Fd::new(listener.as_raw_fd()), listener.local_addr().expect("clients address"))
+                .expect("held clients listener");
+            let _ = listener.into_raw_fd();
+        }
+        service
     }
     #[must_use]
     pub fn end(&self) -> Option<&crate::End> {
@@ -425,6 +441,7 @@ impl Host for ServiceHost {
             }
             if service.is_empty() && self.github_seeded {
                 self.forge = None;
+                self.clients_listener = None;
             }
         }
         if !self.github_seeded && self.service.as_ref().is_some_and(temper_service::Service::is_empty) {

@@ -151,9 +151,16 @@ pub(crate) fn run(
         }))
     });
     host(&mut world, scratch.path(), steps, direct_key, 1);
-    drop(reservation);
-    if let Some(address) = issuer {
-        world.spawn(|| Proc::Issuer(Box::new(crate::issuer::peer(address, &crate::issuer::registration(address)))));
+    if let Some(listener) = reservation {
+        use std::os::fd::{AsRawFd, IntoRawFd};
+        let address = listener.local_addr().expect("issuer address");
+        let fd = skein_io::kernel::Fd::new(listener.as_raw_fd());
+        world.spawn_with_fds(vec![fd], || {
+            let mut peer = crate::issuer::peer(address, &crate::issuer::registration(address));
+            peer.adopt_listener(fd, address).expect("held issuer listener");
+            let _ = listener.into_raw_fd();
+            Proc::Issuer(Box::new(peer))
+        });
     }
     world.run(&skein_shell::Clock::new(), crate::PATIENCE)
 }
