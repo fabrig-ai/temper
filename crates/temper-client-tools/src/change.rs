@@ -24,13 +24,13 @@ use temper_client_domain::{
 use temper_client_protocol_wire::{self as wire, v1 as w};
 
 pub const READ: Tool = Tool {
-    name: b"change",
+    name: b"change show",
     line: b"Read a change's way to landing: its pull request, CI and step",
     prints: b"`change N`, its repository, branch and landing branch, its pull request, step and CI at its head, and a digest",
     result: b"change",
     forms: &[&[
-        positional(b"task", b"N", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
-        flag(b"project", b"P", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
+        positional(b"task", b"TASK", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
+        flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
     ]],
     keyed: Keyed::Never,
     area: 6,
@@ -38,8 +38,8 @@ pub const READ: Tool = Tool {
 };
 pub const WAIT_FORM: &[jig::table::Argument] = &[
     positional(b"subject", b"change", Kind::Word { set: &[b"change"] }, Required, b"A change's way to landing"),
-    positional(b"task", b"N", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
-    flag(b"project", b"P", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
+    positional(b"task", b"TASK", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
+    flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
     flag(b"since", b"DIGEST", Kind::Digest, Optional, b"The digest of your last read of the change"),
     flag(
         b"until",

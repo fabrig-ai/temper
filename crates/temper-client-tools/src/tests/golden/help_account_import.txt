@@ -1,9 +1,9 @@
-import FILE --key NAME
+account import FILE --key KEY
   FILE (file): a file; required. The private file export wrote
 Move an account in from the file export wrote, then remove the file
 Prints: `moved in: account N`
 --json: the record import.
-Key: --key NAME, required.
+Key: --key KEY, required.
 The file holds 1 to 131072 bytes, read whole. It is removed once
 the engine holds the account, and kept otherwise: the same call
 with the same key and file gets the first answer. A record of a

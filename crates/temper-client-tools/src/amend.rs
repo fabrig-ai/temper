@@ -30,7 +30,7 @@ pub(crate) fn prepare(call: &Call, task: &c::Task, me: &c::Me, limits: &Limits) 
         return Err(amend_error(task, b"", None, b"amend changes nothing on task "));
     };
     if drafted.revision.is_some() && shown.is_none() {
-        return Err(Failed::Fixed(b"amend needs --rev R"));
+        return Err(Failed::Fixed(b"task amend needs --rev REV"));
     }
     let revision = shown.or(drafted.revision);
     let change = Box::new(drafted.change);

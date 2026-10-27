@@ -1,8 +1,0 @@
-settings
-Read the settings, the revisions running work holds, and pending proposals
-Prints: `newest revision R`, each setting and its last revision, the held revisions and their live tasks, and the pending proposals
---json: the record settings.
-Key: none.
-`setting KIND N --json` prints one value to edit. change-settings
-and propose-settings take the newest revision this prints as
-`--against`.

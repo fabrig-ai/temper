@@ -10,7 +10,7 @@ use skein_lib::{List, Wall};
 
 const REVISION: Option<c::Revision> = Some(c::Revision { value: 7 });
 const DEADLINE: Wall = Wall::from_nanos(1_893_553_440_000_000_000); // 2030-01-02T03:04Z.
-const DEADLINE_CALL: &[&str] = &["amend", "41", "--rev", "7", "--deadline", "2030-01-02T03:04Z", "because"];
+const DEADLINE_CALL: &[&str] = &["task", "amend", "41", "--rev", "7", "--deadline", "2030-01-02T03:04Z", "because"];
 fn task() -> c::Task {
     let mut task = f::choice_task(c::Admission::Allowed);
     task.authority.cut = false;
@@ -60,7 +60,7 @@ fn deadline_change(task: &c::Task, deadline: Option<Wall>) -> c::Amendment {
 #[test]
 fn amend_sends_a_priority_alone_without_a_revision() {
     sends(
-        &["amend", "41", "--priority", "3", "because"],
+        &["task", "amend", "41", "--priority", "3", "because"],
         task(),
         expected(c::Amendment { tracked: Some(c::Tracking::Tracked { priority: 3 }), ..no_change() }, None),
     );
@@ -68,7 +68,7 @@ fn amend_sends_a_priority_alone_without_a_revision() {
 #[test]
 fn amend_sends_a_priority_with_an_explicit_revision() {
     sends(
-        &["amend", "41", "--rev", "7", "--priority", "3", "because"],
+        &["task", "amend", "41", "--rev", "7", "--priority", "3", "because"],
         task(),
         expected(c::Amendment { tracked: Some(c::Tracking::Tracked { priority: 3 }), ..no_change() }, REVISION),
     );
@@ -77,12 +77,12 @@ fn amend_sends_a_priority_with_an_explicit_revision() {
 fn amend_needs_a_revision_to_track_an_untracked_task() {
     let mut task = task();
     task.priority = None;
-    refuses(&["amend", "41", "--priority", "3", "because"], task, b"amend needs --rev R\n");
+    refuses(&["task", "amend", "41", "--priority", "3", "because"], task, b"task amend needs --rev REV\n");
 }
 #[test]
 fn amend_untracks_at_the_shown_revision() {
     sends(
-        &["amend", "41", "--rev", "7", "--untracked", "because"],
+        &["task", "amend", "41", "--rev", "7", "--untracked", "because"],
         task(),
         expected(c::Amendment { tracked: Some(c::Tracking::Untracked), ..no_change() }, REVISION),
     );
@@ -104,7 +104,7 @@ fn amend_removes_the_deadline() {
     let mut task = task();
     task.authority.authority.deadline = Some(DEADLINE);
     let change = deadline_change(&task, None);
-    sends(&["amend", "41", "--rev", "7", "--no-deadline", "because"], task, expected(change, REVISION));
+    sends(&["task", "amend", "41", "--rev", "7", "--no-deadline", "because"], task, expected(change, REVISION));
 }
 #[test]
 fn amend_refuses_a_deadline_on_a_cut_authority() {
@@ -128,7 +128,7 @@ fn loaded(argv: &[&str], bytes: &[u8], index: usize, task: c::Task, ask: c::Ask)
 fn amend_reads_instructions_from_a_file() {
     // The host supplies the loaded bytes; its file IO is tested by the shell's world.
     loaded(
-        &["amend", "41", "--rev", "7", "--instructions", "instructions.txt", "because"],
+        &["task", "amend", "41", "--rev", "7", "--instructions", "instructions.txt", "because"],
         b"Run checks",
         6,
         task(),
@@ -138,7 +138,7 @@ fn amend_reads_instructions_from_a_file() {
 #[test]
 fn amend_reads_instructions_from_stdin() {
     loaded(
-        &["amend", "41", "--rev", "7", "--instructions", "-", "because"],
+        &["task", "amend", "41", "--rev", "7", "--instructions", "-", "because"],
         b"Run checks",
         6,
         task(),
@@ -150,7 +150,7 @@ fn amend_sends_empty_instructions() {
     let mut task = task();
     task.instructions = Some(f::document_text(b"Run checks"));
     loaded(
-        &["amend", "41", "--rev", "7", "--instructions", "-", "because"],
+        &["task", "amend", "41", "--rev", "7", "--instructions", "-", "because"],
         b"",
         6,
         task,
@@ -171,7 +171,7 @@ fn amend_sets_the_spec_words_keeping_its_parameters() {
     let mut spec = task.spec.whole().expect("whole spec");
     spec.words = f::act_text(b"Build and check");
     loaded(
-        &["amend", "41", "--rev", "7", "--spec", "-", "because"],
+        &["task", "amend", "41", "--rev", "7", "--spec", "-", "because"],
         b"Build and check",
         7,
         task,
@@ -182,7 +182,7 @@ fn amend_sets_the_spec_words_keeping_its_parameters() {
 fn amend_refuses_words_on_a_cut_spec() {
     let mut task = task();
     task.spec.cut = true;
-    let mut call = f::call(&["amend", "41", "--rev", "7", "--spec", "-", "because"]);
+    let mut call = f::call(&["task", "amend", "41", "--rev", "7", "--spec", "-", "because"]);
     call.values[7] = Some(Values::One(Value::Text(b"Build".as_slice().into())));
     let mut root = f::choice_root(f::choice_me(f::CHAT_BUDGET));
     let call = root.submit_prepared(call, false, None);
@@ -199,7 +199,7 @@ fn amend_sends_the_whole_dependency_list() {
     dependencies.push(47).unwrap();
     dependencies.push(43).unwrap();
     sends(
-        &["amend", "41", "--rev", "7", "--dependency", "47", "--dependency", "43", "because"],
+        &["task", "amend", "41", "--rev", "7", "--dependency", "47", "--dependency", "43", "because"],
         task(),
         expected(c::Amendment { dependencies: Some(dependencies), ..no_change() }, REVISION),
     );
@@ -207,7 +207,7 @@ fn amend_sends_the_whole_dependency_list() {
 #[test]
 fn amend_removes_every_dependency() {
     sends(
-        &["amend", "41", "--rev", "7", "--no-dependencies", "because"],
+        &["task", "amend", "41", "--rev", "7", "--no-dependencies", "because"],
         task(),
         expected(c::Amendment { dependencies: Some(List::with_capacity(0)), ..no_change() }, REVISION),
     );
@@ -244,7 +244,7 @@ fn amend_proposes_a_priority_at_the_base_revision() {
     let mut task = task();
     task.acts.get_mut(0).unwrap().admission = c::Admission::Proposed { to: c::Recipient::Party(f::RECIPIENT) };
     sends(
-        &["amend", "41", "--priority", "3", "because"],
+        &["task", "amend", "41", "--priority", "3", "because"],
         task,
         c::Ask::Propose {
             project: f::PROJECT,
@@ -264,7 +264,7 @@ fn amend_refuses_both_of_a_pair() {
         (["--deadline", "2030-01-02T03:04Z", "--no-deadline"].as_slice(), 5),
         (["--dependency", "43", "--no-dependencies"].as_slice(), 9),
     ] {
-        let argv = f::extended(&["amend", "41", "--rev", "7", "because"], flags);
+        let argv = f::extended(&["task", "amend", "41", "--rev", "7", "because"], flags);
         assert_eq!(f::parse(argv.as_slice()), Err(Usage::Twice { argument }), "{flags:?}");
     }
 }
@@ -282,19 +282,19 @@ fn amend_refuses_a_malformed_deadline() {
         "9999-01-01T00:00Z",
     ] {
         assert_eq!(
-            f::parse(&["amend", "41", "--rev", "7", "--deadline", deadline, "because"]),
+            f::parse(&["task", "amend", "41", "--rev", "7", "--deadline", deadline, "because"]),
             Err(Usage::Kind { argument: 4 })
         );
     }
 }
 #[test]
 fn amend_changes_nothing_is_refused() {
-    refuses(&["amend", "41", "--priority", "2", "because"], task(), b"amend changes nothing on task 41\n");
+    refuses(&["task", "amend", "41", "--priority", "2", "because"], task(), b"amend changes nothing on task 41\n");
 }
 #[test]
 fn the_old_spec_revision_form_asks_for_rev() {
     assert_eq!(
-        f::parse(&["amend", "41", "--spec", "8", "--model", "chosen-model", "because"]),
+        f::parse(&["task", "amend", "41", "--spec", "8", "--model", "chosen-model", "because"]),
         Err(Usage::AmendmentRevision)
     );
 }
@@ -306,28 +306,28 @@ fn amend_refuses_a_repeated_flag() {
         (["--instructions", "one", "--instructions", "two"].as_slice(), 6),
         (["--model", "chosen-model", "--model", "plain-model"].as_slice(), 10),
     ] {
-        let argv = f::extended(&["amend", "41", "--rev", "7", "because"], flags);
+        let argv = f::extended(&["task", "amend", "41", "--rev", "7", "because"], flags);
         assert_eq!(f::parse(argv.as_slice()), Err(Usage::Twice { argument }), "{flags:?}");
     }
 }
 #[test]
 fn amend_uses_stdin_only_once() {
     assert_eq!(
-        f::parse(&["amend", "41", "--rev", "7", "--instructions", "-", "--spec", "-", "because"]),
+        f::parse(&["task", "amend", "41", "--rev", "7", "--instructions", "-", "--spec", "-", "because"]),
         Err(Usage::Stdin)
     );
 }
 #[test]
 fn amend_requires_a_model_for_an_effort() {
     assert_eq!(
-        f::parse(&["amend", "41", "--rev", "7", "--effort", "high", "because"]),
+        f::parse(&["task", "amend", "41", "--rev", "7", "--effort", "high", "because"]),
         Err(Usage::Missing { argument: 10 })
     );
 }
 #[test]
 fn amend_json_carries_texts_inline_including_a_dash() {
     let call = f::from_json(
-        br#"{"tool":"amend","arguments":{"task":41,"rev":7,"instructions":"-","spec":"Build","reason":"because"}}"#,
+        br#"{"tool":"task amend","arguments":{"task":41,"rev":7,"instructions":"-","spec":"Build","reason":"because"}}"#,
     );
     assert_eq!(call.values[6], Some(Values::One(Value::Text(b"-".as_slice().into()))));
     assert_eq!(f::from_json(&crate::jig::json::write_call(crate::table::TOOLS, &call).unwrap()), call);
@@ -341,7 +341,7 @@ fn amend_deadlines_parse_epoch_and_leap_dates() {
 }
 
 fn dependencies_at(count: u32) -> List<&'static str> {
-    let mut argv = f::extended(&["amend", "41", "--rev", "7", "because"], &[]);
+    let mut argv = f::extended(&["task", "amend", "41", "--rev", "7", "because"], &[]);
     for _ in 0..count {
         argv.push("--dependency").expect("fixture word bound");
         argv.push("43").expect("fixture word bound");
@@ -369,7 +369,7 @@ fn amend_needs_a_revision_for_any_other_change() {
         &["--no-dependencies"],
         &["--model", "chosen-model"],
     ] {
-        let argv = f::extended(&["amend", "41", "because"], flags);
+        let argv = f::extended(&["task", "amend", "41", "because"], flags);
         assert_eq!(f::parse(argv.as_slice()), Err(Usage::AmendmentRevision), "{flags:?}");
     }
 }

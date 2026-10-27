@@ -1,5 +1,5 @@
-revision R
-  R (revision): a number from 0 to 4294967295; required. The revision's number
+revision show REVISION
+  REVISION (revision): a number from 0 to 4294967295; required. The revision's number
 Read one revision of the settings and its items
 Prints: `revision R, against revision A`, when, by whom, from which proposal, whether running work moved, then its items
 --json: the record revision.

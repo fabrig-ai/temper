@@ -9,8 +9,11 @@ pub fn usage(tool: &Tool, out: &mut Writer) -> Result<(), Overflow> {
     Ok(())
 }
 fn form_usage(tool: &Tool, form: &[Argument], out: &mut Writer) -> Result<(), Overflow> {
-    if tool.name == b"amend" {
-        return out.put(b"amend N [--rev R] [--priority P | --untracked] [--deadline T | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency M]... [--no-dependencies] [--model M [--effort E]] REASON [--key NAME]\n");
+    if tool.name == b"task amend" {
+        return out.put(b"task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency TASK]... [--no-dependencies] [--model MODEL [--effort EFFORT]] REASON [--key KEY]\n");
+    }
+    if tool.name == super::rows::HELP.name {
+        return out.put(b"help [GROUP [VERB]]\n");
     }
     out.put(tool.name)?;
     for argument in form {
@@ -18,8 +21,8 @@ fn form_usage(tool: &Tool, form: &[Argument], out: &mut Writer) -> Result<(), Ov
     }
     out.put(match tool.keyed {
         Keyed::Never => b"",
-        Keyed::Optional => b" [--key NAME]",
-        Keyed::Required => b" --key NAME",
+        Keyed::Optional => b" [--key KEY]",
+        Keyed::Required => b" --key KEY",
     })?;
     out.put(b"\n")
 }
@@ -50,35 +53,7 @@ fn argument_usage(argument: &Argument, out: &mut Writer) -> Result<(), Overflow>
     Ok(())
 }
 fn shown(argument: &Argument, out: &mut Writer) -> Result<(), Overflow> {
-    match argument.kind {
-        Kind::Proposal => out.put(b"tN/K|pN/K"),
-        Kind::Order => out.put(b"activity|priority"),
-        Kind::Word { set } => {
-            let mut separator = b"".as_slice();
-            for word in set {
-                out.put(separator)?;
-                out.put(word)?;
-                separator = b"|";
-            }
-            Ok(())
-        }
-        Kind::NumberRange { .. }
-        | Kind::NamedNumber { .. }
-        | Kind::Number
-        | Kind::Count
-        | Kind::Text
-        | Kind::Literal
-        | Kind::File
-        | Kind::Duration
-        | Kind::Digest
-        | Kind::Condition
-        | Kind::Subject
-        | Kind::Project { .. }
-        | Kind::Turn
-        | Kind::Cursor
-        | Kind::Group
-        | Kind::Tool => out.put(argument.shown),
-    }
+    out.put(argument.shown)
 }
 /// The table's complete list, following the agents' guide.
 pub fn tools(table: &[&Tool], out: &mut Writer) -> Result<(), Overflow> {
@@ -110,8 +85,8 @@ pub fn tool(tool: &Tool, limits: &Limits, out: &mut Writer) -> Result<(), Overfl
     out.put(b".\n")?;
     out.put(match tool.keyed {
         Keyed::Never => b"Key: none.\n",
-        Keyed::Optional => b"Key: --key NAME, optional.\n",
-        Keyed::Required => b"Key: --key NAME, required.\n",
+        Keyed::Optional => b"Key: --key KEY, optional.\n",
+        Keyed::Required => b"Key: --key KEY, required.\n",
     })?;
     out.put(tool.notes)?;
     if tool.name == b"wait" {

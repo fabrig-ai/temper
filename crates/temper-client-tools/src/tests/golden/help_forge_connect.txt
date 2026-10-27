@@ -1,26 +1,26 @@
-forge-connect F github-app ID FILE --key NAME
-  F (forge): a number from 1 to 65535; required. GitHub's forge number
+forge connect FORGE github-app APP FILE --key KEY
+  FORGE (forge): a number from 1 to 65535; required. GitHub's forge number
   github-app (way): one of github-app; required. An App of your own, or one another owns
-  ID (id): a number from 1 to 18446744073709551615; required. The App's id
+  APP (id): a number from 1 to 18446744073709551615; required. The App's id
   FILE (file): a file; required. The private file of the App's PEM key
-forge-connect F github --key NAME
-  F (forge): a number from 1 to 65535; required. GitHub's forge number
+forge connect FORGE github --key KEY
+  FORGE (forge): a number from 1 to 65535; required. GitHub's forge number
   github (way): one of github; required. temper's App, made in a browser from its manifest
-forge-connect F forgejo FILE --key NAME
-  F (forge): a number from 1 to 65535; required. The Forgejo's forge number
+forge connect FORGE forgejo FILE --key KEY
+  FORGE (forge): a number from 1 to 65535; required. The Forgejo's forge number
   forgejo (way): one of forgejo; required. Not offered yet
   FILE (file): text, at most 1048576 bytes; required. Not offered yet; no file is read
-forge-connect F forgejo-admin FILE [--first ORG/NAME] [--project P] [--label L] --key NAME
-  F (forge): a number from 1 to 65535; required. The Forgejo's forge number
+forge connect FORGE forgejo-admin FILE [--first ORG/REPOSITORY] [--project PROJECT] [--label LABEL] --key KEY
+  FORGE (forge): a number from 1 to 65535; required. The Forgejo's forge number
   forgejo-admin (way): one of forgejo-admin; required. As the Forgejo's site admin
   FILE (file): a file; required. The private file of the admin's token
-  --first ORG/NAME: text, at most 1048576 bytes; optional. Make this first repository, ORG/NAME
-  --project P: a project's name or number; optional. Adopt it into this project; a new one named after it when absent
-  --label L: text, at most 1048576 bytes; optional. The runner's label; docker when absent
+  --first ORG/REPOSITORY: text, at most 1048576 bytes; optional. Make this first repository, ORG/NAME
+  --project PROJECT: a project's name or number; optional. Adopt it into this project; a new one named after it when absent
+  --label LABEL: text, at most 1048576 bytes; optional. The runner's label; docker when absent
 Connect GitHub through an App, or a Forgejo as its site admin
 Prints: `connecting`, then the wait to make; for github, the address to open in a browser
 --json: the record forge-connect.
-Key: --key NAME, required.
+Key: --key KEY, required.
 The key or token file holds 1 to 4089 bytes after one final
 newline is trimmed. An App another owns is set read-only in the
 configuration before the start (temper help github). Then `wait

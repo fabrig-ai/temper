@@ -9,18 +9,19 @@ use temper_client_shell_cli::{
 
 pub(crate) fn parse<'a>(
     words: &[&'a [u8]],
-) -> Result<(Option<&'a [u8]>, temper_client_tools::jig::call::Parsed), &'static str> {
+) -> Result<(Option<&'a [u8]>, temper_client_tools::jig::call::Parsed), String> {
     let (directory, words) = match words.split_first() {
         Some((word, _)) if *word == b"help" => (None, words),
         Some((directory, words)) => (Some(*directory), words),
-        None => return Err("usage: temper ctl DIRECTORY TOOL [ARGUMENT...]"),
+        None => return Err(String::from_utf8_lossy(temper_client_tools::table::USAGE).into_owned()),
     };
     let parsed = arguments::parse(words).map_err(|why| {
-        if why == temper_client_tools::jig::argv::Usage::AmendmentRevision {
-            "amend needs --rev R"
-        } else {
-            "usage: temper ctl DIRECTORY TOOL [ARGUMENT...]"
-        }
+        let size = words.iter().map(|word| word.len()).sum::<usize>() + 256;
+        let mut out = skein_lib::Writer::new(size);
+        temper_client_tools::table::refusal(why, words, &mut out).expect("usage fits");
+        let mut exact = skein_lib::Writer::new(out.written());
+        temper_client_tools::table::refusal(why, words, &mut exact).expect("measured usage");
+        String::from_utf8_lossy(&exact.finish()).into_owned()
     })?;
     Ok((directory, parsed))
 }

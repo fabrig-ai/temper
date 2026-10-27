@@ -7,7 +7,7 @@ use skein_lib::List;
 fn account_reads_close_authorized_watches_after_the_first_projection() {
     for owner in [false, true] {
         let mut root = f::account_root(owner);
-        let call = root.submit(&["accounts", "--json"]);
+        let call = root.submit(&["account", "list", "--json"]);
         assert!(root.reads.is_empty(), "accounts has no ReadValue");
         let mut deployment = false;
         for watched in root.watches.values() {
@@ -102,11 +102,11 @@ fn models_group_only_project_authorized_models_without_guessing_provider_readine
     me.providers = f::provider_offers();
     root.deliver(c::Delivery::Me(Box::new(me)));
     for project in ["absent", "999"] {
-        let call = root.submit(&["models", "--project", project]);
+        let call = root.submit(&["model", "list", "--project", project]);
         assert_eq!(root.answer(call).expect("membership error").status, 1);
         assert_eq!(root.watches.len(), 1, "invalid projects open no watch");
     }
-    for flags in [&["models", "--project", "shop", "--json"][..], &["models", "--json"]] {
+    for flags in [&["model", "list", "--project", "shop", "--json"][..], &["model", "list", "--json"]] {
         let call = root.submit(flags);
         f::deliver_accounts(&mut root, f::accounts());
         let printed = root.answer(call).expect("models join");
@@ -156,7 +156,7 @@ fn account_output_truncates_oversized_projections_within_the_result_window() {
     }
     for json in [false, true] {
         let mut root = f::account_root(false);
-        let flags = if json { &["accounts", "--json"][..] } else { &["accounts"][..] };
+        let flags = if json { &["account", "list", "--json"][..] } else { &["account", "list"][..] };
         let call = root.submit(flags);
         f::deliver_accounts(&mut root, value.clone());
         let printed = root.answer(call).expect("cut result");
@@ -266,7 +266,7 @@ fn deployment_offers_share_the_accounts_result_window() {
         deployment.providers.push(offer.clone()).expect("offer room");
         deployment.readiness.push(*f::payer_readiness().get(0).expect("readiness")).expect("readiness room");
     }
-    for flags in [&["accounts"][..], &["accounts", "--json"]] {
+    for flags in [&["account", "list"][..], &["account", "list", "--json"]] {
         let mut root = f::account_root(true);
         let call = root.submit(flags);
         f::deliver_accounts(&mut root, f::accounts());
@@ -274,7 +274,7 @@ fn deployment_offers_share_the_accounts_result_window() {
         let printed = root.answer(call).expect("bounded offers");
         assert_eq!(printed.status, 0);
         assert!(printed.stdout.len() <= usize::try_from(crate::limits::TEXT).expect("text fits"));
-        assert!(f::json_has(&printed, if flags.len() > 1 { b"\"cut\":true" } else { b"cut: true" }));
+        assert!(f::json_has(&printed, if flags.len() > 2 { b"\"cut\":true" } else { b"cut: true" }));
     }
 }
 
@@ -304,7 +304,7 @@ fn account_projection_includes_configured_worker_login_facts() {
         })
         .unwrap();
     let mut root = f::account_root(false);
-    let call = root.submit(&["accounts", "--json"]);
+    let call = root.submit(&["account", "list", "--json"]);
     f::deliver_accounts(&mut root, accounts);
     let printed = root.answer(call).expect("account projection");
     for fact in [b"configured-worker".as_slice(), b"work-login", b"other-method"] {
@@ -331,7 +331,7 @@ fn model_cache_writes_default_to_the_supplied_input_price() {
         })
         .expect("model room");
     root.deliver(c::Delivery::Me(Box::new(me)));
-    let call = root.submit(&["models", "--json"]);
+    let call = root.submit(&["model", "list", "--json"]);
     f::deliver_accounts(&mut root, f::accounts());
     let printed = root.answer(call).expect("model prices");
     assert!(f::json_has(&printed, b"\"description\":null"));
@@ -354,7 +354,7 @@ fn accounts_show_supplied_deployment_activity_and_no_party_activity() {
         row.runs.push(chip.clone()).expect("running task");
         chip.task = 223;
         row.waiting.push(chip).expect("waiting task");
-        let call = root.submit(if json { &["accounts", "--json"][..] } else { &["accounts"][..] });
+        let call = root.submit(if json { &["account", "list", "--json"][..] } else { &["account", "list"][..] });
         f::deliver_accounts(&mut root, f::accounts());
         f::deliver_deployment(&mut root, deployment);
         let printed = root.answer(call).expect("activity");
@@ -378,7 +378,7 @@ fn model_text_prints_supplied_descriptions_prices_efforts_and_provider_name() {
     model.description = Some(f::act_text(b"Reasoning and code"));
     model.prices = c::ModelPrices { input: 13, cached: 7, cache_write: None, output: 31, unit: 1000 };
     root.deliver(c::Delivery::Me(Box::new(me)));
-    let call = root.submit(&["models", "--project", "shop"]);
+    let call = root.submit(&["model", "list", "--project", "shop"]);
     f::deliver_accounts(&mut root, f::accounts());
     let printed = root.answer(call).expect("model text");
     assert_eq!(printed.status, 0);
