@@ -9,7 +9,6 @@ mod admission;
 mod archive;
 mod assemble;
 mod boundary;
-mod commit;
 mod deadline;
 mod decision;
 mod domain;
@@ -36,7 +35,6 @@ pub use store::{
 pub use admission::try_step;
 pub use boundary::Request as Output;
 pub use boundary::*;
-pub use commit::commit_text;
 pub use domain::{Domain, Refused, fire, max_out, refused, release, step};
 pub use jig_domain_core::{Charter, Delegate, Dependency, Model, ProcedureStep, RunCharter, RunPolicy, StepEnd};
 pub use limits::{
@@ -45,6 +43,7 @@ pub use limits::{
 };
 pub use link::{hello_bounds, inbox_sender, inbox_words};
 pub use route::{Approval, Freshness, Gate, HostDelivery, HostRequest, LandingRule, adopt_repository_ask};
+pub use temper_engine_domain_forge::commit_text;
 pub use translate::{Config, LandingPolicy};
 
 /// Startup's secret-free decision (protocol/credentials.md, 2.2).

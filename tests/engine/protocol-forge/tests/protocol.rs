@@ -1067,6 +1067,10 @@ fn a_sha1_pull_files_answer_matches_the_requested_head_and_fills_the_review_brie
         })
         .expect("the review's complete pull section came through");
     let words = core::str::from_utf8(&words).expect("review text");
+    let head = temper_engine_domain_forge::commit_text(&head);
+    let head = core::str::from_utf8(&head).expect("SHA-1 text");
+    assert_eq!(head.len(), 40);
+    assert!(words.starts_with(&format!("Pull request at head {head}\nTitle: ")), "{words}");
     assert!(words.contains("Files and diff:"), "{words}");
     assert!(words.contains("File: review.txt"), "{words}");
     assert!(words.contains("After:\nthe reviewed contents"), "{words}");
