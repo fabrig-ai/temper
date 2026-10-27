@@ -179,8 +179,15 @@ const FORGE: forge::Limits = forge::Limits {
     bindings: 64,
     // Collaborators kept by the forge, from the engine forge world fixture.
     collaborators: 8,
-    // Landing operations retained, from the engine forge world fixture.
-    landings: 8,
+    // Live landing tasks (domain/landing.md, 12).
+    landings: 2,
+    landing_members: 2,
+    gates: 2,
+    receipts_per_gate: 4,
+    ignored_paths: 4,
+    key_entries: 16,
+    key_path_bytes: 1024,
+    trees_in_flight: 2,
     // Project judge tables, from the engine forge world fixture.
     judge_projects: 2,
     // Criteria in each judge table, from the engine forge world fixture.

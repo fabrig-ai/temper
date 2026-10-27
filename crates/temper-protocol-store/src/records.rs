@@ -12,6 +12,7 @@ mod client;
 pub(crate) use api::encode_error;
 mod entries;
 mod issues;
+mod landing;
 mod names;
 mod topics;
 const FITS: &str = "admitted fields fit the schema";
@@ -20,6 +21,8 @@ const FITS: &str = "admitted fields fit the schema";
 #[must_use]
 pub fn encode(value: &d::Stored) -> Box<[u8]> {
     let value = match value {
+        d::Stored::Landing(row) => w::Value::Landing(landing::encode(row)),
+        d::Stored::Receipt { key, receipt } => w::Value::Receipt(landing::encode_receipt(key, receipt)),
         d::Stored::Application { token, until, outcome } => {
             w::Value::Application(application::encode(*token, *until, outcome))
         }
@@ -90,6 +93,8 @@ pub fn encode(value: &d::Stored) -> Box<[u8]> {
 pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
     let row = w::Row::decode(bounds.limits(), &mut Reader::new(bytes)).or(Err(Undecodable))?;
     Ok(match row.into_parts().value {
+        w::Value::Landing(row) => d::Stored::Landing(landing::decode(row)),
+        w::Value::Receipt(row) => landing::decode_receipt(row),
         w::Value::Application(value) => application::decode(value, bounds)?,
         w::Value::Issue(value) => d::Stored::Issue(issues::decode(*value)),
         w::Value::Change(value) => d::Stored::Change(change::decode_change_row(*value)),
@@ -169,6 +174,12 @@ pub fn row(key: &[u8], value: &[u8], bounds: &Bounds) -> Result<d::Stored, Undec
 
 pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
     Some(w::Limits {
+        landing_state_members: forge.landing_members,
+        landing_member_gates: forge.gates,
+        landing_row_asks: forge.landing_members,
+        landing_row_entries: forge.entries,
+        receipt_name_name: 32,
+        receipt_run_url: 2048,
         answer_name_name: forge.client.answer_bytes,
         binding_address: 254,
         binding_subject: 255,
