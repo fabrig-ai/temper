@@ -133,8 +133,8 @@ impl Host for Process {
 pub fn worker_roots(_spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
     vec![StartupRoot { name: b"worker".as_slice().into(), path: b"worker".as_slice().into() }]
 }
-/// The prepared workspace root opened by agents and the restricted shell.
+/// The named worker base beneath which agents open their prepared workspaces.
 #[must_use]
 pub fn agent_roots(_spawn: &skein_io::kernel::Spawn) -> Vec<StartupRoot> {
-    vec![StartupRoot { name: b"worker".as_slice().into(), path: b"agent".as_slice().into() }]
+    vec![StartupRoot { name: b"/worker".as_slice().into(), path: b"worker".as_slice().into() }]
 }

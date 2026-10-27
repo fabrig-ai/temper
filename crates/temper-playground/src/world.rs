@@ -82,7 +82,7 @@ pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Ma
             git as fn(&skein_io::kernel::Spawn, &Inherited) -> Process,
             crate::worker_roots as skein_sim_world::StartupRoots,
         ),
-        (crate::SH, shell, crate::agent_roots),
+        (crate::SH, shell, crate::worker_roots),
     ] {
         world.host_roots(HostedProgram { program: program.into(), make, instances: 8, operations: 1 }, roots);
     }
