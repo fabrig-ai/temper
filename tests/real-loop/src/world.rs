@@ -325,7 +325,11 @@ fn host<R: Referee<Proc>>(
         world.host_startup(
             crate::claude::program(program.path.as_os_str().as_bytes()),
             |spawn| {
-                smith_fake_claude::config_root(spawn).into_iter().chain(smith_fake_claude::mcp_root(spawn)).collect()
+                let launch = crate::claude::launch(spawn);
+                smith_fake_claude::config_root(&launch)
+                    .into_iter()
+                    .chain(smith_fake_claude::mcp_root(&launch))
+                    .collect()
             },
             |spawn| smith_fake_claude::observation_append(spawn).into_iter().collect(),
         );
