@@ -462,7 +462,7 @@ fn a_release_resets_failed_review_tries_before_any_forge_read() {
     c.gate_failures = Box::new([GateFailure { number: 1, count: 2 }]);
     c.repairs = LIMITS.repairs;
     let lifted = released(&c, at(5));
-    assert!(!matches!(lifted.state, State::Held { .. }));
+    assert_eq!(lifted.state, State::Gating { head: HEAD, asked: Box::new([]) });
     assert!(lifted.gate_failures.is_empty());
     assert_eq!(lifted.released, Some(Hold::Failed));
     assert_eq!(lifted.repairs, 0);
