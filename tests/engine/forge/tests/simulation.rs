@@ -829,6 +829,9 @@ fn a_change_produced_opened_checked_queued_and_landed() {
                 | top::Request::EraseCarried { .. }
                 | top::Request::SetUp { .. }
                 | top::Request::LandingDecision { .. }
+                | top::Request::TierRun { .. }
+                | top::Request::TierEffect { .. }
+                | top::Request::TierDecision { .. }
                 | top::Request::ChangeDecision { .. }
                 | top::Request::Resource { .. }
                 | top::Request::Adopted { .. }
@@ -886,9 +889,23 @@ fn a_change_landed_where_its_repository_has_a_tier_lives_verifying() {
     world.adopt();
     assert!(world.project_tiers(
         PROJECT,
+        top::TierSettings {
+            verdict: temper_engine_domain_forge_tiers::Settings {
+                retries: 2,
+                suspects: temper_engine_domain_forge_tiers::Suspects::Bisect
+            },
+            bound: skein_lib::Duration::from_secs(7200),
+            pause_on_red: false
+        },
         Box::new([top::RepositoryTiers {
             repository: REPO,
-            tiers: Box::new([top::Tier { name: b"browser".as_slice().into() }]),
+            tiers: Box::new([top::Tier {
+                name: b"browser".as_slice().into(),
+                workflow: b"tier.yml".as_slice().into(),
+                ignored: Box::new([]),
+                artifact: b"report".as_slice().into(),
+                format: temper_engine_domain_forge_tiers::Format::Lines
+            }]),
         }])
     ));
     let branch = top::Name {
