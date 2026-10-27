@@ -45,6 +45,7 @@ pub fn print(out: &Path) -> Result<(), Refusal> {
     }
     let inputs = skein_ui_bundle::Inputs {
         name: "temper_client_shell_web".to_owned(),
+        worker: None,
         prefix: "/bundle/".to_owned(),
         stylesheets,
         pictures: vec![],
@@ -55,6 +56,7 @@ pub fn print(out: &Path) -> Result<(), Refusal> {
     let digest = match skein_ui_bundle::bundle(
         &inputs,
         &skein_ui_bundle::Glue { js: vec![], wasm: vec![], snippets: vec![] },
+        None,
         &out.join("bundle"),
     ) {
         Ok(digest) => digest,
