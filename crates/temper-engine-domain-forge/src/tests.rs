@@ -165,6 +165,8 @@ fn status(number: u64, task: u64) -> skein_forge_client::Entry {
                 commit: [3; 32],
                 context: Box::from(&b"test"[..]),
                 check: skein_forge::api::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
             },
             condition: skein_forge_client::Condition::None,
         },
@@ -606,8 +608,8 @@ fn native_effect_rows_keep_the_clients_recovery_promises() {
     let writes = [
         (3, EffectForm::Creation, Write::OpenPull { title: empty(), body: empty(), head: empty(), base: empty() }),
         (10, EffectForm::Set, Write::Edit { number: 1, title: None, body: None }),
-        (11, EffectForm::Transition, Write::Update { number: 1 }),
-        (4, EffectForm::Transition, Write::Merge { number: 1, head: [1; 32] }),
+        (11, EffectForm::Transition, Write::Update { number: 1, style: skein_forge::api::UpdateStyle::Merge }),
+        (4, EffectForm::Transition, Write::Merge { number: 1, head: [1; 32], how: skein_forge::api::MergeHow::Style }),
         (12, EffectForm::Set, Write::Close { number: 1 }),
         (12, EffectForm::Set, Write::Reopen { number: 1 }),
         (
@@ -619,7 +621,13 @@ fn native_effect_rows_keep_the_clients_recovery_promises() {
         (
             6,
             EffectForm::Set,
-            Write::Status { commit: [1; 32], context: empty(), check: skein_forge::api::Check::Passed },
+            Write::Status {
+                commit: [1; 32],
+                context: empty(),
+                check: skein_forge::api::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
+            },
         ),
         (8, EffectForm::Creation, Write::CreateIssue { key: empty(), title: empty(), body: empty() }),
         (13, EffectForm::Set, Write::Edit { number: 1, title: None, body: None }),
