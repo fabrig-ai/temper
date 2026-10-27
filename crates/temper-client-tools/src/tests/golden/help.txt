@@ -109,3 +109,7 @@ forge-accept F I [--key NAME]
   Accept a GitHub App installation made already
 move-to-newest R --key NAME
   Move the live tasks on revision R to the newest revision
+landing N [--project P]
+  Read a landing: its members, their candidates, each gate's proof and the turn
+landings --project P [--ended]
+  List a project's landings, the turn's holder first, then newest first

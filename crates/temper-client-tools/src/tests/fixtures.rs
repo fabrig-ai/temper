@@ -104,6 +104,8 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["wait", "forges"],
     &["wait", "change", "2"],
     &["change", "2"],
+    &["landing", "61"],
+    &["landings", "--project", "1"],
     &["export", "43", "record"],
     &["import", "record", "--key", "move-in"],
     &["settings"],
@@ -651,7 +653,7 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 /// A stable stored request's engine key, unrelated to its client call prefix.
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 59;
+pub(super) const TOOL_FORMS: u32 = 61;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.
