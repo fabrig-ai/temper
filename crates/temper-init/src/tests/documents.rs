@@ -148,6 +148,26 @@ fn the_default_is_the_owned_example_so_edited() {
                 .expect("executor kinds")
                 .insert(2, json!({"kind":"charter", "number":4_u32}));
         }
+        let policy = &mut expected["engine"]["projects"][0]["policy"];
+        for path in ["/ceiling/grants", "/projections", "/roles/0/authority/grants"] {
+            let grants = policy.pointer_mut(path).unwrap().as_array_mut().unwrap();
+            for kind in [6_u32, 9, 15, 16, 17] {
+                grants.push(
+                    json!({"connector":1_u16,"kind":kind,"pattern":{"segments":["forge"],"last":"open","value":""}}),
+                );
+            }
+            let mut ordered = alloc::collections::BTreeMap::new();
+            for grant in &*grants {
+                ordered.insert(grant["kind"].as_u64().unwrap(), grant.clone());
+            }
+            grants.clear();
+            for grant in ordered.into_values() {
+                grants.push(grant);
+            }
+        }
+        for path in ["/ceiling/delegation/kinds", "/roles/0/authority/delegation/kinds"] {
+            policy.pointer_mut(path).unwrap().as_array_mut().unwrap().push(json!({"kind":"procedure","number":3_u32}));
+        }
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
         expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(12_288_u32);
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
