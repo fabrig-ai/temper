@@ -14,16 +14,9 @@ pub(super) fn cursor(range: &Range, key: &Key) -> Option<store::Cursor> {
     let interval = match (range, key) {
         (_, Key::Wires) => return None,
         (Range::Census(census), Key::Core(key)) => census.interval(key)?,
-        // jig restores issued names first, then the counter, accounts and sources.
-        (
-            Range::Core(CoreRange::Accounts),
-            Key::Core(core::Key::Accounts(
-                jig_domain_accounts::Key::Next
-                | jig_domain_accounts::Key::Account { .. }
-                | jig_domain_accounts::Key::Source { .. },
-            )),
-        )
-        | (Range::Core(CoreRange::Tasks), Key::Core(core::Key::Tasks(_))) => 1,
+        (Range::Core(range), Key::Core(_)) if !range.restore_ranges().is_empty() => {
+            return store::intervals::cursor(range.restore_ranges(), &after);
+        }
         (Range::Core(_) | Range::Census(_) | Range::Forge, Key::Core(_) | Key::Forge(_)) => 0,
     };
     Some(store::Cursor { interval, after })
@@ -44,12 +37,13 @@ pub(super) fn request(owner: skein_lib::Token, flight: &Flight) -> Option<store:
         Range::Forge => store::Restore::Application(Box::new([temper_protocol_store::interval()])),
         Range::Census(census) => store::Restore::Jig(Box::new([core::RestoreRange::Census(census.clone())])),
         Range::Core(range) => match range {
-            CoreRange::Deployment => store::Restore::Jig(Box::new([core::RestoreRange::Deployment])),
-            CoreRange::Settings => store::Restore::Jig(Box::new([core::RestoreRange::Settings])),
-            CoreRange::Accounts => store::Restore::Jig(Box::new([core::RestoreRange::Accounts])),
-            CoreRange::People => store::Restore::Jig(Box::new([core::RestoreRange::People])),
-            CoreRange::Tasks => store::Restore::Jig(Box::new([core::RestoreRange::Core, core::RestoreRange::Tasks])),
-            CoreRange::Calls | CoreRange::RunProofs => store::Restore::Jig(Box::new([core::RestoreRange::Core])),
+            CoreRange::Deployment
+            | CoreRange::Settings
+            | CoreRange::Accounts
+            | CoreRange::People
+            | CoreRange::Tasks
+            | CoreRange::Calls
+            | CoreRange::RunProofs => store::Restore::Jig(Box::from(range.restore_ranges())),
             CoreRange::EndedRead { task, party } => {
                 return Some(store::Request::Get {
                     owner,

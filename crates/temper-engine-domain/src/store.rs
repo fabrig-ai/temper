@@ -393,6 +393,30 @@ impl Range {
 }
 
 impl CoreRange {
+    /// Translate a root restore request into jig's ranges. Interval placement
+    /// remains jig's (jig's protocol/store.md, 7.2); historical loads use their
+    /// own protocol requests instead of the restart walk.
+    #[must_use]
+    pub const fn restore_ranges(&self) -> &'static [jig_domain_core::RestoreRange] {
+        use jig_domain_core::RestoreRange;
+        match self {
+            Self::Deployment => &[RestoreRange::Deployment],
+            Self::Settings => &[RestoreRange::Settings],
+            Self::Accounts => &[RestoreRange::Accounts],
+            Self::People => &[RestoreRange::People],
+            Self::Tasks => &[RestoreRange::Core, RestoreRange::Tasks],
+            Self::Calls | Self::RunProofs => &[RestoreRange::Core],
+            Self::ProposalDecision { .. }
+            | Self::TaskProposal { .. }
+            | Self::EscalationDecision { .. }
+            | Self::EndedRead { .. }
+            | Self::TaskResult { .. }
+            | Self::Turns { .. }
+            | Self::TaskTranscript { .. }
+            | Self::Notes(_) => &[],
+        }
+    }
+
     /// Membership of one core or child key; live families follow jig's own predicates.
     #[must_use]
     pub fn contains(&self, key: &jig_domain_core::Key) -> bool {

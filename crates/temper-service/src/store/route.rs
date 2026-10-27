@@ -249,10 +249,16 @@ fn page(
             continue;
         }
         if let engine::Range::Census(_) = &flight.range {
-        } else if let Some(after) = &flight.after
-            && key <= *after
-        {
-            continue;
+        } else if let Some(after) = &flight.after {
+            let (Some(position), Some(start)) =
+                (ranges::cursor(&flight.range, &key), ranges::cursor(&flight.range, after))
+            else {
+                stop(routes, into);
+                return;
+            };
+            if (position.interval, &position.after) <= (start.interval, &start.after) {
+                continue;
+            }
         }
         let Some((payload_bytes, total)) = page_bytes(&record, bytes) else {
             stop(routes, into);

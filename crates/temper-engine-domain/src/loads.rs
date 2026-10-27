@@ -337,7 +337,8 @@ fn check(entry: &Entry, limits: &Limits, rows: &[Record], next: Option<Key>) -> 
         }
         if let Range::Census(_) = &entry.range {
         } else if let Some(old) = &previous
-            && key <= *old
+            && position(&entry.range, &key).ok_or(Failure::Range)?
+                <= position(&entry.range, old).ok_or(Failure::Range)?
         {
             return Err(Failure::Order);
         }
@@ -415,6 +416,16 @@ fn check(entry: &Entry, limits: &Limits, rows: &[Record], next: Option<Key>) -> 
         }
     };
     Ok(Page { keep, next: continuation, cut })
+}
+
+fn position(range: &Range, key: &Key) -> Option<(u32, Key)> {
+    if let (Range::Core(range), Key::Core(core)) = (range, key)
+        && !range.restore_ranges().is_empty()
+    {
+        let (interval, key) = jig_domain_core::restore_cursor(range.restore_ranges(), core)?;
+        return Some((interval, Key::Core(key)));
+    }
+    Some((0, key.clone()))
 }
 
 fn census_position(census: &jig_domain_core::Census, key: &Key) -> Option<(u32, jig_domain_core::Key)> {
