@@ -183,3 +183,19 @@ fn extra_hour_0() -> Box<[api::Setup]> {
 fn configure_hour_0(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     fixture(&CAST).configure(value, agent, forge);
 }
+
+#[must_use]
+pub fn fixture_step_8_1() -> forge::Fixture {
+    forge::Fixture { configure: configure_step_8_1, ..fixture_hour_0() }
+}
+fn configure_step_8_1(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
+    configure_hour_0(value, agent, forge);
+    // Proposing is within this story's director authority. The seeded defaults
+    // inherit this policy through the existing own_policy fixture hook.
+    for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        let tools = &mut project["policy"]["ceiling"]["tools"];
+        *tools = (tools.as_u64().expect("tool families") | 16).into();
+        let tools = &mut project["policy"]["roles"][0]["authority"]["tools"];
+        *tools = (tools.as_u64().expect("role tool families") | 16).into();
+    }
+}
