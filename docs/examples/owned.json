@@ -3,7 +3,8 @@
     "limits": {
       "profile": "small",
       "overrides": {
-        "authority.grants": 12,
+        "authority.grants": 14,
+        "authority.executors": 5,
         "authority.segments": 8,
         "core.resume_bytes": 1590050,
         "documents.lines": 2,
@@ -14,7 +15,8 @@
         "hub.turn_queue_bytes": 12720368,
         "notes.scopes": 15,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 12,
+        "tasks.authority_grants": 14,
+        "tasks.executor_kinds": 5,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
         "tasks.hold_segments": 8,

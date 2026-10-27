@@ -124,8 +124,8 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
     }
 }
 fn grants() -> Box<[authority::Grant]> {
-    let mut grants = List::with_capacity(13);
-    for kind in [1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 16, 17] {
+    let mut grants = List::with_capacity(14);
+    for kind in [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17] {
         grants
             .push(authority::Grant {
                 connector: FORGE,
@@ -135,7 +135,7 @@ fn grants() -> Box<[authority::Grant]> {
                     last: authority::Last::Open(Box::default()),
                 },
             })
-            .expect("thirteen stock forge grants");
+            .expect("fourteen stock forge grants");
     }
     grants.into_boxed()
 }

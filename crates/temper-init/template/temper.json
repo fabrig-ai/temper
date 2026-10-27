@@ -4,7 +4,8 @@
     "limits": {
       "profile": "small",
       "overrides": {
-        "authority.grants": 12,
+        "authority.grants": 14,
+        "authority.executors": 5,
         "authority.segments": 8,
         "core.resume_bytes": 1039548,
         "documents.lines": 2,
@@ -15,7 +16,8 @@
         "hub.turn_queue_bytes": 8316352,
         "notes.scopes": 15,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 12,
+        "tasks.authority_grants": 14,
+        "tasks.executor_kinds": 5,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
         "tasks.contract_choices": 2,
@@ -218,6 +220,17 @@
                 "value": ""
               }
             },
+{
+              "connector": 1,
+              "kind": 6,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
             {
               "connector": 1,
               "kind": 7,
@@ -358,6 +371,17 @@
               {
                 "connector": 1,
                 "kind": 4,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+{
+                "connector": 1,
+                "kind": 6,
                 "pattern": {
                   "segments": [
                     "forge"
@@ -544,6 +568,17 @@
                   {
                     "connector": 1,
                     "kind": 4,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+{
+                    "connector": 1,
+                    "kind": 6,
                     "pattern": {
                       "segments": [
                         "forge"

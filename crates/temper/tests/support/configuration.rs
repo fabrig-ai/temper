@@ -38,9 +38,11 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     value["engine"]["connectors"] = serde_json::json!([1]);
     value["engine"]["llm"]["endpoints"][0]["dialect"] = 3.into();
     value["engine"]["llm"]["endpoints"][0]["address"] = serde_json::json!({"socket":"127.0.0.1:0"});
-    // The stock carries two charters, ten forge grants and its 2374-byte policy 1.
+    // The stock carries two charters, fourteen forge grants and five executor kinds.
     value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
     value["engine"]["limits"]["overrides"]["authority.grants"] = 16.into();
+    value["engine"]["limits"]["overrides"]["authority.executors"] = 5.into();
+    value["engine"]["limits"]["overrides"]["tasks.executor_kinds"] = 5.into();
     value["engine"]["limits"]["overrides"]["notes.scopes"] = 32.into();
     value["engine"]["limits"]["overrides"]["core.policy_bytes"] = 4096.into();
     value["engine"]["limits"]["overrides"]["core.load_slots"] = 8.into();

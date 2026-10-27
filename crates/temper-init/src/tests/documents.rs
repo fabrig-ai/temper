@@ -136,29 +136,29 @@ fn the_default_is_the_owned_example_so_edited() {
         assert_eq!(replace_org_patterns(&mut expected), 30, "{row}");
         expected["engine"]["projects"][0]["policy"]["ceiling"]["tools"] = json!(513_u64);
         expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["tools"] = json!(513_u64);
-        // Init additionally admits tier branch creation and its deployment procedure.
+        // Init also admits status, tier branch creation, run dispatch/rerun and their procedures.
         for path in [
             "/engine/projects/0/policy/ceiling/grants",
             "/engine/projects/0/policy/projections",
             "/engine/projects/0/policy/roles/0/authority/grants",
         ] {
-            expected
-                .pointer_mut(path)
-                .expect("owned grants")
-                .as_array_mut()
-                .expect("grant list")
-                .insert(6, json!({"connector": 1_u16, "kind": 9_u16, "pattern": every_forge()}));
+            let grants = expected.pointer_mut(path).expect("owned grants").as_array_mut().expect("grant list");
+            for (index, kind) in [(4, 6_u16), (7, 9)] {
+                grants.insert(index, json!({"connector": 1_u16, "kind": kind, "pattern": every_forge()}));
+            }
+            for kind in [16_u16, 17] {
+                grants.push(json!({"connector": 1_u16, "kind": kind, "pattern": every_forge()}));
+            }
         }
         for path in [
             "/engine/projects/0/policy/ceiling/delegation/kinds",
             "/engine/projects/0/policy/roles/0/authority/delegation/kinds",
         ] {
-            expected
-                .pointer_mut(path)
-                .expect("owned delegation kinds")
-                .as_array_mut()
-                .expect("executor list")
-                .push(json!({"kind": "procedure", "number": 4_u16}));
+            let kinds =
+                expected.pointer_mut(path).expect("owned delegation kinds").as_array_mut().expect("executor list");
+            for number in [3_u16, 4] {
+                kinds.push(json!({"kind": "procedure", "number": number}));
+            }
         }
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);

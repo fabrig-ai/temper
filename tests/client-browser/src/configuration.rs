@@ -45,10 +45,15 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
             role["authority"]["delegation"]["depth"] = 4.into();
         }
     }
-    // Admit stock policy 1 and its ten grants.
-    for (name, count) in
-        [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32), ("tasks.charters", 2)]
-    {
+    // Admit stock policy 1 with fourteen grants and five executor kinds.
+    for (name, count) in [
+        ("core.policy_bytes", 4096),
+        ("authority.grants", 16),
+        ("authority.executors", 5),
+        ("tasks.executor_kinds", 5),
+        ("notes.scopes", 32),
+        ("tasks.charters", 2),
+    ] {
         value["engine"]["limits"]["overrides"][name] = count.into();
     }
     let worker: serde_json::Value =

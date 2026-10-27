@@ -3,7 +3,8 @@
     "limits": {{
       "profile": "small",
       "overrides": {{
-        "authority.grants": 12,
+        "authority.grants": 14,
+        "authority.executors": 5,
         "authority.projects": 2,
         "authority.requirements": 3,
         "authority.roles": 1,
@@ -46,7 +47,8 @@
         "people.waiters": 4,
         "people.words": 512,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 12,
+        "tasks.authority_grants": 14,
+        "tasks.executor_kinds": 5,
         "tasks.authority_segments": 9,
         "tasks.batch": 1,
         "tasks.charters": 2,
