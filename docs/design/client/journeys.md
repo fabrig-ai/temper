@@ -515,6 +515,7 @@ over skein's harness.
 | Name | The walk | Its pages |
 |---|---|---|
 | `welcome-set-up` | on a fresh `temper box --fake-backends` (3.5): the printed sign-in link opened, the welcome drawn, "Set up temper" pressed, then "Choose" on "Forgejo on this machine" | `01.html`, the welcome as it was when "Set up temper" was pressed, which leads to `02.html`, the Forge step's choices as they were when "Choose" was pressed, which leads to `03.html`, Forgejo on this machine's details as they were when the recording ended; its `README.md` says so |
+| `welcome-playground` | on a fresh `temper box --fake-backends` (3.5): the printed sign-in link opened, the welcome drawn, "Try the playground" pressed | `01.html`, the welcome as it was when "Try the playground" was pressed, which leads to `02.html`, the chats page in the Playground project, the demo started, as it was when the recording ended; its `README.md` says so |
 
 ## 10. Open questions
 
