@@ -167,6 +167,47 @@ impl ForgeStand {
         self.domain.reclaim();
     }
 
+    /// A scripted worker pushes a new head, then publishes its CI status.
+    pub fn push_checked(&mut self, repository: u32, branch: &[u8], first: bool, passing: bool) {
+        if first {
+            self.push_branch(repository, branch);
+        }
+        assert!(self.quiescent(), "worker push between forge calls");
+        let name = self.repositories.get(&repository).expect("worker repository").clone();
+        // Distinct pushes must have distinct forge update times for incremental polls.
+        self.env.now = self.env.now.saturating_add(skein_lib::Duration::from_secs(1));
+        self.env.wall = Wall::from_nanos(self.env.now.as_nanos());
+        let content: &[u8] = if passing { b"repaired" } else { b"needs repair" };
+        let head = fake::advance(&mut self.domain, &self.env, &name, branch, b"file", content, 1)
+            .expect("worker pushed a new head");
+        // The fake recomputes pull mergeability two seconds after a push.
+        self.env.now = self.env.now.saturating_add(skein_lib::Duration::from_secs(2));
+        self.env.wall = Wall::from_nanos(self.env.now.as_nanos());
+        while self.domain.is_due(self.env.now) {
+            fake::fire(&mut self.domain, &self.env, &mut self.out);
+        }
+        assert!(self.out.is_empty());
+        fake::step(
+            &mut self.domain,
+            &self.env,
+            fake::Event::Call {
+                reply_to: ReplyTo::new(Token::new(10_002)),
+                user: 1,
+                repository: name,
+                op: raw::Op::Write(raw::Write::Status {
+                    commit: head,
+                    context: b"build".as_slice().into(),
+                    state: if passing { raw::Check::Passed } else { raw::Check::Failed },
+                }),
+            },
+            &mut self.out,
+        );
+        fake::fire(&mut self.domain, &self.env, &mut self.out);
+        assert!(matches!(self.out.pop(), Some(fake::Request::Reply { result: Ok(raw::Answer::Done), .. })));
+        assert!(self.quiescent());
+        self.domain.reclaim();
+    }
+
     /// Observe between engine steps, with no pending calls or due fake work.
     ///
     /// Reads leave the fake as the engine sees it: rate limiting and faults

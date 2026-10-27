@@ -2740,6 +2740,7 @@ dependencies = [
  "jig-tasks-world",
  "jig-test-domain",
  "jig-test-store-files",
+ "serde_json",
  "skein-fake-forge-domain",
  "skein-forge",
  "skein-forge-client",

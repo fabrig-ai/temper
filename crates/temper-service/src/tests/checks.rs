@@ -590,7 +590,7 @@ fn admission_names_global_and_time_requirements_with_their_units() {
             9,
             8,
             8,
-            "rules.maximum_run_spend: needs a spend allowance of 10; the agent's profile.policy.max_spend allows 9\n",
+            "rules.maximum_run_spend: needs a spend allowance of 40; the agent's profile.policy.max_spend allows 9\n",
         ),
         (
             300_000,

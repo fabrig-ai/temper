@@ -63,13 +63,13 @@ fn stock_chats_can_delegate_message_and_read_the_forge() {
             authority.tools,
             jig_domain_authority::Tools(families.delegate.0 | families.message.0 | families.read.0)
         );
-        assert_eq!(authority.delegation.tasks, 12);
+        assert_eq!(authority.delegation.tasks, 14);
         assert_eq!(authority.delegation.depth, 4);
     }
 }
 
 #[test]
-fn the_seeded_project_keeps_the_stocks_tool_families_and_delegation() {
+fn the_seeded_project_keeps_the_stocks_tools_delegation_and_budgets() {
     // Interim: the seeded project will take its policy from the stock at configuring-stock's
     // seed boundary. Then both the template's inline copy and this agreement test go.
     let engine = engine(&generated());
@@ -81,6 +81,11 @@ fn the_seeded_project_keeps_the_stocks_tool_families_and_delegation() {
         assert_eq!(authority.tools, stock.tools);
         assert_eq!(authority.delegation, stock.delegation);
     }
+    let policy = &defaults.policies.get(&1).expect("stock policy 1").policy;
+    assert_eq!(seed.ceiling.budget, policy.ceiling.budget);
+    assert_eq!(seed.period_spend, policy.period_spend);
+    assert_eq!(seed.roles[0].authority.budget, policy.roles[0].authority.budget);
+    assert_eq!(seed.roles[0].period_spend, policy.roles[0].period_spend);
 }
 
 #[test]
@@ -182,4 +187,57 @@ fn the_transition_keeps_the_documents_own_defaults() {
     assert_eq!(engine.defaults, config::Defaults::Document);
     assert_eq!(engine.charters[0].policy.turns, 9, "the document's edit survives the transition");
     assert!(config::files(&engine).iter().any(|file| file.path.ends_with(b"charters/chat.txt")));
+}
+
+#[test]
+fn init_inbox_holds_two_full_message_credits_within_the_store_codec() {
+    let engine = engine(&generated());
+    let limits = &engine.limits.core;
+    assert_eq!(limits.tasks.result_bytes, 512);
+    assert_eq!(limits.tasks.message_bytes, 4096);
+    assert_eq!(limits.tasks.inbox_bytes, 2 * limits.tasks.message_bytes);
+    assert!(jig_protocol_store::codec::limits(limits).is_some(), "the two-credit inbox fits the pinned store codec");
+}
+
+#[test]
+fn stock_budgets_follow_the_default_models_costliest_completion() {
+    let mut engine = engine(&generated());
+    for (row, altered, c) in [("init", false, 1057), ("costliest prices and rounding", true, 7)] {
+        if altered {
+            let model = &mut engine.llm.models[0];
+            model.window = 1501;
+            model.output = 503;
+            model.input_price = 1;
+            model.cached_price = 2;
+            model.cache_write_price = Some(3);
+            model.output_price = 4;
+            model.price_unit = 1000;
+        }
+        let stock = crate::stock::defaults(&engine.llm);
+        let k = 4 * c;
+        assert_eq!(stock.rules.minimum_run_spend, 2 * c, "{row}");
+        assert_eq!(stock.rules.maximum_run_spend, k, "{row}");
+        for charter in &stock.charters {
+            assert_eq!(charter.spend, k, "{row}");
+        }
+        let policy = &stock.policies.get(&1).expect("policy 1").policy;
+        assert_eq!(policy.roles[0].authority.budget.spend, 24 * k, "{row}");
+        for spend in [
+            stock.rules.ceiling.budget.spend,
+            stock.rules.period_spend,
+            policy.ceiling.budget.spend,
+            policy.period_spend,
+            policy.roles[0].period_spend,
+        ] {
+            assert_eq!(spend, 48 * k, "{row}");
+        }
+    }
+}
+
+#[test]
+fn startup_refuses_stock_budget_overflow_before_constructing_defaults() {
+    let document = fixtures::with(&single_model(), b"engine.llm.models[0].prices.input", b"18446744073709551615");
+    let document = fixtures::with(&document, b"engine.llm.models[0].prices.unit", b"1");
+    let found = crate::named(&document, &config::Directories::working()).unwrap_err();
+    assert_eq!(crate::startup::lines(&found).as_ref(), b"engine.llm.models[0].prices: past its bound\n");
 }

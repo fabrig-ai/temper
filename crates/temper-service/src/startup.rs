@@ -383,7 +383,14 @@ pub fn engine(
             problems.push(Path::root().member(b"llm").member(b"models"), config::What::Bound);
             return Err(problems);
         }
-        let defaults = crate::stock::defaults(&engine.llm);
+        let Some(defaults) = crate::stock::checked(&engine.llm) else {
+            let mut problems = config::Problems::empty();
+            problems.push(
+                Path::root().member(b"llm").member(b"models").child(Segment::Index(0)).member(b"prices"),
+                config::What::Bound,
+            );
+            return Err(problems);
+        };
         config::pass(&mut engine, defaults)?;
     }
     Ok(engine)
