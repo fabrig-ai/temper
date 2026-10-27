@@ -9,8 +9,16 @@ use super::{
 use crate::commit_text;
 use alloc::boxed::Box;
 use jig_domain_brief as brief;
+use temper_engine_domain_forge_landing as landing;
+pub(crate) const CHANGE_CODE: u32 = 2;
+pub(crate) const LANDING_CODE: u32 = 3;
+#[expect(dead_code, reason = "reserved after-landing procedure (domain/after-landing.md)")]
+pub(crate) const AFTER_LANDING_CODE: u32 = 4;
 use jig_domain_core::connector::{EffectDescription, EffectForm, Recovery};
 
+mod landing_route;
+pub(crate) use landing_route::start_landing_step;
+use landing_route::{describe_landing_effect, landing_decision, start_landing};
 #[cfg(test)]
 mod tests;
 
@@ -458,7 +466,7 @@ fn describe_agent(
     for (_, flight) in &domain.forge_effects {
         match flight {
             EffectFlight::Call { .. } => staged = staged.saturating_add(1),
-            EffectFlight::Procedure { .. } | EffectFlight::Projection { .. } => {}
+            EffectFlight::Procedure { .. } | EffectFlight::Landing { .. } | EffectFlight::Projection { .. } => {}
         }
     }
     if !domain.forge.effect_room(&env.limits.forge, staged) {
@@ -759,7 +767,7 @@ pub(crate) fn task_holdings(
     let eligible = match executor {
         tasks::Executor::Person(_) => false,
         tasks::Executor::Procedure { connector, code } => {
-            connector == domain.config.forge_connector && (code == 1 || code == 2)
+            connector == domain.config.forge_connector && (code == 1 || code == CHANGE_CODE)
         }
         tasks::Executor::Agent { .. } => !child_of_change,
     };
@@ -767,7 +775,7 @@ pub(crate) fn task_holdings(
         return Some(Box::new([]));
     }
     let mut selected = List::with_capacity(env.limits.forge.resources_per_task);
-    if let tasks::Executor::Procedure { connector, code: 1 | 2 } = executor
+    if let tasks::Executor::Procedure { connector, code: 1 | CHANGE_CODE } = executor
         && connector == domain.config.forge_connector
     {
         let mut repository = None;
@@ -1013,7 +1021,7 @@ fn goal_topics(domain: &mut Domain, env: &Env<Limits>, feed: &jig_domain_core::P
     for child in &feed.plan {
         let Some(task) = domain.core.tasks.task(child.number) else { continue };
         let relevant = match task.executor {
-            tasks::Executor::Procedure { connector, code: 2 } => connector == domain.config.forge_connector,
+            tasks::Executor::Procedure { connector, code: CHANGE_CODE } => connector == domain.config.forge_connector,
             tasks::Executor::Procedure { .. } | tasks::Executor::Agent { .. } | tasks::Executor::Person(_) => false,
         };
         if !relevant {
@@ -1161,7 +1169,8 @@ fn goal_members(
             continue;
         }
         match task.executor {
-            tasks::Executor::Procedure { connector, code: 2 } if connector == domain.config.forge_connector => {}
+            tasks::Executor::Procedure { connector, code: CHANGE_CODE }
+                if connector == domain.config.forge_connector => {}
             tasks::Executor::Procedure { .. } | tasks::Executor::Agent { .. } | tasks::Executor::Person(_) => continue,
         }
         let Some(change_topic) = change_topic(domain, task) else { continue };
@@ -1601,15 +1610,15 @@ fn describe_change_effect(
     }
     let pull_what = pull_what(row.pull);
     let (kind, what, state) = match effect {
-        // landing.md 3: the top's task
-        forge_change::Effect::Prepare { .. } => return None,
         forge_change::Effect::Open => {
             (3, branch_what(&row.branch, env.limits.forge.name_bytes), evidence.head.unwrap_or([0; 32]))
         }
         forge_change::Effect::CreateBranch { head } => (9, branch_what(&row.branch, env.limits.forge.name_bytes), head),
         forge_change::Effect::Reopen => (12, pull_what, evidence.head.unwrap_or([0; 32])),
         forge_change::Effect::Retarget => (10, pull_what, evidence.head.unwrap_or([0; 32])),
-        forge_change::Effect::Update { head, .. } => (11, branch_what(&row.branch, env.limits.forge.name_bytes), head),
+        forge_change::Effect::Prepare { head, .. } | forge_change::Effect::Update { head, .. } => {
+            (11, branch_what(&row.branch, env.limits.forge.name_bytes), head)
+        }
         forge_change::Effect::Merge { head, .. } => (4, branch_what(&row.base, env.limits.forge.name_bytes), head),
     };
     let what = what?;
@@ -2083,7 +2092,7 @@ pub(crate) fn chat_change(
     authority.note_resources = Box::new([]);
     Ok(super::Delegate {
         deadline: tasks::Deadline::Named,
-        executor: tasks::Executor::Procedure { connector: domain.config.forge_connector, code: 2 },
+        executor: tasks::Executor::Procedure { connector: domain.config.forge_connector, code: CHANGE_CODE },
         spec: tasks::Spec {
             words,
             parameters: Box::new(change_parameters(
@@ -2266,7 +2275,7 @@ fn change_delegate(
                             fields: Box::new([]),
                         },
                         tasks::Verdict {
-                            code: 2,
+                            code: CHANGE_CODE,
                             words: env.limits.tasks.result_bytes,
                             followups: 0,
                             fields: Box::new([]),
@@ -2516,7 +2525,7 @@ fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool
         ]),
         inputs: Box::new([]),
     };
-    let executor = tasks::Executor::Procedure { connector: domain.config.forge_connector, code: 2 };
+    let executor = tasks::Executor::Procedure { connector: domain.config.forge_connector, code: CHANGE_CODE };
     let Some(holdings) = task_holdings(domain, env, project, repair, repair, executor, &spec, None) else {
         return false;
     };
@@ -2651,9 +2660,24 @@ fn change_result_bound(domain: &Domain, task: u64) -> u32 {
     }
 }
 
+fn ready_change(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool {
+    let row = domain.forge.change(task).expect("ready change");
+    let again = row.change.way == forge_change::Way::Queue;
+    let landing = match domain.forge.change(task) {
+        Some(row) => row.change.landing,
+        None => None,
+    };
+    if let Some(landing) = landing {
+        domain.work.push(Work::Tasks(tasks::Event::WakeProcedure { task: landing }));
+    } else {
+        start_landing(domain, env, task);
+    }
+    again
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
-    if connector != domain.config.forge_connector || code != 2 {
+    if connector != domain.config.forge_connector || code != CHANGE_CODE {
         return;
     }
     domain.forge.offered_change(task);
@@ -2690,7 +2714,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
         forge_change::Decision::Hold(why) => hold_change_decision(domain, env, task, why),
         forge_change::Decision::CancelGates { head } => cancel_change_gates(domain, task, head),
         forge_change::Decision::Ready => {
-            again = true;
+            again = ready_change(domain, env, task);
             ProcedureStep::new(StepEnd::Wait)
         }
         forge_change::Decision::QueueRepair => {
@@ -2702,7 +2726,16 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
             }
         }
         forge_change::Decision::Wait { until } => {
-            domain.forge.wait_change(&super::environment_forge(env), task, until);
+            let row = domain.forge.change(task).expect("waiting change");
+            if row.change.way == forge_change::Way::Turn
+                && let forge_change::State::Ready { .. } = row.change.state
+            {
+                if row.change.landing.is_none() {
+                    start_landing(domain, env, task);
+                }
+            } else {
+                domain.forge.wait_change(&super::environment_forge(env), task, until);
+            }
             ProcedureStep::new(StepEnd::Wait)
         }
         forge_change::Decision::None | forge_change::Decision::Effect(_) | forge_change::Decision::Cancel => {
@@ -2748,6 +2781,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
 }
 
 #[expect(clippy::too_many_lines, reason = "one exhaustive connector output translation")]
+#[expect(clippy::manual_map, reason = "the foundation requires explicit option matching")]
 pub(crate) fn outputs(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -3130,7 +3164,39 @@ pub(crate) fn outputs(
                     domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Drift }));
                 }
             }
-            forge::Request::LandingDecision { .. } => {}
+            forge::Request::LandingDecision { task, decision: choice, entry, evidence } => {
+                if let Some(entry) = entry {
+                    let Some((_, _, step)) = domain.core.tasks.procedure_due(task) else { continue };
+                    if let Some(description) = describe_landing_effect(domain, env, task, entry) {
+                        let owner = effect_owner(domain);
+                        domain
+                            .forge_effects
+                            .insert(
+                                owner,
+                                EffectFlight::Landing {
+                                    description: Box::new(description),
+                                    entry,
+                                    task,
+                                    evidence: match evidence {
+                                        Some(evidence) => Some(Box::new(evidence)),
+                                        None => None,
+                                    },
+                                },
+                            )
+                            .expect("bounded landing effect handoff");
+                        domain.work.push(Work::Core(jig_domain_core::Event::EffectStart {
+                            owner,
+                            connector: domain.config.forge_connector,
+                            origin: jig_domain_core::EffectOrigin::Procedure { task, step, entry: Some(entry) },
+                        }));
+                    } else {
+                        domain.work.push(Work::Forge(forge::Event::VetoLanding { task, entry }));
+                        domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                    }
+                } else {
+                    landing_decision(domain, env, task, choice);
+                }
+            }
             forge::Request::ChangeDecision { task, decision: choice, entry, evidence } => match choice {
                 forge_change::Decision::Effect(effect) => {
                     if let Some(entry) = entry
@@ -3225,6 +3291,12 @@ pub(crate) enum EffectFlight {
         description: Box<EffectDescription>,
         row: Box<forge::IssueRow>,
         entry: skein_forge_client::Entry,
+    },
+    Landing {
+        description: Box<EffectDescription>,
+        entry: u64,
+        task: u64,
+        evidence: Option<Box<forge::LandingEvidence>>,
     },
     Procedure {
         description: Box<EffectDescription>,
@@ -3330,6 +3402,7 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                 Some(
                     EffectFlight::Call { description, .. }
                     | EffectFlight::Procedure { description, .. }
+                    | EffectFlight::Landing { description, .. }
                     | EffectFlight::Projection { description, .. },
                 ) => description.clone(),
                 None => return,
@@ -3401,7 +3474,10 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                         },
                     }));
                 }
-                Some(EffectFlight::Procedure { .. } | EffectFlight::Projection { .. }) | None => {
+                Some(
+                    EffectFlight::Procedure { .. } | EffectFlight::Landing { .. } | EffectFlight::Projection { .. },
+                )
+                | None => {
                     unreachable!("agent effect proposal was described")
                 }
             }
@@ -3447,7 +3523,7 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     assert!(kept.number == entry && kept.task == task, "admitted projection entry");
                     domain.work.push(Work::Forge(forge::Event::KeepProjection { row: *row, entry: kept }));
                 }
-                Some(EffectFlight::Procedure { entry: kept, .. }) => {
+                Some(EffectFlight::Procedure { entry: kept, .. } | EffectFlight::Landing { entry: kept, .. }) => {
                     assert!(kept == entry, "core releases the described procedure entry");
                 }
                 None => {}
@@ -3474,6 +3550,14 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     repository: row.repository,
                     closing,
                 }));
+            }
+            Some(EffectFlight::Landing { entry, task, .. }) => {
+                domain.work.push(Work::Forge(forge::Event::VetoLanding { task, entry }));
+                if answer == authority::Answer::Wait {
+                    domain.forge.wait_landing(&super::environment_forge(env), task, None);
+                } else {
+                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                }
             }
             Some(EffectFlight::Call { .. }) | None => {}
         },
@@ -3548,6 +3632,35 @@ fn judge_effect(
             };
             (verdict, guarded)
         }
+        Some(EffectFlight::Landing { task, evidence: Some(evidence), description, .. }) => {
+            let Some(row) = domain.forge.change(evidence.change) else { return (authority::Verdict::Refuse, false) };
+            let Some(repository) = domain.forge.repository(row.repository) else {
+                return (authority::Verdict::Refuse, false);
+            };
+            let Some(reviewers) = landing_reviewers(domain, env, row, &evidence.facts) else {
+                return (authority::Verdict::Refuse, false);
+            };
+            let guarded = description.effect.kind == 4
+                && domain.forge.guards_landing(repository.project, judge.requirement, judge.parameters);
+            let verdict = domain.forge.judge_landing(
+                repository.project,
+                judge.requirement,
+                judge.parameters,
+                *task,
+                state,
+                &evidence.facts,
+                &reviewers,
+            );
+            (
+                match verdict {
+                    Some(forge::JudgeVerdict::Met) => authority::Verdict::Met,
+                    Some(forge::JudgeVerdict::Refuse) => authority::Verdict::Refuse,
+                    Some(forge::JudgeVerdict::Wait) | None => authority::Verdict::Wait,
+                },
+                guarded,
+            )
+        }
+        Some(EffectFlight::Landing { evidence: None, .. }) => (authority::Verdict::Refuse, false),
         Some(EffectFlight::Call { .. } | EffectFlight::Projection { .. }) | None => (authority::Verdict::Wait, false),
     }
 }

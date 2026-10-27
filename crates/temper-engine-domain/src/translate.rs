@@ -41,6 +41,7 @@ pub struct Config {
 pub(crate) struct RootConfig {
     pub(crate) forge_connector: u16,
     pub(crate) forge_charter: u32,
+    pub(crate) landings: Map<u32, ProjectLanding>,
 }
 
 /// Typed forge landing policy retained by the application for policy snapshots.
@@ -48,6 +49,59 @@ pub(crate) struct RootConfig {
 pub struct LandingPolicy {
     pub deployment: Box<[LandingRule]>,
     pub projects: Map<u32, Box<[LandingRule]>>,
+    pub landings: Map<u32, ProjectLanding>,
+}
+
+/// A project's landing way and repository checks (protocol/configuration.md, 3).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ProjectLanding {
+    pub by: Way,
+    pub repositories: Box<[RepositoryChecks]>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Way {
+    Queue,
+    Turn,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RepositoryChecks {
+    pub repository: skein_forge::api::Repository,
+    pub gates: Box<[GateCheck]>,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct GateCheck {
+    pub name: Box<[u8]>,
+    pub workflow: Box<[u8]>,
+    pub ignored: Box<[Box<[u8]>]>,
+    pub blocking: bool,
+}
+pub(crate) fn project_landing(forge: &mut forge::Domain, project: u32, landing: &ProjectLanding) -> bool {
+    let mut repositories =
+        skein_lib::List::with_capacity(u32::try_from(landing.repositories.len()).expect("repositories"));
+    for repository in &landing.repositories {
+        let mut gates = skein_lib::List::with_capacity(u32::try_from(repository.gates.len()).expect("gates"));
+        for gate in &repository.gates {
+            gates
+                .push(temper_engine_domain_forge_landing::Gate {
+                    name: gate.name.clone(),
+                    workflow: gate.workflow.clone(),
+                    ignored: gate.ignored.clone(),
+                    blocking: gate.blocking,
+                })
+                .expect("counted gates");
+        }
+        repositories
+            .push(forge::RepositoryGates { repository: repository.repository, gates: gates.into_boxed() })
+            .expect("counted repositories");
+    }
+    forge.project_landing(
+        project,
+        match landing.by {
+            Way::Queue => temper_engine_domain_forge_change::Way::Queue,
+            Way::Turn => temper_engine_domain_forge_change::Way::Turn,
+        },
+        repositories.into_boxed(),
+    )
 }
 
 pub(crate) fn environment_forge(env: &Env<Limits>) -> Env<forge::Limits> {
