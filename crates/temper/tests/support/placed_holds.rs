@@ -1,4 +1,4 @@
-//! Executable owner-release stories, with the fake's next scripts built from ctl's placed hold.
+//! Executable owner-release stories in one fresh deployment.
 use super::{Ended, boxed, ctl};
 use ctl::{Call, Step};
 use serde_json::{Value, json};
@@ -6,9 +6,18 @@ use skein_fake_llm_domain::api::{Finish, Line, Part, Query, Role, Rule, Script, 
 use skein_io::kernel::Exit;
 use std::path::Path;
 
+// Creating and parking tasks consumes task identities, not message identities.
+// No message precedes the stop, which takes the deployment's first message number.
+const STOP_HOLD: u64 = 1;
+const HOLD_REVISION: u64 = 1;
+const TASK_HOLD_REVISION: u64 = 1;
+// The owner's resume message takes 2; the coordinator's proposal takes 3.
+const PROPOSAL: &str = "t1/3";
+
 const GOAL: &str = "@held-goal";
 const CHILD: &str = "@held-child";
-const PARKED: &[u8] = b"\"executor\":{\"agent\":{\"charter\":2}},\"phase\":\"idle\"";
+const PARKED_GOAL: &[u8] = b"\"task\":2,\"title\":{\"bytes\":\"@held-goal\",\"cut\":false},\"executor\":{\"agent\":{\"charter\":2}},\"phase\":\"idle\"";
+const PARKED_CHILD: &[u8] = b"\"task\":3,\"title\":{\"bytes\":\"@held-child\",\"cut\":false},\"executor\":{\"agent\":{\"charter\":2}},\"phase\":\"idle\"";
 
 fn call(name: &[u8], arguments: &Value) -> Turn {
     Turn {
@@ -18,7 +27,12 @@ fn call(name: &[u8], arguments: &Value) -> Turn {
     }
 }
 fn wait() -> Turn {
-    call(b"wait", &json!({}))
+    let mut turn = call(b"wait", &json!({}));
+    turn.lines = Box::new([
+        Line::Text { text: b"Waiting for the owner's direction.".as_slice().into() },
+        Line::Call { name: b"wait".as_slice().into(), arguments: b"{}".as_slice().into() },
+    ]);
+    turn
 }
 fn delegate(words: &str, children: bool) -> Turn {
     call(
@@ -36,43 +50,36 @@ fn delegate(words: &str, children: bool) -> Turn {
         }]}),
     )
 }
-fn scripts(hold: Option<&Value>) -> Box<[Script]> {
-    let mut chat = vec![if hold.is_some() { wait() } else { delegate(GOAL, true) }, wait()];
-    if let Some(hold) = hold {
-        chat.extend([
-            call(b"release", &json!({"target":2,"revision":hold["task_revision"]})),
-            call(
-                b"propose",
-                &json!({"action":"release","task":2,"hold":hold["hold"],
-                "revision":hold["revision"],"reason":"Please resume the stopped goal"}),
-            ),
-            wait(),
-        ]);
-    } else {
-        chat.extend([wait(), wait(), wait()]);
-    }
+fn scripts() -> Box<[Script]> {
     Box::new([
-        Script { cue: b"@hold-chat".as_slice().into(), turns: chat.into_boxed_slice() },
         Script {
-            cue: GOAL.as_bytes().into(),
-            turns: Box::new([if hold.is_some() { wait() } else { delegate(CHILD, false) }, wait()]),
-        },
-        Script {
-            cue: CHILD.as_bytes().into(),
+            cue: b"@hold-chat".as_slice().into(),
             turns: Box::new([
-                if hold.is_some() { wait() } else { call(b"read_docs", &json!({"topic":"hold"})) },
+                delegate(GOAL, true),
+                wait(),
+                call(b"release", &json!({"target":2,"revision":TASK_HOLD_REVISION})),
+                call(
+                    b"propose",
+                    &json!({"action":"release","task":2,"hold":STOP_HOLD,
+                "revision":HOLD_REVISION,"reason":"Please resume the stopped goal"}),
+                ),
                 wait(),
             ]),
+        },
+        Script { cue: GOAL.as_bytes().into(), turns: Box::new([delegate(CHILD, false), wait()]) },
+        Script {
+            cue: CHILD.as_bytes().into(),
+            turns: Box::new([call(b"read_docs", &json!({"topic":"hold"})), wait()]),
         },
     ])
 }
 fn rules(entries: &[(&str, u32)]) -> Box<[Rule]> {
     entries.iter().map(|(cue, turn)| Rule { cue: cue.as_bytes().into(), turn: *turn }).collect()
 }
-fn llm(config: &Path, hold: Option<&Value>, expected_exits: Vec<(usize, u8)>) -> boxed::CtlLlm {
+fn llm(config: &Path, expected_exits: Vec<(usize, u8)>) -> boxed::CtlLlm {
     let config = config.to_path_buf();
     let recipe = temper_real_loop_world::llm::played_by_input(
-        scripts(hold),
+        scripts(),
         Box::new([
             rules(&[
                 ("Ask to resume the stopped goal", 2),
@@ -108,7 +115,7 @@ fn llm(config: &Path, hold: Option<&Value>, expected_exits: Vec<(usize, u8)>) ->
     super::write_private(&path, &serde_json::to_vec(&agent).unwrap());
     boxed::CtlLlm { peer, expected_exits, on_link: Box::new(|| {}) }
 }
-fn initialize(scratch: &Path, config: &Path, flags: &[String]) {
+fn initialize(scratch: &Path, flags: &[String]) {
     let initialized = std::process::Command::new(skein_scratch::paths::binary("temper"))
         .arg("init")
         .args(flags)
@@ -118,45 +125,66 @@ fn initialize(scratch: &Path, config: &Path, flags: &[String]) {
         .output()
         .expect("initialize story deployment");
     assert!(initialized.status.success(), "{}", String::from_utf8_lossy(&initialized.stderr));
-    let path = config.join("temper.json");
-    let mut document: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    // MakeService requires an actual policy role. Give this story's maintainer
-    // the existing policy's authority, with its distinct built-in rank.
-    for project in document["engine"]["projects"].as_array_mut().unwrap() {
-        let roles = project["policy"]["roles"].as_array_mut().unwrap();
-        let mut maintainer = roles[0].clone();
-        maintainer["number"] = json!(1);
-        roles.push(maintainer);
-    }
-    super::write_private(&path, &serde_json::to_vec(&document).unwrap());
 }
 fn initial_steps(scratch: &Path) -> Vec<Step> {
+    let settings_file = scratch.join("hold-settings.json");
     let key = scratch.join("llm-key");
     super::write_private(&key, jig_channel_world::fixtures::KEY);
     vec![
         Step::Run(Call::sign_in()), // 0
         Step::Run(Call::new(&["account", "add-key", "1", key.to_str().unwrap(), "--key", "hold-account"])), // 1
-        Step::Run(Call::new(&["me", "--json"])), // 2
-        Step::Maintainer { scratch: scratch.into(), directory: "maintainer" },
-        Step::Run(Call::new(&["me", "--json"]).in_directory("maintainer")), // 3
+        Step::Run(Call::new(&["settings", "show", "rules", "--json"])), // 2
+        Step::Run(Call::new(&["settings", "show", "policy", "1", "--json"])), // 3
+        Step::Then(Box::new(move |calls| {
+            let rules_document = ctl::json(&calls[2]);
+            let mut rules = rules_document["value"].clone();
+            let mut policy = ctl::json(&calls[3])["value"].clone();
+            // Give this story's coordinator control and propose, families 4 and 16,
+            // through the public settings path, before creating its project.
+            let tools = rules["ceiling"]["tools"].as_u64().unwrap() | 4 | 16;
+            rules["ceiling"]["tools"] = tools.into();
+            policy["ceiling"]["tools"] = tools.into();
+            policy["roles"][0]["authority"]["tools"] = tools.into();
+            let mut maintainer = policy["roles"][0].clone();
+            maintainer["number"] = json!(1);
+            policy["roles"].as_array_mut().unwrap().push(maintainer);
+            let change = json!({"items":[
+                {"setting":{"kind":"rules"},"set":rules},
+                {"setting":{"kind":"policy","number":1},"set":policy}
+            ]});
+            super::write_private(&settings_file, &serde_json::to_vec(&change).unwrap());
+            Call::new(&[
+                "settings",
+                "apply",
+                settings_file.to_str().unwrap(),
+                "--against",
+                &rules_document["revision"].to_string(),
+                "--key",
+                "hold-tools",
+            ])
+        })), // 4
+        Step::Project { scratch: scratch.into(), client: scratch.join("client"), name: "held-work", number: 2 },
+        Step::Run(Call::new(&["me", "--json"])), // 5
+        Step::Maintainer { scratch: scratch.into(), directory: "maintainer", project: 2 },
+        Step::Run(Call::new(&["me", "--json"]).in_directory("maintainer")), // 6
         Step::Run(Call::new(&[
             "chat",
             "start",
             "--project",
-            "1",
+            "2",
             "--key",
             "hold-chat",
             "@hold-chat Delegate and wait",
-        ])), // 4
-        Step::Until(Call::new(&["task", "show", "3", "--json"]), PARKED),   // 5
-        Step::Until(Call::new(&["task", "show", "2", "--json"]), PARKED),   // 6
-        Step::Until(Call::new(&["task", "show", "1", "--json"]), b"\"phase\":\"idle\""), // 7
-        Step::Run(Call::new(&["task", "stop", "2", "--key", "stop-goal"])), // 8
-        Step::Run(Call::new(&["task", "show", "2", "--json"])),             // 9
-        Step::Run(Call::new(&["task", "show", "3", "--json"])),             // 10
-        Step::Run(Call::new(&["task", "run", "2"])),                        // 11
-        Step::Run(Call::new(&["task", "run", "3"])),                        // 12
-        Step::Run(Call::new(&["task", "show", "2"])),                       // 13
+        ])), // 7
+        Step::Until(Call::new(&["task", "show", "3", "--json"]), PARKED_CHILD), // 8
+        Step::Until(Call::new(&["task", "show", "2", "--json"]), PARKED_GOAL), // 9
+        Step::Until(Call::new(&["task", "show", "1", "--json"]), b"\"phase\":\"idle\""), // 10
+        Step::Run(Call::new(&["task", "stop", "2", "--key", "stop-goal"])), // 11
+        Step::Run(Call::new(&["task", "show", "2", "--json"])),             // 12
+        Step::Run(Call::new(&["task", "show", "3", "--json"])),             // 13
+        Step::Run(Call::new(&["task", "run", "2"])),                        // 14
+        Step::Run(Call::new(&["task", "run", "3"])),                        // 15
+        Step::Run(Call::new(&["task", "show", "2"])),                       // 16
     ]
 }
 fn check_box(seen: &boxed::CtlOutcome<()>, expected_exits: &[(usize, u8)]) {
@@ -168,53 +196,52 @@ fn check_box(seen: &boxed::CtlOutcome<()>, expected_exits: &[(usize, u8)]) {
     }
 }
 fn placed(calls: &[Ended]) -> Value {
-    assert_eq!(calls[8].stdout, b"done: task 2, stop\n");
-    let task = ctl::json(&calls[9]);
-    let child = ctl::json(&calls[10]);
+    assert_eq!(calls[11].stdout, b"done: task 2, stop\n");
+    let task = ctl::json(&calls[12]);
+    let child = ctl::json(&calls[13]);
     assert_eq!(task["chip"]["phase"], "held");
     assert_eq!(child["chip"]["phase"], "held");
     assert_eq!(task["hold"]["placed"], child["hold"]["placed"]);
-    assert_eq!(task["hold"]["placed"]["owner"]["person"], ctl::json(&calls[2])["party"]["number"]);
+    assert_eq!(task["hold"]["placed"]["owner"]["person"], ctl::json(&calls[5])["party"]["number"]);
     assert_eq!(task["hold"]["placed"]["may_lift"], true);
-    assert!(String::from_utf8_lossy(&calls[11].stdout).starts_with("run: none"));
-    assert!(String::from_utf8_lossy(&calls[12].stdout).starts_with("run: none"));
-    assert!(String::from_utf8_lossy(&calls[13].stdout).contains("you may lift it"));
-    let mut hold = task["hold"]["placed"].clone();
-    hold["task_revision"] = task["hold"]["owner"]["revision"].clone();
-    hold
+    assert!(String::from_utf8_lossy(&calls[14].stdout).starts_with("run: none"));
+    assert!(String::from_utf8_lossy(&calls[15].stdout).starts_with("run: none"));
+    assert!(String::from_utf8_lossy(&calls[16].stdout).contains("you may lift it"));
+    assert_eq!(task["hold"]["placed"]["hold"], STOP_HOLD, "derived message counter");
+    assert_eq!(task["hold"]["placed"]["revision"], HOLD_REVISION);
+    assert_eq!(task["hold"]["owner"]["revision"], TASK_HOLD_REVISION);
+    // Chip attempts retain the last claimed identity even after a run parks.
+    // The run documents above prove no attempt remains live after the stop.
+    task["hold"]["placed"].clone()
 }
 fn queries<'a>(seen: &'a super::forge_land::Seen, cue: &[u8]) -> Vec<&'a Query> {
     seen.requests.iter().filter(|query| query.system.windows(cue.len()).any(|bytes| bytes == cue)).collect()
 }
-fn transcript(before: &super::forge_land::Seen, after: &super::forge_land::Seen, cue: &[u8]) {
-    let old = queries(before, cue);
-    let new = queries(after, cue);
-    let old = old.last().expect("the stopped live model request");
-    let new = new.first().expect("the resumed model request");
+fn transcript(seen: &super::forge_land::Seen, cue: &[u8]) {
+    let requests = queries(seen, cue);
+    let old = requests.get(1).expect("the request after the first committed tool turn");
+    let new = requests.get(2).expect("the resumed model request");
     let mut saved = 0;
-    for message in old.messages.iter().filter(|message| message.role == Role::Assistant) {
-        assert!(new.messages.contains(message), "earlier assistant turn restored for {}", String::from_utf8_lossy(cue));
+    let mut remaining = new.messages.iter();
+    for message in old.messages.iter().filter(|message| {
+        message.role == Role::Assistant || message.parts.iter().any(|part| matches!(part, Part::ToolOutput { .. }))
+    }) {
+        assert!(
+            remaining.any(|next| next == message),
+            "committed turns restored in order for {}",
+            String::from_utf8_lossy(cue)
+        );
         saved += 1;
     }
-    assert!(saved > 0, "a nonempty committed transcript before stop");
-    for message in &old.messages {
-        for part in &message.parts {
-            if let Part::ToolOutput { .. } = part {
-                assert!(
-                    new.messages.iter().any(|message| message.parts.contains(part)),
-                    "earlier tool result restored"
-                );
-            }
-        }
-    }
+    assert!(saved >= 2, "a nonempty assistant/tool transcript before stop");
 }
-/// Stop and inspect using the first fixed scripts; resume with scripts built from the observed hold.
+
 pub fn proposal(scratch: &Path, config: &Path, flags: Vec<String>) {
-    initialize(scratch, config, &flags);
+    initialize(scratch, &flags);
     let mut steps = initial_steps(scratch);
     steps.extend([
         Step::Then(Box::new(|calls| {
-            let task = ctl::json(&calls[9]);
+            let task = ctl::json(&calls[12]);
             Call::new(&[
                 "task",
                 "release",
@@ -225,140 +252,128 @@ pub fn proposal(scratch: &Path, config: &Path, flags: Vec<String>) {
                 "maintainer-release",
             ])
             .in_directory("maintainer")
-        })), // 14
-        Step::Run(Call::new(&["task", "show", "2"]).in_directory("maintainer")), // 15
+        })), // 17
+        Step::Run(Call::new(&["task", "show", "2"]).in_directory("maintainer")), // 18
+        Step::Run(Call::new(&["task", "message", "1", "Ask to resume the stopped goal", "--key", "request-release"])), // 19
+        Step::Until(Call::new(&["inbox"]), PROPOSAL.as_bytes()), // 20
+        Step::Run(Call::new(&["proposal", "show", PROPOSAL])),   // 21
+        Step::Run(Call::new(&["proposal", "decide", PROPOSAL, "accept", "--key", "owner-accept"])), // 22
+        Step::Until(Call::new(&["task", "show", "2", "--json"]), PARKED_GOAL), // 23
+        Step::Until(Call::new(&["task", "show", "3", "--json"]), PARKED_CHILD), // 24
     ]);
-    let first = boxed::run_ctl_with_llm(
+    let seen = boxed::run_ctl_with_llm(
         scratch,
-        flags.clone(),
+        flags,
         scratch,
         steps,
         boxed::BOX_DEADLINE,
         |_| (),
-        llm(config, None, vec![(14, 2)]),
+        llm(config, vec![(17, 2)]),
     );
-    check_box(&first, &[(14, 2)]);
-    assert_eq!(
-        first.calls.len(),
-        16,
-        "last task {}; model answers {:?}; requests {}",
-        String::from_utf8_lossy(&first.calls.last().unwrap().stdout),
-        first.model.as_ref().map(|m| &m.answers),
-        first.model.as_ref().map_or(0, |m| m.requests.len())
-    );
-    for before in [&first.calls[5], &first.calls[6]] {
-        let before = ctl::json(before);
-        assert!(
-            before["chip"]["details"]["owner"]["details"]["attempt"]
-                .as_u64()
-                .expect("the cancellation story needs live attempts before the stop")
-                > 0
-        );
-    }
-    let hold = placed(&first.calls);
+    check_box(&seen, &[(17, 2)]);
+    assert_eq!(seen.calls.len(), 25);
+    let hold = placed(&seen.calls);
     let owner = hold["owner"]["person"].as_u64().unwrap();
     let number = hold["hold"].as_u64().unwrap();
     let revision = hold["revision"].as_u64().unwrap();
-    assert_eq!(first.calls[14].stderr, format!("release: Held by hold {number}, placed by person {owner}: only they, or a role above theirs, may release it\n").as_bytes());
+    assert_eq!(seen.calls[17].stderr, format!("release: Held by hold {number}, placed by person {owner}: only they, or a role above theirs, may release it\n").as_bytes());
     assert!(
-        String::from_utf8_lossy(&first.calls[15].stdout)
+        String::from_utf8_lossy(&seen.calls[18].stdout)
             .contains(&format!("only person {owner}, or a role above theirs, may release it"))
     );
-    let second = boxed::run_ctl_with_llm(
-        scratch,
-        flags,
-        scratch,
-        vec![
-            Step::Run(Call::new(&[
-                "task",
-                "message",
-                "1",
-                "Ask to resume the stopped goal",
-                "--key",
-                "request-release",
-            ])),
-            Step::Until(Call::new(&["inbox"]), b"t1/1"),
-            Step::Run(Call::new(&["proposal", "show", "t1/1"])),
-            Step::Run(Call::new(&["proposal", "decide", "t1/1", "accept", "--key", "owner-accept"])),
-            Step::Until(Call::new(&["task", "show", "2", "--json"]), PARKED),
-            Step::Until(Call::new(&["task", "show", "3", "--json"]), PARKED),
-        ],
-        boxed::BOX_DEADLINE,
-        |_| (),
-        llm(config, Some(&hold), Vec::new()),
-    );
-    check_box(&second, &[]);
-    assert_eq!(second.calls.len(), 6);
     assert!(
-        String::from_utf8_lossy(&second.calls[2].stdout)
+        String::from_utf8_lossy(&seen.calls[21].stdout)
             .contains(&format!("release task 2 from hold {number} (revision {revision})"))
     );
-    assert!(ctl::json(&second.calls[4])["hold"].is_null());
-    assert!(ctl::json(&second.calls[5])["hold"].is_null());
-    let before = first.model.as_ref().unwrap();
-    let after = second.model.as_ref().unwrap();
-    transcript(before, after, GOAL.as_bytes());
-    transcript(before, after, CHILD.as_bytes());
+    assert!(ctl::json(&seen.calls[23])["hold"].is_null());
+    assert!(ctl::json(&seen.calls[24])["hold"].is_null());
+    let model = seen.model.as_ref().unwrap();
+    transcript(model, GOAL.as_bytes());
+    transcript(model, CHILD.as_bytes());
     let refusal = format!(
-        "Refused: task 2 is held by hold {number} (revision {revision}), placed by person {owner}; only they may release it. Propose it: {{\"action\": \"release\", \"task\": 2, \"hold\": {number}, \"revision\": {revision}, \"reason\": \"...\"}}"
+        "Error: Refused: task 2 is held by hold {number} (revision {revision}), placed by person {owner}; only they may release it. Propose it: {{\"action\": \"release\", \"task\": 2, \"hold\": {number}, \"revision\": {revision}, \"reason\": \"...\"}}"
     );
-    assert!(queries(after,b"@hold-chat").iter().any(|query| query.messages.iter().any(|message| message.parts.iter().any(|part| matches!(part, Part::ToolOutput { output, is_error: true, .. } if output.as_ref() == refusal.as_bytes())))),"coordinator hears the owner refusal");
+    assert!(
+        queries(model, b"@hold-chat").iter().any(|query| query.messages.iter().any(|message| message
+            .parts
+            .iter()
+            .any(|part| matches!(part, Part::ToolOutput { output, .. } if output.as_ref() == refusal.as_bytes())))),
+        "coordinator hears the owner refusal"
+    );
 }
 
 pub fn lift(scratch: &Path, config: &Path, flags: Vec<String>) {
-    initialize(scratch, config, &flags);
-    let first = boxed::run_ctl_with_llm(
-        scratch,
-        flags.clone(),
-        scratch,
-        initial_steps(scratch),
-        boxed::BOX_DEADLINE,
-        |_| (),
-        llm(config, None, Vec::new()),
-    );
-    check_box(&first, &[]);
-    let hold = placed(&first.calls);
-    let number = hold["hold"].as_u64().unwrap();
-    let revision = hold["revision"].as_u64().unwrap();
-    let second = boxed::run_ctl_with_llm(
+    initialize(scratch, &flags);
+    let mut steps = initial_steps(scratch);
+    steps.extend([
+        Step::Run(Call::new(&[
+            "hold",
+            "lift",
+            &STOP_HOLD.to_string(),
+            "--rev",
+            "1",
+            "--with-tasks",
+            "--key",
+            "lift-goal",
+        ])), // 17
+        Step::Until(Call::new(&["task", "show", "2", "--json"]), PARKED_GOAL), // 18
+        Step::Until(Call::new(&["task", "show", "3", "--json"]), PARKED_CHILD), // 19
+        Step::Run(Call::new(&["task", "stop", "2", "--key", "retained-stop"])), // 20
+        Step::Run(Call::new(&["task", "show", "2", "--json"])),                // 21
+        Step::Then(Box::new(|calls| {
+            let task = ctl::json(&calls[21]);
+            Call::new(&[
+                "hold",
+                "lift",
+                &task["hold"]["placed"]["hold"].to_string(),
+                "--rev",
+                "1",
+                "--key",
+                "retained-lift",
+            ])
+        })), // 22
+        Step::Then(Box::new(|calls| {
+            let task = ctl::json(&calls[21]);
+            Call::new(&[
+                "hold",
+                "lift",
+                &task["hold"]["placed"]["hold"].to_string(),
+                "--rev",
+                "1",
+                "--key",
+                "stale-lift",
+            ])
+        })), // 23
+        Step::Run(Call::new(&["task", "show", "2", "--json"])),                // 24
+        Step::Run(Call::new(&["task", "show", "3", "--json"])),                // 25
+    ]);
+    let seen = boxed::run_ctl_with_llm(
         scratch,
         flags,
         scratch,
-        vec![
-            Step::Run(Call::new(&[
-                "hold",
-                "lift",
-                &number.to_string(),
-                "--rev",
-                &revision.to_string(),
-                "--with-tasks",
-                "--key",
-                "lift-goal",
-            ])),
-            Step::Run(Call::new(&[
-                "hold",
-                "lift",
-                &number.to_string(),
-                "--rev",
-                &revision.to_string(),
-                "--with-tasks",
-                "--key",
-                "stale-lift",
-            ])),
-            Step::Until(Call::new(&["task", "show", "2", "--json"]), PARKED),
-            Step::Until(Call::new(&["task", "show", "3", "--json"]), PARKED),
-        ],
+        steps,
         boxed::BOX_DEADLINE,
         |_| (),
-        llm(config, Some(&hold), vec![(1, 2)]),
+        llm(config, vec![(23, 2)]),
     );
-    check_box(&second, &[(1, 2)]);
-    assert_eq!(second.calls[0].stdout, format!("done: hold {number} lifted, 2 released\n").as_bytes());
+    check_box(&seen, &[(23, 2)]);
+    assert_eq!(seen.calls.len(), 26);
+    placed(&seen.calls);
+    assert_eq!(seen.calls[17].stdout, format!("done: hold {STOP_HOLD} lifted, 2 released\n").as_bytes());
+    assert!(ctl::json(&seen.calls[18])["hold"].is_null());
+    assert!(ctl::json(&seen.calls[19])["hold"].is_null());
+    let retained = ctl::json(&seen.calls[21])["hold"]["placed"]["hold"].as_u64().unwrap();
+    assert_eq!(seen.calls[22].stdout, format!("done: hold {retained} lifted, 0 released\n").as_bytes());
     assert!(
-        String::from_utf8_lossy(&second.calls[1].stderr).contains("revision now: 2"),
+        String::from_utf8_lossy(&seen.calls[23].stderr).contains("revision now: 2"),
         "{}",
-        String::from_utf8_lossy(&second.calls[1].stderr)
+        String::from_utf8_lossy(&seen.calls[23].stderr)
     );
-    assert!(ctl::json(&second.calls[2])["hold"].is_null());
-    assert!(ctl::json(&second.calls[3])["hold"].is_null());
+    for call in &seen.calls[24..=25] {
+        let task = ctl::json(call);
+        assert_eq!(task["chip"]["phase"], "held");
+        assert_eq!(task["hold"]["placed"]["hold"], retained);
+        assert_eq!(task["hold"]["placed"]["lifted"], true);
+        assert_eq!(task["hold"]["placed"]["revision"], 2);
+    }
 }

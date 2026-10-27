@@ -244,20 +244,30 @@ mod tests {
             panic!("the deferred load is issued when room returns")
         };
         assert!(after.is_none());
-        assert!(matches!(range, Range::Core(crate::CoreRange::Notes(jig_domain_notes::Range::Lines { scope: jig_domain_notes::Scope::Deployment, after: None }))));
-        assert!(matches!(domain.archive_reads.get(skein_lib::Id::from_token(waiter)), Some(Some(Read::Notes { owner })) if *owner == Token::new(1)));
+        assert!(matches!(
+            range,
+            Range::Core(crate::CoreRange::Notes(jig_domain_notes::Range::Lines {
+                scope: jig_domain_notes::Scope::Deployment,
+                after: None
+            }))
+        ));
+        assert!(
+            matches!(domain.archive_reads.get(skein_lib::Id::from_token(waiter)), Some(Some(Read::Notes { owner })) if *owner == Token::new(1))
+        );
         assert!(domain.work.is_empty());
     }
     fn delivery(domain: &mut Domain, limits: &Limits, decision: Decision) -> Delivery {
-        crate::decision::accept_pending(&mut domain.journal, &mut domain.core.counters, &limits.journal, decision).unwrap();
+        crate::decision::accept_pending(&mut domain.journal, &mut domain.core.counters, &limits.journal, decision)
+            .unwrap();
         while let Some(output) = crate::decision::commit(&mut domain.journal, &limits.journal) {
             let crate::decision::JournalOutput::Commit { number, .. } = output else { panic!("store commit") };
             crate::decision::committed(&mut domain.journal, number);
         }
         let mut out = skein_lib::Queue::with_capacity(1);
         crate::decision::resume(&mut domain.journal, &mut out);
-        let Some(crate::decision::JournalOutput::Deliver(delivery)) = out.pop() else { panic!("one deferred delivery") };
+        let Some(crate::decision::JournalOutput::Deliver(delivery)) = out.pop() else {
+            panic!("one deferred delivery")
+        };
         delivery
     }
-
 }
