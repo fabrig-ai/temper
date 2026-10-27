@@ -27,10 +27,12 @@ mod gates;
 mod held;
 pub mod items;
 mod judge;
+mod landing;
 mod limits;
 mod panel;
 pub mod purpose;
 mod reconcile;
+pub mod runs;
 pub use reconcile::{RecordKind, Unresolved};
 pub mod resources;
 mod settle;
@@ -85,12 +87,12 @@ pub enum Recovery {
 #[must_use]
 pub const fn effect_shape(kind: u16) -> Option<(EffectForm, Recovery)> {
     match kind {
-        2 | 11 => Some((EffectForm::Transition, Recovery::Unrecoverable)),
+        2 | 11 | 17 => Some((EffectForm::Transition, Recovery::Unrecoverable)),
         4 => Some((EffectForm::Transition, Recovery::Conditional)),
         3 => Some((EffectForm::Creation, Recovery::Conditional)),
-        5 | 7 | 8 | 9 => Some((EffectForm::Creation, Recovery::Unrecoverable)),
+        5 | 7 | 8 | 9 | 16 => Some((EffectForm::Creation, Recovery::Unrecoverable)),
         6 | 10 | 12..=15 => Some((EffectForm::Set, Recovery::Idempotent)),
-        0 | 1 | 16..=u16::MAX => None,
+        0 | 1 | 18..=u16::MAX => None,
     }
 }
 
@@ -187,7 +189,7 @@ pub fn effect_access(repository: &Repository, what: &What, kind: u16) -> Access 
         6 => repository.kinds.status,
         7 => repository.kinds.comment,
         8 | 13 => repository.kinds.issue,
-        9 | 15 => repository.kinds.branch,
+        9 | 15..=17 => repository.kinds.branch,
         _ => false,
     };
     let shared = match what {
@@ -207,6 +209,8 @@ pub fn effect_access(repository: &Repository, what: &What, kind: u16) -> Access 
 #[must_use]
 pub fn stored_key(row: &Stored) -> Key {
     match row {
+        Stored::Landing(row) => Key::Landing(row.landing.task),
+        Stored::Receipt { key, .. } => Key::Receipt(key.clone()),
         Stored::Call { key, .. } => Key::Call(*key),
         Stored::Repository(row) => Key::Repository(row.provider),
         Stored::Hold(row) => Key::Hold(row.name.clone()),
@@ -300,6 +304,8 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
         }
     }
     match record {
+        Stored::Landing(row) => landing::row_bytes(row),
+        Stored::Receipt { key, receipt } => landing::receipt_bytes(key, receipt),
         Stored::Call { answer, .. } => match answer {
             CallPayload::Effect { .. } | CallPayload::Refused(_) => Some(0),
             CallPayload::Read(answer) => match answer.as_ref() {

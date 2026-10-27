@@ -39,7 +39,15 @@ pub struct Limits {
     /// Durable member address bindings (protocol/sign-in.md, 5).
     pub bindings: u32,
     pub collaborators: u32,
+    /// Live landing procedure rows (domain/landing.md, 12).
     pub landings: u32,
+    pub landing_members: u32,
+    pub gates: u32,
+    pub receipts_per_gate: u32,
+    pub ignored_paths: u32,
+    pub key_entries: u32,
+    pub key_path_bytes: u32,
+    pub trees_in_flight: u32,
     /// Project judge tables retained beside committed policy.
     pub judge_projects: u32,
     /// Criteria in each deployment or project judge table.
@@ -97,7 +105,13 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
     // retirement's Keep each fit output (Keep <= client.max_out <= output),
     // so 2 * output covers both. Other events use that second cohort for
     // panel marks instead; application answers and demo acts are separate.
-    l.output.checked_mul(2)?.checked_add(l.applications)?.checked_add(demo_act_bound(l)?.checked_mul(2)?)?;
+    l.output
+        .checked_mul(2)?
+        .checked_add(l.applications)?
+        .checked_add(demo_act_bound(l)?.checked_mul(2)?)?
+        .checked_add(l.landings)?
+        .checked_add(l.landing_members)?
+        .checked_add(l.entries)?;
     let names =
         u64::from(l.tasks).checked_mul(u64::from(l.resources_per_task))?.checked_mul(u64::from(l.name_bytes))?;
     let goal_tasks = u64::from(l.subscriptions).checked_mul(u64::from(l.issue_policy.plan_items))?.checked_mul(8)?;
@@ -174,8 +188,10 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(
             u64::from(l.tasks).checked_mul(u64::from(l.client.op_bytes).checked_add(u64::from(l.name_bytes))?)?,
         )?
-        .checked_add(Map::<skein_forge::api::Commit, u64>::worst_case(l.landings)?)?
-        .checked_add(Map::<skein_lib::Token, crate::domain::PendingLanding>::worst_case(l.landings)?)?
+        .checked_add(Map::<skein_forge::api::Commit, u64>::worst_case(l.landings.max(l.changes))?)?
+        .checked_add(Map::<skein_lib::Token, crate::domain::PendingLanding>::worst_case(
+            l.landings.max(l.client.resources),
+        )?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLost>::worst_case(l.holds)?)?
         .checked_add(Map::<u64, crate::ChangeRow>::worst_case(l.changes)?)?
         .checked_add(
@@ -223,7 +239,8 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(names)?
         .checked_add(subscribers)?
         .checked_add(goal_tasks)?
-        .checked_add(judges)
+        .checked_add(judges)?
+        .checked_add(crate::landing::worst_case(l)?)
 }
 
 use alloc::boxed::Box;
