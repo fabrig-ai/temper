@@ -3415,13 +3415,25 @@ fn a_policy_change_beyond_the_deployments_rules_is_refused() {
 }
 
 #[test]
-fn a_policy_change_survives_a_restart() {
+fn a_project_spend_cut_survives_restart_and_funds_the_next_chat() {
     let mut driver =
         Driver::configured(Store::new(), [administration_config(9413), administration_config(9413)], &limits());
     driver.settle();
     driver.sign_in();
     driver.settle();
     let session = driver.session();
+    let period =
+        Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ledger(tasks::Funder::Period { project: 1, period: 1 })));
+    let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ledger(before)))) =
+        driver.store.rows.get(&period)
+    else {
+        panic!("the open period's ledger")
+    };
+    let mut resized = *before;
+    let used = before.numbers.reserved + before.numbers.spent + before.numbers.spent_below;
+    resized.numbers.budget = 800.max(used);
+    assert_eq!(before.numbers.budget, 1000);
+    let expected = Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ledger(resized)));
     driver.send(engine::Event::Party(engine::PartyInput::Ask {
         models: Box::new([]),
         reply_to: ReplyTo::new(Token::new(9414)),
@@ -3432,9 +3444,12 @@ fn a_policy_change_survives_a_restart() {
     driver.settle();
     assert!(matches!(driver.store.rows.get(&Key::Core(jig_domain_core::Key::People(people::Key::Policy(1)))),
         Some(Record::Core(jig_domain_core::Record::People(people::Stored::Policy { value, .. }))) if value.period_spend == 800));
+    assert!(replied(&driver, &people::Outcome::PolicyChanged { project: 1 }));
+    assert_eq!(driver.store.rows.get(&period), Some(&expected), "the cut resizes the open period");
     let mut restarted =
         Driver::configured(driver.store, [administration_config(9413), administration_config(9413)], &limits());
     restarted.settle();
+    assert_eq!(restarted.store.rows.get(&period), Some(&expected), "restart keeps the resized ledger");
     restarted.send(engine::Event::Party(engine::PartyInput::Ask {
         models: Box::new([]),
         reply_to: ReplyTo::new(Token::new(9415)),
@@ -3442,11 +3457,13 @@ fn a_policy_change_survives_a_restart() {
         key: [46; 16],
         ask: restarted.chat_ask(1, b"later"),
     }));
-    restarted.settle();
-    // Authority refusals carry what is lacking (jig b7bdd9e8): the period's
-    // budget is past the restored project spend.
-    let lacking = people::Lack::Budget { needs: 1000, left: 800 };
-    assert!(replied(&restarted, &people::Outcome::Refused(people::Refusal::Authority { lacking, proposable: None })));
+    // The made chat waits for a worker, leaving the fleet's deadline armed.
+    restarted.pump();
+    assert!(replied(
+        &restarted,
+        &people::Outcome::Created { first: 1, last: 1, given: Some(people::Given { task: 1, amount: 500 }) }
+    ));
+    assert_eq!(live(&restarted, 1).funder, tasks::Funder::Pool { project: 1, person: 1, period: 1 });
 }
 
 #[test]
