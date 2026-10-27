@@ -134,6 +134,21 @@ impl World {
             false,
             4,
             true,
+            false,
+        )
+    }
+    #[must_use]
+    pub fn tiered() -> World {
+        Self::configured(
+            11,
+            LIMITS.facts,
+            false,
+            Some(skein_forge_client::Writer { forge: REPO.forge, author: 1 }),
+            None,
+            false,
+            4,
+            false,
+            true,
         )
     }
     pub fn project_landing(
@@ -186,6 +201,7 @@ impl World {
             false,
             4,
             false,
+            false,
         )
     }
 
@@ -201,6 +217,7 @@ impl World {
             signatures,
             4,
             false,
+            false,
         )
     }
 
@@ -214,6 +231,7 @@ impl World {
             None,
             false,
             branches,
+            false,
             false,
         )
     }
@@ -234,7 +252,11 @@ impl World {
         self.signatures = required;
     }
 
-    #[expect(clippy::too_many_arguments, reason = "one shared fake fixture with independent scenario switches")]
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::fn_params_excessive_bools,
+        reason = "one shared fake fixture with independent scenario switches"
+    )]
     fn configured(
         seed: u64,
         facts: u32,
@@ -244,6 +266,7 @@ impl World {
         signatures: bool,
         branches: u32,
         turn: bool,
+        tier: bool,
     ) -> World {
         let limits = top::Limits {
             landings: if turn { 2 } else { LIMITS.landings },
@@ -253,8 +276,8 @@ impl World {
         };
         let mut config = fake_config();
         config.limits.branches = branches;
-        config.limits.workflows = u32::from(turn);
-        config.limits.workflow_runs = if turn { 4 } else { 0 };
+        config.limits.workflows = u32::from(turn) + u32::from(tier);
+        config.limits.workflow_runs = if turn || tier { 4 } else { 0 };
         config.limits.bypassing_users = protection
             .as_ref()
             .map_or(0, |rule| u32::try_from(rule.bypassing_users.len()).expect("fixture bypass list"));
@@ -265,10 +288,20 @@ impl World {
             raw::Setup {
                 workflows: if turn {
                     Box::new([raw::Workflow {
-                        file: Box::from(b"gate.yml".as_slice()),
-                        jobs: Box::new([Box::from(b"test".as_slice())]),
+                        file: b"gate.yml".as_slice().into(),
+                        jobs: Box::new([b"test".as_slice().into()]),
                         latency_min: Duration::from_secs(2),
                         latency_max: Duration::from_secs(2),
+                        silent: 0,
+                        passes: 1000,
+                        cue: None,
+                    }])
+                } else if tier {
+                    Box::new([raw::Workflow {
+                        file: b"browser.yml".as_slice().into(),
+                        jobs: Box::new([b"browser".as_slice().into()]),
+                        latency_min: Duration::from_secs(90),
+                        latency_max: Duration::from_secs(90),
                         silent: 0,
                         passes: 1000,
                         cue: None,
@@ -338,7 +371,7 @@ impl World {
     /// Construct and restart without any configured writer.
     #[must_use]
     pub fn writerless(seed: u64) -> World {
-        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false)
+        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false, false)
     }
     pub fn give_writer(&mut self, writer: skein_forge_client::Writer) -> bool {
         let accepted = top::writer(&mut self.top, &self.env, writer, &mut self.top_out);
@@ -372,6 +405,7 @@ impl World {
             None,
             false,
             4,
+            false,
             false,
         )
     }
@@ -651,6 +685,10 @@ impl World {
             ),
             raw::Answer::Pushed(raw::Pushed::Pushed)
         );
+    }
+    #[must_use]
+    pub fn has_branch(&self, branch: &[u8]) -> bool {
+        self.forge.inspect(&self.forge_env.limits, b"org/repo", &raw::Read::Branch { branch: branch.into() }).is_ok()
     }
     #[must_use]
     pub fn branch(&self, branch: &[u8]) -> u64 {
