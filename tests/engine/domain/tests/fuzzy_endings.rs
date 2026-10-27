@@ -187,7 +187,7 @@ fn drawn_root_stories_reach_every_durable_ending_and_held_route() {
                 assert!(
                     matches!(driver.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(assignment.task)))),
                         Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))))
-                        if matches!(row.phase, tasks::Phase::Held { why: tasks::Hold::StoppedBy { party: 1 }, .. })
+                        if matches!(row.phase, tasks::Phase::Held { why: tasks::Hold::Placed { .. }, .. })
                     ),
                     "stopped chat held durably, seed {seed}"
                 );

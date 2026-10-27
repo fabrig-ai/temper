@@ -12,7 +12,6 @@ const FIRST_CALL: u64 = 61;
 const SECOND_CALL: u64 = 62;
 const STALE_CALL: u64 = 63;
 const STOP_REPLY: u64 = 123;
-const OWNER: u64 = 1;
 
 fn settled(story: Story) -> World {
     let mut world = World::new(Settings::calm(9100, story));
@@ -459,19 +458,28 @@ fn a_release_naming_an_old_hold_revision_is_answered_moved() {
     let (mut driver, parent, child) = revision_delegate();
     stop_delegate(&mut driver, child, [41; 16]);
     let first = driver.task(child).expect("held delegate").revisions.hold;
-    tool_call(&mut driver, &parent, FIRST_CALL, Tool::Release { target: child, revision: first, again: None });
+    // The stopping person owns the placed hold; their release permits the
+    // second stop, while the stale agent call still tests revision checking.
+    driver.send(temper_engine_domain::Event::Party(temper_engine_domain::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: skein_lib::ReplyTo::new(Token::new(STOP_REPLY)),
+        sign_in: driver.session(),
+        key: [43; 16],
+        ask: people::Ask::Release { project: 1, task: child, revision: first, again: None },
+    }));
+    for _ in 0..60 {
+        driver.advance(true);
+    }
     stop_delegate(&mut driver, child, [42; 16]);
     let before = driver.task(child).expect("held delegate").clone();
     assert!(before.revisions.hold > first);
+    let tasks::Phase::Held { why: tasks::Hold::Placed { hold }, .. } = before.phase else { panic!("placed stop") };
     tool_call(&mut driver, &parent, STALE_CALL, Tool::Release { target: child, revision: first, again: None });
     assert_eq!(
         driver.answered(STALE_CALL),
         Some(&CallAnswer::Moved {
             task: child,
-            now: people::Moved::Hold {
-                revision: before.revisions.hold,
-                reason: people::HoldReason::StoppedBy { party: OWNER },
-            },
+            now: people::Moved::Hold { revision: before.revisions.hold, reason: people::HoldReason::Placed { hold } },
         })
     );
     assert_eq!(driver.task(child), Some(&before));
