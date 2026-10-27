@@ -27,6 +27,17 @@ pub(super) fn deadline(wall: Wall, out: &mut Text) {
     super::utc(wall, out);
     out.put(b" UTC");
 }
+pub(super) fn minute(wall: Wall, out: &mut Text) {
+    let (year, month, day) = civil(wall);
+    out.number(year);
+    out.put(b"-");
+    two_digits(month, out);
+    out.put(b"-");
+    two_digits(day, out);
+    out.put(b"T");
+    super::utc(wall, out);
+    out.put(b"Z");
+}
 fn two_digits(number: u64, out: &mut Text) {
     if number < 10 {
         out.put(b"0");

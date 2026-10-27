@@ -1,0 +1,7 @@
+project show PROJECT
+  PROJECT (project): a project's name or number; required. The project
+Read a project, its roles and spends, its open period and each party's pool
+Prints: The project, its homes and spend per period, each role, its open period and each pool
+--json: the record project.
+Key: none.
+Amounts are in the deployment's unit. Spent includes what ended tasks spent. A missing next start or open period says so.
