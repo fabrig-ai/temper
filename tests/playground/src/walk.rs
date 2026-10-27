@@ -6,7 +6,7 @@ use skein_fake_person::{Doing, Next, Person, Step, TreeFace, Why};
 use skein_lib::{Duration, Time, Wall};
 use skein_playground::native::Native;
 use skein_ui_web::{
-    bridge::{Output, Start},
+    bridge::{Output, Stamp, Start},
     mapping::Primary,
     page::Page,
     platform::{
@@ -67,6 +67,13 @@ impl Walk {
             }
         }
         assert!(ended, "the welcome's open stream ends on close");
+    }
+
+    /// The world's completed steps and current instant at this point in the visit.
+    #[must_use]
+    pub fn stamp(&self) -> Stamp {
+        let world = self.native.slices().world();
+        Stamp { step: world.steps(), instant: world.now() }
     }
 
     /// The displayed tree, retained for a failed walk's diagnostics.
