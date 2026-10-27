@@ -2546,6 +2546,7 @@ dependencies = [
  "temper-client-protocol-wire",
  "temper-client-shell-terminal",
  "temper-docs",
+ "temper-settings-form",
 ]
 
 [[package]]
@@ -2802,14 +2803,18 @@ dependencies = [
 name = "temper-engine-smith"
 version = "0.0.0"
 dependencies = [
+ "jig-client",
+ "jig-client-protocol-wire",
  "jig-domain-accounts",
  "jig-domain-authority",
  "jig-domain-brief",
+ "jig-domain-core",
  "jig-domain-fleet",
  "jig-domain-host",
  "jig-domain-notes",
  "jig-domain-people",
  "jig-domain-tasks",
+ "jig-protocol-engine-clients",
  "skein-forge",
  "skein-forge-client",
  "skein-json",
@@ -2817,9 +2822,11 @@ dependencies = [
  "smith-domain",
  "smith-domain-run",
  "smith-domain-session",
+ "temper-client-tools",
  "temper-docs",
  "temper-engine-domain",
  "temper-engine-domain-forge",
+ "temper-settings-form",
 ]
 
 [[package]]
@@ -3196,6 +3203,16 @@ dependencies = [
  "temper-worker-domain-checkout",
  "temper-worker-protocol-git",
  "temper-worker-protocol-git-world",
+]
+
+[[package]]
+name = "temper-settings-form"
+version = "0.0.0"
+dependencies = [
+ "jig-client-protocol-wire",
+ "skein-codec",
+ "skein-json",
+ "skein-lib",
 ]
 
 [[package]]
