@@ -380,7 +380,7 @@ fn issue_fields_use_their_domain_limits_at_and_past_each_bound() {
     for (name, field, limit) in [
         ("title", 0_u8, 128_usize),
         ("goal", 1, 512),
-        ("plan item", 2, 256),
+        ("plan item", 2, 512),
         ("milestone", 3, 256),
         ("finished", 4, 256),
     ] {

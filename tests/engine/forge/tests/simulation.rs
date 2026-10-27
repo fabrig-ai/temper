@@ -798,6 +798,7 @@ fn a_change_produced_opened_checked_queued_and_landed() {
                 | top::Request::Taken { .. }
                 | top::Request::Refused { .. }
                 | top::Request::Outcome { .. }
+                | top::Request::ProjectionOutcome { .. }
                 | top::Request::NotMade { .. }
                 | top::Request::ContinueRelease { .. }
                 | top::Request::EffectsSettled { .. }
@@ -856,7 +857,7 @@ fn a_goal_issue_is_created_only_after_its_outbox_commit() {
     assert_eq!(world.writes(), 1);
     let mut made = false;
     for event in world.seen() {
-        if let top::Request::Outcome { entry: 1, outcome: skein_forge_client::Outcome::Made { .. }, .. } = event {
+        if let top::Request::ProjectionOutcome { entry: 1, outcome: skein_forge_client::Outcome::Made { .. } } = event {
             made = true;
         }
     }

@@ -62,3 +62,24 @@ fn demo_row_sizes_fit_the_existing_application_ceiling() {
         assert_eq!(records::row(&key, &value, &bounds), Ok(row));
     }
 }
+
+#[test]
+fn plan_text_uses_the_body_bound_without_changing_the_format() {
+    // Eight items grow from 256 bytes of text each to 512 bytes each.
+    const EXTRA_PLAN_BYTES: u64 = 2048;
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let after = *bounds.limits();
+    let before = crate::v10::Limits { plan_item_text: fixtures::LIMITS.issue_policy.comment_bytes, ..after };
+    let old_view = crate::v10::GoalView::worst_case_bytes(&before).expect("old view size");
+    let new_view = crate::v10::GoalView::worst_case_bytes(&after).expect("new view size");
+    assert_eq!(new_view - old_view, EXTRA_PLAN_BYTES);
+    // The schema's fixed framing plus the measured view; ChangeRow still dominates Row.
+    assert_eq!(old_view, 5238);
+    assert_eq!(new_view, 7286);
+    assert_eq!(crate::v10::IssueRow::worst_case_bytes(&before), Some(5657));
+    assert_eq!(crate::v10::IssueRow::worst_case_bytes(&after), Some(7705));
+    assert_eq!(crate::v10::IssueRow::worst_case_heap(&before), Some(5888));
+    assert_eq!(crate::v10::IssueRow::worst_case_heap(&after), Some(7936));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(35_403));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(35_403));
+}

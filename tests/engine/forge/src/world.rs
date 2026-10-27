@@ -681,6 +681,7 @@ impl World {
                 | top::Request::Taken { .. }
                 | top::Request::Refused { .. }
                 | top::Request::Outcome { .. }
+                | top::Request::ProjectionOutcome { .. }
                 | top::Request::NotMade { .. }
                 | top::Request::ContinueRelease { .. }
                 | top::Request::EffectsSettled { .. }

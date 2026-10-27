@@ -174,7 +174,7 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         binding_subject: 255,
         application_adopted_owner: forge.name_bytes,
         application_adopted_name: forge.name_bytes,
-        plan_item_text: forge.issue_policy.comment_bytes,
+        plan_item_text: forge.issue_policy.body_bytes,
         milestone_text: forge.issue_policy.comment_bytes,
         goal_view_title: forge.issue_policy.title_bytes,
         goal_view_goal_text: forge.issue_policy.body_bytes,

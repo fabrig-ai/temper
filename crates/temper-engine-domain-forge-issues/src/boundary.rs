@@ -136,7 +136,7 @@ pub enum Decision {
     Wait(Wall),
     /// Projection matches the committed goal facts.
     None,
-    /// Input or projection exceeded its bounds, or history contradicted itself.
+    /// History contradicted itself.
     Hold,
 }
 

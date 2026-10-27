@@ -1,6 +1,6 @@
 //! Projection cells, intervals, bounds and keyed history.
 use alloc::boxed::Box;
-use skein_lib::{Duration, Wall, bytes::copy_of};
+use skein_lib::{Duration, List, Wall, bytes::copy_of};
 
 use crate::{Decision, Effect, GoalView, Key, Limits, Milestone, MilestoneKey, PlanItem, Projected, project};
 
@@ -167,14 +167,8 @@ fn changed_final_body_is_written_before_close() {
 }
 
 #[test]
-fn oversized_and_contradictory_history_is_held_without_mutation() {
+fn contradictory_history_is_held_without_mutation() {
     let old = project(&goal(), &Projected::default(), at(0), &LIMITS).projected;
-    let mut oversized = goal();
-    oversized.plan = Box::new([PlanItem { text: "A task that is far too long".into(), phase: crate::Phase::Waiting }]);
-    let tight = Limits { body_bytes: 4, ..LIMITS };
-    let held = project(&oversized, &old, at(60), &tight);
-    assert_eq!(held.decision, Decision::Hold);
-    assert_eq!(held.projected, old);
     let mut duplicate = goal();
     duplicate.milestones = Box::new([
         Milestone { key: MilestoneKey::PlanAccepted, text: "accepted".into() },
@@ -207,4 +201,230 @@ fn projection_steps_repeat_from_identical_snapshots() {
             }
         }
     }
+}
+
+// The deployed box's issue policy and client operation bound.
+const BODY_BYTES: u32 = 512;
+const OP_BYTES: u32 = 512;
+const TITLE_BYTES: u32 = 128;
+const COMMENT_BYTES: u32 = 256;
+const PLAN_ITEMS: u32 = 8;
+const MILESTONES: u32 = 8;
+const LONG_GOAL_BYTES: usize = 300;
+const LONG_ITEM_BYTES: usize = 200;
+const SHORT_ITEM_BYTES: usize = 10;
+const HISTORY_WORDS: [&str; 10] = [
+    "Milestone 0",
+    "Milestone 1",
+    "Milestone 2",
+    "Milestone 3",
+    "Milestone 4",
+    "Milestone 5",
+    "Milestone 6",
+    "Milestone 7",
+    "Milestone 8",
+    "Milestone 9",
+];
+const BODY_LINES: u32 = PLAN_ITEMS + 2; // The goal, state, and one line per item.
+const INDIVIDUAL_COMMENTS: usize = 6; // Eight slots reserve the count and Finished.
+const BOX_LIMITS: Limits = Limits {
+    body_bytes: BODY_BYTES,
+    title_bytes: TITLE_BYTES,
+    comment_bytes: COMMENT_BYTES,
+    plan_items: PLAN_ITEMS,
+    milestones: MILESTONES,
+    ..LIMITS
+};
+
+fn long_goal(short_items: usize) -> GoalView {
+    let mut view = goal();
+    view.goal_text = "g".repeat(LONG_GOAL_BYTES).into_boxed_str();
+    let mut plan = List::with_capacity(PLAN_ITEMS);
+    for index in 0..PLAN_ITEMS {
+        let bytes =
+            if usize::try_from(index).expect("small index") < short_items { SHORT_ITEM_BYTES } else { LONG_ITEM_BYTES };
+        plan.push(PlanItem { text: "t".repeat(bytes).into_boxed_str(), phase: crate::Phase::Waiting })
+            .expect("plan capacity");
+    }
+    view.plan = plan.into_boxed();
+    view
+}
+
+#[expect(clippy::disallowed_methods, reason = "the assertion inspects the projection's rendered UTF-8 body")]
+fn opened_body(view: &GoalView, limits: &Limits) -> Box<str> {
+    let Decision::Effect(Effect::Open { body, .. }) = project(view, &Projected::default(), at(0), limits).decision
+    else {
+        panic!("projection opens");
+    };
+    Box::from(core::str::from_utf8(&body).expect("UTF-8 body"))
+}
+
+fn body_lines(body: &str) -> Box<[&str]> {
+    let mut lines = List::with_capacity(BODY_LINES);
+    for line in body.lines() {
+        lines.push(line).expect("body line capacity");
+    }
+    lines.into_boxed()
+}
+
+#[test]
+fn a_long_goal_and_nine_long_items_are_cut_to_the_body() {
+    let body = opened_body(&long_goal(0), &BOX_LIMITS);
+    assert!(body.len() <= usize::try_from(BODY_BYTES).expect("box limit"));
+    let lines = body_lines(&body);
+    assert!(lines[0].ends_with('…'));
+    assert_eq!(lines[1], "State: waiting");
+    assert_eq!(lines.len(), usize::try_from(PLAN_ITEMS).expect("box limit") + 2);
+    for line in &lines[2..] {
+        assert!(line.starts_with("- [ ] "));
+        assert!(line.ends_with("… (waiting)"));
+    }
+}
+
+#[test]
+fn short_items_leave_their_room_to_long_ones() {
+    const SHORT_ITEMS: usize = 2;
+    // Skeleton 152 bytes; goal gets 180 of the remaining 360, two items
+    // use 10 each, leaving 160: four shares of 27 and two of 26.
+    let body = opened_body(&long_goal(SHORT_ITEMS), &BOX_LIMITS);
+    let lines = body_lines(&body);
+    assert_eq!(&lines[2..4], ["- [ ] tttttttttt (waiting)", "- [ ] tttttttttt (waiting)"]);
+    let mut lengths = List::with_capacity(PLAN_ITEMS);
+    for line in &lines[4..] {
+        lengths.push(line.len() - "- [ ]  (waiting)".len()).expect("plan capacity");
+        assert!(line.ends_with("… (waiting)"));
+    }
+    assert_eq!(lengths.as_slice(), [27, 27, 27, 27, 26, 26]);
+    assert_eq!(body.len(), usize::try_from(BODY_BYTES).expect("box limit"));
+}
+
+#[test]
+fn a_body_that_fits_is_rendered_as_before() {
+    assert_eq!(
+        opened_body(&goal(), &BOX_LIMITS).as_ref(),
+        "A goal with a plan.\nState: waiting\n- [ ] First step (waiting)\n"
+    );
+}
+
+#[test]
+fn the_edit_fits_the_operation_with_its_title() {
+    const EDIT_TITLE_BYTES: usize = 120;
+    let mut view = long_goal(0);
+    view.title = "s".repeat(EDIT_TITLE_BYTES).into_boxed_str();
+    let policy = Limits {
+        body_bytes: BODY_BYTES.min(OP_BYTES - u32::try_from(EDIT_TITLE_BYTES).expect("fixture title size")),
+        ..BOX_LIMITS
+    };
+    let before = project(&goal(), &Projected::default(), at(0), &policy).projected;
+    let Decision::Effect(Effect::Body { title, body, .. }) = project(&view, &before, at(60), &policy).decision else {
+        panic!("changed body is due");
+    };
+    assert!(title.len() + body.len() <= usize::try_from(OP_BYTES).expect("box limit"));
+}
+
+fn history_goal(finished: bool) -> GoalView {
+    let mut view = goal();
+    let mut milestones = List::with_capacity(u32::try_from(HISTORY_WORDS.len()).expect("fixture history"));
+    for (number, words) in HISTORY_WORDS.into_iter().enumerate() {
+        milestones
+            .push(Milestone {
+                key: MilestoneKey::Revision(u64::try_from(number).expect("fixture position")),
+                text: Box::from(words),
+            })
+            .expect("history capacity");
+    }
+    view.milestones = milestones.into_boxed();
+    if finished {
+        view.finished = Some("Goal finished".into());
+    }
+    view
+}
+
+#[test]
+fn milestones_past_the_bound_are_counted_in_one_comment_before_finished() {
+    let live = crate::gather(None, history_goal(false), &BOX_LIMITS).expect("bounded history");
+    let mut state = project(&live, &Projected::default(), at(0), &BOX_LIMITS).projected;
+    let mut comments = List::with_capacity(MILESTONES);
+    for _ in 0..INDIVIDUAL_COMMENTS {
+        let step = project(&live, &state, at(0), &BOX_LIMITS);
+        let Decision::Effect(Effect::Comment { body, .. }) = step.decision else {
+            panic!("prefix comment");
+        };
+        comments.push(body).expect("comment capacity");
+        state = step.projected;
+    }
+    assert_eq!(project(&live, &state, at(0), &BOX_LIMITS).decision, Decision::None);
+    let finished = crate::gather(Some(&live), history_goal(true), &BOX_LIMITS).expect("bounded finish");
+    assert_eq!(finished.milestones.len(), INDIVIDUAL_COMMENTS + 1);
+    assert_eq!(crate::gather(Some(&finished), finished.clone(), &BOX_LIMITS), Some(finished.clone()));
+    for _ in 0_u32..2 {
+        let step = project(&finished, &state, at(0), &BOX_LIMITS);
+        let Decision::Effect(Effect::Comment { body, .. }) = step.decision else {
+            panic!("finishing comments");
+        };
+        comments.push(body).expect("comment capacity");
+        state = step.projected;
+    }
+    assert_eq!(comments.len(), MILESTONES);
+    for (comment, words) in comments.iter().zip(HISTORY_WORDS).take(INDIVIDUAL_COMMENTS) {
+        assert_eq!(comment.as_ref(), words);
+    }
+    assert_eq!(
+        comments.get(u32::try_from(INDIVIDUAL_COMMENTS).expect("prefix")).expect("count").as_ref(),
+        "4 more milestones; the last: Milestone 9"
+    );
+    assert_eq!(comments.last().expect("Finished").as_ref(), "Goal finished");
+    assert_eq!(state.milestones.last(), Some(&MilestoneKey::Finished));
+    let closed = project(&finished, &state, at(0), &BOX_LIMITS);
+    assert_eq!(
+        closed.decision,
+        Decision::Effect(Effect::Close { goal: finished.goal, repository: finished.repository, key: Key::Close })
+    );
+    assert_eq!(project(&finished, &closed.projected, at(0), &BOX_LIMITS).decision, Decision::None);
+}
+
+#[test]
+fn a_long_milestone_is_cut_to_a_comment() {
+    const LONG_COMMENT_BYTES: usize = 400;
+    let mut view = goal();
+    view.milestones = Box::new([Milestone {
+        key: MilestoneKey::PlanAccepted,
+        text: "λ".repeat(LONG_COMMENT_BYTES / 2).into_boxed_str(),
+    }]);
+    let before = project(&view, &Projected::default(), at(0), &BOX_LIMITS).projected;
+    let Decision::Effect(Effect::Comment { body, .. }) = project(&view, &before, at(0), &BOX_LIMITS).decision else {
+        panic!("milestone comment");
+    };
+    assert!(body.len() <= usize::try_from(COMMENT_BYTES).expect("box limit"));
+    assert!(body.ends_with('…'));
+}
+
+#[test]
+fn a_title_is_cut_at_its_utf8_boundary() {
+    let mut view = goal();
+    view.title = "λ".repeat(usize::try_from(TITLE_BYTES).expect("box limit")).into_boxed_str();
+    let Decision::Effect(Effect::Open { title, .. }) =
+        project(&view, &Projected::default(), at(0), &BOX_LIMITS).decision
+    else {
+        panic!("issue opens");
+    };
+    assert_eq!(title.len(), 127); // 62 two-byte letters plus the three-byte marker.
+    assert!(title.ends_with('…'));
+}
+
+#[test]
+fn incremental_milestones_keep_the_count_across_empty_feeds() {
+    let mut prior = None;
+    for milestone in history_goal(false).milestones {
+        let mut next = goal();
+        next.milestones = Box::new([milestone]);
+        prior = crate::gather(prior.as_ref(), next, &BOX_LIMITS);
+    }
+    let prior = prior.expect("incremental history");
+    let mut finished = goal();
+    finished.finished = Some("Goal finished".into());
+    let gathered = crate::gather(Some(&prior), finished, &BOX_LIMITS).expect("finish without new milestones");
+    assert_eq!(gathered.milestones.len(), INDIVIDUAL_COMMENTS + 1);
+    assert_eq!(gathered.milestones.last().expect("count").text.as_ref(), "4 more milestones; the last: Milestone 9");
+    assert_eq!(gathered.milestones.last().expect("key").key, MilestoneKey::Revision(9));
 }

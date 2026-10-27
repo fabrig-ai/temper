@@ -851,11 +851,7 @@ pub(crate) struct RunWorkspace {
 }
 
 /// Translate committed tracked-task facts into one bounded issue projection.
-#[expect(
-    clippy::disallowed_methods,
-    clippy::wildcard_enum_match_arm,
-    reason = "projection converts already validated task text and selects current milestone kinds"
-)]
+#[expect(clippy::disallowed_methods, reason = "projection renders already validated task text")]
 pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_domain_core::ProjectionFeed) {
     goal_topics(domain, env, feed);
     let goal = &feed.goal;
@@ -870,23 +866,54 @@ pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_do
     };
     let provider = repository.provider;
     let Some(text) = core::str::from_utf8(&goal.words).ok() else {
-        domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal.number, why: tasks::Hold::Effects }));
+        fail_projection_feed(domain, provider, feed);
         return;
     };
     let title = text.lines().next().unwrap_or(text);
+    let bound = usize::try_from(env.limits.forge.issue_policy.plan_items).expect("u32 fits usize");
+    let children = feed.plan.iter().filter(|child| child.number != goal.number).count();
     let mut plan = List::with_capacity(env.limits.forge.issue_policy.plan_items);
+    let individual = if children > bound { bound.saturating_sub(1) } else { children };
+    let mut seen = 0usize;
+    let mut live = false;
     for child in &feed.plan {
         if child.number == goal.number {
             continue;
         }
-        let Some(words) = core::str::from_utf8(&child.words).ok() else { continue };
-        if plan.push(forge_issues::PlanItem { text: Box::from(words), phase: projection_phase(&child.phase) }).is_err()
-        {
-            domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal.number, why: tasks::Hold::Effects }));
+        let Some(words) = core::str::from_utf8(&child.words).ok() else {
+            fail_projection_feed(domain, provider, feed);
             return;
+        };
+        if seen < individual {
+            plan.push(forge_issues::PlanItem { text: Box::from(words), phase: projection_phase(&child.phase) })
+                .expect("bounded prefix");
+        } else {
+            match child.phase {
+                tasks::Phase::Ended(_) => {}
+                tasks::Phase::Waiting
+                | tasks::Phase::Active(_)
+                | tasks::Phase::Closing(_)
+                | tasks::Phase::Held { .. } => live = true,
+            }
         }
+        seen = seen.checked_add(1).expect("bounded plan");
     }
-    let mut milestones = List::with_capacity(env.limits.forge.issue_policy.milestones);
+    if children > bound && bound > 0 {
+        let count = children.checked_sub(individual).expect("folded children");
+        let digits = decimal(u64::try_from(count).expect("bounded plan"));
+        let mut words = List::with_capacity(31); // Twenty decimal digits and " more tasks".
+        for byte in digits.iter().chain(b" more tasks") {
+            words.push(*byte).expect("counted task line");
+        }
+        let words = words.into_boxed();
+        let words = Box::<str>::from(core::str::from_utf8(&words).expect("ASCII summary"));
+        plan.push(forge_issues::PlanItem {
+            text: words,
+            phase: if live { forge_issues::Phase::Active } else { forge_issues::Phase::Done },
+        })
+        .expect("last summary item");
+    }
+    let mut milestones = List::with_capacity(u32::try_from(feed.milestones.len()).expect("bounded feed"));
     for milestone in &feed.milestones {
         let kept = match &milestone.phase {
             Some(tasks::Phase::Ended(_) | tasks::Phase::Held { .. }) => true,
@@ -905,10 +932,7 @@ pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_do
         };
         let words = core::str::from_utf8(&milestone.words).unwrap_or("Task milestone");
         let words = if words.is_empty() { "Task milestone" } else { words };
-        if milestones.push(forge_issues::Milestone { key, text: Box::from(words) }).is_err() {
-            domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal.number, why: tasks::Hold::Effects }));
-            return;
-        }
+        milestones.push(forge_issues::Milestone { key, text: Box::from(words) }).expect("feed capacity");
     }
     let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return };
     domain.work.push(Work::Forge(forge::Event::Project {
@@ -922,14 +946,45 @@ pub(crate) fn project_goal(domain: &mut Domain, env: &Env<Limits>, feed: &jig_do
             goal_text: Box::from(text),
             plan: plan.into_boxed(),
             milestones: milestones.into_boxed(),
-            finished: match goal.phase {
-                tasks::Phase::Closing(_)
-                | tasks::Phase::Ended(_)
-                | tasks::Phase::Held { was: tasks::Was::Closing(_), .. } => Some(Box::from("Goal finished")),
-                _ => None,
-            },
+            finished: if feed.closing { Some(Box::from("Goal finished")) } else { None },
         },
     }));
+}
+
+fn fail_projection_feed(
+    domain: &mut Domain,
+    repository: skein_forge::api::Repository,
+    feed: &jig_domain_core::ProjectionFeed,
+) {
+    domain.work.push(Work::Forge(forge::Event::FailProjection {
+        goal: feed.goal.number,
+        repository,
+        closing: feed.closing,
+    }));
+}
+
+fn outbox_outcome(entry: u64, outcome: skein_forge_client::Outcome) -> jig_domain_core::connector::OutboxOutcome {
+    match outcome {
+        skein_forge_client::Outcome::Made { .. } => jig_domain_core::connector::OutboxOutcome::Made,
+        skein_forge_client::Outcome::Failed(_) | skein_forge_client::Outcome::Raced { .. } => {
+            jig_domain_core::connector::OutboxOutcome::Failed
+        }
+        skein_forge_client::Outcome::Withdrawn => jig_domain_core::connector::OutboxOutcome::Withdrawn,
+        skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {
+            jig_domain_core::connector::OutboxOutcome::Uncertain
+        }
+        skein_forge_client::Outcome::Held => jig_domain_core::connector::OutboxOutcome::Held { entry },
+    }
+}
+
+fn projection_failed(domain: &mut Domain, goal: u64, closing: bool) {
+    if closing {
+        domain.forge.projection_settled(goal);
+        domain.work.push(Work::Core(jig_domain_core::Event::ProjectionSettled {
+            goal,
+            connector: domain.config.forge_connector,
+        }));
+    }
 }
 
 fn projection_phase(phase: &tasks::Phase) -> forge_issues::Phase {
@@ -2556,21 +2611,20 @@ pub(crate) fn outputs(
                     },
                 )));
             }
+            forge::Request::ProjectionOutcome { entry, outcome } => {
+                domain.work.push(Work::Core(jig_domain_core::Event::EffectConnector(
+                    jig_domain_core::connector::Event::ProjectionOutbox {
+                        connector: domain.config.forge_connector,
+                        entry,
+                        outcome: outbox_outcome(entry, outcome),
+                    },
+                )));
+            }
             forge::Request::Outcome { entry, task, outcome } => {
                 if let Some(named) = domain.forge.named_effect(entry) {
                     save_connector_answer(domain, &env.limits, decision, core_call(named));
                 }
-                let result = match outcome {
-                    skein_forge_client::Outcome::Made { .. } => jig_domain_core::connector::OutboxOutcome::Made,
-                    skein_forge_client::Outcome::Failed(_) | skein_forge_client::Outcome::Raced { .. } => {
-                        jig_domain_core::connector::OutboxOutcome::Failed
-                    }
-                    skein_forge_client::Outcome::Withdrawn => jig_domain_core::connector::OutboxOutcome::Withdrawn,
-                    skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {
-                        jig_domain_core::connector::OutboxOutcome::Uncertain
-                    }
-                    skein_forge_client::Outcome::Held => jig_domain_core::connector::OutboxOutcome::Held { entry },
-                };
+                let result = outbox_outcome(entry, outcome);
                 domain.work.push(Work::Core(jig_domain_core::Event::EffectConnector(
                     jig_domain_core::connector::Event::Outbox {
                         connector: domain.config.forge_connector,
@@ -2659,7 +2713,7 @@ pub(crate) fn outputs(
                 }));
             }
             forge::Request::ProjectionFailed { goal } => {
-                domain.work.push(Work::Tasks(tasks::Event::Hold { task: goal, why: tasks::Hold::Effects }));
+                projection_failed(domain, goal, domain.core.tasks.task(goal).is_none());
             }
             forge::Request::Drift { task, .. } => {
                 domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Drift }));
@@ -2993,7 +3047,18 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
                 }
             }
-            Some(EffectFlight::Call { .. } | EffectFlight::Projection { .. }) | None => {}
+            Some(EffectFlight::Projection { row, .. }) => {
+                let closing = match &row.desired {
+                    Some(view) => view.finished.is_some(),
+                    None => false,
+                };
+                domain.work.push(Work::Forge(forge::Event::FailProjection {
+                    goal: row.goal,
+                    repository: row.repository,
+                    closing,
+                }));
+            }
+            Some(EffectFlight::Call { .. }) | None => {}
         },
         jig_domain_core::connector::Ask::Judge { owner, judge, state, resources: _ } => {
             let (verdict, guarded) = judge_effect(domain, env, owner, number, judge, state);

@@ -24,6 +24,10 @@ pub enum HoldWrite {
     Merge,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the world injects independent read/write faults alongside gate choices"
+)]
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
     pub root: engine::Domain,
@@ -39,12 +43,15 @@ pub struct World {
     pub adopted: Vec<forge_top::ApplicationOutcome>,
     pub signed_in: Option<u64>,
     pub assigned: Vec<engine::Assignment>,
+    /// Inbox messages delivered after an assignment, as a real worker receives them.
+    pub delivered_messages: BTreeMap<(u64, u64), Vec<u64>>,
     pub answers: Vec<temper_engine_domain::CallAnswer>,
     pub reads: Vec<(ReplyTo, jig_domain_core::reads::Answer)>,
     pub protocol: Protocol,
     pub immediate: VecDeque<engine::Event>,
     /// The funding period sent to this process's root, once it is ready.
     period: Option<u64>,
+    period_budget: u64,
     pub fail_job_reads: bool,
     slow_brief_reads: bool,
     /// A branch whose reads take twenty seconds, each decided when it is sent.
@@ -57,6 +64,8 @@ pub struct World {
     pub held_write_answers: Vec<engine::Event>,
     /// Timeouts before dispatch: the caller cannot know the write was never made.
     pub lose_writes: u32,
+    pub fail_issue_writes: bool,
+    pub issue_write_times: Vec<Wall>,
     /// The durable commit number observed when the root drained.
     pub drained: Option<u64>,
     pub unsettled: Vec<engine::Unsettled>,
@@ -137,10 +146,40 @@ impl World {
         )
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one fixture configures the policy, fake, and bounds for root forge stories"
-    )]
+    /// Stock settings and model, with room for B2's advisor and two repaired changes.
+    #[must_use]
+    pub fn configured_stock(defaults: &jig_domain_core::settings::Defaults, model: &engine::Model) -> Self {
+        Self::configured_settings(
+            true,
+            true,
+            true,
+            1000,
+            paths::Gate { agent: true, ..paths::Gate::default() },
+            None,
+            StoryLimits::default(),
+            Some((defaults, model, None)),
+        )
+    }
+
+    /// Stock settings under exactly the deployment's effective limits.
+    #[must_use]
+    pub fn configured_stock_limits(
+        defaults: &jig_domain_core::settings::Defaults,
+        model: &engine::Model,
+        limits: &engine::Limits,
+    ) -> Self {
+        Self::configured_settings(
+            true,
+            true,
+            true,
+            1000,
+            paths::Gate { agent: true, ..paths::Gate::default() },
+            None,
+            StoryLimits::default(),
+            Some((defaults, model, Some(limits))),
+        )
+    }
+
     #[must_use]
     pub fn configured_limits(
         with_read: bool,
@@ -150,6 +189,24 @@ impl World {
         gate: paths::Gate,
         documents: Option<jig_domain_core::documents::DocumentLimits>,
         timing: StoryLimits,
+    ) -> Self {
+        Self::configured_settings(with_read, with_change, silent_ci, passes, gate, documents, timing, None)
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::too_many_lines,
+        reason = "one fixture configures the policy, fake, and bounds for root forge stories"
+    )]
+    fn configured_settings(
+        with_read: bool,
+        with_change: bool,
+        silent_ci: bool,
+        passes: u32,
+        gate: paths::Gate,
+        documents: Option<jig_domain_core::documents::DocumentLimits>,
+        timing: StoryLimits,
+        stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
         let StoryLimits { brief, stall } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
@@ -344,6 +401,74 @@ impl World {
                 config.core.seed_projects[0].policy.policy = domain.policy(1).expect("configured seed policy").clone();
                 config.core.defaults.rules = domain.rules().clone();
             }
+            if let Some((defaults, model, _)) = stock {
+                const STOCK_CHARTERS: u32 = 2;
+                const STOCK_EXECUTORS: u32 = 3;
+                const TREE_TASKS: u32 = 12; // Stock lifetime ceiling, including the root.
+                const LANDED_CHANGES: u32 = 2;
+                const RETAINED_HOLDINGS: u32 = 1 + LANDED_CHANGES * 2;
+                const CONTROL_OUTPUT: u32 = 9;
+                const TREE_ISSUE_BYTES: u32 = 8192;
+                const TREE_MILESTONES: u32 = 64;
+                const MILESTONE_BYTES: u32 = 1024; // A 512-byte result plus its lifecycle heading.
+                const TREE_FORGE_BYTES: u32 = TREE_ISSUE_BYTES + 1024;
+                const RESULT_INBOX_BYTES: u32 = 4096;
+                // Keep policy 1, the run limits, charters and templates exactly as supplied.
+                config.core.defaults.rules = defaults.rules.clone();
+                config.core.defaults.charters.clone_from(&defaults.charters);
+                config.core.defaults.templates.clone_from(&defaults.templates);
+                config
+                    .core
+                    .defaults
+                    .policies
+                    .insert(1, defaults.policies.get(&1).expect("stock policy 1").clone())
+                    .expect("one stock policy");
+                config.core.seed_projects[0].policy = defaults.policies.get(&1).expect("stock policy 1").clone();
+                config.core.settings.models = Box::new([model.clone()]);
+                config.core.settings.llm_providers.providers[0].models = Box::new([model.name.clone()]);
+                config.core.connectors = Box::new([1]);
+                config.forge_charter = 2;
+                for rule in &mut config.landing.deployment {
+                    rule.connector = 1;
+                    for gate in &mut rule.gates {
+                        gate.freshness = engine::Freshness::Clean;
+                    }
+                }
+                config.landing.projects = skein_lib::Map::with_capacity(1);
+                // Stock names two charters and three executor kinds; all ten forge grants fit.
+                limits.tasks.charters = STOCK_CHARTERS;
+                limits.tasks.executor_kinds = STOCK_EXECUTORS;
+                limits.authority.executors = STOCK_EXECUTORS;
+                // B2 retains eleven tasks (chat, work, advisor, two procedures and six agents).
+                limits.tasks.funders = TREE_TASKS;
+                limits.tasks.project_goals = TREE_TASKS;
+                // The root retains its run branch and both landed changes' branch/pull pairs.
+                limits.tasks.holdings = RETAINED_HOLDINGS;
+                // Names for every task's permitted workspace resources can coexist in watches.
+                limits.forge.client.resources = TREE_TASKS * limits.forge.resources_per_task;
+                // The connector's declared worst-case client/retirement output burst.
+                limits.forge.output = skein_forge_client::max_out(&limits.forge.client)
+                    + limits.forge.subscriptions * 3
+                    + limits.forge.holds * 3
+                    + CONTROL_OUTPUT;
+                // The tracked work's issue renders every descendant's spec and lifecycle.
+                // Twelve 512-byte specs plus headings fit in 8 KiB, rather than the tiny
+                // fixture's 512-byte body. Milestones are retained for the whole walk:
+                // eleven task endings, both changes' state transitions and W's wakes.
+                limits.forge.issue_policy.plan_items = TREE_TASKS;
+                limits.forge.issue_policy.milestones = TREE_MILESTONES;
+                limits.forge.issue_policy.body_bytes = TREE_ISSUE_BYTES;
+                limits.forge.issue_policy.comment_bytes = MILESTONE_BYTES;
+                // The forge client carries that body plus its title, purpose key and framing.
+                limits.forge.client.op_bytes = TREE_FORGE_BYTES;
+                limits.forge.client.answer_bytes = TREE_FORGE_BYTES;
+                // Reports use jig's deployment result bound.
+                limits.tasks.result_bytes =
+                    jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.result_bytes;
+                limits.tasks.inbox_bytes = RESULT_INBOX_BYTES;
+                limits.loads.bytes = limits.loads.bytes.max(RESULT_INBOX_BYTES);
+                limits.loads.reply_bytes = limits.loads.reply_bytes.max(RESULT_INBOX_BYTES);
+            }
             if let Some(brief) = brief {
                 limits.brief = brief;
                 // A shipped brief brings its own room: results hold it, forge sections read it.
@@ -354,10 +479,23 @@ impl World {
                 limits.forge.change_policy.stall = stall;
             }
             limits.notes.scopes = 3 + limits.authority.grants;
+            if stock.is_some() {
+                // The larger resource route needs its full declared journal-write burst.
+                limits.journal.writes = limits.journal.writes.max(walking::writes(&limits));
+            }
+            if let Some((_, _, Some(deployment))) = stock {
+                limits = *deployment;
+            }
             (config, limits)
         });
         let mut fake_config = forge_world::fake_config();
         fake_config.limits.repositories = 2;
+        if stock.is_some() {
+            // The peer accepts the same whole issue bodies and retained comments.
+            fake_config.limits.body_bytes = limits.forge.issue_policy.body_bytes;
+            fake_config.limits.title_bytes = limits.forge.issue_policy.title_bytes;
+            fake_config.limits.comments = limits.forge.issue_policy.milestones;
+        }
         let mut fake = fake::Domain::new(&fake_config, 71);
         fake::repository(
             &mut fake,
@@ -389,11 +527,30 @@ impl World {
             limits.documents = paths::document_limits(documents, &limits);
         }
         // Keep the world's broad page bounds and align its message codec with the root.
-        let mut store_limits = temper_engine_domain_world::store::widest();
+        let mut store_limits = match stock {
+            Some((_, _, Some(deployment))) => *deployment,
+            Some((_, _, None)) | None => temper_engine_domain_world::store::widest(),
+        };
         store_limits.people.words = limits.people.words;
         store_limits.tasks.message_bytes = limits.tasks.message_bytes;
+        store_limits.tasks.spec_bytes = limits.tasks.spec_bytes;
+        store_limits.tasks.result_bytes = limits.tasks.result_bytes;
+        store_limits.tasks.inbox_bytes = limits.tasks.inbox_bytes;
+        store_limits.tasks.executor_kinds = limits.tasks.executor_kinds;
+        store_limits.authority.executors = limits.authority.executors;
+        store_limits.tasks.charters = limits.tasks.charters;
+        if stock.is_some() {
+            store_limits.forge.issue_policy = limits.forge.issue_policy;
+            store_limits.forge.client.op_bytes = limits.forge.client.op_bytes;
+            store_limits.forge.client.answer_bytes = limits.forge.client.answer_bytes;
+            store_limits.forge.client.resources = limits.forge.client.resources;
+            store_limits.forge.output = limits.forge.output;
+            store_limits.tasks.holdings = limits.tasks.holdings;
+            store_limits.journal.writes = limits.journal.writes;
+        }
         let store =
             temper_engine_domain_world::fixtures::restored_over(Store::with_limits(&store_limits), bootstrap, &limits);
+        let period_budget = config.core.defaults.rules.period_spend;
         Self {
             creating: jig_core_world::fixtures::Creating::new(&config.core, limits.tasks.tree_tasks),
             root: engine::Domain::new(config, &limits).expect("valid engine configuration"),
@@ -409,11 +566,13 @@ impl World {
             adopted: Vec::new(),
             signed_in: None,
             assigned: Vec::new(),
+            delivered_messages: BTreeMap::new(),
             answers: Vec::new(),
             reads: Vec::new(),
             protocol: Protocol::default(),
             immediate: VecDeque::new(),
             period: None,
+            period_budget,
             fail_job_reads: false,
             slow_brief_reads: false,
             slow_branch: None,
@@ -422,6 +581,8 @@ impl World {
             hold_write_answers: None,
             held_write_answers: Vec::new(),
             lose_writes: 0,
+            fail_issue_writes: false,
+            issue_write_times: Vec::new(),
             drained: None,
             unsettled: Vec::new(),
             busy_calls: 0,
@@ -575,6 +736,35 @@ impl World {
                         self.merges += 1;
                     }
                     self.forge_calls += 1;
+                    let issue_write = match &op {
+                        skein_forge::api::Op::Write(skein_forge::api::Write::CreateIssue { .. }) => true,
+                        skein_forge::api::Op::Write(
+                            skein_forge::api::Write::Edit { number, .. }
+                            | skein_forge::api::Write::Post { number, .. }
+                            | skein_forge::api::Write::Close { number },
+                        ) => self.store.rows.values().any(|row| {
+                            matches!(row,
+                                Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Issue(issue)
+                                    if issue.number == Some(*number)))
+                        }),
+                        _ => false,
+                    };
+                    if issue_write {
+                        self.issue_write_times.push(self.env.wall);
+                    }
+                    if self.fail_issue_writes && issue_write {
+                        self.events.push_back(engine::Event::Forge(Box::new(forge_top::Event::Client(
+                            skein_forge_client::Event::Answered {
+                                free: 0,
+                                rate: None,
+                                call,
+                                cost: 1,
+                                result: Err(skein_forge::api::Error::Refused),
+                            },
+                        ))));
+                        continue;
+                    }
+
                     if self.lose_writes > 0 && matches!(op, skein_forge::api::Op::Write(_)) {
                         self.lose_writes -= 1;
                         self.events.push_back(engine::Event::Forge(Box::new(forge_top::Event::Client(
@@ -644,6 +834,9 @@ impl World {
                     }
                     Delivery::Assigned { assignment, .. } => self.assigned.push(assignment),
                     Delivery::Read { reply, answer } => self.reads.push((reply, answer)),
+                    Delivery::Link { down: host::LinkDown::Message { run, attempt, name, .. }, .. } => {
+                        self.delivered_messages.entry((run.raw(), attempt.raw())).or_default().push(name.raw());
+                    }
                     // The run has its answer once the hub relays it down; the
                     // world renders an answer as its first call's name, and a
                     // replayed call carries that same text.
@@ -720,7 +913,7 @@ impl World {
         }
         if self.period.is_none() && self.root.ready() {
             self.period = Some(1);
-            let period = engine::PartyInput::Period { project: 1, period: 1, budget: 1000, next: None };
+            let period = engine::PartyInput::Period { project: 1, period: 1, budget: self.period_budget, next: None };
             self.send(engine::Event::Party(period));
             // The repository's git identity, an application credential from
             // temper's own source (domain/root.md, 7.1).
@@ -1292,4 +1485,23 @@ pub fn failed_ci_with_delayed_brief() -> (World, u64, u64) {
     );
     world.send(event);
     (world, chat.task, producer.task)
+}
+
+/// Effective box limits, read through the shipped init template.
+#[must_use]
+pub fn box_limits() -> engine::Limits {
+    use jig_protocol_config as config;
+    let document = config::document(
+        include_bytes!("../../../../crates/temper-init/template/temper.json"),
+        &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 },
+    )
+    .expect("init template JSON");
+    let mut root = config::read::Object::new(&document, 0).expect("template object");
+    let engine = root.member(&document, b"engine").expect("engine member");
+    let mut engine = config::read::Object::new(&document, engine).expect("engine object");
+    let at = engine.member(&document, b"limits").expect("engine limits");
+    let jig = config::overrides::parse(&document, at, &config::Path::root().member(b"engine").member(b"limits"))
+        .expect("init limits");
+    let temper = temper_service::limits::profile(temper_service::limits::Profile::Small);
+    temper_service::limits::engine(&jig, &temper).expect("coherent box limits")
 }

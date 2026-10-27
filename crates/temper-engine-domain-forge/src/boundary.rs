@@ -1057,6 +1057,12 @@ pub enum Event {
         repository: skein_forge::api::Repository,
         view: issues::GoalView,
     },
+    /// The root could not translate or authorize a goal projection.
+    FailProjection {
+        goal: u64,
+        repository: skein_forge::api::Repository,
+        closing: bool,
+    },
     /// Continue the latest authorized snapshot after an outbox outcome or interval.
     ProjectDesired {
         entry: u64,
@@ -1331,6 +1337,11 @@ pub enum Request {
     Outcome {
         entry: u64,
         task: u64,
+        outcome: skein_forge_client::Outcome,
+    },
+    /// Projection recovery belongs to the connector and settles no task or call.
+    ProjectionOutcome {
+        entry: u64,
         outcome: skein_forge_client::Outcome,
     },
     /// A held entry settled as not made, by a person or its task's close.

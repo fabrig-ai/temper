@@ -1,4 +1,5 @@
 use crate::*;
+use temper_engine_domain_forge_issues as issues;
 mod adoption;
 mod binding;
 mod change;
@@ -280,6 +281,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Taken { .. }
         | Request::Refused { .. }
         | Request::Outcome { .. }
+        | Request::ProjectionOutcome { .. }
         | Request::NotMade { .. }
         | Request::ContinueRelease { .. }
         | Request::Released { .. }
@@ -350,6 +352,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Taken { .. }
         | Request::Refused { .. }
         | Request::Outcome { .. }
+        | Request::ProjectionOutcome { .. }
         | Request::NotMade { .. }
         | Request::ContinueRelease { .. }
         | Request::Released { .. }
@@ -417,6 +420,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::Taken { .. }
         | Request::Refused { .. }
         | Request::Outcome { .. }
+        | Request::ProjectionOutcome { .. }
         | Request::NotMade { .. }
         | Request::ContinueRelease { .. }
         | Request::Released { .. }
@@ -2024,4 +2028,82 @@ fn workspace_landing_is_only_for_an_existing_inherited_writable_producer() {
             }
         }
     }
+}
+
+fn failed_issue() -> (Domain, issues::GoalView) {
+    const GOAL: u64 = 7;
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    let view = issues::GoalView {
+        phase: issues::Phase::Active,
+        goal: GOAL,
+        repository: u64::from(REPO.repository),
+        title: "Work".into(),
+        goal_text: "Complete the work".into(),
+        plan: Box::new([]),
+        milestones: Box::new([]),
+        finished: None,
+    };
+    outputs(
+        &mut d,
+        Event::Restore {
+            record: Stored::Issue(IssueRow {
+                goal: GOAL,
+                repository: REPO,
+                state: issues::Projected::default(),
+                number: None,
+                pending: None,
+                before: None,
+                failed: true,
+                desired: Some(view.clone()),
+            }),
+        },
+    );
+    (d, view)
+}
+
+fn has_projection_effect(requests: &[Request]) -> bool {
+    for request in requests {
+        let Request::ProjectionEffect { .. } = request else { continue };
+        return true;
+    }
+    false
+}
+
+#[test]
+fn a_failed_projection_waits_but_changed_facts_retry_immediately() {
+    const ENTRY: u64 = 40;
+    let (mut d, mut view) = failed_issue();
+    let when = Wall::from_nanos(env().wall.as_nanos() + LIMITS.issue_policy.interval.as_nanos());
+    d.projection_after(view.goal, when);
+    let waiting = outputs(&mut d, Event::ProjectDesired { entry: ENTRY, goal: view.goal });
+    assert!(waiting.contains(&Request::ProjectAfter { goal: view.goal, when: Some(when) }));
+    assert!(!has_projection_effect(&waiting));
+    view.goal_text = "New committed goal words".into();
+    let retry = outputs(&mut d, Event::Project { entry: ENTRY, repository: REPO, view });
+    assert!(has_projection_effect(&retry));
+}
+
+#[test]
+fn a_closing_failed_projection_settles_and_keeps_its_failed_row() {
+    const ENTRY: u64 = 40;
+    let (mut d, mut view) = failed_issue();
+    view.finished = Some("Goal finished".into());
+    let goal = view.goal;
+    let settled = outputs(&mut d, Event::Project { entry: ENTRY, repository: REPO, view });
+    assert!(settled.contains(&Request::ProjectionSettled { goal }));
+    assert!(!has_projection_effect(&settled));
+    outputs(&mut d, Event::ForgetProjection { goal });
+    assert!(d.issue(goal).expect("retained diagnostic").failed);
+}
+
+#[test]
+fn an_untranslatable_closing_feed_settles_a_failed_projection() {
+    const GOAL: u64 = 7;
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    let settled = outputs(&mut d, Event::FailProjection { goal: GOAL, repository: REPO, closing: true });
+    assert!(settled.contains(&Request::ProjectionFailed { goal: GOAL }));
+    assert!(settled.contains(&Request::ProjectionSettled { goal: GOAL }));
+    assert!(d.issue(GOAL).expect("failed diagnostic").failed);
 }

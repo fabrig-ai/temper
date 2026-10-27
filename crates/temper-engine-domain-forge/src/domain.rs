@@ -1231,6 +1231,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         Event::ForgetProjection { goal } => {
             if let Some(row) = d.issues.get(&goal)
                 && row.pending.is_none()
+                && !row.failed
             {
                 d.issues.remove(&goal);
                 emit(out, Request::Erase { key: Key::Issue(goal) });
@@ -1308,6 +1309,9 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             keep_entry(d, entry, None, out);
         }
         Event::Project { entry, repository, view } => project(d, env, entry, repository, view, out),
+        Event::FailProjection { goal, repository, closing } => {
+            fail_projection(d, env, goal, Some(repository), closing, out);
+        }
         Event::ProjectDesired { entry, goal } => {
             if let Some(row) = d.issues.get(&goal)
                 && let Some(view) = &row.desired
@@ -1456,6 +1460,10 @@ pub(crate) fn child(d: &mut Domain, env: &Env<Limits>, event: skein_forge_client
     drain(d, env, out);
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one client-output cohort updates connector state before routing its outcomes"
+)]
 fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     for _ in 0..d.client_out.len() {
         let request = d.client_out.pop().expect("counted child output");
@@ -1480,6 +1488,10 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
             skein_forge_client::Request::Erase { key } => emit(out, Request::Erase { key: Key::Client(key) }),
             skein_forge_client::Request::Progress { entry } => keep_entry(d, entry, None, out),
             skein_forge_client::Request::Outcome { entry, task, outcome } => {
+                let mut projection = false;
+                for (_, row) in &d.issues {
+                    projection |= row.pending == Some(entry);
+                }
                 d.named_outcome(entry, outcome);
                 outcome_facts(d, env, entry, task, outcome, out);
                 match outcome {
@@ -1503,7 +1515,11 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                         erase_flight(d, task, entry, out);
                     }
                 }
-                emit(out, Request::Outcome { entry, task, outcome });
+                if projection {
+                    emit(out, Request::ProjectionOutcome { entry, outcome });
+                } else {
+                    emit(out, Request::Outcome { entry, task, outcome });
+                }
                 if outcome != skein_forge_client::Outcome::Uncertain
                     && outcome != skein_forge_client::Outcome::Queued
                     && match d.releases.get(&task) {
@@ -1578,7 +1594,7 @@ fn outcome_facts(
         let repository = row.entry.repository;
         crate::capabilities::refresh(d, env, repository, out);
     }
-    projection_outcome(d, entry, outcome, out);
+    projection_outcome(d, env, entry, outcome, out);
     change_outcome(d, env, entry, outcome, out);
     release_outcome(d, entry, outcome, out);
     match outcome {
@@ -3411,6 +3427,10 @@ fn release_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outc
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Release(row) });
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one projection admission saves facts, waits, or describes its next keyed effect"
+)]
 fn project(
     d: &mut Domain,
     env: &Env<Limits>,
@@ -3421,7 +3441,7 @@ fn project(
 ) {
     let goal = view.goal;
     let Some(adopted) = d.repositories.get(&repository) else {
-        emit(out, Request::ProjectionFailed { goal });
+        fail_projection(d, env, goal, Some(repository), view.finished.is_some(), out);
         return;
     };
     if view.repository != u64::from(repository.repository)
@@ -3429,12 +3449,12 @@ fn project(
         || !adopted.kinds.issue
         || (!d.issues.contains_key(&goal) && d.issues.len() == env.limits.issues)
     {
-        emit(out, Request::ProjectionFailed { goal });
+        fail_projection(d, env, goal, Some(repository), view.finished.is_some(), out);
         return;
     }
     let mut prior = match d.issues.get(&goal) {
         Some(row) if row.repository != repository => {
-            emit(out, Request::ProjectionFailed { goal });
+            fail_projection(d, env, goal, Some(repository), view.finished.is_some(), out);
             return;
         }
         Some(row) => row.clone(),
@@ -3449,38 +3469,53 @@ fn project(
             desired: None,
         },
     };
-    let Some(view) = issues::gather(prior.desired.as_ref(), view, &env.limits.issue_policy) else {
-        emit(out, Request::ProjectionFailed { goal });
+    let Some(policy) = projection_limits(d, &env.limits, &prior, &view) else {
+        fail_projection(d, env, goal, Some(repository), view.finished.is_some(), out);
         return;
     };
-    if prior.desired.as_ref() != Some(&view) {
+    let closing = view.finished.is_some();
+    let Some(view) = issues::gather(prior.desired.as_ref(), view, &policy) else {
+        fail_projection(d, env, goal, Some(repository), closing, out);
+        return;
+    };
+    let changed = prior.desired.as_ref() != Some(&view);
+    if changed {
         prior.desired = Some(view.clone());
         d.issues.insert(goal, prior.clone()).expect("projection room checked");
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(prior.clone()) });
     }
     if prior.failed {
-        emit(out, Request::ProjectionFailed { goal });
-        return;
+        if view.finished.is_some() {
+            settled_projection(d, goal, out);
+            return;
+        }
+        if !changed
+            && let Some(when) = d.projection_due.get(&goal)
+            && *when > env.wall
+        {
+            emit(out, Request::ProjectAfter { goal, when: Some(*when) });
+            return;
+        }
     }
     if prior.pending.is_some() {
         emit(out, Request::ProjectAfter { goal, when: None });
         return;
     }
-    let projected = issues::project(&view, &prior.state, env.wall, &env.limits.issue_policy);
+    let projected = issues::project(&view, &prior.state, env.wall, &policy);
     match projected.decision {
         issues::Decision::None | issues::Decision::Wait(_) => match projected.decision {
             issues::Decision::Wait(when) => emit(out, Request::ProjectAfter { goal, when: Some(when) }),
             issues::Decision::None => settled_projection(d, goal, out),
             issues::Decision::Hold | issues::Decision::Effect(_) => unreachable!("matched above"),
         },
-        issues::Decision::Hold => emit(out, Request::ProjectionFailed { goal }),
+        issues::Decision::Hold => fail_projection(d, env, goal, Some(repository), closing, out),
         issues::Decision::Effect(effect) => {
             if d.entries.len() == env.limits.entries || d.entries.contains_key(&number) {
                 emit(out, Request::ProjectAfter { goal, when: None });
                 return;
             }
             let Some(write) = project_write(d, &prior, effect, &env.limits) else {
-                emit(out, Request::ProjectionFailed { goal });
+                fail_projection(d, env, goal, Some(repository), closing, out);
                 return;
             };
             let entry = skein_forge_client::Entry {
@@ -3504,11 +3539,87 @@ fn project(
                 desired: Some(view),
             };
             let Some(description) = crate::describe_projection_effect(adopted, &entry.effect.write) else {
-                emit(out, Request::ProjectionFailed { goal });
+                fail_projection(d, env, goal, Some(repository), closing, out);
                 return;
             };
             emit(out, Request::ProjectionEffect { row, entry, description });
         }
+    }
+}
+
+fn projection_limits(d: &Domain, limits: &Limits, prior: &IssueRow, view: &issues::GoalView) -> Option<issues::Limits> {
+    let title_bound = usize::try_from(limits.issue_policy.title_bytes).expect("u32 fits usize");
+    let title_bytes = if view.title.len() <= title_bound {
+        view.title.len()
+    } else {
+        let mut end = title_bound.saturating_sub("…".len());
+        while !view.title.is_char_boundary(end) {
+            end = end.checked_sub(1).expect("UTF-8 title boundary");
+        }
+        end.checked_add("…".len().min(title_bound)).expect("bounded title")
+    };
+    // A create retains its purpose key too; an edit carries only title and body.
+    let key_bytes = if prior.state.opened {
+        0
+    } else {
+        let key = projection_key(&d.namespace, view.goal, issues::Key::Open, limits)?;
+        u32::try_from(key.len()).expect("bounded key")
+    };
+    Some(issues::Limits {
+        body_bytes: limits.issue_policy.body_bytes.min(
+            limits
+                .client
+                .op_bytes
+                .saturating_sub(key_bytes)
+                .saturating_sub(u32::try_from(title_bytes).expect("bounded title")),
+        ),
+        ..limits.issue_policy
+    })
+}
+
+/// A projection's failed row and timer are independent of the task's lifecycle.
+fn fail_projection(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    goal: u64,
+    repository: Option<skein_forge::api::Repository>,
+    closing: bool,
+    out: &mut Queue<Request>,
+) {
+    if !d.issues.contains_key(&goal)
+        && d.issues.len() < env.limits.issues
+        && let Some(repository) = repository
+        && d.repositories.contains_key(&repository)
+    {
+        d.issues
+            .insert(
+                goal,
+                IssueRow {
+                    goal,
+                    repository,
+                    state: issues::Projected::default(),
+                    number: None,
+                    pending: None,
+                    before: None,
+                    failed: true,
+                    desired: None,
+                },
+            )
+            .expect("projection room checked");
+    }
+    if let Some(row) = d.issues.get_mut(&goal) {
+        row.failed = true;
+        emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(row.clone()) });
+    }
+    emit(out, Request::ProjectionFailed { goal });
+    if closing {
+        emit(out, Request::ProjectionSettled { goal });
+    } else if d.issues.contains_key(&goal) {
+        let when = skein_lib::Wall::from_nanos(
+            env.wall.as_nanos().saturating_add(env.limits.issue_policy.interval.as_nanos()),
+        );
+        d.projection_due.insert(goal, when).expect("one deadline per issue");
+        emit(out, Request::ProjectAfter { goal, when: Some(when) });
     }
 }
 
@@ -3556,7 +3667,13 @@ fn projection_key(namespace: &[u8], goal: u64, key: issues::Key, l: &Limits) -> 
     crate::purpose::EffectPurpose::Projection { goal, part, number }.key(namespace, l.client.op_bytes)
 }
 
-fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outcome, out: &mut Queue<Request>) {
+fn projection_outcome(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    entry: u64,
+    outcome: skein_forge_client::Outcome,
+    out: &mut Queue<Request>,
+) {
     let mut goal = None;
     for (number, row) in &d.issues {
         if row.pending == Some(entry) {
@@ -3596,6 +3713,18 @@ fn projection_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Issue(saved) });
     if row.failed {
         emit(out, Request::ProjectionFailed { goal });
+        if match &row.desired {
+            Some(view) => view.finished.is_some(),
+            None => false,
+        } {
+            settled_projection(d, goal, out);
+        } else {
+            let when = skein_lib::Wall::from_nanos(
+                env.wall.as_nanos().saturating_add(env.limits.issue_policy.interval.as_nanos()),
+            );
+            d.projection_due.insert(goal, when).expect("one deadline per issue");
+            emit(out, Request::ProjectAfter { goal, when: Some(when) });
+        }
     } else {
         emit(out, Request::ProjectAfter { goal, when: None });
     }
@@ -4517,7 +4646,7 @@ fn read_afresh_complete(d: &mut Domain, out: &mut Queue<Request>) {
 fn settled_projection(d: &Domain, goal: u64, out: &mut Queue<Request>) {
     let settled = match d.issues.get(&goal) {
         Some(row) => {
-            row.state.closed
+            (row.state.closed || row.failed)
                 && match &row.desired {
                     Some(view) => view.finished.is_some(),
                     None => false,

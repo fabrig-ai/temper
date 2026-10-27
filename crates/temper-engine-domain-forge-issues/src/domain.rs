@@ -12,26 +12,31 @@ use crate::{Decision, Effect, GoalView, Key, Limits, MilestoneKey, Phase, Projec
 
 /// Project one goal from its current committed record and root facts.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one ordered projection decision: body, prefix, folded suffix, Finished, close"
+)]
 pub fn project(goal: &GoalView, last: &Projected, now: Wall, limits: &Limits) -> Projection {
-    if goal.plan.len() > usize::try_from(limits.plan_items).expect("u32 fits usize")
-        || goal.milestones.len() > usize::try_from(limits.milestones).expect("u32 fits usize")
-        || goal.title.len() > usize::try_from(limits.title_bytes).expect("u32 fits usize")
-        || last.milestones.len() > usize::try_from(limits.milestones).expect("u32 fits usize")
-        || !valid_history(goal, last, limits)
+    if last.milestones.len() > usize::try_from(limits.milestones).expect("u32 fits usize") || !valid_history(goal, last)
     {
         return held(last);
     }
-    let Some(body) = body(goal, limits) else { return held(last) };
+    let mut fitted = goal.clone();
+    fit_words(&mut fitted, limits);
+    let goal = &fitted;
+    let body = body(goal);
+    let prefix = usize::try_from(limits.milestones.saturating_sub(2)).expect("u32 fits usize");
     let mut digest = Sha256::new();
     digest.update(goal.title.as_bytes());
     digest.update(&body);
     let hash: [u8; 32] = digest.finalize().into();
     if last.closed {
         let mut complete = has(&last.milestones, MilestoneKey::Finished);
-        for milestone in &goal.milestones {
-            if !has(&last.milestones, milestone.key) {
-                complete = false;
-            }
+        for milestone in goal.milestones.iter().take(prefix) {
+            complete &= has(&last.milestones, milestone.key);
+        }
+        if let Some(milestone) = goal.milestones.last() {
+            complete &= has(&last.milestones, milestone.key);
         }
         return if last.digest == Some(hash) && goal.finished.is_some() && complete {
             Projection { projected: last.clone(), decision: Decision::None }
@@ -76,9 +81,26 @@ pub fn project(goal: &GoalView, last: &Projected, now: Wall, limits: &Limits) ->
             };
         }
     }
-    for milestone in &goal.milestones {
+    for milestone in goal.milestones.iter().take(prefix) {
         if !has(&last.milestones, milestone.key) {
             return comment(goal, last, milestone.key, milestone.text.clone(), limits);
+        }
+    }
+    if goal.finished.is_some() && goal.milestones.len() > prefix {
+        let milestone = goal.milestones.last().expect("waiting suffix");
+        if !has(&last.milestones, milestone.key) {
+            // A gathered view already contains one counting entry. Direct
+            // callers may still supply the whole waiting suffix.
+            let words = if goal.milestones.len() == prefix.checked_add(1).expect("bounded prefix") {
+                milestone.text.clone()
+            } else {
+                counted(
+                    goal.milestones.len().checked_sub(prefix).expect("waiting suffix"),
+                    &milestone.text,
+                    limits.comment_bytes,
+                )
+            };
+            return comment(goal, last, milestone.key, words, limits);
         }
     }
     if let Some(finished) = &goal.finished {
@@ -112,6 +134,17 @@ pub fn project(goal: &GoalView, last: &Projected, now: Wall, limits: &Limits) ->
 /// Retain immutable milestone history while replacing the goal and its whole plan.
 #[must_use]
 pub fn gather(prior: Option<&GoalView>, mut next: GoalView, limits: &Limits) -> Option<GoalView> {
+    if !valid_history(&next, &Projected::default()) {
+        return None;
+    }
+    // A retry of the stored desired view must not fold its counting entry again.
+    if prior == Some(&next) {
+        return Some(next);
+    }
+    if let Some(words) = &mut next.finished {
+        *words = cut(words, usize::try_from(limits.comment_bytes).ok()?);
+    }
+    let prefix = usize::try_from(limits.milestones.checked_sub(2)?).ok()?;
     let mut milestones = List::with_capacity(limits.milestones);
     if let Some(prior) = prior {
         if prior.goal != next.goal
@@ -120,40 +153,183 @@ pub fn gather(prior: Option<&GoalView>, mut next: GoalView, limits: &Limits) -> 
         {
             return None;
         }
-        for item in &prior.milestones {
+        for item in prior.milestones.iter().take(prefix) {
             milestones.push(item.clone()).ok()?;
         }
     }
+    let mut waiting = 0usize;
+    let mut last = None;
+    if let Some(prior) = prior
+        && let Some(item) = prior.milestones.get(prefix)
+    {
+        waiting = waiting_count(&item.text)?;
+        last = Some(item.clone());
+    }
+    let previous_last = last.clone();
+    let mut replaying = false;
+    if let Some(previous) = &previous_last {
+        for item in &next.milestones {
+            replaying |= item.key == previous.key;
+        }
+    }
     for item in &next.milestones {
+        let words = cut(&item.text, usize::try_from(limits.comment_bytes).ok()?);
         let mut found = false;
         for kept in &milestones {
             if kept.key == item.key {
-                if kept != item {
+                if kept.text != words {
                     return None;
                 }
                 found = true;
             }
         }
-        if !found {
-            milestones.push(item.clone()).ok()?;
+        if replaying {
+            if let Some(previous) = &previous_last
+                && previous.key == item.key
+            {
+                if previous.text != counted(waiting, &item.text, limits.comment_bytes) {
+                    return None;
+                }
+                replaying = false;
+            }
+            continue;
         }
+        if found {
+            continue;
+        }
+        if usize::try_from(milestones.len()).ok()? < prefix {
+            milestones.push(crate::Milestone { key: item.key, text: words }).ok()?;
+        } else {
+            waiting = waiting.checked_add(1)?;
+            last = Some(crate::Milestone { key: item.key, text: counted(waiting, &item.text, limits.comment_bytes) });
+        }
+    }
+    if let Some(last) = last {
+        milestones.push(last).ok()?;
     }
     next.milestones = milestones.into_boxed();
-    if next.plan.len() > usize::try_from(limits.plan_items).ok()?
-        || next.title.len() > usize::try_from(limits.title_bytes).ok()?
-        || body(&next, limits).is_none()
-    {
+    fit_words(&mut next, limits);
+    Some(next)
+}
+
+/// The marker is included in the allowance, and the prefix ends on UTF-8.
+fn cut(words: &str, allowance: usize) -> Box<str> {
+    if words.len() <= allowance {
+        return Box::from(words);
+    }
+    let Some(mut end) = allowance.checked_sub("…".len()) else { return Box::from("") };
+    while !words.is_char_boundary(end) {
+        end = end.checked_sub(1).expect("UTF-8 prefix boundary");
+    }
+    let mut text =
+        List::with_capacity(u32::try_from(end.checked_add("…".len()).expect("bounded cut")).expect("bounded text"));
+    append(&mut text, words.as_bytes().get(..end).expect("measured UTF-8 prefix"));
+    append(&mut text, "…".as_bytes());
+    boxed_text(text)
+}
+
+#[expect(clippy::disallowed_methods, reason = "rendering joins already validated UTF-8 text and fixed ASCII")]
+fn boxed_text(text: List<u8>) -> Box<str> {
+    let text = text.into_boxed();
+    Box::from(core::str::from_utf8(&text).expect("rendered UTF-8 text"))
+}
+
+fn waiting_count(words: &str) -> Option<usize> {
+    let mut count = 0usize;
+    let mut digits = 0usize;
+    for byte in words.as_bytes() {
+        if !byte.is_ascii_digit() {
+            break;
+        }
+        count = count.checked_mul(10)?.checked_add(usize::from(byte.checked_sub(b'0')?))?;
+        digits = digits.checked_add(1)?;
+    }
+    if digits == 0 || !words.as_bytes().get(digits..)?.starts_with(b" more milestones; the last: ") {
         return None;
     }
-    for item in &next.milestones {
-        if item.text.len() > usize::try_from(limits.comment_bytes).ok()? {
-            return None;
+    Some(count)
+}
+
+fn counted(count: usize, last: &str, bound: u32) -> Box<str> {
+    // At most twenty decimal digits for a u64 history count.
+    let mut digits = [b'0'; 20];
+    let mut at = digits.len();
+    let mut number = count;
+    loop {
+        at = at.checked_sub(1).expect("usize decimal width");
+        *digits.get_mut(at).expect("decimal width") =
+            b'0'.checked_add(u8::try_from(number % 10).expect("decimal digit")).expect("decimal ASCII");
+        number /= 10;
+        if number == 0 {
+            break;
         }
     }
-    if !valid_history(&next, &Projected::default(), limits) {
-        return None;
+    let header = b" more milestones; the last: ";
+    let room = usize::try_from(bound).expect("u32 fits usize");
+    let prefix = digits.len().checked_sub(at).expect("decimal prefix").checked_add(header.len()).expect("fixed header");
+    let mut text = List::with_capacity(bound.max(u32::try_from(prefix).expect("fixed header")));
+    append(&mut text, digits.get(at..).expect("decimal prefix"));
+    append(&mut text, header);
+    let words = cut(last, room.saturating_sub(prefix));
+    append(&mut text, words.as_bytes());
+    cut(&boxed_text(text), room)
+}
+
+fn fit_words(goal: &mut GoalView, limits: &Limits) {
+    goal.title = cut(&goal.title, usize::try_from(limits.title_bytes).expect("u32 fits usize"));
+    let mut fixed = 9usize.checked_add(label(goal.phase).len()).expect("fixed syntax");
+    let mut text = goal.goal_text.len();
+    for item in &goal.plan {
+        fixed = fixed
+            .checked_add(10)
+            .expect("bounded plan syntax")
+            .checked_add(label(item.phase).len())
+            .expect("phase label");
+        text = text.checked_add(item.text.len()).expect("bounded plan words");
     }
-    Some(next)
+    let room = usize::try_from(limits.body_bytes).expect("u32 fits usize").saturating_sub(fixed);
+    if text <= room {
+        return;
+    }
+    goal.goal_text = cut(&goal.goal_text, goal.goal_text.len().min(room / 2));
+    let mut left = room.checked_sub(goal.goal_text.len()).expect("goal share fits room");
+    let mut pending = goal.plan.len();
+    let mut shares = List::with_capacity(u32::try_from(pending).expect("bounded plan"));
+    for _ in &goal.plan {
+        shares.push(None).expect("plan capacity");
+    }
+    let mut shares = shares.into_boxed();
+    // Water fill: short items release their unused bytes to the remainder.
+    loop {
+        if pending == 0 {
+            break;
+        }
+        let share = left.checked_div(pending).expect("pending items");
+        let mut changed = false;
+        for (item, assigned) in goal.plan.iter().zip(shares.iter_mut()) {
+            if assigned.is_none() && item.text.len() <= share {
+                *assigned = Some(item.text.len());
+                left = left.checked_sub(item.text.len()).expect("short item fits share");
+                pending = pending.checked_sub(1).expect("pending item");
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    for (item, assigned) in goal.plan.iter_mut().zip(shares.iter()) {
+        let allowance = match assigned {
+            Some(bytes) => *bytes,
+            None => {
+                let bytes = left.div_ceil(pending);
+                left = left.checked_sub(bytes).expect("item fits remaining room");
+                pending = pending.checked_sub(1).expect("pending item");
+                bytes
+            }
+        };
+        item.text = cut(&item.text, allowance);
+    }
 }
 
 fn held(last: &Projected) -> Projection {
@@ -169,7 +345,7 @@ fn has(keys: &[MilestoneKey], key: MilestoneKey) -> bool {
     false
 }
 
-fn valid_history(goal: &GoalView, last: &Projected, limits: &Limits) -> bool {
+fn valid_history(goal: &GoalView, last: &Projected) -> bool {
     for item in &goal.milestones {
         if item.key == MilestoneKey::Finished {
             return false;
@@ -200,21 +376,28 @@ fn valid_history(goal: &GoalView, last: &Projected, limits: &Limits) -> bool {
     if goal.finished.is_none() && has(&last.milestones, MilestoneKey::Finished) {
         return false;
     }
-    match goal.milestones.len().checked_add(usize::from(goal.finished.is_some())) {
-        Some(count) => count <= usize::try_from(limits.milestones).expect("u32 fits usize"),
-        None => false,
-    }
+    true
 }
 
-fn body(goal: &GoalView, limits: &Limits) -> Option<Box<[u8]>> {
-    let mut bytes = goal.goal_text.len().checked_add(9)?.checked_add(label(goal.phase).len())?;
+fn body(goal: &GoalView) -> Box<[u8]> {
+    // Fixed syntax is never cut, even for a policy too small for its skeleton.
+    let mut bytes = goal
+        .goal_text
+        .len()
+        .checked_add(9)
+        .expect("bounded goal words")
+        .checked_add(label(goal.phase).len())
+        .expect("phase label");
     for item in &goal.plan {
-        bytes = bytes.checked_add(10)?.checked_add(item.text.len())?.checked_add(label(item.phase).len())?;
+        bytes = bytes
+            .checked_add(10)
+            .expect("bounded plan syntax")
+            .checked_add(item.text.len())
+            .expect("bounded item words")
+            .checked_add(label(item.phase).len())
+            .expect("phase label");
     }
-    if bytes > usize::try_from(limits.body_bytes).expect("u32 fits usize") {
-        return None;
-    }
-    let mut rendered = List::with_capacity(limits.body_bytes);
+    let mut rendered = List::with_capacity(u32::try_from(bytes).expect("bounded issue body"));
     append(&mut rendered, goal.goal_text.as_bytes());
     append(&mut rendered, b"\nState: ");
     append(&mut rendered, label(goal.phase));
@@ -231,7 +414,7 @@ fn body(goal: &GoalView, limits: &Limits) -> Option<Box<[u8]>> {
         append(&mut rendered, b")");
         rendered.push(b'\n').expect("body size checked");
     }
-    Some(rendered.into_boxed())
+    rendered.into_boxed()
 }
 
 fn label(phase: Phase) -> &'static [u8] {
@@ -253,9 +436,8 @@ fn append(into: &mut List<u8>, bytes: &[u8]) {
 }
 
 fn comment(goal: &GoalView, last: &Projected, key: MilestoneKey, words: Box<str>, limits: &Limits) -> Projection {
-    if words.len() > usize::try_from(limits.comment_bytes).expect("u32 fits usize")
-        || last.milestones.len() >= usize::try_from(limits.milestones).expect("u32 fits usize")
-    {
+    let words = cut(&words, usize::try_from(limits.comment_bytes).expect("u32 fits usize"));
+    if last.milestones.len() >= usize::try_from(limits.milestones).expect("u32 fits usize") {
         return held(last);
     }
     let mut keys = List::with_capacity(limits.milestones);
