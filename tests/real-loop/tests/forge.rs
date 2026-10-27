@@ -40,6 +40,7 @@ fn adopt(name: &'static str) -> temper_real_loop_world::Ran {
                 call(
                     D1,
                     argv![
+                        "repository",
                         "adopt",
                         "--project",
                         "1",

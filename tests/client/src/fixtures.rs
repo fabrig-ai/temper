@@ -920,7 +920,7 @@ pub fn call(words: &[&[u8]]) -> crate::app::Event {
     match temper_client_tools::table::parse(words).unwrap_or_else(|error| panic!("agent call usage: {error:?}")) {
         temper_client_tools::jig::call::Parsed::Call { mut call, json } => {
             // The world supplies the host's already-loaded amendment text.
-            if temper_client_tools::table::TOOLS[usize::from(call.tool)].name == b"amend" {
+            if temper_client_tools::table::TOOLS[usize::from(call.tool)].name == b"task amend" {
                 for slot in &mut call.values {
                     if let Some(temper_client_tools::jig::call::Values::One(
                         temper_client_tools::jig::call::Value::File(path),
@@ -1177,7 +1177,7 @@ pub fn printed_act(stdout: &[u8], act: &[u8]) -> Vec<Box<[u8]>> {
         .skip_while(|line| *line != "acts:")
         .skip(1)
         .take_while(|line| line.starts_with("  "))
-        .find(|line| line.split_ascii_whitespace().next() == Some(act))
+        .find(|line| line.trim_start().strip_prefix(act).is_some_and(|rest| rest.starts_with(' ')))
         .expect("printed act");
     line.split_ascii_whitespace().map(|word| Box::from(word.as_bytes())).collect()
 }

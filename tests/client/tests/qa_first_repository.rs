@@ -198,7 +198,7 @@ fn a_second_tab_that_never_asked_does_not_adopt_the_made_repository() {
     let agent = fixtures::agent(&mut world);
     let person = world.client(fixtures::PARTY, flow());
     let number =
-        fixtures::give(&mut world, agent, &[b"forge-setup", b"1", b"--org", b"acme", b"--repository", b"shop"]);
+        fixtures::give(&mut world, agent, &[b"forge", b"setup", b"1", b"--org", b"acme", b"--repository", b"shop"]);
     wait_for_setup(&mut world);
     made(&mut world);
     connected(&mut world);
@@ -238,13 +238,14 @@ fn page_and_ctl_replayed_adoptions_share_the_first_repository_key() {
     // client/forge.md, 5.4; client/tools.md, 5.5: page and ctl share first-repository-F.
     let mut world = configured(true);
     let agent = fixtures::agent(&mut world);
-    let _ = ctl(&mut world, agent, &[b"forges"]);
+    let _ = ctl(&mut world, agent, &[b"forge", b"list"]);
     let person = world.client(fixtures::PARTY, flow());
     setup(&mut world, person);
     made(&mut world);
     connected(&mut world);
     script(&mut world, person, vec![see(b"acme/shop is ready")]);
     let adopt: &[&[u8]] = &[
+        b"repository",
         b"adopt",
         b"--project",
         b"2",
@@ -279,6 +280,7 @@ fn setup_keeps_an_existing_projects_home_and_gives_the_new_project_its_own() {
         &mut world,
         agent,
         &[
+            b"repository",
             b"adopt",
             b"--project",
             b"1",

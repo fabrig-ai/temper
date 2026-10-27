@@ -172,10 +172,10 @@ fn cancelling_the_pending_fix_holds_its_live_dependent() {
                 .expect("fix review release");
             steps.truncate(release);
             steps.extend([
-                calls::call(D1, argv!["cancel", calls::number(case::BLOCKER_E1), "QA cancels the blocker fix"]),
-                calls::call(D1, argv!["wait", "task", calls::number(case::BLOCKER_E1), "--until", "ended"]),
-                calls::call(D1, argv!["wait", "task", calls::number(case::BLOCKER_A3), "--until", "held"]),
-                calls::call(D1, argv!["task", calls::number(case::BLOCKER_A3), "--json"]),
+                calls::call(D1, argv!["task", "cancel", calls::number(case::BLOCKER_E1), "QA cancels the blocker fix"]),
+                calls::call(D1, argv!["task", "show", calls::number(case::BLOCKER_E1), "--until", "ended"]),
+                calls::call(D1, argv!["task", "show", calls::number(case::BLOCKER_A3), "--until", "held"]),
+                calls::call(D1, argv!["task", "show", calls::number(case::BLOCKER_A3), "--json"]),
                 calls::release_hold(case::BLOCKER_REVIEW_HOLD),
             ]);
             steps

@@ -27,7 +27,8 @@ fn connect(app: Arg, key: &'static str) -> Step {
     calls::call(
         D1,
         Argv(vec![
-            Arg::Lit("forge-connect"),
+            Arg::Lit("forge"),
+            Arg::Lit("connect"),
             Arg::Lit("1"),
             Arg::Lit("github-app"),
             app,
@@ -42,12 +43,13 @@ fn begin() -> Vec<Step> {
     vec![
         calls::sign_in(D1),
         connect(calls::github_app(), "qa-connect"),
-        call(&["wait", "forges", "--until", "connected:1", "--json"]),
+        call(&["forge", "list", "--until", "connected:1", "--json"]),
     ]
 }
 
 fn adopt(owner: &'static str, name: &'static str, key: &'static str) -> Step {
     call(&[
+        "repository",
         "adopt",
         "--project",
         "1",
@@ -145,9 +147,9 @@ fn an_unvisited_install_link_does_not_authorize_adoption() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa-abandoned"]),
+            call(&["forge", "install", "1", "--key", "qa-abandoned"]),
             adopt("acme", "app", "qa-no-install"),
-            call(&["forges", "--json"]),
+            call(&["forge", "list", "--json"]),
         ]);
         steps
     });
@@ -190,10 +192,10 @@ fn a_read_only_app_keeps_its_hook_and_old_stray_through_paste_and_reconcile() {
         // Connected is published before reconcile completes; await its end before
         // asking for an install link, since setup refuses overlapping plans as busy.
         steps.extend([
-            call(&["wait", "forges", "--until", "settled", "--json"]),
-            call(&["forge-install", "1", "--key", "qa-read-only-install"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
+            call(&["forge", "install", "1", "--key", "qa-read-only-install"]),
             calls::browse(INSTALL),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
         ]);
         steps
     });
@@ -234,8 +236,8 @@ fn replaying_an_install_request_keeps_one_link_and_one_acceptance() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa-repeat"]),
-            call(&["forge-install", "1", "--key", "qa-repeat"]),
+            call(&["forge", "install", "1", "--key", "qa-repeat"]),
+            call(&["forge", "install", "1", "--key", "qa-repeat"]),
             calls::browse(3),
             calls::browse(4),
             adopt("acme", "app", "qa-after-replay"),
@@ -261,10 +263,10 @@ fn an_accepted_installation_fits_the_ctls_forges_status() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa-status"]),
+            call(&["forge", "install", "1", "--key", "qa-status"]),
             calls::browse(3),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
-            call(&["forges", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--json"]),
         ]);
         steps
     });
@@ -288,9 +290,9 @@ fn accepting_acme_does_not_grant_umbras_repository() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa-acme"]),
+            call(&["forge", "install", "1", "--key", "qa-acme"]),
             calls::browse(3),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
             adopt("umbra", "tool", "qa-wrong-owner"),
             adopt("acme", "app", "qa-right-owner"),
         ]);
@@ -316,7 +318,7 @@ fn an_app_id_mismatch_leaves_a_public_failure_without_the_key() {
         vec![
             calls::sign_in(D1),
             connect(calls::number(u64::MAX), "qa-other-app"),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
         ]
     });
     succeeded(&ran, 0);
@@ -340,7 +342,7 @@ fn an_app_id_mismatch_leaves_a_public_failure_without_the_key() {
 fn a_suspended_installation_and_a_revoked_key_stop_repository_access() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
-        steps.extend([call(&["forge-install", "1", "--key", "qa-suspend-revoke"]), calls::browse(3)]);
+        steps.extend([call(&["forge", "install", "1", "--key", "qa-suspend-revoke"]), calls::browse(3)]);
         steps
     });
     assert_eq!(ran.browsed()[0].hops, [302, 200]);
@@ -358,16 +360,16 @@ fn ctl_human_and_json_status_follow_paste_and_install() {
     let ran = run_github(fresh(), no_agents, || {
         vec![
             calls::sign_in(D1),
-            call(&["forges", "--json"]),
-            call(&["forges"]),
+            call(&["forge", "list", "--json"]),
+            call(&["forge", "list"]),
             connect(calls::github_app(), "qa2-status-connect"),
-            call(&["wait", "forges", "--until", "connected:1", "--json"]),
-            call(&["forges"]),
-            call(&["forge-install", "1", "--key", "qa2-status-install"]),
-            call(&["forges", "--json"]),
+            call(&["forge", "list", "--until", "connected:1", "--json"]),
+            call(&["forge", "list"]),
+            call(&["forge", "install", "1", "--key", "qa2-status-install"]),
+            call(&["forge", "list", "--json"]),
             calls::browse(6),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
-            call(&["forges"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
+            call(&["forge", "list"]),
         ]
     });
     no_git_writes_or_key_leaks(&ran);
@@ -421,13 +423,13 @@ fn a_failed_paste_is_named_in_human_status_and_cleared_by_retry() {
         vec![
             calls::sign_in(D1),
             connect(calls::number(u64::MAX), "qa2-failed-paste"),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
-            call(&["forges"]),
-            call(&["forge-install", "1", "--key", "qa2-install-too-soon", "--json"]),
-            call(&["forges", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
+            call(&["forge", "list"]),
+            call(&["forge", "install", "1", "--key", "qa2-install-too-soon", "--json"]),
+            call(&["forge", "list", "--json"]),
             connect(calls::github_app(), "qa2-retry-paste"),
-            call(&["wait", "forges", "--until", "connected:1", "--json"]),
-            call(&["forges"]),
+            call(&["forge", "list", "--until", "connected:1", "--json"]),
+            call(&["forge", "list"]),
         ]
     });
     no_git_writes_or_key_leaks(&ran);
@@ -466,11 +468,11 @@ fn replaying_a_paste_and_refusing_a_new_connect_preserves_the_app() {
         steps.extend([
             connect(calls::github_app(), "qa-connect"),
             connect(calls::number(u64::MAX), "qa2-already-connected"),
-            call(&["forges", "--json"]),
+            call(&["forge", "list", "--json"]),
             connect(calls::github_app(), "qa-connect"),
-            call(&["forge-install", "1", "--key", "qa2-after-repeated-paste"]),
+            call(&["forge", "install", "1", "--key", "qa2-after-repeated-paste"]),
             calls::browse(7),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
             adopt("acme", "app", "qa2-repeated-paste-adopt"),
         ]);
         steps
@@ -501,11 +503,11 @@ fn install_json_and_human_replays_name_the_same_live_link() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa2-link-formats", "--json"]),
-            call(&["forge-install", "1", "--key", "qa2-link-formats"]),
+            call(&["forge", "install", "1", "--key", "qa2-link-formats", "--json"]),
+            call(&["forge", "install", "1", "--key", "qa2-link-formats"]),
             calls::browse(4),
-            call(&["forge-install", "1", "--key", "qa2-link-formats", "--json"]),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "install", "1", "--key", "qa2-link-formats", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
         ]);
         steps
     });
@@ -541,12 +543,12 @@ fn independent_install_links_remain_live_and_accept_one_installation() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa2-first-live"]),
-            call(&["forge-install", "1", "--key", "qa2-second-live"]),
+            call(&["forge", "install", "1", "--key", "qa2-first-live"]),
+            call(&["forge", "install", "1", "--key", "qa2-second-live"]),
             calls::browse(4),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
             calls::browse(3),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
             calls::browse(4),
             calls::browse(3),
         ]);
@@ -577,15 +579,15 @@ fn refused_and_replayed_pastes_keep_keys_out_of_persisted_public_state() {
         vec![
             calls::sign_in(D1),
             connect(calls::number(u64::MAX), "qa2-secrecy-failed"),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
             connect(calls::number(u64::MAX), "qa2-secrecy-failed"),
             connect(calls::github_app(), "qa2-secrecy-ok"),
-            call(&["wait", "forges", "--until", "connected:1", "--json"]),
+            call(&["forge", "list", "--until", "connected:1", "--json"]),
             connect(calls::github_app(), "qa2-secrecy-ok"),
             connect(calls::github_app(), "qa2-secrecy-refused"),
-            call(&["forge-install", "1", "--key", "qa2-secrecy-install"]),
+            call(&["forge", "install", "1", "--key", "qa2-secrecy-install"]),
             calls::browse(8),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
         ]
     });
     no_git_writes_or_key_leaks(&ran);
@@ -640,8 +642,8 @@ fn replayed_pastes_and_accepts_make_no_duplicate_store_writes() {
         let mut steps = begin();
         steps.extend([
             connect(calls::github_app(), "qa-connect"),
-            call(&["forge-install", "1", "--key", "qa2-write-count"]),
-            call(&["forge-install", "1", "--key", "qa2-write-count"]),
+            call(&["forge", "install", "1", "--key", "qa2-write-count"]),
+            call(&["forge", "install", "1", "--key", "qa2-write-count"]),
             calls::browse(4),
             calls::browse(5),
         ]);
@@ -661,9 +663,9 @@ fn installation_tokens_stay_out_of_logs_records_and_saved_client_state() {
     let ran = run_github(fresh(), no_agents, || {
         let mut steps = begin();
         steps.extend([
-            call(&["forge-install", "1", "--key", "qa2-token-secrecy"]),
+            call(&["forge", "install", "1", "--key", "qa2-token-secrecy"]),
             calls::browse(3),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
             adopt("acme", "app", "qa2-token-adopt"),
         ]);
         steps
@@ -692,8 +694,8 @@ fn an_app_lacking_permissions_still_connects() {
         vec![
             calls::sign_in(D1),
             connect(calls::github_app(), "qa2-lacking-connect"),
-            call(&["wait", "forges", "--until", "settled", "--json"]),
-            call(&["forges"]),
+            call(&["forge", "list", "--until", "settled", "--json"]),
+            call(&["forge", "list"]),
         ]
     });
     no_git_writes_or_key_leaks(&ran);

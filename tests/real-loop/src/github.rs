@@ -433,19 +433,20 @@ const CHANGE_TASK: u64 = 2;
 pub fn connect_adopt_and_ask_for_a_change() -> Vec<Step> {
     vec![
         sign_in(D1),
-        call(D1, argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "github-llm"]),
-        call(D1, argv!["wait", "accounts", "--until", "usable"]),
+        call(D1, argv!["account", "add-key", "1", file("fixture.key"), "--deployment", "--key", "github-llm"]),
+        call(D1, argv!["account", "list", "--until", "usable"]),
         call(
             D1,
-            argv!["forge-connect", "1", "github-app", github_app(), file("github-app.pem"), "--key", "github-app"],
+            argv!["forge", "connect", "1", "github-app", github_app(), file("github-app.pem"), "--key", "github-app"],
         ),
-        call(D1, argv!["wait", "forges", "--until", "connected:1"]),
-        call(D1, argv!["forge-install", "1", "--key", "github-install"]),
+        call(D1, argv!["forge", "list", "--until", "connected:1"]),
+        call(D1, argv!["forge", "install", "1", "--key", "github-install"]),
         browse(INSTALL),
-        call(D1, argv!["wait", "forges", "--until", "settled"]),
+        call(D1, argv!["forge", "list", "--until", "settled"]),
         call(
             D1,
             argv![
+                "repository",
                 "adopt",
                 "--project",
                 "1",
@@ -461,13 +462,13 @@ pub fn connect_adopt_and_ask_for_a_change() -> Vec<Step> {
                 "adopt-app"
             ],
         ),
-        call(D1, argv!["chat", "--project", "1", "--key", "github-land", "@forge_chat Update README"]),
+        call(D1, argv!["chat", "start", "--project", "1", "--key", "github-land", "@forge_chat Update README"]),
         // The first reply follows delegate creation. Join that change before
         // starting the chat's final wait: its report follows the landing.
-        call(D1, argv!["wait", "task", number(CHAT_TASK), "--until", "replied"]),
-        call(D1, argv!["wait", "task", number(CHANGE_TASK), "--until", "ended", "--json"]),
-        call(D1, argv!["task", number(CHANGE_TASK), "--json"]),
-        call(D1, argv!["wait", "task", number(CHAT_TASK), "--until", "ended", "--json"]),
+        call(D1, argv!["task", "show", number(CHAT_TASK), "--until", "replied"]),
+        call(D1, argv!["task", "show", number(CHANGE_TASK), "--until", "ended", "--json"]),
+        call(D1, argv!["task", "show", number(CHANGE_TASK), "--json"]),
+        call(D1, argv!["task", "show", number(CHAT_TASK), "--until", "ended", "--json"]),
     ]
 }
 

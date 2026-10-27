@@ -19,15 +19,15 @@ fn ended_tree(json: bool) {
     let parent = tasks.goal.to_string();
     let child = tasks.first.to_string();
 
-    let live = fixtures::give(&mut world, agent, &[b"task", parent.as_bytes(), b"--tree"]);
+    let live = fixtures::give(&mut world, agent, &[b"task", b"show", parent.as_bytes(), b"--tree"]);
     let live = fixtures::answered(&mut world, agent, live);
     assert_eq!(live.status, 0, "live parent tree: {live:?}");
-    let plain = fixtures::give(&mut world, agent, &[b"task", child.as_bytes()]);
+    let plain = fixtures::give(&mut world, agent, &[b"task", b"show", child.as_bytes()]);
     let plain = fixtures::answered(&mut world, agent, plain);
     assert_eq!(plain.status, 0, "ended delegate document: {plain:?}");
     assert!(plain.stderr.is_empty());
 
-    let mut words = vec![b"task".as_slice(), child.as_bytes(), b"--tree"];
+    let mut words = vec![b"task".as_slice(), b"show", child.as_bytes(), b"--tree"];
     if json {
         words.push(b"--json");
     }

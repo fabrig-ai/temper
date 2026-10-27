@@ -53,11 +53,12 @@ fn scripts(address: SocketAddr) -> Box<[Script]> {
 fn begin() -> Vec<Step> {
     vec![
         sign_in(D1),
-        call(D1, argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "qa-llm"]),
-        call(D1, argv!["wait", "accounts", "--until", "usable"]),
+        call(D1, argv!["account", "add-key", "1", file("fixture.key"), "--deployment", "--key", "qa-llm"]),
+        call(D1, argv!["account", "list", "--until", "usable"]),
         call(
             D1,
             argv![
+                "repository",
                 "adopt",
                 "--project",
                 "1",
@@ -71,7 +72,7 @@ fn begin() -> Vec<Step> {
                 "qa-adopt"
             ],
         ),
-        call(D1, argv!["chat", "--project", "1", "--key", "qa-chat", "@forge_chat Make one small edit"]),
+        call(D1, argv!["chat", "start", "--project", "1", "--key", "qa-chat", "@forge_chat Make one small edit"]),
     ]
 }
 
@@ -84,12 +85,12 @@ fn landing_reads() -> Vec<Step> {
     steps.extend([
         // The chat's committed first reply follows delegate creation. Opening
         // a watch on T2 before that would correctly answer unknown.
-        call(D1, argv!["wait", "task", task(CHAT_CALL), "--until", "replied"]),
-        call(D1, argv!["wait", "task", number(CHANGE), "--until", "ended", "--json"]),
+        call(D1, argv!["task", "show", task(CHAT_CALL), "--until", "replied"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--until", "ended", "--json"]),
         // Ended tasks retain a plain result; --tree is a live watch.
-        call(D1, argv!["task", number(CHANGE), "--json"]),
-        calls::until(D1, argv!["chat", task(CHAT_CALL), "--json"], LANDED, b"Change requested"),
-        call(D1, argv!["task", number(CHANGE), "--json"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--json"]),
+        calls::until(D1, argv!["chat", "show", task(CHAT_CALL), "--json"], LANDED, b"Change requested"),
+        call(D1, argv!["task", "show", number(CHANGE), "--json"]),
     ]);
     steps
 }
@@ -98,7 +99,7 @@ fn leave_chat_open(mut steps: Vec<Step>) -> Vec<Step> {
     // These requester-ended chats remain available on the person's page.
     // Join the activation that published the reply, without closing the chat.
     steps.extend([
-        call(D1, argv!["wait", "task", number(CHAT), "--until", "phase:idle", "--json"]),
+        call(D1, argv!["task", "show", number(CHAT), "--until", "phase:idle", "--json"]),
         calls::ends_leaving(&[temper_real_loop_world::ending::Leftover {
             task: CHAT,
             may_be: &[temper_real_loop_world::ending::Left::Due],
@@ -517,12 +518,12 @@ fn silent_steps() -> Vec<Step> {
     steps.extend([
         // Synchronize on actual task creation and the worker's completed push,
         // then observe both sides of the short stall through client reads.
-        call(D1, argv!["wait", "task", task(CHAT_CALL), "--until", "replied"]),
-        call(D1, argv!["wait", "task", number(WORKER), "--until", "ended", "--timeout", "2s"]),
-        call(D1, argv!["task", number(CHANGE), "--json"]),
-        call(D1, argv!["wait", "task", number(CHANGE), "--until", "held", "--timeout", "2s", "--json"]),
-        call(D1, argv!["task", number(CHANGE), "--json"]),
-        calls::until(D1, argv!["chat", task(CHAT_CALL), "--json"], HELD_REPLY, b"Change requested"),
+        call(D1, argv!["task", "show", task(CHAT_CALL), "--until", "replied"]),
+        call(D1, argv!["task", "show", number(WORKER), "--until", "ended", "--timeout", "2s"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--json"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--until", "held", "--timeout", "2s", "--json"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--json"]),
+        calls::until(D1, argv!["chat", "show", task(CHAT_CALL), "--json"], HELD_REPLY, b"Change requested"),
         // Reading the service again after the hold also checks it still serves.
         call(D1, argv!["me", "--json"]),
         terminal::open(),
@@ -652,9 +653,9 @@ fn an_unanswered_repair_brief_is_bounded_by_its_gather_deadline() {
     let ran = run_github(fixture(), unanswered_repair_scripts, || {
         let mut steps = begin();
         steps.extend([
-            call(D1, argv!["wait", "task", task(CHAT_CALL), "--until", "replied"]),
+            call(D1, argv!["task", "show", task(CHAT_CALL), "--until", "replied"]),
             call(D1, argv!["me", "--json"]),
-            call(D1, argv!["task", number(CHANGE), "--json"]),
+            call(D1, argv!["task", "show", number(CHANGE), "--json"]),
         ]);
         steps
     });

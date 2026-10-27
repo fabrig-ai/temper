@@ -2,10 +2,22 @@ use jig_client_world::harness::FrontFault;
 use skein_lib::Duration;
 use temper_client_world::{app::Temper, fixtures, front::Joint};
 
-const CHAT: &[&[u8]] = &[b"chat", b"--project", b"1", b"--key", b"hello", b"Hello"];
-const AGAIN: &[&[u8]] = &[b"chat", b"--project", b"1", b"--key", b"second", b"Again"];
-const ADOPT: &[&[u8]] =
-    &[b"adopt", b"--project", b"1", b"--owner", b"acme", b"--name", b"shop", b"--landing", b"main", b"--key", b"shop"];
+const CHAT: &[&[u8]] = &[b"chat", b"start", b"--project", b"1", b"--key", b"hello", b"Hello"];
+const AGAIN: &[&[u8]] = &[b"chat", b"start", b"--project", b"1", b"--key", b"second", b"Again"];
+const ADOPT: &[&[u8]] = &[
+    b"repository",
+    b"adopt",
+    b"--project",
+    b"1",
+    b"--owner",
+    b"acme",
+    b"--name",
+    b"shop",
+    b"--landing",
+    b"main",
+    b"--key",
+    b"shop",
+];
 // A restart is recovered inside the world's one-second story bound.
 const OFFLINE: Duration = Duration::from_millis(30);
 // Exactly one application is admitted even if its answer is cut.
@@ -91,7 +103,7 @@ fn an_unkeyed_stop_cut_before_its_answer_is_resent_with_its_kept_line() {
     let mut world = world();
     let agent = fixtures::agent(&mut world);
     let task = fixtures::done_task(&call(&mut world, agent, CHAT));
-    fixtures::cut(&mut world, agent, &[b"stop", task.to_string().as_bytes()]);
+    fixtures::cut(&mut world, agent, &[b"task", b"stop", task.to_string().as_bytes()]);
     world.reload(agent);
     let printed = call(&mut world, agent, AGAIN);
     let expected = format!("kept: stop, done: task {task}, stop\n");

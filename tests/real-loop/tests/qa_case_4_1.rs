@@ -174,7 +174,7 @@ fn a_failed_document_act_cannot_silently_pass() {
         case::scripts::step_4_1_rules,
         || {
             let mut steps = acts::step_4_1();
-            steps[design_read] = calls::call(D1, argv!["task", calls::number(ABSENT_TASK), "--json"]);
+            steps[design_read] = calls::call(D1, argv!["task", "show", calls::number(ABSENT_TASK), "--json"]);
             steps
         },
     );
