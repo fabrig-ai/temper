@@ -675,6 +675,9 @@ impl World {
                     let mut workflows = Vec::new();
                     if turn {
                         workflows.push(raw::Workflow {
+                        fails: Box::new([]),
+                        report: None,
+                        select: None,
                             file: b"gate.yml".as_slice().into(),
                             jobs: Box::new([b"test".as_slice().into()]),
                             latency_min: Duration::from_secs(1),
@@ -686,6 +689,9 @@ impl World {
                     }
                     if tier {
                         workflows.push(raw::Workflow {
+                        fails: Box::new([]),
+                        report: None,
+                        select: None,
                             file: b"browser.yml".as_slice().into(),
                             jobs: Box::new([b"browser".as_slice().into()]),
                             latency_min: Duration::from_secs(90),

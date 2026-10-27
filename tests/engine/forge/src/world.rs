@@ -285,6 +285,9 @@ impl World {
             raw::Setup {
                 workflows: if turn {
                     Box::new([raw::Workflow {
+                        fails: Box::new([]),
+                        report: None,
+                        select: None,
                         file: b"gate.yml".as_slice().into(),
                         jobs: Box::new([b"test".as_slice().into()]),
                         latency_min: Duration::from_secs(2),
@@ -295,6 +298,9 @@ impl World {
                     }])
                 } else if tier {
                     Box::new([raw::Workflow {
+                        fails: Box::new([]),
+                        report: None,
+                        select: None,
                         file: b"browser.yml".as_slice().into(),
                         jobs: Box::new([b"browser".as_slice().into()]),
                         latency_min: Duration::from_secs(90),

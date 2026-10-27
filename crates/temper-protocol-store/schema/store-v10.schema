@@ -231,12 +231,13 @@ enum TierPart { whole, rerun: TierTests, probe: TierProbe }
 record TierRun { number: u64 tip: fixed 32 key: fixed 32 landings: list 257 TierLanding part: TierPart faults: u32 }
 record TierRecord { sequence: u64 judged: option TierJudged failing: Failures flakes: list 1024 TierFlake run: option TierRun }
 enum TierBranch { absent, pending: Number, made }
-record TierFlight { next: option u64 entry: u64 start: option u64 since: option u64 waiting: bool fault: bool pending: list 65536 JobAttempt }
-record TierJudgement { number: u64 tip: fixed 32 key: fixed 32 finding: TierFinding }
 record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
-record TierResult { verdict: TierJudgement run: ReceiptRun received: bool status: TierBranch }
+record TierFlight { next: option u64 entry: u64 start: option u64 since: option u64 waiting: bool fault: bool report: option ReceiptRun pending: list 65536 JobAttempt }
+record TierJudgement { number: u64 tip: fixed 32 key: fixed 32 finding: TierFinding }
+record TierResult { verdict: TierJudgement run: ReceiptRun received: bool status: TierBranch applied: bool }
 record TierPending { commit: fixed 32 key: option Commit }
-record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierPending baseline: option TierPending task: option u64 branch: TierBranch flight: option TierFlight result: option TierResult }
+record TierProbeBranch { landing: u32 branch: TierBranch }
+record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierPending baseline: option TierPending task: option u64 branch: TierBranch probe: option TierProbeBranch flight: option TierFlight result: option TierResult }
 # Families 23 and 24: landing state and receipts (domain/landing.md, 12).
 record LandingAt { at: u64 }
 enum LandingPlace { waiting, preparing, proving, proved: LandingAt, turn: LandingAt, landed, cancelled }

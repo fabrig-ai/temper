@@ -112,22 +112,54 @@ fn fact(row: &Verification) -> change::Verification {
     if cleared { change::Verification::Cleared } else { change::Verification::Verifying }
 }
 
-/// Lay a judged run's verdict on each named landing; T4 supplies the judged range.
+/// Apply blame and repair older reds once this judged run passes their tests (5.3).
 pub(crate) fn judged(
     d: &mut Domain,
     repository: Repository,
     tier: &[u8],
-    run: u64,
+    judged: &temper_engine_domain_forge_tiers::Verdict,
     landings: &[(Commit, Blame)],
     out: &mut Queue<Request>,
 ) {
+    // Earlier reds keep their own verdict. Only a judged run that no longer
+    // fails any of their blamed tests repairs them, whether in this range or before it.
+    let mut keys = List::with_capacity(d.verifications.len());
+    for (key, _) in &d.verifications {
+        if key.0 == repository { keys.push(*key).expect("verification count"); }
+    }
+    for key in &keys {
+        let row = d.verifications.get_mut(key).expect("collected verification");
+        let before = fact(row);
+        let mut changed = false;
+        for verification in &mut row.tiers {
+            if verification.tier.as_ref() == tier && verification.repaired.is_none()
+                && let Some(verdict) = &verification.verdict
+                && let Blame::Owns(_) | Blame::Suspect(_) = &verdict.blame
+                && temper_engine_domain_forge_tiers::repaired(&verdict.blame, &judged.failing)
+            {
+                verification.repaired = Some(judged.tip);
+                changed = true;
+            }
+        }
+        if changed {
+            if fact(row) != before {
+                for task in &row.changes {
+                    d.procedure_wakes.insert(*task, true).expect("one pending wake per change");
+                }
+            }
+            save(row.clone(), out);
+        }
+    }
     for (commit, blame) in landings {
         let Some(row) = d.verifications.get_mut(&(repository, *commit)) else { continue };
         let before = fact(row);
         let mut changed = false;
         for verification in &mut row.tiers {
             if verification.tier.as_ref() == tier {
-                let verdict = TierVerdict { run, blame: blame.clone() };
+                if let Some(TierVerdict { blame: Blame::Owns(_) | Blame::Suspect(_), .. }) = &verification.verdict {
+                    continue;
+                }
+                let verdict = TierVerdict { run: judged.number, blame: blame.clone() };
                 if verification.verdict.as_ref() != Some(&verdict) {
                     verification.verdict = Some(verdict);
                     changed = true;

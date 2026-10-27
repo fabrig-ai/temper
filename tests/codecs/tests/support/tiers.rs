@@ -20,6 +20,7 @@ pub fn smallest() -> Stored {
         baseline: None,
         task: None,
         branch: TierBranch::Absent,
+        probe: None,
         flight: None,
         result: None,
     })
@@ -67,6 +68,7 @@ pub fn fullest() -> Stored {
             .collect(),
         task: Some(51),
         branch: TierBranch::Pending { entry: 11 },
+        probe: None,
         flight: Some(temper_engine_domain_forge::TierFlight {
             next: Some(skein_lib::Time::from_nanos(7)),
             entry: 11,
@@ -74,6 +76,7 @@ pub fn fullest() -> Stored {
             since: Some(skein_lib::Time::from_nanos(4)),
             waiting: false,
             fault: false,
+            report: None,
             pending: Box::new([skein_forge::api::JobAttempt { head: TIP, run: 71, job: 81, attempt: 2 }]),
         }),
         result: Some(temper_engine_domain_forge::TierResult {
@@ -92,6 +95,7 @@ pub fn fullest() -> Stored {
             },
             received: false,
             status: TierBranch::Pending { entry: 12 },
+            applied: false,
         }),
     })
 }
