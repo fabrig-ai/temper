@@ -44,7 +44,7 @@ members:
 
 - `engine`: its limits; the LLM providers and their models; the
   workers it admits and its listener; the owners; the ways to sign in;
-  the first project and its policy;
+  the first project, naming its policy (`"policy": 1`);
 - `workers`: each worker's engine address, name, secret file, slots
   and agent program;
 - `application`: the forges; the landing rules and the forge's
@@ -53,7 +53,10 @@ members:
 
 The settings (charters, templates, policies, rules) are not in it:
 they live in the store and change while the deployment runs (temper
-help settings).
+help settings). A configuration naming one is refused at the start,
+and so is a project whose policy is written out in it:
+`engine.projects[0].policy: name a policy, policy: 1; change it with
+temper ctl settings apply`.
 
 ## How it changes
 
