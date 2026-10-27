@@ -171,7 +171,7 @@ fn process_settings(value: &mut Value) -> Value {
         value["engine"].as_object_mut().expect("engine").remove(member);
     }
     for (name, minimum) in
-        [("tasks.charters", 2), ("authority.grants", 16), ("notes.scopes", 32), ("core.policy_bytes", 4096)]
+        [("tasks.charters", 4), ("authority.grants", 16), ("notes.scopes", 32), ("core.policy_bytes", 4096)]
     {
         let held = value["engine"]["limits"]["overrides"][name].as_u64().unwrap_or(0);
         value["engine"]["limits"]["overrides"][name] = held.max(minimum).into();
