@@ -399,7 +399,7 @@ pub fn setup_items(directory: &Path) -> Option<serde_json::Value> {
     charter["waiting"] = 1_000_000.into();
     let mut template = stock["template"].clone();
     template["grace"] = 1_000_000.into();
-    template["budget"]["as_allowed"]["cap"] = 50.into();
+    template["budget"]["as_allowed"]["cap"] = flags["cap"].as_u64().unwrap_or(50).into();
     if flags["requester"] != true {
         template["flags"]["ended_by"] = "result".into();
     }
@@ -442,7 +442,8 @@ pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -
     let stock_period_spend = defaults.rules.period_spend;
     defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(1);
     defaults.templates[0].grace = Some(skein_lib::Duration::from_millis(1));
-    defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(50) };
+    defaults.templates[0].budget =
+        jig_domain_people::TemplateBudget::AsAllowed { cap: Some(flags["cap"].as_u64().unwrap_or(50)) };
     if flags["requester"] != true {
         defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Result;
     }
