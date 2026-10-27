@@ -19,7 +19,7 @@ fn call(name: &[u8], arguments: &serde_json::Value) -> Turn {
 }
 #[must_use]
 pub fn scripts() -> Box<[Script]> {
-    let spend = super::configuration::run_spend(2);
+    let spend = super::first_repository::run_spend(2);
     Box::new([
         Script {
             cue: b"@revision-chat".as_slice().into(),

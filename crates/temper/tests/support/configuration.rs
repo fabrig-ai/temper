@@ -69,38 +69,6 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     (serde_json::to_vec(&agent).expect("agent JSON"), serde_json::to_vec(&value).expect("deployment JSON"))
 }
 
-/// Price a process story's purse from init's default model and stock run cap.
-#[must_use]
-pub fn run_spend(runs: u64) -> u64 {
-    let mut template: serde_json::Value =
-        serde_json::from_slice(include_bytes!("../../../temper-init/template/temper.json")).expect("init template");
-    // Only the default model prices this story; the demo's socket is filled by init.
-    for member in ["providers", "endpoints", "models"] {
-        template["engine"]["llm"][member].as_array_mut().expect("model configuration").truncate(1);
-    }
-    let bytes = serde_json::to_vec(&template).expect("single-model template");
-    let document = jig_protocol_config::document(
-        &bytes,
-        &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 65_536, depth: 32 },
-    )
-    .expect("init document");
-    let at = jig_protocol_config::read::Object::new(&document, 0)
-        .expect("init object")
-        .member(&document, b"engine")
-        .expect("init engine");
-    let engine = temper_service::startup::engine(&document, at, &jig_protocol_config::Directories::working())
-        .expect("init engine settings");
-    // Price the story in stock run units, then round its fixture purse
-    // to the least power of two covering those runs.
-    engine
-        .rules
-        .maximum_run_spend
-        .checked_mul(runs)
-        .expect("stock runs")
-        .checked_next_power_of_two()
-        .expect("bounded story spend")
-}
-
 /// Keep a copied fixture's startup members and use temper's stock settings.
 pub fn use_stock(value: &mut serde_json::Value) {
     for member in ["charters", "templates", "policies", "rules"] {
