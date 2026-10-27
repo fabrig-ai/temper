@@ -28,6 +28,8 @@ Run a whole deployment on one machine, on loopback, from its configuration to a 
 - `BUNDLE`: the loopback bundle's directory, on fake backends.
 - `REQUEST`: a file of the words that ask for the change.
 - `CHANGE`: the change task's number, which step 6 reads.
+- `NAME`: a Claude Code login's name, 1 to 32 lower-case letters,
+  digits or hyphens (step 5).
 
 ## 1. Write the configuration
 
@@ -43,8 +45,7 @@ Expect: `init: wrote DATA/worker.secret`, with `DATA` the path you
 gave; the last line names the step 2 command for real backends.
 
 **Claude Code** needs a provider `temper init` does not write. Give it
-Anthropic's in OpenAI's place, so that every agent runs on Claude Code:
-`MODEL` is a model Claude Code takes, such as `sonnet` or `opus`;
+Anthropic's in OpenAI's place: `MODEL` is a model Claude Code takes, such as `sonnet` or `opus`;
 `PROGRAMS` is the private directory that holds its logins, such as
 `DATA/programs`, or the parent of a signed-in Claude Code directory you
 hold (step 5); `DIR/temper.json` and `DIR/agent.json` are scratch
@@ -185,10 +186,8 @@ the box printed:
 temper ctl DIR account add-key PROVIDER FILE --deployment --key KEY
 ```
 
-A Claude Code login, on the configuration step 1 gave Claude Code;
-`NAME` is the login's name, 1 to 32 lower-case letters, digits or
-hyphens, and `ACCOUNT` the account `account list` shows for provider
-2:
+A Claude Code login, on step 1's Claude Code configuration;
+`ACCOUNT` is the account `account list` shows for provider 2:
 
 ```
 temper ctl DIR account declare 2 claude_code NAME --key KEY
