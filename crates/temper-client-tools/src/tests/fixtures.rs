@@ -114,6 +114,8 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["proposal", "show", "p73/7"],
     &["forge", "accept", "3", "1"],
     &["revision", "advance", "7", "--key", "move-7"],
+    &["landing", "show", "41"],
+    &["landing", "list", "--project", "1"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -707,6 +709,8 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot per row and form; fewer omits decide's second form.
 pub(super) const TOOL_FORMS: u32 = 57;
+    &["landing", "show", "41"],
+    &["landing", "list", "--project", "1"],
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

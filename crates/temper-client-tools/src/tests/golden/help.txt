@@ -15,3 +15,4 @@ model  Models: read those your party may use
 settings  The settings: read them, change them, or propose a change to their owners
 revision  Settings revisions: read one or the history, move running work to the newest
 playground  The playground: start the demo
+landing  Landings: read one or a project's landings
