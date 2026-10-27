@@ -337,16 +337,3 @@ pub fn program_story(repository: u64, readme: &[u8]) -> smith_fake_claude::Story
         ..Story::default()
     }
 }
-
-/// The same landing path, with every charter defaulting to the program model.
-#[must_use]
-pub fn program_fixture() -> crate::forge::Fixture {
-    crate::forge::Fixture {
-        configure: |value, agent, forge| {
-            (fixture().configure)(value, agent, forge);
-            // Stock charters take their default from the first configured model.
-            value["engine"]["llm"]["models"].as_array_mut().expect("models").swap(0, 1);
-        },
-        ..fixture()
-    }
-}
