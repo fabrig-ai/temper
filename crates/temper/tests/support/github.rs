@@ -18,7 +18,7 @@ const INSTALLATION: u64 = 1;
 const CODER: u64 = 3; // Fresh deployment: chat 1, change procedure 2, its coder 3.
 const EDIT: &[u8] = b"Changed by temper.\n";
 
-/// Both GitHub stories park chat promptly and reserve 50 units for its delegates.
+/// Both GitHub stories park chat promptly; a stock run and change fit in 64 units.
 /// Read the stock's whole settings after sign-in, then commit both edits together.
 pub fn settings_setup(client: &Path, following: Vec<ctl::Call>) -> Vec<ctl::Step> {
     use ctl::{Call, Step};
@@ -34,7 +34,7 @@ pub fn settings_setup(client: &Path, following: Vec<ctl::Call>) -> Vec<ctl::Step
             let mut chat = charter["value"].clone();
             chat["waiting"] = 1_000_000.into();
             let mut recipe = template["value"].clone();
-            recipe["budget"] = serde_json::json!({"as_allowed":{"cap":50}});
+            recipe["budget"] = serde_json::json!({"as_allowed":{"cap":64}});
             let change = serde_json::json!({"items":[
                 {"setting":charter["setting"],"set":chat},
                 {"setting":template["setting"],"set":recipe}

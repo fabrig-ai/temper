@@ -581,7 +581,7 @@
                   "depth": 4
                 }},
                 "budget": {{
-                  "spend": 40,
+                  "spend": 64,
                   "deadline_unix_seconds": null
                 }},
                 "notes": 0,
