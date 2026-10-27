@@ -20,7 +20,6 @@ const PRODUCER: u64 = 4;
 const QUESTION: u64 = 1;
 const REQUEST: &str = "Add CSV export to widget: agree the plan with me before anything is changed.";
 const CHAT_SPEND: u64 = 100;
-const RUN_SPEND: u64 = 10;
 const QUESTION_WORDS: &str = "Export widget's table as CSV in src/main.rs and land it on main. Go ahead?";
 const ANSWER: &str = "Go ahead.";
 const CHANGE_SPEC: &str = "@green_coding Export widget's table as CSV";
@@ -78,7 +77,7 @@ pub fn fixture() -> forge::Fixture {
                 project["policy"]["ceiling"]["delegation"]["depth"] = 5.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = 3.into();
                 project["policy"]["roles"][0]["authority"]["delegation"]["depth"] = 5.into();
-                // Two halvings fund the goal and its change while each run reserves ten.
+                // Two halvings fund the goal and its change within the model-priced run reserve.
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = CHAT_SPEND.into();
             }
         },
@@ -350,9 +349,13 @@ pub fn check(ran: &Ran) {
         );
     }
     assert_eq!(parent["spend"], CHAT_SPEND, "the chat's original purse");
+    let temper_service::stock::Given::Own(defaults) = crate::fixtures::given(ran.path()) else {
+        panic!("the green-light fixture supplies its own defaults")
+    };
+    let run_spend = defaults.charters[0].spend;
     assert_eq!(
         child["spend"],
-        (CHAT_SPEND - RUN_SPEND) / 2,
+        (CHAT_SPEND - run_spend) / 2,
         "the goal gets half left after the chat's first run reserve"
     );
     let producer = document(ran, PRODUCED);
