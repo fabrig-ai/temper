@@ -82,6 +82,9 @@ impl Walk {
             || (),
         );
         let diagnostic = String::from_utf8_lossy(&outcome.stderr);
+        // A refused restart must fail on the box's terminal, before missing
+        // ctl answers obscure the reason it never printed a new sign-in link.
+        assert_eq!(outcome.exit, Some(Exit::Code(0)), "healthy box stop: {diagnostic}");
         let last = outcome.calls.iter().rev().find(|call| call.exit == Some(Exit::Code(0)));
         let last = last.map_or_else(String::new, |call| String::from_utf8_lossy(&call.stdout).into_owned());
         for (index, call) in outcome.calls.iter().enumerate() {
@@ -95,7 +98,6 @@ impl Walk {
         }
         assert_eq!(outcome.calls.len(), count + 1, "all welcome acts completed; box: {diagnostic}");
         assert!(outcome.checked.is_some(), "live checkpoint reached; box: {diagnostic}");
-        assert_eq!(outcome.exit, Some(Exit::Code(0)), "healthy box stop: {diagnostic}");
         assert_eq!(outcome.left, Some(Vec::new()), "no child outlives its box: {diagnostic}");
         Seen { answers: outcome.calls.into_iter().skip(1).collect(), visits: outcome.visits }
     }
