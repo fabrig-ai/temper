@@ -83,13 +83,13 @@ fn landing_merge_carries_coherent_evidence_and_veto_withdraws_it() {
     let (call, op) = fixtures::next_call(&mut d);
     assert_eq!(op, Op::Read(Read::Reviews { number: 1, page: 1 }));
     let requests = fixtures::answer(&mut d, call, Ok(Answer::Reviews { reviews: Box::new([]), more: false }));
-    let evidence = requests
-        .iter()
-        .find_map(|request| match request {
-            Request::LandingDecision { evidence: Some(evidence), entry: Some(91), .. } => Some(evidence),
-            _ => None,
-        })
-        .expect("merge evidence");
+    let mut evidence = None;
+    for request in &requests {
+        if let Request::LandingDecision { evidence: Some(facts), entry: Some(91), .. } = request {
+            evidence = Some(facts);
+        }
+    }
+    let evidence = evidence.expect("merge evidence");
     assert_eq!(evidence.change, fixtures::CHANGE);
     assert_eq!(evidence.facts.head, Some(fixtures::HEAD));
     assert_eq!(evidence.facts.base_tip, fixtures::BASE);
@@ -101,11 +101,15 @@ fn landing_merge_carries_coherent_evidence_and_veto_withdraws_it() {
     assert_eq!(described.kind, 4);
     assert_eq!(described.state, fixtures::HEAD);
     let vetoed = outputs(&mut d, Event::VetoLanding { task: 61, entry: 91 });
-    assert!(vetoed.iter().any(|request| *request == Request::Erase { key: Key::Entry(91) }));
+    assert!(vetoed.contains(&Request::Erase { key: Key::Entry(91) }));
     assert!(d.describe_landing_effect(61, 91).is_none());
     assert_eq!(d.landing.results.get(&(61, 0, 0, 5)), Some(&policy::Status::Failed));
     outputs(&mut d, Event::Committed { entry: 91 });
-    assert!(ready(&mut d).iter().all(|request| !matches!(request, Request::Call { op: Op::Write(_), .. })));
+    for request in ready(&mut d) {
+        if let Request::Call { op: Op::Write(_), .. } = request {
+            panic!("vetoed write reached client");
+        }
+    }
 }
 
 #[test]
@@ -118,9 +122,65 @@ fn landing_deadline_wakes_once_and_an_offered_step_clears_it() {
     assert_eq!(d.next_wall_deadline(), Some(env().wall));
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     fire(&mut d, &env(), &mut out);
-    assert!(std::iter::from_fn(|| out.pop()).any(|request| request == Request::WakeProcedure { task: 61 }));
+    let mut wakes = 0;
+    while let Some(request) = out.pop() {
+        if request == (Request::WakeProcedure { task: 61 }) {
+            wakes += 1;
+        }
+    }
+    assert_eq!(wakes, 1);
     assert_eq!(d.next_wall_deadline(), None);
     d.wait_landing(&env(), 61, None);
     d.offered_landing(61);
     assert_eq!(d.next_wall_deadline(), None);
+}
+
+fn member_landing(d: &mut Domain) {
+    let mut row = landing_row(61, policy::Phase::Preparing);
+    row.landing.members = Box::new([policy::Member {
+        change: fixtures::CHANGE,
+        repository: policy::Repository { forge: REPO.forge, repository: REPO.repository },
+        pull: 1,
+        head: None,
+        base: None,
+        candidate: None,
+        gates: Box::new([]),
+        asked: None,
+        landed: None,
+    }]);
+    row.asks = Box::new([None]);
+    outputs(d, Event::Landing { row });
+}
+#[test]
+fn cancelling_a_landing_leaves_its_change_live_and_detached() {
+    let mut d = landing_fixture();
+    member_landing(&mut d);
+    let requests = outputs(&mut d, Event::SettleEffects { task: 61, root: 61, ending: ReleaseEnding::Cancelled });
+    assert_eq!(d.landing(61).expect("cancelled landing").landing.phase, policy::Phase::Cancelled);
+    assert_eq!(d.change(fixtures::CHANGE).expect("member stays").change.landing, None);
+    for request in &requests {
+        if let Request::Save { record: Stored::Release(row), .. } = request {
+            assert_ne!(row.task, fixtures::CHANGE, "member is not cancelled");
+        }
+    }
+}
+#[test]
+fn cancelling_the_last_member_cancels_its_landing_without_reading_the_missing_branch() {
+    let mut d = landing_fixture();
+    member_landing(&mut d);
+    outputs(
+        &mut d,
+        Event::SettleEffects { task: fixtures::CHANGE, root: fixtures::CHANGE, ending: ReleaseEnding::Cancelled },
+    );
+    assert!(d.landing(61).expect("landing").landing.members.is_empty());
+    let requests = outputs(
+        &mut d,
+        Event::StepLanding { task: 61, entry: 92, heard: LandingHeard { released: false, cancelled: false } },
+    );
+    assert!(requests.contains(&Request::LandingDecision {
+        task: 61,
+        decision: policy::Decision::Cancel,
+        entry: None,
+        evidence: None
+    }));
 }
