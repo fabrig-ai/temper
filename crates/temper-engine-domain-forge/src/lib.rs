@@ -295,6 +295,8 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             | change::State::CancellingGates { .. }
             | change::State::Queued { .. }
             | change::State::First { .. }
+            | change::State::Ready { .. }
+            | change::State::Preparing { .. }
             | change::State::Updating { .. }
             | change::State::Resolving { .. }
             | change::State::Repairing { .. }

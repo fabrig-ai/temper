@@ -1601,6 +1601,8 @@ fn describe_change_effect(
     }
     let pull_what = pull_what(row.pull);
     let (kind, what, state) = match effect {
+        // landing.md 3: the top's task
+        forge_change::Effect::Prepare { .. } => return None,
         forge_change::Effect::Open => {
             (3, branch_what(&row.branch, env.limits.forge.name_bytes), evidence.head.unwrap_or([0; 32]))
         }
@@ -1748,6 +1750,8 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 priority,
                 ci: None,
                 change: forge_change::Change {
+                    way: forge_change::Way::Queue,
+                    landing: None,
                     task,
                     state: forge_change::State::Producing { requested: false },
                     gates,
@@ -2214,6 +2218,8 @@ fn change_delegate(
                 forge_change::Repair::Ci => b"Repair the failed CI on the change branch",
                 forge_change::Repair::Semantic => b"Repair the base update's semantic conflict",
                 forge_change::Repair::Gate(_) => b"Repair the requested gate changes",
+                // landing.md 3: the top's task
+                forge_change::Repair::Landing { .. } => return None,
             };
             (
                 tasks::Executor::Agent { charter: row.producing_charter },
