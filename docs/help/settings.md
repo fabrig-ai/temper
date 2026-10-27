@@ -209,6 +209,15 @@ Rejection keeps the reason and notifies the proposer. Do not supply
 for those decisions. Ordinary task proposals are described in
 `temper help task`.
 
+An agent can propose settings too, when its task's authority holds the
+settings tools: it reads the settings and proposes a change against the
+revision it read, with a reason, and its proposal waits for the
+deployment's owners as yours does. It is named by its task: `t41/2` is
+task 41's proposal 2. Review and decide it with the same commands. The
+agent hears the outcome in its task's messages: accepted, with the
+revision it made; rejected, with your reason; or withdrawn as stale,
+with the newest revision, so that it can propose again.
+
 Pending settings proposals survive an unchanged restart. A start
 that makes a new revision for changed defaults withdraws proposals
 that have become stale, just as a settings change does.
