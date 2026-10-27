@@ -1,5 +1,6 @@
 mod commands;
 mod help;
+mod host_parts;
 mod settings_fields;
 
 #[test]

@@ -130,6 +130,7 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
         hosts: jig_domain_fleet::Kinds::Workers,
         spend: 0,
         policy: RunPolicy {
+            tools: authority::Tools(1023),
             instructions: bytes::copy_of(instructions),
             model,
             alternatives: alternatives.into_boxed(),

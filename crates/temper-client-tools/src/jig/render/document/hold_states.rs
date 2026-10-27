@@ -21,6 +21,7 @@ pub(super) fn encode_hold_category(
                 jig_client::contract::Bound::History => b"history",
                 jig_client::contract::Bound::Window => b"window",
                 jig_client::contract::Bound::Output => b"output",
+                jig_client::contract::Bound::HostPart => b"host_part",
             });
             out.key(b"value");
             out.unsigned(exceeded.value);
@@ -120,6 +121,7 @@ mod tests {
             (Bound::History, br#"{"exceeded":{"bound":"history","value":2048}}"#.as_slice()),
             (Bound::Window, br#"{"exceeded":{"bound":"window","value":2048}}"#.as_slice()),
             (Bound::Output, br#"{"exceeded":{"bound":"output","value":2048}}"#.as_slice()),
+            (Bound::HostPart, br#"{"exceeded":{"bound":"host_part","value":2048}}"#.as_slice()),
         ] {
             let category = HoldCategory::Exceeded(Exceeded { bound, value: 2048 });
             let limits = skein_json::writer::Limits { depth: 3, length: 256 };

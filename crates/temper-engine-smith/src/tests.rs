@@ -42,6 +42,7 @@ fn assignment() -> engine::Assignment {
                 kind: jig_domain_fleet::HostKind::Worker,
             },
             policy: engine::RunPolicy {
+                tools: jig_domain_authority::Tools(2047),
                 instructions: b"Do the task".as_slice().into(),
                 waiting: Duration::from_secs(1),
                 resume: true,
@@ -123,11 +124,15 @@ fn root_charter_becomes_a_smith_start_with_ordered_brief_and_exact_budget() {
 }
 
 #[test]
-fn settings_tools_are_offered_only_with_the_runs_settings_family() {
-    for allowed in [false, true] {
+fn settings_tools_require_the_family_in_both_the_charter_and_authority() {
+    for (named, held) in [(false, false), (false, true), (true, false), (true, true)] {
+        let allowed = named && held;
         let mut assignment = assignment();
-        if allowed {
+        if held {
             assignment.run.authority.tools.0 |= jig_domain_core::ToolFamilies::JIG.settings;
+        }
+        if !named {
+            assignment.run.policy.tools.0 &= !jig_domain_core::ToolFamilies::JIG.settings;
         }
         let charter = crate::charter(&assignment);
         assert_eq!(charter.grants.host_tools.len(), if allowed { 39 } else { 37 });

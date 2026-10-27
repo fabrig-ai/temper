@@ -668,6 +668,7 @@ const fn encode_bound(value: p::Bound) -> w::Bound {
         p::Bound::History => w::Bound::History,
         p::Bound::Window => w::Bound::Window,
         p::Bound::Output => w::Bound::Output,
+        p::Bound::HostPart => w::Bound::HostPart,
     }
 }
 
@@ -682,6 +683,7 @@ const fn decode_bound(value: w::Bound) -> p::Bound {
         w::Bound::History => p::Bound::History,
         w::Bound::Window => p::Bound::Window,
         w::Bound::Output => p::Bound::Output,
+        w::Bound::HostPart => p::Bound::HostPart,
     }
 }
 
