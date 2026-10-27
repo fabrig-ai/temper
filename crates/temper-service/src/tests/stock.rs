@@ -69,11 +69,16 @@ fn stock_chats_can_delegate_message_and_read_the_forge() {
 }
 
 #[test]
-fn stock_charters_name_their_host_families_and_reviews_name_reads_alone() {
+fn stock_charters_name_chat_producer_and_review_host_families() {
     let engine = engine(&single_model());
     let defaults = crate::stock::defaults(&engine.llm);
     for charter in &defaults.charters {
-        let tools = if charter.number == 4 { 512 } else { 1023 };
+        let tools = match charter.number {
+            1 => 1023,
+            2 => 514,
+            4 => 512,
+            other => panic!("unexpected stock charter {other}"),
+        };
         assert_eq!(charter.policy.tools.0, tools);
     }
 }

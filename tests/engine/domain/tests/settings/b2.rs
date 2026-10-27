@@ -322,7 +322,13 @@ fn no_settings_or_message_tools(run: &engine::Assignment) {
     assert_eq!(run.run.authority.tools.0 & core::ToolFamilies::JIG.settings, 0);
     assert_eq!(run.run.authority.tools.0 & core::ToolFamilies::JIG.message.0, 0);
     let charter = temper_engine_smith::charter(run);
-    assert_eq!(charter.grants.host_tools.len(), if run.charter == 4 { 19 } else { 36 });
+    let expected = match run.charter {
+        1 => 36,
+        2 => 20,
+        4 => 19,
+        other => panic!("unexpected stock charter {other}"),
+    };
+    assert_eq!(charter.grants.host_tools.len(), expected);
     for tool in &charter.grants.host_tools {
         assert!(
             tool.name.as_ref() != b"settings"
