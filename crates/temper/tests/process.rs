@@ -1403,8 +1403,8 @@ fn a_csv_change_fails_the_persons_gate_is_repaired_and_lands_on_the_owned_forge(
         support::boxed::echo_steps(flags),
         scratch.path(),
         csv_repair::steps(&paths, scratch.path(), began),
-        support::forge_land::OWNED_ALLOWANCE.saturating_add(Duration::from_secs(60)),
-        || csv_repair::landed(&paths, scratch.path(), began),
+        BOX_DEADLINE,
+        |_| csv_repair::landed(&paths, scratch.path(), began),
         csv_repair::llm(&paths[0]),
     );
     let stderr = String::from_utf8_lossy(&ended.stderr);
