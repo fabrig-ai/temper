@@ -116,19 +116,22 @@ A forge that starts from its records is refused: temper serve takes its handover
 
 ## temper ctl
 
-`temper ctl DIR TOOL [ARGUMENT...] [--json]`
+`temper ctl DIR GROUP VERB [ARGUMENT...] [--json]`
+
+`temper ctl DIR me|inbox|sign-in|sign-out|pending [ARGUMENT...] [--json]`
 
 `temper ctl DIR --call FILE [--json]`
 
-`temper ctl help [TOOL]`
+`temper ctl help [GROUP [VERB]]`
 
 Act in a deployment as one party, one call a process: the agents' command line.
 
 - `DIR`: ctl's private directory for one deployment and one party: its sign-in, its kept requests and the engine's address.
-- `TOOL`: A tool's name; temper ctl help lists them.
-- `FILE`: One call as JSON, {"tool": ..., "arguments": {...}}, or - for stdin.
+- `GROUP`: A group of tools, a noun of temper's or one of the client's own names; temper ctl help lists them.
+- `VERB`: One of the group's tools; temper ctl help GROUP lists them.
+- `FILE`: One call as JSON, {"tool": "GROUP VERB", "arguments": {...}}, or - for stdin.
 
-temper ctl help prints how to work through it, then every tool.
+temper ctl help prints how to work through it, then the groups.
 
 ## temper open
 

@@ -1,6 +1,37 @@
 //! Help bytes for the host to write, bounded by the tools' text window.
+use crate::table::Group;
 use crate::{jig, limits, table};
 use skein_lib::{Overflow, Writer};
+/// The reference page `ctl-GROUP`, whole, as docs/help/reference holds it.
+pub fn reference(group: &Group, out: &mut Writer) -> Result<(), Overflow> {
+    out.put(b"# temper ctl ")?;
+    out.put(group.name)?;
+    out.put(b"\n\nKind: reference\n\n")?;
+    out.put(group.line)?;
+    out.put(b".\n")?;
+    for (index, row) in table::TOOLS.iter().enumerate() {
+        if jig::table::name_words(row.name).0 != group.name {
+            continue;
+        }
+        let mut earlier = false;
+        for prior in table::TOOLS.get(..index).ok_or(Overflow)? {
+            earlier |= prior.name == row.name;
+        }
+        if earlier {
+            continue;
+        }
+        out.put(b"\n## ")?;
+        out.put(row.name)?;
+        out.put(b"\n\n```\n")?;
+        for record in table::TOOLS {
+            if record.name == row.name {
+                jig::help::tool(record, &limits::tools(), out)?;
+            }
+        }
+        out.put(b"```\n")?;
+    }
+    Ok(())
+}
 /// None: the ctl page and groups. Some: the selected table row's record.
 pub fn text(tool: Option<u8>, out: &mut Writer) -> Result<(), Overflow> {
     let mut measured = Writer::new(usize::try_from(limits::TEXT).expect("text fits usize"));
