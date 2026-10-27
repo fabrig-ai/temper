@@ -282,7 +282,7 @@ fn checked_store(
     }
 }
 
-fn engine_limits(
+pub(crate) fn engine_limits(
     jig: &mut config::Limits,
     own: &crate::limits::Limits,
 ) -> Result<temper_engine_domain::Limits, Problems> {

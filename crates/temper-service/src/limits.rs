@@ -1,5 +1,7 @@
 //! The small profile and checked field overrides (protocol/configuration.md, section 7).
+mod jig;
 mod names;
+pub use jig::{JIG, Place, Use};
 use skein_lib::Duration;
 use temper_engine_domain as engine;
 use temper_engine_domain_forge as forge;
