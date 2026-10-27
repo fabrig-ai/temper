@@ -59,6 +59,7 @@ pub struct World {
     owner_gate: bool,
     pub held_reads: Option<Vec<engine::Request>>,
     pub merges: u32,
+    pub writes: Vec<skein_forge::api::Write>,
     /// Hold decoded write answers after the independent forge has made the effect.
     pub hold_write_answers: Option<HoldWrite>,
     pub held_write_answers: Vec<engine::Event>,
@@ -74,6 +75,8 @@ pub struct World {
 
 #[derive(Clone, Copy, Default)]
 pub struct StoryLimits {
+    pub turn: bool,
+    pub landing_members: Option<u32>,
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
 }
@@ -208,7 +211,7 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall } = timing;
+        let StoryLimits { brief, stall, turn, landing_members } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -403,6 +406,67 @@ impl World {
                 if documents.is_some() {
                     paths::add_reader(&mut policy);
                 }
+                if turn {
+                    limits.authority.grants = 16;
+                    limits.tasks.authority_grants = 16;
+                    limits.authority.executors = 3;
+                    limits.tasks.executor_kinds = 3;
+                    limits.tasks.result_bytes = 256;
+                    limits.journal.run_bytes = 32768;
+                    if let Some(slots) = landing_members {
+                        limits.forge.landing_members = slots;
+                    }
+                    let mut grants = List::with_capacity(16);
+                    for grant in &rules.ceiling.grants {
+                        grants.push(grant.clone()).expect("ceiling grants");
+                    }
+                    for kind in [6, 9, 15, 16, 17] {
+                        grants.push(authority::Grant { kind, ..grant.clone() }).expect("landing grants");
+                    }
+                    rules.ceiling.grants = grants.into_boxed();
+                    rules.ceiling.delegation.kinds = Box::new([
+                        authority::Executor::Charter(1),
+                        authority::Executor::Procedure(2),
+                        authority::Executor::Procedure(3),
+                    ]);
+                    policy.ceiling = rules.ceiling.clone();
+                    let rule = engine::LandingRule {
+                        connector: 0,
+                        kind: 4,
+                        enforce: true,
+                        pattern: authority::Pattern {
+                            segments: [b"forge".as_slice(), b"forge.example", b"org", b"repo", b"branch"]
+                                .map(Box::from)
+                                .into(),
+                            last: authority::Last::Exact(b"main".as_slice().into()),
+                        },
+                        ci: true,
+                        up_to_date: true,
+                        gates: Box::new([]),
+                        approvals: Box::new([]),
+                    };
+                    config.landing.deployment = Box::new([rule.clone()]);
+                    config.landing.projects.insert(1, Box::new([rule])).expect("turn landing requirements");
+                    config
+                        .landing
+                        .landings
+                        .insert(
+                            1,
+                            engine::ProjectLanding {
+                                by: engine::Way::Turn,
+                                repositories: Box::new([engine::RepositoryChecks {
+                                    repository: forge_world::REPO,
+                                    gates: Box::new([engine::GateCheck {
+                                        name: b"gate".as_slice().into(),
+                                        workflow: b"gate.yml".as_slice().into(),
+                                        ignored: Box::new([b"docs".as_slice().into()]),
+                                        blocking: true,
+                                    }]),
+                                }]),
+                            },
+                        )
+                        .expect("one turn project");
+                }
                 let mut domain = authority::Domain::new(rules, limits.authority).expect("read authority rules");
                 let mut facts = Queue::with_capacity(authority::POLICY_MAX_OUT);
                 authority::step(&mut domain, authority::Event::Policy { project: 1, policy }, &mut facts);
@@ -506,19 +570,35 @@ impl World {
             fake_config.limits.title_bytes = limits.forge.issue_policy.title_bytes;
             fake_config.limits.comments = limits.forge.issue_policy.milestones;
         }
+        if turn {
+            fake_config.limits.workflows = 1;
+            fake_config.limits.workflow_runs = 8;
+        }
         let mut fake = fake::Domain::new(&fake_config, 71);
         fake::repository(
             &mut fake,
             &fake_config,
             raw::Setup {
-                workflows: Box::new([]),
+                workflows: if turn {
+                    Box::new([raw::Workflow {
+                        file: b"gate.yml".as_slice().into(),
+                        jobs: Box::new([b"test".as_slice().into()]),
+                        latency_min: Duration::from_secs(1),
+                        latency_max: Duration::from_secs(1),
+                        silent: 0,
+                        passes: 1000,
+                        cue: None,
+                    }])
+                } else {
+                    Box::new([])
+                },
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
                 default: Box::from(&b"main"[..]),
                 tree: Box::new([]),
                 labels: Box::new([]),
                 checks: raw::Checks {
-                    contexts: Box::new([Box::from(&b"build"[..])]),
+                    contexts: if turn { Box::new([]) } else { Box::new([Box::from(&b"build"[..])]) },
                     latency_min: Duration::ZERO,
                     latency_max: Duration::ZERO,
                     silent: if silent_ci { 1000 } else { 0 },
@@ -542,6 +622,13 @@ impl World {
             Some((_, _, Some(deployment))) => *deployment,
             Some((_, _, None)) | None => temper_engine_domain_world::store::widest(),
         };
+        if turn {
+            store_limits.tasks.executor_kinds = limits.tasks.executor_kinds;
+            store_limits.tasks.authority_grants = limits.tasks.authority_grants;
+            store_limits.authority.grants = limits.authority.grants;
+            store_limits.authority.executors = limits.authority.executors;
+            store_limits.tasks.result_bytes = limits.tasks.result_bytes;
+        }
         store_limits.people.words = limits.people.words;
         store_limits.tasks.message_bytes = limits.tasks.message_bytes;
         store_limits.tasks.spec_bytes = limits.tasks.spec_bytes;
@@ -598,6 +685,7 @@ impl World {
             unsettled: Vec::new(),
             busy_calls: 0,
             merges: 0,
+            writes: Vec::new(),
         }
     }
 
@@ -749,6 +837,9 @@ impl World {
                     }
                     if matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. })) {
                         self.merges += 1;
+                    }
+                    if let skein_forge::api::Op::Write(write) = &op {
+                        self.writes.push(write.clone());
                     }
                     self.forge_calls += 1;
                     let issue_write = match &op {

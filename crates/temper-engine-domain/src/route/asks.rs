@@ -321,10 +321,12 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                     unreachable!("procedure route owns a procedure context")
                 }
             };
-            if connector == domain.config.forge_connector && code == 2 {
+            if connector == domain.config.forge_connector && code == forge_route::CHANGE_CODE {
                 if !forge_route::start_change(domain, env, &context) {
                     domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
                 }
+            } else if connector == domain.config.forge_connector && code == forge_route::LANDING_CODE {
+                forge_route::start_landing_step(domain, env, &context);
             } else {
                 emit(decision, &env.limits, Delivery::Procedure { task, step, connector, code });
             }

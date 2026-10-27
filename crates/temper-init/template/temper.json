@@ -4,7 +4,7 @@
     "limits": {
       "profile": "small",
       "overrides": {
-        "authority.grants": 12,
+        "authority.grants": 16,
         "authority.segments": 8,
         "core.resume_bytes": 1039548,
         "documents.lines": 2,
@@ -13,9 +13,9 @@
         "hub.transcript_bytes": 4158192,
         "hub.turn_bytes": 1039544,
         "hub.turn_queue_bytes": 8316352,
-        "notes.scopes": 15,
+        "notes.scopes": 19,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 12,
+        "tasks.authority_grants": 16,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
         "tasks.contract_choices": 2,
@@ -159,7 +159,7 @@
     "connectors": [
       1
     ],
-    "memory_bytes": 630000000000000,
+    "memory_bytes": 700000000000000,
     "projects": [
       {
         "number": 1,
@@ -221,6 +221,17 @@
             },
             {
               "connector": 1,
+              "kind": 6,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
               "kind": 7,
               "pattern": {
                 "segments": [
@@ -233,6 +244,17 @@
             {
               "connector": 1,
               "kind": 8,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 9,
               "pattern": {
                 "segments": [
                   "forge"
@@ -277,6 +299,39 @@
             {
               "connector": 1,
               "kind": 13,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 15,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 16,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 17,
               "pattern": {
                 "segments": [
                   "forge"
@@ -336,6 +391,17 @@
               },
               {
                 "connector": 1,
+                "kind": 6,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
                 "kind": 7,
                 "pattern": {
                   "segments": [
@@ -348,6 +414,17 @@
               {
                 "connector": 1,
                 "kind": 8,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 9,
                 "pattern": {
                   "segments": [
                     "forge"
@@ -399,6 +476,39 @@
                   "last": "open",
                   "value": ""
                 }
+              },
+              {
+                "connector": 1,
+                "kind": 15,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 16,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+              {
+                "connector": 1,
+                "kind": 17,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
               }
             ],
             "delegation": {
@@ -418,6 +528,10 @@
                 {
                   "kind": "procedure",
                   "number": 2
+                },
+                {
+                  "kind": "procedure",
+                  "number": 3
                 }
               ],
               "tasks": 14,
@@ -485,6 +599,17 @@
                   },
                   {
                     "connector": 1,
+                    "kind": 6,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
                     "kind": 7,
                     "pattern": {
                       "segments": [
@@ -497,6 +622,17 @@
                   {
                     "connector": 1,
                     "kind": 8,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 9,
                     "pattern": {
                       "segments": [
                         "forge"
@@ -548,6 +684,39 @@
                       "last": "open",
                       "value": ""
                     }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 15,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 16,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+                  {
+                    "connector": 1,
+                    "kind": 17,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
                   }
                 ],
                 "delegation": {
@@ -567,6 +736,10 @@
                     {
                       "kind": "procedure",
                       "number": 2
+                    },
+                    {
+                      "kind": "procedure",
+                      "number": 3
                     }
                   ],
                   "tasks": 14,
