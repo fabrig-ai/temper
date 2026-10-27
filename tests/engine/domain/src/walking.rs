@@ -926,6 +926,7 @@ impl World {
             | Delivery::ForgeCommitted { .. }
             | Delivery::ReadEscalationDecision { .. }
             | Delivery::Relay { .. }
+            | Delivery::NotesLoad { .. }
             | Delivery::Load { .. } => {
                 panic!("internal handoff leaked to world")
             }

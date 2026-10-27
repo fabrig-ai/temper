@@ -436,40 +436,7 @@ pub fn incoming(
             return Ok(ended(transport, watcher, wire::watches::ended(why)));
         }
         Delivery::Application { to, outcome: value } => (to, value),
-        Delivery::WebReply { to, reply } => {
-            // Preserve the affine answer right until its route is known.
-            let matching = transport.reply_tokens().into_iter().find(|token| to == skein_lib::ReplyTo::new(*token));
-            let Some(token) = matching else {
-                return Err(Box::new(engine::Request::Party(PartyRequest::Deliver(Delivery::WebReply { to, reply }))));
-            };
-            if !matches!(transport.reply(token), Some(Reply::Keyed { owner: KeyedOwner::Application { .. }, .. })) {
-                return Err(Box::new(engine::Request::Party(PartyRequest::Deliver(Delivery::WebReply { to, reply }))));
-            }
-            let (envelope, answer) = wire::answers::keyed(
-                wire::answers::reply(reply, &transport.models, limits).expect("bounded application admission reply"),
-            )
-            .expect("application admission disposition");
-            let Reply::Keyed { client, attempt, .. } = transport.take_reply(to.into_token()).expect("original route")
-            else {
-                panic!("keyed route")
-            };
-            if envelope == RequestEnvelope::SignedOut {
-                transport.signed_out(client);
-            }
-            return Ok(Some((
-                client,
-                client::Event::Client {
-                    event: jig_client::Event::Up {
-                        up: jig_client::Up::Answer {
-                            attempt,
-                            envelope,
-                            answer: answer.map(jig_client::Answered::Jig),
-                            why: None,
-                        },
-                    },
-                },
-            )));
-        }
+        Delivery::WebReply { to, reply } => return admission_reply(transport, to, reply, limits),
         delivery @ (Delivery::DemoActed { .. }
         | Delivery::DemoNote { .. }
         | Delivery::SourceSignedOut { .. }
@@ -490,6 +457,7 @@ pub fn incoming(
         | Delivery::Restart(_)
         | Delivery::Refuse { .. }
         | Delivery::TurnBusy { .. }
+        | Delivery::NotesLoad { .. }
         | Delivery::Load { .. }
         | Delivery::Read { .. }
         | Delivery::Document { .. }
@@ -500,6 +468,44 @@ pub fn incoming(
     };
     let Some(route) = transport.take_reply(to.into_token()) else { return Ok(None) };
     Ok(Some(answered(&route, body)))
+}
+fn admission_reply(
+    transport: &mut Transport,
+    to: skein_lib::ReplyTo,
+    reply: jig_domain_people::Reply,
+    limits: &jig_client::DomainLimits,
+) -> Result<Option<(ClientId, client::Event)>, Box<engine::Request>> {
+    // Preserve the affine answer right until its route is known.
+    let matching = transport.reply_tokens().into_iter().find(|token| to == skein_lib::ReplyTo::new(*token));
+    let Some(token) = matching else {
+        return Err(Box::new(engine::Request::Party(PartyRequest::Deliver(Delivery::WebReply { to, reply }))));
+    };
+    if !matches!(transport.reply(token), Some(Reply::Keyed { owner: KeyedOwner::Application { .. }, .. })) {
+        return Err(Box::new(engine::Request::Party(PartyRequest::Deliver(Delivery::WebReply { to, reply }))));
+    }
+    let (envelope, answer) = wire::answers::keyed(
+        wire::answers::reply(reply, &transport.models, limits).expect("bounded application admission reply"),
+    )
+    .expect("application admission disposition");
+    let Reply::Keyed { client, attempt, .. } = transport.take_reply(to.into_token()).expect("original route") else {
+        panic!("keyed route")
+    };
+    if envelope == RequestEnvelope::SignedOut {
+        transport.signed_out(client);
+    }
+    Ok(Some((
+        client,
+        client::Event::Client {
+            event: jig_client::Event::Up {
+                up: jig_client::Up::Answer {
+                    attempt,
+                    envelope,
+                    answer: answer.map(jig_client::Answered::Jig),
+                    why: None,
+                },
+            },
+        },
+    )))
 }
 /// The application's outcome, answered on its keyed route as the forge family's bytes.
 fn answered(route: &Reply, body: Option<temper_engine_domain::ApplicationAnswer>) -> (ClientId, client::Event) {
