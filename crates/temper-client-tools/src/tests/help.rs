@@ -9,6 +9,8 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(16), "help_task_tree"),
     (Some(34), "help_forge_list"),
     (Some(49), "help_change_show"),
+    (Some(53), "help_landing_show"),
+    (Some(54), "help_landing_list"),
     (Some(20), "help_pending"),
     (Some(17), "help_repository_adopt"),
     (Some(31), "help_task_amend"),
@@ -104,6 +106,8 @@ const USAGES: &[&[u8]] = &[
     b"task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]\n",
     b"project show PROJECT\n",
     b"project fund PROJECT AMOUNT [--role ROLE] --key KEY\n",
+    b"landing show TASK [--project PROJECT]\n",
+    b"landing list --project PROJECT [--ended]\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {
