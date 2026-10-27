@@ -112,11 +112,23 @@ A read.
 }
 
 #[test]
-fn every_description_is_within_its_bound() {
+fn every_description_is_present_and_within_its_bound() {
     for spec in &SPECS {
         let tool = core::str::from_utf8(spec.name).expect("tool name UTF-8");
+        assert!(!spec.description.is_empty(), "{tool}: description is empty");
         assert!(spec.description.len() <= DESCRIPTION_BYTES, "{tool}: description exceeds {DESCRIPTION_BYTES} bytes");
         let schema = json::parse(spec.schema).expect("declared schema");
+        if let Some(Value::Object(properties)) = schema.field(b"properties").expect("declared schema is an object") {
+            for (name, property) in properties {
+                let member = core::str::from_utf8(name).expect("member name UTF-8");
+                let Some(Value::String(description)) =
+                    property.field(b"description").expect("declared member is an object")
+                else {
+                    panic!("{tool}.{member}: description is missing or is not text");
+                };
+                assert!(!description.is_empty(), "{tool}.{member}: description is empty");
+            }
+        }
         member_descriptions(&schema, tool, "input");
     }
 }

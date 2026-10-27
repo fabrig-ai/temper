@@ -10,8 +10,8 @@ Have one goal in your words tracked and reported; it may plan, ask you and call 
 
 A write.
 
-- `words`: text; required.
-- `advisor`: true or false; optional.
+- `words`: text; required. What the goal is to do, in your words: the brief its run reads first.
+- `advisor`: true or false; optional. true: an advisor, which reads and reports and changes nothing.
 
 ## change
 
