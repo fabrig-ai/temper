@@ -79,7 +79,7 @@ pub struct Page {
 
 /// `index`, then the concepts, walks, recipes, reference pages and guides, each by name.
 #[expect(clippy::disallowed_macros, reason = "pages compile their single Markdown source as static data")]
-pub static PAGES: [Page; 50] = [
+pub static PAGES: [Page; 51] = [
     Page {
         name: "index",
         kind: Kind::Index,
@@ -352,6 +352,13 @@ pub static PAGES: [Page; 50] = [
         title: "temper ctl proposal",
         summary: "Proposals: read one, decide it.",
         text: include_str!("../../../docs/help/reference/ctl-proposal.md"),
+    },
+    Page {
+        name: "ctl-hold",
+        kind: Kind::Reference,
+        title: "temper ctl hold",
+        summary: "Placed holds: lift one you may lift.",
+        text: include_str!("../../../docs/help/reference/ctl-hold.md"),
     },
     Page {
         name: "ctl-change",
