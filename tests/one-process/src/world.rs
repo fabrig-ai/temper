@@ -580,9 +580,11 @@ fn service(inherited: &Inherited) -> Proc {
     service.adopt_signals(inherited.signal).expect("service signal");
     let mut capture = Capture::default();
     capture.root(root);
-    let families =
-        temper_protocol_store::bounds(&temper_service::limits::profile(temper_service::limits::Profile::Small).forge)
-            .expect("application codec bounds");
+    let families = temper_protocol_store::bounds(
+        &temper_service::limits::profile(temper_service::limits::Profile::Small).forge,
+        jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.spec_bytes,
+    )
+    .expect("application codec bounds");
     Proc::Service(Box::new(ServiceHost {
         service,
         hooks: None,

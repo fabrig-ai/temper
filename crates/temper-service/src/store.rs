@@ -146,7 +146,7 @@ pub(crate) fn layout(
     }
     let sizes = match protocol::sizes::check(
         &core,
-        &temper_protocol_store::application(forge).ok_or(arithmetic)?,
+        &temper_protocol_store::application(forge, root.tasks.spec_bytes).ok_or(arithmetic)?,
         &root::journal_limits(&root.journal),
         &kv,
         profile.orphan_erases,
@@ -203,7 +203,8 @@ impl Store {
         let routes = route::Routes::new(
             application.loads.loads,
             application,
-            temper_protocol_store::bounds(&application.forge).expect("checked family bounds"),
+            temper_protocol_store::bounds(&application.forge, application.tasks.spec_bytes)
+                .expect("checked family bounds"),
         );
         let mut drivers = [driver(limits, room), driver(limits, room), driver(limits, room)];
         let [store, secrets, transcripts] = &mut drivers;
@@ -213,7 +214,8 @@ impl Store {
         );
         let mut component = protocol::Store::on_directory(
             limits,
-            temper_protocol_store::application(&application.forge).expect("checked application sizes"),
+            temper_protocol_store::application(&application.forge, application.tasks.spec_bytes)
+                .expect("checked application sizes"),
             models,
             seeded,
         );

@@ -58,7 +58,7 @@ fn end_act(rng: &mut Rng, bounds: &Bounds) {
 }
 #[test]
 fn store_decoders_never_panic_and_reencode_the_same() {
-    let bounds = temper_protocol_store::bounds(&LIMITS).expect("fixture limits fit");
+    let bounds = temper_protocol_store::bounds(&LIMITS, LIMITS.client.op_bytes).expect("fixture limits fit");
     let mut rng = Rng::new(0x7e3d_0405);
     let goldens = temper_codecs_world::goldens("crates/temper-protocol-store/golden");
     for _ in 0..2_000 {

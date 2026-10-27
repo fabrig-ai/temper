@@ -188,8 +188,6 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         change_gate_failures: forge.change_policy.gates,
         change_row_branch: forge.name_bytes,
         change_row_base: forge.name_bytes,
-        change_row_title: forge.client.op_bytes,
-        change_row_body: forge.client.op_bytes,
         change_row_verdicts: forge.change_policy.gates,
         change_row_gate_remarks: forge.change_policy.gates,
         gate_remark_words: forge.client.answer_bytes,

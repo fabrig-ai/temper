@@ -78,7 +78,7 @@ struct ItemRow {
 
 #[test]
 fn answer_piece_words_read_their_full_fixtures() {
-    let bounds = crate::bounds(&fixtures::LIMITS).unwrap();
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     let mut rows = List::with_capacity(ANSWER_WORDS);
     for fixture in fixtures::item_answers().into_iter().chain(fixtures::remaining_answers()) {
         let encoded = answer(&fixture, &bounds);
@@ -133,7 +133,7 @@ fn answer_name(bounds: &Bounds, reader: &mut Reader<'_>) -> Box<[u8]> {
 
 #[test]
 fn name_piece_words_read_their_full_fixtures() {
-    let bounds = crate::bounds(&fixtures::LIMITS).unwrap();
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     let name = fixtures::named_branch();
     let row = forge::Stored::Hold(forge::Hold { name: name.clone(), task: 1, writer: None, drift: None });
     let w::Value::Hold(held) = stored(&row, &bounds) else { panic!("hold fixture") };
@@ -181,7 +181,7 @@ fn name_piece_words_read_their_full_fixtures() {
 fn held_refusal_word_reads_the_full_application_fixture() {
     use jig_domain_people as p;
     use jig_protocol_store::people_v13 as people;
-    let bounds = crate::bounds(&fixtures::LIMITS).unwrap();
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     // The full list fills the held declaration's largest payload at temper's limits.
     let mut tasks = List::with_capacity(people::CEILINGS.refusal_circle_tasks);
     for task in 0..people::CEILINGS.refusal_circle_tasks {

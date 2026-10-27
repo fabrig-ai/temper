@@ -246,7 +246,7 @@ impl Amending {
     fn of(task: &c::Task, shape: Shape) -> Self {
         let mut draft = crate::amend::Draft::of(task);
         let words = task.spec.specification.words.bytes.clone();
-        let cut = draft.words(words.clone()).is_err();
+        let cut = task.spec.specification.words.cut || draft.words(words.clone()).is_err();
         Self {
             draft,
             words: if cut { Box::default() } else { words.into_bytes() },

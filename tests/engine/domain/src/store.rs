@@ -134,7 +134,7 @@ impl Store {
         let models = crate::walking::models();
         let mut component = protocol::Store::over(
             &component_limits,
-            temper_protocol_store::application(&limits.forge).expect("checked family sizes"),
+            temper_protocol_store::application(&limits.forge, limits.tasks.spec_bytes).expect("checked family sizes"),
             &models,
             stores,
         );
@@ -226,7 +226,8 @@ impl Store {
         self.files.crash(seed);
         self.component = Some(protocol::Store::over(
             &self.component_limits,
-            temper_protocol_store::application(&self.limits.forge).expect("checked family sizes"),
+            temper_protocol_store::application(&self.limits.forge, self.limits.tasks.spec_bytes)
+                .expect("checked family sizes"),
             &self.models,
             stores,
         ));
@@ -520,7 +521,11 @@ impl Store {
     }
 }
 fn routes(limits: &engine::Limits) -> route::Routes {
-    route::Routes::new(limits.loads.loads, limits, temper_protocol_store::bounds(&limits.forge).expect("family bounds"))
+    route::Routes::new(
+        limits.loads.loads,
+        limits,
+        temper_protocol_store::bounds(&limits.forge, limits.tasks.spec_bytes).expect("family bounds"),
+    )
 }
 /// The largest journal, task and brief bounds used by the engine stories.
 #[must_use]

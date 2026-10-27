@@ -28,8 +28,11 @@ pub(crate) fn row() -> temper_engine_domain::Record {
     )))
 }
 pub(crate) fn bounds() -> temper_protocol_store::Bounds {
-    temper_protocol_store::bounds(&temper_service::limits::profile(temper_service::limits::Profile::Small).forge)
-        .expect("small forge bounds")
+    temper_protocol_store::bounds(
+        &temper_service::limits::profile(temper_service::limits::Profile::Small).forge,
+        jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.spec_bytes,
+    )
+    .expect("small forge bounds")
 }
 pub(crate) struct Bytes {
     pub(crate) frames: Vec<Vec<u8>>,

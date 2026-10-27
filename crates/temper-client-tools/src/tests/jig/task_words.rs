@@ -546,3 +546,34 @@ fn instruction_previews_count_characters_and_keep_utf8_whole() {
     instructions("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxéZ".as_bytes(), false,
         "instructions: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxé… (82 bytes; --json prints them whole)".as_bytes());
 }
+
+#[test]
+fn a_held_tasks_text_names_its_reason_and_release_revision() {
+    for (reason, words) in [
+        (c::HoldCategory::Effects, b"Effects need a decision".as_slice()),
+        (
+            c::HoldCategory::Exceeded(c::Exceeded { bound: c::Bound::Items, value: 4 }),
+            b"configured allowance of 4".as_slice(),
+        ),
+    ] {
+        let task = f::held_task(f::goal(f::TASK, c::WaitsOn::Nothing), reason);
+        let answer = f::read_answer(f::TASK_CALL, f::task_result(task));
+        assert_eq!(answer.status, 0);
+        assert!(skein_lib::bytes::find(&answer.stdout, words).is_some());
+        assert!(skein_lib::bytes::find(&answer.stdout, b"task release 41 --hold 9").is_some());
+    }
+}
+
+#[test]
+fn a_held_tasks_text_keeps_the_effect_source_supplied_by_the_read() {
+    let mut task = f::held_task(f::goal(f::TASK, c::WaitsOn::Nothing), c::HoldCategory::EffectFailed);
+    let Some(c::TaskHold::Owner(hold)) = task.hold.as_mut() else { panic!("owner hold") };
+    hold.source = Some(part());
+    let answer = f::read_answer(f::TASK_CALL, f::task_result(task));
+    assert_eq!(answer.status, 0);
+    assert!(skein_lib::bytes::find(&answer.stdout, b"source: ").is_some());
+    assert!(skein_lib::bytes::find(&answer.stdout, b"temper/1/c2").is_some());
+    assert!(
+        skein_lib::bytes::find(&answer.stdout, b"review and resolve the effects, then task release 41 --hold 9").is_some()
+    );
+}
