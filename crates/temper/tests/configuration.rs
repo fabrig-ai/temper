@@ -3,8 +3,6 @@ pub mod support;
 // The process configuration reader admits a MiB, 64K tokens and 32 levels.
 const DOCUMENT: jig_protocol_config::DocumentLimits =
     jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 65_536, depth: 32 };
-// client/README.md 5.4 admits twelve entries independently of document rows.
-const AUTHORITY_ENTRIES: u32 = 12;
 
 fn process_engine() -> jig_protocol_config::Engine {
     let scratch = support::Scratch::startup("native-document-limits");
@@ -12,9 +10,9 @@ fn process_engine() -> jig_protocol_config::Engine {
     let bytes = std::fs::read(scratch.path().join("temper.json")).expect("process configuration");
     let mut value: serde_json::Value = serde_json::from_slice(&bytes).expect("deployment JSON");
     // Forge::Unreached omits Forgejo's overrides; include its whole-authority bounds here.
-    value["engine"]["limits"]["overrides"]["authority.grants"] = 12.into();
-    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 12.into();
-    value["engine"]["limits"]["overrides"]["notes.scopes"] = 15.into();
+    value["engine"]["limits"]["overrides"]["authority.grants"] = 16.into();
+    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 16.into();
+    value["engine"]["limits"]["overrides"]["notes.scopes"] = 19.into();
     let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(&bytes, &DOCUMENT).expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
@@ -74,8 +72,8 @@ fn the_owned_example_fits_the_native_client() {
         .max(engine.limits.core.tasks.authority_segments);
     assert!(paths <= native.segments);
     assert!(engine.limits.core.documents.text_bytes <= native.text);
-    assert!(engine.limits.core.authority.grants <= AUTHORITY_ENTRIES);
-    assert!(engine.limits.core.tasks.authority_grants <= AUTHORITY_ENTRIES);
+    assert!(engine.limits.core.authority.grants <= native.authority);
+    assert!(engine.limits.core.tasks.authority_grants <= native.authority);
     assert_owned_limits(&value["engine"]["limits"]);
 }
 fn assert_owned_limits(limits: &serde_json::Value) {
@@ -83,7 +81,7 @@ fn assert_owned_limits(limits: &serde_json::Value) {
         "authority.segments":8,"tasks.hold_segments":8,"tasks.authority_segments":8,
         "documents.rows":2,"documents.lines":2,"documents.text_bytes":128,
         "views.watchers":16,"views.watchers_per_party":16,
-        "authority.grants":12,"tasks.authority_grants":12,"notes.scopes":15,
+        "authority.grants":16,"tasks.authority_grants":16,"notes.scopes":19,
         "tasks.authority_bytes":512,"tasks.batch":1
     }}}});
     let agent: serde_json::Value =
