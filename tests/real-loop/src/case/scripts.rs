@@ -108,7 +108,7 @@ pub fn step_4_1(forge: SocketAddr) -> Box<[Script]> {
         "contract":{"kind":"report","words":128},
         "llm":{"main":{"model":OWNER_MODEL_NUMBER,"effort":OWNER_EFFORT_NUMBER}},
         "authority":{"tools":3,"grants":grants(forge, &[2,3,4,7,8,10,11,12,13]),
-            "delegation":{"kinds":[{"kind":"procedure","number":2},{"kind":"agent","number":1}],"tasks":6,"depth":3},
+            "delegation":{"kinds":[{"kind":"procedure","number":2},{"kind":"agent","number":1},{"kind":"agent","number":4}],"tasks":6,"depth":3},
             "budget":{"spend":20},"notes":0}
     }]});
     let design = json!({"batch":[{
@@ -118,7 +118,7 @@ pub fn step_4_1(forge: SocketAddr) -> Box<[Script]> {
             {"name":2,"kind":"bytes","value":"main"}]},
         "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
         "authority":{"tools":1,"grants":grants(forge, &[2,3,4,10,11,12]),
-            "delegation":{"kinds":[{"kind":"agent","number":1}],"tasks":4,"depth":2},
+            "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"agent","number":4}],"tasks":4,"depth":2},
             "budget":{"spend":10},"notes":0}
     }]});
     Box::new([
@@ -557,7 +557,7 @@ pub fn step_5_2(forge: SocketAddr) -> Box<[Script]> {
         3,
         4,
         3,
-        json!([{"kind":"agent","number":1},{"kind":"procedure","number":2}]),
+        json!([{"kind":"agent","number":1},{"kind":"agent","number":4},{"kind":"procedure","number":2}]),
         grants(forge, &[2, 3, 4, 7, 8, 10, 11, 12, 13]),
     );
     b["tracked"] = json!({"priority":1});
@@ -571,7 +571,7 @@ pub fn step_5_2(forge: SocketAddr) -> Box<[Script]> {
             {"name":2,"kind":"bytes","value":"main"}]},
         "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
         "authority":{"tools":1,"grants":grants(forge,&[2,3,4,10,11,12]),
-            "delegation":{"kinds":[{"kind":"agent","number":1}],"tasks":2,"depth":2},
+            "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"agent","number":4}],"tasks":2,"depth":2},
             "budget":{"spend":10},"notes":0}
     });
     let held = |name: &[u8], words: &str, mut turn: Turn| {
@@ -813,7 +813,7 @@ fn direction_owner(forge: SocketAddr, spec: &str, spend: u64, notes: u32, tasks:
         "executor":{"kind":"agent","charter":1},"tracked":{"priority":1},
         "spec":{"words":spec,"parameters":[]},"contract":{"kind":"report","words":128},
         "authority":{"tools":391,"notes":notes,"grants":grants(forge,&[2,3,4,10,11,12]),
-            "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"procedure","number":2}],"tasks":tasks,"depth":3},
+            "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"agent","number":4},{"kind":"procedure","number":2}],"tasks":tasks,"depth":3},
             "budget":{"spend":spend}}
     })
 }
@@ -829,7 +829,7 @@ fn repository_change(forge: SocketAddr, repository: u32, spec: &str, path: &str,
             {"name":6,"kind":"bytes","value":path}]},
         "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
         "authority":{"tools":1,"notes":0,"grants":grants(forge,&[2,3,4,10,11,12]),
-            "delegation":{"kinds":[{"kind":"agent","number":1}],"tasks":tasks,"depth":2},"budget":{"spend":10}}
+            "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"agent","number":4}],"tasks":tasks,"depth":2},"budget":{"spend":10}}
     })
 }
 fn direction_held(name: &[u8], mut turn: Turn) -> Turn {
@@ -1113,8 +1113,7 @@ fn blocker_owner(forge: SocketAddr, agent: Agent, spend: u64, tasks: u32, depth:
     let mut member = batch_member(agent, spend, tasks, depth, deadline);
     member["authority"]["tools"] = 7.into();
     member["authority"]["grants"] = grants(forge, &[2, 3, 4, 10, 11, 12]);
-    member["authority"]["delegation"]["kinds"] =
-        json!([{"kind":"agent","number":1},{"kind":"agent","number":2},{"kind":"procedure","number":2}]);
+    member["authority"]["delegation"]["kinds"] = json!([{"kind":"agent","number":1},{"kind":"agent","number":2},{"kind":"agent","number":4},{"kind":"procedure","number":2}]);
     member
 }
 

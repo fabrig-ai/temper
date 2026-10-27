@@ -1769,6 +1769,8 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 base_repair,
                 queue_repair: None,
                 queue_repairs: 0,
+                producing_charter: domain.config.forge_charter,
+                review_charter: 4,
             },
         }));
         let branch_name =
@@ -2045,13 +2047,15 @@ pub(crate) fn chat_change(
     }
     let mut authority = context.authority.clone();
     authority.grants = change_grants(domain, env, repository, &authority.grants)?;
-    let mut kinds = List::with_capacity(2);
+    let mut kinds = List::with_capacity(3);
     kinds.push(tasks::AuthorityExecutor::Charter(domain.config.forge_charter)).expect("producer kind");
+    if domain.config.forge_charter != 4 {
+        kinds.push(tasks::AuthorityExecutor::Charter(4)).expect("review kind");
+    }
     let gates =
         configured_gates(domain, env, repository, &repository.settings.default_branch).ok_or(tasks::Refusal::Spec)?;
     for gate in &gates {
-        if gate_executor(domain, gate.kind) == tasks::Executor::Person(tasks::PersonAddress::Role(1))
-            && !kinds.as_slice().contains(&tasks::AuthorityExecutor::Role(1))
+        if gate.kind == forge_change::GateKind::Person && !kinds.as_slice().contains(&tasks::AuthorityExecutor::Role(1))
         {
             kinds.push(tasks::AuthorityExecutor::Role(1)).expect("one person gate role");
         }
@@ -2186,7 +2190,7 @@ fn change_delegate(
     parameters.push(tasks::Parameter::Bytes { name: 3, value: row.branch.clone() }).ok()?;
     let (executor, words, contract) = match kind {
         forge_change::Delegate::Produce => (
-            tasks::Executor::Agent { charter: domain.config.forge_charter },
+            tasks::Executor::Agent { charter: row.producing_charter },
             produce_words(&row.title, &row.base, &row.branch, env.limits.tasks.spec_bytes),
             tasks::Contract::Change {
                 connector: domain.config.forge_connector,
@@ -2201,7 +2205,7 @@ fn change_delegate(
                 forge_change::Repair::Gate(_) => b"Repair the requested gate changes",
             };
             (
-                tasks::Executor::Agent { charter: domain.config.forge_charter },
+                tasks::Executor::Agent { charter: row.producing_charter },
                 Box::from(words),
                 tasks::Contract::Change {
                     connector: domain.config.forge_connector,
@@ -2213,7 +2217,7 @@ fn change_delegate(
         forge_change::Delegate::Resolve { base } => {
             parameters.push(tasks::Parameter::Bytes { name: 6, value: commit_text(&base) }).ok()?;
             (
-                tasks::Executor::Agent { charter: domain.config.forge_charter },
+                tasks::Executor::Agent { charter: row.producing_charter },
                 Box::from(&b"Resolve the merge conflict and push the merge commit"[..]),
                 tasks::Contract::Change {
                     connector: domain.config.forge_connector,
@@ -2232,10 +2236,10 @@ fn change_delegate(
                 }
             }
             let gate = found?;
-            let executor = gate_executor(domain, gate.kind);
+            gate_authority(domain, env, &mut authority, gate.kind)?;
             (
-                executor,
-                Box::from(&b"Review this change at the named head"[..]),
+                gate_executor(row, gate.kind),
+                review_words(&row.title, parameters.as_slice(), env.limits.tasks.spec_bytes),
                 tasks::Contract::Verdict {
                     choices: Box::new([
                         tasks::Verdict {
@@ -2278,6 +2282,44 @@ waits for CI and merges it. Finish with your change once it is checked.";
 
 /// The producer's brief: the change's words, then its scope, if the spec's
 /// bound has room for both beside its branches; the words alone otherwise.
+/// domain/agent.md, 8: a review holds only the run's existing reads.
+fn gate_authority(
+    domain: &Domain,
+    env: &Env<Limits>,
+    authority: &mut tasks::Authority,
+    kind: forge_change::GateKind,
+) -> Option<()> {
+    if kind != forge_change::GateKind::Agent {
+        return Some(());
+    }
+    authority.tools.0 &= domain.core.settings.tools.read.0;
+    let mut grants = List::with_capacity(env.limits.tasks.authority_grants);
+    for grant in &authority.grants {
+        if grant.connector == domain.config.forge_connector && forge::READ_KINDS.contains(&grant.kind) {
+            grants.push(grant.clone()).ok()?;
+        }
+    }
+    authority.grants = grants.into_boxed();
+    Some(())
+}
+
+fn review_words(title: &[u8], parameters: &[tasks::Parameter], bound: u32) -> Box<[u8]> {
+    // The spec's byte bound includes its base, branch and named head.
+    let mut room = bound;
+    for parameter in parameters {
+        if let tasks::Parameter::Bytes { value, .. } = parameter {
+            room = room.saturating_sub(u32::try_from(value.len()).unwrap_or(u32::MAX));
+        }
+    }
+    let mut words = List::with_capacity(room);
+    append(
+        &mut words,
+        b"Review this change at the named head\nVerdict 1 approves; verdict 2 requests changes. Change: ",
+    );
+    append(&mut words, title);
+    words.into_boxed()
+}
+
 fn produce_words(title: &[u8], base: &[u8], branch: &[u8], bound: u32) -> Box<[u8]> {
     let room = usize::try_from(bound).unwrap_or(usize::MAX).saturating_sub(base.len()).saturating_sub(branch.len());
     let parts = [title, b"\n\n".as_slice(), PRODUCE_SCOPE];
@@ -2373,11 +2415,10 @@ fn takes_no_messages(requester: tasks::Party, limit: u32) -> Box<[u8]> {
     words.into_boxed()
 }
 
-fn gate_executor(domain: &Domain, kind: forge_change::GateKind) -> tasks::Executor {
+fn gate_executor(row: &forge::ChangeRow, kind: forge_change::GateKind) -> tasks::Executor {
     match kind {
-        forge_change::GateKind::Agent | forge_change::GateKind::Check => {
-            tasks::Executor::Agent { charter: domain.config.forge_charter }
-        }
+        forge_change::GateKind::Agent => tasks::Executor::Agent { charter: row.review_charter },
+        forge_change::GateKind::Check => tasks::Executor::Agent { charter: row.producing_charter },
         forge_change::GateKind::Person => tasks::Executor::Person(tasks::PersonAddress::Role(1)),
     }
 }
