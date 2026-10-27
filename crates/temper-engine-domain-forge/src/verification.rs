@@ -10,7 +10,12 @@ use crate::{Domain, Key, Limits, RepositoryTiers, Request, Stored, Tier, TierVer
 
 impl Domain {
     /// Replace a project's tiers, refusing duplicate repositories, invalid or duplicate names and bounds.
-    pub fn project_tiers(&mut self, project: u32, repositories: Box<[RepositoryTiers]>) -> bool {
+    pub fn project_tiers(
+        &mut self,
+        project: u32,
+        settings: crate::TierSettings,
+        repositories: Box<[RepositoryTiers]>,
+    ) -> bool {
         let (repository_limit, tier_limit) = self.tier_limits;
         if repositories.len() > usize::try_from(repository_limit).expect("u32 fits usize") {
             return false;
@@ -25,7 +30,7 @@ impl Domain {
                 }
             }
             for (index, tier) in repository.tiers.iter().enumerate() {
-                if !valid_name(&tier.name) {
+                if !valid_name(&tier.name) || !crate::tiers::valid(tier, &self.tier_config_limits) {
                     return false;
                 }
                 for previous in repository.tiers.get(..index).expect("enumerated tier prefix") {
@@ -35,7 +40,11 @@ impl Domain {
                 }
             }
         }
-        self.tiers.insert(project, repositories).is_ok()
+        if self.tiers.insert(project, repositories).is_err() {
+            return false;
+        }
+        self.tier_settings.insert(project, settings).expect("same project bound");
+        true
     }
 }
 
@@ -51,7 +60,7 @@ pub(crate) fn valid_name(name: &[u8]) -> bool {
     true
 }
 
-fn tiers(d: &Domain, repository: Repository) -> &[Tier] {
+pub(crate) fn tiers(d: &Domain, repository: Repository) -> &[Tier] {
     let Some(adopted) = d.repositories.get(&repository) else { return &[] };
     let Some(repositories) = d.tiers.get(&adopted.project) else { return &[] };
     for configured in repositories {
@@ -204,14 +213,18 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
             .checked_add(u64::from(crate::CHECK_NAME_BYTES))?
             .checked_add(tests)?,
     )?;
-    let configured =
-        u64::from(l.repositories).checked_mul(
-            u64::try_from(size_of::<RepositoryTiers>()).ok()?.checked_add(u64::from(l.tiers).checked_mul(
-                u64::try_from(size_of::<Tier>()).ok()?.checked_add(u64::from(crate::CHECK_NAME_BYTES))?,
-            )?)?,
-        )?;
+    let path = u64::from(l.name_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?;
+    let tier = u64::try_from(size_of::<Tier>())
+        .ok()?
+        .checked_add(u64::from(crate::CHECK_NAME_BYTES).checked_mul(2)?)?
+        .checked_add(u64::from(crate::WORKFLOW_BYTES))?
+        .checked_add(u64::from(l.ignored_paths).checked_mul(path)?)?;
+    let configured = u64::from(l.repositories).checked_mul(
+        u64::try_from(size_of::<RepositoryTiers>()).ok()?.checked_add(u64::from(l.tiers).checked_mul(tier)?)?,
+    )?;
     Map::<(Repository, Commit), Verification>::worst_case(l.changes)?
         .checked_add(u64::from(l.changes).checked_mul(tiers.checked_add(8)?)?)?
         .checked_add(Map::<u32, Box<[RepositoryTiers]>>::worst_case(l.judge_projects)?)?
-        .checked_add(u64::from(l.judge_projects).checked_mul(configured)?)
+        .checked_add(u64::from(l.judge_projects).checked_mul(configured)?)?
+        .checked_add(Map::<u32, crate::TierSettings>::worst_case(l.judge_projects)?)
 }

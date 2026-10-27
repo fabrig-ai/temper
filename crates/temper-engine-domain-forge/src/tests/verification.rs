@@ -122,7 +122,7 @@ fn project_tiers_accepts_both_name_and_count_bounds() {
     const NAME_BYTES: usize = 32;
     for names in [&[BROWSER, FUZZY][..], &[[b'a'; NAME_BYTES].as_slice()][..], &[b"a-Z_09".as_slice()][..]] {
         let mut d = domain();
-        assert!(d.project_tiers(PROJECT, fixtures::repository_tiers(names)));
+        assert!(d.project_tiers(PROJECT, fixtures::tier_settings(), fixtures::repository_tiers(names)));
     }
 }
 
@@ -140,7 +140,7 @@ fn project_tiers_refuses_invalid_configuration_without_replacing_it() {
     ] {
         let mut d = fixtures::verifying();
         let before = d.tiers.get(&PROJECT).expect("configured").clone();
-        assert!(!d.project_tiers(PROJECT, fixtures::repository_tiers(names)));
+        assert!(!d.project_tiers(PROJECT, fixtures::tier_settings(), fixtures::repository_tiers(names)));
         assert_eq!(d.tiers.get(&PROJECT), Some(&before));
     }
 }
@@ -149,6 +149,6 @@ fn project_tiers_refuses_invalid_configuration_without_replacing_it() {
 fn project_tiers_refuses_a_repeated_repository() {
     let mut d = domain();
     let repeated = RepositoryTiers { repository: REPO, tiers: Box::new([]) };
-    assert!(!d.project_tiers(PROJECT, Box::new([repeated.clone(), repeated])));
+    assert!(!d.project_tiers(PROJECT, fixtures::tier_settings(), Box::new([repeated.clone(), repeated])));
     assert!(d.tiers.is_empty());
 }
