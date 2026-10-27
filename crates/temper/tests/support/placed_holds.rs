@@ -21,7 +21,10 @@ const PARKED_CHILD: &[u8] = b"\"task\":3,\"title\":{\"bytes\":\"@held-child\",\"
 
 fn call(name: &[u8], arguments: &Value) -> Turn {
     Turn {
-        lines: Box::new([Line::Call { name: name.into(), arguments: serde_json::to_vec(arguments).unwrap().into() }]),
+        lines: Box::new([Line::Call {
+            name: name.into(),
+            arguments: serde_json::to_vec(arguments).expect("tool JSON").into(),
+        }]),
         finish: Finish::ToolCalls,
         tokens: 20,
     }
@@ -107,12 +110,13 @@ fn llm(config: &Path, expected_exits: Vec<(usize, u8)>) -> boxed::CtlLlm {
     );
     let address = peer.address();
     let path = config.join("agent.json");
-    let mut agent: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let mut agent: Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("agent configuration")).expect("agent JSON");
     agent["endpoints"][0]["address"] = address.to_string().into();
     agent["endpoints"][0]["server_name"] = "skein.test".into();
     agent["endpoints"][0]["trust_der"] = json!(config.join("root.der"));
     super::write_private(&config.join("root.der"), skein_tls_world::pki::ROOT);
-    super::write_private(&path, &serde_json::to_vec(&agent).unwrap());
+    super::write_private(&path, &serde_json::to_vec(&agent).expect("agent JSON"));
     boxed::CtlLlm { peer, expected_exits, on_link: Box::new(|| {}) }
 }
 fn initialize(scratch: &Path, flags: &[String]) {
@@ -132,7 +136,14 @@ fn initial_steps(scratch: &Path) -> Vec<Step> {
     super::write_private(&key, jig_channel_world::fixtures::KEY);
     vec![
         Step::Run(Call::sign_in()), // 0
-        Step::Run(Call::new(&["account", "add-key", "1", key.to_str().unwrap(), "--key", "hold-account"])), // 1
+        Step::Run(Call::new(&[
+            "account",
+            "add-key",
+            "1",
+            key.to_str().expect("UTF-8 fixture key path"),
+            "--key",
+            "hold-account",
+        ])), // 1
         Step::Run(Call::new(&["settings", "show", "rules", "--json"])), // 2
         Step::Run(Call::new(&["settings", "show", "policy", "1", "--json"])), // 3
         Step::Then(Box::new(move |calls| {
@@ -141,22 +152,22 @@ fn initial_steps(scratch: &Path) -> Vec<Step> {
             let mut policy = ctl::json(&calls[3])["value"].clone();
             // Give this story's coordinator control and propose, families 4 and 16,
             // through the public settings path, before creating its project.
-            let tools = rules["ceiling"]["tools"].as_u64().unwrap() | 4 | 16;
+            let tools = rules["ceiling"]["tools"].as_u64().expect("rules tool families") | 4 | 16;
             rules["ceiling"]["tools"] = tools.into();
             policy["ceiling"]["tools"] = tools.into();
             policy["roles"][0]["authority"]["tools"] = tools.into();
             let mut maintainer = policy["roles"][0].clone();
             maintainer["number"] = json!(1);
-            policy["roles"].as_array_mut().unwrap().push(maintainer);
+            policy["roles"].as_array_mut().expect("policy roles").push(maintainer);
             let change = json!({"items":[
                 {"setting":{"kind":"rules"},"set":rules},
                 {"setting":{"kind":"policy","number":1},"set":policy}
             ]});
-            super::write_private(&settings_file, &serde_json::to_vec(&change).unwrap());
+            super::write_private(&settings_file, &serde_json::to_vec(&change).expect("settings change JSON"));
             Call::new(&[
                 "settings",
                 "apply",
-                settings_file.to_str().unwrap(),
+                settings_file.to_str().expect("UTF-8 settings path"),
                 "--against",
                 &rules_document["revision"].to_string(),
                 "--key",
@@ -273,9 +284,9 @@ pub fn proposal(scratch: &Path, config: &Path, flags: Vec<String>) {
     check_box(&seen, &[(17, 2)]);
     assert_eq!(seen.calls.len(), 25);
     let hold = placed(&seen.calls);
-    let owner = hold["owner"]["person"].as_u64().unwrap();
-    let number = hold["hold"].as_u64().unwrap();
-    let revision = hold["revision"].as_u64().unwrap();
+    let owner = hold["owner"]["person"].as_u64().expect("placed hold owner");
+    let number = hold["hold"].as_u64().expect("placed hold number");
+    let revision = hold["revision"].as_u64().expect("placed hold revision");
     assert_eq!(seen.calls[17].stderr, format!("release: Held by hold {number}, placed by person {owner}: only they, or a role above theirs, may release it\n").as_bytes());
     assert!(
         String::from_utf8_lossy(&seen.calls[18].stdout)
@@ -287,7 +298,7 @@ pub fn proposal(scratch: &Path, config: &Path, flags: Vec<String>) {
     );
     assert!(ctl::json(&seen.calls[23])["hold"].is_null());
     assert!(ctl::json(&seen.calls[24])["hold"].is_null());
-    let model = seen.model.as_ref().unwrap();
+    let model = seen.model.as_ref().expect("scripted model observations");
     transcript(model, GOAL.as_bytes());
     transcript(model, CHILD.as_bytes());
     let refusal = format!(
@@ -362,7 +373,7 @@ pub fn lift(scratch: &Path, config: &Path, flags: Vec<String>) {
     assert_eq!(seen.calls[17].stdout, format!("done: hold {STOP_HOLD} lifted, 2 released\n").as_bytes());
     assert!(ctl::json(&seen.calls[18])["hold"].is_null());
     assert!(ctl::json(&seen.calls[19])["hold"].is_null());
-    let retained = ctl::json(&seen.calls[21])["hold"]["placed"]["hold"].as_u64().unwrap();
+    let retained = ctl::json(&seen.calls[21])["hold"]["placed"]["hold"].as_u64().expect("retained hold number");
     assert_eq!(seen.calls[22].stdout, format!("done: hold {retained} lifted, 0 released\n").as_bytes());
     assert!(
         String::from_utf8_lossy(&seen.calls[23].stderr).contains("revision now: 2"),

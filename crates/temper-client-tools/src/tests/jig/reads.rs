@@ -678,71 +678,122 @@ fn placed_holds_print_ownership_scope_permission_and_json_facts() {
             "you may lift it",
         ),
     ] {
-        for document in [false, true] {
-            let mut task = fixtures::offered(&[c::ActKind::Release]);
-            let placed = c::PlacedHold {
-                number: 12,
-                owner,
-                mode,
-                scope,
-                reason: b"Pause for review".as_slice().into(),
-                placed_at: skein_lib::Wall::EPOCH,
-                revision: c::Revision { value: 1 },
-                lifted,
-                may_lift,
-            };
-            task.hold = Some(c::TaskHold::Document(Box::new(c::Hold {
-                placed: Some(placed.clone()),
-                revision: c::Revision { value: 7 },
-                reason: c::HoldReason::Budget { spent: 1, limit: 0 },
-                before: c::Phase::Running,
-                since: skein_lib::Wall::EPOCH,
-                result: None,
-                spend: skein_lib::List::with_capacity(0),
-            })));
-            if !document {
-                task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
-                    placed: Some(placed.clone()),
-                    circle: None,
-                    account: None,
-                    source: None,
-                    reason: c::HoldCategory::Placed { hold: 12 },
-                    revision: 7,
-                    before: c::OwnerPriorPhase::Waiting,
-                    escalation: None,
-                    tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
-                    hold_wait_since: None,
-                })));
-            }
-            let text = fixtures::read_answer(fixtures::TASK_CALL, fixtures::task_result(task.clone()));
-            let text = std::str::from_utf8(&text.stdout).unwrap();
-            let scope_words = match scope {
-                c::HoldScope::Subtree { .. } => "task 41 and below",
-                c::HoldScope::Project => "project shop",
-            };
-            let mode_words = match mode {
-                c::HoldMode::Stop => "stop",
-                c::HoldMode::Drain => "drain",
-            };
-            let lifted_words = if lifted { " · lifted" } else { "" };
-            assert!(text.contains(&format!("\nhold: 12 · {mode_words} · {scope_words} · placed by {owner_words} at 1970-01-01 00:00 UTC · revision 1{lifted_words} · {permission}\nhold reason: Pause for review")), "{text}");
-            assert_eq!(text.contains("  hold lift 12 --rev 1 --with-tasks\n"), may_lift);
-            if may_lift {
-                assert!(text.find("  task release").unwrap() < text.find("  hold lift").unwrap());
-            }
-            let json = fixtures::read_answer(&["task", "show", "41", "--json"], fixtures::task_result(task));
-            let owner_json = match owner {
-                c::HoldOwner::Party { person } => format!("{{\"person\":{person}}}"),
-                c::HoldOwner::Task { task } => format!("{{\"task\":{task}}}"),
-            };
-            let scope_json = match scope {
-                c::HoldScope::Subtree { task } => format!("{{\"task\":{task}}}"),
-                c::HoldScope::Project => "\"project\"".into(),
-            };
-            let expected = format!(
-                "\"placed\":{{\"hold\":12,\"owner\":{owner_json},\"mode\":\"{mode_words}\",\"scope\":{scope_json},\"reason\":\"Pause for review\",\"placed_at\":0,\"revision\":1,\"lifted\":{lifted},\"may_lift\":{may_lift}}}"
-            );
-            assert!(std::str::from_utf8(&json.stdout).unwrap().contains(&expected));
-        }
+        check_placed_hold(owner, may_lift, lifted, mode, scope, owner_words, permission);
     }
+}
+fn check_placed_hold(
+    owner: jig_client::contract::HoldOwner,
+    may_lift: bool,
+    lifted: bool,
+    mode: jig_client::contract::HoldMode,
+    scope: jig_client::contract::HoldScope,
+    owner_words: &str,
+    permission: &str,
+) {
+    use jig_client::contract as c;
+    for document in [false, true] {
+        let mut task = fixtures::offered(&[c::ActKind::Release]);
+        let placed = c::PlacedHold {
+            number: 12,
+            owner,
+            mode,
+            scope,
+            reason: b"Pause for review".as_slice().into(),
+            placed_at: skein_lib::Wall::EPOCH,
+            revision: c::Revision { value: 1 },
+            lifted,
+            may_lift,
+        };
+        task.hold = Some(c::TaskHold::Document(Box::new(c::Hold {
+            placed: Some(placed.clone()),
+            revision: c::Revision { value: 7 },
+            reason: c::HoldReason::Budget { spent: 1, limit: 0 },
+            before: c::Phase::Running,
+            since: skein_lib::Wall::EPOCH,
+            result: None,
+            spend: skein_lib::List::with_capacity(0),
+        })));
+        if !document {
+            task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+                placed: Some(placed.clone()),
+                circle: None,
+                account: None,
+                source: None,
+                reason: c::HoldCategory::Placed { hold: 12 },
+                revision: 7,
+                before: c::OwnerPriorPhase::Waiting,
+                escalation: None,
+                tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
+                hold_wait_since: None,
+            })));
+        }
+        let text = fixtures::read_answer(fixtures::TASK_CALL, fixtures::task_result(task.clone()));
+        let scope_words = match scope {
+            c::HoldScope::Subtree { .. } => "task 41 and below",
+            c::HoldScope::Project => "project shop",
+        };
+        let mode_words = match mode {
+            c::HoldMode::Stop => "stop",
+            c::HoldMode::Drain => "drain",
+        };
+        let lifted_words = if lifted { " · lifted" } else { "" };
+        let expected = hold_words(&[
+            "\nhold: 12 · ",
+            mode_words,
+            " · ",
+            scope_words,
+            " · placed by ",
+            owner_words,
+            " at 1970-01-01 00:00 UTC · revision 1",
+            lifted_words,
+            " · ",
+            permission,
+            "\nhold reason: Pause for review",
+        ]);
+        assert!(skein_lib::bytes::find(&text.stdout, &expected).is_some());
+        assert_eq!(skein_lib::bytes::find(&text.stdout, b"  hold lift 12 --rev 1 --with-tasks\n").is_some(), may_lift);
+        if may_lift {
+            assert!(
+                skein_lib::bytes::find(&text.stdout, b"  task release").unwrap()
+                    < skein_lib::bytes::find(&text.stdout, b"  hold lift").unwrap()
+            );
+        }
+        let json = fixtures::read_answer(&["task", "show", "41", "--json"], fixtures::task_result(task));
+        let owner_json = match owner {
+            c::HoldOwner::Party { person: 3 } => r#"{"person":3}"#,
+            c::HoldOwner::Party { person: fixtures::PARTY } => r#"{"person":73}"#,
+            c::HoldOwner::Task { task: 9 } => r#"{"task":9}"#,
+            c::HoldOwner::Party { .. } | c::HoldOwner::Task { .. } => panic!("test owner"),
+        };
+        let scope_json = match scope {
+            c::HoldScope::Subtree { .. } => r#"{"task":41}"#,
+            c::HoldScope::Project => r#""project""#,
+        };
+        let expected = hold_words(&[
+            r#""placed":{"hold":12,"owner":"#,
+            owner_json,
+            r#","mode":""#,
+            mode_words,
+            r#"","scope":"#,
+            scope_json,
+            r#","reason":"Pause for review","placed_at":0,"revision":1,"lifted":"#,
+            if lifted { "true" } else { "false" },
+            r#","may_lift":"#,
+            if may_lift { "true" } else { "false" },
+            "}",
+        ]);
+        assert!(skein_lib::bytes::find(&json.stdout, &expected).is_some());
+    }
+}
+
+fn hold_words(parts: &[&str]) -> Box<[u8]> {
+    let mut size = 0_usize;
+    for part in parts {
+        size = size.checked_add(part.len()).expect("test words fit");
+    }
+    let mut writer = skein_lib::Writer::new(size);
+    for part in parts {
+        writer.put(part.as_bytes()).unwrap();
+    }
+    writer.finish()
 }
