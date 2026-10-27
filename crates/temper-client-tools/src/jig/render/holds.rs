@@ -21,7 +21,20 @@ pub(crate) fn text(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
     }
     out.put(b"held: ");
     reason(task, vocabulary, out);
-    out.put(b"\nway out: ");
+    out.put(b"\n");
+    if let Some(c::TaskHold::Owner(hold)) = &task.hold
+        && let c::HoldCategory::Exceeded(value) = hold.reason
+        && value.bound == c::Bound::HostPart
+        && let c::ChipPhase::Owner { details, .. } = task.chip.details.as_ref()
+        && let c::OwnerExecutor::Agent { charter } = details.executor
+    {
+        out.put(b"fix first: charter ");
+        out.number(u64::from(charter));
+        out.put(b"'s runs pass smith's host part; narrow its tools, or undo the settings change that grew them (settings show charter ");
+        out.number(u64::from(charter));
+        out.put(b")\n");
+    }
+    out.put(b"way out: ");
     way_out(task, out);
     out.put(b"\n");
 }
@@ -48,6 +61,7 @@ fn recovery(hold: &c::TaskHold) -> &'static [u8] {
             c::HoldCategory::Exceeded(value) if value.bound == c::Bound::Items => {
                 b"reduce calls per response or raise agent.json's calls_per_response, then "
             }
+            c::HoldCategory::Exceeded(value) if value.bound == c::Bound::HostPart => b"",
             c::HoldCategory::Exceeded(_) => b"reduce the request or raise its configured allowance, then ",
             c::HoldCategory::Budget => b"",
             c::HoldCategory::Deadline => b"amend the task's deadline, then ",
@@ -128,6 +142,14 @@ fn reason(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
 }
 
 fn owner(reason: &c::HoldCategory, out: &mut Text) {
+    if let c::HoldCategory::Exceeded(value) = reason
+        && value.bound == c::Bound::HostPart
+    {
+        out.put(b"smith refused its host part, past its bound of ");
+        out.number(value.value);
+        out.put(b" bytes");
+        return;
+    }
     let number = match reason {
         c::HoldCategory::Exceeded(value) if value.bound != c::Bound::History => Some(value.value),
         c::HoldCategory::Dependency { task } => Some(*task),

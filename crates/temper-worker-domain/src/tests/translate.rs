@@ -49,3 +49,13 @@ fn every_smith_limit_names_a_hold_or_stays_a_model_failure() {
         assert_eq!(crate::translate::run_failure(&failure), expected, "{name}");
     }
 }
+
+#[test]
+fn a_host_part_start_refusal_keeps_smiths_bound() {
+    for bound in [1, 33419, u64::MAX] {
+        assert_eq!(
+            crate::translate::start_cause(agent::RunInvalid::HostPart { bound }),
+            host::StartCause::HostPart { bound }
+        );
+    }
+}
