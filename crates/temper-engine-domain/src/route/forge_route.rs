@@ -1859,6 +1859,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                         | forge_change::State::Reopening { .. }
                         | forge_change::State::Checking { .. }
                         | forge_change::State::Gating { .. }
+                        | forge_change::State::CancellingGates { .. }
                         | forge_change::State::Queued { .. }
                         | forge_change::State::First { .. }
                         | forge_change::State::Updating { .. }
