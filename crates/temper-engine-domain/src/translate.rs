@@ -409,3 +409,36 @@ pub(crate) fn keep_connector_answer(
         Err(payload) => Err(call_payload_answer(payload)),
     }
 }
+
+pub(crate) fn is_settings_read(tool: &Tool) -> bool {
+    match tool {
+        Tool::Settings { .. } => true,
+        Tool::ProposeSettings { .. }
+        | Tool::Goal { .. }
+        | Tool::Note { .. }
+        | Tool::Recall { .. }
+        | Tool::EffectForge { .. }
+        | Tool::ReadNamed { .. }
+        | Tool::ReadForge { .. }
+        | Tool::Propose { .. }
+        | Tool::Decide { .. }
+        | Tool::Withdraw { .. }
+        | Tool::DecideEscalation { .. }
+        | Tool::Change { .. }
+        | Tool::Delegate { .. }
+        | Tool::Amend { .. }
+        | Tool::Cancel { .. }
+        | Tool::Release { .. }
+        | Tool::Message { .. }
+        | Tool::Introduce { .. }
+        | Tool::Subscribe { .. }
+        | Tool::SubscribeForge { .. }
+        | Tool::Unsubscribe { .. }
+        | Tool::Rejected(_)
+        | Tool::RejectedMessage(_)
+        | Tool::RejectedControl(_)
+        | Tool::RejectedProposal(_)
+        | Tool::RejectedNote(_)
+        | Tool::Unavailable => false,
+    }
+}

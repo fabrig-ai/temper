@@ -255,6 +255,8 @@ fn message_schema_decodes_a_named_question_and_rejects_a_malformed_body() {
 #[test]
 fn every_declared_tool_decodes_its_minimum_shape_and_rejects_a_wrong_shape() {
     let cases: &[(&[u8], &[u8], &[u8])] = &[
+        (b"settings", br"{}", br#"{"from":-1}"#),
+        (b"propose_settings", br#"{"against":1,"items":[],"reason":"why"}"#, br#"{"against":0,"items":[],"reason":"why"}"#),
         (b"read_items", br#"{"repository":"qa/pilot","since":0,"page":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
         (b"read_item", br#"{"repository":"qa/pilot","number":1,"after":0}"#, br#"{"repository":"qa/pilot","page":0}"#),
         (b"read_pull", br#"{"repository":"qa/pilot","number":1}"#, br#"{"repository":"qa/pilot","page":0}"#),
