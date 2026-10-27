@@ -1,6 +1,6 @@
 //! Concrete whole-value decoders; the schema has fixed depth, with no recursive calls.
 use super::{Decoder, Error, error, field, optional};
-use jig_client::contract as c;
+use crate::view as c;
 use skein_json::Kind;
 use skein_lib::{Duration, List, Wall};
 pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
@@ -27,6 +27,13 @@ pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
         ],
     )?;
     Ok(c::Charter {
+        switches: [
+            d.boolean(field(&fields, b"resume")?)?,
+            d.boolean(field(&fields, b"inspect")?)?,
+            d.boolean(field(&fields, b"modify")?)?,
+            d.boolean(field(&fields, b"shell")?)?,
+            d.boolean(field(&fields, b"agents")?)?,
+        ],
         number: u32::try_from(d.number(field(&fields, b"number")?)?)
             .or(Err(error(b"charter_number", b"integer bound")))?,
         instructions: d.words(
@@ -35,7 +42,6 @@ pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
             b"charter_instructions",
         )?,
         waiting: Duration::from_nanos(d.number(field(&fields, b"waiting")?)?),
-        resume: d.boolean(field(&fields, b"resume")?)?,
         turns: u32::try_from(d.number(field(&fields, b"turns")?)?)
             .or(Err(error(b"charter_turns", b"integer bound")))?,
         time: Duration::from_nanos(d.number(field(&fields, b"time")?)?),
@@ -52,10 +58,6 @@ pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
             }
             values
         },
-        inspect: d.boolean(field(&fields, b"inspect")?)?,
-        modify: d.boolean(field(&fields, b"modify")?)?,
-        shell: d.boolean(field(&fields, b"shell")?)?,
-        agents: d.boolean(field(&fields, b"agents")?)?,
         call_timeout: Duration::from_nanos(d.number(field(&fields, b"call_timeout")?)?),
         hosts: setting_hosts(d, field(&fields, b"hosts")?)?,
         spend: d.number(field(&fields, b"spend")?)?,
