@@ -126,11 +126,7 @@ fn send(d: &mut Domain, request: Token, forge: u16, ask: Ask, carried: Option<Ca
         Ask::Connect { how: how @ crate::How::GitHubApp { .. }, .. } => {
             let carried = carried.expect("admitted key");
             d.connect.running.insert(forge, (request, Some(carried))).expect("room checked");
-            let kept = match d.connections.get(&forge) {
-                Some((_, kept, _)) => *kept,
-                None => None,
-            };
-            d.connections.insert(forge, (Connection::Connecting, kept, None)).expect("configured forge");
+            d.connections.insert(forge, (Connection::Connecting, None)).expect("configured forge");
             out.push(Request::MarkedForges);
             out.push(Request::Connect { forge, request, how, carried });
         }
@@ -219,12 +215,12 @@ fn admin(
     d.ended.remove(&forge);
     d.connect.pending.insert(request, token).expect("room checked");
     d.connect.running.insert(forge, (request, Some(carried))).expect("room checked");
-    let (kept, failed) = match d.connections.get(&forge) {
-        Some((_, kept, failed)) => (*kept, *failed),
-        None => (None, None),
+    let failed = match d.connections.get(&forge) {
+        Some((_, failed)) => *failed,
+        None => None,
     };
     d.connect.previous.insert(forge, (previous, failed)).expect("one previous connection per running connect");
-    d.connections.insert(forge, (Connection::Connecting, kept, None)).expect("configured forge");
+    d.connections.insert(forge, (Connection::Connecting, None)).expect("configured forge");
     if let crate::How::ForgejoAdmin { first } = &how {
         d.first.remove(&forge);
         if let Some(first) = first {
@@ -261,12 +257,8 @@ pub(crate) fn connected(d: &mut Domain, forge: u16, request: Token, answer: Conn
             if let Some((_, Some(carried))) = d.connect.running.remove(&forge) {
                 out.push(Request::CarriedUnused { number: carried.number });
             }
-            let kept = match d.connections.get(&forge) {
-                Some((_, kept, _)) => *kept,
-                None => None,
-            };
             let (previous, failed) = d.connect.previous.remove(&forge).unwrap_or((Connection::NotConnected, None));
-            d.connections.insert(forge, (previous, kept, failed)).expect("configured forge");
+            d.connections.insert(forge, (previous, failed)).expect("configured forge");
             out.push(Request::MarkedForges);
         }
         d.connect.answer(request, token, Answered::Connect(answer), out);
@@ -339,12 +331,8 @@ pub(crate) fn ended(
             if let Some(why) = why {
                 stopped_end(d, forge, &why, if admin { stop } else { None }, out);
             }
-            let kept = match d.connections.get(&forge) {
-                Some((_, kept, _)) => *kept,
-                None => None,
-            };
             let (previous, failed) = d.connect.previous.remove(&forge).unwrap_or((Connection::NotConnected, None));
-            d.connections.insert(forge, (previous, kept, failed)).expect("configured forge");
+            d.connections.insert(forge, (previous, failed)).expect("configured forge");
             out.push(Request::MarkedForges);
         }
     }

@@ -2,7 +2,7 @@
 //! sections 2–5). Durable rows are held here and mirrored by root store
 //! writes.
 use alloc::boxed::Box;
-use skein_lib::{Env, List, Map, Queue, Token};
+use skein_lib::{Duration, Env, List, Map, Queue, Token};
 use temper_engine_domain_forge_change as change;
 use temper_engine_domain_forge_issues as issues;
 
@@ -108,8 +108,8 @@ enum RestorePhase {
     Active,
 }
 
-/// Volatile connection, retained setup answer and the last failure's step.
-pub(crate) type ConnectionState = (crate::Connection, Option<(Token, crate::SetUpAnswer)>, Option<crate::FailedStep>);
+/// Volatile connection and the last failure's step.
+pub(crate) type ConnectionState = (crate::Connection, Option<crate::FailedStep>);
 
 /// The bounded forge connector subtree.
 #[derive(Debug)]
@@ -126,8 +126,8 @@ pub struct Domain {
     pub(crate) first: Map<u16, crate::First>,
     pub(crate) ended: Map<u16, (Box<[u8]>, Option<crate::AdminStop>)>,
     pub(crate) apps: Map<u16, crate::AppWay>,
-    setup_unknown: Option<(Token, crate::SetUpAnswer)>,
-    setup_pending: Map<Token, Token>,
+    setup_answers: Map<Token, (skein_lib::Wall, crate::SetUpAnswer)>,
+    setup_pending: Map<Token, (Token, Duration)>,
     pub(crate) connect: crate::connect::State,
     pub(crate) installations: Map<(u16, u64), crate::Installation>,
     pub(crate) repositories: Map<skein_forge::api::Repository, Repository>,
@@ -206,7 +206,7 @@ impl Domain {
             return crate::Connection::NotConnected;
         }
         match self.connections.get(&forge) {
-            Some((state, _, _)) => state.clone(),
+            Some((state, _)) => state.clone(),
             None => crate::Connection::NotConnected,
         }
     }
@@ -264,7 +264,7 @@ impl Domain {
                 mode: config.mode,
                 connection: self.connection(*forge),
                 failed: match self.connections.get(forge) {
-                    Some((_, _, failed)) => *failed,
+                    Some((_, failed)) => *failed,
                     None => None,
                 },
                 offer: self.offer(*forge),
@@ -316,23 +316,20 @@ impl Domain {
             | crate::Connection::Stopped { .. } => crate::Offer::NotOffered,
         }
     }
-    fn setup_answer(&mut self, forge: u16, request: Token, answer: crate::SetUpAnswer, out: &mut Queue<Request>) {
-        if let Some(token) = self.setup_pending.remove(&request) {
-            if self.configured.contains_key(&forge) {
-                if let Some((_, kept, _)) = self.connections.get_mut(&forge) {
-                    *kept = Some((token, answer));
-                } else {
-                    self.connections
-                        .insert(forge, (crate::Connection::NotConnected, Some((token, answer)), None))
-                        .expect("configured forge answers");
-                }
-            } else {
-                self.setup_unknown = Some((token, answer));
-            }
+    fn setup_answer(
+        &mut self,
+        env: &Env<Limits>,
+        request: Token,
+        answer: crate::SetUpAnswer,
+        out: &mut Queue<Request>,
+    ) {
+        if let Some((token, retention)) = self.setup_pending.remove(&request) {
+            let until = skein_lib::Wall::from_nanos(env.wall.as_nanos().saturating_add(retention.as_nanos()));
+            self.setup_answers.insert(token, (until, answer)).expect("reserved setup answer");
             out.push(Request::ApplicationDone { request, token });
         }
     }
-    /// Latest volatile setup answer or retained adoption outcome.
+    /// Volatile setup answer or retained adoption outcome for this request.
     #[must_use]
     #[expect(clippy::manual_map, reason = "step code uses explicit matches (programming-model.md, 10)")]
     pub fn application_answer(&self, token: Token) -> Option<crate::Answered> {
@@ -342,17 +339,8 @@ impl Domain {
         if let Some(answer) = self.demo_answers.get(&token) {
             return Some(crate::Answered::StartDemo(answer.clone()));
         }
-        for (_, (_, kept, _)) in &self.connections {
-            if let Some((held, answer)) = kept
-                && *held == token
-            {
-                return Some(crate::Answered::SetUp(*answer));
-            }
-        }
-        if let Some((held, answer)) = self.setup_unknown
-            && held == token
-        {
-            return Some(crate::Answered::SetUp(answer));
+        if let Some((_, answer)) = self.setup_answers.get(&token) {
+            return Some(crate::Answered::SetUp(*answer));
         }
         match self.application_outcome(token) {
             Some(outcome) => Some(crate::Answered::Adopt(outcome.clone())),
@@ -555,7 +543,7 @@ impl Domain {
             first: Map::with_capacity(l.client.repositories),
             ended: Map::with_capacity(l.client.repositories),
             apps: Map::with_capacity(l.client.repositories),
-            setup_unknown: None,
+            setup_answers: Map::with_capacity(l.applications),
             setup_pending: Map::with_capacity(l.applications),
             connect: crate::connect::State::new(l.applications),
             installations: Map::with_capacity(l.client.rows),
@@ -1072,7 +1060,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                 if d.forge_ended(*forge) {
                     continue;
                 }
-                if let Some((state, _, failed)) = d.connections.get_mut(forge)
+                if let Some((state, failed)) = d.connections.get_mut(forge)
                     && let crate::Connection::SettingUp { .. } = state
                 {
                     *failed = failed_at(state, *failed);
@@ -1098,7 +1086,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         Event::ConnectEnded { forge, request, connected, why, stop } => {
             crate::connect::ended(d, forge, request, connected, why, stop, out);
         }
-        Event::SetUpAnswered { forge, request, answer } => {
+        Event::SetUpAnswered { forge: _, request, answer } => {
             if d.demo_pending.contains_key(&request) {
                 if let crate::SetUpAnswer::Refused(_) = answer {
                     crate::demo::answered(
@@ -1108,7 +1096,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                     );
                 }
             } else {
-                d.setup_answer(forge, request, answer, out);
+                d.setup_answer(env, request, answer, out);
             }
         }
         Event::FirstMade { forge, id } => {
@@ -1153,13 +1141,9 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                 | crate::Connection::Connecting
                 | crate::Connection::Stopped { .. } => {}
             }
-            let kept = match d.connections.get(&forge) {
-                Some((_, kept, _)) => *kept,
-                None => None,
-            };
             let failed = match &state {
                 crate::Connection::SetUpFailed { .. } => match d.connections.get(&forge) {
-                    Some((held, _, failed)) => failed_at(held, *failed),
+                    Some((held, failed)) => failed_at(held, *failed),
                     None => None,
                 },
                 crate::Connection::NotConnected
@@ -1169,7 +1153,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                 | crate::Connection::Connected { .. }
                 | crate::Connection::Stopped { .. } => None,
             };
-            d.connections.insert(forge, (state, kept, failed)).expect("configured forge connections");
+            d.connections.insert(forge, (state, failed)).expect("configured forge connections");
             out.push(Request::MarkedForges);
         }
         Event::Installation { forge, installation, state } => {
@@ -1193,9 +1177,20 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             crate::Ask::StartDemo => crate::demo::start(d, request, token, out),
             crate::Ask::Adopt(adoption) => adoption::start(d, env, request, token, retention, adoption, out),
             crate::Ask::SetUp { forge, org, repository, project, playground } => {
-                if d.setup_pending.insert(request, token).is_err() {
+                let mut expired = None;
+                for (token, (until, _)) in &d.setup_answers {
+                    if *until <= env.wall {
+                        expired = Some(*token);
+                        break;
+                    }
+                }
+                if let Some(token) = expired {
+                    d.setup_answers.remove(&token);
+                }
+                if d.setup_pending.len().saturating_add(d.setup_answers.len()) >= env.limits.applications {
                     out.push(Request::ApplicationAgain { request, why: jig_domain_people::Again::Busy });
                 } else {
+                    d.setup_pending.insert(request, (token, retention)).expect("setup answer room checked");
                     let invalid_project = match &project {
                         crate::SetUpProject::New(name) => {
                             name.is_empty()
@@ -1217,7 +1212,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                             crate::Offer::NotUnderTheBox => Some(crate::SetUpRefusal::NotUnderTheBox),
                             crate::Offer::Offered => {
                                 let mut busy = false;
-                                for (_, (state, _, _)) in &d.connections {
+                                for (_, (state, _)) in &d.connections {
                                     if let crate::Connection::SettingUp { .. } = state {
                                         busy = true;
                                     }
@@ -1227,7 +1222,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                         }
                     };
                     match refusal {
-                        Some(why) => d.setup_answer(forge, request, crate::SetUpAnswer::Refused(why), out),
+                        Some(why) => d.setup_answer(env, request, crate::SetUpAnswer::Refused(why), out),
                         None => {
                             d.first
                                 .insert(

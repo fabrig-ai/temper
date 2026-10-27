@@ -237,6 +237,7 @@ pub(crate) fn adopt(d: &mut Domain, env: &Env<Limits>, reply_to: Token, out: &mu
     }
     if let Some(existing) = d.repositories.get(&repository)
         && existing.project != request.project
+        && existing.role != Role::Context
         && request.role != Role::Context
     {
         refused(d, out, reply_to, AdoptionRefusal::AnotherProject);
@@ -485,8 +486,17 @@ fn finish_adoption(d: &mut Domain, owner: Token, pending: PendingAdoption, out: 
         protection: pending.protection,
         settings,
     };
-    d.repositories.insert(row.provider, row.clone()).expect("adoption capacity checked");
-    emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Repository(row.clone()) });
+    // The core keeps each project's read grant. This row keeps the writer:
+    // another project's context adoption must leave its home and effects alone.
+    let writer_held = row.role == Role::Context
+        && match d.repositories.get(&row.provider) {
+            Some(existing) => existing.project != row.project && existing.role != Role::Context,
+            None => false,
+        };
+    if !writer_held {
+        d.repositories.insert(row.provider, row.clone()).expect("adoption capacity checked");
+        emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Repository(row.clone()) });
+    }
     // The forges row lists its adoptions (client/forge.md, 5.4).
     emit(out, Request::MarkedForges);
     adopted(d, out, owner, Ok(Adopted { repository: row, collaborators: pending.collaborators.into_boxed() }));

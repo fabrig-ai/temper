@@ -1495,7 +1495,7 @@ fn a_connection_change_keeps_the_latest_setup_answer() {
 }
 
 #[test]
-fn setup_flights_refuse_busy_at_the_bound_and_an_answer_frees_room() {
+fn setup_answers_reserve_room_until_retention_ends() {
     let mut d = setup_domain(&configured(), true);
     outputs(&mut d, Event::Connection { forge: 1, state: Connection::NotSetUp });
     for number in 1..=u64::from(LIMITS.applications) {
@@ -1517,21 +1517,29 @@ fn setup_flights_refuse_busy_at_the_bound_and_an_answer_frees_room() {
     );
     assert_eq!(
         outputs(&mut d, setup_application(1, request, request)).as_ref(),
-        [
-            Request::MarkedForges,
-            Request::SetUp {
-                playground: false,
-                forge: 1,
-                request,
-                org: b"work".as_slice().into(),
-                repository: b"hello".as_slice().into()
-            }
-        ]
+        [Request::ApplicationAgain { request, why: jig_domain_people::Again::Busy }]
     );
+    let mut later = env();
+    later.wall = Wall::from_nanos(later.wall.as_nanos() + Duration::from_secs(60).as_nanos());
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    step(&mut d, &later, setup_application(1, request, request), &mut out);
+    assert_eq!(d.application_answer(Token::new(1)), None, "expired answer released");
+    assert_eq!(out.pop(), Some(Request::MarkedForges));
+    assert_eq!(
+        out.pop(),
+        Some(Request::SetUp {
+            playground: false,
+            forge: 1,
+            request,
+            org: b"work".as_slice().into(),
+            repository: b"hello".as_slice().into(),
+        })
+    );
+    assert!(out.is_empty());
 }
 
 #[test]
-fn a_later_setup_answer_replaces_only_that_forges_previous_token() {
+fn a_refused_second_setup_keeps_the_first_tokens_answer() {
     let mut d = setup_domain(&configured(), true);
     d.connection_limits(2, 1);
     for forge in [1, 2] {
@@ -1540,22 +1548,21 @@ fn a_later_setup_answer_replaces_only_that_forges_previous_token() {
         outputs(&mut d, setup_application(forge, token, token));
         outputs(&mut d, Event::SetUpAnswered { forge, request: token, answer: SetUpAnswer::SettingUp });
     }
-    let request = Token::new(3);
-    outputs(&mut d, setup_application(1, request, request));
-    assert_eq!(
-        d.application_answer(Token::new(1)),
-        Some(Answered::SetUp(SetUpAnswer::SettingUp)),
-        "kept until answered"
+    outputs(
+        &mut d,
+        Event::Connection { forge: 1, state: Connection::Connected { id: 7, login: b"bot".as_slice().into() } },
     );
-    let answer = SetUpAnswer::Refused(SetUpRefusal::Busy);
-    outputs(&mut d, Event::SetUpAnswered { forge: 1, request, answer });
-    assert_eq!(d.application_answer(Token::new(1)), None);
+    let request = Token::new(3);
+    let requests = outputs(&mut d, setup_application(1, request, request));
+    assert_eq!(requests.as_ref(), [Request::ApplicationDone { request, token: request }]);
+    let answer = SetUpAnswer::Refused(SetUpRefusal::NotOffered);
+    assert_eq!(d.application_answer(Token::new(1)), Some(Answered::SetUp(SetUpAnswer::SettingUp)));
     assert_eq!(d.application_answer(request), Some(Answered::SetUp(answer)));
     assert_eq!(d.application_answer(Token::new(2)), Some(Answered::SetUp(SetUpAnswer::SettingUp)));
 }
 
 #[test]
-fn unconfigured_forges_share_one_latest_refusal_beside_the_configured_forges() {
+fn unconfigured_forges_keep_each_refusal_beside_the_configured_forges() {
     let mut d = setup_domain(&configured()[..1], true);
     d.connection_limits(1, 1);
     outputs(&mut d, Event::Connection { forge: 1, state: Connection::NotSetUp });
@@ -1576,7 +1583,10 @@ fn unconfigured_forges_share_one_latest_refusal_beside_the_configured_forges() {
         );
     }
     assert_eq!(d.application_answer(Token::new(1)), Some(Answered::SetUp(SetUpAnswer::SettingUp)));
-    assert_eq!(d.application_answer(Token::new(2)), None);
+    assert_eq!(
+        d.application_answer(Token::new(2)),
+        Some(Answered::SetUp(SetUpAnswer::Refused(SetUpRefusal::NotOffered)))
+    );
     assert_eq!(
         d.application_answer(Token::new(3)),
         Some(Answered::SetUp(SetUpAnswer::Refused(SetUpRefusal::NotOffered)))
