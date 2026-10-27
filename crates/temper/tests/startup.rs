@@ -206,7 +206,7 @@ fn a_document_charter_is_refused_naming_temper_ctl_settings() {
     assert!(ended.stdout.is_empty());
     assert_eq!(
         ended.stderr,
-        b"temper serve: engine.charters: settings live in the store; read them with temper ctl settings\n"
+        b"temper serve: engine.charters: settings live in the store; read them with temper ctl DIR settings show\n"
     );
     scratch.remove();
 }
