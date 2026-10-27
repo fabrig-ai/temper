@@ -568,6 +568,7 @@ pub(crate) struct Observations {
     pub(crate) families: temper_protocol_store::Bounds,
     pub(crate) names: Box<[jig_domain_core::settings::ModelName]>,
     pub(crate) agent: smith_channel::Limits,
+    pub(crate) settings: u32,
 }
 pub(crate) fn instrumented(
     start: &temper_playground::Start,
@@ -586,7 +587,7 @@ pub(crate) fn instrumented(
         hooks: None,
         bound_hooks: None,
         capture,
-        wire: Wire::new(store.clone(), observations.agent),
+        wire: Wire::new(store.clone(), observations.agent, start.seeds.deployment, observations.settings),
         store,
         commits: Vec::new(),
         attached: false,
@@ -621,6 +622,8 @@ fn service(inherited: &Inherited) -> Proc {
             .expect("application codec bounds"),
             names: fixtures::store_names().to_vec().into_boxed_slice(),
             agent: fixtures::agent_limits().channel.bodies,
+            // The stock terminal chat changes revision 1 before starting work.
+            settings: if stories::uses_stock() { 2 } else { 1 },
         },
         false,
     )
