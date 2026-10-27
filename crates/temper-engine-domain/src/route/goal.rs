@@ -2,8 +2,12 @@
 use super::{Delegate, Domain, Env, Limits};
 use alloc::boxed::Box;
 use jig_domain_tasks as tasks;
-use skein_lib::List;
+use skein_lib::{List, Writer};
 use temper_engine_domain_forge as forge;
+
+/// The root names an advisor before the requester's words (domain/agent.md, 4.3.2).
+const ADVISOR_SCOPE: &[u8] =
+    b"You are an advisor: you read what your brief asks and report what you found; you change nothing and ask no one.";
 
 pub(crate) fn goal(
     domain: &Domain,
@@ -71,6 +75,24 @@ pub(crate) fn goal(
             }
         }
         Some(priority)
+    };
+    let words = if advisor {
+        let length = ADVISOR_SCOPE
+            .len()
+            .checked_add(2)
+            .ok_or(tasks::Refusal::Spec)?
+            .checked_add(words.len())
+            .ok_or(tasks::Refusal::Spec)?;
+        if length > usize::try_from(env.limits.tasks.spec_bytes).unwrap_or(usize::MAX) {
+            return Err(tasks::Refusal::Spec);
+        }
+        let mut writer = Writer::new(length);
+        for part in [ADVISOR_SCOPE, b"\n\n".as_slice(), &words] {
+            writer.put(part).expect("measured advisor brief");
+        }
+        writer.finish()
+    } else {
+        words
     };
     Ok(Delegate {
         executor: tasks::Executor::Agent { charter },

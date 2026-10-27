@@ -2,6 +2,10 @@
 use super::*;
 
 const WORDS: &[u8] = b"Plan the fix, ask me, then make it";
+const ADVISOR_PREFIX: &[u8] = b"You are an advisor: you read what your brief asks and report what you found; you change nothing and ask no one.\n\n";
+const GOAL_CALL: u64 = 93; // The fixture's first call name, after chat key 92.
+const AT_BOUND: usize = 0;
+const ONE_PAST_BOUND: usize = 1; // One additional byte crosses the spec's bound.
 
 fn chat_world(cap: u64, tasks: u32, depth: u32) -> (World, engine::Assignment) {
     let mut world = World::configured(true, true);
@@ -268,4 +272,45 @@ fn oversized_goal_words_are_refused_as_a_delegate_spec() {
     let words = vec![b'x'; usize::try_from(world.env.limits.tasks.spec_bytes).expect("u32 fits usize") + 1];
     assert!(matches!(call(&mut world, &chat, 93, engine::Tool::Goal { words: words.into(), advisor: false }),
         engine::CallAnswer::DelegationRefused(p) if p.why == tasks::Refusal::Spec));
+}
+
+fn words_world() -> (World, engine::Assignment) {
+    // The ordinary goal fixture's funding and tree capacity; only its words differ.
+    const CHAT_CAP: u64 = 100;
+    const TREE_TASKS: u32 = 11;
+    const TREE_DEPTH: u32 = 3;
+    chat_world(CHAT_CAP, TREE_TASKS, TREE_DEPTH)
+}
+
+#[test]
+fn an_advisors_brief_opens_with_the_roots_line() {
+    for (advisor, expected) in [(true, [ADVISOR_PREFIX, WORDS].concat()), (false, WORDS.to_vec())] {
+        let (mut world, chat) = words_world();
+        let task = delegated(goal(&mut world, &chat, GOAL_CALL, advisor));
+        assert_eq!(live(&world, task).spec.words.as_ref(), expected.as_slice());
+    }
+}
+
+fn advisor_at_spec_edge(extra: usize) -> (World, engine::CallAnswer) {
+    let (mut world, chat) = words_world();
+    let bound = usize::try_from(world.env.limits.tasks.spec_bytes).expect("u32 fits usize");
+    let words = vec![b'x'; bound - ADVISOR_PREFIX.len() + extra];
+    let answer = call(&mut world, &chat, GOAL_CALL, engine::Tool::Goal { words: words.into(), advisor: true });
+    (world, answer)
+}
+
+#[test]
+fn an_advisors_brief_fits_at_the_spec_bound() {
+    let (world, answer) = advisor_at_spec_edge(AT_BOUND);
+    let task = delegated(answer);
+    assert_eq!(
+        live(&world, task).spec.words.len(),
+        usize::try_from(world.env.limits.tasks.spec_bytes).expect("u32 fits usize")
+    );
+}
+
+#[test]
+fn an_advisors_brief_past_the_spec_bound_is_refused() {
+    let (_, answer) = advisor_at_spec_edge(ONE_PAST_BOUND);
+    assert!(matches!(answer, engine::CallAnswer::DelegationRefused(p) if p.why == tasks::Refusal::Spec));
 }
