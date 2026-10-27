@@ -38,6 +38,7 @@ pub(crate) struct Pending {
     trees: List<policy::Tree>,
     entries: List<policy::Entry>,
     woken: bool,
+    evidence: Box<[crate::LandingEvidence]>,
 }
 #[derive(Clone, Debug)]
 enum Stage {
@@ -45,6 +46,7 @@ enum Stage {
     Main(u16),
     Compare(u16),
     Pull(u16),
+    Reviews(u16, u32),
     Collect,
     Run { key: ReceiptKey, pages: u32 },
     Tree { member: u16, gate: u16, candidate: api::Commit, object: api::Commit, page: u32, main: bool },
@@ -287,7 +289,24 @@ pub(crate) fn step(
         return;
     };
     let mut facts = List::with_capacity(env.limits.landing_members);
+    let mut evidence = List::with_capacity(env.limits.landing_members);
     for member in &row.landing.members {
+        let change = d.changes.get(&member.change).expect("member change");
+        evidence
+            .push(crate::LandingEvidence {
+                change: member.change,
+                facts: crate::ChangeEvidence {
+                    prior: change.change.clone(),
+                    head: None,
+                    base_tip: [0; 32],
+                    contains_base: change::Status::Unknown,
+                    ci: change::Status::Unknown,
+                    gates: change.verdicts.clone(),
+                    reviews: Box::new([]),
+                    reviews_complete: false,
+                },
+            })
+            .expect("bounded evidence");
         facts.push(fresh(d.landing.gates(row.landing.project, repository(member)))).expect("admitted members");
     }
     let Some(first) = row.landing.members.first() else {
@@ -314,6 +333,7 @@ pub(crate) fn step(
                 trees: List::with_capacity(env.limits.trees_in_flight),
                 entries: List::with_capacity(env.limits.key_entries),
                 woken: false,
+                evidence: evidence.into_boxed(),
             },
         )
         .expect("one chain per landing");
@@ -340,6 +360,7 @@ fn wait(task: u64, env: &Env<Limits>, out: &mut Queue<Request>) {
                 until: Some(Wall::from_nanos(env.wall.as_nanos().saturating_add(env.limits.client.poll.as_nanos()))),
             },
             entry: None,
+            evidence: None,
         },
     );
 }
@@ -417,23 +438,52 @@ pub(crate) fn answered(
                     fact.ready = if let change::State::Ready { .. } = change.change.state { true } else { false };
                     fact.asked = row.asks.get(usize::from(index)).expect("member ask").is_some();
                     fact.cancelled = p.heard.cancelled;
-                    if usize::from(index) + 1 < row.landing.members.len() {
-                        let index = index.checked_add(1).expect("member index");
-                        let next = row.landing.members.get(usize::from(index)).expect("member");
-                        let change = d.changes.get(&next.change).expect("member's change");
-                        let repo = change.repository;
-                        let read = api::Read::Branch { branch: change.branch.clone() };
-                        p.stage = Stage::Branch(index);
-                        ask(d, env, owner, p, repo, read, out);
-                        return;
-                    }
-                    p.stage = Stage::Collect;
-                    collect(d, env, owner, p, out);
-                    return;
+                    p.stage = Stage::Reviews(index, 1);
+                    api::Read::Reviews { number: member.pull, page: 1 }
                 }
-                Stage::Collect | Stage::Run { .. } | Stage::Tree { .. } => unreachable!("member stage"),
+                Stage::Reviews(_, _) | Stage::Collect | Stage::Run { .. } | Stage::Tree { .. } => {
+                    unreachable!("member stage")
+                }
             };
             ask(d, env, owner, p, repo, read, out);
+        }
+        Stage::Reviews(index, page) => {
+            let evidence = &mut p.evidence.get_mut(usize::from(index)).expect("member evidence").facts;
+            if let Ok(api::Answer::Reviews { reviews, more }) = answer {
+                let mut gathered = List::with_capacity(env.limits.client.inbox);
+                for review in &evidence.reviews {
+                    gathered.push(review.clone()).expect("bounded reviews");
+                }
+                let mut fits = true;
+                for review in reviews {
+                    if gathered.push(review).is_err() {
+                        fits = false;
+                        break;
+                    }
+                }
+                evidence.reviews = gathered.into_boxed();
+                if fits && more && page < env.limits.client.rows {
+                    let member = row.landing.members.get(usize::from(index)).expect("member");
+                    let page = page.checked_add(1).expect("bounded review pages");
+                    p.stage = Stage::Reviews(index, page);
+                    ask(d, env, owner, p, repository(member), api::Read::Reviews { number: member.pull, page }, out);
+                    return;
+                }
+                evidence.reviews_complete = fits && !more;
+            }
+            if usize::from(index) + 1 < row.landing.members.len() {
+                let index = index.checked_add(1).expect("member index");
+                let next = row.landing.members.get(usize::from(index)).expect("member");
+                let change = d.changes.get(&next.change).expect("member's change");
+                let repo = change.repository;
+                let read = api::Read::Branch { branch: change.branch.clone() };
+                p.stage = Stage::Branch(index);
+                ask(d, env, owner, p, repo, read, out);
+                return;
+            }
+            p.stage = Stage::Collect;
+            collect(d, env, owner, p, out);
+            return;
         }
         Stage::Run { key, pages } => {
             let writer = d.writers.get(&key.repository.forge).copied().unwrap_or(0);
@@ -557,6 +607,7 @@ pub(crate) fn answered(
                                 task: p.task,
                                 decision: policy::Decision::Key { member, gate, candidate },
                                 entry: None,
+                                evidence: None,
                             },
                         );
                     }
@@ -715,6 +766,31 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
         }
         row.asks = asks.into_boxed();
     }
+    let evidence = if let policy::Decision::Merge { member, candidate } = decision {
+        let fact = p.facts.get(usize::from(member)).expect("fresh member facts");
+        let mut evidence = p.evidence.get(usize::from(member)).expect("member evidence").clone();
+        evidence.facts.head = Some(candidate);
+        evidence.facts.base_tip = fact.main;
+        evidence.facts.contains_base = match fact.contains_main {
+            policy::Status::Unknown => change::Status::Unknown,
+            policy::Status::Pending => change::Status::Pending,
+            policy::Status::Passed => change::Status::Passed,
+            policy::Status::Failed => change::Status::Failed,
+        };
+        evidence.facts.ci = change::Status::Passed;
+        for gate in &fact.gates {
+            if gate.blocking && gate.receipt != policy::Status::Passed {
+                evidence.facts.ci = if gate.receipt == policy::Status::Failed {
+                    change::Status::Failed
+                } else {
+                    change::Status::Unknown
+                };
+            }
+        }
+        Some(evidence)
+    } else {
+        None
+    };
     let mut committed = None;
     match decision {
         policy::Decision::Prepare { member, head, main } => {
@@ -876,7 +952,7 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
     if decision != policy::Decision::Proved {
         assign_turn(d, project, out);
     }
-    emit(out, Request::LandingDecision { task: p.task, decision, entry: committed });
+    emit(out, Request::LandingDecision { task: p.task, decision, entry: committed, evidence });
 }
 fn purpose_identity(row: &LandingRow, member: u16, gate: u16, operation: u8, attempt: u16) -> Box<[u8]> {
     crate::purpose::EffectPurpose::Landing {
@@ -1372,7 +1448,15 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
             u64::from(walk_nodes)
                 .checked_mul(u64::from(l.trees_in_flight.checked_add(1)?).checked_mul(u64::from(l.name_bytes))?)?,
         )?;
+    let evidence = u64::from(l.landing_members).checked_mul(
+        u64::try_from(size_of::<crate::LandingEvidence>())
+            .ok()?
+            .checked_add(u64::from(l.client.inbox).checked_mul(u64::try_from(size_of::<api::Review>()).ok()?)?)?
+            .checked_add(u64::from(l.change_policy.gates).checked_mul(256)?)?
+            .checked_add(u64::from(l.change_policy.clean_heads).checked_mul(32)?)?,
+    )?;
     let pending = trees
+        .checked_add(evidence)?
         .checked_add(walker)?
         .checked_add(u64::from(l.key_entries).checked_mul(64 + u64::from(l.name_bytes))?)?
         .checked_add(u64::from(l.key_path_bytes).checked_mul(3)?)?
@@ -1468,6 +1552,7 @@ fn continue_retry(d: &mut Domain, row: &mut LandingRow, entry: u64, out: &mut Qu
                 task: row.landing.task,
                 decision: policy::Decision::Wait { until: None },
                 entry: None,
+                evidence: None,
             },
         );
         return true;
@@ -1485,6 +1570,7 @@ fn continue_retry(d: &mut Domain, row: &mut LandingRow, entry: u64, out: &mut Qu
                 task: row.landing.task,
                 decision: policy::Decision::Wait { until: None },
                 entry: None,
+                evidence: None,
             },
         );
         return true;
@@ -1498,6 +1584,7 @@ fn continue_retry(d: &mut Domain, row: &mut LandingRow, entry: u64, out: &mut Qu
             task: row.landing.task,
             decision: policy::Decision::Retry { member, gate, key: key.key, try_ },
             entry: Some(entry),
+            evidence: None,
         },
     );
     true
@@ -1625,4 +1712,73 @@ fn matches_terminal(phase: &policy::Phase) -> bool {
         | policy::Phase::Turn { .. }
         | policy::Phase::Held { .. } => false,
     }
+}
+
+impl Domain {
+    /// Describe the exact saved landing write before core authorization.
+    #[must_use]
+    pub fn describe_landing_effect(
+        &self,
+        task: u64,
+        entry: u64,
+    ) -> Option<(api::Repository, crate::What, crate::AgentEffect)> {
+        let row = self.landing.rows.get(&task)?;
+        let mut item = None;
+        for candidate in &row.entries {
+            if candidate.entry == entry {
+                item = Some(*candidate);
+            }
+        }
+        let item = item?;
+        let member = row.landing.members.get(usize::from(item.member))?;
+        let kept = &self.entries.get(&entry)?.entry;
+        if kept.task != task {
+            return None;
+        }
+        let (kind, what, state) = match &kept.effect.write {
+            api::Write::Dispatch { .. } => (16, crate::What::Repository, member.candidate?),
+            api::Write::Rerun { .. } => (17, crate::What::Repository, member.candidate?),
+            api::Write::Status { commit, .. } => (6, crate::What::Repository, *commit),
+            api::Write::Merge { head, .. } => {
+                let change = self.changes.get(&member.change)?;
+                let mut parts = List::with_capacity(self.landing.limits.authority_segments);
+                for part in change.base.split(is_slash) {
+                    parts.push(Box::from(part)).ok()?;
+                }
+                (4, crate::What::Branch(parts.into_boxed()), *head)
+            }
+            _ => return None,
+        };
+        let (form, recovery) = crate::effect_shape(kind)?;
+        Some((kept.repository, what, crate::AgentEffect { effect: kept.effect.clone(), kind, state, form, recovery }))
+    }
+}
+/// A refused entry never reaches the client and is observed as failed next step.
+pub(crate) fn veto(d: &mut Domain, task: u64, entry: u64, out: &mut Queue<Request>) {
+    if !matches_entry(d, task, entry) {
+        return;
+    }
+    outcome(d, entry, skein_forge_client::Outcome::Failed(api::Error::Refused), out);
+    d.entries.remove(&entry);
+    emit(out, Request::Erase { key: Key::Entry(entry) });
+    if let Some(mut row) = d.landing.rows.get(&task).cloned() {
+        let mut entries = List::with_capacity(d.landing.limits.entries);
+        for item in &row.entries {
+            if item.entry != entry {
+                entries.push(*item).expect("bounded entries");
+            }
+        }
+        row.entries = entries.into_boxed();
+        save(d, row, out);
+    }
+}
+fn matches_entry(d: &Domain, task: u64, entry: u64) -> bool {
+    match d.entries.get(&entry) {
+        Some(row) => row.entry.task == task && d.landing.rows.contains_key(&task),
+        None => false,
+    }
+}
+
+fn is_slash(byte: &u8) -> bool {
+    *byte == b'/'
 }

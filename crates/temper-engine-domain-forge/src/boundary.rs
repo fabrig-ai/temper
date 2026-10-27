@@ -724,6 +724,12 @@ pub struct ChangeEvidence {
     pub reviews: Box<[skein_forge::api::Review]>,
     pub reviews_complete: bool,
 }
+/// Coherent merge facts for a landing member, read in the landing's step.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LandingEvidence {
+    pub change: u64,
+    pub facts: ChangeEvidence,
+}
 /// Identity supplied by the named-call owner, interpreted only for lookup.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct NamedCall {
@@ -928,6 +934,10 @@ pub struct Installation {
 pub enum Event {
     Landing {
         row: LandingRow,
+    },
+    VetoLanding {
+        task: u64,
+        entry: u64,
     },
     StepLanding {
         task: u64,
@@ -1273,6 +1283,7 @@ pub enum Request {
         task: u64,
         decision: landing::Decision,
         entry: Option<u64>,
+        evidence: Option<LandingEvidence>,
     },
     /// The client finished sent entries or reached its bound; those without an outcome.
     Settled {

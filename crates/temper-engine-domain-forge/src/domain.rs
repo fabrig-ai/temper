@@ -1050,6 +1050,7 @@ pub const fn max_out(l: &Limits) -> u32 {
 pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Request>) {
     match event {
         Event::Landing { row } => crate::landing::register(d, env, row, out),
+        Event::VetoLanding { task, entry } => crate::landing::veto(d, task, entry, out),
         Event::StepLanding { task, entry, heard } => crate::landing::step(d, env, task, entry, heard, out),
         Event::Settle => {
             d.stopping = true;

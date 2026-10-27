@@ -70,7 +70,7 @@ pub fn step_landing(world: &mut World, task: u64, entry: u64) -> landing::Decisi
     let mut decision = None;
     let mut committed = None;
     for request in world.take_seen() {
-        if let top::Request::LandingDecision { task: decided, decision: choice, entry } = request
+        if let top::Request::LandingDecision { task: decided, decision: choice, entry, .. } = request
             && decided == task
         {
             decision = Some(choice);
