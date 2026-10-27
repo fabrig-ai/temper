@@ -231,6 +231,7 @@ pub fn panel_rows() -> List<v1::ChangePanel> {
             | Step::Resolving
             | Step::Repairing(_)
             | Step::Landing
+            | Step::Ended
             | Step::Landed(_) => {}
         }
         parts.step = step;
