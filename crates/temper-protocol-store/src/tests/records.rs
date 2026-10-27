@@ -306,6 +306,7 @@ fn each_change_delegate_round_trips_unchanged() {
         Delegate::Repair(Repair::Ci),
         Delegate::Repair(Repair::Gate(1)),
         Delegate::Repair(Repair::Semantic),
+        Delegate::Repair(Repair::Landing { gate: 3 }),
         Delegate::Resolve { base: [2; 32] },
         Delegate::Gate { number: 3, head: [4; 32] },
     ] {
@@ -898,6 +899,25 @@ fn review_failure_counts_take_the_gate_bound() {
             assert_eq!(records::decode(&bytes, &bounds), Ok(row));
         } else {
             assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
+        }
+    }
+}
+
+#[test]
+fn a_turn_change_ready_or_preparing_round_trips_with_its_landing() {
+    use temper_engine_domain_forge_change::{State, Way};
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    for state in [
+        State::Ready { head: [1; 32], ready_since: skein_lib::Wall::from_nanos(2) },
+        State::Preparing { from: [1; 32], main: [3; 32], ready_since: skein_lib::Wall::from_nanos(2) },
+    ] {
+        for landing in [None, Some(8)] {
+            let mut row = fixtures::change_row(state.clone());
+            row.change.way = Way::Turn;
+            row.change.landing = landing;
+            let row = forge::Stored::Change(row);
+            let bytes = records::encode(&row);
+            assert_eq!(records::decode(&bytes, &bounds), Ok(row));
         }
     }
 }

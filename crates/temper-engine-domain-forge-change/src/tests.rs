@@ -18,6 +18,8 @@ fn at(seconds: u64) -> Wall {
 }
 fn change(state: State) -> Change {
     Change {
+        way: crate::Way::Queue,
+        landing: None,
         task: 7,
         state,
         gates: Box::new([]),
@@ -34,6 +36,7 @@ fn change(state: State) -> Change {
 }
 fn facts() -> Facts {
     Facts {
+        ask: None,
         branch: Some(HEAD),
         expected_base: BASE,
         pull: Pull::Open { head: HEAD, base: BASE },
@@ -453,3 +456,5 @@ fn each_gate_has_its_own_failure_count() {
     );
     assert_eq!(decide(&two, &facts(), &heard()).decision, Decision::Delegate(Delegate::Gate { number: 9, head: HEAD }));
 }
+
+mod turn;
