@@ -115,6 +115,28 @@ pub fn configure_turn(root: &Path, setup: &Setup) {
     super::write_private(&path, &serde_json::to_vec(&config).expect("configuration JSON"));
 }
 
+/// The stock reserves policy 1's whole period to role 0's pool, which leaves its
+/// project's landing task no spend (temper#16): this deployment keeps 7K of 48K free.
+pub const ROLE_PERIOD_IN_K: u64 = 41;
+const PERIOD_IN_K: u64 = 48;
+
+/// Leave policy 1's projects spend for landing tasks, applying against the newest
+/// revision read from the inventory and preserving the policy's other members.
+pub fn fund_landings(root: &Path, policy: &super::Ended, inventory: &super::Ended) -> ctl::Call {
+    let file = root.join("landing-settings.json");
+    ctl::setting_change_file(&file, policy, |value| {
+        let period = value["period_spend"].as_u64().expect("policy period spend");
+        let role = value["roles"]
+            .as_array_mut()
+            .expect("policy roles")
+            .iter_mut()
+            .find(|role| role["number"] == 0)
+            .expect("owner role");
+        role["period_spend"] = json!(period / PERIOD_IN_K * ROLE_PERIOD_IN_K);
+    });
+    ctl::settings_change(inventory, &file, "landing-settings")
+}
+
 pub struct Evidence {
     pub list: super::Ended,
     pub show: super::Ended,
