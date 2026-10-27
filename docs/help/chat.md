@@ -34,15 +34,16 @@ A chat is a conversation between a party and an agent in a project: an untracked
   it at the next turn's boundary.
 - **Each delegate decided at the close:** none is left without an
   owner; the ones not moved are cancelled with the chat.
-- **The transcript stays** after the close, and `chat show` reads it.
+- **The transcript stays** after the close: `chat show` and `task
+  show` with `--run` read it.
 
 ## Acting on it
 
 - **ctl:** `chat start` starts one in a project and `chat show` reads
-  one; `task message` sends it words; `chat close` ends it; `task
-  show` on its task with `--until replied` returns once it has
-  answered or waits on someone; `task tree` shows the change tasks it
-  started.
+  one; `task message` sends it words; `chat close` ends it, and the
+  same `chat close` again gets its first answer; `task show` on its
+  task with `--until replied` returns once it has answered or waits on
+  someone; `task tree` shows the change tasks it started.
 - **temper's runs** in a chat use the host tools `change`,
   `delegate` and `message`, and read these pages with `read_docs`.
 
