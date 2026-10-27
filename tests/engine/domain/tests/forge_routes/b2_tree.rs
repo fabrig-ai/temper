@@ -342,10 +342,39 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> u64 {
 #[test]
 fn b2s_tree_admits_every_run_under_the_stock() {
     let (mut world, chat) = stock_world();
-    tree(&mut world, &chat);
+    let tree = tree(&mut world, &chat);
+    let defaults = defaults();
+    // protocol/configuration.md, 13.4: W has its run and two 5K changes.
+    const WORK_RUNS: u64 = 11;
+    const CHANGE_RUNS: u64 = 5;
+    let k = defaults.rules.maximum_run_spend;
+    let c = defaults.rules.minimum_run_spend / u64::from(defaults.charters[0].policy.reserve_turns + 1);
+    assert!(record(&world, tree.work).numbers.budget >= WORK_RUNS * k);
+    for change in [tree.first, tree.second] {
+        assert!(record(&world, change).numbers.budget >= CHANGE_RUNS * k);
+    }
+    println!("stock C={c}, K={k}");
+    for (name, task) in [
+        ("chat", tree.chat),
+        ("W", tree.work),
+        ("V", tree.advisor),
+        ("C1", tree.first),
+        ("C2", tree.second),
+    ] {
+        let numbers = &record(&world, task).numbers;
+        println!("{name}: budget={}, spent={}, spent_below={}", numbers.budget, numbers.spent, numbers.spent_below);
+    }
 }
 
-fn tree(world: &mut World, chat: &engine::Assignment) {
+struct Tree {
+    chat: u64,
+    work: u64,
+    advisor: u64,
+    first: u64,
+    second: u64,
+}
+
+fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
     let chat = admitted(world, chat.task);
     let work_task = goal(world, &chat, false);
     answer(world, &chat, CHAT_TURNS, tasks::End::Parked);
@@ -372,14 +401,12 @@ fn tree(world: &mut World, chat: &engine::Assignment) {
         tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { words })) if words.as_ref() == WORK_REPORT));
     // The stock chat is a conversation ended by its requester; its report is a reply.
     assert!(record(world, chat.task).last_reply > 0);
+    Tree { chat: chat.task, work: work_task, advisor: advisor_task, first, second }
 }
 
 #[test]
 fn an_advisors_report_at_the_deployments_result_bound_reaches_the_work() {
-    let mut defaults = defaults();
-    // Funding is incidental to the report contract: use the period's full authority.
-    defaults.policies.get_mut(&PROJECT).expect("stock policy").policy.roles[0].authority.budget.spend = 100;
-    let (mut world, chat) = world_with(&defaults);
+    let (mut world, chat) = stock_world();
     let work_task = goal(&mut world, &chat, false);
     answer(&mut world, &chat, CHAT_TURNS, tasks::End::Parked);
     let work = admitted(&world, work_task);
@@ -398,27 +425,8 @@ fn an_advisors_report_at_the_deployments_result_bound_reaches_the_work() {
     );
 }
 
-fn stock_box_world() -> (World, engine::Assignment) {
-    // This test isolates capacities: even repeated halvings leave abundant funding.
-    const SPEND: u64 = 1_000_000;
-    let mut defaults = defaults();
-    defaults.rules.period_spend = SPEND;
-    defaults.rules.ceiling.budget.spend = SPEND;
-    for charter in &mut defaults.charters {
-        charter.spend = SPEND;
-    }
-    let policy = &mut defaults.policies.get_mut(&PROJECT).expect("stock policy").policy;
-    policy.ceiling.budget.spend = SPEND;
-    policy.period_spend = SPEND;
-    for role in &mut policy.roles {
-        role.authority.budget.spend = SPEND;
-        role.period_spend = SPEND;
-    }
-    started_world(World::configured_stock_limits(&defaults, &model(), &box_limits()), &defaults)
-}
-
 #[test]
 fn b2s_tree_fits_the_boxs_limits() {
-    let (mut world, chat) = stock_box_world();
+    let (mut world, chat) = stock_world();
     tree(&mut world, &chat);
 }
