@@ -1,11 +1,12 @@
 //! Application landing rules use jig's pattern and project vocabulary.
-use super::{Problems, What, limits, read};
+use super::{Forge, Problems, What, limits, read};
 use alloc::boxed::Box;
 use jig_protocol_config::{self as config, Path};
 use skein_json::Document;
 use skein_lib::{List, Map};
 use temper_engine_domain::{self as engine, Approval, Freshness, Gate, LandingRule};
 use temper_engine_domain_forge::{CHECK_NAME_BYTES, WORKFLOW_BYTES};
+use temper_engine_domain_forge_tiers::{Format, Settings, Suspects};
 
 fn freshness(
     object: &mut config::read::Object,
@@ -252,6 +253,24 @@ fn optional_list(
         }
     }
 }
+fn optional_integer(
+    object: &mut config::read::Object,
+    document: &Document,
+    name: &[u8],
+    default: u64,
+    max: u64,
+    path: &Path,
+    problems: &mut Problems,
+) -> Option<u64> {
+    let Some(at) = object.member(document, name) else { return Some(default) };
+    match config::read::integer(document, at, max) {
+        Ok(value) => Some(value),
+        Err(what) => {
+            problems.push(path.member(name), What::Jig(what));
+            None
+        }
+    }
+}
 fn optional_word(
     object: &mut config::read::Object,
     document: &Document,
@@ -372,8 +391,10 @@ fn repository_checks(
     let forge = read::short(&mut object, document, b"forge", path, problems);
     let repository = read::number(&mut object, document, b"repository", path, problems);
     let gate_ats = optional_list(&mut object, document, b"gates", limits.gates, path, problems);
+    let tier_ats = optional_list(&mut object, document, b"tiers", limits.tiers, path, problems);
     read::finish(object, document, path, problems);
     let mut gates = List::with_capacity(limits.gates);
+    let mut tiers = List::with_capacity(limits.tiers);
     if let Some(ats) = gate_ats {
         for (index, at) in ats.iter().enumerate() {
             let path = read::index(&path.member(b"gates"), index);
@@ -401,9 +422,64 @@ fn repository_checks(
             }
         }
     }
+    if let Some(ats) = tier_ats {
+        for (index, at) in ats.iter().enumerate() {
+            let path = read::index(&path.member(b"tiers"), index);
+            let Some(mut object) = read::object(document, *at, &path, problems) else { continue };
+            let check = check(&mut object, document, &path, limits, problems);
+            let artifact = checked_text(
+                &mut object,
+                document,
+                b"artifact",
+                u32::try_from(CHECK_NAME_BYTES).expect("check name bound"),
+                &path,
+                problems,
+            );
+            let format = read::text(&mut object, document, b"format", &path, problems);
+            read::finish(object, document, &path, problems);
+            if let Some(artifact) = &artifact {
+                read::form(!artifact.contains(&b'/'), path.member(b"artifact"), problems);
+            }
+            let format = match format.as_deref() {
+                Some(b"junit") => Some(Format::Junit),
+                Some(b"lines") => Some(Format::Lines),
+                Some(_) => {
+                    read::form(false, path.member(b"format"), problems);
+                    None
+                }
+                None => None,
+            };
+            if let Some(check) = check
+                && let Some(artifact) = artifact
+                && let Some(format) = format
+            {
+                for previous in &gates {
+                    if previous.name == check.name {
+                        problems.push(path.member(b"name"), What::Jig(config::What::Unique));
+                    }
+                }
+                for previous in &tiers {
+                    let previous: &engine::TierCheck = previous;
+                    if previous.name == check.name {
+                        problems.push(path.member(b"name"), What::Jig(config::What::Unique));
+                    }
+                }
+                tiers
+                    .push(engine::TierCheck {
+                        name: check.name,
+                        workflow: check.workflow,
+                        ignored: check.ignored,
+                        artifact,
+                        format,
+                    })
+                    .expect("bounded tiers");
+            }
+        }
+    }
     Some(engine::RepositoryChecks {
         repository: skein_forge::api::Repository { forge: forge?, repository: repository? },
         gates: gates.into_boxed(),
+        tiers: tiers.into_boxed(),
     })
 }
 fn project_landing(
@@ -411,11 +487,25 @@ fn project_landing(
     document: &Document,
     path: &Path,
     limits: &temper_engine_domain_forge::Limits,
-    forges: &[super::Forge],
+    forges: &[Forge],
     problems: &mut Problems,
 ) -> Option<engine::ProjectLanding> {
-    let by = optional_word(object, document, b"by", b"queue", path, problems)?;
-    let by = match by.as_ref() {
+    let by = optional_word(object, document, b"by", b"queue", path, problems);
+    let ats = optional_list(object, document, b"gates", limits.repositories, path, problems);
+    let retries = optional_integer(object, document, b"tier_retries", 2, u64::from(u32::MAX), path, problems);
+    let bound = optional_integer(object, document, b"verification_bound_ms", 7_200_000, u64::MAX, path, problems);
+    let suspects = optional_word(object, document, b"suspects", b"bisect", path, problems);
+    let pause = match object.member(document, b"pause_on_red") {
+        Some(at) => match config::read::boolean(document, at) {
+            Ok(value) => Some(value),
+            Err(what) => {
+                problems.push(path.member(b"pause_on_red"), What::Jig(what));
+                None
+            }
+        },
+        None => Some(false),
+    };
+    let by = match by?.as_ref() {
         b"queue" => engine::Way::Queue,
         b"turn" => engine::Way::Turn,
         _ => {
@@ -423,33 +513,50 @@ fn project_landing(
             return None;
         }
     };
-    let ats = optional_list(object, document, b"gates", limits.repositories, path, problems)?;
+    let suspects = match suspects?.as_ref() {
+        b"bisect" => Suspects::Bisect,
+        b"tell_all" => Suspects::TellAll,
+        _ => {
+            read::form(false, path.member(b"suspects"), problems);
+            return None;
+        }
+    };
     let mut repositories = List::with_capacity(limits.repositories);
-    for (index, at) in ats.iter().enumerate() {
-        let path = read::index(&path.member(b"gates"), index);
-        if let Some(checks) = repository_checks(document, *at, &path, limits, problems) {
-            let mut found = false;
-            for forge in forges {
-                if forge.number == checks.repository.forge {
-                    found = true;
-                    read::form(
-                        by != engine::Way::Turn || forge.kind != crate::settings::Kind::GitHub,
-                        path.member(b"repository"),
-                        problems,
-                    );
+    if let Some(ats) = ats {
+        for (index, at) in ats.iter().enumerate() {
+            let path = read::index(&path.member(b"gates"), index);
+            if let Some(checks) = repository_checks(document, *at, &path, limits, problems) {
+                let mut found = false;
+                for forge in forges {
+                    if forge.number == checks.repository.forge {
+                        found = true;
+                        read::form(
+                            by != engine::Way::Turn || forge.kind != crate::settings::Kind::GitHub,
+                            path.member(b"forge"),
+                            problems,
+                        );
+                    }
                 }
-            }
-            if !found {
-                problems.push(path.member(b"forge"), What::Jig(config::What::Refers));
-            }
-            for previous in &repositories {
-                let previous: &engine::RepositoryChecks = previous;
-                if previous.repository == checks.repository {
-                    problems.push(path.member(b"repository"), What::Jig(config::What::Unique));
+                if !found {
+                    problems.push(path.member(b"forge"), What::Jig(config::What::Refers));
                 }
+                for previous in &repositories {
+                    let previous: &engine::RepositoryChecks = previous;
+                    if previous.repository == checks.repository {
+                        problems.push(path.member(b"repository"), What::Jig(config::What::Unique));
+                    }
+                }
+                repositories.push(checks).expect("bounded repositories");
             }
-            repositories.push(checks).expect("bounded repositories");
         }
     }
-    Some(engine::ProjectLanding { by, repositories: repositories.into_boxed() })
+    Some(engine::ProjectLanding {
+        by,
+        repositories: repositories.into_boxed(),
+        after: engine::AfterLanding {
+            verdict: Settings { retries: u32::try_from(retries?).expect("bounded retries"), suspects },
+            bound: skein_lib::Duration::from_millis(bound?),
+            pause_on_red: pause?,
+        },
+    })
 }
