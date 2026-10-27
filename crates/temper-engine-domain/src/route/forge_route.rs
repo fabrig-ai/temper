@@ -2632,6 +2632,16 @@ fn cancel_change_gates(domain: &Domain, task: u64, head: [u8; 32]) -> ProcedureS
     ProcedureStep { cancels, ..ProcedureStep::new(StepEnd::Wait) }
 }
 
+fn change_result_bound(domain: &Domain, task: u64) -> u32 {
+    match domain.core.tasks.task(task) {
+        Some(row) => match row.contract {
+            tasks::Contract::Change { words, .. } => words,
+            tasks::Contract::Approval { .. } | tasks::Contract::Report { .. } | tasks::Contract::Verdict { .. } => 0,
+        },
+        None => 0,
+    }
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
     if connector != domain.config.forge_connector || code != 2 {
@@ -2660,15 +2670,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 }));
                 return;
             };
-            let bound = match domain.core.tasks.task(task) {
-                Some(row) => match row.contract {
-                    tasks::Contract::Change { words, .. } => words,
-                    tasks::Contract::Approval { .. }
-                    | tasks::Contract::Report { .. }
-                    | tasks::Contract::Verdict { .. } => 0,
-                },
-                None => 0,
-            };
+            let bound = change_result_bound(domain, task);
             ProcedureStep::new(StepEnd::Result(tasks::TaskResult::Change {
                 connector: domain.config.forge_connector,
                 kind: 1,
