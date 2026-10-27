@@ -45,6 +45,21 @@ fn landed() -> w::Step {
     w::Step::Landed(w::Landed::new(&w::CEILINGS, w::LandedParts { merge: [34; 32] }).unwrap())
 }
 fn deliver(root: &mut f::Harness, panel: w::ChangePanel) {
+    let mut own_read = None;
+    for (&call, (_, read)) in &root.reads {
+        if *read == (c::Read::Task { task: 2 }) {
+            own_read = Some(call);
+            break;
+        }
+    }
+    if let Some(call) = own_read {
+        let serving = root.serving;
+        serve(root, call, false, false);
+        root.serving = serving;
+    }
+    deliver_panel(root, panel);
+}
+fn deliver_panel(root: &mut f::Harness, panel: w::ChangePanel) {
     let subject = change::subject(2, 1, &root.limits);
     let token = root.watch_token(&subject);
     root.client(client::Event::Up {
@@ -158,7 +173,7 @@ fn checking_text_and_json_name_pull_head_gates_bounds_and_same_digest() {
 fn landed_and_held_repair_panels_keep_whole_facts() {
     for json in [false, true] {
         let limits = f::limits_root();
-        let answer = change::print(Some(&panel(landed())), json, None, b"", &limits, None);
+        let answer = change::print(Some(&panel(landed())), json, None, b"", &limits, &change::Holds::new());
         assert_eq!(answer.status, 0);
         contains(&answer.stdout, b"2222222222222222222222222222222222222222");
         assert!(skein_lib::bytes::find(&answer.stdout, b"next:").is_none());
@@ -179,8 +194,14 @@ fn landed_and_held_repair_panels_keep_whole_facts() {
                 .unwrap(),
             )
             .unwrap();
-        let answer =
-            change::print(Some(&w::ChangePanel::new(&w::CEILINGS, parts).unwrap()), json, None, b"", &limits, None);
+        let answer = change::print(
+            Some(&w::ChangePanel::new(&w::CEILINGS, parts).unwrap()),
+            json,
+            None,
+            b"",
+            &limits,
+            &change::Holds::new(),
+        );
         if json {
             contains(&answer.stdout, br#""repair":"ci","hold":"stalled","runs":7"#);
             contains(&answer.stdout, br#""gates":[{"number":1,"kind":"review","blocks":true,"verdict":"pending"}]"#);
@@ -193,7 +214,6 @@ fn landed_and_held_repair_panels_keep_whole_facts() {
 #[test]
 fn absent_project_reads_the_task_project_before_opening_the_panel() {
     let mut root = f::signed_in(f::PARTY);
-    root.pending_reads.push(1);
     let call = root.submit(&["change", "show", "2"]);
     assert_eq!(root.reads[&call].1, c::Read::Task { task: 2 });
     assert_eq!(root.watches.len(), 1);
@@ -296,7 +316,7 @@ fn an_unmet_final_panel_or_a_task_without_a_change_keeps_its_last_panel() {
 #[test]
 fn since_and_condition_both_must_hold_and_timeout_keeps_last_digest() {
     let mut root = f::signed_in(f::PARTY);
-    let answer = change::print(Some(&panel(w::Step::Checking)), true, None, b"", &root.limits, None);
+    let answer = change::print(Some(&panel(w::Step::Checking)), true, None, b"", &root.limits, &change::Holds::new());
     let marker = b"\"digest\":\"";
     let start = skein_lib::bytes::find(&answer.stdout, marker).unwrap() + marker.len();
     let digest = &answer.stdout[start..start + 16];
@@ -400,6 +420,7 @@ fn changed_with_since_waits_for_a_panel_change_after_the_baseline() {
     let read = root.submit(&["change", "show", "2", "--project", "1", "--json"]);
     deliver(&mut root, panel(w::Step::Gating));
     let digest = f::last_digest(&root.answer(read).unwrap().stdout);
+    root.pending_reads.push(root.next + 1);
     let call = root.wait_since(&["change", "show", "2", "--project", "1"], &["--until", "changed"], &digest);
     for step in [w::Step::Checking, w::Step::Gating] {
         deliver(&mut root, panel(step));
@@ -439,11 +460,6 @@ fn a_panels_held_reviewer_says_held_with_its_reason() {
         root.serving = None;
         assert!(root.answer(call).is_none(), "read the reviewer's state before naming it");
         root.serve(call, f::task_result(f::held_task(f::goal(8, c::WaitsOn::Nothing), c::HoldCategory::Budget)));
-        if waiting {
-            assert!(root.answer(call).is_none(), "held review is not landed");
-            root.now = root.now.checked_add(Duration::from_secs(1)).unwrap();
-            root.fire();
-        }
         let answer = root.answer(call).unwrap();
         assert_eq!(answer.status, if waiting { 3 } else { 0 });
         contains(&answer.stdout, b"held: task 8 (Insufficient activation budget)");
@@ -465,10 +481,7 @@ fn a_landing_wait_observes_a_reviewer_held_after_its_first_read() {
         &client::Watchable::Jig(c::Subject::Task { task: 8 }),
         c::Delivery::Task(Box::new(f::held_task(f::goal(8, c::WaitsOn::Nothing), c::HoldCategory::Budget))),
     );
-    assert!(root.answer(call).is_none());
-    root.now = root.now.checked_add(Duration::from_secs(1)).unwrap();
-    root.fire();
-    let answer = root.answer(call).unwrap();
+    let answer = root.answer(call).expect("a held reviewer ends the landing wait without a timeout");
     assert_eq!(answer.status, 3);
     contains(&answer.stdout, b"held: task 8 (Insufficient activation budget)");
     assert!(skein_lib::bytes::find(&answer.stdout, b"running: task 8").is_none());
@@ -499,8 +512,133 @@ fn an_authority_hold_prints_its_precise_cause_in_text_and_json() {
     ));
     let panel = w::ChangePanel::new(&w::CEILINGS, value).unwrap();
     for json in [false, true] {
-        let printed = change::print(Some(&panel), json, None, b"", &f::limits_root(), None);
+        let printed = change::print(Some(&panel), json, None, b"", &f::limits_root(), &change::Holds::new());
         assert_eq!(printed.status, 0);
         contains(&printed.stdout, reason);
     }
+}
+
+#[test]
+fn the_change_tasks_own_hold_keeps_its_reason_and_way_out() {
+    for json in [false, true] {
+        let mut root = f::signed_in(f::PARTY);
+        let call = root.submit_prepared(f::call(&["change", "show", "2", "--project", "1"]), json, None);
+        root.serve(call, f::task_result(f::held_task(task(false, false), c::HoldCategory::Deadline)));
+        deliver(&mut root, panel(w::Step::Checking));
+        let answer = root.answer(call).unwrap();
+        assert_eq!(answer.status, 0);
+        contains(&answer.stdout, b"Deadline passed");
+        contains(&answer.stdout, b"amend the task's deadline, then task release 2 --hold 9");
+        if json {
+            contains(&answer.stdout, br#""task_hold":{"reason":"Deadline passed","way_out":"#);
+        } else {
+            contains(&answer.stdout, b"held: task 2 (Deadline passed)\nway out: ");
+            contains(&answer.stdout, b"next: temper ctl DIR task show 2\n");
+        }
+    }
+}
+
+#[test]
+fn a_landing_wait_ends_on_the_change_tasks_hold_without_a_panel_change() {
+    for json in [false, true] {
+        for initial in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let call = root.submit_prepared(
+                f::call(&["change", "show", "2", "--project", "1", "--until", "landed"]),
+                json,
+                None,
+            );
+            let held = f::held_task(task(false, false), c::HoldCategory::Deadline);
+            if initial {
+                root.serve(call, f::task_result(held.clone()));
+                root.deliver_subject(
+                    &client::Watchable::Jig(c::Subject::Task { task: 2 }),
+                    c::Delivery::Task(Box::new(held.clone())),
+                );
+            }
+            deliver(&mut root, panel(w::Step::Checking));
+            if !initial {
+                assert!(root.answer(call).is_none());
+                root.deliver_subject(
+                    &client::Watchable::Jig(c::Subject::Task { task: 2 }),
+                    c::Delivery::Task(Box::new(held)),
+                );
+            }
+            let answer = root.answer(call).expect("hold ends the wait at once");
+            assert_eq!(answer.status, 3);
+            contains(&answer.stdout, b"Deadline passed");
+            contains(&answer.stdout, b"task release 2 --hold 9");
+            contains(&answer.stdout, if json { br#""met":false,"why":"held"# } else { b"not met: held" });
+            assert_eq!(root.watches.len(), 1, "all change watches close: {:?}", root.watches);
+        }
+    }
+}
+
+#[test]
+fn an_early_panel_waits_for_the_change_tasks_hold_read() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["change", "show", "2", "--project", "1"]);
+    deliver_panel(&mut root, panel(w::Step::Checking));
+    assert!(root.answer(call).is_none(), "the forge panel alone cannot attest no task hold");
+    root.serve(call, f::task_result(f::held_task(task(false, false), c::HoldCategory::Deadline)));
+    let answer = root.answer(call).unwrap();
+    contains(&answer.stdout, b"held: task 2 (Deadline passed)");
+    contains(&answer.stdout, b"task release 2 --hold 9");
+}
+
+#[test]
+fn a_change_task_hold_is_shown_beside_its_held_reviewer() {
+    for json in [false, true] {
+        let mut root = f::signed_in(f::PARTY);
+        let call = root.submit_prepared(f::call(&["change", "show", "2"]), json, None);
+        root.serve(call, f::task_result(f::held_task(task(false, false), c::HoldCategory::Deadline)));
+        let mut parts = panel(w::Step::Gating).into_parts();
+        parts.runs = Some(8);
+        root.serving = Some(call);
+        deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+        root.serving = None;
+        root.serve(call, f::task_result(f::held_task(f::goal(8, c::WaitsOn::Nothing), c::HoldCategory::Budget)));
+        let answer = root.answer(call).unwrap();
+        contains(&answer.stdout, b"Deadline passed");
+        contains(&answer.stdout, b"task release 2 --hold 9");
+        contains(&answer.stdout, b"Insufficient activation budget");
+        if json {
+            contains(&answer.stdout, br#""run_hold":"Insufficient activation budget"#);
+        } else {
+            contains(&answer.stdout, b"held: task 8 (Insufficient activation budget)");
+        }
+    }
+}
+
+#[test]
+fn a_change_task_hold_changes_the_digest_without_a_forge_panel_change() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "changed", "--json"]);
+    deliver(&mut root, panel(w::Step::Checking));
+    assert!(root.answer(call).is_none());
+    root.deliver_subject(
+        &client::Watchable::Jig(c::Subject::Task { task: 2 }),
+        c::Delivery::Task(Box::new(f::held_task(task(false, false), c::HoldCategory::Deadline))),
+    );
+    let answer = root.answer(call).expect("the hold changes what change show prints and hashes");
+    assert_eq!(answer.status, 0);
+    contains(&answer.stdout, br#""met":true"#);
+    contains(&answer.stdout, b"Deadline passed");
+}
+
+#[test]
+fn a_panel_ending_during_a_delegate_read_still_reads_the_change_task() {
+    let mut root = f::signed_in(f::PARTY);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "landed"]);
+    let mut parts = panel(w::Step::Gating).into_parts();
+    parts.runs = Some(8);
+    root.serving = Some(call);
+    deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
+    root.serving = None;
+    end_panel(&mut root, call, c::WatchEnd::SubjectEnded);
+    // The delegate's old terminal may arrive before the change's final task read.
+    root.serve(call, f::task_result(f::goal(8, c::WaitsOn::Nothing)));
+    serve(&mut root, call, true, true);
+    deliver(&mut root, panel(landed()));
+    assert_eq!(root.answer(call).unwrap().status, 0);
 }

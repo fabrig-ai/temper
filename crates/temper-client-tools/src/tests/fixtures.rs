@@ -551,7 +551,9 @@ impl Harness {
         if json {
             self.json_calls.insert(self.next);
         }
-        let count = if crate::jig::call::waiting(crate::table::TOOLS[usize::from(call.tool)], &call) {
+        let count = if crate::table::TOOLS[usize::from(call.tool)].name == b"change show" {
+            SINGLE_READ
+        } else if crate::jig::call::waiting(crate::table::TOOLS[usize::from(call.tool)], &call) {
             0
         } else {
             match call.tool {

@@ -44,6 +44,11 @@ pub(crate) struct Changes {
     calls: BTreeMap<u32, Watching>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TaskState {
+    Unknown,
+    Known,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PanelState {
     Expected,
     Missing,
@@ -66,10 +71,40 @@ struct Watching {
     panel_state: PanelState,
     run_read: Option<u64>,
     run_watch: Option<(Handle, u64)>,
-    run_hold: Option<Box<[u8]>>,
+    holds: Holds,
+    task_state: TaskState,
     last: Option<Box<w::ChangePanel>>,
     serial: u32,
     started: bool,
+}
+#[derive(Debug)]
+pub(crate) struct Holds {
+    own: Option<Held>,
+    run: Option<Box<[u8]>>,
+}
+#[derive(Debug)]
+struct Held {
+    reason: Box<[u8]>,
+    way_out: Box<[u8]>,
+}
+impl Holds {
+    pub(crate) fn new() -> Self {
+        Self { own: None, run: None }
+    }
+    fn task(&mut self, task: &c::Task) {
+        self.own = if task.chip.phase == c::Phase::Held && task.hold.is_some() {
+            let mut measure = Text::measure();
+            render::holds::way_out(task, &mut measure);
+            let mut out = Text::writing_exact(measure);
+            render::holds::way_out(task, &mut out);
+            Some(Held { reason: render::holds::summary(task, &crate::root::Parts), way_out: out.finish() })
+        } else {
+            None
+        };
+    }
+    fn any(&self, panel: &w::ChangePanel) -> bool {
+        self.own.is_some() || self.run.is_some() || panel.hold().is_some()
+    }
 }
 impl Changes {
     pub(crate) fn new() -> Self {
@@ -132,7 +167,8 @@ pub(crate) fn call(state: &mut Changes, client: &Client, env: &Env<Limits>, call
             panel_state: PanelState::Expected,
             run_read: None,
             run_watch: None,
-            run_hold: None,
+            holds: Holds::new(),
+            task_state: TaskState::Unknown,
             last: None,
             serial: 16,
             started: false,
@@ -182,9 +218,8 @@ pub(crate) fn ready(state: &mut Changes, client: &Client, env: &Env<Limits>, out
         }
         if watch.project.is_some() {
             open_panel(watch, env, out);
-        } else {
-            read_task(watch, out);
         }
+        read_task(watch, out);
     }
 }
 
@@ -251,7 +286,9 @@ fn panel_ended(watch: &mut Watching, out: &mut Queue<Out>) {
     if let Some(handle) = watch.panel.take() {
         out.push(Out::Client { event: Event::Unwatch { handle } });
     }
-    read_task(watch, out);
+    if watch.read.is_none() || watch.run_read.is_some() {
+        read_task(watch, out);
+    }
 }
 fn has_change(task: &c::Task, result: Option<&c::Result>) -> bool {
     let result = match result {
@@ -315,6 +352,8 @@ fn task_read(
     if task.chip.task != watch.task {
         return Some(render::failure(b"unexpected task document", watch.called.json, 1));
     }
+    watch.task_state = TaskState::Known;
+    watch.holds.task(task);
     if watch.panel_state == PanelState::Missing {
         if task.chip.phase == c::Phase::Held
             && let c::TaskContractDocument::Change { connector: wire::FORGE, kind: 1, .. } = task.result_contract
@@ -348,7 +387,7 @@ fn task_read(
                     Some(false),
                     why,
                     &env.limits,
-                    watch.run_hold.as_deref(),
+                    &watch.holds,
                 ));
             }
             if watch.panel.is_none() {
@@ -356,9 +395,7 @@ fn task_read(
             }
         } else if watch.final_panel {
             return Some(match watch.last.as_deref() {
-                Some(panel) => {
-                    print(Some(panel), watch.called.json, Some(false), b"ended", &env.limits, watch.run_hold.as_deref())
-                }
+                Some(panel) => print(Some(panel), watch.called.json, Some(false), b"ended", &env.limits, &watch.holds),
                 None => missing(watch.task, watch.called.json),
             });
         } else {
@@ -371,6 +408,16 @@ fn task_read(
         watch.activity = Some(task.activity);
         if watch.task_watch.is_none() {
             watch_task(watch, out);
+        }
+    }
+    if watch.final_panel {
+        return None;
+    }
+    if let Some(panel) = watch.last.as_deref() {
+        if let Some(run) = panel.runs() {
+            read_run(watch, *run, out);
+        } else {
+            return delivered(watch, env);
         }
     }
     None
@@ -434,7 +481,7 @@ fn read_page(
         read_run(watch, latest, out);
         return None;
     }
-    watch.run_hold = if latest.is_some() && task.chip.phase == c::Phase::Held {
+    watch.holds.run = if latest.is_some() && task.chip.phase == c::Phase::Held {
         Some(render::holds::summary(task, &crate::root::Parts))
     } else {
         None
@@ -472,7 +519,7 @@ fn panel_changed(
         Some(panel) if panel.task() == watch.task => {
             watch.last = Some(Box::new(panel));
             watch.panel_state = PanelState::Expected;
-            watch.run_hold = None;
+            watch.holds.run = None;
             if let Some((_, task)) = watch.run_watch
                 && Some(task) != *watch.last.as_ref().expect("delivered panel").runs()
             {
@@ -530,7 +577,7 @@ pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told
             if let Some(Latest::Jig(c::Delivery::Task(task))) = doc.latest {
                 let (_, run) = watch.run_watch.expect("run watch");
                 if task.chip.task == run {
-                    watch.run_hold = if task.chip.phase == c::Phase::Held {
+                    watch.holds.run = if task.chip.phase == c::Phase::Held {
                         Some(render::holds::summary(task, &crate::root::Parts))
                     } else {
                         None
@@ -559,12 +606,19 @@ pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told
                         out.push(Out::Client { event: Event::Unwatch { handle } });
                     }
                     read_task(watch, out);
-                } else if watch.panel.is_none() && watch.activity != Some(task.activity) {
-                    watch.activity = Some(task.activity);
-                    if let Some(handle) = watch.task_watch.take() {
-                        out.push(Out::Client { event: Event::Unwatch { handle } });
+                } else {
+                    watch.task_state = TaskState::Known;
+                    watch.holds.task(task);
+                    if watch.last.is_some() {
+                        printed = delivered(watch, env);
                     }
-                    open_panel(watch, env, out);
+                    if printed.is_none() && watch.panel.is_none() && watch.activity != Some(task.activity) {
+                        watch.activity = Some(task.activity);
+                        if let Some(handle) = watch.task_watch.take() {
+                            out.push(Out::Client { event: Event::Unwatch { handle } });
+                        }
+                        open_panel(watch, env, out);
+                    }
                 }
             }
         }
@@ -595,11 +649,14 @@ pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told
     }
 }
 fn delivered(watch: &mut Watching, env: &Env<Limits>) -> Option<jig::Printed> {
+    if watch.task_state == TaskState::Unknown {
+        return None;
+    }
     let panel = watch.last.as_deref().expect("delivered panel");
     if !watch.waiting {
-        return Some(print(Some(panel), watch.called.json, None, b"", &env.limits, watch.run_hold.as_deref()));
+        return Some(print(Some(panel), watch.called.json, None, b"", &env.limits, &watch.holds));
     }
-    let Some(digest) = digest(panel, &env.limits) else {
+    let Some(digest) = digest(panel, &env.limits, &watch.holds) else {
         return Some(render::failure(b"result limit", watch.called.json, 1));
     };
     let condition = match value(&watch.called.call, 3) {
@@ -618,18 +675,21 @@ fn delivered(watch: &mut Watching, env: &Env<Limits>) -> Option<jig::Printed> {
         Some(b"ci:pending") => Some(*panel.ci() == w::Ci::Pending),
         Some(b"ci:passed") => Some(*panel.ci() == w::Ci::Passed),
         Some(b"ci:failed") => Some(*panel.ci() == w::Ci::Failed),
-        Some(b"held") => Some(panel.hold().is_some() || watch.run_hold.is_some()),
+        Some(b"held") => Some(watch.holds.any(panel)),
         Some(b"landed") => Some(landed(panel.step()).is_some()),
         None => None,
         _ => unreachable!("checked condition"),
     };
     if let Some(why) = watch.ended {
-        return Some(print(Some(panel), watch.called.json, Some(false), why, &env.limits, watch.run_hold.as_deref()));
+        return Some(print(Some(panel), watch.called.json, Some(false), why, &env.limits, &watch.holds));
     }
     let met = jig::wait::met(watch.since, watch.first, digest, holds);
     watch.first = Some(watch.first.unwrap_or(digest));
+    if !met && condition == Some(b"landed") && watch.holds.any(panel) {
+        return Some(print(Some(panel), watch.called.json, Some(false), b"held", &env.limits, &watch.holds));
+    }
     if met || watch.final_panel || landed(panel.step()).is_some() {
-        Some(print(Some(panel), watch.called.json, Some(met), b"ended", &env.limits, watch.run_hold.as_deref()))
+        Some(print(Some(panel), watch.called.json, Some(met), b"ended", &env.limits, &watch.holds))
     } else {
         None
     }
@@ -647,14 +707,8 @@ pub(crate) fn fire(state: &mut Changes, env: &Env<Limits>, out: &mut Queue<Out>)
         }
         let Some(number) = due else { break };
         let watch = state.calls.get(&number).expect("active change");
-        let printed = print(
-            watch.last.as_deref(),
-            watch.called.json,
-            Some(false),
-            b"timeout",
-            &env.limits,
-            watch.run_hold.as_deref(),
-        );
+        let printed =
+            print(watch.last.as_deref(), watch.called.json, Some(false), b"timeout", &env.limits, &watch.holds);
         complete(state, number, printed, out);
     }
 }
@@ -782,7 +836,7 @@ fn used_json(used: &w::Used, out: &mut Encoder) {
     out.unsigned(u64::from(used.limit()));
     out.object_end();
 }
-fn encode(panel: &w::ChangePanel, digest: Option<Digest>, out: &mut Encoder) {
+fn encode(panel: &w::ChangePanel, digest: Option<Digest>, holds: &Holds, out: &mut Encoder) {
     out.object_start();
     out.key(b"task");
     out.unsigned(panel.task());
@@ -875,18 +929,41 @@ fn encode(panel: &w::ChangePanel, digest: Option<Digest>, out: &mut Encoder) {
         out.key(key);
         used_json(used, out);
     }
+    encode_holds(holds, out);
     if let Some(digest) = digest {
         out.key(b"digest");
         out.string(&digest.hex());
     }
     out.object_end();
 }
-fn json(panel: Option<&w::ChangePanel>, digest: Option<Digest>, met: Option<bool>, why: &[u8], out: &mut Encoder) {
+fn encode_holds(holds: &Holds, out: &mut Encoder) {
+    if let Some(held) = &holds.own {
+        out.key(b"task_hold");
+        out.object_start();
+        out.key(b"reason");
+        out.string(&held.reason);
+        out.key(b"way_out");
+        out.string(&held.way_out);
+        out.object_end();
+    }
+    if let Some(reason) = &holds.run {
+        out.key(b"run_hold");
+        out.string(reason);
+    }
+}
+fn json(
+    panel: Option<&w::ChangePanel>,
+    digest: Option<Digest>,
+    met: Option<bool>,
+    why: &[u8],
+    holds: &Holds,
+    out: &mut Encoder,
+) {
     if let Some(met) = met {
         out.object_start();
         out.key(b"change");
         match panel {
-            Some(panel) => encode(panel, digest, out),
+            Some(panel) => encode(panel, digest, holds, out),
             None => out.null(),
         }
         out.key(b"met");
@@ -897,7 +974,7 @@ fn json(panel: Option<&w::ChangePanel>, digest: Option<Digest>, met: Option<bool
         }
         out.object_end();
     } else {
-        encode(panel.expect("read panel"), digest, out);
+        encode(panel.expect("read panel"), digest, holds, out);
     }
 }
 fn text(
@@ -905,7 +982,7 @@ fn text(
     digest: Option<Digest>,
     met: Option<bool>,
     why: &[u8],
-    run_hold: Option<&[u8]>,
+    holds: &Holds,
     out: &mut Text,
 ) {
     if let Some(panel) = panel {
@@ -949,16 +1026,7 @@ fn text(
             out.put(step(panel.step()));
             out.put(b"\n");
         }
-        if let Some(task) = panel.runs() {
-            out.put(if run_hold.is_some() { b"held: task " } else { b"running: task " });
-            out.number(*task);
-            if let Some(reason) = run_hold {
-                out.put(b" (");
-                out.put(reason);
-                out.put(b")");
-            }
-            out.put(b"\n");
-        }
+        text_holds(panel, holds, out);
         if let Some(queue) = words::queue(panel.step()) {
             out.put(b"queued: place ");
             out.number(u64::from(queue.place));
@@ -969,11 +1037,11 @@ fn text(
             out.put(b"\n");
         }
         if let w::Step::Repairing(_) = panel.step() {
-            let (word, holes) = words::line(panel);
+            let (word, arguments) = words::line(panel);
             out.put(b"repair: ");
             for (candidate, literals, _) in &forge::words::CHANGES {
                 if *candidate == word {
-                    crate::forge::literals_text(literals, &holes, out);
+                    crate::forge::literals_text(literals, &arguments, out);
                     break;
                 }
             }
@@ -985,7 +1053,11 @@ fn text(
             out.put(&digest.hex());
             out.put(b"\n");
         }
-        if landed(panel.step()).is_none() {
+        if holds.own.is_some() || holds.run.is_some() {
+            out.put(b"next: temper ctl DIR task show ");
+            out.number(if holds.own.is_some() { panel.task() } else { panel.runs().expect("held delegate") });
+            out.put(b"\n");
+        } else if landed(panel.step()).is_none() {
             out.put(b"next: temper ctl DIR change show ");
             out.number(panel.task());
             out.put(b" --until landed\n");
@@ -999,6 +1071,27 @@ fn text(
             out.put(b"\n");
         }
         None => {}
+    }
+}
+fn text_holds(panel: &w::ChangePanel, holds: &Holds, out: &mut Text) {
+    if let Some(held) = &holds.own {
+        out.put(b"held: task ");
+        out.number(panel.task());
+        out.put(b" (");
+        out.put(&held.reason);
+        out.put(b")\nway out: ");
+        out.put(&held.way_out);
+        out.put(b"\n");
+    }
+    if let Some(task) = panel.runs() {
+        out.put(if holds.run.is_some() { b"held: task " } else { b"running: task " });
+        out.number(*task);
+        if let Some(reason) = holds.run.as_deref() {
+            out.put(b" (");
+            out.put(reason);
+            out.put(b")");
+        }
+        out.put(b"\n");
     }
 }
 fn text_checks(panel: &w::ChangePanel, out: &mut Text) {
@@ -1041,12 +1134,12 @@ fn text_checks(panel: &w::ChangePanel, out: &mut Text) {
     }
     out.put(b"\n");
 }
-fn digest(panel: &w::ChangePanel, limits: &Limits) -> Option<Digest> {
+fn digest(panel: &w::ChangePanel, limits: &Limits, holds: &Holds) -> Option<Digest> {
     let bounds = skein_json::writer::Limits { depth: 8, length: limits.tools.text };
     let mut measure = Encoder::measure(&bounds);
-    encode(panel, None, &mut measure);
+    encode(panel, None, holds, &mut measure);
     let mut out = Encoder::write(measure.measured().ok()?, &bounds);
-    encode(panel, None, &mut out);
+    encode(panel, None, holds, &mut out);
     Some(Digest::of(&out.finish()))
 }
 pub(crate) fn print(
@@ -1055,10 +1148,10 @@ pub(crate) fn print(
     met: Option<bool>,
     why: &[u8],
     limits: &Limits,
-    run_hold: Option<&[u8]>,
+    holds: &Holds,
 ) -> jig::Printed {
     let digest = match panel {
-        Some(panel) => match digest(panel, limits) {
+        Some(panel) => match digest(panel, limits, holds) {
             Some(digest) => Some(digest),
             None => return render::failure(b"result limit", json_output, 1),
         },
@@ -1067,16 +1160,16 @@ pub(crate) fn print(
     let bytes = if json_output {
         let bounds = skein_json::writer::Limits { depth: 8, length: limits.tools.text };
         let mut measure = Encoder::measure(&bounds);
-        json(panel, digest, met, why, &mut measure);
+        json(panel, digest, met, why, holds, &mut measure);
         let Ok(size) = measure.measured() else { return render::failure(b"result limit", true, 1) };
         let mut out = Encoder::write(size, &bounds);
-        json(panel, digest, met, why, &mut out);
+        json(panel, digest, met, why, holds, &mut out);
         out.finish()
     } else {
         let mut measure = Text::measure();
-        text(panel, digest, met, why, run_hold, &mut measure);
+        text(panel, digest, met, why, holds, &mut measure);
         let mut out = Text::writing_exact(measure);
-        text(panel, digest, met, why, run_hold, &mut out);
+        text(panel, digest, met, why, holds, &mut out);
         out.finish()
     };
     if bytes.len() > usize::try_from(limits.tools.text).expect("text fits") {
