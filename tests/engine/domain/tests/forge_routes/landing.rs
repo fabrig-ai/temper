@@ -93,9 +93,10 @@ fn a_chats_change_lands_by_turn() {
     assert_eq!(row.requester, tasks::Party::Deployment { project: 1 });
     assert_eq!(row.spec.words.as_ref(), b"Land Small fix");
     assert!(row.dependencies.is_empty());
-    for kind in [3, 4, 6, 9, 12, 15, 16, 17] {
+    for kind in [3, 4, 6, 9, 12, 16, 17] {
         assert!(row.authority.grants.iter().any(|grant| grant.kind == kind), "landing granted kind {kind}");
     }
+    assert!(!row.authority.grants.iter().any(|grant| grant.kind == 5 || grant.kind == 15));
     let tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { words })) = &row.phase else {
         panic!("landing done: {:?}; writes={:?}", row.phase, world.writes);
     };
