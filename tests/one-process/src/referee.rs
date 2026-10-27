@@ -11,7 +11,7 @@ use crate::world::Proc;
 pub(crate) use agent::Wire;
 use jig_conformance::referee as rules;
 use jig_domain_core as core;
-use skein_lib::Time;
+use skein_lib::{Duration, Time};
 use skein_shell::Host;
 use std::{
     cell::RefCell,
@@ -20,6 +20,8 @@ use std::{
     rc::Rc,
 };
 use temper_engine_domain as root;
+
+const COMPLETION_GRACE: Duration = Duration::from_secs(10);
 #[derive(Default)]
 pub(crate) struct Run {
     rules: Option<Rc<RefCell<rules::Referee>>>,
@@ -60,6 +62,7 @@ pub(crate) struct Referee {
     drained: Option<()>,
     forge: Rc<RefCell<forge::Forge>>,
     story: crate::world::Story,
+    page: Option<crate::replay::Driver>,
 }
 impl Referee {
     pub(crate) fn new(
@@ -140,13 +143,25 @@ impl Referee {
             drained: None,
             forge,
             story: scenario,
+            page: None,
         }
+    }
+    /// Page visits end through their log, rather than terminal person evidence.
+    pub(crate) fn with_page(mut self, driver: crate::replay::Driver) -> Self {
+        crate::replay::policy(&mut self.rules.borrow_mut().policy);
+        self.page = Some(driver);
+        self
     }
     fn say(&mut self, now: Time, event: rules::Observed) {
         self.rules
             .borrow_mut()
             .observe(now.as_nanos(), event)
             .expect("one-process conformance over bytes and durable rows");
+    }
+    fn completion_deadline(&self) -> Time {
+        self.page
+            .as_ref()
+            .map_or(Time::ZERO.saturating_add(COMPLETION_GRACE), |page| page.completion_deadline(COMPLETION_GRACE))
     }
     fn adoption_window(&mut self, service: &crate::world::ServiceHost) {
         let saved = crate::world::saved_adoptions();
@@ -227,11 +242,35 @@ fn snapshot(store: &Store) -> rules::Snapshot {
     }
     snapshot
 }
+/// As jig's core-world observer, a committed parent inbox witnesses delivery
+/// of its delegate's result; no live task state enters the referee.
+fn result_receipts(store: &Store) -> Vec<rules::Receipt> {
+    let mut reached = Vec::new();
+    for row in store.rows.values() {
+        let root::Record::Core(core::Record::Tasks(
+            jig_domain_tasks::Stored::Live(task) | jig_domain_tasks::Stored::Ended(task),
+        )) = row
+        else {
+            continue;
+        };
+        for word in &task.inbox {
+            if matches!(word.kind, jig_domain_tasks::MessageKind::Result(_))
+                && let jig_domain_tasks::Party::Task(child) = word.from
+            {
+                reached.push(rules::Receipt::Ended(child));
+            }
+        }
+    }
+    reached
+}
+
 impl skein_world::Referee<Proc> for Referee {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         let (service, other) = procs.split_at_mut(1);
         let Proc::Service(service) = &mut service[0] else { panic!("service first") };
-        if let Some(bound) = service.hooks {
+        if self.page.is_none()
+            && let Some(bound) = service.hooks
+        {
             self.forge.borrow_mut().hand_hooks(bound);
         }
         if !service.attached {
@@ -262,7 +301,8 @@ impl skein_world::Referee<Proc> for Referee {
             }
             self.attached = Some(());
         }
-        if !self.handed
+        if self.page.is_none()
+            && !self.handed
             && let Some(link) = service.service.service().links().pop()
         {
             for proc in other.iter_mut() {
@@ -278,32 +318,36 @@ impl skein_world::Referee<Proc> for Referee {
             Proc::Client(person) => person.is_empty(),
             Proc::Service(_) | Proc::Playground(_) | Proc::Ctl(_) => true,
         });
-        if crate::stories::adopted(&self.store.borrow().rows) > 0 {
+        if self.page.is_none() && crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();
         }
-        let complete = match self.phase {
-            crate::world::Phase::SignIn => {
-                other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
-            }
-            crate::world::Phase::Drain => {
-                snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
-            }
-            crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
-            crate::world::Phase::Fault { .. } => {
-                self.run.borrow().restarts > 0
-                    && self.cold.is_none()
-                    && crate::stories::adopted(&self.store.borrow().rows) > 0
-            }
-            crate::world::Phase::Story => match self.story {
-                crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
-                crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
-                crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
-                crate::world::Story::Adopt => {
-                    let forge = self.forge.borrow();
-                    forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
+        let complete = if let Some(page) = &mut self.page {
+            page.act(now, service, other)
+        } else {
+            match self.phase {
+                crate::world::Phase::SignIn => {
+                    other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
                 }
-                crate::world::Story::Merge => self.forge.borrow().complete(),
-            },
+                crate::world::Phase::Drain => {
+                    snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
+                }
+                crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
+                crate::world::Phase::Fault { .. } => {
+                    self.run.borrow().restarts > 0
+                        && self.cold.is_none()
+                        && crate::stories::adopted(&self.store.borrow().rows) > 0
+                }
+                crate::world::Phase::Story => match self.story {
+                    crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
+                    crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
+                    crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
+                    crate::world::Story::Adopt => {
+                        let forge = self.forge.borrow();
+                        forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
+                    }
+                    crate::world::Story::Merge => self.forge.borrow().complete(),
+                },
+            }
         };
         if self.done.is_none()
             && (done || !matches!(self.phase, crate::world::Phase::Story | crate::world::Phase::Fault { .. }))
@@ -326,8 +370,9 @@ impl skein_world::Referee<Proc> for Referee {
     fn observe(&mut self, now: Time, procs: &[Proc]) {
         self.forge.borrow_mut().observe(procs);
         let Proc::Service(service) = &procs[0] else { panic!("service first") };
-        self.adoption_window(service);
-        let store = self.store.borrow();
+        if self.page.is_none() {
+            self.adoption_window(service);
+        }
         for commit in &service.commits {
             if commit.number <= self.applied {
                 continue;
@@ -342,11 +387,13 @@ impl skein_world::Referee<Proc> for Referee {
                     rules::Observed::Durable { number: commit.number, snapshot: snapshot(&self.committed) },
                 )
                 .expect("durable conformance");
+            for receipt in result_receipts(&self.committed) {
+                self.say(now, rules::Observed::Reached(receipt));
+            }
             self.applied = commit.number;
             self.run.borrow_mut().applied = self.applied;
             self.run.borrow_mut().rows.clone_from(&self.committed.rows);
         }
-        drop(store);
         let restored = self.store.borrow_mut().restored.take();
         if self.cold.is_some()
             && let Some(rows) = restored
@@ -421,10 +468,16 @@ impl skein_world::Referee<Proc> for Referee {
         self.say(now, rules::Observed::Tick);
     }
     fn next_deadline(&self) -> Option<Time> {
-        self.done.is_none().then_some(Time::from_nanos(10_000_000_000))
+        [
+            self.done.is_none().then_some(self.completion_deadline()),
+            self.page.as_ref().and_then(crate::replay::Driver::next_deadline),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
     fn overdue(&self, now: Time) -> Option<String> {
-        (self.done.is_none() && now >= Time::from_nanos(10_000_000_000)).then(|| {
+        (self.done.is_none() && now >= self.completion_deadline()).then(|| {
             format!(
                 "story not complete: link {}, signed in {}, terminals {}, tasks {:?}, agents {:?}, forge {:?}",
                 self.handed,
@@ -450,6 +503,9 @@ impl skein_world::Referee<Proc> for Referee {
         })
     }
     fn passed(&self) -> bool {
+        if let Some(page) = &self.page {
+            return page.finished() && self.done.is_some() && self.drained.is_some();
+        }
         self.done.is_some()
             && (matches!(self.phase, crate::world::Phase::Restart)
                 || self.signed_in

@@ -1,5 +1,11 @@
 //! Hosted agent construction from startup values.
 use skein_sim_world::{Inherited, PipeHost, PipeWriter};
+/// Declared operations for a hosted agent with one named base and stderr,
+/// no trace or program backend, including its diagnostic pipe capture.
+#[must_use]
+pub fn agent_operations(routes: u32, directories: u32) -> u32 {
+    routes + 1 + directories + 1 + 1
+}
 /// A hosted agent as temper agent runs it, from its configuration as values.
 #[must_use]
 pub fn agent(

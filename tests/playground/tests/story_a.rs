@@ -17,7 +17,10 @@ fn the_visitor_signs_in_by_the_printed_link_and_the_welcome_shows() {
         find: Find::exactly_named(Role::Button, b"Try the playground"),
         within: WELCOME_WITHIN,
     }]);
-    assert_eq!(Walk::new(&A, SEED, START).run(script), Outcome::Done);
+    let mut walk = Walk::new(&A, SEED, START);
+    assert_eq!(walk.run(script), Outcome::Done);
+    walk.close();
+    fixture(&walk.log(), "welcome.log");
 }
 
 #[test]
@@ -32,8 +35,10 @@ fn story_a_lands_the_csv_change_and_answers_the_other_two() {
     let mut walk = Walk::new(&A, SEED, START);
     let outcome = walk.run(story_a::whole());
     assert_eq!(outcome, Outcome::Done, "{:?}", walk.tree());
+    walk.close();
     let stamp = walk.stamp();
     let bytes = walk.log();
+    fixture(&bytes, "story-a.log");
     let log = log::read(&bytes).expect("the completed story's session log decodes");
     assert!(matches!(log.end, End::Said(_)), "the whole story fits its session log");
     println!(
@@ -43,4 +48,15 @@ fn story_a_lands_the_csv_change_and_answers_the_other_two() {
         bytes.len(),
         log.inputs.len()
     );
+}
+
+fn fixture(bytes: &[u8], name: &str) {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(name);
+    if std::env::var("TEMPER_PLAYGROUND_RECORD").as_deref() == Ok("1") {
+        std::fs::create_dir_all(fixture.parent().expect("fixture directory")).expect("create fixture directory");
+        std::fs::write(&fixture, bytes).expect("record session log");
+    } else {
+        let expected = std::fs::read(&fixture).expect("session fixture; record with TEMPER_PLAYGROUND_RECORD=1");
+        assert!(bytes == expected, "{name} differs; record with TEMPER_PLAYGROUND_RECORD=1");
+    }
 }

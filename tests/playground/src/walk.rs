@@ -14,7 +14,7 @@ use skein_ui_web::{
         worker::{Heard, Limits, Speed},
     },
     store::Store,
-    transport,
+    transport::{self, StreamDuty},
 };
 use temper_client_domain::{Address, address};
 use temper_client_shell_web::host::{self, Host, Report};
@@ -62,6 +62,20 @@ impl Walk {
         Stamp { step: world.steps(), instant: world.now() }
     }
 
+    /// End the visit's stream before taking its fixture. Its terminal report
+    /// makes the log's end observable without adding a stamp to the format.
+    pub fn close(&mut self) {
+        self.native.stream(StreamDuty::Close);
+        self.native.run();
+        let mut ended = false;
+        while let Some(heard) = self.native.heard() {
+            if matches!(heard, Heard::Report(skein_ui_web::fetch::Report::StreamEnded)) {
+                ended = true;
+            }
+        }
+        assert!(ended, "the visit's open stream ends on close");
+    }
+
     /// The displayed tree, retained for a failed walk's diagnostics.
     #[must_use]
     pub fn tree(&self) -> &skein_ui::Tree {
@@ -76,7 +90,7 @@ impl Walk {
             world(story, seed, start),
             Start { story: story.name.as_bytes().into(), seed, start },
             SLICE_STEPS,
-            b"temper-native-walk",
+            b"native",
             Limits { exchanges: VISITOR_EXCHANGES, log: SESSION_LOG },
             Speed(1),
         );
