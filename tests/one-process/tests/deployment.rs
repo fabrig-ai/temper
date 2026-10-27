@@ -7,8 +7,11 @@ use temper_one_process_world::{
 
 // Chat's stored settings, identities, account and terminal, plus the
 // component's format/layout/installation/place/attempt rows.
-const STORE_ROWS: usize = 52;
-const JIG_ROWS: usize = 46;
+// Own defaults avoid three ctl settings rows; Wires adds one component row.
+const STORE_ROWS: usize = 50;
+const JIG_ROWS: usize = 43;
+// A fresh start and settled shutdown each persist a lifecycle commit.
+const REOPEN_COMMITS: u64 = 2;
 // One forge Names row; two credential digests and the account's key.
 const APPLICATION_ROWS: usize = 1;
 const SECRET_ROWS: usize = 3;
@@ -23,11 +26,12 @@ fn a_captured_deployment_starts_again_on_a_fresh_machine() {
     // A copied deployment may have any active generation, and stale retained
     // generations must not enter its offline read.
     for kept in [deployment.clone(), generation(&deployment, 9)] {
-        let held = Held::read(&kept);
+        let mut held = Held::read(&kept);
         let mut restarted = world::over(&kept, fixtures::calm(fixtures::SEED));
         let after = restarted.deployment();
         assert_eq!(after.configuration, kept.configuration);
         assert_eq!(after.startup, kept.startup);
+        advance_lifecycle_commits(&mut held);
         assert_eq!(Held::read(&after), held);
     }
 }
@@ -73,4 +77,17 @@ fn generation(deployment: &Deployment, number: u64) -> Deployment {
     manifest.generation = number;
     kept.files.get_mut(format!("{prefix}/manifest").as_bytes()).expect("manifest").bytes = manifest.encode();
     kept
+}
+
+fn advance_lifecycle_commits(held: &mut Held) {
+    use jig_domain_core::{CoreKey, CoreRecord, Key, Record};
+    let key = Key::Core(CoreKey::Deployment);
+    let row = held.jig.get_mut(&key).expect("deployment counters");
+    let Record::Core(CoreRecord::Deployment(numbers)) = row else { panic!("deployment counters") };
+    numbers.commits = numbers.commits.checked_add(REOPEN_COMMITS).expect("lifecycle commits");
+    let limits =
+        jig_protocol_store::codec::limits(&jig_protocol_config::profile(jig_protocol_config::Profile::Small).core)
+            .expect("counter codec limits");
+    let bytes = jig_protocol_store::codec::encode(row, &limits, &[]).expect("counter row");
+    held.store.insert(jig_protocol_store::keys::encode(&key, u32::MAX).expect("counter key"), bytes);
 }
