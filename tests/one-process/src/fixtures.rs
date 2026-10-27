@@ -80,6 +80,8 @@ pub(crate) const ENGINE_OVERRIDES: [(&str, u32); 20] = [
 pub(crate) const ADOPTION_FORM_START: usize = 3;
 pub(crate) const ADOPTION_FORM_STEPS: usize = 7;
 pub(crate) const ADOPTION_REPLY_STEP: usize = 7;
+// The first ten repository-person steps adopt; the chat navigation follows.
+pub(crate) const ADOPTION_CHAT_START: usize = 10;
 pub(crate) const PREPARED_REPOSITORY: &[u8] = b"workspaces/0/app";
 pub(crate) const AGENTS: u32 = 2;
 pub(crate) const CLIENTS: std::net::SocketAddr =

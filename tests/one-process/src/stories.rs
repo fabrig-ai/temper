@@ -12,6 +12,13 @@ use temper_fake_checkout::git::Remote;
 pub(crate) const ADOPT_HOOKS: usize = 2;
 
 thread_local! { static STORY: std::cell::Cell<Story> = const { std::cell::Cell::new(Story::Chat { words: b"Hello" }) }; }
+thread_local! { static CONTINUING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+pub(crate) fn continue_work(enabled: bool) {
+    CONTINUING.with(|slot| slot.set(enabled));
+}
+pub(crate) fn continuing() -> bool {
+    CONTINUING.with(std::cell::Cell::get)
+}
 pub(crate) fn set(story: Story) {
     STORY.with(|slot| slot.set(story));
 }
@@ -129,6 +136,9 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
     ];
     if matches!(story, Story::Golden) {
         crate::golden::scripts(&mut scripts);
+        if continuing() {
+            crate::later::scripts(&mut scripts);
+        }
     }
     fixtures::scripted_provider(scripts.into_boxed_slice())
 }
