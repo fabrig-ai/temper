@@ -59,17 +59,25 @@ run cap. It must also have enough reserve and fit task and project
 spend ceilings. The deployment's minimum is strict: the amount must
 be greater than the floor, not equal to it.
 
-The default floor is 1 unit and the default run cap is 10 units.
-With those defaults, 1 unit left does not admit a run. A task allowed
-40 units can still receive only a 10-unit run. Read the current
-rules rather than assuming those defaults apply to your deployment:
+At each start, the stock prices one worst-case completion of the first
+configured model: its full input window at the costliest input or cache
+price, plus its output allowance, rounded up to deployment units. Call
+that amount C. The default floor is 2C and the run cap is K = 4C.
+The chat authority allows 24K; deployment and project ceilings and
+periods allow 48K. A delegate's budget still comes from its caller.
+
+With init's model prices, C is 1,057 units: the floor is 2,114, the
+run cap is 4,228, the chat allowance is 101,472 and the ceilings and
+periods are 202,944. An amount equal to the floor does not admit a run.
+Changing the configured models changes these defaults at the next start.
+Read the current rules:
 
 ```sh
 temper ctl me setting rules --json
 ```
 
 A charter supplies turns, time, finishing reserve and default spend.
-The default charter spend is 20 units, subject to the task's funds
+The default charter spend is K, subject to the task's funds
 and the deployment cap. Its default turn ceiling is 8 turns. Read
 charter 1, or the charter used by your work, for its current values:
 

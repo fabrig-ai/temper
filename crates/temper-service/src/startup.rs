@@ -399,7 +399,14 @@ pub fn engine_with(
             problems.push(Path::root().member(b"llm").member(b"models"), config::What::Bound);
             return Err(problems);
         }
-        let defaults = given.defaults(&engine.llm);
+        let Some(defaults) = given.defaults(&engine.llm) else {
+            let mut problems = config::Problems::empty();
+            problems.push(
+                Path::root().member(b"llm").member(b"models").child(Segment::Index(0)).member(b"prices"),
+                config::What::Bound,
+            );
+            return Err(problems);
+        };
         config::pass(&mut engine, defaults)?;
     }
     Ok(engine)
