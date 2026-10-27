@@ -45,25 +45,25 @@ fn a_program_and_forgejo_here_reach_ready_on_the_fake_box() {
     let walk = Walk::owned("walk-program-here");
     let seen = walk
         .run(vec![
-            Act::Now(Call::new(&["accounts", "--json"])),
-            Act::Now(Call::new(&["forges", "--json"])),
+            Act::Now(Call::new(&["account", "list", "--json"])),
+            Act::Now(Call::new(&["forge", "list", "--json"])),
             Act::Mark("welcome preconditions"),
             Act::After(Box::new(|seen| {
                 here_key::assert_offered(seen);
-                Call::new(&["forge-setup", "3", "--key", "walk-here", "--json"])
+                Call::new(&["forge", "setup", "3", "--key", "walk-here", "--json"])
             })),
             Act::Mark("owned forge adopted"),
             Act::After(Box::new(|seen| {
                 here_key::assert_adopted(seen.last().expect("setup adoption"));
-                Call::new(&["declare", "2", "claude_code", NAME, "--key", "walk-program"])
+                Call::new(&["account", "declare", "2", "claude_code", NAME, "--key", "walk-program"])
             })),
-            Act::Now(Call::new(&["accounts", "--json"])),
+            Act::Now(Call::new(&["account", "list", "--json"])),
             Act::After(Box::new(|seen| {
                 let [.., declared, accounts] = seen else { panic!("program declaration and account read") };
                 assert!(String::from_utf8_lossy(&declared.stdout).contains("temper program-login claude-owner"));
                 program_account(accounts);
                 // A read after these assertions lets the printed-command step follow the same act sequence.
-                Call::new(&["forges", "--json"])
+                Call::new(&["forge", "list", "--json"])
             })),
             Act::ProgramLogin(NAME),
             Act::After(Box::new(|seen| {
@@ -71,11 +71,11 @@ fn a_program_and_forgejo_here_reach_ready_on_the_fake_box() {
                 let [.., accounts, _forges, _login] = seen else { panic!("declared account before login") };
                 let account = program_account(accounts).to_string();
                 // tools.md 5.5: verify asks the host to check a newly completed terminal login.
-                Call::new(&["verify", &account, "--source", "program", "--json"])
+                Call::new(&["account", "verify", &account, "--source", "program", "--json"])
             })),
-            Act::Now(Call::new(&["wait", "accounts", "--until", "usable", "--json"])),
-            Act::Now(Call::new(&["forges", "--json"])),
-            Act::Now(Call::new(&["accounts", "--json"])),
+            Act::Now(Call::new(&["account", "list", "--until", "usable", "--json"])),
+            Act::Now(Call::new(&["forge", "list", "--json"])),
+            Act::Now(Call::new(&["account", "list", "--json"])),
             Act::Mark("program ready"),
         ])
         .answers;

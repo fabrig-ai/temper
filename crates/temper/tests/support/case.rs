@@ -383,7 +383,7 @@ impl Judge {
         for call in Self::calls(root).ends() {
             success(call);
         }
-        Self::calls(root).push(ctl::Step::Run(ctl::Call::new(&["setting", "rules", "--json"])));
+        Self::calls(root).push(ctl::Step::Run(ctl::Call::new(&["settings", "show", "rules", "--json"])));
         self.stage = Stage::ReadRules;
     }
     fn change_settings(&mut self, root: &mut cluster::Root) {
@@ -398,7 +398,8 @@ impl Judge {
         let file = self.client.parent().expect("case scratch").join("case-settings.json");
         write(&file, &json!({"items":self.settings}));
         Self::calls(root).push(ctl::Step::Run(ctl::Call::new(&[
-            "change-settings",
+            "settings",
+            "apply",
             file.to_str().expect("settings path"),
             "--against",
             "1",
@@ -583,6 +584,7 @@ impl Judge {
             self.provisioning = true;
             let key = self.members.dir("llm").join("llm.key");
             batch.push(ctl::Step::Run(ctl::Call::new(&[
+                "account",
                 "add-key",
                 "1",
                 key.to_str().expect("key"),
@@ -590,7 +592,7 @@ impl Judge {
                 "--key",
                 "case-llm",
             ])));
-            batch.push(ctl::Step::Run(ctl::Call::new(&["wait", "accounts", "--until", "usable"])));
+            batch.push(ctl::Step::Run(ctl::Call::new(&["account", "list", "--until", "usable"])));
             self.stage = Stage::Provision;
             return false;
         }
@@ -610,8 +612,8 @@ impl Judge {
                 .expect("task")
                 .to_owned();
             batch.push(ctl::Step::Run(ctl::Call::new(&[
-                "wait",
                 "task",
+                "show",
                 &director,
                 "--until",
                 "phase:running",
@@ -630,7 +632,7 @@ impl Judge {
         let batch = Self::calls(root);
         let Some(step) = self.steps.pop_front() else {
             self.mark("acts", now);
-            batch.push(ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])));
+            batch.push(ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])));
             self.stage = Stage::Accounts;
             return;
         };
@@ -643,19 +645,21 @@ impl Judge {
             Step::Call { at, argv } => {
                 assert_eq!(at.0, 1);
                 let mut args = self.arguments(argv);
-                if args.first().is_some_and(|verb| verb == "wait") && !args.iter().any(|arg| arg == "--json") {
+                if args.iter().any(|arg| matches!(arg.as_str(), "--until" | "--since"))
+                    && !args.iter().any(|arg| arg == "--json")
+                {
                     args.push("--json".into());
                 }
                 if matches!(self.steps.front(), Some(Step::StopWorker { name: "ws" })) {
                     let director = temper_real_loop_world::case::HANG.to_string();
-                    assert_eq!(args, ["wait", "task", &director, "--until", "replied", "--json"]);
+                    assert_eq!(args, ["task", "show", &director, "--until", "replied", "--json"]);
                     batch.push(ctl::Step::Run(ctl::Call::new(&args.iter().map(String::as_str).collect::<Vec<_>>())));
                     // Replied also accepts WaitingForYou while work is still writing.
                     // After the committed-read barrier, retain the exact waiting
                     // observation the oracle requires before stopping ws.
                     self.slots.push(batch.ends().len() + 1);
                     batch.push(ctl::Step::Until(
-                        ctl::Call::new(&["task", &director, "--json"]),
+                        ctl::Call::new(&["task", "show", &director, "--json"]),
                         b"\"work\":\"waiting\"",
                     ));
                 } else {
@@ -684,12 +688,12 @@ impl Judge {
             }
             Step::AddWorker { name } => {
                 assert_eq!(*name, "s2");
-                batch.push(ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])));
+                batch.push(ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])));
                 self.stage = Stage::BeforeAdd;
             }
             Step::StopWorker { name } => {
                 assert_eq!(*name, "ws");
-                batch.push(ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])));
+                batch.push(ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])));
                 self.stage = Stage::BeforeStop;
             }
             Step::StartWorker { name } => {
@@ -857,8 +861,8 @@ impl Referee<cluster::Root> for Judge {
             Stage::Added { target } if self.members.linked("s2") == target => {
                 let task = temper_real_loop_world::case::BENCHMARK.to_string();
                 let batch = Self::calls(root);
-                batch.push(ctl::Step::Run(ctl::Call::new(&["wait", "task", &task, "--until", "replied", "--json"])));
-                batch.push(ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])));
+                batch.push(ctl::Step::Run(ctl::Call::new(&["task", "show", &task, "--until", "replied", "--json"])));
+                batch.push(ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])));
                 self.stage = Stage::Placed;
             }
             Stage::Placed if Self::calls(root).foreground_idle() => self.record_placement(root),

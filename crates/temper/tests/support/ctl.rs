@@ -1103,11 +1103,11 @@ pub fn json(ended: &Ended) -> serde_json::Value {
 /// Use the revision actually read by the owner, including on a stale retry.
 #[must_use]
 pub fn settings_change(inventory: &Ended, file: &Path, key: &str) -> Call {
-    settings_call("change-settings", inventory, file, key)
+    settings_call("apply", inventory, file, key)
 }
 #[must_use]
 pub fn settings_proposal(inventory: &Ended, file: &Path, key: &str) -> Call {
-    settings_call("propose-settings", inventory, file, key)
+    settings_call("propose", inventory, file, key)
 }
 /// The newest revision actually read by the owner.
 #[must_use]
@@ -1116,10 +1116,18 @@ pub fn newest(inventory: &Ended) -> u64 {
 }
 fn settings_call(verb: &str, inventory: &Ended, file: &Path, key: &str) -> Call {
     let revision = newest(inventory);
-    Call::new(&[verb, file.to_str().expect("fixture FILE path"), "--against", &revision.to_string(), "--key", key])
+    Call::new(&[
+        "settings",
+        verb,
+        file.to_str().expect("fixture FILE path"),
+        "--against",
+        &revision.to_string(),
+        "--key",
+        key,
+    ])
 }
 
-/// Write FILE for `change-settings`: the setting `ctl setting KIND N --json` read,
+/// Write FILE for `settings apply`: the setting `ctl settings show KIND NUMBER --json` read,
 /// its whole value edited by `edit`.
 pub fn setting_change_file(file: &Path, setting: &Ended, edit: impl FnOnce(&mut serde_json::Value)) {
     let document = json(setting);
@@ -1200,7 +1208,7 @@ mod read_condition_tests {
     fn process_writing_task_resubscribes_from_the_subject_digest_without_a_poll_delay() {
         let mut calls = Calls::new(Fd::new(0), Vec::new(), None, None);
         calls.action = Some(Action::Until(
-            Call::new(&["wait", "task", "8", "--until", "phase:running", "--json"]),
+            Call::new(&["task", "show", "8", "--until", "phase:running", "--json"]),
             ReadCondition::WritingTask { task: 8 },
         ));
         calls.child = Some(completed(
@@ -1213,14 +1221,14 @@ mod read_condition_tests {
         let Some(Action::Until(call, _)) = &calls.action else { panic!("task watch") };
         assert_eq!(
             call.arguments,
-            Call::new(&["wait", "task", "8", "--since", "0123456789abcdef", "--json"]).arguments
+            Call::new(&["task", "show", "8", "--since", "0123456789abcdef", "--json"]).arguments
         );
     }
     #[test]
     fn process_until_retains_matching_bytes_and_their_completion_wall() {
         let condition = ReadCondition::LimitedTask { task: 2, account: 1, source: 0 };
         let mut calls = Calls::new(Fd::new(0), Vec::new(), None, None);
-        calls.action = Some(Action::Until(Call::new(&["task", "2", "--json"]), condition));
+        calls.action = Some(Action::Until(Call::new(&["task", "show", "2", "--json"]), condition));
         calls.child = Some(completed(br#"{"chip":{"task":2,"phase":"due"},"run_wait":null}"#));
         calls.wall = Wall::from_nanos(10);
         calls.finish(Time::from_nanos(1));

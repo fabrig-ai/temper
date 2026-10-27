@@ -1,0 +1,491 @@
+crates/temper/src/tests.rs:96:    for name in ["accounts", "secrets", "state"] {
+crates/temper/src/tests.rs:310:    managed["application"]["forges"][0]["api_token"] = "forge-1/api_token".into();
+crates/temper/src/tests.rs:311:    managed["application"]["forges"][0]["user"] = serde_json::json!({"file":"forge-1/user"});
+crates/temper/src/tests.rs:380:    let mut host = document["application"]["forges"][0].clone();
+crates/temper/src/tests.rs:392:    document["application"]["forges"] = serde_json::json!([host, socket]);
+crates/temper/src/tests.rs:396:    document["engine"]["limits"]["overrides"]["accounts.credentials"] = 2.into();
+crates/temper/src/tests.rs:399:    let endpoints = super::forges(&named.forges, reject_names).expect("DNS never refuses a start");
+crates/temper/src/tests.rs:403:        matches!(&named.forges[0].api, jig_protocol_config::Address::Host { name, .. } if name.as_ref() == b"forge.example")
+crates/temper/tests/startup.rs:97:            "temper serve: application.forges[0].user.file: {}: readable by others or reached through a link\n",
+crates/temper/tests/startup.rs:121:        value["application"]["forges"][0]["api_token"] = "forge-1/api_token".into();
+crates/temper/tests/startup.rs:122:        value["application"]["forges"][0]["user"] = serde_json::json!({"file":"forge-1/user"});
+crates/temper/tests/startup.rs:132:    value["application"]["forges"][0]["api_token"] = "another/api_token".into();
+crates/temper/tests/startup.rs:139:        "temper serve: application.forges[0].api_token: invalid form\n"
+crates/temper/tests/startup.rs:369:            "temper serve: application.forges[0].webhook_secret: {}: readable by others or reached through a link\n",
+crates/temper/tests/startup.rs:456:                "engine.limits: needs 4096-byte messages (tasks.message_bytes); the agent offers 4095 (tool_payload less 2)\n",
+crates/temper/tests/startup.rs:464:                "engine.limits: needs 4096-byte messages (tasks.message_bytes); the agent offers 598 (tool_payload less 2)\ntemper serve: workers[0].agent.profile.declared.tool_payload: 600 bytes, short of temper's documentation answer (read_docs), 2048 bytes\n",
+crates/temper/tests/startup.rs:545:    let payload = u64::from(engine.limits.core.tasks.message_bytes)
+crates/temper/tests/startup.rs:909:            assert!(refused.contains("application.forges[0].api_token"), "{row}: {refused}");
+crates/temper/tests/startup.rs:940:// accounts counts its driver, configured providers and trust; setup/checked its host and inputs.
+crates/temper/tests/startup.rs:1241:                "init: after starting, continue with ChatGPT or add an OpenAI API key from the accounts page\n"
+crates/temper/tests/startup.rs:1455:                    "temper serve: application.forges[0].api_token: {}/forge-1/api_token: readable by others or reached through a link\n",
+crates/temper/tests/startup.rs:1539:    value["application"]["forges"][0]["transport"] =
+crates/temper/tests/startup.rs:1913:    use support::parent::{Guard, live, signal, wait};
+crates/temper/tests/startup.rs:1934:trap 'kill -TERM "$helper"; wait "$helper"; exit 37' TERM
+crates/temper/tests/startup.rs:1936:wait "$helper"
+crates/temper/tests/startup.rs:1958:    wait(|| pid_file.exists());
+crates/temper/tests/startup.rs:1961:    wait(|| support::boxed::status(address, "/") == Some(200));
+crates/temper/tests/startup.rs:1966:    wait(|| guard.child.as_mut().expect("parent").try_wait().expect("exit").is_some());
+crates/temper/tests/startup.rs:1970:        wait(|| !live(fake));
+crates/temper/tests/startup.rs:1972:        wait(|| guard.pids.iter().all(|pid| !live(*pid)));
+crates/temper/tests/qa_forge_setup.rs:48:    let forge = entry(&value, "forges", "number", 3);
+crates/temper/tests/qa_forge_setup.rs:135:    assert_eq!(entry(&value, "forges", "number", 3)["api"], sockets[1].clone());
+crates/temper/tests/process.rs:128:    assert!(elapsed < Duration::from_secs(5), "accounts story took {elapsed:?}");
+crates/temper/tests/process.rs:129:    eprintln!("deployment accounts story: {elapsed:?}");
+crates/temper/tests/process.rs:367:        format!("change-settings: stale; newest revision {newest}; read settings again\n").as_bytes()
+crates/temper/tests/process.rs:630:    let [_, me, wait] = seen.calls.as_slice() else { panic!("three ctl ends") };
+crates/temper/tests/process.rs:631:    assert_eq!(wait.exit, Some(Exit::Code(3)), "{}", String::from_utf8_lossy(&wait.stderr));
+crates/temper/tests/process.rs:632:    assert_eq!(support::ctl::json(wait)["me"]["digest"], support::ctl::json(me)["digest"]);
+crates/temper/tests/process.rs:1297:    // Seven playground reads plus the reply wait; six setup reads; six end reads
+crates/temper/tests/process.rs:1494:        let (tasks_at, tasks) = forge_land::plan_ended_tasks(&outcome.calls[..closing_at]);
+crates/temper/tests/process.rs:1497:            ended_tasks = Some(tasks);
+crates/temper/tests/process.rs:1500:            assert_eq!(Some(tasks), ended_tasks, "no second change or producer");
+crates/temper/tests/process.rs:1511:        // three chat turns delegate, wait, then reply after the procedure ends.
+crates/temper/tests/process.rs:1844:    let [created, task, accounts] = calls.map(support::ctl::json);
+crates/temper/tests/process.rs:1848:    let rows = accounts["accounts"]["deployment"].as_array().expect("deployment accounts");
+crates/temper/tests/process.rs:1849:    assert_eq!(rows.len(), 1, "the demo model's deployment account: {accounts}");
+crates/temper/tests/process.rs:1850:    assert_eq!(rows[0]["provider"], 3, "{accounts}");
+crates/temper/tests/process.rs:1851:    assert_eq!(rows[0]["provider_name"]["bytes"], "demo", "{accounts}");
+crates/temper/tests/process.rs:1852:    assert_eq!(rows[0]["holder"]["deployment"], true, "{accounts}");
+crates/temper/tests/process.rs:1864:    let tasks = support::ctl::json(&calls[2]);
+crates/temper/tests/process.rs:1865:    let ended = tasks["ended"]["rows"]["rows"].as_array().expect("ended chats");
+crates/temper/tests/process.rs:1866:    assert_eq!(tasks["ended"]["rows"]["cut"], false, "{tasks}");
+crates/temper/tests/process.rs:1867:    assert!(tasks["ended"]["rows"]["after"].is_null(), "all ended chats: {tasks}");
+crates/temper/tests/process.rs:1868:    assert_eq!(ended.len(), 1, "one ended demo chat: {tasks}");
+crates/temper/tests/process.rs:1869:    assert_eq!(ended[0]["chip"]["task"], 1, "the same chat ended once: {tasks}");
+crates/temper/tests/process.rs:1870:    assert_eq!(ended[0]["chip"]["phase"], "ended", "{tasks}");
+crates/temper/tests/process.rs:1871:    let accounts = support::ctl::json(&calls[3]);
+crates/temper/tests/process.rs:1872:    let rows = accounts["accounts"]["deployment"].as_array().expect("deployment accounts");
+crates/temper/tests/process.rs:1873:    assert!(!rows.iter().any(|row| row["number"].as_u64() == account), "demo account removed: {accounts}");
+crates/temper/tests/process.rs:1874:    assert!(!rows.iter().any(|row| row["provider"] == 3), "demo provider has no account: {accounts}");
+crates/temper/tests/process.rs:1888:        assert_eq!(met, true, "the forge wait settled: {document}");
+crates/temper/tests/process.rs:1889:        &document["forges"]
+crates/temper/tests/process.rs:1893:    let rows = document["forges"].as_array().expect("forge rows");
+crates/temper/tests/process.rs:1907:    let listen = application["forges"]
+crates/temper/tests/process.rs:1909:        .expect("configured forges")
+crates/temper/tests/process.rs:2052:    let call = support::ctl::Call::bare(&[private.to_str().expect("client path"), "forges"]);
+crates/temper/tests/process.rs:2055:    let stdout = String::from_utf8(ended.stdout).expect("forges row");
+crates/temper/tests/process.rs:2087:    let address = document["application"]["forges"][0]["api"]["socket"]
+crates/temper/tests/process.rs:2543:        tasks: Vec::new(),
+crates/temper/tests/process.rs:2572:const KILL_SIGNAL: u32 = 9; // Linux SIGKILL, as reported by wait
+crates/temper/tests/process.rs:2611:    tasks: Vec<String>,
+crates/temper/tests/process.rs:2682:        self.checking.front().or_else(|| self.tasks.last()).expect("current chat")
+crates/temper/tests/process.rs:2714:            [task, accounts] => {
+crates/temper/tests/process.rs:2717:                return Some(ClusterRead::new(task, json(accounts)));
+crates/temper/tests/process.rs:2724:            _ => panic!("task/accounts, task with activity, or continued activity"),
+crates/temper/tests/process.rs:2820:        let text = if self.tasks.first().is_some_and(|task| task == self.current())
+crates/temper/tests/process.rs:2821:            || (self.story == ClusterStory::Hung && self.tasks.get(1).is_some_and(|task| task == self.current()))
+crates/temper/tests/process.rs:2829:            || (self.story == ClusterStory::Hung && self.tasks.get(1).is_some_and(|task| task == self.current()))
+crates/temper/tests/process.rs:2833:        if self.story == ClusterStory::Hung && self.tasks.len() == FIRST_LINK {
+crates/temper/tests/process.rs:2863:            if self.story == ClusterStory::Restart && self.tasks.len() < CLUSTER_CHATS {
+crates/temper/tests/process.rs:2877:                match self.tasks.len() {
+crates/temper/tests/process.rs:2890:                        self.checking.push_back(self.tasks[1].clone());
+crates/temper/tests/process.rs:2899:        let first = self.tasks.len() < CLUSTER_CHATS;
+crates/temper/tests/process.rs:2903:                self.tasks.last().expect("chat"),
+crates/temper/tests/process.rs:3053:        for task in &self.tasks {
+crates/temper/tests/process.rs:3056:                && self.tasks.first() == Some(task)
+crates/temper/tests/process.rs:3070:    accounts: serde_json::Value,
+crates/temper/tests/process.rs:3075:    fn new(task: serde_json::Value, accounts: serde_json::Value) -> Self {
+crates/temper/tests/process.rs:3076:        Self { task, accounts, rows: Vec::new(), turns: false }
+crates/temper/tests/process.rs:3088:        self.accounts["accounts"]["deployment_facts"]["program_hosts"].as_array().expect("deployment hosts")
+crates/temper/tests/process.rs:3154:                        self.tasks.push(task);
+crates/temper/tests/process.rs:3155:                        self.stage = if self.story == ClusterStory::Later && self.tasks.len() == CLUSTER_CHATS {
+crates/temper/tests/process.rs:3373:    assert!(!diagnostic.contains("application.forges"), "forge preparation refused: {diagnostic}");
+crates/temper/tests/process.rs:3548:    use support::parent::{Guard, descendants, live, wait};
+crates/temper/tests/process.rs:3570:        let _ended = box_process.wait().expect("box wait");
+crates/temper/tests/process.rs:3591:    wait(|| pid_file.exists());
+crates/temper/tests/process.rs:3594:    wait(|| {
+crates/temper/tests/process.rs:3604:    guard.child.as_mut().expect("child test").wait().expect("reap test");
+crates/temper/tests/process.rs:3605:    wait(|| guard.pids.iter().all(|pid| !live(*pid)));
+crates/temper/tests/process.rs:3622:            "authority":{"tools":0,"grants":[],"delegation":{"kinds":[],"tasks":1,"depth":1},
+crates/temper/tests/process.rs:3799:        Step::Mark("Moving the newest revision answers no tasks moved or left behind"),
+crates/temper/tests/process.rs:3823:    assert_eq!(calls[4].stdout, format!("moved 0 tasks to revision {newest}\n").as_bytes());
+crates/temper/tests/process.rs:3830:    assert_eq!(calls[6].stderr.as_slice(), b"move-to-newest: No visible object with that name\n");
+crates/temper/tests/process.rs:3854:        Step::Run(Call::new(&["chat", "start", "--project", "1", "--key", "revision-chat", "@revision-chat Delegate and wait"])),
+crates/temper/tests/process.rs:3868:        Step::Mark("The owner moves both live tasks to R+1"),
+crates/temper/tests/process.rs:3950:    let row = rows["forges"].as_array().expect("forge rows").iter().find(|row| row["number"] == 3).expect("forge 3");
+crates/temper/tests/forge.rs:139:    first.kill().and_then(|()| first.wait()).expect("first stopped");
+crates/temper/tests/forge.rs:152:    run.kill().and_then(|()| run.wait()).expect("stopped");
+crates/temper/tests/forge.rs:174:    run.kill().and_then(|()| run.wait()).expect("stopped");
+crates/temper/tests/forge.rs:196:    run.kill().and_then(|()| run.wait()).expect("stopped");
+crates/temper/tests/forge.rs:325:        value["application"]["forges"][0]["transport"] =
+crates/temper/tests/forge.rs:450:        document["application"]["forges"][0]["number"] = 3.into();
+crates/temper/tests/forge.rs:551:    for (case, expected) in [(0, "openssl"), (1, "application.sign_in.forges"), (2, "engine.clients.provider")] {
+crates/temper/tests/forge.rs:554:            changed["application"]["sign_in"]["forges"] = serde_json::json!([]);
+crates/temper/tests/fake.rs:113:            let _ended = child.wait();
+crates/temper/tests/fake.rs:308:    config["application"]["forges"][0]["api"] = json!({"socket":listen});
+crates/temper/tests/fake.rs:309:    config["application"]["forges"][0]["git"] = json!(format!("http://{listen}"));
+crates/temper/tests/fake.rs:593:    config["application"]["forges"][0]["api"] = prepared["application"]["forges"][0]["api"].clone();
+crates/temper/tests/fake.rs:594:    config["application"]["forges"][0]["git"] = prepared["application"]["forges"][0]["git"].clone();
+crates/temper/tests/support/github_land.rs:38:    fixture["github"]["accounts"][0]["installation"] = Value::Null;
+crates/temper/tests/support/github_land.rs:69:        tasks: None,
+crates/temper/tests/support/github_land.rs:128:    tasks: Option<Vec<u64>>,
+crates/temper/tests/support/github_land.rs:209:        packet["forges"]
+crates/temper/tests/support/github_land.rs:211:            .expect("forges rows")
+crates/temper/tests/support/github_land.rs:225:            let digest = packet["digest"].as_str().expect("forges digest");
+crates/temper/tests/support/github_land.rs:240:        assert!(location.starts_with(&format!("http://{}/forges/1/github/setup?", self.clients)), "setup URL");
+crates/temper/tests/support/github_land.rs:327:            Stage::Restored => self.restored(host, &ctl::json(calls.ends().last().expect("restored forges"))),
+crates/temper/tests/support/github_land.rs:454:            assert_eq!(Some(&self.life_tasks), self.tasks.as_ref(), "no task made after restart");
+crates/temper/tests/support/github_land.rs:463:            self.tasks = Some(self.life_tasks.clone());
+crates/temper/tests/support/github_land.rs:480:            "no task beyond the four first-life tasks"
+crates/temper/tests/support/github_land.rs:736:            self.mark("Musts: same landing, one PR, one merge, no new tasks, secrecy and teardown passed");
+crates/temper/tests/support/github_land.rs:737:            let row = self.restored.as_ref().expect("restored forges row");
+crates/temper/tests/support/github_land.rs:799:    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
+crates/temper/tests/support/github_land.rs:801:    value["application"]["forges"][0]["app_read_only"] = true.into();
+crates/temper/tests/support/github_land.rs:811:    value["engine"]["limits"]["overrides"]["tasks.result_bytes"] = 512.into();
+crates/temper/tests/support/owned.rs:35:    for name in ["forges", "identities", "setup"] {
+crates/temper/tests/support/owned.rs:43:    let forge = &mut application["forges"][0];
+crates/temper/tests/support/owned.rs:122:if [ -f "$base/{program}.hang" ] && [ "$1" = "$(cat "$base/{program}.hang")" ]; then sleep 60 & echo $! > "$base/hung"; wait; fi
+crates/temper/tests/support/owned.rs:271:            child.wait().expect("reaped");
+crates/temper/tests/support/owned.rs:626:    forges: Box<[temper_service::ForgeRuntime]>,
+crates/temper/tests/support/owned.rs:630:    pub fn forges(&self) -> skein_lib::List<temper_service::ForgeRuntime> {
+crates/temper/tests/support/owned.rs:632:        let mut forges = skein_lib::List::with_capacity(u32::try_from(self.forges.len()).expect("forge count"));
+crates/temper/tests/support/owned.rs:633:        for forge in &self.forges {
+crates/temper/tests/support/owned.rs:640:            forges
+crates/temper/tests/support/owned.rs:650:        forges
+crates/temper/tests/support/owned.rs:653:    pub fn accounts(&self) -> temper_service::AccountsRuntime {
+crates/temper/tests/support/owned.rs:706:            Some(&self.accounts()),
+crates/temper/tests/support/owned.rs:707:            self.forges(),
+crates/temper/tests/support/owned.rs:715:        let accounts = value.get("engine").map(|_| self.accounts());
+crates/temper/tests/support/owned.rs:722:            accounts.as_ref(),
+crates/temper/tests/support/owned.rs:723:            self.forges(),
+crates/temper/tests/support/owned.rs:731:        let accounts = value.get("engine").map(|_| self.accounts());
+crates/temper/tests/support/owned.rs:738:            accounts.as_ref(),
+crates/temper/tests/support/owned.rs:739:            self.forges(),
+crates/temper/tests/support/owned.rs:751:            Some(self.accounts()),
+crates/temper/tests/support/owned.rs:756:            self.forges(),
+crates/temper/tests/support/owned.rs:902:    let (files, setup, forges) = if value.get("engine").is_some() {
+crates/temper/tests/support/owned.rs:908:        let mut forges = skein_lib::List::with_capacity(u32::try_from(named.forges.len()).expect("forges"));
+crates/temper/tests/support/owned.rs:909:        for forge in &named.forges {
+crates/temper/tests/support/owned.rs:910:            forges
+crates/temper/tests/support/owned.rs:920:        (named.files, setup, forges.into_boxed())
+crates/temper/tests/support/owned.rs:950:        forges,
+crates/temper/tests/support/owned.rs:970:    let mut forges = List::with_capacity(u32::try_from(named.forges.len()).expect("forge count"));
+crates/temper/tests/support/owned.rs:971:    for local in &named.forges {
+crates/temper/tests/support/owned.rs:974:                panic!("additional bounded forges have socket addresses")
+crates/temper/tests/support/owned.rs:977:            forges
+crates/temper/tests/support/owned.rs:988:    forges.push(forge).expect("primary forge");
+crates/temper/tests/support/owned.rs:1031:        forges: forges.into_boxed(),
+crates/temper/tests/support/owned.rs:1049:    let mut forges = Vec::new();
+crates/temper/tests/support/owned.rs:1050:    for forge in &named.forges {
+crates/temper/tests/support/owned.rs:1059:        forges.push(check::Forge {
+crates/temper/tests/support/owned.rs:1093:        &Members { forges: forges.into_boxed_slice(), listeners: listeners.into_boxed_slice() },
+crates/temper/tests/support/owned.rs:1157:/// temper-01a's Adopt stand-in (forge-setup.md, 4.5 and 4.8); temper-15 removes it.
+crates/temper/tests/support/configuration.rs:35:    value["workers"][0]["limits"]["overrides"]["hub.accounts"] = 4.into();
+crates/temper/tests/support/configuration.rs:42:    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
+crates/temper/tests/support/configuration.rs:53:    // Projects 0 and 1, and the one forge-setup makes for the first repository.
+crates/temper/tests/support/configuration.rs:56:    value["engine"]["limits"]["overrides"]["tasks.funders"] = 4.into();
+crates/temper/tests/support/configuration.rs:60:        "forges":[{"number":1,"kind":"forgejo","api":{"socket":"127.0.0.1:9"},"transport":"plaintext",
+crates/temper/tests/support/configuration.rs:119:    value["application"]["forges"][0]["api_token"] = "forge-1/api_token".into();
+crates/temper/tests/support/configuration.rs:120:    value["application"]["forges"][0]["user"] = serde_json::json!({"file":"forge-1/user"});
+crates/temper/tests/support/configuration.rs:129:    let forge = value["application"]["forges"][0].as_object_mut().expect("forge");
+crates/temper/tests/support/case/settings.rs:45:    let limit = &mut value["engine"]["limits"]["overrides"]["tasks.charters"];
+crates/temper/tests/support/case/settings.rs:91:        "delegation":{"kinds":kinds,"tasks":source["delegation"]["tasks"],"depth":source["delegation"]["depth"]},
+crates/temper/tests/support/live_github.rs:24:/// engine's own, which `wait forges --until settled` does not cover (client/tools.md, 5.4).
+crates/temper/tests/support/live_github.rs:155:    value["application"]["forges"][0] = json!({"number":1,"kind":"github","api":{"socket":api.to_string()},"transport":"plaintext","git":format!("http://{git}"),"web":null,"app_read_only":true});
+crates/temper/tests/support/live_github.rs:174:    tasks: Vec<u64>,
+crates/temper/tests/support/live_github.rs:222:    // This read precedes product startup, so mint independently rather than wait for its token.
+crates/temper/tests/support/live_github.rs:321:        packet["forges"].as_array().expect("forge rows").iter().find(|row| row["number"] == 1).expect("forge 1").clone()
+crates/temper/tests/support/live_github.rs:378:                    "http://{}/forges/1/github/setup?installation_id={}&setup_action=install&state={state}",
+crates/temper/tests/support/live_github.rs:484:                let row = Self::row(&ctl::json(calls.ends().last().expect("reconnected forges")));
+crates/temper/tests/support/live_github.rs:520:            tasks: vec![1],
+crates/temper/tests/support/live_github.rs:551:        let Landing { restarted, mut tasks, row, coder, .. } = self.landing.take().expect("landing read");
+crates/temper/tests/support/live_github.rs:552:        tasks.sort_unstable();
+crates/temper/tests/support/live_github.rs:553:        assert_eq!(tasks, [1, 2, 3, 4], "complete task set");
+crates/temper/tests/support/live_github.rs:557:            assert_eq!(tasks, seen.tasks);
+crates/temper/tests/support/live_github.rs:563:            seen.tasks = tasks;
+crates/temper/tests/support/live_github.rs:573:    tasks: Vec<u64>,
+crates/temper/tests/support/live_github.rs:584:        self.tasks.extend(
+crates/temper/tests/support/live.rs:45:        For the conversation requesting a small change, call delegate exactly with {}, then call wait with {{}}. \
+crates/temper/tests/support/live.rs:136:    let account = value["accounts"]["party"]
+crates/temper/tests/support/live.rs:138:        .ok_or("person's accounts missing")?
+crates/temper/tests/support/live.rs:229:            if value.get("accounts").is_some() {
+crates/temper/tests/support/live.rs:399:pub fn ctl_completions(client: &Path, tasks: &[u64]) -> Result<u32, String> {
+crates/temper/tests/support/live.rs:401:    for task in tasks {
+crates/temper/tests/support/github/existing.rs:80:                assert!(text.contains("forge-accept 1 1"), "{text}");
+crates/temper/tests/support/github/existing.rs:163:            document["application"]["forges"][0]["app_read_only"] = true.into();
+crates/temper/tests/support/case.rs:150:    value["application"]["forges"] = json!([{
+crates/temper/tests/support/case.rs:356:        // accounts' program hosts hold documents.lines rows (jig documents/programs.rs `hosts`);
+crates/temper/tests/support/case.rs:561:                if args.first().is_some_and(|verb| verb == "wait") && !args.iter().any(|arg| arg == "--json") {
+crates/temper/tests/support/case.rs:566:                    assert_eq!(args, ["wait", "task", &director, "--until", "replied", "--json"]);
+crates/temper/tests/support/case.rs:708:        let accounts = ctl::json(batch.ends().last().expect("placement hosts"));
+crates/temper/tests/support/case.rs:709:        self.map_channels(&accounts);
+crates/temper/tests/support/case.rs:712:            "every started worker held a run: assigned {:?}; channels {:?}; placed {:?}; accounts {accounts}",
+crates/temper/tests/support/case.rs:720:        let accounts = Self::calls(root).ends().last().expect("post-act accounts");
+crates/temper/tests/support/case.rs:721:        success(accounts);
+crates/temper/tests/support/case.rs:722:        let accounts = ctl::json(accounts);
+crates/temper/tests/support/case.rs:723:        self.collect(&accounts);
+crates/temper/tests/support/case.rs:976:    fn collect(&mut self, accounts: &Value) {
+crates/temper/tests/support/case.rs:1043:            self.map_channels(accounts);
+crates/temper/tests/support/case.rs:1092:    fn map_channels(&mut self, accounts: &Value) {
+crates/temper/tests/support/case.rs:1093:        let deployment = accounts
+crates/temper/tests/support/case.rs:1094:            .pointer("/accounts/deployment_facts/program_hosts")
+crates/temper/tests/support/case.rs:1098:            accounts.pointer("/accounts/program_hosts").and_then(Value::as_array).expect("party worker channels");
+crates/temper/tests/qa_adoption.rs:31:    let forges = document["application"]["forges"].as_array().expect("forges");
+crates/temper/tests/qa_adoption.rs:32:    let demo = forges.iter().find(|forge| forge["number"] == 1).expect("demo forge");
+crates/temper/tests/qa_adoption.rs:98:        &app["forges"][0]["api"]["socket"],
+crates/temper/tests/qa_adoption.rs:111:    assert!(app["forges"][0].get("webhook_secret").is_none());
+crates/temper/tests/qa_adoption.rs:223:                support::ctl::Call::bare(&[client.join("private").to_str().expect("client path"), "forges"]),
+crates/temper/tests/qa_adoption.rs:242:    // A setup entry's forge names its secret exactly when the deployment has a listener (temper-forge-setup's members
+crates/temper/tests/qa_adoption.rs:245:        ("listener-only", true, false, "application.forges[0].webhook_secret: invalid form"),
+crates/temper/tests/qa_adoption.rs:246:        ("secret-only", false, true, "application.forges[0].webhook_secret: needs application.webhooks"),
+crates/temper/tests/qa_adoption.rs:260:        document["application"]["forges"][0]["api_token"] = "demo/forge/api_token".into();
+crates/temper/tests/qa_adoption.rs:261:        document["application"]["forges"][0]["user"] = serde_json::json!({"file":"demo/forge/user"});
+crates/temper/tests/qa_adoption.rs:262:        document["application"]["forges"][0]["webhook_secret"] = "demo/forge/webhook_secret".into();
+crates/temper/tests/qa_adoption.rs:268:            document["application"]["forges"][0]["webhook_secret"] = serde_json::Value::Null;
+crates/temper/tests/support/github.rs:65:    fixture["github"]["accounts"][0]["installation"] = Value::Null;
+crates/temper/tests/support/github.rs:221:        packet["forges"]
+crates/temper/tests/support/github.rs:223:            .expect("forges rows")
+crates/temper/tests/support/github.rs:237:            let digest = packet["digest"].as_str().expect("forges digest");
+crates/temper/tests/support/github.rs:252:        assert!(location.starts_with(&format!("http://{}/forges/1/github/setup?", self.clients)), "setup URL");
+crates/temper/tests/support/github.rs:327:            Stage::Restored => self.restored(host, &ctl::json(calls.ends().last().expect("restored forges"))),
+crates/temper/tests/support/github.rs:564:            let row = self.restored.as_ref().expect("restored forges row");
+crates/temper/tests/support/github.rs:732:    let setup_url = format!("{origin}/forges/1/github/setup");
+crates/temper/tests/support/github.rs:733:    let redirect = format!("{origin}/forges/1/github/redirect");
+crates/temper/tests/support/forgejo_sign_in.rs:48:        self.child.wait().expect("serve reaped");
+crates/temper/tests/support/forgejo_elsewhere.rs:150:    let entry = value["application"]["forges"][0].as_object_mut().expect("forge");
+crates/temper/tests/support/forgejo_elsewhere.rs:182:                call(b"wait", json!({})),
+crates/temper/tests/support/forgejo_elsewhere.rs:326:            let forges = ctl::json(ends.last().expect("forges read"));
+crates/temper/tests/support/forgejo_elsewhere.rs:327:            let row = &forges["forges"][0];
+crates/temper/tests/support/forgejo.rs:243:    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
+crates/temper/tests/support/forge_sign_in.rs:27:        "forges":[{"forge":1,"client":"forgejo"}]
+crates/temper/tests/support/forge_parent.rs:112:        let wait = if io.is_ready() || !complete.is_empty() {
+crates/temper/tests/support/forge_parent.rs:117:        kernel.submit(&mut subs, wait);
+crates/temper/tests/live.rs:80:                    tasks: previous.as_ref().map(|before| before.tasks.clone()),
+crates/temper/tests/live.rs:113:                assert_eq!(evidence.tasks, before.tasks, "same task numbers after restart");
+crates/temper/tests/live.rs:114:                assert_eq!(evidence.delegates, before.delegates, "same change and producer tasks");
+crates/temper/tests/support/boxed.rs:26:    /// Kill Forgejo, wait for its replacement, and check the engine before stopping.
+crates/temper/tests/support/webhooks.rs:31:    value["application"]["forges"][0]["webhook_secret"] = "secrets/forge-1.webhook-secret".into();
+crates/temper/tests/qa_serving.rs:475:        if serve.try_wait().expect("a wait").is_some() {
+crates/temper/tests/qa_serving.rs:480:    let code = serve.try_wait().expect("a wait").map(|status| status.code().unwrap_or(-1));
+crates/temper/tests/support/sign_in_browser.rs:3:// Adapted from jig's protocol-accounts world's private browser at the pinned revision.
+crates/temper/tests/support/sign_in.rs:358:            let [signing] = pending["accounts"]["signing"].as_array().expect("signing list").as_slice() else {
+crates/temper/tests/support/sign_in.rs:692:    let ended = ctl::json(ends.last().expect("ended wait"));
+crates/temper/tests/support/sign_in.rs:743:    let account = ready["accounts"]["party"]
+crates/temper/tests/support/sign_in.rs:745:        .expect("person's accounts")
+crates/temper/tests/qa_forge_handover.rs:48:        let forge = application["forges"][0].as_object_mut().expect("forge object");
+crates/temper/tests/qa_forge_handover.rs:110:    assert_eq!(seen.calls.len(), 3, "client did not finish inspecting forges");
+crates/temper/tests/qa_forge_handover.rs:200:    // setup.md 6.5 and skein forge-setup.md 4.7: a stop never removes it.
+crates/temper/tests/qa_forge_handover.rs:223:    rows["forges"]
+crates/temper/tests/qa_forge_handover.rs:225:        .expect("forges document")
+crates/temper/tests/qa_forge_handover.rs:240:    // setup.md 6.3, 6.5; skein forge-setup.md 4.7: present beats kept.
+crates/temper/tests/qa_forge_handover.rs:422:    connected(&ctl::json(outcome.calls.last().expect("fake forges call")));
+crates/temper/tests/qa_forge_handover.rs:464:    assert!(seen.calls[1].exit == Some(Exit::Code(0)), "forges read failed");
+crates/temper/tests/qa_forge_handover.rs:479:    // setup.md 6.5, skein forge-setup.md 4.3: never take over a person's
+crates/temper/tests/qa_forge_handover.rs:552:    connected(&ctl::json(first.calls.last().expect("connected forges row")));
+crates/temper/tests/qa_forge_handover.rs:582:    connected(&ctl::json(second.calls.last().expect("restored forges row")));
+crates/temper/tests/qa_forge_handover.rs:643:            assert_eq!(call.exit, Some(Exit::Code(1)), "forge-setup waits for the prepare failure");
+crates/temper/tests/qa_forge_handover.rs:696:    // setup.md 6.5 and skein forge-setup.md 4.7: the entire file is the
+crates/temper/tests/qa_forge_handover.rs:723:    // skein forge-setup.md 4.3, 4.7: an empty given token stops Missing.
+crates/temper/tests/qa_account_move.rs:2://! jig's domain/accounts.md 6 and protocol/llm.md 5.6. All records are fake.
+crates/temper/tests/qa_account_move.rs:15:    gate.wait();
+crates/temper/tests/qa_account_move.rs:39:    gate.wait();
+crates/temper/tests/qa_account_move.rs:48:    fixture.a().empty(); // Resends kept written before reading accounts (tools.md 15).
+crates/temper/tests/qa_account_move.rs:67:    gate.wait();
+crates/temper/tests/qa_account_move.rs:84:    gate.wait();
+crates/temper/tests/qa_account_move.rs:100:    gate.wait();
+crates/temper/tests/qa_first_run.rs:28:    let forge = document["application"]["forges"]
+crates/temper/tests/qa_first_run.rs:30:        .expect("configured forges")
+crates/temper/tests/qa_first_run.rs:38:    ctl::json(call)["forges"]
+crates/temper/tests/qa_first_run.rs:162:    assert!(final_forges["forges"].as_array().expect("rows").iter().all(|row| row["number"] != 1));
+crates/temper/tests/qa_first_run.rs:175:    let accounts = ctl::json(&outcome.calls[10]);
+crates/temper/tests/qa_first_run.rs:176:    assert_eq!(accounts["accounts"]["deployment"], serde_json::json!([]), "demo account removed: {accounts}");
+crates/temper/tests/qa_first_run.rs:340:                    parent::wait(|| !parent::live(child));
+crates/temper/tests/qa_first_run.rs:341:                    parent::wait(|| !parent::live(pid));
+crates/temper/tests/forge_land.rs:7:fn roots_read(tasks: &[u64]) -> Value {
+crates/temper/tests/forge_land.rs:8:    json!({"tasks": {"rows": tasks.iter().map(|task| json!({"chip": {"task": task}})).collect::<Vec<_>>(), "more": false}})
+crates/temper/tests/forge_land.rs:18:        Err("live root tasks this sitting left: [7]; earlier live root tasks missing: []".to_owned())
+crates/temper/tests/forge_land.rs:29:        Err("live root tasks this sitting left: [4]; earlier live root tasks missing: []".to_owned())
+crates/temper/tests/forge_land.rs:38:        Err("live root tasks this sitting left: []; earlier live root tasks missing: [1]".to_owned())
+crates/temper/tests/forge_land.rs:45:        json!({"tasks": {"rows": [], "more": true}}),
+crates/temper/tests/forge_land.rs:46:        json!({"tasks": {"more": false}}),
+crates/temper/tests/forge_land.rs:47:        json!({"tasks": {"rows": [{"chip": {}}], "more": false}}),
+crates/temper/tests/forge_land.rs:86:// owner_authority,tasks,parts,llm}.rs.
+crates/temper/tests/forge_land.rs:159:    for wait in
+crates/temper/tests/forge_land.rs:162:        continues_with("/run_wait", wait);
+crates/temper/tests/qa_first_repository.rs:50:    for member in ["forges", "identities", "setup"] {
+crates/temper/tests/qa_first_repository.rs:54:            .retain(|row| row[if member == "forges" { "number" } else { "forge" }] == 3);
+crates/temper/tests/qa_first_repository.rs:169:    let rows = rows["forges"].as_array().unwrap_or_else(|| panic!("forges rows: {rows}"));
+crates/temper/tests/support/account_file_qa.rs:1://! QA-B process probes: client/tools.md 5.5 area 5 and 6.3; jig domain/accounts.md 6
+crates/temper/tests/support/account_file_qa.rs:26:    for field in ["forges", "identities", "setup", "demo", "webhooks", "workers", "clients"] {
+crates/temper/tests/support/account_file_qa.rs:70:    let rows = value["accounts"]["party"].as_array().expect("holder's accounts");
+crates/temper/tests/support/account_file_qa.rs:92:    // jig's protocol/llm.md, 5.6: jig-accounts Moved replaces JIGM at version 1.
+crates/temper/tests/support/account_file_qa.rs:93:    assert!(newer.starts_with(&[0, 1]), "real export's jig-accounts version");
+crates/temper/tests/support/account_file_qa.rs:405:    assert!(record.starts_with(&[0, 1]), "real moved record's jig-accounts version");
+crates/temper/tests/support/account_file_qa.rs:439:            if directory == b"accounts-viewer" { 81 } else { 82 },
+crates/temper/tests/support/account_file_qa.rs:630:        let (at, directory, page) = (4, b"accounts-viewer".as_slice(), temper_client_domain::Address::Accounts);
+crates/temper/tests/support/account_file_qa.rs:661:            value["accounts"]["party"].as_array().expect("accounts").is_empty(),
+crates/temper/tests/support/account_file_qa.rs:741:                let MovingProcess::Viewer(viewer) = &mut procs[4] else { panic!("accounts viewer") };
+crates/temper/tests/support/account_file_qa.rs:783:            "moving clients stalled at {:?}; accounts moving: {}; task waiting: {}",
+crates/temper/tests/support/account_move.rs:43:    for field in ["forges", "identities", "setup", "demo", "webhooks", "workers", "clients"] {
+crates/temper/tests/support/account_move.rs:71:    let rows = value["accounts"]["party"].as_array().expect("holder's accounts");
+crates/temper/tests/support/account_move.rs:141:                    empty["accounts"]["party"].as_array().expect("A's accounts").is_empty(),
+crates/temper/tests/support/account_move.rs:166:                assert!(empty["accounts"]["party"].as_array().expect("A's accounts").is_empty(), "A holds nothing");
+crates/temper/tests/support/account_move.rs:290:    socket.write_all(format!("POST /api/accounts/oauth/token HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).expect("replay sent");
+crates/temper/tests/support/account_move_qa.rs:46:    for field in ["forges", "identities", "setup", "demo", "webhooks", "workers", "clients"] {
+crates/temper/tests/support/account_move_qa.rs:49:    value["engine"]["limits"]["overrides"]["accounts.move_deadline_ms"] = DEADLINE_MS.into();
+crates/temper/tests/support/account_move_qa.rs:219:    pub fn accounts(&self) -> serde_json::Value {
+crates/temper/tests/support/account_move_qa.rs:222:        serde_json::from_slice(&output.stdout).expect("accounts JSON")
+crates/temper/tests/support/account_move_qa.rs:228:            let value = self.accounts();
+crates/temper/tests/support/account_move_qa.rs:229:            let rows = value["accounts"]["party"].as_array().expect("party accounts");
+crates/temper/tests/support/account_move_qa.rs:244:        assert!(self.accounts()["accounts"]["party"].as_array().expect("accounts").is_empty(), "source holds nothing");
+crates/temper/tests/support/account_move_qa.rs:253:        let _ = self.accounts();
+crates/temper/tests/support/account_move_qa.rs:260:        let _ = self.child.wait();
+crates/temper/tests/support/account_move_qa.rs:291:            let _ = child.wait();
+crates/temper/tests/support/account_move_qa.rs:354:        self.b.child.wait().expect("B stopped");
+crates/temper/tests/support/account_move_qa.rs:413:    pub fn wait(&self) {
+crates/temper/tests/support/ctl.rs:371:    // A newly published referee action needs one more turn before the ring may wait.
+crates/temper/tests/support/ctl.rs:456:    /// completes, tolerating natural exit. Drain pipes, wait, reap and close as
+crates/temper/tests/support/ctl.rs:1041:        // Each wait keeps WITHIN, with one more WITHIN to drain after the last timeout.
+crates/temper/tests/support/ctl.rs:1106:    settings_call("change-settings", inventory, file, key)
+crates/temper/tests/support/ctl.rs:1110:    settings_call("propose-settings", inventory, file, key)
+crates/temper/tests/support/ctl.rs:1122:/// Write FILE for `change-settings`: the setting `ctl setting KIND N --json` read,
+crates/temper/tests/support/ctl.rs:1237:        calls.child = Some(completed(b"{\"accounts\":{}}"));
+crates/temper/tests/support/first_repository.rs:81:                            "delegation":{"kinds":[{"kind":"agent","number":2}],"tasks":4,"depth":2},
+crates/temper/tests/support/first_repository.rs:85:                call(b"wait", &json!({})),
+crates/temper/tests/support/first_repository.rs:211:/// The first repository has its own project; earlier demo tasks may precede its task tree.
+crates/temper/tests/support/first_repository.rs:241:        // forge-setup makes the repository a project of its own (tools.md 5.5).
+crates/temper/tests/support/first_repository.rs:327:    let forge = document["application"]["forges"]
+crates/temper/tests/support/first_repository.rs:329:        .expect("forges")
+crates/temper/tests/support/first_repository.rs:450:        delegation.contains(&format!("Delegated tasks: {}", evidence.change)),
+crates/temper/tests/configuration.rs:16:    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 12.into();
+crates/temper/tests/configuration.rs:42:        .max(engine.limits.core.tasks.hold_segments)
+crates/temper/tests/configuration.rs:43:        .max(engine.limits.core.tasks.authority_segments);
+crates/temper/tests/configuration.rs:73:        .max(engine.limits.core.tasks.hold_segments)
+crates/temper/tests/configuration.rs:74:        .max(engine.limits.core.tasks.authority_segments);
+crates/temper/tests/configuration.rs:78:    assert!(engine.limits.core.tasks.authority_grants <= AUTHORITY_ENTRIES);
+crates/temper/tests/configuration.rs:83:        "authority.segments":8,"tasks.hold_segments":8,"tasks.authority_segments":8,
+crates/temper/tests/configuration.rs:86:        "authority.grants":12,"tasks.authority_grants":12,"notes.scopes":15,
+crates/temper/tests/configuration.rs:87:        "tasks.authority_bytes":512,"tasks.batch":1
+crates/temper/tests/support/forge_land.rs:10:/// forge-setup's first repository goes into a project of its own, made after
+crates/temper/tests/support/forge_land.rs:77:/// Delegate, wait, then reply as an Open chat.
+crates/temper/tests/support/forge_land.rs:279:            // 'Change requested' plus wait already meets replied. A snapshot
+crates/temper/tests/support/forge_land.rs:313:    // the first box's delegate, wait and reply are turns 0 to 2, played there.
+crates/temper/tests/support/forge_land.rs:362:    let tasks =
+crates/temper/tests/support/forge_land.rs:364:    (tasks_at, tasks)
+crates/temper/tests/support/forge_land.rs:369:    let mut tasks = Vec::new();
+crates/temper/tests/support/forge_land.rs:383:            tasks.push(row["chip"]["task"].as_u64().expect("task number"));
+crates/temper/tests/support/forge_land.rs:387:    tasks.sort_unstable();
+crates/temper/tests/support/forge_land.rs:388:    assert_eq!(tasks, expected, "exact ended delegates of this parent");
+crates/temper/tests/support/forge_land.rs:389:    tasks
+crates/temper/tests/support/forge_land.rs:392:    assert_eq!(value["live"], serde_json::json!([]), "no live tasks in this query: {value}");
+crates/temper/tests/support/forge_land.rs:393:    assert!(value["live_after"].is_null(), "all live tasks read");
+crates/temper/tests/support/forge_land.rs:395:/// A project's live roots read: `tasks --project P` without `--ended`.
+crates/temper/tests/support/forge_land.rs:397:    assert_eq!(value["tasks"]["rows"], serde_json::json!([]), "no live root tasks: {value}");
+crates/temper/tests/support/forge_land.rs:398:    assert_eq!(value["tasks"]["more"], false, "all live root tasks read: {value}");
+crates/temper/tests/support/forge_land.rs:504:        // first-repository story, wait for the chat's initial reply first.
+crates/temper/tests/support/forge_land.rs:640:        let forge = offered["forges"]
+crates/temper/tests/support/forge_land.rs:657:            made["forges"].as_array().expect("forges rows").iter().find(|row| row["number"] == 3).expect("forge 3");
+crates/temper/tests/support/forge_land.rs:676:    let stdout = String::from_utf8_lossy(&calls.last().expect("forges read").stdout);
+crates/temper/tests/support/forge_land.rs:680:    assert!(user.is_some_and(|user| user != 0), "{run}: forges row: {stdout}; box: {stderr}");
+crates/temper/tests/support/forge_land.rs:721:    value["engine"]["limits"]["overrides"]["accounts.sign_in_deadline_ms"] = 600_000.into();
+crates/temper/tests/support/forge_land.rs:723:    value["application"]["forges"]
+crates/temper/tests/support/forge_land.rs:725:        .expect("forges")
+crates/temper/tests/support/forge_land.rs:870:    pub tasks: LiveTasks,
+crates/temper/tests/support/forge_land.rs:1009:            child.wait().expect("reap oracle command");
+crates/temper/tests/support/forge_land.rs:1054:/// The live root task numbers of a `tasks --project P --json` read, whole.
+crates/temper/tests/support/forge_land.rs:1056:    require(read["tasks"]["more"] == false, "whole live root tasks read")?;
+crates/temper/tests/support/forge_land.rs:1057:    read["tasks"]["rows"]
+crates/temper/tests/support/forge_land.rs:1072:        &format!("live root tasks this sitting left: {extra:?}; earlier live root tasks missing: {missing:?}"),
+crates/temper/tests/support/forge_land.rs:1084:    pub tasks: Option<LiveTasks>,
+crates/temper/tests/support/forge_land.rs:1204:    tasks: LiveTasks,
+crates/temper/tests/support/forge_land.rs:1239:            self.queue(&["task", "list", "--project", &self.tasks.project.to_string(), "--json"]);
+crates/temper/tests/support/forge_land.rs:1244:        let chat = self.tasks.chat.to_string();
+crates/temper/tests/support/forge_land.rs:1245:        let change = self.tasks.change.to_string();
+crates/temper/tests/support/forge_land.rs:1246:        let project = self.tasks.project.to_string();
+crates/temper/tests/support/forge_land.rs:1268:                self.tasks.chat = last["outcome"]["done"]["owner"]["created"]["first"]
+crates/temper/tests/support/forge_land.rs:1289:                        self.tasks.change,
+crates/temper/tests/support/forge_land.rs:1333:            document["application"]["forges"]
+crates/temper/tests/support/forge_land.rs:1335:                .ok_or("forges missing")?
+crates/temper/tests/support/forge_land.rs:1354:                self.tasks.project = kept_project(self.plan.client, &me, &pulls)?;
+crates/temper/tests/support/forge_land.rs:1356:                let forges = live_json(&calls.ends()[5])?;
+crates/temper/tests/support/forge_land.rs:1357:                let forge = forges["forges"]
+crates/temper/tests/support/forge_land.rs:1359:                    .ok_or("forges missing")?
+crates/temper/tests/support/forge_land.rs:1368:                self.tasks.project = live_json(&calls.ends()[7])?["projects"]
+crates/temper/tests/support/forge_land.rs:1381:                self.queue(&["task", "list", "--project", &self.tasks.project.to_string(), "--json"]);
+crates/temper/tests/support/forge_land.rs:1447:                &self.tasks.chat.to_string(),
+crates/temper/tests/support/forge_land.rs:1458:            self.tasks.change = delegates[0];
+crates/temper/tests/support/forge_land.rs:1461:                self.tasks.change, self.tasks.chat, self.tasks.project
+crates/temper/tests/support/forge_land.rs:1469:        let chat = self.tasks.chat.to_string();
+crates/temper/tests/support/forge_land.rs:1470:        let change = self.tasks.change.to_string();
+crates/temper/tests/support/forge_land.rs:1471:        let project = self.tasks.project.to_string();
+crates/temper/tests/support/forge_land.rs:1523:        let children = last["tasks"]["rows"]
+crates/temper/tests/support/forge_land.rs:1533:            self.tasks.change,
+crates/temper/tests/support/forge_land.rs:1556:        let page = live_change_page(client_address(calls)?, self.plan.client, self.tasks.change);
+crates/temper/tests/support/forge_land.rs:1559:        for (offset, tasks) in delegates.iter_mut().enumerate() {
+crates/temper/tests/support/forge_land.rs:1565:            *tasks = ended["rows"]
+crates/temper/tests/support/forge_land.rs:1571:            tasks.sort_unstable();
+crates/temper/tests/support/forge_land.rs:1573:        require(delegates[0].contains(&self.tasks.change), "change task belongs to the chat that called change")?;
+crates/temper/tests/support/forge_land.rs:1575:        let mut tasks = vec![self.tasks.chat, self.tasks.change];
+crates/temper/tests/support/forge_land.rs:1576:        tasks.extend(&delegates[1]);
+crates/temper/tests/support/forge_land.rs:1577:        tasks.sort_unstable();
+crates/temper/tests/support/forge_land.rs:1578:        tasks.dedup();
+crates/temper/tests/support/forge_land.rs:1579:        let completions = super::live::ctl_completions(self.plan.client, &tasks)?;
+crates/temper/tests/support/forge_land.rs:1583:            self.tasks.chat, self.tasks.change
+crates/temper/tests/support/forge_land.rs:1596:            tasks: self.tasks.clone(),
+crates/temper/tests/support/forge_land.rs:1608:        self.queue(&["task", "show", &self.tasks.chat.to_string(), "--json"]);
+crates/temper/tests/support/forge_land.rs:1612:            &self.tasks.project.to_string(),
+crates/temper/tests/support/forge_land.rs:1614:            &self.tasks.chat.to_string(),
+crates/temper/tests/support/forge_land.rs:1624:        let change = self.tasks.change.to_string();
+crates/temper/tests/support/forge_land.rs:1649:        let chat = self.tasks.chat.to_string();
+crates/temper/tests/support/forge_land.rs:1650:        let change = self.tasks.change.to_string();
+crates/temper/tests/support/forge_land.rs:1651:        let project = self.tasks.project.to_string();
+crates/temper/tests/support/forge_land.rs:1754:            let not_yet = self.arguments.get(index).is_some_and(|args| args.first().is_some_and(|arg| arg == "wait"))
+crates/temper/tests/support/forge_land.rs:1951:        tasks: plan.tasks.clone().unwrap_or_default(),
+crates/temper/tests/support/running_revision.rs:1://! client/tools.md, 11.4: two live tasks keep their charter until an owner moves them.
+crates/temper/tests/support/running_revision.rs:32:                        "authority":{"tools":0,"grants":[],"delegation":{"kinds":[],"tasks":0,"depth":0},
+crates/temper/tests/support/running_revision.rs:36:                call(b"wait", &json!({})),
+crates/temper/tests/support/running_revision.rs:41:            turns: Box::new([call(b"wait", &json!({})), call(b"wait", &json!({}))]),
+crates/temper/tests/support/running_revision.rs:92:    assert_eq!(calls[11].stdout, format!("moved 2 tasks to revision {newest}\n").as_bytes());
+crates/temper/tests/support/running_revision.rs:94:    // Both tasks are parked again, so this count includes two distinct delegate runs.
+crates/temper/tests/fake_backends/walk/program_here.rs:8:    let accounts = ctl::json(call);
+crates/temper/tests/fake_backends/walk/program_here.rs:9:    let account = accounts["accounts"]["party"]
+crates/temper/tests/fake_backends/walk/program_here.rs:11:        .expect("accounts")
+crates/temper/tests/fake_backends/walk/program_here.rs:26:    let accounts = ctl::json(call);
+crates/temper/tests/fake_backends/walk/program_here.rs:27:    let host = accounts["accounts"]["program_hosts"]
+crates/temper/tests/fake_backends/walk/program_here.rs:62:                let [.., declared, accounts] = seen else { panic!("program declaration and account read") };
+crates/temper/tests/fake_backends/walk/program_here.rs:64:                program_account(accounts);
+crates/temper/tests/fake_backends/walk/program_here.rs:71:                let [.., accounts, _forges, _login] = seen else { panic!("declared account before login") };
+crates/temper/tests/fake_backends/walk/program_here.rs:72:                let account = program_account(accounts).to_string();
+crates/temper/tests/fake_backends/walk/program_here.rs:83:    assert_program_usable(seen.last().expect("accounts after login"));
+crates/temper/tests/fake_backends/walk/here_key.rs:5:    let [model, forges] = seen else { panic!("welcome model and forge reads") };
+crates/temper/tests/fake_backends/walk/here_key.rs:7:    let forge = super::forge_number(forges, 3);
+crates/temper/tests/fake_backends/walk/here_key.rs:15:    // forge-setup emits a progress document before its final adoption document.
+crates/temper/tests/fake_backends/walk/here_key.rs:28:    let [.., forges, accounts] = seen else { panic!("ready reads") };
+crates/temper/tests/fake_backends/walk/here_key.rs:29:    let forge = super::forge_number(forges, 3);
+crates/temper/tests/fake_backends/walk/here_key.rs:34:    assert!(usable(accounts), "the welcome reaches Ready");
+crates/temper/tests/support/person.rs:80:/// The configured first owner adds a deployment key through the accounts page.
+crates/temper/tests/support/person.rs:123:/// Observe a ctl-started sign-in through the same person's served accounts page.
+crates/temper/tests/support/person.rs:204:/// The first run delegates and lands without choosing a model or answering its wait.
+crates/temper/tests/support/person.rs:421:                Step::See { find: Find::named(Role::Button, b"Use deployment accounts"), within: START_WITHIN },
+crates/temper/tests/support/person.rs:422:                Step::Press { find: Find::named(Role::Button, b"Use deployment accounts") },
+crates/temper/tests/support/person.rs:644:                assert!(!face.allows(cue, &skein_ui::Act::Press), "suggestions wait for the start's answer");
+crates/temper/tests/support/program_login.rs:44:    for name in [".claude", "state", "worker-root", "worker.secret", "secrets", "accounts", "charters"] {
+crates/temper/tests/support/parent.rs:22:            let _reaped = child.wait();
+crates/temper/tests/support/parent.rs:37:pub fn wait(mut ready: impl FnMut() -> bool) {
+crates/temper/tests/support/mod.rs:42:/// Two equal listeners fail temper-forge-setup's `check.rs:112`.
+crates/temper/tests/support/mod.rs:129:    for name in ["accounts", "secrets", "state"] {
+crates/temper/tests/fake_backends/walk/chatgpt.rs:7:    acts.push(accounts());
+crates/temper/tests/fake_backends/walk/chatgpt.rs:12:        let provider = document["accounts"]["deployment_facts"]["providers"]
+crates/temper/tests/fake_backends/walk/chatgpt.rs:33:    assert!(authorize.path.starts_with("/api/accounts/authorize?"));
+crates/temper/tests/box_listeners.rs:66:    child.wait().expect("box reaped");
+crates/temper/tests/fake_backends/walk/github.rs:26:    assert!(manifest.path.starts_with("/forges/2/github/manifest?"));
+crates/temper/tests/fake_backends/walk/github.rs:28:    assert!(convert.path.starts_with("/forges/2/github/redirect?"));
+crates/temper/tests/fake_backends/walk/github.rs:30:    assert!(setup.path.starts_with("/forges/2/github/setup?"));
+crates/temper/tests/fake_backends/walk/github.rs:39:            accounts(),
+crates/temper/tests/fake_backends/walk/github.rs:40:            forges(),
+crates/temper/tests/fake_backends/walk/github.rs:64:    assert!(setup.path.starts_with("/forges/2/github/setup?installation_id="));
+crates/temper/tests/fake_backends/walk/github.rs:70:        accounts(),
+crates/temper/tests/fake_backends/walk/github.rs:71:        forges(),
+crates/temper/tests/fake_backends/qa.rs:23:// Each live story signs in, then reads accounts.
+crates/temper/tests/fake_backends/qa.rs:181:    assert_eq!(outcome.calls.len(), CTL_CALLS, "sign-in and accounts completed");
+crates/temper/tests/fake_backends/qa.rs:185:    let _: Value = serde_json::from_slice(&outcome.calls[1].stdout).expect("accounts reached through the serve child");
+crates/temper/tests/fake_backends/qa.rs:272:    let github = row(&document["application"]["forges"], "number", &json!(GITHUB_FORGE));
+crates/temper/tests/fake_backends/qa.rs:468:        value["application"]["forges"].as_array_mut().expect("forges").retain(|forge| forge["number"] != GITHUB_FORGE);
+crates/temper/tests/fake_backends/walk.rs:110:    document["accounts"]["usable"].as_bool().expect("account usability")
+crates/temper/tests/fake_backends/walk.rs:115:    let document = if document.get("met").is_some() { &document["forges"] } else { &document };
+crates/temper/tests/fake_backends/walk.rs:116:    document["forges"]
+crates/temper/tests/fake_backends/walk.rs:156:fn accounts() -> Act {
+crates/temper/tests/fake_backends/walk.rs:159:fn forges() -> Act {
+crates/temper/tests/fake_backends/walk.rs:167:        let connected = forge_number(seen.last().expect("settled forges"), 2);
+crates/temper/tests/fake_backends/walk.rs:210:    assert_eq!(ctl::json(waited)["met"], true, "chat replied before the wait ended");

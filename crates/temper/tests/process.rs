@@ -180,8 +180,8 @@ fn temper_ctl_settings() {
         scratch.path(),
         vec![
             Step::Run(Call::sign_in()),
-            Step::Run(Call::new(&["settings"])),
-            Step::Run(Call::new(&["settings", "--json"])),
+            Step::Run(Call::new(&["settings", "show"])),
+            Step::Run(Call::new(&["settings", "show", "--json"])),
         ],
     ));
     let [signed, text, json] = seen.calls.as_slice() else { panic!("sign-in and settings in text and JSON") };
@@ -206,9 +206,9 @@ fn temper_ctl_setting() {
         scratch.path(),
         vec![
             Step::Run(Call::sign_in()),
-            Step::Run(Call::new(&["settings", "--json"])),
-            Step::Run(Call::new(&["setting", "charter", "1"])),
-            Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+            Step::Run(Call::new(&["settings", "show", "--json"])),
+            Step::Run(Call::new(&["settings", "show", "charter", "1"])),
+            Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
         ],
     ));
     let [signed, inventory, text, json] = seen.calls.as_slice() else { panic!("sign-in and whole setting reads") };
@@ -232,11 +232,11 @@ fn temper_ctl_setting() {
 fn temper_ctl_revision() {
     use support::ctl::{Call, Step, Story};
     let scratch = ctl_scratch("ctl_revision");
-    let mut steps = vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["settings", "--json"]))];
+    let mut steps = vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["settings", "show", "--json"]))];
     for json in [false, true] {
         steps.push(Step::Then(Box::new(move |calls| {
             let revision = support::ctl::json(&calls[1])["newest"].as_u64().expect("newest revision").to_string();
-            let mut arguments = vec!["revision", &revision];
+            let mut arguments = vec!["revision", "show", &revision];
             if json {
                 arguments.push("--json");
             }
@@ -268,9 +268,9 @@ fn temper_ctl_revisions() {
         scratch.path(),
         vec![
             Step::Run(Call::sign_in()),
-            Step::Run(Call::new(&["settings", "--json"])),
-            Step::Run(Call::new(&["revisions"])),
-            Step::Run(Call::new(&["revisions", "--json"])),
+            Step::Run(Call::new(&["settings", "show", "--json"])),
+            Step::Run(Call::new(&["revision", "list"])),
+            Step::Run(Call::new(&["revision", "list", "--json"])),
         ],
     ));
     let [signed, inventory, text, json] = seen.calls.as_slice() else { panic!("sign-in and revision history reads") };
@@ -301,23 +301,23 @@ fn temper_ctl_change_settings() {
     let mut steps = vec![
         Step::Run(Call::sign_in()),
         Step::Run(Call::new(&["me", "--json"])),
-        Step::Run(Call::new(&["settings", "--json"])),
-        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
         Step::Then(Box::new(|calls| {
             let revision = support::ctl::json(&calls[2])["newest"].as_u64().expect("read revision").to_string();
-            Call::new(&["revision", &revision, "--json"])
+            Call::new(&["revision", "show", &revision, "--json"])
         })),
         Step::Then(Box::new(move |calls| {
             support::ctl::charter_change_file(&change_file, &calls[3], instructions);
             support::ctl::settings_change(&calls[2], &change_file, "owner-settings")
         })),
-        Step::Run(Call::new(&["setting", "charter", "1"])),
-        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "charter", "1"])),
+        Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
     ];
     for json in [false, true] {
         steps.push(Step::Then(Box::new(move |calls| {
             let revision = support::ctl::json(&calls[7])["revision"].as_u64().expect("changed revision").to_string();
-            let mut arguments = vec!["revision", &revision];
+            let mut arguments = vec!["revision", "show", &revision];
             if json {
                 arguments.push("--json");
             }
@@ -624,7 +624,7 @@ fn a_wait_past_its_timeout_exits_3() {
         vec![
             Step::Run(Call::sign_in()),
             Step::Run(Call::new(&["me", "--json"])),
-            Step::Run(Call::new(&["wait", "me", "--timeout", "1", "--json"])),
+            Step::Run(Call::new(&["me", "--until", "changed", "--timeout", "1", "--json"])),
         ],
     ));
     let [_, me, wait] = seen.calls.as_slice() else { panic!("three ctl ends") };
@@ -640,6 +640,7 @@ fn an_adopt_cut_by_a_signal_is_made_once() {
     let forgejo = support::forgejo::Throwaway::start(&scratch);
     support::configuration(scratch.path(), &forgejo.forge());
     let adopt = &[
+        "repository",
         "adopt",
         "--project",
         PROJECT,
@@ -1279,10 +1280,14 @@ fn an_imported_records_path_is_printed_as_file() {
     use support::forge_land::printed_command;
     let words = |words: &[&str]| words.iter().map(|word| (*word).to_owned()).collect::<Vec<_>>();
     assert_eq!(
-        printed_command(&words(&["import", "/held/record", "--key", "connect-plan"])),
-        words(&["import", "FILE", "--key", "connect-plan"])
+        printed_command(&words(&["account", "import", "/held/record", "--key", "connect-plan"])),
+        words(&["account", "import", "FILE", "--key", "connect-plan"])
     );
-    for kept in [&["accounts", "--json"][..], &["connect", "1", "--key", "connect-plan"], &["import"]] {
+    for kept in [
+        &["account", "list", "--json"][..],
+        &["account", "connect", "1", "--key", "connect-plan"],
+        &["account", "import"],
+    ] {
         assert_eq!(printed_command(&words(kept)), words(kept));
     }
 }
@@ -1399,7 +1404,7 @@ fn demo_then_forgejo_steps(root: &std::path::Path, task: support::first_reposito
     use support::ctl::{Call, Step};
     use support::first_repository;
     let mut steps = playground_end_steps("first");
-    steps.insert(5, Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "30s", "--json"])));
+    steps.insert(5, Step::Run(Call::new(&["task", "show", "1", "--until", "replied", "--timeout", "30s", "--json"])));
     // Keep the same signed-in client and box: skip the setup story's mark and sign-in.
     steps.extend(forgejo_setup_steps("first").into_iter().skip(2));
     steps.push(Step::Stderr(b"Playground: stopped\n"));
@@ -1694,8 +1699,8 @@ fn a_first_run_ctl_demo_start_answers_running_twice() {
         scratch.path(),
         vec![
             Step::Run(Call::sign_in()),
-            Step::Run(Call::new(&["demo-start", "--key", "first"])),
-            Step::Run(Call::new(&["demo-start", "--key", "second"])),
+            Step::Run(Call::new(&["playground", "start", "--key", "first"])),
+            Step::Run(Call::new(&["playground", "start", "--key", "second"])),
         ],
         BOX_DEADLINE,
         || (),
@@ -1813,28 +1818,37 @@ fn playground_end_steps(run: &str) -> Vec<support::ctl::Step> {
         steps.push(Step::Stderr(b"Playground: stopped\n"));
     }
     if first {
-        steps.push(Step::Run(Call::new(&["demo-start", "--key", "first"])));
+        steps.push(Step::Run(Call::new(&["playground", "start", "--key", "first"])));
     }
     steps.extend([
-        Step::Run(Call::new(&["wait", "forges", "--until", "settled", "--timeout", "30s", "--json"])),
-        Step::Run(Call::new(&["forges", "--json"])),
+        Step::Run(Call::new(&["forge", "list", "--until", "settled", "--timeout", "30s", "--json"])),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
     ]);
     if first {
         steps.extend([
-            Step::Run(Call::new(&["chat", "--project", "1", "--key", "chat", "Add a dark theme to widget", "--json"])),
-            Step::Run(Call::new(&["task", "1", "--json"])),
-            Step::Run(Call::new(&["accounts", "--json"])),
+            Step::Run(Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                "1",
+                "--key",
+                "chat",
+                "Add a dark theme to widget",
+                "--json",
+            ])),
+            Step::Run(Call::new(&["task", "show", "1", "--json"])),
+            Step::Run(Call::new(&["account", "list", "--json"])),
         ]);
     }
     if third {
         steps.extend([
-            Step::Run(Call::new(&["wait", "task", "1", "--until", "ended", "--timeout", "30s", "--json"])),
-            Step::Run(Call::new(&["task", "1", "--json"])),
-            Step::Run(Call::new(&["tasks", "--project", "1", "--label", "chat", "--mine", "--ended", "--json"])),
-            Step::Run(Call::new(&["accounts", "--json"])),
+            Step::Run(Call::new(&["task", "show", "1", "--until", "ended", "--timeout", "30s", "--json"])),
+            Step::Run(Call::new(&["task", "show", "1", "--json"])),
+            Step::Run(Call::new(&["task", "list", "--project", "1", "--label", "chat", "--mine", "--ended", "--json"])),
+            Step::Run(Call::new(&["account", "list", "--json"])),
             // Keep both refused starts, after observing the end without asking for it.
-            Step::Run(Call::new(&["demo-start", "--key", "second"])),
-            Step::Run(Call::new(&["demo-start", "--key", "third"])),
+            Step::Run(Call::new(&["playground", "start", "--key", "second"])),
+            Step::Run(Call::new(&["playground", "start", "--key", "third"])),
         ]);
     }
     steps
@@ -2049,7 +2063,7 @@ fn demo_bot(config: &std::path::Path, root: &std::path::Path) -> u64 {
     let address = document["application"]["clients"]["listener"]["socket"].as_str().expect("client address");
     support::write_private(&root.join("private/address"), format!("http://{address}\n").as_bytes());
     let private = root.join("private");
-    let call = support::ctl::Call::bare(&[private.to_str().expect("client path"), "forges"]);
+    let call = support::ctl::Call::bare(&[private.to_str().expect("client path"), "forge", "list"]);
     let ended = support::ctl::alone(root, call);
     assert_eq!(ended.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&ended.stderr));
     let stdout = String::from_utf8(ended.stdout).expect("forges row");
@@ -2657,6 +2671,7 @@ impl ClusterChatJudge {
                 Call::sign_in(),
                 support::cluster::settings_change(&self.settings),
                 Call::new(&[
+                    "account",
                     "add-key",
                     "1",
                     self.key.to_str().expect("LLM key path"),
@@ -2664,8 +2679,8 @@ impl ClusterChatJudge {
                     "--key",
                     "cluster-llm",
                 ]),
-                Call::new(&["wait", "accounts", "--until", "usable"]),
-                Call::new(&["chat", "--project", PROJECT, "--key", "first", "cluster-first-chat", "--json"]),
+                Call::new(&["account", "list", "--until", "usable"]),
+                Call::new(&["chat", "start", "--project", PROJECT, "--key", "first", "cluster-first-chat", "--json"]),
             ],
         );
         self.stage = ClusterChatStage::Created;
@@ -2674,7 +2689,16 @@ impl ClusterChatJudge {
         use support::ctl::{Call, PROJECT};
         self.queue(
             client,
-            vec![Call::new(&["chat", "--project", PROJECT, "--key", "second", "cluster-second-chat", "--json"])],
+            vec![Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                PROJECT,
+                "--key",
+                "second",
+                "cluster-second-chat",
+                "--json",
+            ])],
         );
         self.stage = ClusterChatStage::Created;
     }
@@ -2688,12 +2712,22 @@ impl ClusterChatJudge {
             self.stage,
             ClusterChatStage::Verifying | ClusterChatStage::FenceSnapshot | ClusterChatStage::FenceCheck
         ) {
-            vec![Call::new(&["task", task, "--activity", &temper_client_tools::limits::ROWS.to_string(), "--json"])]
+            vec![Call::new(&[
+                "task",
+                "show",
+                task,
+                "--activity",
+                &temper_client_tools::limits::ROWS.to_string(),
+                "--json",
+            ])]
         } else if matches!(self.stage, ClusterChatStage::Replied) {
             // The live reply watch returns a task; read.waiting() still checks its exact work and placement.
-            vec![Call::new(&["wait", "task", task, "--until", "replied", "--json"]), Call::new(&["accounts", "--json"])]
+            vec![
+                Call::new(&["task", "show", task, "--until", "replied", "--json"]),
+                Call::new(&["account", "list", "--json"]),
+            ]
         } else {
-            vec![Call::new(&["task", task, "--json"]), Call::new(&["accounts", "--json"])]
+            vec![Call::new(&["task", "show", task, "--json"]), Call::new(&["account", "list", "--json"])]
         };
         self.queue(client, calls);
     }
@@ -2727,7 +2761,7 @@ impl ClusterChatJudge {
         read.rows.extend(page["rows"].as_array().expect("activity rows").iter().cloned());
         let task = self.current();
         if let Some(before) = page["before"]["value"].as_str() {
-            self.queue(client, vec![Call::new(&["activity", task, "--before", before, "--json"])]);
+            self.queue(client, vec![Call::new(&["task", "activity", task, "--before", before, "--json"])]);
         } else {
             let calls: Vec<_> = read
                 .rows
@@ -2736,7 +2770,7 @@ impl ClusterChatJudge {
                     let turn = row.pointer("/event/owner/source/line/turn")?;
                     let attempt = turn["attempt"].as_u64().expect("turn attempt");
                     let number = turn["turn"].as_u64().expect("turn number");
-                    Some(Call::new(&["turn", task, &format!("{attempt}.{number}"), "--json"]))
+                    Some(Call::new(&["task", "turn", task, &format!("{attempt}.{number}"), "--json"]))
                 })
                 .collect();
             if calls.is_empty() {
@@ -2847,6 +2881,7 @@ impl ClusterChatJudge {
                 client,
                 vec![support::ctl::Call::new(&[
                     "chat",
+                    "start",
                     "--project",
                     support::ctl::PROJECT,
                     "--key",
@@ -2912,7 +2947,7 @@ impl ClusterChatJudge {
                 self.queue(
                     client,
                     vec![
-                        support::ctl::Call::new(&["wait", "task", self.current(), "--until", "ended"]),
+                        support::ctl::Call::new(&["task", "show", self.current(), "--until", "ended"]),
                         support::ctl::Call::new(&["unknown"]),
                     ],
                 );
@@ -3058,8 +3093,8 @@ impl ClusterChatJudge {
                 continue;
             }
             self.checking.push_back(task.clone());
-            close.push(Call::new(&["close", task, "--key", &format!("close-{task}")]));
-            close.push(Call::new(&["wait", "task", task, "--until", "ended"]));
+            close.push(Call::new(&["chat", "close", task, "--key", &format!("close-{task}")]));
+            close.push(Call::new(&["task", "show", task, "--until", "ended"]));
         }
         self.queue(client, close);
         self.stage = ClusterChatStage::Closed;
@@ -3630,8 +3665,8 @@ fn ctl_settings_member_setup(scratch: &std::path::Path) -> Vec<support::ctl::Ste
         Step::Run(Call::new(&["me", "--json"])),
         Step::Member { scratch: scratch.into(), directory: "member" },
         Step::Run(Call::new(&["me", "--json"]).in_directory("member")),
-        Step::Run(Call::new(&["settings", "--json"])),
-        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
         Step::Then(Box::new(move |calls| {
             support::ctl::charter_change_file(&file, &calls[4], "Settings proposed by the member.");
             ctl_member_proposal_call(&calls[3], &file, "member-settings")
@@ -3641,7 +3676,8 @@ fn ctl_settings_member_setup(scratch: &std::path::Path) -> Vec<support::ctl::Ste
 fn ctl_member_proposal_call(inventory: &support::Ended, file: &std::path::Path, key: &str) -> support::ctl::Call {
     let revision = support::ctl::json(inventory)["newest"].as_u64().expect("newest revision");
     support::ctl::Call::new(&[
-        "propose-settings",
+        "settings",
+        "propose",
         file.to_str().expect("FILE path"),
         "Please review member settings",
         "--against",
@@ -3666,9 +3702,10 @@ fn temper_ctl_propose_settings() {
     let mut steps = ctl_settings_member_setup(scratch.path());
     let file = scratch.path().join("proposed.json");
     steps.push(Step::Then(Box::new(move |calls| ctl_member_proposal_call(&calls[3], &file, "member-settings"))));
-    steps.push(Step::Run(Call::new(&["settings", "--json"])));
-    steps
-        .push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]))));
+    steps.push(Step::Run(Call::new(&["settings", "show", "--json"])));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["proposal", "show", &support::ctl::proposal_key(&calls[5]), "--json"])
+    })));
     let seen = support::ctl::run(Story::new(scratch.path(), steps));
     ctl_assert_success(&seen.calls);
     let calls = &seen.calls;
@@ -3687,16 +3724,17 @@ fn temper_ctl_proposal() {
     use support::ctl::{Call, Step, Story};
     let scratch = ctl_scratch("ctl_proposal_m2");
     let mut steps = ctl_settings_member_setup(scratch.path());
-    steps.push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5])]))));
-    steps
-        .push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]))));
+    steps.push(Step::Then(Box::new(|calls| Call::new(&["proposal", "show", &support::ctl::proposal_key(&calls[5])]))));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["proposal", "show", &support::ctl::proposal_key(&calls[5]), "--json"])
+    })));
     let direct = scratch.path().join("direct.json");
     steps.push(Step::Then(Box::new(move |calls| {
         support::ctl::charter_change_file(&direct, &calls[4], "Owner supersedes the member proposal.");
         support::ctl::settings_change(&calls[3], &direct, "supersede-settings")
     })));
     steps.push(Step::Then(Box::new(|calls| {
-        Call::new(&["proposal", &support::ctl::proposal_key(&calls[5]), "--json"]).in_directory("member")
+        Call::new(&["proposal", "show", &support::ctl::proposal_key(&calls[5]), "--json"]).in_directory("member")
     })));
     let seen = support::ctl::run(Story::new(scratch.path(), steps));
     ctl_assert_success(&seen.calls);
@@ -3724,12 +3762,20 @@ fn temper_ctl_decide_settings() {
         ctl_member_proposal_call(&calls[3], &sibling, "sibling-settings").in_directory("client")
     })));
     steps.push(Step::Then(Box::new(|calls| {
-        Call::new(&["decide", &support::ctl::proposal_key(&calls[5]), "accept", "--key", "member-forbidden"])
-            .in_directory("member")
+        Call::new(&[
+            "proposal",
+            "decide",
+            &support::ctl::proposal_key(&calls[5]),
+            "accept",
+            "--key",
+            "member-forbidden",
+        ])
+        .in_directory("member")
     })));
-    steps.push(Step::Run(Call::new(&["settings", "--json"])));
+    steps.push(Step::Run(Call::new(&["settings", "show", "--json"])));
     steps.push(Step::Then(Box::new(|calls| {
         Call::new(&[
+            "proposal",
             "decide",
             &support::ctl::proposal_key(&calls[5]),
             "accept",
@@ -3739,17 +3785,19 @@ fn temper_ctl_decide_settings() {
             "owner-accept",
         ])
     })));
-    steps.push(Step::Run(Call::new(&["settings", "--json"])));
+    steps.push(Step::Run(Call::new(&["settings", "show", "--json"])));
     steps.push(Step::Then(Box::new(|calls| {
         Call::new(&[
             "revision",
+            "show",
             &support::ctl::json(&calls[10])["newest"].as_u64().expect("newest").to_string(),
             "--json",
         ])
     })));
-    steps.push(Step::Run(Call::new(&["setting", "charter", "1", "--json"])));
-    steps
-        .push(Step::Then(Box::new(|calls| Call::new(&["proposal", &support::ctl::proposal_key(&calls[6]), "--json"]))));
+    steps.push(Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["proposal", "show", &support::ctl::proposal_key(&calls[6]), "--json"])
+    })));
     let seen = support::ctl::run(Story::new(scratch.path(), steps));
     for (index, call) in seen.calls.iter().enumerate() {
         if index == 7 {
@@ -3780,10 +3828,11 @@ fn temper_ctl_move_to_newest() {
     let steps = vec![
         Step::Mark("An owner reads the newest settings revision"),
         Step::Run(Call::sign_in()),
-        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
         Step::Mark("A ctl-created agent chat records the newest settings revision"),
         Step::Run(Call::new(&[
             "chat",
+            "start",
             "--project",
             "1",
             "--key",
@@ -3794,15 +3843,16 @@ fn temper_ctl_move_to_newest() {
         Step::Then(Box::new(|calls| {
             let created = support::ctl::json(&calls[2]);
             let task = created["outcome"]["done"]["owner"]["created"]["first"].as_u64().expect("created chat");
-            Call::new(&["task", &task.to_string()])
+            Call::new(&["task", "show", &task.to_string()])
         })),
         Step::Mark("Moving the newest revision answers no tasks moved or left behind"),
         Step::Then(Box::new(|calls| {
-            Call::new(&["move-to-newest", &support::ctl::newest(&calls[1]).to_string(), "--key", "move-newest"])
+            Call::new(&["revision", "advance", &support::ctl::newest(&calls[1]).to_string(), "--key", "move-newest"])
         })),
         Step::Then(Box::new(|calls| {
             Call::new(&[
-                "move-to-newest",
+                "revision",
+                "advance",
                 &support::ctl::newest(&calls[1]).to_string(),
                 "--key",
                 "move-newest-json",
@@ -3811,7 +3861,13 @@ fn temper_ctl_move_to_newest() {
         })),
         Step::Mark("A revision not held is unknown"),
         Step::Then(Box::new(|calls| {
-            Call::new(&["move-to-newest", &(support::ctl::newest(&calls[1]) + 5).to_string(), "--key", "move-unknown"])
+            Call::new(&[
+                "revision",
+                "advance",
+                &(support::ctl::newest(&calls[1]) + 5).to_string(),
+                "--key",
+                "move-unknown",
+            ])
         })),
     ];
     let seen = support::ctl::run(Story::new(scratch.path(), steps));
@@ -3847,34 +3903,49 @@ fn temper_ctl_running_work_keeps_its_revision() {
     let steps = vec![
         Step::Mark("An owner reads revision R and its delegate charter"),
         Step::Run(Call::sign_in()),
-        Step::Run(Call::new(&["add-key", "1", key.to_str().expect("key path"), "--key", "revision-account"])),
-        Step::Run(Call::new(&["settings", "--json"])),
-        Step::Run(Call::new(&["setting", "charter", "2", "--json"])),
+        Step::Run(Call::new(&[
+            "account",
+            "add-key",
+            "1",
+            key.to_str().expect("key path"),
+            "--key",
+            "revision-account",
+        ])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "charter", "2", "--json"])),
         Step::Mark("A chat delegates one task, and both park under R"),
-        Step::Run(Call::new(&["chat", "--project", "1", "--key", "revision-chat", "@revision-chat Delegate and wait"])),
-        Step::Until(Call::new(&["task", "2", "--json"]), running_revision::PARKED_DELEGATE),
-        Step::Until(Call::new(&["task", "1", "--json"]), b"\"phase\":\"idle\""),
+        Step::Run(Call::new(&[
+            "chat",
+            "start",
+            "--project",
+            "1",
+            "--key",
+            "revision-chat",
+            "@revision-chat Delegate and wait",
+        ])),
+        Step::Until(Call::new(&["task", "show", "2", "--json"]), running_revision::PARKED_DELEGATE),
+        Step::Until(Call::new(&["task", "show", "1", "--json"]), b"\"phase\":\"idle\""),
         Step::Mark("Changing the delegate charter makes R+1 while running work keeps R"),
         Step::Then(Box::new(move |calls| {
             assert_eq!(support::ctl::json(&calls[5])["chip"]["phase"], "idle");
             support::ctl::charter_change_file(&file, &calls[3], running_revision::INSTRUCTIONS);
             support::ctl::settings_change(&calls[2], &file, "revision-instructions")
         })),
-        Step::Run(Call::new(&["task", "2"])),
-        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["task", "show", "2"])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
         Step::Then(Box::new(|calls| {
-            Call::new(&["setting", "charter", "2", "--revision", &support::ctl::newest(&calls[2]).to_string()])
+            Call::new(&["settings", "show", "charter", "2", "--revision", &support::ctl::newest(&calls[2]).to_string()])
         })),
         Step::Mark("The owner moves both live tasks to R+1"),
         Step::Then(Box::new(|calls| {
-            Call::new(&["move-to-newest", &support::ctl::newest(&calls[2]).to_string(), "--key", "move-running"])
+            Call::new(&["revision", "advance", &support::ctl::newest(&calls[2]).to_string(), "--key", "move-running"])
         })),
         Step::Mark("A ctl message wakes the delegate, whose next run reads the new instructions"),
-        Step::Run(Call::new(&["message", "2", "Read your revised instructions", "--key", "wake-delegate"])),
-        Step::Run(Call::new(&["task", "2", "--json"])),
-        Step::Until(Call::new(&["task", "2", "--json"]), running_revision::PARKED_DELEGATE),
+        Step::Run(Call::new(&["task", "message", "2", "Read your revised instructions", "--key", "wake-delegate"])),
+        Step::Run(Call::new(&["task", "show", "2", "--json"])),
+        Step::Until(Call::new(&["task", "show", "2", "--json"]), running_revision::PARKED_DELEGATE),
         Step::Mark("Revision R is no longer held"),
-        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
     ];
     let seen = support::boxed::run_ctl_with_llm(
         scratch.path(),
@@ -3918,8 +3989,8 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
     let _cached = cache_forgejo_binaries(&paths[2]);
     let mut steps = vec![
         Step::Run(Call::sign_in()),
-        Step::Run(Call::new(&["forge-setup", "3", "--playground"])),
-        Step::Run(Call::new(&["forges", "--json"])),
+        Step::Run(Call::new(&["forge", "setup", "3", "--playground"])),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
     ];
     steps.extend(first_repository::playground_task_steps(scratch.path()));
     let ended = support::boxed::run_ctl_with_llm(

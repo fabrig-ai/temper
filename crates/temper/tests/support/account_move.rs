@@ -115,14 +115,18 @@ impl Referee<Process> for Move {
                     .to_vec();
                 let Process::Visitor(visitor) = &mut procs[VISITOR] else { panic!("browser") };
                 visitor.hand(&address);
-                queue(procs, A, &["wait", "accounts", "--until", "settled", "--json"]);
-                queue(procs, A, &["accounts", "--json"]);
+                queue(procs, A, &["account", "list", "--until", "settled", "--json"]);
+                queue(procs, A, &["account", "list", "--json"]);
                 self.phase = Phase::Account;
             }
             Phase::Account if calls(procs, A).ends().len() == 4 => {
                 self.number = account(&calls(procs, A).ends()[3])["number"].as_u64().expect("account number");
                 assert!(!self.file.exists(), "export creates a new file");
-                queue(procs, A, &["export", &self.number.to_string(), self.file.to_str().expect("file path")]);
+                queue(
+                    procs,
+                    A,
+                    &["account", "export", &self.number.to_string(), self.file.to_str().expect("file path")],
+                );
                 self.phase = Phase::Export;
             }
             Phase::Export if calls(procs, A).ends().len() == 5 => {
@@ -132,7 +136,7 @@ impl Referee<Process> for Move {
                 );
                 assert_eq!(fs::metadata(&self.file).expect("exported file").permissions().mode() & 0o777, 0o600);
                 self.record = fs::read(&self.file).expect("keep file bytes only for the stale-token check");
-                queue(procs, A, &["accounts", "--json"]);
+                queue(procs, A, &["account", "list", "--json"]);
                 self.phase = Phase::Withdrawn;
             }
             Phase::Withdrawn if calls(procs, A).ends().len() == 6 => {
@@ -143,7 +147,7 @@ impl Referee<Process> for Move {
                 );
                 let Process::Calls(b) = &mut procs[B + 1] else { panic!("B's calls") };
                 b.push(ctl::Step::Run(ctl::Call::sign_in()));
-                queue(procs, B, &["import", self.file.to_str().expect("file path"), "--key", "move-in"]);
+                queue(procs, B, &["account", "import", self.file.to_str().expect("file path"), "--key", "move-in"]);
                 self.phase = Phase::Import;
             }
             Phase::Import if calls(procs, B).ends().len() == 2 => {
@@ -156,8 +160,8 @@ impl Referee<Process> for Move {
                     .parse()
                     .expect("B's account number");
                 assert!(!self.file.exists(), "import removes the file");
-                queue(procs, B, &["wait", "accounts", "--until", "settled", "--json"]);
-                queue(procs, B, &["accounts", "--json"]);
+                queue(procs, B, &["account", "list", "--until", "settled", "--json"]);
+                queue(procs, B, &["account", "list", "--json"]);
                 self.phase = Phase::Empty;
             }
             Phase::Empty if calls(procs, A).ends().len() == 6 && calls(procs, B).ends().len() == 4 => {
@@ -222,7 +226,7 @@ fn move_account(a: &Path, b: &Path, file: &Path) -> (u64, Vec<u8>) {
             a,
             vec![
                 ctl::Step::Run(ctl::Call::sign_in()),
-                ctl::Step::Run(ctl::Call::new(&["connect", "1", "--key", "connect-move"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "connect", "1", "--key", "connect-move"])),
             ],
         ),
         (b, Vec::new()),
@@ -399,9 +403,10 @@ pub fn run(directory: &Path) {
             &b,
             vec![
                 ctl::Step::Run(ctl::Call::sign_in()),
-                ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])),
                 ctl::Step::Run(ctl::Call::new(&[
                     "chat",
+                    "start",
                     "--project",
                     "1",
                     "--model",
@@ -411,10 +416,10 @@ pub fn run(directory: &Path) {
                     "Hello",
                     "--json",
                 ])),
-                ctl::Step::Run(ctl::Call::new(&["wait", "task", "1", "--until", "replied", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--until", "replied", "--json"])),
                 // Stop holds the parked chat immediately, without a closing grace turn.
-                ctl::Step::Run(ctl::Call::new(&["stop", "1", "--json"])),
-                ctl::Step::Run(ctl::Call::new(&["wait", "task", "1", "--until", "held", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["task", "stop", "1", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--until", "held", "--json"])),
             ],
         ));
         for ended in &seen.calls {

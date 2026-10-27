@@ -111,8 +111,8 @@ fn first_landed_task_and_adoption_survive_a_box_restart_without_setup_replay() {
     stage_binaries(root);
     let mut steps = vec![
         Step::Run(Call::sign_in()),
-        Step::Run(Call::new(&["forge-setup", "3"])),
-        Step::Run(Call::new(&["forges", "--json"])),
+        Step::Run(Call::new(&["forge", "setup", "3"])),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
     ];
     steps.extend(first_repository::task_steps(root));
     let first = boxed::run_ctl_with_llm(
@@ -143,9 +143,9 @@ fn first_landed_task_and_adoption_survive_a_box_restart_without_setup_replay() {
         );
     }
     let mut steps = vec![
-        Step::Run(Call::new(&["wait", "forges", "--until", "settled", "--timeout", "60s"])),
-        Step::Run(Call::new(&["forges", "--json"])),
-        Step::Run(Call::new(&["forge-setup", "3"])),
+        Step::Run(Call::new(&["forge", "list", "--until", "settled", "--timeout", "60s"])),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
+        Step::Run(Call::new(&["forge", "setup", "3"])),
     ];
     steps.extend(first_repository::found_steps());
     let restarted = boxed::run_ctl_with_exits(

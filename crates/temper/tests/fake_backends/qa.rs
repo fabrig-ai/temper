@@ -148,7 +148,7 @@ impl Fixture {
             self.scratch.path(),
             self.fake_flags(),
             self.scratch.path(),
-            vec![ctl::Step::Run(ctl::Call::sign_in()), ctl::Step::Run(ctl::Call::new(&["accounts", "--json"]))],
+            vec![ctl::Step::Run(ctl::Call::sign_in()), ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"]))],
             WITHIN,
             check,
         )

@@ -174,15 +174,18 @@ impl Referee<Process> for Files {
                 let address = sign_in::authorization_address(&ended[1]).expect("fake authorization").to_vec();
                 let Process::Visitor(visitor) = &mut procs[3] else { panic!("visitor") };
                 visitor.hand(&address);
-                queue(procs, ctl::Call::new(&["wait", "accounts", "--until", "settled", "--json"]));
-                queue(procs, ctl::Call::new(&["accounts", "--json"]));
+                queue(procs, ctl::Call::new(&["account", "list", "--until", "settled", "--json"]));
+                queue(procs, ctl::Call::new(&["account", "list", "--json"]));
                 self.phase = Phase::Account;
             }
             Phase::Account if ended.len() == 4 => {
                 success(&ended[2]);
                 self.number = account(&ended[3])["number"].as_u64().expect("account number");
                 let file = self.directory.join("valid.move");
-                queue(procs, ctl::Call::new(&["export", &self.number.to_string(), file.to_str().expect("path")]));
+                queue(
+                    procs,
+                    ctl::Call::new(&["account", "export", &self.number.to_string(), file.to_str().expect("path")]),
+                );
                 self.phase = Phase::Export;
             }
             Phase::Export if ended.len() == 5 => {
@@ -190,14 +193,17 @@ impl Referee<Process> for Files {
                 let file = self.directory.join("valid.move");
                 let record = fs::read(&file).expect("one real export shared by all FILE probes");
                 self.probes = probes(&self.directory, &record);
-                queue(procs, ctl::Call::new(&["import", file.to_str().expect("path"), "--key", "qa-b-restore"]));
+                queue(
+                    procs,
+                    ctl::Call::new(&["account", "import", file.to_str().expect("path"), "--key", "qa-b-restore"]),
+                );
                 self.phase = Phase::Import;
             }
             Phase::Import if ended.len() == 6 => {
                 success(&ended[5]);
                 assert!(!self.directory.join("valid.move").exists(), "spent export removed");
-                queue(procs, ctl::Call::new(&["wait", "accounts", "--until", "usable", "--json"]));
-                queue(procs, ctl::Call::new(&["accounts", "--json"]));
+                queue(procs, ctl::Call::new(&["account", "list", "--until", "usable", "--json"]));
+                queue(procs, ctl::Call::new(&["account", "list", "--json"]));
                 self.phase = Phase::Ready;
             }
             Phase::Ready if ended.len() == 8 => {
@@ -293,15 +299,15 @@ impl Files {
         self.baseline = calls(procs).ends().len();
         let path = probe.file.to_str().expect("probe path");
         let call = if probe.export {
-            ctl::Call::new(&["export", &self.number.to_string(), path])
+            ctl::Call::new(&["account", "export", &self.number.to_string(), path])
         } else {
-            ctl::Call::new(&["import", path, "--key", "qa-b-refused"])
+            ctl::Call::new(&["account", "import", path, "--key", "qa-b-refused"])
         };
         queue(procs, call.clone());
         if probe.precheck {
             queue(procs, call.in_directory("absent-client"));
         }
-        queue(procs, ctl::Call::new(&["accounts", "--json"]));
+        queue(procs, ctl::Call::new(&["account", "list", "--json"]));
         self.phase = Phase::Probe;
     }
 }
@@ -330,7 +336,7 @@ pub fn files(directory: &Path) {
             root,
             vec![
                 ctl::Step::Run(ctl::Call::sign_in()),
-                ctl::Step::Run(ctl::Call::new(&["connect", "1", "--key", "qa-b-connect"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "connect", "1", "--key", "qa-b-connect"])),
             ],
             Some(&streams),
             None,
@@ -689,8 +695,8 @@ impl Referee<MovingProcess> for Moving {
                 let address = sign_in::authorization_address(&ended[1]).expect("fake authorization").to_vec();
                 let MovingProcess::Standard(Process::Visitor(visitor)) = &mut procs[3] else { panic!("visitor") };
                 visitor.hand(&address);
-                moving_queue(procs, &["wait", "accounts", "--until", "settled", "--json"]);
-                moving_queue(procs, &["accounts", "--json"]);
+                moving_queue(procs, &["account", "list", "--until", "settled", "--json"]);
+                moving_queue(procs, &["account", "list", "--json"]);
                 self.phase = MovingPhase::Account;
             }
             MovingPhase::Account if ended.len() == 4 => {
@@ -716,6 +722,7 @@ impl Referee<MovingProcess> for Moving {
                         procs,
                         &[
                             "chat",
+                            "start",
                             "--project",
                             "1",
                             "--model",
@@ -758,7 +765,7 @@ impl Referee<MovingProcess> for Moving {
                     && !viewer(procs, 4).has_account()
                     && !viewer(procs, 4).text(b"Moving to another deployment")
                 {
-                    moving_queue(procs, &["accounts", "--json"]);
+                    moving_queue(procs, &["account", "list", "--json"]);
                     self.phase = MovingPhase::Stop;
                 }
             }
@@ -862,7 +869,7 @@ pub fn terminal(directory: &Path) {
                 root,
                 vec![
                     ctl::Step::Run(ctl::Call::sign_in()),
-                    ctl::Step::Run(ctl::Call::new(&["connect", "1", "--key", "qa-b-connect"])),
+                    ctl::Step::Run(ctl::Call::new(&["account", "connect", "1", "--key", "qa-b-connect"])),
                 ],
                 Some(&streams),
                 None,

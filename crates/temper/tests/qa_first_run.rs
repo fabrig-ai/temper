@@ -95,7 +95,7 @@ fn qa_dormant_owned_forge_holds_its_port_before_any_setup() {
         scratch.path(),
         forge_land::deployment_flags(&dirs),
         scratch.path(),
-        vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["forges", "--json"]))],
+        vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["forge", "list", "--json"]))],
         Duration::from_secs(30),
         || {
             let address = forge_address(&dirs[0]);
@@ -125,21 +125,29 @@ fn qa_running_playground_ends_whole_when_owned_forge_connects_without_restart() 
     let (cached, sources) = forge_land::cache_forgejo_binaries(&dirs[2]);
     let steps = vec![
         Step::Run(Call::sign_in()),
-        Step::Run(Call::new(&["demo-start"])),
-        Step::Run(Call::new(&["chat", "--project", "1", "--key", "playground-chat", "Add CSV export to widget"])),
-        Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "20s"])),
-        Step::Run(Call::new(&["wait", "task", "2", "--until", "ended", "--timeout", "60s"])),
-        Step::Until(Call::new(&["chat", "1"]), b"CSV export is available"),
-        Step::Run(Call::new(&["forges", "--json"])),
-        Step::Run(Call::new(&["forge-setup", "3"])),
-        Step::Run(Call::new(&["wait", "forges", "--until", "settled", "--timeout", "180s"])),
-        Step::Run(Call::new(&["forges", "--json"])),
-        Step::Run(Call::new(&["accounts", "--json"])),
-        Step::Run(Call::new(&["wait", "task", "1", "--until", "ended", "--timeout", "20s"])),
-        Step::Run(Call::new(&["task", "1"])),
-        Step::Run(Call::new(&["demo-start"])),
-        Step::Run(Call::new(&["forges"])),
-        Step::Run(Call::new(&["task", "2"])),
+        Step::Run(Call::new(&["playground", "start"])),
+        Step::Run(Call::new(&[
+            "chat",
+            "start",
+            "--project",
+            "1",
+            "--key",
+            "playground-chat",
+            "Add CSV export to widget",
+        ])),
+        Step::Run(Call::new(&["task", "show", "1", "--until", "replied", "--timeout", "20s"])),
+        Step::Run(Call::new(&["task", "show", "2", "--until", "ended", "--timeout", "60s"])),
+        Step::Until(Call::new(&["chat", "show", "1"]), b"CSV export is available"),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
+        Step::Run(Call::new(&["forge", "setup", "3"])),
+        Step::Run(Call::new(&["forge", "list", "--until", "settled", "--timeout", "180s"])),
+        Step::Run(Call::new(&["forge", "list", "--json"])),
+        Step::Run(Call::new(&["account", "list", "--json"])),
+        Step::Run(Call::new(&["task", "show", "1", "--until", "ended", "--timeout", "20s"])),
+        Step::Run(Call::new(&["task", "show", "1"])),
+        Step::Run(Call::new(&["playground", "start"])),
+        Step::Run(Call::new(&["forge", "list"])),
+        Step::Run(Call::new(&["task", "show", "2"])),
     ];
     let expected = [(13, 2)];
     let outcome = boxed::run_ctl_with_exits(
@@ -258,19 +266,20 @@ fn bad_cached_release() -> String {
         scratch.path(),
         vec![
             Step::Run(Call::sign_in()),
-            Step::Run(Call::new(&["demo-start"])),
-            Step::Run(Call::new(&["forge-setup", "3"])),
-            Step::Run(Call::new(&["forges", "--json"])),
-            Step::Run(Call::new(&["demo-start"])),
+            Step::Run(Call::new(&["playground", "start"])),
+            Step::Run(Call::new(&["forge", "setup", "3"])),
+            Step::Run(Call::new(&["forge", "list", "--json"])),
+            Step::Run(Call::new(&["playground", "start"])),
             Step::Run(Call::new(&[
                 "chat",
+                "start",
                 "--project",
                 "1",
                 "--key",
                 "after-failed-setup",
                 "Add a dark theme to widget",
             ])),
-            Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "20s"])),
+            Step::Run(Call::new(&["task", "show", "1", "--until", "replied", "--timeout", "20s"])),
         ],
         Duration::from_secs(60),
         || {
@@ -307,7 +316,7 @@ fn parent_shutdown(signal: &str) {
     let dirs = paths(scratch.path());
     let _cached = forge_land::cache_forgejo_binaries(&dirs[2]);
     let mut steps = forge_land::forgejo_setup_steps("first");
-    steps.push(Step::Run(Call::new(&["demo-start"])));
+    steps.push(Step::Run(Call::new(&["playground", "start"])));
     let outcome = boxed::run_ctl_with_exits(
         scratch.path(),
         forge_land::deployment_flags(&dirs),

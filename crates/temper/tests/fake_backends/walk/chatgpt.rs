@@ -16,7 +16,7 @@ pub(super) fn run() {
             .find(|provider| provider["provider"] == 1)
             .expect("OpenAI offered");
         assert_eq!(provider["sign_in"], true);
-        Call::new(&["connect", "1", "--key", "walk-sign-in"])
+        Call::new(&["account", "connect", "1", "--key", "walk-sign-in"])
     })));
     acts.push(Act::Visit);
     acts.extend(first_chat());

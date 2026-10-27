@@ -21,7 +21,8 @@ fn refuses_file(case: &str, mode: u32, link: bool) {
     let ended = ctl::alone(
         scratch.path(),
         Call::new(&[
-            "forge-connect",
+            "forge",
+            "connect",
             "1",
             "github-app",
             "4242",

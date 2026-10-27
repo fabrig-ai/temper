@@ -235,9 +235,9 @@ impl Judge<'_> {
         self.checked = calls.ends().len();
         if self.phase == Phase::Running && now >= self.poll && calls.idle() {
             for arguments in [
-                &["accounts", "--json"][..],
-                &["tasks", "--project", "1", "--json"],
-                &["tasks", "--project", "1", "--ended", "--json"],
+                &["account", "list", "--json"][..],
+                &["task", "list", "--project", "1", "--json"],
+                &["task", "list", "--project", "1", "--ended", "--json"],
             ] {
                 calls.push(Step::Run(Call::new(arguments)));
             }
@@ -345,12 +345,12 @@ pub fn run(directory: &Path, forge: &Throwaway, instructions: &str, deadline: Du
             ctl_root,
             vec![
                 Step::Run(Call::sign_in()),
-                Step::Run(Call::new(&["connect", "1", "--key", "live-sign-in"])),
-                Step::Run(Call::new(&["wait", "accounts", "--until", "settled", "--json"])),
-                Step::Run(Call::new(&["accounts", "--json"])),
-                Step::Run(Call::new(&["settings", "--json"])),
-                Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
-                Step::Run(Call::new(&["setting", "template", "1", "--json"])),
+                Step::Run(Call::new(&["account", "connect", "1", "--key", "live-sign-in"])),
+                Step::Run(Call::new(&["account", "list", "--until", "settled", "--json"])),
+                Step::Run(Call::new(&["account", "list", "--json"])),
+                Step::Run(Call::new(&["settings", "show", "--json"])),
+                Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
+                Step::Run(Call::new(&["settings", "show", "template", "1", "--json"])),
                 Step::Then(Box::new(move |calls| {
                     let charter = super::ctl::json(&calls[5]);
                     let mut value = charter["value"].clone();
@@ -402,7 +402,7 @@ pub fn ctl_completions(client: &Path, tasks: &[u64]) -> Result<u32, String> {
         let task = task.to_string();
         let mut before = None::<String>;
         for page in 0..32 {
-            let mut args = vec!["activity", &task, "--limit", "32", "--json"];
+            let mut args = vec!["task", "activity", &task, "--limit", "32", "--json"];
             if let Some(before) = &before {
                 args.extend(["--before", before]);
             }

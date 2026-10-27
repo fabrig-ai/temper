@@ -56,7 +56,7 @@ impl Walk {
         let paste = self.key();
         Act::After(Box::new(move |_| {
             super::write(&paste, &std::fs::read(&source).expect("box's fake model key"));
-            Call::new(&["add-key", "1", path(&paste), "--deployment", "--key", "walk-model", "--json"])
+            Call::new(&["account", "add-key", "1", path(&paste), "--deployment", "--key", "walk-model", "--json"])
         }))
     }
 
@@ -154,13 +154,13 @@ fn githubs_own_app_and_a_key_reach_a_first_chat_on_the_fake_box() {
 }
 
 fn accounts() -> Act {
-    Act::Now(Call::new(&["accounts", "--json"]))
+    Act::Now(Call::new(&["account", "list", "--json"]))
 }
 fn forges() -> Act {
-    Act::Now(Call::new(&["forges", "--json"]))
+    Act::Now(Call::new(&["forge", "list", "--json"]))
 }
 fn wait_forges() -> Act {
-    Act::Now(Call::new(&["wait", "forges", "--until", "settled", "--json"]))
+    Act::Now(Call::new(&["forge", "list", "--until", "settled", "--json"]))
 }
 fn adopt_github() -> Act {
     Act::After(Box::new(|seen| {
@@ -172,6 +172,7 @@ fn adopt_github() -> Act {
         assert_eq!(installation["account"]["login"], "fake-person", "{installation}");
         assert_eq!(installation["stray"], false, "the come-back accepted the installation");
         Call::new(&[
+            "repository",
             "adopt",
             "--project",
             "1",
@@ -191,14 +192,25 @@ fn adopt_github() -> Act {
 }
 fn first_chat() -> Vec<Act> {
     vec![
-        Act::Now(Call::new(&["wait", "accounts", "--until", "usable", "--json"])),
+        Act::Now(Call::new(&["account", "list", "--until", "usable", "--json"])),
         Act::After(Box::new(|seen| {
             assert!(usable(seen.last().expect("usable account read")), "Ready has a usable account");
-            Call::new(&["chat", "--project", "1", "--model", "gpt-6-luna", "--key", "walk-chat", "Hello", "--json"])
+            Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                "1",
+                "--model",
+                "gpt-6-luna",
+                "--key",
+                "walk-chat",
+                "Hello",
+                "--json",
+            ])
         })),
-        Act::Now(Call::new(&["task", "1", "--json"])),
-        Act::Now(Call::new(&["wait", "task", "1", "--until", "replied", "--json"])),
-        Act::Now(Call::new(&["chat", "1", "--json"])),
+        Act::Now(Call::new(&["task", "show", "1", "--json"])),
+        Act::Now(Call::new(&["task", "show", "1", "--until", "replied", "--json"])),
+        Act::Now(Call::new(&["chat", "show", "1", "--json"])),
     ]
 }
 fn assert_reply(seen: &Seen) {

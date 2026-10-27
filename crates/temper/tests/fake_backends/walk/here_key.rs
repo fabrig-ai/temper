@@ -38,25 +38,36 @@ pub(super) fn assert_ready(seen: &[Ended]) {
 fn forgejo_here_and_a_key_reach_a_first_chat_on_the_fake_box() {
     let walk = Walk::owned("walk-here-key");
     let seen = walk.run(vec![
-        Act::Now(Call::new(&["accounts", "--json"])),
-        Act::Now(Call::new(&["forges", "--json"])),
+        Act::Now(Call::new(&["account", "list", "--json"])),
+        Act::Now(Call::new(&["forge", "list", "--json"])),
         Act::Mark("welcome preconditions"),
         Act::After(Box::new(|seen| {
             assert_offered(seen);
-            Call::new(&["forge-setup", "3", "--key", "walk-here", "--json"])
+            Call::new(&["forge", "setup", "3", "--key", "walk-here", "--json"])
         })),
         Act::Mark("owned forge adopted"),
         walk.add_key(),
-        Act::Now(Call::new(&["wait", "accounts", "--until", "usable", "--json"])),
-        Act::Now(Call::new(&["forges", "--json"])),
-        Act::Now(Call::new(&["accounts", "--json"])),
+        Act::Now(Call::new(&["account", "list", "--until", "usable", "--json"])),
+        Act::Now(Call::new(&["forge", "list", "--json"])),
+        Act::Now(Call::new(&["account", "list", "--json"])),
         Act::After(Box::new(|seen| {
             assert_ready(seen);
-            Call::new(&["chat", "--project", "hello", "--model", "gpt-6-luna", "--key", "walk-chat", "Hello", "--json"])
+            Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                "hello",
+                "--model",
+                "gpt-6-luna",
+                "--key",
+                "walk-chat",
+                "Hello",
+                "--json",
+            ])
         })),
         // No other task precedes this first chat in the fresh deployment.
-        Act::Now(Call::new(&["wait", "task", "1", "--until", "replied", "--json"])),
-        Act::Now(Call::new(&["chat", "1", "--json"])),
+        Act::Now(Call::new(&["task", "show", "1", "--until", "replied", "--json"])),
+        Act::Now(Call::new(&["chat", "show", "1", "--json"])),
         Act::Mark("first chat committed"),
     ]);
     assert_adopted(seen.answers.get(2).expect("setup adoption"));
