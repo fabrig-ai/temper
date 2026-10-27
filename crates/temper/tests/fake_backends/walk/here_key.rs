@@ -12,16 +12,17 @@ pub(super) fn assert_offered(seen: &[Ended]) {
 }
 
 pub(super) fn assert_adopted(call: &Ended) {
-    // forge-setup emits a progress document before its final adoption document.
+    // forge setup emits a progress document before its final adoption document.
     let mut answers = serde_json::Deserializer::from_slice(&call.stdout).into_iter::<serde_json::Value>();
     assert_eq!(answers.next().expect("setup progress").expect("progress JSON"), serde_json::json!({"setting_up":{}}));
     let adopted = answers.next().expect("adoption answer").expect("adoption JSON");
     assert!(answers.next().is_none(), "one progress and one final adoption");
-    assert_eq!(adopted["adopted"]["forge"], 3, "first repository adopted: {adopted}");
-    assert_eq!(adopted["adopted"]["owner"], "work");
-    assert_eq!(adopted["adopted"]["name"], "hello");
-    assert_eq!(adopted["adopted"]["role"], "owned");
-    assert_eq!(adopted["adopted"]["home"], true);
+    assert!(adopted["project"].as_u64().expect("setup project") > 0);
+    assert_eq!(adopted["outcome"]["adopted"]["forge"], 3, "first repository adopted: {adopted}");
+    assert_eq!(adopted["outcome"]["adopted"]["owner"], "work");
+    assert_eq!(adopted["outcome"]["adopted"]["name"], "hello");
+    assert_eq!(adopted["outcome"]["adopted"]["role"], "owned");
+    assert_eq!(adopted["outcome"]["adopted"]["home"], true);
 }
 
 pub(super) fn assert_ready(seen: &[Ended]) {
