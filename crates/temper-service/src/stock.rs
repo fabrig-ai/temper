@@ -150,6 +150,7 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
 }
 fn reviewer(llm: &jig_protocol_config::Llm) -> Charter {
     let mut value = charter(4, include_bytes!("stock/review.txt"), llm);
+    value.policy.tools = jig_domain_core::ToolFamilies::JIG.read;
     value.policy.modify = false;
     value.policy.agents = false;
     value
