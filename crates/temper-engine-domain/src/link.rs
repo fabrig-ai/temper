@@ -374,6 +374,7 @@ fn end(ending: &host::Ending) -> tasks::End {
                 host::Bound::History => tasks::Bound::History,
                 host::Bound::Window => tasks::Bound::Window,
                 host::Bound::Output => tasks::Bound::Output,
+                host::Bound::HostPart => tasks::Bound::HostPart,
             };
             tasks::End::Exceeded(tasks::Exceeded { bound, value: exceeded.value })
         }

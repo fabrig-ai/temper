@@ -167,7 +167,7 @@ fn stock_startup_requires_a_model_before_building_its_charters() {
 fn the_transition_keeps_the_documents_own_defaults() {
     let legacy = [
         br#"{"charters":[{
-            "number":1,"instructions":"charters/chat.txt","model":"small","alternatives":[],
+            "number":1,"tools":1023,"instructions":"charters/chat.txt","model":"small","alternatives":[],
             "hosts":"workers","waiting_ms":10000,"resume":true,"turns":8,"time_ms":120000,
             "reserve_turns":1,"reserve_time_ms":60000,"spend":20,"inspect":true,"modify":true,
             "shell":false,"agents":true,"call_timeout_ms":10000

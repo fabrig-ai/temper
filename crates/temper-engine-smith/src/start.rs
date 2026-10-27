@@ -163,7 +163,10 @@ pub fn charter(assignment: &engine::Assignment) -> run::Charter {
             },
             tools: run::charter::Tools { inspect: policy.inspect, modify: policy.modify, shell: policy.shell },
             agents: policy.agents,
-            host_tools: crate::calls::tools_for(policy.call_timeout, assignment.run.authority.tools),
+            host_tools: crate::calls::tools_for(
+                policy.call_timeout,
+                tasks::Tools(policy.tools.0 & assignment.run.authority.tools.0),
+            ),
         },
         outcome,
         budget: run::Budget { turns: policy.turns, spend: assignment.run.budget, time: policy.time },
