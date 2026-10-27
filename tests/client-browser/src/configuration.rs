@@ -43,11 +43,17 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
         project.as_object_mut().expect("seed").remove("roles");
     }
     // Admit stock policy 1 and its ten grants.
-    for (name, count) in
-        [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32), ("tasks.charters", 4)]
-    {
+    for (name, count) in [
+        ("core.policy_bytes", 4096),
+        ("authority.grants", 16),
+        ("tasks.authority_grants", 16),
+        ("notes.scopes", 32),
+        ("tasks.charters", 4),
+    ] {
         value["engine"]["limits"]["overrides"][name] = count.into();
     }
+    // A Create member owns stock's ten grants and four executors, plus its words.
+    value["engine"]["limits"]["overrides"]["people.amendment_bytes"] = 1024.into();
     let worker: serde_json::Value =
         serde_json::from_slice(jig_channel_world::fixtures::WORKER_DOCUMENT).expect("worker JSON");
     value["workers"] = worker["workers"].clone();

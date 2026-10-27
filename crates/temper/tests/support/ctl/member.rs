@@ -8,7 +8,9 @@ use std::path::Path;
 const KEY: client::Key = client::Key { asker: client::Asker::JIG, number: 1 };
 const PROJECT: u32 = 1;
 const ME: client::Handle = client::Handle { asker: client::Asker::JIG, number: 0 };
-const SEED: u64 = 713;
+// Independent setup clients need distinct operation-key streams.
+const MEMBER_SEED: u64 = 713;
+const PROJECT_SEED: u64 = 714;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
@@ -35,6 +37,9 @@ pub struct Member {
 }
 impl Member {
     pub fn new(root: Fd, base: &Path, owner: &Path, directory: &str) -> Self {
+        Self::with_seed(root, base, owner, directory, MEMBER_SEED)
+    }
+    fn with_seed(root: Fd, base: &Path, owner: &Path, directory: &str, seed: u64) -> Self {
         let address = std::fs::read(owner.join("address")).expect("fixture owner address");
         let host = std::str::from_utf8(&address)
             .expect("fixture address text")
@@ -48,10 +53,10 @@ impl Member {
         super::super::write_private(&member.join("address"), &address);
         let bounds = temper_client_shell_cli::limits::native();
         let mut shell = Shell::new(temper_client_shell_cli::limits::settings(engine, directory.as_bytes().into()));
-        shell.adopt(root, skein_shell::effective_user(), SEED);
+        shell.adopt(root, skein_shell::effective_user(), seed);
         Self {
             shell,
-            client: client::Client::new(&bounds.root.domain.client, SEED).expect("native client bounds"),
+            client: client::Client::new(&bounds.root.domain.client, seed).expect("native client bounds"),
             out: Queue::with_capacity(client::max_out(&bounds.root.domain.client)),
             owner: Some(token),
             made: None,
@@ -65,7 +70,7 @@ impl Member {
         }
     }
     pub fn project(root: Fd, base: &Path, owner: &Path, name: &'static str, number: u32) -> Self {
-        let mut host = Self::new(root, base, owner, "case-project");
+        let mut host = Self::with_seed(root, base, owner, "case-project", PROJECT_SEED);
         host.project = Some((name, number));
         host.key = client::Key { asker: client::Asker::JIG, number: 2 };
         host
