@@ -59,11 +59,7 @@ pub fn defaults(llm: &jig_protocol_config::Llm) -> Defaults {
 /// Checked stock construction lets startup refuse unrepresentable model-based budgets.
 pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     llm.models.first()?;
-    let mut charters = Box::new([
-        charter(1, include_bytes!("stock/chat.txt"), llm),
-        charter(2, include_bytes!("stock/coding.txt"), llm),
-        reviewer(llm),
-    ]);
+    let mut charters = Box::new([charter(1, include_bytes!("stock/chat.txt"), llm), producer(llm), reviewer(llm)]);
     // jig prices the costliest completion; one reserve turn plus one is 2C.
     // Its existing admission helper keeps the stock on that same rounding rule.
     let minimum_run = jig_domain_core::reserve_floor(&charters.first()?.policy)?;
@@ -147,6 +143,12 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
             call_timeout: Duration::from_millis(10_000),
         },
     }
+}
+fn producer(llm: &jig_protocol_config::Llm) -> Charter {
+    let mut value = charter(2, include_bytes!("stock/coding.txt"), llm);
+    let families = jig_domain_core::ToolFamilies::JIG;
+    value.policy.tools = authority::Tools(families.read.0 | families.message.0);
+    value
 }
 fn reviewer(llm: &jig_protocol_config::Llm) -> Charter {
     let mut value = charter(4, include_bytes!("stock/review.txt"), llm);
