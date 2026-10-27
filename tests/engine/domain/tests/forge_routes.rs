@@ -38,6 +38,8 @@ mod change_tool;
 
 #[path = "forge_routes/result.rs"]
 mod result;
+#[path = "forge_routes/landing.rs"]
+mod landing;
 
 #[path = "forge_routes/reviews.rs"]
 mod reviews;

@@ -853,7 +853,7 @@ pub fn parse(
         references(&mut forges, &mut identities, charter, jig, problems);
     }
     let landing = match landing_at {
-        Some(at) => landing::parse(document, at, jig, &bounds, problems),
+        Some(at) => landing::parse(document, at, jig, &bounds, forges.as_slice(), problems),
         None => None,
     };
     if !problems.is_empty() {

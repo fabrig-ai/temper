@@ -267,6 +267,22 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     let landing_bytes = Map::<u32, Box<[LandingRule]>>::worst_case(limits.authority.projects)?.checked_add(
         u64::from(limits.authority.projects).checked_add(1)?.checked_mul(u64::from(limits.journal.transcript_bytes))?,
     )?;
+    let landing_bytes = landing_bytes
+        .checked_add(Map::<u32, crate::ProjectLanding>::worst_case(limits.authority.projects)?)?
+        .checked_add(
+            u64::from(limits.authority.projects).checked_mul(
+                u64::from(limits.forge.repositories).checked_mul(
+                    u64::try_from(size_of::<crate::RepositoryChecks>()).ok()?.checked_add(
+                        u64::from(limits.forge.gates).checked_mul(
+                            u64::try_from(size_of::<crate::GateCheck>()).ok()?.checked_add(32 + 255)?.checked_add(
+                                u64::from(limits.forge.ignored_paths)
+                                    .checked_mul(16 + u64::from(limits.forge.name_bytes))?,
+                            )?,
+                        )?,
+                    )?,
+                )?,
+            )?,
+        )?;
     let permission_bytes = Map::<u32, Box<[people::PermissionRole]>>::worst_case(limits.authority.projects)?
         .checked_add(u64::from(limits.authority.projects).checked_mul(u64::from(limits.journal.transcript_bytes))?)?;
     let load_bytes = loads::worst_case(&limits.loads)?;
