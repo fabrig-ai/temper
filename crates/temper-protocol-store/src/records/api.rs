@@ -30,6 +30,7 @@ fn decode_check(value: w::Check) -> d::Check {
         w::Check::Failed => d::Check::Failed,
     }
 }
+#[expect(clippy::too_many_lines, reason = "one exhaustive durable write translation")]
 pub(super) fn encode_write(value: &d::Write) -> w::Write {
     match value {
         d::Write::Dispatch { workflow, branch, inputs } => {
