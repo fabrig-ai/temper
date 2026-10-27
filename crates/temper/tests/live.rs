@@ -1,4 +1,4 @@
-//! A person signs in with `ChatGPT`, then a real model answers and pushes a change.
+//! A person asks a real model to change a repository on the owned forge.
 pub mod support;
 use skein_lib::Duration;
 #[test]
@@ -39,19 +39,31 @@ fn ci_shown(page: &str, first: bool) {
 #[test]
 #[ignore = "live: a person's sitting, run by scripts/proof-live.sh forge-land"]
 fn a_person_asks_chatgpt_to_land_a_change_on_the_owned_forge() {
+    let account = support::forge_land::live_account();
+    owned_forge_landing(support::forge_land::LiveModel::ChatGpt { account: account.as_deref() });
+}
+
+/// domain/testing.md, 2.7 and protocol/credentials.md, 3: a held login used in place.
+#[test]
+#[ignore = "live: owner-run only, through scripts/proof-live.sh forge-land-claude"]
+fn a_person_asks_claude_code_to_land_a_change_on_the_owned_forge() {
+    let login = std::path::PathBuf::from(std::env::var_os("TEMPER_LIVE_CLAUDE").expect("held Claude Code login"));
+    owned_forge_landing(support::forge_land::LiveModel::ClaudeCode { login: &login });
+}
+
+fn owned_forge_landing(model: support::forge_land::LiveModel<'_>) {
     use std::{fs, os::unix::fs::PermissionsExt};
-    use support::forge_land::{self, Face, LivePlan};
+    use support::forge_land::{self, Face, LiveModel, LivePlan};
     let clock = skein_shell::Clock::new();
     let started = clock.now().now;
     let deadline = started.saturating_add(Duration::from_secs(2_400));
-    let account = forge_land::live_account();
-    let (store, kept) = forge_land::live_store(account.is_some());
+    let (store, kept) = forge_land::live_store(matches!(model, LiveModel::ChatGpt { account: Some(_) }));
     let scratch = support::Scratch::live();
     let paths = ["config", "data", "cache"].map(|name| store.join(name));
     let address = if kept {
         None
     } else {
-        let address = forge_land::live_deployment(&paths);
+        let address = forge_land::live_deployment(&paths, model);
         let _ = forge_land::cache_forgejo_binaries(&paths[2]);
         Some(address)
     };
@@ -75,7 +87,7 @@ fn a_person_asks_chatgpt_to_land_a_change_on_the_owned_forge() {
                     client: &client,
                     first,
                     kept,
-                    account: account.as_deref().filter(|_| first),
+                    model,
                     address: previous.as_ref().map(|before| before.address).or(address),
                     tasks: previous.as_ref().map(|before| before.tasks.clone()),
                     baseline: previous.as_ref().map(|before| &before.baseline),

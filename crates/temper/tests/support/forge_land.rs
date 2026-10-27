@@ -712,11 +712,24 @@ pub fn assert_cached_binary_unchanged(cached: &std::path::Path, source: &std::pa
     }
 }
 
-/// Init's shipped issuer, Responses endpoints and charter text, on the same
-/// three roots as the process story. Only sign-in and run deadlines grow.
+/// Init's shipped charters on the process story's three roots. The model
+/// choice changes only ordinary provider and program configuration.
 #[must_use]
-pub fn live_deployment(paths: &[PathBuf; 3]) -> std::net::SocketAddr {
+pub fn live_deployment(paths: &[PathBuf; 3], model: LiveModel<'_>) -> std::net::SocketAddr {
     initialize(paths);
+    if let LiveModel::ClaudeCode { .. } = model {
+        let executable = std::env::var_os("PATH")
+            .into_iter()
+            .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+            .filter(|directory| directory.is_absolute())
+            .map(|directory| directory.join("claude"))
+            .find(|path| {
+                fs::metadata(path)
+                    .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+            })
+            .expect("Claude Code must be installed on PATH");
+        configure_live_model(&paths[0], model, &executable);
+    }
     let path = paths[0].join("temper.json");
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("configuration")).expect("JSON");
     value["engine"]["limits"]["overrides"]["accounts.sign_in_deadline_ms"] = 600_000.into();
@@ -1023,8 +1036,10 @@ fn oracle_token(paths: &[PathBuf; 3], first: bool) -> String {
 
 /// Commands are admitted one at a time so a failure cannot start the next act.
 /// A fresh store's account comes from a person's sign-in, or from a held
-/// record moved in by `import`, as qa-live.md's 0b seed does (4.3).
-fn live_commands(fresh: bool, account: Option<&std::path::Path>) -> (Vec<Vec<String>>, usize) {
+/// record moved in by `import`, as qa-live.md's 0b seed does (4.3), or a
+/// held Claude Code directory declared and verified on the worker.
+#[must_use]
+pub fn live_commands(fresh: bool, model: LiveModel<'_>) -> (Vec<Vec<String>>, usize) {
     let mut commands = vec![vec!["sign-in", "-"]];
     if fresh {
         commands.extend([vec!["forges"], vec!["forges", "--json"], vec!["forge-setup", "3"]]);
@@ -1036,16 +1051,23 @@ fn live_commands(fresh: bool, account: Option<&std::path::Path>) -> (Vec<Vec<Str
         vec!["me", "--json"],
     ]);
     if fresh {
-        commands.extend(match account.map(|file| file.to_str().expect("held account path is UTF-8")) {
-            Some(file) => [
-                vec!["import", file, "--key", "connect-plan"],
-                vec!["wait", "accounts", "--until", "usable", "--timeout", "600s", "--json"],
-            ],
-            None => [
-                vec!["connect", "1", "--key", "connect-plan"],
-                vec!["wait", "accounts", "--until", "settled", "--timeout", "600s", "--json"],
-            ],
-        });
+        match model {
+            LiveModel::ChatGpt { account } => {
+                commands.extend(match account.map(|file| file.to_str().expect("held account path is UTF-8")) {
+                    Some(file) => [
+                        vec!["import", file, "--key", "connect-plan"],
+                        vec!["wait", "accounts", "--until", "usable", "--timeout", "600s", "--json"],
+                    ],
+                    None => [
+                        vec!["connect", "1", "--key", "connect-plan"],
+                        vec!["wait", "accounts", "--until", "settled", "--timeout", "600s", "--json"],
+                    ],
+                });
+            }
+            LiveModel::ClaudeCode { login } => {
+                commands.push(vec!["declare", "2", "claude_code", source_name(login), "--key", "live-program"]);
+            }
+        }
     }
     let account = commands.len();
     commands.push(vec!["accounts", "--json"]);
@@ -1074,19 +1096,156 @@ pub fn require_closed_roots(read: &serde_json::Value, before: &std::collections:
     )
 }
 
+/// The held source selects the same story's model, without copying a login.
+#[derive(Clone, Copy)]
+pub enum LiveModel<'a> {
+    ChatGpt { account: Option<&'a std::path::Path> },
+    ClaudeCode { login: &'a std::path::Path },
+}
+
+fn source_name(login: &std::path::Path) -> &str {
+    let name = login.file_name().and_then(|name| name.to_str()).expect("held login source name");
+    let _name = smith_host_domain::SourceName::new(name.as_bytes()).expect("valid held login source name");
+    name
+}
+
+impl LiveModel<'_> {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::ChatGpt { .. } => "gpt-6-luna",
+            Self::ClaudeCode { .. } => "sonnet",
+        }
+    }
+    const fn unavailable(self) -> &'static str {
+        match self {
+            Self::ChatGpt { .. } => KEPT_SIGN_IN_EXPIRED,
+            Self::ClaudeCode { .. } => "the held Claude Code login is not usable; stop and return it to its holder",
+        }
+    }
+    pub fn ready(self, value: &serde_json::Value) -> Result<(), String> {
+        match self {
+            Self::ChatGpt { .. } => super::live::ready_account(value),
+            Self::ClaudeCode { login } => {
+                let account = declared_program(value, source_name(login))?;
+                require(
+                    account["sources"].as_array().ok_or("account sources missing")?.iter().any(|source| {
+                        source["kind"] == "program" && source["name"] == source_name(login) && source["usable"] == true
+                    }),
+                    "held Claude Code source is not usable",
+                )?;
+                let hosts = value["accounts"]["program_hosts"].as_array().ok_or("program hosts missing")?;
+                require(
+                    hosts.iter().any(|host| {
+                        host["name"] == "worker"
+                            && host["connected"] == true
+                            && host["programs"].as_array().is_some_and(|programs| {
+                                programs.iter().any(|program| {
+                                    program["name"] == source_name(login) && program["state"] == "usable"
+                                })
+                            })
+                    }),
+                    "held Claude Code login is not usable on the worker",
+                )
+            }
+        }
+    }
+}
+
+fn declared_program<'a>(value: &'a serde_json::Value, name: &str) -> Result<&'a serde_json::Value, String> {
+    let accounts = value["accounts"]["party"].as_array().ok_or("person's accounts missing")?;
+    require(accounts.iter().all(|account| account["provider"] == 2), "only the Claude Code provider has an account")?;
+    accounts
+        .iter()
+        .find(|account| {
+            account["sources"].as_array().is_some_and(|sources| {
+                sources.iter().any(|source| source["kind"] == "program" && source["name"] == name)
+            })
+        })
+        .ok_or_else(|| "held Claude Code account missing".to_owned())
+}
+
+/// Verify the declared account number returned by ctl, then wait for the host.
+pub fn program_verification(login: &std::path::Path, accounts: &serde_json::Value) -> Result<Vec<Vec<String>>, String> {
+    let account = declared_program(accounts, source_name(login))?["number"]
+        .as_u64()
+        .ok_or("program account number missing")?
+        .to_string();
+    Ok([
+        vec!["verify", &account, "--source", "program", "--json"],
+        vec!["wait", "accounts", "--until", "usable", "--timeout", "600s", "--json"],
+        vec!["accounts", "--json"],
+    ]
+    .into_iter()
+    .map(|args| args.into_iter().map(str::to_owned).collect())
+    .collect())
+}
+
+/// Write the ordinary provider and agent configuration; inspect no login entry.
+/// A single program model makes both stock charters choose it at startup.
+pub fn configure_live_model(config: &std::path::Path, model: LiveModel<'_>, executable: &std::path::Path) {
+    let LiveModel::ClaudeCode { login } = model else { return };
+    let path = config.join("temper.json");
+    let agent_path = config.join("agent.json");
+    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("deployment")).expect("JSON");
+    let mut agent: serde_json::Value = serde_json::from_slice(&fs::read(&agent_path).expect("agent")).expect("JSON");
+    let mut endpoint = agent["endpoints"][0].clone();
+    endpoint["name"] = "claude".into();
+    endpoint["number"] = 2.into();
+    endpoint["dialect"] = 2.into();
+    endpoint["provider"] = "anthropic".into();
+    endpoint["program"] = "claude_code".into();
+    endpoint["address"] = "api.anthropic.com:443".into();
+    endpoint["server_name"] = "api.anthropic.com".into();
+    endpoint["models"][0]["name"] = model.name().into();
+    let mut declared = value["engine"]["llm"]["models"][0].clone();
+    declared["name"] = model.name().into();
+    declared["endpoint"] = "claude".into();
+    let mut route = value["engine"]["llm"]["endpoints"][0].clone();
+    for key in ["name", "number", "dialect", "provider", "program", "server_name"] {
+        route[key] = endpoint[key].clone();
+    }
+    route["transport"] = "tls".into();
+    route["address"] = serde_json::json!({"host":"api.anthropic.com", "port":443});
+    value["engine"]["llm"] = serde_json::json!({
+        "providers":[{"name":"anthropic", "number":2, "signed_in_plan":false,
+            "manage_usage":"https://claude.ai/settings/usage", "models":[model.name()],
+            "sources":{"programs":["claude_code"]}}],
+        "endpoints":[route], "models":[declared]
+    });
+    // The demo's LLM binding requires its own provider. This sitting uses
+    // only the held program provider and never offers the demo.
+    value["application"]["demo"] = serde_json::Value::Null;
+    agent["endpoints"] = serde_json::json!([endpoint]);
+    agent["programs"] = serde_json::json!({"claude_code":{
+        "path":executable, "directory":login.parent().expect("held login parent")
+    }});
+    super::write_private(&path, &serde_json::to_vec(&value).expect("live configuration"));
+    super::write_private(&agent_path, &serde_json::to_vec(&agent).expect("live agent"));
+}
+
 pub struct LivePlan<'a> {
     pub paths: &'a [PathBuf; 3],
     pub client: &'a std::path::Path,
     pub first: bool,
     pub kept: bool,
-    /// The held `ChatGPT` record a fresh store's first run moves in.
-    pub account: Option<&'a std::path::Path>,
+    pub model: LiveModel<'a>,
     pub address: Option<std::net::SocketAddr>,
     pub tasks: Option<LiveTasks>,
     pub baseline: Option<&'a std::collections::BTreeSet<u64>>,
     pub roots: Option<&'a std::collections::BTreeSet<u64>>,
     pub words: &'a str,
     pub line: &'a str,
+}
+
+impl LivePlan<'_> {
+    fn starting_phase(&self) -> LivePhase {
+        if self.first && !self.kept && matches!(self.model, LiveModel::ClaudeCode { .. }) {
+            LivePhase::ProgramDeclared
+        } else {
+            LivePhase::Setup
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1183,6 +1342,7 @@ fn live_json(call: &super::Ended) -> Result<serde_json::Value, String> {
 }
 
 enum LivePhase {
+    ProgramDeclared,
     Setup,
     Settings,
     SettingsChanged,
@@ -1246,6 +1406,13 @@ impl LiveJudge<'_> {
         let change = self.tasks.change.to_string();
         let project = self.tasks.project.to_string();
         match self.phase {
+            LivePhase::ProgramDeclared => {
+                let LiveModel::ClaudeCode { login } = self.plan.model else { unreachable!("program model") };
+                let commands = program_verification(login, &last)?;
+                self.account_at = self.arguments.len() + commands.len() - 1;
+                self.pending.extend(commands);
+                self.phase = LivePhase::Setup;
+            }
             LivePhase::Setup => self.setup(now, calls)?,
             LivePhase::Settings => self.settings(calls)?,
             LivePhase::SettingsChanged => unreachable!("settings change handled before the JSON reads"),
@@ -1257,7 +1424,7 @@ impl LiveJudge<'_> {
                     "--project",
                     &project,
                     "--model",
-                    "gpt-6-luna",
+                    self.plan.model.name(),
                     "--key",
                     &key,
                     self.plan.words,
@@ -1402,7 +1569,7 @@ impl LiveJudge<'_> {
         for read in &reads[1..] {
             let setting = live_json(read)?;
             let mut value = setting["value"].clone();
-            require(value["model"]["name"] == "gpt-6-luna", "the shipped plan model")?;
+            require(value["model"]["name"] == self.plan.model.name(), "the selected live model in every charter")?;
             value["time"] = 240_000_000_000_u64.into();
             items.push(serde_json::json!({"setting":setting["setting"],"set":value}));
         }
@@ -1663,8 +1830,8 @@ impl LiveJudge<'_> {
         } else {
             None
         };
-        let message = if account.as_ref().is_some_and(|value| super::live::ready_account(value).is_err()) {
-            KEPT_SIGN_IN_EXPIRED
+        let message = if account.as_ref().is_some_and(|value| self.plan.model.ready(value).is_err()) {
+            self.plan.model.unavailable()
         } else {
             message
         };
@@ -1738,9 +1905,9 @@ impl LiveJudge<'_> {
             let call = &calls.ends()[index];
             if (self.plan.kept || self.account_checked)
                 && self.arguments.get(index).is_some_and(|args| args == &["accounts", "--json"])
-                && live_json(call).and_then(|value| super::live::ready_account(&value)).is_err()
+                && live_json(call).and_then(|value| self.plan.model.ready(&value)).is_err()
             {
-                self.fail(KEPT_SIGN_IN_EXPIRED, calls, Some(index));
+                self.fail(self.plan.model.unavailable(), calls, Some(index));
                 break;
             }
             if (self.plan.kept || self.account_checked)
@@ -1751,7 +1918,7 @@ impl LiveJudge<'_> {
                     task.pointer("/run_wait/account/why").and_then(serde_json::Value::as_str),
                     Some("needs_sign_in" | "refused")
                 ) {
-                    self.fail(KEPT_SIGN_IN_EXPIRED, calls, Some(index));
+                    self.fail(self.plan.model.unavailable(), calls, Some(index));
                     break;
                 }
             }
@@ -1761,9 +1928,13 @@ impl LiveJudge<'_> {
                 self.fail("live ctl failed", calls, Some(index));
                 break;
             }
-            if self.plan.first && !self.plan.kept && index == self.account_at - 2 {
+            if self.plan.first
+                && !self.plan.kept
+                && matches!(self.plan.model, LiveModel::ChatGpt { .. })
+                && index == self.account_at - 2
+            {
                 super::live::notice(&String::from_utf8_lossy(&call.stdout));
-                if self.plan.account.is_none() {
+                if matches!(self.plan.model, LiveModel::ChatGpt { account: None }) {
                     self.signing_until = Some(now.saturating_add(Duration::from_secs(600)));
                 }
             }
@@ -1773,13 +1944,14 @@ impl LiveJudge<'_> {
         }
         self.checked = calls.ends().len();
         if !matches!(self.phase, LivePhase::Done | LivePhase::Stopping | LivePhase::Settled)
+            && !matches!(self.phase, LivePhase::ProgramDeclared)
             && !self.account_checked
             && calls.ends().len() > self.account_at
         {
-            match live_json(&calls.ends()[self.account_at]).and_then(|value| super::live::ready_account(&value)) {
+            match live_json(&calls.ends()[self.account_at]).and_then(|value| self.plan.model.ready(&value)) {
                 Ok(()) => self.account_checked = true,
                 Err(message) => self.fail(
-                    if self.plan.kept { KEPT_SIGN_IN_EXPIRED } else { &message },
+                    if self.plan.kept { self.plan.model.unavailable() } else { &message },
                     calls,
                     Some(self.account_at),
                 ),
@@ -1948,7 +2120,7 @@ pub fn run_live(
     let mut fds = streams.descriptors();
     let root = skein_shell::open_root(plan.client).expect("fresh client root");
     fds.push(root);
-    let (commands, account_at) = live_commands(plan.first && !plan.kept, plan.account);
+    let (commands, account_at) = live_commands(plan.first && !plan.kept, plan.model);
     let failure = std::cell::Cell::new(None);
     let evidence = std::cell::Cell::new(None);
     let mut world = real::World::new(LiveJudge {
@@ -1957,7 +2129,6 @@ pub fn run_live(
         roots: plan.roots.cloned().unwrap_or_default(),
         address: plan.address,
         token: None,
-        plan,
         visitor: matches!(face, Face::Fake { .. }).then_some(3),
         account_at,
         found_at: 0,
@@ -1973,7 +2144,8 @@ pub fn run_live(
         account_checked: false,
         linked: false,
         cleanup: false,
-        phase: LivePhase::Setup,
+        phase: plan.starting_phase(),
+        plan,
         snapshot: None,
         replies: std::collections::BTreeMap::new(),
         tasks_at: 0,
