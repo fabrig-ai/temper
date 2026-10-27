@@ -20,10 +20,12 @@ the task reads its charter, whole:
   how long it waits idle, and the timeout of its calls to temper's
   tools.
 
-The forge's procedures run their agent work, a change's producing,
-review and repairs, under the forge's charter: the one the
-configuration's `application.charter` names, `charter 2` as
-`temper init` writes it.
+The forge's procedures run a change's agent work under two charters,
+which the change keeps from its making to its end: its producing and
+repairs under the forge's charter, the one the configuration's
+`application.charter` names, `charter 2` as `temper init` writes it;
+its reviews under the reviewer's charter, `charter 4`, which reads the
+change and gives its verdict, and edits, pushes and runs nothing.
 
 ## How it changes
 
