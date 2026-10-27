@@ -99,9 +99,9 @@ fn words(task: u64, turn: c::TurnName, part: &mut u64, bytes: &[u8], call: &Call
     let from = if call.tool == 6 { number(call, 3).unwrap_or(0) } else { 0 };
     let from = text_end(bytes, usize::try_from(from).unwrap_or(usize::MAX));
     let bytes = bytes.get(from..).expect("offset within part");
-    let end = text_end(bytes, out.room.min(usize::try_from(limits.part).expect("part bound fits")));
+    let end = text_end(bytes, out.room().min(usize::try_from(limits.part).expect("part bound fits")));
     out.put(bytes.get(..end).expect("part cut"));
-    out.room = out.room.checked_sub(end).expect("within text bound");
+    out.reserve(end);
     out.put(b"\n");
     let left = bytes.len().checked_sub(end).expect("part cut");
     if left > 0 {

@@ -6,7 +6,6 @@ mod projects_json;
 mod proposal;
 pub(super) mod question;
 pub(crate) mod settings;
-mod settings_values;
 use super::{Text, acts};
 use crate::jig::{Limits, runner::Printed};
 use alloc::boxed::Box;
@@ -91,9 +90,9 @@ pub(crate) fn print(
         if accounts && structural > usize::try_from(limits.text).expect("text fits") {
             return super::failure(b"result limit", false, 1);
         }
-        let mut measure = Text::bounded(limits, structural);
+        let mut measure = Text::bounded(limits.text, structural);
         text(&document, &book, limits, vocabulary, &mut measure);
-        let mut out = measure.writing(limits, structural);
+        let mut out = measure.writing(limits.text, structural);
         text(&document, &book, limits, vocabulary, &mut out);
         out.finish()
     };

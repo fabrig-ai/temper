@@ -1,10 +1,10 @@
 //! Whole values for settings JSON; no display truncation is applied.
-use jig_client::contract as c;
+use crate::view as c;
 use skein_json::writer::Encoder;
 fn encode_text(value: &c::Text, out: &mut Encoder) {
     out.string(value.bytes());
 }
-pub(super) fn encode_document_text(value: &c::DocumentText, out: &mut Encoder) {
+pub fn encode_document_text(value: &c::DocumentText, out: &mut Encoder) {
     out.object_start();
     out.key(b"bytes");
     out.string(value.bytes());
@@ -12,7 +12,7 @@ pub(super) fn encode_document_text(value: &c::DocumentText, out: &mut Encoder) {
     out.boolean(value.cut);
     out.object_end();
 }
-pub(super) fn encode_charter(value: &c::Charter, out: &mut Encoder) {
+pub fn encode_charter(value: &c::Charter, out: &mut Encoder) {
     out.object_start();
     out.key(b"number");
     out.unsigned(u64::from(value.number));
@@ -21,7 +21,7 @@ pub(super) fn encode_charter(value: &c::Charter, out: &mut Encoder) {
     out.key(b"waiting");
     out.unsigned(value.waiting.as_nanos());
     out.key(b"resume");
-    out.boolean(value.resume);
+    out.boolean(value.resume());
     out.key(b"turns");
     out.unsigned(u64::from(value.turns));
     out.key(b"time");
@@ -39,13 +39,13 @@ pub(super) fn encode_charter(value: &c::Charter, out: &mut Encoder) {
     }
     out.array_end();
     out.key(b"inspect");
-    out.boolean(value.inspect);
+    out.boolean(value.inspect());
     out.key(b"modify");
-    out.boolean(value.modify);
+    out.boolean(value.modify());
     out.key(b"shell");
-    out.boolean(value.shell);
+    out.boolean(value.shell());
     out.key(b"agents");
-    out.boolean(value.agents);
+    out.boolean(value.agents());
     out.key(b"call_timeout");
     out.unsigned(value.call_timeout.as_nanos());
     out.key(b"hosts");
@@ -54,7 +54,7 @@ pub(super) fn encode_charter(value: &c::Charter, out: &mut Encoder) {
     out.unsigned(value.spend);
     out.object_end();
 }
-pub(super) fn encode_template(value: &c::Template, out: &mut Encoder) {
+pub fn encode_template(value: &c::Template, out: &mut Encoder) {
     out.object_start();
     out.key(b"number");
     out.unsigned(u64::from(value.number));
@@ -97,7 +97,7 @@ pub(super) fn encode_template(value: &c::Template, out: &mut Encoder) {
     }
     out.object_end();
 }
-pub(super) fn encode_setting_policy(value: &c::SettingPolicy, out: &mut Encoder) {
+pub fn encode_setting_policy(value: &c::SettingPolicy, out: &mut Encoder) {
     out.object_start();
     out.key(b"escalation_role");
     match &value.escalation_role {
@@ -142,7 +142,7 @@ pub(super) fn encode_setting_policy(value: &c::SettingPolicy, out: &mut Encoder)
     out.array_end();
     out.object_end();
 }
-pub(super) fn encode_rules(value: &c::Rules, out: &mut Encoder) {
+pub fn encode_rules(value: &c::Rules, out: &mut Encoder) {
     out.object_start();
     out.key(b"ceiling");
     encode_owner_authority(&value.ceiling, out);
@@ -166,7 +166,7 @@ pub(super) fn encode_rules(value: &c::Rules, out: &mut Encoder) {
     out.array_end();
     out.object_end();
 }
-pub(super) fn encode_setting_model(value: &c::SettingModel, out: &mut Encoder) {
+pub fn encode_setting_model(value: &c::SettingModel, out: &mut Encoder) {
     out.object_start();
     out.key(b"dialect");
     out.unsigned(u64::from(value.dialect));
@@ -215,14 +215,14 @@ pub(super) fn encode_setting_model(value: &c::SettingModel, out: &mut Encoder) {
     }
     out.object_end();
 }
-pub(super) fn encode_setting_hosts(value: &c::SettingHosts, out: &mut Encoder) {
+pub fn encode_setting_hosts(value: &c::SettingHosts, out: &mut Encoder) {
     match value {
         c::SettingHosts::Workers => out.string(b"workers"),
         c::SettingHosts::Engine => out.string(b"engine"),
         c::SettingHosts::Both => out.string(b"both"),
     }
 }
-pub(super) fn encode_template_executor(value: c::TemplateExecutor, out: &mut Encoder) {
+pub fn encode_template_executor(value: c::TemplateExecutor, out: &mut Encoder) {
     let value = &value;
     match value {
         c::TemplateExecutor::Charter(value) => {
@@ -234,14 +234,14 @@ pub(super) fn encode_template_executor(value: c::TemplateExecutor, out: &mut Enc
         c::TemplateExecutor::Chosen => out.string(b"chosen"),
     }
 }
-pub(super) fn encode_task_contract_document(value: &c::TaskContractDocument, out: &mut Encoder) {
+pub fn encode_task_contract_document(value: &c::TaskContractDocument, out: &mut Encoder) {
     match value {
         c::TaskContractDocument::Approval { state, part } => {
             out.object_start();
             out.key(b"approval");
             out.object_start();
             out.key(b"state");
-            super::hex(state, out);
+            crate::hex(state, out);
             out.key(b"part");
             encode_owner_part(part, out);
             out.object_end();
@@ -286,7 +286,7 @@ pub(super) fn encode_task_contract_document(value: &c::TaskContractDocument, out
         }
     }
 }
-pub(super) fn encode_template_budget(value: &c::TemplateBudget, out: &mut Encoder) {
+pub fn encode_template_budget(value: &c::TemplateBudget, out: &mut Encoder) {
     match value {
         c::TemplateBudget::Amount(value) => {
             out.object_start();
@@ -311,7 +311,7 @@ pub(super) fn encode_template_budget(value: &c::TemplateBudget, out: &mut Encode
         c::TemplateBudget::Given => out.string(b"given"),
     }
 }
-pub(super) fn encode_template_deadline(value: &c::TemplateDeadline, out: &mut Encoder) {
+pub fn encode_template_deadline(value: &c::TemplateDeadline, out: &mut Encoder) {
     match value {
         c::TemplateDeadline::None => out.string(b"none"),
         c::TemplateDeadline::Span(value) => {
@@ -323,7 +323,7 @@ pub(super) fn encode_template_deadline(value: &c::TemplateDeadline, out: &mut En
         c::TemplateDeadline::Given => out.string(b"given"),
     }
 }
-pub(super) fn encode_task_flags(value: c::TaskFlags, out: &mut Encoder) {
+pub fn encode_task_flags(value: c::TaskFlags, out: &mut Encoder) {
     let value = &value;
     out.object_start();
     out.key(b"conversation");
@@ -336,7 +336,7 @@ pub(super) fn encode_task_flags(value: c::TaskFlags, out: &mut Encoder) {
     encode_ended_by(value.ended_by, out);
     out.object_end();
 }
-pub(super) fn encode_llm_choice(value: &c::LlmChoice, out: &mut Encoder) {
+pub fn encode_llm_choice(value: &c::LlmChoice, out: &mut Encoder) {
     out.object_start();
     out.key(b"account");
     match &value.account {
@@ -355,7 +355,7 @@ pub(super) fn encode_llm_choice(value: &c::LlmChoice, out: &mut Encoder) {
     out.array_end();
     out.object_end();
 }
-pub(super) fn encode_owner_authority(value: &c::OwnerAuthority, out: &mut Encoder) {
+pub fn encode_owner_authority(value: &c::OwnerAuthority, out: &mut Encoder) {
     out.object_start();
     out.key(b"models");
     match &value.models {
@@ -393,7 +393,7 @@ pub(super) fn encode_owner_authority(value: &c::OwnerAuthority, out: &mut Encode
     out.array_end();
     out.object_end();
 }
-pub(super) fn encode_owner_grant(value: &c::OwnerGrant, out: &mut Encoder) {
+pub fn encode_owner_grant(value: &c::OwnerGrant, out: &mut Encoder) {
     out.object_start();
     out.key(b"connector");
     out.unsigned(u64::from(value.connector));
@@ -403,7 +403,7 @@ pub(super) fn encode_owner_grant(value: &c::OwnerGrant, out: &mut Encoder) {
     encode_owner_pattern(&value.pattern, out);
     out.object_end();
 }
-pub(super) fn encode_policy_edit_role(value: &c::PolicyEditRole, out: &mut Encoder) {
+pub fn encode_policy_edit_role(value: &c::PolicyEditRole, out: &mut Encoder) {
     out.object_start();
     out.key(b"number");
     out.unsigned(u64::from(value.number));
@@ -417,7 +417,7 @@ pub(super) fn encode_policy_edit_role(value: &c::PolicyEditRole, out: &mut Encod
     out.unsigned(u64::from(value.decides));
     out.object_end();
 }
-pub(super) fn encode_policy_requirement(value: &c::PolicyRequirement, out: &mut Encoder) {
+pub fn encode_policy_requirement(value: &c::PolicyRequirement, out: &mut Encoder) {
     out.object_start();
     out.key(b"connector");
     out.unsigned(u64::from(value.connector));
@@ -433,7 +433,7 @@ pub(super) fn encode_policy_requirement(value: &c::PolicyRequirement, out: &mut 
     out.boolean(value.must_be_guarded);
     out.object_end();
 }
-pub(super) fn encode_policy_permission(value: c::PolicyPermission, out: &mut Encoder) {
+pub fn encode_policy_permission(value: c::PolicyPermission, out: &mut Encoder) {
     let value = &value;
     out.object_start();
     out.key(b"connector");
@@ -444,7 +444,7 @@ pub(super) fn encode_policy_permission(value: c::PolicyPermission, out: &mut Enc
     out.unsigned(u64::from(value.role));
     out.object_end();
 }
-pub(super) fn encode_template_override(value: &c::TemplateOverride, out: &mut Encoder) {
+pub fn encode_template_override(value: &c::TemplateOverride, out: &mut Encoder) {
     out.object_start();
     out.key(b"template");
     out.unsigned(u64::from(value.template));
@@ -478,7 +478,7 @@ pub(super) fn encode_template_override(value: &c::TemplateOverride, out: &mut En
     }
     out.object_end();
 }
-pub(super) fn encode_owner_kind_implication(value: c::OwnerKindImplication, out: &mut Encoder) {
+pub fn encode_owner_kind_implication(value: c::OwnerKindImplication, out: &mut Encoder) {
     let value = &value;
     out.object_start();
     out.key(b"connector");
@@ -489,7 +489,7 @@ pub(super) fn encode_owner_kind_implication(value: c::OwnerKindImplication, out:
     out.unsigned(u64::from(value.implies));
     out.object_end();
 }
-pub(super) fn encode_owner_part(value: &c::OwnerPart, out: &mut Encoder) {
+pub fn encode_owner_part(value: &c::OwnerPart, out: &mut Encoder) {
     out.object_start();
     out.key(b"connector");
     out.unsigned(u64::from(value.connector));
@@ -499,7 +499,7 @@ pub(super) fn encode_owner_part(value: &c::OwnerPart, out: &mut Encoder) {
     encode_owner_part_key(&value.key, out);
     out.object_end();
 }
-pub(super) fn encode_verdict_choice(value: &c::VerdictChoice, out: &mut Encoder) {
+pub fn encode_verdict_choice(value: &c::VerdictChoice, out: &mut Encoder) {
     out.object_start();
     out.key(b"code");
     out.unsigned(u64::from(value.code));
@@ -515,21 +515,21 @@ pub(super) fn encode_verdict_choice(value: &c::VerdictChoice, out: &mut Encoder)
     out.array_end();
     out.object_end();
 }
-pub(super) fn encode_retention(value: c::Retention, out: &mut Encoder) {
+pub fn encode_retention(value: c::Retention, out: &mut Encoder) {
     let value = &value;
     match value {
         c::Retention::Kept => out.string(b"kept"),
         c::Retention::ForgottenOnceRead => out.string(b"forgotten_once_read"),
     }
 }
-pub(super) fn encode_ended_by(value: c::EndedBy, out: &mut Encoder) {
+pub fn encode_ended_by(value: c::EndedBy, out: &mut Encoder) {
     let value = &value;
     match value {
         c::EndedBy::Result => out.string(b"result"),
         c::EndedBy::Requester => out.string(b"requester"),
     }
 }
-pub(super) fn encode_model_effort(value: &c::ModelEffort, out: &mut Encoder) {
+pub fn encode_model_effort(value: &c::ModelEffort, out: &mut Encoder) {
     out.object_start();
     out.key(b"model");
     encode_text(&value.model, out);
@@ -542,7 +542,7 @@ pub(super) fn encode_model_effort(value: &c::ModelEffort, out: &mut Encoder) {
     }
     out.object_end();
 }
-pub(super) fn encode_authority_models(value: &c::AuthorityModels, out: &mut Encoder) {
+pub fn encode_authority_models(value: &c::AuthorityModels, out: &mut Encoder) {
     match value {
         c::AuthorityModels::All => out.string(b"all"),
         c::AuthorityModels::Named(value) => {
@@ -550,14 +550,14 @@ pub(super) fn encode_authority_models(value: &c::AuthorityModels, out: &mut Enco
             out.key(b"named");
             out.array_start();
             for value in value {
-                super::hex(value, out);
+                crate::hex(value, out);
             }
             out.array_end();
             out.object_end();
         }
     }
 }
-pub(super) fn encode_owner_delegation(value: &c::OwnerDelegation, out: &mut Encoder) {
+pub fn encode_owner_delegation(value: &c::OwnerDelegation, out: &mut Encoder) {
     out.object_start();
     out.key(b"kinds");
     out.array_start();
@@ -571,7 +571,7 @@ pub(super) fn encode_owner_delegation(value: &c::OwnerDelegation, out: &mut Enco
     out.unsigned(u64::from(value.depth));
     out.object_end();
 }
-pub(super) fn encode_owner_resource_scope(value: &c::OwnerResourceScope, out: &mut Encoder) {
+pub fn encode_owner_resource_scope(value: &c::OwnerResourceScope, out: &mut Encoder) {
     out.object_start();
     out.key(b"connector");
     out.unsigned(u64::from(value.connector));
@@ -579,19 +579,19 @@ pub(super) fn encode_owner_resource_scope(value: &c::OwnerResourceScope, out: &m
     encode_owner_pattern(&value.pattern, out);
     out.object_end();
 }
-pub(super) fn encode_owner_pattern(value: &c::OwnerPattern, out: &mut Encoder) {
+pub fn encode_owner_pattern(value: &c::OwnerPattern, out: &mut Encoder) {
     out.object_start();
     out.key(b"segments");
     out.array_start();
     for value in &value.segments {
-        super::hex(value, out);
+        crate::hex(value, out);
     }
     out.array_end();
     out.key(b"last");
     encode_owner_pattern_end(&value.last, out);
     out.object_end();
 }
-pub(super) fn encode_policy_judge(value: c::PolicyJudge, out: &mut Encoder) {
+pub fn encode_policy_judge(value: c::PolicyJudge, out: &mut Encoder) {
     let value = &value;
     out.object_start();
     out.key(b"connector");
@@ -602,7 +602,7 @@ pub(super) fn encode_policy_judge(value: c::PolicyJudge, out: &mut Encoder) {
     out.unsigned(u64::from(value.parameters));
     out.object_end();
 }
-pub(super) fn encode_policy_guard(value: &c::PolicyGuard, out: &mut Encoder) {
+pub fn encode_policy_guard(value: &c::PolicyGuard, out: &mut Encoder) {
     match value {
         c::PolicyGuard::Guarded => out.string(b"guarded"),
         c::PolicyGuard::Observed { freshness } => {
@@ -616,7 +616,7 @@ pub(super) fn encode_policy_guard(value: &c::PolicyGuard, out: &mut Encoder) {
         }
     }
 }
-pub(super) fn encode_owner_part_kind(value: c::OwnerPartKind, out: &mut Encoder) {
+pub fn encode_owner_part_kind(value: c::OwnerPartKind, out: &mut Encoder) {
     let value = &value;
     match value {
         c::OwnerPartKind::Resource => out.string(b"resource"),
@@ -628,14 +628,14 @@ pub(super) fn encode_owner_part_kind(value: c::OwnerPartKind, out: &mut Encoder)
         c::OwnerPartKind::Hold => out.string(b"hold"),
     }
 }
-pub(super) fn encode_owner_part_key(value: &c::OwnerPartKey, out: &mut Encoder) {
+pub fn encode_owner_part_key(value: &c::OwnerPartKey, out: &mut Encoder) {
     match value {
         c::OwnerPartKey::Path(value) => {
             out.object_start();
             out.key(b"path");
             out.array_start();
             for value in value {
-                super::hex(value, out);
+                crate::hex(value, out);
             }
             out.array_end();
             out.object_end();
@@ -648,15 +648,15 @@ pub(super) fn encode_owner_part_key(value: &c::OwnerPartKey, out: &mut Encoder) 
         }
     }
 }
-pub(super) fn encode_field_rule(value: &c::FieldRule, out: &mut Encoder) {
+pub fn encode_field_rule(value: &c::FieldRule, out: &mut Encoder) {
     out.object_start();
     out.key(b"name");
-    super::hex(&value.name, out);
+    crate::hex(&value.name, out);
     out.key(b"max");
     out.unsigned(u64::from(value.max));
     out.object_end();
 }
-pub(super) fn encode_owner_authority_executor(value: c::OwnerAuthorityExecutor, out: &mut Encoder) {
+pub fn encode_owner_authority_executor(value: c::OwnerAuthorityExecutor, out: &mut Encoder) {
     let value = &value;
     match value {
         c::OwnerAuthorityExecutor::Charter(value) => {
@@ -679,18 +679,18 @@ pub(super) fn encode_owner_authority_executor(value: c::OwnerAuthorityExecutor, 
         }
     }
 }
-pub(super) fn encode_owner_pattern_end(value: &c::OwnerPatternEnd, out: &mut Encoder) {
+pub fn encode_owner_pattern_end(value: &c::OwnerPatternEnd, out: &mut Encoder) {
     match value {
         c::OwnerPatternEnd::Exact(value) => {
             out.object_start();
             out.key(b"exact");
-            super::hex(value, out);
+            crate::hex(value, out);
             out.object_end();
         }
         c::OwnerPatternEnd::Open(value) => {
             out.object_start();
             out.key(b"open");
-            super::hex(value, out);
+            crate::hex(value, out);
             out.object_end();
         }
     }

@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+settings-form.workspace = true
 jig-client.workspace = true
 jig-client-domain.workspace = true
 jig-client-protocol-link.workspace = true
