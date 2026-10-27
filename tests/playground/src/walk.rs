@@ -73,7 +73,7 @@ impl Walk {
                 ended = true;
             }
         }
-        assert!(ended, "the welcome's open stream ends on close");
+        assert!(ended, "the visit's open stream ends on close");
     }
 
     /// The displayed tree, retained for a failed walk's diagnostics.
