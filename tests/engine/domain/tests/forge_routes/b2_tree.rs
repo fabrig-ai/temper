@@ -60,9 +60,9 @@ fn world_with(defaults: &jig_domain_core::settings::Defaults) -> (World, engine:
 }
 
 fn started_world(mut world: World, defaults: &jig_domain_core::settings::Defaults) -> (World, engine::Assignment) {
-    world.adopt();
     // Two slots let a caller delegate before it parks; no actor needs a third.
     const SLOTS: u32 = 2;
+    world.adopt();
     let mut bounds = protocol::bounds();
     bounds.models = Box::new([host::ModelBound { name: model().name, window: MODEL_WINDOW, output: MODEL_OUTPUT }]);
     bounds.spend = defaults.rules.maximum_run_spend;
@@ -361,10 +361,10 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> u64 {
 #[test]
 fn b2s_tree_admits_every_run_under_the_stock() {
     let (mut world, chat) = stock_world();
-    tree(&mut world, chat);
+    tree(&mut world, &chat);
 }
 
-fn tree(world: &mut World, chat: engine::Assignment) {
+fn tree(world: &mut World, chat: &engine::Assignment) {
     let chat = admitted(world, chat.task);
     let work_task = goal(world, &chat, false);
     answer(world, &chat, CHAT_TURNS, tasks::End::Parked);
@@ -437,9 +437,9 @@ fn box_limits() -> engine::Limits {
 }
 
 fn stock_box_world() -> (World, engine::Assignment) {
-    let mut defaults = defaults();
     // This test isolates capacities: even repeated halvings leave abundant funding.
     const SPEND: u64 = 1_000_000;
+    let mut defaults = defaults();
     defaults.rules.period_spend = SPEND;
     defaults.rules.ceiling.budget.spend = SPEND;
     for charter in &mut defaults.charters {
@@ -452,11 +452,11 @@ fn stock_box_world() -> (World, engine::Assignment) {
         role.authority.budget.spend = SPEND;
         role.period_spend = SPEND;
     }
-    started_world(World::configured_stock_limits(&defaults, &model(), box_limits()), &defaults)
+    started_world(World::configured_stock_limits(&defaults, &model(), &box_limits()), &defaults)
 }
 
 #[test]
 fn b2s_tree_fits_the_boxs_limits() {
     let (mut world, chat) = stock_box_world();
-    tree(&mut world, chat);
+    tree(&mut world, &chat);
 }
