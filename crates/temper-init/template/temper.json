@@ -4,7 +4,8 @@
     "limits": {
       "profile": "small",
       "overrides": {
-        "authority.grants": 16,
+        "authority.executors": 5,
+        "authority.grants": 14,
         "authority.segments": 8,
         "core.resume_bytes": 1039548,
         "documents.lines": 2,
@@ -13,12 +14,13 @@
         "hub.transcript_bytes": 4158192,
         "hub.turn_bytes": 1039544,
         "hub.turn_queue_bytes": 8316352,
-        "notes.scopes": 19,
+        "notes.scopes": 17,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 16,
+        "tasks.authority_grants": 14,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
         "tasks.contract_choices": 2,
+        "tasks.executor_kinds": 5,
         "tasks.hold_segments": 8,
         "tasks.inbox_bytes": 12288,
         "tasks.parameters": 5,
@@ -309,17 +311,6 @@
             },
             {
               "connector": 1,
-              "kind": 15,
-              "pattern": {
-                "segments": [
-                  "forge"
-                ],
-                "last": "open",
-                "value": ""
-              }
-            },
-            {
-              "connector": 1,
               "kind": 16,
               "pattern": {
                 "segments": [
@@ -479,17 +470,6 @@
               },
               {
                 "connector": 1,
-                "kind": 15,
-                "pattern": {
-                  "segments": [
-                    "forge"
-                  ],
-                  "last": "open",
-                  "value": ""
-                }
-              },
-              {
-                "connector": 1,
                 "kind": 16,
                 "pattern": {
                   "segments": [
@@ -532,6 +512,10 @@
                 {
                   "kind": "procedure",
                   "number": 3
+                },
+                {
+                  "kind": "procedure",
+                  "number": 4
                 }
               ],
               "tasks": 14,
@@ -687,17 +671,6 @@
                   },
                   {
                     "connector": 1,
-                    "kind": 15,
-                    "pattern": {
-                      "segments": [
-                        "forge"
-                      ],
-                      "last": "open",
-                      "value": ""
-                    }
-                  },
-                  {
-                    "connector": 1,
                     "kind": 16,
                     "pattern": {
                       "segments": [
@@ -740,6 +713,10 @@
                     {
                       "kind": "procedure",
                       "number": 3
+                    },
+                    {
+                      "kind": "procedure",
+                      "number": 4
                     }
                   ],
                   "tasks": 14,
