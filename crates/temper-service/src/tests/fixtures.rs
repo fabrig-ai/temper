@@ -156,6 +156,7 @@ pub fn task_record(number: u64) -> jig_domain_tasks::TaskRecord {
         ended_below: tasks::Endings::ZERO,
         question_lines: Box::new([]),
         hold: 0,
+        placed: None,
         proposal_rows: Box::new([]),
         instructions: None,
         llm: None,

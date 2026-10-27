@@ -2692,7 +2692,7 @@ fn pause_children(observed: &Observed, misses: &mut Vec<Miss>) {
         DELEGATES_RESUME,
         "h1 must receive its coder's change and its held reviewer's passing verdict",
     );
-    let hold = number(held, "/hold/owner/reason/placed/hold");
+    let placed = number(held, "/hold/owner/reason/placed/hold");
     for (read, running) in [
         (Read::ImplementerHeld, Some(Read::ImplementerRunning)),
         (Read::H1Held, None),
@@ -2703,8 +2703,8 @@ fn pause_children(observed: &Observed, misses: &mut Vec<Miss>) {
             misses,
             "5.2",
             text(child, "/chip/phase") == "held"
-                && hold.is_some_and(|hold| hold != 0)
-                && number(child, "/hold/owner/reason/placed/hold") == hold
+                && placed.is_some_and(|number| number != 0)
+                && number(child, "/hold/owner/reason/placed/hold") == placed
                 && child["result"].is_null()
                 && running.is_none_or(|running| {
                     number(child, "/chip/details/owner/details/attempt")
@@ -5140,24 +5140,6 @@ mod direction_tests {
                 ],
             ),
             (
-                Read::PlannedHeld,
-                vec![
-                    "/task/chip/phase",
-                    "/task/result",
-                    "/task/hold/owner/reason/placed/hold",
-                    "/task/chip/details/owner/details/attempt",
-                ],
-            ),
-            (
-                Read::PlannedCoderHeld,
-                vec![
-                    "/task/chip/phase",
-                    "/task/result",
-                    "/task/hold/owner/reason/placed/hold",
-                    "/task/chip/details/owner/details/attempt",
-                ],
-            ),
-            (
                 Read::StoryLanded,
                 vec![
                     "/task/result/ending/task/done/change/kind",
@@ -5202,6 +5184,24 @@ mod direction_tests {
             }
         }
     }
+    #[test]
+    fn descendants_must_share_bs_hold_without_advancing_or_finishing() {
+        let passing = met();
+        for read in [Read::PlannedHeld, Read::PlannedCoderHeld] {
+            for (path, replacement) in [
+                ("/task/chip/phase", json!("running")),
+                ("/task/result", json!({"value":{}})),
+                ("/task/hold/owner/reason/placed/hold", json!(99)),
+                ("/task/chip/details/owner/details/attempt", json!(99)),
+            ] {
+                let mut observed = passing.clone();
+                *observed.documents.get_mut(&read).expect("held descendant").pointer_mut(path).expect("field") =
+                    replacement;
+                assert!(!step_5_4(&observed).is_empty(), "{read:?}{path}");
+            }
+        }
+    }
+
     #[test]
     fn identities_and_reports_reject_a_mutation() {
         let mut passing = met();
