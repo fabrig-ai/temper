@@ -1,4 +1,5 @@
 //! Read-only checkpoints keep the first post's assertions before history continues.
+use skein_fake_forge_github::manifest::Manifest;
 use skein_fake_peers::{Listening, forge::Peer};
 use skein_fake_person::{Find, Next, Step as PersonStep};
 use skein_fake_person_browser::{BrowserFace, Play, Script, Step};
@@ -14,10 +15,11 @@ type Counts = Rc<Cell<(usize, usize)>>;
 pub(super) struct Observed {
     pub peer: Peer,
     counts: Counts,
+    pub first_manifest: Option<(Box<[u8]>, Manifest)>,
 }
 impl Observed {
     pub fn new(peer: Peer) -> Self {
-        Self { peer, counts: Rc::new(Cell::new((0, 0))) }
+        Self { peer, counts: Rc::new(Cell::new((0, 0))), first_manifest: None }
     }
     pub fn counts(&self) -> Counts {
         Rc::clone(&self.counts)
@@ -38,6 +40,41 @@ impl Host for Observed {
             .count();
         let installations = self.peer.github_layer().expect("GitHub layer").installations().iter().count();
         self.counts.set((posts, installations));
+        if posts == 1 && self.first_manifest.is_none() {
+            let target = self
+                .peer
+                .observations()
+                .iter()
+                .find_map(|record| match record {
+                    skein_fake_peers::forge::Observation::Head { call, .. }
+                        if call.method == skein_http::Method::Post =>
+                    {
+                        Some(call.target.as_ref())
+                    }
+                    _ => None,
+                })
+                .expect("first manifest post");
+            let state = target.strip_prefix(b"/settings/apps/new?state=").expect("manifest state");
+            let Some(manifest) = self.peer.github_layer().expect("GitHub layer").manifest(state) else {
+                return; // The head can arrive before the form body has been decoded.
+            };
+            // Preserve the first post's fields before Continue may replace the record for this state.
+            self.first_manifest = Some((
+                state.into(),
+                Manifest {
+                    name: manifest.name.clone(),
+                    url: manifest.url.clone(),
+                    public: manifest.public,
+                    redirect_url: manifest.redirect_url.clone(),
+                    setup_url: manifest.setup_url.clone(),
+                    setup_on_update: manifest.setup_on_update,
+                    hook_attributes: manifest.hook_attributes.clone(),
+                    default_permissions: manifest.default_permissions.clone(),
+                    default_events: manifest.default_events.clone(),
+                    account: manifest.account.clone(),
+                },
+            ));
+        }
     }
     fn completions(&mut self) -> &mut Queue<Complete> {
         self.peer.completions()

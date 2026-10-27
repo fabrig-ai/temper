@@ -41,7 +41,8 @@ fn the_manifest_posts_once_and_back_waits_for_continue() {
     assert!(!state.is_empty());
     let origin = page.strip_suffix("forges/1/github/manifest").expect("clients origin");
     let layer = github.peer.github_layer().expect("GitHub layer");
-    let manifest = layer.manifest(state.as_bytes()).expect("page posted its manifest with ctl's state");
+    let (posted_state, manifest) = github.first_manifest.as_ref().expect("first automatic manifest post");
+    assert_eq!(posted_state.as_ref(), state.as_bytes(), "the first post carries ctl's state");
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(manifest.url.as_ref(), origin.as_bytes());
     assert_eq!(manifest.redirect_url.as_ref(), format!("{origin}forges/1/github/redirect").as_bytes());
