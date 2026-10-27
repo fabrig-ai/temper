@@ -69,6 +69,16 @@ fn stock_chats_can_delegate_message_and_read_the_forge() {
 }
 
 #[test]
+fn stock_charters_name_their_host_families_and_reviews_name_reads_alone() {
+    let engine = engine(&single_model());
+    let defaults = crate::stock::defaults(&engine.llm);
+    for charter in &defaults.charters {
+        let tools = if charter.number == 4 { 512 } else { 1023 };
+        assert_eq!(charter.policy.tools.0, tools);
+    }
+}
+
+#[test]
 fn the_stock_passes_jigs_one_check() {
     let init = generated();
     let without_demo = fixtures::with(&init, b"application.demo", b"null");
@@ -307,6 +317,7 @@ fn the_reviewer_keeps_the_coding_run_with_read_only_workspace_families() {
     let defaults = crate::stock::defaults(&engine.llm);
     let mut expected = defaults.charters[1].clone();
     expected.number = 4;
+    expected.policy.tools = jig_domain_core::ToolFamilies::JIG.read;
     expected.policy.instructions = include_bytes!("../stock/review.txt").as_slice().into();
     expected.policy.modify = false;
     expected.policy.agents = false;
