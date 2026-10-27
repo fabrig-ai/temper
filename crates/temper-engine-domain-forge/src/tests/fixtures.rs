@@ -393,8 +393,11 @@ pub fn tier_settings() -> TierSettings {
 /// A tiered repository at its first observed landing tip.
 pub fn tiered() -> Domain {
     let mut d = domain();
-    d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
     tier_tip(&mut d, BASE);
     d
 }
@@ -411,6 +414,7 @@ pub fn tier_tip(d: &mut Domain, commit: [u8; 32]) {
 pub fn tier_baseline(d: &mut Domain) -> Queue<Request> {
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::start_due(d, &env(), REPO, &mut out);
+    finish_tier_keys(d, &mut out);
     out
 }
 pub fn tier_judged(d: &mut Domain) {
@@ -422,7 +426,10 @@ pub fn tier_judged(d: &mut Domain) {
     for key in &keys {
         let row = d.tier_rows.get_mut(key).expect("fixture tier");
         row.record.sequence = 1;
-        row.record.judged = Some(temper_engine_domain_forge_tiers::Judged { tip: BASE, key: BASE });
+        row.record.judged = Some(temper_engine_domain_forge_tiers::Judged {
+            tip: BASE,
+            key: row.record.run.as_ref().expect("baseline").key,
+        });
         row.record.run = None;
     }
 }
@@ -430,6 +437,7 @@ pub fn tier_move(d: &mut Domain, tip: [u8; 32], commits: Option<&[[u8; 32]]>) ->
     tier_tip(d, tip);
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::moved(d, &env(), REPO, BASE, tip, commits, &mut out);
+    finish_tier_keys(d, &mut out);
     out
 }
 pub fn browser(d: &Domain) -> &TierRow {
@@ -443,9 +451,9 @@ pub fn full_tier_range(length: usize) -> (Domain, Env<Limits>) {
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::verification::landed(&mut d, REPO, MERGE, CHANGE, &mut out);
     let pending = [
-        temper_engine_domain_forge_tiers::Landing { commit: [10; 32], key: [10; 32] },
-        temper_engine_domain_forge_tiers::Landing { commit: [11; 32], key: [11; 32] },
-        temper_engine_domain_forge_tiers::Landing { commit: MERGE, key: MERGE },
+        TierLanding { commit: [10; 32], key: Some([10; 32]) },
+        TierLanding { commit: [11; 32], key: Some([11; 32]) },
+        TierLanding { commit: MERGE, key: Some(MERGE) },
     ];
     d.tier_rows.get_mut(&(REPO, Box::from(BROWSER))).expect("tier").pending = Box::from(&pending[..length]);
     let mut env = env();
@@ -467,8 +475,12 @@ pub fn configured_tier(workflow: usize, paths: usize, path_bytes: usize, artifac
 
 /// Finish the standing main watch's initial read before scripting a change's calls.
 fn prime_tier_main(d: &mut Domain) {
-    answer_next(d, Ok(skein_forge::api::Answer::Commit(BASE)));
-    ready(d);
+    let answered = answer_next(d, Ok(skein_forge::api::Answer::Commit(BASE)));
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    for request in answered {
+        out.push(request);
+    }
+    finish_tier_keys(d, &mut out);
 }
 
 fn tier_bytes(byte: u8, length: usize) -> Box<[u8]> {
@@ -478,3 +490,63 @@ fn tier_bytes(byte: u8, length: usize) -> Box<[u8]> {
     }
     bytes.into_boxed()
 }
+
+/// Script actual tree reads for the tier stories; each tip has a distinct
+/// source object. Tests about key reuse supply their own trees instead.
+pub fn finish_tier_keys(d: &mut Domain, out: &mut Queue<Request>) {
+    let mut pending = Queue::with_capacity(max_out(&LIMITS));
+    while let Some(request) = out.pop() {
+        pending.push(request);
+    }
+    loop {
+        while let Some(request) = pending.pop() {
+            if let Request::Call {
+                call,
+                op: skein_forge::api::Op::Read(skein_forge::api::Read::Tree { object, .. }),
+                ..
+            } = request
+            {
+                for request in answer(d, call, Ok(tier_tree(object))) {
+                    pending.push(request);
+                }
+            } else {
+                out.push(request);
+            }
+        }
+        for request in ready(d) {
+            pending.push(request);
+        }
+        if pending.is_empty() {
+            break;
+        }
+    }
+}
+
+pub fn tier_tree(object: [u8; 32]) -> skein_forge::api::Answer {
+    skein_forge::api::Answer::Tree {
+        entries: Box::new([skein_forge::api::Entry {
+            name: b"src".as_slice().into(),
+            mode: 0o040_000,
+            kind: skein_forge::api::EntryKind::Tree,
+            object,
+        }]),
+        more: false,
+    }
+}
+
+pub const BROWSER_BASE_KEY: [u8; 32] = [
+    225, 169, 6, 251, 146, 169, 177, 245, 14, 152, 145, 113, 23, 180, 158, 50, 114, 216, 54, 91, 179, 234, 175, 75, 44,
+    125, 58, 255, 123, 165, 141, 149,
+];
+
+pub const BROWSER_MERGE_KEY: [u8; 32] = [
+    155, 188, 61, 97, 180, 208, 1, 82, 113, 198, 4, 177, 178, 84, 122, 248, 66, 201, 206, 115, 143, 185, 64, 82, 227,
+    74, 2, 13, 42, 255, 211, 5,
+];
+
+pub const BROWSER_HEAD_KEY: [u8; 32] = [
+    65, 233, 135, 238, 111, 20, 74, 6, 231, 143, 83, 61, 56, 34, 147, 175, 195, 28, 129, 199, 78, 239, 239, 108, 89,
+    104, 220, 135, 206, 220, 248, 212,
+];
+
+pub const BROWSER_HEAD_HEX: &[u8] = b"41e987ee6f144a06e78f533d382293afc31c81c74eefef6c5968dc87cedcf8d4";
