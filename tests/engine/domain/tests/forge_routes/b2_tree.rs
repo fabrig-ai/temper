@@ -1,12 +1,9 @@
 //! Rung B2 under the box's stock funding and the init template's model.
 use super::*;
 
-// crates/temper-init/template/temper.json, engine.llm.models: gpt-6-luna.
-const MODEL_WINDOW: u32 = 1_048_576;
-const MODEL_OUTPUT: u32 = 8192;
-const INPUT_PRICE: u64 = 1;
-const OUTPUT_PRICE: u64 = 1;
-const PRICE_UNIT: u32 = 1_000_000;
+use super::stock::box_model as model;
+use temper_engine_domain_world::forge_routes::box_limits;
+
 const TOKENS_PER_TURN: u64 = 30_000;
 const OUTPUT_PER_TURN: u64 = 1000;
 const CHAT_TURNS: u64 = 2;
@@ -26,24 +23,6 @@ const ADVISOR_REPORT: &[u8] = b"Survey complete";
 const WORK_REPORT: &[u8] = b"Both changes landed";
 const CHAT_REPORT: &[u8] = b"Done: both landed";
 
-fn model() -> engine::Model {
-    engine::Model {
-        dialect: 3,
-        endpoint: 1,
-        program: None,
-        name: b"gpt-6-luna".as_slice().into(),
-        window: MODEL_WINDOW,
-        output: MODEL_OUTPUT,
-        input_price: INPUT_PRICE,
-        cached_price: INPUT_PRICE,
-        cache_write_price: None,
-        output_price: OUTPUT_PRICE,
-        price_unit: PRICE_UNIT,
-        efforts: Box::new([]),
-        effort: None,
-    }
-}
-
 fn defaults() -> jig_domain_core::settings::Defaults {
     // This world scripts the worker; it never connects to an endpoint or real account.
     let llm = jig_protocol_config::Llm {
@@ -56,7 +35,7 @@ fn defaults() -> jig_domain_core::settings::Defaults {
 }
 
 fn world_with(defaults: &jig_domain_core::settings::Defaults) -> (World, engine::Assignment) {
-    started_world(World::configured_stock(defaults, &model()), defaults)
+    started_world(World::configured_stock_limits(defaults, &model(), &box_limits()), defaults)
 }
 
 fn started_world(mut world: World, defaults: &jig_domain_core::settings::Defaults) -> (World, engine::Assignment) {
@@ -64,7 +43,7 @@ fn started_world(mut world: World, defaults: &jig_domain_core::settings::Default
     const SLOTS: u32 = 2;
     world.adopt();
     let mut bounds = protocol::bounds();
-    bounds.models = Box::new([host::ModelBound { name: model().name, window: MODEL_WINDOW, output: MODEL_OUTPUT }]);
+    bounds.models = Box::new([host::ModelBound { name: model().name, window: model().window, output: model().output }]);
     bounds.spend = defaults.rules.maximum_run_spend;
     bounds.time = defaults.charters[0].policy.time;
     bounds.message_bytes = world.env.limits.tasks.message_bytes.max(world.env.limits.tasks.result_bytes);
@@ -114,8 +93,10 @@ fn stock_world() -> (World, engine::Assignment) {
 
 /// Smith rounds each completion's combined input/output charge upward once
 /// (smith's domain/session.md, 6; smith-domain-session's record.rs).
-fn charge(turns: u64) -> u64 {
-    let completion = (TOKENS_PER_TURN * INPUT_PRICE + OUTPUT_PER_TURN * OUTPUT_PRICE).div_ceil(u64::from(PRICE_UNIT));
+fn charge(turns: u64, model: &engine::Model) -> u64 {
+    let completion = (TOKENS_PER_TURN * model.input_price + OUTPUT_PER_TURN * model.output_price)
+        .div_ceil(u64::from(model.price_unit))
+        .max(1);
     turns * completion
 }
 
@@ -209,7 +190,7 @@ fn answer_parts(world: &mut World, run: &engine::Assignment, turns: u64, end: ta
         .map(|word| word.number)
         .chain(world.delivered_messages.get(&(run.task, run.attempt)).into_iter().flatten().copied())
         .max();
-    let spent = charge(turns).min(run.run.budget);
+    let spent = charge(turns, &run.run.policy.model);
     let body = match &end {
         tasks::End::Finished { result: tasks::TaskResult::Report { words }, .. } => words.as_ref(),
         _ => b"Read messages",
@@ -415,25 +396,6 @@ fn an_advisors_report_at_the_deployments_result_bound_reaches_the_work() {
         record(&world, advisor_task).phase,
         record(&world, advisor_task).numbers
     );
-}
-
-/// Build the effective engine limits through the same profile/override readers
-/// and final composition as startup, reading the init template itself.
-fn box_limits() -> engine::Limits {
-    use jig_protocol_config as config;
-    let document = config::document(
-        include_bytes!("../../../../../crates/temper-init/template/temper.json"),
-        &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 },
-    )
-    .expect("init template JSON");
-    let mut root = config::read::Object::new(&document, 0).expect("template object");
-    let engine = root.member(&document, b"engine").expect("engine member");
-    let mut engine = config::read::Object::new(&document, engine).expect("engine object");
-    let at = engine.member(&document, b"limits").expect("engine limits");
-    let jig = config::overrides::parse(&document, at, &config::Path::root().member(b"engine").member(b"limits"))
-        .expect("init limits");
-    let temper = temper_service::limits::profile(temper_service::limits::Profile::Small);
-    temper_service::limits::engine(&jig, &temper).expect("coherent box limits")
 }
 
 fn stock_box_world() -> (World, engine::Assignment) {
