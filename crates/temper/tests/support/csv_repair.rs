@@ -73,7 +73,19 @@ pub fn llm(config: &Path) -> super::boxed::CtlLlm {
     // smith's write checks the version the agent read; playground/widget
     // already has src/main.rs, unlike the CSV fixture's empty work/hello.
     scripts[1].turns = Box::new([call(b"read", &json!({"path":"src/main.rs"})), source, finish]);
-    scripts[0].turns[2] = call(b"finish", &json!({"form":"report", "text":"playground/widget landed.", "fields":{}}));
+    let mut report = call(b"finish", &json!({"form":"report", "text":"playground/widget landed.", "fields":{}}));
+    let mut lines = report.lines.into_vec();
+    lines.insert(
+        0,
+        Line::Pieces {
+            pieces: Box::new([Piece {
+                text: b"Reporting the CSV landing.".as_slice().into(),
+                hold: Some(b"csv-result".as_slice().into()),
+            }]),
+        },
+    );
+    report.lines = lines.into_boxed_slice();
+    scripts[0].turns[2] = report;
     let mut write = call(b"write", &json!({"path":"changes/1.md", "content":NOTE}));
     let mut lines = write.lines.into_vec();
     lines.insert(
@@ -331,6 +343,9 @@ pub fn steps(paths: &[PathBuf; 3], client: &Path, began: Time) -> Vec<Step> {
         }
         steps.push(step);
     }
+    // The change's ending precedes its requester's next model request. Wait
+    // for that request to carry the result before stopping the box.
+    steps.push(Step::ReleaseLlm { name: b"csv-result", cue: b"Add CSV export to widget" });
     steps
 }
 
