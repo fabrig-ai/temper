@@ -80,6 +80,9 @@ pub enum Read {
     X3Produced,
     X3Ended,
     PlannedRunning,
+    PlannedCoderRunning,
+    PlannedHeld,
+    PlannedCoderHeld,
     PlannedEnded,
     StoryLanded,
     DirectionBHeld,
@@ -761,28 +764,30 @@ pub fn step_5_6() -> Vec<calls::Step> {
 }
 
 // Act 2, step 5.4 (domain/testing.md, 5.3)
-const DIRECTION_B_ENDED: usize = 30;
-const STORY_OWNER_ENDED: usize = 34;
-const DIRECTION_ENDED: usize = 36;
-const STORY_OWNER_EARLIER: usize = 37;
-const STORY_OWNER_FIRST: usize = 38;
-const STORY_OWNER_INITIAL: usize = 40;
+const DIRECTION_B_ENDED: usize = 32;
+const STORY_OWNER_ENDED: usize = 36;
+const DIRECTION_ENDED: usize = 38;
+const STORY_OWNER_EARLIER: usize = 39;
+const STORY_OWNER_FIRST: usize = 40;
+const STORY_OWNER_INITIAL: usize = 41;
 pub const READS_5_4: &[(Read, usize)] = &[
     (Read::X3Open, 7),
     (Read::X3Produced, 8),
+    (Read::PlannedCoderRunning, 11),
     (Read::PlannedRunning, 12),
     (Read::DirectionBHeld, 15),
-    (Read::DirectionNoteWritten, 18),
-    (Read::X3Ended, 20),
-    (Read::StoryLanded, 23),
-    (Read::DirectionBPending, 24),
-    (Read::PlannedEnded, 28),
+    (Read::PlannedHeld, 16),
+    (Read::PlannedCoderHeld, 17),
+    (Read::DirectionNoteWritten, 20),
+    (Read::X3Ended, 22),
+    (Read::StoryLanded, 25),
+    (Read::DirectionBPending, 26),
+    (Read::PlannedEnded, 30),
     (Read::DirectionBEnded, DIRECTION_B_ENDED),
     (Read::StoryOwnerEnded, STORY_OWNER_ENDED),
     (Read::DirectionEnded, DIRECTION_ENDED),
     (Read::StoryOwnerEarlier, STORY_OWNER_EARLIER),
     (Read::StoryOwnerFirst, STORY_OWNER_FIRST),
-    (Read::DirectionFirst, 39),
     (Read::StoryOwnerInitial, STORY_OWNER_INITIAL),
 ];
 #[must_use]
@@ -833,6 +838,8 @@ pub fn step_5_4() -> Vec<calls::Step> {
             b"\"phase\":\"held\"",
             b"\"task\"",
         ),
+        call(D1, argv!["task", number(PLANNED), "--json"]),
+        call(D1, argv!["task", number(PLANNED_CODER), "--json"]),
         call(D1, argv!["message", number(DIRECTION), "--key", "new-direction", DIRECTION_MESSAGE]),
         call(D1, argv!["wait", "task", number(X3), "--until", "phase:closing"]),
         // Commit the note before releasing the review: otherwise the cancel's
@@ -885,9 +892,8 @@ pub fn step_5_4() -> Vec<calls::Step> {
             D1,
             argv!["activity", number(STORY_OWNER), "--before", calls::activity_before(STORY_OWNER_EARLIER), "--json"],
         ),
-        // B's hold can give the director an extra parked run before the
-        // person's direction. Keep that run and the initial delegation too.
-        call(D1, argv!["activity", number(DIRECTION), "--before", calls::activity_before(DIRECTION_ENDED), "--json"]),
+        // A placed stop creates no escalation notice for the director; its
+        // complete journal, including the initial delegation, fits one page.
         // A's additional current-head CI wake adds an earlier parked run.
         call(
             D1,

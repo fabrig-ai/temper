@@ -4399,6 +4399,7 @@ pub fn step_5_4(observed: &Observed) -> Vec<Miss> {
         "a1 must land green changing B's file, while main excludes x3's file",
     );
     direction_pulls(observed, &mut misses);
+    direction_subtree(observed, &mut misses);
     direction_news(observed, &mut misses);
     direction_attempts(observed, &mut misses);
     direction_messages(observed, &mut misses);
@@ -4423,11 +4424,14 @@ pub fn step_5_4(observed: &Observed) -> Vec<Miss> {
 }
 
 fn direction_identities(observed: &Observed, misses: &mut Vec<Miss>) {
-    use super::{DIRECTION, OVERLAP_OWNER, PLANNED, STORY_CHANGE, STORY_OWNER, X3};
+    use super::{DIRECTION, OVERLAP_OWNER, PLANNED, PLANNED_CODER, STORY_CHANGE, STORY_OWNER, X3};
     for (read, task, parent) in [
         (Read::X3Open, X3, STORY_OWNER),
         (Read::X3Ended, X3, STORY_OWNER),
         (Read::PlannedRunning, PLANNED, OVERLAP_OWNER),
+        (Read::PlannedCoderRunning, PLANNED_CODER, PLANNED),
+        (Read::PlannedHeld, PLANNED, OVERLAP_OWNER),
+        (Read::PlannedCoderHeld, PLANNED_CODER, PLANNED),
         (Read::PlannedEnded, PLANNED, OVERLAP_OWNER),
         (Read::StoryLanded, STORY_CHANGE, STORY_OWNER),
         (Read::DirectionBHeld, OVERLAP_OWNER, DIRECTION),
@@ -4554,6 +4558,32 @@ fn direction_commit(commit: u64) -> String {
     }
     hex
 }
+fn direction_subtree(observed: &Observed, misses: &mut Vec<Miss>) {
+    let root = task_document(observed, Read::DirectionBHeld);
+    let hold = number(root, "/hold/owner/reason/placed/hold");
+    for (before, held) in
+        [(Read::PlannedRunning, Read::PlannedHeld), (Read::PlannedCoderRunning, Read::PlannedCoderHeld)]
+    {
+        let previous = task_document(observed, before);
+        let doc = task_document(observed, held);
+        step_check(
+            misses,
+            "5.4",
+            hold.is_some_and(|hold| hold != 0)
+                && text(doc, "/chip/phase") == "held"
+                && number(doc, "/hold/owner/reason/placed/hold") == hold
+                && doc.pointer("/result") == Some(&Value::Null)
+                && number(previous, "/chip/details/owner/details/attempt").is_some()
+                && number(previous, "/chip/details/owner/details/attempt")
+                    == number(doc, "/chip/details/owner/details/attempt"),
+            DIRECTION_NEWS,
+            format_args!(
+                "{held:?}: B's subtree must share its placed hold without finishing or starting another attempt"
+            ),
+        );
+    }
+}
+
 fn direction_news(observed: &Observed, misses: &mut Vec<Miss>) {
     use super::{B_FILE, OVERLAP_HOLD_REVISION, OVERLAP_OWNER, OVERLAP_SUBSCRIPTION, PLANNED};
     let held = task_document(observed, Read::DirectionBHeld);
@@ -4825,6 +4855,9 @@ mod direction_tests {
             (Read::X3Produced, X3_CODER, X3),
             (Read::X3Ended, X3, STORY_OWNER),
             (Read::PlannedRunning, PLANNED, OVERLAP_OWNER),
+            (Read::PlannedCoderRunning, PLANNED_CODER, PLANNED),
+            (Read::PlannedHeld, PLANNED, OVERLAP_OWNER),
+            (Read::PlannedCoderHeld, PLANNED_CODER, PLANNED),
             (Read::PlannedEnded, PLANNED, OVERLAP_OWNER),
             (Read::StoryLanded, STORY_CHANGE, STORY_OWNER),
             (Read::DirectionBHeld, OVERLAP_OWNER, DIRECTION),
@@ -4864,6 +4897,12 @@ mod direction_tests {
         documents.get_mut(&Read::PlannedRunning).expect("h1")["task"]["spec"] = json!({"specification":{
             "parameters":[{"bytes":{"name":6,"value":{"bytes":B_FILE,"cut":false}}}]
         }});
+        for read in [Read::PlannedHeld, Read::PlannedCoderHeld] {
+            let doc = &mut documents.get_mut(&read).expect("held delegate")["task"];
+            doc["chip"]["phase"] = json!("held");
+            doc["result"] = Value::Null;
+            doc["hold"] = json!({"owner":{"revision":OVERLAP_HOLD_REVISION,"reason":{"placed":{"hold":1}}}});
+        }
         let news = format!("forge landing 12345678 -> {}", &direction_commit(9)[..8]);
         let rows: Vec<_> = [
             json!({"run_began":{"attempt":1}}),
@@ -5101,6 +5140,24 @@ mod direction_tests {
                 ],
             ),
             (
+                Read::PlannedHeld,
+                vec![
+                    "/task/chip/phase",
+                    "/task/result",
+                    "/task/hold/owner/reason/placed/hold",
+                    "/task/chip/details/owner/details/attempt",
+                ],
+            ),
+            (
+                Read::PlannedCoderHeld,
+                vec![
+                    "/task/chip/phase",
+                    "/task/result",
+                    "/task/hold/owner/reason/placed/hold",
+                    "/task/chip/details/owner/details/attempt",
+                ],
+            ),
+            (
                 Read::StoryLanded,
                 vec![
                     "/task/result/ending/task/done/change/kind",
@@ -5152,6 +5209,9 @@ mod direction_tests {
             (Read::X3Open, X3, STORY_OWNER),
             (Read::X3Ended, X3, STORY_OWNER),
             (Read::PlannedRunning, PLANNED, OVERLAP_OWNER),
+            (Read::PlannedCoderRunning, PLANNED_CODER, PLANNED),
+            (Read::PlannedHeld, PLANNED, OVERLAP_OWNER),
+            (Read::PlannedCoderHeld, PLANNED_CODER, PLANNED),
             (Read::PlannedEnded, PLANNED, OVERLAP_OWNER),
             (Read::StoryLanded, STORY_CHANGE, STORY_OWNER),
             (Read::DirectionBHeld, OVERLAP_OWNER, DIRECTION),
