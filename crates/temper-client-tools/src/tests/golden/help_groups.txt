@@ -6,10 +6,14 @@ temper ctl is the command line through which an agent works in a deployment for 
 
 ## What it is
 
-- **A call** is `temper ctl DIR TOOL [ARGUMENT...] [--json]`: one
-  process, one tool, then its exit status. `temper ctl help` lists the
-  tools, a line each; `temper ctl help TOOL` prints one tool's usage,
-  arguments and result.
+- **A call** is `temper ctl DIR GROUP VERB [ARGUMENT...] [--json]`:
+  one process, one tool, then its exit status. A group is one of
+  temper's nouns, such as `task`, `forge` or `account`; its verbs are
+  its tools: `task show`, `forge setup`. Five tools are one word:
+  `me`, `inbox`, `sign-in`, `sign-out`, `pending`.
+- **Help:** `temper ctl help` prints this page, then the groups, a
+  line each; `temper ctl help GROUP` the group's tools; `temper ctl
+  help GROUP VERB` one tool's usage, arguments and result.
 - **`DIR`** is the agent's directory for one deployment and one party:
   the sign-in's token, the engine's address, and the requests the
   engine has not yet answered. It is private to the user who owns it.
@@ -18,8 +22,8 @@ temper ctl is the command line through which an agent works in a deployment for 
   something can follow, `acts:`, the calls ready to copy, and, where a
   wait can follow, a `digest:`.
 - **An act** asks the engine for a change and prints its outcome.
-- **A wait** blocks until a read's subject changes, or meets a
-  condition, or its timeout passes.
+- **A wait** is a read given `--since` or `--until`: it blocks until
+  the subject changes, or meets a condition, or its timeout passes.
 - **The party** is who `DIR` is signed in as. `temper ctl DIR me`
   prints it, with its projects, its bounds and how long the engine
   keeps its requests.
@@ -77,16 +81,34 @@ again.
 
 ```
 temper ctl DIR me
-temper ctl DIR wait me --until waiting
+temper ctl DIR me --until waiting
 temper ctl DIR inbox
-temper ctl DIR task TASK --tree
-temper ctl DIR message TASK TEXT --key KEY
+temper ctl DIR task show TASK --tree
+temper ctl DIR task message TASK TEXT --key KEY
 ```
 
-A wait with `--since` names the digest of the read it follows, and
-returns when the subject differs from it; with `--until`, when the
-condition holds; with both, when both do. `temper ctl help wait`
-lists the subjects, their conditions and the timeouts.
+**Waits.** A read of one subject waits when given `--since DIGEST`,
+the digest a read of it printed, or `--until CONDITION`, or both:
+`--since` returns once the subject differs from that read; `--until`
+once the condition holds, at once if it holds already; both, once
+both do. `--until changed` returns at the subject's next change.
+`--timeout DURATION` bounds it: 300 seconds unless given, at most
+3600. The subjects, and their conditions beside `changed`:
+
+- `me`: `waiting`, something waits on your party;
+- `inbox`, with no flag: `waiting`; `updates`, an unread update;
+- `task show TASK`, with no flag: `ended` (done, failed or
+  cancelled); `waiting-on-me`, over the task's tree; `held`;
+  `replied`, once a chat waits on someone, holds, closes or ends;
+  `phase:PHASE`, a live phase;
+- `task tree TASK`, `task run TASK`: `ended`;
+- `task list`, without `--after` or `--ended`: none;
+- `account list`: `usable`, an account your work may use; `settled`,
+  no sign-in or check you asked still in progress;
+- `forge list`: `settled`, no set up, connect or install in progress;
+  `connected:FORGE`; `made:FORGE`, its first repository made;
+- `change show TASK`: `pull`, `ci:pending`, `ci:passed`, `ci:failed`,
+  `held`, `landed`.
 
 - **Keys:** an act takes `--key KEY` where its usage shows one,
   required or optional; reads and waits take none. Agents that share
@@ -105,11 +127,12 @@ lists the subjects, their conditions and the timeouts.
   and never opens one. After opening one on the engine's machine,
   wait for what it settles.
 - **JSON:** `--json` prints one object, its keys in snake case.
-  `--call FILE` reads one call as JSON, `{"tool": "message",
-  "arguments": {...}}`, the arguments named as `temper ctl help TOOL
-  --json` names them and `key` among them; `--call -` reads it from
-  stdin. A tool that reads a file, such as a secret or `sign-in`'s
-  link, takes its arguments on the command line, never in `--call`.
+  `--call FILE` reads one call as JSON, `{"tool": "task message",
+  "arguments": {...}}`, the arguments named as `temper ctl help GROUP
+  VERB --json` names them and `key` among them; `--call -` reads it
+  from stdin. A tool that reads a file, such as a secret or
+  `sign-in`'s link, takes its arguments on the command line, never in
+  `--call`.
 - **The forge:** read its diffs, reviews, CI runs, logs and branches
   with tools of your own, at the numbers and links ctl prints. What
   temper owns there, its branches, its pull requests and their
@@ -120,9 +143,10 @@ lists the subjects, their conditions and the timeouts.
 - ctl reaches an engine on loopback alone: `127.0.0.0/8` or `[::1]`.
 - The link's deadline is 30 seconds: an engine that does not answer
   within it fails the call (exit 1).
-- A malformed call prints the usage line alone:
-  `temper ctl: usage: temper ctl DIRECTORY TOOL [ARGUMENT...]`.
-  `temper ctl help TOOL` says what the tool takes.
+- A malformed call prints the usage line alone: `temper ctl: usage:
+  temper ctl DIR GROUP VERB [ARGUMENT...]; temper ctl help GROUP VERB
+  prints one tool`. A word that names no group or tool says which, and
+  where help lists them.
 - A `DIR` holds one party's sign-in; several parties take several
   directories. Give `temper open` a directory of its own.
 - Calls that send take `DIR` in turns: a second waits up to 60
