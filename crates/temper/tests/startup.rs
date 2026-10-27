@@ -11,7 +11,7 @@ use std::{
 #[test]
 fn a_rung_reads_created_chats_waited_changes_and_both_child_sets_in_ctls_forms() {
     use serde_json::json;
-    use support::forge_land::rung::{child_rows, created_chat, waited};
+    use support::forge_land::rung::{child_rows, created_chat, plan_question, task_digest, waited};
     // Native chat-start outcome from the failed live run: top-level task is
     // null, and the owner's actual created range supplies the number.
     let created = json!({"operation":"chat","task":null,"to":null,
@@ -25,20 +25,43 @@ fn a_rung_reads_created_chats_waited_changes_and_both_child_sets_in_ctls_forms()
     assert!(waited(&["change", "show", "3"], json!({"met":false})).is_err());
     let task = json!({"task":{"chip":{"task":2},"digest":"abc"},"met":true});
     assert_eq!(waited(&["task", "show", "2"], task.clone()), Ok(task));
+    assert_eq!(task_digest(&json!({"chip":{"task":2},"digest":"plain"})), Ok("plain"));
+    assert_eq!(task_digest(&json!({"task":{"digest":"compound"},"tree":{}})), Ok("compound"));
+    assert!(task_digest(&json!({"chip":{"task":2}})).is_err());
     let accounts = json!({"accounts":{"party":[]},"met":true});
     assert_eq!(waited(&["account", "list"], accounts.clone()), Ok(accounts));
-    let live = json!({"live":[{"chip":{"task":3}}],"live_after":null,"ended":"none"});
+    let live = json!({"tasks":{"rows":[{"chip":{"task":3}}],"more":false,"digest":"abc"},"read_on":null});
     let ended = json!({"live":[],"live_after":null,
         "ended":{"rows":{"rows":[{"chip":{"task":4}}],"after":null,"cut":false}}});
     let rows = child_rows(&live, &ended).expect("both sets");
     assert_eq!(rows, vec![json!({"chip":{"task":3}}), json!({"chip":{"task":4}})]);
     assert_eq!(child_rows(&live, &json!({"ended":"none"})).expect("no ended children").len(), 1);
-    let mut cut = ended;
+    let mut cut = ended.clone();
     cut["ended"]["rows"]["cut"] = true.into();
     assert!(child_rows(&live, &cut).is_err(), "a partial set cannot prove no change");
     let mut more = live;
-    more["live_after"] = json!({"value":"aa"});
-    assert!(child_rows(&more, &cut).is_err(), "an unread live child cannot disappear");
+    more["tasks"]["more"] = true.into();
+    assert!(child_rows(&more, &ended).is_err(), "an unread live child cannot disappear");
+    let question = json!({"event":{"owner":{"source":{"line":{"words":{
+        "kind":"question","by":{"task":2},"message":7,"words":"May I go ahead with this plan?"
+    }}}}}});
+    assert_eq!(plan_question(std::slice::from_ref(&question), 2, 7), Ok("May I go ahead with this plan?"));
+    assert!(plan_question(std::slice::from_ref(&question), 3, 7).is_err(), "actual author, not just any question");
+    assert!(plan_question(std::slice::from_ref(&question), 2, 8).is_err(), "the exact question in the person's inbox");
+}
+
+#[test]
+fn a_rung_recognizes_the_exact_delivered_approval_in_explicit_message_activity() {
+    use serde_json::json;
+    use support::forge_land::rung::approval_at;
+    let mut delivered = json!({"position":9,"at":42,"event":{"owner":{"source":{"line":{"words":{
+        "message":3,"by":{"task":1},"kind":{"answer":{"question":1}},
+        "words":"Go ahead. The CSV's first line must be the header fruit,count."
+    }}}}}});
+    assert_eq!(approval_at(std::slice::from_ref(&delivered), 1), Some(42));
+    assert_eq!(approval_at(std::slice::from_ref(&delivered), 2), None, "the chat must send it");
+    delivered["event"]["owner"]["source"]["line"]["words"]["words"] = "Go ahead.".into();
+    assert_eq!(approval_at(&[delivered], 1), None, "the header condition must reach the work too");
 }
 
 #[test]

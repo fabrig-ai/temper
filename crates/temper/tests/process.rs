@@ -65,6 +65,14 @@ fn rung_b0s_setup_reaches_account_import_with_the_fake_model_and_no_account() {
     scratch.remove();
 }
 
+/// Replays B0 unchanged except that support replaces both recorded reviews with one immediate approval.
+#[test]
+fn rung_b0s_walk_passes_offline_on_its_twin() {
+    let scratch = support::Scratch::new("rung-b0-offline-walk");
+    support::forge_land::rung::offline_walk(scratch.path());
+    scratch.remove();
+}
+
 #[test]
 fn a_held_clients_listener_stops_serve() {
     held_listener_stops_serve("clients", "temper serve: client listener failed\n");

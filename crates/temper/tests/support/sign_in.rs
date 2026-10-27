@@ -562,7 +562,15 @@ pub(super) fn plan_peer(scripts: Box<[skein_fake_llm_domain::api::Script]>) -> s
         .unwrap_or(0);
     // Retain the ordinary peer's room for script slots and wire framing.
     let strings = 16_384_u32.checked_add(u32::try_from(largest).expect("scripted item length")).expect("peer strings");
-    let mut recipe = temper_real_loop_world::llm::scripted_sized(scripts, strings);
+    plan_recipe(temper_real_loop_world::llm::scripted_sized(scripts, strings))
+}
+
+/// Serve a recorded document through the same TLS plan-account transport.
+pub(super) fn plan_document(bytes: &[u8]) -> super::llm::Listening {
+    plan_recipe(temper_real_loop_world::green_light::from_document(bytes))
+}
+
+fn plan_recipe(mut recipe: temper_real_loop_world::llm::Recipe) -> super::llm::Listening {
     // The sign-in peer alone takes a real-length plan bearer: 4096 bytes plus
     // the request line and headers exceed 4096; the next power of two is 8192.
     recipe.protocol_limits.http.head = 8192;

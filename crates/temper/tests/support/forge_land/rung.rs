@@ -1,4 +1,4 @@
-//! The ladder's real-model walks (domain/testing.md, 2.7).
+//! The ladder's real-model walks and their process proof (domain/testing.md, 2.7).
 //!
 //! Like `forge_land`'s oracle, this driver uses bounded child commands. Its box
 //! outlives the test on interruption so proof-live's final return hook can still
@@ -67,11 +67,11 @@ pub fn waited(args: &[&str], value: Value) -> Result<Value, String> {
     }
 }
 
-/// `read_queries.rs::encode_task_page` keeps live and ended reads separate;
-/// `EndedGroup::Rows` adds its own rows object around the ended page.
+/// `read_sets.rs::encode_tasks` uses the tasks subject for its first live
+/// page; the ended read uses `read_queries.rs::encode_task_page` instead.
 pub fn child_rows(live: &Value, ended: &Value) -> Result<Vec<Value>, String> {
-    require(live["live_after"].is_null(), "whole live child set")?;
-    let mut rows = live["live"].as_array().ok_or("live children missing")?.clone();
+    require(live["tasks"]["more"] == false && live["read_on"].is_null(), "whole live child set")?;
+    let mut rows = live["tasks"]["rows"].as_array().ok_or("live children missing")?.clone();
     match &ended["ended"] {
         Value::String(none) if none == "none" => {}
         Value::Object(group) => {
@@ -84,6 +84,36 @@ pub fn child_rows(live: &Value, ended: &Value) -> Result<Vec<Value>, String> {
         }
     }
     Ok(rows)
+}
+
+/// Explicit messages are `OwnerActivity::Words`, with their author in `by`;
+/// other input, such as results and forge news, uses the separate `Heard` form.
+pub fn plan_question(rows: &[Value], goal: u64, question: u64) -> Result<&str, String> {
+    rows.iter()
+        .find_map(|row| {
+            let words = &row["event"]["owner"]["source"]["line"]["words"];
+            (words["kind"] == "question" && words["by"]["task"] == goal && words["message"] == question)
+                .then(|| words["words"].as_str())
+                .flatten()
+        })
+        .ok_or_else(|| "the inbox question was not asked by the planning work".into())
+}
+
+/// The delivered approval's activity timestamp, not a call argument or a
+/// later run's time. `read_owner_activity.rs` encodes explicit answer words.
+#[must_use]
+pub fn approval_at(rows: &[Value], chat: u64) -> Option<u64> {
+    rows.iter().find_map(|row| {
+        let words = &row["event"]["owner"]["source"]["line"]["words"];
+        (words["kind"]["answer"]["question"].is_u64() && words["by"]["task"] == chat && words["words"] == ANSWER)
+            .then(|| row["at"].as_u64())
+            .flatten()
+    })
+}
+
+/// A plain task read is its subject; adding `--tree` makes a compound read.
+pub fn task_digest(value: &Value) -> Result<&str, String> {
+    value["digest"].as_str().or_else(|| value["task"]["digest"].as_str()).ok_or_else(|| "task digest missing".into())
 }
 
 /// The guide's init and the existing owned-forge fixture, with QA's model/room
@@ -465,27 +495,36 @@ pub fn green_light() {
     assert!(!kept, "a rung starts with a fresh box");
     let paths = ["config", "data", "cache"].map(|name| store.join(name));
     deployment(&paths);
-    let _ = super::cache_forgejo_binaries(&paths[2]);
-    let client = store.join("client");
-    fs::create_dir(&client).expect("fresh client");
-    fs::set_permissions(&client, fs::Permissions::from_mode(0o700)).expect("private client");
-    let mut driver = Driver::new(&store, &client);
-    return_hook(&driver.binary, &store, &driver.client, &account);
-    let mut boxed = Command::new("setsid")
-        .arg(&driver.binary)
+    super::super::live::notice(&format!("TAG rung-b0-{}", super::live_tag()));
+    run_walk(&store, &paths, &account);
+}
+
+fn start_box(store: &Path, paths: &[PathBuf; 3]) -> Child {
+    Command::new("setsid")
+        .arg(skein_scratch::paths::binary("temper"))
         .arg("box")
-        .args(super::deployment_flags(&paths))
+        .args(super::deployment_flags(paths))
         .args(["--echo", "steps"])
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
-        .current_dir(&store)
+        .current_dir(store)
         .stdin(Stdio::null())
         .stdout(fs::File::create(store.join("box.out")).expect("box output"))
         .stderr(fs::File::create(store.join("box.err")).expect("box errors"))
         .spawn()
-        .expect("live box");
-    super::super::live::notice(&format!("TAG rung-b0-{}", super::live_tag()));
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| walk(&mut driver, &paths, &account)));
+        .expect("rung box")
+}
+
+/// Both faces import, walk, return the account, then stop through these acts.
+fn run_walk(store: &Path, paths: &[PathBuf; 3], account: &Path) {
+    let _ = super::cache_forgejo_binaries(&paths[2]);
+    let client = store.join("client");
+    fs::create_dir(&client).expect("fresh client");
+    fs::set_permissions(&client, fs::Permissions::from_mode(0o700)).expect("private client");
+    let mut driver = Driver::new(store, &client);
+    return_hook(&driver.binary, store, &driver.client, account);
+    let mut boxed = start_box(store, paths);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| walk(&mut driver, paths, account)));
     // No ordinary failure or panic bypasses the return. The launcher's copy of
     // this act covers a signal to the test process itself.
     driver.phase = "return held login";
@@ -503,6 +542,162 @@ pub fn green_light() {
         panic!("{message}")
     });
     stopped.expect("box stopped after login return");
+}
+
+fn twin_peer() -> super::super::llm::Listening {
+    let mut document: Value = serde_json::from_slice(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/real-loop/tests/fixtures/b0/llm.json"
+    )))
+    .expect("checked-in B0 twin");
+    let scripts = document["cued"].as_array_mut().expect("twin scripts");
+    assert_eq!(scripts.len(), 5, "chat, goal, coder, failed review and retry");
+    assert_eq!(scripts[3]["cue"], "Review this change at the named head");
+    assert_eq!(scripts[4]["cue"], "This review is asked again at the same head");
+    scripts.pop();
+    scripts[3]["turns"] = json!([{
+        "lines":[{"call":"finish","arguments":{
+            "form":"verdict","label":"1","text":"Approved for the driver replay.","fields":{},"items":[]
+        }}],
+        "finish":"tool_calls","tokens":20
+    }]);
+    // All other call arguments stay recorded. Identity-bearing prose in
+    // words/text/content is deliberately untouched and is not an oracle.
+    for (task, script) in scripts.iter().enumerate() {
+        for (turn, value) in script["turns"].as_array().expect("turns").iter().enumerate() {
+            for line in value["lines"].as_array().expect("lines") {
+                if let Some(call) = line["call"].as_str() {
+                    let args = line["arguments"].as_object().expect("call arguments");
+                    let identity = args.contains_key("head")
+                        || args.contains_key("merge")
+                        || (call.starts_with("read_pull") && args.contains_key("number"));
+                    assert!(!identity, "unbound recorded identity: task {task}, turn {turn}, call {call}");
+                }
+            }
+        }
+    }
+    super::super::sign_in::plan_document(&serde_json::to_vec(&document).expect("adapted twin JSON"))
+}
+
+/// Create only a synthetic account, using native connect and export. Its
+/// provider registration follows the file to the walk's fresh deployment.
+fn fake_account(root: &Path, paths: &[PathBuf; 3], file: &Path) {
+    use super::super::{
+        boxed,
+        ctl::{Call, Step},
+        sign_in,
+    };
+    use skein_io::kernel::Exit;
+    let donor = root.join("donor");
+    fs::create_dir(&donor).expect("fake account donor");
+    let donor_paths = ["config", "data", "cache"].map(|name| donor.join(name));
+    deployment(&donor_paths);
+    let issuer = sign_in::patch_configuration(&donor_paths[0]);
+    let _ = super::cache_forgejo_binaries(&donor_paths[2]);
+    let outcome = boxed::run_ctl_with_account(
+        &donor,
+        boxed::echo_steps(super::deployment_flags(&donor_paths)),
+        &donor,
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["account", "connect", "1", "--key", "donor-account"])),
+            Step::Run(Call::new(&["account", "list", "--until", "usable", "--timeout", "10s"])),
+            Step::Run(Call::new(&["account", "export", "1", file.to_str().expect("fake account path")])),
+        ],
+        boxed::BOX_DEADLINE,
+        || (),
+        super::fake_face(issuer, Box::new([])),
+    );
+    for call in &outcome.calls {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "fake account setup: {}", String::from_utf8_lossy(&call.stderr));
+    }
+    assert_eq!(outcome.calls.len(), 4, "native account exported");
+    assert_eq!(outcome.exit, Some(Exit::Code(0)));
+    assert!(outcome.checked.is_some() && outcome.left.as_ref().is_none_or(Vec::is_empty), "donor drained");
+    let registration =
+        read_json(&donor_paths[0].join("temper.json"))["engine"]["llm"]["providers"][0]["sources"]["sign_in"].clone();
+    let config = paths[0].join("temper.json");
+    let mut destination = read_json(&config);
+    destination["engine"]["llm"]["providers"][0]["sources"]["sign_in"] = registration;
+    write_json(&config, &destination);
+}
+
+struct TwinPeers {
+    stop: std::sync::mpsc::Receiver<()>,
+    ended: bool,
+    deadline: Time,
+    wake: Time,
+}
+
+impl skein_world::Referee<super::super::Process> for TwinPeers {
+    fn act(&mut self, at: Time, procs: &mut [super::super::Process]) {
+        self.wake = at.saturating_add(Duration::from_millis(10));
+        if !self.ended && !matches!(self.stop.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)) {
+            let [super::super::Process::Issuer(issuer), super::super::Process::Peer(peer)] = procs else {
+                panic!("twin peers")
+            };
+            issuer.shutdown();
+            peer.shutdown();
+            self.ended = true;
+        }
+    }
+    fn observe(&mut self, _at: Time, _procs: &[super::super::Process]) {}
+    fn next_deadline(&self) -> Option<Time> {
+        Some(self.deadline.min(self.wake))
+    }
+    fn overdue(&self, at: Time) -> Option<String> {
+        (at >= self.deadline).then(|| "B0 twin peers did not settle".into())
+    }
+    fn passed(&self) -> bool {
+        self.ended
+    }
+}
+
+/// Real Forgejo, runner, ctl and clock, with only the account/model replaced.
+pub fn offline_walk(root: &Path) {
+    use super::super::{Process, sign_in};
+    use skein_shell::{Clock, Host};
+    let paths = ["config", "data", "cache"].map(|name| root.join(name));
+    deployment(&paths);
+    drop(sign_in::patch_configuration(&paths[0]));
+    let account = root.join("fake-account.move");
+    fake_account(root, &paths, &account);
+    let issuer = sign_in::restart_issued_issuer(&paths[0]);
+    let peer = twin_peer();
+    peer.configure(&paths[0]);
+    // As in account_move: one independent world must serve the fake while
+    // the synchronous bounded ctl/curl driver waits for its child commands.
+    std::thread::scope(|scope| {
+        let (stop, receiver) = std::sync::mpsc::channel();
+        let (ready, listening) = std::sync::mpsc::channel();
+        let peers = scope.spawn(move || {
+            let clock = Clock::new();
+            // Setup plus the unchanged whole-walk bound; not a phase increase.
+            let within = Duration::from_secs(700);
+            let mut world = skein_world::real::World::new(TwinPeers {
+                stop: receiver,
+                ended: false,
+                deadline: clock.now().now.saturating_add(within),
+                wake: clock.now().now,
+            });
+            world.spawn(|| Process::Issuer(Box::new(issuer)));
+            let index = peer.spawn(&mut world);
+            ready.send(()).expect("twin peer world ready");
+            let outcome = world.run(&clock, within);
+            assert!(outcome.procs.iter().all(Host::is_empty), "twin peer io drained");
+            let seen = super::peer_seen(&outcome.procs, index);
+            assert!(!seen.requests.is_empty(), "twin served the driver");
+            assert!(seen.answers.iter().all(Result::is_ok), "every twin answer served");
+            assert!(
+                seen.schemes.iter().all(|scheme| *scheme == Some(skein_llm::Scheme::Bearer)),
+                "plan bearer transport"
+            );
+        });
+        listening.recv().expect("twin peers constructed");
+        run_walk(root, &paths, &account);
+        drop(stop);
+        peers.join().expect("independent twin world");
+    });
 }
 
 fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Value, String> {
@@ -703,15 +898,7 @@ fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(),
     driver.phase("person's answer sent", 186_660);
     let goal = driver.unchanged(&chat, &baseline)?;
     let question_rows = driver.activity(chat.parse().map_err(|_| "chat number")?)?;
-    let asked = question_rows
-        .iter()
-        .find_map(|row| {
-            let heard = &row["event"]["owner"]["source"]["line"]["heard"];
-            (heard["kind"] == "question" && heard["from"]["task"].as_u64() == Some(goal))
-                .then(|| heard["words"].as_str())
-                .flatten()
-        })
-        .ok_or("the inbox question was not asked by the planning work")?;
+    let asked = plan_question(&question_rows, goal, question.parse().map_err(|_| "question number")?)?;
     require(
         asked.to_lowercase().contains("plan") && asked.contains('?'),
         "the question tells its plan and asks for go-ahead",
@@ -732,18 +919,11 @@ fn follow(driver: &mut Driver, chat: &str, goal: u64) -> Result<(), String> {
     let answer_at = loop {
         let read = driver.ctl(&["task", "show", &goal_text], None)?;
         let rows = driver.activity(goal)?;
-        let answered = rows.iter().find_map(|row| {
-            let heard = &row["event"]["owner"]["source"]["line"]["heard"];
-            (heard["kind"]["answer"]["question"].is_u64()
-                && heard["from"]["task"].as_u64().map(|n| n.to_string()) == Some(chat.to_owned())
-                && heard["words"] == ANSWER)
-                .then(|| heard["at"].as_u64())
-                .flatten()
-        });
+        let answered = approval_at(&rows, chat.parse().map_err(|_| "chat number")?);
         if let Some(at) = answered {
             break at;
         }
-        let digest = read["task"]["digest"].as_str().ok_or("goal digest")?;
+        let digest = task_digest(&read)?;
         driver.wait(&["task", "show", &goal_text, "--since", digest], "changed")?;
     };
     driver.met(190_910);
@@ -754,7 +934,7 @@ fn follow(driver: &mut Driver, chat: &str, goal: u64) -> Result<(), String> {
         if let Some(row) = children.iter().find(|r| r["chip"]["executor"].get("procedure").is_some()) {
             break row["chip"]["task"].as_u64().ok_or("change task number")?.to_string();
         }
-        let digest = read["task"]["digest"].as_str().ok_or("work digest")?;
+        let digest = task_digest(&read)?;
         driver.wait(&["task", "show", &goal_text, "--since", digest], "changed")?;
     };
     driver.met(214_930);
@@ -818,7 +998,7 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         .and_then(|r| r["id"].as_u64())
         .ok_or("box runner has not completed CI at the pull head")?;
     let jobs = driver.forge_json(&format!("actions/runs/{run}/jobs"))?;
-    let job = jobs["jobs"]
+    let job = jobs
         .as_array()
         .ok_or("Forgejo jobs missing")?
         .iter()
@@ -881,13 +1061,13 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
             let words = driver.conversation(chat)?.to_lowercase();
             let own_words = json!(replies).to_string().to_lowercase();
             require(
-                own_words.contains("landed") || own_words.contains(&format!("#{number}")),
-                "chat's own final reply names the landing",
+                own_words.contains("landed") || own_words.contains("pr #"),
+                "chat's own final reply reports the landing or pull",
             )?;
             require(words.contains("landed"), "chat conversation carries the landed report")?;
             break;
         }
-        let digest = snapshot["task"]["digest"].as_str().ok_or("chat digest")?;
+        let digest = task_digest(&snapshot)?;
         driver.wait(&["task", "show", chat, "--since", digest], "changed")?;
     }
     driver.met(WHOLE);
