@@ -487,13 +487,15 @@ fn landed(step: &w::Step) -> Option<&w::Landed> {
         | w::Step::Updating
         | w::Step::Resolving
         | w::Step::Repairing(_)
-        | w::Step::Landing => None,
+        | w::Step::Landing
+        | w::Step::Ended => None,
     }
 }
 fn step(step: &w::Step) -> &'static [u8] {
     // The browser's held-step vocabulary is also the step's lower-case name.
     match step {
         w::Step::First => b"first",
+        w::Step::Ended => b"ended",
         w::Step::Producing
         | w::Step::Opening
         | w::Step::Recreating
@@ -556,7 +558,8 @@ fn repair(step: &w::Step) -> Option<&'static [u8]> {
         | w::Step::Updating
         | w::Step::Resolving
         | w::Step::Landing
-        | w::Step::Landed(_) => None,
+        | w::Step::Landed(_)
+        | w::Step::Ended => None,
     }
 }
 fn gate_kind(kind: &w::GateKind) -> &'static [u8] {
