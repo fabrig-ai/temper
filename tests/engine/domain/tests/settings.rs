@@ -246,13 +246,13 @@ fn stock_config() -> engine::Config {
 
 fn stock_limits() -> engine::Limits {
     let mut limits = walking::limits();
-    // Stock policy 1 holds ten grants and three executor kinds.
+    // Stock policy 1 holds ten grants; room for the design's five executor kinds.
     limits.authority.grants = 16;
-    limits.authority.executors = 4;
+    limits.authority.executors = 8;
     limits.documents.grants = 16;
-    limits.documents.executors = 4;
+    limits.documents.executors = 8;
     limits.notes.scopes = 32;
-    limits.tasks.charters = 2;
+    limits.tasks.charters = 4;
     limits.journal.writes = walking::writes(&limits);
     limits
 }
@@ -545,4 +545,9 @@ fn a_stored_change_that_no_longer_checks_refuses_the_start() {
             changed: true
         })
     );
+}
+
+#[test]
+fn a_stock_reviewer_reads_and_gives_a_verdict_but_cannot_delegate() {
+    b2::reviewer();
 }
