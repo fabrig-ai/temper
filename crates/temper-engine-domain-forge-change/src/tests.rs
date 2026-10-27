@@ -401,7 +401,7 @@ fn reviewing() -> Change {
 #[test]
 fn a_failed_review_is_asked_again_at_the_same_head() {
     let failed = crate::review_failed(&reviewing(), 9, HEAD, at(2), &LIMITS);
-    assert_eq!(failed.gate_failures.as_ref(), &[crate::GateFailure { number: 9, count: 1 }]);
+    assert_eq!(failed.gate_failures.as_ref(), &[GateFailure { number: 9, count: 1 }]);
     let next = step(&failed, &facts(), &heard(), at(3), &LIMITS);
     assert_eq!(next.decision, Decision::Delegate(Delegate::Gate { number: 9, head: HEAD }));
     assert_eq!(next.change.repairs, 0);
@@ -420,14 +420,14 @@ fn a_second_failed_review_holds_the_change() {
     let next = step(&twice, &facts(), &heard(), at(5), &LIMITS);
     assert_eq!(next.decision, Decision::Hold(Hold::Failed));
     assert_eq!(next.change.repairs, 0);
-    assert_eq!(next.change.gate_failures.as_ref(), &[crate::GateFailure { number: 9, count: 2 }]);
+    assert_eq!(next.change.gate_failures.as_ref(), &[GateFailure { number: 9, count: 2 }]);
     assert_eq!(decide(&next.change, &facts(), &heard()).decision, Decision::None);
 }
 
 #[test]
 fn a_new_head_starts_its_review_failures_at_zero() {
     let mut c = reviewing();
-    c.gate_failures = Box::new([crate::GateFailure { number: 9, count: 2 }]);
+    c.gate_failures = Box::new([GateFailure { number: 9, count: 2 }]);
     c.state = State::Checking { head: NEW };
     let mut f = facts();
     f.branch = Some(NEW);
@@ -437,7 +437,7 @@ fn a_new_head_starts_its_review_failures_at_zero() {
     assert!(checked.change.gate_failures.is_empty());
     let review = decide(&checked.change, &f, &heard());
     let failed = crate::review_failed(&review.change, 9, NEW, at(2), &LIMITS);
-    assert_eq!(failed.gate_failures.as_ref(), &[crate::GateFailure { number: 9, count: 1 }]);
+    assert_eq!(failed.gate_failures.as_ref(), &[GateFailure { number: 9, count: 1 }]);
     assert_eq!(decide(&failed, &f, &heard()).decision, Decision::Delegate(Delegate::Gate { number: 9, head: NEW }));
 }
 
@@ -450,7 +450,7 @@ fn each_gate_has_its_own_failure_count() {
     let two = crate::review_failed(&one, 10, HEAD, at(3), &LIMITS);
     assert_eq!(
         two.gate_failures.as_ref(),
-        &[crate::GateFailure { number: 9, count: 1 }, crate::GateFailure { number: 10, count: 1 }]
+        &[GateFailure { number: 9, count: 1 }, GateFailure { number: 10, count: 1 }]
     );
     assert_eq!(decide(&two, &facts(), &heard()).decision, Decision::Delegate(Delegate::Gate { number: 9, head: HEAD }));
 }
