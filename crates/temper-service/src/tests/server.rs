@@ -5,6 +5,7 @@ const SOCKET: Token = Token::new(71);
 const OWNER: Token = Token::new(0);
 const CONNECTION: Token = Token::new(1);
 const STALL_AT: Time = Time::from_nanos(30_000_000_000);
+mod admission;
 
 fn accepted() -> (crate::server::Server, Queue<crate::server::Routed>) {
     let mut server = fixtures::server();
