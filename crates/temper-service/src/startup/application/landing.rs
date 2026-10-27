@@ -5,6 +5,7 @@ use jig_protocol_config::{self as config, Path};
 use skein_json::Document;
 use skein_lib::{List, Map};
 use temper_engine_domain::{self as engine, Approval, Freshness, Gate, LandingRule};
+use temper_engine_domain_forge::{CHECK_NAME_BYTES, WORKFLOW_BYTES};
 
 fn freshness(
     object: &mut config::read::Object,
@@ -176,6 +177,7 @@ pub(super) fn parse(
     at: u32,
     jig: &config::Engine,
     limits: &limits::Limits,
+    forges: &[super::Forge],
     problems: &mut Problems,
 ) -> Option<(engine::LandingPolicy, Box<[u32]>)> {
     let path = Path::root().member(b"application").member(b"landing");
@@ -188,6 +190,7 @@ pub(super) fn parse(
     let deployment = rules(document, deployment_ats?, &path.member(b"deployment"), jig, limits, None, problems);
     let mut projects = Map::with_capacity(jig.limits.core.authority.projects);
     let mut order = List::with_capacity(jig.limits.core.authority.projects);
+    let mut landings = Map::with_capacity(jig.limits.core.authority.projects);
     if let Some(ats) = project_ats {
         for (index, at) in ats.iter().enumerate() {
             let path = read::index(&path.member(b"projects"), index);
@@ -195,6 +198,7 @@ pub(super) fn parse(
             let project = read::number(&mut object, document, b"project", &path, problems);
             let ats =
                 read::list(&mut object, document, b"rules", jig.limits.core.authority.requirements, &path, problems);
+            let landing = project_landing(&mut object, document, &path, &limits.forge, forges, problems);
             read::finish(object, document, &path, problems);
             if let Some(project) = project
                 && let Some(ats) = ats
@@ -213,9 +217,231 @@ pub(super) fn parse(
                 }
                 let rules = rules(document, ats, &path.member(b"rules"), jig, limits, Some(project), problems);
                 projects.insert(project, rules).expect("bounded projects");
+                if let Some(landing) = landing {
+                    landings.insert(project, landing).expect("bounded projects");
+                }
                 order.push(project).expect("bounded projects");
             }
         }
     }
-    Some((engine::LandingPolicy { deployment, projects }, order.into_boxed()))
+    Some((engine::LandingPolicy { deployment, projects, landings }, order.into_boxed()))
+}
+
+fn optional_list(
+    object: &mut config::read::Object,
+    document: &Document,
+    name: &[u8],
+    max: u32,
+    path: &Path,
+    problems: &mut Problems,
+) -> Option<List<u32>> {
+    let Some(at) = object.member(document, name) else { return Some(List::with_capacity(0)) };
+    match config::read::list(document, at, max) {
+        Ok(ats) => Some(ats),
+        Err(what) => {
+            problems.push(path.member(name), What::Jig(what));
+            None
+        }
+    }
+}
+fn optional_word(
+    object: &mut config::read::Object,
+    document: &Document,
+    name: &[u8],
+    default: &[u8],
+    path: &Path,
+    problems: &mut Problems,
+) -> Option<Box<[u8]>> {
+    let Some(at) = object.member(document, name) else { return Some(default.into()) };
+    match config::read::text(document, at, 1_048_576) {
+        Ok(value) => Some(value),
+        Err(what) => {
+            problems.push(path.member(name), What::Jig(what));
+            None
+        }
+    }
+}
+fn checked_text(
+    object: &mut config::read::Object,
+    document: &Document,
+    name: &[u8],
+    max: u32,
+    path: &Path,
+    problems: &mut Problems,
+) -> Option<Box<[u8]>> {
+    let at = read::required(object, document, name, path, problems)?;
+    match config::read::text(document, at, max) {
+        Ok(value) => {
+            read::form(!value.is_empty(), path.member(name), problems);
+            Some(value)
+        }
+        Err(what) => {
+            problems.push(path.member(name), What::Jig(what));
+            None
+        }
+    }
+}
+// Ignored paths are whole segments; no empty segment, dot or parent segment.
+fn valid_ignored_path(value: &[u8]) -> bool {
+    let mut length = 0_usize;
+    let mut dots = true;
+    for byte in value {
+        if *byte == b'/' {
+            if length == 0 || (dots && length <= 2) {
+                return false;
+            }
+            length = 0;
+            dots = true;
+        } else {
+            length = length.saturating_add(1);
+            dots &= *byte == b'.';
+        }
+    }
+    length > 0 && (!dots || length > 2)
+}
+
+struct Check {
+    name: Box<[u8]>,
+    workflow: Box<[u8]>,
+    ignored: Box<[Box<[u8]>]>,
+}
+fn check(
+    object: &mut config::read::Object,
+    document: &Document,
+    path: &Path,
+    limits: &temper_engine_domain_forge::Limits,
+    problems: &mut Problems,
+) -> Option<Check> {
+    let name = checked_text(
+        object,
+        document,
+        b"name",
+        u32::try_from(CHECK_NAME_BYTES).expect("check name bound"),
+        path,
+        problems,
+    );
+    let workflow = checked_text(
+        object,
+        document,
+        b"workflow",
+        u32::try_from(WORKFLOW_BYTES).expect("workflow bound"),
+        path,
+        problems,
+    );
+    let ats = optional_list(object, document, b"ignored", limits.ignored_paths, path, problems);
+    let mut ignored = List::with_capacity(limits.ignored_paths);
+    if let Some(ats) = ats {
+        for (index, at) in ats.iter().enumerate() {
+            let path = read::index(&path.member(b"ignored"), index);
+            match config::read::text(document, *at, limits.name_bytes) {
+                Ok(value) => {
+                    read::form(valid_ignored_path(&value), path, problems);
+                    ignored.push(value).expect("bounded ignored paths");
+                }
+                Err(what) => problems.push(path, What::Jig(what)),
+            }
+        }
+    }
+    let name = name?;
+    for byte in &name {
+        if !byte.is_ascii_alphanumeric() && *byte != b'-' && *byte != b'_' {
+            read::form(false, path.member(b"name"), problems);
+            break;
+        }
+    }
+    let workflow = workflow?;
+    read::form(!workflow.contains(&b'/'), path.member(b"workflow"), problems);
+    Some(Check { name, workflow, ignored: ignored.into_boxed() })
+}
+fn repository_checks(
+    document: &Document,
+    at: u32,
+    path: &Path,
+    limits: &temper_engine_domain_forge::Limits,
+    problems: &mut Problems,
+) -> Option<engine::RepositoryChecks> {
+    let mut object = read::object(document, at, path, problems)?;
+    let forge = read::short(&mut object, document, b"forge", path, problems);
+    let repository = read::number(&mut object, document, b"repository", path, problems);
+    let gate_ats = optional_list(&mut object, document, b"gates", limits.gates, path, problems);
+    read::finish(object, document, path, problems);
+    let mut gates = List::with_capacity(limits.gates);
+    if let Some(ats) = gate_ats {
+        for (index, at) in ats.iter().enumerate() {
+            let path = read::index(&path.member(b"gates"), index);
+            let Some(mut object) = read::object(document, *at, &path, problems) else { continue };
+            let check = check(&mut object, document, &path, limits, problems);
+            let blocking = read::boolean(&mut object, document, b"blocking", &path, problems);
+            read::finish(object, document, &path, problems);
+            if let Some(check) = check
+                && let Some(blocking) = blocking
+            {
+                for previous in &gates {
+                    let previous: &engine::GateCheck = previous;
+                    if previous.name == check.name {
+                        problems.push(path.member(b"name"), What::Jig(config::What::Unique));
+                    }
+                }
+                gates
+                    .push(engine::GateCheck {
+                        name: check.name,
+                        workflow: check.workflow,
+                        ignored: check.ignored,
+                        blocking,
+                    })
+                    .expect("bounded gates");
+            }
+        }
+    }
+    Some(engine::RepositoryChecks {
+        repository: skein_forge::api::Repository { forge: forge?, repository: repository? },
+        gates: gates.into_boxed(),
+    })
+}
+fn project_landing(
+    object: &mut config::read::Object,
+    document: &Document,
+    path: &Path,
+    limits: &temper_engine_domain_forge::Limits,
+    forges: &[super::Forge],
+    problems: &mut Problems,
+) -> Option<engine::ProjectLanding> {
+    let by = optional_word(object, document, b"by", b"queue", path, problems)?;
+    let by = match by.as_ref() {
+        b"queue" => engine::Way::Queue,
+        b"turn" => engine::Way::Turn,
+        _ => {
+            read::form(false, path.member(b"by"), problems);
+            return None;
+        }
+    };
+    let ats = optional_list(object, document, b"gates", limits.repositories, path, problems)?;
+    let mut repositories = List::with_capacity(limits.repositories);
+    for (index, at) in ats.iter().enumerate() {
+        let path = read::index(&path.member(b"gates"), index);
+        if let Some(checks) = repository_checks(document, *at, &path, limits, problems) {
+            let mut found = false;
+            for forge in forges {
+                if forge.number == checks.repository.forge {
+                    found = true;
+                    read::form(
+                        by != engine::Way::Turn || forge.kind != crate::settings::Kind::GitHub,
+                        path.member(b"repository"),
+                        problems,
+                    );
+                }
+            }
+            if !found {
+                problems.push(path.member(b"forge"), What::Jig(config::What::Refers));
+            }
+            for previous in &repositories {
+                let previous: &engine::RepositoryChecks = previous;
+                if previous.repository == checks.repository {
+                    problems.push(path.member(b"repository"), What::Jig(config::What::Unique));
+                }
+            }
+            repositories.push(checks).expect("bounded repositories");
+        }
+    }
+    Some(engine::ProjectLanding { by, repositories: repositories.into_boxed() })
 }

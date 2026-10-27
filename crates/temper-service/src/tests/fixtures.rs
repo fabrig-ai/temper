@@ -87,6 +87,7 @@ pub fn engine() -> settings::Engine {
         landing: temper_engine_domain::LandingPolicy {
             deployment: Box::new([]),
             projects: skein_lib::Map::with_capacity(0),
+            landings: skein_lib::Map::with_capacity(0),
         },
         charter: 1,
         limits: limits::profile(limits::Profile::Small),

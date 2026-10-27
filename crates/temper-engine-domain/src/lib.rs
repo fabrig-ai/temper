@@ -43,7 +43,7 @@ pub use limits::{
 };
 pub use link::{hello_bounds, inbox_words};
 pub use route::{Approval, Freshness, Gate, HostDelivery, HostRequest, LandingRule, adopt_repository_ask};
-pub use translate::{Config, LandingPolicy};
+pub use translate::{Config, GateCheck, LandingPolicy, ProjectLanding, RepositoryChecks, Way};
 
 /// Startup's secret-free decision (protocol/credentials.md, 2.2).
 /// Runs are volatile; every surviving carried row is no longer in use.

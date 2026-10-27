@@ -2287,3 +2287,39 @@ fn owned_startup_details_keep_the_runner_pin_and_directory_path_and_managed_has_
     settings.setup[0].entry.mode = Mode::Managed { admin_token: Some(b"/fake/admin-token".as_slice().into()) };
     assert!(application::configured(&settings)[0].owned.is_none());
 }
+
+#[test]
+fn a_turn_project_on_github_is_refused_at_start() {
+    let jig = fixtures::engine().jig;
+    let input = fixtures::with(
+        github_application().as_bytes(),
+        b"landing.projects",
+        br#"[{"project":1,"rules":[],"by":"turn","gates":[{"forge":1,"repository":2}]}]"#,
+    );
+    let (members, problems) = application(&input, &jig);
+    assert!(members.is_none());
+    assert_eq!(lines(&problems).as_ref(), b"application.landing.projects[0].gates[0].repository: invalid form\n");
+}
+
+#[test]
+fn landing_configuration_reads_the_way_and_bounded_repository_gates() {
+    let jig = fixtures::engine().jig;
+    let input = fixtures::with(fixtures::APPLICATION, b"landing.projects", br#"[{"project":1,"rules":[],"by":"turn","gates":[{"forge":1,"repository":2,"gates":[{"name":"gate","workflow":"gate.yml","ignored":["docs"],"blocking":true}]}]}]"#);
+    let (members, problems) = application(&input, &jig);
+    assert!(problems.is_empty(), "{:?}", lines(&problems));
+    let members = members.unwrap();
+    let landing = members.landing.landings.get(&1).unwrap();
+    assert_eq!(landing.by, temper_engine_domain::Way::Turn);
+    assert_eq!(landing.repositories[0].repository.repository, 2);
+    let check = &landing.repositories[0].gates[0];
+    assert_eq!(check.name.as_ref(), b"gate");
+    assert_eq!(check.workflow.as_ref(), b"gate.yml");
+    assert_eq!(check.ignored.as_ref(), &[Box::from(b"docs".as_slice())]);
+    assert!(check.blocking);
+    let (members, problems) = application(fixtures::APPLICATION, &jig);
+    assert!(problems.is_empty());
+    let members = members.unwrap();
+    let landing = members.landing.landings.get(&1).unwrap();
+    assert_eq!(landing.by, temper_engine_domain::Way::Queue);
+    assert!(landing.repositories.is_empty());
+}

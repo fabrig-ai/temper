@@ -222,3 +222,22 @@ fn a_worlds_own_defaults_replace_the_stock_without_document_members() {
     assert_eq!(engine.policies.iter().find(|policy| policy.number == 1).unwrap().policy.period_spend, 41);
     assert_eq!(engine.rules.maximum_run_spend, 2);
 }
+
+#[test]
+fn stock_and_init_admit_the_landing_procedure_and_its_effects() {
+    let document = generated();
+    let engine_bytes = fixtures::value(&document, b"engine");
+    let engine = fixtures::parse_engine(&engine_bytes);
+    let defaults = crate::stock::defaults(&engine.llm);
+    let core = config::core(&engine, [1; 16], 7);
+    for ceiling in [
+        &defaults.rules.ceiling,
+        &defaults.policies.get(&1).unwrap().policy.ceiling,
+        &core.seed_projects[0].policy.policy.ceiling,
+    ] {
+        assert!(ceiling.delegation.kinds.contains(&jig_domain_authority::Executor::Procedure(3)));
+        for kind in [3, 4, 6, 9, 12, 15, 16, 17] {
+            assert!(ceiling.grants.iter().any(|grant| grant.kind == kind), "kind {kind}");
+        }
+    }
+}
