@@ -45,7 +45,8 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   others) and a revision of its own. Releasing it runs it again;
   leaving it held, or passing it up to the next holder of authority,
   are the other decisions. Only an uncertain effect asks whether to
-  repeat it.
+  repeat it. `task` prints `held:` and its reason, then `way out:`,
+  what to mend and the call that releases it: `release N --hold R`.
 - **Stopped:** stopping ends the current run and holds the task; its
   delegates go on.
 - **Cancelled:** cancelling ends the task and its tree: at once, or
@@ -53,7 +54,8 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
 - **Amended:** an amendment replaces the controls it names (priority
   and tracking, deadline, instructions, spec, dependencies, model) and
   keeps the rest; all but a tracked task's priority name the spec
-  revision the amender saw.
+  revision the amender saw. Words a read cut short are replaced whole
+  at that revision.
 
 ## What temper guarantees
 
