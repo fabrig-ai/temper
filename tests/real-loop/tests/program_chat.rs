@@ -19,8 +19,9 @@ const DECLARED: usize = 2;
 const USABLE: usize = 6;
 // The chat follows the accounts reads; each reply is joined at idle before the next act.
 const CHAT: usize = 7;
-const SECOND_PARKED: usize = 12;
-const CONVERSATION: usize = 13;
+const FIRST_REPLY: usize = 9;
+const SECOND_PARKED: usize = 14;
+const CONVERSATION: usize = 15;
 const FIRST: &str = "First.";
 const SECOND: &str = "Second.";
 const ONE: &str = "One.";
@@ -32,13 +33,13 @@ const REPLIES: usize = 2;
 fn a_chat_on_a_program_source_replies_parks_and_resumes() {
     let scratch = Scratch::new("program-chat");
     let story = Story {
-        asked: [(FIRST, ONE), (SECOND, TWO)]
-            .into_iter()
-            .map(|(cue, reply)| Script {
-                cue: cue.into(),
-                turns: vec![Turn { steps: vec![Step::Text(reply.into())], ..Turn::default() }],
-            })
-            .collect(),
+        cued: vec![Script {
+            cue: FIRST.into(),
+            turns: [ONE, TWO]
+                .into_iter()
+                .map(|reply| Turn { steps: vec![Step::Text(reply.into())], ..Turn::default() })
+                .collect(),
+        }],
         ..Story::default()
     };
     claude::source(&scratch, SOURCE, &story).expect("signed-in fake source");
@@ -55,9 +56,11 @@ fn a_chat_on_a_program_source_replies_parks_and_resumes() {
                 call(D1, argv!["wait", "accounts", "--until", "usable", "--json"]),
                 call(D1, argv!["accounts", "--json"]),
                 call(D1, argv!["chat", "--project", fixtures::PROJECT, "--key", "program-chat", FIRST]),
+                call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
                 until(D1, argv!["chat", task(CHAT)], ONE.as_bytes(), b"One"),
                 call(D1, argv!["wait", "task", task(CHAT), "--until", "phase:idle"]),
                 call(D1, argv!["message", task(CHAT), SECOND, "--key", "program-second"]),
+                call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
                 until(D1, argv!["chat", task(CHAT)], TWO.as_bytes(), b"Two"),
                 call(D1, argv!["wait", "task", task(CHAT), "--until", "phase:idle", "--json"]),
                 call(D1, argv!["chat", task(CHAT)]),
@@ -99,16 +102,21 @@ fn a_chat_on_a_program_source_replies_parks_and_resumes() {
         .expect("source checked on worker");
     assert_eq!(program["state"], "usable");
 
-    let conversation = &ran.calls()[CONVERSATION].stdout;
-    let text = std::str::from_utf8(conversation).expect("chat text");
-    let positions = [FIRST, ONE, SECOND, TWO].map(|words| text.find(words).expect("chat holds the words"));
+    // The two-line activity pages keep the replies in separate reads. Smith puts
+    // the opening request in the brief, rather than a person transcript message.
+    let mut conversation = ran.calls()[FIRST_REPLY].stdout.clone();
+    conversation.extend_from_slice(&ran.calls()[CONVERSATION].stdout);
+    let text = std::str::from_utf8(&conversation).expect("chat text");
+    let positions =
+        [ONE, SECOND, TWO].map(|words| text.find(words).unwrap_or_else(|| panic!("chat lacks {words}: {text}")));
     assert!(positions.windows(2).all(|pair| pair[0] < pair[1]), "{text}");
     for reply in [ONE, TWO] {
-        assert_eq!(occurrences(conversation, reply.as_bytes()), 1, "{text}");
+        assert_eq!(occurrences(&conversation, reply.as_bytes()), 1, "{text}");
     }
     let parked: serde_json::Value =
         serde_json::from_slice(&ran.calls()[SECOND_PARKED].stdout).expect("parked task JSON");
     assert_eq!(parked["task"]["kept_account"], PROGRAM_ACCOUNT, "{parked}");
+    assert_eq!(parked["task"]["spec"]["specification"]["words"]["bytes"], FIRST, "{parked}");
     assert_eq!(parked["task"]["llm"]["main"]["model"], "fake-claude", "{parked}");
     assert!(ran.llm().is_empty(), "no direct-key request: {:?}", ran.llm());
 
@@ -146,7 +154,8 @@ fn check_program(bytes: &[u8]) {
     }
     let received = smith_fake_claude::received(bytes);
     assert_eq!(received.len(), REPLIES, "{received:?}");
-    for (message, words) in received.iter().zip([FIRST, SECOND]) {
+    let mut texts = Vec::new();
+    for message in &received {
         assert_eq!(message["type"], "user");
         assert_eq!(message["message"]["role"], "user");
         let content = &message["message"]["content"];
@@ -155,15 +164,21 @@ fn check_program(bytes: &[u8]) {
             serde_json::Value::Array(parts) => {
                 parts.iter().filter_map(|part| part["text"].as_str()).collect::<Vec<_>>().join("\n")
             }
-            _ => panic!("user content: {content}"),
+            serde_json::Value::Null
+            | serde_json::Value::Bool(_)
+            | serde_json::Value::Number(_)
+            | serde_json::Value::Object(_) => panic!("user content: {content}"),
         };
-        assert!(text.contains(words), "{message}");
+        texts.push(text);
     }
+    // Smith opens from its brief with BEGIN; the resumed input carries the person's next words.
+    assert!(!texts[0].contains(FIRST) && !texts[0].contains(SECOND), "{}", texts[0]);
+    assert!(texts[1].contains(SECOND), "{}", texts[1]);
     assert_eq!(
         smith_fake_claude::selections(bytes),
         [
-            Seen::Selected { script: Selection::Asked(0), turn: 0 },
-            Seen::Selected { script: Selection::Asked(1), turn: 0 }
+            Seen::Selected { script: Selection::Cued(0), turn: 0 },
+            Seen::Selected { script: Selection::Cued(0), turn: 1 }
         ]
     );
 }
