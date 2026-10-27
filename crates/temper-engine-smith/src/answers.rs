@@ -492,6 +492,9 @@ fn task_problem(text: &mut Text, problem: &jig_domain_tasks::Problem) -> Result<
             })
         }
 
+        Refusal::Placed { .. } => text.add(b"held by a placed hold"),
+        Refusal::HoldOwner { .. } => text.add(b"only the placed hold's owner may release it"),
+        Refusal::HoldRevision { .. } => text.add(b"placed hold revision changed"),
         Refusal::NotReady => text.add(b"not ready"),
         Refusal::Unknown => text.add(b"unknown"),
         Refusal::Busy => text.add(b"busy"),
@@ -851,7 +854,7 @@ fn hold_reason(reason: &jig_domain_people::HoldReason) -> &'static [u8] {
         HoldReason::Stalled => b"because it stalled",
         HoldReason::Dependency { .. } => b"for its dependency",
         HoldReason::Stopped => b"because it was stopped",
-        HoldReason::StoppedBy { .. } => b"because a party stopped it",
+        HoldReason::Placed { .. } => b"because a placed hold holds it",
         HoldReason::Drift => b"for drift",
         HoldReason::Effects => b"for its effects",
         HoldReason::EffectFailed => b"for a failed effect",

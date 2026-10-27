@@ -48,12 +48,12 @@ pub(super) fn encode_hold_category(
             out.object_end();
         }
         jig_client::contract::HoldCategory::Stopped => out.string(b"stopped"),
-        jig_client::contract::HoldCategory::StoppedBy { party } => {
+        jig_client::contract::HoldCategory::Placed { hold } => {
             out.object_start();
-            out.key(b"stopped_by");
+            out.key(b"placed");
             out.object_start();
-            out.key(b"party");
-            out.unsigned(*(party));
+            out.key(b"hold");
+            out.unsigned(*(hold));
             out.object_end();
             out.object_end();
         }

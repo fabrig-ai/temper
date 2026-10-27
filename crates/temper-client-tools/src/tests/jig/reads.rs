@@ -335,6 +335,16 @@ fn a_circle_hold_keeps_its_json_category() {
     assert!(skein_lib::bytes::find(&printed.stdout, br#""reason":"circle""#).is_some());
 }
 #[test]
+fn a_placed_hold_keeps_its_number_in_json() {
+    use jig_client::contract as c;
+    let mut latest = fixtures::chat_at(fixtures::TASK, c::RunStage::Idle, None);
+    let task = fixtures::task_in(&mut latest);
+    let c::ChipPhase::Owner { phase, .. } = task.chip.details.as_mut() else { panic!("owner chip") };
+    *phase = c::OwnerChipPhase::Held { reason: c::HoldCategory::Placed { hold: u64::MAX }, revision: 1 };
+    let printed = fixtures::read_answer(fixtures::TASK_JSON_CALL, fixtures::task_result(task.clone()));
+    assert!(skein_lib::bytes::find(&printed.stdout, br#""reason":{"placed":{"hold":18446744073709551615}}"#).is_some());
+}
+#[test]
 fn a_refused_next_run_names_its_cause_in_text_and_json() {
     use jig_client::contract as c;
     // One minute after the epoch exercises the document's wall formatting.

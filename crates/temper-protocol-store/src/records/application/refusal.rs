@@ -38,8 +38,8 @@ pub(super) fn encode_hold_reason(value: &p::HoldReason, l: &w::Limits) -> Result
             w::HoldReason::Dependency(w::HoldReasonDependency::new(l, w::HoldReasonDependencyParts { task: *task })?)
         }
         p::HoldReason::Stopped => w::HoldReason::Stopped,
-        p::HoldReason::StoppedBy { party } => {
-            w::HoldReason::StoppedBy(w::HoldReasonStoppedBy::new(l, w::HoldReasonStoppedByParts { party: *party })?)
+        p::HoldReason::Placed { hold } => {
+            w::HoldReason::Placed(w::HoldReasonPlaced::new(l, w::HoldReasonPlacedParts { hold: *hold })?)
         }
         p::HoldReason::Drift => w::HoldReason::Drift,
         p::HoldReason::Effects => w::HoldReason::Effects,
@@ -70,7 +70,7 @@ pub(super) fn decode_hold_reason(value: w::HoldReason) -> p::HoldReason {
         w::HoldReason::Stalled => p::HoldReason::Stalled,
         w::HoldReason::Dependency(value) => p::HoldReason::Dependency { task: value.task() },
         w::HoldReason::Stopped => p::HoldReason::Stopped,
-        w::HoldReason::StoppedBy(value) => p::HoldReason::StoppedBy { party: value.party() },
+        w::HoldReason::Placed(value) => p::HoldReason::Placed { hold: value.hold() },
         w::HoldReason::Drift => p::HoldReason::Drift,
         w::HoldReason::Effects => p::HoldReason::Effects,
         w::HoldReason::EffectFailed => p::HoldReason::EffectFailed,
@@ -221,6 +221,10 @@ pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::Limit
     match value {
         p::LimitKind::SettingsProposals => unreachable!("forge applications cannot propose settings"),
         p::LimitKind::Projects => w::LimitKind::Projects,
+        p::LimitKind::PlacedHolds => w::LimitKind::PlacedHolds,
+        p::LimitKind::ProjectPlacedHolds => w::LimitKind::ProjectPlacedHolds,
+        p::LimitKind::PartyPlacedHolds => w::LimitKind::PartyPlacedHolds,
+        p::LimitKind::Exemptions => w::LimitKind::Exemptions,
         p::LimitKind::Words => w::LimitKind::Words,
         p::LimitKind::Identity => w::LimitKind::Identity,
         p::LimitKind::Roles => w::LimitKind::Roles,
@@ -269,6 +273,10 @@ pub(super) fn decode_limit_kind(value: w::LimitKind) -> p::LimitKind {
     match value {
         w::LimitKind::SettingsProposals => unreachable!("forge applications cannot store a settings proposal limit"),
         w::LimitKind::Projects => p::LimitKind::Projects,
+        w::LimitKind::PlacedHolds => p::LimitKind::PlacedHolds,
+        w::LimitKind::ProjectPlacedHolds => p::LimitKind::ProjectPlacedHolds,
+        w::LimitKind::PartyPlacedHolds => p::LimitKind::PartyPlacedHolds,
+        w::LimitKind::Exemptions => p::LimitKind::Exemptions,
         w::LimitKind::Words => p::LimitKind::Words,
         w::LimitKind::Identity => p::LimitKind::Identity,
         w::LimitKind::Roles => p::LimitKind::Roles,
