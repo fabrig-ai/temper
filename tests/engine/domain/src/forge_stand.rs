@@ -200,6 +200,8 @@ impl ForgeStand {
                 op: raw::Op::Write(raw::Write::Status {
                     commit: head,
                     context: b"build".as_slice().into(),
+                    description: Box::default(),
+                    link: Box::default(),
                     state: if passing { raw::Check::Passed } else { raw::Check::Failed },
                 }),
             },
