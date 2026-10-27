@@ -14,7 +14,8 @@ const SECOND_MESSAGE: &[u8] = b"And then?";
 const TWO_ANSWERS: u32 = 2;
 const NO_ANSWERS: u32 = 0;
 const NO_ATTEMPT: u64 = 0;
-const REFUSAL: &[u8] = b"Next run refused \xc2\xb7 This model runs through a program. A chat can't stay open through a program yet. To chat now, choose a model that doesn't run through a program.";
+const REFUSAL: &[u8] =
+    b"Next run refused \xc2\xb7 A worker was refused at 00:00. Unconfigured or occupied worker position 7.";
 
 fn see(find: Find) -> Step<Address> {
     Step::See { find, within: fixtures::WITHIN }
@@ -90,8 +91,8 @@ fn an_open_chat_stays_live_takes_a_second_message_and_is_closed() {
 }
 
 #[test]
-fn a_refused_chat_says_why_and_starts_nothing() {
-    let mut world = fixtures::refusing_world(fixtures::SEED);
+fn a_chat_with_a_refused_hello_says_why_and_starts_nothing() {
+    let mut world = fixtures::refused_hello_world(fixtures::SEED);
     let (person, mut steps) = start_chat(&mut world);
     steps.extend([
         see(Find::text(b"Cannot start yet")),

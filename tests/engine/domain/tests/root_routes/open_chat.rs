@@ -1,6 +1,6 @@
 //! temper's Open chat wiring; jig owns the lifecycle's exhaustive proofs.
 use super::*;
-use jig_client::{contract as c, facts, shapes};
+use jig_client::{contract as c, shapes};
 use jig_client_world::joint::wire;
 use jig_domain_core::{documents as d, reads};
 use temper_engine_domain_world::{fixtures, walking};
@@ -351,7 +351,7 @@ fn a_goals_delegate_still_ends_by_its_result_beside_open_chats() {
 }
 
 #[test]
-fn an_open_chat_on_a_program_endpoint_is_refused_and_starts_nothing() {
+fn an_open_chat_on_a_program_endpoint_starts() {
     let mut driver = Driver::configured(Store::new(), [open_config(91), open_config(91)], &limits());
     let mut program_bounds = protocol::bounds();
     program_bounds.program_endpoints = Box::new([charter().policy.model.endpoint]);
@@ -386,29 +386,14 @@ fn an_open_chat_on_a_program_endpoint_is_refused_and_starts_nothing() {
             }
         })
         .expect("chat created");
-    assert_eq!(assignments(&driver), 0);
+    assert_eq!(assignments(&driver), 1);
+    assert_eq!(driver.last_assignment().task, task);
     assert_eq!(live(&driver, task).tries, tasks::Tries::NONE);
-    assert_eq!(live(&driver, task).attempt, 0);
+    assert_eq!(live(&driver, task).attempt, 1);
     assert!(ended(&driver, task).is_none());
     let reads::Answer::Document(document) = read(&mut driver, reads::Read::Task { task }) else { panic!("task read") };
     let d::Document::Task(document) = *document else { panic!("task document") };
-    assert_eq!(document.run_wait, Some(d::TaskRunWait::Refused(d::TaskWaitRefused::Program(d::OpenProgram::Model))));
-    let client_task = wire::task::document(&document, &client_limits(), &walking::models()).expect("client task");
-    let me = client_me(&mut driver);
-    assert_eq!(
-        facts::chat_status(
-            &client_task.chip,
-            &client_task.waits_on,
-            client_task.run_wait.as_ref(),
-            client_task.project,
-            &me
-        ),
-        facts::ChatStatus::HostRefused(c::TaskWaitRefused::Program(c::OpenProgram::Model))
-    );
-    let (control, assigned) = open_chat();
-    assert_eq!(assignments(&control), 1);
-    assert_eq!(live(&control, assigned.task).tries, tasks::Tries::NONE);
-    assert!(ended(&control, assigned.task).is_none());
+    assert_eq!(document.run_wait, None);
 }
 
 #[test]
