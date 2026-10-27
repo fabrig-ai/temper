@@ -379,8 +379,11 @@ fn demo_answers_the_brief() {
         }]}
     ]);
     let demo = read(&value).unwrap().unwrap();
-    let csv = "Help the person plan their work. When they ask for a change to a repository, call change with what to change, then tell them what landed. Explain each result.\n\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n";
-    let dark = "Help the person plan their work. When they ask for a change to a repository, call change with what to change, then tell them what landed. Explain each result.\n\n## Task\n\nAdd a dark theme to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n";
+    let csv = CHAT;
+    let dark = concat!(
+        include_str!("../../../temper-service/src/stock/chat.txt"),
+        "\n## Task\n\nAdd a dark theme to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n"
+    );
     let opening = "Begin the work your brief describes.";
     for (name, system, user, said, text, tokens, finish) in [
         ("CSV brief", csv, opening, false, "Export CSV", 3, Finish::ToolCalls),
@@ -433,8 +436,14 @@ fn template() -> Value {
     value
 }
 
-const CHAT: &str = "Help the person plan their work. When they ask for a change to a repository, call change with what to change, then tell them what landed. Explain each result.\n\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n";
-const RESUMED_CHAT: &str = "Help the person plan their work. When they ask for a change to a repository, call change with what to change, then tell them what landed. Explain each result.\n\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n## Plan\n\ndelegate 2: ended, spec revision 1\n";
+const CHAT: &str = concat!(
+    include_str!("../../../temper-service/src/stock/chat.txt"),
+    "\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n"
+);
+const RESUMED_CHAT: &str = concat!(
+    include_str!("../../../temper-service/src/stock/chat.txt"),
+    "\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n## Plan\n\ndelegate 2: ended, spec revision 1\n"
+);
 const CODING: &str = "Read the repository and make the requested change. Check the result, then finish with a clear change summary.\n\n## Task\n\nExport widget's table as CSV\n[Change connector 1, kind 2, at most 4096 bytes]\n[Requested by task 2]\n\n";
 
 #[test]
