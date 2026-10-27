@@ -145,6 +145,16 @@ impl World {
     pub fn change(&self, task: u64) -> &top::ChangeRow {
         self.top.change(task).expect("fixture change")
     }
+    /// The whole document requested by the root for this watch subject.
+    #[must_use]
+    pub fn document(&self, project: u32, subject: u64) -> Option<top::Document> {
+        self.top.document(
+            subject,
+            jig_domain_people::ApplicationScope::Project(project),
+            self.env.wall,
+            &self.env.limits,
+        )
+    }
     #[must_use]
     pub fn landing(&self, task: u64) -> &top::LandingRow {
         self.top.landing(task).expect("fixture landing")
