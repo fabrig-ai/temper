@@ -1061,14 +1061,8 @@ fn chip_hold(chip: &c::Chip) -> Option<u64> {
 }
 /// The hold's revision a held card's read task carries, if any.
 fn hold_revision(page: Option<&c::ReadValue>) -> Option<u64> {
-    if let Some(c::ReadValue::Task(task)) = page {
-        match &task.hold {
-            Some(hold) => Some(hold.revision().value),
-            None => None,
-        }
-    } else {
-        None
-    }
+    let Some(c::ReadValue::Task(task)) = page else { return None };
+    Some(task.hold.as_ref()?.revision().value)
 }
 fn latest(client: &Client, handle: Handle) -> Option<&Latest> {
     client.document(handle)?.latest
