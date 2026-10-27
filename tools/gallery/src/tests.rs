@@ -234,7 +234,7 @@ const HOLDS: [Holds; samples::N] = [
         parts: &[
             Part::Named { role: Role::Region, name: "GitHub" },
             Part::Named { role: Role::Region, name: "Forgejo on this machine" },
-            Part::Named { role: Role::Region, name: "A Forgejo elsewhere" },
+            Part::Absent { role: Role::Region, name: "A Forgejo elsewhere" },
         ],
     },
     Holds {
