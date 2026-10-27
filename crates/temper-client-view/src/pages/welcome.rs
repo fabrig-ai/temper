@@ -24,6 +24,25 @@ fn paragraph(b: &mut Builder, w: &Words, word: Word, style: skein_ui::Style) {
     w.text(b, word, &[]);
     b.close();
 }
+fn lead(b: &mut Builder, w: &Words) {
+    paragraph(b, w, Word::WelcomeLead, look::WELCOME_LEAD);
+    let describe = w.say(Word::WelcomeDescribe, &[]);
+    let what = w.say(Word::WelcomeWhat, &[]);
+    let want_and = w.say(Word::WelcomeWantAnd, &[]);
+    let how = w.say(Word::WelcomeHow, &[]);
+    let want_done = w.say(Word::WelcomeWantDone, &[]);
+    b.open(Role::Paragraph);
+    b.style(look::WELCOME_LEAD);
+    b.name(&crate::accounts::words::join(&[&describe, &what, &want_and, &how, &want_done]));
+    b.open(Role::Text);
+    b.run(Run::Plain, &describe);
+    b.run(Run::Strong, &what);
+    b.run(Run::Plain, &want_and);
+    b.run(Run::Strong, &how);
+    b.run(Run::Plain, &want_done);
+    b.close();
+    b.close();
+}
 fn control(b: &mut Builder, w: &Words, bindings: &mut Bindings, word: Word, act: Act) {
     let name = w.say(word, &[]);
     let binding = bindings.insert(act.clone());
@@ -120,7 +139,7 @@ pub(crate) fn main(
             if let Some(page) = root.pages().welcome()
                 && page.decided
             {
-                paragraph(b, w, Word::WelcomeLead, look::WELCOME_LEAD);
+                lead(b, w);
                 b.open(Role::Slot);
                 b.style(look::WELCOME_CHOICES);
                 if playground {
