@@ -657,6 +657,8 @@ impl ChangeRow {
             | change::State::Checking { .. }
             | change::State::Gating { .. }
             | change::State::CancellingGates { .. }
+            | change::State::Ready { .. }
+            | change::State::Preparing { .. }
             | change::State::Queued { .. }
             | change::State::First { .. }
             | change::State::Updating { .. }

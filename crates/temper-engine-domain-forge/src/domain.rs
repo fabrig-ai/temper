@@ -3565,6 +3565,8 @@ fn end_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Requ
         | change::State::Checking { .. }
         | change::State::Gating { .. }
         | change::State::CancellingGates { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
         | change::State::Updating { .. }
