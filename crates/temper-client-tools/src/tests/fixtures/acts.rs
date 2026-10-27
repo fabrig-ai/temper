@@ -108,7 +108,6 @@ pub(crate) const OTHER_MESSAGE: &[&str] = &["task", "message", "41", "different 
 pub(crate) const JSON_FLAG: &[&str] = &["--json"];
 /// Every act form is stable under clocks and seeds; the row carries its arguments.
 pub(crate) const ACT_CALLS: &[&[&str]] = &[
-    &["hold", "lift", "12", "--rev", "1", "--with-tasks", "--key", "lift-name"],
     MESSAGE_CALL,
     CLOSE_CALL,
     &["task", "answer", "41", "3", "yes", "--key", "act-name"],
@@ -117,6 +116,7 @@ pub(crate) const ACT_CALLS: &[&[&str]] = &[
     &["task", "release", "41", "--hold", "2", "--again", "--key", "act-name"],
     &["task", "stop", "41", "--key", "act-name"],
     &["task", "cancel", "41", "finished", "--key", "act-name"],
+    &["hold", "lift", "12", "--rev", "1", "--with-tasks", "--key", "lift-name"],
 ];
 pub(crate) fn chat_me(budget: u64) -> c::Me {
     let mut me = me(PARTY);
