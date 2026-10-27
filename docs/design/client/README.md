@@ -111,9 +111,10 @@ section 11.
   clients' component on it with jig's default HTTP mapping, under
   `/jig`, with its example guards, and routes `/forges/...` for a
   GitHub connect's browser steps (section 8; `forge.md`, 9.1). The
-  mapping's engine end
-  owns its calls in flight: the server asks for its room before it
-  hands it a call, and answers a call under `/jig` that finds none
+  mapping's engine end owns its calls in flight. Small's eight-call room
+  covers one person's page overlap: a page's stream and three watches,
+  twice while the old page's calls close. The server asks for its room
+  before it hands it a call, and answers a call under `/jig` that finds none
   itself, as it answers a path no one claims: `503`, with no body,
   closing the connection (jig's `protocol/client.md`, 17.4). The
   server's connections are its own bound, never the engine end's.

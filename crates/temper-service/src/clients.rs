@@ -88,6 +88,17 @@ fn invalid(what: What) -> Problems {
     problems
 }
 impl Clients {
+    #[cfg(test)]
+    pub(crate) fn with_server_for_test(mut self, server: crate::server::Server) -> Self {
+        self.server = server;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn mapping_room_for_test(&self) -> u32 {
+        self.mount.room()
+    }
+
     pub(crate) fn demo_read(&mut self) -> Option<crate::HandoverRead> {
         self.demo_reads.pop()
     }

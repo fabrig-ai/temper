@@ -16,6 +16,16 @@ pub struct Peer {
 }
 impl Peer {
     pub fn new(engine: &mut Engine, method: &[u8], path: &[u8], body: &[u8], bearer: Option<&[u8]>) -> Self {
+        Self::new_on(engine, method, path, body, bearer, SOCKET)
+    }
+    pub fn new_on(
+        engine: &mut Engine,
+        method: &[u8],
+        path: &[u8],
+        body: &[u8],
+        bearer: Option<&[u8]>,
+        socket: Token,
+    ) -> Self {
         let header =
             b" HTTP/1.1\r\nHost: 127.0.0.1:7100\r\nConnection: close\r\nContent-Type: application/octet-stream\r\n";
         let content = b"Content-Length: ";
@@ -60,7 +70,7 @@ impl Peer {
         bytes.put(Decimal::of(u64::try_from(body.len()).unwrap()).as_bytes()).unwrap();
         bytes.put(b"\r\n\r\n").unwrap();
         bytes.put(body).unwrap();
-        Self::raw(engine, &bytes.finish())
+        Self::raw_on(engine, &bytes.finish(), socket)
     }
     pub fn raw(engine: &mut Engine, bytes: &[u8]) -> Self {
         Self::raw_on(engine, bytes, SOCKET)
@@ -115,7 +125,29 @@ impl Peer {
                 engine.clients.secrets_step(&mut engine.store);
             }
             for _ in 0..engine.clients.io.len() {
-                match engine.clients.io.pop().unwrap() {
+                let request = engine.clients.io.pop().unwrap();
+                let socket = match &request {
+                    io::Request::Bind { socket, .. }
+                    | io::Request::Reject { socket }
+                    | io::Request::Stream { stream: socket, .. }
+                    | io::Request::Close { entity: socket }
+                    | io::Request::Abort { entity: socket } => Some(socket),
+                    io::Request::Listen { .. }
+                    | io::Request::Connect { .. }
+                    | io::Request::Output { .. }
+                    | io::Request::Spawn { .. }
+                    | io::Request::Signal { .. }
+                    | io::Request::Usage { .. }
+                    | io::Request::Window { .. } => None,
+                };
+                if let Some(socket) = socket
+                    && *socket != self.socket
+                {
+                    // Overlapping peers leave each other's IO queued for its owner.
+                    engine.clients.io.push(request);
+                    continue;
+                }
+                match request {
                     io::Request::Listen { owner, addr } => {
                         assert!(engine.clients.up(io::Event::Listening { owner, listener: LISTENER, addr }));
                     }

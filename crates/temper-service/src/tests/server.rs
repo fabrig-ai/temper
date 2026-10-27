@@ -232,11 +232,72 @@ fn the_policy_keeps_a_field_the_answer_already_holds() {
 const HELD_READ_HEAD: &[u8] = b"POST /jig/v1/read HTTP/1.1\r\nHost: 127.0.0.1:7100\r\nContent-Type: application/octet-stream\r\nContent-Length: 1\r\n\r\n";
 // Refuse an empty request too: it still needs Discard before its response.
 const EMPTY_READ_HEAD: &[u8] = b"POST /jig/v1/read HTTP/1.1\r\nHost: 127.0.0.1:7100\r\nContent-Type: application/octet-stream\r\nContent-Length: 0\r\n\r\n";
+const HELD_WATCH_HEAD: &[u8] = b"POST /jig/v1/watch HTTP/1.1\r\nHost: 127.0.0.1:7100\r\nContent-Type: application/octet-stream\r\nContent-Length: 1\r\n\r\n";
+const PAGE_WATCHES: u32 = 3;
+const PAGE_CALLS: u32 = 1 + PAGE_WATCHES;
+const OVERLAPPING_PAGES: u32 = 2;
+
+#[test]
+fn a_pages_stream_and_watches_fit_while_the_old_pages_calls_are_still_open() {
+    let mut service = fixtures::ready();
+    let link = service.links().pop().unwrap();
+    let engine = service.engine.as_mut().expect("engine");
+    let body = fixtures::http::link_body(engine, &link);
+    let mut sign_in = fixtures::http::Peer::new(engine, b"POST", b"/jig/v1/sign-in/link", &body, None);
+    sign_in.pump(engine, true);
+    let jig_client_protocol_wire::v19::SignInAnswer::SignedIn(answer) = sign_in.sign_in_answer(engine) else {
+        panic!("signed in")
+    };
+    let bearer = fixtures::http::bearer(answer.token().as_ref().expect("native credential").expose());
+    let mut streams = skein_lib::List::with_capacity(OVERLAPPING_PAGES);
+    let mut watches = skein_lib::List::with_capacity(PAGE_WATCHES * OVERLAPPING_PAGES);
+    for page in 0..OVERLAPPING_PAGES {
+        let first = fixtures::http::SOCKET.raw() + 1 + u64::from(page * PAGE_CALLS);
+        let mut stream =
+            fixtures::http::Peer::new_on(engine, b"GET", b"/jig/v1/stream", &[], Some(&bearer), Token::new(first));
+        assert!(stream.read_hello(engine), "each page opens its authenticated stream without Busy");
+        assert!(streams.push(stream).is_ok());
+        for watch in 0..PAGE_WATCHES {
+            let socket = Token::new(first + 1 + u64::from(watch));
+            let mut peer = fixtures::http::Peer::raw_on(engine, HELD_WATCH_HEAD, socket);
+            // Delay the watch body: no call from either page can finish and free its slot.
+            peer.hold_body(engine);
+            assert!(peer.received().is_empty(), "the watch is admitted without a refusal");
+            assert_eq!(peer.closed(), 0);
+            assert!(watches.push(peer).is_ok());
+        }
+    }
+    assert_eq!(streams.len() + watches.len(), PAGE_CALLS * OVERLAPPING_PAGES);
+    assert_eq!(engine.clients.mapping_room_for_test(), 0, "all eight page calls remain mounted together");
+    for index in 0..watches.len() {
+        watches.get_mut(index).unwrap().close(engine);
+    }
+    for index in 0..streams.len() {
+        streams.get_mut(index).unwrap().end(engine);
+    }
+}
+
 #[test]
 fn a_call_past_the_mounts_room_is_answered_busy() {
     let mut service = fixtures::started();
+    let settings = fixtures::engine();
+    let capacity = settings.jig.limits.clients_http.calls;
+    // Give the HTTP fixture one extra connection to test mapping exhaustion independently.
+    // The shipped server keeps its own eight-connection bound.
+    let mut transport = crate::limits::server(&settings.jig.limits);
+    transport.connections = capacity + 1;
+    service.engine.as_mut().expect("engine").clients = crate::clients::Clients::new(
+        &settings.jig,
+        &settings.clients,
+        &fixtures::seeds(),
+        512,
+        &settings.limits.root.journal,
+        None,
+        &[],
+    )
+    .unwrap()
+    .with_server_for_test(crate::server::Server::new(fixtures::http::address(), &transport));
     fixtures::listening(&mut service);
-    let capacity = fixtures::engine().jig.limits.clients_http.calls;
     let mut peers = skein_lib::List::with_capacity(capacity);
     for number in 0..capacity {
         let socket = Token::new(fixtures::http::SOCKET.raw().checked_add(u64::from(number)).unwrap());
