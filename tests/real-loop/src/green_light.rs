@@ -72,7 +72,7 @@ pub fn fixture() -> forge::Fixture {
             // A tracked goal reserves one full news message beside its question's answer credit.
             value["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = 8192.into();
             value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 5.into();
-            value["engine"]["templates"][0]["budget"]["as_allowed"] = CHAT_SPEND.into();
+            value["world_settings"]["cap"] = CHAT_SPEND.into();
             for project in value["engine"]["projects"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 3.into();
                 project["policy"]["ceiling"]["delegation"]["depth"] = 5.into();
