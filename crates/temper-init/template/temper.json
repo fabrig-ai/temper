@@ -20,6 +20,7 @@
         "tasks.batch": 1,
         "tasks.contract_choices": 2,
         "tasks.hold_segments": 8,
+        "tasks.inbox_bytes": 8192,
         "tasks.parameters": 5,
         "views.watchers": 16,
         "views.watchers_per_party": 16
@@ -101,7 +102,7 @@
             "input": 1,
             "cached": 1,
             "output": 1,
-            "unit": 1000000
+            "unit": 1000
           }
         },
         {
@@ -113,7 +114,7 @@
             "input": 1,
             "cached": 1,
             "output": 1,
-            "unit": 1000000
+            "unit": 1000
           }
         }
       ]
@@ -172,7 +173,7 @@
         "policy": {
           "templates": [],
           "escalation_role": 0,
-          "period_spend": 100,
+          "period_spend": 202944,
           "projections": [
             {
               "connector": 1,
@@ -415,11 +416,11 @@
                   "number": 2
                 }
               ],
-              "tasks": 12,
+              "tasks": 14,
               "depth": 4
             },
             "budget": {
-              "spend": 100,
+              "spend": 202944,
               "deadline_unix_seconds": null
             },
             "notes": 0,
@@ -428,7 +429,7 @@
           "roles": [
             {
               "number": 0,
-              "period_spend": 100,
+              "period_spend": 202944,
               "requests": 511,
               "decides": 31,
               "authority": {
@@ -560,11 +561,11 @@
                       "number": 2
                     }
                   ],
-                  "tasks": 12,
+                  "tasks": 14,
                   "depth": 4
                 },
                 "budget": {
-                  "spend": 40,
+                  "spend": 101472,
                   "deadline_unix_seconds": null
                 },
                 "notes": 0,
@@ -879,7 +880,7 @@
                               "depth": 2
                             },
                             "budget": {
-                              "spend": 10
+                              "spend": 21140
                             },
                             "notes": 0
                           }
