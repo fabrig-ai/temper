@@ -828,13 +828,12 @@ pub fn fixture_6_1() -> forge::Fixture {
             // The standard engine needed for a four-entry batch also needs
             // matching application room: 128 retained calls; 8 workers *
             // fleet.max_out (137) + 1 deliveries; three held per delivery;
-            // and route_bound (14,162) + 128 journal writes. Held-revision
-            // writes and the 32 retained forge answers contribute to this bound.
+            // and journal writes derived from the complete route below.
+            // Placed subtree writes and retained forge answers contribute.
             // A1's task read needs documents.lines = 4 for its complete live delegates.
             value["application"]["limits"]["overrides"]["forge.named_calls"] = 128.into();
             value["application"]["limits"]["overrides"]["root.journal.deliveries"] = 1097.into();
             value["application"]["limits"]["overrides"]["root.journal.held"] = 3291.into();
-            value["application"]["limits"]["overrides"]["root.journal.writes"] = 14290.into();
             // All owners, including the chat, park on the ordinary charter's
             // wait. That releases the three slots for the three implementers.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
@@ -854,6 +853,7 @@ pub fn fixture_6_1() -> forge::Fixture {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 71.into();
             }
             value["application"]["landing"]["projects"] = json!([]);
+            landing::size_journal_writes(value);
             landing::admit(value);
         },
         ..fixture()
