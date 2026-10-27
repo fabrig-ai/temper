@@ -2275,3 +2275,142 @@ fn a_repository_with_222_branches_and_two_recorded_prefix_branches_is_adopted() 
     );
     assert!(!world.seen().iter().any(|request| matches!(request, top::Request::Adopted { result: Err(_), .. })));
 }
+
+const TIER_BASELINE: u64 = 101;
+const TIER_RANGE: u64 = 102;
+const FIRST_CHANGE: u64 = 51;
+const SECOND_CHANGE: u64 = 52;
+const TIER_STEPS: u64 = 100; // two seconds per scripted step covers the 90-second workflow.
+fn browser_row(world: &World) -> &top::TierRow {
+    let Some(top::Stored::Tier(row)) =
+        world.stored().get(&top::Key::Tier { repository: REPO, tier: b"browser".as_slice().into() })
+    else {
+        panic!("browser tier")
+    };
+    row
+}
+fn tier_hold(world: &mut World, task: u64, number: u64) {
+    let branch = format!("browser.{number}").into_bytes().into_boxed_slice();
+    world.event(top::Event::Hold {
+        task,
+        resource: top::Name {
+            forge: REPO.forge,
+            repository: REPO.repository,
+            what: top::What::Branch(Box::new([b"temper".as_slice().into(), b"tier".as_slice().into(), branch])),
+        },
+        from: None,
+    });
+    world.event(top::Event::TierTask { repository: REPO, tier: b"browser".as_slice().into(), number, task });
+}
+fn tier_step(world: &mut World, task: u64, entry: u64) -> bool {
+    world.take_seen();
+    world.event(top::Event::StepTier { task, entry });
+    world.run_for(1);
+    let requests = world.take_seen();
+    let done = requests
+        .iter()
+        .any(|request| matches!(request, top::Request::TierDecision { decision: top::TierDecision::Done { .. }, .. }));
+    for request in requests {
+        if let top::Request::TierEffect { entry, .. } = request {
+            world.event(top::Event::Committed { entry: entry.number });
+        }
+    }
+    world.run_for(1);
+    done
+}
+fn release_tier(world: &mut World, task: u64, entry: u64) {
+    world.event(top::Event::Release { task, root: task, ending: top::ReleaseEnding::Done, reason: None, entry });
+    world.event(top::Event::Committed { entry });
+    world.run_for(1);
+    world.event(top::Event::ContinueRelease { task, entry: entry + 1 });
+    world.run_for(1);
+}
+fn land_for_tier(world: &mut World, task: u64, branch: &[u8]) -> skein_forge::api::Commit {
+    let mut row = change_row();
+    row.task = task;
+    row.change.task = task;
+    row.branch = branch.into();
+    world.event(top::Event::Change { row });
+    change_step_task(world, task, task * 100, change::Status::Unknown, Box::new([]), false, false);
+    world.produce_on(branch, b"main");
+    world.status(branch, skein_fake_forge_domain::api::Check::Passed);
+    for at in 1..24 {
+        change_step_task(world, task, task * 100 + at, change::Status::Passed, Box::new([]), false, false);
+        if let Some(commit) = temper_engine_forge_world::changes::merged(&world.change(task).change.state) {
+            return commit;
+        }
+    }
+    panic!("change {task} lands before the baseline ends: {:?}", world.change(task));
+}
+#[test]
+fn a_green_tier_run_clears_the_two_landings_in_its_range_and_each_change_gives_its_result() {
+    let mut world = World::tiered();
+    world.adopt();
+    assert!(world.project_tiers(
+        5,
+        top::TierSettings {
+            verdict: temper_engine_domain_forge_tiers::Settings {
+                retries: 2,
+                suspects: temper_engine_domain_forge_tiers::Suspects::Bisect,
+            },
+            bound: skein_lib::Duration::from_secs(7200),
+            pause_on_red: false,
+        },
+        Box::new([top::RepositoryTiers {
+            repository: REPO,
+            tiers: Box::new([top::Tier {
+                name: b"browser".as_slice().into(),
+                workflow: b"browser.yml".as_slice().into(),
+                ignored: Box::new([]),
+                artifact: b"report".as_slice().into(),
+                format: temper_engine_domain_forge_tiers::Format::Lines,
+            }]),
+        }]),
+    ));
+    world.event(top::Event::Names {
+        task: TIER_BASELINE,
+        resources: Box::new([top::Name {
+            forge: REPO.forge,
+            repository: REPO.repository,
+            what: top::What::Branch(Box::new([b"main".as_slice().into()])),
+        }]),
+    });
+    world.run_for(1);
+    tier_hold(&mut world, TIER_BASELINE, 1);
+    tier_step(&mut world, TIER_BASELINE, 1000);
+    tier_step(&mut world, TIER_BASELINE, 1001);
+    let first = land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
+    let second = land_for_tier(&mut world, SECOND_CHANGE, b"temper/52");
+    for at in 0..TIER_STEPS {
+        if tier_step(&mut world, TIER_BASELINE, 1100 + at) {
+            break;
+        }
+    }
+    assert_eq!(browser_row(&world).record.sequence, 1);
+    assert_eq!(browser_row(&world).record.run.as_ref().expect("next range").landings.len(), 2);
+    release_tier(&mut world, TIER_BASELINE, 1300);
+    tier_hold(&mut world, TIER_RANGE, 2);
+    for at in 0..TIER_STEPS {
+        if tier_step(&mut world, TIER_RANGE, 1400 + at) {
+            break;
+        }
+    }
+    release_tier(&mut world, TIER_RANGE, 1600);
+    assert_eq!(
+        change_step_task(&mut world, FIRST_CHANGE, 1700, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: first }
+    );
+    assert_eq!(
+        change_step_task(&mut world, SECOND_CHANGE, 1701, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: second }
+    );
+    let skein_fake_forge_domain::api::Answer::Statuses(statuses) =
+        world.inspect(&skein_fake_forge_domain::api::Read::Statuses { commit: world.branch(b"main") })
+    else {
+        panic!("verdict statuses")
+    };
+    assert!(statuses.iter().any(|status| status.context.as_ref() == b"temper/verdict/browser"
+        && status.state == skein_fake_forge_domain::api::Check::Passed));
+    assert!(!world.has_branch(b"temper/tier/browser.1"));
+    assert!(!world.has_branch(b"temper/tier/browser.2"));
+}

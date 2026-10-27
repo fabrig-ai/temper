@@ -1093,6 +1093,7 @@ fn receipts_preserve_the_check_key_run_and_verdict() {
                 },
                 receipt: forge::Receipt {
                     passed,
+                    failures: None,
                     run: forge::ReceiptRun { id: 7, number: 8, url: Box::from(b"https://forge/run/7".as_slice()) },
                     candidate: [4; 32],
                     ended: skein_lib::Wall::from_nanos(9),
