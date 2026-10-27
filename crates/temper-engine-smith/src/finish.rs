@@ -77,6 +77,11 @@ pub fn result(answer: run::Answer, change: Option<ChangeResource>) -> Result<Ter
         }
         run::Answer::Refused(refusal) => match refusal {
             run::Refusal::Busy => Ok(Terminal { cumulative: 0, turns: 0, end: tasks::End::Refused }),
+            run::Refusal::Invalid(run::Invalid::HostPart { bound }) => Ok(Terminal {
+                cumulative: 0,
+                turns: 0,
+                end: tasks::End::Exceeded(tasks::Exceeded { bound: tasks::Bound::HostPart, value: bound }),
+            }),
             run::Refusal::Invalid(_) => {
                 Ok(Terminal { cumulative: 0, turns: 0, end: tasks::End::Failed(tasks::Class::Permanent) })
             }
