@@ -18,4 +18,3 @@ pub fn box_model() -> temper_engine_domain::Model {
         u32::try_from(model["prices"]["unit"].as_u64().expect("price unit")).expect("bounded price unit");
     value
 }
-

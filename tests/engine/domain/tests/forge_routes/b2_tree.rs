@@ -341,12 +341,12 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> u64 {
 
 #[test]
 fn b2s_tree_admits_every_run_under_the_stock() {
-    let (mut world, chat) = stock_world();
-    let tree = tree(&mut world, &chat);
-    let defaults = defaults();
     // protocol/configuration.md, 13.4: W has its run and two 5K changes.
     const WORK_RUNS: u64 = 11;
     const CHANGE_RUNS: u64 = 5;
+    let (mut world, chat) = stock_world();
+    let tree = tree(&mut world, &chat);
+    let defaults = defaults();
     let k = defaults.rules.maximum_run_spend;
     let c = defaults.rules.minimum_run_spend / u64::from(defaults.charters[0].policy.reserve_turns + 1);
     assert!(record(&world, tree.work).numbers.budget >= WORK_RUNS * k);
@@ -354,13 +354,9 @@ fn b2s_tree_admits_every_run_under_the_stock() {
         assert!(record(&world, change).numbers.budget >= CHANGE_RUNS * k);
     }
     println!("stock C={c}, K={k}");
-    for (name, task) in [
-        ("chat", tree.chat),
-        ("W", tree.work),
-        ("V", tree.advisor),
-        ("C1", tree.first),
-        ("C2", tree.second),
-    ] {
+    for (name, task) in
+        [("chat", tree.chat), ("W", tree.work), ("V", tree.advisor), ("C1", tree.first), ("C2", tree.second)]
+    {
         let numbers = &record(&world, task).numbers;
         println!("{name}: budget={}, spent={}, spent_below={}", numbers.budget, numbers.spent, numbers.spent_below);
     }
