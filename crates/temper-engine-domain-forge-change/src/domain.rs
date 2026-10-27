@@ -114,26 +114,6 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
     }
 }
 
-fn is_reopening(state: &State) -> bool {
-    match state {
-        State::Reopening { .. } => true,
-        State::Producing { .. }
-        | State::Opening { .. }
-        | State::Recreating { .. }
-        | State::Checking { .. }
-        | State::Gating { .. }
-        | State::Queued { .. }
-        | State::First { .. }
-        | State::Updating { .. }
-        | State::Resolving { .. }
-        | State::Repairing { .. }
-        | State::Landing { .. }
-        | State::Landed { .. }
-        | State::Ended
-        | State::Held { .. } => false,
-    }
-}
-
 /// Lift a task's own change hold in the same decision as the task's release.
 /// The persisted cause lets the next fresh snapshot perform drift recovery.
 #[must_use]
