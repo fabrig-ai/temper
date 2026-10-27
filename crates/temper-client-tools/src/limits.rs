@@ -43,7 +43,7 @@ pub fn client() -> client::Limits {
             watches: 16, // Includes the shared me watch.
             turn_bytes: 1_048_576,
             backoff: jig_client::Backoff { first: Duration::from_secs(1), most: Duration::from_secs(30) },
-            authority: 12,
+            authority: 16,
             heartbeat: Duration::from_secs(30),
             reads: 16,
             parts: 16,
