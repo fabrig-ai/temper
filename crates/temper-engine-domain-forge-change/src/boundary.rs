@@ -77,6 +77,8 @@ pub enum Repair {
     Gate(u64),
     /// CI failed after a clean update from the base.
     Semantic,
+    /// A landing's gate failed at its candidate (domain/landing.md, 7.3).
+    Landing { gate: u16 },
 }
 
 /// The part of a change's authority its next delegate needs.
@@ -147,6 +149,10 @@ pub enum State {
     Checking { head: Commit },
     /// Required gates are sought on the checked head.
     Gating { head: Commit, asked: Box<[u64]> },
+    /// Ready at `head`: its landing prepares, proves and lands it (domain/landing.md, 3).
+    Ready { head: Commit, ready_since: Wall },
+    /// The prepare's rebase onto `main` is outstanding (domain/landing.md, 5.2).
+    Preparing { from: Commit, main: Commit, ready_since: Wall },
     /// CI failed; cancelled gate delegates must end before repair is funded.
     CancellingGates { head: Commit },
     /// The change is ready, waiting its turn.
@@ -169,10 +175,20 @@ pub enum State {
     Held { was: Box<State>, why: Hold },
 }
 
+/// How the change's project lands (domain/landing.md, 1; domain/forge.md, 8.2).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Way {
+    Queue,
+    Turn,
+}
+
 /// The top-owned procedure record for one change task.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Change {
     pub task: u64,
+    pub way: Way,
+    /// Its landing's task, once it is a member (domain/landing.md, 4.2).
+    pub landing: Option<u64>,
     pub state: State,
     pub gates: Box<[Gate]>,
     pub clean: Box<[Commit]>,
@@ -209,10 +225,21 @@ pub struct Ci {
     pub status: Status,
 }
 
+/// What its landing asks of the change (domain/landing.md, 3).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Ask {
+    /// Rebase the last known head onto the requested main tip.
+    Prepare { head: Commit, main: Commit },
+    /// Repair a real gate failure at the landing's candidate.
+    Repair { gate: u16, candidate: Commit },
+}
+
 /// Fresh forge and queue facts gathered by the top.
 #[expect(clippy::struct_excessive_bools, reason = "independent root-supplied facts")]
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Facts {
+    /// Its landing's current request; absent under queue.
+    pub ask: Option<Ask>,
     pub branch: Option<Commit>,
     pub expected_base: Commit,
     pub pull: Pull,
@@ -297,6 +324,8 @@ pub enum Effect {
     Retarget,
     /// Merge the landing branch into the change's branch.
     Update { head: Commit, base: Commit },
+    /// Rebase the pull request onto `main` (domain/landing.md, 5.2).
+    Prepare { head: Commit, main: Commit },
     /// Merge the pull request at its checked head.
     Merge { head: Commit, base: Commit },
 }
@@ -314,7 +343,7 @@ pub enum Decision {
     Effect(Effect),
     /// Cancel live gate delegates at the head whose CI failed.
     CancelGates { head: Commit },
-    /// Tell the top this change is ready to queue.
+    /// Tell the top this change is ready for its queue or landing.
     Ready,
     /// Ask the top for the branch's one queue repair.
     QueueRepair,
