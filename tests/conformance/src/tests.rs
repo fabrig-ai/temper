@@ -69,7 +69,13 @@ fn ci_evidence_follows_native_commit_and_pull_reads() {
     for state in [raw::Check::Passed, raw::Check::Pending, raw::Check::Failed] {
         forge.external(
             clock,
-            raw::Op::Write(raw::Write::Status { commit: raw_head, context: b"build".as_slice().into(), state }),
+            raw::Op::Write(raw::Write::Status {
+                commit: raw_head,
+                context: b"build".as_slice().into(),
+                state,
+                description: Box::new([]),
+                link: Box::new([]),
+            }),
         );
         for read in &reads {
             forge.take_observed();

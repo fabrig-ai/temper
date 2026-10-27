@@ -141,6 +141,7 @@ fn no_overwrite_referee_observes_and_rejects_a_divergent_push() {
         &mut forge,
         &config,
         raw::Setup {
+            workflows: Box::new([]),
             id: 2,
             name: Box::from(&b"org/repo"[..]),
             default: Box::from(&b"main"[..]),

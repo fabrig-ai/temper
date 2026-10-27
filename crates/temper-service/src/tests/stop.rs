@@ -200,7 +200,13 @@ fn a_second_signal_while_settling_aborts() {
         task: 3,
         repository: Repository { forge: 1, repository: 2 },
         effect: Effect {
-            write: Write::Status { commit: [3; 32], context: b"stop".as_slice().into(), check: Check::Passed },
+            write: Write::Status {
+                commit: [3; 32],
+                context: b"stop".as_slice().into(),
+                check: Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
+            },
             condition: Condition::None,
         },
         start: None,

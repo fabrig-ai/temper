@@ -54,6 +54,7 @@ impl ForgeStand {
                     name.push(b'/');
                     name.extend_from_slice(repository);
                     raw::Setup {
+                        workflows: Box::new([]),
                         id: *id,
                         name: name.into(),
                         default: b"main".as_slice().into(),

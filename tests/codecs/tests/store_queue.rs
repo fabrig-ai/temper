@@ -13,7 +13,7 @@ fn entry(queued: bool) -> Stored {
             task: 2,
             repository: Repository { forge: 1, repository: 3 },
             effect: Effect {
-                write: Write::Merge { number: 4, head: [5; 32] },
+                write: Write::Merge { number: 4, head: [5; 32], how: skein_forge::api::MergeHow::Style },
                 condition: Condition::Merge { base: b"main".as_slice().into() },
             },
             start: None,
