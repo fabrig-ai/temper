@@ -1644,6 +1644,8 @@ fn outcome_facts(
                     | skein_forge::api::Write::Merge { .. }
                     | skein_forge::api::Write::Update { .. }
                     | skein_forge::api::Write::Status { .. }
+                    | skein_forge::api::Write::Dispatch { .. }
+                    | skein_forge::api::Write::Rerun { .. }
                     | skein_forge::api::Write::DeleteBranch { .. } => None,
                 };
                 if let Some(branch) = branch {
@@ -2252,6 +2254,8 @@ fn effect_permitted(kinds: Kinds, write: &skein_forge::api::Write) -> bool {
         skein_forge::api::Write::Merge { .. } => kinds.land,
         skein_forge::api::Write::Update { .. }
         | skein_forge::api::Write::CreateBranch { .. }
+        | skein_forge::api::Write::Dispatch { .. }
+        | skein_forge::api::Write::Rerun { .. }
         | skein_forge::api::Write::DeleteBranch { .. } => kinds.branch,
         skein_forge::api::Write::Status { .. } => kinds.status,
     }
@@ -3065,8 +3069,12 @@ fn change_write(row: &ChangeRow, effect: change::Effect, limits: &Limits) -> Opt
         }
         change::Effect::Reopen => Some(skein_forge::api::Write::Reopen { number: row.pull? }),
         change::Effect::Retarget => None,
-        change::Effect::Update { .. } => Some(skein_forge::api::Write::Update { number: row.pull? }),
-        change::Effect::Merge { head, .. } => Some(skein_forge::api::Write::Merge { number: row.pull?, head }),
+        change::Effect::Update { .. } => {
+            Some(skein_forge::api::Write::Update { number: row.pull?, style: skein_forge::api::UpdateStyle::Merge })
+        }
+        change::Effect::Merge { head, .. } => {
+            Some(skein_forge::api::Write::Merge { number: row.pull?, head, how: skein_forge::api::MergeHow::Style })
+        }
     }
 }
 
@@ -4284,6 +4292,9 @@ fn changed(
             | skein_forge::api::Answer::Commented(_)
             | skein_forge::api::Answer::Reviewed(_)
             | skein_forge::api::Answer::Merged(_)
+            | skein_forge::api::Answer::Runs { .. }
+            | skein_forge::api::Answer::Run(_)
+            | skein_forge::api::Answer::Tree { .. }
             | skein_forge::api::Answer::Queued
             | skein_forge::api::Answer::Branch(_)
             | skein_forge::api::Answer::Done,
@@ -4633,6 +4644,8 @@ fn deleting_entry(d: &Domain, task: u64, resource: &skein_forge_client::Resource
         | skein_forge::api::Write::Merge { .. }
         | skein_forge::api::Write::Update { .. }
         | skein_forge::api::Write::Status { .. }
+        | skein_forge::api::Write::Dispatch { .. }
+        | skein_forge::api::Write::Rerun { .. }
         | skein_forge::api::Write::CreateBranch { .. } => false,
     }
 }
