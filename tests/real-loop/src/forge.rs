@@ -198,6 +198,8 @@ impl State {
         config.limits.body_bytes = 2048;
         // A closed pull keeps its item: the case's 5.4 keeps x3's closed pull while a1 opens another.
         config.limits.items = 2;
+        // A tracked goal projects its subtree's milestones as separate comments.
+        config.limits.comments = 8;
         // A waiting pull's head, a red pushed tip and its repair's head hold CI statuses at once (6.4).
         config.limits.statuses = 3;
         // Forgejo timestamps are wall times; this peer runs on the real monotonic clock.

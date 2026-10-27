@@ -18,9 +18,9 @@ const WORK: u64 = 2;
 const CHANGE: u64 = 3;
 const PRODUCER: u64 = 4;
 const QUESTION: u64 = 1;
-const REQUEST: &str = "@green_chat Add CSV export to widget";
-const WORK_SPEC: &str =
-    "@green_work Add CSV export to widget: ask the chat for a green light first, then have the change made and report.";
+const REQUEST: &str = "Add CSV export to widget: agree the plan with me before anything is changed.";
+const CHAT_SPEND: u64 = 100;
+const RUN_SPEND: u64 = 10;
 const QUESTION_WORDS: &str = "Export widget's table as CSV in src/main.rs and land it on main. Go ahead?";
 const ANSWER: &str = "Go ahead.";
 const CHANGE_SPEC: &str = "@green_coding Export widget's table as CSV";
@@ -32,8 +32,8 @@ const CHAT_ASKED: &str = "T2's question waits in your inbox.";
 const CHAT_ANSWERED: &str = "Your green light went to T2.";
 const WORK_ASKED: &str = "Asked for a green light.";
 const WORK_DELEGATED: &str = "The change is under way.";
-const CHAT_CUE: &str = "@green_chat";
-const WORK_CUE: &str = "@green_work";
+const CHAT_CUE: &str = "[Requested by person 1]";
+const WORK_CUE: &str = "[Requested by task 1]";
 const CODING_CUE: &str = "@green_coding";
 const REVIEW_CUE: &str = "Review this change at the named head";
 const SOURCE: &str = r#"fn main() {
@@ -66,13 +66,19 @@ pub fn fixture() -> forge::Fixture {
         },
         configure: |value, agent, forge| {
             (landing::fixture().configure)(value, agent, forge);
+            // o/configuring-stock has not landed Message in stock; tools 3 keeps it for the chat.
             value["engine"]["rules"]["ceiling"]["tools"] = 3.into();
+            // A tracked goal reserves one full news message beside its question's answer credit.
+            value["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = 8192.into();
             value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 5.into();
+            value["engine"]["templates"][0]["budget"]["as_allowed"] = CHAT_SPEND.into();
             for project in value["engine"]["projects"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 3.into();
                 project["policy"]["ceiling"]["delegation"]["depth"] = 5.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = 3.into();
                 project["policy"]["roles"][0]["authority"]["delegation"]["depth"] = 5.into();
+                // Two halvings fund the goal and its change while each run reserves ten.
+                project["policy"]["roles"][0]["authority"]["budget"]["spend"] = CHAT_SPEND.into();
             }
         },
         ..forge::fixture()
@@ -107,35 +113,14 @@ fn report(words: &str) -> Turn {
 }
 
 #[must_use]
-pub fn scripts(forge: SocketAddr) -> Box<[Script]> {
-    let grant = |kind| json!({"connector":1,"kind":kind,"segments":["forge",forge.to_string()],"terminal":"open","last":"acme"});
-    let grants = json!([grant(2), grant(3), grant(4), grant(10), grant(11), grant(12)]);
-    // Two spent asking/waiting, ten reserved for the resumed run, ten for the change.
-    let work = json!({"batch":[{
-        "executor":{"kind":"agent","charter":1},
-        "spec":{"words":WORK_SPEC,"parameters":[]},
-        "contract":{"kind":"report","words":128},
-        "authority":{"tools":3,"grants":grants,
-            "delegation":{"kinds":[{"kind":"procedure","number":2},{"kind":"agent","number":1}],"tasks":6,"depth":3},
-            "budget":{"spend":22},"notes":0}
-    }]});
-    let change = json!({"batch":[{
-        "executor":{"kind":"procedure","connector":1,"code":2},
-        "spec":{"words":CHANGE_SPEC,"parameters":[
-            {"name":1,"kind":"resource","connector":1,"resource":temper_engine_domain_forge::tag(1, forge::ID)},
-            {"name":2,"kind":"bytes","value":"main"}]},
-        "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
-        "authority":{"tools":1,"grants":grants,
-            "delegation":{"kinds":[{"kind":"agent","number":1}],"tasks":4,"depth":2},
-            "budget":{"spend":10},"notes":0}
-    }]});
+pub fn scripts(_forge: SocketAddr) -> Box<[Script]> {
     // Count-picked turns stay in step: the chat hears question, person, report;
     // the work hears the relayed answer, then its sole delegate's result.
     Box::new([
         Script {
             cue: CHAT_CUE.as_bytes().into(),
             turns: Box::new([
-                call(b"delegate", &work),
+                call(b"goal", &json!({"words":REQUEST})),
                 wait(CHAT_DELEGATED),
                 wait(CHAT_ASKED),
                 call(b"message", &json!({"target":WORK,"form":"answer","question":QUESTION,"words":ANSWER})),
@@ -148,7 +133,7 @@ pub fn scripts(forge: SocketAddr) -> Box<[Script]> {
             turns: Box::new([
                 call(b"message", &json!({"target":CHAT,"form":"question","words":QUESTION_WORDS})),
                 wait(WORK_ASKED),
-                call(b"delegate", &change),
+                call(b"change", &json!({"words":CHANGE_SPEC})),
                 wait(WORK_DELEGATED),
                 report(WORK_REPORT),
             ]),
@@ -352,6 +337,23 @@ pub fn check(ran: &Ran) {
     assert_eq!(work["chip"]["task"], WORK, "T2's ended task number: {work}");
     assert_eq!(work["chip"]["phase"], "ended", "T2 ended");
     assert_eq!(work["result"]["value"]["report"]["bytes"], WORK_REPORT, "T2's report");
+    let chat = document(ran, CHAT_ENDED);
+    let parent = &chat["task"]["authority"]["authority"];
+    let child = &work["authority"]["authority"];
+    assert_eq!(child["tools"], parent["tools"], "the goal keeps the chat's tool families");
+    for member in ["tasks", "depth"] {
+        assert_eq!(
+            child["delegation"][member].as_u64().expect("goal delegation"),
+            parent["delegation"][member].as_u64().expect("chat delegation") - 1,
+            "the goal takes one delegation {member}"
+        );
+    }
+    assert_eq!(parent["spend"], CHAT_SPEND, "the chat's original purse");
+    assert_eq!(
+        child["spend"],
+        (CHAT_SPEND - RUN_SPEND) / 2,
+        "the goal gets half left after the chat's first run reserve"
+    );
     let producer = document(ran, PRODUCED);
     assert_eq!(producer["chip"]["task"], PRODUCER, "the producer's task number: {producer}");
     let ending = &producer["chip"]["details"]["owner"]["details"]["ending"];
