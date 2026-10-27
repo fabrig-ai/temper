@@ -132,6 +132,7 @@ struct Seen {
     visits: Vec<Vec<support::sign_in_browser::Hop>>,
 }
 
+mod adoption;
 mod chatgpt;
 mod elsewhere;
 mod github;
