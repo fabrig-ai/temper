@@ -36,6 +36,9 @@ mod change_tool;
 #[path = "forge_routes/reviews.rs"]
 mod reviews;
 
+#[path = "forge_routes/b2_tree.rs"]
+mod b2_tree;
+
 #[path = "forge_routes/goal_tool.rs"]
 mod goal_tool;
 
