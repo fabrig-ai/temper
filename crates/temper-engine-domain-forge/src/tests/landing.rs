@@ -151,6 +151,123 @@ fn member_landing(d: &mut Domain) {
     row.asks = Box::new([None]);
     outputs(d, Event::Landing { row });
 }
+
+fn merged_owner(turn: bool) -> (Domain, Box<[Request]>) {
+    use skein_forge::api::{Answer, Op, Read, Write};
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    let mut change = fixtures::opening_row();
+    change.pull = Some(1);
+    change.pending = None;
+    change.change.way =
+        if turn { temper_engine_domain_forge_change::Way::Turn } else { temper_engine_domain_forge_change::Way::Queue };
+    d.changes.insert(fixtures::CHANGE, change).expect("member change");
+    let task = if turn { 61 } else { fixtures::CHANGE };
+    if turn {
+        assert!(d.project_landing(5, temper_engine_domain_forge_change::Way::Turn, Box::new([])));
+        member_landing(&mut d);
+        let row = d.landing.rows.get_mut(&task).expect("landing");
+        row.landing.phase = policy::Phase::Turn { at: env().wall };
+        let member = row.landing.members.get_mut(0).expect("member");
+        member.head = Some(fixtures::HEAD);
+        member.base = Some(fixtures::BASE);
+        member.candidate = Some(fixtures::HEAD);
+        row.entries = Box::new([LandingEntry { entry: 91, member: 0, gate: 0, operation: Operation::Merge }]);
+    }
+    let mut entry = held_issue();
+    entry.number = 91;
+    entry.task = task;
+    entry.start = None;
+    entry.attempt = None;
+    entry.failures = 0;
+    entry.effect = skein_forge_client::Effect {
+        write: Write::Merge {
+            number: 1,
+            head: fixtures::HEAD,
+            how: if turn { skein_forge::api::MergeHow::FastForwardOnly } else { skein_forge::api::MergeHow::Style },
+        },
+        condition: skein_forge_client::Condition::Merge { base: Box::from(b"main".as_slice()) },
+    };
+    outputs(&mut d, Event::Enqueue { entry });
+    outputs(&mut d, Event::Committed { entry: 91 });
+    let mut merged = false;
+    for _ in 0..8_u32 {
+        let (call, op) = fixtures::next_call(&mut d);
+        let answer = match op {
+            Op::Read(Read::Branch { branch }) if branch.as_ref() == b"main" => Answer::Commit(fixtures::BASE),
+            Op::Read(Read::Branch { branch }) if branch.as_ref() == b"temper/51" => Answer::Commit(fixtures::HEAD),
+            Op::Read(Read::Items { .. }) => Answer::Items { items: Box::new([]), more: false, now: env().now },
+            Op::Read(Read::Pull { number: 1 }) => {
+                let mut pull = fixtures::open_pull();
+                if merged {
+                    pull.state = skein_forge::api::State::Closed;
+                    pull.merged = Some(fixtures::HEAD);
+                }
+                Answer::Pull(pull)
+            }
+            Op::Write(Write::Merge { head, .. }) => {
+                assert_eq!(head, fixtures::HEAD);
+                merged = true;
+                Answer::Merged(fixtures::HEAD)
+            }
+            other @ (Op::Read(_) | Op::Write(_)) => panic!("unexpected merge call: {other:?}"),
+        };
+        let requests = fixtures::answer(&mut d, call, Ok(answer));
+        let mut landed = false;
+        for request in &requests {
+            if let Request::Save { record: Stored::Landed { .. }, .. } = request {
+                landed = true;
+            }
+        }
+        if landed {
+            assert!(merged, "outcome follows merge write");
+            return (d, requests);
+        }
+    }
+    panic!("merge reaches its write");
+}
+
+#[test]
+fn a_turn_merge_records_its_members_change_as_the_landed_owner() {
+    for turn in [false, true] {
+        let (d, requests) = merged_owner(turn);
+        assert!(
+            requests.contains(&Request::Save {
+                read_afresh: None,
+                release: None,
+                record: Stored::Landed { commit: fixtures::HEAD, task: fixtures::CHANGE },
+            }),
+            "merge saves the change as owner, turn={turn}: {requests:?}"
+        );
+        assert_eq!(d.landed.get(&fixtures::HEAD), Some(&fixtures::CHANGE));
+        for request in &requests {
+            if let Request::Save { record: Stored::Landed { task, .. }, .. } = request {
+                assert_ne!(*task, 61, "landing task never owns the commit");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_turn_merges_landed_owner_survives_rebuild() {
+    let (_, requests) = merged_owner(true);
+    let mut landed = None;
+    for request in &requests {
+        if let Request::Save { record: row @ Stored::Landed { .. }, .. } = request {
+            landed = Some(row.clone());
+        }
+    }
+    let landed = landed.expect("durable landed owner");
+    let mut restarted = landing_fixture();
+    outputs(&mut restarted, Event::Restore { record: landed });
+    outputs(&mut restarted, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut restarted, Event::ReadAfresh);
+    outputs(&mut restarted, Event::SettleOutbox);
+    assert_eq!(restarted.landed.get(&fixtures::HEAD), Some(&fixtures::CHANGE));
+}
 #[test]
 fn cancelling_a_landing_leaves_its_change_live_and_detached() {
     let mut d = landing_fixture();
