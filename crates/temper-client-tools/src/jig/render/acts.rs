@@ -255,9 +255,7 @@ pub fn party(number: u64, me: Option<&Me>, out: &mut Text) {
 pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
     match why {
         Refusal::Stale(value) => {
-            out.put(b"stale; newest revision ");
-            out.number(u64::from(value.newest));
-            out.put(b"; read settings again");
+            settings_form::refusal(&settings_form::Refusal::Stale(value.newest), out);
             return;
         }
         Refusal::Full(value) => {
@@ -276,12 +274,14 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
             return;
         }
         Refusal::Malformed { at, why: jig_client::contract::Malformed::Settings(value) } => {
-            out.put(b"out of shape; item ");
-            out.number(u64::from(*at));
-            out.put(b"; ");
-            super::document::settings::setting_text(value.setting, out);
-            out.put(b": ");
-            out.put(super::document::settings::fault_word(value.fault));
+            settings_form::refusal(
+                &settings_form::Refusal::Malformed {
+                    at: *at,
+                    setting: crate::jig::settings_adapter::form_setting(value.setting),
+                    fault: crate::jig::settings_adapter::form_setting_fault(value.fault),
+                },
+                out,
+            );
             return;
         }
         Refusal::Malformed { why: jig_client::contract::Malformed::Running, .. } => {
@@ -289,7 +289,7 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
             return;
         }
         Refusal::Malformed { why: jig_client::contract::Malformed::SettingsUnchanged, .. } => {
-            out.put(b"settings unchanged");
+            settings_form::refusal(&settings_form::Refusal::Unchanged, out);
             return;
         }
         Refusal::AccountMove { .. }
