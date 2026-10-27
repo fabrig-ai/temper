@@ -402,9 +402,8 @@ pub fn fixture_check() -> forge::Fixture {
                 project["policy"]["ceiling"]["tools"] = tools.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = tools.into();
             }
-            // This placement story needs ten-unit runs: the smaller model's
-            // stock 4C cap is four, winding waiting agents down and freeing a
-            // worker before the late benchmark worker is added.
+            // This placement story keeps its own ten-unit run cap so waiting
+            // agents stay placed until the late benchmark worker is added.
             value["world_settings"]["maximum_run_spend"] = 10.into();
             // Announce placement and wait in one completion, with serial tools.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();

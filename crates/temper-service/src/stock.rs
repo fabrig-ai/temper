@@ -64,7 +64,11 @@ pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     // jig prices the costliest completion; one reserve turn plus one is 2C.
     // Its existing admission helper keeps the stock on that same rounding rule.
     let minimum_run = jig_domain_core::reserve_floor(&charters.first()?.policy)?;
-    let run = minimum_run.checked_mul(2)?; // K = 4C.
+    let mut run = minimum_run.checked_mul(2)?; // K starts at 4C.
+    // Coarse prices still leave four units per turn (protocol/configuration.md, 13.4).
+    for charter in charters.iter() {
+        run = run.max(u64::from(charter.policy.turns).checked_mul(4)?);
+    }
     let chat_spend = run.checked_mul(24)?;
     let ceiling_spend = run.checked_mul(48)?;
     for charter in charters.iter_mut() {
