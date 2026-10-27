@@ -523,10 +523,18 @@ pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Give
         defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Result;
     }
     let seed = engine.projects.first().expect("world policy");
+    let number = if uses_stock() {
+        let mut policies = skein_lib::Map::with_capacity(2);
+        policies.insert(1, defaults.policies.get(&1).expect("stock policy 1").clone()).expect("two world policies");
+        defaults.policies = policies;
+        2
+    } else {
+        1
+    };
     defaults
         .policies
         .insert(
-            1,
+            number,
             jig_domain_core::ConfiguredPolicy {
                 policy: seed.policy.clone(),
                 permissions: seed.roles.clone(),

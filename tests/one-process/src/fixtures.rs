@@ -144,6 +144,10 @@ pub(crate) fn world_document() -> serde_json::Value {
         value["engine"].as_object_mut().expect("engine").remove(member);
     }
     if crate::stories::uses_stock() {
+        // Keep stock policy 1 for the restore refusal; chats seed the world's policy 2.
+        for seed in value["engine"]["projects"].as_array_mut().expect("seed projects") {
+            seed["policy"] = 2.into();
+        }
         for project in value["world_settings"]["policies"].as_array_mut().expect("world policies") {
             project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
             for role in project["policy"]["roles"].as_array_mut().expect("roles") {
