@@ -2,7 +2,7 @@
 
 Kind: concept
 
-A change is a task that writes one repository's branch and lands it: its pull request, CI at its head, its gates, the landing queue, its repairs and the merge, each step as change show prints it.
+A change is a task that writes one repository's branch and lands it: its pull request, CI at its head, its gates, the landing queue or its project's landing, its repairs and the merge, each step as change show prints it.
 
 ## What it is
 
@@ -12,7 +12,8 @@ A change is a task that writes one repository's branch and lands it: its pull re
   from those words alone (temper help task).
 - **Its panel,** as `change show` prints it: `change TASK ·
   OWNER/NAME on forge FORGE · BRANCH into BASE`, its pull request and
-  its address, `step:` and the step, the CI at its head, its gates, and
+  its address, `step:` and the step, `way: turn · landing task N`
+  where its project lands by turn, the CI at its head, its gates, and
   how many repairs, resolutions and updates it has used of its limits.
 - **Its result** is the change landed: its merge commit, its pull
   request with its address, then what the landing passed as the change
@@ -45,6 +46,17 @@ Its steps, as `step:` prints them:
   and the end of its log; the change is checked again;
 - `landing`, then `landed`: temper merges it, and `change show` names
   the merge commit.
+
+Where its project lands by turn (temper help landing), no CI runs at
+its head and it waits in no queue: `gating` follows `opening`, then:
+
+- `ready`: its gates hold at its head, and its landing, `way: turn ·
+  landing task N`, proves its candidate and waits for the turn;
+- `preparing`: the forge rebases its branch onto main for its
+  landing, and it is `ready` again at the new head;
+- `repairing`: a gate failed at its candidate, given that run's
+  output, and its new head makes it ready again;
+- `landed`: main was fast-forwarded to its candidate.
 
 After a release, `reopening` reopens its closed pull request and
 `recreating` pushes its missing branch again.
@@ -80,7 +92,8 @@ task, the change's own or its writer's or reviewer's, `held: task N
   request, its CI, a hold or its landing (temper help ctl); a wait for
   its landing ends at a hold, `not met: held` (exit 3); `task show`
   reads its task and its acts, `task release` among them; `task tree`
-  shows its delegates.
+  shows its delegates; `landing show` reads its landing, where its
+  project lands by turn.
 - **temper's runs** ask for one with `change`, and hear landings on a
   branch with `subscribe_forge`.
 - **The forge** holds its diff, its reviews and CI's logs: read them
