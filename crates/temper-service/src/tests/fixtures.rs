@@ -459,6 +459,7 @@ fn start_with_worker(
     }
     settings.jig.limits.core.people.operations = 2;
     settings.jig.limits.core.tasks.tasks = 2;
+    settings.jig.limits.core.tasks.exemptions = 2;
     settings.jig.limits.core.tasks.project_tasks = 2;
     settings.jig.limits.core.tasks.tree_tasks = 2;
     settings.jig.limits.core.tasks.batch = 1;
