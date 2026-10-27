@@ -379,12 +379,17 @@ pub fn assert_briefs(model: &super::forge_land::Seen, landed: &Value) {
     }
     let mut received = String::new();
     for query in &model.requests {
-        if String::from_utf8_lossy(&query.system).contains("@first-repository") {
+        if String::from_utf8_lossy(&query.system).contains("[Requested by person 1]") {
             for message in &query.messages {
                 if message.role == skein_fake_llm_domain::api::Role::User {
                     for part in &message.parts {
-                        if let skein_fake_llm_domain::api::Part::Text { text } = part {
-                            received.push_str(&String::from_utf8_lossy(text));
+                        match part {
+                            skein_fake_llm_domain::api::Part::Text { text }
+                            | skein_fake_llm_domain::api::Part::ToolOutput { output: text, .. } => {
+                                received.push_str(&String::from_utf8_lossy(text));
+                            }
+                            skein_fake_llm_domain::api::Part::Opaque { .. }
+                            | skein_fake_llm_domain::api::Part::ToolCall { .. } => {}
                         }
                     }
                 }
