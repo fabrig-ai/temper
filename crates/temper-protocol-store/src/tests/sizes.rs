@@ -6,11 +6,12 @@ use temper_engine_domain_forge as forge;
 fn the_application_sizes_are_the_largest_key_and_row() {
     // Change's eight remarks hold 4096 bytes each; eight failure counts add 100 bytes.
     // Authority causes add 42 bytes to each of eight holds, drift and released.
+    // Way and landing add ten bytes.
     // Terminal CI adds a presence byte, a 32-byte head and a one-byte status.
     // Result evidence adds four 4096-byte prefixes, cut counts, a head and repair count.
     assert_eq!(
         application(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes),
-        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 52_440 })
+        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 52_450 })
     );
 }
 #[test]
