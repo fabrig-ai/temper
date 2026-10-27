@@ -9,6 +9,7 @@ fn chat_world(cap: u64, tasks: u32, depth: u32) -> (World, engine::Assignment) {
     world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
     let people::Ask::Create { project, mut batch } = adoption_chat(&world) else { panic!("create") };
     batch[0].budget = people::Budget::AsAllowed { cap: Some(cap) };
+    batch[0].contract = people::Contract::Report { words: 32 };
     batch[0].authority.tools = 1 | 2 | 512;
     batch[0].authority.delegation.tasks = tasks;
     batch[0].authority.delegation.depth = depth;
@@ -63,11 +64,22 @@ fn goal_delegates_one_tracked_report_under_the_runs_charter() {
     assert_eq!(row.requester, tasks::Party::Task(chat.task));
     assert_eq!(row.project, live(&world, chat.task).project);
     assert_eq!(row.tracked, Some(0));
-    assert_eq!(row.contract, live(&world, chat.task).contract);
     assert!(matches!(row.contract, tasks::Contract::Report { .. }));
     assert_eq!(row.spec.words.as_ref(), WORDS);
     assert!(row.spec.parameters.is_empty() && row.spec.inputs.is_empty());
     assert_eq!(delegated(goal(&mut world, &chat, 93, false)), task, "named retry makes no second goal");
+}
+
+#[test]
+fn a_goals_report_is_bounded_by_the_deployments_result_bytes() {
+    for advisor in [false, true] {
+        let (mut world, chat) = chat_world(100, 11, 3);
+        let tasks::Contract::Report { words } = live(&world, chat.task).contract else { panic!("chat report") };
+        let result_bytes = world.env.limits.tasks.result_bytes;
+        assert!(words < result_bytes, "the chat's own contract is smaller");
+        let task = delegated(goal(&mut world, &chat, 93, advisor));
+        assert_eq!(live(&world, task).contract, tasks::Contract::Report { words: result_bytes });
+    }
 }
 
 #[test]

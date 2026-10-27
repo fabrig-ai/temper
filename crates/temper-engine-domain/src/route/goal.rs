@@ -72,22 +72,10 @@ pub(crate) fn goal(
         }
         Some(priority)
     };
-    let bound = match &row.contract {
-        tasks::Contract::Report { words } | tasks::Contract::Change { words, .. } => *words,
-        tasks::Contract::Verdict { choices } => {
-            let mut bound = 0;
-            for choice in choices {
-                bound = bound.max(choice.words);
-            }
-            bound
-        }
-        tasks::Contract::Approval { .. } => 1024,
-    }
-    .min(env.limits.tasks.result_bytes);
     Ok(Delegate {
         executor: tasks::Executor::Agent { charter },
         spec: tasks::Spec { words, parameters: Box::new([]), inputs: Box::new([]) },
-        contract: tasks::Contract::Report { words: bound },
+        contract: tasks::Contract::Report { words: env.limits.tasks.result_bytes },
         authority,
         deadline: tasks::Deadline::Named,
         llm: None,
