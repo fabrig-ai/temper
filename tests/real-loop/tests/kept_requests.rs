@@ -159,8 +159,9 @@ fn cancelling_scripts(at: std::net::SocketAddr) -> Box<[Script]> {
     };
     scripts
 }
+// domain/forge.md, 8.3: the retained panel ends with the cancelled task.
 #[test]
-fn cancelling_a_change_answers_its_landing_wait_with_the_last_panel() {
+fn cancelling_a_change_answers_its_landing_wait_with_its_ended_panel() {
     const LANDING_WAIT: usize = 5;
     let ran = world::run_forge(fixture(), cancelling_scripts, || {
         vec![
@@ -182,7 +183,7 @@ fn cancelling_a_change_answers_its_landing_wait_with_the_last_panel() {
     let answer: serde_json::Value = serde_json::from_slice(&ran.calls()[LANDING_WAIT].stdout).expect("wait JSON");
     assert_eq!(answer["met"], false);
     assert_eq!(answer["why"], "ended: cancelled");
-    assert_eq!(answer["change"]["step"], "producing");
+    assert_eq!(answer["change"]["step"], "ended");
     assert!(answer["change"]["digest"].is_string());
     let wait = &ran.calls()[LANDING_WAIT];
     assert!(wait.ended.as_nanos() - wait.spawned.as_nanos() < 2_000_000_000, "{wait:?}");
