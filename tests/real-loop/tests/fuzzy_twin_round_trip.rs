@@ -5,33 +5,11 @@ use std::{
     path::{Path, PathBuf},
 };
 use temper_real_loop_world::{ForgeRecipe, Ran, green_light, llm, run_forge, run_forge_with};
-use temper_twin::{Input, Replace, Take};
+use temper_twin::{Input, Take};
 
 const TASKS: [u64; 4] = [1, 2, 4, 5];
 const CUES: [&str; 4] =
-    ["@green_chat Add CSV export to widget", "@green_work", "@green_coding", "Review this change at the named head"];
-
-fn source_address(ran: &Ran) -> String {
-    // This is the recorded delegate call's forge grant, not a credential.
-    for seen in ran.llm() {
-        if let skein_fake_peers::llm::Observation::Query { query, .. } = seen {
-            for message in &query.messages {
-                for part in &message.parts {
-                    if let skein_fake_llm_domain::api::Part::ToolCall { name, arguments, .. } = part
-                        && name.as_ref() == b"delegate"
-                    {
-                        let args: Value = serde_json::from_slice(arguments).expect("delegate arguments");
-                        return args["batch"][0]["authority"]["grants"][0]["segments"][1]
-                            .as_str()
-                            .expect("forge address")
-                            .into();
-                    }
-                }
-            }
-        }
-    }
-    panic!("the chat delegated its work");
-}
+    ["[Requested by person 1]", "[Requested by task 1]", "@green_coding", "Review this change at the named head"];
 
 fn data(source: &Path) -> PathBuf {
     let config: Value =
@@ -40,9 +18,7 @@ fn data(source: &Path) -> PathBuf {
     source.join(config["engine"]["deployment"]["directory"].as_str().expect("deployment data directory"))
 }
 
-fn twin_recipe(address: SocketAddr, source: &Path) -> llm::Recipe {
-    let old = std::fs::read(source.join("twin-source-address")).expect("source forge address");
-    let old_text = String::from_utf8(old.clone()).expect("source socket address");
+fn twin_recipe(_address: SocketAddr, source: &Path) -> llm::Recipe {
     let mut takes = Vec::new();
     for (task, cue) in TASKS.into_iter().zip(CUES) {
         takes.push(Take { task, cue: cue.as_bytes().into() });
@@ -54,18 +30,15 @@ fn twin_recipe(address: SocketAddr, source: &Path) -> llm::Recipe {
         data: data(source),
         base: serde_json::to_vec(&base).expect("base JSON").into_boxed_slice(),
         takes: takes.into_boxed_slice(),
-        replaces: Box::new([Replace {
-            old: old.into_boxed_slice(),
-            new: address.to_string().into_bytes().into_boxed_slice(),
-        }]),
+        // goal and change carry words alone: no forge grant address to replace.
+        replaces: Box::new([]),
     };
     let twin = temper_twin::twin(&input).expect("the stopped green light has a twin");
     assert_eq!(&*twin.report.turns, &[(1, 6), (2, 5), (4, 4), (5, 1)]);
     for (task, count) in &twin.report.turns {
         println!("task {task}: {count} turns");
     }
-    println!("--replace {old_text}={address}: {} occurrences (fresh forge listener)", twin.report.replaced[0]);
-    assert!(twin.report.replaced[0] > 0, "the source forge listener was substituted");
+    assert!(twin.report.replaced.is_empty(), "the words-only scripts need no replacements");
     let document = temper_fake::llm::Document::decode(&twin.document).expect("fake accepts twin");
     let mut recipe = llm::scripted(Box::new([]));
     recipe.domain = document.domain(17);
@@ -92,7 +65,6 @@ fn the_green_light_and_its_twin_land_the_same_csv_change() {
     let source = run_forge(green_light::fixture(), green_light::scripts, green_light::acts);
     green_light::check(&source);
     record_frames(&source);
-    std::fs::write(source.path().join("twin-source-address"), source_address(&source)).expect("source forge listener");
     let scratch = source.into_scratch(); // Drops the stopped world, retains its data.
     let replay = run_forge_with(
         green_light::fixture(),
