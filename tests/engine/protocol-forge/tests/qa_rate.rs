@@ -80,6 +80,7 @@ impl Scheduler {
                         }
                         other @ (change::Decision::None
                         | change::Decision::Delegate(_)
+                        | change::Decision::CancelGates { .. }
                         | change::Decision::Effect(_)
                         | change::Decision::Ready
                         | change::Decision::QueueRepair

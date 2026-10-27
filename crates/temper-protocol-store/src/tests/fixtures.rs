@@ -768,6 +768,7 @@ pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
         State::Reopening { requested: true, retarget: false },
         State::Checking { head: [2; 32] },
         State::Gating { head: [3; 32], asked: Box::new([4, 5]) },
+        State::CancellingGates { head: [3; 32] },
         State::Queued { head: [6; 32], ready_since: skein_lib::Wall::from_nanos(7) },
         State::First { head: [8; 32], ready_since: skein_lib::Wall::from_nanos(9) },
         State::Updating { from: [10; 32], base: [11; 32], ready_since: skein_lib::Wall::from_nanos(12) },
