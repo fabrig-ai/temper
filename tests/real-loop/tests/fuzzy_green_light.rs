@@ -67,6 +67,9 @@ fn fixture() -> forge::Fixture {
             (landing::fixture().configure)(value, agent, forge);
             value["engine"]["rules"]["ceiling"]["tools"] = 3.into();
             temper_real_loop_world::fixtures::own_policy(value);
+            // Asking and resuming share a 22-unit purse with a ten-unit change;
+            // this inbox story reserves ten-unit runs, independently of stock K.
+            value["world_settings"]["maximum_run_spend"] = 10.into();
             value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 5.into();
             for project in value["engine"]["projects"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 3.into();
