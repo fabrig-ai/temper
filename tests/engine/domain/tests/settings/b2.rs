@@ -335,6 +335,7 @@ fn no_settings_tools(run: &engine::Assignment) {
 pub(super) fn changes_without_settings() {
     let mut config = [configuration(), configuration()];
     for config in &mut config {
+        config.core.defaults.charters[0].policy.tools.0 |= core::ToolFamilies::JIG.settings;
         config.core.defaults.rules.ceiling.tools.0 |= core::ToolFamilies::JIG.settings;
         for project in &mut config.core.seed_projects {
             project.policy.policy.ceiling.tools.0 |= core::ToolFamilies::JIG.settings;

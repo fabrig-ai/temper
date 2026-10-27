@@ -73,6 +73,7 @@ fn values() -> Vec<(c::Setting, c::SettingValue)> {
         (
             c::Setting::Charter(c::SettingNumber { number: 3 }),
             c::SettingValue::Charter(Box::new(c::Charter {
+                tools: 1024,
                 number: 3,
                 instructions: words("keep \"boundaries\"\nwhole"),
                 waiting: Duration::from_secs(1),

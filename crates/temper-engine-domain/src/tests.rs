@@ -585,6 +585,7 @@ fn held_assignment() -> crate::Assignment {
                 kind: jig_domain_fleet::HostKind::Worker,
             },
             policy: crate::RunPolicy {
+                tools: jig_domain_authority::Tools(2047),
                 instructions: Box::new([]),
                 waiting: skein_lib::Duration::from_secs(1),
                 resume: true,

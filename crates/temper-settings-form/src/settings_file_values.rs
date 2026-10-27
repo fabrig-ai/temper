@@ -9,6 +9,7 @@ pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
         &[
             b"number",
             b"instructions",
+            b"tools",
             b"waiting",
             b"resume",
             b"turns",
@@ -27,6 +28,7 @@ pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
         ],
     )?;
     Ok(c::Charter {
+        tools: d.number(field(&fields, b"tools")?)?,
         switches: [
             d.boolean(field(&fields, b"resume")?)?,
             d.boolean(field(&fields, b"inspect")?)?,
