@@ -16,6 +16,10 @@ use std::{
     rc::Rc,
 };
 
+/// The patience that ends a hung box story, never its guide: a story's time is measured idle
+/// (domain/testing.md 6.1). Keep a duration under test separate from this horizon.
+pub const BOX_DEADLINE: Duration = Duration::from_secs(240);
+
 /// What the referee does after the link arrives.
 #[derive(Clone, Copy, Debug)]
 pub enum Plan {

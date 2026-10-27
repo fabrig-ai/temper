@@ -186,8 +186,7 @@ fn a_box_on_a_fresh_init_reaches_serves_link_with_forge_3_dormant() {
     assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
     // init's ports are fixed when free; tests run side by side, so each listener moves to a drawn one.
     support::own_listener_files(scratch.path());
-    let ended =
-        support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, skein_lib::Duration::from_secs(6));
+    let ended = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
     let diagnostic = String::from_utf8_lossy(&ended.stderr);
     let link = support::printed_link(&ended.stdout).unwrap_or_else(|| panic!("serve's link: {diagnostic}"));
     assert!(skein_lib::bytes::find(link, b"/jig/v1/sign-in/link?secret=").is_some(), "{diagnostic}");

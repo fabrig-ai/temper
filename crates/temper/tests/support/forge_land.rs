@@ -11,10 +11,6 @@ use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 /// project 1 (tools.md 5.5): work/hello is project 2's.
 const FIRST_PROJECT: &str = "2";
 
-/// Real Forgejo's cached fetch check, preparation/start and first repository
-/// take seconds: three minutes for the acts, plus ten seconds to stop and reap.
-pub const OWNED_ALLOWANCE: Duration = Duration::from_secs(190);
-
 /// The model side: processes a story adds beside the box and ctl.
 #[expect(
     clippy::large_enum_variant,

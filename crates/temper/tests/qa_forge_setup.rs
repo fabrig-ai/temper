@@ -7,9 +7,7 @@ use std::{collections::BTreeSet, fs, net::TcpListener, path::Path, process::Comm
 
 use serde_json::Value;
 use skein_io::kernel::Exit;
-use skein_lib::Duration;
 
-const WITHIN: Duration = Duration::from_secs(10);
 const FILES: [&str; 4] = ["api_token", "git_token", "user", "webhook_secret"];
 
 fn init(directory: &Path) -> (Value, String) {
@@ -35,7 +33,7 @@ fn write(directory: &Path, value: &Value) {
 
 fn boxed(directory: &Path) {
     support::own_listener_files(directory);
-    let ended = support::boxed::run(directory, None, support::boxed::Plan::Stop, WITHIN);
+    let ended = support::boxed::run(directory, None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
     assert!(support::printed_link(&ended.stdout).is_some(), "box reaches sign-in");
     assert_eq!(ended.exit, Some(Exit::Code(0)), "box stops cleanly");
     assert!(ended.left.as_ref().is_some_and(Vec::is_empty), "no surviving children");
@@ -164,7 +162,7 @@ fn a_box_on_inits_document_leaves_the_asked_forge_and_cache_absent() {
         directory: scratch.path().into(),
         environment: Vec::new(),
     };
-    let ended = support::boxed::run_command(command, None, support::boxed::Plan::Stop, WITHIN);
+    let ended = support::boxed::run_command(command, None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
     assert!(support::printed_link(&ended.stdout).is_some(), "box reaches sign-in");
     assert_eq!(ended.exit, Some(Exit::Code(0)));
     assert!(ended.left.as_ref().is_some_and(Vec::is_empty));
@@ -197,7 +195,8 @@ fn asked_forge_accepts_every_subset_of_missing_files() {
             directory: scratch.path().into(),
             environment: Vec::new(),
         };
-        let ended = support::boxed::run_command(command, None, support::boxed::Plan::Stop, WITHIN);
+        let ended =
+            support::boxed::run_command(command, None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
         assert!(
             support::printed_link(&ended.stdout).is_some(),
             "asked forge missing-file mask {mask} must not refuse: {}",
@@ -273,7 +272,7 @@ fn qa_box_drain_does_not_report_its_own_pipe_as_closed() {
     let scratch = support::Scratch::startup("qa-m2-box-drain");
     init(scratch.path());
     support::own_listener_files(scratch.path());
-    let ended = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, WITHIN);
+    let ended = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
     assert!(support::printed_link(&ended.stdout).is_some(), "box reaches sign-in");
     assert_eq!(ended.exit, Some(Exit::Code(0)));
     assert!(ended.left.as_ref().is_some_and(Vec::is_empty));

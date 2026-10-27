@@ -388,7 +388,7 @@ fn fake_box(scratch: &Path, client: &str, credentials: &[Vec<u8>]) {
             ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "15s"])),
             ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
         ],
-        support::WITHIN,
+        support::boxed::BOX_DEADLINE,
         || {
             let permission = owned::answer(
                 address.port(),
@@ -532,7 +532,7 @@ fn asked_owned_setup_connects_and_box_record_restarts_it() {
             ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "30s"])),
             ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
         ],
-        support::WITHIN,
+        support::boxed::BOX_DEADLINE,
         || (forge_directory(scratch.path()).join("admin_token").exists(), secrets(scratch.path())),
     );
     let (left_handover, credentials) = first.checked.as_ref().expect("first box's evidence");
@@ -566,7 +566,7 @@ fn asked_owned_setup_connects_and_box_record_restarts_it() {
             ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "30s"])),
             ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
         ],
-        support::WITHIN,
+        support::boxed::BOX_DEADLINE,
         || forge_directory(scratch.path()).join("admin_token").exists(),
     );
     no_secrets(&second.stdout, credentials);
@@ -634,7 +634,7 @@ fn asked_prepare_failure_is_visible_and_can_be_asked_again() {
             ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "settled", "--timeout", "15s"])),
             ctl::Step::Run(ctl::Call::new(&["forges", "--json"])),
         ],
-        support::WITHIN,
+        support::boxed::BOX_DEADLINE,
         || directory(scratch.path(), "--data").join("box/started/1").exists(),
         &[(1, 1), (4, 1)],
     );

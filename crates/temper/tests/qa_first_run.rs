@@ -10,7 +10,6 @@ mod support;
 
 use serde_json::Value;
 use skein_io::kernel::Exit;
-use skein_lib::Duration;
 use std::{fs, net::SocketAddr, path::Path};
 use support::{
     Scratch, boxed, ctl,
@@ -96,7 +95,7 @@ fn qa_dormant_owned_forge_holds_its_port_before_any_setup() {
         forge_land::deployment_flags(&dirs),
         scratch.path(),
         vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["forges", "--json"]))],
-        Duration::from_secs(30),
+        boxed::BOX_DEADLINE,
         || {
             let address = forge_address(&dirs[0]);
             let reservation = std::net::TcpListener::bind(address).err().map(|error| error.kind());
@@ -147,7 +146,7 @@ fn qa_running_playground_ends_whole_when_owned_forge_connects_without_restart() 
         forge_land::deployment_flags(&dirs),
         scratch.path(),
         steps,
-        Duration::from_secs(210),
+        boxed::BOX_DEADLINE,
         || {
             support::playground::retired_reload(&dirs[0], scratch.path());
             let turns = support::first_repository::turns(scratch.path(), "1");
@@ -272,7 +271,7 @@ fn bad_cached_release() -> String {
             ])),
             Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "20s"])),
         ],
-        Duration::from_secs(60),
+        boxed::BOX_DEADLINE,
         || {
             let address = forge_address(&dirs[0]);
             (
@@ -313,7 +312,7 @@ fn parent_shutdown(signal: &str) {
         forge_land::deployment_flags(&dirs),
         scratch.path(),
         steps,
-        Duration::from_secs(210),
+        boxed::BOX_DEADLINE,
         || {
             let runners = descendants_with(&["forge", "run"]);
             let forge_parent = runners

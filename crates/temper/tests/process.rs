@@ -9,9 +9,7 @@ use support::forge_land::{
     forgejo_setup_steps, plan_change_steps,
 };
 
-/// The patience that ends a hung box story, never its guide: a story's time is measured idle
-/// (domain/testing.md 6.1).
-const BOX_DEADLINE: Duration = Duration::from_secs(240);
+use support::boxed::BOX_DEADLINE;
 
 #[test]
 fn a_held_clients_listener_stops_serve() {
@@ -62,7 +60,7 @@ fn held_listener_stops_serve(listener: &str, expected: &str) {
         },
         None,
         support::boxed::Plan::Exit,
-        Duration::from_secs(5),
+        BOX_DEADLINE,
     );
     let diagnostic = String::from_utf8_lossy(&ended.stderr);
     assert_eq!(ended.exit, Some(Exit::Code(1)), "{diagnostic}");
@@ -1186,7 +1184,7 @@ fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_la
             flags.clone(),
             &client_root,
             steps,
-            support::forge_land::OWNED_ALLOWANCE,
+            BOX_DEADLINE,
             || support::first_repository::live(&paths[0], &paths[1], &client_root),
             support::first_repository::csv_llm(&paths[0]),
         );
@@ -1314,7 +1312,7 @@ fn a_first_run_plays_the_demo_then_sets_up_a_forgejo_here_with_no_restart() {
         flags,
         scratch.path(),
         steps,
-        support::forge_land::OWNED_ALLOWANCE,
+        BOX_DEADLINE,
         || {
             (
                 first_repository::live_for(&paths[0], &paths[1], scratch.path(), HELLO),
@@ -1469,7 +1467,7 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
             flags.clone(),
             &client,
             steps,
-            Duration::from_secs(240),
+            BOX_DEADLINE,
             || support::first_repository::live(&paths[0], &paths[1], &client),
             forge_land::plan_face(issuer, scripts, first),
         );
@@ -1564,7 +1562,7 @@ fn a_change_whose_coder_fails_holds_and_its_chat_answers() {
         flags,
         &client,
         steps,
-        Duration::from_secs(240),
+        BOX_DEADLINE,
         || support::first_repository::live(&paths[0], &paths[1], &client),
         CtlFace { face: forge_land::fake_face(issuer, scripts), first: true, reply: forge_land::HELD },
     );
@@ -3365,7 +3363,7 @@ exec "$@"
         },
         None,
         support::boxed::Plan::Stop,
-        Duration::from_secs(6),
+        BOX_DEADLINE,
     );
     let diagnostic = String::from_utf8_lossy(&ended.stderr).into_owned();
     let linked = support::printed_link(&ended.stdout).is_some();
@@ -3881,7 +3879,7 @@ fn temper_ctl_running_work_keeps_its_revision() {
         flags,
         scratch.path(),
         steps,
-        support::WITHIN,
+        BOX_DEADLINE,
         || (),
         running_revision::llm(&paths[0]),
     );
@@ -3927,7 +3925,7 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
         flags,
         scratch.path(),
         steps,
-        support::forge_land::OWNED_ALLOWANCE,
+        BOX_DEADLINE,
         || first_repository::live(&paths[0], &paths[1], scratch.path()),
         first_repository::playground_llm(&paths[0]),
     );

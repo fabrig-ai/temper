@@ -4,7 +4,6 @@ pub mod support;
 use std::{fs, net::TcpListener, os::unix::fs::PermissionsExt, path::PathBuf, process::Command};
 
 use skein_io::kernel::Exit;
-use skein_lib::Duration;
 
 #[test]
 fn init_names_a_fixed_listener_and_a_records_only_demo() {
@@ -214,7 +213,7 @@ fn a_running_box_adopts_every_seeded_repository_before_connecting() {
         flags.into_iter().map(|flag| flag.into_string().expect("flag")).collect(),
         &client,
         support::person::demo_change(),
-        Duration::from_secs(90),
+        support::boxed::BOX_DEADLINE,
         || {
             let address = document["application"]["clients"]["listener"]["socket"].as_str().expect("client address");
             support::write_private(&client.join("private/address"), format!("http://{address}\n").as_bytes());
@@ -268,7 +267,8 @@ fn old_form_one_sided_hook_wiring_is_refused_before_a_fake_connects() {
             document["application"]["forges"][0]["webhook_secret"] = serde_json::Value::Null;
         }
         fs::write(&path, serde_json::to_vec(&document).expect("JSON")).expect("one-sided hook wiring");
-        let outcome = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, Duration::from_secs(10));
+        let outcome =
+            support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
         let stderr = String::from_utf8_lossy(&outcome.stderr);
         assert_eq!(outcome.exit, Some(Exit::Code(1)), "{name}: {stderr}");
         assert!(stderr.contains(refusal), "{name}: {stderr}");
@@ -289,7 +289,7 @@ fn the_default_box_prepares_adopts_and_hands_over_the_link() {
         .expect("run init");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     support::own_listener_files(scratch.path());
-    let outcome = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, Duration::from_secs(10));
+    let outcome = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
     assert_eq!(outcome.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&outcome.stderr));
     assert!(support::printed_link(&outcome.stdout).is_some(), "seed must finish and hand over the sign-in link");
     assert_eq!(outcome.left.as_deref(), Some([].as_slice()));

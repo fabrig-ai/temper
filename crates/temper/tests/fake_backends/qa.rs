@@ -4,7 +4,6 @@
 use crate::support::{self, boxed, ctl};
 use serde_json::{Value, json};
 use skein_io::kernel::Exit;
-use skein_lib::Duration;
 use skein_world::end_to_end::Command;
 use std::{
     ffi::OsString,
@@ -14,7 +13,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const WITHIN: Duration = Duration::from_secs(30);
 // The stable init identities and five issuer URLs of configuration.md, 12.1.
 const GITHUB_FORGE: u16 = 2;
 const OPENAI_PROVIDER: u16 = 1;
@@ -75,7 +73,7 @@ fn command(root: &Path, verb: &str, arguments: Vec<String>) -> boxed::Outcome {
         },
         None,
         boxed::Plan::Stop,
-        WITHIN,
+        boxed::BOX_DEADLINE,
     )
 }
 
@@ -149,7 +147,7 @@ impl Fixture {
             self.fake_flags(),
             self.scratch.path(),
             vec![ctl::Step::Run(ctl::Call::sign_in()), ctl::Step::Run(ctl::Call::new(&["accounts", "--json"]))],
-            WITHIN,
+            boxed::BOX_DEADLINE,
             check,
         )
     }

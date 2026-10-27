@@ -9,7 +9,6 @@ mod support;
 
 use serde_json::{Value, json};
 use skein_io::kernel::Exit;
-use skein_lib::Duration;
 use std::{fs, num::NonZeroU16, os::unix::ffi::OsStrExt, path::Path};
 use support::{
     Scratch, boxed,
@@ -120,7 +119,7 @@ fn first_landed_task_and_adoption_survive_a_box_restart_without_setup_replay() {
         flags(root),
         root,
         steps,
-        Duration::from_secs(180),
+        boxed::BOX_DEADLINE,
         || first_repository::live(root, root, root),
         first_repository::llm(root),
     );
@@ -153,7 +152,7 @@ fn first_landed_task_and_adoption_survive_a_box_restart_without_setup_replay() {
         flags(root),
         root,
         steps,
-        Duration::from_secs(120),
+        boxed::BOX_DEADLINE,
         || first_repository::live(root, root, root),
         &[(2, 2)],
     );
