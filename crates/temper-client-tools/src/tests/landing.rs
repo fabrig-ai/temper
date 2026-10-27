@@ -245,8 +245,11 @@ fn landings_with_none_print_no_landings() {
     );
     for json in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let call =
-            root.submit(if json { &["landing", "list", "--project", "1", "--json"] } else { &["landing", "list", "--project", "1"] });
+        let call = root.submit(if json {
+            &["landing", "list", "--project", "1", "--json"]
+        } else {
+            &["landing", "list", "--project", "1"]
+        });
         root.end(call, &landing::subject(None, 1, false, &root.limits), c::WatchEnd::Unknown);
         assert_eq!(root.answer(call).unwrap().stdout, read_list(&list(None, &[]), json).stdout);
     }
@@ -277,14 +280,21 @@ fn an_absent_project_reads_the_task_and_a_project_name_resolves_through_me() {
 }
 #[test]
 fn landing_calls_round_trip_and_reject_waits_and_zero_tasks() {
-    for argv in
-        [&["landing", "show", "61"][..], &["landing", "show", "61", "--project", "work"], &["landing", "list", "--project", "1", "--ended"]]
-    {
+    for argv in [
+        &["landing", "show", "61"][..],
+        &["landing", "show", "61", "--project", "work"],
+        &["landing", "list", "--project", "1", "--ended"],
+    ] {
         let call = f::call(argv);
         assert_eq!(f::printed(&call), jig::call::Parsed::Call { call: call.clone(), json: false });
         assert_eq!(f::from_json(&jig::json::write_call(crate::table::TOOLS, &call).unwrap()), call);
     }
-    for argv in [&["landing", "show", "0"][..], &["wait", "landing", "61"], &["landings"], &["landing", "show", "61", "--key", ""]] {
+    for argv in [
+        &["landing", "show", "0"][..],
+        &["wait", "landing", "61"],
+        &["landings"],
+        &["landing", "show", "61", "--key", ""],
+    ] {
         f::parse(argv).unwrap_err();
     }
 }

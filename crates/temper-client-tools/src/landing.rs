@@ -36,7 +36,8 @@ pub const READ: Tool = Tool {
 pub const LIST: Tool = Tool {
     name: b"landing list",
     line: b"List a project's landings, the turn's holder first, then newest first",
-    prints: b"`landings of project PROJECT`, the turn, and a line per landing: its task, phase, changes and repositories",
+    prints:
+        b"`landings of project PROJECT`, the turn, and a line per landing: its task, phase, changes and repositories",
     result: b"landings",
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Required, b"The project"),
