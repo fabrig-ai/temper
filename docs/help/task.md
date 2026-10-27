@@ -46,8 +46,9 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   leaving it held, or passing it up to the next holder of authority,
   are the other decisions. Only an uncertain effect asks whether to
   repeat it.
-- **Stopped:** stopping ends the current run and holds the task; its
-  delegates go on.
+- **Stopped:** stopping holds the task and every task below it, those
+  made later included, and ends their runs; releasing the stopped task
+  runs them all again.
 - **Cancelled:** cancelling ends the task and its tree: at once, or
   after a grace the canceller gives, in which its run may finish.
 - **Amended:** an amendment replaces the controls it names (priority
