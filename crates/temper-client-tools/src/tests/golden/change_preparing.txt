@@ -6,4 +6,4 @@ head 1111111111111111111111111111111111111111 · CI pending
 gates: none
 repairs 0 of 3 · resolutions 0 of 3 · updates 0 of 5
 digest: 0b1bda6577cfb05e
-next: temper ctl DIRECTORY wait change 2 --until landed
+next: temper ctl DIR change show 2 --until landed
