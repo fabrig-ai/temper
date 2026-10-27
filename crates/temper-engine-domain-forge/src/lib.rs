@@ -18,6 +18,7 @@ pub use address::{PULL_ADDRESS_BYTES, pull_address};
 mod adoption;
 pub mod boundary;
 mod brief;
+mod brief_ci;
 mod capabilities;
 mod ci;
 mod connect;

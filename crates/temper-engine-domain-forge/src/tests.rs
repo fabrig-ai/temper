@@ -3,6 +3,8 @@ use temper_engine_domain_forge_issues as issues;
 mod adoption;
 mod binding;
 mod change;
+#[path = "tests/brief.rs"]
+mod ci_brief;
 mod connect;
 mod demo;
 mod fixtures;
@@ -1107,7 +1109,7 @@ fn a_release_still_fails_for_a_running_writer_or_a_lost_writer_without_a_read() 
 }
 
 #[test]
-fn a_ci_sections_words_keep_their_end_and_others_their_start() {
+fn bounded_words_keep_the_requested_edge() {
     for (tail, gathered, cut) in [(true, b"cdefghij", b"ghij"), (false, b"abcdefgh", b"abcd")] {
         let mut words = brief::BriefWords::with_capacity(8, tail);
         brief::append(&mut words, b"abcdefghij");

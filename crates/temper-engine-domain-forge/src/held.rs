@@ -19,6 +19,7 @@ pub(crate) struct Pending {
 pub(crate) struct Held {
     source: BriefSource,
     pub(crate) words: Box<[u8]>,
+    ci: Option<crate::brief_ci::Section>,
 }
 
 #[expect(clippy::too_many_arguments, reason = "one bounded section handoff names its source and read limits")]
@@ -64,7 +65,39 @@ pub(crate) fn ready(domain: &mut Domain, section: Token, read: BriefRead, out: &
             let size = u32::try_from(words.len()).expect("bounded rendered section");
             domain
                 .brief_held
-                .insert(section, Held { source: pending.source, words })
+                .insert(section, Held { source: pending.source, words, ci: None })
+                .expect("pending reserved held room");
+            out.push(Request::BriefSized { section, size: Some(size) });
+        }
+        None => out.push(Request::BriefSized { section, size: None }),
+    }
+}
+
+/// Retain CI structure so subsequent cuts follow the same whole-head rule.
+pub(crate) fn ready_ci(
+    domain: &mut Domain,
+    section: Token,
+    ci: crate::brief_ci::Section,
+    budget: u32,
+    out: &mut Queue<Request>,
+) {
+    let Some(pending) = domain.brief_pending.remove(&section) else {
+        let read = match ci.render(budget) {
+            Some(bytes) => BriefRead::Got { bytes, left: 0 },
+            None => BriefRead::Failed,
+        };
+        out.push(Request::BriefReady { owner: section, read });
+        return;
+    };
+    if pending.dropped {
+        return;
+    }
+    match ci.render(pending.budget) {
+        Some(words) => {
+            let size = u32::try_from(words.len()).expect("bounded CI section");
+            domain
+                .brief_held
+                .insert(section, Held { source: pending.source, words, ci: Some(ci) })
                 .expect("pending reserved held room");
             out.push(Request::BriefSized { section, size: Some(size) });
         }
@@ -83,10 +116,17 @@ pub(crate) fn cut(domain: &mut Domain, section: Token, bytes: u32, out: &mut Que
         out.push(Request::BriefSized { section, size: Some(size) });
         return;
     }
-    match render(held.source, held.words.clone(), 0, bytes) {
+    let rendered = match &held.ci {
+        Some(ci) => ci.render(bytes),
+        None => render(held.source, held.words.clone(), 0, bytes),
+    };
+    match rendered {
         Some(words) => {
             let size = u32::try_from(words.len()).expect("bounded cut");
-            domain.brief_held.insert(section, Held { source: held.source, words }).expect("same held room");
+            domain
+                .brief_held
+                .insert(section, Held { source: held.source, words, ci: held.ci })
+                .expect("same held room");
             out.push(Request::BriefSized { section, size: Some(size) });
         }
         None => {
@@ -111,15 +151,30 @@ pub(crate) fn drop_section(domain: &mut Domain, section: Token) {
     }
 }
 
-fn render(source: BriefSource, text: Box<[u8]>, left: u64, budget: u32) -> Option<Box<[u8]>> {
+fn render(_source: BriefSource, text: Box<[u8]>, left: u64, budget: u32) -> Option<Box<[u8]>> {
+    // CI is rendered from its retained check/log structure in ready_ci.
+    render_edge(text, left, budget, false)
+}
+
+pub(crate) const LOG_CUT: &[u8] = b"[log truncated before this]\n";
+
+pub(crate) fn render_log(text: Box<[u8]>, truncated: bool, budget: u32) -> Option<Box<[u8]>> {
+    let room = usize::try_from(budget).ok()?;
+    if !truncated && text.len() <= room {
+        return Some(text);
+    }
+    let kept = edge(&text, room.checked_sub(LOG_CUT.len())?.min(text.len()), true);
+    let mut writer = Writer::new(LOG_CUT.len().checked_add(kept.len())?);
+    writer.put(LOG_CUT).expect("measured log marker");
+    writer.put(kept).expect("measured log tail");
+    Some(writer.finish())
+}
+
+fn render_edge(text: Box<[u8]>, left: u64, budget: u32, tail: bool) -> Option<Box<[u8]>> {
     let room = usize::try_from(budget).ok()?;
     if left == 0 && text.len() <= room {
         return Some(text);
     }
-    let tail = match source {
-        BriefSource::Ci { .. } => true,
-        BriefSource::Home { .. } | BriefSource::Reviews { .. } | BriefSource::Pull { .. } => false,
-    };
     let mut low = 0_usize;
     let mut high = text.len().min(room);
     let minimum = marker(left.checked_add(u64::try_from(text.len()).ok()?)?, false);
@@ -164,7 +219,7 @@ fn marker(lost: u64, leading: bool) -> usize {
         .saturating_add(b" bytes cut]\n".len())
 }
 
-fn edge(text: &[u8], wanted: usize, tail: bool) -> &[u8] {
+pub(crate) fn edge(text: &[u8], wanted: usize, tail: bool) -> &[u8] {
     if tail {
         let mut start = text.len().saturating_sub(wanted);
         for _ in 0..3 {

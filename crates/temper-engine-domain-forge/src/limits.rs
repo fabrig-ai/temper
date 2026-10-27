@@ -217,6 +217,15 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(u64::from(l.brief_sections).checked_mul(u64::from(l.brief_bytes))?)?
         .checked_add(u64::from(l.brief_sections).checked_mul(u64::from(l.brief_bytes))?)?
         .checked_add(u64::from(l.brief_sections).checked_mul(u64::from(l.client.answer_bytes))?)?
+        // CI retains bounded head/log records and one section-sized payload, so
+        // a later cut can preserve heads without parsing provider-controlled text.
+        // Pending and held sections share the same section capacity.
+        .checked_add(
+            u64::from(l.brief_sections).checked_mul(
+                skein_lib::List::<crate::brief_ci::Check>::worst_case(l.client.rows)?
+                    .checked_add(u64::from(l.brief_bytes))?,
+            )?,
+        )?
         .checked_add(u64::from(l.brief_bytes).checked_mul(2)?)?
         .checked_add(Queue::<Stored>::worst_case(l.output)?)?
         .checked_add(Queue::<Key>::worst_case(l.output)?)?
