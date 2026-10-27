@@ -21,7 +21,7 @@ pub fn agent(
                 seed,
                 pid,
                 trace: None,
-                roots: Some(inherited.roots.iter().map(|(_, fd)| *fd).collect()),
+                roots: Some(inherited.roots.clone().into_boxed_slice()),
                 programs: None,
             },
             Box::new(errors),
