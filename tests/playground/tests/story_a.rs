@@ -1,6 +1,7 @@
 use skein_fake_person::{Find, Step};
 use skein_lib::{Duration, Wall};
 use skein_ui::Role;
+use skein_ui_web::bridge::log::{self, End};
 use temper_client_shell_web::limits;
 use temper_playground::{A, VISITOR_ANSWER, VISITOR_EXCHANGES, VISITOR_PIECE};
 use temper_playground_world::story_a;
@@ -31,4 +32,15 @@ fn story_a_lands_the_csv_change_and_answers_the_other_two() {
     let mut walk = Walk::new(&A, SEED, START);
     let outcome = walk.run(story_a::whole());
     assert_eq!(outcome, Outcome::Done, "{:?}", walk.tree());
+    let stamp = walk.stamp();
+    let bytes = walk.log();
+    let log = log::read(&bytes).expect("the completed story's session log decodes");
+    assert!(matches!(log.end, End::Said(_)), "the whole story fits its session log");
+    println!(
+        "Story A: world={} ns, steps={}, session={} bytes, inputs={}",
+        stamp.instant.as_nanos(),
+        stamp.step,
+        bytes.len(),
+        log.inputs.len()
+    );
 }
