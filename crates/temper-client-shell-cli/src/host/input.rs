@@ -88,7 +88,11 @@ impl OneShot {
                     self.call = Some(Parsed::Call { call, json });
                     self.prepare_start();
                 }
-                Err(why @ (jig::argv::Usage::Timeout | jig::argv::Usage::WaitPart { .. })) => {
+                Err(
+                    why @ (jig::argv::Usage::Timeout
+                    | jig::argv::Usage::WaitPart { .. }
+                    | jig::argv::Usage::TerminalPhase { .. }),
+                ) => {
                     let mut measured = skein_lib::Writer::new(1024);
                     temper_client_tools::table::refusal(why, &[], &mut measured).expect("refusal");
                     let mut exact = skein_lib::Writer::new(measured.written());

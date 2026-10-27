@@ -635,6 +635,25 @@ fn usage_exits_1_before_directory_opens() {
     assert!(f.no_directory());
 }
 #[test]
+fn a_terminal_task_phase_names_until_ended_and_sends_nothing() {
+    use temper_client_tools::jig::argv::Usage;
+    assert_eq!(
+        crate::arguments::parse(&[b"task", b"show", b"41", b"--until", b"phase:done"]),
+        Err(Usage::TerminalPhase { phase: jig_client::contract::Phase::Done })
+    );
+    let mut f = fixtures::Frame::read(&["--call", "-"]);
+    f.input = br#"{"tool":"task show","arguments":{"task":41,"until":"phase:done"}}"#;
+    f.drain();
+    assert_eq!(f.exit(), Some(Exit::Code(1)));
+    assert_eq!(
+        f.stderr(),
+        b"temper ctl: --until phase:done never holds: a task's watch ends with the task; use --until ended\n"
+    );
+    assert!(f.stdout().is_empty());
+    assert!(f.no_directory());
+    assert_eq!(f.requests(), 0);
+}
+#[test]
 fn a_json_call_reads_its_file_beneath_the_file_root() {
     let mut f = fixtures::Frame::read(&["--call", "/elsewhere/call.json"]);
     f.link = br#"{"tool":"me","arguments":{}}"#;

@@ -27,7 +27,17 @@ pub enum Condition {
 /// Parse a condition for its subject; terminal phases name `--until ended`.
 pub fn condition(subject: &Subject, word: &[u8]) -> Result<Condition, Usage> {
     let value = parse(word).ok_or(Usage::Condition)?;
-    if takes(subject, &value) { Ok(value) } else { Err(Usage::Condition) }
+    check(subject, value)?;
+    Ok(value)
+}
+pub(crate) fn check(subject: &Subject, condition: Condition) -> Result<(), Usage> {
+    if takes(subject, &condition) {
+        return Ok(());
+    }
+    if let (Subject::Task(_), Condition::Phase(phase)) = (subject, condition) {
+        return Err(Usage::TerminalPhase { phase });
+    }
+    Err(Usage::Condition)
 }
 /// Tree/run: `Ended` only; `WaitingOnMe`: `Task` only; `Phase`: ten live phases only.
 #[must_use]
@@ -56,9 +66,6 @@ pub(super) fn parse(word: &[u8]) -> Option<Condition> {
         b"replied" => Condition::Replied,
         _ => {
             let phase = phase(word.strip_prefix(b"phase:")?)?;
-            if !live(phase) {
-                return None;
-            }
             Condition::Phase(phase)
         }
     })
