@@ -47,9 +47,10 @@ members:
   the first project, naming its policy (`"policy": 1`);
 - `workers`: each worker's engine address, name, secret file, slots
   and agent program;
-- `application`: the forges; the landing rules and the forge's
-  charter; the client and webhook listeners; the owned forge's setup;
-  sign-in with Google; the playground; temper's own limits.
+- `application`: the forges; the landing rules, how each project lands
+  and its repositories' gates, and the forge's charter; the client and
+  webhook listeners; the owned forge's setup; sign-in with Google; the
+  playground; temper's own limits.
 
 The settings (charters, templates, policies, rules) are not in it:
 they live in the store and change while the deployment runs (temper
