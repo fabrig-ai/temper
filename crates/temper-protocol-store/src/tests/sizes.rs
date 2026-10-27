@@ -5,9 +5,10 @@ use temper_engine_domain_forge as forge;
 #[test]
 fn the_application_sizes_are_the_largest_key_and_row() {
     // Change's eight remarks hold 4096 bytes each; eight failure counts add 100 bytes.
+    // Its optional released hold adds two bytes at its largest.
     assert_eq!(
         application(&fixtures::LIMITS),
-        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 35_503 })
+        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 35_505 })
     );
 }
 #[test]
