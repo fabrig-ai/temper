@@ -97,7 +97,12 @@ fn order(step: &w::Step) -> u8 {
         w::Step::First => 5,
         w::Step::Landing => 6,
         w::Step::Landed(_) => 7,
-        w::Step::Recreating | w::Step::Reopening | w::Step::Updating | w::Step::Resolving | w::Step::Repairing(_) => {
+        w::Step::Ended
+        | w::Step::Recreating
+        | w::Step::Reopening
+        | w::Step::Updating
+        | w::Step::Resolving
+        | w::Step::Repairing(_) => {
             panic!("the passing head needs no recovery: {step:?}")
         }
     }

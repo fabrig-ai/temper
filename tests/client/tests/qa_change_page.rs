@@ -160,6 +160,7 @@ fn a_change_prepared_by_the_existing_engine_driver_shows_its_current_line() {
     let step = value.step().clone();
     let page = text(&world, client);
     let line = match step {
+        w::Step::Ended => "Change ended.",
         w::Step::Producing => "Producing its branch.",
         w::Step::Opening => "Opening its pull request.",
         w::Step::Recreating => "Making its branch again at the head temper last knew.",
