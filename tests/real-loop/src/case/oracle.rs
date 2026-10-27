@@ -1756,6 +1756,7 @@ fn rules_controls(misses: &mut Vec<Miss>, observed: &Observed) {
     let waiting = task_document(observed, Read::RulesWaiting);
     let held = task_document(observed, Read::RulesHeld);
     let question = task_document(observed, Read::RulesQuestionWaiting);
+    let scope = task_document(observed, Read::ScopeHeld);
     for (met, promise, what) in [
         (
             number(waiting, "/chip/task") == Some(RULES)
@@ -1768,7 +1769,8 @@ fn rules_controls(misses: &mut Vec<Miss>, observed: &Observed) {
         ),
         (rules_held(held), RULES_CONTROL, "the chat must be held, stopped by the person at its hold revision"),
         (
-            rules_held(question)
+            number(question, "/chip/task") == Some(RULES)
+                && question["hold"].is_null()
                 && check_activity(observed, Read::RulesQuestionWaiting).iter().any(|row| {
                     number(row, "/task") == Some(RULES)
                         && number(row, "/line/words/message") == Some(SCOPE_QUESTION_NUMBER)
@@ -1777,12 +1779,15 @@ fn rules_controls(misses: &mut Vec<Miss>, observed: &Observed) {
                         && text(row, "/line/words/words") == SCOPE_QUESTION
                 }),
             RULES_INBOX,
-            "A's numbered question must wait at the still-held chat",
+            "A's numbered question must reach the director after the subtree resumes",
         ),
         (
-            number(question, "/hold/owner/revision") == Some(RULES_HOLD_REVISION),
+            number(scope, "/chip/task") == Some(SCOPE)
+                && text(scope, "/chip/phase") == "held"
+                && number(scope, "/hold/owner/reason/placed/hold") == number(held, "/hold/owner/reason/placed/hold")
+                && number(scope, "/hold/owner/revision") == Some(RULES_HOLD_REVISION),
             RULES_INBOX,
-            "the same hold must remain while the question waits",
+            "the same hold must stop A before its question can be sent",
         ),
         (
             observed.kit.main.get(RULES_FILE.as_bytes()).is_some_and(|words| words == NEW_RULES.as_bytes()),
@@ -1827,11 +1832,12 @@ fn rules_director(misses: &mut Vec<Miss>, observed: &Observed) {
             after.first().is_some_and(|first| {
                 after.iter().all(|told| told.system == first.system)
                     && after.windows(2).all(|pair| pair[1].history.starts_with(&pair[0].history))
+                    && after.iter().any(|told| user_words(told).any(|words| contains(words, SCOPE_QUESTION)))
                     && after.iter().all(|told| {
-                        user_words(told)
+                        let count = user_words(told)
                             .map(|words| calls::occurrences(words, SCOPE_QUESTION.as_bytes()))
-                            .sum::<usize>()
-                            == 1
+                            .sum::<usize>();
+                        count <= 1
                     })
             }),
             RULES_INBOX,
@@ -2019,8 +2025,12 @@ mod rules_tests {
                 ),
                 (Read::RulesHeld, held()),
                 (
+                    Read::ScopeHeld,
+                    json!({"chip":{"task":SCOPE,"phase":"held"},"hold":{"owner":{"reason":{"placed":{"hold":1}},"revision":RULES_HOLD_REVISION}}}),
+                ),
+                (
                     Read::RulesQuestionWaiting,
-                    json!({"task":held(),"activity":{"rows":[{"event":{"owner":{"source":{
+                    json!({"task":{"chip":{"task":RULES,"phase":"running"},"hold":null},"activity":{"rows":[{"event":{"owner":{"source":{
                     "task":RULES,"line":{"words":{"message":SCOPE_QUESTION_NUMBER,"by":{"task":SCOPE},
                         "kind":"question","words":SCOPE_QUESTION}}}}}}]}}),
                 ),
@@ -2075,8 +2085,9 @@ mod rules_tests {
             (Read::RulesHeld, "/chip/phase", RULES_CONTROL, "stopped by the person"),
             (Read::RulesHeld, "/hold/owner/reason/placed/hold", RULES_CONTROL, "stopped by the person"),
             (Read::RulesHeld, "/hold/owner/revision", RULES_CONTROL, "stopped by the person"),
-            (Read::RulesQuestionWaiting, "/task/chip/phase", RULES_INBOX, "still-held"),
-            (Read::RulesQuestionWaiting, "/task/hold/owner/revision", RULES_INBOX, "same hold"),
+            (Read::RulesQuestionWaiting, "/task/chip/task", RULES_INBOX, "numbered question"),
+            (Read::ScopeHeld, "/chip/phase", RULES_INBOX, "same hold"),
+            (Read::ScopeHeld, "/hold/owner/revision", RULES_INBOX, "same hold"),
         ] {
             let saved = passing.documents.get_mut(&read).expect("document").pointer_mut(path).expect("field").take();
             rejects(&passing, promise, what);
