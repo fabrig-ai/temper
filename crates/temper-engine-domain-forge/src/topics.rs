@@ -264,7 +264,10 @@ pub(crate) fn classify(d: &Domain, subscriber: &Subscriber, news: &News) -> Clas
             continue;
         };
         match row.change.state {
-            change::State::Landed { .. } | change::State::Red { .. } | change::State::Cleared { .. } | change::State::Ended => continue,
+            change::State::Landed { .. }
+            | change::State::Red { .. }
+            | change::State::Cleared { .. }
+            | change::State::Ended => continue,
             change::State::Producing { .. }
             | change::State::Opening { .. }
             | change::State::Recreating { .. }

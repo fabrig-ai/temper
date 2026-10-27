@@ -21,6 +21,7 @@ temper-protocol-store.workspace = true
 temper-service.workspace = true
 skein-lib.workspace = true
 temper-engine-domain.workspace = true
+temper-engine-domain-forge-tiers.workspace = true
 jig-domain-people.workspace = true
 jig-domain-tasks.workspace = true
 jig-domain-fleet.workspace = true
