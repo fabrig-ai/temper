@@ -577,7 +577,7 @@ fn enqueue_merge(world: &mut Protocol, pull: u64, head: skein_forge::api::Commit
             task: 51,
             repository: REPO,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Merge { number: pull, head },
+                write: skein_forge::api::Write::Merge { number: pull, head, how: skein_forge::api::MergeHow::Style },
                 condition: skein_forge_client::Condition::Merge { base: Box::from(&b"main"[..]) },
             },
             start: None,

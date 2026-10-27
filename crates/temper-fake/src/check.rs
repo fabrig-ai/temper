@@ -117,7 +117,7 @@ pub fn evidence(forge: u16, rows: &[(Box<[u8]>, Box<[u8]>)], limits: &d::Limits)
             d::Stored::Entry { entry, .. } => {
                 if entry.repository.forge == forge {
                     match entry.effect.write {
-                        Write::Merge { number, head } => {
+                        Write::Merge { number, head, .. } => {
                             merges.push((entry.repository, number, head)).expect("at most one merge per input row");
                         }
                         Write::CreateIssue { .. }
@@ -131,6 +131,8 @@ pub fn evidence(forge: u16, rows: &[(Box<[u8]>, Box<[u8]>)], limits: &d::Limits)
                         | Write::Update { .. }
                         | Write::Status { .. }
                         | Write::CreateBranch { .. }
+                        | Write::Dispatch { .. }
+                        | Write::Rerun { .. }
                         | Write::DeleteBranch { .. } => {}
                     }
                 }

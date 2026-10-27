@@ -189,6 +189,7 @@ impl World {
             &mut fake,
             &config,
             raw::Setup {
+                workflows: Box::new([]),
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
                 default: Box::from(&b"main"[..]),
@@ -484,6 +485,8 @@ impl World {
                 commit: self.branch(branch),
                 context: Box::from(&b"build"[..]),
                 state: check,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
             1,
         );
@@ -518,7 +521,10 @@ impl World {
             panic!("fixture pull read")
         };
         let head = self.branch(&snapshot.head);
-        let raw::Answer::Merged(merge) = self.external(raw::Op::Write(raw::Write::Merge { number, head }), 1) else {
+        let raw::Answer::Merged(merge) = self.external(
+            raw::Op::Write(raw::Write::Merge { number, head, how: skein_fake_forge_domain::api::MergeHow::Style }),
+            1,
+        ) else {
             panic!("fixture pull merged")
         };
         self.pull_snapshot = Some(snapshot);
@@ -759,6 +765,16 @@ impl World {
                         Ok(answer) => {
                             let mut answer =
                                 translate::answer_as(&pending.op, answer, &self.env.limits.client, 1, self.signatures);
+                            if let skein_forge::api::Answer::Run(run) = &mut answer {
+                                let raw::Answer::Jobs(jobs) = self
+                                    .forge
+                                    .inspect(&self.forge_env.limits, b"org/repo", &raw::Read::Jobs { run: run.id })
+                                    .expect("run jobs")
+                                else {
+                                    panic!("jobs answer")
+                                };
+                                run.jobs = translate::run_jobs(jobs);
+                            }
                             if matches!(&pending.op, skein_forge::api::Op::Read(skein_forge::api::Read::PullFor { .. }))
                                 && let skein_forge::api::Answer::Pull(pull) = &mut answer
                                 && let Some(snapshot) = self.pull_snapshot.take()
@@ -824,7 +840,11 @@ fn key(row: &top::Stored) -> top::Key {
 #[must_use]
 pub fn fake_config() -> forge::Config {
     forge::Config {
+        setup_faults: 0,
+        lost: 0,
         limits: forge::Limits {
+            workflows: 0,
+            workflow_runs: 0,
             repositories: 1,
             users: 3,
             labels: 2,

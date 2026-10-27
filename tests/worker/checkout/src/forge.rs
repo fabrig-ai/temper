@@ -33,6 +33,8 @@ const CI: u64 = 3;
 /// branches of their workstreams, and every commit their runs make. Nothing
 /// fills: a forge that refused for want of room would fail the world.
 pub const LIMITS: Limits = Limits {
+    workflows: 0,
+    workflow_runs: 0,
     repositories: 16,
     users: 4,
     labels: 1,
@@ -59,6 +61,8 @@ pub const LIMITS: Limits = Limits {
 
 /// A forge that answers at once and fails only as a world scripts it.
 pub const CONFIG: Config = Config {
+    setup_faults: 0,
+    lost: 0,
     limits: LIMITS,
     latency_min: Duration::ZERO,
     latency_max: Duration::ZERO,
@@ -156,6 +160,7 @@ impl Forge {
     pub fn repository(&mut self, remote: &[u8], default: &[u8], tree: Tree) -> u64 {
         self.repositories = self.repositories.checked_add(1).expect("scenario repository bound");
         let setup = Setup {
+            workflows: Box::new([]),
             id: self.repositories,
             name: remote.into(),
             default: default.into(),
@@ -268,6 +273,7 @@ impl Forge {
                 | Observation::Reviewed { .. }
                 | Observation::Reported { .. }
                 | Observation::Merged { .. }
+                | Observation::Rebased { .. }
                 | Observation::Wiki { .. } => panic!("only git reaches the forge here: {observation:?}"),
             }
         }

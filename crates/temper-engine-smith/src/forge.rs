@@ -184,8 +184,12 @@ pub(crate) fn write(value: &Value) -> Result<api::Write, Problem> {
         b"merge" => Ok(api::Write::Merge {
             number: value.required(b"number")?.number(b"number")?,
             head: commit(value.required(b"head")?, b"head")?,
+            how: api::MergeHow::Style,
         }),
-        b"update" => Ok(api::Write::Update { number: value.required(b"number")?.number(b"number")? }),
+        b"update" => Ok(api::Write::Update {
+            number: value.required(b"number")?.number(b"number")?,
+            style: api::UpdateStyle::Merge,
+        }),
         b"status" => {
             let check = match value.required(b"check")?.text(b"check")?.as_ref() {
                 b"pending" => api::Check::Pending,
@@ -197,6 +201,8 @@ pub(crate) fn write(value: &Value) -> Result<api::Write, Problem> {
                 commit: commit(value.required(b"commit")?, b"commit")?,
                 context: value.required(b"context")?.text(b"context")?,
                 check,
+                description: Box::new([]),
+                link: Box::new([]),
             })
         }
         b"create_branch" => Ok(api::Write::CreateBranch {

@@ -4258,6 +4258,7 @@ fn pull_digest(records: &[skein_fake_forge_domain::Observation]) -> Vec<Pull> {
             | Observation::Dequeued { .. }
             | Observation::Refused { .. }
             | Observation::Rejected { .. }
+            | Observation::Rebased { .. }
             | Observation::Wiki { .. } => {}
         }
     }
