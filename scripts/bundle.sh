@@ -41,8 +41,10 @@ if "$playground"; then
     fi
     profile=web
     cargo build --target wasm32-unknown-unknown --profile web \
-        -p temper-client-shell-web --features playground -p temper-playground
-    set -- --worker-module "target/wasm32-unknown-unknown/web/temper_playground.wasm" \
+        -p temper-client-shell-web --features playground
+    cargo build --target wasm32-unknown-unknown --profile playground \
+        -p temper-playground
+    set -- --worker-module "target/wasm32-unknown-unknown/playground/temper_playground.wasm" \
         --worker-name temper_playground --page "$shell/playground/index.html" --stylesheet "$shell/playground.css"
     noscript="temper's playground needs WebAssembly and scripts."
 else

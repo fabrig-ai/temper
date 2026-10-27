@@ -243,6 +243,11 @@ panic = "abort"
 overflow-checks = true
 strip = true
 
+# Build the playground's world for the 6 MB download bar (playground.md, 8).
+[profile.playground]
+inherits = "web"
+opt-level = "z"
+
 [profile.dev.package.skein-codegen]
 opt-level = 3
 
