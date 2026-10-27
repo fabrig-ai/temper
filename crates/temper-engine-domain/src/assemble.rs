@@ -199,9 +199,9 @@ pub(crate) fn finish_brief_plan(
             forge_change::Delegate::Repair(forge_change::Repair::Gate(_)) => {
                 forge::BriefSource::Reviews { item, head: forge::BriefCommit(head) }
             }
-            forge_change::Delegate::Repair(forge_change::Repair::Ci | forge_change::Repair::Semantic) => {
-                forge::BriefSource::Ci { item, head: forge::BriefCommit(head) }
-            }
+            forge_change::Delegate::Repair(
+                forge_change::Repair::Ci | forge_change::Repair::Semantic | forge_change::Repair::Landing { .. },
+            ) => forge::BriefSource::Ci { item, head: forge::BriefCommit(head) },
             forge_change::Delegate::Resolve { .. } => forge::BriefSource::Pull { item, head: forge::BriefCommit(head) },
             forge_change::Delegate::Produce | forge_change::Delegate::Gate { .. } => {
                 forge::BriefSource::Pull { item, head: forge::BriefCommit(head) }
@@ -229,7 +229,9 @@ pub(crate) fn finish_brief_plan(
             Some((_, forge_change::Delegate::Repair(forge_change::Repair::Semantic))) => true,
             Some((
                 _,
-                forge_change::Delegate::Repair(forge_change::Repair::Ci | forge_change::Repair::Gate(_))
+                forge_change::Delegate::Repair(
+                    forge_change::Repair::Ci | forge_change::Repair::Gate(_) | forge_change::Repair::Landing { .. },
+                )
                 | forge_change::Delegate::Resolve { .. }
                 | forge_change::Delegate::Gate { .. }
                 | forge_change::Delegate::Produce,

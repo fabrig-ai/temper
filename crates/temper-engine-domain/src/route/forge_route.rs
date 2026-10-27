@@ -1601,6 +1601,8 @@ fn describe_change_effect(
     }
     let pull_what = pull_what(row.pull);
     let (kind, what, state) = match effect {
+        // landing.md 3: the top's task
+        forge_change::Effect::Prepare { .. } => return None,
         forge_change::Effect::Open => {
             (3, branch_what(&row.branch, env.limits.forge.name_bytes), evidence.head.unwrap_or([0; 32]))
         }
@@ -1748,6 +1750,8 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 priority,
                 ci: None,
                 change: forge_change::Change {
+                    way: forge_change::Way::Queue,
+                    landing: None,
                     task,
                     state: forge_change::State::Producing { requested: false },
                     gates,
@@ -2376,6 +2380,7 @@ fn repair_opening(row: &forge::ChangeRow, why: forge_change::Repair) -> Option<B
         forge_change::Repair::Ci => return Some(Box::from(&b"Repair CI at "[..])),
         forge_change::Repair::Semantic => return Some(Box::from(&b"Repair the base's break at "[..])),
         forge_change::Repair::Gate(number) => number,
+        forge_change::Repair::Landing { .. } => return None,
     };
     let mut found = None;
     for gate in &row.change.gates {
@@ -2412,6 +2417,7 @@ fn repair_words(
         forge_change::Repair::Ci => b"Repair the failed CI on the change branch",
         forge_change::Repair::Semantic => b"Repair the base update's semantic conflict",
         forge_change::Repair::Gate(_) => b"Repair the requested gate changes",
+        forge_change::Repair::Landing { .. } => return None,
     };
     let head = row.change.last_head?;
     let digits = commit_text(&head);
@@ -2439,6 +2445,7 @@ fn repair_words(
         }
         forge_change::Repair::Semantic => append(&mut identity, &row.base),
         forge_change::Repair::Gate(_) => append(&mut identity, b"changes requested"),
+        forge_change::Repair::Landing { .. } => return None,
     }
     let mut words = List::with_capacity(room);
     append(&mut words, identity.as_slice());
