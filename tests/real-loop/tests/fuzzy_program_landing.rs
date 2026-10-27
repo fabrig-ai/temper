@@ -1,5 +1,5 @@
 //! The landing path on Claude Code, past the focused guide (domain/testing.md, 2.4).
-//! As fuzzy_landing does, use the system allocator for the shared-forge hosts.
+//! As `fuzzy_landing` does, use the system allocator for the shared-forge hosts.
 use smith_fake_claude::{Seen, Selection};
 use temper_real_loop_world::{
     Exit, Scratch, argv,
@@ -24,7 +24,7 @@ fn a_chat_on_claude_code_lands_its_change_on_the_forge() {
         .expect("signed-in fake source");
     let ran = run_forge_on(
         scratch,
-        landing::program_fixture(),
+        landing::fixture(),
         |_| Box::new([]),
         || {
             let mut steps = claude::sign_in();
@@ -66,15 +66,17 @@ fn a_chat_on_claude_code_lands_its_change_on_the_forge() {
     assert_eq!(ran.calls()[ENDED].exit, Some(Exit::Code(0)));
     assert!(ran.forge().merged_green());
     assert!(ran.forge().main_file(b"README.md").ends_with(landing::EDIT));
-    let mut conversation = ran.calls()[FIRST_REPLY].stdout.clone();
-    conversation.extend_from_slice(&ran.calls()[LAST_REPLY].stdout);
-    let text = std::str::from_utf8(&conversation).expect("chat text");
+    let first = &ran.calls()[FIRST_REPLY].stdout;
+    assert_eq!(occurrences(first, landing::REQUESTED.as_bytes()), 1, "{}", String::from_utf8_lossy(first));
+    // The resumed chat read includes its retained earlier turns too.
+    let conversation = &ran.calls()[LAST_REPLY].stdout;
+    let text = std::str::from_utf8(conversation).expect("chat text");
     assert!(
         text.find(landing::REQUESTED).expect("first reply") < text.find(landing::LANDED).expect("last reply"),
         "{text}"
     );
     for reply in [landing::REQUESTED, landing::LANDED] {
-        assert_eq!(occurrences(&conversation, reply.as_bytes()), 1, "{text}");
+        assert_eq!(occurrences(conversation, reply.as_bytes()), 1, "{text}");
     }
     assert!(ran.llm().is_empty(), "no direct-key request: {:?}", ran.llm());
     let bytes =

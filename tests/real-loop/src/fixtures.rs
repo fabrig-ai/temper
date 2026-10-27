@@ -427,6 +427,15 @@ pub(crate) fn setup_items(directory: &Path) -> Option<serde_json::Value> {
         template["flags"]["ended_by"] = "result".into();
     }
     if crate::claude::configured(directory) {
+        // Bind delegates too: a template's choice alone leaves its charter's
+        // direct-model alternative available to the coder and reviewer.
+        let model = std::iter::once(&charter["model"])
+            .chain(charter["alternatives"].as_array().expect("charter alternatives"))
+            .find(|model| model["name"] == "fake-claude")
+            .expect("program model offered by stock")
+            .clone();
+        charter["model"] = model;
+        charter["alternatives"] = serde_json::json!([]);
         template["flags"]["ended_by"] = "requester".into();
         template["llm"] = serde_json::json!({
             "account":null, "main":{"model":"fake-claude","effort":null}, "subagents":[]
