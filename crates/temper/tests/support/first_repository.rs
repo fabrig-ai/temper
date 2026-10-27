@@ -61,39 +61,11 @@ fn call(name: &[u8], value: &Value) -> Turn {
         tokens: 20,
     }
 }
-fn change_spend() -> u64 {
-    let mut template: Value =
-        serde_json::from_slice(include_bytes!("../../../temper-init/template/temper.json")).expect("init template");
-    // Only the default model prices this story; the demo's socket is filled by init.
-    for member in ["providers", "endpoints", "models"] {
-        template["engine"]["llm"][member].as_array_mut().expect("model configuration").truncate(1);
-    }
-    let bytes = serde_json::to_vec(&template).expect("single-model template");
-    let document = jig_protocol_config::document(
-        &bytes,
-        &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 65_536, depth: 32 },
-    )
-    .expect("init document");
-    let at = jig_protocol_config::read::Object::new(&document, 0)
-        .expect("init object")
-        .member(&document, b"engine")
-        .expect("init engine");
-    let engine = temper_service::startup::engine(&document, at, &jig_protocol_config::Directories::working())
-        .expect("init engine settings");
-    // protocol/configuration.md, 13.4: a change has five runs; size this story
-    // to the stock's units, rounding its fixture purse to a power of two.
-    engine
-        .rules
-        .maximum_run_spend
-        .checked_mul(5)
-        .expect("five stock runs")
-        .checked_next_power_of_two()
-        .expect("bounded first change spend")
-}
+
 fn scripts() -> Box<[Script]> {
     // work/hello is forge 3's first repository; playground/widget is on forge 1.
     let repository = temper_engine_domain_forge::tag(3, 1);
-    let spend = change_spend();
+    let spend = super::configuration::run_spend(5);
     let grant = |kind| json!({"connector":1,"kind":kind,"segments":["forge"],"terminal":"open","last":""});
     Box::new([
         Script {
