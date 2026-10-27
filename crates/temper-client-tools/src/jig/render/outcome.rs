@@ -6,6 +6,7 @@ use jig_client::{Answered, Ask, Outcome, contract as c};
 use skein_json::writer::Encoder;
 #[derive(Debug)]
 pub(crate) struct Operation {
+    pub project_fund: Option<u32>,
     pub revision: Option<u32>,
     pub exported: Option<(u32, u32)>,
     pub file: Option<Box<[u8]>>,
@@ -74,6 +75,10 @@ impl Operation {
                 c::Ask::Seen { .. } => (b"seen", None),
                 c::Ask::EditNote { .. } => (b"edit-note", None),
                 c::Ask::DeleteNote { .. } => (b"delete-note", None),
+                c::Ask::ChangePolicy {
+                    edit: c::PolicyEdit::ProjectSpend { .. } | c::PolicyEdit::RoleSpend { .. },
+                    ..
+                } => (b"project fund", None),
                 c::Ask::ChangePolicy { .. } => (b"change-policy", None),
                 c::Ask::SetRoles { .. } => (b"set-roles", None),
                 c::Ask::MakeProject { .. } => (b"make-project", None),
@@ -101,6 +106,7 @@ impl Operation {
             },
         };
         Self {
+            project_fund: funding_project(ask),
             revision: if let Ask::Jig(ask) = ask {
                 if let c::Ask::MoveToNewest(value) = ask.as_ref() { Some(value.revision) } else { None }
             } else {
@@ -117,6 +123,18 @@ impl Operation {
             value_name: None,
             proposal_project: proposal_project(ask),
         }
+    }
+}
+fn funding_project(ask: &Ask) -> Option<u32> {
+    if let Ask::Jig(ask) = ask
+        && let c::Ask::ChangePolicy {
+            project,
+            edit: c::PolicyEdit::ProjectSpend { .. } | c::PolicyEdit::RoleSpend { .. },
+        } = ask.as_ref()
+    {
+        Some(*project)
+    } else {
+        None
     }
 }
 pub(crate) fn print(
@@ -451,6 +469,7 @@ pub(crate) fn retry(call: &crate::jig::call::Call) -> Box<[u8]> {
         }
         rows::AMEND_AT => &rows::AMEND,
         rows::MOVE_TO_NEWEST_AT => &rows::MOVE_TO_NEWEST,
+        rows::PROJECT_FUND_AT => &rows::PROJECT_FUND,
         _ => unreachable!("act tool"),
     };
     let mut call = call.clone();
@@ -604,6 +623,18 @@ fn moved_in(account: u32, renewed: bool, out: &mut Text) {
 }
 
 fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, out: &mut Text) {
+    if let (Some(project), c::Refusal::Authority { lacking: c::Lacking::Budget { needed, left }, .. }) =
+        (operation.project_fund, refusal)
+    {
+        out.put(b"refused: the period has ");
+        out.number(*left);
+        out.put(b" left, the pools need ");
+        out.number(*needed);
+        out.put(b"; raise the project's first: project fund ");
+        out.number(u64::from(project));
+        out.put(b" AMOUNT");
+        return;
+    }
     out.put(operation.word);
     out.put(b": ");
     acts::refusal(refusal, &document::phrasebook(limits.text), out);

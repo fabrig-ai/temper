@@ -23,6 +23,9 @@ pub(super) fn text(
     }
     for page in reading.pages.values() {
         match page {
+            Readout::Jig(c::ReadResult::Value(c::ReadValue::OwnerProject(project))) => {
+                super::projects::text(project, call, limits, vocabulary, out);
+            }
             Readout::Jig(c::ReadResult::Value(
                 value @ (c::ReadValue::Settings(_)
                 | c::ReadValue::Setting(_)
@@ -119,6 +122,9 @@ pub(super) fn encode(reading: &Reading, limits: &Limits, out: &mut Encoder, budg
             out.key(if *local == 1 { b"needs" } else { b"updates" });
         }
         match page {
+            Readout::Jig(c::ReadResult::Value(c::ReadValue::OwnerProject(project))) => {
+                super::projects::encode(project, call, limits, out, budget);
+            }
             Readout::Jig(c::ReadResult::Value(
                 value @ (c::ReadValue::Settings(_)
                 | c::ReadValue::Setting(_)
@@ -173,10 +179,7 @@ pub(super) fn encode(reading: &Reading, limits: &Limits, out: &mut Encoder, budg
                 budget.turn = None;
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Turn(turn))) => {
-                budget.turn =
-                    Some(super::turn_window::Window::new(&reading.called.call, turn.task, turn.name, limits.part));
-                super::encode_archived_turn(turn, out, budget);
-                budget.turn = None;
+                encode_turn(reading, turn, limits, out, budget);
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Inbox(page))) => {
                 super::encode_inbox_page(page, out, budget);
@@ -252,4 +255,10 @@ fn encode_tasks(reading: &Reading, page: &c::TaskPage, limits: &Limits, out: &mu
     } else {
         super::encode_task_page(page, crate::jig::call::value(call, 4).is_some(), next.as_deref(), out, budget);
     }
+}
+
+fn encode_turn(reading: &Reading, turn: &c::ArchivedTurn, limits: &Limits, out: &mut Encoder, budget: &mut Cut) {
+    budget.turn = Some(super::turn_window::Window::new(&reading.called.call, turn.task, turn.name, limits.part));
+    super::encode_archived_turn(turn, out, budget);
+    budget.turn = None;
 }
