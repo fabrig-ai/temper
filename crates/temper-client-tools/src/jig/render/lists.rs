@@ -223,7 +223,7 @@ pub(super) fn activity_limit(call: &Call, rows: u32) -> u32 {
     }
 }
 
-pub(super) fn inboxes(reading: &Reading, limits: &crate::jig::Limits, out: &mut Text) {
+pub(super) fn inboxes(reading: &Reading, limits: &crate::jig::Limits, book: &Phrasebook, out: &mut Text) {
     let rows = limits.rows;
     let updates_fit = updates_fit(reading, rows);
     for (local, page) in &reading.pages {
@@ -238,7 +238,7 @@ pub(super) fn inboxes(reading: &Reading, limits: &crate::jig::Limits, out: &mut 
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::OwnerInbox(page))) => {
                 for row in page.rows.as_slice().iter().take(usize::try_from(rows).expect("rows fit")) {
-                    object(row.card_key(), out);
+                    owner_inbox_row(row, book, out);
                 }
             }
             Readout::Limit | Readout::NotServed { .. } | Readout::Jig(_) | Readout::Family { .. } => {
@@ -299,6 +299,15 @@ fn group_cursor(group: u8, after: Option<&c::Cursor>) -> c::Cursor {
     bytes.put(&[group]).expect("group byte");
     bytes.put(after).expect("whole cursor");
     c::Cursor::new(bytes.finish(), u32::MAX).expect("bounded cursor")
+}
+pub(super) fn owner_inbox_row(row: &c::OwnerInboxEntry, book: &Phrasebook, out: &mut Text) {
+    object(row.card_key(), out);
+    if let c::OwnerTaskLink::Live(chip) | c::OwnerTaskLink::Retained { chip, .. } = &row.task
+        && let c::ChipPhase::Owner { phase, .. } = chip.details.as_ref()
+        && let c::OwnerChipPhase::Held { reason: c::HoldCategory::Budget, .. } = phase
+    {
+        super::document::budget_hold_text(chip.task, book, out);
+    }
 }
 pub(super) fn object(key: c::ObjectKey, out: &mut Text) {
     match key {

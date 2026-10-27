@@ -414,7 +414,7 @@ pub(crate) fn status(
     b.open(Role::Status);
     b.style(token);
     let name = match status {
-        ChatStatus::Held(ref reason @ HoldCategory::Exceeded(_)) => crate::cards::hold_phrase(reason, words),
+        ChatStatus::Held(ref reason @ HoldCategory::Exceeded(_)) => crate::cards::hold_phrase(chip.task, reason, words),
         ChatStatus::WaitingForYou { .. } => words.say(Word::WaitingForYou, &[]),
         ChatStatus::Ended { .. } => words.say(Word::ChatClosed, &[]),
         ChatStatus::Starting

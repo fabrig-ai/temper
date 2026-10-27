@@ -321,41 +321,12 @@ pub(crate) fn proposal_facts(b: &mut Builder, page: &c::ReadValue, words: &Words
     proposal::facts(b, page, words, rows, place);
 }
 
-pub fn hold(b: &mut Builder, value: &c::HoldCategory, words: &Words) {
-    text(b, Role::Paragraph, &hold_phrase(value, words));
+pub fn hold(b: &mut Builder, task: u64, value: &c::HoldCategory, words: &Words) {
+    text(b, Role::Paragraph, &hold_phrase(task, value, words));
 }
 
-pub(crate) fn hold_phrase(value: &c::HoldCategory, words: &Words) -> Box<[u8]> {
-    let number = match value {
-        c::HoldCategory::Exceeded(value) => match value.bound {
-            c::Bound::History => None,
-            c::Bound::Reasoning
-            | c::Bound::Metadata
-            | c::Bound::Items
-            | c::Bound::Answer
-            | c::Bound::Tools
-            | c::Bound::HistoryItems
-            | c::Bound::Window
-            | c::Bound::Output => Some(Hole::Number(value.value)),
-        },
-        c::HoldCategory::Dependency { task } => Some(Hole::Number(*task)),
-        c::HoldCategory::Uncertain { entry } => Some(Hole::Number(*entry)),
-        c::HoldCategory::PoolLost { pool } => Some(Hole::Number(*pool)),
-        c::HoldCategory::Failures { .. }
-        | c::HoldCategory::Stalled
-        | c::HoldCategory::Stopped
-        | c::HoldCategory::Placed { .. }
-        | c::HoldCategory::Drift
-        | c::HoldCategory::Effects
-        | c::HoldCategory::EffectFailed
-        | c::HoldCategory::Budget
-        | c::HoldCategory::Deadline
-        | c::HoldCategory::HoldsWaited
-        | c::HoldCategory::ResourceUnavailable
-        | c::HoldCategory::ResourceAccess
-        | c::HoldCategory::Circle
-        | c::HoldCategory::Procedure => None,
-    };
+pub(crate) fn hold_phrase(task: u64, value: &c::HoldCategory, words: &Words) -> Box<[u8]> {
+    let number = temper_client_domain::words::hold_number(task, value);
     words.say_word(jig_client::words::Word::hold(value), number.as_slice())
 }
 

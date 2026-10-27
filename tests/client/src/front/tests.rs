@@ -220,7 +220,7 @@ fn qa_a_panel_dropped_before_its_first_record_keeps_loading_until_jig_reopens_it
     let mut world = World::<Temper, Joint>::new(
         Settings {
             seed: fixtures::SEED,
-            words: temper_client_view::words::jig_language(),
+            words: fixtures::decision_words(),
             heap_bytes_per_client: 64 * 1024 * 1024,
             ..Settings::default()
         },
