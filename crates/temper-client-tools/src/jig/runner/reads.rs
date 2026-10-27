@@ -291,7 +291,7 @@ fn complete(runner: &mut Runner, client: &Client, env: &Env<Limits>, mut reading
         thread.run(run, reading.text.as_ref());
     }
     if let Some(thread) = &reading.thread
-        && matches!(reading.pages.get(&1), Some(Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(_)))))
+        && let Some(Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(_)))) = reading.pages.get(&1)
     {
         // JSON and text expose the same kept window, not just the final
         // transport page used to fill it. Thread rows are newest first.
@@ -453,13 +453,7 @@ fn terminal_read(
     let expected = number(&reading.called.call, 0).expect("task argument");
     let terminal = match page {
         Readout::Jig(c::ReadResult::Value(value)) => match render::read_task(value) {
-            Some((task, _)) => {
-                task.chip.task == expected
-                    && matches!(
-                        task.chip.phase,
-                        c::Phase::Ended | c::Phase::Done | c::Phase::Failed | c::Phase::Cancelled
-                    )
-            }
+            Some((task, _)) => task.chip.task == expected && render::terminal_phase(task.chip.phase),
             None => false,
         },
         Readout::Jig(c::ReadResult::None(_)) | Readout::Limit | Readout::NotServed { .. } | Readout::Family { .. } => {

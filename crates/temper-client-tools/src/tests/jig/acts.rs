@@ -494,3 +494,27 @@ fn close_rebuilds_the_same_ask_after_the_chat_and_its_delegates_end() {
         assert_eq!(replay.sent_name(call), Some(fixtures::named("close-chat")));
     }
 }
+
+#[test]
+fn close_names_an_archived_chat_end_only_when_the_authorized_read_proves_it() {
+    let ending = c::Ending::Task(Box::new(c::OwnerChipEnding::Done(c::ResultValue::Report(fixtures::document_text(
+        b"finished",
+    )))));
+    for (ended, refusal, names_end) in
+        [(true, c::Refusal::Unknown, true), (false, c::Refusal::Unknown, false), (true, c::Refusal::KeyConflict, false)]
+    {
+        let mut root = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
+        let call = root.submit(fixtures::CLOSE_CALL);
+        let page = if ended {
+            fixtures::historical_task_result(fixtures::ended_task(c::Phase::Done), ending.clone())
+        } else {
+            fixtures::task_result(fixtures::with_delegates())
+        };
+        root.serve(call, page);
+        assert_eq!(root.sent_name(call), Some(fixtures::named("close-chat")), "send the keyed ask even after end");
+        root.answered(call, c::Answer::Refused { refusal, at: None });
+        let answer = root.answer(call).expect("engine refusal answered");
+        assert_eq!(answer.status, 2);
+        assert_eq!(skein_lib::bytes::find(&answer.stderr, b"chat 41 has ended").is_some(), names_end);
+    }
+}

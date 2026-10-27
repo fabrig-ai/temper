@@ -256,13 +256,7 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
         return Err(Failed::Fixed(b"unexpected amendment document"));
     }
     if call.tool == rows::CLOSE_AT {
-        let (task, _) = render::read_task(document).ok_or(Failed::Fixed(b"unexpected close document"))?;
-        if task.chip.task != number(call, 0).expect("chat argument") {
-            return Err(Failed::Fixed(b"unexpected close task"));
-        }
-        // The task read supplies only its immutable routing scope. Offers and
-        // live delegates cannot change a named close's compound on replay.
-        return Ok((Request::Ask(close(call, me, task.project, limits)?), None));
+        return close_request(call, document, me, limits);
     }
     let (project, offers) = match document {
         c::ReadValue::Task(task) => (task.project, &task.acts),
@@ -438,6 +432,7 @@ pub(crate) enum Request {
     Written { holder: c::AccountHolder, account: u32, number: u32 },
     MoveIn,
     Ask(c::Ask),
+    Close { ask: c::Ask, ended: bool },
     Account { ask: c::Ask, context: render::outcome::Account },
     AddKey { holder: c::AccountHolder, provider: u32, join: Option<u32> },
     ReplaceKey { holder: c::AccountHolder, source: u32 },
@@ -486,8 +481,9 @@ fn send(
         Some(name) => Some(crate::jig::key::named(runner.salt, name)),
         None => None,
     };
-    let (request, account) = match request {
-        Request::Account { ask, context } => (Request::Ask(ask), Some(context)),
+    let (request, account, ended_chat) = match request {
+        Request::Close { ask, ended } => (Request::Ask(ask), None, ended),
+        Request::Account { ask, context } => (Request::Ask(ask), Some(context), false),
         request @ (Request::MoveOut { .. }
         | Request::Written { .. }
         | Request::MoveIn
@@ -495,7 +491,7 @@ fn send(
         | Request::AddKey { .. }
         | Request::ReplaceKey { .. }
         | Request::DeclareProgram { .. }
-        | Request::CheckProgram { .. }) => (request, None),
+        | Request::CheckProgram { .. }) => (request, None, false),
     };
     let mut holder = None;
     let mut exported = None;
@@ -514,7 +510,7 @@ fn send(
             c::AccountHolder::Own,
             called.value.take().expect("record supplied"),
         ),
-        Request::Account { .. } => unreachable!("account context extracted"),
+        Request::Account { .. } | Request::Close { .. } => unreachable!("request context extracted"),
         Request::DeclareProgram { holder, provider, join, name: program } => {
             jig_client::accounts::declare_program(key, name.expect("declaration name"), holder, provider, join, program)
         }
@@ -547,6 +543,7 @@ fn send(
         operation.file = Some(file.clone());
     }
     operation.account = account;
+    operation.ended_chat = ended_chat;
     if called.call.tool != rows::EXPORT_AT
         && called.call.tool != rows::CHANGE_SETTINGS_AT
         && called.call.tool != rows::PROPOSE_SETTINGS_AT
@@ -620,6 +617,17 @@ pub(super) fn answered(
         let line = render::outcome::kept(&operation, outcome, runner.kept_json, me(runner, client), &env.limits);
         out.push(Out::Kept { line });
     }
+}
+
+fn close_request(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits) -> Prepared {
+    let (task, _) = render::read_task(document).ok_or(Failed::Fixed(b"unexpected close document"))?;
+    if task.chip.task != number(call, 0).expect("chat argument") {
+        return Err(Failed::Fixed(b"unexpected close task"));
+    }
+    // Only immutable routing scope enters the ask. Terminal history is kept
+    // as answer context: an archived task can be Unknown to a fresh act.
+    let ended = render::terminal_phase(task.chip.phase);
+    Ok((Request::Close { ask: close(call, me, task.project, limits)?, ended }, None))
 }
 
 fn close(call: &Call, me: &c::Me, project: u32, limits: &Limits) -> Result<c::Ask, Failed> {
