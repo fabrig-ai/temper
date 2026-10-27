@@ -66,7 +66,7 @@ impl Walk {
                 ended = true;
             }
         }
-        assert!(ended, "the welcome's open stream ends on close");
+        assert!(ended, "the visit's open stream ends on close");
     }
 
     /// The world's completed steps and current instant at this point in the visit.
