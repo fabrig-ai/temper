@@ -207,7 +207,7 @@ temper ctl me decide p73/7 reject because --key reject-settings-7
 Rejection keeps the reason and notifies the proposer. Do not supply
 `--running` when rejecting or passing a proposal up: it is invalid
 for those decisions. Ordinary task proposals are described in
-`temper help tasks`.
+`temper help task`.
 
 Pending settings proposals survive an unchanged restart. A start
 that makes a new revision for changed defaults withdraws proposals

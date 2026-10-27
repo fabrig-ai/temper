@@ -29,18 +29,30 @@ temper runs software work for people: agents take tasks on the repositories of a
 - temper help ctl: the command line through which an agent works in a
   deployment for a person: calls, keys, kept requests, waits, exit
   statuses.
+- temper help task: a numbered piece of work, its delegates, phases,
+  holds and parts.
+- temper help chat: a conversation with an agent, parked between
+  messages, closed by its party.
+- temper help goal: a tracked task, its priority and its plan.
+- temper help budget: what work spends, where it comes from, and what
+  happens when it runs out.
+
+## The walks
+
+- temper help box: a deployment on one machine, from its
+  configuration to a change landed, and its account kept at the stop.
+- temper help github: GitHub through a GitHub App, an installation
+  accepted, a repository adopted.
+- temper help forgejo: a Forgejo temper does not run, connected as
+  its site admin.
+- temper help server: a long-lived deployment on a server, its
+  workers on another host, and its redeploy.
 
 ## The guides
 
-Written before this map, for people; each becomes walks and concepts
-of its own.
+Written before this map, for people; each becomes concepts of its
+own.
 
-- temper help box: a local box, from nothing to a change landed.
-- temper help server: a long-lived deployment on a server.
-- temper help forgejo: connecting a Forgejo.
-- temper help github: connecting GitHub through a GitHub App.
-- temper help tasks: tasks, goals and chats.
-- temper help budgets: what work spends, and its budgets.
 - temper help charters: charters, templates and policies.
 - temper help settings: settings, revisions and proposals.
 

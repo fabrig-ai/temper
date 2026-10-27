@@ -15,7 +15,7 @@ turn and time limits, a finishing reserve and default spend.
 The task adds the particular brief, the required result, how it ends
 and the spend admitted for this run. Whether work is an open chat or
 a finite task comes from the task, not the charter's number. Read
-`temper help tasks` for that distinction and how you follow the work.
+`temper help task` for that distinction and how you follow the work.
 
 The default chat charter is 1 and the default coding charter is 2.
 Both default to 8 turns and 120 seconds, with a finishing reserve of
@@ -30,7 +30,7 @@ temper ctl me setting charter 1 --json
 
 Here and below, `me` is your client directory. Use the charter number
 for your work in place of 1. These are defaults, not a promise that
-a run receives that much spend: `temper help budgets` explains how
+a run receives that much spend: `temper help budget` explains how
 its allowance depends on the task's funds and deployment limits.
 
 ## Models
@@ -77,8 +77,8 @@ temper ctl me setting template 2 --json
 ```
 
 The goal template's existence does not give ctl a goal-creation
-command. `temper help tasks` explains what you can do with goals
-that already exist. `temper help budgets` explains the difference
+command. `temper help task` explains what you can do with goals
+that already exist. `temper help budget` explains the difference
 between a task's budget rule and a run's limits.
 
 ## What work may do

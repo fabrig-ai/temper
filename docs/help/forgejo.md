@@ -1,264 +1,114 @@
-# Connect Forgejo
+# Connect a Forgejo
 
-Kind: guide
+Kind: walk
 
-Connect temper to a Forgejo as its bot, in one of three modes:
-connected, managed or owned.
+Connect a deployment to a Forgejo it does not run, as its site admin, so that temper makes and keeps its own bot there, then adopt a repository.
 
-temper works on a Forgejo in one of three modes. Each ends with temper
-connected as its bot, a Forgejo user of its own; they differ in who
-makes that bot and what temper keeps.
+## Before you start
 
-| Mode | You give temper | temper makes |
-|---|---|---|
-| Connected | the bot's API token and git token, pasted | nothing on the forge |
-| Managed | a site admin's token, pasted | its bot and the bot's tokens; at each adoption, the bot's access and the repository's hook |
-| Owned | a setup entry naming Forgejo's binaries | the forge itself, its runner and admin; then all of managed's |
+- **A deployment,** its directories made as temper help box says in
+  its step 1, before its start.
+- **The mode.** Managed, this walk: you give a site admin's token,
+  and temper makes its bot, the bot's tokens, and at each adoption
+  the bot's access and the repository's hook. Owned: temper runs the
+  Forgejo itself; on a box, temper help box says how in its step 4,
+  and on a server, temper help server. Connected, a bot's tokens given
+  by hand, is not offered: `forge-connect FORGE forgejo` is refused.
+- **The admin's token** in `FILE`: regular, owned by you, mode 0600,
+  made in a site admin's settings with the scopes `write:admin`,
+  `read:user` and `write:repository`.
+- `FORGE`: the forge's number in the configuration, kept for good: a
+  forge that changes its number is a new forge.
+- `ORG`: the organization of the first repository temper makes.
+- `NAME`: that repository's name.
+- `OWNER`: another repository's owner, as `repositories` prints it.
+- `REPOSITORY`: that repository's name.
+- **On fake backends,** the box's Forgejo elsewhere is forge 4,
+  configured managed already: skip step 1. The box prints `box:
+  Forgejo elsewhere admin token file FILE`.
 
-The design is `docs/design/protocol/setup.md`; the page you use is the
-client's **Forges** (`docs/design/client/forge.md`, the deployment's
-page). A local owned forge, from a checkout to a first change, is the
-box's walk, `temper help box`.
+## 1. Configure the forge, before the start
 
-## 1. Add the forge to the configuration
+Add to `CONFIG/temper.json` the forge, its identity and its setup
+entry, the address the Forgejo answers on in place of `ADDRESS`:
 
-Add a forge of kind `forgejo` to `application.forges`, and its identity
-to `application.identities`:
-
-```json
-{"number": 1, "kind": "forgejo",
- "api": {"host": "forge.example", "port": 443},
- "transport": {"tls": {"server_name": "forge.example", "trust": null}},
- "git": "https://forge.example", "web": null, "log_origins": null}
+```
+jq '.application.forges += [{"number": FORGE, "kind": "forgejo", "api": {"socket": "ADDRESS"}, "transport": "plaintext", "git": "http://ADDRESS", "web": null}]
+  | .application.identities += [{"number": FORGE, "forge": FORGE, "login": "temper", "author": {"name": "temper", "email": "temper@localhost"}}]
+  | .application.setup += [{"forge": FORGE, "bot": {"login": "temper", "email": "temper@localhost"}, "mode": "managed"}]' CONFIG/temper.json > CONFIG/new.json
+mv CONFIG/new.json CONFIG/temper.json
 ```
 
-```json
-{"number": 1, "forge": 1, "login": null,
- "author": {"name": "temper", "email": "temper-bot@forge.example"}}
+A plaintext forge is on loopback; one elsewhere takes a TLS
+`transport`, `{"tls": {"server_name": HOST, "trust": null}}`, and an
+`https` git address.
+
+Expect: no output; the three entries in the file.
+
+If not: a start that names `application.setup` found no setup entry
+for the forge: add it, then start again.
+
+## 2. Start and sign in
+
+```
+temper box --config CONFIG --data DATA --cache CACHE
+temper ctl DIR sign-in -
 ```
 
-- **A forge's `number` is its stable id,** never reused. temper keeps
-  the forge's records under it, so give a forge a number no other forge
-  has had. A forge whose number changes is a new forge, not connected,
-  and its old number's records are left as they are.
-- **Records made for another kind or address** leave the forge "Not
-  connected: its records were made for KIND at ADDRESS". Nothing is
-  erased; connecting again overwrites them.
-- **The identity's `login`,** `null`, is the bot's; its `author` names
-  temper's commits.
-- **No credential is configured.** Every token is pasted in the client
-  and kept as the forge's records (section 5).
-- **Who may connect:** the one whose role holds the deployment's
-  connectors; in standalone, the deployment's owner. `temper ctl` is
-  signed in once with the link `temper serve` printed:
-  `temper ctl me sign-in -`.
+On fake backends, or with `temper serve`, start as temper help box or
+temper help server says. Give the link on stdin.
 
-Restart `temper serve`. The forge's row on **Forges** says "Not
-connected", with **Connect**.
+Expect: `party 1 · owner · Owner` on a new deployment.
 
-## 2. Connected: paste the bot's tokens
+If not: as temper help box says in its steps 2 and 3.
 
-### Make the bot on Forgejo
+## 3. Connect as its admin
 
-1. **A user for temper,** not a site admin. Put `temper:bot` in its full
-   name if you may later give temper a site admin's token (section 3):
-   temper then takes this user over rather than making another.
-2. **Two tokens of that user,** under its settings' applications:
-   - the API token, with the scopes `read:user`, `write:issue` and
-     `write:repository`;
-   - the git token, with `write:repository` and `read:user`.
-3. **Its write access** to each repository temper will adopt: a
-   collaborator with write, or a member of a team that has it.
-4. **Webhooks, if you want them.** Without them temper polls, and
-   keeps up all the same, more slowly. With them, configure
-   `application.webhooks`, as `{"listener": {"socket":
-   "127.0.0.1:7101"}}`, and on each repository, or its organization,
-   add a Forgejo webhook:
-   - target `http://127.0.0.1:7101/hooks/1`, the listener's address and
-     the forge's number; content type JSON; a secret of your own
-     drawing;
-   - the events skein's `forge.md`, section 7 lists: issues, and their
-     assignments, labels and milestones; pull requests, and theirs,
-     their pushes and their review requests; issue and pull request
-     comments; reviews; pushes; branch creation and deletion; workflow
-     jobs;
-   - Forgejo's `[webhook] ALLOWED_HOST_LIST` in its `app.ini` naming
-     the listener's IP address: Forgejo's default refuses loopback.
-5. **CI,** as each repository has it.
-
-### Paste them
-
-On **Forges**, choose **Connect** on the forge's row: paste the API
-token, the git token and, when you made webhooks, their secret,
-together. Or write them into a private tokens file, one `NAME VALUE` a
-line:
-
-```text
-api <api-token>
-git <git-token>
-webhook_secret <secret>
+```
+temper ctl DIR forge-connect FORGE forgejo-admin FILE --first ORG/NAME --key KEY
+temper ctl DIR wait forges --until made:FORGE
 ```
 
-```sh
-chmod 600 tokens
-temper ctl me forge-connect 1 forgejo tokens --key forgejo
-temper ctl me wait forges --until settled
-rm tokens
+`--first` makes the first repository in a new project named after
+it, and adopts it; without it, the forge connects with no repository.
+
+Expect: `connecting`, then `project N`, the new project, then
+`Adopted ORG/NAME on forge FORGE as owned.` and `It is the project's
+home.`; the wait prints the forges, forge `FORGE` `managed`, then
+`met`.
+
+If not: `credential file must contain 1 to 4089 bytes`, or a key
+file's mode (exit 1): mend `FILE`, then the same call with the same
+key. A token without `write:repository` connects, and the adoption
+says that scope is missing: give it, then connect again. `LOGIN is
+not temper's bot` (in `forges`): a user of that login exists; add
+`temper:bot` to its full name on Forgejo, then connect again.
+
+## 4. Adopt another repository
+
+```
+temper ctl DIR repositories FORGE
+temper ctl DIR adopt --project PROJECT --forge FORGE --owner OWNER --name REPOSITORY --landing main --key KEY
 ```
 
-temper checks that both tokens answer as one user, not a site admin,
-and the row says "Connected as LOGIN (ID)". Otherwise it says why, and
-the forge stays as it was:
+`repositories` lists every repository the admin sees; `PROJECT` is
+the project step 3 printed.
 
-- "the API token and the git token answer as LOGIN and LOGIN": two
-  users' tokens;
-- a site admin's token, a token Forgejo refuses, or the forge
-  unreachable, each named.
+Expect: a line per repository, `OWNER/REPOSITORY`; then `Adopted
+OWNER/REPOSITORY on forge FORGE as owned.`
 
-### Adopt, and add repositories later
+If not: `temper's forge user may not read OWNER/REPOSITORY on forge
+FORGE.` (exit 2): the bot has no access to it; make it a collaborator
+with write on Forgejo, then adopt again with a new key. `The project
+has a home already.` (exit 2): add `--no-home`, with a new key.
 
-Adopting grants nothing on a connected forge. The adoption form's
-picker lists the repositories the bot may write; for one it does not
-list, "Not listed" says "Make LOGIN a collaborator with write on
-OWNER/NAME." Do so on Forgejo, and add its webhook if you use them.
+## Clean up
 
-### Replace a token
+- Delete `FILE` once the forge is connected: temper keeps the token.
+- temper keeps the admin's token while the forge is managed; ctl has
+  no call to forget it.
 
-temper cannot replace a forge's token yet; neither **Forges** nor
-`temper ctl` offers it in this build. A token Forgejo refuses under a
-running engine stops the forge, "Stopped: WHY"; the engine and every
-other forge run on.
+## Next
 
-## 3. Managed: paste a site admin's token
-
-temper keeps a site admin's token and makes, repairs and grants what it
-needs itself.
-
-- **Forgejo on the same machine.** A managed forge's `api` is a socket
-  address on loopback, its `transport` `"plaintext"` and its `git`
-  `http://<address>`; a TLS transport refuses the start, naming it.
-
-  ```json
-  {"number": 1, "kind": "forgejo",
-   "api": {"socket": "127.0.0.1:3000"}, "transport": "plaintext",
-   "git": "http://127.0.0.1:3000", "web": null, "log_origins": null}
-  ```
-
-- **A setup entry** in `application.setup` naming its bot:
-
-  ```json
-  {"forge": 1,
-   "bot": {"login": "temper", "email": "temper@example.invalid"},
-   "mode": "managed"}
-  ```
-
-  A Forgejo with no entry refuses a connect as its admin, naming
-  `application.setup`.
-- **A site admin's token,** made in that admin's settings, with the
-  scopes temper's own preparation gives its admin: `write:admin`,
-  `read:user` and `write:repository`. Without `write:repository`,
-  Forgejo refuses temper the bot's access when you adopt a repository,
-  and temper says that scope is missing.
-
-On **Forges**, choose **Connect as its admin** and paste the token, or:
-
-```sh
-chmod 600 admin-token
-temper ctl me forge-connect 1 forgejo-admin admin-token --key forgejo-admin
-temper ctl me wait forges --until settled
-rm admin-token
-```
-
-temper makes its bot, the setup entry's login, unless the forge was
-connected before: then it takes over the connected user when its full
-name carries `temper:bot`, or says "LOGIN is not temper's bot: add
-`temper:bot` to its full name on Forgejo, then connect again.", and the
-forge stays connected. Done, the row says "Connected as LOGIN (ID)",
-managed, "admin's token kept".
-
-- **The admin's token is the setup host's alone,** the part of the
-  engine that runs temper's setup: it reads the token to reconcile the
-  forge at each start, to grant access at an adoption, and to list the
-  picker's repositories. The forge's component, which does temper's
-  work, never holds it.
-- **The picker lists every repository the admin can see.** Adopting one
-  makes the bot a collaborator with write on it, and adds its webhook
-  when `application.webhooks` is configured. Nothing is granted
-  organization-wide: the bot reaches the repositories you adopted, and
-  no other.
-- **Each start repairs** the bot, its tokens and each adopted
-  repository's access and hook, where the forge differs. A start whose
-  repair stops leaves the forge not connected, named; connect as its
-  admin again to mend it.
-- **Forgejo's own settings** are yours: temper does not change
-  `ALLOWED_HOST_LIST` or whether Actions are enabled. A forge whose host
-  list refuses temper's listener delivers no webhook, and polling keeps
-  up.
-- **To stop keeping the token,** choose **Forget the admin's token**, or
-  `temper ctl me forge-forget 1`. temper erases it, and the forge is
-  connected, its bot, tokens and hooks kept. Adopting then grants
-  nothing: make the bot a collaborator yourself (section 2). Then delete
-  the token on Forgejo.
-
-## 4. Owned: temper runs the forge
-
-temper prepares and runs a Forgejo of its own on loopback, with a
-runner, and manages it. The setup entry's `mode` is `owned`, naming
-Forgejo's and the runner's binaries, the forge's directory, its address
-and your account (`docs/examples/owned.json` is a whole example). `temper box --config C --data D --cache K`
-runs every step below in order; the box's walk is `temper help box`.
-
-For a fresh box, follow `temper help box`: `temper ctl DIR forge-setup
-3` starts its owned Forgejo and adopts the first repository without a
-browser. Its CI jobs run on the box's runner, on this machine as the
-box's user, with label `temper-host`, without a container. The starter
-workflow only echoes success on pushes to `main` and pull requests;
-your repository's real checks are its own workflow's. With CI on, a
-change waits for a reported pass at its head. Read `temper ctl DIR
-change N` for that CI state, the step, pull request and merge commit.
-
-For an already configured owned forge, the box runs these commands:
-
-1. **`temper forge prepare --config C --data D --cache K 1`** makes the forge's private
-   directory and Forgejo's settings; temper's admin, `temper-admin`;
-   your account, a site admin, with its first password in
-   `person_password`; and the runner's registration. It leaves one file
-   for the engine: `admin_token`, the handover, temper's admin's token.
-   A later preparation makes it again only when it is missing.
-2. **`temper forge run --config C --data D --cache K 1 forgejo`**, and `... 1 runner`,
-   run Forgejo and its runner.
-3. **`temper serve --config C --data D --cache K`** takes the handover at its start: it
-   reads `admin_token` once, keeps it as the forge's admin's token,
-   deletes temper's admin's other tokens, and removes the file. Then it
-   reconciles as managed, and makes each of your organizations that is
-   missing.
-
-- **A forge not yet prepared** says "Not connected: prepare it with
-  `temper forge prepare`".
-- **Files of an older temper,** `api_token`, `git_token`, `user` or
-  `webhook_secret` in the forge's directory, are left unread, and
-  nothing is converted: temper makes the forge's records afresh from
-  the handover.
-- **Sign in on Forgejo** as yourself with `person_password`, and change
-  the password: Forgejo's API refuses you until you do. temper's admin
-  is temper's; deleting it stops the next start's repair and the next
-  preparation, naming it.
-
-## 5. What temper keeps, and where
-
-- **In jig's secrets' store,** under the forge's number, written by the
-  engine's setup alone: the bot's API token and git token, its id, the
-  webhooks' secret, the kind and address the records were made for, and
-  on a managed or owned forge, the admin's token
-  (`docs/design/protocol/credentials.md`, the records).
-- **The webhooks' secret,** on a managed or owned forge, is drawn by
-  temper when `application.webhooks` is configured, and set on each hook
-  it makes; on a connected forge it is the one you pasted, or none.
-- **What you paste** is kept by jig until its run ends, the pasted
-  value, then erased (`docs/design/protocol/credentials.md`, pasted
-  values). No page, log or answer shows it: **Forges** says that a value
-  was given, never what. A run cut by a restart says "interrupted; paste
-  again".
-- **`temper ctl` reads each value from a private file:** your own, with
-  no group or other permission bits, not a link. It never prints the
-  value; delete the file once the row says connected.
+- temper help box: a change asked and followed to its landing.
+- temper help ctl: the loop, keys and exit statuses for every call.

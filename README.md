@@ -41,8 +41,8 @@ draft to landed change.
   real](docs/help/box.md#trying-the-welcome-with-nothing-real).
 - [`docs/help/github.md`](docs/help/github.md): GitHub connected from
   temper's client, through temper's own App.
-- [`docs/help/forgejo.md`](docs/help/forgejo.md): a Forgejo connected
-  from temper's client, managed, owned or connected.
+- [`docs/help/forgejo.md`](docs/help/forgejo.md): a Forgejo temper
+  does not run, connected as its site admin, with `temper ctl`.
 - [`docs/help/server.md`](docs/help/server.md): temper on a server,
   behind a TLS proxy, with Google's sign-in and a worker on another
   host, redeployed from `main`.

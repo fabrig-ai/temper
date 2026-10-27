@@ -1,0 +1,95 @@
+# Tasks
+
+Kind: concept
+
+A task is one numbered piece of work in a project, done by an agent, a procedure or a person, within an authority, toward a result of a declared kind; tasks make trees of delegates.
+
+## What it is
+
+- **A task** has what was asked (its spec, words and inputs), its
+  executor (an agent under a charter, a procedure, a person, or a
+  role), its authority (what it may do, delegate and spend, and by
+  when), and its result contract: a report, a change, a verdict or an
+  approval. `task` prints them; its number is its name.
+- **Delegates:** an agent's run makes child tasks of its own; each
+  is a delegate of its parent, and together they make a tree. A
+  delegate's result reaches its parent, which its run hears as its
+  rules for waking say. A change task is a delegate run by the forge,
+  whose result is a change landed (temper help box); it starts with
+  half of what its parent has left to spend.
+- **Its parts,** each read on its own: its tree (its live
+  delegates), its activity (what happened, a line each, newest last),
+  its turns (each step of a run: the model's words, its calls and
+  their results), and its run (the attempt in progress).
+- **Its settings revision:** an agent task records the settings
+  revision its runs use; `task` prints it as `settings: revision R`,
+  with the run's own and the newest where they differ.
+
+## How it changes
+
+- **Live phases,** as `task` prints them, then as a wait names them:
+  Waiting (`waiting`), Waiting for news (`idle`), Due to run (`due`),
+  Preparing a host (`preparing`), Claimed by a host (`claimed`),
+  Running (`running`), Retrying (`backing-off`), Executor active
+  (`active`), Closing (`closing`), Held (`held`).
+- **Ended:** Completed, Failed, Cancelled, or Ended; a wait names
+  them all `ended`. An ended task keeps its result, and `task` prints
+  it.
+- **What it waits on** prints after `waiting on:`: `Kept by its
+  dependencies`, `Waiting for delegates`, `Waiting for news`, `Nothing
+  awaited`, or a party and what it must answer: `you: question 3 of
+  task 44 · 1 waiting`.
+- **Held:** a held task runs no more until someone decides. Its hold
+  has a reason (out of tries, stopped, its deadline passed, an
+  insufficient budget, an effect whose outcome is uncertain, among
+  others) and a revision of its own. Releasing it runs it again;
+  leaving it held, or passing it up to the next holder of authority,
+  are the other decisions. Only an uncertain effect asks whether to
+  repeat it.
+- **Stopped:** stopping ends the current run and holds the task; its
+  delegates go on.
+- **Cancelled:** cancelling ends the task and its tree: at once, or
+  after a grace the canceller gives, in which its run may finish.
+- **Amended:** an amendment replaces the controls it names (priority
+  and tracking, deadline, instructions, spec, dependencies, model) and
+  keeps the rest; all but a tracked task's priority name the spec
+  revision the amender saw.
+
+## What temper guarantees
+
+- **One result.** A task ends once, with one result of its contract's
+  kind, or failed or cancelled; a delegate's result reaches its
+  parent.
+- **Words between turns:** a message reaches the agent at a turn's
+  boundary and steers its next turn, never the one in progress.
+- **Decisions on what was seen:** a release names the hold's
+  revision and an amendment the spec's; a moved one is refused, and a
+  read shows the new one.
+- **A task's runs keep their settings revision** until it is moved to
+  the newest (temper help settings).
+- **Spend counts up the tree:** a delegate's budget is reserved from
+  its parent's (temper help budget).
+
+## Acting on it
+
+- **Reading:** `tasks` lists a project's tasks; `task` reads one, and
+  its tree, activity or run beside it; `activity`, `turn` and `run`
+  read its parts; `wait` follows a task, a tree or a run.
+- **Acting:** the acts `task` lists under `acts:`, among them
+  `message`, `answer`, `amend`, `stop`, `cancel`, `release` and
+  `decide`; an act marked `(no tool)` has no ctl tool yet.
+- **temper's runs** act on their delegates with the host tools
+  `delegate`, `change`, `amend`, `message`, `cancel`, `release`,
+  `subscribe`, `introduce`, `decide_escalation` and `propose`.
+
+## Limits
+
+- temper does not let ctl take a task, hand it back, move it to
+  another party, reorder it or mark it seen: those acts print `(no
+  tool)`.
+- temper does not interrupt a turn in progress for a message, an
+  amendment or a priority.
+- A task's deadline is checked when a run starts, not while it runs
+  (temper help budget).
+- `activity` and `tasks` read 32 lines a page; a turn's part prints
+  16384 bytes at a time.

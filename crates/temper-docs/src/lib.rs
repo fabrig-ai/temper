@@ -79,7 +79,7 @@ pub struct Page {
 
 /// `index`, then the concepts, walks, recipes, reference pages and guides, each by name.
 #[expect(clippy::disallowed_macros, reason = "pages compile their single Markdown source as static data")]
-pub static PAGES: [Page; 11] = [
+pub static PAGES: [Page; 13] = [
     Page {
         name: "index",
         kind: Kind::Index,
@@ -88,11 +88,53 @@ pub static PAGES: [Page; 11] = [
         text: include_str!("../../../docs/help/index.md"),
     },
     Page {
+        name: "budget",
+        kind: Kind::Concept,
+        title: "Budgets",
+        summary: "A budget is what a task may spend, in units its models' prices make of their usage, and by when; each run draws a share of it, and a task without enough is held.",
+        text: include_str!("../../../docs/help/budget.md"),
+    },
+    Page {
+        name: "chat",
+        kind: Kind::Concept,
+        title: "Chats",
+        summary: "A chat is a conversation between a party and an agent in a project: an untracked task of the label chat, which replies, parks between messages, and asks for changes that other tasks make.",
+        text: include_str!("../../../docs/help/chat.md"),
+    },
+    Page {
         name: "ctl",
         kind: Kind::Concept,
         title: "temper ctl",
         summary: "temper ctl is the command line through which an agent works in a deployment for a person, each call a read, an act or a wait in a process of its own.",
         text: include_str!("../../../docs/help/ctl.md"),
+    },
+    Page {
+        name: "goal",
+        kind: Kind::Concept,
+        title: "Goals",
+        summary: "A goal is a tracked task: work given a numeric priority, which orders the goals' listing and the work waiting for resources, and whose tree is its plan.",
+        text: include_str!("../../../docs/help/goal.md"),
+    },
+    Page {
+        name: "task",
+        kind: Kind::Concept,
+        title: "Tasks",
+        summary: "A task is one numbered piece of work in a project, done by an agent, a procedure or a person, within an authority, toward a result of a declared kind; tasks make trees of delegates.",
+        text: include_str!("../../../docs/help/task.md"),
+    },
+    Page {
+        name: "forgejo",
+        kind: Kind::Walk,
+        title: "Connect a Forgejo",
+        summary: "Connect a deployment to a Forgejo it does not run, as its site admin, so that temper makes and keeps its own bot there, then adopt a repository.",
+        text: include_str!("../../../docs/help/forgejo.md"),
+    },
+    Page {
+        name: "server",
+        kind: Kind::Walk,
+        title: "Run temper on a server",
+        summary: "Run a long-lived deployment on a server: the engine behind a TLS proxy with Google sign-in, an owned Forgejo beside it, the workers on a second host, and a redeploy that keeps the model's accounts.",
+        text: include_str!("../../../docs/help/server.md"),
     },
     Page {
         name: "commands",
@@ -109,25 +151,11 @@ pub static PAGES: [Page; 11] = [
         text: include_str!("../../../docs/help/box.md"),
     },
     Page {
-        name: "budgets",
-        kind: Kind::Guide,
-        title: "Budgets",
-        summary: "How temper counts what work spends, where a task's budget comes from, what happens when it runs out, and what you can do then.",
-        text: include_str!("../../../docs/help/budgets.md"),
-    },
-    Page {
         name: "charters",
         kind: Kind::Guide,
         title: "Charters, templates and policies",
         summary: "What decides how temper's agents work: a charter for each run, a template for each new task, and the policies and rules that bound what work may do.",
         text: include_str!("../../../docs/help/charters.md"),
-    },
-    Page {
-        name: "forgejo",
-        kind: Kind::Guide,
-        title: "Connect Forgejo",
-        summary: "Connect temper to a Forgejo as its bot, in one of three modes: connected, managed or owned.",
-        text: include_str!("../../../docs/help/forgejo.md"),
     },
     Page {
         name: "github",
@@ -137,25 +165,11 @@ pub static PAGES: [Page; 11] = [
         text: include_str!("../../../docs/help/github.md"),
     },
     Page {
-        name: "server",
-        kind: Kind::Guide,
-        title: "Run temper on a server",
-        summary: "Run temper as a long-lived deployment on a server, behind a TLS proxy, with Google sign-in, an owned Forgejo and its workers on another host.",
-        text: include_str!("../../../docs/help/server.md"),
-    },
-    Page {
         name: "settings",
         kind: Kind::Guide,
         title: "Settings, revisions and proposals",
         summary: "How you read and change temper's settings with temper ctl, what a revision is, how a proposal asks the deployment's owners, and what still needs a restart.",
         text: include_str!("../../../docs/help/settings.md"),
-    },
-    Page {
-        name: "tasks",
-        kind: Kind::Guide,
-        title: "Tasks, goals and chats",
-        summary: "What temper's work is made of, tasks with their delegates, goals and chats, and how you follow, answer, steer and stop them.",
-        text: include_str!("../../../docs/help/tasks.md"),
     },
 ];
 

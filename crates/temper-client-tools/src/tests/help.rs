@@ -186,19 +186,6 @@ fn the_moves_places_name_their_rows_in_the_table() {
     }
 }
 
-#[test]
-fn every_call_line_of_the_task_settings_topic_parses() {
-    let source = std::fs::read_to_string("../../docs/help/tasks.md").expect("tasks guide");
-    let mut calls = 0_u32;
-    for line in source.lines() {
-        if let Some(call) = line.as_bytes().strip_prefix(b"temper ctl me ".as_slice()) {
-            fixtures::parse_line(call).expect("tasks guide call parses");
-            calls += 1;
-        }
-    }
-    assert_eq!(calls, 15);
-}
-
 pub(super) const RECORD: jig::table::Tool = jig::table::Tool {
     name: b"fixture",
     line: b"Read a task",

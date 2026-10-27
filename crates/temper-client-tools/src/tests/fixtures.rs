@@ -658,24 +658,6 @@ pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 pub(super) const HELP_SHORTFALL: usize = 1;
 /// Refusing an output must publish no bytes; any positive count is partial help.
 pub(super) const NO_HELP_BYTES: usize = 0;
-/// The guide's examples use whitespace-separated words without shell quoting.
-pub(super) fn parse_line(line: &[u8]) -> Result<crate::jig::call::Parsed, crate::jig::argv::Usage> {
-    let mut words = List::with_capacity(WORDS);
-    let mut start = 0;
-    for at in 0..=line.len() {
-        let boundary = match line.get(at) {
-            Some(byte) => byte.is_ascii_whitespace(),
-            None => true,
-        };
-        if boundary {
-            if start < at {
-                words.push(line.get(start..at).expect("word range")).expect("bounded guide words");
-            }
-            start = at.checked_add(1).expect("guide range fits usize");
-        }
-    }
-    crate::table::parse(words.as_slice())
-}
 /// Measure help inside its window, then fill an exact-length writer.
 pub(super) fn help(tool: Option<u8>) -> Box<[u8]> {
     let mut measured = skein_lib::Writer::new(usize::try_from(crate::limits::TEXT).expect("text fits usize"));
