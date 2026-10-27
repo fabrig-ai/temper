@@ -615,7 +615,6 @@ pub enum ChangeWord {
 }
 pub type ChangeRow = (ChangeWord, &'static [&'static [u8]], &'static [HoleKind]);
 pub const CHANGES: [ChangeRow; 88] = [
-    (ChangeWord::EndedLine, &[b"Change ended."], &[]),
     (ChangeWord::Tag, &[b"Change \xc2\xb7 Task ", b""], &[Number]),
     (ChangeWord::Pull, &[b"PR #", b" \xc2\xb7 "], &[Number]),
     (ChangeWord::NoPull, &[b"No pull request yet \xc2\xb7 "], &[]),
@@ -703,6 +702,7 @@ pub const CHANGES: [ChangeRow; 88] = [
     (ChangeWord::Updates, &[b"updates ", b" of ", b""], &[Number, Number]),
     (ChangeWord::Separator, &[b" \xc2\xb7 "], &[]),
     (ChangeWord::NotRead, &[b"Not read since the restart"], &[]),
+    (ChangeWord::EndedLine, &[b"Change ended."], &[]),
 ];
 impl ChangeWord {
     #[must_use]
