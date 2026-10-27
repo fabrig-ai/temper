@@ -48,7 +48,7 @@ Run a deployment on this machine as one box: the forge's setup steps, then tempe
 - `--fake-backends`: Run against temper's fake LLM provider, forge and OAuth issuer, as a deployment of its own under DATA/box/fake-backends that shares the cache.
 - `BUNDLE`: The web client's bundle directory, in place of the configured one; a relative path is taken from the working directory.
 
-Steps run in order, each restarted when it exits, and stop in reverse order. Its stdout is temper serve's sign-in links, each line whole; its stderr, what --echo chooses; each step logs under the data directory.
+Steps run in order, each restarted when it exits until it has exited too often within its window, when the box gives up, stops the others and exits 1; they stop in reverse order. Its stdout is temper serve's sign-in links, each line whole; its stderr, what --echo chooses; each step logs under the data directory.
 
 ## temper program-login
 
