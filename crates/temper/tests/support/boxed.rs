@@ -754,6 +754,13 @@ fn account_environment(probe: bool, cut: Option<&Path>) -> Vec<(std::ffi::OsStri
     environment
 }
 
+fn configure_face(face: Option<&super::forge_land::Face>, flags: &[String]) {
+    if let Some(super::forge_land::Face::Fake { peer, .. }) = face {
+        let config = flags.windows(2).find(|pair| pair[0] == "--config").expect("explicit config directory");
+        peer.configure(Path::new(&config[1]));
+    }
+}
+
 fn run_ctl_peers<T>(
     directory: &Path,
     flags: Vec<String>,
@@ -777,10 +784,7 @@ fn run_ctl_peers<T>(
         CtlModel::None => (None, None, None, None),
         CtlModel::Account(probe) => (None, None, Some(probe.face), None),
     };
-    if let Some(super::forge_land::Face::Fake { peer, .. }) = &face {
-        let config = flags.windows(2).find(|pair| pair[0] == "--config").expect("explicit config directory");
-        peer.configure(Path::new(&config[1]));
-    }
+    configure_face(face.as_ref(), &flags);
     let tab = steps.iter().any(|step| matches!(step, super::ctl::Step::Visit));
     assert!(!tab || face.is_none(), "box-owned peers or an independent face");
     let clock = Clock::new();
