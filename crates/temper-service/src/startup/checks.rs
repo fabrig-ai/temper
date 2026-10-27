@@ -652,6 +652,7 @@ pub fn root(
     let landing = domain::LandingPolicy { deployment: engine.landing.deployment.clone(), projects };
     let (forge, identities) = crate::forge::config(engine, seeds.deployment);
     let config = domain::Config {
+        period_span: crate::stock::PERIOD_SPAN,
         demo: match &engine.demo {
             Some(demo) => Some(demo.domain(&engine.forges, engine.limits.setup.deadline)),
             None => None,

@@ -36,6 +36,9 @@ impl Domain {
             next = earliest(next, self.forge.next_deadline());
             next = earliest(next, wall_deadline(self.forge.next_wall_deadline(), env.now, env.wall));
         }
+        if self.ready() {
+            next = earliest(next, wall_deadline(self.calendar.next_start(), env.now, env.wall));
+        }
         next
     }
 }

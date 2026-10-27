@@ -196,6 +196,7 @@ pub fn limits() -> engine::Limits {
         + limits.people.pending * 2
         + fleet::max_out(&limits.fleet) * 4
         + temper_engine_domain_forge::max_out(&limits.forge)
+        + 2 * limits.authority.projects
         + limits.tasks.tasks
         + 6;
     limits

@@ -385,6 +385,7 @@ pub fn root() -> (temper_engine_domain::Domain, skein_lib::Env<temper_engine_dom
     let settings = engine();
     let limits = limits::engine(&settings.jig.limits, &settings.limits).unwrap();
     let config = root::Config {
+        period_span: crate::stock::PERIOD_SPAN,
         core: jig_protocol_config::core(&settings.jig, [7; 16], 7),
         landing: settings.landing,
         forge: skein_forge_client::Config {

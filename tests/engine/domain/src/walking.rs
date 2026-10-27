@@ -19,6 +19,9 @@ use std::{
 use temper_engine_domain as engine;
 use temper_engine_domain::{Delivery, JournalLimits, Record, loads};
 
+/// This world's funding span.
+pub const PERIOD_SPAN: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 /// Tiny counted child limits plus the root's declared synchronous-route room.
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "one explicit fixture lists the real child's tiny admission limits together")]
@@ -228,6 +231,7 @@ pub fn writes(limits: &engine::Limits) -> u32 {
         + limits.people.pending * 2
         + fleet::max_out(&limits.fleet) * 4
         + temper_engine_domain_forge::max_out(&limits.forge)
+        + 2 * limits.authority.projects
         + limits.tasks.tasks
         + 4
         + limits.call_records
@@ -297,6 +301,7 @@ pub fn config(seed: u64) -> engine::Config {
         requirements: Box::new([]),
     };
     engine::Config {
+        period_span: PERIOD_SPAN,
         core: jig_domain_core::Config {
             deployment: [31; 16],
             seed,

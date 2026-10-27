@@ -195,6 +195,7 @@ fn two_slot_limits() -> engine::Limits {
         + limits.people.pending * 2
         + fleet::max_out(&limits.fleet) * 4
         + temper_engine_domain_forge::max_out(&limits.forge)
+        + 2 * limits.authority.projects
         + limits.tasks.tasks
         + 6;
     limits
@@ -3102,6 +3103,7 @@ fn coalesced_history_waiters_survive_simultaneous_io_completion_under_full_journ
         + configured.people.pending * 2
         + fleet::max_out(&configured.fleet) * 4
         + temper_engine_domain_forge::max_out(&configured.forge)
+        + 2 * configured.authority.projects
         + configured.tasks.tasks
         + 6;
     configured.journal.deliveries =
@@ -3505,6 +3507,7 @@ fn held_cohort() -> (Driver, [u64; 2], [u64; 2], Vec<tasks::TaskRecord>) {
         + configured.people.pending * 2
         + fleet::max_out(&configured.fleet) * 4
         + temper_engine_domain_forge::max_out(&configured.forge)
+        + 2 * configured.authority.projects
         + configured.tasks.tasks
         + 6;
     let mut driver =

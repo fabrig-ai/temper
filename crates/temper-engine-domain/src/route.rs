@@ -1,6 +1,7 @@
 //! Exhaustive child routing and synchronous handoffs (jig's domain/root.md, 5).
 mod applications;
 mod asks;
+pub(crate) mod calendar;
 pub(crate) mod demo;
 pub(crate) mod escalation;
 pub(crate) mod forge_route;
@@ -97,9 +98,38 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
         Event::Party(crate::PartyInput::StartRecurring { project, authority, template }) => {
             domain.work.push(Work::Core(core::Event::StartRecurring { project, authority, template }));
         }
-        Event::Party(crate::PartyInput::Period { project, period, budget, next }) => {
-            domain.work.push(Work::Core(core::Event::Period { project, period, budget, next }));
-        }
+        Event::Party(crate::PartyInput::Period { project, period, budget, next }) => match next {
+            None if period >= domain.core.period(project) => {
+                let times = match domain.core.tasks.funding(tasks::Funder::Period { project, period }) {
+                    Some(row) => row.period,
+                    None => None,
+                };
+                match times {
+                    Some(times) if times.next.is_some() => {
+                        // Replaying the first source cannot move a durable boundary.
+                        domain.work.push(Work::Core(core::Event::Period { project, period, budget, next: times.next }));
+                    }
+                    Some(times) => calendar::route(
+                        domain,
+                        env,
+                        temper_engine_domain_calendar::Event::Restored {
+                            project,
+                            period,
+                            began: times.began,
+                            next: None,
+                        },
+                        Some(budget),
+                    ),
+                    None => calendar::route(
+                        domain,
+                        env,
+                        temper_engine_domain_calendar::Event::Began { project, period, began: env.wall },
+                        Some(budget),
+                    ),
+                }
+            }
+            None | Some(_) => domain.work.push(Work::Core(core::Event::Period { project, period, budget, next })),
+        },
         Event::Party(crate::PartyInput::ProcedureStep { task, step, connector, code, decision }) => {
             domain.work.push(Work::Core(core::Event::ProcedureStep { task, step, connector, code, decision }));
         }

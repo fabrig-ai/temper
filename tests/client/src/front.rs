@@ -90,6 +90,7 @@ pub fn first_run_projects(config: &mut engine::Config, limits: &mut engine::Limi
     limits.authority.projects = 2;
     limits.people.projects = 3; // The deployment roster and two projects.
     limits.people.holdings = 3;
+    limits.journal.writes = temper_engine_domain_world::walking::writes(limits);
     let seed = &config.core.seed_projects[0].policy;
     let policy = jig_domain_core::ConfiguredPolicy {
         policy: seed.policy.clone(),

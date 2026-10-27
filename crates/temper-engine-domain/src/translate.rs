@@ -14,6 +14,8 @@ use temper_engine_domain_forge as forge;
 /// the core's whole, as jig's applications hold it, and temper's own.
 #[derive(Debug)]
 pub struct Config {
+    /// Deployment funding span (domain/root.md, 5.7).
+    pub period_span: skein_lib::Duration,
     /// The core's rules, charters, owners and projects; its one connector is
     /// the forge's; whether the workers run in the engine's process is
     /// configuration too, set by an in-process hosts' listener: standalone,

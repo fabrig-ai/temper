@@ -375,6 +375,25 @@ pub(crate) fn restart_request(
             jig_domain_core::RestartStep::Open => {
                 let request = domain.core.restart_done(step);
                 assert_eq!(request, jig_domain_core::RestartRequest::Idle, "decisions open once");
+                for index in 0..domain.core.projects.len() {
+                    let project = *domain.core.projects.get(index).expect("bounded core project");
+                    let period = domain.core.period(project);
+                    if let Some(row) = domain.core.tasks.funding(jig_domain_tasks::Funder::Period { project, period })
+                        && let Some(times) = row.period
+                    {
+                        crate::route::calendar::route(
+                            domain,
+                            env,
+                            temper_engine_domain_calendar::Event::Restored {
+                                project,
+                                period,
+                                began: times.began,
+                                next: times.next,
+                            },
+                            None,
+                        );
+                    }
+                }
                 domain.work.push(Work::Forge(forge::Event::SendDemoActs));
                 for _ in 0..domain.limits.tasks.tasks {
                     let Some(context) = domain.core.take_due() else { break };

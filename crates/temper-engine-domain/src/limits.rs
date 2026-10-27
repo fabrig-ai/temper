@@ -203,6 +203,8 @@ pub(crate) fn route_bound(limits: &Limits) -> Option<u32> {
         .checked_add(forge::max_out(&limits.forge))?
         // One serialized role cohort revisits each Waiting task, then answers.
         .checked_add(limits.tasks.tasks.checked_add(4)?)?;
+    // Each due project saves its opened ledger and then its next start.
+    let routes = routes.checked_add(limits.authority.projects.checked_mul(2)?)?;
     Some(routes.max(jig_domain_core::settings::writes_worst_case(&core_limits(limits))?))
 }
 
@@ -312,7 +314,9 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(crate::journal_worst_case(&limits.journal)?)?
         .checked_add(load_bytes)?
         .checked_add(landing_bytes)?
-        .checked_add(permission_bytes)?;
+        .checked_add(permission_bytes)?
+        .checked_add(Map::<u32, temper_engine_domain_calendar::Record>::worst_case(limits.authority.projects)?)?
+        .checked_add(Queue::<temper_engine_domain_calendar::Request>::worst_case(limits.authority.projects)?)?;
     // Checked Return paths can be owned by the journal and output queues, plus one admission.
     let returns = u64::from(limits.journal.held)
         .checked_add(u64::from(limits.journal.deliveries))?

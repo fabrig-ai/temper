@@ -38,6 +38,7 @@ members = [
     "tests/codecs",
     "crates/temper-protocol-store",
     "crates/temper-engine-domain",
+    "crates/temper-engine-domain-calendar",
     "crates/temper-engine-smith",
     "crates/temper-engine-domain-forge-change",
     "crates/temper-engine-domain-forge-issues",
@@ -183,6 +184,7 @@ jig-ops-domain = { git = "https://github.com/fabrig-dev/jig.git" }
 jig-ops-domain-observability = { git = "https://github.com/fabrig-dev/jig.git" }
 jig-ops-domain-infrastructure = { git = "https://github.com/fabrig-dev/jig.git" }
 temper-engine-domain = { path = "crates/temper-engine-domain" }
+temper-engine-domain-calendar = { path = "crates/temper-engine-domain-calendar" }
 temper-engine-smith = { path = "crates/temper-engine-smith" }
 jig-domain-authority = { git = "https://github.com/fabrig-dev/jig.git" }
 jig-domain-core = { git = "https://github.com/fabrig-dev/jig.git" }

@@ -287,6 +287,16 @@ impl Driver {
         self.protocol.answers.iter().rev().find_map(|(named, answer)| (named.as_ref() == name).then_some(answer))
     }
 
+    /// Restart from a store at a chosen wall, without replaying the first-start source.
+    #[must_use]
+    pub fn from_store_at(store: Store, config: engine::Config, limits: &engine::Limits, wall: Wall) -> Driver {
+        let mut driver = Self::cold(store, config, limits);
+        driver.period_sent = true;
+        driver.env.wall = wall;
+        driver.env.now = Time::from_nanos(wall.as_nanos());
+        driver
+    }
+
     /// The deployment's first period for project one, at its first start.
     pub fn period(&mut self) {
         self.send(engine::Event::Party(engine::PartyInput::Period { project: 1, period: 1, budget: 1000, next: None }));

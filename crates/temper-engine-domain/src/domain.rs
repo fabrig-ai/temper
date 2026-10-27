@@ -20,6 +20,7 @@ use jig_domain_people as people;
 use jig_domain_tasks as tasks;
 use jig_domain_views as views;
 use skein_lib::{Env, Id, List, Map, Queue, ReplyTo, Slab, Time, Token, Wall};
+use temper_engine_domain_calendar as calendar;
 use temper_engine_domain_forge as forge;
 use temper_engine_domain_forge_change as forge_change;
 
@@ -43,6 +44,7 @@ pub struct Domain {
     scratch: Queue<Request>,
     pub(crate) config: RootConfig,
     pub(crate) core: Core,
+    pub(crate) calendar: calendar::Calendar,
     pub(crate) journal: Journal,
     pub(crate) stop_pending: bool,
     pub(crate) door_pass: bool,
@@ -328,6 +330,10 @@ impl Domain {
         }
         Ok(Domain {
             revision: 0,
+            calendar: calendar::Calendar::new(
+                &calendar::Limits { projects: limits.authority.projects },
+                config.period_span,
+            ),
             route_room: route_room(limits),
             scratch: Queue::with_capacity(max_out(limits)),
             settled: None,
@@ -852,6 +858,13 @@ pub(crate) fn fire_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Queu
     crate::route::demo::progress(domain, env, &mut decision);
     route_into(domain, env, &mut decision);
     if domain.ready() {
+        if !domain.core.stopping()
+            && let Some(next) = domain.calendar.next_start()
+            && next <= env.wall
+        {
+            crate::route::calendar::route(domain, env, calendar::Event::Due, None);
+            route_into(domain, env, &mut decision);
+        }
         let routed =
             jig_domain_core::step(&mut domain.core, &environment_core(env), jig_domain_core::Event::EffectDeadline);
         route_core_requests(domain, env, &mut decision, routed);
@@ -910,7 +923,17 @@ fn released_into(
     out: &mut Queue<Request>,
 ) {
     match released.0 {
-        Delivery::ProjectMade { project: _ } => {
+        Delivery::ProjectMade { project } => {
+            if let Some(row) = domain.core.tasks.funding(tasks::Funder::Period { project, period: 1 })
+                && let Some(times) = row.period
+            {
+                crate::route::calendar::route(
+                    domain,
+                    env,
+                    calendar::Event::Began { project, period: 1, began: times.began },
+                    None,
+                );
+            }
             // jig's domain/engine.md, "a project made": the root hears it after commit.
             // LandingPolicy.projects, forge Judges.projects and GatePolicy.projects
             // hold optional seeded overrides; deployment rules already cover this project.

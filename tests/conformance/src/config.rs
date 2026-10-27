@@ -121,6 +121,7 @@ pub fn root(
         + limits.people.pending * 2
         + jig_domain_fleet::max_out(&limits.fleet) * 4
         + temper_engine_domain_forge::max_out(&limits.forge)
+        + 2 * limits.authority.projects
         + limits.tasks.tasks
         + 4
         + limits.call_records;

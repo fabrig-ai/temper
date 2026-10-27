@@ -28,7 +28,10 @@ fn a_first_start_gives_each_project_one_period() {
         assert_eq!(row.numbers.budget, budget, "project {project}");
         assert_eq!(
             row.period,
-            Some(tasks::PeriodTimes { began: skein_lib::Wall::from_nanos(1), next: None }),
+            Some(tasks::PeriodTimes {
+                began: skein_lib::Wall::from_nanos(1),
+                next: Some(skein_lib::Wall::from_nanos(1 + crate::stock::PERIOD_SPAN.as_nanos())),
+            }),
             "project {project}"
         );
     }

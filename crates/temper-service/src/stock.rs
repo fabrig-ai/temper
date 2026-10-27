@@ -39,6 +39,9 @@ impl Given {
 
 const FORGE: u16 = 1;
 
+/// Each project's funding span, from its first period (protocol/configuration.md, 13.4).
+pub const PERIOD_SPAN: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 /// Delegate (`change` and `delegate`), Message (delegates' questions and answers)
 /// and Read (the forge's reads), jig's families (jig's `domain/authority.md`);
 /// protocol/configuration.md, 13.4.

@@ -2700,9 +2700,17 @@ dependencies = [
  "skein-forge-client",
  "skein-lib",
  "skein-world",
+ "temper-engine-domain-calendar",
  "temper-engine-domain-forge",
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
+]
+
+[[package]]
+name = "temper-engine-domain-calendar"
+version = "0.0.0"
+dependencies = [
+ "skein-lib",
 ]
 
 [[package]]
