@@ -59,10 +59,15 @@ fn scripts() -> Box<[api::Script]> {
 fn words_during_a_turn_are_answered_once() {
     let ran = temper_real_loop_world::run_forge(chat_fixture(), |_| scripts(), queued_steps);
     calls_succeed(&ran);
-    let conversation =
-        [ran.calls()[OLDER_CHAT_CALL].stdout.as_slice(), ran.calls()[FINAL_CHAT_CALL].stdout.as_slice()].concat();
-    assert_eq!(calls::occurrences(&conversation, FIRST), 1, "first reply committed once");
-    assert_eq!(calls::occurrences(&conversation, SECOND), 1, "queued words answered once");
+    // This cursor belongs to task activity's smaller page. Since t7, chat
+    // fills its conversation window across activity pages, so these two
+    // reads overlap; only chat show's own continuation separates its pages.
+    let older = ran.calls()[OLDER_CHAT_CALL].stdout.as_slice();
+    assert_eq!(calls::occurrences(older, FIRST), 1, "first reply committed once in the older read");
+    assert_eq!(calls::occurrences(older, SECOND), 0, "activity cursor precedes the queued reply");
+    let conversation = ran.calls()[FINAL_CHAT_CALL].stdout.as_slice();
+    assert_eq!(calls::occurrences(conversation, FIRST), 1, "first reply committed once");
+    assert_eq!(calls::occurrences(conversation, SECOND), 1, "queued words answered once");
     let queries = queries(&ran);
     assert_eq!(queries.len(), EXPECTED_REQUESTS, "two messages need two calls, with no nudge or retry");
     let deliveries: usize = queries
