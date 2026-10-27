@@ -51,6 +51,37 @@ fn decode_landings(landings: List<w::TierLanding>) -> Box<[p::Landing]> {
     }
     values.into_boxed()
 }
+#[expect(clippy::manual_map, reason = "step translations use explicit matches")]
+fn encode_pending_landing(landing: &d::TierLanding) -> w::TierPending {
+    let key = match landing.key {
+        Some(commit) => Some(w::Commit::new(&w::CEILINGS, w::CommitParts { commit }).expect(FITS)),
+        None => None,
+    };
+    w::TierPending::new(&w::CEILINGS, w::TierPendingParts { commit: landing.commit, key }).expect(FITS)
+}
+#[expect(clippy::manual_map, reason = "step translations use explicit matches")]
+fn decode_pending_landing(landing: w::TierPending) -> d::TierLanding {
+    let w::TierPendingParts { commit, key } = landing.into_parts();
+    let key = match key {
+        Some(key) => Some(key.into_parts().commit),
+        None => None,
+    };
+    d::TierLanding { commit, key }
+}
+fn encode_pending(landings: &[d::TierLanding]) -> List<w::TierPending> {
+    let mut values = List::with_capacity(u32::try_from(landings.len()).expect(FITS));
+    for landing in landings {
+        values.push(encode_pending_landing(landing)).expect(FITS);
+    }
+    values
+}
+fn decode_pending(landings: List<w::TierPending>) -> Box<[d::TierLanding]> {
+    let mut values = List::with_capacity(landings.len());
+    for landing in landings.into_boxed() {
+        values.push(decode_pending_landing(landing)).expect(FITS);
+    }
+    values.into_boxed()
+}
 fn encode_finding(finding: &p::Finding) -> w::TierFinding {
     let mut blamed = List::with_capacity(u32::try_from(finding.blamed.len()).expect(FITS));
     for blame in &finding.blamed {
@@ -245,7 +276,11 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
             repository: names::encode_repository(row.repository),
             tier: row.tier.clone(),
             record,
-            pending: encode_landings(&row.pending),
+            pending: encode_pending(&row.pending),
+            baseline: match &row.baseline {
+                Some(baseline) => Some(encode_pending_landing(baseline)),
+                None => None,
+            },
             task: row.task,
             branch,
             flight,
@@ -260,7 +295,8 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     reason = "one durable row translation validates the related operation states without callbacks"
 )]
 pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
-    let w::TierRowParts { repository, tier, record, pending, task, branch, flight, result } = row.into_parts();
+    let w::TierRowParts { repository, tier, record, pending, baseline, task, branch, flight, result } =
+        row.into_parts();
     if tier.is_empty() {
         return Err(Undecodable);
     }
@@ -347,7 +383,10 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         }
         None => None,
     };
-    if (flight.is_some() && (run.is_none() || task.is_none())) || (result.is_some() && run.is_none()) {
+    if (baseline.is_some() && (judged.is_some() || run.is_some()))
+        || (flight.is_some() && (run.is_none() || task.is_none()))
+        || (result.is_some() && run.is_none())
+    {
         return Err(Undecodable);
     }
     if let Some(result) = &result {
@@ -370,7 +409,11 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
             flakes: values.into_boxed(),
             run,
         },
-        pending: decode_landings(pending),
+        pending: decode_pending(pending),
+        baseline: match baseline {
+            Some(baseline) => Some(decode_pending_landing(baseline)),
+            None => None,
+        },
         task,
         branch,
         flight,

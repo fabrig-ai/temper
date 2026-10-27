@@ -25,7 +25,7 @@ fn a_merge_moving_the_main_starts_the_next_run_over_its_landing() {
     assert_eq!(tier_runs(&out).as_slice(), &[(2, MERGE); TWO_TIERS]);
     assert_eq!(
         fixtures::browser(&d).record.run.as_ref().expect("next run").landings.as_ref(),
-        &[policy::Landing { commit: MERGE, key: MERGE }]
+        &[policy::Landing { commit: MERGE, key: fixtures::BROWSER_MERGE_KEY }]
     );
 }
 #[test]
@@ -36,7 +36,10 @@ fn a_move_during_a_run_waits_for_the_next_range() {
     outputs(&mut d, Event::TierTask { repository: REPO, tier: fixtures::FUZZY.into(), number: 1, task: OPEN });
     let out = fixtures::tier_move(&mut d, HEAD, None);
     assert!(tier_runs(&out).is_empty());
-    assert_eq!(fixtures::browser(&d).pending.as_ref(), &[policy::Landing { commit: HEAD, key: HEAD }]);
+    assert_eq!(
+        fixtures::browser(&d).pending.as_ref(),
+        &[TierLanding { commit: HEAD, key: Some(fixtures::BROWSER_HEAD_KEY) }]
+    );
 }
 #[test]
 fn a_push_temper_did_not_make_is_a_landing_of_its_own() {
@@ -45,7 +48,7 @@ fn a_push_temper_did_not_make_is_a_landing_of_its_own() {
     fixtures::tier_move(&mut d, HEAD, Some(&[MERGE, HEAD]));
     assert_eq!(
         fixtures::browser(&d).record.run.as_ref().expect("run").landings.as_ref(),
-        &[policy::Landing { commit: HEAD, key: HEAD }]
+        &[policy::Landing { commit: HEAD, key: fixtures::BROWSER_HEAD_KEY }]
     );
 }
 #[test]
@@ -57,7 +60,10 @@ fn a_merge_and_a_push_in_one_move_are_two_landings_oldest_first() {
     fixtures::tier_move(&mut d, HEAD, Some(&[MERGE, HEAD]));
     assert_eq!(
         fixtures::browser(&d).record.run.as_ref().expect("run").landings.as_ref(),
-        &[policy::Landing { commit: MERGE, key: MERGE }, policy::Landing { commit: HEAD, key: HEAD }]
+        &[
+            policy::Landing { commit: MERGE, key: fixtures::BROWSER_MERGE_KEY },
+            policy::Landing { commit: HEAD, key: fixtures::BROWSER_HEAD_KEY }
+        ]
     );
 }
 #[test]
@@ -67,7 +73,7 @@ fn a_move_seen_without_its_commits_is_one_landing_at_the_tip() {
     fixtures::tier_move(&mut d, HEAD, None);
     assert_eq!(
         fixtures::browser(&d).record.run.as_ref().expect("run").landings.as_ref(),
-        &[policy::Landing { commit: HEAD, key: HEAD }]
+        &[policy::Landing { commit: HEAD, key: fixtures::BROWSER_HEAD_KEY }]
     );
 }
 #[test]
@@ -122,9 +128,9 @@ fn a_full_range_merges_its_two_oldest_outside_landings() {
     assert_eq!(
         fixtures::browser(&d).pending.as_ref(),
         &[
-            policy::Landing { commit: [11; 32], key: [11; 32] },
-            policy::Landing { commit: MERGE, key: MERGE },
-            policy::Landing { commit: HEAD, key: HEAD }
+            TierLanding { commit: [11; 32], key: Some([11; 32]) },
+            TierLanding { commit: MERGE, key: Some(MERGE) },
+            TierLanding { commit: HEAD, key: None }
         ]
     );
 }
@@ -136,9 +142,9 @@ fn a_range_one_short_of_full_merges_nothing() {
     assert_eq!(
         fixtures::browser(&d).pending.as_ref(),
         &[
-            policy::Landing { commit: [10; 32], key: [10; 32] },
-            policy::Landing { commit: [11; 32], key: [11; 32] },
-            policy::Landing { commit: HEAD, key: HEAD }
+            TierLanding { commit: [10; 32], key: Some([10; 32]) },
+            TierLanding { commit: [11; 32], key: Some([11; 32]) },
+            TierLanding { commit: HEAD, key: None }
         ]
     );
 }
@@ -338,7 +344,10 @@ fn a_made_branch_dispatches_the_tiers_workflow_with_its_inputs() {
             branch: b"temper/tier/browser.1".as_slice().into(),
             inputs: Box::new([
                 api::Input { name: b"temper_commit".as_slice().into(), value: HEX_TIP.into() },
-                api::Input { name: b"temper_key".as_slice().into(), value: HEX_TIP.into() }
+                api::Input {
+                    name: b"temper_key".as_slice().into(),
+                    value: b"e1a906fb92a9b1f50e98917117b49e3272d8365bb3eaaf4b2c7d3aff7ba58d95".as_slice().into()
+                }
             ]),
         }
     );
@@ -352,8 +361,10 @@ fn a_passed_run_judges_green_clears_its_range_and_wakes_its_changes() {
     let row = d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap();
     let run = row.record.run.as_mut().unwrap();
     run.tip = HEAD;
-    run.landings =
-        Box::new([policy::Landing { commit: MERGE, key: MERGE }, policy::Landing { commit: HEAD, key: HEAD }]);
+    run.landings = Box::new([
+        policy::Landing { commit: MERGE, key: fixtures::BROWSER_MERGE_KEY },
+        policy::Landing { commit: HEAD, key: fixtures::BROWSER_HEAD_KEY },
+    ]);
     dispatch(&mut d, DISPATCH);
     completed(&mut d, api::Conclusion::Success, None);
     judged(&mut d);
@@ -412,8 +423,12 @@ fn a_whole_run_makes_a_receipt_and_a_rerun_none() {
     let mut d = dispatched();
     completed(&mut d, api::Conclusion::Success, None);
     judged(&mut d);
-    let key =
-        ReceiptKey { project: fixtures::PROJECT, repository: REPO, check: Check::Tier(BROWSER.into()), key: BASE };
+    let key = ReceiptKey {
+        project: fixtures::PROJECT,
+        repository: REPO,
+        check: Check::Tier(BROWSER.into()),
+        key: fixtures::BROWSER_BASE_KEY,
+    };
     assert!(d.receipt(&key).unwrap().passed);
     assert_eq!(d.receipt(&key).unwrap().run.id, RUN_ID);
 }
@@ -421,8 +436,12 @@ fn a_whole_run_makes_a_receipt_and_a_rerun_none() {
 fn a_passed_receipt_at_the_tip_judges_with_no_branch_or_dispatch() {
     let mut d = fixtures::tiered();
     d.project_tiers(fixtures::PROJECT, fixtures::tier_settings(), fixtures::repository_tiers(&[BROWSER]));
-    let key =
-        ReceiptKey { project: fixtures::PROJECT, repository: REPO, check: Check::Tier(BROWSER.into()), key: BASE };
+    let key = ReceiptKey {
+        project: fixtures::PROJECT,
+        repository: REPO,
+        check: Check::Tier(BROWSER.into()),
+        key: fixtures::BROWSER_BASE_KEY,
+    };
     d.landing
         .receipts
         .insert(
@@ -496,4 +515,176 @@ fn a_third_refused_dispatch_holds_the_task() {
     }
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 3);
     assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
+}
+
+fn key_domain(ignored: &[&[u8]]) -> Domain {
+    let mut d = fixtures::tiered();
+    let mut configured = fixtures::repository_tiers(&[BROWSER]);
+    let mut paths = skein_lib::List::with_capacity(LIMITS.ignored_paths);
+    for path in ignored {
+        paths.push(Box::from(*path)).expect("fixture ignored paths");
+    }
+    configured[0].tiers[0].ignored = paths.into_boxed();
+    d.project_tiers(fixtures::PROJECT, fixtures::tier_settings(), configured);
+    d
+}
+fn key_start(ignored: &[&[u8]]) -> (Domain, Queue<Request>) {
+    let mut d = key_domain(ignored);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::start_due(&mut d, &env(), REPO, &mut out);
+    (d, out)
+}
+fn tree_call(d: &mut Domain, out: &Queue<Request>) -> (Token, api::Read) {
+    for request in out {
+        if let Request::Call { call, op: api::Op::Read(read), .. } = request {
+            return (*call, read.clone());
+        }
+    }
+    let (call, api::Op::Read(read)) = fixtures::next_call(d) else { panic!("tree read") };
+    (call, read)
+}
+fn tree_reply(d: &mut Domain, out: &Queue<Request>, entries: Box<[api::Entry]>, more: bool) -> Queue<Request> {
+    let (call, _) = tree_call(d, out);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    for request in fixtures::answer(d, call, Ok(api::Answer::Tree { entries, more })) {
+        out.push(request);
+    }
+    out
+}
+fn tree_entry(name: &[u8], object: [u8; 32]) -> api::Entry {
+    api::Entry { name: name.into(), mode: 0o040_000, kind: api::EntryKind::Tree, object }
+}
+fn root(docs: [u8; 32], source: [u8; 32]) -> Box<[api::Entry]> {
+    Box::new([tree_entry(b"docs", docs), tree_entry(b"src", source)])
+}
+fn baseline_key(ignored: &[&[u8]], docs: [u8; 32], source: [u8; 32]) -> [u8; 32] {
+    let (mut d, out) = key_start(ignored);
+    tree_reply(&mut d, &out, root(docs, source), false);
+    fixtures::browser(&d).record.run.as_ref().expect("keyed baseline").key
+}
+#[test]
+fn a_landing_that_changes_only_an_ignored_path_keeps_the_tiers_key() {
+    assert_eq!(baseline_key(&[b"docs"], BASE, BASE), baseline_key(&[b"docs"], HEAD, BASE));
+}
+#[test]
+fn a_landing_that_changes_a_read_path_changes_the_tiers_key() {
+    assert_ne!(baseline_key(&[b"docs"], BASE, BASE), baseline_key(&[b"docs"], BASE, HEAD));
+}
+#[test]
+fn two_tiers_with_different_ignored_paths_key_one_landing_differently() {
+    let mut d = fixtures::tiered();
+    let mut configured = fixtures::repository_tiers(&[BROWSER, fixtures::FUZZY]);
+    configured[0].tiers[0].ignored = Box::new([Box::from(b"docs".as_slice())]);
+    configured[0].tiers[1].ignored = Box::new([Box::from(b"src".as_slice())]);
+    d.project_tiers(fixtures::PROJECT, fixtures::tier_settings(), configured);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::start_due(&mut d, &env(), REPO, &mut out);
+    // The client may share the same root read between both owners.
+    let next = tree_reply(&mut d, &out, root(BASE, HEAD), false);
+    if d.tier_row(REPO, fixtures::FUZZY).unwrap().record.run.is_none() {
+        tree_reply(&mut d, &next, root(BASE, HEAD), false);
+    }
+    let browser = fixtures::browser(&d).record.run.as_ref().expect("browser key").key;
+    let fuzzy = d.tier_row(REPO, fixtures::FUZZY).unwrap().record.run.as_ref().expect("fuzzy key").key;
+    assert_ne!(browser, fuzzy);
+}
+#[test]
+fn a_run_waits_for_its_ranges_keys_then_dispatches_with_its_key() {
+    let (mut d, out) = key_start(&[]);
+    tree_reply(&mut d, &out, Box::new([tree_entry(b"src", BASE)]), false);
+    let row = d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap();
+    row.record.judged = Some(policy::Judged { tip: BASE, key: fixtures::BROWSER_BASE_KEY });
+    row.record.run = None;
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::landed(&mut d, REPO, MERGE, CHANGE, &mut out);
+    fixtures::tier_tip(&mut d, HEAD);
+    crate::tiers::moved(&mut d, &env(), REPO, BASE, HEAD, Some(&[MERGE, HEAD]), &mut out);
+    for landing in &fixtures::browser(&d).pending {
+        assert_eq!(landing.key, None);
+    }
+    assert!(tier_runs(&out).is_empty());
+    let first = tree_reply(&mut d, &out, Box::new([tree_entry(b"src", MERGE)]), false);
+    assert!(tier_runs(&first).is_empty());
+    let second = tree_reply(&mut d, &first, Box::new([tree_entry(b"src", HEAD)]), false);
+    assert_eq!(tier_runs(&second).as_slice(), &[(1, HEAD)]);
+    outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: TIER_TASK });
+    d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap().branch = TierBranch::Made;
+    let dispatched = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: DISPATCH });
+    let api::Write::Dispatch { inputs, .. } = effect_write(&dispatched) else { panic!("keyed dispatch") };
+    assert_eq!(inputs[1].name.as_ref(), b"temper_key");
+    assert_eq!(inputs[1].value.as_ref(), fixtures::BROWSER_HEAD_HEX);
+}
+#[test]
+fn a_tree_past_the_keys_bounds_falls_back_to_the_commit() {
+    const KEY_ENTRIES: u32 = 1; // one source tree fits; adding docs crosses the bound.
+    for (entries, expected) in
+        [(Box::from([tree_entry(b"src", BASE)]), fixtures::BROWSER_BASE_KEY), (root(BASE, BASE), BASE)]
+    {
+        let (mut d, out) = key_start(&[]);
+        let (call, _) = tree_call(&mut d, &out);
+        let mut bounded = env();
+        bounded.limits.key_entries = KEY_ENTRIES;
+        let mut out = Queue::with_capacity(max_out(&LIMITS));
+        step(
+            &mut d,
+            &bounded,
+            Event::Client(skein_forge_client::Event::Answered {
+                free: 0,
+                rate: None,
+                call,
+                cost: 1,
+                result: Ok(api::Answer::Tree { entries, more: false }),
+            }),
+            &mut out,
+        );
+        assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().key, expected);
+    }
+}
+#[test]
+fn a_restart_mid_walk_reads_its_trees_again_and_finishes() {
+    let (mut d, out) = key_start(&[b"docs/guide.md"]);
+    let next = tree_reply(&mut d, &out, root(MERGE, HEAD), false);
+    let (_, read) = tree_call(&mut d, &next);
+    assert_eq!(read, api::Read::Tree { object: MERGE, page: 1 });
+    let row = fixtures::browser(&d).clone();
+    let mut restored = key_domain(&[b"docs/guide.md"]);
+    outputs(&mut restored, Event::Restore { record: Stored::Tier(row) });
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::restart(&mut restored, &env(), &mut out);
+    let (call, read) = tree_call(&mut restored, &out);
+    assert_eq!(read, api::Read::Tree { object: BASE, page: 1 });
+    let replies =
+        fixtures::answer(&mut restored, call, Ok(api::Answer::Tree { entries: root(MERGE, HEAD), more: false }));
+    let mut next = Queue::with_capacity(max_out(&LIMITS));
+    for request in replies {
+        next.push(request);
+    }
+    tree_reply(&mut restored, &next, Box::new([tree_entry(b"guide.md", BASE)]), false);
+    assert!(fixtures::browser(&restored).record.run.is_some());
+    assert!(fixtures::browser(&restored).pending.is_empty());
+}
+#[test]
+fn the_definition_bytes_carry_workflow_ignored_artifact_and_format() {
+    let mut tier = fixtures::repository_tiers(&[BROWSER])[0].tiers[0].clone();
+    tier.ignored = Box::new([Box::from(b"docs".as_slice()), Box::from(b"src/a".as_slice())]);
+    for (format, expected) in [
+        (policy::Format::Junit, b"\0\x08tier.yml\0\x02\0\x04docs\0\x05src/a\0\x06report\0".as_slice()),
+        (policy::Format::Lines, b"\0\x08tier.yml\0\x02\0\x04docs\0\x05src/a\0\x06report\x01".as_slice()),
+    ] {
+        tier.format = format;
+        assert_eq!(crate::tiers::definition(&tier).as_ref(), expected);
+    }
+}
+
+#[test]
+fn a_move_while_the_baseline_keys_waits_for_the_next_range() {
+    let (mut d, out) = key_start(&[]);
+    fixtures::tier_tip(&mut d, MERGE);
+    let mut moved = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::moved(&mut d, &env(), REPO, BASE, MERGE, None, &mut moved);
+    tree_reply(&mut d, &out, Box::new([tree_entry(b"src", BASE)]), false);
+    let row = fixtures::browser(&d);
+    assert_eq!(row.record.run.as_ref().expect("original baseline").tip, BASE);
+    assert!(row.record.run.as_ref().unwrap().landings.is_empty());
+    assert_eq!(row.pending.as_ref(), &[TierLanding { commit: MERGE, key: None }]);
 }
