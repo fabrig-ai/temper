@@ -212,6 +212,32 @@ fn a_document_charter_is_refused_naming_temper_ctl_settings() {
 }
 
 #[test]
+fn an_inline_seed_policy_is_refused_naming_its_path() {
+    let scratch = support::Scratch::startup("inline-seed-policy");
+    support::configuration(scratch.path(), &support::Forge::Unreached);
+    let path = scratch.path().join("temper.json");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).expect("configuration bytes")).expect("configuration JSON");
+    let original: serde_json::Value =
+        serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("jig fixture");
+    document["engine"]["projects"][0]["policy"] = original["engine"]["projects"][0]["policy"].clone();
+    support::write_private(&path, &serde_json::to_vec(&document).expect("configuration JSON"));
+    let ended = std::process::Command::new(skein_scratch::paths::binary("temper"))
+        .arg("serve")
+        .args(support::configuration::flags(scratch.path()))
+        .env_clear()
+        .output()
+        .expect("serve refusal");
+    assert_eq!(ended.status.code(), Some(1));
+    assert!(ended.stdout.is_empty());
+    assert_eq!(
+        ended.stderr,
+        b"temper serve: engine.projects[0].policy: name a policy, policy: 1; change it with temper ctl settings apply\n"
+    );
+    scratch.remove();
+}
+
+#[test]
 fn an_address_with_no_token_in_the_directory_is_not_signed_in() {
     for (row, token, expected) in [
         ("absent", None, "temper open: not signed in: give the link temper serve printed\n"),

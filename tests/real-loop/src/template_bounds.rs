@@ -133,9 +133,9 @@ fn fixture() -> crate::forge::Fixture {
             value["application"]["webhooks"] = Value::Null;
             crate::fixtures::own_policy(value);
             value["application"]["forges"][0]["webhook_secret"] = Value::Null;
-            value["engine"]["projects"][0]["policy"]["ceiling"]["grants"] = json!([]);
-            value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["grants"] = json!([]);
-            value["engine"]["projects"][0]["policy"]["projections"] = json!([]);
+            value["world_settings"]["policies"][0]["policy"]["ceiling"]["grants"] = json!([]);
+            value["world_settings"]["policies"][0]["policy"]["roles"][0]["authority"]["grants"] = json!([]);
+            value["world_settings"]["policies"][0]["policy"]["projections"] = json!([]);
             value["engine"]["limits"]["overrides"]["documents.rows"] = 2.into();
             // At the read, the root document carries all three live delegates whole.
             // Its line allowance is independent of the two-row tree/page window.
@@ -156,8 +156,8 @@ fn fixture() -> crate::forge::Fixture {
             // Five delegates and the root's goal operation fit the same admission.
             value["engine"]["limits"]["overrides"]["people.operations"] = 6.into();
             let kinds = json!([{"kind":"charter","number":1},{"kind":"role","number":0}]);
-            value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
-            value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds;
+            value["world_settings"]["policies"][0]["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
+            value["world_settings"]["policies"][0]["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds;
             fixtures::turn_bounds::apply(value, fixtures::turn_bounds::turn_body(agent));
             // ServiceHost::configured admits the final document with its checked agent
             // through envelope_in after both fixture documents have been written.

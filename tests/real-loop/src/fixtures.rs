@@ -60,6 +60,7 @@ pub fn documents(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> (serde
         "limits":{"profile":"small","overrides":{"checkout.name_bytes":256,"checkout.repositories":2,
             "checkout.message_bytes":4096,"forge.name_bytes":64,"forge.resources_per_task":2,"git_component.stdout_bytes":2048}},
         "workers":[{"root":"worker-root","git":"/usr/bin/git"}]});
+    crate::settings::stage_policies(&mut value);
     stock_document(&mut value);
     turn_bounds::apply(&mut value, turn_bounds::turn_body(&agent));
     (agent, value)
@@ -137,9 +138,10 @@ fn program_documents(directory: &Path, agent: &mut serde_json::Value, config: &m
 pub(crate) fn bind(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> std::io::Result<()> {
     let mut agent: serde_json::Value = serde_json::from_slice(&std::fs::read(directory.join("agent.json"))?)?;
     let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(directory.join("temper.json"))?)?;
+    config["world_settings"] = serde_json::from_slice(&std::fs::read(directory.join("world-settings.json"))?)?;
     bind_documents(&mut agent, &mut config, llm, forge);
     private(&directory.join("agent.json"), &serde_json::to_vec(&agent)?)?;
-    private(&directory.join("temper.json"), &serde_json::to_vec(&config)?)
+    finish_configuration(directory, &mut config)
 }
 
 fn bind_documents(agent: &mut serde_json::Value, config: &mut serde_json::Value, llm: SocketAddr, forge: SocketAddr) {
@@ -149,7 +151,7 @@ fn bind_documents(agent: &mut serde_json::Value, config: &mut serde_json::Value,
     let http = format!("http://{address}");
     // These records carry forge destinations and authority patterns. Listeners
     // and the independent LLM destination never participate in this rebinding.
-    for path in ["/application/forges", "/application/landing", "/engine/projects"] {
+    for path in ["/application/forges", "/application/landing", "/world_settings/policies"] {
         if let Some(value) = config.pointer_mut(path) {
             bind_forge(value, [(&previous, &address), (&previous_http, &http)]);
         }
@@ -338,7 +340,7 @@ fn stock_document(value: &mut serde_json::Value) {
     for member in ["charters", "templates", "policies", "rules"] {
         value["engine"].as_object_mut().expect("engine").remove(member);
     }
-    for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+    for project in value["world_settings"]["policies"].as_array_mut().expect("world policies") {
         if value_own_policy {
             continue;
         }
@@ -461,7 +463,9 @@ pub fn given(directory: &Path) -> temper_service::stock::Given {
 /// Common real-loop defaults, with a wider fixture's own seeded policy when requested.
 #[must_use]
 pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -> temper_service::stock::Given {
-    let engine = crate::settings::configuration(deployment);
+    let mut values = deployment.clone();
+    values["world_settings"] = flags.clone();
+    let engine = crate::settings::configuration(&values);
     let mut defaults = temper_service::stock::defaults(&engine.llm);
     let stock_period_spend = defaults.rules.period_spend;
     defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(1);
@@ -475,21 +479,25 @@ pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -
     if flags["listed"] == true {
         defaults.templates[0].flags.listed = true;
     }
-    if flags["own_policy"] == true {
-        let seed = engine.projects.first().expect("wider project's seed");
-        defaults.rules.ceiling = seed.policy.ceiling.clone();
-        defaults.rules.period_spend = seed.policy.period_spend;
-        defaults
-            .policies
-            .insert(
-                1,
-                jig_domain_core::ConfiguredPolicy {
-                    policy: seed.policy.clone(),
-                    permissions: seed.roles.clone(),
-                    templates: seed.templates.clone(),
-                },
-            )
-            .expect("existing policy slot");
+    if let Some(seed) = engine.projects.first() {
+        if flags["own_policy"] == true {
+            defaults.rules.ceiling = seed.policy.ceiling.clone();
+            defaults.rules.period_spend = seed.policy.period_spend;
+        }
+        let mut policies = skein_lib::Map::with_capacity(u32::try_from(engine.projects.len()).expect("world policies"));
+        for (index, seed) in engine.projects.iter().enumerate() {
+            policies
+                .insert(
+                    u32::try_from(index + 1).expect("policy number"),
+                    jig_domain_core::ConfiguredPolicy {
+                        policy: seed.policy.clone(),
+                        permissions: seed.roles.clone(),
+                        templates: seed.templates.clone(),
+                    },
+                )
+                .expect("one policy per seed");
+        }
+        defaults.policies = policies;
     }
     if let Some(spend) = flags["minimum_run_spend"].as_u64() {
         defaults.rules.minimum_run_spend = spend;

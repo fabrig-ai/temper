@@ -10,7 +10,7 @@
 use super::fixtures;
 use crate::startup::{Problems, checks, lines};
 
-const ENGINE_OVERRIDES: &str = r#""tasks.result_bytes":32,"tasks.run_inbox":2,"hub.turns":1,"people.amendment_bytes":64,"core.policy_bytes":512,"tasks.spec_bytes":128,"tasks.message_bytes":512,"tasks.hold_bytes":64,"tasks.authority_bytes":64,"people.words":512,"core.call_answer_bytes":2048,"notes.recalled":1"#;
+const ENGINE_OVERRIDES: &str = r#""tasks.result_bytes":32,"tasks.run_inbox":2,"hub.turns":1,"people.amendment_bytes":64,"core.policy_bytes":4096,"tasks.spec_bytes":128,"tasks.message_bytes":512,"tasks.hold_bytes":64,"tasks.authority_bytes":64,"people.words":512,"core.call_answer_bytes":2048,"notes.recalled":1"#;
 const WORKER_OVERRIDES: &str = r#""hub.slots":1,"hub.run_calls":1,"tasks.run_inbox":2,"hub.turns":1,"tasks.message_bytes":512,"people.words":512,"core.call_answer_bytes":2048"#;
 
 fn started(document: &[u8]) -> Box<[u8]> {
@@ -166,11 +166,15 @@ fn judges_tables_smaller_than_the_authoritys_refuse_the_start() {
 }
 #[test]
 fn an_owners_project_without_an_escalation_role_refuses_the_start() {
-    let document = fixtures::with(&fixtures::document(), b"engine.projects[0].policy.escalation_role", b"null");
-    assert_eq!(
-        &*started(&document),
-        b"engine.projects[0].policy.escalation_role: an owner's project must name an escalation role from 0 to 3\n"
-    );
+    let mut engine = fixtures::guard_engine();
+    engine.jig.projects[0].policy.escalation_role = None;
+    let seeds = fixtures::seeds();
+    let core = jig_protocol_config::core(&engine.jig, seeds.deployment, seeds.seed);
+    let limits = crate::limits::engine(&engine.jig.limits, &engine.limits).unwrap();
+    let mut found = Problems::empty();
+    checks::root(core, &engine, &seeds, &[], &limits, &mut found);
+    assert!(String::from_utf8_lossy(&lines(&found)).lines().any(|line| line
+        == "engine.projects[0].policy.escalation_role: an owner's project must name an escalation role from 0 to 3"));
 }
 #[test]
 fn a_charters_run_past_its_bytes_refuses_the_start() {
@@ -255,42 +259,33 @@ fn a_joined_policy_past_its_bytes_returns_problems_before_construction() {
         b"application.landing.projects[0].rules[0].approvals",
         br#"[{"role":0,"people":1,"freshness":"clean"}]"#,
     );
-    assert_eq!(
-        started(&document).as_ref(),
-        b"engine.projects[0].policy.bytes: 761 bytes, past core.policy_bytes of 512\n"
-    );
-}
-
-#[test]
-fn live_github_seed_policy_admission_checks_both_projection_shapes() {
-    // Reuse the source seed policy; only files' names become this pure fixture's keys.
-    let template = include_str!("../../../temper/tests/support/github/engine.json")
-        .replace("{{", "{")
-        .replace("}}", "}")
-        .replace("{proc.forge.ready.address}", "127.0.0.1:31002")
-        .replace("{proc.llm.ready.address}", "127.0.0.1:31004")
-        .replace("{story.clients}", "127.0.0.1:31005")
-        .replace("secrets/w1.digest", "secrets/worker-a.digest");
-    for (owner, policy_bytes) in [("freeekanayaka", 4299_u64), ("fabrig-ai", 4167_u64)] {
-        let document = fixtures::without_settings(template.replace("\"acme\"", &format!("\"{owner}\"")).as_bytes());
-        let document = fixtures::with(
-            &document,
-            b"application.forges[0]",
-            br#"{"number":1,"kind":"github","api":{"socket":"127.0.0.1:31001"},"transport":"plaintext","git":"http://127.0.0.1:31002","web":null,"app_read_only":true}"#,
-        );
-        let rule = format!(
-            r#"[{{"project":1,"rules":[{{"connector":1,"kind":4,"pattern":{{"segments":["forge","127.0.0.1:31002","{owner}","temper-probe","branch"],"last":"exact","value":"main"}},"enforce":true,"ci":true,"up_to_date":true,"gates":[{{"number":1,"blocking":true,"freshness":"exact"}}],"approvals":[]}}]}}]"#
-        );
-        let document = fixtures::with(&document, b"application.landing.projects", rule.as_bytes());
-        assert_eq!(
-            started(&document).as_ref(),
-            format!("engine.projects[0].policy.bytes: {policy_bytes} bytes, past core.policy_bytes of 4096\n")
-                .as_bytes()
-        );
-        // Only unused goal-projection grants change; task authority, landing checks and limits stay.
-        let narrowed = fixtures::with(&document, b"engine.projects[0].policy.projections", b"[]");
-        assert_eq!(started(&narrowed).as_ref(), b"", "{owner}: narrowed seed policy admits");
-    }
+    // The old small inline form is jig's input only; this guard takes typed values.
+    let mut engine = fixtures::guard_engine();
+    engine.jig = fixtures::parse_engine(&fixtures::with(fixtures::ENGINE, b"projects", fixtures::INLINE_PROJECTS));
+    engine.jig.projects[0].number = 7;
+    engine.jig.owners[0].project = 7;
+    let parsed = jig_protocol_config::document(
+        &document,
+        &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 },
+    )
+    .unwrap();
+    let at = jig_protocol_config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"application").unwrap();
+    let mut found = Problems::empty();
+    let application = crate::startup::application::parse(
+        &parsed,
+        at,
+        &engine.jig,
+        &jig_protocol_config::Directories::working(),
+        &mut found,
+    )
+    .unwrap();
+    engine.landing = application.landing;
+    let seeds = fixtures::seeds();
+    let core = jig_protocol_config::core(&engine.jig, seeds.deployment, seeds.seed);
+    let mut limits = crate::limits::engine(&engine.jig.limits, &engine.limits).unwrap();
+    limits.policy_bytes = 512;
+    checks::root(core, &engine, &seeds, &application.landing_projects, &limits, &mut found);
+    assert_eq!(lines(&found).as_ref(), b"engine.projects[0].policy.bytes: 761 bytes, past core.policy_bytes of 512\n");
 }
 
 #[test]

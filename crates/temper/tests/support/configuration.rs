@@ -17,13 +17,9 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
         serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("engine JSON");
     value.as_object_mut().expect("whole object").remove("service");
     use_stock(&mut value);
-    // Seed policies are startup inputs; neither this fixture nor its ctl stories
-    // uses the channel world's depth eight beyond the stock's depth four.
-    for project in value["engine"]["projects"].as_array_mut().expect("seeded projects") {
-        project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
-        for role in project["policy"]["roles"].as_array_mut().expect("seeded roles") {
-            role["authority"]["delegation"]["depth"] = 4.into();
-        }
+    for project in value["engine"]["projects"].as_array_mut().expect("seed projects") {
+        project["policy"] = 1.into();
+        project.as_object_mut().expect("seed").remove("roles");
     }
     let worker: serde_json::Value =
         serde_json::from_slice(jig_channel_world::fixtures::WORKER_DOCUMENT).expect("worker JSON");

@@ -15,7 +15,7 @@ pub fn fixture() -> crate::forge::Fixture {
         setup: super::fixture().setup,
         configure: |value, agent, forge| {
             (super::fixture().configure)(value, agent, forge);
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 5.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = 5.into();
             }
