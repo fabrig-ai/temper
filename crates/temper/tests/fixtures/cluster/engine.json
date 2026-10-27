@@ -3,7 +3,7 @@
     "limits": {{
       "profile": "small",
       "overrides": {{
-        "authority.grants": 12,
+        "authority.grants": 16,
         "authority.projects": 2,
         "authority.requirements": 3,
         "authority.roles": 1,
@@ -34,7 +34,7 @@
         "link.silence_ms": 1000,
         "notes.entries_per_scope": 1,
         "notes.recalled": 1,
-        "notes.scopes": 15,
+        "notes.scopes": 19,
         "people.amendment_bytes": 2048,
         "people.holdings": 1,
         "people.inbox_tasks": 16,
@@ -46,7 +46,7 @@
         "people.waiters": 4,
         "people.words": 512,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 12,
+        "tasks.authority_grants": 16,
         "tasks.authority_segments": 9,
         "tasks.batch": 1,
         "tasks.charters": 4,
