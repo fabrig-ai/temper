@@ -72,18 +72,18 @@ fn brand_returns_to_chats_from_every_welcome_step_without_starting_the_playgroun
 }
 
 #[test]
-fn setup_model_sentence_uses_a_plan_key_and_program_when_each_is_offered() {
+fn setup_model_sentence_names_each_product_once_and_omits_keys() {
     for (fixture, expected) in [
-        (h::empty_plan_fixture as fn(u64) -> (Joint, Root), "Your model: your ChatGPT plan, or an OpenAI API key."),
-        (
-            h::program_fixture as fn(u64) -> (Joint, Root),
-            "Your model: your Scripted plan, or your Scripted subscription, or an Scripted API key.",
-        ),
+        (h::empty_plan_fixture as fn(u64) -> (Joint, Root), "Your model: ChatGPT"),
+        (h::program_fixture as fn(u64) -> (Joint, Root), "Your model: Scripted"),
     ] {
         let (mut front, mut root) = fixture(fixtures::SEED);
         go(&mut front, &mut root, welcome(Step::Welcome));
         let shown = text(Temper::tree(&draw(&root)));
         assert!(shown.contains(expected), "expected {expected:?}\n{shown}");
+        assert!(!shown.contains("API key"), "{shown}");
+        assert!(!shown.contains(&format!("{expected}.")), "{shown}");
+        assert!(!shown.contains(&format!("{expected} or ")), "{shown}");
     }
 }
 
@@ -91,8 +91,8 @@ fn setup_model_sentence_uses_a_plan_key_and_program_when_each_is_offered() {
 fn setup_model_sentence_excludes_the_playgrounds_provider() {
     let (front, root) = h::demo_fixture(fixtures::SEED, &temper_client_protocol_wire::v1::DemoState::NotStarted);
     let shown = text(Temper::tree(&draw(&root)));
-    assert!(shown.contains("Your model: your Other fake plan, or an Other fake API key."), "{shown}");
-    assert!(!shown.contains("your Scripted plan"), "{shown}");
+    assert!(shown.contains("Your model: Other fake"), "{shown}");
+    assert!(!shown.contains("Scripted"), "{shown}");
     assert!(front.demo_starts.is_empty());
 }
 

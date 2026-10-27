@@ -95,40 +95,41 @@ fn setup_description(b: &mut Builder, root: &Domain, w: &Words) {
     if let Some(me) = root.pages().me(root.client()) {
         let ways =
             accounts::ways(&me.providers, root.forge().demo_provider(), jig_client::contract::AccountHolder::Own);
-        if !ways.is_empty() {
-            b.open(Role::Paragraph);
-            w.text(b, Word::WelcomeYourModel, &[]);
-        }
         let mut written = false;
-        // Keys form one alternative, with one named key per provider.
         for way in &ways {
-            let word = match way {
-                Way::SignIn { .. } => Word::WelcomeModelPlan,
-                Way::Program { .. } => Word::WelcomeModelProgram,
+            match way {
+                Way::SignIn { .. } | Way::Program { .. } => {}
                 Way::Key { .. } => continue,
-            };
-            if written {
-                w.text(b, Word::WelcomeModelWayOr, &[]);
             }
             let (_, plan) = super::connect_model::names(me, *way);
-            w.text(b, word, &[Hole::Name(crate::choice::shown(plan, w))]);
+            let mut repeated = false;
+            for previous in &ways {
+                if previous == way {
+                    break;
+                }
+                match previous {
+                    Way::SignIn { .. } | Way::Program { .. } => {
+                        if super::connect_model::names(me, *previous).1 == plan {
+                            repeated = true;
+                            break;
+                        }
+                    }
+                    Way::Key { .. } => {}
+                }
+            }
+            if repeated {
+                continue;
+            }
+            if written {
+                w.text(b, Word::WelcomeModelWayOr, &[]);
+            } else {
+                b.open(Role::Paragraph);
+                w.text(b, Word::WelcomeYourModel, &[]);
+            }
+            w.text(b, Word::ChoiceProvider, &[Hole::Name(crate::choice::shown(plan, w))]);
             written = true;
         }
-        let mut key_written = false;
-        for way in &ways {
-            if let Way::Key { .. } = way {
-                if key_written {
-                    w.text(b, Word::WelcomeModelKeysOr, &[]);
-                } else if written {
-                    w.text(b, Word::WelcomeModelWayOr, &[]);
-                }
-                let (brand, _) = super::connect_model::names(me, *way);
-                w.text(b, Word::WelcomeModelKey, &[Hole::Name(crate::choice::shown(brand, w))]);
-                key_written = true;
-            }
-        }
-        if written || key_written {
-            w.text(b, Word::WelcomeModelEnd, &[]);
+        if written {
             b.close();
         }
     }

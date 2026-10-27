@@ -252,7 +252,7 @@ fn the_welcome_step_says_its_words_and_offers_both_cards() {
         "Nothing leaves this machine, and nothing costs. · Ready at once",
         "Try the playground",
         "Set up temper",
-        "Your forge: GitHub, or a Forgejo temper runs on this machine.",
+        "Your forge: GitHub or Forgejo",
         "About five minutes",
         "Set up temper",
         "Started in the playground? Connect your own forge and model whenever you like; the playground then steps aside.",
@@ -956,21 +956,30 @@ pub(super) fn owned_adopted_rows() -> skein_lib::List<w::ForgeRow> {
 }
 
 #[test]
-fn the_setup_card_names_only_the_configured_model_ways() {
+fn the_setup_card_names_each_configured_model_product_once() {
     use jig_client::contract as c;
     let openai = [b"openai".as_slice()];
     let both_keys = [b"openai".as_slice(), b"anthropic"];
-    for (signin, key_names, expected) in [
-        (true, [].as_slice(), "Your model: your ChatGPT plan."),
-        (false, openai.as_slice(), "Your model: an OpenAI API key."),
-        (true, openai.as_slice(), "Your model: your ChatGPT plan, or an OpenAI API key."),
-        (false, both_keys.as_slice(), "Your model: an OpenAI API key or an Anthropic API key."),
+    for (signin, programs, key_names, expected) in [
+        (true, [false, false], [].as_slice(), Some("Your model: ChatGPT")),
+        (false, [false, false], openai.as_slice(), None),
+        (true, [false, false], openai.as_slice(), Some("Your model: ChatGPT")),
+        (false, [false, false], both_keys.as_slice(), None),
+        (false, [false, false], [].as_slice(), None),
+        (true, [false, true], openai.as_slice(), Some("Your model: ChatGPT or Claude")),
+        (true, [true, true], both_keys.as_slice(), Some("Your model: ChatGPT or Claude")),
+        (false, [true, false], both_keys.as_slice(), Some("Your model: ChatGPT")),
+        (false, [false, true], [].as_slice(), Some("Your model: Claude")),
     ] {
         let (mut root, watch, _) = f::root_at(Address::Welcome { step: Step::Welcome }, &f::domain_limits());
         let mut me = root.pages().me(root.client()).unwrap().clone();
         me.providers = skein_lib::List::with_capacity(2);
         for (provider, name) in [b"openai".as_slice(), b"anthropic"].into_iter().enumerate() {
-            if (provider == 0 && signin) || key_names.contains(&name) {
+            if (provider == 0 && signin) || programs[provider] || key_names.contains(&name) {
+                let mut offered_programs = skein_lib::List::with_capacity(1);
+                if programs[provider] {
+                    offered_programs.push(c::Text::new(Box::from(b"claude_code".as_slice()), 32).unwrap()).unwrap();
+                }
                 me.providers
                     .push(c::ProviderOffer {
                         provider: u32::try_from(provider).unwrap() + 20,
@@ -979,7 +988,7 @@ fn the_setup_card_names_only_the_configured_model_ways() {
                         sign_in: provider == 0 && signin,
                         signed_in_plan: true,
                         key: key_names.contains(&name),
-                        programs: skein_lib::List::with_capacity(0),
+                        programs: offered_programs,
                         programs_cut: false,
                         none: false,
                         manage_usage: None,
@@ -1006,8 +1015,8 @@ fn the_setup_card_names_only_the_configured_model_ways() {
                 .position(|n| n.role == Role::Region && n.name.as_deref() == Some(b"Set up temper"))
                 .unwrap();
             let card = String::from_utf8(f::node_text(view.tree(), at).into_vec()).unwrap();
-            assert!(card.contains(expected), "{card}");
-            assert_eq!(card.matches("Your model:").count(), 1);
+            assert!(!card.contains("API key"), "{card}");
+            assert_eq!(card.matches("Your model:").count(), usize::from(expected.is_some()));
             let block = view
                 .tree()
                 .nodes()
@@ -1027,14 +1036,10 @@ fn the_setup_card_names_only_the_configured_model_ways() {
                     f::node_text(view.tree(), at)
                 })
                 .collect();
-            assert_eq!(lines.len(), 2);
-            assert!(lines[0].starts_with(b"Your forge:"));
-            assert_eq!(String::from_utf8_lossy(&lines[1]).trim_start(), expected);
-            if !signin {
-                assert!(!card.contains("ChatGPT"));
-            }
-            if key_names.is_empty() {
-                assert!(!card.contains("API key"));
+            assert_eq!(lines.len(), 1 + usize::from(expected.is_some()));
+            assert_eq!(lines[0].as_ref(), b"Your forge: GitHub or Forgejo");
+            if let Some(expected) = expected {
+                assert_eq!(String::from_utf8_lossy(&lines[1]).trim_start(), expected);
             }
         }
     }
