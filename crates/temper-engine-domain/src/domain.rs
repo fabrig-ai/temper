@@ -918,8 +918,11 @@ fn released_into(
     out: &mut Queue<Request>,
 ) {
     match released.0 {
-        Delivery::ProjectMade { project: _ } => {
+        Delivery::ProjectMade { project } => {
             // jig's domain/engine.md, "a project made": the root hears it after commit.
+            // As for seeded projects, its policy funds its first period.
+            let budget = domain.core.authority.policy(project).expect("committed project policy").period_spend;
+            domain.work.push(Work::Core(jig_domain_core::Event::Period { project, period: 1, budget, next: None }));
             // LandingPolicy.projects, forge Judges.projects and GatePolicy.projects
             // hold optional seeded overrides; deployment rules already cover this project.
             // Repositories/homes arise on adoption, panels on watching, and the demo
