@@ -84,7 +84,7 @@ impl State {
             None => change::Way::Queue,
         }
     }
-    fn gates(&self, project: u32, repository: api::Repository) -> &[policy::Gate] {
+    pub(crate) fn gates(&self, project: u32, repository: api::Repository) -> &[policy::Gate] {
         if let Some((_, repositories)) = self.projects.get(&project) {
             for row in repositories {
                 if row.repository == repository {
@@ -217,8 +217,37 @@ fn proof_key(proof: policy::Proof) -> Option<policy::Key> {
     }
 }
 fn save(d: &mut Domain, row: LandingRow, out: &mut Queue<Request>) {
-    d.landing.rows.insert(row.landing.task, row.clone()).expect("admitted landing");
+    let project = row.landing.project;
+    let task = row.landing.task;
+    let was_turn = match d.landing.rows.get(&task) {
+        Some(prior) => crate::views::matches_turn(&prior.landing.phase),
+        None => false,
+    };
+    let turn_changed = was_turn != crate::views::matches_turn(&row.landing.phase);
+    d.landing.rows.insert(task, row.clone()).expect("admitted landing");
     emit(out, Request::Save { record: Stored::Landing(row), release: None, read_afresh: None });
+    emit(
+        out,
+        Request::Marked {
+            tasks: Box::new([task, crate::landings_subject(project, false), crate::landings_subject(project, true)]),
+        },
+    );
+    // Every project's landing document names the turn's holder.
+    if turn_changed {
+        let mut tasks = List::with_capacity(crate::MARKED);
+        for (other, saved) in &d.landing.rows {
+            if *other != task && saved.landing.project == project {
+                tasks.push(*other).expect("mark room");
+                if tasks.room() == 0 {
+                    emit(out, Request::Marked { tasks: tasks.into_boxed() });
+                    tasks = List::with_capacity(crate::MARKED);
+                }
+            }
+        }
+        if !tasks.is_empty() {
+            emit(out, Request::Marked { tasks: tasks.into_boxed() });
+        }
+    }
 }
 pub(crate) fn register(d: &mut Domain, env: &Env<Limits>, row: LandingRow, out: &mut Queue<Request>) {
     let task = row.landing.task;
@@ -244,7 +273,7 @@ pub(crate) fn register(d: &mut Domain, env: &Env<Limits>, row: LandingRow, out: 
     for member in &row.landing.members {
         let change = d.changes.get_mut(&member.change).expect("validated member");
         change.change.landing = Some(task);
-        emit(out, Request::Save { record: Stored::Change(change.clone()), release: None, read_afresh: None });
+        super::domain::save_change(out, change.clone());
     }
     save(d, row, out);
 }
@@ -384,6 +413,7 @@ fn wait(task: u64, env: &Env<Limits>, out: &mut Queue<Request>) {
     );
 }
 #[expect(clippy::too_many_lines, reason = "one exhaustive bounded landing read chain")]
+#[expect(clippy::manual_map, reason = "the foundation uses explicit matches without closures")]
 #[expect(clippy::match_like_matches_macro, reason = "the foundation forbids matches macros in step code")]
 pub(crate) fn answered(
     d: &mut Domain,
@@ -506,16 +536,28 @@ pub(crate) fn answered(
         Stage::Run { key, pages } => {
             let writer = d.writers.get(&key.repository.forge).copied().unwrap_or(0);
             let flight = d.landing.flights.get_mut(&key).expect("in-flight read");
+            let previous_run = match &flight.run {
+                Some(run) => Some(run.id),
+                None => None,
+            };
             let listing = if let Ok(api::Answer::Runs { .. }) = &answer { true } else { false };
             let ended = flight.answered(answer, writer, env.now, env.limits.client.lifetime);
             let next = if listing && pages < env.limits.client.rows { flight.read() } else { None };
+            let candidate = flight.commit;
+            let current_run = match &flight.run {
+                Some(run) => Some(run.id),
+                None => None,
+            };
+            if previous_run != current_run {
+                mark_key(d, &key, out);
+            }
             if let Some(ended) = ended {
                 match ended.outcome {
                     policy::Verdict::Passed | policy::Verdict::Failed => {
                         let run = ended.run.expect("a verdict has a run");
                         let receipt = Receipt {
                             passed: ended.outcome == policy::Verdict::Passed,
-                            candidate: flight.commit,
+                            candidate,
                             ended: env.wall,
                             run: ReceiptRun { id: run.id, number: run.number, url: run.url },
                         };
@@ -894,6 +936,7 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
                 try_,
             );
             keep(d, &mut row, p.entry, member, gate, operation, write, skein_forge_client::Condition::None, out);
+            mark_key(d, &key, out);
             committed = Some(p.entry);
         }
         policy::Decision::Post { member, gate, posting } => {
@@ -938,11 +981,10 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
             save(d, row.clone(), out);
             let (free, first) = turn(d, row.landing.project);
             if free && let Some(first) = first {
-                let selected = d.landing.rows.get_mut(&first).expect("proved landing");
+                let mut selected = d.landing.rows.get(&first).expect("proved landing").clone();
                 if let policy::Phase::Proved { at } = selected.landing.phase {
                     selected.landing.phase = policy::Phase::Turn { at };
                 }
-                let selected = selected.clone();
                 save(d, selected.clone(), out);
                 if first == p.task {
                     row = selected;
@@ -1122,12 +1164,14 @@ fn put_receipt(d: &mut Domain, env: &Env<Limits>, key: ReceiptKey, receipt: Rece
     if !d.landing.receipts.contains_key(&key) && count >= env.limits.receipts_per_gate {
         if let Some((_, oldest)) = oldest {
             d.landing.receipts.remove(&oldest);
+            mark_key(d, &oldest, out);
             emit(out, Request::Erase { key: Key::Receipt(oldest) });
         } else {
             return;
         }
     }
     d.landing.receipts.insert(key.clone(), receipt.clone()).expect("bounded receipts per gate");
+    mark_key(d, &key, out);
     emit(out, Request::Save { record: Stored::Receipt { key, receipt }, read_afresh: None, release: None });
 }
 fn finish_flight(d: &mut Domain, key: &ReceiptKey, out: &mut Queue<Request>) {
@@ -1511,11 +1555,10 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
 fn assign_turn(d: &mut Domain, project: u32, out: &mut Queue<Request>) {
     let (free, first) = turn(d, project);
     if free && let Some(task) = first {
-        let row = d.landing.rows.get_mut(&task).expect("proved landing");
+        let mut row = d.landing.rows.get(&task).expect("proved landing").clone();
         if let policy::Phase::Proved { at } = row.landing.phase {
             row.landing.phase = policy::Phase::Turn { at };
         }
-        let row = row.clone();
         save(d, row, out);
         emit(out, Request::WakeProcedure { task });
     }
@@ -1705,7 +1748,17 @@ fn retire_finished(d: &mut Domain, out: &mut Queue<Request>) -> bool {
     let Some(task) = finished else {
         return false;
     };
-    d.landing.rows.remove(&task);
+    let retired = d.landing.rows.remove(&task).expect("selected finished landing");
+    emit(
+        out,
+        Request::Marked {
+            tasks: Box::new([
+                task,
+                crate::landings_subject(retired.landing.project, false),
+                crate::landings_subject(retired.landing.project, true),
+            ]),
+        },
+    );
     d.landing.due.remove(&task);
     for member in 0..d.landing.limits.landing_members {
         d.landing.results.remove(&(task, u16::try_from(member).expect("member position"), 0, 5));
@@ -1872,5 +1925,39 @@ fn wake_project_ready(d: &Domain, project: u32, out: &mut Queue<Request>) {
         {
             emit(out, Request::WakeProcedure { task: *task });
         }
+    }
+}
+
+/// Receipt and run observations remake every landing reading this key.
+fn mark_key(d: &Domain, key: &ReceiptKey, out: &mut Queue<Request>) {
+    let mut tasks = List::with_capacity(crate::MARKED);
+    for (task, row) in &d.landing.rows {
+        if row.landing.project != key.project {
+            continue;
+        }
+        let mut reads = false;
+        for member in &row.landing.members {
+            if repository(member) != key.repository {
+                continue;
+            }
+            for (index, proof) in member.gates.iter().enumerate() {
+                if proof_key(proof.proof) == Some(key.key)
+                    && let Some(gate) = d.landing.gates(key.project, key.repository).get(index)
+                    && key.check == Check::Gate(gate.name.clone())
+                {
+                    reads = true;
+                }
+            }
+        }
+        if reads {
+            tasks.push(*task).expect("mark room");
+            if tasks.room() == 0 {
+                emit(out, Request::Marked { tasks: tasks.into_boxed() });
+                tasks = List::with_capacity(crate::MARKED);
+            }
+        }
+    }
+    if !tasks.is_empty() {
+        emit(out, Request::Marked { tasks: tasks.into_boxed() });
     }
 }
