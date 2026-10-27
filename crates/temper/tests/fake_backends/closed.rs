@@ -76,7 +76,8 @@ fn a_closed_chat_keeps_its_turns_and_replays_its_first_close() {
     }
     assert!(ctl::json(&outcome.calls[10]).get("run").is_none(), "ended task has no provisional run");
     assert_eq!(outcome.calls[11].stdout, outcome.calls[6].stdout, "same-key replay gives first answer");
-    assert!(String::from_utf8_lossy(&outcome.calls[12].stderr).contains("chat 1 has ended"));
+    let refusal = String::from_utf8_lossy(&outcome.calls[12].stderr);
+    assert!(refusal.contains("chat 1 has ended"), "new-key close refusal: {refusal}");
     assert!(outcome.checked.is_some(), "story reached final checkpoint");
     assert_eq!(outcome.exit, Some(Exit::Code(0)), "box drains: {diagnostic}");
     assert_eq!(outcome.left, Some(Vec::new()), "no process outlives box");
