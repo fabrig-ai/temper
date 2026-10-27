@@ -695,7 +695,7 @@ impl Domain {
             return None;
         }
         let mut next: Option<skein_lib::Wall> = None;
-        for deadlines in [&self.projection_due, &self.change_due] {
+        for deadlines in [&self.projection_due, &self.change_due, &self.landing.due] {
             for (_, deadline) in deadlines {
                 next = Some(match next {
                     Some(previous) => previous.min(*deadline),
@@ -1473,6 +1473,17 @@ pub fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     }
     for task in &changes {
         d.change_due.remove(task);
+        emit(out, Request::WakeProcedure { task: *task });
+    }
+    let room = out.room().saturating_sub(skein_forge_client::max_out(&env.limits.client));
+    let mut landings = List::with_capacity(env.limits.landings.min(room));
+    for (task, when) in &d.landing.due {
+        if *when <= env.wall && landings.room() > 0 {
+            landings.push(*task).expect("bounded due landings");
+        }
+    }
+    for task in &landings {
+        d.landing.due.remove(task);
         emit(out, Request::WakeProcedure { task: *task });
     }
     let child_env = child_env(env);
