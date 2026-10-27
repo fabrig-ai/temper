@@ -1,0 +1,2 @@
+/* The current step in ink, not the accent: the accent is all but --temper-red, and beside the done steps' green it read as a step gone wrong. */
+.temper-flow-step[aria-current] { border-color: var(--temper-ink); color: var(--temper-ink); }
