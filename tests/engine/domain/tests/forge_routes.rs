@@ -1,5 +1,8 @@
 //! Root forge stories with its durable store and the independent fake Forgejo.
 #![expect(clippy::wildcard_enum_match_arm, reason = "the fixture selects only the forge rows relevant to each story")]
+#[path = "fixtures/stock.rs"]
+mod stock;
+
 use jig_domain_authority as authority;
 use jig_domain_host as host;
 use jig_domain_people as people;
