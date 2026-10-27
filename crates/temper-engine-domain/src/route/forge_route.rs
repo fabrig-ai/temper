@@ -2591,7 +2591,7 @@ fn describe_tier_effect(
             guards: Box::new([]),
         },
         form: EffectForm::Creation,
-        recovery: Recovery::Idempotent,
+        recovery: Recovery::Unrecoverable,
         waits_for_dependencies: forge::waits_for_dependencies(9),
     })
 }

@@ -288,7 +288,7 @@ impl World {
                 limits.tasks.depth = 4;
                 limits.tasks.parameters = 8;
                 limits.tasks.spec_bytes = 512;
-                limits.tasks.executor_kinds = 4;
+                limits.tasks.executor_kinds = 5;
                 limits.tasks.charters = 4;
                 let mut producer = walking::charter();
                 producer.number = 2;
@@ -298,17 +298,17 @@ impl World {
                 reviewer.policy.agents = false;
                 config.core.defaults.charters = Box::new([walking::charter(), producer, reviewer]);
                 config.forge_charter = forge_charter.unwrap_or(1);
-                limits.tasks.authority_grants = 10;
+                limits.tasks.authority_grants = 11;
                 limits.journal.run_bytes = 8192;
                 limits.tasks.authority_segments = 9;
                 limits.tasks.authority_bytes = 512;
                 limits.tasks.contract_choices = 2;
                 limits.tasks.inbox_messages = 8;
                 limits.tasks.inbox_bytes = 1024;
-                limits.authority.executors = 4;
+                limits.authority.executors = 5;
                 limits.authority.batch = 2;
-                limits.authority.grants = 10;
-                limits.authority.segments = 8;
+                limits.authority.grants = 11;
+                limits.authority.segments = if tier { 9 } else { 8 };
                 limits.authority.segment_bytes = 64;
                 limits.authority.writes = 2;
                 limits.journal.writes += 64;
@@ -329,7 +329,7 @@ impl World {
                 if !with_change {
                     limits.authority.grants = 4;
                 }
-                limits.authority.segments = 8;
+                limits.authority.segments = if tier { 9 } else { 8 };
                 limits.authority.segment_bytes = 64;
                 if !with_change {
                     limits.tasks.authority_grants = 2;
