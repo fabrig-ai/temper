@@ -36,7 +36,7 @@
             "input": 1,
             "cached": 1,
             "output": 1,
-            "unit": 1000000
+            "unit": 1000
           },
           "window": 1048576,
           "output": 8192,
@@ -64,7 +64,7 @@
             "input": 1,
             "cached": 1,
             "output": 1,
-            "unit": 1000000
+            "unit": 1000
           },
           "window": 131072,
           "output": 8192,

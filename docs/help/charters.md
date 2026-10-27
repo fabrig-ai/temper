@@ -20,9 +20,10 @@ a finite task comes from the task, not the charter's number. Read
 The default chat charter is 1 and the default coding charter is 2.
 Both default to 8 turns and 120 seconds, with a finishing reserve of
 1 turn and 60 seconds. Their default waiting and call timeout are
-10 seconds, with resuming enabled and default spend of 20 deployment
-units. They use workers and enable inspection, modification and
-agents; local shell use is off by default. Read the current values:
+10 seconds, with resuming enabled and default spend of K = 4C deployment
+units. C is one worst-case completion of the first configured model,
+priced at startup (`temper help budgets`). They use workers and enable
+inspection, modification and agents; local shell use is off by default. Read the current values:
 
 ```sh
 temper ctl me setting charter 1 --json
@@ -104,10 +105,11 @@ the authority and ceilings that bound it; starting another delegate
 does not give that work a fresh unrestricted allowance.
 
 In the client, **Budget and authority** shows **May spend** and
-**May delegate**, including **Up to 12 tasks, 4 deep** when those are
+**May delegate**, including **Up to 14 tasks, 4 deep** when those are
 the allowed values. The default deployment delegation ceiling allows
-charters 1 and 2 and procedure 2, with 12 lifetime descendants and
-depth 4. Read the current ceiling:
+charters 1 and 2 and procedure 2, with 14 tasks including the chat and
+depth 4. Template 1 leaves its chat 13 lifetime descendants. Read the
+current ceiling:
 
 ```sh
 temper ctl me setting rules --json
