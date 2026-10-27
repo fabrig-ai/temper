@@ -43,6 +43,7 @@ pub fn turn(request: smith::Request, transcript: Box<[u8]>) -> Result<host::Turn
             body: transcript,
         }),
         smith::Request::Waiting { .. }
+        | smith::Request::Yield { .. }
         | smith::Request::Job { .. }
         | smith::Request::HostCall { .. }
         | smith::Request::WithdrawHost { .. }
