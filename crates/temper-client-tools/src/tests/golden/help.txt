@@ -17,3 +17,4 @@ settings  The settings: read them, change them, or propose a change to their own
 revision  Settings revisions: read one or the history, move running work to the newest
 project  Projects: read their periods and pools, set their spend per period
 playground  The playground: start the demo
+landing  Landings: read one or a project's landings
