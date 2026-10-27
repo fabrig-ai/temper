@@ -10,6 +10,8 @@ pub const BINDING: u8 = 18;
 pub const DEMO_ACT: u8 = 19;
 /// A write with a committed attempt (protocol/store.md, 2).
 pub const FLIGHT: u8 = 21;
+/// One landing's verification (protocol/store.md, 2; domain/after-landing.md, 10).
+pub const VERIFICATION: u8 = 26;
 
 fn write_name(writer: &mut KeyWriter, name: &forge::Name) {
     writer.u64(u64::from(name.forge)).u64(u64::from(name.repository));
@@ -164,6 +166,11 @@ pub fn encode(key: &forge::Key, limit: u32) -> Option<Box<[u8]>> {
             }
             writer.tag(BINDING).bytes(address);
         }
+        forge::Key::Verification { repository, commit } => {
+            writer.tag(VERIFICATION);
+            write_repository(&mut writer, *repository);
+            writer.bytes(commit);
+        }
         forge::Key::Flight { task, entry } => {
             writer.tag(FLIGHT).u64(*task).u64(*entry);
         }
@@ -207,6 +214,9 @@ pub fn decode(bytes: &[u8], limits: &forge::Limits) -> Option<forge::Key> {
         14 => forge::Key::Release(reader.u64()?),
         15 => forge::Key::Application(reader.u64()?),
         16 => forge::Key::Writer(u16::try_from(reader.u64()?).ok()?),
+        VERIFICATION => {
+            forge::Key::Verification { repository: read_repository(&mut reader)?, commit: read_commit(&mut reader)? }
+        }
         FLIGHT => forge::Key::Flight { task: reader.u64()?, entry: reader.u64()? },
         DEMO_ACT => forge::Key::DemoAct(reader.bytes()?.as_ref().try_into().ok()?),
         17 => forge::Key::Demo(u16::try_from(reader.u64()?).ok()?),
