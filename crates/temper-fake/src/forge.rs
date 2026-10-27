@@ -220,6 +220,7 @@ impl Document {
                 &mut domain,
                 &LIMITS,
                 api::Setup {
+                    workflows: Box::new([]),
                     id,
                     name: full.clone(),
                     default: repository.landing.clone(),
@@ -302,7 +303,11 @@ pub fn checks(ci: Option<&Ci>) -> api::Checks {
 }
 /// Bounded store for eight repositories, with small mutable QA histories.
 pub const LIMITS: domain::Config = domain::Config {
+    setup_faults: 0,
+    lost: 0,
     limits: domain::Limits {
+        workflows: 0,
+        workflow_runs: 0,
         repositories: 8,
         users: 32,
         bypassing_users: 8,

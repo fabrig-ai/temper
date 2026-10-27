@@ -117,6 +117,7 @@ pub fn table(full: &[u8], protected: Option<&[u8]>) -> skein_fake_forge_protocol
 pub fn named(full: &[u8], protected: Option<&[u8]>) -> Scenario {
     let mut domain = domain::Domain::new(&CONFIG, 1);
     let setup = api::Setup {
+        workflows: Box::new([]),
         id: 2,
         name: full.into(),
         default: b"main".as_slice().into(),
