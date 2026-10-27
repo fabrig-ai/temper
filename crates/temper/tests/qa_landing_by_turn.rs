@@ -26,19 +26,34 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     let root = scratch.path();
     generated(root);
     stage_binaries(root);
+    let settings_root = root.to_path_buf();
+    let sitting = std::time::Instant::now();
     let first = boxed::run_ctl(
         root,
         flags(root),
         root,
         vec![
             Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["settings", "show", "policy", "1", "--json"])),
+            Step::Run(Call::new(&["settings", "show", "--json"])),
+            Step::Then(Box::new(move |calls| {
+                let mut reads = calls.iter().rev();
+                let inventory = reads.next().expect("settings inventory");
+                let policy = reads.next().expect("policy 1");
+                landing_by_turn::fund_landings(&settings_root, policy, inventory)
+            })),
+            Step::Run(Call::new(&["help"])),
             Step::Run(Call::new(&["forge", "setup", "3"])),
             Step::Run(Call::new(&["forge", "list", "--until", "made:3", "--timeout", "60s", "--json"])),
         ],
         Duration::from_secs(180),
         || landing_by_turn::configure_repository(root),
     );
+    eprintln!("owned turn first sitting: {:.3}s", sitting.elapsed().as_secs_f64());
     assert_box(&first);
+    for call in &first.calls {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
+    }
     let setup = first.checked.expect("repository and project configured before stop");
     landing_by_turn::configure_turn(root, &setup);
     let task = first_repository::Task { project: setup.project, ..first_repository::FIRST };
@@ -73,6 +88,7 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     steps.push(Step::Join);
     steps.extend(remaining);
     steps.insert(0, Step::Run(Call::new(&["forge", "list", "--until", "settled", "--timeout", "60s"])));
+    let sitting = std::time::Instant::now();
     let second = boxed::run_ctl_with_llm(
         root,
         flags(root),
@@ -82,6 +98,7 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
         |_| landing_by_turn::evidence(root, &setup, task.change),
         first_repository::restarted_llm(root),
     );
+    eprintln!("owned turn second sitting: {:.3}s", sitting.elapsed().as_secs_f64());
     assert_box(&second);
     let stderr = String::from_utf8_lossy(&second.stderr);
     for call in &second.calls {
