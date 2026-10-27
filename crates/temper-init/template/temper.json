@@ -20,7 +20,7 @@
         "tasks.batch": 1,
         "tasks.contract_choices": 2,
         "tasks.hold_segments": 8,
-        "tasks.inbox_bytes": 8192,
+        "tasks.inbox_bytes": 12288,
         "tasks.parameters": 5,
         "views.watchers": 16,
         "views.watchers_per_party": 16
