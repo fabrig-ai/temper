@@ -2444,6 +2444,8 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         | change::State::Gating { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
         | change::State::Updating { .. }
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
@@ -2524,6 +2526,7 @@ fn step_verified(
     let mut row = d.changes.get(&task).expect("known change").clone();
     let facts = change::Facts {
         verification: crate::verification::verification(d, row.repository, merge),
+        ask: None,
         branch: row.change.last_head,
         expected_base: merge,
         pull: change::Pull::Merged { commit: merge },

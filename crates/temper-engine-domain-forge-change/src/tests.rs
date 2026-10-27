@@ -472,7 +472,7 @@ fn a_merged_change_waits_verifying() {
     let mut f = facts();
     f.pull = Pull::Merged { commit: MERGE };
     f.verification = Verification::Verifying;
-    for way in [Way::Queue, Way::Turn] {
+    for way in [crate::Way::Queue, crate::Way::Turn] {
         let mut c = change(State::Landing { head: HEAD });
         c.way = way;
         let next = decide(&c, &f, &heard());

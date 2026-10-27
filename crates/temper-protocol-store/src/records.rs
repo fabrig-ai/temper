@@ -180,7 +180,7 @@ pub fn row(key: &[u8], value: &[u8], bounds: &Bounds) -> Result<d::Stored, Undec
 
 pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
     Some(w::Limits {
-        tier_row_tier: d::CHECK_NAME_BYTES,
+        tier_row_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         tier_row_pending: forge.changes.checked_mul(2)?.checked_add(1)?,
         tier_run_landings: forge.changes.checked_mul(2)?.checked_add(1)?,
         tier_finding_blamed: forge.changes.checked_mul(2)?.checked_add(1)?,
@@ -190,7 +190,7 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         tier_tests_tests: forge.failing_tests,
         verification_changes: forge.changes,
         verification_tiers: forge.tiers,
-        tier_verification_tier: d::CHECK_NAME_BYTES,
+        tier_verification_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         failed_tests_tests: forge.failing_tests,
         failing_test_test_id: forge.test_id_bytes,
         landing_state_members: forge.landing_members,

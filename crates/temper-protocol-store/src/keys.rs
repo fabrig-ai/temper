@@ -224,9 +224,7 @@ pub fn decode(bytes: &[u8], limits: &forge::Limits) -> Option<forge::Key> {
         TIER => {
             let repository = read_repository(&mut reader)?;
             let tier = reader.bytes()?;
-            if tier.is_empty()
-                || tier.len() > usize::try_from(forge::CHECK_NAME_BYTES).expect("tier name bound fits usize")
-            {
+            if tier.is_empty() || tier.len() > forge::CHECK_NAME_BYTES {
                 return None;
             }
             for byte in &tier {

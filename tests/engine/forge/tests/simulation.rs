@@ -912,7 +912,7 @@ fn a_change_landed_where_its_repository_has_a_tier_lives_verifying() {
         let decision = change_step(&mut world, entry, change::Status::Passed, Box::new([]));
         assert!(!matches!(decision, change::Decision::Finish { .. }));
         if let Some(top::Stored::Change(row)) = world.stored().get(&top::Key::Change(CHANGE))
-            && let change::State::Landed { merge: commit } = row.change.state
+            && let Some(commit) = temper_engine_forge_world::changes::merged(&row.change.state)
         {
             merge = Some(commit);
             break;

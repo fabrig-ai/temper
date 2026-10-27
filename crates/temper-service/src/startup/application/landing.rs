@@ -331,8 +331,22 @@ fn check(
     limits: &temper_engine_domain_forge::Limits,
     problems: &mut Problems,
 ) -> Option<Check> {
-    let name = checked_text(object, document, b"name", CHECK_NAME_BYTES, path, problems);
-    let workflow = checked_text(object, document, b"workflow", WORKFLOW_BYTES, path, problems);
+    let name = checked_text(
+        object,
+        document,
+        b"name",
+        u32::try_from(CHECK_NAME_BYTES).expect("check name bound fits u32"),
+        path,
+        problems,
+    );
+    let workflow = checked_text(
+        object,
+        document,
+        b"workflow",
+        u32::try_from(WORKFLOW_BYTES).expect("workflow bound fits u32"),
+        path,
+        problems,
+    );
     let ats = optional_list(object, document, b"ignored", limits.ignored_paths, path, problems);
     let mut ignored = List::with_capacity(limits.ignored_paths);
     if let Some(ats) = ats {
@@ -405,7 +419,14 @@ fn repository_checks(
             let path = read::index(&path.member(b"tiers"), index);
             let Some(mut object) = read::object(document, *at, &path, problems) else { continue };
             let check = check(&mut object, document, &path, limits, problems);
-            let artifact = checked_text(&mut object, document, b"artifact", CHECK_NAME_BYTES, &path, problems);
+            let artifact = checked_text(
+                &mut object,
+                document,
+                b"artifact",
+                u32::try_from(CHECK_NAME_BYTES).expect("artifact name bound fits u32"),
+                &path,
+                problems,
+            );
             let format = read::text(&mut object, document, b"format", &path, problems);
             read::finish(object, document, &path, problems);
             if let Some(artifact) = &artifact {

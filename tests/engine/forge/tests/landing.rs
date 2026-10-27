@@ -42,7 +42,7 @@ fn a_landing_of_one_is_rebased_proved_by_one_run_and_fast_forwarded() {
     let mut world = landings::first_landing();
     let candidate = translate::commit(world.branch(b"temper/51"));
     let row = world.change(CHANGE);
-    assert_eq!(row.change.state, change::State::Landed { merge: candidate });
+    assert_eq!(temper_engine_forge_world::changes::merged(&row.change.state), Some(candidate));
     assert_eq!(translate::commit(world.branch(b"main")), candidate);
     assert_eq!(world.landing(LANDING).landing.phase, landing::Phase::Landed);
     let raw::Answer::Pull(pull) = world.inspect(&raw::Read::Pull { number: row.pull.expect("opened pull") }) else {
@@ -102,7 +102,7 @@ fn a_documentation_landing_lands_on_its_receipt_with_no_run() {
     world.take_calls();
     landings::documentation_landing(&mut world, DOC_CHANGE, DOC_LANDING, b"temper/52");
     let candidate = translate::commit(world.branch(b"temper/52"));
-    assert_eq!(world.change(DOC_CHANGE).change.state, change::State::Landed { merge: candidate });
+    assert_eq!(temper_engine_forge_world::changes::merged(&world.change(DOC_CHANGE).change.state), Some(candidate));
     assert_eq!(translate::commit(world.branch(b"main")), candidate);
     assert_eq!(world.landing(DOC_LANDING).landing.members[0].gates[0].proof, landing::Proof::Passed { key: first_key });
     assert_eq!(runs(&world).len(), 1);

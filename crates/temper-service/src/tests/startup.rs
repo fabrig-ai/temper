@@ -2389,8 +2389,8 @@ fn check_bound_rows(extra: u32) -> Box<[CheckBoundRow]> {
     let repositories: Box<[_]> = (0..limits.repositories.checked_add(extra).unwrap())
         .map(|index| format!(r#"{{"forge":1,"repository":{index}}}"#))
         .collect();
-    let name_bytes = usize::try_from(CHECK_NAME_BYTES.checked_add(extra).unwrap()).unwrap();
-    let workflow_bytes = usize::try_from(WORKFLOW_BYTES.checked_add(extra).unwrap()).unwrap();
+    let name_bytes = CHECK_NAME_BYTES.checked_add(usize::try_from(extra).unwrap()).unwrap();
+    let workflow_bytes = WORKFLOW_BYTES.checked_add(usize::try_from(extra).unwrap()).unwrap();
     let path_bytes = usize::try_from(limits.name_bytes.checked_add(extra).unwrap()).unwrap();
     Box::new([
         (b"landing.projects[0].gates[0].tiers", format!("[{}]", tiers.join(",")).into_boxed_str(), "gates[0].tiers"),

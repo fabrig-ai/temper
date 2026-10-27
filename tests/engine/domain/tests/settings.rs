@@ -242,11 +242,11 @@ fn deployment_without_projects() -> Driver {
     config.core.seed_projects = Box::new([]);
     config.core.owners[0].project = people::DEPLOYMENT;
     let mut limits = walking::limits();
-    // Stock policy 1 holds ten grants and three executor kinds.
+    // The joined stock policy holds thirteen grants and five executor kinds.
     limits.authority.grants = 16;
-    limits.authority.executors = 4;
+    limits.authority.executors = 5;
     limits.documents.grants = 16;
-    limits.documents.executors = 4;
+    limits.documents.executors = 5;
     limits.notes.scopes = 32;
     limits.tasks.charters = 2;
     limits.journal.writes = walking::writes(&limits);

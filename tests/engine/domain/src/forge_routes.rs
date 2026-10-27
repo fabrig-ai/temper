@@ -1362,6 +1362,8 @@ pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_
         | State::Gating { .. }
         | State::Queued { .. }
         | State::First { .. }
+        | State::Ready { .. }
+        | State::Preparing { .. }
         | State::Updating { .. }
         | State::Resolving { .. }
         | State::Repairing { .. }

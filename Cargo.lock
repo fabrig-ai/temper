@@ -2611,9 +2611,25 @@ dependencies = [
 name = "temper-codecs-world"
 version = "0.0.0"
 dependencies = [
+ "jig-client-protocol-wire",
+ "jig-protocol-config",
  "skein-codegen",
+ "skein-fake-forge-github",
+ "skein-forge",
+ "skein-forge-client",
+ "skein-forge-connection",
+ "skein-forge-setup",
+ "skein-io",
  "skein-lib",
  "skein-scratch",
+ "temper-client-protocol-wire",
+ "temper-engine-domain-forge",
+ "temper-engine-domain-forge-change",
+ "temper-engine-domain-forge-issues",
+ "temper-engine-domain-forge-tiers",
+ "temper-protocol-records",
+ "temper-protocol-store",
+ "temper-protocol-worker-wire",
 ]
 
 [[package]]
