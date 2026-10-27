@@ -35,22 +35,22 @@ fn delegated(cast: &Cast, member: &Member) -> Value {
 pub fn scripts(cast: &Cast, _forge: SocketAddr) -> Box<[Script]> {
     let mut scripts = Vec::with_capacity(cast.members.len());
     for member in cast.members {
-        let mut batch = Vec::with_capacity(cast.members.len());
+        // Singleton batches reuse the small fixture's admission and preserve
+        // each parent's children in cast order without a wider batch bound.
+        let mut turns = Vec::with_capacity(1 + cast.descendants(member.name) as usize);
         for child in cast.members {
             if child.under == Some(member.name) {
-                batch.push(delegated(cast, child));
+                turns.push(Turn {
+                    lines: Box::new([Line::Call {
+                        name: b"delegate".as_slice().into(),
+                        arguments: serde_json::to_vec(&json!({"batch":[delegated(cast, child)]}))
+                            .expect("delegation JSON")
+                            .into(),
+                    }]),
+                    finish: Finish::ToolCalls,
+                    tokens: 20,
+                });
             }
-        }
-        let mut turns = Vec::with_capacity(2);
-        if !batch.is_empty() {
-            turns.push(Turn {
-                lines: Box::new([Line::Call {
-                    name: b"delegate".as_slice().into(),
-                    arguments: serde_json::to_vec(&json!({"batch":batch})).expect("delegation JSON").into(),
-                }]),
-                finish: Finish::ToolCalls,
-                tokens: 20,
-            });
         }
         // The peer's held piece leaves this exact attempt writing. Teardown
         // cancels it through the existing harness, as in the first edition.

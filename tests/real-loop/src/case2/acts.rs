@@ -9,7 +9,6 @@ use crate::{
 pub enum Read {
     Writing(&'static str),
     Task(&'static str),
-    Roots,
 }
 #[must_use]
 pub fn acts(cast: &Cast) -> Vec<calls::Step> {
@@ -43,27 +42,35 @@ pub fn acts(cast: &Cast) -> Vec<calls::Step> {
         D1,
         argv!["chat", "start", "--project", number(PROJECT), "--key", "case2-hour-0", cast.members[0].spec],
     ));
-    // A parent's reply proves its delegation committed before the next numbered
-    // read. Keep every member's held piece in place throughout the checkpoint.
+    // A live delegate card proves creation before its numbered task read.
+    // A held stream has not replied yet, so waiting for `replied` here would
+    // wait for the very piece the checkpoint deliberately leaves unreleased.
     for member in cast.members {
+        let mut last = None;
         for child in cast.members {
             if child.under == Some(member.name) {
-                acts.push(call(D1, argv!["task", "show", number(cast.number(member.name)), "--until", "replied"]));
-                break;
+                last = Some(child);
             }
+        }
+        if let Some(child) = last {
+            acts.push(calls::until(
+                D1,
+                argv!["task", "show", number(cast.number(member.name)), "--json"],
+                child.cue.as_bytes(),
+                b"\"task\"",
+            ));
         }
     }
     for member in cast.members {
         acts.push(calls::writing_task(D1, cast.number(member.name)));
         acts.push(call(D1, argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"]));
     }
-    acts.push(call(D1, argv!["task", "list", "--project", number(PROJECT), "--json"]));
     acts
 }
 #[must_use]
 pub fn reads(cast: &Cast) -> Vec<(Read, usize)> {
-    let mut reads = Vec::with_capacity(2 * cast.members.len() + 1);
-    // sign-in, adoptions, chat, then each member's replied read.
+    let mut reads = Vec::with_capacity(2 * cast.members.len());
+    // sign-in, adoptions, chat, then each parent's delegate-card read.
     let mut base = 2 + cast.repositories.len();
     for member in cast.members {
         for child in cast.members {
@@ -77,10 +84,29 @@ pub fn reads(cast: &Cast) -> Vec<(Read, usize)> {
         reads.push((Read::Writing(member.name), base + 2 * at));
         reads.push((Read::Task(member.name), base + 2 * at + 1));
     }
-    reads.push((Read::Roots, base + 2 * cast.members.len()));
     reads
 }
 #[must_use]
 pub fn hour_0() -> Vec<calls::Step> {
-    acts(&CAST)
+    let mut steps = acts(&CAST);
+    steps.extend(close(&CAST));
+    steps
+}
+
+/// After the checkpoint (or a later step), end the chat's subtree through ctl.
+/// The harness then checks ordinary completion and drains every hosted child.
+#[must_use]
+pub fn close(cast: &Cast) -> Vec<calls::Step> {
+    let director = cast.number(cast.members[0].name);
+    let mut steps = vec![
+        call(
+            D1,
+            argv!["task", "cancel", number(director), "The case's checkpoint is complete.", "--key", "case2-close"],
+        ),
+        call(D1, argv!["task", "show", number(director), "--until", "ended"]),
+    ];
+    for member in cast.members {
+        steps.push(calls::release_hold(member.cue.as_bytes()));
+    }
+    steps
 }

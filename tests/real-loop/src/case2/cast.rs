@@ -37,8 +37,8 @@ impl Model {
     #[must_use]
     pub const fn number(self) -> u32 {
         match self {
-            Self::Claude => 1,
-            Self::Gpt => 2,
+            Self::Claude => 0,
+            Self::Gpt => 1,
         }
     }
 }
@@ -122,11 +122,15 @@ impl Cast {
     }
 }
 
+/// Shared by the director and the goal coordinators.
+pub const COORDINATORS_CHARTER: u32 = 1;
+pub const COORDINATORS: &str = "Coordinate the work your requester entrusted to you. Delegate its parts within your authority, follow your delegates, and bring decisions outside your authority to your requester.";
+
 pub const DIRECTOR: Member = Member {
     name: "director",
     kind: MemberKind::Chat,
     under: None,
-    charter: 1,
+    charter: COORDINATORS_CHARTER,
     model: Model::Claude,
     cue: "@case2_director",
     spec: "@case2_director Coordinate the project; keep Themes running under P.",
@@ -135,7 +139,7 @@ pub const P: Member = Member {
     name: "P",
     kind: MemberKind::Goal { priority: 2 },
     under: Some(DIRECTOR.name),
-    charter: 1,
+    charter: COORDINATORS_CHARTER,
     model: Model::Claude,
     cue: "@case2_p",
     spec: "@case2_p Own Themes in app; delegate its two implementers and follow their work.",
