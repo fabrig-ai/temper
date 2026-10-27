@@ -271,3 +271,5 @@ forge-accept F I [--key NAME]
   Accept an existing GitHub App installation
 move-to-newest R --key NAME
   Move every live agent task on held revision R that may move to the newest
+restore R [REASON] --key NAME
+  Propose restoring the settings as revision R left them

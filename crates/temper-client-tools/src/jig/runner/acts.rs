@@ -28,6 +28,15 @@ pub(crate) fn me<'a>(runner: &Runner, client: &'a Client) -> Option<&'a c::Me> {
     }
 }
 pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
+    if called.call.tool == crate::jig::rows::RESTORE_AT {
+        let revision = u32::try_from(number(&called.call, 0).expect("revision argument")).expect("revision fits u32");
+        let request = match words(&called.call, 1, &env.limits) {
+            Ok(reason) => Ok((Request::Ask(c::Ask::Restore(c::Restore { revision, reason })), None)),
+            Err(why) => Err(why),
+        };
+        prepared(runner, client, env, called, request, out);
+        return;
+    }
     if called.call.tool == crate::jig::rows::MOVE_TO_NEWEST_AT {
         let revision = u32::try_from(number(&called.call, 0).expect("revision argument")).expect("revision fits u32");
         prepared(

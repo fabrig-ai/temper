@@ -224,6 +224,29 @@ not compare its values or accept it. Its generic **Accept** lacks
 the running choice settings acceptance requires. Review and decide
 settings proposals with `temper ctl` using the commands above.
 
+## Restoring a revision
+
+A party with a deployment or project role can ask the owners to restore
+an earlier revision:
+
+```sh
+temper ctl me restore 5 because --key restore-settings-5
+```
+
+The answer names a proposal, for example `proposed restoring revision 5
+as proposal p73/7, to the owners`. Read it with `proposal p73/7` and
+accept it with the explicit running choice shown above. Restore proposes
+one item per setting changed since that revision. Previously chosen values
+return; settings that followed their defaults follow today's defaults.
+Application settings whose historical values are unavailable are left out
+and named in the answer.
+
+The revision must remain within the history window, even if older running
+work still holds it. A forgotten refusal names the oldest kept revision.
+Restoring the newest revision is empty; a settings decision made while
+the history loads makes the request stale. A restore larger than one whole
+settings set is refused; try a later revision.
+
 ## What needs a restart
 
 An admitted stored settings change takes effect without restarting

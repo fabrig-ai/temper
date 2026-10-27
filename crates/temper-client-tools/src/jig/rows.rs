@@ -567,3 +567,23 @@ pub const MOVE_TO_NEWEST: Tool = Tool {
     keyed: Keyed::Required,
     area: 1,
 };
+
+/// New rows append to preserve durable call identities.
+pub const RESTORE_AT: u8 = 52;
+pub const RESTORE: Tool = Tool {
+    name: b"restore",
+    line: b"Propose restoring the settings as revision R left them",
+    result: b"restore",
+    forms: &[&[
+        positional(
+            b"revision",
+            b"R",
+            Kind::NumberRange { min: 0, max: 4_294_967_295 },
+            Required,
+            b"Revision to restore",
+        ),
+        positional(b"reason", b"REASON", Kind::Text, Optional, b"Reason"),
+    ]],
+    keyed: Keyed::Required,
+    area: 1,
+};

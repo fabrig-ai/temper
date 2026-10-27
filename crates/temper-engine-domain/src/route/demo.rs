@@ -338,6 +338,7 @@ pub(crate) fn end_acted(
         }
         people::Outcome::SettingsChanged { .. }
         | people::Outcome::MovedToNewest { .. }
+        | people::Outcome::Restored { .. }
         | people::Outcome::Renamed { .. }
         | people::Outcome::ProjectMade { .. }
         | people::Outcome::Created { .. }
@@ -383,6 +384,7 @@ pub(crate) fn end_acted(
 fn refusal_name(why: &people::Refusal) -> &'static str {
     use people::Refusal;
     match why {
+        Refusal::Forgotten { .. } => "Forgotten",
         Refusal::Stale { .. } => "Stale",
         Refusal::Full { .. } => "Full",
         Refusal::NameTaken => "NameTaken",

@@ -32,6 +32,7 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::PROPOSE_SETTINGS_AT), "help_propose_settings"),
     (Some(jig::rows::PROPOSAL_AT), "help_proposal"),
     (Some(jig::rows::MOVE_TO_NEWEST_AT), "help_move_to_newest"),
+    (Some(jig::rows::RESTORE_AT), "help_restore"),
 ];
 #[test]
 fn the_help_prints_as_its_golden_files() {
@@ -100,6 +101,7 @@ const USAGES: &[&[u8]] = &[
     b"change N [--project P]\n",
     b"forge-accept F I [--key NAME]\n",
     b"move-to-newest R --key NAME\n",
+    b"restore R [REASON] --key NAME\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {

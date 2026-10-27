@@ -116,6 +116,7 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["proposal", "p73/7"],
     &["forge-accept", "3", "1"],
     &["move-to-newest", "7", "--key", "move-7"],
+    &["restore", "7", "because", "--key", "restore-7"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -658,7 +659,7 @@ pub(super) const GUIDE_CALLS: u32 = 43;
 /// One slot per guide line, including the final line; fewer loses that line.
 const GUIDE_LINES: u32 = 173;
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 59;
+pub(super) const TOOL_FORMS: u32 = 60;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

@@ -174,7 +174,12 @@ fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, call
             reads::start(runner, client, env, called, out);
         }
         24 | 26 | 32 | rows::IMPORT_AT => accounts::start(runner, client, env, called, out),
-        8..=15 | 31 | rows::CHANGE_SETTINGS_AT | rows::PROPOSE_SETTINGS_AT | rows::MOVE_TO_NEWEST_AT => {
+        8..=15
+        | 31
+        | rows::CHANGE_SETTINGS_AT
+        | rows::PROPOSE_SETTINGS_AT
+        | rows::MOVE_TO_NEWEST_AT
+        | rows::RESTORE_AT => {
             acts::start(runner, client, env, called, out);
         }
         16 => wait::start(runner, client, env, called, out),

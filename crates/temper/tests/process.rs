@@ -3960,3 +3960,81 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
     assert_eq!(panel["pull"]["address"], format!("http://{}/playground/widget/pulls/1", evidence.address));
     scratch.remove();
 }
+
+#[test]
+fn temper_ctl_restore() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_restore");
+    let first = scratch.path().join("first.json");
+    let second = scratch.path().join("second.json");
+    let steps = vec![
+        Step::Run(Call::sign_in()),
+        Step::Run(Call::new(&["me", "--json"])),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+        Step::Then(Box::new(move |calls| {
+            support::ctl::charter_change_file(&first, &calls[3], "A");
+            support::ctl::settings_change(&calls[2], &first, "first-settings")
+        })),
+        Step::Run(Call::new(&["settings", "--json"])),
+        Step::Then(Box::new(move |calls| {
+            support::ctl::charter_change_file(&second, &calls[3], "B");
+            support::ctl::settings_change(&calls[5], &second, "second-settings")
+        })),
+        Step::Then(Box::new(|calls| {
+            Call::new(&[
+                "restore",
+                &support::ctl::newest(&calls[5]).to_string(),
+                "Use the first choice",
+                "--key",
+                "restore-first",
+                "--json",
+            ])
+        })),
+        Step::Then(Box::new(|calls| {
+            Call::new(&[
+                "restore",
+                &support::ctl::newest(&calls[5]).to_string(),
+                "Use the first choice",
+                "--key",
+                "restore-first",
+            ])
+        })),
+        Step::Then(Box::new(|calls| {
+            let party = support::ctl::json(&calls[1])["party"]["number"].as_u64().expect("party");
+            let proposal = support::ctl::json(&calls[7])["proposal"].as_u64().expect("restore proposal");
+            Call::new(&["proposal", &format!("p{party}/{proposal}"), "--json"])
+        })),
+        Step::Then(Box::new(|calls| {
+            let party = support::ctl::json(&calls[1])["party"]["number"].as_u64().expect("party");
+            let proposal = support::ctl::json(&calls[7])["proposal"].as_u64().expect("restore proposal");
+            Call::new(&[
+                "decide",
+                &format!("p{party}/{proposal}"),
+                "accept",
+                "--running",
+                "stays",
+                "--key",
+                "accept-restored",
+            ])
+        })),
+        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
+    ];
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    ctl_assert_success(&seen.calls);
+    let calls = &seen.calls;
+    let to = support::ctl::newest(&calls[5]);
+    let restored = support::ctl::json(&calls[7]);
+    assert_eq!(restored["to"], to);
+    assert_eq!(restored["left_out"], serde_json::json!([]));
+    assert!(
+        String::from_utf8_lossy(&calls[8].stdout).contains(&format!("proposed restoring revision {to} as proposal p"))
+    );
+    let document = support::ctl::json(&calls[9]);
+    let item = &document["action"]["settings"]["review"]["items"][0];
+    assert_eq!(item["now"]["value"]["value"]["charter"]["instructions"], "B", "{document}");
+    assert_eq!(item["would_be"]["value"]["value"]["charter"]["instructions"], "A", "{document}");
+    assert!(document["reason"]["bytes"].as_str().expect("reason").contains(&format!("restores revision {to}")));
+    assert_eq!(support::ctl::json(&calls[11])["value"]["instructions"], "A");
+    scratch.remove();
+}

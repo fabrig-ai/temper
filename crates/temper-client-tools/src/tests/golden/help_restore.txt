@@ -1,0 +1,5 @@
+restore R [REASON] --key NAME
+Propose restoring the settings as revision R left them
+Result: restore
+  revision: Revision to restore
+  reason: Reason

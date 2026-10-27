@@ -319,8 +319,8 @@ pub(super) fn decode_limit_kind(value: w::LimitKind) -> p::LimitKind {
 )]
 pub(super) fn encode_refusal(value: &p::Refusal, l: &w::Limits) -> Result<w::Refusal, w::Problem> {
     Ok(match value {
-        // Only ChangeSettings emits Stale; forge applications never carry that ask.
-        p::Refusal::Stale { .. }
+        // Settings requests are not carried by forge applications.
+        p::Refusal::Forgotten { .. } | p::Refusal::Stale { .. }
         // Only settings admission emits Full; a forge application carries no settings value.
         | p::Refusal::Full { .. }
         // Only finishing an account sign-in emits SignInRedirect.
@@ -452,6 +452,7 @@ pub(super) fn encode_refusal(value: &p::Refusal, l: &w::Limits) -> Result<w::Ref
 }
 pub(super) fn decode_refusal(value: w::Refusal) -> p::Refusal {
     match value {
+        w::Refusal::Forgotten(_) => unreachable!("forge applications cannot store a forgotten settings refusal"),
         // Forge application records cannot contain a settings decision's stale revision.
         w::Refusal::Stale(_) => unreachable!("forge applications cannot store a stale settings refusal"),
         // Forge application requests never enter settings' held-revision admission.
@@ -692,6 +693,7 @@ mod settings_boundary_tests {
         for refusal in [
             p::Refusal::Stale { newest: 2 },
             p::Refusal::Full { revision: 1, tasks: Box::new([]), more: 0 },
+            p::Refusal::Forgotten { oldest: 1 },
             p::Refusal::NotWellFormed {
                 at: 0,
                 why: p::Malformed::Settings { setting: p::Setting::Rules, fault: p::SettingFault::Shape },

@@ -24,6 +24,7 @@ pub fn refusal(b: &mut Builder, words: &Words, value: &c::Refusal) {
         c::Refusal::Account { account, .. } => Some(Hole::Number(u64::from(*account))),
         c::Refusal::Taken { by } => Some(Hole::Number(*by)),
         c::Refusal::Llm { model, .. } => Some(Hole::Name(words.model_name(model.bytes()))),
+        c::Refusal::Forgotten(value) => Some(Hole::Number(u64::from(value.oldest))),
         c::Refusal::Stale(_)
         | c::Refusal::Full(_)
         | c::Refusal::AccountMove { .. }
@@ -82,6 +83,7 @@ pub fn outcome(b: &mut Builder, words: &Words, value: &c::Outcome) {
         c::Outcome::Decided { how, .. } | c::Outcome::DecidedFirst { how, .. } => return decided(b, words, how),
         c::Outcome::SettingsChanged(_)
         | c::Outcome::MovedToNewest(_)
+        | c::Outcome::Restored(_)
         | c::Outcome::Made { .. }
         | c::Outcome::Changed => P::Applied,
         c::Outcome::Proposed { .. } => P::ProposeInstead,

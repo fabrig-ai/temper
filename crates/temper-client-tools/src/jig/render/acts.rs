@@ -252,6 +252,11 @@ pub fn party(number: u64, me: Option<&Me>, out: &mut Text) {
 }
 pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
     match why {
+        Refusal::Forgotten(value) => {
+            out.put(b"forgotten; oldest kept revision ");
+            out.number(u64::from(value.oldest));
+            return;
+        }
         Refusal::Stale(value) => {
             out.put(b"stale; newest revision ");
             out.number(u64::from(value.newest));
@@ -315,7 +320,7 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
     }
     let word = Word::refusal(why);
     let text = match why {
-        Refusal::Stale(_) | Refusal::Full(_) => {
+        Refusal::Forgotten(_) | Refusal::Stale(_) | Refusal::Full(_) => {
             unreachable!("the tools do not request settings")
         }
         Refusal::Account { account, .. } => book.say(0, word.id(), &[Hole::Number(u64::from(*account))]),

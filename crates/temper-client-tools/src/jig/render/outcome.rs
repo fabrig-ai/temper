@@ -32,6 +32,7 @@ impl Operation {
             Ask::Family { .. } => (b"adopt", None),
             Ask::Jig(ask) => match ask.as_ref() {
                 c::Ask::Propose { action: c::ProposeAction::Settings(_), .. } => (b"propose_settings", None),
+                c::Ask::Restore(_) => (b"restore", None),
                 c::Ask::MoveToNewest(_) => (b"move-to-newest", None),
                 c::Ask::ChangeSettings(_) => (b"change-settings", None),
                 c::Ask::Create { .. } | c::Ask::Propose { action: c::ProposeAction::Batch { .. }, .. } => {
@@ -262,6 +263,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         )) => {
             sign_out(operation, *confirmed, failed_hosts, me, limits, out);
         }
+        c::Answer::Done(c::Outcome::Restored(value)) => restored_text(operation, value, out),
         c::Answer::Done(c::Outcome::MovedToNewest(value)) => moved_text(operation, value, out),
         c::Answer::Done(c::Outcome::SettingsChanged(changed)) => {
             out.put(b"revision ");
@@ -270,7 +272,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         c::Answer::Done(done) => {
             out.put(b"done: ");
             let task = match done {
-                c::Outcome::SettingsChanged(_) | c::Outcome::MovedToNewest(_) => {
+                c::Outcome::Restored(_) | c::Outcome::SettingsChanged(_) | c::Outcome::MovedToNewest(_) => {
                     unreachable!("settings answer handled above")
                 }
                 c::Outcome::Made { what: c::Made::Tasks { tasks } } => tasks.get(0).copied(),
@@ -324,15 +326,7 @@ fn encode(
     me: Option<&c::Me>,
     limits: &Limits,
 ) {
-    if !kept && let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::MovedToNewest(value)))) = outcome {
-        moved_json(value, out);
-        return;
-    }
-    if !kept && let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::SettingsChanged(changed)))) = outcome {
-        out.object_start();
-        out.key(b"revision");
-        out.unsigned(u64::from(changed.revision));
-        out.object_end();
+    if !kept && settings_answer(outcome, out) {
         return;
     }
     out.object_start();
@@ -448,6 +442,7 @@ pub(crate) fn retry(call: &crate::jig::call::Call) -> Box<[u8]> {
         24..=30 | 32 | 33 | rows::EXPORT_AT | rows::IMPORT_AT => account_tool(call.tool),
         31 => &rows::AMEND,
         rows::MOVE_TO_NEWEST_AT => &rows::MOVE_TO_NEWEST,
+        rows::RESTORE_AT => &rows::RESTORE,
         _ => unreachable!("act tool"),
     };
     let mut call = call.clone();
@@ -618,6 +613,7 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
 fn proposal_project(ask: &Ask) -> Option<u32> {
     match ask {
         Ask::Jig(ask) => match ask.as_ref() {
+            c::Ask::Restore(_) => Some(0),
             c::Ask::Propose { project, .. } => Some(*project),
             c::Ask::MoveToNewest(_)
             | c::Ask::ChangeSettings(_)
@@ -673,4 +669,65 @@ fn moved_text(operation: &Operation, value: &c::OutcomeMovedToNewest, out: &mut 
         out.put(if value.stayed == 1 { b" could not, and finishes on " } else { b" could not, and finish on " });
         out.number(u64::from(operation.revision.expect("move request's revision")));
     }
+}
+
+pub(super) fn restored_json(value: &c::OutcomeRestored, out: &mut Encoder) {
+    out.object_start();
+    out.key(b"proposal");
+    out.unsigned(value.proposal);
+    out.key(b"to");
+    out.unsigned(u64::from(value.to));
+    out.key(b"left_out");
+    out.array_start();
+    for setting in &value.left_out {
+        out.object_start();
+        out.key(b"kind");
+        out.unsigned(u64::from(setting.kind));
+        out.key(b"scope");
+        out.unsigned(u64::from(setting.scope));
+        out.key(b"number");
+        out.unsigned(u64::from(setting.number));
+        out.object_end();
+    }
+    out.array_end();
+    out.object_end();
+}
+fn restored_text(operation: &Operation, value: &c::OutcomeRestored, out: &mut Text) {
+    out.put(b"proposed restoring revision ");
+    out.number(u64::from(value.to));
+    out.put(b" as proposal p");
+    out.number(operation.party.expect("request party retained"));
+    out.put(b"/");
+    out.number(value.proposal);
+    out.put(b", to the owners");
+    if !value.left_out.is_empty() {
+        out.put(b"\nleft out:");
+        for setting in &value.left_out {
+            out.put(b" kind ");
+            out.number(u64::from(setting.kind));
+            out.put(b" scope ");
+            out.number(u64::from(setting.scope));
+            out.put(b" number ");
+            out.number(u64::from(setting.number));
+        }
+    }
+}
+
+fn settings_answer(outcome: &Outcome, out: &mut Encoder) -> bool {
+    if let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::Restored(value)))) = outcome {
+        restored_json(value, out);
+        return true;
+    }
+    if let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::MovedToNewest(value)))) = outcome {
+        moved_json(value, out);
+        return true;
+    }
+    if let Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::SettingsChanged(changed)))) = outcome {
+        out.object_start();
+        out.key(b"revision");
+        out.unsigned(u64::from(changed.revision));
+        out.object_end();
+        return true;
+    }
+    false
 }
