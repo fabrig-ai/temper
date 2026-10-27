@@ -48,7 +48,9 @@ updates are spent`, `its branch was moved on the forge`, `its branch is
 missing on the forge`, `its pull request was closed on the forge`, `its
 pull request was retargeted on the forge`, `a delegate or a write
 failed for good`, or `a person rejected a gate`. A release resets its
-counts and goes on from where it was held.
+counts and goes on from where it was held. Its panel also names a held
+task, the change's own or its writer's or reviewer's, `held: task N
+(REASON)`, with that task's way out.
 
 ## What temper guarantees
 
@@ -68,7 +70,8 @@ counts and goes on from where it was held.
 ## Acting on it
 
 - **ctl:** `change show` reads its panel and waits for its pull
-  request, its CI, a hold or its landing (temper help ctl); `task show`
+  request, its CI, a hold or its landing (temper help ctl); a wait for
+  its landing ends at a hold, `not met: held` (exit 3); `task show`
   reads its task and its acts, `task release` among them; `task tree`
   shows its delegates.
 - **temper's runs** ask for one with `change`, and hear landings on a

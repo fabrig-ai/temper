@@ -259,11 +259,12 @@ If not: `not met: timeout` (exit 3): read `temper ctl DIR change
 show CHANGE` and `temper ctl DIR task show CHANGE --tree` for its step, its
 hold and its acts, act on them, and wait again. `not met: ended:
 cancelled` or `not met: ended: failed` (exit 3), at once: the change
-ended without landing; its tree says why. `held: task N (REASON)` in
-the panel: task `N`, its writer or its reviewer, is held; `temper ctl
-DIR task show N` prints its way out. `held before registration:
-REASON` (exit 2): the change was held before its pull request was
-made; `temper ctl DIR task show CHANGE` prints its way out.
+ended without landing; its tree says why. `not met: held` (exit 3):
+its `held: task N (REASON)` names the change, its writer or its
+reviewer; `temper ctl DIR task show N` prints its way out. `held
+before registration: REASON` (exit 2): the change was held before its
+pull request was made; `temper ctl DIR task show CHANGE` prints its
+way out.
 
 ## 8. Export the account, then stop
 
