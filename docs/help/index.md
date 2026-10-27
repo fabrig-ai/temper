@@ -7,9 +7,8 @@ temper runs software work for people: agents take tasks on the repositories of a
 ## What temper is
 
 - **A deployment** is temper's engine, its workers and the forges it
-  works on. The binary makes and runs one: `temper init` writes its
-  configuration, `temper box` runs it on one machine, `temper serve`
-  runs its engine.
+  works on. `temper init` writes its configuration, `temper box` runs
+  it on one machine, `temper serve` runs its engine.
 - **An agent works in a deployment** for a person with `temper ctl`,
   one call a process.
 - **temper's own runs** read these pages with their host tool
@@ -26,31 +25,30 @@ temper runs software work for people: agents take tasks on the repositories of a
 
 ## The map
 
-- temper help ctl: the command line through which an agent works in a
-  deployment for a person: calls, keys, kept requests, waits, exit
-  statuses.
-- temper help task: a numbered piece of work, its delegates, phases,
-  holds and parts.
-- temper help chat: a conversation with an agent, parked between
-  messages, closed by its party.
+- temper help ctl: calls, keys, kept requests, waits, exit statuses.
+- temper help deployment: the engine, its workers, its directories
+  and its configuration.
+- temper help party: a person or a service, its roles, signing in.
+- temper help project: its repositories, its home, its members.
+- temper help forge: GitHub or Forgejo, and how temper reaches one.
+- temper help repository: a forge's repository adopted into a project.
+- temper help account: an LLM provider's account, its sources, models.
+- temper help task: a piece of work, its delegates, phases and holds.
+- temper help chat: a conversation with an agent, closed by its party.
 - temper help goal: a tracked task, its priority and its plan.
-- temper help proposal: an act beyond its proposer's authority, which
-  waits for one who may decide it; a change of settings among them.
-- temper help settings: the charters, templates, policies and rules
-  a deployment's owners change while it runs, one checked decision at
-  a time.
-- temper help revision: each settings decision as a numbered record,
-  their history, and the revision a task's runs read their charter
-  from.
-- temper help charter: how an agent's run works: its instructions,
-  models, workspace tools, hosts and limits.
+- temper help change: a change's way from a branch to its landing.
+- temper help inbox: what waits on your party, then its updates.
+- temper help proposal: an act that waits for one who may decide it.
+- temper help settings: charters, templates, policies and rules,
+  changed while the deployment runs.
+- temper help revision: each settings decision, numbered, and the
+  revision a task's runs read.
+- temper help charter: how an agent's run works.
 - temper help template: how a new task of one shape is filled.
-- temper help policy: what work in a project may do and spend: the
-  policies, roles and rules, and the requirements on effects.
-- temper help landing-rule: what a change must meet before temper
-  merges it.
-- temper help budget: what work spends, where it comes from, and what
-  happens when it runs out.
+- temper help policy: what a project's work may do and spend.
+- temper help landing-rule: what a change must meet to merge.
+- temper help budget: what work spends, and what happens at the end.
+- temper help playground: the demo, on a fake forge and model.
 
 ## The walks
 

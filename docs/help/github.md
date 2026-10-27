@@ -89,7 +89,9 @@ If not: `credential file must contain 1 to 4089 bytes` or a key
 file's mode (exit 1): mend `FILE`, then the same call with the same
 key. `connected already` (exit 2): forge 2 holds a key, which this
 build cannot replace. An App short of a permission or an event
-connects, and `forge list` names what it lacks: grant it in the App's
+connects, and `temper serve` prints what it lacks on its stderr,
+`temper serve: forge 2: App lacks ` then each name, which a box writes
+to its `serve` log under `DATA/box/logs/`: grant them in the App's
 settings on GitHub.
 
 ## 4. Accept an installation

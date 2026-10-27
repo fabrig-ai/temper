@@ -79,7 +79,7 @@ pub struct Page {
 
 /// `index`, then the concepts, walks, recipes, reference pages and guides, each by name.
 #[expect(clippy::disallowed_macros, reason = "pages compile their single Markdown source as static data")]
-pub static PAGES: [Page; 35] = [
+pub static PAGES: [Page; 44] = [
     Page {
         name: "index",
         kind: Kind::Index,
@@ -88,11 +88,25 @@ pub static PAGES: [Page; 35] = [
         text: include_str!("../../../docs/help/index.md"),
     },
     Page {
+        name: "account",
+        kind: Kind::Concept,
+        title: "Accounts and models",
+        summary: "An account is how a deployment pays an LLM provider for its runs, through its sources: a sign-in, a key or a program's login; models are what each provider offers, as the configuration lists them.",
+        text: include_str!("../../../docs/help/account.md"),
+    },
+    Page {
         name: "budget",
         kind: Kind::Concept,
         title: "Budgets",
         summary: "A budget is what a task may spend, in units its models' prices make of their usage, and by when; each run draws a share of it, and a task without enough is held.",
         text: include_str!("../../../docs/help/budget.md"),
+    },
+    Page {
+        name: "change",
+        kind: Kind::Concept,
+        title: "Changes",
+        summary: "A change is a task that writes one repository's branch and lands it: its pull request, CI at its head, its gates, the landing queue, its repairs and the merge, each step as change show prints it.",
+        text: include_str!("../../../docs/help/change.md"),
     },
     Page {
         name: "charter",
@@ -116,11 +130,32 @@ pub static PAGES: [Page; 35] = [
         text: include_str!("../../../docs/help/ctl.md"),
     },
     Page {
+        name: "deployment",
+        kind: Kind::Concept,
+        title: "Deployments",
+        summary: "A deployment is one temper: its engine, the workers that run its agents, the forges it works on, and the three directories that hold its configuration, its data and its cache.",
+        text: include_str!("../../../docs/help/deployment.md"),
+    },
+    Page {
+        name: "forge",
+        kind: Kind::Concept,
+        title: "Forges",
+        summary: "A forge is where repositories live, GitHub or Forgejo, numbered in the configuration; temper connects to one or runs its own, and works only in the repositories adopted from it.",
+        text: include_str!("../../../docs/help/forge.md"),
+    },
+    Page {
         name: "goal",
         kind: Kind::Concept,
         title: "Goals",
         summary: "A goal is a tracked task: work given a numeric priority, which orders the goals' listing and the work waiting for resources, and whose tree is its plan.",
         text: include_str!("../../../docs/help/goal.md"),
+    },
+    Page {
+        name: "inbox",
+        kind: Kind::Concept,
+        title: "The inbox",
+        summary: "A party's inbox is what waits on it, questions, proposals, escalations and person tasks, then its updates, the results and replies it has not read; one read lists both, needs first.",
+        text: include_str!("../../../docs/help/inbox.md"),
     },
     Page {
         name: "landing-rule",
@@ -130,6 +165,20 @@ pub static PAGES: [Page; 35] = [
         text: include_str!("../../../docs/help/landing-rule.md"),
     },
     Page {
+        name: "party",
+        kind: Kind::Concept,
+        title: "Parties",
+        summary: "A party is who acts in a deployment, a person or a service, numbered, with a role in the deployment or in a project; ctl acts as the party its directory signed in as.",
+        text: include_str!("../../../docs/help/party.md"),
+    },
+    Page {
+        name: "playground",
+        kind: Kind::Concept,
+        title: "The playground",
+        summary: "The playground is temper's demo: a repository on a fake forge and a scripted model, started with one call, so that a chat and its change run through real tasks with no account of yours.",
+        text: include_str!("../../../docs/help/playground.md"),
+    },
+    Page {
         name: "policy",
         kind: Kind::Concept,
         title: "Policy",
@@ -137,11 +186,25 @@ pub static PAGES: [Page; 35] = [
         text: include_str!("../../../docs/help/policy.md"),
     },
     Page {
+        name: "project",
+        kind: Kind::Concept,
+        title: "Projects",
+        summary: "A project is where work happens: the repositories adopted into it, one of them its home, the parties with a role in it, its own policy, and the period its budget comes from.",
+        text: include_str!("../../../docs/help/project.md"),
+    },
+    Page {
         name: "proposal",
         kind: Kind::Concept,
         title: "Proposal",
         summary: "A request for an act beyond its proposer's authority, which waits for a party or task that may decide it: a batch of tasks, an effect, a widening, an amendment, or a change of settings.",
         text: include_str!("../../../docs/help/proposal.md"),
+    },
+    Page {
+        name: "repository",
+        kind: Kind::Concept,
+        title: "Repositories",
+        summary: "A repository is a forge's repository adopted into a project: owned, a fork or context, with temper's own branches under a prefix, its CI or its checks, and one of them the project's home.",
+        text: include_str!("../../../docs/help/repository.md"),
     },
     Page {
         name: "revision",
