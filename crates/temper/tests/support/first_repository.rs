@@ -388,6 +388,7 @@ pub fn live_from_hands(config: &Path, data: &Path, client: &Path, stderr: &[u8])
     evidence
 }
 
+#[must_use]
 pub fn header_request(api: &str, header: &str, method: &str, route: &str, body: Option<&str>) -> (u16, Value) {
     let mut command = std::process::Command::new("curl");
     command.args([
@@ -575,6 +576,7 @@ pub fn assert_task(run: &str, calls: &[super::Ended], stderr: &str, evidence: &E
     }
 }
 
+#[must_use]
 pub fn flags(root: &Path) -> Vec<String> {
     super::configuration::flags(root).into_iter().map(|flag| flag.into_string().expect("scratch UTF-8")).collect()
 }
