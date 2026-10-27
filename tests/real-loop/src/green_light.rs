@@ -68,6 +68,7 @@ pub fn fixture() -> forge::Fixture {
             (landing::fixture().configure)(value, agent, forge);
             // o/configuring-stock has not landed Message in stock; tools 3 keeps it for the chat.
             value["engine"]["rules"]["ceiling"]["tools"] = 3.into();
+            crate::fixtures::own_policy(value);
             // A tracked goal reserves one full news message beside its question's answer credit.
             value["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = 8192.into();
             value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 5.into();
