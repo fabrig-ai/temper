@@ -2,7 +2,7 @@
 use skein_fake_person::{Find, Step, Target};
 use skein_lib::Duration;
 use skein_ui::Role;
-use temper_client_domain::{Address, address::ChatsFilter};
+use temper_client_domain::Address;
 
 const WITHIN: Duration = Duration::from_secs(40);
 const LANDS_WITHIN: Duration = Duration::from_secs(122);
@@ -58,7 +58,7 @@ pub fn whole() -> Box<[Step<Address>]> {
         ),
     ] {
         steps.extend([
-            Step::Go { address: Address::Chats { filter: ChatsFilter::All, start: false } },
+            Step::Press { find: Find::exactly_named(Role::Link, b"Chats") },
             see(Find::named(Role::Button, cue)),
             Step::Press { find: Find::named(Role::Button, cue) },
             see(Find::exactly_named(Role::Paragraph, cue).within(conversation())),

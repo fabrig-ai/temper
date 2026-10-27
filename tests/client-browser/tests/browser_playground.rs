@@ -1,11 +1,11 @@
 //! The static page boots its world in a worker and spends that world's printed sign-in link
 //! (playground.md, 2, 6 and 9); the server only supplies the bundle.
-use skein_fake_person::{Face, Find, Found, Next, Step as PersonStep, Why};
+use skein_fake_person::{Face, Find, Found, Next, Step as PersonStep, Target, Why};
 use skein_fake_person_browser::{BrowserFace, Harness, Outcome, Play, Script, Step};
 use skein_lib::Time;
 use skein_ui::Role;
-use temper_client_browser_world::{Tier, WITHIN};
-use temper_client_domain::{Address, address};
+use temper_client_browser_world::{ABSENT, Tier, WITHIN};
+use temper_client_domain::Address;
 use temper_playground_world::story_a;
 
 #[test]
@@ -39,13 +39,36 @@ fn story_a_walks_in_the_browser_playground() {
     run_with_figures(&tier, Script::new(steps.into_boxed_slice()));
 }
 
-/// Keep the shared script's observations and person-time waits unchanged. Its Go to Chats
-/// becomes the visible link: Page.navigate would reload the page and reset the worker's world.
+#[test]
+fn a_failed_world_shows_the_failure_page_and_offers_its_log() {
+    let tier = Tier::playground("playground-failure");
+    let see = |find| Step::Person(PersonStep::See { find, within: WITHIN });
+    let failure = || Box::new([Target::Role { role: Role::Alert, name: b"".as_slice().into() }]) as Box<[Target]>;
+    let failed = || Find::exactly_named(Role::Heading { level: 1 }, b"The playground failed.").within(failure());
+    let mut script = Script::new(Box::new([
+        Step::Person(PersonStep::Go { address: b"/?story=missing-story".as_slice().into() }),
+        see(failed()),
+        see(Find::text(b"known playground story directory").within(failure())),
+        see(Find::exactly_named(Role::Button, b"Download the session's log").within(failure())),
+        see(Find::exactly_named(Role::Link, b"Start over").within(failure())),
+        Step::Person(PersonStep::Gone { find: Find::text("Loading the playground…".as_bytes()), within: WITHIN }),
+        Step::Person(PersonStep::Pause { span: ABSENT }),
+        Step::Address(b"/?story=missing-story".as_slice().into()),
+        see(failed()),
+        Step::Person(PersonStep::Press { find: Find::exactly_named(Role::Link, b"Start over").within(failure()) }),
+        see(Find::exactly_named(Role::Heading { level: 1 }, b"Welcome to temper")),
+        see(Find::exactly_named(Role::Button, b"Try the playground")),
+        Step::Address(b"/welcome".as_slice().into()),
+        Step::Person(PersonStep::Gone { find: failed(), within: WITHIN }),
+    ]));
+    assert_eq!(Harness::new(tier.playground_setup()).run(&mut [&mut script]), Outcome::Done);
+}
+
+/// Keep the shared script's actions, observations and person-time waits unchanged.
 fn browser_step(step: PersonStep<Address>) -> Step {
     Step::Person(match step {
-        PersonStep::Go { address } => {
-            assert_eq!(address::print(&address).as_ref(), b"/chats", "the story's in-page destination");
-            PersonStep::Press { find: Find::exactly_named(Role::Link, b"Chats") }
+        PersonStep::Go { .. } => {
+            panic!("the browser story takes no address moves: a reload would end the world")
         }
         PersonStep::Press { find } => PersonStep::Press { find },
         PersonStep::Type { find, words } => PersonStep::Type { find, words },
