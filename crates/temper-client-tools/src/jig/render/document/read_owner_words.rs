@@ -271,3 +271,31 @@ fn encode_message_notice(
     out.object_end();
     out.object_end();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::encode_owner_message_kind;
+    use jig_client::contract::{OwnerMessageKind, SettingsOutcome};
+    use skein_json::writer::{Encoder, Limits};
+
+    #[test]
+    fn settings_decisions_encode_all_three_outcomes() {
+        let limits = Limits { depth: 8, length: 256 };
+        for (outcome, expected) in [
+            (
+                SettingsOutcome::Accepted { revision: 7 },
+                br#"{"settings_decision":{"proposal":3,"outcome":{"accepted":7}}}"#.as_slice(),
+            ),
+            (SettingsOutcome::Rejected, br#"{"settings_decision":{"proposal":3,"outcome":"rejected"}}"#),
+            (SettingsOutcome::Stale { newest: 8 }, br#"{"settings_decision":{"proposal":3,"outcome":{"stale":8}}}"#),
+        ] {
+            let kind = OwnerMessageKind::SettingsDecision { proposal: 3, outcome };
+            let mut budget = super::super::Cut { room: 0, left: 0, turn: None, subject: false, digest: None };
+            let mut measured = Encoder::measure(&limits);
+            encode_owner_message_kind(&kind, &mut measured, &mut budget);
+            let mut encoded = Encoder::write(measured.measured().expect("bounded decision"), &limits);
+            encode_owner_message_kind(&kind, &mut encoded, &mut budget);
+            assert_eq!(encoded.finish().as_ref(), expected);
+        }
+    }
+}
