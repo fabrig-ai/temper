@@ -486,6 +486,10 @@ fn application_limit_refusals(rows: &mut skein_lib::List<jig_domain_people::Refu
     use jig_domain_people as p;
     for which in [
         p::LimitKind::Projects,
+        p::LimitKind::PlacedHolds,
+        p::LimitKind::ProjectPlacedHolds,
+        p::LimitKind::PartyPlacedHolds,
+        p::LimitKind::Exemptions,
         p::LimitKind::Words,
         p::LimitKind::Identity,
         p::LimitKind::Roles,
@@ -572,7 +576,7 @@ fn application_moved_and_ended(rows: &mut skein_lib::List<jig_domain_people::Ref
         p::HoldReason::Stalled,
         p::HoldReason::Dependency { task: u64::MAX },
         p::HoldReason::Stopped,
-        p::HoldReason::StoppedBy { party: u64::MAX },
+        p::HoldReason::Placed { hold: u64::MAX },
         p::HoldReason::Drift,
         p::HoldReason::Effects,
         p::HoldReason::EffectFailed,

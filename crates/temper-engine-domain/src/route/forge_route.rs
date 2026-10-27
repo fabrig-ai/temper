@@ -2966,7 +2966,8 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                             | tasks::ProposalAction::ProcedureEffect { .. }
                             | tasks::ProposalAction::Amend { .. }
                             | tasks::ProposalAction::Widen { .. }
-                            | tasks::ProposalAction::Release { .. } => return,
+                            | tasks::ProposalAction::Release { .. }
+                            | tasks::ProposalAction::ReleasePlaced { .. } => return,
                         },
                         None => return,
                     };

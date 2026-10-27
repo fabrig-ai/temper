@@ -1063,8 +1063,7 @@ fn chip_hold(chip: &c::Chip) -> Option<u64> {
 fn hold_revision(page: Option<&c::ReadValue>) -> Option<u64> {
     if let Some(c::ReadValue::Task(task)) = page {
         match &task.hold {
-            Some(c::TaskHold::Owner(hold)) => Some(hold.revision),
-            Some(c::TaskHold::Document(hold)) => Some(hold.revision.value),
+            Some(hold) => Some(hold.revision().value),
             None => None,
         }
     } else {

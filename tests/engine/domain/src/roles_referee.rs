@@ -237,6 +237,7 @@ impl Referee {
                                 | tasks::Stored::History(_)
                                 | tasks::Stored::PersonProposal(_)
                                 | tasks::Stored::Writer(_)
+                                | tasks::Stored::PlacedHold(_)
                                 | tasks::Stored::Pool(_)
                                 | tasks::Stored::Update(_)
                                 | tasks::Stored::Result(_)

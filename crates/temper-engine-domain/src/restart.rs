@@ -509,7 +509,8 @@ pub(crate) fn restore_page_row(domain: &mut Domain, env: &Env<Limits>, row: Reco
                 | tasks::Stored::Stub(_)
                 | tasks::Stored::Ledger(_)
                 | tasks::Stored::Writer(_)
-                | tasks::Stored::Pool(_) => true,
+                | tasks::Stored::Pool(_)
+                | tasks::Stored::PlacedHold(_) => true,
             };
             if !supported || !domain.core.restore_task_row(&record) {
                 let _refused = domain.core.restart_refuse();

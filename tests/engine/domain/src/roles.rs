@@ -231,6 +231,7 @@ impl World {
                         | tasks::Stored::Stub(_)
                         | tasks::Stored::Ledger(_)
                         | tasks::Stored::Writer(_)
+                        | tasks::Stored::PlacedHold(_)
                         | tasks::Stored::Pool(_)
                         | tasks::Stored::Milestone(_)
                         | tasks::Stored::History(_)

@@ -344,7 +344,7 @@ pub(crate) fn hold_phrase(value: &c::HoldCategory, words: &Words) -> Box<[u8]> {
         c::HoldCategory::Failures { .. }
         | c::HoldCategory::Stalled
         | c::HoldCategory::Stopped
-        | c::HoldCategory::StoppedBy { .. }
+        | c::HoldCategory::Placed { .. }
         | c::HoldCategory::Drift
         | c::HoldCategory::Effects
         | c::HoldCategory::EffectFailed

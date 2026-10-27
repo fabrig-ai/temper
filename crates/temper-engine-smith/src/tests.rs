@@ -664,6 +664,14 @@ const ANSWER_CASES: &[(engine::CallAnswer, &[u8], bool)] = &[
     (
         engine::CallAnswer::Moved {
             task: CALL_TASK,
+            now: jig_domain_people::Moved::Hold { revision: 2, reason: jig_domain_people::HoldReason::Placed { hold: u64::MAX } },
+        },
+        b"Moved: task 23 is held at hold revision 2 now, because a placed hold holds it",
+        true,
+    ),
+    (
+        engine::CallAnswer::Moved {
+            task: CALL_TASK,
             now: jig_domain_people::Moved::Hold { revision: 2, reason: jig_domain_people::HoldReason::Circle },
         },
         b"Moved: task 23 is held at hold revision 2 now, for a circle of waits",
