@@ -5,6 +5,8 @@ use skein_fake_person_browser::{BrowserFace, Harness, Outcome, Play, Script, Ste
 use skein_lib::Time;
 use skein_ui::Role;
 use temper_client_browser_world::{Tier, WITHIN};
+use temper_client_domain::{Address, address};
+use temper_playground_world::story_a;
 
 #[test]
 fn the_playground_shows_the_welcome_signed_in_by_its_printed_link() {
@@ -20,6 +22,42 @@ fn the_playground_shows_the_welcome_signed_in_by_its_printed_link() {
         Step::Person(PersonStep::Gone { find: Find::text("Loading the playground…".as_bytes()), within: WITHIN }),
         see(Find::text(b"The world: ")),
     ]));
+    run_with_figures(&tier, script);
+}
+
+#[test]
+fn story_a_walks_in_the_browser_playground() {
+    let tier = Tier::playground("playground-story-a");
+    let mut steps = vec![
+        Step::Person(PersonStep::See {
+            find: Find::exactly_named(Role::Heading { level: 1 }, b"Welcome to temper"),
+            within: WITHIN,
+        }),
+        Step::Person(PersonStep::Press { find: Find::exactly_named(Role::Option, "100×".as_bytes()) }),
+    ];
+    steps.extend(story_a::whole().into_vec().into_iter().map(browser_step));
+    run_with_figures(&tier, Script::new(steps.into_boxed_slice()));
+}
+
+/// Keep the shared script's observations and person-time waits unchanged. Its Go to Chats
+/// becomes the visible link: Page.navigate would reload the page and reset the worker's world.
+fn browser_step(step: PersonStep<Address>) -> Step {
+    Step::Person(match step {
+        PersonStep::Go { address } => {
+            assert_eq!(address::print(&address).as_ref(), b"/chats", "the story's in-page destination");
+            PersonStep::Press { find: Find::exactly_named(Role::Link, b"Chats") }
+        }
+        PersonStep::Press { find } => PersonStep::Press { find },
+        PersonStep::Type { find, words } => PersonStep::Type { find, words },
+        PersonStep::Send { find } => PersonStep::Send { find },
+        PersonStep::See { find, within } => PersonStep::See { find, within },
+        PersonStep::Gone { find, within } => PersonStep::Gone { find, within },
+        PersonStep::Reload => PersonStep::Reload,
+        PersonStep::Pause { span } => PersonStep::Pause { span },
+    })
+}
+
+fn run_with_figures(tier: &Tier, script: Script) {
     let mut story = Figures { script, words: None };
     assert_eq!(Harness::new(tier.playground_setup()).run(&mut [&mut story]), Outcome::Done);
     let words = std::str::from_utf8(story.words.as_deref().expect("frame's figures")).expect("figures UTF-8");

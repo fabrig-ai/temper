@@ -2432,7 +2432,9 @@ dependencies = [
  "skein-ui-bundle",
  "skein-world",
  "smith-agent-shell",
+ "temper-client-domain",
  "temper-engine-domain",
+ "temper-playground-world",
 ]
 
 [[package]]

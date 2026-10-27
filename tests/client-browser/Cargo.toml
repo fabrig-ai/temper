@@ -37,6 +37,8 @@ jig-client-protocol-link.workspace = true
 jig-client-fake-person-browser.workspace = true
 
 [dev-dependencies]
+temper-playground-world = { path = "../playground" }
+temper-client-domain.workspace = true
 skein-io.workspace = true
 skein-world.workspace = true
 skein-sim = { git = "https://github.com/fabrig-dev/skein.git" }
