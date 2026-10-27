@@ -204,19 +204,22 @@ pub(crate) const SPECS: [Spec; 39] = [
 /// The complete host-tool registry, with exact schemas and write effects.
 #[must_use]
 pub fn tools(timeout: Duration) -> Box<[run::HostTool]> {
-    offered_tools(timeout, true)
+    offered_tools(timeout, true, true)
 }
 
-/// Settings declarations require the run's settings family. Root authority
-/// still decides each accepted call by its durable name.
+/// Settings and message declarations require their respective run families.
+/// Root authority still decides each accepted call by its durable name.
 pub(crate) fn tools_for(timeout: Duration, authority: tasks::Tools) -> Box<[run::HostTool]> {
-    offered_tools(timeout, authority.0 & jig_domain_core::ToolFamilies::JIG.settings != 0)
+    let families = jig_domain_core::ToolFamilies::JIG;
+    offered_tools(timeout, authority.0 & families.settings != 0, authority.0 & families.message.0 != 0)
 }
 
-fn offered_tools(timeout: Duration, settings: bool) -> Box<[run::HostTool]> {
+fn offered_tools(timeout: Duration, settings: bool, message: bool) -> Box<[run::HostTool]> {
     let mut tools = List::with_capacity(u32::try_from(SPECS.len()).expect("fixed tool list"));
     for spec in SPECS {
-        if !settings && (spec.name == b"settings" || spec.name == b"propose_settings") {
+        if (!settings && (spec.name == b"settings" || spec.name == b"propose_settings"))
+            || (!message && spec.name == b"message")
+        {
             continue;
         }
         tools

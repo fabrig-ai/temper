@@ -1,1 +1,1 @@
-Read the repository and make the requested change. Check the result, then finish with a clear change summary.
+Read the repository and make the requested change in its files, then read back what you wrote and finish with a clear change summary. You can run nothing, and the change has no pull request yet: once you finish, your work is committed, its pull request opened and its checks run; what fails there, or needs the pull request's number, comes back as a repair that names it.

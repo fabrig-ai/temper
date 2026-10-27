@@ -246,6 +246,12 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
     );
     assert_eq!(driver.task(change).expect("procedure").numbers.budget, 5 * K);
     let mut worker = child_run(driver, change);
+    assert_eq!(
+        worker.run.policy.instructions.as_ref(),
+        include_bytes!("../../../../../crates/temper-service/src/stock/coding.txt"),
+        "the producer reads the stock coding instructions"
+    );
+    assert!(!worker.run.policy.shell, "the producer can run nothing");
     let tasks::Parameter::Bytes { value: branch, .. } = &driver.task(worker.task).expect("producer").spec.parameters[2]
     else {
         panic!("branch");
@@ -253,7 +259,7 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
     let branch = branch.clone();
     let mut workers = Vec::new();
     for round in 0..3 {
-        no_settings_tools(&worker);
+        no_settings_or_message_tools(&worker);
         assert_eq!(worker.charter, 2);
         assert_eq!(worker.run.policy.model, box_model());
         workers.push(worker.task);
@@ -271,7 +277,7 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
         worker = child_run(driver, change);
     }
     assert_eq!(worker.charter, 4);
-    no_settings_tools(&worker);
+    no_settings_or_message_tools(&worker);
     assert!(matches!(worker.run.contract, tasks::Contract::Verdict { .. }), "one review follows both repairs");
     workers.push(worker.task);
     workers.sort_unstable();
@@ -305,16 +311,21 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
     );
 }
 
-fn no_settings_tools(run: &engine::Assignment) {
+fn no_settings_or_message_tools(run: &engine::Assignment) {
     assert_eq!(run.run.authority.tools.0 & core::ToolFamilies::JIG.settings, 0);
+    assert_eq!(run.run.authority.tools.0 & core::ToolFamilies::JIG.message.0, 0);
     let charter = temper_engine_smith::charter(run);
-    assert_eq!(charter.grants.host_tools.len(), 37);
+    assert_eq!(charter.grants.host_tools.len(), 36);
     for tool in &charter.grants.host_tools {
-        assert!(tool.name.as_ref() != b"settings" && tool.name.as_ref() != b"propose_settings");
+        assert!(
+            tool.name.as_ref() != b"settings"
+                && tool.name.as_ref() != b"propose_settings"
+                && tool.name.as_ref() != b"message"
+        );
     }
 }
 
-pub(super) fn changes_without_settings() {
+pub(super) fn changes_without_settings_or_message() {
     let mut config = [configuration(), configuration()];
     for config in &mut config {
         config.core.defaults.rules.ceiling.tools.0 |= core::ToolFamilies::JIG.settings;
@@ -328,6 +339,7 @@ pub(super) fn changes_without_settings() {
     let (mut driver, chat) = chat_in(config);
     assert_ne!(chat.run.authority.tools.0 & core::ToolFamilies::JIG.settings, 0);
     assert_eq!(temper_engine_smith::charter(&chat).grants.host_tools.len(), 39);
+    assert_ne!(chat.run.authority.tools.0 & core::ToolFamilies::JIG.message.0, 0);
     let coordinator = delegate(&driver, chat.task, b"Land a change", 5, 11 * K);
     let engine::CallAnswer::Delegated(made) =
         call(&mut driver, &chat, 42, engine::Tool::Delegate { batch: Box::new([coordinator]) })
@@ -335,6 +347,8 @@ pub(super) fn changes_without_settings() {
         panic!("coordinator admitted");
     };
     let coordinator = assigned(&driver, made[0].task).expect("coordinator run");
+    assert_ne!(coordinator.run.authority.tools.0 & core::ToolFamilies::JIG.message.0, 0);
+    assert_eq!(temper_engine_smith::charter(&coordinator).grants.host_tools.len(), 39);
     repair_change(&mut driver, &coordinator, 43);
 }
 

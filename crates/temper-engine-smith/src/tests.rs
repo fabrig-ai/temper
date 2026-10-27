@@ -117,7 +117,7 @@ fn root_charter_becomes_a_smith_start_with_ordered_brief_and_exact_budget() {
     assert_eq!(charter.brief.sections[0].title.as_ref(), b"Task");
     assert_eq!(charter.brief.sections[0].text.as_ref(), b"Say hello");
     assert_eq!(charter.budget.spend, 40);
-    assert_eq!(charter.grants.host_tools.len(), 37);
+    assert_eq!(charter.grants.host_tools.len(), 36);
     assert_eq!(grants[0].name.generation, 2);
     assert!(transcript.is_none());
 }
@@ -126,6 +126,7 @@ fn root_charter_becomes_a_smith_start_with_ordered_brief_and_exact_budget() {
 fn settings_tools_are_offered_only_with_the_runs_settings_family() {
     for allowed in [false, true] {
         let mut assignment = assignment();
+        assignment.run.authority.tools.0 |= jig_domain_core::ToolFamilies::JIG.message.0;
         if allowed {
             assignment.run.authority.tools.0 |= jig_domain_core::ToolFamilies::JIG.settings;
         }
@@ -144,6 +145,36 @@ fn settings_tools_are_offered_only_with_the_runs_settings_family() {
             if tool.name.as_ref() != b"settings" && tool.name.as_ref() != b"propose_settings" {
                 assert!(charter.grants.host_tools.contains(&tool), "unchanged declaration: {:?}", tool.name);
             }
+        }
+    }
+}
+
+#[test]
+fn message_is_offered_only_with_the_runs_message_family() {
+    let families = jig_domain_core::ToolFamilies::JIG;
+    for settings in [false, true] {
+        for (role, authority, message) in [
+            ("coder", families.read.0 | families.effect.0, false),
+            ("repairer", families.read.0 | families.effect.0, false),
+            ("reviewer", families.read.0, false),
+            ("chat", families.read.0 | families.message.0, true),
+            ("goal", families.delegate.0 | families.message.0, true),
+        ] {
+            let mut assignment = assignment();
+            assignment.run.authority.tools = tasks::Tools(authority | if settings { families.settings } else { 0 });
+            let charter = crate::charter(&assignment);
+            let expected = tools(Duration::from_secs(10));
+            let mut offered = charter.grants.host_tools.iter();
+            for tool in &expected {
+                if (!settings && (tool.name.as_ref() == b"settings" || tool.name.as_ref() == b"propose_settings"))
+                    || (!message && tool.name.as_ref() == b"message")
+                {
+                    continue;
+                }
+                assert_eq!(offered.next(), Some(tool), "{role}: unchanged declaration and order");
+            }
+            assert_eq!(offered.next(), None, "{role}: no additional tools");
+            assert_eq!(charter.grants.host_tools.len(), 36 + usize::from(message) + 2 * usize::from(settings));
         }
     }
 }
