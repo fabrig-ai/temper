@@ -17,7 +17,18 @@ fn the_visitor_signs_in_by_the_printed_link_and_the_welcome_shows() {
         find: Find::exactly_named(Role::Button, b"Try the playground"),
         within: WELCOME_WITHIN,
     }]);
-    assert_eq!(Walk::new(&A, SEED, START).run(script), Outcome::Done);
+    let mut walk = Walk::new(&A, SEED, START);
+    assert_eq!(walk.run(script), Outcome::Done);
+    walk.close();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/welcome.log");
+    let log = walk.log();
+    if std::env::var("TEMPER_PLAYGROUND_RECORD").as_deref() == Ok("1") {
+        std::fs::create_dir_all(fixture.parent().expect("fixture directory")).expect("create fixture directory");
+        std::fs::write(&fixture, &log).expect("record welcome session log");
+    } else {
+        let expected = std::fs::read(&fixture).expect("welcome fixture; record with TEMPER_PLAYGROUND_RECORD=1");
+        assert!(log.as_ref() == expected, "welcome log differs; record with TEMPER_PLAYGROUND_RECORD=1");
+    }
 }
 
 #[test]

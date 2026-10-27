@@ -12,9 +12,13 @@ pub fn in_bytes(bytes: &[u8]) -> Option<&'static str> {
         ("LLM access token", fixtures::LLM_TOKEN),
         ("git identity token", fixtures::GIT_TOKEN),
         ("forge API token", fixtures::API_TOKEN),
-    ] {
+    ]
+    .into_iter()
+    .map(|(name, bytes)| (name, bytes.to_vec().into_boxed_slice()))
+    .chain(crate::replay::issued())
+    {
         let rendered = format!("{token:?}");
-        if text.contains(std::str::from_utf8(token).expect("ASCII fixture token")) || text.contains(&rendered) {
+        if text.contains(std::str::from_utf8(&token).expect("ASCII fixture token")) || text.contains(&rendered) {
             return Some(name);
         }
     }
@@ -34,9 +38,14 @@ pub(crate) fn require_formatted(text: &str, place: &str) {
         ("LLM access token", fixtures::LLM_TOKEN),
         ("git identity token", fixtures::GIT_TOKEN),
         ("forge API token", fixtures::API_TOKEN),
-    ] {
+    ]
+    .into_iter()
+    .map(|(name, bytes)| (name, bytes.to_vec().into_boxed_slice()))
+    .chain(crate::replay::issued())
+    {
         assert!(
-            !text.contains(std::str::from_utf8(token).expect("fixture token")) && !text.contains(&format!("{token:?}")),
+            !text.contains(std::str::from_utf8(&token).expect("fixture token"))
+                && !text.contains(&format!("{token:?}")),
             "{name} in {place}"
         );
     }

@@ -14,8 +14,9 @@ mod world;
 pub use story::{A, STORIES, Story};
 pub use visitor::{
     VISITOR_ANSWER, VISITOR_COOKIE, VISITOR_COOKIES, VISITOR_DUTIES, VISITOR_EXCHANGES, VISITOR_PIECE, VISITOR_REQUEST,
+    visitor,
 };
-pub use world::world;
+pub use world::{StoryStart, story_start, world};
 
 /// The world's process types and its visitor (playground.md, 3).
 pub struct Playground;

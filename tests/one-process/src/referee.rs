@@ -60,6 +60,7 @@ pub(crate) struct Referee {
     drained: Option<()>,
     forge: Rc<RefCell<forge::Forge>>,
     story: crate::world::Story,
+    page: Option<crate::replay::Driver>,
 }
 impl Referee {
     pub(crate) fn new(
@@ -140,7 +141,13 @@ impl Referee {
             drained: None,
             forge,
             story: scenario,
+            page: None,
         }
+    }
+    /// Page visits end through their log, rather than terminal person evidence.
+    pub(crate) fn with_page(mut self, driver: crate::replay::Driver) -> Self {
+        self.page = Some(driver);
+        self
     }
     fn say(&mut self, now: Time, event: rules::Observed) {
         self.rules
@@ -231,7 +238,9 @@ impl skein_world::Referee<Proc> for Referee {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         let (service, other) = procs.split_at_mut(1);
         let Proc::Service(service) = &mut service[0] else { panic!("service first") };
-        if let Some(bound) = service.hooks {
+        if self.page.is_none()
+            && let Some(bound) = service.hooks
+        {
             self.forge.borrow_mut().hand_hooks(bound);
         }
         if !service.attached {
@@ -262,7 +271,8 @@ impl skein_world::Referee<Proc> for Referee {
             }
             self.attached = Some(());
         }
-        if !self.handed
+        if self.page.is_none()
+            && !self.handed
             && let Some(link) = service.service.service().links().pop()
         {
             for proc in other.iter_mut() {
@@ -278,32 +288,36 @@ impl skein_world::Referee<Proc> for Referee {
             Proc::Client(person) => person.is_empty(),
             Proc::Service(_) | Proc::Playground(_) | Proc::Ctl(_) => true,
         });
-        if crate::stories::adopted(&self.store.borrow().rows) > 0 {
+        if self.page.is_none() && crate::stories::adopted(&self.store.borrow().rows) > 0 {
             self.forge.borrow_mut().adopted();
         }
-        let complete = match self.phase {
-            crate::world::Phase::SignIn => {
-                other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
-            }
-            crate::world::Phase::Drain => {
-                snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
-            }
-            crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
-            crate::world::Phase::Fault { .. } => {
-                self.run.borrow().restarts > 0
-                    && self.cold.is_none()
-                    && crate::stories::adopted(&self.store.borrow().rows) > 0
-            }
-            crate::world::Phase::Story => match self.story {
-                crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
-                crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
-                crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
-                crate::world::Story::Adopt => {
-                    let forge = self.forge.borrow();
-                    forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
+        let complete = if let Some(page) = &mut self.page {
+            page.act(now, service, other)
+        } else {
+            match self.phase {
+                crate::world::Phase::SignIn => {
+                    other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
                 }
-                crate::world::Story::Merge => self.forge.borrow().complete(),
-            },
+                crate::world::Phase::Drain => {
+                    snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
+                }
+                crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
+                crate::world::Phase::Fault { .. } => {
+                    self.run.borrow().restarts > 0
+                        && self.cold.is_none()
+                        && crate::stories::adopted(&self.store.borrow().rows) > 0
+                }
+                crate::world::Phase::Story => match self.story {
+                    crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
+                    crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
+                    crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
+                    crate::world::Story::Adopt => {
+                        let forge = self.forge.borrow();
+                        forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
+                    }
+                    crate::world::Story::Merge => self.forge.borrow().complete(),
+                },
+            }
         };
         if self.done.is_none()
             && (done || !matches!(self.phase, crate::world::Phase::Story | crate::world::Phase::Fault { .. }))
@@ -326,7 +340,9 @@ impl skein_world::Referee<Proc> for Referee {
     fn observe(&mut self, now: Time, procs: &[Proc]) {
         self.forge.borrow_mut().observe(procs);
         let Proc::Service(service) = &procs[0] else { panic!("service first") };
-        self.adoption_window(service);
+        if self.page.is_none() {
+            self.adoption_window(service);
+        }
         let store = self.store.borrow();
         for commit in &service.commits {
             if commit.number <= self.applied {
@@ -421,7 +437,13 @@ impl skein_world::Referee<Proc> for Referee {
         self.say(now, rules::Observed::Tick);
     }
     fn next_deadline(&self) -> Option<Time> {
-        self.done.is_none().then_some(Time::from_nanos(10_000_000_000))
+        [
+            self.done.is_none().then_some(Time::from_nanos(10_000_000_000)),
+            self.page.as_ref().and_then(crate::replay::Driver::next_deadline),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
     fn overdue(&self, now: Time) -> Option<String> {
         (self.done.is_none() && now >= Time::from_nanos(10_000_000_000)).then(|| {
@@ -450,6 +472,9 @@ impl skein_world::Referee<Proc> for Referee {
         })
     }
     fn passed(&self) -> bool {
+        if let Some(page) = &self.page {
+            return page.finished() && self.done.is_some() && self.drained.is_some();
+        }
         self.done.is_some()
             && (matches!(self.phase, crate::world::Phase::Restart)
                 || self.signed_in
