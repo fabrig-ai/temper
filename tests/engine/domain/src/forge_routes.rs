@@ -427,8 +427,8 @@ impl World {
                 if turn {
                     limits.authority.grants = 14;
                     limits.tasks.authority_grants = 14;
-                    limits.authority.executors = 5;
-                    limits.tasks.executor_kinds = 5;
+                    limits.authority.executors = 6;
+                    limits.tasks.executor_kinds = 6;
                     limits.tasks.result_bytes = 256;
                     limits.journal.run_bytes = 32768;
                     if let Some(slots) = landing_members {
@@ -496,7 +496,7 @@ impl World {
             }
             if let Some((defaults, model, _)) = stock {
                 const STOCK_CHARTERS: u32 = 4;
-                const STOCK_EXECUTORS: u32 = 5;
+                const STOCK_EXECUTORS: u32 = 7;
                 const TREE_TASKS: u32 = 12; // Stock lifetime ceiling, including the root.
                 const LANDED_CHANGES: u32 = 2;
                 const RETAINED_HOLDINGS: u32 = 1 + LANDED_CHANGES * 2;
