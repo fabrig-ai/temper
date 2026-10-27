@@ -312,6 +312,8 @@ fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
         body: Box::new([]),
         priority: 0,
         change: change::Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: 7,
             state: change::State::Producing { requested: false },
             gates: Box::new([]),

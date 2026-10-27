@@ -2678,6 +2678,8 @@ pub(crate) fn queue_ready(d: &Domain, row: &ChangeRow, l: &Limits) -> (List<chan
             | change::State::Reopening { .. }
             | change::State::Checking { .. }
             | change::State::Gating { .. }
+            | change::State::Ready { .. }
+            | change::State::Preparing { .. }
             | change::State::Updating { .. }
             | change::State::Resolving { .. }
             | change::State::Repairing { .. }
@@ -2769,7 +2771,13 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
         let stepped = change::step(&row.change, &facts, &heard, env.wall, &env.limits.change_policy);
         let advanced = stepped.change != row.change;
         row.change = stepped.change;
-        match stepped.decision {
+        // landing.md 3: the top's task
+        let decision = if let change::Decision::Effect(change::Effect::Prepare { .. }) = stepped.decision {
+            change::Decision::None
+        } else {
+            stepped.decision
+        };
+        match decision {
             change::Decision::None if advanced => {}
             change::Decision::Effect(effect) => {
                 emit_change_effect(d, env, &mut row, pending, prior, effect, out);
@@ -2815,6 +2823,8 @@ fn in_queue(state: &change::State) -> bool {
         | change::State::Reopening { .. }
         | change::State::Checking { .. }
         | change::State::Gating { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
         | change::State::Updating { .. }
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
@@ -2875,6 +2885,7 @@ fn change_facts(
     };
     let window = crate::settle::window(d, row.task);
     change::Facts {
+        ask: None,
         branch: pending.branch,
         expected_base: base_tip,
         pull,
@@ -2936,7 +2947,9 @@ fn emit_change_effect(
     let condition = match effect {
         change::Effect::Update { head, base } => skein_forge_client::Condition::Update { head, base },
         change::Effect::Merge { .. } => skein_forge_client::Condition::Merge { base: row.base.clone() },
-        change::Effect::Open
+        // landing.md 3: the top's task
+        change::Effect::Prepare { .. }
+        | change::Effect::Open
         | change::Effect::CreateBranch { .. }
         | change::Effect::Reopen
         | change::Effect::Retarget => skein_forge_client::Condition::None,
@@ -2999,7 +3012,7 @@ fn change_write(row: &ChangeRow, effect: change::Effect) -> Option<skein_forge::
             Some(skein_forge::api::Write::CreateBranch { branch: row.branch.clone(), commit: head })
         }
         change::Effect::Reopen => Some(skein_forge::api::Write::Reopen { number: row.pull? }),
-        change::Effect::Retarget => None,
+        change::Effect::Prepare { .. } | change::Effect::Retarget => None,
         change::Effect::Update { .. } => {
             Some(skein_forge::api::Write::Update { number: row.pull?, style: skein_forge::api::UpdateStyle::Merge })
         }

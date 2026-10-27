@@ -148,6 +148,8 @@ fn changed(task: u64, repository: Repository, pull: Option<u64>, head: Option<[u
         body: Box::new([]),
         priority: 0,
         change: change::Change {
+            way: change::Way::Queue,
+            landing: None,
             task,
             state: change::State::Landed { merge: routes::object(99).bytes },
             gates: Box::new([]),

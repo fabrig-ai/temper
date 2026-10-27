@@ -136,6 +136,8 @@ pub(crate) fn cap(
                 | change::State::Checking { .. }
                 | change::State::Gating { .. }
                 | change::State::Queued { .. }
+                | change::State::Ready { .. }
+                | change::State::Preparing { .. }
                 | change::State::Updating { .. }
                 | change::State::Resolving { .. }
                 | change::State::Repairing { .. }
