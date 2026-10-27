@@ -544,7 +544,8 @@ pub const PAUSE_WORKERS: &[&str] = &["ws", "s1", "s2"];
 pub const PAUSE: u64 = 1;
 pub const OWNER: u64 = 2;
 pub const HELPER: u64 = 3;
-pub const HELPER_CHARTER: u64 = 3;
+// Charter 3 belongs to the stock configuring agent.
+pub const HELPER_CHARTER: u64 = 5;
 pub const BOWNER: u64 = 4;
 pub const IMPLEMENTER: u64 = 5;
 pub const H1: u64 = 6;
@@ -589,9 +590,9 @@ pub fn fixture_5_2() -> forge::Fixture {
                 value["application"]["limits"]["overrides"][format!("forge.client.{name}")] = (story_ms + 1).into();
             }
             value["world_settings"]["helper"] = true.into();
-            // Four charters (the placed director, chat, helper and reviewer)
-            // plus the change procedure must fit the delegation's kinds.
-            for (name, size) in [("tasks.charters", 4), ("tasks.executor_kinds", 5), ("authority.executors", 5)] {
+            // Four stock charters plus the helper, and the change procedure:
+            // the least power of two fitting both tables is eight.
+            for (name, size) in [("tasks.charters", 8), ("tasks.executor_kinds", 8), ("authority.executors", 8)] {
                 value["engine"]["limits"]["overrides"][name] = size.into();
             }
             let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();

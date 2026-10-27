@@ -6,7 +6,7 @@ use skein_lib::{Secret, Token};
 pub const DIALECT: u32 = 1;
 
 pub const ENGINE: &[u8] = br#"{
-"limits": {"profile": "small", "overrides": {"tasks.result_bytes":32,"tasks.run_inbox":2,"hub.turns":1,"people.amendment_bytes":64,"core.policy_bytes":4096,"authority.grants":16,"notes.scopes":32,"tasks.spec_bytes":128,"tasks.message_bytes":512,"tasks.hold_bytes":64,"tasks.authority_bytes":64,"people.words":512,"core.call_answer_bytes":2048,"notes.recalled":1}},
+"limits": {"profile": "small", "overrides": {"tasks.result_bytes":32,"tasks.run_inbox":2,"hub.turns":1,"people.amendment_bytes":64,"core.policy_bytes":4096,"authority.executors":8,"tasks.executor_kinds":8,"authority.grants":16,"notes.scopes":32,"tasks.spec_bytes":128,"tasks.message_bytes":512,"tasks.hold_bytes":64,"tasks.authority_bytes":64,"people.words":512,"core.call_answer_bytes":2048,"notes.recalled":1}},
 "llm": {
 "providers":[{"name":"fake-provider","number":1,"models":["small"],"sources":{"keys":true}}],
 "endpoints": [{
@@ -58,7 +58,7 @@ pub const ENGINE: &[u8] = br#"{
 
 pub fn engine() -> settings::Engine {
     let jig = parse_engine(ENGINE);
-    // This typed fixture reaches the core's start; policy 1 needs 2390 bytes.
+    // This typed fixture reaches the core's start; policy 1 needs 2406 bytes.
 
     settings::Engine {
         records_only: Box::new([]),

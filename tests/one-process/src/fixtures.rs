@@ -144,7 +144,13 @@ pub(crate) fn document() -> Vec<u8> {
                 role["authority"]["delegation"]["depth"] = 4.into();
             }
         }
-        for (name, count) in [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32)] {
+        for (name, count) in [
+            ("core.policy_bytes", 4096),
+            ("authority.grants", 16),
+            ("notes.scopes", 32),
+            ("authority.executors", 8),
+            ("tasks.executor_kinds", 8),
+        ] {
             value["engine"]["limits"]["overrides"][name] = count.into();
         }
     }
@@ -154,6 +160,7 @@ pub(crate) fn document() -> Vec<u8> {
         ("tasks.funders", 4),
         ("tasks.dependencies", 2),
         ("tasks.charters", 4),
+        ("core.templates", 4),
         ("notes.entries_per_scope", 2),
         ("notes.recalled", 2),
         ("people.holdings", 2),

@@ -46,9 +46,15 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
         }
     }
     // Admit stock policy 1 and its ten grants.
-    for (name, count) in
-        [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32), ("tasks.charters", 4)]
-    {
+    for (name, count) in [
+        ("core.policy_bytes", 4096),
+        ("authority.grants", 16),
+        ("notes.scopes", 32),
+        ("tasks.charters", 4),
+        ("core.templates", 4),
+        ("authority.executors", 8),
+        ("tasks.executor_kinds", 8),
+    ] {
         value["engine"]["limits"]["overrides"][name] = count.into();
     }
     let worker: serde_json::Value =

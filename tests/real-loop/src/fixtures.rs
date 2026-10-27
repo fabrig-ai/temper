@@ -348,9 +348,15 @@ fn stock_document(value: &mut serde_json::Value) {
             role["authority"]["delegation"]["depth"] = 4.into();
         }
     }
-    for (name, count) in
-        [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32), ("tasks.charters", 4)]
-    {
+    for (name, count) in [
+        ("core.policy_bytes", 4096),
+        ("authority.grants", 16),
+        ("notes.scopes", 32),
+        ("tasks.charters", 4),
+        ("core.templates", 4),
+        ("authority.executors", 8),
+        ("tasks.executor_kinds", 8),
+    ] {
         let held = value["engine"]["limits"]["overrides"][name].as_u64().unwrap_or(0);
         value["engine"]["limits"]["overrides"][name] = held.max(count).into();
     }
