@@ -84,6 +84,26 @@ pub struct StoryLimits {
     pub tier: bool,
 }
 
+fn tier_checks() -> Box<[engine::TierCheck]> {
+    Box::new([engine::TierCheck {
+        name: b"browser".as_slice().into(),
+        workflow: b"browser.yml".as_slice().into(),
+        ignored: Box::new([]),
+        artifact: b"report".as_slice().into(),
+        format: temper_engine_domain_forge_tiers::Format::Lines,
+    }])
+}
+fn after_landing() -> engine::AfterLanding {
+    engine::AfterLanding {
+        verdict: temper_engine_domain_forge_tiers::Settings {
+            retries: 2,
+            suspects: temper_engine_domain_forge_tiers::Suspects::Bisect,
+        },
+        bound: Duration::from_secs(7200),
+        pause_on_red: false,
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Until {
     Ready,
@@ -240,22 +260,9 @@ impl World {
                             repositories: Box::new([engine::RepositoryChecks {
                                 repository: forge_world::REPO,
                                 gates: Box::new([]),
-                                tiers: Box::new([engine::TierCheck {
-                                    name: b"browser".as_slice().into(),
-                                    workflow: b"browser.yml".as_slice().into(),
-                                    ignored: Box::new([]),
-                                    artifact: b"report".as_slice().into(),
-                                    format: temper_engine_domain_forge_tiers::Format::Lines,
-                                }]),
+                                tiers: tier_checks(),
                             }]),
-                            after: engine::AfterLanding {
-                                verdict: temper_engine_domain_forge_tiers::Settings {
-                                    retries: 2,
-                                    suspects: temper_engine_domain_forge_tiers::Suspects::Bisect,
-                                },
-                                bound: Duration::from_secs(7200),
-                                pause_on_red: false,
-                            },
+                            after: after_landing(),
                         },
                     )
                     .expect("one configured project");
@@ -485,7 +492,9 @@ impl World {
                         grants.push(grant.clone()).expect("ceiling grants");
                     }
                     for kind in [6, 9, 16, 17] {
-                        grants.push(authority::Grant { kind, ..grant.clone() }).expect("landing grants");
+                        if !grants.iter().any(|grant| grant.kind == kind) {
+                            grants.push(authority::Grant { kind, ..grant.clone() }).expect("landing grants");
+                        }
                     }
                     rules.ceiling.grants = grants.into_boxed();
                     rules.ceiling.delegation.kinds = Box::new([
@@ -529,7 +538,9 @@ impl World {
                                         ignored: Box::new([b"docs".as_slice().into()]),
                                         blocking: true,
                                     }]),
+                                    tiers: if tier { tier_checks() } else { Box::new([]) },
                                 }]),
+                                after: after_landing(),
                             },
                         )
                         .expect("one turn project");
@@ -647,7 +658,7 @@ impl World {
         if tier {
             fake_config.limits.branches = 5;
         }
-        fake_config.limits.workflows = u32::from(turn || tier);
+        fake_config.limits.workflows = u32::from(turn) + u32::from(tier);
         fake_config.limits.workflow_runs = if turn {
             8
         } else if tier {
@@ -660,18 +671,31 @@ impl World {
             &mut fake,
             &fake_config,
             raw::Setup {
-                workflows: if turn || tier {
-                    Box::new([raw::Workflow {
-                        file: if turn { b"gate.yml".as_slice() } else { b"browser.yml".as_slice() }.into(),
-                        jobs: Box::new([if turn { b"test".as_slice() } else { b"browser".as_slice() }.into()]),
-                        latency_min: Duration::from_secs(if turn { 1 } else { 90 }),
-                        latency_max: Duration::from_secs(if turn { 1 } else { 90 }),
-                        silent: 0,
-                        passes: 1000,
-                        cue: None,
-                    }])
-                } else {
-                    Box::new([])
+                workflows: {
+                    let mut workflows = Vec::new();
+                    if turn {
+                        workflows.push(raw::Workflow {
+                            file: b"gate.yml".as_slice().into(),
+                            jobs: Box::new([b"test".as_slice().into()]),
+                            latency_min: Duration::from_secs(1),
+                            latency_max: Duration::from_secs(1),
+                            silent: 0,
+                            passes: 1000,
+                            cue: None,
+                        });
+                    }
+                    if tier {
+                        workflows.push(raw::Workflow {
+                            file: b"browser.yml".as_slice().into(),
+                            jobs: Box::new([b"browser".as_slice().into()]),
+                            latency_min: Duration::from_secs(90),
+                            latency_max: Duration::from_secs(90),
+                            silent: 0,
+                            passes: 1000,
+                            cue: None,
+                        });
+                    }
+                    workflows.into_boxed_slice()
                 },
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
@@ -1837,8 +1861,6 @@ pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_
         | State::Resolving { .. }
         | State::Repairing { .. }
         | State::Landing { .. }
-        | State::Preparing { .. }
-        | State::Ready { .. }
         | State::Ended
         | State::Held { .. } => None,
     }

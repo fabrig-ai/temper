@@ -1727,7 +1727,18 @@ fn outcome_facts(
         }
         skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Merged(commit), .. } => {
             if let Some(kept) = d.entries.get(&entry) {
-                crate::verification::landed(d, kept.entry.repository, commit, task, out);
+                let change = match d.landing.rows.get(&task) {
+                    Some(row) => {
+                        let saved = row
+                            .entries
+                            .iter()
+                            .find(|saved| saved.entry == entry)
+                            .expect("landing merge retains its member entry");
+                        row.landing.members.get(usize::from(saved.member)).expect("saved landing member").change
+                    }
+                    None => task,
+                };
+                crate::verification::landed(d, kept.entry.repository, commit, change, out);
             }
             if d.landed.len() < env.limits.landings.max(env.limits.changes) || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");

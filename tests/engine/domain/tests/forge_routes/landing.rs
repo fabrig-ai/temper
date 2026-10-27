@@ -24,6 +24,10 @@ fn produced_turn_change(landing_members: Option<u32>) -> (World, u64) {
         StoryLimits { turn: true, landing_members, ..StoryLimits::default() },
     );
     world.adopt();
+    produced_turn_change_in(world, true)
+}
+
+fn produced_turn_change_in(mut world: World, main_moves: bool) -> (World, u64) {
     world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
     let ask = adoption_chat(&world);
     let chat = assigned_chat(&mut world, 92, ask);
@@ -40,8 +44,10 @@ fn produced_turn_change(landing_members: Option<u32>) -> (World, u64) {
     world.external(1, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
     fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"fixed", 1)
         .expect("producer pushes");
-    fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"main", b"other", b"main moved", 2)
-        .expect("main moves under change");
+    if main_moves {
+        fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"main", b"other", b"main moved", 2)
+            .expect("main moves under change");
+    }
     let answer = world.protocol.answer(
         Token::new(7),
         producer.task,
@@ -163,4 +169,88 @@ fn a_ready_change_waits_when_landing_room_is_full() {
         |record| !matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Landing(_)))
     ));
     assert_eq!(world.merges, 0);
+}
+
+/// The real root gives the change's result only after its turn's tier verdict.
+#[test]
+fn a_change_landed_by_turn_verifies_until_its_tier_clears_it() {
+    use temper_engine_domain_forge_change::State;
+    // The existing tier story allows three 600-tick settling windows for a 90 s workflow.
+    const TIER_TICKS: u32 = 1800;
+    const LANDING_TICKS: u32 = 600;
+    let mut world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { turn: true, tier: true, ..StoryLimits::default() },
+    );
+    world.adopt();
+    for _ in 0..TIER_TICKS {
+        world.tick();
+        if world.store.rows.values().any(|record| {
+            matches!(record,
+            Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Tier(row)
+                if row.record.judged.is_some() && row.record.run.is_none()))
+        }) {
+            break;
+        }
+    }
+    assert!(
+        world.store.rows.values().any(|record| matches!(record,
+        Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Tier(row)
+            if row.record.judged.is_some() && row.record.run.is_none()))),
+        "baseline green"
+    );
+    // The 90 s baseline outlives the fixture's 60 s sign-in.
+    world.signed_in = None;
+    world.sign_in();
+    let (mut world, change) = produced_turn_change_in(world, false);
+    let key = Key::Forge(forge_top::Key::Change(change));
+    let mut merge = None;
+    for _ in 0..LANDING_TICKS {
+        world.tick();
+        if let Some(Record::Forge { row }) = world.store.rows.get(&key)
+            && let forge_top::Stored::Change(row) = row.as_ref()
+            && let State::Landed { merge: commit } = row.change.state
+        {
+            merge = Some(commit);
+            break;
+        }
+    }
+    let merge = merge.expect("turn's merge is verifying");
+    assert_eq!(world.merges, 1);
+    assert!(!matches!(task_row(&world, change).expect("change task").phase, tasks::Phase::Ended(_)));
+    let Some(Record::Forge { row }) = world
+        .store
+        .rows
+        .get(&Key::Forge(forge_top::Key::Verification { repository: forge_world::REPO, commit: merge }))
+    else {
+        panic!("merge verification");
+    };
+    let forge_top::Stored::Verification(row) = row.as_ref() else {
+        panic!("verification row");
+    };
+    assert_eq!(row.changes.as_ref(), &[change], "verdict belongs to the member's change");
+    assert_eq!(row.tiers.len(), 1);
+    assert!(row.tiers[0].verdict.is_none());
+    for _ in 0..TIER_TICKS {
+        world.tick();
+        if task_row(&world, change).is_some_and(|row| matches!(row.phase, tasks::Phase::Ended(_))) {
+            break;
+        }
+    }
+    let Some(Record::Forge { row }) = world.store.rows.get(&key) else {
+        panic!("cleared change");
+    };
+    let forge_top::Stored::Change(row) = row.as_ref() else {
+        panic!("change row");
+    };
+    assert_eq!(row.change.state, State::Cleared { merge });
+    assert!(matches!(
+        task_row(&world, change).expect("change result").phase,
+        tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Change { .. }))
+    ));
 }
