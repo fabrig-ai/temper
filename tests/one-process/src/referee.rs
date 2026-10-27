@@ -11,7 +11,7 @@ use crate::world::Proc;
 pub(crate) use agent::Wire;
 use jig_conformance::referee as rules;
 use jig_domain_core as core;
-use skein_lib::Time;
+use skein_lib::{Duration, Time};
 use skein_shell::Host;
 use std::{
     cell::RefCell,
@@ -20,6 +20,8 @@ use std::{
     rc::Rc,
 };
 use temper_engine_domain as root;
+
+const COMPLETION_GRACE: Duration = Duration::from_secs(10);
 #[derive(Default)]
 pub(crate) struct Run {
     rules: Option<Rc<RefCell<rules::Referee>>>,
@@ -155,6 +157,11 @@ impl Referee {
             .borrow_mut()
             .observe(now.as_nanos(), event)
             .expect("one-process conformance over bytes and durable rows");
+    }
+    fn completion_deadline(&self) -> Time {
+        self.page
+            .as_ref()
+            .map_or(Time::ZERO.saturating_add(COMPLETION_GRACE), |page| page.completion_deadline(COMPLETION_GRACE))
     }
     fn adoption_window(&mut self, service: &crate::world::ServiceHost) {
         let saved = crate::world::saved_adoptions();
@@ -439,7 +446,7 @@ impl skein_world::Referee<Proc> for Referee {
     }
     fn next_deadline(&self) -> Option<Time> {
         [
-            self.done.is_none().then_some(Time::from_nanos(10_000_000_000)),
+            self.done.is_none().then_some(self.completion_deadline()),
             self.page.as_ref().and_then(crate::replay::Driver::next_deadline),
         ]
         .into_iter()
@@ -447,7 +454,7 @@ impl skein_world::Referee<Proc> for Referee {
         .min()
     }
     fn overdue(&self, now: Time) -> Option<String> {
-        (self.done.is_none() && now >= Time::from_nanos(10_000_000_000)).then(|| {
+        (self.done.is_none() && now >= self.completion_deadline()).then(|| {
             format!(
                 "story not complete: link {}, signed in {}, terminals {}, tasks {:?}, agents {:?}, forge {:?}",
                 self.handed,

@@ -4,7 +4,7 @@ use crate::{
     referee::{self, Store},
     world::{self, Observations, Proc, Programs, ServiceHost, Story},
 };
-use skein_lib::{List, Time};
+use skein_lib::{Duration, List, Time};
 use skein_playground::replay::{Differs, Feed};
 use skein_ui_web::{
     bridge::{Duty, Said, Stamp, log::Log},
@@ -20,10 +20,12 @@ pub(crate) struct Driver {
     exchanges: BTreeSet<u32>,
     streams: u32,
     finished: bool,
+    last_input: Time,
 }
 impl Driver {
     fn new(log: Log) -> Self {
-        Self { feed: Some(Feed::new(log)), exchanges: BTreeSet::new(), streams: 0, finished: false }
+        let last_input = log.inputs.last().map_or(Time::ZERO, |input| input.stamp.instant);
+        Self { feed: Some(Feed::new(log)), exchanges: BTreeSet::new(), streams: 0, finished: false, last_input }
     }
     fn enter(&mut self, at: Stamp, visitor: &mut skein_playground::visitor::Visitor) -> Result<(), Differs> {
         let feed = self.feed.as_mut().expect("feed before the visit ends");
@@ -88,6 +90,9 @@ impl Driver {
             self.finished = true;
         }
         self.finished
+    }
+    pub(crate) fn completion_deadline(&self, grace: Duration) -> Time {
+        self.last_input.saturating_add(grace)
     }
     pub(crate) fn next_deadline(&self) -> Option<Time> {
         self.feed.as_ref().and_then(Feed::next).map(|stamp| stamp.instant)
@@ -295,6 +300,30 @@ pub fn run(log: Log) -> Outcome {
 mod tests {
     use super::*;
     use skein_ui_web::bridge::{Line, Output, log};
+
+    #[test]
+    fn completion_deadline_retains_the_last_input_stamp() {
+        for (last, deadline) in [(0, 10), (31, 41), (47, 57)] {
+            let mut log = log::read(include_bytes!("../../playground/fixtures/welcome.log")).expect("welcome fixture");
+            log.inputs.last_mut().expect("last input").stamp.instant = Time::from_nanos(last * 1_000_000_000);
+            let mut driver = Driver::new(log);
+            let expected = Time::from_nanos(deadline * 1_000_000_000);
+            assert_eq!(driver.completion_deadline(Duration::from_secs(10)), expected);
+            driver.feed.take();
+            assert_eq!(driver.completion_deadline(Duration::from_secs(10)), expected);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "at 10000000000 ns, the referee failed the world")]
+    fn a_stalled_replay_fails_after_its_last_input_and_grace() {
+        let mut log = log::read(include_bytes!("../../playground/fixtures/welcome.log")).expect("welcome fixture");
+        let last = log.inputs.pop().expect("last input");
+        assert!(matches!(last.duty, Duty::Stream(StreamDuty::Close)));
+        // Omit close: no terminal can finish the visit. The real referee
+        // must still wake and fail at the log's end plus its grace.
+        let _ = run(log);
+    }
 
     #[test]
     fn a_log_whose_digest_differs_fails_at_that_input() {
