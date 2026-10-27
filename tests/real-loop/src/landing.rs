@@ -88,6 +88,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     for (name, size) in [
         ("people.operations", 5),
         ("tasks.tasks", 8),
+        ("tasks.exemptions", 8),
         ("documents.lines", 2),
         ("documents.chips", 2),
         ("tasks.project_tasks", 8),
