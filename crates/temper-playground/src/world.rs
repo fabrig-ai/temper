@@ -39,6 +39,7 @@ fn draw_id(rng: &mut Rng) -> [u8; 16] {
 struct Context {
     story: &'static Story,
     worker_path: Box<[u8]>,
+    bot_login: Box<[u8]>,
     seeds: Seeds,
     printer: Printer,
     shared: Rc<RefCell<skein_fake_peers::forge::Forge>>,
@@ -61,9 +62,19 @@ pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Ma
     let config = skein_sim::Config { wall: start, trace: skein_sim::Trace::Off, ..skein_sim::Config::calm() };
     let mut world = World::new(seeds.simulator, config).with_machine(Machine::new(Machine::fresh(USER)));
     let printer = world.printer(b"temper", Stream::Output);
+    let deployment: serde_json::Value = serde_json::from_slice(story.deployment).expect("story deployment");
+    let bot_login =
+        deployment["application"]["setup"][0]["bot"]["login"].as_str().expect("story bot").as_bytes().into();
     CONTEXT.with(|context| {
-        *context.borrow_mut() =
-            Some(Context { story, worker_path: b"/worker".as_slice().into(), seeds, printer, shared, table });
+        *context.borrow_mut() = Some(Context {
+            story,
+            worker_path: b"/worker".as_slice().into(),
+            bot_login,
+            seeds,
+            printer,
+            shared,
+            table,
+        });
     });
     let agents = smith_agent_shell::config::parse(story.agent).expect("story agent");
     world.host_roots(
@@ -89,7 +100,6 @@ pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Ma
         crate::worker_roots,
     );
     world.host(HostedProgram { program: crate::SH.into(), make: shell, instances: 8, operations: 1 });
-    let deployment: serde_json::Value = serde_json::from_slice(story.deployment).expect("story deployment");
     let git_path =
         deployment["application"]["setup"][0]["mode"]["fake"]["git"].as_str().expect("story fake git").as_bytes();
     if git_path != crate::GIT {
@@ -142,9 +152,7 @@ fn identities(peer: &mut skein_fake_peers::forge::Peer) {
         let mut context = context.borrow_mut();
         let context = context.as_mut().expect("world context");
         let store = peer.setup_mut();
-        let document: serde_json::Value = serde_json::from_slice(context.story.deployment).expect("story deployment");
-        let login = document["application"]["setup"][0]["bot"]["login"].as_str().expect("story bot").as_bytes();
-        if let Some(bot) = store.find(login) {
+        if let Some(bot) = store.find(&context.bot_login) {
             let mut users = List::with_capacity(1);
             users.push((bot.id, bot.login.clone())).expect("one bot");
             context.table.users = users;
