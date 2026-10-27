@@ -41,11 +41,15 @@ pub(crate) fn apply(defaults: &mut Defaults, flags: &Value, stock_period_spend: 
     if flags["helper"] == true {
         let mut helper = defaults.charters[0].clone();
         helper.number = u32::try_from(super::HELPER_CHARTER).expect("helper charter number");
-        let mut charters = List::with_capacity(3);
+        let capacity = u32::try_from(defaults.charters.len())
+            .expect("bounded stock charters")
+            .checked_add(1)
+            .expect("stock charters plus case helper");
+        let mut charters = List::with_capacity(capacity);
         for charter in &defaults.charters {
-            charters.push(charter.clone()).expect("two case charters");
+            charters.push(charter.clone()).expect("counted stock charters");
         }
-        charters.push(helper).expect("third helper charter");
+        charters.push(helper).expect("room for case helper charter");
         defaults.charters = charters.into_boxed();
     }
 }
