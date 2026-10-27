@@ -21,7 +21,8 @@ A change is a task that writes one repository's branch and lands it: its pull re
 
 Its steps, as `step:` prints them:
 
-- `producing`: the coder writes the change and pushes its branch;
+- `producing`: the coder writes the change in its files, and temper
+  pushes its work as the change's branch once it finishes;
 - `opening`: temper opens its pull request;
 - `checking`: the forge's CI runs at its head;
 - `gating`: its blocking gates give their verdicts (temper help
