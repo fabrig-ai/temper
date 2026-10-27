@@ -54,6 +54,7 @@ fn startup(
             pending_streak: crate::patience::PendingStreak::default(),
             peer: llm::peer(llm::scripted(Box::new([]))).expect("deferred LLM"),
             scripts: Some(|_| Box::new([])),
+            recipe: None,
             rules: None,
             cue: false,
             release: None,
