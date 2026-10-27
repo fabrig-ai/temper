@@ -173,6 +173,7 @@ inbox  Read what waits on your party, then its updates
 task  Tasks: read one and its parts, and act on it
 chat  Chats: start one, read its conversation, close it
 proposal  Proposals: read one, decide it
+hold  Placed holds: lift one you may lift
 change  Changes: read a change's way to landing
 repository  Repositories: adopt one into a project
 forge  Forges: read them, set one up, connect it, accept an installation, read what it reaches

@@ -86,6 +86,9 @@ pub(super) fn decode_hold_reason(value: w::HoldReason) -> p::HoldReason {
 }
 pub(super) fn encode_moved(value: &p::Moved, l: &w::Limits) -> Result<w::Moved, w::Problem> {
     Ok(match value {
+        p::Moved::PlacedHold { revision } => {
+            w::Moved::PlacedHold(w::MovedPlacedHold::new(l, w::MovedPlacedHoldParts { revision: *revision })?)
+        }
         p::Moved::Hold { revision, reason } => w::Moved::Hold(w::MovedHold::new(
             l,
             w::MovedHoldParts { revision: *revision, reason: encode_hold_reason(reason, l)? },
@@ -99,6 +102,7 @@ pub(super) fn encode_moved(value: &p::Moved, l: &w::Limits) -> Result<w::Moved, 
 }
 pub(super) fn decode_moved(value: w::Moved) -> p::Moved {
     match value {
+        w::Moved::PlacedHold(value) => p::Moved::PlacedHold { revision: value.revision() },
         w::Moved::Hold(value) => {
             p::Moved::Hold { revision: value.revision(), reason: decode_hold_reason(value.reason().clone()) }
         }
@@ -150,6 +154,17 @@ pub(super) fn decode_ending(value: w::Ending) -> p::Ending {
 }
 pub(super) fn encode_lack(value: &p::Lack, l: &w::Limits) -> Result<w::Lack, w::Problem> {
     Ok(match value {
+        p::Lack::HoldOwner { hold, owner } => {
+            let owner = match owner {
+                p::HoldOwner::Party { person } => {
+                    w::HoldOwner::Party(w::HoldOwnerParty::new(l, w::HoldOwnerPartyParts { person: *person })?)
+                }
+                p::HoldOwner::Task { task } => {
+                    w::HoldOwner::Task(w::HoldOwnerTask::new(l, w::HoldOwnerTaskParts { task: *task })?)
+                }
+            };
+            w::Lack::HoldOwner(w::LackHoldOwner::new(l, w::LackHoldOwnerParts { hold: *hold, owner })?)
+        }
         p::Lack::Approver => w::Lack::Approver,
         p::Lack::Budget { needs, left } => {
             w::Lack::Budget(w::LackBudget::new(l, w::LackBudgetParts { needs: *needs, left: *left })?)
@@ -191,6 +206,13 @@ pub(super) fn encode_lack(value: &p::Lack, l: &w::Limits) -> Result<w::Lack, w::
 }
 pub(super) fn decode_lack(value: w::Lack) -> p::Lack {
     match value {
+        w::Lack::HoldOwner(value) => p::Lack::HoldOwner {
+            hold: value.hold(),
+            owner: match value.owner() {
+                w::HoldOwner::Party(owner) => p::HoldOwner::Party { person: owner.person() },
+                w::HoldOwner::Task(owner) => p::HoldOwner::Task { task: owner.task() },
+            },
+        },
         w::Lack::Approver => p::Lack::Approver,
         w::Lack::Budget(value) => p::Lack::Budget { needs: value.needs(), left: value.left() },
         w::Lack::Grant(value) => p::Lack::Grant { kind: value.kind() },

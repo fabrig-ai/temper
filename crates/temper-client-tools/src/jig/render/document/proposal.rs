@@ -53,6 +53,7 @@ pub(super) fn text(value: &c::ReadValue, reading: &Reading, limits: &Limits, out
     settings::proposal_text(key, out);
     out.put(b" \xc2\xb7 ");
     out.put(action);
+    release_text(value, out);
     if let c::ReadValue::OwnerProposal(p) = value
         && let c::OwnerProposalAction::Settings(s) = &p.action
     {
@@ -152,6 +153,29 @@ fn review_value_text(
         Err(why) => out.put(why),
     }
 }
+fn task_number(task: &c::OwnerTaskLink) -> u64 {
+    match task {
+        c::OwnerTaskLink::Live(chip) | c::OwnerTaskLink::Retained { chip, .. } => chip.task,
+        c::OwnerTaskLink::Stored { number, .. } => *number,
+    }
+}
+fn release_text(value: &c::ReadValue, out: &mut Text) {
+    if let c::ReadValue::OwnerProposal(p) = value
+        && let c::OwnerProposalAction::Release { task, hold } = &p.action
+    {
+        out.put(b" task ");
+        out.number(task_number(task));
+        if let Some(hold) = hold
+            && let Some(placed) = &hold.placed
+        {
+            out.put(b" from hold ");
+            out.number(placed.number);
+            out.put(b" (revision ");
+            out.number(placed.revision.value);
+            out.put(b")");
+        }
+    }
+}
 fn owner_action(action: &c::OwnerProposalAction) -> &'static [u8] {
     match action {
         c::OwnerProposalAction::Settings(_) => b"settings",
@@ -189,12 +213,25 @@ pub(super) fn encode(value: &c::ReadValue, reading: &Reading, out: &mut Encoder,
             out.key(b"action");
             match &p.action {
                 c::OwnerProposalAction::Settings(s) => encode_settings(s, reading, out),
+                c::OwnerProposalAction::Release { task, hold } => {
+                    out.object_start();
+                    out.key(b"release");
+                    out.object_start();
+                    out.key(b"task");
+                    out.unsigned(task_number(task));
+                    out.key(b"hold");
+                    match hold {
+                        Some(hold) => super::encode_owner_chip_hold(hold, out, budget),
+                        None => out.null(),
+                    }
+                    out.object_end();
+                    out.object_end();
+                }
                 action @ (c::OwnerProposalAction::Batch(_)
                 | c::OwnerProposalAction::Effect { .. }
                 | c::OwnerProposalAction::ProcedureEffect { .. }
                 | c::OwnerProposalAction::Amend { .. }
-                | c::OwnerProposalAction::Widen { .. }
-                | c::OwnerProposalAction::Release { .. }) => out.string(owner_action(action)),
+                | c::OwnerProposalAction::Widen { .. }) => out.string(owner_action(action)),
             }
             out.key(b"as_holder");
             out.boolean(p.as_holder);
