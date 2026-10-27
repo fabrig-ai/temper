@@ -290,7 +290,7 @@ fn every_declared_tool_decodes_its_minimum_shape_and_rejects_a_wrong_shape() {
         (b"decide_escalation", br#"{"task":3,"revision":1,"decision":"release"}"#, br#"{"task":3,"revision":1,"decision":"unknown"}"#),
         (b"decide", br#"{"proposer":3,"proposal":1,"decision":"accept"}"#, br#"{"proposer":3,"proposal":1,"decision":"unknown"}"#),
         (b"subscribe", br#"{"kind":"task","target":3}"#, br#"{"kind":"task"}"#),
-        (b"propose", br#"{"action":"release","task":3,"reason":"x"}"#, br#"{"action":"release","reason":"x"}"#),
+        (b"propose", br#"{"action":"release","task":3,"hold":12,"revision":1,"reason":"x"}"#, br#"{"action":"release","reason":"x"}"#),
         (b"note", br#"{"scope":{"kind":"project","project":1},"description":"slow start","body":"warm it first"}"#, br#"{"scope":{"kind":"project"},"description":"slow start","body":"warm it first"}"#),
         (b"read_docs", br#"{"topic":"box"}"#, br#"{"topic":3}"#),
         (b"recall", br#"{"kind":"name","name":1}"#, br#"{"kind":"name","name":0}"#),
@@ -1347,3 +1347,40 @@ fn goal_decodes_words_and_an_optional_advisor() {
 
 #[path = "tests/settings.rs"]
 mod settings;
+#[test]
+fn a_proposed_release_names_the_placed_hold_and_its_revision() {
+    let body =
+        decided(b"propose", br#"{"action":"release","task":41,"hold":12,"revision":1,"reason":"please resume"}"#)
+            .expect("placed release");
+    assert_eq!(
+        body.tool,
+        engine::Tool::Propose {
+            action: engine::ProposedAction::Release { task: 41, hold: 12, revision: 1 },
+            reason: b"please resume".as_slice().into(),
+            as_holder: false,
+        }
+    );
+    for (json, field) in [
+        (br#"{"action":"release","task":41,"revision":1,"reason":"x"}"#.as_slice(), b"hold".as_slice()),
+        (br#"{"action":"release","task":41,"hold":12,"reason":"x"}"#.as_slice(), b"revision".as_slice()),
+    ] {
+        assert_eq!(decided(b"propose", json), Err(Problem::Missing(field)));
+    }
+    assert!(decided(b"propose", br#"{"action":"release","task":41,"hold":0,"revision":1,"reason":"x"}"#).is_err());
+    assert!(decided(b"propose", br#"{"action":"release","task":41,"hold":12,"revision":0,"reason":"x"}"#).is_err());
+}
+
+#[test]
+fn a_refused_release_names_its_owner_and_the_exact_proposal() {
+    for (owner, words) in [
+        (jig_domain_people::HoldOwner::Party { person: 3 }, "person 3; only they may release it"),
+        (jig_domain_people::HoldOwner::Task { task: 9 }, "task 9; only it or a task above it may release it"),
+    ] {
+        let value = engine::CallAnswer::HoldOwner { task: 41, hold: 12, revision: 1, owner };
+        let part = value.core_part(1);
+        assert_eq!(engine::CallAnswer::from_core(&part), Some(value.clone()));
+        let rendered = answer(&value);
+        assert!(rendered.error());
+        assert_eq!(rendered.text(), format!("Refused: task 41 is held by hold 12 (revision 1), placed by {words}. Propose it: {{\"action\": \"release\", \"task\": 41, \"hold\": 12, \"revision\": 1, \"reason\": \"...\"}}").as_bytes());
+    }
+}

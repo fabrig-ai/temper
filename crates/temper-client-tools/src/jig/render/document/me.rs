@@ -152,6 +152,15 @@ pub(super) fn encode_moved(value: &jig_client::contract::Moved, out: &mut Encode
             out.object_end();
             out.object_end();
         }
+        jig_client::contract::Moved::PlacedHold { revision } => {
+            out.object_start();
+            out.key(b"placed_hold");
+            out.object_start();
+            out.key(b"revision");
+            out.unsigned(revision.value);
+            out.object_end();
+            out.object_end();
+        }
         jig_client::contract::Moved::Spec => out.string(b"spec"),
         jig_client::contract::Moved::PersonTask => out.string(b"person_task"),
         jig_client::contract::Moved::Note => out.string(b"note"),

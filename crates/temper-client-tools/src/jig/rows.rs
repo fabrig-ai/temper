@@ -281,6 +281,20 @@ pub const RELEASE: Tool = Tool {
     area: 1,
     notes: b"",
 };
+pub const LIFT: Tool = Tool {
+    name: b"hold lift",
+    line: b"Lift a placed hold you may lift",
+    prints: b"",
+    result: b"lift",
+    forms: &[&[
+        positional(b"hold", b"HOLD", Kind::Number, Required, b"Hold number, as task show prints it"),
+        flag(b"rev", b"REV", Kind::Number, Required, b"Hold revision, as task show prints it"),
+        switch(b"with-tasks", b"Also release every task it holds that nothing else holds"),
+    ]],
+    keyed: Keyed::Optional,
+    area: 1,
+    notes: b"",
+};
 pub const STOP: Tool = Tool {
     name: b"task stop",
     line: b"Stop a task's run and hold it",
@@ -826,3 +840,4 @@ pub const PROJECT_FUND: Tool = Tool {
     area: 1,
     notes: b"An owner's chats are funded from their pool, and pools reserve from the project's period. Raise both with two calls: project fund PROJECT AMOUNT first, then project fund PROJECT AMOUNT --role ROLE. A role's raise past the period's room is refused, exit 2, naming what the period has left. A cut keeps each budget at what it has used. A key replay prints the original edit, then today's balances marked now:. JSON has answer (project, optional role, period_spend) and now (the project read).\n",
 };
+pub const LIFT_AT: u8 = 55;

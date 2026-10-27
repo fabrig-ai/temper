@@ -129,7 +129,7 @@ fn owner_outcome(b: &mut Builder, words: &Words, value: &c::OwnerOutcome) {
     use c::OwnerOutcome as O;
     let word = match value {
         O::Cancelled { .. } => P::Cancelled,
-        O::Released { .. } => P::Released,
+        O::Released { .. } | O::Lifted { .. } => P::Released,
         O::PersonTaken { .. } => P::Taken,
         O::PersonHandedBack { .. } => P::HandedBack,
         O::PersonAnswered { .. } | O::QuestionAnswered { .. } => P::Answered,

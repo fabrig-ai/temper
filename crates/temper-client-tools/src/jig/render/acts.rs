@@ -74,6 +74,20 @@ pub fn text(task: &Task, me: Option<&Me>, book: &Phrasebook, out: &mut Text) {
             }
         }
         out.put(b"\n");
+        if offer.act == ActKind::Release {
+            lift(task, out);
+        }
+    }
+}
+fn lift(task: &Task, out: &mut Text) {
+    if let Some(hold) = task.hold.as_ref().and_then(jig_client::contract::TaskHold::placed)
+        && hold.may_lift
+    {
+        out.put(b"  hold lift ");
+        out.number(hold.number);
+        out.put(b" --rev ");
+        out.number(hold.revision.value);
+        out.put(b" --with-tasks\n");
     }
 }
 fn has_tool(_task: &Task, act: ActKind) -> bool {
@@ -290,6 +304,17 @@ pub fn refusal(why: &Refusal, book: &Phrasebook, out: &mut Text) {
         }
         Refusal::Malformed { why: jig_client::contract::Malformed::SettingsUnchanged, .. } => {
             settings_form::refusal(&settings_form::Refusal::Unchanged, out);
+            return;
+        }
+        Refusal::Authority { lacking: jig_client::contract::Lacking::HoldOwner { hold, owner }, .. } => {
+            let owner = match owner {
+                jig_client::contract::HoldOwner::Party { person } => *person,
+                jig_client::contract::HoldOwner::Task { task } => *task,
+            };
+            let phrase = book
+                .say(0, Word::refusal(why).id(), &[Hole::Number(*hold), Hole::Number(owner)])
+                .expect("hold owner phrase");
+            out.put(&phrase.text);
             return;
         }
         Refusal::AccountMove { .. }

@@ -498,6 +498,52 @@ fn close_rebuilds_the_same_ask_after_the_chat_and_its_delegates_end() {
 }
 
 #[test]
+fn hold_lift_sends_without_a_read_and_prints_done_refused_and_moved() {
+    use jig_client::contract as c;
+    let argv = &["hold", "lift", "12", "--rev", "1", "--with-tasks", "--key", "lift-12"];
+    let cases = [
+        (
+            c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Lifted { hold: 12, released: 2 })),
+            0,
+            "done: hold 12 lifted, 2 released\n",
+        ),
+        (
+            c::Answer::Refused {
+                refusal: c::Refusal::Authority {
+                    lacking: c::Lacking::HoldOwner { hold: 12, owner: c::HoldOwner::Party { person: 3 } },
+                    proposable: Some(true),
+                },
+                at: None,
+            },
+            2,
+            "lift: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n",
+        ),
+        (
+            c::Answer::Refused {
+                refusal: c::Refusal::Moved {
+                    what: c::Moved::PlacedHold { revision: c::Revision { value: 2 } },
+                    now: c::Revision { value: 2 },
+                },
+                at: None,
+            },
+            2,
+            "lift: The object changed\nrevision now: 2\n",
+        ),
+    ];
+    for (answer, status, expected) in cases {
+        let (mut root, call) = fixtures::send_act(argv, fixtures::SEED, 0);
+        assert!(!root.reads.contains_key(&call), "a hold lift has no preceding read");
+        let jig_client::Ask::Jig(ask) = &root.sends.get(&call).expect("sent directly").2 else { panic!("jig request") };
+        assert_eq!(ask.as_ref(), &c::Ask::Lift { hold: 12, revision: c::Revision { value: 1 }, with_tasks: true });
+        root.answered(call, answer);
+        let printed = root.answer(call).expect("terminal answer");
+        assert_eq!(printed.status, status);
+        let actual = if status == 0 { &printed.stdout } else { &printed.stderr };
+        assert_eq!(actual.as_ref(), expected.as_bytes());
+    }
+}
+
+#[test]
 fn close_names_an_archived_chat_end_only_when_the_authorized_read_proves_it() {
     let ending = c::Ending::Task(Box::new(c::OwnerChipEnding::Done(c::ResultValue::Report(fixtures::document_text(
         b"finished",
@@ -585,4 +631,26 @@ fn a_call_joining_a_restored_full_request_ends_at_once() {
     let answer = root.answer(call).expect("the restored full facts already exceed this call's patience");
     assert_eq!((answer.status, answer.stderr.as_ref()), (2, FULL_LINE));
     assert_eq!(root.root.kept(), fixtures::KEPT, "the original key remains available for another call");
+}
+
+#[test]
+fn an_owner_refused_release_reaches_the_engine_and_gives_no_propose_advice() {
+    use jig_client::contract as c;
+    let refusal = c::Refusal::Authority {
+        lacking: c::Lacking::HoldOwner { hold: 12, owner: c::HoldOwner::Party { person: 3 } },
+        proposable: Some(true),
+    };
+    let mut root = fixtures::signed_in(fixtures::PARTY);
+    let call = root.submit(&["task", "release", "41", "--hold", "1"]);
+    let mut task = fixtures::offered(&[c::ActKind::Release]);
+    task.acts.get_mut(0).unwrap().admission = c::Admission::Refused(refusal.clone());
+    root.serve(call, fixtures::task_result(task));
+    assert!(root.sends.contains_key(&call));
+    root.answered(call, c::Answer::Refused { refusal, at: None });
+    let answer = root.answer(call).unwrap();
+    assert_eq!(answer.status, 2);
+    assert_eq!(
+        answer.stderr.as_ref(),
+        b"release: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n"
+    );
 }

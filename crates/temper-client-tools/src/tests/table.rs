@@ -142,6 +142,8 @@ fn tasks_default_to_number_and_unwritten_orders_are_refused() {
     }
 }
 const ACTS: &[&[&str]] = &[
+    &["hold", "lift", "12", "--rev", "1", "--with-tasks"],
+    &["hold", "lift", "12", "--rev", "1", "--key", "lift-12"],
     &["chat", "start", "hello", "--project", "shop", "--key", "start-chat"],
     &["task", "message", "41", "hello", "--key", "say-hello"],
     &["task", "message", "41", "-", "--key", "stdin"],

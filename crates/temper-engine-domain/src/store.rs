@@ -54,6 +54,8 @@ impl Changed {
 pub enum CallAnswer {
     /// Settings proposal admission failed before mutation.
     SettingsRefused(jig_domain_people::Refusal),
+    /// The placed hold owner refused this release, with the facts needed to propose it.
+    HoldOwner { task: u64, hold: u64, revision: u64, owner: jig_domain_people::HoldOwner },
     /// A release must name again exactly when its effect is uncertain.
     Again { task: u64, required: bool },
     /// The caller exceeded its authority and passed the escalation up.
@@ -131,6 +133,9 @@ impl CallAnswer {
     pub fn core_part(&self, connector: u16) -> jig_domain_core::CallPart {
         match self {
             CallAnswer::SettingsRefused(why) => jig_domain_core::CallPart::SettingsRefused(why.clone()),
+            CallAnswer::HoldOwner { task, hold, revision, owner } => {
+                jig_domain_core::CallPart::HoldOwner { task: *task, hold: *hold, revision: *revision, owner: *owner }
+            }
             CallAnswer::Again { task, required } => {
                 jig_domain_core::CallPart::Again { task: *task, required: *required }
             }
@@ -270,6 +275,9 @@ impl CallAnswer {
                 CallAnswer::NoteRecalled { entries: entries.clone(), more: *more }
             }
             jig_domain_core::CallPart::NoteRefused(why) => CallAnswer::NoteRefused(*why),
+            jig_domain_core::CallPart::HoldOwner { task, hold, revision, owner } => {
+                CallAnswer::HoldOwner { task: *task, hold: *hold, revision: *revision, owner: *owner }
+            }
             jig_domain_core::CallPart::Unavailable => CallAnswer::Unavailable,
         })
     }
@@ -703,6 +711,7 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                     | jig_domain_people::Ask::SetPool { .. }
                     | jig_domain_people::Ask::HandBackPerson { .. }
                     | jig_domain_people::Ask::Stop { .. }
+                    | jig_domain_people::Ask::Lift { .. }
                     | jig_domain_people::Ask::Release { .. }
                     | jig_domain_people::Ask::AccountSignIn { .. }
                     | jig_domain_people::Ask::AccountSignOut { .. } => Some(0),
@@ -825,6 +834,7 @@ pub(crate) fn call_answer_bytes(answer: &CallAnswer) -> Option<u64> {
         },
         CallAnswer::ForgeEffect { .. }
         | CallAnswer::ForgeEffectRefused(_)
+        | CallAnswer::HoldOwner { .. }
         | CallAnswer::Unavailable
         | CallAnswer::SettingsRefused(_)
         | CallAnswer::Proposed { .. }
@@ -949,6 +959,7 @@ pub(crate) fn program_answer_bytes(outcome: &jig_domain_people::Outcome) -> Opti
         | Outcome::AccountChanged
         | Outcome::AccountMovingOut { .. }
         | Outcome::AccountMovedIn { .. }
+        | Outcome::Lifted { .. }
         | Outcome::Refused(_) => Some(0),
     }
 }

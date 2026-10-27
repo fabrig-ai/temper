@@ -3223,6 +3223,7 @@ pub(crate) fn effect_answer(domain: &Domain, key: CallKey, part: &jig_domain_cor
         | jig_domain_core::CallPart::NoteRecalled { .. }
         | jig_domain_core::CallPart::NoteRefused(_)
         | jig_domain_core::CallPart::SettingsRefused(_)
+        | jig_domain_core::CallPart::HoldOwner { .. }
         | jig_domain_core::CallPart::Unavailable => CallAnswer::from_core(part).expect("core owns its answer"),
     }
 }
