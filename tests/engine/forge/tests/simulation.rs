@@ -143,6 +143,8 @@ fn a_permission_refusal_rereads_capabilities_and_narrows_later_writes() {
                 commit: translate::commit(1),
                 context: Box::from(&b"build"[..]),
                 check: skein_forge::api::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
             },
             condition: skein_forge_client::Condition::None,
         },
@@ -1036,7 +1038,7 @@ fn a_merge_with_its_answer_lost_is_found_after_restart_without_merging_twice() {
             task: 51,
             repository: REPO,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Merge { number: pull, head },
+                write: skein_forge::api::Write::Merge { number: pull, head, how: skein_forge::api::MergeHow::Style },
                 condition: skein_forge_client::Condition::Merge { base: Box::from(&b"main"[..]) },
             },
             start: None,
@@ -1072,7 +1074,11 @@ fn a_merge_decided_for_an_old_head_cannot_land_the_new_head() {
             task: 51,
             repository: REPO,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Merge { number: pull, head: old_head },
+                write: skein_forge::api::Write::Merge {
+                    number: pull,
+                    head: old_head,
+                    how: skein_forge::api::MergeHow::Style,
+                },
                 condition: skein_forge_client::Condition::Merge { base: Box::from(&b"main"[..]) },
             },
             start: None,

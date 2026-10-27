@@ -511,6 +511,7 @@ impl World {
             &mut fake,
             &fake_config,
             raw::Setup {
+                workflows: Box::new([]),
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
                 default: Box::from(&b"main"[..]),
@@ -1478,6 +1479,8 @@ pub fn failed_ci_with_delayed_brief() -> (World, u64, u64) {
             commit: head,
             context: Box::from(&b"build"[..]),
             state: raw::Check::Failed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     world.slow_brief_reads = true;

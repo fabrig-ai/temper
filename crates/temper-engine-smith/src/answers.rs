@@ -760,6 +760,9 @@ fn forge_answer(text: &mut Text, answer: &api::Answer) -> Result<(), Problem> {
             api::BranchCreation::Created => text.add(b"Branch created")?,
             api::BranchCreation::Exists => text.add(b"Branch already exists")?,
         },
+        api::Answer::Runs { .. } | api::Answer::Run(_) | api::Answer::Tree { .. } => {
+            unreachable!("agent forge reads do not request Actions or trees")
+        }
         api::Answer::Queued => unreachable!("temper-12 gives merge queue answers meaning"),
         api::Answer::Done => text.add(b"Done")?,
     }

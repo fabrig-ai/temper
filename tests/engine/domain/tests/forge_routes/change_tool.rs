@@ -301,6 +301,7 @@ fn several_repositories() -> (World, engine::Assignment) {
         &mut world.fake,
         &world.fake_env.limits,
         raw::Setup {
+            workflows: Box::new([]),
             id: 3,
             name: Box::from(&b"org/extra"[..]),
             default: Box::from(&b"main"[..]),

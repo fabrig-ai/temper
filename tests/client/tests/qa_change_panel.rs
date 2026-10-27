@@ -299,6 +299,8 @@ fn ci_failure_is_read_into_the_panel_and_names_its_repair() {
             commit: head,
             context: b"build".as_slice().into(),
             check: skein_forge::api::Check::Failed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
         &limits,
     );

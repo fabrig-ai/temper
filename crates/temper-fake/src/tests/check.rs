@@ -126,7 +126,10 @@ fn entry(repository: Repository, number: u64, head: [u8; 32], parked: bool) -> d
             number,
             task: 4,
             repository,
-            effect: Effect { write: Write::Merge { number, head }, condition: Condition::None },
+            effect: Effect {
+                write: Write::Merge { number, head, how: skein_forge::api::MergeHow::Style },
+                condition: Condition::None,
+            },
             start: None,
             attempt: None,
             failures: 0,
