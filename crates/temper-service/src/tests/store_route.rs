@@ -277,6 +277,50 @@ fn account_continuations_stay_in_jigs_restore_interval() {
 }
 
 #[test]
+fn people_and_task_continuations_cross_into_jigs_later_interval() {
+    use jig_domain_people::{ActKey, Key as People, RequestKey};
+    use jig_domain_tasks::Key as Tasks;
+    // The same two-row, 8 KiB page as the account continuation fixture above.
+    const PAGE_ROWS: u32 = 2;
+    const PAGE_BYTES: u32 = 8192;
+    for (range, keys, intervals) in [
+        (
+            engine::CoreRange::People,
+            [
+                core::Key::People(People::Answer(RequestKey { person: 1, key: [255; 16] })),
+                core::Key::People(People::Acted(ActKey { connector: 1, key: [0; 16] })),
+            ],
+            [0, 1], // Ordinary people rows, then acted rows (tag 8).
+        ),
+        (
+            engine::CoreRange::Tasks,
+            [core::Key::Tasks(Tasks::Live(1)), core::Key::Tasks(Tasks::PlacedHold(1))],
+            [1, 2], // Core's interval, then live tasks, then placed holds (tag 21).
+        ),
+    ] {
+        let mut routes = fixtures::routes();
+        for (key, interval) in keys.into_iter().zip(intervals) {
+            let Some(store::Request::Restore { range: store::Restore::Jig(ranges), after: Some(cursor), .. }) =
+                route::down(
+                    &mut routes,
+                    load(
+                        engine::Range::Core(range.clone()),
+                        Some(engine::Key::Core(key.clone())),
+                        PAGE_ROWS,
+                        PAGE_BYTES,
+                    ),
+                )
+            else {
+                panic!("core continuation");
+            };
+            let bytes = store::keys::encode(&key, u32::MAX).expect("bounded fixture key");
+            assert_eq!(Some(cursor.clone()), store::intervals::cursor(&ranges, &bytes));
+            assert_eq!(cursor.interval, interval, "{range:?}, {key:?}");
+        }
+    }
+}
+
+#[test]
 fn a_task_page_keeps_projections_then_live_tasks_and_drops_calls() {
     let projection = projection_row();
     let task = core::Record::Tasks(jig_domain_tasks::Stored::Live(Box::new(fixtures::task_record(1))));

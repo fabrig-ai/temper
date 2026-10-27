@@ -185,3 +185,69 @@ fn accounts_load_accepts_counter_after_an_issued_page_cursor() {
         "accounts continuation must accept the counter after Issued without skipping it"
     );
 }
+
+fn issued(number: u32) -> accounts::Stored {
+    accounts::Stored::Issued { number, holder: accounts::Holder::Party(1), name: LOGIN.into(), signed_out: false }
+}
+
+fn account(number: u32) -> accounts::Stored {
+    accounts::Stored::Account {
+        number,
+        provider: CLAUDE,
+        holder: accounts::Holder::Party(1),
+        place: 0,
+        uses: None,
+        subject: Box::new([]),
+        display: Box::new([]),
+    }
+}
+
+fn checked_accounts(after: Option<accounts::Key>, rows: Vec<accounts::Stored>) -> Option<engine::loads::Request> {
+    use engine::loads::{self, Loads};
+    let mut loads = Loads::new(&limits().loads);
+    // One load request or terminal per entry point.
+    let mut out = Queue::with_capacity(1);
+    let owner = loads::begin(
+        &mut loads,
+        Token::new(104),
+        engine::Range::Core(engine::CoreRange::Accounts),
+        after.map(account_key),
+        PAGE,
+        &mut out,
+    )
+    .expect("load admitted");
+    let _ = out.pop().expect("store request");
+    let rows = rows.into_iter().map(|row| Record::Core(core::Record::Accounts(row))).collect();
+    loads::loaded(&mut loads, owner, rows, None, &mut out);
+    out.pop()
+}
+
+#[test]
+fn the_first_account_follows_the_counter_cursor() {
+    assert_eq!(
+        checked_accounts(Some(accounts::Key::Next), vec![account(0)]),
+        Some(engine::loads::Request::Loaded {
+            waiter: Token::new(104),
+            rows: Box::new([Record::Core(core::Record::Accounts(account(0)))]),
+            next: None,
+            cut: None,
+        })
+    );
+}
+
+#[test]
+fn duplicate_and_backward_accounts_pages_are_still_refused() {
+    use accounts::Key;
+    for (after, rows) in [
+        (None, vec![issued(1), issued(1)]),
+        (Some(Key::Issued { number: 2 }), vec![issued(1)]),
+        (Some(Key::Account { number: 3 }), vec![account(0)]),
+        (Some(Key::Next), vec![issued(1)]),
+        (None, vec![accounts::Stored::Next { number: 4 }, issued(1)]),
+    ] {
+        assert_eq!(
+            checked_accounts(after, rows),
+            Some(engine::loads::Request::Unloaded { waiter: Token::new(104), failure: engine::loads::Failure::Order })
+        );
+    }
+}

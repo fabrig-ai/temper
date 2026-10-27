@@ -1,5 +1,5 @@
 //! The Model step declares a program, then the person copies the box's login command.
-use super::{Act, Call, Walk, ctl, here_key};
+use super::{Act, Call, Walk, ctl, here_key, path};
 
 // Init's link signs in as "Owner"; the Model step's default is claude-owner.
 const NAME: &str = "claude-owner";
@@ -84,5 +84,49 @@ fn a_program_and_forgejo_here_reach_ready_on_the_fake_box() {
     // End at Ready: programs cannot take a first chat today (jig's
     // crates/jig-domain-core/src/run_choice.rs:202–223), and ctl has no goal tool
     // yet (tools.md, area 2; temper-client-tools/src/guide.rs:79).
+    walk.scratch.remove();
+}
+
+#[test]
+fn a_program_and_imported_account_survive_a_box_restart() {
+    let walk = Walk::new("walk-program-import-restart");
+    let moved = walk.scratch.path().join("fake-account.move");
+    let export = moved.clone();
+    // Export a fake ChatGPT record from this registration, then import it
+    // beside the declared program. No second issuer or real login is needed.
+    walk.run(vec![
+        Act::Now(Call::new(&["account", "connect", "1", "--key", "restart-donor"])),
+        Act::Visit,
+        Act::Now(Call::new(&["account", "list", "--until", "usable", "--json"])),
+        Act::After(Box::new(move |seen| {
+            let document = ctl::json(seen.last().expect("donor accounts"));
+            let account = document["accounts"]["party"]
+                .as_array()
+                .expect("party accounts")
+                .iter()
+                .find(|account| account["provider"] == 1)
+                .expect("fake ChatGPT account")["number"]
+                .as_u64()
+                .expect("account number");
+            Call::new(&["account", "export", &account.to_string(), path(&export)])
+        })),
+        Act::Now(Call::new(&["account", "declare", "2", "claude_code", NAME, "--key", "restart-program"])),
+        Act::ProgramLogin(NAME),
+        Act::Now(Call::new(&["account", "import", path(&moved), "--key", "restart-import"])),
+        Act::Now(Call::new(&["account", "list", "--until", "usable", "--json"])),
+    ]);
+    // The same config, data and cache, after the first box drained and exited.
+    let seen = walk.run(vec![Act::Now(Call::new(&["account", "list", "--json"]))]);
+    let listed = seen.answers.last().expect("accounts after restart");
+    program_account(listed);
+    let document = ctl::json(listed);
+    let imported = document["accounts"]["party"]
+        .as_array()
+        .expect("party accounts")
+        .iter()
+        .find(|account| account["provider"] == 1)
+        .expect("imported ChatGPT account after restart");
+    assert!(imported["sources"].as_array().expect("sources").iter().any(|source| source["kind"] == "sign_in"));
+    assert!(!moved.exists(), "the fake carried record was consumed by import");
     walk.scratch.remove();
 }
