@@ -1089,6 +1089,8 @@ pub enum Event {
         task: u64,
         child: u64,
         status: change::Status,
+        /// The child failed to produce a result, rather than returning a negative verdict.
+        failed: bool,
         words: Box<[u8]>,
     },
     /// Gather fresh forge facts and step one registered change.

@@ -176,6 +176,11 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLanding>::worst_case(l.landings)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLost>::worst_case(l.holds)?)?
         .checked_add(Map::<u64, crate::ChangeRow>::worst_case(l.changes)?)?
+        .checked_add(
+            u64::from(l.changes)
+                .checked_mul(u64::from(l.change_policy.gates))?
+                .checked_mul(u64::try_from(size_of::<temper_engine_domain_forge_change::GateFailure>()).ok()?)?,
+        )?
         .checked_add(Map::<u64, temper_engine_domain_forge_change::Ci>::worst_case(l.changes)?)?
         .checked_add(skein_lib::List::<(Box<[u8]>, crate::DriftChange)>::worst_case(l.changes)?)?
         .checked_add(u64::from(l.changes).checked_mul(u64::from(l.name_bytes).checked_mul(3)?)?)?

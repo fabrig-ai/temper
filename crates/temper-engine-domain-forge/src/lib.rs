@@ -411,6 +411,11 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             )?
             .checked_add(u64::try_from(row.change.clean.len()).ok()?.checked_mul(32)?)?
             .checked_add(
+                u64::try_from(row.change.gate_failures.len())
+                    .ok()?
+                    .checked_mul(u64::try_from(size_of::<change::GateFailure>()).ok()?)?,
+            )?
+            .checked_add(
                 u64::try_from(row.verdicts.len())
                     .ok()?
                     .checked_mul(u64::try_from(size_of::<change::GateReport>()).ok()?)?,

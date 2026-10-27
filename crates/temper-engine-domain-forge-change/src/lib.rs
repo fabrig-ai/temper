@@ -18,8 +18,8 @@ mod queue;
 mod tests;
 
 pub use boundary::{
-    Change, Ci, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateKind, GateReport, Heard, Hold,
-    Limits, Pull, Ready, Repair, State, Status, Stepped,
+    Change, Ci, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, GateReport,
+    Heard, Hold, Limits, Pull, Ready, Repair, State, Status, Stepped,
 };
-pub use domain::step;
+pub use domain::{review_failed, step};
 pub use queue::first;

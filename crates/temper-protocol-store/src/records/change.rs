@@ -313,6 +313,7 @@ pub(super) fn encode_change(value: &d::Change) -> w::Change {
         ready_since,
         owns_turn,
         last_head,
+        gate_failures,
     } = value;
     w::Change::new(
         &w::CEILINGS,
@@ -331,6 +332,7 @@ pub(super) fn encode_change(value: &d::Change) -> w::Change {
             },
             owns_turn: *owns_turn,
             last_head: *last_head,
+            gate_failures: encode_gate_failures(gate_failures),
         },
     )
     .expect(FITS)
@@ -349,6 +351,7 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
         ready_since,
         owns_turn,
         last_head,
+        gate_failures,
     } = value.into_parts();
     d::Change {
         task,
@@ -365,6 +368,7 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
         },
         owns_turn,
         last_head,
+        gate_failures: decode_gate_failures(gate_failures),
     }
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
@@ -551,6 +555,27 @@ fn decode_gate_remarks(values: List<w::GateRemark>) -> Box<[top::GateRemark]> {
     for value in values.into_boxed() {
         let item = decode_gate_remark(value);
         result.push(item).expect("same count");
+    }
+    result.into_boxed()
+}
+
+fn encode_gate_failures(values: &[d::GateFailure]) -> List<w::GateFailure> {
+    let mut result = List::with_capacity(u32::try_from(values.len()).expect("admitted count"));
+    for value in values {
+        let d::GateFailure { number, count } = value;
+        result
+            .push(
+                w::GateFailure::new(&w::CEILINGS, w::GateFailureParts { number: *number, count: *count }).expect(FITS),
+            )
+            .expect("same count");
+    }
+    result
+}
+fn decode_gate_failures(values: List<w::GateFailure>) -> Box<[d::GateFailure]> {
+    let mut result = List::with_capacity(values.len());
+    for value in values.into_boxed() {
+        let w::GateFailureParts { number, count } = value.into_parts();
+        result.push(d::GateFailure { number, count }).expect("same count");
     }
     result.into_boxed()
 }

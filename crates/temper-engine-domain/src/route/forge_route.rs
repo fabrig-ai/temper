@@ -1703,6 +1703,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                     state: forge_change::State::Producing { requested: false },
                     gates,
                     clean: Box::new([]),
+                    gate_failures: Box::new([]),
                     repairs: 0,
                     resolutions: 0,
                     updates: 0,
@@ -1748,13 +1749,13 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                     tasks::ResultKind::Report
                     | tasks::ResultKind::Change { .. }
                     | tasks::ResultKind::Verdict { code: 1, .. },
-                ) => Some(forge_change::Status::Passed),
-                tasks::MessageKind::Result(
-                    tasks::ResultKind::Failed
-                    | tasks::ResultKind::Cancelled
-                    | tasks::ResultKind::Verdict { .. }
-                    | tasks::ResultKind::Approved { .. },
-                ) => Some(forge_change::Status::Failed),
+                ) => Some((forge_change::Status::Passed, false)),
+                tasks::MessageKind::Result(tasks::ResultKind::Failed | tasks::ResultKind::Cancelled) => {
+                    Some((forge_change::Status::Failed, true))
+                }
+                tasks::MessageKind::Result(tasks::ResultKind::Verdict { .. } | tasks::ResultKind::Approved { .. }) => {
+                    Some((forge_change::Status::Failed, false))
+                }
                 tasks::MessageKind::Escalation { .. }
                 | tasks::MessageKind::Proposal { .. }
                 | tasks::MessageKind::ProposalDecision { .. }
@@ -1770,11 +1771,12 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 | tasks::MessageKind::EffectNotMade { .. }
                 | tasks::MessageKind::News { .. } => None,
             };
-            if let Some(status) = status {
+            if let Some((status, failed)) = status {
                 domain.work.push(Work::Forge(forge::Event::DelegateResult {
                     task,
                     child,
                     status,
+                    failed,
                     words: word.words.clone(),
                 }));
                 break;
@@ -2233,6 +2235,54 @@ fn change_landing_words(
     landing_words(merge, bound, repository, pull, configured)
 }
 
+/// Explain a failed review in the same decision that holds its change.
+fn review_failure_message(domain: &Domain, env: &Env<Limits>, task: u64) -> Option<jig_domain_core::StepMessage> {
+    let row = domain.forge.change(task)?;
+    let context = domain.core.tasks.delegation(task)?;
+    let tasks::Party::Task(requester) = context.requester else { return None };
+    let mut reason = None;
+    for failure in &row.change.gate_failures {
+        if failure.count < 2 {
+            continue;
+        }
+        for remark in &row.gate_remarks {
+            if remark.number == failure.number && Some(remark.head) == row.change.last_head {
+                let mut words = List::with_capacity(env.limits.tasks.message_bytes);
+                append(&mut words, b"Change held: review gate ");
+                append(&mut words, &decimal(failure.number));
+                append(&mut words, b" failed twice: ");
+                append(&mut words, &remark.words);
+                reason = Some(words.into_boxed());
+                break;
+            }
+        }
+        if reason.is_some() {
+            break;
+        }
+    }
+    Some(jig_domain_core::StepMessage { target: requester, kind: tasks::MessageKind::Words, words: reason? })
+}
+
+fn hold_change_decision(domain: &Domain, env: &Env<Limits>, task: u64, why: forge_change::Hold) -> ProcedureStep {
+    let message = if why == forge_change::Hold::Failed { review_failure_message(domain, env, task) } else { None };
+    let why = match why {
+        forge_change::Hold::BranchMoved
+        | forge_change::Hold::BranchMissing
+        | forge_change::Hold::Retargeted
+        | forge_change::Hold::PullClosed => tasks::Hold::Drift,
+        forge_change::Hold::Stalled => tasks::Hold::Stalled,
+        forge_change::Hold::Repairs | forge_change::Hold::Resolutions | forge_change::Hold::Updates => {
+            tasks::Hold::Procedure
+        }
+        forge_change::Hold::Failed | forge_change::Hold::Rejected => tasks::Hold::EffectFailed,
+    };
+    let mut decision = ProcedureStep::new(StepEnd::Hold(why));
+    if let Some(message) = message {
+        decision.messages = Box::new([message]);
+    }
+    decision
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
     if connector != domain.config.forge_connector || code != 2 {
@@ -2272,20 +2322,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 words: change_landing_words(domain, task, &merge, pull, bound),
             }))
         }
-        forge_change::Decision::Hold(why) => {
-            let why = match why {
-                forge_change::Hold::BranchMoved
-                | forge_change::Hold::BranchMissing
-                | forge_change::Hold::Retargeted
-                | forge_change::Hold::PullClosed => tasks::Hold::Drift,
-                forge_change::Hold::Stalled => tasks::Hold::Stalled,
-                forge_change::Hold::Repairs | forge_change::Hold::Resolutions | forge_change::Hold::Updates => {
-                    tasks::Hold::Procedure
-                }
-                forge_change::Hold::Failed | forge_change::Hold::Rejected => tasks::Hold::EffectFailed,
-            };
-            ProcedureStep::new(StepEnd::Hold(why))
-        }
+        forge_change::Decision::Hold(why) => hold_change_decision(domain, env, task, why),
         forge_change::Decision::Ready => {
             again = true;
             ProcedureStep::new(StepEnd::Wait)

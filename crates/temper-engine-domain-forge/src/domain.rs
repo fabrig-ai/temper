@@ -1327,8 +1327,8 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         }
         Event::Delegated { task, child, kind } => delegated(d, task, child, kind, out),
         Event::DelegateRefused { task, child } => delegate_refused(d, env, task, child, out),
-        Event::DelegateResult { task, child, status, words } => {
-            delegate_result(d, env, task, child, status, &words, out);
+        Event::DelegateResult { task, child, status, failed, words } => {
+            delegate_result(d, env, task, child, status, failed, &words, out);
         }
         Event::StepChange { task, entry, heard, gates, queue_repair_active, kept } => {
             step_change(d, env, StepInput { task, entry, heard, gates, queue_repair_active, kept }, out);
@@ -2275,12 +2275,14 @@ fn delegate_refused(d: &mut Domain, env: &Env<Limits>, task: u64, child: u64, ou
     save_queue_change(d, env, before, saved, out);
 }
 
+#[expect(clippy::too_many_arguments, reason = "one child's terminal carries its status, failure standing and words")]
 fn delegate_result(
     d: &mut Domain,
     env: &Env<Limits>,
     task: u64,
     child: u64,
     status: change::Status,
+    failed: bool,
     words: &[u8],
     out: &mut Queue<Request>,
 ) {
@@ -2300,11 +2302,14 @@ fn delegate_result(
                     verdicts.push(*old).expect("bounded prior gate reports");
                 }
             }
-            if verdicts.push(report).is_err() {
+            if !failed && verdicts.push(report).is_err() {
                 emit(out, Request::Refused { task });
                 return;
             }
             row.verdicts = verdicts.into_boxed();
+            if failed {
+                row.change = change::review_failed(&row.change, number, head, env.wall, &env.limits.change_policy);
+            }
             let mut remarks = List::with_capacity(env.limits.change_policy.gates);
             for old in &row.gate_remarks {
                 if old.number != number {

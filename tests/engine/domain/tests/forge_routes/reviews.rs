@@ -231,3 +231,122 @@ fn assert_repository_grants(task: u64, authority: &tasks::Authority) {
         assert!(!authority::pattern_covers(&pattern(&grant.pattern), &sibling));
     }
 }
+
+fn finish_review(world: &mut World, reviewer: &engine::Assignment, result: tasks::TaskResult) {
+    let event = world.protocol.answer(
+        CHANNEL,
+        reviewer.task,
+        reviewer.attempt,
+        5,
+        tasks::End::Finished { result, cancel_delegates: false },
+        engine::Parts::none(),
+    );
+    world.send(event);
+}
+
+fn requester(world: &World, task: u64) -> u64 {
+    let tasks::Party::Task(parent) = live_task(world, task).requester else { panic!("task requester") };
+    parent
+}
+
+fn change_row(world: &World, task: u64) -> &forge_top::ChangeRow {
+    world
+        .store
+        .rows
+        .values()
+        .find_map(|record| match record {
+            Record::Forge { row } => match row.as_ref() {
+                forge_top::Stored::Change(row) if row.task == task => Some(row),
+                _ => None,
+            },
+            Record::Core(_) => None,
+        })
+        .expect("durable change")
+}
+
+fn assert_review_head(world: &World, reviewer: &engine::Assignment, head: [u8; 32]) {
+    let row = live_task(world, reviewer.task);
+    assert!(matches!(row.contract, tasks::Contract::Verdict { .. }), "fresh review, not a repair");
+    assert!(
+        row.spec.parameters.iter().any(|parameter| matches!(parameter, tasks::Parameter::Number { name: 7, value: 1 })),
+        "the same gate"
+    );
+    let mut digits = skein_lib::List::with_capacity(40);
+    for byte in &head[..20] {
+        for digit in forge_top::hex(*byte) {
+            digits.push(digit).expect("SHA-1 digits");
+        }
+    }
+    assert!(
+        row.spec.parameters.iter().any(|parameter| matches!(parameter,
+        tasks::Parameter::Bytes { name: 8, value } if value.as_ref() == digits.as_slice())),
+        "the same pinned head"
+    );
+}
+
+#[test]
+fn a_failed_review_is_asked_again_at_the_same_head() {
+    let (mut world, first, head) = review_world();
+    let change = requester(&world, first.task);
+    finish_review(&mut world, &first, tasks::TaskResult::Failure { reason: b"cannot read the pull".as_slice().into() });
+    let second = next_assignment(&mut world, 3);
+    assert_ne!(second.task, first.task);
+    assert_review_head(&world, &second, head);
+    let row = change_row(&world, change);
+    assert_eq!(row.change.repairs, 0);
+    assert_eq!(
+        row.change.gate_failures.as_ref(),
+        &[temper_engine_domain_forge_change::GateFailure { number: 1, count: 1 }]
+    );
+    assert!(row.verdicts.is_empty(), "failure is no verdict");
+    assert_eq!(world.merges, 0);
+}
+
+#[test]
+fn a_second_failed_review_holds_the_change_naming_it() {
+    use temper_engine_domain_forge_change::{GateFailure, Hold, State};
+    const SECOND_FAILURE: &[u8] = b"cannot judge the second review";
+    let (mut world, first, head) = review_world();
+    let change = requester(&world, first.task);
+    let parent = requester(&world, change);
+    finish_review(&mut world, &first, tasks::TaskResult::Failure { reason: b"cannot read the pull".as_slice().into() });
+    let second = next_assignment(&mut world, 3);
+    assert_review_head(&world, &second, head);
+    finish_review(&mut world, &second, tasks::TaskResult::Failure { reason: SECOND_FAILURE.into() });
+    for _ in 0..MAX_TICKS {
+        world.tick();
+    }
+    let row = change_row(&world, change);
+    assert!(matches!(row.change.state, State::Held { why: Hold::Failed, .. }), "{:?}", row.change.state);
+    assert_eq!(row.change.repairs, 0);
+    assert_eq!(row.change.gate_failures.as_ref(), &[GateFailure { number: 1, count: 2 }]);
+    assert!(row.verdicts.is_empty());
+    assert_eq!(world.merges, 0);
+    assert_eq!(world.assigned.len(), 4, "no repair or third review");
+    assert!(
+        matches!(live_task(&world, change).phase, tasks::Phase::Held { why: tasks::Hold::EffectFailed, .. }),
+        "jig holds the change"
+    );
+    assert!(
+        live_task(&world, parent).inbox.iter().any(|word| word.from == tasks::Party::Task(change)
+            && word.words.windows(SECOND_FAILURE.len()).any(|part| part == SECOND_FAILURE)),
+        "hold names the second review's failure"
+    );
+}
+
+#[test]
+fn a_request_for_changes_is_still_a_repair() {
+    let (mut world, first, _) = review_world();
+    let change = requester(&world, first.task);
+    finish_review(
+        &mut world,
+        &first,
+        tasks::TaskResult::Verdict { code: 2, fields: Box::new([]), words: b"fix the unsafe edge".as_slice().into() },
+    );
+    let repair = next_assignment(&mut world, 3);
+    assert!(matches!(live_task(&world, repair.task).contract, tasks::Contract::Change { .. }));
+    let row = change_row(&world, change);
+    assert_eq!(row.change.repairs, 1);
+    assert!(row.change.gate_failures.is_empty());
+    assert_eq!(row.verdicts[0].status, temper_engine_domain_forge_change::Status::Failed);
+}

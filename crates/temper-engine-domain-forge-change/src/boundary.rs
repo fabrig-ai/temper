@@ -61,6 +61,13 @@ pub struct GateReport {
     pub status: Status,
 }
 
+/// Failures to obtain a gate's verdict at the change's last head.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct GateFailure {
+    pub number: u64,
+    pub count: u32,
+}
+
 /// Why a repair delegate is needed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Repair {
@@ -137,6 +144,8 @@ pub struct Change {
     pub state: State,
     pub gates: Box<[Gate]>,
     pub clean: Box<[Commit]>,
+    /// One bounded count per gate; cleared when the head changes.
+    pub gate_failures: Box<[GateFailure]>,
     pub repairs: u32,
     pub resolutions: u32,
     pub updates: u32,

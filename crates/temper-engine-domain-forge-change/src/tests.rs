@@ -22,6 +22,7 @@ fn change(state: State) -> Change {
         state,
         gates: Box::new([]),
         clean: Box::new([]),
+        gate_failures: Box::new([]),
         repairs: 0,
         resolutions: 0,
         updates: 0,
@@ -368,4 +369,73 @@ fn a_pending_wait_past_the_settle_window_stalls_as_any_wait() {
     let decision =
         step(&change(State::First { head: HEAD, ready_since: at(0) }), &f, &heard(), at(40), &LIMITS).decision;
     assert_eq!(decision, Decision::Hold(Hold::Stalled));
+}
+
+fn reviewing() -> Change {
+    let mut c = change(State::Gating { head: HEAD, asked: Box::new([9]) });
+    c.gates = Box::new([Gate {
+        number: 9,
+        kind: GateKind::Agent,
+        blocking: true,
+        freshness: Freshness::Exact,
+        eager: false,
+    }]);
+    c
+}
+
+#[test]
+fn a_failed_review_is_asked_again_at_the_same_head() {
+    let failed = crate::review_failed(&reviewing(), 9, HEAD, at(2), &LIMITS);
+    assert_eq!(failed.gate_failures.as_ref(), &[crate::GateFailure { number: 9, count: 1 }]);
+    let next = step(&failed, &facts(), &heard(), at(3), &LIMITS);
+    assert_eq!(next.decision, Decision::Delegate(Delegate::Gate { number: 9, head: HEAD }));
+    assert_eq!(next.change.repairs, 0);
+    assert_eq!(next.change.state, State::Gating { head: HEAD, asked: Box::new([9]) });
+    assert!(
+        decide(&next.change, &facts(), &heard()).decision == Decision::Wait { until: Some(at(32)) },
+        "a repeated snapshot does not request a third review"
+    );
+}
+
+#[test]
+fn a_second_failed_review_holds_the_change() {
+    let failed = crate::review_failed(&reviewing(), 9, HEAD, at(2), &LIMITS);
+    let retry = step(&failed, &facts(), &heard(), at(3), &LIMITS);
+    let twice = crate::review_failed(&retry.change, 9, HEAD, at(4), &LIMITS);
+    let next = step(&twice, &facts(), &heard(), at(5), &LIMITS);
+    assert_eq!(next.decision, Decision::Hold(Hold::Failed));
+    assert_eq!(next.change.repairs, 0);
+    assert_eq!(next.change.gate_failures.as_ref(), &[crate::GateFailure { number: 9, count: 2 }]);
+    assert_eq!(decide(&next.change, &facts(), &heard()).decision, Decision::None);
+}
+
+#[test]
+fn a_new_head_starts_its_review_failures_at_zero() {
+    let mut c = reviewing();
+    c.gate_failures = Box::new([crate::GateFailure { number: 9, count: 2 }]);
+    c.state = State::Checking { head: NEW };
+    let mut f = facts();
+    f.branch = Some(NEW);
+    f.pull = Pull::Open { head: NEW, base: BASE };
+    f.ci.head = NEW;
+    let checked = decide(&c, &f, &heard());
+    assert!(checked.change.gate_failures.is_empty());
+    let review = decide(&checked.change, &f, &heard());
+    let failed = crate::review_failed(&review.change, 9, NEW, at(2), &LIMITS);
+    assert_eq!(failed.gate_failures.as_ref(), &[crate::GateFailure { number: 9, count: 1 }]);
+    assert_eq!(decide(&failed, &f, &heard()).decision, Decision::Delegate(Delegate::Gate { number: 9, head: NEW }));
+}
+
+#[test]
+fn each_gate_has_its_own_failure_count() {
+    let mut c = reviewing();
+    c.gates = Box::new([c.gates[0], Gate { number: 10, ..c.gates[0] }]);
+    c.state = State::Gating { head: HEAD, asked: Box::new([9, 10]) };
+    let one = crate::review_failed(&c, 9, HEAD, at(2), &LIMITS);
+    let two = crate::review_failed(&one, 10, HEAD, at(3), &LIMITS);
+    assert_eq!(
+        two.gate_failures.as_ref(),
+        &[crate::GateFailure { number: 9, count: 1 }, crate::GateFailure { number: 10, count: 1 }]
+    );
+    assert_eq!(decide(&two, &facts(), &heard()).decision, Decision::Delegate(Delegate::Gate { number: 9, head: HEAD }));
 }

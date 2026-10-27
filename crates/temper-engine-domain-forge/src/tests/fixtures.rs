@@ -83,6 +83,7 @@ pub fn opening_row() -> ChangeRow {
             state: change::State::Opening { requested: true },
             gates: Box::new([]),
             clean: Box::new([]),
+            gate_failures: Box::new([]),
             repairs: 0,
             resolutions: 0,
             updates: 0,

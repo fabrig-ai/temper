@@ -8,8 +8,8 @@ use alloc::boxed::Box;
 use skein_lib::{List, Wall};
 
 use crate::{
-    Change, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateKind, Heard, Hold, Limits, Pull,
-    Repair, State, Status, Stepped,
+    Change, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, Heard, Hold,
+    Limits, Pull, Repair, State, Status, Stepped,
 };
 
 /// Decide one change from current forge and task facts, independent of its wake.
@@ -18,8 +18,14 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
     let mut next = change.clone();
     if change.gates.len() > usize::try_from(limits.gates).expect("u32 fits usize")
         || change.clean.len() > usize::try_from(limits.clean_heads).expect("u32 fits usize")
+        || change.gate_failures.len() > usize::try_from(limits.gates).expect("u32 fits usize")
     {
         return hold(next, Hold::Failed);
+    }
+    if let Some(head) = facts.branch
+        && change.last_head != Some(head)
+    {
+        next.gate_failures = Box::new([]);
     }
     match &change.state {
         State::Landed { merge } => return Stepped { change: next, decision: Decision::Finish { merge: *merge } },
@@ -392,6 +398,15 @@ fn gating(mut change: Change, head: [u8; 32], asked: &[u64], facts: &Facts, now:
     if facts.branch != Some(head) {
         return hold(change, Hold::BranchMoved);
     }
+    for failure in &change.gate_failures {
+        if failure.count >= 2 {
+            for gate in &change.gates {
+                if failure.number == gate.number {
+                    return hold(change, Hold::Failed);
+                }
+            }
+        }
+    }
     if facts.ci.head == head && facts.ci.status == Status::Failed {
         let why = if change.clean.is_empty() { Repair::Ci } else { Repair::Semantic };
         return repair_due(change, why, facts, now, limits);
@@ -664,4 +679,35 @@ fn landing(mut change: Change, head: [u8; 32], standing: &Heard, now: Wall, limi
         }
         EffectResult::None | EffectResult::Pending | EffectResult::Made => waiting(change, now, limits),
     }
+}
+
+/// Record a failed review without inventing a verdict (domain/forge.md, 8.3).
+/// The top consumes the child's result once before calling this transition.
+#[must_use]
+pub fn review_failed(change: &Change, number: u64, head: [u8; 32], now: Wall, limits: &Limits) -> Change {
+    let mut next = change.clone();
+    let State::Gating { head: current, asked } = &change.state else { return next };
+    if *current != head || !asked.contains(&number) {
+        return next;
+    }
+    let mut failures = List::with_capacity(limits.gates);
+    let mut count = 1;
+    for failure in &change.gate_failures {
+        if failure.number == number {
+            count = failure.count.saturating_add(1).min(2);
+        } else {
+            failures.push(*failure).expect("admitted gate failures");
+        }
+    }
+    failures.push(GateFailure { number, count }).expect("one count per admitted gate");
+    next.gate_failures = failures.into_boxed();
+    let mut remaining = List::with_capacity(limits.gates);
+    for prior in asked {
+        if *prior != number {
+            remaining.push(*prior).expect("admitted gate requests");
+        }
+    }
+    next.state = State::Gating { head, asked: remaining.into_boxed() };
+    next.since = now;
+    next
 }

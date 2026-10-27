@@ -19,6 +19,7 @@ pub fn change_row() -> top::ChangeRow {
             state: change::State::Producing { requested: false },
             gates: Box::new([]),
             clean: Box::new([]),
+            gate_failures: Box::new([]),
             repairs: 0,
             resolutions: 0,
             updates: 0,

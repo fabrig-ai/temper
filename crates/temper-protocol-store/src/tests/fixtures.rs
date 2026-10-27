@@ -732,6 +732,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
                 eager: true,
             }]),
             clean: Box::new([[8; 32], [9; 32]]),
+            gate_failures: Box::new([temper_engine_domain_forge_change::GateFailure { number: 7, count: 1 }]),
             repairs: 10,
             resolutions: 11,
             updates: 12,

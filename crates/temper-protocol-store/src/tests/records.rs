@@ -880,3 +880,24 @@ fn flight_rows_keep_both_key_fields_and_refuse_a_disagreeing_key() {
         assert_eq!(records::row(&other, &bytes, &bounds), Err(crate::Undecodable));
     }
 }
+
+#[test]
+fn review_failure_counts_take_the_gate_bound() {
+    use temper_engine_domain_forge_change::{GateFailure, State};
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    for count in [fixtures::LIMITS.change_policy.gates, fixtures::LIMITS.change_policy.gates + 1] {
+        let mut row = fixtures::change_row(State::Checking { head: [1; 32] });
+        let mut failures = skein_lib::List::with_capacity(count);
+        for number in 0..count {
+            failures.push(GateFailure { number: u64::from(number), count: 2 }).expect("named count");
+        }
+        row.change.gate_failures = failures.into_boxed();
+        let row = forge::Stored::Change(row);
+        let bytes = records::encode(&row);
+        if count == fixtures::LIMITS.change_policy.gates {
+            assert_eq!(records::decode(&bytes, &bounds), Ok(row));
+        } else {
+            assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
+        }
+    }
+}
