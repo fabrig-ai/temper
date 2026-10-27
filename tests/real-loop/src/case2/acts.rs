@@ -130,6 +130,11 @@ fn pause(cast: &Cast) -> Vec<calls::Step> {
     use super::scripts::{DIRECTION, PROPOSAL};
     let mut steps = Vec::with_capacity(12 + 7 * cast.members.len());
     steps.push(call(D1, argv!["task", "stop", number(cast.number("P")), "--key", "case2-stop-p"]));
+    // Stop has been acknowledged. Release the canceled fake streams so they can
+    // drain while the following reads verify the held tasks and retired attempts.
+    for member in &cast.members[1..] {
+        steps.push(calls::release_hold(member.cue.as_bytes()));
+    }
     for member in &cast.members[1..] {
         steps.push(calls::until(
             D1,
@@ -138,7 +143,6 @@ fn pause(cast: &Cast) -> Vec<calls::Step> {
             b"\"task\"",
         ));
         steps.push(call(D1, argv!["task", "run", number(cast.number(member.name)), "--json"]));
-        steps.push(calls::release_hold(member.cue.as_bytes()));
     }
     // The director was never stopped. Finish its held response and park before
     // delivering the person's direction, so the next scripted turn sees it.
