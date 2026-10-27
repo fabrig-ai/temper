@@ -122,6 +122,7 @@ pub fn held(act: ActKind) -> ReadValue {
         ending: None,
         task: chip(),
         hold: Hold {
+            placed: None,
             revision: NEW_REVISION,
             reason: HoldReason::Tries { failures: List::with_capacity(EMPTY_LIST) },
             before: Phase::Running,
