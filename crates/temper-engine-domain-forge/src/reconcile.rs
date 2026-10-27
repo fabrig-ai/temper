@@ -196,7 +196,7 @@ impl Reconciliation {
             // Landing history outlives tasks (domain/forge.md, 7.2).
             // Bindings outlive members. End acts retry until the saved answer,
             // including after their target ended or was removed.
-            Stored::Landed { .. } | Stored::Binding { .. } | Stored::DemoAct(_) => {}
+            Stored::Landed { .. } | Stored::Binding { .. } | Stored::DemoAct(_) | Stored::Verification(_) => {}
             Stored::Flight { task, entry } => self.need(RecordKind::Flight, Need::Entry { task: *task, entry: *entry }),
         }
     }
