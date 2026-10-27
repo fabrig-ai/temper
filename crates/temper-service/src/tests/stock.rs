@@ -113,6 +113,19 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
 }
 
 #[test]
+fn the_goal_and_chat_report_only_the_checks_named_in_the_result() {
+    let words = include_str!("../stock/chat.txt");
+    assert!(
+        words.contains("report what landed as its result says it, naming no check or test it doesn't."),
+        "the goal names only the checks in the change's result"
+    );
+    assert!(
+        words.contains("Explain each result by what it says: never say a check or test ran that it doesn't name."),
+        "the chat names only the checks in the result it hears"
+    );
+}
+
+#[test]
 fn each_charter_offers_every_configured_model() {
     for (document, names) in [
         (single_model(), [b"gpt-6-luna".as_slice()].as_slice()),
