@@ -438,6 +438,8 @@ impl World {
                     rules.ceiling.grants = grants.into_boxed();
                     rules.ceiling.delegation.kinds = Box::new([
                         authority::Executor::Charter(1),
+                        authority::Executor::Charter(2),
+                        authority::Executor::Charter(4),
                         authority::Executor::Procedure(2),
                         authority::Executor::Procedure(3),
                         authority::Executor::Procedure(4),
