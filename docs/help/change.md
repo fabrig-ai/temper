@@ -14,8 +14,13 @@ A change is a task that writes one repository's branch and lands it: its pull re
   OWNER/NAME on forge FORGE · BRANCH into BASE`, its pull request and
   its address, `step:` and the step, the CI at its head, its gates, and
   how many repairs, resolutions and updates it has used of its limits.
-- **Its result** is the change landed, with its merge commit; or it
-  fails, or is cancelled, as any task.
+- **Its result** is the change landed: its merge commit, its pull
+  request with its address, then what the landing passed as the change
+  saw it: `checks at HEAD:` each check at the landed head with its
+  conclusion, `repairs: N:` why each repair was asked, and `reviews:`
+  each verdict at the head it judged, cut from the end and marked when
+  long. It names no check or test the change didn't see. Or it fails,
+  or is cancelled, as any task.
 
 ## How it changes
 
