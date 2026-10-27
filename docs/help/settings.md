@@ -74,9 +74,9 @@ default that changed.
   ctl help settings apply`.
 - A settings file holds a change's items: its form is
   `temper help settings-fields`.
-- A run whose authority holds the settings tool family reads with the
-  host tool `settings` and proposes with `propose_settings`
-  (`temper help host-tools`).
+- A run whose charter names the settings tool family, and whose
+  authority holds it, reads with the host tool `settings` and proposes
+  with `propose_settings` (`temper help host-tools`).
 
 ## Limits
 

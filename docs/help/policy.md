@@ -71,7 +71,8 @@ Each member, with its type and bound, is in
 
 - `temper ctl`: `settings show policy` and `settings show rules` read
   them; `settings apply` and `settings propose` change them.
-- A run reads them with the host tool `settings`.
+- A run whose charter and authority have the settings family reads
+  them with the host tool `settings`.
 - A project's own policy: `project show PROJECT` reads its spends, its
   open period and its pools; `project fund PROJECT AMOUNT` raises its
   period spend, and with `--role ROLE` a role's.

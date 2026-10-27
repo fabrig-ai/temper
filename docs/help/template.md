@@ -61,7 +61,8 @@ policy's override naming it is refused.
   the project's chat template.
 - `me` gives each project's templates, with its policy's overrides
   applied.
-- A run reads templates with the host tool `settings`.
+- A run whose charter and authority have the settings family reads
+  templates with the host tool `settings`.
 
 ## Limits
 
