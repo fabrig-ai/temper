@@ -1222,7 +1222,8 @@ pub fn change_world_in(
     let child_authority = tasks::Authority {
         tools: tasks::Tools(1023),
         grants: [1, 3, 4, 10, 11, 12].map(|kind| tasks::Grant { kind, ..grant.clone() }).into(),
-        delegation: tasks::Delegation { kinds: Box::new([tasks::AuthorityExecutor::Charter(1)]), tasks: 4, depth: 1 },
+        // A producer and two reviews both before and after a release.
+        delegation: tasks::Delegation { kinds: Box::new([tasks::AuthorityExecutor::Charter(1)]), tasks: 5, depth: 1 },
         // Each run's spend must fund its finishing reserve, six with the
         // world's charter (jig a020bf1c): room for five attempts of five.
         budget: tasks::Budget { spend: 40, deadline: None },
