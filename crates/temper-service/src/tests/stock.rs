@@ -124,7 +124,7 @@ fn the_goals_words_survey_before_planning_and_sequence_changes() {
     assert!(words.contains("If your words ask for an advisor, or you need the code read before you can plan, first call goal with advisor set and words saying what to read and report; wait for its report, and name what it found in your plan. Make each agreed change with change, one at a time: when one builds on another, call change for it only after the first's result says it landed, and say in its words what to reuse."), "the goal surveys first and waits for landing before dependent changes");
     assert!(
         words.contains(
-            "Then call change with what was agreed, wait for its result, and report once every change has landed."
+            "Then call change with what was agreed, wait for its result, and report once every change has landed, each as its result says it, naming no check or test it doesn't."
         ),
         "the goal reports after every agreed change lands"
     );
