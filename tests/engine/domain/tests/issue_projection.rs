@@ -276,6 +276,134 @@ fn assert_reported(world: &World, chat: u64, goal: u64) {
     );
 }
 
+fn restart_stock(world: &mut World) {
+    let fresh = World::configured_stock_limits(&defaults(), &model(), &world.env.limits);
+    world.root = fresh.root;
+    world.out = fresh.out;
+    world.events.clear();
+    world.immediate.clear();
+    world.held_write_answers.clear();
+    world.hold_write_answers = None;
+    world.pending.clear();
+    world.events.push_back(engine::Event::Restart { pending: world.store.pending_generation });
+    advance(world);
+}
+
+#[test]
+fn an_untracked_goals_pending_closing_projection_survives_restart() {
+    let (mut world, _, goal) = world(false);
+    let number = issue(&world, goal.task).number.expect("projected issue");
+    world.hold_write_answers = Some(temper_engine_domain_world::forge_routes::HoldWrite::All);
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(93)),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [93; 16],
+        ask: people::Ask::Amend {
+            project: PROJECT,
+            task: goal.task,
+            revision: record(&world, goal.task).revisions.spec,
+            release: None,
+            amendment: people::Amendment {
+                tracked: Some(people::Tracking::Untracked),
+                ..jig_people_world::fixtures::person_unchanged(b"stop tracking")
+            },
+        },
+    }));
+    advance(&mut world);
+    restart_stock(&mut world);
+    assert!(world.root.ready(), "restart admits a live untracked goal's closing feed");
+    let raw::Answer::Item { item, .. } = world
+        .fake
+        .inspect(&world.fake_env.limits, b"org/repo", &raw::Read::Item { number, after: 0 })
+        .expect("issue after restart")
+    else {
+        panic!("item read")
+    };
+    assert_eq!(item.state, raw::State::Closed);
+    assert_eq!(record(&world, goal.task).tracked, None);
+    assert!(
+        !world.store.rows.contains_key(&Key::Core(jig_domain_core::Key::Core(jig_domain_core::CoreKey::Projection(
+            jig_domain_core::ProjectionKey::Goal(goal.task)
+        ),))),
+        "closing projection settled"
+    );
+}
+
+fn adopt_home(world: &mut World, key: u8, name: &[u8], home: bool) {
+    world.send(engine::Event::Party(engine::PartyInput::Application {
+        scope: people::ApplicationScope::Project(PROJECT),
+        reply_to: ReplyTo::new(Token::new(u64::from(key))),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [key; 16],
+        digest: [key; 32],
+        carried: None,
+        request: engine::Application::Forge(forge::Ask::Adopt(forge::Adoption {
+            project: PROJECT,
+            home,
+            forge: 1,
+            host: b"forge.example".as_slice().into(),
+            owner: b"org".as_slice().into(),
+            name: name.into(),
+            prefix: b"temper/".as_slice().into(),
+            role: forge::Role::Owned,
+            landing: b"main".as_slice().into(),
+            ci: true,
+            checks: Box::new([]),
+        })),
+    }));
+    advance(world);
+}
+
+#[test]
+fn a_failed_closing_issue_in_the_previous_home_restores() {
+    const SECOND_REPOSITORY: u32 = 3;
+    let (mut world, _, goal) = world(false);
+    skein_fake_forge_domain::repository(
+        &mut world.fake,
+        &world.fake_env.limits,
+        raw::Setup {
+            id: SECOND_REPOSITORY,
+            name: b"org/extra".as_slice().into(),
+            default: b"main".as_slice().into(),
+            tree: Box::new([]),
+            labels: Box::new([]),
+            checks: raw::Checks {
+                contexts: Box::new([]),
+                latency_min: Duration::ZERO,
+                latency_max: Duration::ZERO,
+                silent: 0,
+                passes: 1000,
+                reruns: 0,
+                cue: None,
+            },
+            protection: None,
+            hooked: false,
+        },
+    );
+    skein_fake_forge_domain::grant(&mut world.fake, b"org/extra", 1, raw::Permission::Admin);
+    adopt_home(&mut world, 94, b"repo", false);
+    adopt_home(&mut world, 95, b"extra", true);
+    report(&mut world, &goal, REPORT);
+    restart_stock(&mut world);
+    assert!(world.root.ready(), "a failed closing projection must not require a live goal");
+    world.send(engine::Event::Forge(Box::new(forge::Event::ForgetProjection { goal: goal.task })));
+    advance(&mut world);
+    let retained = issue(&world, goal.task);
+    assert!(retained.failed);
+    assert!(!retained.state.closed);
+    assert_eq!(retained.repository.repository, 2);
+    let number = retained.number.expect("issue in the first home");
+    let raw::Answer::Item { item, .. } = world
+        .fake
+        .inspect(&world.fake_env.limits, b"org/repo", &raw::Read::Item { number, after: 0 })
+        .expect("retained issue after restart")
+    else {
+        panic!("item read")
+    };
+    assert_eq!(item.state, raw::State::Open);
+}
+
 #[test]
 fn a_goal_with_a_long_request_and_nine_tasks_reports_and_its_issue_fits() {
     const REPORTS_PER_READ: usize = 3; // Three results plus one reserved slot fit the box's eight messages.

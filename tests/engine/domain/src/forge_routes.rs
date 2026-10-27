@@ -914,7 +914,12 @@ impl World {
                     self.drained = Some(self.store.header().commits);
                 }
                 engine::Request::Worker(other) => panic!("forge fixture received an unexpected request {other:?}"),
-                engine::Request::Stop => panic!("root startup or store failure"),
+                engine::Request::Stop => panic!(
+                    "root startup or store failure: restart={:?}, restore={:?}, forge={:?}",
+                    self.root.restart_failure(),
+                    self.root.restore_failure(),
+                    self.root.forge_restore_failure(),
+                ),
             }
         }
     }
