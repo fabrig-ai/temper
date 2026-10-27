@@ -13,10 +13,10 @@ task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME
   --effort EFFORT: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
   REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why
 Amend a task: each control you name is replaced, the rest kept
-Prints: `done: task N, amend`, or `proposed: P/K, to RECIPIENT` when another party must agree
+Prints: `done: task N, amend`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree
 --json: the record amend.
 Key: --key KEY, optional.
 A task whose spec moved since your read fails with `read again:
-task N`. Each file is read before anything is sent, one final
-newline trimmed, at most 32768 bytes of UTF-8. An amendment that
-changes nothing fails (exit 1).
+task show TASK`. Each file is read before anything is sent, one
+final newline trimmed, at most 32768 bytes of UTF-8. An amendment
+that changes nothing fails (exit 1).

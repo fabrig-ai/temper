@@ -32,7 +32,7 @@ pub(super) fn answered(
             return;
         }
         let printed = if let Outcome::Lost = outcome {
-            render::failure(b"the record of the move was lost on its way; the engine keeps the account and cancels the move at its deadline; export again after it", sent.called.json, 1)
+            render::failure(b"the record of the move was lost on its way; the engine keeps the account and cancels the move at its deadline; account export again after it", sent.called.json, 1)
         } else {
             render::outcome::print(&sent.operation, outcome, sent.called.json, acts::me(runner, client), &env.limits)
         };

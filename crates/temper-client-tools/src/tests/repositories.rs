@@ -65,7 +65,7 @@ fn repositories_prints_rows_ids_privacy_and_the_next_call_or_no_more() {
         assert_eq!(
             printed.stdout.as_ref(),
             if more {
-                b"acme/app private 42/10\nacme/public 43/10\ntemper ctl DIRECTORY repositories 3 --installation 11 --page 3\n".as_slice()
+                b"acme/app private 42/10\nacme/public 43/10\ntemper ctl DIR forge repositories 3 --installation 11 --page 3\n".as_slice()
             } else {
                 b"acme/app private 42/10\nacme/public 43/10\nNo more repositories follow.\n".as_slice()
             }

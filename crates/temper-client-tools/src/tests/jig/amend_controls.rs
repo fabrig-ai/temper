@@ -91,7 +91,7 @@ fn amend_untracks_at_the_shown_revision() {
 fn amend_refuses_a_moved_revision_locally() {
     let mut task = task();
     task.spec_revision = c::Revision { value: 9 };
-    refuses(DEADLINE_CALL, task, b"task 41 moved: its spec revision is 9, not 7; read again: task 41\n");
+    refuses(DEADLINE_CALL, task, b"task 41 moved: its spec revision is 9, not 7; read again: task show 41\n");
 }
 #[test]
 fn amend_restates_the_authority_with_its_deadline() {

@@ -236,7 +236,7 @@ fn amend_renders_a_moved_spec_refusal() {
     let answer = root.answer(call).expect("refusal");
     assert_eq!(
         (answer.status, answer.stderr.as_ref()),
-        (2, b"amend: The object changed\nread again: task 41\n".as_slice())
+        (2, b"amend: The object changed\nread again: task show 41\n".as_slice())
     );
 }
 #[test]
@@ -246,7 +246,7 @@ fn task_offers_print_the_general_amend_form() {
     task.spec_revision = c::Revision { value: 8 };
     root.serve(call, f::task_result(task));
     let answer = root.answer(call).expect("task read");
-    assert!(skein_lib::bytes::find(&answer.stdout, b"amend 41 --rev 8 CHANGE... REASON --key NAME").is_some());
+    assert!(skein_lib::bytes::find(&answer.stdout, b"task amend 41 --rev 8 CHANGE... REASON --key KEY").is_some());
 }
 
 #[test]
@@ -260,7 +260,7 @@ fn amend_refusal_keeps_the_named_retry() {
         },
     );
     assert_eq!(root.answer(call).expect("refusal").stderr.as_ref(),
-        b"amend: Authority missing\npropose instead: amend 41 because --rev 7 --model chosen-model --effort high --key model-amend\n");
+        b"amend: Authority missing\npropose instead: task amend 41 because --rev 7 --model chosen-model --effort high --key model-amend\n");
 }
 #[test]
 fn a_named_amend_is_stable_across_clocks() {
@@ -302,5 +302,5 @@ fn task_without_llm_offers_the_general_amend_form() {
     task.llm = None;
     root.serve(call, f::task_result(task));
     let answer = root.answer(call).expect("task read");
-    assert!(skein_lib::bytes::find(&answer.stdout, b"amend 41 --rev 8 CHANGE... REASON --key NAME").is_some());
+    assert!(skein_lib::bytes::find(&answer.stdout, b"task amend 41 --rev 8 CHANGE... REASON --key KEY").is_some());
 }

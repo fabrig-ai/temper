@@ -5,5 +5,5 @@ settings: revision 1
 waiting on: you: question of task 42 · 1 waiting
 acts:
   take (no tool)
-  cancel 41 REASON --key NAME
+  task cancel 41 REASON --key KEY
 digest: task 74c39090f17caab1

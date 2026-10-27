@@ -9,6 +9,6 @@ dependencies:
   task 45 · Waiting · added by task 7 at 2026-10-22 05:10 UTC
 waiting on: Nothing awaited
 acts:
-  stop 41 --key NAME
-  cancel 41 REASON --key NAME
+  task stop 41 --key KEY
+  task cancel 41 REASON --key KEY
 digest: task bc6feee1b0e6e571

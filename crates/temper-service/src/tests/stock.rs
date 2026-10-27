@@ -133,7 +133,8 @@ fn the_document_members_are_refused_naming_temper_ctl_settings() {
         assert_eq!(problems.problems.len(), 1);
         assert_eq!(
             crate::startup::lines(&problems).as_ref(),
-            format!("engine.{member}: settings live in the store; read them with temper ctl settings\n").as_bytes()
+            format!("engine.{member}: settings live in the store; read them with temper ctl DIR settings show\n")
+                .as_bytes()
         );
     }
 }

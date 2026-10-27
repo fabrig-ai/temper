@@ -17,7 +17,7 @@ pub(super) fn sized(task: u64, turn: c::TurnName, bytes: u64, past: bool, out: &
     if past {
         out.put(b"past the limit; report it\n");
     } else {
-        out.put(b"read with: turn ");
+        out.put(b"read with: task turn ");
         out.number(task);
         out.put(b" ");
         name(turn, out);
@@ -119,7 +119,7 @@ fn words(task: u64, turn: c::TurnName, part: &mut u64, bytes: &[u8], call: &Call
 }
 
 fn continuation(task: u64, turn: c::TurnName, part: u64, from: u64, out: &mut Text) {
-    out.put(b"turn ");
+    out.put(b"task turn ");
     out.number(task);
     out.put(b" ");
     name(turn, out);

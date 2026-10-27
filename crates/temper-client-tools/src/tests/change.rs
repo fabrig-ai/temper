@@ -7,7 +7,7 @@ use jig_client::{self as client, contract as c};
 use skein_lib::{Duration, List};
 use temper_client_protocol_wire::{self as wire, v1 as w};
 
-fn panel(step: w::Step) -> w::ChangePanel {
+pub(super) fn panel(step: w::Step) -> w::ChangePanel {
     let used = w::Used::new(&w::CEILINGS, w::UsedParts { used: 0, limit: 3 }).unwrap();
     w::ChangePanel::new(
         &w::CEILINGS,
@@ -140,7 +140,7 @@ fn checking_text_and_json_name_pull_head_gates_bounds_and_same_digest() {
     contains(&text.stdout, b"change 2 \xc2\xb7 qa/pilot-20261026 on forge 3 \xc2\xb7 temper/2-readme into main\n");
     contains(&text.stdout, b"pull request #1 \xc2\xb7 http://127.0.0.1:3000/qa/pilot-20261026/pulls/1\nstep: checking\nhead 1111111111111111111111111111111111111111 \xc2\xb7 CI pending\ngates: none\n");
     contains(&text.stdout, b"repairs 0 of 3 \xc2\xb7 resolutions 0 of 3 \xc2\xb7 updates 0 of 5\n");
-    contains(&text.stdout, b"next: temper ctl DIRECTORY wait change 2 --until landed\n");
+    contains(&text.stdout, b"next: temper ctl DIR change show 2 --until landed\n");
     let call = root.submit(&["change", "show", "2", "--project", "1", "--json"]);
     deliver(&mut root, panel(w::Step::Checking));
     let json = root.answer(call).unwrap();

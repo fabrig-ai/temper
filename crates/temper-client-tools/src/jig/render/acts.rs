@@ -12,24 +12,22 @@ use skein_ui::phrases::{Hole, Phrasebook};
 #[must_use]
 pub fn name(act: ActKind) -> &'static [u8] {
     match act {
-        ActKind::Message => b"message",
-        ActKind::Answer => b"answer",
+        ActKind::Message => b"task message",
+        ActKind::Answer => b"task answer",
         ActKind::Take => b"take",
         ActKind::HandBack => b"hand-back",
-        ActKind::Accept => b"accept",
-        ActKind::Reject => b"reject",
-        ActKind::PassUp => b"pass-up",
-        ActKind::Release => b"release",
-        ActKind::LeaveHeld => b"leave-held",
-        ActKind::Amend => b"amend",
-        ActKind::Stop => b"stop",
-        ActKind::Cancel => b"cancel",
+        ActKind::Accept | ActKind::Reject | ActKind::PassUp => b"proposal decide",
+        ActKind::Release => b"task release",
+        ActKind::LeaveHeld => b"task decide",
+        ActKind::Amend => b"task amend",
+        ActKind::Stop => b"task stop",
+        ActKind::Cancel => b"task cancel",
         ActKind::Move => b"move",
         ActKind::Reorder => b"reorder",
         ActKind::Seen => b"seen",
         ActKind::EditNote => b"edit-note",
         ActKind::DeleteNote => b"delete-note",
-        ActKind::Adopt => b"adopt",
+        ActKind::Adopt => b"repository adopt",
         ActKind::ChangePolicy => b"change-policy",
         ActKind::SetRoles => b"set-roles",
         ActKind::MakeService => b"make-service",
@@ -43,13 +41,17 @@ pub fn text(task: &Task, me: Option<&Me>, book: &Phrasebook, out: &mut Text) {
     for offer in &task.acts {
         out.put(b"  ");
         if !has_tool(task, offer.act) {
-            out.put(name(offer.act));
+            out.put(if offer.act == ActKind::PassUp && task.hold.is_some() { b"task decide" } else { name(offer.act) });
             out.put(b" (no tool)\n");
             continue;
         }
         match &offer.admission {
             Admission::Refused(why) => {
-                out.put(name(offer.act));
+                out.put(if offer.act == ActKind::PassUp && task.hold.is_some() {
+                    b"task decide"
+                } else {
+                    name(offer.act)
+                });
                 out.put(b": ");
                 refusal(why, book, out);
             }
@@ -110,7 +112,7 @@ fn call(task: &Task, act: ActKind, out: &mut Text) {
             out.number(task.chip.task);
             match act {
                 ActKind::Message => out.put(b" TEXT"),
-                ActKind::Answer => out.put(b" Q TEXT"),
+                ActKind::Answer => out.put(b" QUESTION TEXT"),
                 ActKind::Cancel => out.put(b" REASON"),
                 ActKind::Release => hold(task, out),
                 ActKind::Take
@@ -144,18 +146,18 @@ fn call(task: &Task, act: ActKind, out: &mut Text) {
             out.put(b" pass-up REASON");
         }
         ActKind::PassUp | ActKind::LeaveHeld => {
-            out.put(b"decide ");
+            out.put(b"task decide ");
             out.number(task.chip.task);
             hold(task, out);
             out.put(if act == ActKind::PassUp { b" pass-up REASON" } else { b" leave REASON" });
         }
         ActKind::Adopt => {
-            out.put(b"adopt --project ");
+            out.put(b"repository adopt --project ");
             out.number(u64::from(task.project));
-            out.put(b" --owner O --name N --landing B");
+            out.put(b" --owner OWNER --name REPOSITORY --landing BRANCH");
         }
         ActKind::Amend => {
-            out.put(b"amend ");
+            out.put(b"task amend ");
             out.number(task.chip.task);
             out.put(b" --rev ");
             out.number(task.spec_revision.value);
@@ -176,17 +178,17 @@ fn call(task: &Task, act: ActKind, out: &mut Text) {
         | ActKind::SetPool
         | ActKind::Withdraw => return,
     }
-    out.put(b" --key NAME");
+    out.put(b" --key KEY");
 }
 fn hold(task: &Task, out: &mut Text) {
     out.put(b" --hold ");
     match &task.hold {
         Some(hold) => out.number(hold.revision().value),
-        None => out.put(b"R"),
+        None => out.put(b"REV"),
     }
 }
 fn proposal(task: &Task, out: &mut Text) {
-    out.put(b"decide ");
+    out.put(b"proposal decide ");
     match task.proposals.get(0) {
         Some(key) => {
             match key.proposer {
