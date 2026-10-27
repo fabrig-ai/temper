@@ -482,8 +482,6 @@ fn cancel_and_assert_panel_ended(world: &mut World, task: u64) {
                 }
             }
             panic!("ended change's retained panel was not delivered");
-            assert_eq!(world.merges, 0);
-            return;
         }
     }
     panic!("cancel did not end the held task");
@@ -576,4 +574,42 @@ fn a_cancelled_change_with_a_declined_approval_ends_its_panel() {
 fn a_cancelled_change_with_a_moved_branch_ends_its_panel() {
     let (mut world, task, _) = held_for(temper_engine_domain_forge_change::Hold::BranchMoved);
     cancel_and_assert_panel_ended(&mut world, task);
+}
+
+fn observed_move(world: &World, task: u64, head: [u8; 32]) -> bool {
+    world.store.rows.values().any(|record| {
+        matches!(record,
+        Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Hold(hold)
+            if hold.task == task && matches!(&hold.drift,
+                Some(forge_top::Drift { change: forge_top::DriftChange::Branch { observed: Some(observed), .. }, .. })
+                    if *observed == head)))
+    })
+}
+
+#[test]
+fn a_released_moved_change_is_not_held_again_while_its_fresh_read_is_slow() {
+    const SLOW_READ_TICKS: u32 = 600;
+    let (mut world, task, _) = held_for(temper_engine_domain_forge_change::Hold::BranchMoved);
+    let branch = change_row(&world, task).branch.clone();
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, FILE, b"new diff", 2)
+        .expect("person moved the branch");
+    let head = translate::commit(head);
+    for _ in 0..SLOW_READ_TICKS {
+        world.tick();
+        if observed_move(&world, task, head) {
+            break;
+        }
+    }
+    assert!(observed_move(&world, task, head), "the branch's drift is observed before release");
+    world.slow_branch = Some(branch);
+    release(&mut world, task);
+    for _ in 0..SLOW_READ_TICKS {
+        world.tick();
+        if let Some(fresh) = world.assigned.get(4) {
+            assert_review_head(&world, fresh, head);
+            assert!(!matches!(live_task(&world, task).phase, tasks::Phase::Held { .. }));
+            return;
+        }
+    }
+    panic!("the released change was held again: {:?}", live_task(&world, task).phase);
 }
