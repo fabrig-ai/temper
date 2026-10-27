@@ -9,6 +9,9 @@ use skein_lib::{Duration, List, bytes};
 pub(crate) fn apply(defaults: &mut Defaults, flags: &Value, stock_period_spend: u64) {
     // Project-period budgets stay in policy 1; the deployment keeps its stock period.
     defaults.rules.period_spend = stock_period_spend;
+    if let Some(spend) = flags["maximum_run_spend"].as_u64() {
+        defaults.rules.maximum_run_spend = spend;
+    }
     defaults.templates[0].contract = jig_domain_tasks::Contract::Report {
         words: u32::try_from(flags["report_words"].as_u64().expect("case report words")).expect("report words"),
     };
