@@ -7,7 +7,10 @@ use crate::{
 use skein_lib::{Duration, List, Time};
 use skein_playground::replay::{Differs, Feed};
 use skein_ui_web::{
-    bridge::{Duty, Said, Stamp, log::Log},
+    bridge::{
+        Duty, Said, Stamp,
+        log::{self, Log},
+    },
     fetch::Report,
     transport::StreamDuty,
 };
@@ -21,11 +24,19 @@ pub(crate) struct Driver {
     streams: u32,
     finished: bool,
     last_input: Time,
+    difference: Rc<RefCell<Option<Differs>>>,
 }
 impl Driver {
     fn new(log: Log) -> Self {
         let last_input = log.inputs.last().map_or(Time::ZERO, |input| input.stamp.instant);
-        Self { feed: Some(Feed::new(log)), exchanges: BTreeSet::new(), streams: 0, finished: false, last_input }
+        Self {
+            feed: Some(Feed::new(log)),
+            exchanges: BTreeSet::new(),
+            streams: 0,
+            finished: false,
+            last_input,
+            difference: Rc::default(),
+        }
     }
     fn enter(&mut self, at: Stamp, visitor: &mut skein_playground::visitor::Visitor) -> Result<(), Differs> {
         let feed = self.feed.as_mut().expect("feed before the visit ends");
@@ -78,7 +89,11 @@ impl Driver {
         while let Some(report) = visitor.report() {
             self.report(report);
         }
-        self.enter(Stamp { step: service.turns, instant: now }, visitor).expect("session log replays at each input");
+        if let Err(differs) = self.enter(Stamp { step: service.turns, instant: now }, visitor) {
+            *self.difference.borrow_mut() = Some(differs);
+            self.finished = true;
+            return true;
+        }
         if self.feed.as_ref().expect("feed before the visit ends").next().is_none()
             && self.exchanges.is_empty()
             && self.streams == 0
@@ -86,7 +101,7 @@ impl Driver {
             // The fixture is a visit ending at its stream's terminal, while the
             // service is still running. Check its snapshot before teardown:
             // that teardown's stop was not part of the recorded visit.
-            self.feed.take().expect("finish the log once").finish().expect("session log replays to its end");
+            *self.difference.borrow_mut() = self.feed.take().expect("finish the log once").finish().err();
             self.finished = true;
         }
         self.finished
@@ -227,9 +242,26 @@ pub struct Outcome {
     pub commits: u64,
     pub drained: bool,
 }
-/// Replay story A's kept visit with the one-process referee's ordinary checks.
-#[must_use]
-pub fn run(log: Log) -> Outcome {
+/// A malformed log, or its first differing input (zero-based; the count names the end).
+#[derive(Debug)]
+pub enum Error {
+    Read(log::Refused),
+    Differs { differs: Differs, stamp: Option<Stamp> },
+}
+
+/// Replay a page's session-log bytes with the one-process referee's ordinary checks.
+/// A different build is accepted; each input and the end must have the same digest.
+/// Referee violations still fail the world, as in the native tests.
+///
+/// # Errors
+/// Returns the format refusal or first digest difference, including its build and stamp.
+pub fn run(bytes: &[u8]) -> Result<Outcome, Error> {
+    let log = log::read(bytes).map_err(Error::Read)?;
+    let stamps: Vec<_> = log.inputs.iter().map(|input| input.stamp).collect();
+    run_log(log).map_err(|differs| Error::Differs { stamp: stamps.get(differs.input).copied(), differs })
+}
+
+fn run_log(log: Log) -> Result<Outcome, Differs> {
     assert_eq!(log.start.story.as_ref(), A.name.as_bytes(), "the fixture names story A");
     let start = temper_playground::story_start(&A, log.start.seed);
     let machine = Machine(start.machine());
@@ -257,9 +289,11 @@ pub fn run(log: Log) -> Outcome {
             issued: vec![("LLM access token", key.into()), ("forge API token", token.into())],
         });
     });
+    let driver = Driver::new(log);
+    let difference = driver.difference.clone();
     let mut world = World::new_controlled(simulator, config, Memory::Unchecked, |controls| {
         referee::Referee::new(controls, store.clone(), scenario, forge, run.clone(), world::Phase::Story)
-            .with_page(Driver::new(log))
+            .with_page(driver)
     })
     .with_machine(machine);
     let agents = smith_agent_shell::config::parse(A.agent).expect("story agent");
@@ -309,13 +343,14 @@ pub fn run(log: Log) -> Outcome {
         drained: run.borrow().drained,
     };
     CONTEXT.with(|context| *context.borrow_mut() = None);
-    result
+    let differs = difference.borrow_mut().take();
+    differs.map_or(Ok(result), Err)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use skein_ui_web::bridge::{Line, Output, log};
+    use skein_ui_web::bridge::log;
 
     #[test]
     fn completion_deadline_retains_the_last_input_stamp() {
@@ -338,44 +373,35 @@ mod tests {
         assert!(matches!(last.duty, Duty::Stream(StreamDuty::Close)));
         // Omit close: no terminal can finish the visit. The real referee
         // must still wake and fail at the log's end plus its grace.
-        let _ = run(log);
+        let _ = run_log(log);
     }
 
     #[test]
-    fn a_log_whose_digest_differs_fails_at_that_input() {
-        let mut log = log::read(include_bytes!("../../playground/fixtures/welcome.log")).expect("welcome fixture");
-        let build = log.build.clone();
-        let stamp = log.inputs[0].stamp;
-        let logged = {
-            log.inputs[0].digest[0] ^= 1;
-            log.inputs[0].digest
-        };
-        let mut world = temper_playground::world(&A, log.start.seed, log.start.start);
-        let mut driver = Driver::new(log);
-        while world.steps() < stamp.step {
-            if !world.busy() {
-                world.advance(world.next_due().expect("startup wakes"));
-            }
-            world.step();
-            for printed in world.printed() {
-                driver.feed.as_mut().expect("feed before first input").said(&Said::Line(Line {
-                    process: printed.process,
-                    stream: match printed.stream {
-                        skein_sim_world::Stream::Output => Output::Standard,
-                        skein_sim_world::Stream::Error => Output::Error,
-                    },
-                    line: printed.line,
-                }));
-            }
+    fn byte_replay_names_the_first_differing_input_or_end_and_its_build() {
+        let bytes = include_bytes!("../../playground/fixtures/welcome.log");
+        let log = log::read(bytes).expect("welcome fixture");
+        for input in [0, log.inputs.len()] {
+            let text = std::str::from_utf8(bytes).expect("text log").replace("native", "another-build");
+            let mut lines: Vec<_> = text.lines().map(str::to_owned).collect();
+            let line = &mut lines[input + 1];
+            let digit = line.pop().expect("digest digit");
+            line.push(if digit == '0' { '1' } else { '0' });
+            let edited = lines.join("\n") + "\n";
+            let Error::Differs { differs, stamp } = run(edited.as_bytes()).expect_err("edited digest differs") else {
+                panic!("the format is valid");
+            };
+            assert_eq!(differs.input, input);
+            assert_eq!(differs.build.as_ref(), b"another-build");
+            assert_eq!(stamp, log.inputs.get(input).map(|input| input.stamp));
+            let expected = log.inputs.get(input).map_or_else(
+                || match log.end {
+                    log::End::Said(digest) => digest,
+                    log::End::Cut => panic!("whole log"),
+                },
+                |input| input.digest,
+            );
+            assert_eq!(differs.replayed, expected, "only the digest edit differs");
+            assert_ne!(differs.logged, expected);
         }
-        assert_eq!(world.now(), stamp.instant);
-        let Process::Visitor(visitor) = world.process(3) else { panic!("visitor fourth") };
-        let differs = driver.enter(stamp, visitor).expect_err("the edited digest differs");
-        assert_eq!(differs.input, 0);
-        assert_eq!(differs.build, build);
-        assert_eq!(differs.logged, logged);
-        let mut original = logged;
-        original[0] ^= 1;
-        assert_eq!(differs.replayed, original, "only the digest edit made the input differ");
     }
 }
