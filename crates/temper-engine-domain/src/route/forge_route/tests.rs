@@ -333,6 +333,7 @@ fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
         delegate: None,
         delegate_status: change::Status::Unknown,
         verdicts: Box::new([]),
+        result: forge::ChangeResult::empty(),
         gate_remarks: Box::new([]),
         drift: None,
         base_repair: false,
@@ -610,4 +611,46 @@ fn a_review_never_starts_with_a_cut_pull_identity() {
     assert_eq!(super::review_words(&row, 1, &SHA1, &parameters, bound).unwrap().as_ref(), identity);
     assert!(super::review_words(&row, 1, &SHA1, &parameters, bound - 1).is_none());
     assert!(super::review_words(&change_row(None), 1, &SHA1, &parameters, bound).is_none());
+}
+
+#[test]
+fn a_small_landed_result_cuts_only_evidence_and_keeps_both_identity_lines() {
+    let (mut domain, env) = two_forges();
+    let mut row = change_row(Some(7));
+    row.change.last_head = Some(SHA1);
+    row.result.head = Some(SHA1);
+    row.result.checks.bytes = Box::from(b"build passed; release note passed".as_slice());
+    row.result.repair_count = 1;
+    row.result.repairs.bytes = Box::from(b"CI failed: release note".as_slice());
+    row.result.reviews.bytes = Box::from(b"approved at abcdef0123456789abcdef0123456789abcdef01".as_slice());
+    let identity = landing_words(
+        &SHA1,
+        512,
+        domain.forge.repository(row.repository),
+        7,
+        domain.forge.configured(row.repository.forge),
+    );
+    let mut out = skein_lib::Queue::with_capacity(super::forge::max_out(&env.limits.forge));
+    super::forge::step(
+        &mut domain.forge,
+        &super::super::environment_forge(&env),
+        super::forge::Event::Restore { record: super::forge::Stored::Change(row) },
+        &mut out,
+    );
+    let whole = super::change_landing_words(&domain, 7, &SHA1, 7, 512);
+    let bound = u32::try_from(identity.len() + 90).unwrap();
+    let cut = super::change_landing_words(&domain, 7, &SHA1, 7, bound);
+    assert!(cut.starts_with(&identity));
+    let mut kept = None;
+    for (at, pair) in cut.windows(2).enumerate() {
+        if pair == b"\n[" {
+            kept = Some(at);
+        }
+    }
+    let kept = kept.expect("cut marker");
+    assert!(whole.starts_with(&cut[..kept]));
+    let lost = skein_lib::Decimal::of(u64::try_from(whole.len() - kept).unwrap());
+    assert_eq!(&cut[kept + 2..cut.len() - b" bytes cut]\n".len()], lost.as_bytes());
+    assert!(cut.ends_with(b" bytes cut]\n"));
+    assert!(cut.len() <= usize::try_from(bound).unwrap());
 }

@@ -100,6 +100,7 @@ pub fn opening_row() -> ChangeRow {
         delegate: None,
         delegate_status: change::Status::Passed,
         verdicts: Box::new([]),
+        result: ChangeResult::empty(),
         gate_remarks: Box::new([]),
         drift: None,
         base_repair: false,
@@ -240,8 +241,9 @@ pub fn checks(check: skein_forge::api::Check) -> skein_forge::api::Answer {
     }]))
 }
 
-/// The matching pull already supplied head CI, leaving just the base and comparison.
+/// Read the head contexts for the result, then the base and comparison.
 pub fn finish_open(d: &mut Domain) -> Box<[Request]> {
+    answer_next(d, Ok(checks(skein_forge::api::Check::Passed)));
     answer_next(d, Ok(checks(skein_forge::api::Check::Passed)));
     answer_next(
         d,

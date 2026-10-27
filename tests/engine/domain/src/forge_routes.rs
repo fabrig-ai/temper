@@ -53,6 +53,8 @@ pub struct World {
     slow_brief_reads: bool,
     /// A branch whose reads take twenty seconds, each decided when it is sent.
     pub slow_branch: Option<Box<[u8]>>,
+    /// Delay the review diff independently of the change's fresh checks.
+    pub review_files_delay: Option<Duration>,
     gate: paths::Gate,
     pub held_reads: Option<Vec<engine::Request>>,
     pub merges: u32,
@@ -74,6 +76,7 @@ pub struct StoryLimits {
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
     pub spec_bytes: Option<u32>,
+    pub result_bytes: Option<u32>,
     pub forge_charter: Option<u32>,
 }
 
@@ -207,10 +210,13 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes, forge_charter } = timing;
+        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
+            if let Some(bytes) = result_bytes {
+                limits.tasks.result_bytes = bytes;
+            }
             limits.people.amendment_bytes =
                 jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.people.amendment_bytes;
             limits.people.people = 4;
@@ -604,6 +610,7 @@ impl World {
             fail_job_reads: false,
             slow_brief_reads: false,
             slow_branch: None,
+            review_files_delay: None,
             gate,
             held_reads: None,
             hold_write_answers: None,
@@ -827,6 +834,12 @@ impl World {
                     } else {
                         panic!("unknown test repository {repository:?}");
                     };
+                    let review_delay =
+                        if matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::PullFiles { .. })) {
+                            self.review_files_delay
+                        } else {
+                            None
+                        };
                     let slow = (self.slow_brief_reads
                         && matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Job { .. })))
                         || matches!((&op, &self.slow_branch),
@@ -838,6 +851,10 @@ impl World {
                     if slow {
                         limits.latency_min = Duration::from_secs(20);
                         limits.latency_max = Duration::from_secs(20);
+                    }
+                    if let Some(delay) = review_delay {
+                        limits.latency_min = delay;
+                        limits.latency_max = delay;
                     }
                     let fake_env = Env { now: self.fake_env.now, wall: self.fake_env.wall, limits };
                     fake::step(

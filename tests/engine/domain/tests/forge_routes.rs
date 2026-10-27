@@ -33,6 +33,9 @@ mod delegates;
 #[path = "forge_routes/change_tool.rs"]
 mod change_tool;
 
+#[path = "forge_routes/result.rs"]
+mod result;
+
 #[path = "forge_routes/reviews.rs"]
 mod reviews;
 
@@ -1103,6 +1106,8 @@ fn a_review_whose_forge_reads_take_seconds_is_prepared_once_and_merges() {
     world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
     let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"review this diff", 1)
         .expect("producer pushed");
+    // Keep the review's file gather outstanding while the hint's fresh chain runs.
+    world.review_files_delay = Some(Duration::from_secs(20));
     // Even four domain reads take >1s; GitHub expands them into more HTTP requests.
     world.fake_env.limits.latency_min = Duration::from_millis(300);
     world.fake_env.limits.latency_max = Duration::from_millis(300);

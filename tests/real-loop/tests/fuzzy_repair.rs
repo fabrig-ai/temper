@@ -69,6 +69,8 @@ fn fixture() -> forge::Fixture {
             // Coder and repair leave four units for the review; this story
             // retains its one-unit admission floor through its own defaults.
             value["world_settings"]["minimum_run_spend"] = 1.into();
+            value["engine"]["limits"]["overrides"]["tasks.result_bytes"] = 512.into();
+            value["engine"]["limits"]["overrides"]["documents.text_bytes"] = 512.into();
         },
         ..forge::fixture()
     }
@@ -106,7 +108,7 @@ fn scripts(forge: SocketAddr) -> Box<[Script]> {
         "spec":{"words":CHANGE_SPEC,"parameters":[
             {"name":1,"kind":"resource","connector":1,"resource":temper_engine_domain_forge::tag(1, forge::ID)},
             {"name":2,"kind":"bytes","value":"main"}]},
-        "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
+        "contract":{"kind":"change","connector":1,"change_kind":1,"words":512},
         "authority":{"tools":1,"grants":grants,
             "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"agent","number":4}],"tasks":4,"depth":2},
             "budget":{"spend":10},"notes":0}
@@ -389,6 +391,24 @@ fn check_landing(ran: &Ran, commit: u64) {
         Some(merge_hex.as_str()),
         "the change's first result line names the merge commit in full lowercase hex"
     );
+    assert_eq!(change["result"]["value"]["change"]["words"]["cut"], false, "the result document is whole");
+    let words = change["result"]["value"]["change"]["words"]["bytes"].as_str().expect("landing words");
+    let head = ran
+        .forge()
+        .observations()
+        .iter()
+        .find_map(|seen| {
+            let Observation::Merged { head, .. } = seen else { return None };
+            Some(*head)
+        })
+        .expect("merged head");
+    let head = hex(&object_bytes(head));
+    let lines: Vec<_> = words.lines().collect();
+    assert_eq!(lines.len(), 5, "{words}");
+    assert_eq!(lines[2], format!("checks at {head}: check passed"));
+    assert_eq!(lines[3], "repairs: 1: CI failed: check");
+    assert_eq!(lines[4], format!("reviews: approved at {head}"));
+    assert!(told(query_at(ran, CHAT_CUE, 2)).contains(words), "the requester heard the whole result");
     let result = format!("Result from task {CHANGE}:\n{merge_hex}");
     assert!(told(query_at(ran, CHAT_CUE, 2)).contains(&result), "T1 heard T2's merge commit before reporting");
     let chat = document(ran, CHAT_ENDED);

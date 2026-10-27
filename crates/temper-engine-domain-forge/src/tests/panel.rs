@@ -247,7 +247,11 @@ fn a_fresh_ci_read_marks_a_changed_verdict_and_restart_forgets_it() {
     let (mut d, _) = fixtures::opening();
     fixtures::missing_pull(&mut d);
     let got = fixtures::answer_next(&mut d, Ok(fixtures::checks(skein_forge::api::Check::Pending)));
-    assert_eq!(got.as_ref(), &[Request::Marked { tasks: Box::new([fixtures::CHANGE]) }]);
+    let [Request::Save { record: Stored::Change(saved), .. }, Request::Marked { tasks }] = got.as_ref() else {
+        panic!("observed contexts saved, panel marked: {got:?}")
+    };
+    assert_eq!(saved.result.checks.bytes.as_ref(), b"ci pending");
+    assert_eq!(tasks.as_ref(), &[fixtures::CHANGE]);
     assert_eq!(panel(&d).ci, change::Status::Pending);
     let row = d.change(fixtures::CHANGE).expect("kept change").clone();
     let mut restarted = with_row(row);
@@ -378,8 +382,8 @@ fn landed_panel_keeps_passed_ci_across_a_restart() {
     use skein_forge::api::{Answer, State};
     use skein_forge_client::RecoveryClock;
 
-    // Repository, initial change, head-CI update, and landed change.
-    const RESTART_RECORDS: u32 = 4;
+    // Repository, initial change, observed contexts, landed change, and settlement.
+    const RESTART_RECORDS: u32 = 5;
     let repository = Stored::Repository(adopted());
     let mut records = skein_lib::List::with_capacity(RESTART_RECORDS);
     records.push(repository.clone()).expect("repository fits");
@@ -403,6 +407,7 @@ fn landed_panel_keeps_passed_ci_across_a_restart() {
         Answer::Commit(fixtures::HEAD),
         Answer::Commit(fixtures::BASE),
         Answer::Pull(merged),
+        fixtures::checks(skein_forge::api::Check::Passed),
         fixtures::checks(skein_forge::api::Check::Passed),
         Answer::Compare {
             before: fixtures::BASE,

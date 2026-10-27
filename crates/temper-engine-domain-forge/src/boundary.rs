@@ -610,6 +610,8 @@ pub struct IssueRow {
 /// A change task's forge parameters and top-owned procedure state.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ChangeRow {
+    /// Bounded, durable observations for the landed result.
+    pub result: crate::ChangeResult,
     pub task: u64,
     pub repository: skein_forge::api::Repository,
     pub branch: Box<[u8]>,

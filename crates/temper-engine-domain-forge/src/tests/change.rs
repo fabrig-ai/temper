@@ -324,8 +324,11 @@ fn merge_after_base_reads(d: &mut Domain) {
 }
 
 #[test]
-fn passed_pull_ci_merges_without_reading_head_checks_again() {
+fn passed_pull_ci_reads_the_head_contexts_for_its_landed_result() {
     let mut d = merging_change(Protection::Absent, skein_forge::api::Ci::Passed);
+    let (call, op) = fixtures::next_call(&mut d);
+    assert_eq!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Checks { commit: fixtures::HEAD }));
+    fixtures::answer(&mut d, call, Ok(fixtures::checks(skein_forge::api::Check::Passed)));
     merge_after_base_reads(&mut d);
 }
 
@@ -455,6 +458,7 @@ fn a_settling_change_relies_on_its_own_pull_watch_but_keeps_its_deadline() {
         (None, true, LIMITS.client.hinted),
     ] {
         let mut d = first_change(Protection::Absent, Ci::Passed, false);
+        fixtures::answer_next(&mut d, Ok(fixtures::checks(skein_forge::api::Check::Passed)));
         fixtures::answer_next(&mut d, Ok(fixtures::checks(skein_forge::api::Check::Passed)));
         fixtures::answer_next(
             &mut d,

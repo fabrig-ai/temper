@@ -64,11 +64,11 @@ fn a_pull_checking_past_poll_is_read_every_poll_then_merges() {
         world.run_to(until);
     }
     assert_eq!(asked, [1, 1, 2, 4, 5]);
-    assert_eq!(world.calls() - calls, 30, "five steps of six fresh reads");
+    assert_eq!(world.calls() - calls, 35, "five steps of seven fresh reads");
     assert_eq!(seconds(world.wall(), t0), 13);
     let merged = change_step(&mut world, 6, change::Status::Passed, Box::new([]));
     assert!(matches!(merged, change::Decision::Effect(change::Effect::Merge { .. })), "{merged:?}");
-    assert_eq!(world.calls() - calls, 40, "six steps of six fresh reads and four calls to land the merge");
+    assert_eq!(world.calls() - calls, 46, "six steps of seven fresh reads and four calls to land the merge");
     assert_eq!(world.writes(), 1, "never resolved");
 }
 

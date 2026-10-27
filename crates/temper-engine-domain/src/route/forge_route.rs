@@ -1765,6 +1765,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 delegate: None,
                 delegate_status: forge_change::Status::Unknown,
                 verdicts: Box::new([]),
+                result: forge::ChangeResult::empty(),
                 gate_remarks: Box::new([]),
                 drift: None,
                 base_repair,
@@ -2536,7 +2537,15 @@ fn change_landing_words(
     let row = domain.forge.change(task).expect("landed change");
     let repository = domain.forge.repository(row.repository);
     let configured = domain.forge.configured(row.repository.forge);
-    landing_words(merge, bound, repository, pull, configured)
+    let identity = landing_words(merge, bound, repository, pull, configured);
+    let Some(head) = row.change.last_head else { return identity };
+    let room = bound.saturating_sub(u32::try_from(identity.len()).expect("bounded identity")).saturating_sub(1);
+    let Some(evidence) = row.result.words(&head, bound).fitted(room) else { return identity };
+    let mut out = List::with_capacity(bound);
+    append(&mut out, &identity);
+    append(&mut out, b"\n");
+    append(&mut out, &evidence);
+    out.into_boxed()
 }
 
 /// Explain a failed review in the same decision that holds its change.

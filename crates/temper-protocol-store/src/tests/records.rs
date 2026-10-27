@@ -964,3 +964,19 @@ fn an_authority_hold_keeps_its_cause_and_release_across_restart() {
         }
     }
 }
+
+#[test]
+fn a_changes_result_evidence_survives_restart_with_its_cut_counts() {
+    let mut row = fixtures::change_row(temper_engine_domain_forge_change::State::Landed { merge: [1; 32] });
+    row.result = forge::ChangeResult {
+        head: Some([3; 32]),
+        checks: forge::ResultText { bytes: b"check passed".as_slice().into(), cut: 0 },
+        failed: forge::ResultText { bytes: b"check".as_slice().into(), cut: 0 },
+        repairs: forge::ResultText { bytes: b"CI failed: check".as_slice().into(), cut: 31 },
+        repair_count: 8,
+        reviews: forge::ResultText { bytes: b"failed at 123".as_slice().into(), cut: 77 },
+    };
+    let row = forge::Stored::Change(row);
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
+    assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+}
