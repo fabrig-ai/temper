@@ -29,7 +29,7 @@ fn a_large_turn_in_a_chat_prints_as_its_size_line() {
     let printed = fixtures::answered(&mut world, agent, call);
     assert_eq!(printed.status, 0, "{printed:?}");
     let stdout = std::str::from_utf8(&printed.stdout).expect("chat UTF-8");
-    assert!(stdout.contains(&format!("read with: turn {task} {attempt}.{number}\n")), "{stdout}");
+    assert!(stdout.contains(&format!("read with: task turn {task} {attempt}.{number}\n")), "{stdout}");
 }
 
 // The 24 KiB text crosses PART=16 KiB, needing exactly two printed reads.

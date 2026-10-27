@@ -8,12 +8,12 @@ pub const READ: Tool = Tool {
     name: b"forge list",
     line: b"Read the deployment's forges",
     prints:
-        b"A line per forge, `forge F`, its kind, mode and connection, its App and installations, then `digest: forges`",
+        b"A line per forge, `forge N`, its kind, mode and connection, its App and installations, then `digest: forges`",
     result: b"forges",
     forms: &[&[]],
     keyed: Keyed::Never,
     area: 6,
-    notes: b"An installation not yet accepted prints the `forge-accept F I`\nthat accepts it.\n",
+    notes: b"An installation not yet accepted prints the `forge accept FORGE\nINSTALLATION` that accepts it.\n",
 };
 pub const SET_UP: Tool = Tool {
     name: b"forge setup",
@@ -35,7 +35,7 @@ pub const SET_UP: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 6,
-    notes: b"It waits up to 300 seconds while the box fetches, prepares and\nstarts Forgejo and its runner, then adopts the repository as the\nproject's home, landing on main, with CI. Past the wait, it prints\nthe forges and `not met: timeout` (exit 3): wait on forges, then\nread them. `refused: not under the box` (exit 2): the deployment is\nno box, and the refusal names the commands to run instead.\n",
+    notes: b"It waits up to 300 seconds while the box fetches, prepares and\nstarts Forgejo and its runner, then adopts the repository as the\nproject's home, landing on main, with CI. Past the wait, it prints\nthe forges and `not met: timeout` (exit 3): wait with forge list\n--until made:FORGE, then read it. `refused: not under the box` (exit\n2): the deployment is no box, and the refusal names the commands to\nrun instead.\n",
 };
 pub const CONNECT: Tool = Tool {
     name: b"forge connect",
@@ -93,22 +93,22 @@ pub const CONNECT: Tool = Tool {
     ],
     keyed: Keyed::Required,
     area: 6,
-    notes: b"The key or token file holds 1 to 4089 bytes after one final\nnewline is trimmed. An App another owns is set read-only in the\nconfiguration before the start (temper help github). Then `wait\nforges --until connected:F`, or, after a browser, `--until\nsettled`. With `--first`, it goes on to make and adopt that\nrepository, and prints its project. `connected already` (exit 2):\nthe forge holds a key, which this build cannot replace.\n",
+    notes: b"The key or token file holds 1 to 4089 bytes after one final\nnewline is trimmed. An App another owns is set read-only in the\nconfiguration before the start (temper help github). Then forge\nlist --until connected:FORGE, or, after a browser, --until settled.\nWith `--first`, it goes on to make and adopt that repository, and\nprints its project. `connected already` (exit 2): the forge holds a\nkey, which this build cannot replace.\n",
 };
 pub const INSTALL: Tool = Tool {
     name: b"forge install",
     line: b"Print a fresh link that installs GitHub's App on another account",
-    prints: b"`Open this address in a browser on the engine's machine:`, the address, then `wait forges --until settled`",
+    prints: b"`Open this address in a browser on the engine's machine:`, the address, then `forge list --until settled`",
     result: b"forge-install",
     forms: &[&[positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number")]],
     keyed: Keyed::Optional,
     area: 6,
-    notes: b"An installation made through this link is accepted. One made on\nGitHub without it is accepted with `forge-accept`.\n",
+    notes: b"An installation made through this link is accepted. One made on\nGitHub without it is accepted with forge accept.\n",
 };
 pub const ACCEPT: Tool = Tool {
     name: b"forge accept",
     line: b"Accept a GitHub App installation made already",
-    prints: b"`accepted: installation I on forge F`, then the repositories call to make",
+    prints: b"`accepted: installation N on forge N`, then the forge repositories call to make",
     result: b"forge-accept",
     forms: &[&[
         positional(b"forge", b"FORGE", Kind::NumberRange { min: 1, max: 65535 }, Required, b"GitHub's forge number"),
@@ -122,7 +122,7 @@ pub const ACCEPT: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 6,
-    notes: b"It needs no browser, and an installation accepted already answers\nthe same. `GitHub has no installation I of this App` (exit 2): read\nforges for the ids.\n",
+    notes: b"It needs no browser, and an installation accepted already answers\nthe same. `GitHub has no installation I of this App` (exit 2): read\nforge list for the ids.\n",
 };
 pub const REPOSITORIES: Tool = Tool {
     name: b"forge repositories",
@@ -142,7 +142,7 @@ pub const REPOSITORIES: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 6,
-    notes: b"On GitHub, name the installation whose repositories you want:\nforges prints its id.\n",
+    notes: b"On GitHub, name the installation whose repositories you want: forge\nlist prints its id.\n",
 };
 mod connection;
 mod repositories;
@@ -859,7 +859,7 @@ fn text_rows(rows: Option<&[Row]>, digest: Option<Digest>, met: Option<bool>, ou
                 }
                 out.put(&words::installation_words(installation, row.read_only));
                 if installation.stray {
-                    out.put(b" \xc2\xb7 forge-accept ");
+                    out.put(b" \xc2\xb7 forge accept ");
                     out.number(u64::from(row.number));
                     out.put(b" ");
                     out.number(installation.id);

@@ -21,4 +21,4 @@ task cancel TASK [--grace DURATION] REASON [--key KEY]
 task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency TASK]... [--no-dependencies] [--model MODEL [--effort EFFORT]] REASON [--key KEY]
   Amend a task: each control you name is replaced, the rest kept
 task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]
-  Decide a proposal, or the escalation of a held task
+  Decide the escalation of a held task

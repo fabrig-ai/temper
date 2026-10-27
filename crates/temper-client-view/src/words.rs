@@ -2687,7 +2687,7 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::SendAmendment => (&[b"Send amendment"], &[]),
         Word::Discard => (&[b"Discard"], &[]),
         Word::NoChange => (&[b"No change"], &[]),
-        Word::SpecTooLong => (&[b"This task's specification is too long to edit here: use `temper ctl amend`"], &[]),
+        Word::SpecTooLong => (&[b"This task's specification is too long to edit here: use `temper ctl DIR task amend`"], &[]),
         Word::TaskChanged => (&[b"This task changed since the editor opened"], &[]),
         Word::LookAgain => (&[b"Look again"], &[]),
         Word::StopHolds => (&[b"Its run stops, and the task is held until it is released."], &[]),

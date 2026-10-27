@@ -34,7 +34,7 @@ pub const READ: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 6,
-    notes: b"Until it lands, it prints `next: temper ctl DIRECTORY wait change N\n--until landed`; landed, its merge commit. A task with no change\nfails, `no change panel for task N` (exit 2). The forge holds its\ndiff, reviews and logs: read them there.\n",
+    notes: b"Until it lands, it prints `next: temper ctl DIR change show TASK\n--until landed`; landed, its merge commit. A task with no change\nfails, `no change panel for task N` (exit 2). The forge holds its\ndiff, reviews and logs: read them there.\n",
 };
 pub const WAIT_FORM: &[jig::table::Argument] = &[
     positional(b"subject", b"change", Kind::Word { set: &[b"change"] }, Required, b"A change's way to landing"),
@@ -779,7 +779,7 @@ fn text(panel: Option<&w::ChangePanel>, digest: Option<Digest>, met: Option<bool
             out.put(b"\n");
         }
         if landed(panel.step()).is_none() {
-            out.put(b"next: temper ctl DIRECTORY wait change ");
+            out.put(b"next: temper ctl DIR change show ");
             out.number(panel.task());
             out.put(b" --until landed\n");
         }

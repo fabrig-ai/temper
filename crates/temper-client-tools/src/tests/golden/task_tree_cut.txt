@@ -1,4 +1,4 @@
 41 · Root · Running
 42 · Delegate · Running
 43 · Delegate · Running
-cut: 3 more not shown (1 Waiting, 2 Running); read on with: tasks --project 1 --parent 41
+cut: 3 more not shown (1 Waiting, 2 Running); read on with: task list --project 1 --parent 41

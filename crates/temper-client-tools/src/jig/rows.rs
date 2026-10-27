@@ -17,7 +17,7 @@ pub const ME: Tool = Tool {
 pub const INBOX: Tool = Tool {
     name: b"inbox",
     line: b"Read what waits on your party, then its updates",
-    prints: b"A line per item, its task and what waits, then `read on with: inbox ... --after C` or `no more`, and, unfiltered, `digest: inbox`",
+    prints: b"A line per item, its task and what waits, then `read on with: inbox ... --after CURSOR` or `no more`, and, unfiltered, `digest: inbox`",
     result: b"inbox",
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Only this project"),
@@ -32,7 +32,7 @@ pub const INBOX: Tool = Tool {
 pub const TASKS: Tool = Tool {
     name: b"task list",
     line: b"Read a project's tasks, a line each",
-    prints: b"A line per task, its number, kind and phase, then `read on with: tasks ... --after C` or `no more`; the first page of live tasks ends with a digest",
+    prints: b"A line per task, its number, kind and phase, then `read on with: task list ... --after CURSOR` or `no more`; the first page of live tasks ends with a digest",
     result: b"tasks",
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Required, b"The project"),
@@ -56,7 +56,7 @@ pub const TASK: Tool = Tool {
     forms: &[&[
         positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
         switch(b"tree", b"Add its live tree of delegates"),
-        flag(b"activity", b"COUNT", Kind::Count, Optional, b"Add its latest K lines of activity"),
+        flag(b"activity", b"COUNT", Kind::Count, Optional, b"Add its latest COUNT lines of activity"),
         switch(b"run", b"Add its live run"),
     ]],
     keyed: Keyed::Never,
@@ -66,7 +66,7 @@ pub const TASK: Tool = Tool {
 pub const CHAT: Tool = Tool {
     name: b"chat show",
     line: b"Read a chat's conversation from its end",
-    prints: b"The conversation, oldest line first: each turn's words, each run's start and end, then `read on with: chat N --before C` or `no more`",
+    prints: b"The conversation, oldest line first: each turn's words, each run's start and end, then `read on with: chat show TASK --before CURSOR` or `no more`",
     result: b"chat",
     forms: &[&[
         positional(b"task", b"TASK", Kind::Number, Required, b"The chat's task number"),
@@ -79,25 +79,25 @@ pub const CHAT: Tool = Tool {
 pub const ACTIVITY: Tool = Tool {
     name: b"task activity",
     line: b"Read a task's activity from its end",
-    prints: b"A line per event, oldest first, then `read on with: activity N --before C` or `no more`",
+    prints: b"A line per event, oldest first, then `read on with: task activity TASK --before CURSOR` or `no more`",
     result: b"activity",
     forms: &[&[
         positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
         flag(b"before", b"CURSOR", Kind::Cursor, Optional, b"The cursor a page printed, to read further back"),
-        flag(b"limit", b"COUNT", Kind::Count, Optional, b"At most K lines"),
+        flag(b"limit", b"COUNT", Kind::Count, Optional, b"At most COUNT lines"),
     ]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"A turn prints as its size and `read with: turn N A.T`. With\n`--limit`, the page keeps its last K lines, and `read on with:`\nrepeats the read without the limit.\n",
+    notes: b"A turn prints as its size and `read with: task turn TASK TURN`.\nWith `--limit`, the page keeps its last COUNT lines, and `read on\nwith:` repeats the read without the limit.\n",
 };
 pub const TURN: Tool = Tool {
     name: b"task turn",
     line: b"Read one turn of a task's run, part by part",
-    prints: b"`turn A.T`, then its words, calls and results in order; a cut part ends with `K bytes left; read on with: turn N A.T --part K --from B`",
+    prints: b"A turn's header, then its words, calls and results in order; a cut part ends with `N bytes left; read on with: task turn TASK TURN --part PART --from OFFSET`",
     result: b"turn",
     forms: &[&[
         positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
-        positional(b"turn", b"TURN", Kind::Turn, Required, b"The attempt and turn, as activity prints them"),
+        positional(b"turn", b"TURN", Kind::Turn, Required, b"The attempt and turn, as A.T, as task activity prints them"),
         flag(b"part", b"PART", Kind::Number, Optional, b"Only this part"),
         flag(b"from", b"OFFSET", Kind::Number, Optional, b"From this byte of the part"),
     ]],
@@ -113,7 +113,7 @@ pub const RUN: Tool = Tool {
     forms: &[&[positional(b"task", b"TASK", Kind::Number, Required, b"The task's number")]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"`wait run N --until ended` returns when the run ends.\n",
+    notes: b"With `--until ended`, it returns when the run ends.\n",
 };
 pub const SIGN_IN: Tool = Tool {
     name: b"sign-in",
@@ -148,20 +148,20 @@ pub const PENDING: Tool = Tool {
 pub const HELP: Tool = Tool {
     name: b"help",
     line: b"Read the page ctl and the groups, a group's tools, or one tool's record",
-    prints: b"The page ctl, then a line per tool; with TOOL, its record",
+    prints: b"The page ctl, then a line per group; with GROUP, its tools; with GROUP VERB, the tool's record",
     result: b"help",
     forms: &[&[
-        positional(b"group", b"GROUP", Kind::Literal, Optional, b""),
-        positional(b"verb", b"VERB", Kind::Literal, Optional, b""),
+        positional(b"group", b"GROUP", Kind::Literal, Optional, b"A group, as help lists them"),
+        positional(b"verb", b"VERB", Kind::Literal, Optional, b"One of the group's tools, as help GROUP lists them"),
     ]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"It takes no DIR. With `--json`, it prints the first row of the\ntool's name.\n",
+    notes: b"It takes no DIR. With `--json`, it prints the tool's first record.\n",
 };
 pub const CHAT_CREATE: Tool = Tool {
     name: b"chat start",
     line: b"Start a chat in a project",
-    prints: b"`done: task N, chat`, or `proposed: P/K, to RECIPIENT` when another party must agree",
+    prints: b"`done: task N, chat`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree",
     result: b"chat_create",
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Required, b"The project"),
@@ -171,7 +171,7 @@ pub const CHAT_CREATE: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 1,
-    notes: b"The chat's template chooses its model unless `--model` names one;\n`--effort` needs `--model`, and a model that declares efforts needs\n`--effort`. A chat past what your party may start, but within what\nit may propose, is proposed (exit 0). `chat not offered` and `chat\nexceeds offered bounds` (exit 1): your party may not start it.\nThen `wait task N --until replied`.\n",
+    notes: b"The chat's template chooses its model unless `--model` names one;\n`--effort` needs `--model`, and a model that declares efforts needs\n`--effort`. A chat past what your party may start, but within what\nit may propose, is proposed (exit 0). `chat not offered` and `chat\nexceeds offered bounds` (exit 1): your party may not start it.\nThen task show TASK --until replied.\n",
 };
 pub const MESSAGE: Tool = Tool {
     name: b"task message",
@@ -216,7 +216,7 @@ pub const ANSWER: Tool = Tool {
 };
 pub const DECIDE: Tool = Tool {
     name: b"proposal decide",
-    line: b"Decide a proposal, or the escalation of a held task",
+    line: b"Decide a proposal",
     prints: b"`done: decide`, or `decided first:`, by whom, how and when, if it was decided already",
     result: b"decide",
     forms: &[
@@ -265,7 +265,7 @@ pub const STOP: Tool = Tool {
     forms: &[&[positional(b"task", b"TASK", Kind::Number, Required, b"The task's number")]],
     keyed: Keyed::Optional,
     area: 1,
-    notes: b"The task stays held until `release` lifts the hold or `cancel` ends\nit.\n",
+    notes: b"The task stays held until task release lifts the hold or task\ncancel ends it.\n",
 };
 pub const CANCEL: Tool = Tool {
     name: b"task cancel",
@@ -312,7 +312,7 @@ pub const ACCOUNTS: Tool = Tool {
     forms: &[&[]],
     keyed: Keyed::Never,
     area: 5,
-    notes: b"The deployment's own accounts show beside your party's when your\nparty owns the deployment. `wait accounts` takes this read's\ndigest.\n",
+    notes: b"The deployment's own accounts show beside your party's when your\nparty owns the deployment.\n",
 };
 pub const MODELS: Tool = Tool {
     name: b"model list",
@@ -322,7 +322,7 @@ pub const MODELS: Tool = Tool {
     forms: &[&[flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Only this project")]],
     keyed: Keyed::Never,
     area: 5,
-    notes: b"Its digest is the models' read, not the accounts': wait on accounts\nwith the digest accounts prints.\n",
+    notes: b"Its digest is the models' read, not the accounts'; to wait on the\naccounts, use the digest account list prints.\n",
 };
 
 /// Account source shorthand is resolved against the current accounts watch.
@@ -336,19 +336,19 @@ const SOURCE: super::table::Argument = flag(
 pub const CONNECT: Tool = Tool {
     name: b"account connect",
     line: b"Start a sign-in to an LLM provider",
-    prints: b"`Open this address in a browser on the engine's machine:`, the address, then `wait accounts --until settled`",
+    prints: b"`Open this address in a browser on the engine's machine:`, the address, then `account list --until settled`",
     result: b"connect",
     forms: &[&[positional(b"provider", b"PROVIDER", Kind::Number, Required, b"The provider's number, as me prints it")]],
     keyed: Keyed::Required,
     area: 5,
-    notes: b"It returns once the sign-in starts. Open the address in a browser\non the engine's machine, where the provider sends the browser back,\nthen `wait accounts --until settled`.\n",
+    notes: b"It returns once the sign-in starts. Open the address in a browser\non the engine's machine, where the provider sends the browser back,\nthen account list --until settled.\n",
 };
 pub const DISCONNECT: Tool = Tool {
     name: b"account disconnect",
     line: b"Sign an account's source out",
     prints: b"`done: disconnect`; for a program, where it signed out; for a provider that keeps its grant, where to revoke it",
     result: b"disconnect",
-    forms: &[&[positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"), SOURCE]],
+    forms: &[&[positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"), SOURCE]],
     keyed: Keyed::Optional,
     area: 5,
     notes: b"Without `--source`, the account has one source. Where the\nprovider's grant cannot be revoked from here, the answer says where\nto revoke it, in the provider's settings.\n",
@@ -366,7 +366,7 @@ pub const ADD_KEY: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 5,
-    notes: b"The file holds 1 to 4096 bytes after one final newline is trimmed.\nctl leaves it in place: remove it once the account is usable. Then\n`wait accounts --until usable`.\n",
+    notes: b"The file holds 1 to 4096 bytes after one final newline is trimmed.\nctl leaves it in place: remove it once the account is usable. Then\naccount list --until usable.\n",
 };
 pub const REPLACE_KEY: Tool = Tool {
     name: b"account replace-key",
@@ -374,19 +374,19 @@ pub const REPLACE_KEY: Tool = Tool {
     prints: b"`done: replace-key`",
     result: b"replace_key",
     forms: &[&[
-        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"),
+        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"),
         positional(b"file", b"FILE", Kind::File, Required, b"The private file holding the new key"),
     ]],
     keyed: Keyed::Optional,
     area: 5,
-    notes: b"The account has one key source. The file's bounds are add-key's.\n",
+    notes: b"The account has one key source. The file's bounds are account\nadd-key's.\n",
 };
 pub const FORGET: Tool = Tool {
     name: b"account forget",
     line: b"Remove an account, or one of its sources",
     prints: b"`done: forget`",
     result: b"forget",
-    forms: &[&[positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"), SOURCE]],
+    forms: &[&[positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"), SOURCE]],
     keyed: Keyed::Optional,
     area: 5,
     notes: b"Without `--source`, the whole account goes. With it, a sign-in or\nprogram source is signed out, and a key source is erased.\n",
@@ -397,7 +397,7 @@ pub const RANK: Tool = Tool {
     prints: b"`done: rank`",
     result: b"rank",
     forms: &[&[
-        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"),
+        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"),
         positional(b"position", b"POSITION", Kind::Number, Required, b"The place, from 1"),
         SOURCE,
     ]],
@@ -411,7 +411,7 @@ pub const RETRY: Tool = Tool {
     prints: b"`done: retry`",
     result: b"retry",
     forms: &[&[
-        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"),
+        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"),
         SOURCE,
     ]],
     keyed: Keyed::Optional,
@@ -431,7 +431,7 @@ pub const DEPENDENCIES: u32 = 32;
 pub const AMEND: Tool = Tool {
     name: b"task amend",
     line: b"Amend a task: each control you name is replaced, the rest kept",
-    prints: b"`done: task N, amend`, or `proposed: P/K, to RECIPIENT` when another party must agree",
+    prints: b"`done: task N, amend`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree",
     result: b"amend",
     forms: &[&[
         positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
@@ -456,7 +456,7 @@ pub const AMEND: Tool = Tool {
     ]],
     keyed: Keyed::Optional,
     area: 2,
-    notes: b"A task whose spec moved since your read fails with `read again:\ntask N`. Each file is read before anything is sent, one final\nnewline trimmed, at most 32768 bytes of UTF-8. An amendment that\nchanges nothing fails (exit 1).\n",
+    notes: b"A task whose spec moved since your read fails with `read again:\ntask show TASK`. Each file is read before anything is sent, one\nfinal newline trimmed, at most 32768 bytes of UTF-8. An amendment\nthat changes nothing fails (exit 1).\n",
 };
 
 /// Appended so existing keyed tool identities stay stable.
@@ -479,15 +479,16 @@ pub const DECLARE: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 5,
-    notes: b"No program runs for you: run the printed command on each host that\nruns the program, then `verify`.\n",
+    notes:
+        b"No program runs for you: run the printed command on each host that\nruns the program, then account verify.\n",
 };
 pub const VERIFY: Tool = Tool {
     name: b"account verify",
     line: b"Ask the hosts to check a program's login",
-    prints: b"`asked`, then `wait accounts --until settled`",
+    prints: b"`asked`, then `account list --until settled`",
     result: b"verify",
     forms: &[&[
-        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"),
+        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"),
         SOURCE,
     ]],
     keyed: Keyed::Optional,
@@ -502,19 +503,19 @@ pub const EXPORT: Tool = Tool {
     prints: b"`moved out: account N to FILE`",
     result: b"export",
     forms: &[&[
-        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"),
+        positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as account list prints it"),
         positional(b"file", b"FILE", Kind::File, Required, b"The new file; nothing may be there"),
     ]],
     keyed: Keyed::Never,
     area: 5,
-    notes: b"It takes no --key. It creates FILE, mode 0600, before sending\nanything, writes and syncs the account's record, and only then\ntells the engine; the account then leaves this deployment. A\nfailure before that removes FILE, and the engine keeps the account\nand cancels the move at its deadline: export again after it.\nImport FILE, as it is, on the deployment it moves to.\n",
+    notes: b"It takes no --key. It creates FILE, mode 0600, before sending\nanything, writes and syncs the account's record, and only then\ntells the engine; the account then leaves this deployment. A\nfailure before that removes FILE, and the engine keeps the account\nand cancels the move at its deadline: export again after it.\nOn the deployment it moves to, account import FILE, as it is.\n",
 };
 pub const IMPORT: Tool = Tool {
     name: b"account import",
-    line: b"Move an account in from the file export wrote, then remove the file",
+    line: b"Move an account in from the file account export wrote, then remove the file",
     prints: b"`moved in: account N`",
     result: b"import",
-    forms: &[&[positional(b"file", b"FILE", Kind::File, Required, b"The private file export wrote")]],
+    forms: &[&[positional(b"file", b"FILE", Kind::File, Required, b"The private file account export wrote")]],
     keyed: Keyed::Required,
     area: 5,
     notes: b"The file holds 1 to 131072 bytes, read whole. It is removed once\nthe engine holds the account, and kept otherwise: the same call\nwith the same key and file gets the first answer. A record of a\nnewer form than this binary reads asks for an upgrade.\n",
@@ -538,7 +539,7 @@ pub const SETTINGS: Tool = Tool {
     forms: &[&[]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"`setting KIND N --json` prints one value to edit. change-settings\nand propose-settings take the newest revision this prints as\n`--against`.\n",
+    notes: b"settings show KIND NUMBER --json prints one value to edit.\nsettings apply and settings propose take the newest revision this\nprints as `--against`.\n",
 };
 pub const SETTING: Tool = Tool {
     name: b"settings show",
@@ -589,12 +590,12 @@ pub const REVISION: Tool = Tool {
     )]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"A forgotten revision prints `revision R is forgotten; the oldest\nkept is revision O`, with exit 0. An item too large to print names\nthe setting call that reads it.\n",
+    notes: b"A forgotten revision prints `revision R is forgotten; the oldest\nkept is revision O`, with exit 0. An item too large to print names\nthe settings show call that reads it.\n",
 };
 pub const REVISIONS: Tool = Tool {
     name: b"revision list",
     line: b"Read the settings' history, newest first, a page at a time",
-    prints: b"Each revision's head and its items' edits, then `read on: revisions --before R`, `no older revisions` or `older revisions were forgotten`",
+    prints: b"Each revision's head and its items' edits, then `read on: revision list --before REVISION`, `no older revisions` or `older revisions were forgotten`",
     result: b"revisions",
     forms: &[&[flag(
         b"before",
@@ -625,7 +626,7 @@ pub const CHANGE_SETTINGS: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 1,
-    notes: b"The file is `{\"items\": [ITEM, ...]}`, at most 1024 items; an item\nis `{\"setting\": {\"kind\": KIND, \"number\": N}, \"set\": VALUE}`, or\n`\"edit\": \"removed\"` or `\"reset\"` in place of `set`; rules takes no\nnumber. A file out of form names the item, member and rule (exit\n1). `stale; newest revision R; read settings again` (exit 2): read\nthe settings, then decide again.\n",
+    notes: b"The file is `{\"items\": [ITEM, ...]}`, at most 1024 items; an item\nis `{\"setting\": {\"kind\": KIND, \"number\": NUMBER}, \"set\": VALUE}`, or\n`\"edit\": \"removed\"` or `\"reset\"` in place of `set`; rules takes no\nnumber. A file out of form names the item, member and rule (exit\n1). `stale; newest revision R; read settings again` (exit 2): read\nthe settings, then decide again.\n",
 };
 
 /// New rows append to preserve every earlier durable call identity.
@@ -634,7 +635,7 @@ pub const PROPOSAL_AT: u8 = 48;
 pub const PROPOSE_SETTINGS: Tool = Tool {
     name: b"settings propose",
     line: b"Propose a change of the settings to the deployment's owners",
-    prints: b"`proposed: pN/K, to RECIPIENT`",
+    prints: b"`proposed: PROPOSAL, to RECIPIENT`",
     result: b"propose_settings",
     forms: &[&[
         positional(b"items", b"FILE", Kind::File, Required, b"The settings file, JSON, or -"),
@@ -649,24 +650,30 @@ pub const PROPOSE_SETTINGS: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 1,
-    notes: b"The file is change-settings'. Read the proposal with `proposal\npN/K`.\n",
+    notes: b"The file is settings apply's. Read the proposal with proposal show\nPROPOSAL.\n",
 };
 pub const PROPOSAL: Tool = Tool {
     name: b"proposal show",
     line: b"Read a proposal; for settings, what each item would change",
     prints: b"`proposal P/K` and its action, its reason, and, for settings, each item now and as it would be",
     result: b"proposal",
-    forms: &[&[positional(b"proposal", b"PROPOSAL", Kind::Proposal, Required, b"The proposal, tN/K or pN/K")]],
+    forms: &[&[positional(
+        b"proposal",
+        b"PROPOSAL",
+        Kind::Proposal,
+        Required,
+        b"The proposal, tN/K or pN/K, as a read prints it",
+    )]],
     keyed: Keyed::Never,
     area: 2,
-    notes: b"A decided proposal prints how it was decided. Decide a live one\nwith `decide`.\n",
+    notes: b"A decided proposal prints how it was decided. Decide a live one\nwith proposal decide.\n",
 };
 
 /// New rows append to preserve every earlier durable call identity.
 pub const MOVE_TO_NEWEST_AT: u8 = 51;
 pub const MOVE_TO_NEWEST: Tool = Tool {
     name: b"revision advance",
-    line: b"Move the live tasks on revision R to the newest revision",
+    line: b"Move the live tasks on held REVISION to the newest revision",
     prints: b"`moved N tasks to revision R`, then how many could not, which finish on their revision",
     result: b"move_to_newest",
     forms: &[&[positional(
@@ -685,7 +692,7 @@ pub const MOVE_TO_NEWEST: Tool = Tool {
 pub const TASK_DECIDE_AT: u8 = 52;
 pub const TASK_DECIDE: Tool = Tool {
     name: b"task decide",
-    line: DECIDE.line,
+    line: b"Decide the escalation of a held task",
     prints: DECIDE.prints,
     result: b"decide",
     forms: &[

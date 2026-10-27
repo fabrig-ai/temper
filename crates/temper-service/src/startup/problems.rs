@@ -153,7 +153,7 @@ fn words(what: What) -> &'static [u8] {
             | config::What::CodecArithmetic
             | config::What::StoreCodec => b"",
             config::What::Json => b"invalid JSON",
-            config::What::Stored => b"settings live in the store; read them with temper ctl settings",
+            config::What::Stored => b"settings live in the store; read them with temper ctl DIR settings show",
             config::What::Unknown => b"unknown member",
             config::What::Missing => b"missing",
             config::What::Duplicate => b"duplicate",

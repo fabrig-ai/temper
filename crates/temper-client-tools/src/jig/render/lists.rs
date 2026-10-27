@@ -183,10 +183,8 @@ pub(super) fn write_call(call: &Call, out: &mut Text) {
         5 => &crate::jig::rows::ACTIVITY,
         _ => unreachable!("paged read"),
     };
-    // This slice preserves printed follow-up calls; their rename follows separately.
-    let tool = crate::jig::table::Tool { name: tool.result, ..*tool };
     call.tool = 0;
-    crate::jig::argv::back(&[&tool], &call, &mut argv).expect("a parsed continuation call");
+    crate::jig::argv::back(&[tool], &call, &mut argv).expect("a parsed continuation call");
     for (index, word) in argv.as_slice().iter().enumerate() {
         if index > 0 {
             out.put(b" ");

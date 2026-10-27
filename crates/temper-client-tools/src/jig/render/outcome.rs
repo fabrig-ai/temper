@@ -249,12 +249,12 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
             out.put(name);
         }
         c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::AccountChanged)) if operation.word == b"verify" => {
-            out.put(b"asked\nwait accounts --until settled");
+            out.put(b"asked\naccount list --until settled");
         }
         c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::AccountSignInStarted { address, .. })) => {
             out.put(b"Open this address in a browser on the engine's machine:\n");
             out.put(address);
-            out.put(b"\nwait accounts --until settled");
+            out.put(b"\naccount list --until settled");
         }
         c::Answer::Done(c::Outcome::Owner(
             c::OwnerOutcome::AccountSignedOut { confirmed, failed_hosts }
@@ -425,7 +425,7 @@ fn encode(
     out.object_end();
 }
 fn read_again(task: u64, out: &mut Text) {
-    out.put(b"task ");
+    out.put(b"task show ");
     out.number(task);
 }
 pub(crate) fn newline(bytes: &[u8]) -> Box<[u8]> {
@@ -453,22 +453,10 @@ pub(crate) fn retry(call: &crate::jig::call::Call) -> Box<[u8]> {
         rows::MOVE_TO_NEWEST_AT => &rows::MOVE_TO_NEWEST,
         _ => unreachable!("act tool"),
     };
-    let name = if call.tool == rows::TASK_DECIDE_AT {
-        b"decide".as_slice()
-    } else if call.tool == rows::CHAT_CREATE_AT {
-        b"chat".as_slice()
-    } else {
-        match crate::jig::table::name_words(tool.name).1 {
-            Some(b"advance") => b"move-to-newest".as_slice(),
-            Some(word) => word,
-            None => tool.name,
-        }
-    };
-    let tool = crate::jig::table::Tool { name, ..*tool };
     let mut call = call.clone();
     call.tool = 0;
     let mut words = skein_lib::List::with_capacity(128);
-    argv::back(&[&tool], &call, &mut words).expect("parsed act");
+    argv::back(&[tool], &call, &mut words).expect("parsed act");
     let mut measure = Text::measure();
     retry_words(words.as_slice(), &mut measure);
     let mut out = Text::writing_exact(measure);
@@ -510,11 +498,11 @@ fn account_follow_up(operation: &Operation, outcome: &Outcome) -> Option<&'stati
     match outcome {
         Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::Owner(
             c::OwnerOutcome::AccountSignInStarted { .. },
-        )))) => Some(b"wait accounts --until settled"),
+        )))) => Some(b"account list --until settled"),
         Outcome::Answered(Answered::Jig(c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::AccountChanged))))
             if operation.word == b"verify" =>
         {
-            Some(b"wait accounts --until settled")
+            Some(b"account list --until settled")
         }
         Outcome::NotKept
         | Outcome::Answered(_)
@@ -622,7 +610,7 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
     if let c::Refusal::Moved { .. } = refusal
         && let Some(task) = operation.task
     {
-        out.put(b"\nread again: task ");
+        out.put(b"\nread again: task show ");
         out.number(task);
     }
     if let c::Refusal::Authority { proposable: Some(true), .. } = refusal {

@@ -1,2 +1,2 @@
 41 · goal · Running
-read on with: tasks --project shop --ended --after 1122
+read on with: task list --project shop --ended --after 1122

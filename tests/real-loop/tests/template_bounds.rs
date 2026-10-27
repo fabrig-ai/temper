@@ -37,6 +37,9 @@ fn reads_answer_at_the_templates_bounds() {
     let tree = seen.tree.split_once("tree:\n").expect("tree").1.split_once("digest:").expect("tree digest").0;
     assert_eq!(tree.lines().filter(|line| line.contains(" · ")).count(), 3, "root and two rows: {tree}");
     assert!(tree.starts_with("1 · "), "{tree}");
-    assert!(tree.contains("cut: 1 more not shown (1 Waiting); read on with: tasks --project 1 --parent 1\n"), "{tree}");
+    assert!(
+        tree.contains("cut: 1 more not shown (1 Waiting); read on with: task list --project 1 --parent 1\n"),
+        "{tree}"
+    );
     assert_eq!(seen.delegates, [4, 5, 6], "all live delegates reached");
 }

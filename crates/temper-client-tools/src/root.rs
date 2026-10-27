@@ -336,7 +336,7 @@ impl jig::render::Parts for Parts {
         if let jig_client::contract::TaskContractDocument::Change { connector, kind: 1, .. } = task.result_contract
             && connector == temper_client_protocol_wire::FORGE
         {
-            out.put(b"next: temper ctl DIRECTORY change ");
+            out.put(b"next: temper ctl DIR change show ");
             out.number(task.chip.task);
             out.put(b"\n");
         }

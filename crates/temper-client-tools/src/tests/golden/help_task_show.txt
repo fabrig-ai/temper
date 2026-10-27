@@ -1,7 +1,7 @@
 task show TASK [--tree] [--activity COUNT] [--run]
   TASK (task): a number; required. The task's number
   --tree: a switch. Add its live tree of delegates
-  --activity COUNT: a count from 1 to 32; optional. Add its latest K lines of activity
+  --activity COUNT: a count from 1 to 32; optional. Add its latest COUNT lines of activity
   --run: a switch. Add its live run
 Read a task: its state, what it waits on, and the acts you may take
 Prints: `task N`, its kind, phase, project and tracking, its fields, `acts:` and a digest; each part asked for after it, with its own digest
