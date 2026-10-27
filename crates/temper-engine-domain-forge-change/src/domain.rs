@@ -27,9 +27,10 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
     {
         next.gate_failures = Box::new([]);
     }
-    match &change.state {
+    let held = match &change.state {
         State::Landed { merge } => return Stepped { change: next, decision: Decision::Finish { merge: *merge } },
         State::Ended => return Stepped { change: next, decision: Decision::Cancel },
+        State::Held { .. } => true,
         State::Producing { .. }
         | State::Opening { .. }
         | State::Recreating { .. }
@@ -41,13 +42,15 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         | State::Updating { .. }
         | State::Resolving { .. }
         | State::Repairing { .. }
-        | State::Landing { .. }
-        | State::Held { .. } => {}
-    }
-    if let Pull::Merged { commit } = facts.pull {
-        next.state = State::Landed { merge: commit };
-        next.released = None;
-        return Stepped { change: next, decision: Decision::Finish { merge: commit } };
+        | State::Landing { .. } => false,
+    };
+    match facts.pull {
+        Pull::Merged { commit } => {
+            next.state = State::Landed { merge: commit };
+            next.released = None;
+            return Stepped { change: next, decision: Decision::Finish { merge: commit } };
+        }
+        Pull::Missing | Pull::Open { .. } | Pull::Closed => {}
     }
     if standing.cancelled {
         next.state = State::Ended;
@@ -62,7 +65,7 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         let was = next.state.clone();
         return release(next, &was, why, facts);
     }
-    if let State::Held { .. } = next.state {
+    if held {
         return Stepped { change: next, decision: Decision::None };
     }
     if facts.writer_taken {
@@ -136,15 +139,31 @@ fn is_reopening(state: &State) -> bool {
 #[must_use]
 pub fn released(change: &Change, now: Wall) -> Change {
     let mut next = change.clone();
-    if let State::Held { was, why } = &change.state {
-        next.state = *was.clone();
-        next.released = Some(*why);
-        next.gate_failures = Box::new([]);
-        next.repairs = 0;
-        next.resolutions = 0;
-        next.updates = 0;
-        next.since = now;
-        next.owns_turn = false;
+    match &change.state {
+        State::Held { was, why } => {
+            next.state = *was.clone();
+            next.released = Some(*why);
+            next.gate_failures = Box::new([]);
+            next.repairs = 0;
+            next.resolutions = 0;
+            next.updates = 0;
+            next.since = now;
+            next.owns_turn = false;
+        }
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Recreating { .. }
+        | State::Reopening { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Landed { .. }
+        | State::Ended => {}
     }
     next
 }
