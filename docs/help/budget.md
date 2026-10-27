@@ -46,7 +46,8 @@ A budget is what a task may spend, in units its models' prices make of their usa
   of tries. A task without enough for its next run is held for its
   budget, one past its deadline for its deadline, which comes first
   when both hold; `task show` prints `Held`, and its record names the
-  reason.
+  reason and what lets it run: for its budget, more budget, then a
+  release; a release alone holds it again.
 - **The period spent:** nothing more in the project is funded. Raising
   the period spend afterwards does not refill it; a project made after
   a change of policy 1 starts with the new period spend.
