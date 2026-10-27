@@ -300,7 +300,9 @@ impl<'a> Change<'a> {
         match self.panel.ci() {
             w::Ci::Unknown => match self.panel.step() {
                 w::Step::Landed(_) | w::Step::Ended => W::NotRead,
-                w::Step::Ready(_) | w::Step::Preparing(_) | w::Step::Producing
+                w::Step::Ready(_)
+                | w::Step::Preparing(_)
+                | w::Step::Producing
                 | w::Step::Opening
                 | w::Step::Recreating
                 | w::Step::Reopening
