@@ -59,11 +59,7 @@ fn a_failed_bind_is_not_a_hooks_address() {
 
 #[test]
 fn a_refused_restore_ends_with_its_in_process_worker() {
-    let scenario = Story::Chat { words: b"Hello" };
-    let settings = fixtures::calm(fixtures::SEED);
-    let run = Rc::new(RefCell::new(referee::Run::default()));
-    let (_, disk, store) = run_phase(settings, scenario, Phase::SignIn, machine::fresh(), Store::new(), run.clone());
-    let (outcome, _, _) = run_phase(settings, scenario, Phase::Refused, disk, store, run);
+    let outcome = refused_restore(fixtures::calm(fixtures::SEED));
     let Some(temper_service::End::Stopped(temper_service::Stop::Start(problems))) = outcome.end else {
         panic!("the stored policy refuses restore: {:?}", outcome.end);
     };

@@ -610,6 +610,12 @@ fn person_failed(step: u32, why: &skein_fake_person::Why, wire: &referee::client
         panic!("person step {step}: {why:?}; adoption keys sent {sent:?}, answered {answered:?}, durable outcomes {durable}; pre-cut sent {before:?}; Adopt presses had frame {:?}; private cache {:?}", progress.press_had_frame, progress.cache.borrow());
     })
 }
+fn service_roots() -> Vec<skein_world::StartupRoot> {
+    vec![
+        skein_world::StartupRoot { name: b"state".as_slice().into(), path: b"state".as_slice().into() },
+        skein_world::StartupRoot { name: b"worker".as_slice().into(), path: b"worker".as_slice().into() },
+    ]
+}
 fn service(inherited: &Inherited) -> Proc {
     let root = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"state").expect("state root").1;
     let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
@@ -975,6 +981,30 @@ fn forge_for_run(run: &Rc<RefCell<referee::Run>>, scenario: Story) -> temper_fak
     }
     transport
 }
+/// Restore a persisted policy past a smaller read bound, with the box's held listener.
+#[must_use]
+pub fn refused_restore(settings: Settings) -> Outcome {
+    let scenario = Story::Chat { words: b"Hello" };
+    let run = Rc::new(RefCell::new(referee::Run::default()));
+    let (_, disk, store) = run_phase(settings, scenario, Phase::SignIn, machine::fresh(), Store::new(), run.clone());
+    run_phase(settings, scenario, Phase::Refused, disk, store, run).0
+}
+
+fn ended(procs: &[Proc], phase: Phase) -> Option<temper_service::End> {
+    assert!(procs.iter().all(Host::is_empty), "all processes drain");
+    for proc in procs {
+        if let Proc::Service(service) = proc {
+            if matches!(phase, Phase::Refused) {
+                let pending = service.service.pending(Time::ZERO);
+                assert!(!pending.engine.expect("engine").release_pending, "an ended engine owes no release");
+                assert!(pending.worker.expect("in-process worker").aborted);
+            }
+            return service.service.end().cloned();
+        }
+    }
+    None
+}
+
 fn run_phase(
     settings: Settings,
     scenario: Story,
@@ -1001,13 +1031,7 @@ fn run_phase(
     })
     .with_machine(Machine(disk));
     host_programs(&mut world);
-    world.spawn_restartable(
-        vec![
-            skein_world::StartupRoot { name: b"state".as_slice().into(), path: b"state".as_slice().into() },
-            skein_world::StartupRoot { name: b"worker".as_slice().into(), path: b"worker".as_slice().into() },
-        ],
-        service,
-    );
+    world.spawn_restartable(service_roots(), service);
     match phase {
         Phase::Fault { cut, before } => {
             world.spawn_restartable(
@@ -1062,13 +1086,7 @@ fn run_phase(
     }
     let pushed = std::mem::take(&mut observed_forge.borrow_mut().pushed);
     let deliveries = deliveries(&outcome.procs);
-    assert!(outcome.procs.iter().all(Host::is_empty), "all processes drain");
-    if matches!(phase, Phase::Refused) {
-        let Proc::Service(service) = &outcome.procs[0] else { panic!("service first") };
-        let pending = service.service.pending(Time::ZERO);
-        assert!(!pending.engine.expect("engine").release_pending, "an ended engine owes no release");
-        assert!(pending.worker.expect("in-process worker").aborted);
-    }
+    let end = ended(&outcome.procs, phase);
     share(None);
     STORE.with(|cell| {
         *cell.borrow_mut() = None;
@@ -1083,10 +1101,7 @@ fn run_phase(
         pushed,
         deliveries,
         drained: run.borrow().drained,
-        end: outcome
-            .procs
-            .iter()
-            .find_map(|proc| if let Proc::Service(service) = proc { service.service.end().cloned() } else { None }),
+        end,
         restarts: run.borrow().restarts,
         claims_settled_at_restart: run.borrow().settled,
         adoptions_answered: u32::try_from(run.borrow().answers.len()).expect("adoption answers"),

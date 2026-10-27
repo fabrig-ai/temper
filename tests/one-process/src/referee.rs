@@ -233,6 +233,36 @@ fn snapshot(store: &Store) -> rules::Snapshot {
     }
     snapshot
 }
+impl Referee {
+    fn phase_complete(&self, other: &[Proc]) -> bool {
+        match self.phase {
+            crate::world::Phase::Refused => unreachable!("refused starts send no shutdown signal"),
+            crate::world::Phase::SignIn => {
+                other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
+            }
+            crate::world::Phase::Drain => {
+                snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
+            }
+            crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
+            crate::world::Phase::Fault { .. } => {
+                self.run.borrow().restarts > 0
+                    && self.cold.is_none()
+                    && crate::stories::adopted(&self.store.borrow().rows) > 0
+            }
+            crate::world::Phase::Story => match self.story {
+                crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
+                crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
+                crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
+                crate::world::Story::Adopt => {
+                    let forge = self.forge.borrow();
+                    forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
+                }
+                crate::world::Story::Merge => self.forge.borrow().complete(),
+                crate::world::Story::HeldChange => crate::stories::change_held(&self.store.borrow().rows),
+            },
+        }
+    }
+}
 impl skein_world::Referee<Proc> for Referee {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         let (service, other) = procs.split_at_mut(1);
@@ -302,32 +332,7 @@ impl skein_world::Referee<Proc> for Referee {
             }
             return;
         }
-        let complete = match self.phase {
-            crate::world::Phase::Refused => unreachable!("refused starts send no shutdown signal"),
-            crate::world::Phase::SignIn => {
-                other.iter().any(|proc| matches!(proc, Proc::Client(person) if person.signed_in > 0))
-            }
-            crate::world::Phase::Drain => {
-                snapshot(&self.store.borrow()).receipts.contains(&rules::Receipt::Turn(1, 1, 1))
-            }
-            crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
-            crate::world::Phase::Fault { .. } => {
-                self.run.borrow().restarts > 0
-                    && self.cold.is_none()
-                    && crate::stories::adopted(&self.store.borrow().rows) > 0
-            }
-            crate::world::Phase::Story => match self.story {
-                crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
-                crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
-                crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
-                crate::world::Story::Adopt => {
-                    let forge = self.forge.borrow();
-                    forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
-                }
-                crate::world::Story::Merge => self.forge.borrow().complete(),
-                crate::world::Story::HeldChange => crate::stories::change_held(&self.store.borrow().rows),
-            },
-        };
+        let complete = self.phase_complete(other);
         if self.done.is_none()
             && (done || !matches!(self.phase, crate::world::Phase::Story | crate::world::Phase::Fault { .. }))
             && complete

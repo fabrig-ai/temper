@@ -900,7 +900,7 @@ fn close_sources(service: &mut Service) {
                 break;
             }
             let entity = *service.held_listeners.get(service.listeners_closing).expect("held listener");
-            service.listeners_closing += 1;
+            service.listeners_closing = service.listeners_closing.checked_add(1).expect("one close per held listener");
             io::down(&mut service.io, &service.io_env, io::Request::Close { entity }, &mut service.raw_submissions);
         }
     }
@@ -922,6 +922,15 @@ fn close_sources(service: &mut Service) {
             io::down(&mut service.io, &service.io_env, io::Request::Close { entity }, &mut service.raw_submissions);
         }
     }
+}
+fn held_listener_closed(service: &Service, event: &io::Event) -> bool {
+    let io::Event::Closed { owner } = event else { return false };
+    for entity in &service.held_listeners {
+        if entity == owner {
+            return true;
+        }
+    }
+    false
 }
 fn route_events(service: &mut Service) {
     for _ in 0..service.told.len() {
@@ -972,9 +981,7 @@ fn route_events(service: &mut Service) {
             }
             continue;
         }
-        if matches!(event, io::Event::Closed { .. })
-            && service.held_listeners.iter().any(|entity| Some(*entity) == owner)
-        {
+        if held_listener_closed(service, &event) {
             // An unclaimed listener's token owns Closed. Once claimed, its
             // component's owner receives that terminal through the normal route.
             continue;

@@ -71,6 +71,9 @@ fn held_listener_stops_serve(listener: &str, expected: &str) {
 
 #[test]
 fn the_box_finishes_its_restart_policy_after_a_refused_restore() {
+    // The stored stock policy exceeds this read bound; five retries mean six attempts.
+    const REFUSED_POLICY_BYTES: u32 = 512;
+    const ATTEMPTS: usize = 6;
     let scratch = support::Scratch::new("refused_restore_box");
     support::configuration(scratch.path(), &support::Forge::Unreached);
     let first = refused_restore_serve(scratch.path(), support::boxed::Plan::Stop);
@@ -84,7 +87,6 @@ fn the_box_finishes_its_restart_policy_after_a_refused_restore() {
         serde_json::json!({"listener":{"socket":hooks.local_addr().expect("webhooks address").to_string()}});
     drop(hooks);
     // The old stored policy is larger; this start has no seed policies.
-    const REFUSED_POLICY_BYTES: u32 = 512; // The stored stock policy exceeds this existing read bound.
     document["engine"]["limits"]["overrides"]["core.policy_bytes"] = REFUSED_POLICY_BYTES.into();
     std::fs::write(path, serde_json::to_vec(&document).expect("configuration JSON")).expect("fake configuration");
     let alone = refused_restore_serve(scratch.path(), support::boxed::Plan::Exit);
@@ -96,8 +98,6 @@ fn the_box_finishes_its_restart_policy_after_a_refused_restore() {
     );
     let ended = support::boxed::run_echo_steps(scratch.path(), None, support::boxed::Plan::Exit, BOX_DEADLINE);
     let stderr = String::from_utf8_lossy(&ended.stderr);
-    // The shipped generic supervisor allows five restarts, then gives up.
-    const ATTEMPTS: usize = 6;
     assert_eq!(ended.exit, Some(Exit::Code(1)), "{stderr}");
     assert_eq!(ended.left, Some(Vec::new()), "{stderr}");
     assert_eq!(
