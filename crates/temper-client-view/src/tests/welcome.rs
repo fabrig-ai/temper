@@ -246,7 +246,8 @@ fn the_welcome_step_says_its_words_and_offers_both_cards() {
         "Model",
         "Ready",
         "Welcome to temper",
-        "Ask for a change in a chat. temper’s agents make it on a branch, open a pull request, and land it once CI passes.",
+        "Reliable, scalable and flexible software factory.",
+        "You describe what you want and how you want it done, and it happens.",
         "Try the playground",
         "A built-in scripted model and forge. Ask one of three requests and follow its change from a branch to main.",
         "Nothing leaves this machine, and nothing costs. · Ready at once",
@@ -272,6 +273,33 @@ fn the_welcome_step_says_its_words_and_offers_both_cards() {
     assert_eq!(
         press(&root, Role::Link, "Set up temper"),
         d::Action::Pages(pages::Act::Go { address: Address::Welcome { step: Step::Forge { forge: None } } })
+    );
+}
+#[test]
+fn the_welcome_lead_has_two_named_paragraphs_and_strong_what_and_how() {
+    let view = f::page_view(&f::welcome_root(Step::Welcome, true));
+    let tree = view.tree();
+    let first = node(tree, Role::Paragraph, "Reliable, scalable and flexible software factory.");
+    let second = node(tree, Role::Paragraph, "You describe what you want and how you want it done, and it happens.");
+    for id in [first, second] {
+        let paragraph = tree.nodes().iter().find(|n| n.id == id).unwrap();
+        assert!(paragraph.styles.as_slice().contains(&crate::look::WELCOME_LEAD));
+    }
+    let start = tree.nodes().iter().position(|n| n.id == first).unwrap();
+    assert_eq!(tree.nodes()[start + usize::try_from(tree.nodes()[start].size).unwrap()].id, second);
+    let start = tree.nodes().iter().position(|n| n.id == second).unwrap();
+    let text = &tree.nodes()[start + 1];
+    assert_eq!(text.role, Role::Text);
+    let runs: Vec<_> = text.text.iter().map(|r| (r.run, r.text.as_ref())).collect();
+    assert_eq!(
+        runs,
+        [
+            (skein_ui::Run::Plain, b"You describe ".as_slice()),
+            (skein_ui::Run::Strong, b"what".as_slice()),
+            (skein_ui::Run::Plain, b" you want and ".as_slice()),
+            (skein_ui::Run::Strong, b"how".as_slice()),
+            (skein_ui::Run::Plain, b" you want it done, and it happens.".as_slice()),
+        ]
     );
 }
 #[test]

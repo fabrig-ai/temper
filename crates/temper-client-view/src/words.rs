@@ -204,6 +204,11 @@ pub enum Word {
     WelcomeSteps,
     WelcomeTitle,
     WelcomeLead,
+    WelcomeDescribe,
+    WelcomeWhat,
+    WelcomeWantAnd,
+    WelcomeHow,
+    WelcomeWantDone,
     WelcomePlayground,
     WelcomePlaygroundDescription,
     WelcomePlaygroundCost,
@@ -652,9 +657,9 @@ pub enum Word {
 // A task document's reading line and seven lasting read ends (client/README.md, 3.5).
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
-const PHRASES: u32 = 1158;
-const SEGMENTS: u32 = 2027;
-const ALL: [Word; 587] = [
+const PHRASES: u32 = 1163;
+const SEGMENTS: u32 = 2032;
+const ALL: [Word; 592] = [
     Word::WelcomeYourModel,
     Word::BrandChats,
     Word::ForgeHereVersionDetails,
@@ -842,6 +847,11 @@ const ALL: [Word; 587] = [
     Word::WelcomeSteps,
     Word::WelcomeTitle,
     Word::WelcomeLead,
+    Word::WelcomeDescribe,
+    Word::WelcomeWhat,
+    Word::WelcomeWantAnd,
+    Word::WelcomeHow,
+    Word::WelcomeWantDone,
     Word::WelcomePlayground,
     Word::WelcomePlaygroundDescription,
     Word::WelcomePlaygroundCost,
@@ -1440,6 +1450,11 @@ impl Word {
             Self::WelcomeSteps => 1304,
             Self::WelcomeTitle => 1305,
             Self::WelcomeLead => 1306,
+            Self::WelcomeDescribe => 2127,
+            Self::WelcomeWhat => 2128,
+            Self::WelcomeWantAnd => 2129,
+            Self::WelcomeHow => 2130,
+            Self::WelcomeWantDone => 2131,
             Self::WelcomePlayground => 1307,
             Self::WelcomePlaygroundDescription => 1308,
             Self::WelcomePlaygroundCost => 1309,
@@ -2291,7 +2306,12 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::WelcomeReadyStep => (&[b"Ready"], &[]),
         Word::WelcomeSteps => (&[b"Steps"], &[]),
         Word::WelcomeTitle => (&[b"Welcome to temper"], &[]),
-        Word::WelcomeLead => (&[b"Ask for a change in a chat. temper\xe2\x80\x99s agents make it on a branch, open a pull request, and land it once CI passes."], &[]),
+        Word::WelcomeLead => (&[b"Reliable, scalable and flexible software factory."], &[]),
+        Word::WelcomeDescribe => (&[b"You describe "], &[]),
+        Word::WelcomeWhat => (&[b"what"], &[]),
+        Word::WelcomeWantAnd => (&[b" you want and "], &[]),
+        Word::WelcomeHow => (&[b"how"], &[]),
+        Word::WelcomeWantDone => (&[b" you want it done, and it happens."], &[]),
         Word::WelcomePlayground => (&[b"Try the playground"], &[]),
         Word::WelcomePlaygroundDescription => (&[b"A built-in scripted model and forge. Ask one of three requests and follow its change from a branch to main."], &[]),
         Word::WelcomePlaygroundCost => (&[b"Nothing leaves this machine, and nothing costs. \xc2\xb7 Ready at once"], &[]),
