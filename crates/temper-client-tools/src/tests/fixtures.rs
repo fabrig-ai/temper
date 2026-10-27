@@ -114,6 +114,8 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["proposal", "show", "p73/7"],
     &["forge", "accept", "3", "1"],
     &["revision", "advance", "7", "--key", "move-7"],
+    &["project", "show", "1"],
+    &["project", "fund", "1", "200", "--key", "fund"],
 ];
 
 /// Parse the printer's bytes back without re-creating argv in each test.
@@ -557,7 +559,8 @@ impl Harness {
                 | crate::jig::rows::TASK_DECIDE_AT
                 | 31
                 | 42..=45
-                | crate::jig::rows::PROPOSAL_AT => SINGLE_READ,
+                | crate::jig::rows::PROPOSAL_AT
+                | crate::jig::rows::PROJECT_SHOW_AT => SINGLE_READ,
                 3 => {
                     if crate::jig::call::number(&call, 2).is_some() {
                         COMPOSITE_READS
@@ -706,7 +709,7 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 /// A stable stored request's engine key, unrelated to its client call prefix.
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 57;
+pub(super) const TOOL_FORMS: u32 = 59;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

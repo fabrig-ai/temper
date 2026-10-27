@@ -178,7 +178,8 @@ fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, call
         | rows::VERIFY_AT
         | rows::EXPORT_AT
         | rows::SETTINGS_AT..=rows::REVISIONS_AT
-        | rows::PROPOSAL_AT => {
+        | rows::PROPOSAL_AT
+        | rows::PROJECT_SHOW_AT => {
             reads::start(runner, client, env, called, out);
         }
         rows::CONNECT_AT | rows::ADD_KEY_AT | rows::DECLARE_AT | rows::IMPORT_AT => {
@@ -189,7 +190,8 @@ fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, call
         | rows::AMEND_AT
         | rows::CHANGE_SETTINGS_AT
         | rows::PROPOSE_SETTINGS_AT
-        | rows::MOVE_TO_NEWEST_AT => {
+        | rows::MOVE_TO_NEWEST_AT
+        | rows::PROJECT_FUND_AT => {
             acts::start(runner, client, env, called, out);
         }
         rows::TREE_AT => reads::start(runner, client, env, called, out),
