@@ -611,9 +611,11 @@ pub enum ChangeWord {
     Resolutions,
     Updates,
     Separator,
+    EndedLine,
 }
 pub type ChangeRow = (ChangeWord, &'static [&'static [u8]], &'static [HoleKind]);
-pub const CHANGES: [ChangeRow; 87] = [
+pub const CHANGES: [ChangeRow; 88] = [
+    (ChangeWord::EndedLine, &[b"Change ended."], &[]),
     (ChangeWord::Tag, &[b"Change \xc2\xb7 Task ", b""], &[Number]),
     (ChangeWord::Pull, &[b"PR #", b" \xc2\xb7 "], &[Number]),
     (ChangeWord::NoPull, &[b"No pull request yet \xc2\xb7 "], &[]),
@@ -751,6 +753,7 @@ pub fn change_name_bytes(word: ChangeWord, index: usize) -> u32 {
         | ChangeWord::Loading
         | ChangeWord::Unknown
         | ChangeWord::Ended
+        | ChangeWord::EndedLine
         | ChangeWord::Producing
         | ChangeWord::Opening
         | ChangeWord::Checking

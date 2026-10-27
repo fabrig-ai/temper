@@ -1359,7 +1359,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         Event::StepChange { task, entry, heard, gates, queue_repair_active, kept } => {
             step_change(d, env, StepInput { task, entry, heard, gates, queue_repair_active, kept }, out);
         }
-        Event::ReleaseChange { task } => release_change(d, task, out),
+        Event::ReleaseChange { task } => release_change(d, env, task, out),
         Event::SettleEffects { task, root, ending } => settle_effects(d, env, task, root, ending, out),
         Event::Release { task, root, ending, reason, entry } => release(d, env, task, root, ending, reason, entry, out),
         Event::ContinueRelease { task, entry } => continue_release(d, env, task, entry, out),
@@ -2386,7 +2386,11 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
     if d.stopping {
         return;
     }
-    let StepInput { task, entry, heard, gates, queue_repair_active, kept } = input;
+    let StepInput { task, entry, mut heard, gates, queue_repair_active, kept } = input;
+    if heard.released {
+        release_change(d, env, task, out);
+        heard.released = false;
+    }
     let Some(row) = d.changes.get(&task) else {
         emit(out, Request::Refused { task });
         return;
@@ -2678,6 +2682,7 @@ pub(crate) fn queue_ready(d: &Domain, row: &ChangeRow, l: &Limits) -> (List<chan
             | change::State::Resolving { .. }
             | change::State::Repairing { .. }
             | change::State::Landing { .. }
+            | change::State::Ended
             | change::State::Landed { .. }
             | change::State::Held { .. } => None,
         };
@@ -2815,6 +2820,7 @@ fn in_queue(state: &change::State) -> bool {
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
         | change::State::Landing { .. }
+        | change::State::Ended
         | change::State::Landed { .. }
         | change::State::Held { .. } => false,
     }
@@ -3094,14 +3100,16 @@ fn change_outcome(
     emit(out, Request::ChangeDecision { task, decision: change::Decision::None, entry: None, evidence: None });
 }
 
-fn release_change(d: &mut Domain, task: u64, out: &mut Queue<Request>) {
+fn release_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Request>) {
     let Some(row) = d.changes.get_mut(&task) else {
         emit(out, Request::Refused { task });
         return;
     };
+    let before = crate::panel::ready(row);
+    row.change = change::released(&row.change, env.wall);
     row.drift = None;
     let saved = row.clone();
-    save_change(out, saved);
+    save_queue_change(d, env, before, saved, out);
     let mut affected = List::with_capacity(d.holds.len());
     for (name, hold) in &d.holds {
         if hold.task == task && hold.drift.is_some() {
@@ -3369,12 +3377,37 @@ fn continue_release(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, ou
             unsubscribe(d, task, topic.clone(), out);
         }
         unnamed(d, env, task, out);
+        end_change(d, env, task, out);
         d.releases.remove(&task);
         emit(out, Request::Erase { key: Key::Release(task) });
         emit(out, Request::Released { task });
         return;
     }
     unreachable!("every release pass removes a hold or completes");
+}
+
+/// The panel outlives its task, but never its task's live state (domain/forge.md, 8.3).
+fn end_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Request>) {
+    let Some(row) = d.changes.get_mut(&task) else { return };
+    let before = crate::panel::ready(row);
+    let mut merge = None;
+    for (commit, owner) in &d.landed {
+        if *owner == task {
+            merge = Some(*commit);
+        }
+    }
+    if !matches!(row.change.state, change::State::Landed { .. }) {
+        row.change.state = match merge {
+            Some(merge) => change::State::Landed { merge },
+            None => change::State::Ended,
+        };
+    }
+    row.change.released = None;
+    row.change.owns_turn = false;
+    row.delegate = None;
+    row.drift = None;
+    let saved = row.clone();
+    save_queue_change(d, env, before, saved, out);
 }
 
 fn release_pull_write(row: &ReleaseRow, namespace: &[u8], number: u64, limits: &Limits) -> skein_forge::api::Write {

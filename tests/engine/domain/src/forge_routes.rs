@@ -47,6 +47,7 @@ pub struct World {
     pub delivered_messages: BTreeMap<(u64, u64), Vec<u64>>,
     pub answers: Vec<temper_engine_domain::CallAnswer>,
     pub reads: Vec<(ReplyTo, jig_domain_core::reads::Answer)>,
+    pub panels: Vec<(Token, forge_top::Panel)>,
     pub protocol: Protocol,
     pub immediate: VecDeque<engine::Event>,
     /// The funding period sent to this process's root, once it is ready.
@@ -579,6 +580,7 @@ impl World {
             delivered_messages: BTreeMap::new(),
             answers: Vec::new(),
             reads: Vec::new(),
+            panels: Vec::new(),
             protocol: Protocol::default(),
             immediate: VecDeque::new(),
             period: None,
@@ -851,6 +853,7 @@ impl World {
                     Delivery::Link { down: host::LinkDown::Message { run, attempt, name, .. }, .. } => {
                         self.delivered_messages.entry((run.raw(), attempt.raw())).or_default().push(name.raw());
                     }
+                    Delivery::Panel { watcher, panel } => self.panels.push((watcher, *panel)),
                     // The run has its answer once the hub relays it down; the
                     // world renders an answer as its first call's name, and a
                     // replayed call carries that same text.

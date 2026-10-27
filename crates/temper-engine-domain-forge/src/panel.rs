@@ -16,6 +16,7 @@ pub const MARKED: u32 = 32;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum PanelStep {
+    Ended,
     Producing,
     Opening,
     Recreating,
@@ -85,7 +86,8 @@ impl Panel {
                 | PanelStep::Resolving
                 | PanelStep::Repairing(_)
                 | PanelStep::Landing
-                | PanelStep::Landed { .. } => true,
+                | PanelStep::Landed { .. }
+                | PanelStep::Ended => true,
             }
     }
 }
@@ -108,6 +110,7 @@ impl Domain {
             state = was;
         }
         let step = match state {
+            change::State::Ended => PanelStep::Ended,
             change::State::Producing { .. } => PanelStep::Producing,
             change::State::Opening { .. } => PanelStep::Opening,
             change::State::Recreating { .. } => PanelStep::Recreating,
