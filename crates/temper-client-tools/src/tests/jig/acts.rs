@@ -391,9 +391,10 @@ fn dependency_refusals_print_jigs_words_and_integer_facts() {
             br#""kept":{"pending":[]}"#,
         ),
     ] {
-        for (args, expected) in
-            [(fixtures::MESSAGE_CALL, words), (&["message", "41", "hello", "--key", "words", "--json"][..], json)]
-        {
+        for (args, expected) in [
+            (fixtures::MESSAGE_CALL, words),
+            (&["task", "message", "41", "hello", "--key", "words", "--json"][..], json),
+        ] {
             let mut root = fixtures::signed_in(fixtures::PARTY);
             let call = root.submit(args);
             root.serve(call, fixtures::task_result(fixtures::offered(&[c::ActKind::Message])));
@@ -413,7 +414,7 @@ fn sign_in_redirect_refusals_keep_each_reason_in_json() {
         (c::SignInRedirectWhy::TooMany, br#""sign_in_redirect":{"why":"too_many"}"#),
     ] {
         let mut root = fixtures::signed_in(fixtures::PARTY);
-        let call = root.submit(&["message", "41", "hello", "--key", "words", "--json"]);
+        let call = root.submit(&["task", "message", "41", "hello", "--key", "words", "--json"]);
         root.serve(call, fixtures::task_result(fixtures::offered(&[c::ActKind::Message])));
         root.answered(call, c::Answer::Refused { refusal: c::Refusal::SignInRedirect { why }, at: None });
         let printed = root.answer(call).expect("refused");
@@ -425,7 +426,7 @@ fn sign_in_redirect_refusals_keep_each_reason_in_json() {
 #[test]
 fn an_account_finishing_outcome_keeps_its_source_in_json() {
     let mut root = fixtures::signed_in(fixtures::PARTY);
-    let call = root.submit(&["message", "41", "hello", "--key", "words", "--json"]);
+    let call = root.submit(&["task", "message", "41", "hello", "--key", "words", "--json"]);
     root.serve(call, fixtures::task_result(fixtures::offered(&[c::ActKind::Message])));
     root.done(call, c::Outcome::Owner(c::OwnerOutcome::AccountFinishing { source: 23 }));
     let printed = root.answer(call).expect("answered");

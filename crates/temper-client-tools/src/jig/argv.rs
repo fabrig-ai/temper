@@ -14,6 +14,9 @@ use value::{decode, encode, valid};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Usage {
     Tool,
+    NoGroup { at: u16 },
+    NeedsVerb { at: u16 },
+    NoTool { group: u16, verb: u16 },
     Unknown { at: u16 },
     Extra { at: u16 },
     Missing { argument: u8 },
@@ -58,9 +61,24 @@ pub fn parse(table: &[&Tool], words: &[&[u8]], limits: &Limits) -> Result<Parsed
         let file = if *file == b"-" { Source::Stdin } else { Source::Path(Box::from(*file)) };
         return Ok(Parsed::File { file, json });
     }
+    let offset = u16::from(json);
+    let (selected, words) = named_tool(table, name, words, offset)?;
+    if name == super::rows::HELP.name
+        && let Some((group, tail)) = words.split_first()
+        && !group.starts_with(b"--")
+    {
+        let at = offset.checked_add(1).ok_or(Usage::Tool)?;
+        let known = first_word(table, group).ok_or(Usage::NoGroup { at })?;
+        if let Some(verb) = tail.first()
+            && !verb.starts_with(b"--")
+            && (known.name == *group || named_index(table, group, verb).is_none())
+        {
+            return Err(Usage::NoTool { group: at, verb: at.checked_add(1).ok_or(Usage::Tool)? });
+        }
+    }
     let mut error = Usage::Tool;
     for (tool, row) in table.iter().enumerate() {
-        if row.name != name {
+        if row.name != selected.name {
             continue;
         }
         let tool = u8::try_from(tool).or(Err(Usage::Tool))?;
@@ -96,6 +114,40 @@ pub fn parse(table: &[&Tool], words: &[&[u8]], limits: &Limits) -> Result<Parsed
         }
     }
     Err(error)
+}
+#[expect(clippy::manual_find, reason = "the parser searches the bounded table without closures")]
+fn first_word<'a>(table: &[&'a Tool], word: &[u8]) -> Option<&'a Tool> {
+    for row in table {
+        if super::table::name_words(row.name).0 == word {
+            return Some(row);
+        }
+    }
+    None
+}
+fn named_index(table: &[&Tool], group: &[u8], verb: &[u8]) -> Option<u8> {
+    for (index, row) in table.iter().enumerate() {
+        if let Some(rest) = row.name.strip_prefix(group)
+            && rest.strip_prefix(b" ") == Some(verb)
+        {
+            return u8::try_from(index).ok();
+        }
+    }
+    None
+}
+fn named_tool<'a, 'b>(
+    table: &[&'a Tool],
+    group: &[u8],
+    words: &'b [&'b [u8]],
+    at: u16,
+) -> Result<(&'a Tool, &'b [&'b [u8]]), Usage> {
+    let row = first_word(table, group).ok_or(Usage::NoGroup { at })?;
+    if row.name == group {
+        return Ok((row, words));
+    }
+    let (verb, tail) = words.split_first().ok_or(Usage::NeedsVerb { at })?;
+    let index = named_index(table, group, verb)
+        .ok_or(Usage::NoTool { group: at, verb: at.checked_add(1).ok_or(Usage::Tool)? })?;
+    Ok((*table.get(usize::from(index)).ok_or(Usage::Tool)?, tail))
 }
 fn tool_index(table: &[&Tool], word: &[u8]) -> Option<u8> {
     for (index, tool) in table.iter().enumerate() {
@@ -237,7 +289,7 @@ pub(crate) fn watch<'a>(
             (subject, 1)
         }
         b"tasks" => {
-            let tool = tool_index(table, b"tasks").ok_or(Usage::Tool)?;
+            let tool = tool_index(table, super::rows::TASKS.name).ok_or(Usage::Tool)?;
             let row = table.get(usize::from(tool)).ok_or(Usage::Tool)?;
             let arguments = *row.forms.first().ok_or(Usage::Tool)?;
             let mut query = List::with_capacity(count);
@@ -295,17 +347,20 @@ pub fn check(table: &[&Tool], call: &Call, limits: &Limits) -> Result<(), Usage>
         Keyed::Never | Keyed::Optional | Keyed::Required => {}
     }
     check_values(table, args, &call.values, limits)?;
+    if tool.name == super::rows::HELP.name && !help_valid(table, call) {
+        return Err(Usage::Tool);
+    }
     // The creation row owns this rule; reading a chat has no keyed choice form.
-    if tool.name == b"chat" && tool.keyed == Keyed::Required {
+    if tool.name == super::rows::CHAT_CREATE.name && tool.keyed == Keyed::Required {
         check_choice(call, 2, 3, limits)?;
     }
-    if tool.name == b"amend" {
+    if tool.name == b"task amend" {
         check_amend(call, limits)?;
     }
-    if tool.name == b"forge-connect" && call.form == 0 && call.values.contains(&Some(Values::One(Value::Stdin))) {
+    if tool.name == b"forge connect" && call.form == 0 && call.values.contains(&Some(Values::One(Value::Stdin))) {
         return Err(Usage::Stdin);
     }
-    if tool.area == 5 && (tool.keyed != Keyed::Never || tool.name == b"export") {
+    if tool.area == 5 && (tool.keyed != Keyed::Never || tool.name == b"account export") {
         for (index, (arg, slot)) in args.iter().zip(&call.values).enumerate() {
             if let Some(Values::One(Value::Number(n))) = slot
                 && ((*n == 0 && arg.name == b"position") || u32::try_from(*n).is_err())
@@ -317,7 +372,7 @@ pub fn check(table: &[&Tool], call: &Call, limits: &Limits) -> Result<(), Usage>
             }
         }
     }
-    if tool.name == b"declare" {
+    if tool.name == b"account declare" {
         for (index, bound) in [(1, crate::jig::call::PROGRAM_ADAPTER), (2, crate::jig::call::PROGRAM_NAME)] {
             let argument = u8::try_from(index).expect("argument");
             let Some(Value::Text(bytes)) = crate::jig::call::value(call, index) else {
@@ -354,7 +409,7 @@ fn validate_subject(table: &[&Tool], subject: &Subject, limits: &Limits) -> Resu
     match subject {
         Subject::Tasks(call) => {
             let row = table.get(usize::from(call.tool)).ok_or(Usage::Condition)?;
-            if row.name != b"tasks" || call.form != 0 || call.key.is_some() {
+            if row.name != b"task list" || call.form != 0 || call.key.is_some() {
                 return Err(Usage::Condition);
             }
             let args = *row.forms.first().ok_or(Usage::Condition)?;
@@ -424,7 +479,11 @@ pub fn back(table: &[&Tool], call: &Call, out: &mut List<Box<[u8]>>) -> Result<(
     if args.len() != call.values.len() {
         return Err(Unwritten::NoForm);
     }
-    push(out, row.name)?;
+    let (group, verb) = super::table::name_words(row.name);
+    push(out, group)?;
+    if let Some(verb) = verb {
+        push(out, verb)?;
+    }
     let delayed = escaped_position(args, &call.values, table)?;
     for positional in [true, false] {
         for (index, (argument, slot)) in args.iter().zip(&call.values).enumerate() {
@@ -493,7 +552,7 @@ pub(crate) fn write_subject(table: &[&Tool], subject: &Subject, out: &mut List<B
         Subject::Tasks(call) => {
             let row = table.get(usize::from(call.tool)).ok_or(Unwritten::NoForm)?;
             let args = row.forms.get(usize::from(call.form)).ok_or(Unwritten::NoForm)?;
-            if row.name != b"tasks" || args.len() != call.values.len() {
+            if row.name != b"task list" || args.len() != call.values.len() {
                 return Err(Unwritten::NoForm);
             }
             push(out, b"tasks")?;
@@ -686,5 +745,19 @@ fn subject_form(arguments: &[Argument]) -> bool {
     match arguments.first() {
         Some(arg) => arg.kind == Kind::Subject,
         None => false,
+    }
+}
+
+fn help_valid(table: &[&Tool], call: &Call) -> bool {
+    let group = match super::call::value(call, 0) {
+        Some(Value::Text(group)) => group,
+        None => return super::call::value(call, 1).is_none(),
+        Some(_) => return false,
+    };
+    let Some(row) = first_word(table, group) else { return false };
+    match super::call::value(call, 1) {
+        Some(Value::Text(verb)) => row.name != group.as_ref() && named_index(table, group, verb).is_some(),
+        None => true,
+        Some(_) => false,
     }
 }

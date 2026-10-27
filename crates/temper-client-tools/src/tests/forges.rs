@@ -74,12 +74,12 @@ fn deliver(root: &mut f::Harness, record: client::Family) {
 #[test]
 fn forge_calls_round_trip_through_argv_json_and_help() {
     for argv in [
-        &["forges"][..],
-        &["forge-setup", "3"],
-        &["forge-setup", "3", "--key", "setup"],
-        &["forge-setup", "3", "--org", "team", "--repository", "widget", "--project", "shop"],
+        &["forge", "list"][..],
+        &["forge", "setup", "3"],
+        &["forge", "setup", "3", "--key", "setup"],
+        &["forge", "setup", "3", "--org", "team", "--repository", "widget", "--project", "shop"],
         &["wait", "forges", "--until", "made:3"],
-        &["forge-setup", "3", "--project", ""],
+        &["forge", "setup", "3", "--project", ""],
         &["wait", "forges", "--until", "settled"],
         &["wait", "forges", "--since", "0123456789abcdef", "--until", "connected:3", "--timeout", "2s"],
     ] {
@@ -91,10 +91,10 @@ fn forge_calls_round_trip_through_argv_json_and_help() {
         assert!(skein_lib::bytes::find(&help, argv[0].as_bytes()).is_some());
     }
     for argv in [
-        &["forge-setup"][..],
-        &["forge-setup", "oops"],
-        &["forge-setup", "65536"],
-        &["forge-setup", "0"],
+        &["forge", "setup"][..],
+        &["forge", "setup", "oops"],
+        &["forge", "setup", "65536"],
+        &["forge", "setup", "0"],
         &["wait", "forges", "--until", "busy"],
         &["wait", "forges", "--until", "made:x"],
         &["wait", "forges", "--until", "made:0"],
@@ -201,7 +201,7 @@ fn the_read_closes_after_its_first_document_and_refuses_invalid_bytes() {
         (client::Family { bytes: b"bad".as_slice().into(), ..record(w::Connection::NotSetUp) }, 1),
     ] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["forges"]);
+        let call = root.submit(&["forge", "list"]);
         deliver(&mut root, bytes);
         assert_eq!(root.answer(call).unwrap().status, status);
         assert_eq!(root.closed.len(), 1);
@@ -234,7 +234,7 @@ fn a_wait_follows_each_setup_step_and_releases_the_watch_and_timer() {
 fn since_uses_the_read_digest_and_plain_wait_requires_a_change() {
     for until in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let read = root.submit(&["forges", "--json"]);
+        let read = root.submit(&["forge", "list", "--json"]);
         deliver(&mut root, record(w::Connection::NotSetUp));
         let printed = root.answer(read).unwrap();
         let digest = f::last_digest(&printed.stdout);
@@ -287,7 +287,7 @@ fn setup_answers_print_their_words_json_and_status() {
     ] {
         for json in [false, true] {
             let mut root = f::signed_in(f::PARTY);
-            let call = root.submit_prepared(f::call(&["forge-setup", "3"]), json, None);
+            let call = root.submit_prepared(f::call(&["forge", "setup", "3"]), json, None);
             let client::Ask::Family { scope, record } = root.adoption_bytes(call) else { panic!("family") };
             assert_eq!(*scope, c::Scope::Deployment);
             let w::Request::SetUp(request) = wire::decode_requesting(&record.bytes, &limits).unwrap().into_parts().request else { panic!("set up"); };
@@ -310,7 +310,7 @@ fn setup_answers_print_their_words_json_and_status() {
 fn setup_keeps_drawn_keys_and_recovers_the_answer_in_its_own_words() {
     for json in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["forge-setup", "3"]);
+        let call = root.submit(&["forge", "setup", "3"]);
         assert!(root.saved.contains_key(&call), "a drawn key is durable too");
         let key = root.sent_name(call).unwrap();
         let mut records = f::restored_adoption(f::PARTY);
@@ -331,12 +331,12 @@ fn setup_keeps_drawn_keys_and_recovers_the_answer_in_its_own_words() {
 #[test]
 fn setup_names_are_stable_and_unconfirmed_calls_wait_for_me() {
     let mut root = f::started(List::with_capacity(0));
-    let call = root.submit(&["forge-setup", "3", "--key", "start-here"]);
+    let call = root.submit(&["forge", "setup", "3", "--key", "start-here"]);
     assert!(root.nothing_sent());
     root.deliver(c::Delivery::Me(Box::new(f::me(f::PARTY))));
     assert_eq!(root.sent_name(call), Some(crate::key::engine(&f::name(b"start-here"))));
     let mut other = f::signed_in(f::PARTY);
-    let next = other.submit(&["forge-setup", "3", "--key", "start-here"]);
+    let next = other.submit(&["forge", "setup", "3", "--key", "start-here"]);
     assert_eq!(root.sent_name(call), other.sent_name(next));
     assert_eq!(root.adoption_bytes(call), other.adoption_bytes(next));
 }
@@ -366,7 +366,7 @@ fn all_children_share_the_call_budget_and_timeouts_release_it() {
         };
         calls.push(root.submit(argv)).unwrap();
     }
-    let excess = root.submit(&["forge-setup", "3", "--json"]);
+    let excess = root.submit(&["forge", "setup", "3", "--json"]);
     let printed = root.answer(excess).unwrap();
     assert_eq!(printed.status, 1);
     assert_eq!(printed.stderr.as_ref(), br#"{"error":"call limit"}"#);
@@ -376,7 +376,7 @@ fn all_children_share_the_call_budget_and_timeouts_release_it() {
     for call in &calls {
         assert!(root.answer(*call).is_some());
     }
-    let next = root.submit(&["forge-setup", "3"]);
+    let next = root.submit(&["forge", "setup", "3"]);
     assert!(root.sends.contains_key(&next));
 }
 
@@ -413,7 +413,8 @@ fn made() -> w::FirstState {
 }
 #[test]
 fn setup_defaults_flags_and_project_names_are_carried_in_the_request() {
-    const WORDS_WITH_ONE_FLAG: u32 = 4;
+    // Group, verb, forge, flag and value.
+    const WORDS_WITH_ONE_FLAG: u32 = 5;
     for (flags, org, repository, project) in [
         (&[][..], b"work".as_slice(), b"hello".as_slice(), 0),
         (&["--org", "team"][..], b"team", b"hello", 0),
@@ -423,7 +424,8 @@ fn setup_defaults_flags_and_project_names_are_carried_in_the_request() {
     ] {
         let mut root = f::signed_in(f::PARTY);
         let mut words = List::with_capacity(WORDS_WITH_ONE_FLAG);
-        words.push("forge-setup").unwrap();
+        words.push("forge").unwrap();
+        words.push("setup").unwrap();
         words.push("3").unwrap();
         for word in flags {
             words.push(*word).unwrap();
@@ -455,7 +457,7 @@ fn an_unknown_project_is_sent_as_new_and_both_new_refusals_exit_two() {
         (w::SetUpRefusal::Invalid, b"invalid: the organization, repository or project name is empty or too long"),
     ] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["forge-setup", "3", "--project", "Next"]);
+        let call = root.submit(&["forge", "setup", "3", "--project", "Next"]);
         let client::Ask::Family { record, .. } = root.adoption_bytes(call) else { panic!("family") };
         let w::Request::SetUp(value) =
             wire::decode_requesting(&record.bytes, &w::CEILINGS).unwrap().into_parts().request
@@ -477,7 +479,8 @@ fn an_unknown_project_is_sent_as_new_and_both_new_refusals_exit_two() {
 fn made_sends_the_home_adoption_with_its_stable_key_and_prints_its_answer() {
     for home_taken in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["forge-setup", "3", "--org", "team", "--repository", "widget", "--project", "shop"]);
+        let call =
+            root.submit(&["forge", "setup", "3", "--org", "team", "--repository", "widget", "--project", "shop"]);
         root.adoption_answer(call, w::Outcome::SettingUp);
         assert!(root.answer(call).is_none());
         assert_eq!(root.progress.as_slice(), &[Box::<[u8]>::from(b"setting up\n".as_slice())]);
@@ -556,7 +559,7 @@ fn setup_failure_names_the_creation_or_box_step_and_exits_one() {
     }
     for (connection, first, words) in cases.into_boxed() {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["forge-setup", "3"]);
+        let call = root.submit(&["forge", "setup", "3"]);
         root.adoption_answer(call, w::Outcome::SettingUp);
         deliver(&mut root, record_first(connection, first));
         let printed = root.answer(call).unwrap();
@@ -698,7 +701,7 @@ fn demo_start_answers_print_their_words_json_and_status() {
     ] {
         for json in [false, true] {
             let mut root = f::signed_in(f::PARTY);
-            let call = root.submit_prepared(f::call(&["demo-start", "--key", "playground"]), json, None);
+            let call = root.submit_prepared(f::call(&["playground", "start", "--key", "playground"]), json, None);
             let client::Ask::Family { scope, record } = root.adoption_bytes(call) else { panic!("family") };
             assert_eq!(*scope, c::Scope::Deployment);
             assert_eq!(wire::decode_requesting(&record.bytes, l).unwrap().request(), &w::Request::StartDemo);
@@ -715,7 +718,7 @@ fn demo_start_answers_print_their_words_json_and_status() {
 fn demo_start_keeps_drawn_keys_and_recovers_its_own_answer() {
     for json in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["demo-start"]);
+        let call = root.submit(&["playground", "start"]);
         assert!(root.saved.contains_key(&call), "a drawn demo start key is durable");
         let key = root.sent_name(call).unwrap();
         let mut records = f::restored_adoption(f::PARTY);
@@ -994,10 +997,13 @@ fn human_forges_bounds_the_wire_maximum_installations_with_longest_logins() {
 
 #[test]
 fn setup_makes_the_default_or_named_project_then_adopts_the_answered_number() {
+    // Group, verb, forge, project flag and value.
+    const WORDS_WITH_PROJECT: u32 = 5;
     for flags in [&[][..], &["--project", "Next"][..], &["--project", "7"][..]] {
         let mut root = f::signed_in(f::PARTY);
-        let mut argv = List::with_capacity(4);
-        argv.push("forge-setup").unwrap();
+        let mut argv = List::with_capacity(WORDS_WITH_PROJECT);
+        argv.push("forge").unwrap();
+        argv.push("setup").unwrap();
         argv.push("3").unwrap();
         for flag in flags {
             argv.push(*flag).unwrap();
@@ -1046,7 +1052,7 @@ fn setup_makes_the_default_or_named_project_then_adopts_the_answered_number() {
 #[test]
 fn refused_make_project_prints_jigs_words_and_sends_no_adoption() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["forge-setup", "3"]);
+    let call = root.submit(&["forge", "setup", "3"]);
     root.adoption_answer(call, w::Outcome::SettingUp);
     deliver(
         &mut root,
@@ -1075,13 +1081,16 @@ fn refused_make_project_prints_jigs_words_and_sends_no_adoption() {
 
 #[test]
 fn playground_setup_sends_its_copy_and_default_or_explicit_project() {
+    // Group, verb, forge, playground switch, project flag and value.
+    const PLAYGROUND_WORDS: u32 = 6;
     for (flags, project) in [
         (&["--playground"][..], b"widget".as_slice()),
         (&["--playground", "--project", "copy"][..], b"copy".as_slice()),
     ] {
         let mut root = f::signed_in(f::PARTY);
-        let mut words = List::with_capacity(5);
-        words.push("forge-setup").unwrap();
+        let mut words = List::with_capacity(PLAYGROUND_WORDS);
+        words.push("forge").unwrap();
+        words.push("setup").unwrap();
         words.push("3").unwrap();
         for word in flags {
             words.push(*word).unwrap();
@@ -1103,7 +1112,7 @@ fn playground_setup_sends_its_copy_and_default_or_explicit_project() {
 fn playground_setup_rejects_org_or_repository_before_sending() {
     for flag in ["--org", "--repository"] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["forge-setup", "3", "--playground", flag, "other"]);
+        let call = root.submit(&["forge", "setup", "3", "--playground", flag, "other"]);
         assert_eq!(root.answer(call).unwrap().status, 1);
         assert!(root.nothing_sent(), "a usage error must send no request");
     }

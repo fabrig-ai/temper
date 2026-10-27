@@ -107,7 +107,7 @@ pub(crate) fn account_read(
     value: c::OwnerAccounts,
     deployment: Option<c::OwnerDeployment>,
 ) -> crate::jig::Printed {
-    let call = root.submit(&["accounts", "--json"]);
+    let call = root.submit(&["account", "list", "--json"]);
     deliver_accounts(root, value);
     if let Some(deployment) = deployment {
         deliver_deployment(root, deployment);

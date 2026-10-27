@@ -5,8 +5,8 @@ use super::fixtures::{
 };
 use jig_client_protocol_wire as w;
 use skein_io::kernel::{Error, Exit, Kind, OpenHow, ServiceSignal, Stat};
-const EXPORT: &[&[u8]] = &[b"export", b"7", b"/linked-parent/record"];
-const IMPORT: &[&[u8]] = &[b"import", b"/linked-parent/record", b"--key", b"move-in"];
+const EXPORT: &[&[u8]] = &[b"account", b"export", b"7", b"/linked-parent/record"];
+const IMPORT: &[&[u8]] = &[b"account", b"import", b"/linked-parent/record", b"--key", b"move-in"];
 const LOST: &[u8] = b"temper ctl: the record of the move was lost on its way; the engine keeps the account and cancels the move at its deadline; export again after it\n";
 const AT_BOUND: &[u8] = &[0; 131_072]; // tools.md, 12: 128 KiB whole.
 const OVER_BOUND: &[u8] = &[b'r'; 131_073];
@@ -209,12 +209,12 @@ fn an_import_refused_or_lost_keeps_the_file() {
 fn account_move_json_has_public_outcomes_and_never_the_record() {
     for (words, answers, expected) in [
         (
-            &[b"export".as_slice(), b"7", b"/linked-parent/record", b"--json"][..],
+            &[b"account", b"export".as_slice(), b"7", b"/linked-parent/record", b"--json"][..],
             vec![Answer::Moving(RECORD), Answer::Done],
             br#""outcome":{"account":7,"number":83,"file":"/linked-parent/record"}"#.as_slice(),
         ),
         (
-            &[b"import".as_slice(), b"/linked-parent/record", b"--key", b"move-in", b"--json"][..],
+            &[b"account", b"import".as_slice(), b"/linked-parent/record", b"--key", b"move-in", b"--json"][..],
             vec![Answer::MovedIn(true)],
             br#""account":7,"renewed":true"#,
         ),
@@ -274,8 +274,8 @@ fn a_later_call_resends_written_before_importing() {
 #[test]
 fn json_calls_cannot_name_move_files() {
     for bytes in [
-        br#"{"tool":"export","arguments":{"account":7,"file":"record"}}"#.as_slice(),
-        br#"{"tool":"import","arguments":{"file":"record","key":"move-in"}}"#,
+        br#"{"tool":"account export","arguments":{"account":7,"file":"record"}}"#.as_slice(),
+        br#"{"tool":"account import","arguments":{"file":"record","key":"move-in"}}"#,
     ] {
         let mut f = Frame::read(&["--call", "-"]);
         f.input = bytes;

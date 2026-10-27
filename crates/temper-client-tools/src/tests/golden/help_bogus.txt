@@ -1,0 +1,1 @@
+temper ctl: no group bogus; temper ctl help lists them

@@ -39,9 +39,9 @@ pub fn file_root(parsed: &Parsed) -> Option<Box<[u8]>> {
         Parsed::Call { call, .. } => {
             let name = TOOLS[usize::from(call.tool)].name;
             if class(call) == Class::Help
-                || name == b"amend"
-                || name == b"change-settings"
-                || name == b"propose-settings"
+                || name == b"task amend"
+                || name == b"settings apply"
+                || name == b"settings propose"
             {
                 return None;
             }
@@ -87,9 +87,9 @@ pub(crate) fn key_file(call: &Call) -> Option<&[u8]> {
     let name = TOOLS.get(usize::from(call.tool))?.name;
     let index = if name == rows::IMPORT.name {
         0
-    } else if name == b"forge-connect" && call.form == 0 {
+    } else if name == b"forge connect" && call.form == 0 {
         3
-    } else if name == b"forge-connect" && call.form == 3 {
+    } else if name == b"forge connect" && call.form == 3 {
         2
     } else if name == rows::ADD_KEY.name || name == rows::REPLACE_KEY.name {
         1
@@ -108,7 +108,7 @@ pub fn text_files(parsed: &Parsed) -> Vec<(u8, Box<[u8]>)> {
     let mut files = Vec::new();
     let Parsed::Call { call, .. } = parsed else { return files };
     let name = TOOLS[usize::from(call.tool)].name;
-    if name != b"amend" && name != b"change-settings" && name != b"propose-settings" {
+    if name != b"task amend" && name != b"settings apply" && name != b"settings propose" {
         return files;
     }
     for (index, slot) in call.values.iter().enumerate() {
@@ -128,7 +128,7 @@ pub fn text_files(parsed: &Parsed) -> Vec<(u8, Box<[u8]>)> {
 pub(crate) fn key_bytes(call: &Call) -> u32 {
     if call.tool == temper_client_tools::jig::rows::IMPORT_AT {
         temper_client_tools::limits::MOVED_BYTES
-    } else if TOOLS[usize::from(call.tool)].name == b"forge-connect" {
+    } else if TOOLS[usize::from(call.tool)].name == b"forge connect" {
         4089
     } else {
         temper_client_tools::limits::KEY_BYTES

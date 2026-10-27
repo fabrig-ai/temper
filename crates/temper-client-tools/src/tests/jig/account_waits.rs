@@ -142,7 +142,7 @@ fn account_text_waits_append_the_condition_to_read_output() {
     let mut root = f::account_root(false);
     let mut party = f::accounts();
     party.usable = true;
-    let read = root.submit(&["accounts"]);
+    let read = root.submit(&["account", "list"]);
     f::deliver_accounts(&mut root, party.clone());
     let expected = root.answer(read).expect("text read");
     let wait = root.submit(&["wait", "accounts", "--until", "usable"]);

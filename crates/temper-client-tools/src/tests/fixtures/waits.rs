@@ -151,12 +151,12 @@ pub(crate) fn chip_phase(latest: &mut client::Latest, phase: c::OwnerChipPhase) 
     *current = phase;
 }
 
-pub(crate) const WAIT_TASK: &[&str] = &["wait", TASK_CALL[0], TASK_CALL[1]];
-pub(crate) const WAIT_TREE: &[&str] = &[WAIT_TASK[0], "tree", TASK_CALL[1]];
-pub(crate) const WAIT_RUN: &[&str] = &[WAIT_TASK[0], RUN_CALL[0], TASK_CALL[1]];
+pub(crate) const WAIT_TASK: &[&str] = &["wait", "task", TASK_CALL[2]];
+pub(crate) const WAIT_TREE: &[&str] = &[WAIT_TASK[0], "tree", TASK_CALL[2]];
+pub(crate) const WAIT_RUN: &[&str] = &[WAIT_TASK[0], "run", TASK_CALL[2]];
 pub(crate) const WAIT_ME: &[&str] = &[WAIT_TASK[0], "me"];
 pub(crate) const WAIT_INBOX: &[&str] = &[WAIT_TASK[0], INBOX_CALL[0]];
-pub(crate) const WAIT_TASKS: &[&str] = &[WAIT_TASK[0], TASKS_CALL[0], TASKS_CALL[1], TASKS_CALL[2]];
+pub(crate) const WAIT_TASKS: &[&str] = &[WAIT_TASK[0], "tasks", TASKS_CALL[2], TASKS_CALL[3]];
 /// One second exposes before/at deadline behavior without any real-time wait.
 pub(crate) const WAIT_SPAN: skein_lib::Duration = skein_lib::Duration::from_secs(1);
 pub(crate) const SHORT_TIMEOUT: &[&str] = &["--timeout", "1s"];

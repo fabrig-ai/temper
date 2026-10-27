@@ -1,0 +1,7 @@
+me
+Read your party: its projects, what it may start, and what waits on it
+Prints: `party N`, its login and name, its projects and bounds, what waits on it, the requests' retention, the providers it may use, and `digest: me`
+--json: the record me.
+Key: none.
+Read it first: it gives the project and provider numbers other
+calls take, and how long the engine keeps a keyed request.

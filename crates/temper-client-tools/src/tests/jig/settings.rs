@@ -158,7 +158,7 @@ fn values() -> Vec<(c::Setting, c::SettingValue)> {
 }
 fn read(argv: &[&str], value: c::ReadValue) -> jig::Printed {
     let (mut root, call) = fixtures::read_call(argv);
-    if argv.first() == Some(&"setting") {
+    if let c::ReadValue::Setting(_) = &value {
         newest_for_setting(&mut root, call);
     }
     root.serve(call, c::ReadResult::Value(value));
@@ -179,7 +179,7 @@ fn newest_for_setting(root: &mut fixtures::Harness, call: u32) {
 }
 fn setting_json(setting: c::Setting, value: c::SettingValue) -> Vec<u8> {
     let mut root = fixtures::signed_in(fixtures::PARTY);
-    let mut call = fixtures::call(&["setting", "rules"]);
+    let mut call = fixtures::call(&["settings", "show", "rules"]);
     call.tool = rows::SETTING_AT;
     let number = root.submit_prepared(call, true, None);
     newest_for_setting(&mut root, number);
@@ -198,7 +198,7 @@ fn file_from_setting(bytes: &[u8]) -> Vec<u8> {
 fn changed(bytes: &[u8], json: bool) -> (fixtures::Harness, u32) {
     let mut root = fixtures::signed_in(fixtures::PARTY);
     let mut call =
-        fixtures::call(&["change-settings", "FILE", "--against", "5", "--running", "moves", "--key", "settings-5"]);
+        fixtures::call(&["settings", "apply", "FILE", "--against", "5", "--running", "moves", "--key", "settings-5"]);
     *call.values.get_mut(0).expect("FILE") = Some(Values::One(Value::Text(bytes.into())));
     let number = root.submit_prepared(call, json, None);
     (root, number)
@@ -223,14 +223,14 @@ fn golden(name: &str, bytes: &[u8]) {
 #[test]
 fn settings_calls_parse_and_write_back_with_existing_numbers_unchanged() {
     for argv in [
-        vec!["settings"],
-        vec!["setting", "charter", "3", "--revision", "5"],
-        vec!["setting", "template", "4"],
-        vec!["setting", "policy", "5"],
-        vec!["setting", "rules"],
-        vec!["revision", "5"],
-        vec!["revisions", "--before", "5"],
-        vec!["change-settings", "-", "--against", "5", "--running", "moves", "--key", "settings-5"],
+        vec!["settings", "show"],
+        vec!["settings", "show", "charter", "3", "--revision", "5"],
+        vec!["settings", "show", "template", "4"],
+        vec!["settings", "show", "policy", "5"],
+        vec!["settings", "show", "rules"],
+        vec!["revision", "show", "5"],
+        vec!["revision", "list", "--before", "5"],
+        vec!["settings", "apply", "-", "--against", "5", "--running", "moves", "--key", "settings-5"],
     ] {
         let call = fixtures::call(&argv);
         assert_eq!(fixtures::back(&call), fixtures::owned(&argv));
@@ -238,11 +238,11 @@ fn settings_calls_parse_and_write_back_with_existing_numbers_unchanged() {
     }
     assert_eq!((rows::EXPORT_AT, rows::IMPORT_AT, rows::SETTINGS_AT, rows::CHANGE_SETTINGS_AT), (40, 41, 42, 46));
     for argv in [
-        vec!["setting", "rules", "--project", "1"],
-        vec!["setting", "charter", "3", "--project", "1"],
-        vec!["revision", "4294967296"],
-        vec!["settings", "--watch"],
-        vec!["change-settings", "FILE", "--against", "5"],
+        vec!["settings", "show", "rules", "--project", "1"],
+        vec!["settings", "show", "charter", "3", "--project", "1"],
+        vec!["revision", "show", "4294967296"],
+        vec!["settings", "show", "--watch"],
+        vec!["settings", "apply", "FILE", "--against", "5"],
     ] {
         assert!(fixtures::parse(&argv).is_err(), "{argv:?}");
     }
@@ -344,10 +344,10 @@ fn whole_settings_document_renderings_are_stable() {
     }));
     let forgotten = c::ReadValue::Revision(Box::new(c::RevisionAnswer::Forgotten(c::RevisionForgotten { oldest: 2 })));
     for (argv, document, name) in [
-        (vec!["settings"], inventory, "settings_inventory"),
-        (vec!["revision", "5"], revision, "settings_revision"),
-        (vec!["revisions"], revisions, "settings_revisions"),
-        (vec!["revision", "1"], forgotten, "settings_forgotten"),
+        (vec!["settings", "show"], inventory, "settings_inventory"),
+        (vec!["revision", "show", "5"], revision, "settings_revision"),
+        (vec!["revision", "list"], revisions, "settings_revisions"),
+        (vec!["revision", "show", "1"], forgotten, "settings_forgotten"),
     ] {
         let text = read(&argv, document.clone());
         assert_eq!(text.status, 0);
@@ -476,17 +476,17 @@ fn settings_values_refuse_each_nonempty_byte_and_list_bound_on_both_sides() {
 #[test]
 fn settings_reads_request_the_exact_contract_and_do_not_watch_settings() {
     for (argv, expected) in [
-        (vec!["settings"], c::Read::Settings),
+        (vec!["settings", "show"], c::Read::Settings),
         (
-            vec!["setting", "charter", "3", "--revision", "5"],
+            vec!["settings", "show", "charter", "3", "--revision", "5"],
             c::Read::Setting(c::ReadSetting {
                 setting: c::Setting::Charter(c::SettingNumber { number: 3 }),
                 revision: 5,
             }),
         ),
-        (vec!["setting", "rules"], c::Read::Settings),
-        (vec!["revision", "5"], c::Read::Revision(c::ReadRevision { number: 5 })),
-        (vec!["revisions", "--before", "5"], c::Read::Revisions(c::ReadRevisions { before: Some(5) })),
+        (vec!["settings", "show", "rules"], c::Read::Settings),
+        (vec!["revision", "show", "5"], c::Read::Revision(c::ReadRevision { number: 5 })),
+        (vec!["revision", "list", "--before", "5"], c::Read::Revisions(c::ReadRevisions { before: Some(5) })),
     ] {
         let (root, call) = fixtures::read_call(&argv);
         assert_eq!(root.reads.get(&call).expect("one read").1, expected);
@@ -497,10 +497,10 @@ fn settings_reads_request_the_exact_contract_and_do_not_watch_settings() {
 #[test]
 fn an_unqualified_setting_reads_the_inventoried_revision_before_its_value() {
     for (argv, setting) in [
-        (vec!["setting", "charter", "3"], c::Setting::Charter(c::SettingNumber { number: 3 })),
-        (vec!["setting", "template", "4"], c::Setting::Template(c::SettingNumber { number: 4 })),
-        (vec!["setting", "policy", "5"], c::Setting::Policy(c::SettingNumber { number: 5 })),
-        (vec!["setting", "rules"], c::Setting::Rules),
+        (vec!["settings", "show", "charter", "3"], c::Setting::Charter(c::SettingNumber { number: 3 })),
+        (vec!["settings", "show", "template", "4"], c::Setting::Template(c::SettingNumber { number: 4 })),
+        (vec!["settings", "show", "policy", "5"], c::Setting::Policy(c::SettingNumber { number: 5 })),
+        (vec!["settings", "show", "rules"], c::Setting::Rules),
     ] {
         let (mut root, call) = fixtures::read_call(&argv);
         assert_eq!(root.reads.get(&call).expect("first read").1, c::Read::Settings);
@@ -518,7 +518,12 @@ fn an_unqualified_setting_reads_the_inventoried_revision_before_its_value() {
 
 #[test]
 fn settings_reads_keep_their_neighbours_not_served_and_role_statuses() {
-    for argv in [vec!["settings"], vec!["setting", "rules"], vec!["revision", "5"], vec!["revisions"]] {
+    for argv in [
+        vec!["settings", "show"],
+        vec!["settings", "show", "rules"],
+        vec!["revision", "show", "5"],
+        vec!["revision", "list"],
+    ] {
         for (page, status) in [
             (jig_client::Readout::NotServed { family: None, served: None }, 1),
             (jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::Refused)), 2),
@@ -534,10 +539,10 @@ fn settings_reads_keep_their_neighbours_not_served_and_role_statuses() {
 fn setting_text_and_revisions_include_whole_set_values_and_last_page_facts() {
     for (index, (setting, value)) in values().into_iter().enumerate() {
         let argv = match setting {
-            c::Setting::Charter(_) => vec!["setting", "charter", "3"],
-            c::Setting::Template(_) => vec!["setting", "template", "4"],
-            c::Setting::Policy(_) => vec!["setting", "policy", "5"],
-            c::Setting::Rules => vec!["setting", "rules"],
+            c::Setting::Charter(_) => vec!["settings", "show", "charter", "3"],
+            c::Setting::Template(_) => vec!["settings", "show", "template", "4"],
+            c::Setting::Policy(_) => vec!["settings", "show", "policy", "5"],
+            c::Setting::Rules => vec!["settings", "show", "rules"],
         };
         let answer = read(
             &argv,
@@ -546,7 +551,7 @@ fn setting_text_and_revisions_include_whole_set_values_and_last_page_facts() {
         assert_eq!(answer.status, 0);
         golden(&format!("settings_value_{index}"), &answer.stdout);
         for json in [false, true] {
-            let mut argv = vec!["revision", "5"];
+            let mut argv = vec!["revision", "show", "5"];
             if json {
                 argv.push("--json");
             }
@@ -565,17 +570,17 @@ fn setting_text_and_revisions_include_whole_set_values_and_last_page_facts() {
         }
     }
     let answer = read(
-        &["revisions"],
+        &["revision", "list"],
         c::ReadValue::Revisions(Box::new(c::RevisionsPage { rows: list([]), next: None, forgotten: true })),
     );
     assert_eq!(answer.stdout.as_ref(), b"older revisions were forgotten\n");
-    let answer = read(&["revision", "99"], c::ReadValue::Revision(Box::new(c::RevisionAnswer::Unknown)));
+    let answer = read(&["revision", "show", "99"], c::ReadValue::Revision(Box::new(c::RevisionAnswer::Unknown)));
     assert_eq!((answer.status, answer.stderr.as_ref()), (2, b"unknown revision\n".as_slice()));
 }
 
 #[test]
 fn change_settings_running_defaults_to_stays_and_json_names_the_new_revision() {
-    let mut call = fixtures::call(&["change-settings", "FILE", "--against", "5", "--key", "settings-5"]);
+    let mut call = fixtures::call(&["settings", "apply", "FILE", "--against", "5", "--key", "settings-5"]);
     *call.values.get_mut(0).expect("FILE") =
         Some(Values::One(Value::Text(br#"{"items":[{"setting":{"kind":"rules"},"edit":"reset"}]}"#.as_slice().into())));
     let mut root = fixtures::signed_in(fixtures::PARTY);
@@ -738,7 +743,7 @@ fn non_charter_revision_hints_explicitly_read_the_current_value() {
         (c::Setting::Rules, "rules"),
     ] {
         let answer = read(
-            &["revision", "5"],
+            &["revision", "show", "5"],
             c::ReadValue::Revision(Box::new(c::RevisionAnswer::Revision(c::RevisionDocument {
                 head: head(c::RevisionDecider::Release),
                 items: list([c::RevisionItem {
@@ -755,10 +760,10 @@ fn non_charter_revision_hints_explicitly_read_the_current_value() {
 #[test]
 fn settings_proposals_and_decision_choices_parse_round_trip_and_preserve_identities() {
     for argv in [
-        vec!["propose-settings", "-", "--against", "5", "--key", "proposal-5"],
-        vec!["proposal", "p73/7"],
-        vec!["decide", "p73/7", "accept", "--running", "moves"],
-        vec!["decide", "t41/3", "reject", "reason", "--running", "stays"],
+        vec!["settings", "propose", "-", "--against", "5", "--key", "proposal-5"],
+        vec!["proposal", "show", "p73/7"],
+        vec!["proposal", "decide", "p73/7", "accept", "--running", "moves"],
+        vec!["proposal", "decide", "t41/3", "reject", "reason", "--running", "stays"],
     ] {
         let mut call = fixtures::call(&argv);
         assert_eq!(fixtures::back(&call), fixtures::owned(&argv));
@@ -770,18 +775,18 @@ fn settings_proposals_and_decision_choices_parse_round_trip_and_preserve_identit
     }
     assert_eq!((rows::PROPOSE_SETTINGS_AT, rows::PROPOSAL_AT), (47, 48));
     for argv in [
-        vec!["propose-settings", "FILE", "--against", "5"],
-        vec!["propose-settings", "FILE", "--against", "5", "--running", "moves", "--key", "proposal-5"],
-        vec!["proposal", "p73/7", "--key", "read"],
-        vec!["decide", "p73/7", "accept", "--running", "other"],
-        vec!["decide", "41", "--hold", "2", "release", "--running", "moves"],
+        vec!["settings", "propose", "FILE", "--against", "5"],
+        vec!["settings", "propose", "FILE", "--against", "5", "--running", "moves", "--key", "proposal-5"],
+        vec!["proposal", "show", "p73/7", "--key", "read"],
+        vec!["proposal", "decide", "p73/7", "accept", "--running", "other"],
+        vec!["task", "decide", "41", "--hold", "2", "release", "--running", "moves"],
     ] {
         assert!(fixtures::parse(&argv).is_err(), "{argv:?}");
     }
 }
 fn proposed(bytes: &[u8], json: bool) -> (fixtures::Harness, u32) {
     let mut root = fixtures::signed_in(fixtures::PARTY);
-    let mut call = fixtures::call(&["propose-settings", "FILE", "--against", "5", "--key", "proposal-5"]);
+    let mut call = fixtures::call(&["settings", "propose", "FILE", "--against", "5", "--key", "proposal-5"]);
     *call.values.get_mut(0).expect("FILE") = Some(Values::One(Value::Text(bytes.into())));
     let number = root.submit_prepared(call, json, None);
     (root, number)
@@ -876,7 +881,7 @@ fn settings_review_goldens_keep_every_edit_value_origin_and_head_fact() {
             ]),
         };
         for json in [false, true] {
-            let mut argv = vec!["proposal", "p73/7"];
+            let mut argv = vec!["proposal", "show", "p73/7"];
             if json {
                 argv.push("--json");
             }
@@ -886,14 +891,14 @@ fn settings_review_goldens_keep_every_edit_value_origin_and_head_fact() {
         }
     }
     for review in [None, Some(c::SettingsReview { newest: 5, items: list([]), cut: false })] {
-        let answer = read(&["proposal", "p73/7"], review_proposal(review));
+        let answer = read(&["proposal", "show", "p73/7"], review_proposal(review));
         assert_eq!(answer.status, 0);
         assert!(!core::str::from_utf8(&answer.stdout).expect("text").contains("cut:"));
     }
 }
 #[test]
 fn proposal_reads_use_one_exact_read_and_keep_not_served_and_role_statuses() {
-    let (root, call) = fixtures::read_call(&["proposal", "p73/7"]);
+    let (root, call) = fixtures::read_call(&["proposal", "show", "p73/7"]);
     assert_eq!(
         root.reads.get(&call).expect("exact read").1,
         c::Read::Proposal { proposal: c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 } }
@@ -903,7 +908,7 @@ fn proposal_reads_use_one_exact_read_and_keep_not_served_and_role_statuses() {
         (jig_client::Readout::NotServed { family: None, served: None }, 1),
         (jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::Refused)), 2),
     ] {
-        let (mut root, call) = fixtures::read_call(&["proposal", "p73/7"]);
+        let (mut root, call) = fixtures::read_call(&["proposal", "show", "p73/7"]);
         root.serve_readout(call, page);
         assert_eq!(root.answer(call).expect("terminal read").status, status);
     }
@@ -915,7 +920,7 @@ fn decide_sends_only_the_given_running_choice_and_leaves_malformed_to_the_engine
             [(None, None), (Some("stays"), Some(c::Running::Stays)), (Some("moves"), Some(c::Running::Moves))]
         {
             for decision in ["accept", "reject"] {
-                let mut argv = vec!["decide", proposer, decision];
+                let mut argv = vec!["proposal", "decide", proposer, decision];
                 if decision == "reject" {
                     argv.push("because");
                 }
@@ -963,10 +968,10 @@ fn a_withdrawn_settings_proposal_is_read_as_its_retained_state() {
         at: None,
         by: None,
     }));
-    let text = read(&["proposal", "p73/7"], history.clone());
+    let text = read(&["proposal", "show", "p73/7"], history.clone());
     assert_eq!(text.status, 0);
     assert_eq!(text.stdout.as_ref(), b"proposal p73/7 \xc2\xb7 settings \xc2\xb7 withdrawn\nagainst revision 5\n");
-    let json = read(&["proposal", "p73/7", "--json"], history);
+    let json = read(&["proposal", "show", "p73/7", "--json"], history);
     assert_eq!(json.status, 0);
     assert_eq!(json.stdout.as_ref(), br#"{"key":{"proposer":{"party":73},"number":7},"action":{"settings":{"against":5,"items":[{"setting":{"kind":"rules"},"edit":"reset"}],"review":null,"made":null}},"state":{"withdrawn":{}}}"#);
 }
@@ -975,7 +980,7 @@ fn a_withdrawn_settings_proposal_is_read_as_its_retained_state() {
 fn propose_settings_forwards_optional_reason_and_prints_the_original_returned_role() {
     let mut root = fixtures::signed_in(fixtures::PARTY);
     let mut call =
-        fixtures::call(&["propose-settings", "FILE", "Please review", "--against", "5", "--key", "with-reason"]);
+        fixtures::call(&["settings", "propose", "FILE", "Please review", "--against", "5", "--key", "with-reason"]);
     *call.values.get_mut(0).expect("FILE") =
         Some(Values::One(Value::Text(file_from_setting(&setting_json(values()[0].0, values()[0].1.clone())).into())));
     let number = root.submit_prepared(call, true, None);
@@ -1010,10 +1015,10 @@ fn retained_proposal(key: c::ProposalKey, action: c::OwnerRetainedAction) -> c::
 fn retained_task_release_keeps_its_typed_identity_kind_and_decision_in_text_and_json() {
     let key = c::ProposalKey { proposer: c::Proposer::Task(73), number: 7 };
     let history = retained_proposal(key, c::OwnerRetainedAction::Release { task: 41 });
-    let text = read(&["proposal", "t73/7"], history.clone());
+    let text = read(&["proposal", "show", "t73/7"], history.clone());
     assert_eq!(text.status, 0);
     assert_eq!(text.stdout.as_ref(), b"proposal t73/7 \xc2\xb7 release \xc2\xb7 accepted\n");
-    let json = read(&["proposal", "t73/7", "--json"], history);
+    let json = read(&["proposal", "show", "t73/7", "--json"], history);
     assert_eq!(json.status, 0);
     assert_eq!(
         json.stdout.as_ref(),
@@ -1033,7 +1038,7 @@ fn retained_settings_preserves_task_or_party_keys_and_its_revision_details() {
             }),
         );
         for json in [false, true] {
-            let argv = if json { vec!["proposal", name, "--json"] } else { vec!["proposal", name] };
+            let argv = if json { vec!["proposal", "show", name, "--json"] } else { vec!["proposal", "show", name] };
             let answer = read(&argv, history.clone());
             assert_eq!(answer.status, 0);
             let text = core::str::from_utf8(&answer.stdout).expect("text");
@@ -1069,7 +1074,7 @@ fn retained_proposals_refuse_mismatched_inner_outer_and_requested_identity() {
         h.proposer = proposer;
         h.number = number;
         for json in [false, true] {
-            let argv = if json { vec!["proposal", name, "--json"] } else { vec!["proposal", name] };
+            let argv = if json { vec!["proposal", "show", name, "--json"] } else { vec!["proposal", "show", name] };
             assert_eq!(read(&argv, c::ReadValue::Historical(broken.clone())).status, 1);
         }
     }
@@ -1108,10 +1113,10 @@ fn retained_party_batch() -> c::ReadValue {
 #[test]
 fn retained_party_single_goal_batch_keeps_its_actual_kind_key_and_pending_state() {
     let history = retained_party_batch();
-    let text = read(&["proposal", "p73/7"], history.clone());
+    let text = read(&["proposal", "show", "p73/7"], history.clone());
     assert_eq!(text.status, 0);
     assert_eq!(text.stdout.as_ref(), b"proposal p73/7 \xc2\xb7 batch \xc2\xb7 pending\n");
-    let json = read(&["proposal", "p73/7", "--json"], history);
+    let json = read(&["proposal", "show", "p73/7", "--json"], history);
     assert_eq!(json.status, 0);
     assert_eq!(
         json.stdout.as_ref(),
@@ -1121,15 +1126,15 @@ fn retained_party_single_goal_batch_keeps_its_actual_kind_key_and_pending_state(
 
 #[test]
 fn move_to_newest_parses_the_revision_and_requires_a_number_and_key() {
-    let argv = ["move-to-newest", "7", "--key", "move-7"];
+    let argv = ["revision", "advance", "7", "--key", "move-7"];
     let call = fixtures::call(&argv);
     assert_eq!(call.tool, rows::MOVE_TO_NEWEST_AT);
     assert_eq!(fixtures::back(&call), fixtures::owned(&argv));
     for argv in [
-        vec!["move-to-newest", "--key", "move-7"],
-        vec!["move-to-newest", "seven", "--key", "move-7"],
-        vec!["move-to-newest", "4294967296", "--key", "move-7"],
-        vec!["move-to-newest", "7"],
+        vec!["revision", "advance", "--key", "move-7"],
+        vec!["revision", "advance", "seven", "--key", "move-7"],
+        vec!["revision", "advance", "4294967296", "--key", "move-7"],
+        vec!["revision", "advance", "7"],
     ] {
         assert!(fixtures::parse(&argv).is_err(), "{argv:?}");
     }
@@ -1143,7 +1148,7 @@ fn move_to_newest_sends_the_revision_and_renders_both_counts() {
     ] {
         for json in [false, true] {
             let mut root = fixtures::signed_in(fixtures::PARTY);
-            let call = fixtures::call(&["move-to-newest", &revision.to_string(), "--key", "move-7"]);
+            let call = fixtures::call(&["revision", "advance", &revision.to_string(), "--key", "move-7"]);
             let call = root.submit_prepared(call, json, None);
             let (_, _, jig_client::Ask::Jig(ask)) = root.sends.get(&call).expect("one keyed request") else {
                 panic!("jig ask")

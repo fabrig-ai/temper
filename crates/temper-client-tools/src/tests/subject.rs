@@ -170,7 +170,10 @@ fn typed_wait_calls_follow_the_same_subject_condition_and_duration_checks() {
         call.values[slot] = Some(Values::One(value));
         assert_eq!(argv::check(crate::table::TOOLS, &call, &crate::limits::tools()), Err(error), "{slot}");
     }
-    for words in [&["tasks", "--project", "shop", "--ended"][..], &["tasks", "--project", "shop", "--after", "abcd"]] {
+    for words in [
+        &["task", "list", "--project", "shop", "--ended"][..],
+        &["task", "list", "--project", "shop", "--after", "abcd"],
+    ] {
         let mut call = base.clone();
         call.values[0] = Some(Values::One(Value::Subject(Subject::Tasks(Box::new(fixtures::call(words))))));
         assert_eq!(
