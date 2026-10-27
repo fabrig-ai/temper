@@ -502,7 +502,6 @@ pub(crate) fn answered(
             }
             p.stage = Stage::Collect;
             collect(d, env, owner, p, out);
-            return;
         }
         Stage::Run { key, pages } => {
             let writer = d.writers.get(&key.repository.forge).copied().unwrap_or(0);
