@@ -533,8 +533,8 @@ pub fn widest() -> engine::Limits {
     limits.tasks.depth = 3;
     limits.tasks.parameters = 8;
     limits.tasks.spec_bytes = 512;
-    limits.tasks.executor_kinds = 2;
-    limits.tasks.authority_grants = 10;
+    limits.tasks.executor_kinds = 3;
+    limits.tasks.authority_grants = 11;
     limits.tasks.authority_segments = 9;
     limits.tasks.authority_bytes = 512;
     limits.tasks.contract_choices = 2;
@@ -552,11 +552,11 @@ pub fn widest() -> engine::Limits {
     limits.brief.brief_bytes = 768;
     limits.loads.reply_bytes = 32_768;
     limits.loads.transcript_bytes = 32_768;
-    limits.authority.grants = 10;
+    limits.authority.grants = 11;
     // Settings patterns use jig's eight-segment store ceiling; task scopes retain their own nine.
     limits.authority.segments = 8;
     limits.authority.segment_bytes = 64;
-    limits.authority.executors = 2;
+    limits.authority.executors = 3;
     limits.authority.batch = 2;
     limits.authority.writes = 2;
     limits.people.inbox_tasks = 24;
