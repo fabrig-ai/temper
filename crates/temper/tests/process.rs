@@ -875,7 +875,16 @@ fn landing(case: &str, raised: bool, tier: bool) {
     let peer = support::fake_llm(support::landing_scripts(support::ANSWER, &forgejo));
     let clock = skein_shell::Clock::new();
     let began = clock.now().now;
-    let first = support::run_until_landed(scratch.path(), support::person::adopt_and_change(&forgejo), peer, &forgejo);
+    let first = if tier {
+        support::run_until_change_ended(
+            scratch.path(),
+            support::person::adopt_and_change_with_tier(&forgejo),
+            peer,
+            &forgejo,
+        )
+    } else {
+        support::run_until_landed(scratch.path(), support::person::adopt_and_change(&forgejo), peer, &forgejo)
+    };
     assert_eq!((first.signed_in, first.finished), (1, true), "{}", String::from_utf8_lossy(&first.stderr));
     eprintln!("stage job: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
     let merged = forgejo.merged_pull().expect("the change's pull request is merged");
@@ -884,7 +893,12 @@ fn landing(case: &str, raised: bool, tier: bool) {
     }
     assert_eq!(forgejo.job_state(merged), "success");
     assert!(forgejo.main_readme().ends_with(support::EDIT), "main holds the agent's edit");
-    let second = support::run(scratch.path(), support::person::found(), None, Duration::from_secs(120));
+    let found = if tier {
+        support::person::found_from(first.change_chat.expect("change's parent chat"))
+    } else {
+        support::person::found()
+    };
+    let second = support::run(scratch.path(), found, None, Duration::from_secs(120));
     assert!(second.finished, "the work is found after the restart");
     assert_eq!(forgejo.merged_pull(), Some(merged), "the forge's state is unchanged by the restart");
     forgejo.stop();

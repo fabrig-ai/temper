@@ -160,6 +160,7 @@ fn configure(directory: &Path, forge: &Forge<'_>, tier_repository: Option<u64>) 
     let mut value: serde_json::Value = serde_json::from_slice(&value).expect("deployment JSON");
     forgejo::configuration(directory, forge, &mut value);
     if let Some(repository) = tier_repository {
+        forgejo::tier_authority(&mut value);
         value["application"]["landing"]["projects"][0]["gates"] = serde_json::json!([{
             "forge": value["application"]["forges"][0]["number"],
             "repository": repository,
@@ -516,12 +517,14 @@ pub struct Seen {
     pub signed_in: u32,
     pub finished: bool,
     pub stderr: Vec<u8>,
+    pub change_chat: Option<u64>,
 }
 #[derive(Clone, Copy)]
 enum Ending {
     Stop,
     Box,
     Crash,
+    Change,
 }
 enum ChatPhase {
     SettingUp,
@@ -536,17 +539,92 @@ struct ChatJudge<'a> {
     forge: Option<&'a forgejo::Throwaway>,
     poll: Time,
     merged: bool,
+    read_calls: usize,
+    next_read: Option<ctl::Call>,
+    read_due: bool,
+    ended_inventory: bool,
+    change: Option<u64>,
+    change_chat: &'a mut Option<u64>,
+    change_read: serde_json::Value,
 }
 impl ChatJudge<'_> {
     fn stopping(&self) -> bool {
         matches!(self.phase, ChatPhase::Stopping | ChatPhase::Settled)
+    }
+    fn wait_change(&self) -> bool {
+        matches!(self.ending, Ending::Change)
+    }
+    fn change_done(&self) -> bool {
+        self.change_read["chip"]["phase"] == "ended"
+    }
+    fn read_change(&mut self, calls: &mut ctl::Calls, poll: bool) {
+        if let Some(read) = calls.ends().get(self.read_calls) {
+            self.read_calls += 1;
+            assert_eq!(read.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&read.stderr));
+            let document = ctl::json(read);
+            if let Some(change) = self.change {
+                self.change_read = document;
+                let task = &self.change_read;
+                *self.change_chat = Some(task["requester"]["task"].as_u64().expect("change's parent chat"));
+                if task["chip"]["phase"] == "ended" {
+                    assert!(task["result"]["ending"]["task"].get("done").is_some(), "change did not end done: {task}");
+                    assert!(task["result"]["value"].get("change").is_some(), "change has no result: {task}");
+                    eprintln!("change task ended: {task}");
+                } else {
+                    self.next_read =
+                        Some(ctl::Call::new(&["task", &change.to_string(), "--json"]).in_directory("private"));
+                }
+            } else {
+                let live = document
+                    .pointer("/tasks/rows")
+                    .or_else(|| document.get("live"))
+                    .and_then(serde_json::Value::as_array)
+                    .expect("live task rows");
+                let ended = document.pointer("/ended/rows/rows").and_then(serde_json::Value::as_array);
+                if let Some(cut) = document.pointer("/ended/rows/cut") {
+                    assert_eq!(cut, false, "ended task inventory fits: {document}");
+                }
+                self.change = live.iter().chain(ended.into_iter().flatten()).find_map(|row| {
+                    (row["chip"]["executor"]["procedure"]["kind"] == 2)
+                        .then(|| row["chip"]["task"].as_u64().expect("change task"))
+                });
+                if let Some(change) = self.change {
+                    self.next_read =
+                        Some(ctl::Call::new(&["task", &change.to_string(), "--json"]).in_directory("private"));
+                    self.read_due = true;
+                } else if let Some(next) = document["read_on"].as_str() {
+                    // Follow the CLI's continuation as arguments, retaining JSON.
+                    let mut args: Vec<_> = next.split_ascii_whitespace().collect();
+                    args.push("--json");
+                    self.next_read = Some(ctl::Call::new(&args).in_directory("private"));
+                    self.read_due = true;
+                } else if !self.ended_inventory {
+                    self.ended_inventory = true;
+                    self.next_read =
+                        Some(ctl::Call::new(&["tasks", "--project", "1", "--ended", "--json"]).in_directory("private"));
+                    self.read_due = true;
+                } else {
+                    self.ended_inventory = false;
+                    self.next_read =
+                        Some(ctl::Call::new(&["tasks", "--project", "1", "--json"]).in_directory("private"));
+                }
+            }
+        }
+        if !self.change_done()
+            && (self.read_due || poll)
+            && calls.foreground_idle()
+            && let Some(call) = self.next_read.take()
+        {
+            calls.push(ctl::Step::Run(call));
+            self.read_due = false;
+        }
     }
 }
 impl Referee<Process> for ChatJudge<'_> {
     fn act(&mut self, now: Time, procs: &mut [Process]) {
         if matches!(self.phase, ChatPhase::SettingUp) {
             let Process::Calls(calls) = &procs[2] else { panic!("native settings setup") };
-            if calls.ends().len() < NATIVE_SETUP_CALLS {
+            if calls.ends().len() < NATIVE_SETUP_CALLS + usize::from(self.wait_change()) {
                 return;
             }
             for call in calls.ends() {
@@ -557,11 +635,21 @@ impl Referee<Process> for ChatJudge<'_> {
             person.ctl_ready(&link);
             self.phase = ChatPhase::Running;
         }
-        if !self.stopping() && now >= self.poll {
+        let poll = now >= self.poll;
+        if !self.stopping() && poll {
             if let Some(forge) = self.forge {
                 self.merged = forge.merged_pull().is_some();
             }
             self.poll = now.saturating_add(Duration::from_secs(2));
+        }
+        let Process::Person(person) = &procs[1] else { panic!("native person") };
+        if !self.stopping()
+            && self.wait_change()
+            && person.finished
+            && person.client.as_ref().is_some_and(Host::is_empty)
+        {
+            let Process::Calls(calls) = &mut procs[2] else { panic!("change task observer") };
+            self.read_change(calls, poll);
         }
         let Process::Person(person) = &procs[1] else {
             panic!("native person");
@@ -570,15 +658,21 @@ impl Referee<Process> for ChatJudge<'_> {
             && person.finished
             && person.client.as_ref().is_some_and(Host::is_empty)
             && (self.forge.is_none() || self.merged)
+            && (!self.wait_change() || self.change_done())
         {
             let Process::Binary(binary) = &mut procs[0] else {
                 panic!("binary");
             };
             match self.ending {
                 Ending::Stop | Ending::Box => binary.signal(Signal::Terminate),
-                Ending::Crash => binary.signal_tree(Signal::Kill),
+                Ending::Crash | Ending::Change => binary.signal_tree(Signal::Kill),
             }
             for proc in procs {
+                if self.wait_change()
+                    && let Process::Calls(calls) = proc
+                {
+                    calls.release();
+                }
                 if let Process::Peer(peer) = proc {
                     peer.shutdown();
                 }
@@ -630,12 +724,15 @@ impl Referee<Process> for ChatJudge<'_> {
                 "temper serve did not stop cleanly: {}",
                 String::from_utf8_lossy(binary.stderr())
             ),
-            Ending::Crash => assert!(!binary.stderr_overflowed(), "crashed temper serve overflowed stderr"),
+            Ending::Crash | Ending::Change => {
+                assert!(!binary.stderr_overflowed(), "crashed temper serve overflowed stderr");
+            }
         }
         assert!(
             now < self.deadline || matches!(self.phase, ChatPhase::Settled),
-            "native chat did not settle: {}",
-            String::from_utf8_lossy(binary.stderr())
+            "native chat did not settle: {}; last change task: {}",
+            String::from_utf8_lossy(binary.stderr()),
+            self.change_read
         );
     }
     fn next_deadline(&self) -> Option<Time> {
@@ -694,12 +791,21 @@ pub fn run_until_landed(
 ) -> Seen {
     run_story(directory, script, Some(peer), LANDING, Some(forge), Ending::Crash)
 }
+#[must_use]
+pub fn run_until_change_ended(
+    directory: &Path,
+    script: person::Script,
+    peer: llm::Listening,
+    forge: &forgejo::Throwaway,
+) -> Seen {
+    run_story(directory, script, Some(peer), LANDING, Some(forge), Ending::Change)
+}
 // Sign-in, inventory, whole template read, then one owner settings change.
 const NATIVE_SETUP_CALLS: usize = 4;
-fn native_settings_setup(directory: &Path) -> Vec<ctl::Step> {
+fn native_settings_setup(directory: &Path, wait_forge: bool) -> Vec<ctl::Step> {
     use ctl::{Call, Step};
     let file = directory.join("settings.json");
-    vec![
+    let mut steps = vec![
         Step::Run(Call::sign_in().in_directory("private")),
         Step::Run(Call::new(&["settings", "show", "--json"]).in_directory("private")),
         Step::Run(Call::new(&["settings", "show", "template", "1", "--json"]).in_directory("private")),
@@ -709,7 +815,11 @@ fn native_settings_setup(directory: &Path) -> Vec<ctl::Step> {
             ctl::setting_change_file(&file, &calls[2], |value| value["flags"]["ended_by"] = "result".into());
             ctl::settings_change(&calls[1], &file, "native-chat-settings").in_directory("private")
         })),
-    ]
+    ];
+    if wait_forge {
+        steps.push(Step::Until(Call::new(&["forges", "--json"]).in_directory("private"), b"\"state\":\"connected\""));
+    }
+    steps
 }
 fn run_story(
     directory: &Path,
@@ -726,7 +836,7 @@ fn run_story(
     let mut binary = match ending {
         Ending::Stop => serve(directory),
         Ending::Box => sign_in::start(directory),
-        Ending::Crash => {
+        Ending::Crash | Ending::Change => {
             Binary::start_with_tree(serve_command(directory), Mode::Pipes, 65_536, Expectation::Supervise, false)
                 .expect("temper serve starts for a whole-tree crash")
         }
@@ -738,12 +848,20 @@ fn run_story(
     };
     let root = skein_shell::open_root(directory).expect("client's parent root");
     let setting_up = peer.is_some();
+    let mut change_chat = None;
     let mut world = real::World::new(ChatJudge {
         phase: if setting_up { ChatPhase::SettingUp } else { ChatPhase::Running },
         ending,
         forge,
         poll: clock.now().now,
         merged: false,
+        read_calls: NATIVE_SETUP_CALLS + usize::from(matches!(ending, Ending::Change)),
+        next_read: Some(ctl::Call::new(&["tasks", "--project", "1", "--json"]).in_directory("private")),
+        read_due: true,
+        ended_inventory: false,
+        change: None,
+        change_chat: &mut change_chat,
+        change_read: serde_json::Value::Null,
         deadline: clock.now().now.saturating_add(Duration::from_nanos(
             deadline.as_nanos().saturating_sub(Duration::from_secs(10).as_nanos()),
         )),
@@ -756,7 +874,16 @@ fn run_story(
             Process::Person(Box::new(person::Person::waiting_for_ctl_with_key(root, script)))
         });
         world.spawn_with_fds(fds, || {
-            Process::Calls(Box::new(ctl::Calls::new(ctl_root, native_settings_setup(directory), Some(&streams), None)))
+            let mut calls = ctl::Calls::new(
+                ctl_root,
+                native_settings_setup(directory, matches!(ending, Ending::Change)),
+                Some(&streams),
+                None,
+            );
+            if matches!(ending, Ending::Change) {
+                calls.hold();
+            }
+            Process::Calls(Box::new(calls))
         });
     } else {
         fds.push(root);
@@ -770,7 +897,7 @@ fn run_story(
     let Process::Binary(binary) = &outcome.procs[0] else {
         panic!("binary");
     };
-    if matches!(ending, Ending::Crash) {
+    if matches!(ending, Ending::Crash | Ending::Change) {
         assert!(binary.counts().is_some(), "the crashed temper serve tree settled before the restart");
     }
     let Process::Person(person) = &outcome.procs[1] else {
@@ -782,6 +909,7 @@ fn run_story(
         signed_in: person.client.as_ref().expect("native client").seen().signed_in + u32::from(setting_up),
         finished: person.finished,
         stderr: binary.stderr().to_vec(),
+        change_chat,
     }
 }
 

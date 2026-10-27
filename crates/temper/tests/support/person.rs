@@ -803,6 +803,16 @@ pub fn adopt_and_change(_forgejo: &super::forgejo::Throwaway) -> Script {
     ]);
     Script { steps: steps.into_boxed_slice(), begin: Begin::LinkWithKey }
 }
+/// Observe the new chat's acknowledgement without assuming its task number.
+#[must_use]
+pub fn adopt_and_change_with_tier(forgejo: &super::forgejo::Throwaway) -> Script {
+    let mut script = adopt_and_change(forgejo);
+    let last = script.steps.len() - 1;
+    script.steps[last - 1] = Step::See { find: Find::text(b"Change requested"), within: super::WITHIN };
+    script.steps[last] = Step::Go { address: Address::Inbox { filter: temper_client_domain::address::Filter::ALL } };
+    script
+}
+
 /// A person's live sitting keeps the native stories, allowing real completions their budget.
 #[must_use]
 pub fn live_adopt_and_change(forge: &super::forgejo::Throwaway) -> Script {
@@ -825,6 +835,13 @@ pub fn found() -> Script {
         ]),
     }
 }
+#[must_use]
+pub fn found_from(task: u64) -> Script {
+    let mut script = found();
+    *script.steps.last_mut().expect("reply step") = inbox_reply(format!("Reply from T{task}").as_bytes());
+    script
+}
+
 /// The forge chat's reply in the inbox: the chat is task 2, after "Hello", and
 /// the view names each inbox entry by its kind and its source task.
 const FORGE_CHAT_REPLY: &[u8] = b"Reply from T2";
