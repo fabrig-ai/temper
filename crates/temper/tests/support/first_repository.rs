@@ -181,7 +181,8 @@ pub fn csv_llm(config: &Path) -> CtlLlm {
     scripts[1].turns = coder.into_boxed_slice();
     // The fake streams this review until the story has read the pending gate.
     let verdict = scripts[2].turns[0].clone();
-    let mut read = call(b"read", &json!({"path":"src/main.rs"}));
+    // The first read uses the pull identity in the review brief.
+    let mut read = call(b"read_pull", &json!({"number":1}));
     let mut lines = read.lines.into_vec();
     lines.insert(
         0,
@@ -193,7 +194,8 @@ pub fn csv_llm(config: &Path) -> CtlLlm {
         },
     );
     read.lines = lines.into_boxed_slice();
-    scripts[2].turns = Box::new([read, verdict]);
+    scripts[2].cue = b"Pull request: #1\nBranch: ".as_slice().into();
+    scripts[2].turns = Box::new([read, call(b"read", &json!({"path":"src/main.rs"})), verdict]);
     model(config, scripts)
 }
 

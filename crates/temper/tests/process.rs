@@ -1415,12 +1415,53 @@ fn a_csv_change_passes_ci_and_a_blocking_agent_review_on_the_owned_forge_then_la
                 })
                 .collect();
             assert!(!reviews.is_empty(), "the reviewer reached the model");
-            for query in reviews {
+            for query in &reviews {
                 assert!(
                     query.system.windows(review_instructions.len()).any(|part| part == review_instructions),
                     "the reviewer reads review.txt's whole instructions"
                 );
             }
+            let brief = String::from_utf8_lossy(&reviews[0].system);
+            let subject = format!(
+                "Pull request: #1\nBranch: {}\nBase: main\nHead: {}\n",
+                panel["branch"].as_str().expect("change branch"),
+                panel["head"].as_str().expect("reviewed head"),
+            );
+            let subject_at = brief.find(&subject).expect("review names the exact pull, branch, base and SHA-1 head");
+            let pull_at = brief.find("## Pull request").expect("review's pull section");
+            assert!(subject_at < pull_at, "identity precedes the pull section: {brief}");
+            for words in [
+                "Title: @hello-readme Add CSV export to widget in work/hello",
+                "Body: @hello-readme Add CSV export to widget in work/hello",
+                "Files and diff:",
+                "File: src/main.rs",
+                "--csv",
+            ] {
+                assert!(brief[pull_at..].contains(words), "the pull section includes {words}: {brief}");
+            }
+            let first_call = reviews
+                .iter()
+                .flat_map(|query| &query.messages)
+                .flat_map(|message| &message.parts)
+                .find_map(|part| match part {
+                    skein_fake_llm_domain::api::Part::ToolCall { name, arguments, .. } => Some((name, arguments)),
+                    skein_fake_llm_domain::api::Part::Opaque { .. }
+                    | skein_fake_llm_domain::api::Part::Text { .. }
+                    | skein_fake_llm_domain::api::Part::ToolOutput { .. } => None,
+                })
+                .expect("reviewer's first tool call was observed");
+            assert_eq!(first_call.0.as_ref(), b"read_pull");
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(first_call.1).expect("read arguments"),
+                serde_json::json!({"number":1})
+            );
+            assert!(
+                reviews.iter().flat_map(|query| &query.messages).flat_map(|message| &message.parts).any(|part| {
+                    matches!(part, skein_fake_llm_domain::api::Part::ToolOutput { output, .. }
+                    if output.windows(b"Pull 1 head ".len()).any(|part| part == b"Pull 1 head "))
+                }),
+                "the named pull read succeeded: {reviews:?}"
+            );
             csv_landing = Some(identity);
         } else {
             assert_eq!(Some(identity), csv_landing, "the same landing survives restart");

@@ -604,8 +604,9 @@ impl Joint {
             limits.tasks.tree_tasks = TREE_TASKS;
             limits.tasks.depth = 2;
             limits.tasks.parameters = 5;
-            // A gate's brief spec includes its branch and hexadecimal head.
-            limits.tasks.spec_bytes = 128;
+            // A gate's brief names its pull, branch, base and hexadecimal head,
+            // alongside the task's byte parameters (domain/forge.md, 8.3).
+            limits.tasks.spec_bytes = 384;
             limits.tasks.contract_choices = 2;
             limits.tasks.executor_kinds = 3;
             limits.tasks.charters = 4;
@@ -625,7 +626,8 @@ impl Joint {
             limits.journal.result_bytes = 4096;
             limits.journal.run_bytes = 8192;
             limits.brief.sections = 5;
-            limits.brief.brief_bytes = 768;
+            limits.brief.brief_bytes = 1024;
+            limits.brief.budgets.task = 512;
             limits.brief.read_bytes = 512;
             limits.brief.budgets.pull = 384;
             limits.brief.budgets.ci = 384;

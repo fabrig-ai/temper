@@ -1877,7 +1877,8 @@ fn a_chat_made_before_its_home_was_adopted_reads_the_home_and_says_why() {
     let mut world =
         World::configured_brief(true, true, false, 1000, paths::Gate::default(), None, Some(small.root.brief));
     assert_eq!(world.env.limits.brief.budgets.task, 4608);
-    assert_eq!(world.env.limits.brief.brief_bytes, 5376);
+    assert_eq!(world.env.limits.brief.budgets.pull, 4608);
+    assert_eq!(world.env.limits.brief.brief_bytes, 9984);
     world.sign_in();
     world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
     let mut chats = Vec::new();

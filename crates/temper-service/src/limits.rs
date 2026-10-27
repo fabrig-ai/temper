@@ -257,7 +257,7 @@ const ROOT: Root = Root {
         // At least row_bound, including forge.client.answer_bytes: the root's worst case.
         transcript_bytes: 65_536,
         // At least brief.brief_bytes and jig small people.words: the root's worst case.
-        result_bytes: 8192,
+        result_bytes: 9984,
         // Run charter carrier in the root's worst case; jig small core.run_bytes.
         run_bytes: 16_384,
     },
@@ -294,8 +294,9 @@ const ROOT: Root = Root {
             ci: 128,
             // Reviews section's bytes, from the root world.
             reviews: 128,
-            // Pull section's bytes, from the root world.
-            pull: 128,
+            // A review receives a pull's title, body, files and diff, within the
+            // same read bound as the task section (domain/forge.md, 8.3).
+            pull: 4608,
             // Attempts section's bytes, from the root world.
             attempts: 128,
             // Plan section's bytes, from the root world.
@@ -303,8 +304,8 @@ const ROOT: Root = Root {
             // Notes section's bytes, from the root world.
             notes: 64,
         },
-        // Assembled brief bytes: the task section and room for the others.
-        brief_bytes: 5376,
+        // Whole task and pull sections, with the existing 768 bytes for other context.
+        brief_bytes: 9984,
         // Outlast sequential forge reads and a retry; bound a stuck connector (domain/root.md, 10).
         gather: Duration::from_secs(30),
     },

@@ -168,7 +168,7 @@ fn assert_cut_review(world: &ClientWorld, client: ClientId) {
     assert!(document.spec.specification.words.cut, "long review words are marked cut");
     assert_eq!(
         document.spec.specification.words.bytes.bytes(),
-        b"Review this change at the named head\nVerdict 1 approves; verdict"
+        b"Review this change at the named head\nPull request: #2\nBranch: te"
     );
 }
 
