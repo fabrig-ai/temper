@@ -79,7 +79,7 @@ pub struct Page {
 
 /// `index`, then the concepts, walks, recipes, reference pages and guides, each by name.
 #[expect(clippy::disallowed_macros, reason = "pages compile their single Markdown source as static data")]
-pub static PAGES: [Page; 36] = [
+pub static PAGES: [Page; 37] = [
     Page {
         name: "index",
         kind: Kind::Index,
@@ -121,6 +121,13 @@ pub static PAGES: [Page; 36] = [
         title: "Goals",
         summary: "A goal is a tracked task: work given a numeric priority, which orders the goals' listing and the work waiting for resources, and whose tree is its plan.",
         text: include_str!("../../../docs/help/goal.md"),
+    },
+    Page {
+        name: "landing",
+        kind: Kind::Concept,
+        title: "landing",
+        summary: "A landing is how a project that lands by turn lands a change: its candidate is proved by each gate's receipt, then its main is fast-forwarded to it.",
+        text: include_str!("../../../docs/help/landing.md"),
     },
     Page {
         name: "landing-rule",
@@ -200,13 +207,6 @@ pub static PAGES: [Page; 36] = [
         text: include_str!("../../../docs/help/server.md"),
     },
     Page {
-        name: "landing",
-        kind: Kind::Concept,
-        title: "landing",
-        summary: "A landing is how a project that lands by turn lands a change: its candidate is proved by each gate's receipt, then its main is fast-forwarded to it.",
-        text: include_str!("../../../docs/help/landing.md"),
-    },
-    Page {
         name: "commands",
         kind: Kind::Reference,
         title: "temper's commands",
@@ -282,6 +282,13 @@ pub static PAGES: [Page; 36] = [
         title: "temper ctl change",
         summary: "Changes: read a change's way to landing.",
         text: include_str!("../../../docs/help/reference/ctl-change.md"),
+    },
+    Page {
+        name: "ctl-landing",
+        kind: Kind::Reference,
+        title: "temper ctl landing",
+        summary: "Landings: read one or a project's landings.",
+        text: include_str!("../../../docs/help/reference/ctl-landing.md"),
     },
     Page {
         name: "ctl-repository",
