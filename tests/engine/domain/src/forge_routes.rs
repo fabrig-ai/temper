@@ -57,7 +57,7 @@ pub struct World {
     slow_brief_reads: bool,
     /// A branch whose reads take twenty seconds, each decided when it is sent.
     pub slow_branch: Option<Box<[u8]>>,
-    owner_gate: bool,
+    gate: paths::Gate,
     pub held_reads: Option<Vec<engine::Request>>,
     pub merges: u32,
     /// Hold decoded write answers after the independent forge has made the effect.
@@ -588,7 +588,7 @@ impl World {
             fail_job_reads: false,
             slow_brief_reads: false,
             slow_branch: None,
-            owner_gate,
+            gate,
             held_reads: None,
             hold_write_answers: None,
             held_write_answers: Vec::new(),
@@ -631,27 +631,15 @@ impl World {
     pub fn restart(&mut self, with_read: bool, with_change: bool) {
         assert!(self.store.pending.is_empty(), "the chosen cut resolves store uncertainty first");
         assert!(self.pending.is_empty(), "old API terminals are drained at this cut");
-        let mut fresh = if self.owner_gate {
-            Self::configured_brief(
-                with_read,
-                with_change,
-                false,
-                0,
-                paths::Gate { owner: true, ..paths::Gate::default() },
-                None,
-                Some(self.env.limits.brief),
-            )
-        } else {
-            Self::configured_brief(
-                with_read,
-                with_change,
-                false,
-                1000,
-                paths::Gate::default(),
-                None,
-                Some(self.env.limits.brief),
-            )
-        };
+        let mut fresh = Self::configured_brief(
+            with_read,
+            with_change,
+            false,
+            if self.gate.owner { 0 } else { 1000 },
+            self.gate,
+            None,
+            Some(self.env.limits.brief),
+        );
         std::mem::swap(&mut self.root, &mut fresh.root);
         std::mem::swap(&mut self.out, &mut fresh.out);
         self.events.clear();
