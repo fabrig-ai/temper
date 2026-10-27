@@ -679,6 +679,8 @@ fn a_chats_two_kib_change_lands_with_its_words_whole_in_the_producers_brief() {
             commit: head,
             context: b"build".as_slice().into(),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     let event = world.protocol.answer(
