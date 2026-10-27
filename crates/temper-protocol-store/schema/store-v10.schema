@@ -58,11 +58,17 @@ record Post { number: u64 key: bytes 1048576 body: bytes 1048576 }
 record PostReview { number: u64 key: bytes 1048576 verdict: Verdict body: bytes 1048576 }
 record Edit { number: u64 title: option bytes 1048576 body: option bytes 1048576 }
 record SetReviewers { number: u64 reviewers: list 65536 u64 }
-record MergeWrite { number: u64 head: fixed 32 }
-record SetStatus { commit: fixed 32 context: bytes 1048576 status: Check }
+record JobAttempt { head: fixed 32 run: u64 job: u64 attempt: u32 }
+enum MergeHow { style, fast_forward_only }
+enum UpdateStyle { merge, rebase }
+record MergeWrite { number: u64 head: fixed 32 how: MergeHow }
+record UpdateWrite { number: u64 style: UpdateStyle }
+record DispatchInput { name: bytes 255 value: bytes 1048576 }
+record DispatchWrite { workflow: bytes 255 branch: bytes 4096 inputs: list 32 DispatchInput }
+record SetStatus { commit: fixed 32 context: bytes 1048576 status: Check description: bytes 140 link: bytes 2048 }
 record CreateBranch { branch: bytes 1048576 commit: fixed 32 }
 record DeleteBranch { branch: bytes 1048576 }
-enum Write { create_issue: CreateIssue, open_pull: OpenPull, post: Post, review: PostReview, edit: Edit, set_reviewers: SetReviewers, close: Number, reopen: Number, merge: MergeWrite, update: Number, status: SetStatus, create_branch: CreateBranch, delete_branch: DeleteBranch }
+enum Write { create_issue: CreateIssue, open_pull: OpenPull, post: Post, review: PostReview, edit: Edit, set_reviewers: SetReviewers, close: Number, reopen: Number, merge: MergeWrite, update: UpdateWrite, status: SetStatus, create_branch: CreateBranch, delete_branch: DeleteBranch, dispatch: DispatchWrite, rerun: JobAttempt }
 record MergeCondition { base: bytes 1048576 }
 record UpdateCondition { head: fixed 32 base: fixed 32 }
 enum Condition { none, merge: MergeCondition, update: UpdateCondition, review: Commit }
@@ -84,7 +90,6 @@ enum Outcome { made: OutcomeMade, failed: ErrorValue, raced: OutcomeRaced, uncer
 enum Permission { none, read, write, admin }
 enum BranchCreation { created, exists }
 record Pull { reviewers: list 65536 u64 number: u64 state: ItemState head: bytes 1048576 base: bytes 1048576 commit: fixed 32 base_commit: option fixed 32 merged: option fixed 32 mergeable: bool ci: Ci }
-record JobAttempt { head: fixed 32 run: u64 job: u64 attempt: u32 }
 record Step { number: u32 name: bytes 1048576 }
 record JobAnswer { attempt: JobAttempt step: option Step log: bytes 1048576 truncated: bool }
 record FileAnswer { head: fixed 32 path: bytes 1048576 bytes: bytes 1048576 truncated: bool }

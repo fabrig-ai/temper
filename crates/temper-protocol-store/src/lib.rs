@@ -58,6 +58,13 @@ pub fn bounds(forge: &temper_engine_domain_forge::Limits, change_words: u32) -> 
         // A change retains its task's spec, independently of forge operation bytes.
         change_row_title: change_words,
         change_row_body: change_words,
+        dispatch_input_name: 255,
+        dispatch_input_value: forge.client.op_bytes,
+        dispatch_write_workflow: 255,
+        dispatch_write_branch: forge.name_bytes,
+        dispatch_write_inputs: 32,
+        set_status_description: 140,
+        set_status_link: 2048,
         create_issue_key: forge.client.op_bytes,
         create_issue_title: forge.client.op_bytes,
         create_issue_body: forge.client.op_bytes,
