@@ -36,12 +36,9 @@ fn choice_cards(tree: &skein_ui::Tree) -> Vec<&[u8]> {
 }
 
 #[test]
-fn the_welcome_leaves_a_configured_admin_forgejo_to_connect_a_forge() {
+fn the_welcome_leaves_other_forgejos_to_connect_a_forge() {
     for (address, cards) in [
-        (
-            Address::Welcome { step: Step::Forge { forge: None } },
-            ["GitHub", "Forgejo on this machine", "A Forgejo elsewhere"].as_slice(),
-        ),
+        (Address::Welcome { step: Step::Forge { forge: None } }, ["GitHub", "Forgejo on this machine"].as_slice()),
         (
             Address::ConnectForge { forge: None },
             ["GitHub", "Forgejo on this machine", "Forgejo at forge 4", "A Forgejo elsewhere"].as_slice(),
@@ -547,6 +544,9 @@ fn selected_forge_choices_have_one_back_to_choose() {
             press(&root, Role::Link, "‹ Back"),
             d::Action::Pages(pages::Act::Go { address: Address::Welcome { step: Step::Forge { forge: None } } })
         );
+        if choice == d::Choice::Elsewhere {
+            node(view.tree(), Role::Heading { level: 2 }, "A Forgejo elsewhere");
+        }
         if choice == d::Choice::Forge(2) {
             node(view.tree(), Role::Heading { level: 2 }, "An App of your own");
             assert!(f::find(view.tree(), Role::Heading { level: 2 }, b"GitHub").is_none());

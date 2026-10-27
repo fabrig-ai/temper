@@ -49,7 +49,21 @@ fn the_flow_shows_the_step_its_row_is_at() {
     }
     assert_eq!(connect::step(None, &rows(C::NotSetUp), None), Shown::Choose);
     assert_eq!(connect::step(Some(Choice::Forge(9)), &rows(C::NotSetUp), None), Shown::Choose);
-    assert_eq!(connect::step(Some(Choice::Elsewhere), &State::Unknown, None), Shown::Details(Choice::Elsewhere));
+    // Leaving the elsewhere card off the welcome does not retire its address.
+    for address in [
+        Address::Welcome { step: Step::Forge { forge: Some(Choice::Elsewhere) } },
+        Address::ConnectForge { forge: Some(Choice::Elsewhere) },
+    ] {
+        let Place::Address(parsed) = crate::address::parse(&crate::address::print(&address)) else {
+            panic!("forge address");
+        };
+        assert_eq!(parsed, address);
+        let choice = match parsed {
+            Address::Welcome { step: Step::Forge { forge } } | Address::ConnectForge { forge } => forge,
+            _ => panic!("forge choice"),
+        };
+        assert_eq!(connect::step(choice, &State::Unknown, None), Shown::Details(Choice::Elsewhere));
+    }
     let demo = forge::family::demo(&demo::answer(b"title"), &w::CEILINGS).unwrap();
     assert_eq!(connect::step(Some(Choice::Forge(demo.forge)), &rows(C::NotSetUp), Some(&demo)), Shown::Choose);
     let github = State::Rows(Box::new([row(2, Kind::GitHub, Mode::Managed, C::NotConnected, Offer::NotOffered)]));

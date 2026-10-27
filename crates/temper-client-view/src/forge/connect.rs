@@ -200,7 +200,7 @@ fn choose(b: &mut Builder, root: &Domain, w: &Words, bindings: &mut Bindings, fo
             && let Some(row) = connect::row(number, root.forges(), root.forge().demo())
             && row.admin
         {
-            // The welcome draws its mockup's three choices; a configured admin
+            // The welcome draws its mockup's two choices; a configured admin
             // Forgejo's card is Connect a forge's alone (client/forge.md, 5.4).
             if let Place::Welcome = place {
                 continue;
@@ -219,6 +219,10 @@ fn choose(b: &mut Builder, root: &Domain, w: &Words, bindings: &mut Bindings, fo
         }
         let (heading, words, note, action) = match *choice {
             Choice::Elsewhere => {
+                // Its address still opens Details on either flow (client/forge.md, 5.4).
+                if let Place::Welcome = place {
+                    continue;
+                }
                 (Word::ForgeElsewhere, Word::ForgeElsewhereDescription, Word::ForgeElsewhereTime, Word::ForgeShowHow)
             }
             Choice::Forge(number) => {

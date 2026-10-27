@@ -332,9 +332,9 @@ fn the_welcomes_forge_step_is_choose_and_details() {
         rows(w::Connection::NotSetUp, w::Offer::Offered),
     );
     assert_eq!(
-        press(&root, Role::Link, b"Show how"),
+        press(&root, Role::Link, b"Choose"),
         d::Action::Pages(pages::Act::Go {
-            address: Address::Welcome { step: Step::Forge { forge: Some(Choice::Elsewhere) } }
+            address: Address::Welcome { step: Step::Forge { forge: Some(Choice::Forge(HERE)) } }
         })
     );
     f::root_event(

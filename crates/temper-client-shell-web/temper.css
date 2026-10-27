@@ -890,6 +890,8 @@ body > noscript, #app:not(:empty):not(:has(*)) { margin-top: 213px; }
 .temper-flow-step[aria-current] { border-color: var(--temper-accent); color: var(--temper-accent-dark); font-weight: 700; }
 .temper-flow-done { border-color: var(--temper-green); color: var(--temper-green); }
 .temper-flow-card { border: 1px solid var(--temper-line); border-radius: 5.42px; background: var(--temper-paper); padding: 21.67px; margin-bottom: 15.17px; }
+/* The welcome's Forge step: its two choices share the row, as the welcome's own two cards do. */
+@media (min-width: 761px) { .temper-welcome .temper-flow-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .temper-welcome .temper-flow-card { border-radius: 9.75px; }
 .temper-flow-card h2 { margin-top: 0; }
 .temper-flow-card :is(p, :where(div.temper-flow-muted, div.temper-flow-subtitle)) { font-size: 11.92px; line-height: 1.6; }
