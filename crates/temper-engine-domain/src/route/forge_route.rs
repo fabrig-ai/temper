@@ -1798,8 +1798,24 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
             // The forge consumes this before starting any asynchronous reads.
             released: match (domain.forge.change(task), domain.core.tasks.task(task)) {
                 (Some(change), Some(task)) => {
-                    matches!(change.change.state, forge_change::State::Held { .. })
-                        && task.due_reason == tasks::Why::Released
+                    let held = match &change.change.state {
+                        forge_change::State::Held { .. } => true,
+                        forge_change::State::Producing { .. }
+                        | forge_change::State::Opening { .. }
+                        | forge_change::State::Recreating { .. }
+                        | forge_change::State::Reopening { .. }
+                        | forge_change::State::Checking { .. }
+                        | forge_change::State::Gating { .. }
+                        | forge_change::State::Queued { .. }
+                        | forge_change::State::First { .. }
+                        | forge_change::State::Updating { .. }
+                        | forge_change::State::Resolving { .. }
+                        | forge_change::State::Repairing { .. }
+                        | forge_change::State::Landing { .. }
+                        | forge_change::State::Landed { .. }
+                        | forge_change::State::Ended => false,
+                    };
+                    held && task.due_reason == tasks::Why::Released
                 }
                 _ => false,
             },
