@@ -158,6 +158,13 @@ pub static PAGES: [Page; 50] = [
         text: include_str!("../../../docs/help/inbox.md"),
     },
     Page {
+        name: "landing",
+        kind: Kind::Concept,
+        title: "landing",
+        summary: "A landing is how a project that lands by turn lands a change: its candidate is proved by each gate's receipt, then its main is fast-forwarded to it.",
+        text: include_str!("../../../docs/help/landing.md"),
+    },
+    Page {
         name: "landing-rule",
         kind: Kind::Concept,
         title: "Landing rule",
@@ -277,13 +284,6 @@ pub static PAGES: [Page; 50] = [
         text: include_str!("../../../docs/help/weekly-budget.md"),
     },
     Page {
-        name: "landing",
-        kind: Kind::Concept,
-        title: "landing",
-        summary: "A landing is how a project that lands by turn lands a change: its candidate is proved by each gate's receipt, then its main is fast-forwarded to it.",
-        text: include_str!("../../../docs/help/landing.md"),
-    },
-    Page {
         name: "commands",
         kind: Kind::Reference,
         title: "temper's commands",
@@ -359,6 +359,13 @@ pub static PAGES: [Page; 50] = [
         title: "temper ctl change",
         summary: "Changes: read a change's way to landing.",
         text: include_str!("../../../docs/help/reference/ctl-change.md"),
+    },
+    Page {
+        name: "ctl-landing",
+        kind: Kind::Reference,
+        title: "temper ctl landing",
+        summary: "Landings: read one or a project's landings.",
+        text: include_str!("../../../docs/help/reference/ctl-landing.md"),
     },
     Page {
         name: "ctl-repository",
