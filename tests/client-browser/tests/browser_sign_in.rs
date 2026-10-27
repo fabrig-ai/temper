@@ -7,40 +7,25 @@ use skein_ui::Role;
 use temper_client_browser_world::{FIRST_CHAT_ADDRESS, Tier, WITHIN, first_chat};
 
 #[test]
-fn the_printed_link_signs_in() {
-    let tier = Tier::new("printed-link");
-    let welcome = Find::exactly_named(Role::Heading { level: 1 }, b"Welcome to temper");
-    let mut script = Script::new(Box::new([
-        Step::Person(PersonStep::See { find: welcome, within: WITHIN }),
-        Step::Person(PersonStep::See { find: Find::exactly_named(Role::Link, b"Set up temper"), within: WITHIN }),
-        Step::Address(Box::from(b"/welcome".as_slice())),
-    ]));
-    assert_eq!(Harness::new(tier.setup()).run(&mut [&mut script]), Outcome::Done);
-}
-
-#[test]
-fn a_reload_on_a_chat_signs_in_by_its_cookie() {
-    let tier = Tier::new("reload-on-a-chat").with_model();
+fn the_link_signs_in_then_the_cookie_and_a_spent_link_is_refused() {
+    let tier = Tier::new("link-cookie-spent").with_model();
     let see = |find| Step::Person(PersonStep::See { find, within: WITHIN });
-    let mut steps = temper_client_browser_world::start_chat(b"Hello");
+    let mut steps = vec![
+        see(Find::exactly_named(Role::Heading { level: 1 }, b"Welcome to temper")),
+        see(Find::exactly_named(Role::Link, b"Set up temper")),
+        Step::Address(Box::from(b"/welcome".as_slice())),
+    ];
+    steps.extend(temper_client_browser_world::start_chat(b"Hello"));
     steps.extend([
         Step::Person(PersonStep::Reload),
         see(first_chat(b"Hello")),
         see(tier.states().live),
         Step::Address(Box::from(FIRST_CHAT_ADDRESS)),
+        // Reopen makes a fresh browser without the cookie to spend the original link again.
+        Step::Reopen,
+        see(tier.states().signed_out),
+        Step::Address(Box::from(b"/welcome".as_slice())),
     ]);
     let mut script = Script::new(steps.into_boxed_slice());
-    assert_eq!(Harness::new(tier.setup()).run(&mut [&mut script]), Outcome::Done);
-}
-
-#[test]
-fn a_spent_link_shows_the_signed_out_words() {
-    let tier = Tier::new("spent-link");
-    let mut script = Script::new(Box::new([
-        Step::Person(PersonStep::See { find: Find::exactly_named(Role::Link, b"Set up temper"), within: WITHIN }),
-        Step::Reopen,
-        Step::Person(PersonStep::See { find: tier.states().signed_out, within: WITHIN }),
-        Step::Address(Box::from(b"/welcome".as_slice())),
-    ]));
     assert_eq!(Harness::new(tier.setup()).run(&mut [&mut script]), Outcome::Done);
 }
