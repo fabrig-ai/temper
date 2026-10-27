@@ -58,9 +58,10 @@ fn the_flow_shows_the_step_its_row_is_at() {
             panic!("forge address");
         };
         assert_eq!(parsed, address);
-        let choice = match parsed {
-            Address::Welcome { step: Step::Forge { forge } } | Address::ConnectForge { forge } => forge,
-            _ => panic!("forge choice"),
+        let (Address::Welcome { step: Step::Forge { forge: choice } } | Address::ConnectForge { forge: choice }) =
+            parsed
+        else {
+            panic!("forge choice");
         };
         assert_eq!(connect::step(choice, &State::Unknown, None), Shown::Details(Choice::Elsewhere));
     }
