@@ -89,28 +89,10 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
     if let Some(why) = facts.drift {
         return hold(next, why);
     }
-    match facts.pull {
-        Pull::Closed => match &change.state {
-            State::Reopening { .. } | State::Recreating { .. } => {}
-            State::Producing { .. }
-            | State::Opening { .. }
-            | State::Checking { .. }
-            | State::Gating { .. }
-            | State::Queued { .. }
-            | State::First { .. }
-            | State::Ready { .. }
-            | State::Preparing { .. }
-            | State::Updating { .. }
-            | State::Resolving { .. }
-            | State::Repairing { .. }
-            | State::Landing { .. }
-            | State::Landed { .. }
-            | State::Ended
-            | State::Held { .. } => return hold(next, Hold::PullClosed),
-        },
-        // The connector reports a changed target branch through facts.drift.
-        // A pull's base commit can lag the landing tip, including our own merge.
-        Pull::Open { .. } | Pull::Missing | Pull::Merged { .. } => {}
+    // The connector reports a changed target branch through facts.drift.
+    // A pull's base commit can lag the landing tip, including our own merge.
+    if facts.pull == Pull::Closed && closed_pull_holds(&change.state) {
+        return hold(next, Hold::PullClosed);
     }
     match &change.state {
         State::Producing { requested } => producing(next, *requested, facts, standing, now, limits),
@@ -132,6 +114,27 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         State::Repairing { requested, why } => repairing(next, *requested, *why, facts, standing, now, limits),
         State::Landing { head } => landing(next, *head, standing, now, limits),
         State::Landed { .. } | State::Ended | State::Held { .. } => unreachable!("terminal states returned above"),
+    }
+}
+
+fn closed_pull_holds(state: &State) -> bool {
+    match state {
+        State::Reopening { .. } | State::Recreating { .. } => false,
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Ready { .. }
+        | State::Preparing { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Landed { .. }
+        | State::Ended
+        | State::Held { .. } => true,
     }
 }
 
