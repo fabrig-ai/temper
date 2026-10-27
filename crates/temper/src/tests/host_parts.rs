@@ -1,4 +1,4 @@
-//! Stock charters meet smith's actual derived host-part bound before a turn.
+//! Measure stock charters at smith's entrance and retain typed host-part refusals.
 use jig_domain_tasks as tasks;
 use skein_lib::{Env, Queue, ReplyTo, Time, Token, Wall};
 use smith_domain_run as run;
@@ -57,10 +57,15 @@ fn assignment(number: u32, settings: bool) -> engine::Assignment {
                 kind: jig_domain_fleet::HostKind::Worker,
             },
             policy,
-            contract: if number == 1 {
-                tasks::Contract::Report { words: 512 }
-            } else {
-                tasks::Contract::Change { connector: 1, kind: 2, words: 512 }
+            contract: match number {
+                1 => tasks::Contract::Report { words: 512 },
+                4 => tasks::Contract::Verdict {
+                    choices: Box::new([
+                        tasks::Verdict { code: 1, words: 512, fields: Box::new([]), followups: 0 },
+                        tasks::Verdict { code: 2, words: 512, fields: Box::new([]), followups: 0 },
+                    ]),
+                },
+                _ => tasks::Contract::Change { connector: 1, kind: 2, words: 512 },
             },
             authority,
             budget: charter.spend,
@@ -77,8 +82,17 @@ fn assignment(number: u32, settings: bool) -> engine::Assignment {
     }
 }
 
-fn enter(number: u32, settings: bool, limits: &run::Limits, bound: u64) -> bool {
-    let charter = temper_engine_smith::charter(&assignment(number, settings));
+fn entrance(
+    assignment: &engine::Assignment,
+    sections: &[run::Section],
+    limits: &run::Limits,
+    bound: u64,
+) -> run::Request {
+    let mut charter = temper_engine_smith::charter(assignment);
+    charter.brief.sections = sections
+        .iter()
+        .map(|section| run::Section { title: section.title.clone(), text: section.text.clone() })
+        .collect();
     let limits = run::Limits { host_part: bound, ..*limits };
     let mut domain = run::Domain::new(&limits, 0);
     let mut out = Queue::with_capacity(run::MAX_OUT);
@@ -98,7 +112,7 @@ fn enter(number: u32, settings: bool, limits: &run::Limits, bound: u64) -> bool 
                     name: b"work".as_slice().into(),
                     host: b"/workspace".as_slice().into(),
                     root: Token::new(1),
-                    writable: true,
+                    writable: assignment.run.policy.modify,
                     git: true,
                     conflicts: Box::new([]),
                 }]),
@@ -108,7 +122,11 @@ fn enter(number: u32, settings: bool, limits: &run::Limits, bound: u64) -> bool 
         },
         &mut out,
     );
-    let request = out.pop().expect("entrance answers before a turn");
+    out.pop().expect("entrance answers before a turn")
+}
+
+fn enter(assignment: &engine::Assignment, sections: &[run::Section], limits: &run::Limits, bound: u64) -> bool {
+    let request = entrance(assignment, sections, limits, bound);
     if let run::Request::Admitted { .. } = request {
         return true;
     }
@@ -123,29 +141,105 @@ fn enter(number: u32, settings: bool, limits: &run::Limits, bound: u64) -> bool 
     panic!("unexpected entrance: {request:?}");
 }
 
+fn measure(number: u32, settings: bool, name: &str, sections: &[run::Section], limits: &run::Limits) {
+    let assignment = assignment(number, settings);
+    let charter = temper_engine_smith::charter(&assignment);
+    let tools = charter.grants.host_tools.len();
+    assert_eq!(
+        tools,
+        if number == 4 {
+            19
+        } else if settings {
+            39
+        } else {
+            37
+        }
+    );
+    let admitted = enter(&assignment, sections, limits, limits.host_part);
+    let (mut lower, mut upper) = (0, limits.host_part);
+    // Vary only this effect-free harness's bound to measure a refused charter;
+    // no production limit changes. The smallest admitted bound is its byte sum.
+    while !enter(&assignment, sections, limits, upper) {
+        upper = upper.checked_mul(2).expect("bounded fixture host part");
+    }
+    while lower < upper {
+        let middle = lower + (upper - lower) / 2;
+        if enter(&assignment, sections, limits, middle) {
+            upper = middle;
+        } else {
+            lower = middle + 1;
+        }
+    }
+    assert!(enter(&assignment, sections, limits, upper));
+    assert!(!enter(&assignment, sections, limits, upper - 1));
+    let brief: usize = sections.iter().map(|section| section.text.len()).sum();
+    eprintln!(
+        "stock charter {number} {name}: {upper}/{} bytes, {tools} tools, {} sections/{brief} body bytes, admitted={admitted}; one {} git directory, no guide body",
+        limits.host_part,
+        sections.len(),
+        if assignment.run.policy.modify { "writable" } else { "read-only" }
+    );
+}
+
+fn largest_brief() -> Box<[run::Section]> {
+    let limits = temper_service::limits::profile(temper_service::limits::Profile::Small).root.brief;
+    assert_eq!(limits.sections, 3);
+    let mut left = usize::try_from(limits.brief_bytes).expect("small brief");
+    let mut sections = Vec::new();
+    // Longest three distinct titles the root's section translation emits.
+    for (index, title) in [b"Earlier attempts".as_slice(), b"Transcript tail", b"Dependencies"].into_iter().enumerate()
+    {
+        let length = usize::try_from(limits.read_bytes).expect("small read").min(left - (2 - index));
+        left -= length;
+        sections.push(run::Section { title: title.into(), text: vec![b'x'; length].into_boxed_slice() });
+    }
+    assert_eq!(left, 0);
+    sections.into_boxed_slice()
+}
+
+fn review_of_35_writes() -> Box<[run::Section]> {
+    // A controlled review brief, not a replay of the QA repository's contents.
+    let mut task = String::from("Review these 35 writes at the named head:\n");
+    for number in 0..35 {
+        use std::fmt::Write;
+        writeln!(task, "src/review_{number:02}.rs: replace old() with checked_new().").expect("fixture string");
+    }
+    Box::new([
+        run::Section { title: b"Task".as_slice().into(), text: task.into_bytes().into_boxed_slice() },
+        run::Section { title: b"CI".as_slice().into(), text: b"Required checks passed.\n".as_slice().into() },
+        run::Section {
+            title: b"Pull request".as_slice().into(),
+            text: b"35 files changed at the pinned head; inspect the diff before deciding.\n".as_slice().into(),
+        },
+    ])
+}
+
 #[test]
-fn stock_producer_and_chat_fit_the_derived_host_part() {
+fn stock_charters_meet_smith_with_empty_full_and_35_write_briefs() {
     let scratch = skein_scratch::Scratch::new("stock-host-part");
     let limits = limits(scratch.path());
-    for (number, settings) in [(2, false), (1, false), (1, true)] {
-        let charter = temper_engine_smith::charter(&assignment(number, settings));
-        let tools = charter.grants.host_tools.len();
-        assert_eq!(tools, if settings { 39 } else { 37 });
-        assert!(enter(number, settings, &limits, limits.host_part));
-        let (mut lower, mut upper) = (0, limits.host_part);
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if enter(number, settings, &limits, middle) {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
-        assert!(enter(number, settings, &limits, upper));
-        assert!(!enter(number, settings, &limits, upper - 1));
-        eprintln!(
-            "stock charter {number}: {upper}/{} bytes, {tools} tools, empty brief, one writable git directory, no guide body",
-            limits.host_part
-        );
+    for (number, settings) in [(2, false), (1, false), (1, true), (4, false)] {
+        measure(number, settings, "empty brief", &[], &limits);
     }
+    let largest = largest_brief();
+    measure(4, false, "maximum aggregate brief", &largest, &limits);
+    measure(2, false, "maximum aggregate brief", &largest, &limits);
+    measure(4, false, "synthetic 35-write review brief", &review_of_35_writes(), &limits);
+}
+
+#[test]
+fn a_large_prepared_brief_keeps_the_host_part_hold_reason() {
+    let scratch = skein_scratch::Scratch::new("large-brief-hold");
+    let limits = limits(scratch.path());
+    let run::Request::Answer { answer, .. } =
+        entrance(&assignment(2, false), &largest_brief(), &limits, limits.host_part)
+    else {
+        panic!("the full producer brief exceeds the stock host part")
+    };
+    let terminal = temper_engine_smith::result(answer, None).expect("typed refusal reaches the hold");
+    assert_eq!(
+        terminal.end,
+        tasks::End::Exceeded(tasks::Exceeded { bound: tasks::Bound::HostPart, value: limits.host_part })
+    );
+    assert_eq!((terminal.cumulative, terminal.turns), (0, 0));
 }
