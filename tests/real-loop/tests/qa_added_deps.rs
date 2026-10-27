@@ -164,7 +164,6 @@ fn refusal_fixture() -> forge::Fixture {
     fixture.configure = |value, agent, forge| {
         (landing::kept::fixture().configure)(value, agent, forge);
         // The kept fixture grants delegate + amend (5); cancel adds its bit (8).
-        value["engine"]["rules"]["ceiling"]["tools"] = 13.into();
         for project in value["engine"]["projects"].as_array_mut().expect("projects") {
             project["policy"]["ceiling"]["tools"] = 13.into();
             project["policy"]["roles"][0]["authority"]["tools"] = 13.into();

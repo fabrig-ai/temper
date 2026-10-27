@@ -149,8 +149,7 @@ fn bind_documents(agent: &mut serde_json::Value, config: &mut serde_json::Value,
     let http = format!("http://{address}");
     // These records carry forge destinations and authority patterns. Listeners
     // and the independent LLM destination never participate in this rebinding.
-    for path in ["/application/forges", "/application/landing", "/engine/rules", "/engine/projects", "/engine/policies"]
-    {
+    for path in ["/application/forges", "/application/landing", "/engine/projects"] {
         if let Some(value) = config.pointer_mut(path) {
             bind_forge(value, [(&previous, &address), (&previous_http, &http)]);
         }
@@ -355,32 +354,6 @@ fn stock_document(value: &mut serde_json::Value) {
         value["engine"]["limits"]["overrides"][name] = held.max(count).into();
     }
 }
-/// Stage legacy values for callbacks; only reference cases retain the Document path.
-/// In-scope writers remove these members and pass their own typed defaults.
-pub(crate) fn document_defaults(value: &mut serde_json::Value) {
-    if value["engine"].get("charters").is_some() {
-        return;
-    }
-    let original: serde_json::Value =
-        serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("original fixture");
-    for member in ["charters", "templates", "policies", "rules"] {
-        if let Some(member_value) = original["engine"].get(member) {
-            value["engine"][member] = member_value.clone();
-        }
-    }
-    value["engine"]["charters"][0]["waiting_ms"] = 1.into();
-    value["engine"]["templates"][0]["grace_ms"] = 1.into();
-    value["engine"]["templates"][0]["budget"] = serde_json::json!({"as_allowed":64});
-}
-fn beyond_stock(value: &serde_json::Value) -> bool {
-    value["engine"]["projects"].as_array().expect("projects").iter().any(|project| {
-        let ceiling = &project["policy"]["ceiling"];
-        ceiling["tools"].as_u64().expect("tools") & !1 != 0
-            || ceiling["notes"].as_u64().expect("notes") != 0
-            || ceiling["delegation"]["depth"].as_u64().expect("depth") > 4
-            || ceiling["delegation"]["kinds"].as_array().expect("kinds").iter().any(|kind| kind["kind"] == "role")
-    })
-}
 /// The QA conversation uses stock's requester ending.
 pub fn requester(value: &mut serde_json::Value) {
     value["world_settings"]["requester"] = true.into();
@@ -390,30 +363,9 @@ pub fn listed(value: &mut serde_json::Value) {
     value["world_settings"]["listed"] = true.into();
 }
 pub(crate) fn finish_configuration(directory: &Path, value: &mut serde_json::Value) -> std::io::Result<()> {
+    stock_document(value);
     let flags = value.as_object_mut().expect("configuration").remove("world_settings").unwrap_or(serde_json::json!({}));
-    if flags["own_policy"] == true {
-        value["world_settings"] = flags.clone();
-        stock_document(value);
-        value.as_object_mut().expect("configuration").remove("world_settings");
-        if directory.join("charters").exists() {
-            std::fs::remove_dir(directory.join("charters"))?;
-        }
-        private(&directory.join("world-settings.json"), &serde_json::to_vec(&flags)?)?;
-    } else if beyond_stock(value) {
-        std::fs::create_dir_all(directory.join("charters"))?;
-        std::fs::set_permissions(directory.join("charters"), std::fs::Permissions::from_mode(0o700))?;
-        for (name, bytes) in jig_channel_world::fixtures::files(false).entries.into_boxed() {
-            if name.starts_with(b"charters/") {
-                private(&directory.join(std::str::from_utf8(&name).expect("charter path")), bytes.expose())?;
-            }
-        }
-    } else {
-        if directory.join("charters").exists() {
-            std::fs::remove_dir(directory.join("charters"))?;
-        }
-        stock_document(value);
-        private(&directory.join("world-settings.json"), &serde_json::to_vec(&flags)?)?;
-    }
+    private(&directory.join("world-settings.json"), &serde_json::to_vec(&flags)?)?;
     private(&directory.join("temper.json"), &serde_json::to_vec(value)?)
 }
 #[must_use]
@@ -421,9 +373,6 @@ pub fn setup_items(directory: &Path) -> Option<serde_json::Value> {
     let value: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("temper.json")).expect("deployment document"))
             .expect("deployment JSON");
-    if value["engine"].get("charters").is_some() {
-        return None;
-    }
     let flags = if directory.join("world-settings.json").exists() {
         serde_json::from_slice(&std::fs::read(directory.join("world-settings.json")).expect("fixture flags"))
             .expect("fixture flags JSON")
@@ -473,9 +422,6 @@ pub fn given(directory: &Path) -> temper_service::stock::Given {
     let deployment: serde_json::Value =
         serde_json::from_slice(&std::fs::read(directory.join("temper.json")).expect("deployment document"))
             .expect("deployment JSON");
-    if deployment["engine"].get("charters").is_some() {
-        return temper_service::stock::Given::Stock;
-    }
     let flags = if directory.join("world-settings.json").exists() {
         serde_json::from_slice(&std::fs::read(directory.join("world-settings.json")).expect("world flags"))
             .expect("world flags JSON")
@@ -569,9 +515,7 @@ mod tests {
     ) -> (serde_json::Value, serde_json::Value) {
         let (mut agent, mut config) = documents(Path::new("/fixture"), llm, forge);
         (fixture.configure)(&mut config, &mut agent, forge);
-        if !beyond_stock(&config) {
-            stock_document(&mut config);
-        }
+        stock_document(&mut config);
         turn_bounds::apply(&mut config, turn_bounds::turn_body(&agent));
         (agent, config)
     }

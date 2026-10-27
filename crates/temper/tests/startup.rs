@@ -65,6 +65,30 @@ fn problems_reach_stderr_one_line_each() {
 }
 
 #[test]
+fn a_document_charter_is_refused_naming_temper_ctl_settings() {
+    let scratch = support::Scratch::startup("stored-charters");
+    support::configuration(scratch.path(), &support::Forge::Unreached);
+    let path = scratch.path().join("temper.json");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).expect("configuration bytes")).expect("configuration JSON");
+    document["engine"]["charters"] = serde_json::json!([]);
+    support::write_private(&path, &serde_json::to_vec(&document).expect("configuration JSON"));
+    let ended = std::process::Command::new(skein_scratch::paths::binary("temper"))
+        .arg("serve")
+        .args(support::configuration::flags(scratch.path()))
+        .env_clear()
+        .output()
+        .expect("serve refusal");
+    assert_eq!(ended.status.code(), Some(1));
+    assert!(ended.stdout.is_empty());
+    assert_eq!(
+        ended.stderr,
+        b"temper serve: engine.charters: settings live in the store; read them with temper ctl settings\n"
+    );
+    scratch.remove();
+}
+
+#[test]
 fn an_address_with_no_token_in_the_directory_is_not_signed_in() {
     for (row, token, expected) in [
         ("absent", None, "temper open: not signed in: give the link temper serve printed\n"),

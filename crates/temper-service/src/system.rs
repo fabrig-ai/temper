@@ -191,9 +191,6 @@ impl Service {
         let shared = crate::forge::shared(&settings.limits, &settings.jig.limits.io);
         settings.jig.limits.clients.wire.keyed_value_some =
             limits::client_value_bytes(&settings.jig.limits, &settings.limits);
-        if settings.jig.defaults == jig_protocol_config::Defaults::Document {
-            read_charters(&mut settings)?;
-        }
         let store_limits = store::limits(&limits, &limits.forge, &settings.jig.limits.store)
             .ok_or(start_problem(b"limits", What::Bound))?;
         let max = temper_engine_domain::max_out(&limits);
@@ -792,16 +789,6 @@ fn accounts_driver(
         return Ok(None);
     }
     Ok(Some(accounts::Accounts::new(ACCOUNT_APPLICATION.into(), &settings.jig, seeds, runtime, room, secrets)?))
-}
-fn read_charters(settings: &mut settings::Engine) -> Result<(), Problems> {
-    for charter in &mut settings.jig.charters {
-        charter.policy.instructions = settings
-            .files
-            .contents(&charter.policy.instructions)
-            .ok_or(start_problem(b"charters", What::Unreadable))?
-            .into();
-    }
-    Ok(())
 }
 /// Drive store terminals, account events, one root input and released outputs.
 pub fn iterate(service: &mut Service, now: Time, wall: Wall) {
