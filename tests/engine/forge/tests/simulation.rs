@@ -516,7 +516,7 @@ fn an_aged_low_priority_change_takes_its_turn_ahead_of_later_work() {
     let head52 = temper_engine_forge_world::translate::commit(world.branch(b"temper/52"));
     let mut low = change_row();
     low.pull = Some(pull51);
-    low.priority = 0;
+    low.priority = 10;
     low.change.state = change::State::Queued { head: head51, ready_since: Wall::EPOCH };
     low.change.last_head = Some(head51);
     world.event(top::Event::Change { row: low });
@@ -525,7 +525,7 @@ fn an_aged_low_priority_change_takes_its_turn_ahead_of_later_work() {
     high.change.task = 52;
     high.branch = Box::from(&b"temper/52"[..]);
     high.pull = Some(pull52);
-    high.priority = 10;
+    high.priority = 0;
     high.change.state = change::State::Queued { head: head52, ready_since: Wall::from_nanos(100_000_000_000) };
     high.change.last_head = Some(head52);
     high.change.gates = Box::new([change::Gate {
@@ -1963,7 +1963,7 @@ fn a_waiting_procedure_stepped_twice_on_unchanged_facts_keeps_its_decision_and_s
     front.branch = Box::from(&b"temper/50"[..]);
     front.task = 50;
     front.change.task = 50;
-    front.priority = 100;
+    front.priority = 0;
     front.change.state = change::State::Queued { head: front_head, ready_since: Wall::EPOCH };
     world.event(top::Event::Change { row: front });
     let gates = Box::new([change::GateReport { number: 9, head, status: change::Status::Passed }]);

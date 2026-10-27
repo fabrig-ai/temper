@@ -305,9 +305,9 @@ fn generated_phase_cells_decide_the_same_from_the_same_snapshot() {
 #[test]
 fn queue_age_precedes_later_priority_and_priority_breaks_young_ties() {
     let ready = [
-        Ready { task: 1, priority: 1, since: at(1) },
+        Ready { task: 1, priority: 20, since: at(1) },
         Ready { task: 2, priority: 10, since: at(15) },
-        Ready { task: 3, priority: 20, since: at(17) },
+        Ready { task: 3, priority: 1, since: at(17) },
     ];
     assert_eq!(first(&ready, Duration::from_secs(10), at(20)), Some(1));
     assert_eq!(first(&ready, Duration::from_secs(10), at(18)), Some(1));
@@ -336,7 +336,7 @@ fn generated_queue_order_agrees_with_an_independent_rank_statement() {
             } else if item_aged && item.since != expected.since {
                 item.since < expected.since
             } else if item.priority != expected.priority {
-                item.priority > expected.priority
+                item.priority < expected.priority
             } else if item.since != expected.since {
                 item.since < expected.since
             } else {

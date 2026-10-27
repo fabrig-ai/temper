@@ -101,9 +101,9 @@ fn queued(task: u64, priority: i32, seconds: u64) -> ChangeRow {
 fn queue_place_uses_priority_time_aging_and_the_base_repairs_precedence() {
     type QueueCase = ([(u64, i32, u64); 3], bool, [u64; 3]);
     let cases: [QueueCase; 3] = [
-        ([(51, 1, 95), (52, 9, 96), (53, 1, 90)], false, [52, 53, 51]),
-        ([(51, 1, 60), (52, 9, 96), (53, 1, 90)], false, [51, 52, 53]),
-        ([(51, 1, 95), (52, 9, 96), (53, 1, 90)], true, [51, 52, 53]),
+        ([(51, 9, 95), (52, 1, 96), (53, 9, 90)], false, [52, 53, 51]),
+        ([(51, 9, 60), (52, 1, 96), (53, 9, 90)], false, [51, 52, 53]),
+        ([(51, 9, 95), (52, 1, 96), (53, 9, 90)], true, [51, 52, 53]),
     ];
     for (rows, repair, expected) in cases {
         let mut d = domain();
@@ -155,7 +155,7 @@ fn a_long_queue_counts_every_place_but_carries_only_the_nearest_ahead() {
 #[test]
 fn queue_entry_and_departure_mark_the_nearest_followers_within_the_subject_bound() {
     let mut d = with_row(queued(52, 2, 90));
-    let expected = queued(51, 9, 90);
+    let expected = queued(51, 1, 90);
     let got = outputs(&mut d, Event::Change { row: expected.clone() });
     assert_eq!(
         got.as_ref(),
@@ -280,9 +280,9 @@ fn priority_moves_mark_the_nearest_followers_and_stop_at_the_mark_bound() {
     for task in 1..=u64::from(CHANGES) {
         step(&mut d, &environment, Event::Restore { record: Stored::Change(queued(task, 0, 95)) }, &mut out);
     }
-    d.priority(&environment, u64::from(CHANGES), 10, &mut out);
+    d.priority(&environment, u64::from(CHANGES), -10, &mut out);
     let Some(Request::Save { record: Stored::Change(row), .. }) = out.pop() else { panic!("priority saved") };
-    assert_eq!(row.priority, 10_i32);
+    assert_eq!(row.priority, -10_i32);
     let Some(Request::Marked { tasks }) = out.pop() else { panic!("priority marked") };
     let mut expected = skein_lib::List::with_capacity(MARKED);
     expected.push(u64::from(CHANGES)).expect("own task");
@@ -292,7 +292,7 @@ fn priority_moves_mark_the_nearest_followers_and_stop_at_the_mark_bound() {
     assert_eq!(tasks, expected.into_boxed());
     assert!(out.is_empty());
     // Moving it behind the same followers also invalidates them in their new order.
-    d.priority(&environment, u64::from(CHANGES), -10, &mut out);
+    d.priority(&environment, u64::from(CHANGES), 10, &mut out);
     let Some(Request::Save { .. }) = out.pop() else { panic!("priority saved") };
     let Some(Request::Marked { tasks: moved }) = out.pop() else { panic!("move marked") };
     assert_eq!(moved, tasks);

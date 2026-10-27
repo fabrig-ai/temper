@@ -384,8 +384,7 @@ fn queue_entry_obeys_the_mark_bound_and_a_reopen_reads_the_new_place() {
 
 // domain/forge.md, 9: aging moves an older ready change ahead regardless of its priority.
 #[test]
-#[ignore = "defect outside M1: the landing queue orders the higher priority first (forge-change queue.rs), where domain/forge.md 9 and agent.md 4.3 put the lower first; left to the forge-domain mission (429)"]
-fn aging_moves_an_older_ready_change_ahead_of_a_higher_priority() {
+fn aging_moves_an_older_ready_change_ahead_of_a_lower_priority_number() {
     let (mut driver, sign_in) = driver();
     driver.fire_at(skein_lib::Duration::from_secs(10));
     driver.settle();

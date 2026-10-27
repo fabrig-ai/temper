@@ -2149,7 +2149,8 @@ fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool
         parameters: Box::new([
             repository_parameter,
             base_parameter,
-            tasks::Parameter::Number { name: 5, value: u64::try_from(i32::MAX).expect("positive priority") },
+            // queue_before and queue_first put the base repair first themselves; priority need not claim it.
+            tasks::Parameter::Number { name: 5, value: 0 },
             tasks::Parameter::Number { name: 9, value: 1 },
         ]),
         inputs: Box::new([]),
