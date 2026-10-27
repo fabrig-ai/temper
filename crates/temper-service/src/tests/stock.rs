@@ -134,7 +134,9 @@ fn the_goals_words_survey_before_planning_and_sequence_changes() {
 fn the_goal_and_chat_report_only_the_checks_named_in_the_result() {
     let words = include_str!("../stock/chat.txt");
     assert!(
-        words.contains("report once every change has landed, each as its result says it, naming no check or test it doesn't."),
+        words.contains(
+            "report once every change has landed, each as its result says it, naming no check or test it doesn't."
+        ),
         "the goal names only the checks in the change's result"
     );
     assert!(
