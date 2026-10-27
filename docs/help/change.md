@@ -2,7 +2,7 @@
 
 Kind: concept
 
-A change is a task that writes one repository's branch and lands it: its pull request, CI at its head, its gates, the landing queue or its project's landing, its repairs and the merge, each step as change show prints it.
+A change is a task that writes one repository's branch and lands it: its pull request, CI at its head, its gates, the landing queue, its repairs and the merge, each step as change show prints it.
 
 ## What it is
 
