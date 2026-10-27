@@ -3,7 +3,7 @@
     "limits": {
       "profile": "small",
       "overrides": {
-        "authority.grants": 12,
+        "authority.grants": 16,
         "authority.segments": 8,
         "core.resume_bytes": 1590050,
         "documents.lines": 2,
@@ -12,9 +12,9 @@
         "hub.transcript_bytes": 6360194,
         "hub.turn_bytes": 1590046,
         "hub.turn_queue_bytes": 12720368,
-        "notes.scopes": 15,
+        "notes.scopes": 19,
         "tasks.authority_bytes": 512,
-        "tasks.authority_grants": 12,
+        "tasks.authority_grants": 16,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
         "tasks.hold_segments": 8,
@@ -123,7 +123,7 @@
     "connectors": [
       1
     ],
-    "memory_bytes": 850000000000000,
+    "memory_bytes": 940000000000000,
     "projects": [
       {
         "number": 1,
