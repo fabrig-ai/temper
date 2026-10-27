@@ -1,4 +1,4 @@
-//! The second edition's opening checkpoint (draft/reference-case.md, 2 and 3).
+//! The person's pause and accepted release (draft/reference-case.md, 8.1).
 use temper_real_loop_world::{
     Exit,
     case2::{
