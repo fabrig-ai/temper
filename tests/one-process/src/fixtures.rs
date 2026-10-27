@@ -153,7 +153,7 @@ pub(crate) fn document() -> Vec<u8> {
         ("tasks.hold_bytes", 256),
         ("tasks.funders", 4),
         ("tasks.dependencies", 2),
-        ("tasks.charters", 2),
+        ("tasks.charters", 4),
         ("notes.entries_per_scope", 2),
         ("notes.recalled", 2),
         ("people.holdings", 2),
