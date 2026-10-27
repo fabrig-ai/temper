@@ -143,7 +143,7 @@ fn the_default_is_the_owned_example_so_edited() {
         expected["engine"]["projects"][0]["policy"]["roles"][0]["period_spend"] = json!(202_944_u64);
         expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = json!(101_472_u64);
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
-        expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(8192_u32);
+        expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(12_288_u32);
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.output"] = json!(82_u32);
