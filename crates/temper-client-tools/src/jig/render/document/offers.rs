@@ -131,10 +131,10 @@ pub(super) fn whole(bytes: &[u8], out: &mut Encoder, cut: &mut Cut, window: &mut
     }
 }
 fn whole_text(bytes: &[u8], out: &mut Text, window: &mut Window) {
-    if bytes.len() <= out.room {
+    if bytes.len() <= out.room() {
         out.words(bytes);
     } else {
-        out.left = out.left.checked_add(bytes.len()).expect("bounded document");
+        out.omit(bytes.len());
         window.cut = true;
     }
 }
@@ -188,7 +188,7 @@ pub(super) fn text(me: &c::Me, limits: &Limits, out: &mut Text) {
     out.put(b"\nkey_bytes: ");
     out.number(u64::from(me.key_bytes));
     out.put(b"\ncut: ");
-    flag(window.cut || out.left > 0, out);
+    flag(window.cut || out.left() > 0, out);
     out.put(b"\n");
 }
 
@@ -204,11 +204,10 @@ mod tests {
             let (printed, cut) = json_whole(bytes, bytes.len());
             assert_eq!(printed.as_ref(), *json);
             assert!(!cut);
-            let mut text = Text::measure();
-            text.room = bytes.len();
+            let mut text = Text::with_room(bytes.len());
             let mut window = Window { left: 0, cut: false };
             whole_text(bytes, &mut text, &mut window);
-            assert_eq!(text.written, bytes.len());
+            assert_eq!(text.written(), bytes.len());
             assert!(!window.cut);
         }
     }
@@ -219,12 +218,11 @@ mod tests {
             let (printed, cut) = json_whole(bytes, room);
             assert_eq!(printed.as_ref(), b"null");
             assert!(cut);
-            let mut text = Text::measure();
-            text.room = room;
+            let mut text = Text::with_room(room);
             let mut window = Window { left: 0, cut: false };
             whole_text(bytes, &mut text, &mut window);
-            assert_eq!(text.written, 0);
-            assert_eq!(text.left, bytes.len());
+            assert_eq!(text.written(), 0);
+            assert_eq!(text.left(), bytes.len());
             assert!(window.cut);
         }
     }
