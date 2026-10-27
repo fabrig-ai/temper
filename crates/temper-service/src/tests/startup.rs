@@ -2316,7 +2316,9 @@ fn a_turn_project_on_github_is_refused_at_start() {
 }
 
 fn turn_projects(project: u32) -> String {
-    format!(r#"[{{"project":{project},"rules":[],"by":"turn","gates":[{{"forge":1,"repository":2,"gates":[{{"name":"gate","workflow":"gate.yml","ignored":["docs"],"blocking":true}}]}}]}}]"#)
+    format!(
+        r#"[{{"project":{project},"rules":[],"by":"turn","gates":[{{"forge":1,"repository":2,"gates":[{{"name":"gate","workflow":"gate.yml","ignored":["docs"],"blocking":true}}]}}]}}]"#
+    )
 }
 fn turn_configuration(project: u32) -> (Option<application::Members>, Problems) {
     let jig = fixtures::engine().jig;
@@ -2334,10 +2336,17 @@ fn turn_configuration_can_name_a_project_adopted_after_the_seed() {
     assert_eq!(landing.by, temper_engine_domain::Way::Turn);
     assert_eq!(landing.repositories[0].gates[0].workflow.as_ref(), b"gate.yml");
     assert!(!members.landing.projects.contains_key(&ADOPTED));
-    let document = fixtures::with(&fixtures::document(), b"application.landing.projects", turn_projects(ADOPTED).as_bytes());
+    let document =
+        fixtures::with(&fixtures::document(), b"application.landing.projects", turn_projects(ADOPTED).as_bytes());
     let started = crate::startup(
-        &document, &config::Directories::working(), &fixtures::files(), &fixtures::startup_agent(),
-        &fixtures::seeds(), None, fixtures::worker_runtime(), fixtures::forge_runtime(),
+        &document,
+        &config::Directories::working(),
+        &fixtures::files(),
+        &fixtures::startup_agent(),
+        &fixtures::seeds(),
+        None,
+        fixtures::worker_runtime(),
+        fixtures::forge_runtime(),
     );
     if let Err(problems) = started {
         panic!("restored turn startup: {}", core::str::from_utf8(&lines(&problems)).unwrap());
