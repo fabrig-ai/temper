@@ -167,6 +167,7 @@ fn seed_repository(domain: &mut domain::Domain, config: &domain::Config) {
         domain,
         config,
         domain::api::Setup {
+            workflows: Box::new([]),
             id: REPOSITORY,
             name: FULL_NAME.into(),
             default: b"main".as_slice().into(),
@@ -191,7 +192,11 @@ fn seed_repository(domain: &mut domain::Domain, config: &domain::Config) {
 // Adoption reads metadata and protection, without changing repository contents.
 fn domain_config() -> domain::Config {
     domain::Config {
+        setup_faults: 0,
+        lost: 0,
         limits: domain::Limits {
+            workflows: 0,
+            workflow_runs: 0,
             repositories: 1,
             users: 4,
             labels: 1,

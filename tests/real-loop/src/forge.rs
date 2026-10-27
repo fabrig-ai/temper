@@ -20,6 +20,7 @@ pub fn fixture() -> Fixture {
 }
 fn setup() -> api::Setup {
     api::Setup {
+        workflows: Box::new([]),
         id: ID,
         name: b"acme/app".as_slice().into(),
         default: b"main".as_slice().into(),
