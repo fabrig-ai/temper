@@ -137,11 +137,13 @@ fn ctl_scratch(case: &str) -> support::Scratch {
 }
 
 #[test]
-fn temper_ctl_help_prints_the_guide() {
+fn temper_ctl_help_prints_the_page_ctl_then_the_tools() {
     let scratch = ctl_scratch("ctl_help");
     let ended = support::ctl::alone(scratch.path(), support::ctl::Call::bare(&["help"]));
     assert_eq!(ended.exit, Some(Exit::Code(0)));
-    assert!(ended.stdout.starts_with(b"Agent tools\n"));
+    let page = temper_docs::find(b"ctl").expect("ctl page").text.as_bytes();
+    let tools = ended.stdout.strip_prefix(page).expect("the page ctl first");
+    assert!(tools.starts_with(b"me\n"));
     assert_eq!(ended.stderr, b"");
     scratch.remove();
 }
