@@ -1255,7 +1255,8 @@ fn batch_settings(
     bounds.brief.sections = 5;
     // jig's provenance header on each dependency result leaves room for both reports.
     bounds.brief.budgets.dependencies = 256;
-    bounds.journal.writes = 4096;
+    // The placed subtree route sizes the journal alongside the fixture's floor.
+    bounds.journal.writes = 4096.max(temper_engine_domain_world::walking::writes(&bounds));
     bounds.journal.deliveries = 100;
     bounds.journal.held = 300;
     let configuration = std::array::from_fn(|_| {
@@ -2003,6 +2004,7 @@ fn an_agent_changes_a_live_delegates_controls_and_replays_the_answer() {
     let (configuration, mut bounds) = batch_settings(2, 1, 200, false, false, false);
     bounds.call_records = 8;
     bounds.fleet.calls = 4;
+    bounds.journal.writes = bounds.journal.writes.max(temper_engine_domain_world::walking::writes(&bounds));
     let mut driver = Driver::configured(Store::new(), configuration, &bounds);
     driver.send(hello_with(Token::new(7), 2, Duration::from_secs(1), Box::new([])));
     driver.settle();
