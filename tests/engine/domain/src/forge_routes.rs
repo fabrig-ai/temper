@@ -236,7 +236,7 @@ impl World {
                                 repository: forge_world::REPO,
                                 gates: Box::new([]),
                                 tiers: Box::new([engine::TierCheck {
-                                    name: b"fuzzy".as_slice().into(),
+                                    name: b"browser".as_slice().into(),
                                     workflow: b"fuzzy.yml".as_slice().into(),
                                     ignored: Box::new([]),
                                     artifact: b"report".as_slice().into(),
@@ -308,7 +308,7 @@ impl World {
                 limits.authority.executors = 5;
                 limits.authority.batch = 2;
                 limits.authority.grants = 11;
-                limits.authority.segments = if tier { 9 } else { 8 };
+                limits.authority.segments = 8;
                 limits.authority.segment_bytes = 64;
                 limits.authority.writes = 2;
                 limits.journal.writes += 64;
@@ -329,7 +329,7 @@ impl World {
                 if !with_change {
                     limits.authority.grants = 4;
                 }
-                limits.authority.segments = if tier { 9 } else { 8 };
+                limits.authority.segments = 8;
                 limits.authority.segment_bytes = 64;
                 if !with_change {
                     limits.tasks.authority_grants = 2;

@@ -3222,6 +3222,7 @@ fn a_change_landed_where_its_project_names_a_tier_gives_no_result_yet() {
 #[test]
 fn a_tiered_repositorys_baseline_makes_a_tier_task_that_creates_its_branch() {
     const SETTLE_TICKS: u32 = 600; // the existing focused change story's settling bound.
+    const ONE_BASELINE: usize = 1; // the configured browser tier.
     let world = World::configured_limits(
         true,
         true,
@@ -3249,7 +3250,6 @@ fn a_tiered_repositorys_baseline_makes_a_tier_task_that_creates_its_branch() {
             _ => None,
         })
         .collect();
-    const ONE_BASELINE: usize = 1; // the configured browser tier.
     assert_eq!(tier_tasks.len(), ONE_BASELINE);
     assert!(matches!(tier_tasks[0].requester, tasks::Party::Deployment { .. }));
     let raw::Answer::Commit(tip) =
@@ -3258,7 +3258,7 @@ fn a_tiered_repositorys_baseline_makes_a_tier_task_that_creates_its_branch() {
         panic!("main tip")
     };
     let made =
-        world.external(1, raw::Op::Read(raw::Read::Branch { branch: b"temper/tier/browser/1".as_slice().into() }));
+        world.external(1, raw::Op::Read(raw::Read::Branch { branch: b"temper/tier/browser.1".as_slice().into() }));
     assert_eq!(made, raw::Answer::Commit(tip));
     reviews::produce(&mut world, &producer, &branch);
     for _ in 0..SETTLE_TICKS {

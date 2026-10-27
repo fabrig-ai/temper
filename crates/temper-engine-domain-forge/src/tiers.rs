@@ -8,17 +8,17 @@ use temper_engine_domain_forge_tiers as policy;
 
 pub(crate) fn valid(tier: &Tier, l: &Limits) -> bool {
     if tier.workflow.is_empty()
-        || tier.workflow.len() > crate::WORKFLOW_BYTES as usize
+        || tier.workflow.len() > usize::try_from(crate::WORKFLOW_BYTES).expect("workflow bound fits usize")
         || tier.workflow.contains(&b'/')
         || tier.artifact.is_empty()
-        || tier.artifact.len() > crate::CHECK_NAME_BYTES as usize
+        || tier.artifact.len() > usize::try_from(crate::CHECK_NAME_BYTES).expect("tier name bound fits usize")
         || tier.artifact.contains(&b'/')
-        || tier.ignored.len() > l.ignored_paths as usize
+        || tier.ignored.len() > usize::try_from(l.ignored_paths).expect("path count fits usize")
     {
         return false;
     }
     for path in &tier.ignored {
-        if path.is_empty() || path.len() > l.name_bytes as usize {
+        if path.is_empty() || path.len() > usize::try_from(l.name_bytes).expect("path bound fits usize") {
             return false;
         }
         for part in path_parts(path).as_ref() {
@@ -31,12 +31,13 @@ pub(crate) fn valid(tier: &Tier, l: &Limits) -> bool {
 }
 
 fn path_parts(bytes: &[u8]) -> Box<[Box<[u8]>]> {
-    let mut parts = List::with_capacity(u32::try_from(bytes.len()).expect("bounded path"));
+    let count = u32::try_from(bytes.len()).expect("bounded path").checked_add(1).expect("one part after each slash");
+    let mut parts = List::with_capacity(count);
     let mut from = 0;
     for at in 0..=bytes.len() {
-        if at == bytes.len() || bytes[at] == b'/' {
-            parts.push(Box::from(&bytes[from..at])).expect("one part per byte");
-            from = at + 1;
+        if at == bytes.len() || bytes.get(at) == Some(&b'/') {
+            parts.push(Box::from(bytes.get(from..at).expect("enumerated path part"))).expect("one part per byte");
+            from = at.checked_add(1).expect("bounded path cursor");
         }
     }
     parts.into_boxed()
@@ -45,6 +46,9 @@ fn path_parts(bytes: &[u8]) -> Box<[Box<[u8]>]> {
 fn main_name(d: &Domain, repository: Repository) -> Option<Name> {
     let adopted = d.repositories.get(&repository)?;
     let branch = &adopted.settings.default_branch;
+    if branch.is_empty() {
+        return None;
+    }
     let mut parts = List::with_capacity(d.tier_config_limits.name_bytes);
     for part in path_parts(branch).as_ref() {
         if part.is_empty() {
@@ -247,7 +251,7 @@ fn append(d: &Domain, env: &Env<Limits>, row: &mut TierRow, commit: Commit) {
     {
         return;
     }
-    let bound = env.limits.changes.checked_mul(2).and_then(|n| n.checked_add(1)).expect("range bound");
+    let bound = env.limits.changes.checked_mul(2).expect("twice the change bound").checked_add(1).expect("range bound");
     let mut pending = List::with_capacity(bound.checked_add(1).expect("one incoming landing"));
     for landing in &row.pending {
         pending.push(*landing).expect("existing range");
@@ -256,8 +260,9 @@ fn append(d: &Domain, env: &Env<Limits>, row: &mut TierRow, commit: Commit) {
     let mut skip = None;
     if pending.len() > bound {
         for (index, pair) in pending.as_slice().windows(2).enumerate() {
-            if !d.verifications.contains_key(&(row.repository, pair[0].commit))
-                && !d.verifications.contains_key(&(row.repository, pair[1].commit))
+            let [earlier, later] = pair else { unreachable!("two-element window") };
+            if !d.verifications.contains_key(&(row.repository, earlier.commit))
+                && !d.verifications.contains_key(&(row.repository, later.commit))
             {
                 skip = Some(index);
                 break;
@@ -295,20 +300,15 @@ pub(crate) fn task(
 /// Decimal run numbers keep the branch stable across steps and restarts.
 #[must_use]
 pub fn branch(tier: &[u8], number: u64) -> Box<[u8]> {
-    let mut digits = [0_u8; 20];
-    let mut at = digits.len();
-    let mut n = number;
-    loop {
-        at -= 1;
-        digits[at] = b'0' + u8::try_from(n % 10).expect("decimal digit");
-        n /= 10;
-        if n == 0 {
-            break;
-        }
-    }
-    let mut bytes = List::with_capacity(u32::try_from(13 + tier.len() + digits.len() - at).expect("tier branch bytes"));
-    for byte in b"temper/tier/".iter().chain(tier).chain(b"/").chain(&digits[at..]) {
-        bytes.push(*byte).expect("branch size");
+    let digits = skein_lib::Decimal::of(number);
+    let count = 13_usize
+        .checked_add(tier.len())
+        .expect("bounded tier name")
+        .checked_add(digits.as_bytes().len())
+        .expect("bounded decimal run");
+    let mut bytes = List::with_capacity(u32::try_from(count).expect("tier branch bytes"));
+    for byte in b"temper/tier/".iter().chain(tier).chain(b".").chain(digits.as_bytes()) {
+        bytes.push(*byte).expect("branch sized from its parts");
     }
     bytes.into_boxed()
 }
@@ -349,8 +349,13 @@ pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, out
                     queued: false,
                 };
                 let mut repository = [0; 16];
-                repository[..8].copy_from_slice(&u64::from(row.repository.forge).to_be_bytes());
-                repository[8..].copy_from_slice(&u64::from(row.repository.repository).to_be_bytes());
+                let identity = u64::from(row.repository.forge)
+                    .to_be_bytes()
+                    .into_iter()
+                    .chain(u64::from(row.repository.repository).to_be_bytes());
+                for (slot, byte) in repository.iter_mut().zip(identity) {
+                    *slot = byte;
+                }
                 let mut index = None;
                 for (at, tier) in crate::verification::tiers(d, row.repository).iter().enumerate() {
                     if tier.name == row.tier {
@@ -413,10 +418,14 @@ pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
         }
         match outcome {
             skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Branch(_), .. } => {
-                row.branch = TierBranch::Made
+                row.branch = TierBranch::Made;
             }
             skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => return,
-            _ => {
+            skein_forge_client::Outcome::Made { .. }
+            | skein_forge_client::Outcome::Failed(_)
+            | skein_forge_client::Outcome::Raced { .. }
+            | skein_forge_client::Outcome::Held
+            | skein_forge_client::Outcome::Withdrawn => {
                 if let Some(task) = row.task {
                     out.push(Request::TierDecision { task, decision: TierDecision::Held });
                 }
@@ -427,7 +436,6 @@ pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
         if let Some(task) = row.task {
             out.push(Request::TierDecision { task, decision: TierDecision::Wait });
         }
-        return;
     }
 }
 
@@ -436,16 +444,17 @@ fn save(row: &TierRow, out: &mut Queue<Request>) {
 }
 
 pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
-    // Every nested policy allocation is bounded by the same admitted limits.
     let mut bytes = u64::try_from(row.tier.len())
         .ok()?
-        .checked_add(u64::try_from(row.pending.len()).ok()?.checked_mul(size_of::<policy::Landing>() as u64)?)?;
+        .checked_add(array_bytes(row.pending.len(), size_of::<policy::Landing>())?)?;
     bytes = bytes.checked_add(failures_bytes(&row.record.failing)?)?;
     for flake in &row.record.flakes {
-        bytes = bytes.checked_add(size_of::<policy::Flake>() as u64)?.checked_add(flake.test.len() as u64)?;
+        bytes = bytes
+            .checked_add(u64::try_from(size_of::<policy::Flake>()).ok()?)?
+            .checked_add(u64::try_from(flake.test.len()).ok()?)?;
     }
     if let Some(run) = &row.record.run {
-        bytes = bytes.checked_add((run.landings.len() * size_of::<policy::Landing>()) as u64)?;
+        bytes = bytes.checked_add(array_bytes(run.landings.len(), size_of::<policy::Landing>())?)?;
         match &run.part {
             policy::Part::Whole => {}
             policy::Part::Rerun { failed } => bytes = bytes.checked_add(tests_bytes(failed)?)?,
@@ -456,7 +465,7 @@ pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
                 bytes = bytes
                     .checked_add(failures_bytes(&finding.failing)?)?
                     .checked_add(tests_bytes(&finding.flakes)?)?
-                    .checked_add((finding.blamed.len() * size_of::<policy::Blame>()) as u64)?;
+                    .checked_add(array_bytes(finding.blamed.len(), size_of::<policy::Blame>())?)?;
                 for blame in &finding.blamed {
                     if let policy::Blame::Owns(f) | policy::Blame::Suspect(f) = blame {
                         bytes = bytes.checked_add(failures_bytes(f)?)?;
@@ -467,10 +476,13 @@ pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
     }
     Some(bytes)
 }
+fn array_bytes(count: usize, bytes: usize) -> Option<u64> {
+    u64::try_from(count).ok()?.checked_mul(u64::try_from(bytes).ok()?)
+}
 fn tests_bytes(tests: &[Box<[u8]>]) -> Option<u64> {
-    let mut bytes = (tests.len() * size_of::<Box<[u8]>>()) as u64;
+    let mut bytes = array_bytes(tests.len(), size_of::<Box<[u8]>>())?;
     for test in tests {
-        bytes = bytes.checked_add(test.len() as u64)?;
+        bytes = bytes.checked_add(u64::try_from(test.len()).ok()?)?;
     }
     Some(bytes)
 }
@@ -480,17 +492,16 @@ fn failures_bytes(f: &policy::Failures) -> Option<u64> {
         policy::Failures::Tests(tests) => tests_bytes(tests),
     }
 }
-
 pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let rows = l.repositories.checked_mul(l.tiers)?;
     let landings = u64::from(l.changes.checked_mul(2)?.checked_add(1)?);
     let tests = u64::from(l.failing_tests)
-        .checked_mul(u64::from(l.test_id_bytes).checked_add(size_of::<Box<[u8]>>() as u64)?)?;
+        .checked_mul(u64::from(l.test_id_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?)?;
     let payload = u64::from(crate::CHECK_NAME_BYTES)
-        .checked_add(landings.checked_mul(2 * size_of::<policy::Landing>() as u64)?)?
+        .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Landing>()).ok()?.checked_mul(2)?)?)?
         .checked_add(tests.checked_mul(5)?)?
-        .checked_add(u64::from(l.failing_tests).checked_mul(size_of::<policy::Flake>() as u64)?)?
-        .checked_add(landings.checked_mul((size_of::<policy::Blame>() as u64).checked_add(tests)?)?)?;
+        .checked_add(u64::from(l.failing_tests).checked_mul(u64::try_from(size_of::<policy::Flake>()).ok()?)?)?
+        .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Blame>()).ok()?.checked_add(tests)?)?)?;
     Map::<(Repository, Box<[u8]>), TierRow>::worst_case(rows)?
         .checked_add(u64::from(rows).checked_mul(payload.checked_add(u64::from(crate::CHECK_NAME_BYTES))?)?)
 }
@@ -498,6 +509,7 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
 impl Domain {
     /// The run owned by a tier procedure task, if it still exists.
     #[must_use]
+    #[expect(clippy::manual_find, reason = "step code searches explicitly without callbacks")]
     pub fn tier_task(&self, task: u64) -> Option<&TierRow> {
         for (_, row) in &self.tier_rows {
             if row.task == Some(task) {
