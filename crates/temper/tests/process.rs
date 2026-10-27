@@ -768,18 +768,25 @@ fn a_push_is_delivered_signed_with_the_secret_reconcile_drew() {
 
 #[test]
 fn a_persons_change_lands_on_the_forge_and_is_found_after_a_restart() {
-    landing("landed", false);
+    landing("landed", false, false);
+}
+
+#[test]
+fn a_persons_change_lands_and_its_tier_clears_it() {
+    landing("tier_cleared", false, true);
 }
 
 #[test]
 fn a_change_lands_by_deliveries_with_every_poll_raised() {
-    landing("hinted", true);
+    landing("hinted", true, false);
 }
 
 /// The landing story; the hinted case raises four limits and pushes the slow job marker.
-fn landing(case: &str, raised: bool) {
+fn landing(case: &str, raised: bool, tier: bool) {
     let scratch = support::Scratch::new(case);
-    let forgejo = if raised {
+    let forgejo = if tier {
+        support::forgejo::Throwaway::start_with_tier(&scratch)
+    } else if raised {
         support::forgejo::Throwaway::start_with_job_sleep(&scratch, 5)
     } else {
         support::forgejo::Throwaway::start(&scratch)
@@ -787,7 +794,12 @@ fn landing(case: &str, raised: bool) {
     if raised {
         forgejo.push("slow");
     }
-    support::configuration(scratch.path(), &forgejo.forge());
+    let baseline = forgejo.branch_head(b"main").expect("baseline main");
+    if tier {
+        support::configuration_with_tier(scratch.path(), &forgejo.forge(), forgejo.repository());
+    } else {
+        support::configuration(scratch.path(), &forgejo.forge());
+    }
     if raised {
         support::raise_paces(scratch.path());
     }
@@ -798,6 +810,9 @@ fn landing(case: &str, raised: bool) {
     assert_eq!((first.signed_in, first.finished), (1, true), "{}", String::from_utf8_lossy(&first.stderr));
     eprintln!("stage job: {} ms", clock.now().now.saturating_since(began).as_nanos() / 1_000_000);
     let merged = forgejo.merged_pull().expect("the change's pull request is merged");
+    if tier {
+        tier_cleared(&forgejo, merged, &baseline, &first.stderr);
+    }
     assert_eq!(forgejo.job_state(merged), "success");
     assert!(forgejo.main_readme().ends_with(support::EDIT), "main holds the agent's edit");
     let second = support::run(scratch.path(), support::person::found(), None, Duration::from_secs(120));
@@ -805,6 +820,40 @@ fn landing(case: &str, raised: bool) {
     assert_eq!(forgejo.merged_pull(), Some(merged), "the forge's state is unchanged by the restart");
     forgejo.stop();
     scratch.remove();
+}
+
+fn tier_cleared(forgejo: &support::forgejo::Throwaway, merged: u64, baseline: &[u8], stderr: &[u8]) {
+    let commit = forgejo.merge_commit(merged);
+    let runs = forgejo.workflow_runs("tier.yaml");
+    let statuses = forgejo.commit_statuses(&commit);
+    let baseline = std::str::from_utf8(baseline).expect("baseline SHA");
+    let baseline_statuses = forgejo.commit_statuses(baseline);
+    let branches = forgejo.branches_with_prefix("temper/tier/browser");
+    eprintln!(
+        "tier evidence: merge={commit}, runs={runs:?}, statuses={statuses}, baseline={baseline}, baseline statuses={baseline_statuses}, tier branches={branches:?}; temper serve stderr: {}",
+        String::from_utf8_lossy(stderr)
+    );
+    assert!(
+        runs.iter().any(|run| run["commit_sha"] == commit
+            && run["event"] == "workflow_dispatch"
+            && run["status"] == "success"
+            && run["trigger_user"]["login"] == "temper"),
+        "the finished change has a green tier dispatched by temper; stderr: {}",
+        String::from_utf8_lossy(stderr)
+    );
+    assert!(
+        runs.iter().any(|run| run["commit_sha"] == baseline && run["status"] == "success"),
+        "the baseline's tier passed"
+    );
+    assert!(
+        statuses["statuses"]
+            .as_array()
+            .expect("commit statuses")
+            .iter()
+            .any(|status| { status["context"] == "temper/verdict/browser" && status["status"] == "success" }),
+        "the merge commit has a green browser verdict"
+    );
+    assert_eq!(branches, Vec::<String>::new(), "tier branches released");
 }
 
 #[test]
