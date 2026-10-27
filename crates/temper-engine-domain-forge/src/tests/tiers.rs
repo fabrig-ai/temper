@@ -149,20 +149,20 @@ fn project_tiers_accepts_each_new_members_bound() {
         fixtures::PROJECT,
         fixtures::tier_settings(),
         fixtures::configured_tier(
-            usize::try_from(WORKFLOW_BYTES).expect("fixture bound fits usize"),
+            WORKFLOW_BYTES,
             usize::try_from(LIMITS.ignored_paths).expect("fixture bound fits usize"),
             usize::try_from(LIMITS.name_bytes).expect("fixture bound fits usize"),
-            usize::try_from(CHECK_NAME_BYTES).expect("fixture bound fits usize")
+            CHECK_NAME_BYTES
         )
     ));
 }
 #[test]
 fn project_tiers_refuses_each_member_one_past_its_bound() {
     for (workflow, paths, path_bytes, artifact) in [
-        (usize::try_from(WORKFLOW_BYTES).expect("fixture bound fits usize") + 1, 0, 1, 1),
+        (WORKFLOW_BYTES + 1, 0, 1, 1),
         (1, usize::try_from(LIMITS.ignored_paths).expect("fixture bound fits usize") + 1, 1, 1),
         (1, 1, usize::try_from(LIMITS.name_bytes).expect("fixture bound fits usize") + 1, 1),
-        (1, 0, 1, usize::try_from(CHECK_NAME_BYTES).expect("fixture bound fits usize") + 1),
+        (1, 0, 1, CHECK_NAME_BYTES + 1),
     ] {
         let mut d = domain();
         assert!(!d.project_tiers(

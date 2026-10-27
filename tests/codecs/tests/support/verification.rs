@@ -53,6 +53,8 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> temper_eng
         body: Box::new([]),
         priority: 0,
         change: change::Change {
+            way: change::Way::Queue,
+            landing: None,
             task: TASK,
             state,
             gates: Box::new([]),
