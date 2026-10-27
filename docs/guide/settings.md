@@ -237,3 +237,24 @@ revision; work holding an older revision keeps that revision's charter.
 Landing rules and the forge's charter selection are not settings
 yet. There is no settings page in the client, nor a page that
 compares and accepts settings proposals.
+
+## Reading and proposing from a run
+
+A run whose task authority includes the settings family can use the
+`settings` and `propose_settings` host tools. `settings` with `{}` reads
+the inventory. `{"setting":{"kind":"charter","number":1},"revision":5}`
+reads charter 1 as held revision 5 sees it. With `{"revision":5}` it
+reads the decision record, and with `{"history":{}}` it reads history;
+`{"history":{"before":5}}` continues before revision 5.
+
+These reads use the same text as temper ctl. Follow `next: OFFSET` by
+repeating the read with `"from": OFFSET`; `end` marks the last text page.
+The reads make no call record and may be repeated to read settings afresh.
+
+`propose_settings` takes `against`, the newest revision the run read,
+`items` in the settings file form above, and a `reason`. Only the
+deployment's owners can accept its proposal. A stale answer names the
+newest revision so the run can read again and propose afresh. The run
+hears the owner's outcome in its messages and next starting inbox:
+`accepted: revision R made`, `rejected: REASON`, or
+`withdrawn as stale: the newest is R`.
