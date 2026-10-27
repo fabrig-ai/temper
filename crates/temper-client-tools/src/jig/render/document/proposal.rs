@@ -1,6 +1,7 @@
 //! Proposal reads and the settings review supplied by wire 19 (client/tools.md, 5.2).
 use super::{Cut, Limits, Text, settings};
 use crate::jig::runner::{proposal::slot, reads::Reading};
+use alloc::boxed::Box;
 use jig_client::{Readout, contract as c};
 use skein_json::writer::Encoder;
 
@@ -112,7 +113,7 @@ fn resolved<'a>(
     value: &'a c::ReviewValue,
     setting: c::Setting,
     page: Option<&'a Readout>,
-) -> Result<Option<&'a c::SettingValue>, &'static [u8]> {
+) -> Result<Option<&'a c::SettingValue>, Box<[u8]>> {
     match value {
         c::ReviewValue::Value(set) => Ok(Some(&set.value)),
         c::ReviewValue::None => Ok(None),
@@ -122,20 +123,24 @@ fn resolved<'a>(
             {
                 Ok(Some(&document.value))
             }
-            Some(Readout::Jig(c::ReadResult::None(why))) => Err(match why {
-                c::ReadNone::Refused => b"refused",
-                c::ReadNone::Unknown => b"unknown",
-                c::ReadNone::Gone => b"gone",
-                c::ReadNone::Busy => b"busy",
-                c::ReadNone::SignedOut => b"signed out",
-                c::ReadNone::Unreachable => b"unreachable",
-                c::ReadNone::Malformed => b"malformed document",
-                c::ReadNone::TooLarge { .. } => b"document limit",
-            }),
-            Some(Readout::Limit) => Err(b"read table limit"),
-            Some(Readout::NotServed { .. }) => Err(b"version not served"),
+            Some(Readout::Jig(c::ReadResult::None(why))) => {
+                let reason: &[u8] = match why {
+                    c::ReadNone::Refused => b"refused",
+                    c::ReadNone::Unknown => b"unknown",
+                    c::ReadNone::Gone => b"gone",
+                    c::ReadNone::Busy => b"busy",
+                    c::ReadNone::SignedOut => b"signed out",
+                    c::ReadNone::Unreachable => b"unreachable",
+                    c::ReadNone::Malformed => b"malformed document",
+                    c::ReadNone::TooLarge { .. } => b"document limit",
+                    c::ReadNone::TooLinked { joins } => return Err(super::super::join_limit(*joins)),
+                };
+                Err(Box::from(reason))
+            }
+            Some(Readout::Limit) => Err(Box::from(b"read table limit".as_slice())),
+            Some(Readout::NotServed { .. }) => Err(Box::from(b"version not served".as_slice())),
             Some(Readout::Jig(c::ReadResult::Value(_)) | Readout::Family { .. }) | None => {
-                Err(b"tools' bug; unexpected setting document; report it as a finding")
+                Err(Box::from(b"tools' bug; unexpected setting document; report it as a finding".as_slice()))
             }
         },
     }
@@ -150,7 +155,7 @@ fn review_value_text(
     match resolved(value, setting, page) {
         Ok(Some(value)) => settings::value_inline(value, limits, out),
         Ok(None) => out.put(b"none"),
-        Err(why) => out.put(why),
+        Err(why) => out.put(&why),
     }
 }
 fn task_number(task: &c::OwnerTaskLink) -> u64 {
@@ -407,7 +412,7 @@ fn encode_review_value(value: &c::ReviewValue, setting: c::Setting, page: Option
         Err(why) => {
             out.object_start();
             out.key(b"refused");
-            out.string(why);
+            out.string(&why);
             out.object_end();
         }
     }

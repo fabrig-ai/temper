@@ -256,6 +256,8 @@ fn an_ended_task_opened_before_me_retries_a_busy_document_read() {
 }
 
 const DOCUMENT_TASK: u64 = 2;
+// Small's join bound, supplied as the read refusal fact.
+const READ_JOINS: u32 = 4;
 fn ended_task_read() -> (crate::Domain, skein_lib::Token) {
     use jig_client::{Down, Up, Watchable, contract as c};
     let limits = fixtures::limits();
@@ -331,6 +333,10 @@ fn lasting_task_read_ends_ask_nothing_again() {
         (Readout::Jig(c::ReadResult::None(c::ReadNone::Gone)), ReadEnd::Gone),
         (Readout::Jig(c::ReadResult::None(c::ReadNone::TooLarge { bytes: 1 })), ReadEnd::TooLarge),
         (Readout::Jig(c::ReadResult::None(c::ReadNone::Malformed)), ReadEnd::Malformed),
+        (
+            Readout::Jig(c::ReadResult::None(c::ReadNone::TooLinked { joins: READ_JOINS })),
+            ReadEnd::TooLinked { joins: READ_JOINS },
+        ),
         (Readout::NotServed { family: None, served: None }, ReadEnd::NotServed),
     ] {
         let (mut root, read) = ended_task_read();
@@ -464,4 +470,22 @@ fn sign_out_ending_a_pending_task_read_asks_nothing_again() {
         pages::task::DocumentRead::Ended { why: pages::task::ReadEnd::SignedOut, retry_at: None }
     );
     assert_eq!(take_document_read(&mut out), None);
+}
+
+#[test]
+fn a_too_linked_task_page_says_so() {
+    use crate::pages::task::{DocumentRead, ReadEnd};
+    let (mut root, read) = ended_task_read();
+    end_document_read(
+        &mut root,
+        &fixtures::env(&fixtures::limits()),
+        read,
+        jig_client::Readout::Jig(jig_client::contract::ReadResult::None(jig_client::contract::ReadNone::TooLinked {
+            joins: READ_JOINS,
+        })),
+    );
+    assert_eq!(
+        root.pages().task().expect("task page").document_read,
+        DocumentRead::Ended { why: ReadEnd::TooLinked { joins: READ_JOINS }, retry_at: None }
+    );
 }

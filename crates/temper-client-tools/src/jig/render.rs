@@ -188,6 +188,22 @@ pub trait Parts: core::fmt::Debug {
 }
 /// A bounded text result; only free text is cut, never identities or authority.
 pub use settings_form::{Text, text_end};
+fn join_limit(joins: u32) -> Box<[u8]> {
+    const PREFIX: &[u8] = b"join limit: more than ";
+    const SUFFIX: &[u8] = b" per read";
+    let number = skein_lib::Decimal::of(u64::from(joins));
+    let size = PREFIX
+        .len()
+        .checked_add(number.as_bytes().len())
+        .expect("join reason size")
+        .checked_add(SUFFIX.len())
+        .expect("join reason size");
+    let mut reason = Writer::new(size);
+    reason.put(PREFIX).expect("measured reason");
+    reason.put(number.as_bytes()).expect("measured reason");
+    reason.put(SUFFIX).expect("measured reason");
+    reason.finish()
+}
 #[must_use]
 pub fn failure(reason: &[u8], json: bool, status: u8) -> Printed {
     let stderr = if json {
@@ -255,6 +271,7 @@ pub fn read(
                 ReadNone::SignedOut => (b"signed out", 1),
                 ReadNone::Unreachable => (b"unreachable", 1),
                 ReadNone::Malformed => (b"malformed document", 1),
+                ReadNone::TooLinked { joins } => return failure(&join_limit(*joins), json, 1),
                 ReadNone::TooLarge { .. } => (b"document limit", 1),
             };
             failure(reason, json, status)

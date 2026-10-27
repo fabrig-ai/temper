@@ -458,3 +458,6 @@ pub(crate) fn held_task(mut task: c::Task, reason: c::HoldCategory) -> c::Task {
     })));
     task
 }
+
+/// The shared proposal identity used by the command fixtures.
+pub(crate) const PROPOSAL_CALL: &[&str] = &["proposal", "show", "p73/7"];
