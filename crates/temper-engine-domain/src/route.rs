@@ -5,7 +5,7 @@ pub(crate) mod calendar;
 pub(crate) mod demo;
 pub(crate) mod escalation;
 pub(crate) mod forge_route;
-mod held;
+pub(crate) mod held;
 pub(crate) mod host_route;
 pub use host_route::{HostDelivery, HostRequest};
 mod goal;

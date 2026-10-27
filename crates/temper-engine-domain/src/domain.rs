@@ -973,6 +973,7 @@ fn released_into(
         }
         Delivery::Restart(_) => unreachable!("root holds only switch and mark continuations"),
         Delivery::Fleet(event) => domain.work.push(Work::Fleet(event)),
+        Delivery::NotesLoad { owner, range } => crate::route::held::notes_load(domain, env, decision, owner, range),
         Delivery::Relay { task, attempt, word, .. } => {
             let name = Token::new(word.number);
             let payload = domain.payloads.insert(Some(Payload::InboxWord(word))).expect("relay payload reserved");

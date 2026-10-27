@@ -53,6 +53,11 @@ pub struct Limits {
 pub enum Delivery {
     /// `Switch` is released behind prior writes; `AdoptRuns` completes the durable mark.
     Restart(jig_domain_core::RestartStep),
+    /// Retry archive admission after the current iteration can retire its read slots.
+    NotesLoad {
+        owner: Token,
+        range: jig_domain_notes::Range,
+    },
     /// The root hears a project made only after its decision commits.
     ProjectMade {
         project: u32,
@@ -507,6 +512,7 @@ impl Decision {
             | Delivery::Refuse { .. }
             | Delivery::ReadEscalationDecision { .. }
             | Delivery::TurnBusy { .. }
+            | Delivery::NotesLoad { .. }
             | Delivery::Restart(_)
             | Delivery::Load { .. } => true,
         };
