@@ -199,7 +199,11 @@ fn argument_bound(argument: &Argument, limits: &Limits, out: &mut Writer) -> Res
     match bound(argument, limits) {
         Bound::None => {}
         Bound::Numbers { least, most } => {
-            out.put(if matches!(argument.kind, Kind::NamedNumber { .. }) { b" with N from " } else { b" from " })?;
+            if let Kind::NamedNumber { .. } = argument.kind {
+                out.put(b" with N from ")?;
+            } else {
+                out.put(b" from ")?;
+            }
             out.put(Decimal::of(least).as_bytes())?;
             out.put(b" to ")?;
             out.put(Decimal::of(most).as_bytes())?;

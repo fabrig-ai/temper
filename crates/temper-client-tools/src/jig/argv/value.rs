@@ -136,21 +136,7 @@ pub(crate) fn decode(table: &[&Tool], kind: Kind, bounds: Bound, word: &[u8]) ->
                 Project::Name(Box::from(word))
             })
         }
-        Kind::Turn => {
-            let mut dot = None;
-            for (index, byte) in word.iter().enumerate() {
-                if *byte == b'.' {
-                    dot = Some(index);
-                    break;
-                }
-            }
-            let split = dot?;
-            let end = split.checked_add(1)?;
-            Value::Turn(TurnName {
-                attempt: number(word.get(..split)?)?,
-                number: u32::try_from(number(word.get(end..)?)?).ok()?,
-            })
-        }
+        Kind::Turn => Value::Turn(turn(word)?),
         Kind::Cursor => Value::Cursor(hex(word)?),
         Kind::Group => Value::Group(match word {
             b"questions" => InboxGroup::Questions,
@@ -430,7 +416,7 @@ fn named_text(word: &[u8], words: &[&[u8]], prefixes: &[&[u8]], min: u64, max: u
 
 fn valid_file(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> Result<(), Usage> {
     if let Value::Text(_) = value
-        && matches!(bound(spec, limits), Bound::Bytes { .. })
+        && let Bound::Bytes { .. } = bound(spec, limits)
     {
         return valid_text(spec, value, argument, limits);
     }
@@ -441,4 +427,17 @@ fn valid_file(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> 
         return Err(Usage::Kind { argument });
     };
     Ok(())
+}
+
+fn turn(word: &[u8]) -> Option<TurnName> {
+    let mut dot = None;
+    for (index, byte) in word.iter().enumerate() {
+        if *byte == b'.' {
+            dot = Some(index);
+            break;
+        }
+    }
+    let split = dot?;
+    let end = split.checked_add(1)?;
+    Some(TurnName { attempt: number(word.get(..split)?)?, number: u32::try_from(number(word.get(end..)?)?).ok()? })
 }

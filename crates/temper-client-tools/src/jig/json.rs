@@ -415,81 +415,7 @@ fn encode_tool(tool: &Tool, limits: &Limits, out: &mut Encoder) {
     for form in tool.forms {
         out.array_start();
         for spec in *form {
-            out.object_start();
-            let name = argument_name(spec.name);
-            for (key, text) in [(b"name".as_slice(), name.as_ref()), (b"shown", spec.shown), (b"line", spec.line)] {
-                out.key(key);
-                out.string(text);
-            }
-            out.key(b"place");
-            out.string(match spec.place {
-                Place::Positional => b"positional",
-                Place::Flag => b"flag",
-                Place::Switch => b"switch",
-            });
-            out.key(b"kind");
-            out.string(kind_word(spec.kind));
-            out.key(b"bound");
-            encode_bound(bound(spec, limits), out);
-            match spec.kind {
-                Kind::Word { set } => {
-                    out.key(b"set");
-                    out.array_start();
-                    for word in set {
-                        out.string(word);
-                    }
-                    out.array_end();
-                }
-                Kind::NumberRange { min, max } => {
-                    out.key(b"min");
-                    out.unsigned(min);
-                    out.key(b"max");
-                    out.unsigned(max);
-                }
-                Kind::NamedNumber { words, prefixes, min, max } => {
-                    out.key(b"set");
-                    out.array_start();
-                    for word in words {
-                        out.string(word);
-                    }
-                    out.array_end();
-                    prefixes_json(prefixes, out);
-                    out.key(b"min");
-                    out.unsigned(min);
-                    out.key(b"max");
-                    out.unsigned(max);
-                }
-                Kind::Number
-                | Kind::Count
-                | Kind::Text
-                | Kind::Literal
-                | Kind::File
-                | Kind::Duration
-                | Kind::Proposal
-                | Kind::Digest
-                | Kind::Condition
-                | Kind::Subject
-                | Kind::Project { .. }
-                | Kind::Turn
-                | Kind::Cursor
-                | Kind::Group
-                | Kind::Order
-                | Kind::Tool => {}
-            }
-            out.key(b"occurs");
-            out.string(match spec.occurs {
-                Occurs::Required => b"required",
-                Occurs::Optional => b"optional",
-                Occurs::Repeated { .. } => b"repeated",
-            });
-            match spec.occurs {
-                Occurs::Repeated { most } => {
-                    out.key(b"most");
-                    out.unsigned(u64::from(most));
-                }
-                Occurs::Required | Occurs::Optional => {}
-            }
-            out.object_end();
+            encode_argument(spec, limits, out);
         }
         out.array_end();
     }
@@ -561,4 +487,82 @@ fn encode_bound(bound: Bound, out: &mut Encoder) {
             out.object_end();
         }
     }
+}
+
+fn encode_argument(spec: &Argument, limits: &Limits, out: &mut Encoder) {
+    out.object_start();
+    let name = argument_name(spec.name);
+    for (key, text) in [(b"name".as_slice(), name.as_ref()), (b"shown", spec.shown), (b"line", spec.line)] {
+        out.key(key);
+        out.string(text);
+    }
+    out.key(b"place");
+    out.string(match spec.place {
+        Place::Positional => b"positional",
+        Place::Flag => b"flag",
+        Place::Switch => b"switch",
+    });
+    out.key(b"kind");
+    out.string(kind_word(spec.kind));
+    out.key(b"bound");
+    encode_bound(bound(spec, limits), out);
+    match spec.kind {
+        Kind::Word { set } => {
+            out.key(b"set");
+            out.array_start();
+            for word in set {
+                out.string(word);
+            }
+            out.array_end();
+        }
+        Kind::NumberRange { min, max } => {
+            out.key(b"min");
+            out.unsigned(min);
+            out.key(b"max");
+            out.unsigned(max);
+        }
+        Kind::NamedNumber { words, prefixes, min, max } => {
+            out.key(b"set");
+            out.array_start();
+            for word in words {
+                out.string(word);
+            }
+            out.array_end();
+            prefixes_json(prefixes, out);
+            out.key(b"min");
+            out.unsigned(min);
+            out.key(b"max");
+            out.unsigned(max);
+        }
+        Kind::Number
+        | Kind::Count
+        | Kind::Text
+        | Kind::Literal
+        | Kind::File
+        | Kind::Duration
+        | Kind::Proposal
+        | Kind::Digest
+        | Kind::Condition
+        | Kind::Subject
+        | Kind::Project { .. }
+        | Kind::Turn
+        | Kind::Cursor
+        | Kind::Group
+        | Kind::Order
+        | Kind::Tool => {}
+    }
+    out.key(b"occurs");
+    out.string(match spec.occurs {
+        Occurs::Required => b"required",
+        Occurs::Optional => b"optional",
+        Occurs::Repeated { .. } => b"repeated",
+    });
+    match spec.occurs {
+        Occurs::Repeated { most } => {
+            out.key(b"most");
+            out.unsigned(u64::from(most));
+        }
+        Occurs::Required | Occurs::Optional => {}
+    }
+    out.object_end();
 }

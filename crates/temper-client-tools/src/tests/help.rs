@@ -253,20 +253,18 @@ pub(super) const RECORD: jig::table::Tool = jig::table::Tool {
 const RECORD_FORMS: &[u8] = b"fixture N [--activity K] [--tree] [--word a|b|c]... [--key NAME]\n  N (task): a number; required. Task number\n  --activity K: a count from 1 to 32; optional. Latest activity lines\n  --tree: a switch. Include the live tree\n  --word K: one of a, b or c; repeated, at most 2. Words\nfixture TEXT [--until K] [--timeout D] [--key NAME]\n  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. Words to send\n  --until K: one of settled, connected:N or made:N with N from 1 to 65535; optional. Condition\n  --timeout D: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. Timeout\n";
 #[test]
 fn a_tools_record_reads_as_written() {
-    let mut expected = RECORD_FORMS.to_vec();
-    expected.extend_from_slice(b"Read a task\nPrints: task N\n--json: the record task.\nKey: --key NAME, optional.\nFirst note.\nSecond note.\n");
+    let expected = expected_record(b"Read a task\nPrints: task N\n--json: the record task.\nKey: --key NAME, optional.\nFirst note.\nSecond note.\n");
     let mut out = skein_lib::Writer::new(expected.len());
     jig::help::tool(&RECORD, &crate::limits::tools(), &mut out).expect("fixture record fits");
-    assert_eq!(&*out.finish(), expected);
+    assert_eq!(out.finish(), expected);
 }
 #[test]
 fn an_empty_prints_and_notes_are_left_out() {
     let record = jig::table::Tool { prints: b"", notes: b"", ..RECORD };
-    let mut expected = RECORD_FORMS.to_vec();
-    expected.extend_from_slice(b"Read a task\n--json: the record task.\nKey: --key NAME, optional.\n");
+    let expected = expected_record(b"Read a task\n--json: the record task.\nKey: --key NAME, optional.\n");
     let mut out = skein_lib::Writer::new(expected.len());
     jig::help::tool(&record, &crate::limits::tools(), &mut out).expect("fixture record fits");
-    assert_eq!(&*out.finish(), expected);
+    assert_eq!(out.finish(), expected);
 }
 #[test]
 fn each_row_keeps_its_notes_within_their_bound() {
@@ -274,4 +272,11 @@ fn each_row_keeps_its_notes_within_their_bound() {
         assert!(row.notes.len() <= jig::table::NOTES_BYTES, "{row:?}");
         assert!(row.notes.is_empty() || row.notes.ends_with(b"\n"), "{row:?}");
     }
+}
+
+fn expected_record(ending: &[u8]) -> Box<[u8]> {
+    let mut expected = skein_lib::Writer::new(RECORD_FORMS.len().checked_add(ending.len()).expect("record size"));
+    expected.put(RECORD_FORMS).expect("forms");
+    expected.put(ending).expect("ending");
+    expected.finish()
 }

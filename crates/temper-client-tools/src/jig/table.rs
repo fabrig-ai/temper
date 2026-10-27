@@ -110,7 +110,7 @@ pub fn bound(argument: &Argument, limits: &Limits) -> Bound {
         Kind::Count => Bound::Numbers { least: 1, most: u64::from(limits.rows) },
         Kind::Number if argument.name == b"forge" => Bound::Numbers { least: 0, most: 65_535 },
         Kind::Text | Kind::Literal => Bound::Bytes { most: limits.ask_bytes },
-        Kind::File if matches!(argument.name, b"items" | b"instructions" | b"spec") => {
+        Kind::File if argument.name == b"items" || argument.name == b"instructions" || argument.name == b"spec" => {
             Bound::Bytes { most: limits.ask_bytes }
         }
         Kind::Duration if argument.name == b"timeout" => {

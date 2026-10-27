@@ -382,6 +382,7 @@ const BOUNDED: Tool = Tool {
     area: 1,
     notes: b"",
 };
+type BoundEdge = (&'static [u8], &'static [u8], &'static [u8], crate::jig::table::Bound, Usage);
 #[test]
 fn bound_is_what_the_parser_accepts() {
     use crate::jig::table::{Bound, bound};
@@ -390,7 +391,7 @@ fn bound_is_what_the_parser_accepts() {
     limits.ask_bytes = 3;
     limits.wait = skein_lib::Duration::from_secs(1);
     limits.wait_most = skein_lib::Duration::from_secs(4);
-    let edges: &[(&[u8], &[u8], &[u8], Bound, Usage)] = &[
+    let edges: &[BoundEdge] = &[
         (b"--range", b"4", b"5", Bound::Numbers { least: 2, most: 4 }, Usage::Kind { argument: 0 }),
         (b"--count", b"2", b"3", Bound::Numbers { least: 1, most: 2 }, Usage::Rows { argument: 1 }),
         (b"--forge", b"65535", b"65536", Bound::Numbers { least: 0, most: 65535 }, Usage::Kind { argument: 2 }),
@@ -402,7 +403,7 @@ fn bound_is_what_the_parser_accepts() {
         (b"--instructions", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 8 }),
         (b"--spec", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 9 }),
     ];
-    for (spec, (flag, at, past, expected, error)) in BOUNDED.forms[0].iter().zip(edges) {
+    for (index, (spec, (flag, at, past, expected, error))) in BOUNDED.forms[0].iter().zip(edges).enumerate() {
         assert_eq!(bound(spec, &limits), *expected, "{spec:?}");
         let Parsed::Call { mut call, .. } =
             argv::parse(&[&BOUNDED], &[b"bounded", flag, at], &limits).expect("value at the bound parses")
@@ -410,10 +411,6 @@ fn bound_is_what_the_parser_accepts() {
             panic!("a call")
         };
         assert_eq!(argv::check(&[&BOUNDED], &call, &limits), Ok(()));
-        let index = usize::from(match error {
-            Usage::Kind { argument } | Usage::Rows { argument } | Usage::Long { argument } => *argument,
-            _ => panic!("fixture refusal names its argument"),
-        });
         if spec.kind == Kind::File {
             // argv names a path; the host supplies its text before checking again.
             call.values[index] = Some(Values::One(Value::Text(Box::from(*at))));
@@ -421,11 +418,18 @@ fn bound_is_what_the_parser_accepts() {
             call.values[index] = Some(Values::One(Value::Text(Box::from(*past))));
         } else {
             assert_eq!(argv::parse(&[&BOUNDED], &[b"bounded", flag, past], &limits), Err(*error));
-            call.values[index] = Some(Values::One(match spec.kind {
-                Kind::NamedNumber { .. } | Kind::Text | Kind::Literal => Value::Text(Box::from(*past)),
-                Kind::Duration => Value::Duration(skein_lib::Duration::from_secs(5)),
-                _ => argv::value::decode(&[&BOUNDED], Kind::Number, Bound::None, past).expect("number"),
-            }));
+            let value = if let Bound::Numbers { most, .. } = expected {
+                if let Kind::NamedNumber { .. } = spec.kind {
+                    Value::Text(Box::from(*past))
+                } else {
+                    Value::Number(most.checked_add(1).expect("one past the numeric edge"))
+                }
+            } else if let Bound::Seconds { most } = expected {
+                Value::Duration(skein_lib::Duration::from_secs(most.checked_add(1).expect("one past the timeout")))
+            } else {
+                Value::Text(Box::from(*past))
+            };
+            call.values[index] = Some(Values::One(value));
         }
         assert_eq!(argv::check(&[&BOUNDED], &call, &limits), Err(*error));
     }
@@ -435,7 +439,7 @@ fn bound_is_what_the_parser_accepts() {
         (b"--named", b"made:2", b"made:1"),
     ] {
         argv::parse(&[&BOUNDED], &[b"bounded", flag, least], &limits).expect("inclusive lower bound");
-        assert!(argv::parse(&[&BOUNDED], &[b"bounded", flag, below], &limits).is_err());
+        argv::parse(&[&BOUNDED], &[b"bounded", flag, below], &limits).expect_err("below the lower bound");
     }
     argv::parse(&[&BOUNDED], &[b"bounded", b"--forge", b"0"], &limits).expect("forge zero stays accepted");
     for kind in [Kind::Number, Kind::File, Kind::Duration, Kind::Word { set: &[b"word"] }] {
