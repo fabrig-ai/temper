@@ -1021,17 +1021,7 @@ fn text(
             out.put(&hex(landed.merge()));
         }
         out.put(b"\n");
-        match panel.way() {
-            w::Way::Turn => {
-                out.put(b"way: turn");
-                if let Some(task) = panel.in_landing() {
-                    out.put(b" \xc2\xb7 landing task ");
-                    out.number(*task);
-                }
-                out.put(b"\n");
-            }
-            w::Way::Queue => {}
-        }
+        text_way(panel, out);
         if let Some(hold) = panel.hold() {
             out.put(b"held: ");
             if let w::Hold::Authority(value) = hold {
@@ -1109,6 +1099,19 @@ fn text_holds(panel: &w::ChangePanel, holds: &Holds, out: &mut Text) {
             out.put(b")");
         }
         out.put(b"\n");
+    }
+}
+fn text_way(panel: &w::ChangePanel, out: &mut Text) {
+    match panel.way() {
+        w::Way::Turn => {
+            out.put(b"way: turn");
+            if let Some(task) = panel.in_landing() {
+                out.put(b" \xc2\xb7 landing task ");
+                out.number(*task);
+            }
+            out.put(b"\n");
+        }
+        w::Way::Queue => {}
     }
 }
 fn text_checks(panel: &w::ChangePanel, out: &mut Text) {
