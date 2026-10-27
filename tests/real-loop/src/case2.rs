@@ -127,7 +127,7 @@ impl Fixture {
                 kinds.push(json!({"kind":"charter","number":member.charter}));
             }
         }
-        for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
             project["policy"]["ceiling"]["delegation"]["kinds"] = json!(kinds);
             project["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = json!(kinds);
         }
@@ -192,7 +192,7 @@ fn configure_step_8_1(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     configure_hour_0(value, agent, forge);
     // Proposing is within this story's director authority. The seeded defaults
     // inherit this policy through the existing own_policy fixture hook.
-    for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+    for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
         let tools = &mut project["policy"]["ceiling"]["tools"];
         *tools = (tools.as_u64().expect("tool families") | 16).into();
         let tools = &mut project["policy"]["roles"][0]["authority"]["tools"];
