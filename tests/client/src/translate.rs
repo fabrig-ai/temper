@@ -341,6 +341,7 @@ fn delivery_packet(
         | Delivery::Restart(_)
         | Delivery::Refuse { .. }
         | Delivery::TurnBusy { .. }
+        | Delivery::NotesLoad { .. }
         | Delivery::Load { .. } => None,
     }
 }
