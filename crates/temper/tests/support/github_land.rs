@@ -842,7 +842,5 @@ pub(crate) fn landing_reads() -> Vec<ctl::Call> {
 
 pub(crate) fn configure_landing(value: &mut Value, forge: SocketAddr, owner: &str, repository: &str) {
     use serde_json::json;
-    // These chat/change stories create no tracked goal needing issue-projection authority.
-    value["engine"]["projects"][0]["policy"]["projections"] = json!([]);
     value["application"]["landing"]["projects"] = json!([{"project":1,"rules":[{"connector":1,"kind":4,"pattern":{"segments":["forge",forge.to_string(),owner,repository,"branch"],"last":"exact","value":"main"},"enforce":true,"ci":true,"up_to_date":true,"gates":[{"number":1,"blocking":true,"freshness":"exact"}],"approvals":[]}]}]);
 }

@@ -74,7 +74,7 @@ pub fn fixture() -> forge::Fixture {
             value["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = 8192.into();
             value["engine"]["rules"]["ceiling"]["delegation"]["depth"] = 5.into();
             value["world_settings"]["cap"] = CHAT_SPEND.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 3.into();
                 project["policy"]["ceiling"]["delegation"]["depth"] = 5.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = 3.into();

@@ -62,6 +62,10 @@ pub fn configuration(deployment: &Value) -> jig_protocol_config::Engine {
     for member in ["charters", "templates", "policies", "rules"] {
         value.as_object_mut().expect("engine").remove(member);
     }
+    if deployment["world_settings"]["policies"].is_array() {
+        // Jig's inline form decodes the world's own values into typed defaults.
+        value["projects"] = deployment["world_settings"]["policies"].clone();
+    }
     let bytes = serde_json::to_vec(&value).expect("engine JSON");
     let document = jig_protocol_config::document(
         &bytes,
@@ -75,4 +79,22 @@ pub fn configuration(deployment: &Value) -> jig_protocol_config::Engine {
         jig_protocol_config::Defaults::Passed,
     )
     .expect("startup configuration")
+}
+
+/// Separate the imported world's policy values from seeds that name their settings.
+pub fn stage_policies(value: &mut serde_json::Value) {
+    let mut policies = value["engine"]["projects"].clone();
+    for (index, policy) in policies.as_array_mut().expect("seed projects").iter_mut().enumerate() {
+        if policy["policy"].is_number() {
+            let original: Value =
+                serde_json::from_slice(&jig_channel_world::fixtures::engine_document()).expect("world defaults");
+            policy["policy"] = original["engine"]["projects"][0]["policy"].clone();
+            policy["roles"] = original["engine"]["projects"][0]["roles"].clone();
+        }
+        policy["number"] = (index + 1).into();
+        let seed = &mut value["engine"]["projects"][index];
+        seed["policy"] = (index + 1).into();
+        seed.as_object_mut().expect("seed").remove("roles");
+    }
+    value["world_settings"]["policies"] = policies;
 }

@@ -17,8 +17,10 @@ fn the_two_call_agent_past_smalls_page_is_refused_by_name() {
     let transcript = fixtures::turn_bounds::turn_body(&agent);
     assert_eq!(transcript, 1_792_262);
     fixtures::turn_bounds::apply(&mut document, transcript);
+    let given = fixtures::own_defaults(&document, &document["world_settings"]);
+    document.as_object_mut().expect("deployment").remove("world_settings");
     let bytes = serde_json::to_vec(&document).expect("old two-call configuration");
-    let refused = temper_service::named(&bytes, &jig_protocol_config::Directories::working())
+    let refused = temper_service::startup::named_with(&bytes, &jig_protocol_config::Directories::working(), &given)
         .expect_err("the old two-call shape exceeds Small's page");
     assert_eq!(
         temper_service::startup::lines(&refused).as_ref(),

@@ -38,12 +38,9 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
     for member in ["charters", "templates", "policies", "rules"] {
         value["engine"].as_object_mut().expect("engine object").remove(member);
     }
-    // The inherited project's unused depth eight exceeded the stock's four.
     for project in value["engine"]["projects"].as_array_mut().expect("seed projects") {
-        project["policy"]["ceiling"]["delegation"]["depth"] = 4.into();
-        for role in project["policy"]["roles"].as_array_mut().expect("seed roles") {
-            role["authority"]["delegation"]["depth"] = 4.into();
-        }
+        project["policy"] = 1.into();
+        project.as_object_mut().expect("seed").remove("roles");
     }
     // Admit stock policy 1 and its ten grants.
     for (name, count) in

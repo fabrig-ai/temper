@@ -311,7 +311,7 @@ pub fn fixture() -> forge::Fixture {
             agent["endpoints"][0]["models"].as_array_mut().expect("agent models").push(model);
             // The director delegates, messages, amends and keeps project notes.
             // The extra owner adds one delegation level before the change procedure.
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 391.into();
                 project["policy"]["ceiling"]["notes"] = 2.into();
                 project["policy"]["roles"][0]["authority"]["notes"] = 2.into();
@@ -345,9 +345,9 @@ pub fn fixture_placed() -> forge::Fixture {
             value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
             value["world_settings"]["executor"] = 2.into();
             // The person must also be offered the new executor for that chat.
-            let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
+            let mut kinds = value["world_settings"]["policies"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
             kinds.as_array_mut().expect("executor kinds").push(json!({"kind":"charter","number":2}));
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
                 project["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds.clone();
             }
@@ -401,7 +401,7 @@ pub fn fixture_check() -> forge::Fixture {
             // 2 * (PATIENCE / 100 ms + 1) steady reads for the two branches.
             // Subscribe is family 32; cancel shares control (4), already in 391.
             let tools = 0x0187 | 0x0020;
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = tools.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = tools.into();
             }
@@ -523,9 +523,9 @@ pub fn fixture_5_3() -> forge::Fixture {
             (fixture().configure)(value, agent, forge);
             value["world_settings"]["owner_brief"] = true.into();
             value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
-            let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
+            let mut kinds = value["world_settings"]["policies"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
             kinds.as_array_mut().expect("executor kinds").push(json!({"kind":"charter","number":2}));
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
                 project["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds.clone();
             }
@@ -594,9 +594,9 @@ pub fn fixture_5_2() -> forge::Fixture {
             for (name, size) in [("tasks.charters", 4), ("tasks.executor_kinds", 5), ("authority.executors", 5)] {
                 value["engine"]["limits"]["overrides"][name] = size.into();
             }
-            let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
+            let mut kinds = value["world_settings"]["policies"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
             kinds.as_array_mut().expect("kinds").push(json!({"kind":"charter","number":HELPER_CHARTER}));
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
                 project["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds.clone();
                 // The chat's run, A, the helper and B reserve 10 + 5 + 5 + 25.
@@ -645,9 +645,9 @@ pub fn fixture_5_5() -> forge::Fixture {
             (fixture().configure)(value, agent, forge);
             value["world_settings"]["second_resume"] = false.into();
             value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
-            let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
+            let mut kinds = value["world_settings"]["policies"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
             kinds.as_array_mut().expect("kinds").push(json!({"kind":"charter","number":2}));
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
                 project["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds.clone();
             }
@@ -687,7 +687,7 @@ pub fn fixture_5_6() -> forge::Fixture {
             value["world_settings"]["resume"] = false.into();
             // Subscribe is family 32; read is 512 for the unchanged-main check.
             let tools = 0x0187 | 0x0020 | 0x0200;
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = tools.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = tools.into();
             }
@@ -779,14 +779,14 @@ pub fn fixture_5_4() -> forge::Fixture {
             // "Authority refused: task allowance": the tree has eleven tasks,
             // two owners plus A's six descendants and B's two, under the chat.
             value["engine"]["limits"]["overrides"]["tasks.tree_tasks"] = 11.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["tasks"] = 11.into();
                 project["policy"]["roles"][0]["authority"]["delegation"]["tasks"] = 11.into();
             }
             // The director was told "spend allowance": its run reserves ten,
             // and A and B reserve thirty and twenty for their subtrees.
             value["world_settings"]["cap"] = 60.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 60.into();
             }
             // Adoption and the fake forge's hooks supply listing changes (5.2).
@@ -855,7 +855,7 @@ pub fn fixture_6_1() -> forge::Fixture {
             // delegates after spending one on its question. A and the director
             // each reserve ten more.
             value["world_settings"]["cap"] = 71.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 71.into();
             }
             value["application"]["landing"]["projects"] = json!([]);
@@ -935,9 +935,9 @@ pub fn fixture_6_2() -> forge::Fixture {
             // amendment reaches it before its done turn is saved as kept.
             value["world_settings"]["second_wait_ms"] = 60000.into();
             value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
-            let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
+            let mut kinds = value["world_settings"]["policies"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
             kinds.as_array_mut().expect("kinds").push(json!({"kind":"charter","number":2}));
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["kinds"] = kinds.clone();
                 project["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds.clone();
             }
@@ -959,10 +959,10 @@ pub fn fixture_6_2() -> forge::Fixture {
             value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();
             value["engine"]["limits"]["overrides"]["documents.lines"] = 3.into();
             value["world_settings"]["cap"] = 52.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 52.into();
             }
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["depth"] = 6.into();
                 project["policy"]["roles"][0]["authority"]["delegation"]["depth"] = 6.into();
             }
@@ -1034,7 +1034,7 @@ pub fn fixture_6_5() -> forge::Fixture {
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();
             value["world_settings"]["cap"] = 45.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 45.into();
             }
             value["application"]["landing"]["projects"] = json!([]);
@@ -1123,7 +1123,7 @@ pub fn fixture_6_4() -> forge::Fixture {
             value["engine"]["limits"]["overrides"]["documents.lines"] = 1.into();
             value["world_settings"]["cap"] = 26.into();
             let tools = 0x0187 | 0x0020;
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = tools.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = tools.into();
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 26.into();
@@ -1186,11 +1186,11 @@ pub fn fixture_6_7() -> forge::Fixture {
             value["workers"][0]["limits"]["overrides"]["hub.run_calls"] = 2.into();
             value["engine"]["limits"]["overrides"]["fleet.calls"] = PAUSE_WORKERS.len().into();
             value["world_settings"]["cap"] = 64.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 64.into();
             }
             // Base 391 lacks decide (8) and subscribe (32).
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["tools"] = 431.into();
                 project["policy"]["roles"][0]["authority"]["tools"] = 431.into();
             }
@@ -1362,7 +1362,7 @@ pub fn fixture_6_8() -> forge::Fixture {
             value["application"]["limits"]["overrides"]["root.journal.held"] = 3291.into();
             // Role -> director -> A -> A1 -> c -> coder: the role's
             // depth six yields the director's five, as 6.2's fixture does.
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["ceiling"]["delegation"]["depth"] = 6.into();
                 project["policy"]["roles"][0]["authority"]["delegation"]["depth"] = 6.into();
             }
@@ -1376,7 +1376,7 @@ pub fn fixture_6_8() -> forge::Fixture {
             // A reserves A1 (50), A2 (10), and its run's ten; the director
             // reserves A (80) and its run. All remain below the base ceiling 100.
             value["world_settings"]["cap"] = 100.into();
-            for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+            for project in value["world_settings"]["policies"].as_array_mut().expect("projects") {
                 project["policy"]["roles"][0]["authority"]["budget"]["spend"] = 100.into();
             }
             let story_ms = crate::PATIENCE.as_nanos().div_euclid(1_000_000);

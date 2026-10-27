@@ -74,15 +74,15 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     let grants =
         json!([grant(1), grant(2), grant(3), grant(4), grant(7), grant(8), grant(10), grant(11), grant(12), grant(13)]);
     let authority = json!({"tools":1,"grants":grants,"delegation":{"kinds":[{"kind":"charter","number":1},{"kind":"charter","number":4},{"kind":"procedure","number":2}],"tasks":8,"depth":4},"budget":{"spend":100,"deadline_unix_seconds":null},"notes":0,"note_resources":[]});
-    value["engine"]["projects"][0]["policy"]["ceiling"] = authority.clone();
-    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"] = authority;
+    value["world_settings"]["policies"][0]["policy"]["ceiling"] = authority.clone();
+    value["world_settings"]["policies"][0]["policy"]["roles"][0]["authority"] = authority;
     // The stock's 32-unit run and the reference cases' 20-unit delegate fit in 64.
-    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = 64.into();
-    value["engine"]["projects"][0]["policy"]["projections"] = grants;
+    value["world_settings"]["policies"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = 64.into();
+    value["world_settings"]["policies"][0]["policy"]["projections"] = grants;
     // A deployment project zero, which the binary's fixture clones from project one, keeps that
     // mirror: its policy too must sit under the rules ceiling set above.
-    let policy = value["engine"]["projects"][0]["policy"].clone();
-    for project in value["engine"]["projects"].as_array_mut().expect("projects").iter_mut().skip(1) {
+    let policy = value["world_settings"]["policies"][0]["policy"].clone();
+    for project in value["world_settings"]["policies"].as_array_mut().expect("projects").iter_mut().skip(1) {
         project["policy"] = policy.clone();
     }
     let limits = value["engine"]["limits"]["overrides"].as_object_mut().expect("engine overrides");
@@ -141,18 +141,16 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
 }
 
 fn limits(value: &Value) -> (jig_protocol_config::Limits, temper_service::limits::Limits) {
-    let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
+    let mut configured = value.clone();
+    configured.as_object_mut().expect("deployment").remove("world_settings");
+    let bytes = serde_json::to_vec(&configured["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(
         &bytes,
         &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 65_536, depth: 32 },
     )
     .expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
-    let given = if value["world_settings"]["own_policy"] == true {
-        crate::fixtures::own_defaults(value, &value["world_settings"])
-    } else {
-        temper_service::stock::Given::Stock
-    };
+    let given = crate::fixtures::own_defaults(value, &value["world_settings"]);
     let jig = temper_service::startup::engine_with(&document, 0, &jig_protocol_config::Directories::working(), &given)
         .expect("engine configuration");
     let mut own = temper_service::limits::profile(temper_service::limits::Profile::Small);

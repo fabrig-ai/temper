@@ -279,13 +279,13 @@ pub(crate) fn configure(value: &mut serde_json::Value) {
         })
         .collect();
     let kinds = serde_json::json!([{"kind":"charter","number":fixtures::CHARTER_NUMBER},{"kind":"procedure","number":fixtures::PROCEDURE_CODE}]);
-    let mut ceiling = value["engine"]["projects"][0]["policy"]["ceiling"].clone();
+    let mut ceiling = value["world_settings"]["policies"][0]["policy"]["ceiling"].clone();
     ceiling["tools"] = fixtures::PRODUCER_TOOLS.into();
     ceiling["grants"] = grants.into();
     ceiling["delegation"]["kinds"] = kinds;
     ceiling["delegation"]["depth"] = fixtures::AUTHORITY_DEPTH.into();
-    value["engine"]["projects"][0]["policy"]["ceiling"] = ceiling.clone();
-    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"] = ceiling;
+    value["world_settings"]["policies"][0]["policy"]["ceiling"] = ceiling.clone();
+    value["world_settings"]["policies"][0]["policy"]["roles"][0]["authority"] = ceiling;
     for (name, count) in fixtures::ENGINE_OVERRIDES {
         value["engine"]["limits"]["overrides"][name] = count.into();
     }
@@ -512,7 +512,9 @@ pub(crate) fn settings_file() -> Vec<u8> {
 
 /// The service's typed defaults, starting from the binary's stock and the document's models.
 pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Given {
-    let engine = crate::settings::configuration(document);
+    let mut document = document.clone();
+    document["world_settings"] = fixtures::world_document()["world_settings"].clone();
+    let engine = crate::settings::configuration(&document);
     let mut defaults = temper_service::stock::defaults(&engine.llm);
     let read_wait = STORY.with(|slot| matches!(slot.get(), Story::ChatReadThenWait { .. }));
     if read_wait {
@@ -520,6 +522,18 @@ pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Give
     } else {
         defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Result;
     }
+    let seed = engine.projects.first().expect("world policy");
+    defaults
+        .policies
+        .insert(
+            1,
+            jig_domain_core::ConfiguredPolicy {
+                policy: seed.policy.clone(),
+                permissions: seed.roles.clone(),
+                templates: seed.templates.clone(),
+            },
+        )
+        .expect("existing policy slot");
     if !uses_stock() {
         let seed = engine.projects.first().expect("repository seed");
         defaults.rules.ceiling = seed.policy.ceiling.clone();
@@ -530,17 +544,6 @@ pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Give
             implies,
         });
         defaults.rules.implies = jig_domain_authority::Implies::new(Box::new(pairs), 2).expect("fixture implications");
-        defaults
-            .policies
-            .insert(
-                1,
-                jig_domain_core::ConfiguredPolicy {
-                    policy: seed.policy.clone(),
-                    permissions: seed.roles.clone(),
-                    templates: seed.templates.clone(),
-                },
-            )
-            .expect("existing policy slot");
         let charter = &mut defaults.charters[0];
         charter.policy.inspect = true;
         charter.policy.modify = true;
