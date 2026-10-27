@@ -273,7 +273,8 @@ pub(crate) fn register(d: &mut Domain, env: &Env<Limits>, row: LandingRow, out: 
     for member in &row.landing.members {
         let change = d.changes.get_mut(&member.change).expect("validated member");
         change.change.landing = Some(task);
-        super::domain::save_change(out, change.clone());
+        let saved = change.clone();
+        super::domain::save_change(d, out, saved);
     }
     save(d, row, out);
 }
