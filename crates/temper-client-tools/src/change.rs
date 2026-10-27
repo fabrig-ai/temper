@@ -717,7 +717,9 @@ use skein_json::writer::Encoder;
 fn landed(step: &w::Step) -> Option<&w::Landed> {
     match step {
         w::Step::Landed(landed) => Some(landed),
-        w::Step::Producing
+        w::Step::Ready(_)
+        | w::Step::Preparing(_)
+        | w::Step::Producing
         | w::Step::Opening
         | w::Step::Recreating
         | w::Step::Reopening
@@ -737,7 +739,7 @@ fn step(step: &w::Step) -> &'static [u8] {
     match step {
         w::Step::First => b"first",
         w::Step::Ended => b"ended",
-        w::Step::Producing
+        w::Step::Ready(_) | w::Step::Preparing(_) | w::Step::Producing
         | w::Step::Opening
         | w::Step::Recreating
         | w::Step::Reopening
@@ -789,7 +791,9 @@ fn repair(step: &w::Step) -> Option<&'static [u8]> {
             w::Reason::Gate(_) => b"gate",
             w::Reason::Semantic => b"semantic",
         }),
-        w::Step::Producing
+        w::Step::Ready(_)
+        | w::Step::Preparing(_)
+        | w::Step::Producing
         | w::Step::Opening
         | w::Step::Recreating
         | w::Step::Reopening
@@ -1015,6 +1019,17 @@ fn text(
             out.put(&hex(landed.merge()));
         }
         out.put(b"\n");
+        match panel.way() {
+            w::Way::Turn => {
+                out.put(b"way: turn");
+                if let Some(task) = panel.in_landing() {
+                    out.put(b" \xc2\xb7 landing task ");
+                    out.number(*task);
+                }
+                out.put(b"\n");
+            }
+            w::Way::Queue => {}
+        }
         if let Some(hold) = panel.hold() {
             out.put(b"held: ");
             if let w::Hold::Authority(value) = hold {
