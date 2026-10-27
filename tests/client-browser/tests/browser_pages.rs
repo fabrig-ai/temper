@@ -56,24 +56,6 @@ fn a_panic_shows_the_failure_page() {
 }
 
 #[test]
-fn a_chat_has_a_day_and_turn_clocks_beside_separately_named_speakers() {
-    let tier = Tier::demo("chat-turn-times");
-    let mut steps = temper_client_browser_world::start_playground_chat(b"Add CSV export to widget");
-    for find in [
-        Find::exactly_named(Role::Log, b"Conversation"),
-        Find::exactly_named(Role::Paragraph, b"You"),
-        Find::named(Role::Paragraph, "Today · ".as_bytes()),
-        Find::named(Role::Time, b":"),
-        Find::exactly_named(Role::TextArea, b"Message"),
-        Find::exactly_named(Role::Button, b"Send"),
-    ] {
-        steps.push(Step::Person(PersonStep::See { find, within: WITHIN }));
-    }
-    let mut script = Script::new(steps.into_boxed_slice());
-    assert_eq!(Harness::new(tier.setup()).run(&mut [&mut script]), Outcome::Done);
-}
-
-#[test]
 fn history_keeps_the_chat_and_the_new_chat_focus_and_filter() {
     let tier = Tier::new("history").with_model();
     let see = |find| Step::Person(PersonStep::See { find, within: WITHIN });

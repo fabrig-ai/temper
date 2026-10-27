@@ -38,6 +38,11 @@ fn an_open_chat_stays_live_takes_a_second_message_and_is_closed() {
     let (person, mut steps) = start_chat(&mut world);
     steps.extend([
         see(Find::text(b"Answered, run 1")),
+        // client/browser.md, 4.6: the conversation's words and roles need no browser.
+        see(Find::exactly_named(Role::Log, b"Conversation")),
+        see(Find::exactly_named(Role::Paragraph, b"You")),
+        see(Find::named(Role::Paragraph, "Today · ".as_bytes())),
+        see(Find::named(Role::Time, b":")),
         see(Find::text(b"waiting on your words")),
         see(Find::named(Role::TextArea, b"Message")),
         see(Find::named(Role::Button, b"Send")),
