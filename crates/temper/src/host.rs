@@ -11,16 +11,31 @@ pub struct Host {
     pub(super) store: Box<[u8]>,
     output: Box<dyn Write>,
     output_failed: bool,
+    wait_probe: bool,
+    listening_clients: bool,
+    wait_reported: bool,
+    now: Time,
 }
 impl Host {
     #[must_use]
     pub fn new(service: Service, directories: Directories) -> Self {
         let store = directories.data.clone();
-        Self { service, directories, store, output: Box::new(io::stdout()), output_failed: false }
+        Self {
+            service,
+            directories,
+            store,
+            output: Box::new(io::stdout()),
+            output_failed: false,
+            wait_probe: std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some(),
+            listening_clients: false,
+            wait_reported: false,
+            now: Time::ZERO,
+        }
     }
 }
 impl skein_shell::Host for Host {
     fn iterate(&mut self, now: Time, wall: Wall) {
+        self.now = now;
         temper_service::iterate(&mut self.service, now, wall);
     }
     fn completions(&mut self) -> &mut Queue<Complete> {
@@ -66,8 +81,26 @@ impl skein_shell::Host for Host {
             self.service.handover_removed(remove.forge, remove.run, removed);
         }
         while let Some(note) = self.service.listening().pop() {
+            if matches!(&note, temper_service::Note::Listening { listener: temper_service::Listening::Clients, .. }) {
+                self.listening_clients = true;
+            }
             let lines = note_line(note);
             eprint!("{lines}");
+            if self.wait_probe
+                && self.listening_clients
+                && let Some(marker) = std::env::var_os("TEMPER_R8_CUT_AT_LISTEN")
+            {
+                // Investigation fault: cut this start once, before the shell can
+                // submit the iteration that announced the clients' listener.
+                match std::fs::OpenOptions::new().write(true).create_new(true).open(marker) {
+                    Ok(marker) => {
+                        drop(marker);
+                        std::process::abort();
+                    }
+                    Err(why) if why.kind() == io::ErrorKind::AlreadyExists => (),
+                    Err(why) => panic!("R8 cut marker: {why}"),
+                }
+            }
         }
         while let Some(note) = self.service.notes().pop() {
             let lines = note_line(note);
@@ -83,6 +116,17 @@ impl skein_shell::Host for Host {
             {
                 self.output_failed = true;
                 self.service.shutdown();
+            }
+        }
+        if self.wait_probe {
+            self.service.check_wait_boundary(self.now);
+            if self.listening_clients && !self.wait_reported && !self.service.work_pending(self.now) {
+                eprintln!(
+                    "R8 first wait after listening: deadline={:?}; {}",
+                    self.service.next_deadline(),
+                    self.service.wait_state()
+                );
+                self.wait_reported = true;
             }
         }
     }

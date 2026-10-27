@@ -107,9 +107,8 @@ impl Host for ServiceHost {
                 || self.service.work_pending(self.now)
                 || self.service.next_deadline().is_some()
                 || !self.in_flight.is_empty(),
-            "service would wait forever with nothing in flight: end {:?}, restart {:?}",
-            self.service.end(),
-            self.service.engine_domain().and_then(temper_engine_domain::Domain::restart_failure)
+            "service would wait forever with nothing in flight: {}",
+            self.service.wait_state()
         );
     }
     fn iterate(&mut self, now: Time, wall: Wall) {

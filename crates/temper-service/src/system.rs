@@ -54,6 +54,60 @@ enum BoxOutput {
 // Existing reservation for setup/forge handoffs beside a root routing pass.
 const SETUP_ROUTING_HEADROOM: u32 = 2;
 impl Service {
+    /// Secret-free owner state at the shell's wait boundary, for restart probes.
+    #[must_use]
+    pub fn wait_state(&self) -> alloc::string::String {
+        let worker = match &self.worker {
+            Some(worker) => worker.is_empty(),
+            None => true,
+        };
+        match &self.engine {
+            Some(engine) => alloc::format!(
+                "end={:?}; restart={:?}; root_ready={}; root_blocked={}; root_events={}; root_room={}; store_open={}; mark={}; store_closed={}; forge_records_done={}; clients_starting={}; closed owners: clients={}, workers={}, accounts={}, setup={}, forge={}, local_worker={}; signals_closing={}; operations={}; accounts=[{}]",
+                engine.end,
+                engine.domain.restart_step(),
+                engine.domain.ready(),
+                engine.blocked,
+                engine.events.len(),
+                engine.room(),
+                engine.store.opened,
+                engine.store.component.mark_durable(),
+                engine.store.closed(),
+                engine.forge_records.done(),
+                engine.clients.starting.is_some(),
+                engine.clients.closed,
+                engine.workers.closed(),
+                match &engine.accounts {
+                    Some(accounts) => accounts.is_empty(),
+                    None => true,
+                },
+                engine.setup.closed,
+                engine.forge.closed,
+                worker,
+                self.signals_closing,
+                self.kernel.has_operations(),
+                match &engine.accounts {
+                    Some(accounts) => accounts.wait_state(),
+                    None => alloc::string::String::new(),
+                }
+            ),
+            None => alloc::format!("worker-only: empty={worker}; operations={}", self.kernel.has_operations()),
+        }
+    }
+
+    /// Check the real ring's empty, unbounded wait shape without another iteration.
+    pub fn check_wait_boundary(&self, now: Time) {
+        assert!(
+            self.is_empty()
+                || self.work_pending(now)
+                || self.next_deadline().is_some()
+                || self.kernel.has_operations()
+                || !self.submissions.is_empty(),
+            "R8 wait forever with nothing in flight: {}",
+            self.wait_state()
+        );
+    }
+
     /// The engine domain, for a world to inspect before requesting shutdown.
     #[must_use]
     pub fn engine_domain(&self) -> Option<&temper_engine_domain::Domain> {

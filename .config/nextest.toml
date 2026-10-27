@@ -46,6 +46,11 @@ default-filter = "binary(=process)"
 global-timeout = "20m"
 test-threads = 1
 
+[[profile.process.overrides]]
+# R8 runs its original exact-base control before the deployment-history variants.
+filter = "test(=a_restart_over_a_budget_held_review_answers_ctl)"
+priority = 20
+
 [profile.live]
 # The live tier (docs/design/domain/testing.md, 2.7): crates/temper's live binary
 # alone, one test at a time, which scripts/proof-live.sh runs.

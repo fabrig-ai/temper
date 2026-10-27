@@ -206,6 +206,23 @@ enum SecretKind {
 }
 
 impl Accounts {
+    pub(crate) fn wait_state(&self) -> alloc::string::String {
+        alloc::format!(
+            "driver={}; loading={}; early={}; moves={}; finishes={}; keys={}; events={}; inventory_active={}; inventory_work={}; above={}; io={}; closed={}",
+            self.component.is_some(),
+            matches!(self.phase, Phase::Loading { .. }),
+            self.early.len(),
+            self.move_out.len(),
+            self.finish_out.len(),
+            self.key_out.len(),
+            self.key_events.len(),
+            self.inventory.active(),
+            self.inventory.work_pending(),
+            self.above.len(),
+            self.io.len(),
+            self.closed
+        )
+    }
     fn secret(
         &mut self,
         store: &mut crate::store::Store,
@@ -1174,6 +1191,9 @@ pub(crate) struct Kernel {
     next: u64,
 }
 impl Kernel {
+    pub(crate) fn has_operations(&self) -> bool {
+        !self.routes.is_empty()
+    }
     pub fn new(room: u32) -> Self {
         Self { routes: Map::with_capacity(room), retired: Map::with_capacity(room), next: 1 }
     }

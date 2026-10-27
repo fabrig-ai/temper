@@ -620,7 +620,12 @@ enum CtlModel {
     None,
     Llm(Box<CtlLlm>),
     Face(Box<super::forge_land::CtlFace>),
-    Account(Box<super::forge_land::Face>),
+    Account(Box<AccountProbe>),
+}
+/// Investigation-only options for the R8 account restart controls.
+pub struct AccountProbe {
+    pub face: super::forge_land::Face,
+    pub cut_after_listening: Option<PathBuf>,
 }
 /// Drive a caller's steps with a signed-in fake account, without a reply sketch.
 #[must_use]
@@ -633,6 +638,26 @@ pub fn run_ctl_with_account<T>(
     check: impl FnOnce() -> T,
     face: super::forge_land::Face,
 ) -> CtlOutcome<T> {
+    run_ctl_with_account_probe(
+        directory,
+        flags,
+        client_root,
+        steps,
+        deadline,
+        check,
+        AccountProbe { face, cut_after_listening: None },
+    )
+}
+#[must_use]
+pub fn run_ctl_with_account_probe<T>(
+    directory: &Path,
+    flags: Vec<String>,
+    client_root: &Path,
+    steps: Vec<super::ctl::Step>,
+    deadline: Duration,
+    check: impl FnOnce() -> T,
+    probe: AccountProbe,
+) -> CtlOutcome<T> {
     run_ctl_peers(
         directory,
         flags,
@@ -640,7 +665,7 @@ pub fn run_ctl_with_account<T>(
         steps,
         deadline,
         check,
-        CtlPeers { expected_exits: Vec::new(), model: CtlModel::Account(Box::new(face)) },
+        CtlPeers { expected_exits: Vec::new(), model: CtlModel::Account(Box::new(probe)) },
     )
     .0
 }
@@ -697,14 +722,19 @@ fn run_ctl_peers<T>(
     check: impl FnOnce() -> T,
     peers: CtlPeers,
 ) -> (CtlOutcome<T>, Option<super::forge_land::Seen>) {
-    let fail_on_panic = matches!(&peers.model, CtlModel::Account(_)).then_some(());
+    let account_probe = matches!(&peers.model, CtlModel::Account(_));
+    let cut = match &peers.model {
+        CtlModel::Account(probe) => probe.cut_after_listening.clone(),
+        CtlModel::None | CtlModel::Llm(_) | CtlModel::Face(_) => None,
+    };
+    let fail_on_panic = (account_probe && cut.is_none()).then_some(());
     let (peer, on_link, face, reply) = match peers.model {
         CtlModel::Llm(llm) => (Some(llm.peer), Some(llm.on_link), None, None),
         CtlModel::Face(story) => {
             (None, None, Some(story.face), Some(super::forge_land::Reply::new(story.first, story.reply)))
         }
         CtlModel::None => (None, None, None, None),
-        CtlModel::Account(face) => (None, None, Some(*face), None),
+        CtlModel::Account(probe) => (None, None, Some(probe.face), None),
     };
     if let Some(super::forge_land::Face::Fake { peer, .. }) = &face {
         let config = flags.windows(2).find(|pair| pair[0] == "--config").expect("explicit config directory");
@@ -722,7 +752,14 @@ fn run_ctl_peers<T>(
             // Real repository stories, including a fake box's owned Forgejo,
             // need init to discover system git for their first chat's checkout.
             environment: if on_link.is_some() || face.is_some() || fake_backends {
-                vec![("PATH".into(), "/usr/bin:/bin".into())]
+                let mut environment = vec![("PATH".into(), "/usr/bin:/bin".into())];
+                if account_probe {
+                    environment.push(("TEMPER_R8_WAIT_CHECK".into(), "1".into()));
+                }
+                if let Some(marker) = &cut {
+                    environment.push(("TEMPER_R8_CUT_AT_LISTEN".into(), marker.as_os_str().to_owned()));
+                }
+                environment
             } else {
                 Vec::new()
             },
