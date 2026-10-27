@@ -3,17 +3,15 @@ use skein_world::domain::heap::Counting;
 use smith_fake_claude::{Script, Seen, Selection, Step, Story, Turn};
 use temper_real_loop_world::{
     Exit, Scratch, argv,
-    calls::{D1, call, number, occurrences, sign_in, task, until},
+    calls::{D1, call, occurrences, task, until},
     claude, fixtures, llm, run_on,
 };
 #[global_allocator]
 static HEAP: Counting = Counting;
 
-const SOURCE: &str = "live";
+use claude::{ACCOUNT as PROGRAM_ACCOUNT, SOURCE};
 // The real loop retains jig's standalone worker fixture name.
 const WORKER: &str = "worker-a";
-// The harness provisions the direct key's account 1 before the story declares its program.
-const PROGRAM_ACCOUNT: u64 = 2;
 // Sign-in and declaration precede the first accounts read; verify and wait precede the last.
 const DECLARED: usize = 2;
 const USABLE: usize = 6;
@@ -47,14 +45,8 @@ fn a_chat_on_a_program_source_replies_parks_and_resumes() {
         scratch,
         || llm::scripted(Box::new([])),
         || {
-            vec![
-                sign_in(D1),
-                call(D1, argv!["declare", "2", "claude_code", SOURCE, "--key", "declare-program"]),
-                call(D1, argv!["accounts", "--json"]),
-                call(D1, argv!["verify", number(PROGRAM_ACCOUNT), "--source", "program", "--json"]),
-                call(D1, argv!["wait", "accounts", "--until", "settled", "--json"]),
-                call(D1, argv!["wait", "accounts", "--until", "usable", "--json"]),
-                call(D1, argv!["accounts", "--json"]),
+            let mut steps = claude::sign_in();
+            steps.extend([
                 call(D1, argv!["chat", "--project", fixtures::PROJECT, "--key", "program-chat", FIRST]),
                 call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
                 until(D1, argv!["chat", task(CHAT)], ONE.as_bytes(), b"One"),
@@ -64,7 +56,8 @@ fn a_chat_on_a_program_source_replies_parks_and_resumes() {
                 until(D1, argv!["chat", task(CHAT)], TWO.as_bytes(), b"Two"),
                 call(D1, argv!["wait", "task", task(CHAT), "--until", "phase:idle", "--json"]),
                 call(D1, argv!["chat", task(CHAT)]),
-            ]
+            ]);
+            steps
         },
     );
     for called in ran.calls() {
