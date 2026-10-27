@@ -25,15 +25,15 @@ pub(crate) struct Driver {
     finished: bool,
     last_input: Time,
     difference: Rc<RefCell<Option<Differs>>>,
-    end: log::End,
+    end: Option<[u8; 32]>,
     tail: Vec<Said>,
 }
 impl Driver {
     fn new(log: Log) -> Self {
         let last_input = log.inputs.last().map_or(Time::ZERO, |input| input.stamp.instant);
         let end = match log.end {
-            log::End::Said(digest) => log::End::Said(digest),
-            log::End::Cut => log::End::Cut,
+            log::End::Said(digest) => Some(digest),
+            log::End::Cut => None,
         };
         Self {
             feed: Some(Feed::new(log)),
@@ -88,8 +88,8 @@ impl Driver {
     }
     fn at_end(&self) -> bool {
         match self.end {
-            log::End::Cut => true,
-            log::End::Said(expected) => {
+            None => true,
+            Some(expected) => {
                 let mut fold = log::Fold::default();
                 for said in &self.tail {
                     fold.said(said);
@@ -369,6 +369,7 @@ fn run_log(log: Log) -> Result<Outcome, Differs> {
 mod tests {
     use super::*;
     use skein_ui_web::bridge::log;
+    use std::fmt::Write;
 
     #[test]
     fn completion_deadline_retains_the_last_input_stamp() {
@@ -403,7 +404,10 @@ mod tests {
         lines.pop().expect("end");
         let close = lines.pop().expect("close");
         assert!(close.contains(" close "));
-        let empty: String = log::Fold::default().take().iter().map(|byte| format!("{byte:02x}")).collect();
+        let mut empty = String::new();
+        for byte in log::Fold::default().take() {
+            write!(&mut empty, "{byte:02x}").expect("digest hex");
+        }
         lines.push(format!("end {empty}"));
         let outcome = run((lines.join("\n") + "\n").as_bytes()).expect("open-stream snapshot replays");
         assert!(outcome.drained);
