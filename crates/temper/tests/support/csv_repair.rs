@@ -289,6 +289,13 @@ pub fn steps(paths: &[PathBuf; 3], client: &Path, began: Time) -> Vec<Step> {
     // phase, then the existing pending-review/approval/landing steps.
     let tail = task.split_off(5);
     steps.extend(task);
+    steps.push(Step::Until(Call::new(&["change", "show", "2", "--json"]), br#""runs":3"#));
+    steps.push(Step::Run(Call::new(&["task", "show", "3", "--json"])));
+    steps.push(Step::Then(Box::new(|calls| {
+        let producer = super::ctl::json(calls.last().expect("producer task"));
+        eprintln!("owned CSV producer task: {producer}");
+        Call::new(&["change", "show", "2", "--json"])
+    })));
     steps.push(Step::Until(Call::new(&["change", "show", "2", "--json"]), br#""step":"repairing""#));
     let red_paths = paths.clone();
     steps.push(Step::Then(Box::new(move |calls| {
