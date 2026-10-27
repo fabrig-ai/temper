@@ -914,11 +914,20 @@ pub fn change_world_with_policy(
     change_world_in(world, paths::Change { no_ci, owner_gate, tracked })
 }
 
-#[expect(clippy::too_many_lines, reason = "the root change fixture builds both producer and review routes")]
 #[must_use]
 pub fn change_world_in(
+    world: World,
+    policy: paths::Change,
+) -> (World, engine::Assignment, engine::Assignment, Box<[u8]>) {
+    change_world_funded(world, policy, 40)
+}
+
+#[expect(clippy::too_many_lines, reason = "the root change fixture builds both producer and review routes")]
+#[must_use]
+pub fn change_world_funded(
     mut world: World,
     policy: paths::Change,
+    spend: u64,
 ) -> (World, engine::Assignment, engine::Assignment, Box<[u8]>) {
     let paths::Change { no_ci, owner_gate, tracked } = policy;
     if no_ci {
@@ -1023,9 +1032,9 @@ pub fn change_world_in(
         tools: tasks::Tools(1023),
         grants: [1, 3, 4, 10, 11, 12].map(|kind| tasks::Grant { kind, ..grant.clone() }).into(),
         delegation: tasks::Delegation { kinds: Box::new([tasks::AuthorityExecutor::Charter(1)]), tasks: 4, depth: 1 },
-        // Each run's spend must fund its finishing reserve, six with the
-        // world's charter (jig a020bf1c): room for five attempts of five.
-        budget: tasks::Budget { spend: 40, deadline: None },
+        // The default 40 funds five attempts of five beside the six-unit
+        // finishing reserve; funding regressions choose their own ceiling.
+        budget: tasks::Budget { spend, deadline: None },
         notes: tasks::Scopes(0),
         note_resources: Box::new([]),
         models: tasks::Models::NONE,

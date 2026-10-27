@@ -1091,6 +1091,8 @@ pub enum Event {
         status: change::Status,
         /// The child failed to produce a result, rather than returning a negative verdict.
         failed: bool,
+        /// The delegate was cancelled; it supplied no verdict and used no review retry.
+        cancelled: bool,
         words: Box<[u8]>,
     },
     /// Gather fresh forge facts and step one registered change.

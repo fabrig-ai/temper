@@ -1749,12 +1749,15 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                     tasks::ResultKind::Report
                     | tasks::ResultKind::Change { .. }
                     | tasks::ResultKind::Verdict { code: 1, .. },
-                ) => Some((forge_change::Status::Passed, false)),
-                tasks::MessageKind::Result(tasks::ResultKind::Failed | tasks::ResultKind::Cancelled) => {
-                    Some((forge_change::Status::Failed, true))
+                ) => Some((forge_change::Status::Passed, false, false)),
+                tasks::MessageKind::Result(tasks::ResultKind::Failed) => {
+                    Some((forge_change::Status::Failed, true, false))
+                }
+                tasks::MessageKind::Result(tasks::ResultKind::Cancelled) => {
+                    Some((forge_change::Status::Failed, false, true))
                 }
                 tasks::MessageKind::Result(tasks::ResultKind::Verdict { .. } | tasks::ResultKind::Approved { .. }) => {
-                    Some((forge_change::Status::Failed, false))
+                    Some((forge_change::Status::Failed, false, false))
                 }
                 tasks::MessageKind::Escalation { .. }
                 | tasks::MessageKind::Proposal { .. }
@@ -1771,12 +1774,13 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 | tasks::MessageKind::EffectNotMade { .. }
                 | tasks::MessageKind::News { .. } => None,
             };
-            if let Some((status, failed)) = status {
+            if let Some((status, failed, cancelled)) = status {
                 domain.work.push(Work::Forge(forge::Event::DelegateResult {
                     task,
                     child,
                     status,
                     failed,
+                    cancelled,
                     words: word.words.clone(),
                 }));
                 break;
@@ -2283,6 +2287,28 @@ fn hold_change_decision(domain: &Domain, env: &Env<Limits>, task: u64, why: forg
     decision
 }
 
+fn cancel_change_gates(domain: &Domain, task: u64, head: [u8; 32]) -> ProcedureStep {
+    let child = match domain.forge.change(task) {
+        Some(row) => match row.delegate {
+            Some((child, forge_change::Delegate::Gate { head: live, .. })) if live == head => Some(child),
+            Some(_) | None => None,
+        },
+        None => None,
+    };
+    let cancels: Box<[jig_domain_core::StepCancel]> = match child {
+        Some(child) => {
+            let mut reason = List::with_capacity(96);
+            append(&mut reason, b"CI failed at head ");
+            for byte in &head {
+                append(&mut reason, &forge::hex(*byte));
+            }
+            Box::new([jig_domain_core::StepCancel { task: child, reason: reason.into_boxed(), grace: None }])
+        }
+        None => Box::new([]),
+    };
+    ProcedureStep { cancels, ..ProcedureStep::new(StepEnd::Wait) }
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
     if connector != domain.config.forge_connector || code != 2 {
@@ -2323,6 +2349,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
             }))
         }
         forge_change::Decision::Hold(why) => hold_change_decision(domain, env, task, why),
+        forge_change::Decision::CancelGates { head } => cancel_change_gates(domain, task, head),
         forge_change::Decision::Ready => {
             again = true;
             ProcedureStep::new(StepEnd::Wait)
@@ -2796,6 +2823,7 @@ pub(crate) fn outputs(
                 forge_change::Decision::None
                 | forge_change::Decision::Wait { .. }
                 | forge_change::Decision::Delegate(_)
+                | forge_change::Decision::CancelGates { .. }
                 | forge_change::Decision::Ready
                 | forge_change::Decision::QueueRepair
                 | forge_change::Decision::Finish { .. }

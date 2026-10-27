@@ -113,7 +113,7 @@ impl Domain {
             change::State::Recreating { .. } => PanelStep::Recreating,
             change::State::Reopening { .. } => PanelStep::Reopening,
             change::State::Checking { .. } => PanelStep::Checking,
-            change::State::Gating { .. } => PanelStep::Gating,
+            change::State::Gating { .. } | change::State::CancellingGates { .. } => PanelStep::Gating,
             change::State::Queued { .. } => {
                 let (place, ahead) = queue_place(self, row, now, limits);
                 PanelStep::Queued { place, ahead }

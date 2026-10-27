@@ -756,7 +756,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
     use temper_engine_domain_forge_change::{Hold, Repair, State};
-    let mut states = List::with_capacity(17);
+    let mut states = List::with_capacity(18);
     for state in [
         State::Producing { requested: true },
         State::Opening { requested: false },
@@ -764,6 +764,7 @@ pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
         State::Reopening { requested: true, retarget: false },
         State::Checking { head: [2; 32] },
         State::Gating { head: [3; 32], asked: Box::new([4, 5]) },
+        State::CancellingGates { head: [3; 32] },
         State::Queued { head: [6; 32], ready_since: skein_lib::Wall::from_nanos(7) },
         State::First { head: [8; 32], ready_since: skein_lib::Wall::from_nanos(9) },
         State::Updating { from: [10; 32], base: [11; 32], ready_since: skein_lib::Wall::from_nanos(12) },

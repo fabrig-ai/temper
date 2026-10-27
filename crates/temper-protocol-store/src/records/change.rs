@@ -150,6 +150,9 @@ fn encode_live(value: &d::State) -> w::ChangeLive {
         d::State::Checking { head } => {
             w::ChangeLive::Checking(w::ChangeHead::new(&w::CEILINGS, w::ChangeHeadParts { head: *head }).expect(FITS))
         }
+        d::State::CancellingGates { head } => w::ChangeLive::CancellingGates(
+            w::ChangeHead::new(&w::CEILINGS, w::ChangeHeadParts { head: *head }).expect(FITS),
+        ),
         d::State::Gating { head, asked } => w::ChangeLive::Gating(
             w::Gating::new(&w::CEILINGS, w::GatingParts { head: *head, asked: encode_numbers(asked) }).expect(FITS),
         ),
@@ -205,6 +208,10 @@ fn decode_live(value: w::ChangeLive) -> d::State {
         w::ChangeLive::Checking(value) => {
             let w::ChangeHeadParts { head } = value.into_parts();
             d::State::Checking { head }
+        }
+        w::ChangeLive::CancellingGates(value) => {
+            let w::ChangeHeadParts { head } = value.into_parts();
+            d::State::CancellingGates { head }
         }
         w::ChangeLive::Gating(value) => {
             let w::GatingParts { head, asked } = value.into_parts();
