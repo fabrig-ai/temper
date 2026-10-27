@@ -20,24 +20,24 @@ fn a_closed_chat_keeps_its_turns_and_replays_its_first_close() {
         vec![
             Step::Run(Call::sign_in()),
             Step::Run(Call::new(&[
-                "add-key",
+                "account", "add-key",
                 "1",
                 key.to_str().expect("fake key path"),
                 "--deployment",
                 "--key",
                 "model",
             ])),
-            Step::Run(Call::new(&["wait", "accounts", "--until", "usable", "--timeout", "20s"])),
-            Step::Run(Call::new(&["chat", "--project", "1", "hello retained chat", "--key", "chat"])),
-            Step::Run(Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "20s"])),
-            Step::Run(Call::new(&["chat", "1", "--json"])),
-            Step::Run(Call::new(&["close", "1", "--reason", "finished", "--key", "close"])),
-            Step::Run(Call::new(&["wait", "task", "1", "--until", "ended", "--timeout", "20s"])),
-            Step::Run(Call::new(&["chat", "1"])),
-            Step::Run(Call::new(&["chat", "1", "--json"])),
-            Step::Run(Call::new(&["task", "1", "--run", "--json"])),
-            Step::Run(Call::new(&["close", "1", "--reason", "finished", "--key", "close"])),
-            Step::Run(Call::new(&["close", "1", "--reason", "finished", "--key", "close-2"])),
+            Step::Run(Call::new(&["account", "list", "--until", "usable", "--timeout", "20s"])),
+            Step::Run(Call::new(&["chat", "start", "--project", "1", "hello retained chat", "--key", "chat"])),
+            Step::Run(Call::new(&["task", "show", "1", "--until", "replied", "--timeout", "20s"])),
+            Step::Run(Call::new(&["chat", "show", "1", "--json"])),
+            Step::Run(Call::new(&["chat", "close", "1", "--reason", "finished", "--key", "close"])),
+            Step::Run(Call::new(&["task", "show", "1", "--until", "ended", "--timeout", "20s"])),
+            Step::Run(Call::new(&["chat", "show", "1"])),
+            Step::Run(Call::new(&["chat", "show", "1", "--json"])),
+            Step::Run(Call::new(&["task", "show", "1", "--run", "--json"])),
+            Step::Run(Call::new(&["chat", "close", "1", "--reason", "finished", "--key", "close"])),
+            Step::Run(Call::new(&["chat", "close", "1", "--reason", "finished", "--key", "close-2"])),
         ],
         crate::BOX_DEADLINE,
         || (),
@@ -76,7 +76,8 @@ fn a_closed_chat_keeps_its_turns_and_replays_its_first_close() {
     }
     assert!(ctl::json(&outcome.calls[10]).get("run").is_none(), "ended task has no provisional run");
     assert_eq!(outcome.calls[11].stdout, outcome.calls[6].stdout, "same-key replay gives first answer");
-    assert!(String::from_utf8_lossy(&outcome.calls[12].stderr).contains("chat 1 has ended"));
+    let refusal = String::from_utf8_lossy(&outcome.calls[12].stderr);
+    assert!(refusal.contains("chat 1 has ended"), "new-key close refusal: {refusal}");
     assert!(outcome.checked.is_some(), "story reached final checkpoint");
     assert_eq!(outcome.exit, Some(Exit::Code(0)), "box drains: {diagnostic}");
     assert_eq!(outcome.left, Some(Vec::new()), "no process outlives box");
