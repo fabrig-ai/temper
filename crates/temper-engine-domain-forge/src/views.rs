@@ -12,6 +12,10 @@ pub fn landings_subject(project: u32, ended: bool) -> u64 {
     (1 << 62) | (u64::from(ended) << 32) | u64::from(project)
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "bounded documents move whole into the root decision; owned_bytes charges the inline enum"
+)]
 pub enum Document {
     Change(Panel),
     Landing(LandingView),
