@@ -163,6 +163,7 @@ impl Judge {
                 &self.client,
                 vec![
                     Call::new(&[
+                        "account",
                         "add-key",
                         "1",
                         self.key.to_str().expect("key path"),
@@ -170,9 +171,10 @@ impl Judge {
                         "--key",
                         "github-llm",
                     ]),
-                    Call::new(&["wait", "accounts", "--until", "usable"]),
+                    Call::new(&["account", "list", "--until", "usable"]),
                     Call::new(&[
-                        "forge-connect",
+                        "forge",
+                        "connect",
                         "1",
                         "github-app",
                         &self.app.as_ref().expect("made App").id.to_string(),
@@ -180,8 +182,8 @@ impl Judge {
                         "--key",
                         "github-app",
                     ]),
-                    Call::new(&["wait", "forges", "--until", "connected:1"]),
-                    Call::new(&["forge-install", "1", "--key", "github-install"]),
+                    Call::new(&["forge", "list", "--until", "connected:1"]),
+                    Call::new(&["forge", "install", "1", "--key", "github-install"]),
                 ],
             ),
         );
@@ -189,6 +191,7 @@ impl Judge {
     }
     fn adoption() -> ctl::Call {
         ctl::Call::new(&[
+            "repository",
             "adopt",
             "--project",
             "1",
@@ -223,7 +226,7 @@ impl Judge {
             .is_some_and(|rows| !rows.is_empty() && rows.iter().any(|row| row["account"].is_null()))
         {
             let digest = packet["digest"].as_str().expect("forges digest");
-            self.queue(host, vec![ctl::Call::new(&["wait", "forges", "--since", digest, "--json"])]);
+            self.queue(host, vec![ctl::Call::new(&["forge", "list", "--since", digest, "--json"])]);
             return;
         }
         self.restored = Some(row);
@@ -249,7 +252,7 @@ impl Judge {
             "the setup page says so"
         );
         self.outputs.push(accepted.body);
-        self.queue(host, vec![ctl::Call::new(&["wait", "forges", "--until", "settled"]), Self::adoption()]);
+        self.queue(host, vec![ctl::Call::new(&["forge", "list", "--until", "settled"]), Self::adoption()]);
         self.stage = Stage::Adopt;
     }
     fn called(&mut self, now: Time, host: &mut cluster::Root, calls: &ctl::Calls) {
@@ -283,11 +286,11 @@ impl Judge {
                 self.queue(
                     host,
                     vec![
-                        ctl::Call::new(&["wait", "task", "1", "--until", "replied"]),
-                        ctl::Call::new(&["wait", "change", "2", "--until", "landed", "--json"]),
-                        ctl::Call::new(&["change", "2", "--json"]),
-                        ctl::Call::new(&["task", "2"]),
-                        ctl::Call::new(&["wait", "task", "2", "--until", "ended", "--json"]),
+                        ctl::Call::new(&["task", "show", "1", "--until", "replied"]),
+                        ctl::Call::new(&["change", "show", "2", "--until", "landed", "--json"]),
+                        ctl::Call::new(&["change", "show", "2", "--json"]),
+                        ctl::Call::new(&["task", "show", "2"]),
+                        ctl::Call::new(&["task", "show", "2", "--until", "ended", "--json"]),
                     ],
                 );
                 self.stage = Stage::Change;
@@ -306,20 +309,20 @@ impl Judge {
                 self.panel = Some(panel);
                 let words = String::from_utf8_lossy(&calls.ends()[3].stdout);
                 assert!(words.contains("result: Landed · pull request #1 · merge commit "), "{words}");
-                assert!(words.contains("next: temper ctl DIR change show 2"), "{words}");
+                assert!(words.contains("next: temper ctl DIR change show 2 --until landed"), "{words}");
                 let packet = ctl::json(calls.ends().last().expect("landed change"));
                 assert_eq!(packet["task"]["chip"]["phase"], "ended");
                 assert_eq!(packet["task"]["result"]["value"]["change"]["kind"], 1);
                 self.landed = Some(packet["task"]["result"].clone());
                 self.mark("change landed");
-                self.queue(host, vec![ctl::Call::new(&["task", "1", "--json"])]);
+                self.queue(host, vec![ctl::Call::new(&["task", "show", "1", "--json"])]);
                 self.stage = Stage::ReplySnapshot;
             }
             Stage::ReplySnapshot => self.reply_snapshot(host, calls),
             Stage::ReplyPages => self.reply_page(host, calls),
             Stage::ChatEnded => {
                 assert_eq!(ctl::json(calls.ends().last().expect("chat ended"))["task"]["chip"]["phase"], "ended");
-                self.queue(host, vec![ctl::Call::new(&["activity", "1", "--limit", "32", "--json"])]);
+                self.queue(host, vec![ctl::Call::new(&["task", "activity", "1", "--limit", "32", "--json"])]);
                 self.stage = Stage::ChatEvidence;
             }
             Stage::ChatEvidence => self.chat_evidence(host, calls),
@@ -355,7 +358,7 @@ impl Judge {
             "the default chat inherits Delegate and Read: {packet}"
         );
         self.reply_snapshot = Some(packet["digest"].as_str().expect("task digest").to_owned());
-        self.queue(host, vec![ctl::Call::new(&["chat", "1", "--json"])]);
+        self.queue(host, vec![ctl::Call::new(&["chat", "show", "1", "--json"])]);
         self.stage = Stage::ReplyPages;
     }
     fn chat_evidence(&mut self, host: &mut cluster::Root, calls: &ctl::Calls) {
@@ -375,7 +378,16 @@ impl Judge {
         assert!(packet["adopted"].is_object(), "Must: first life adopts acme/app: {packet}");
         self.queue(
             host,
-            vec![ctl::Call::new(&["chat", "--project", "1", "--key", "change", "@forge_chat Update README", "--json"])],
+            vec![ctl::Call::new(&[
+                "chat",
+                "start",
+                "--project",
+                "1",
+                "--key",
+                "change",
+                "@forge_chat Update README",
+                "--json",
+            ])],
         );
         self.stage = Stage::Chat;
     }
@@ -383,14 +395,14 @@ impl Judge {
         let page = ctl::json(&calls.ends()[0]);
         self.replied |= page["activity"]["rows"].to_string().contains("The change landed.");
         if let Some(before) = page["activity"]["before"]["value"].as_str() {
-            self.queue(host, vec![ctl::Call::new(&["chat", "1", "--before", before, "--json"])]);
+            self.queue(host, vec![ctl::Call::new(&["chat", "show", "1", "--before", before, "--json"])]);
         } else if !self.replied {
             self.queue(
                 host,
                 vec![
                     ctl::Call::new(&[
-                        "wait",
                         "task",
+                        "show",
                         "1",
                         "--until",
                         "replied",
@@ -398,7 +410,7 @@ impl Judge {
                         self.reply_snapshot.as_deref().expect("reply snapshot"),
                         "--json",
                     ]),
-                    ctl::Call::new(&["task", "1", "--json"]),
+                    ctl::Call::new(&["task", "show", "1", "--json"]),
                 ],
             );
             self.stage = Stage::ReplySnapshot;
@@ -406,8 +418,8 @@ impl Judge {
             self.queue(
                 host,
                 vec![
-                    ctl::Call::new(&["close", "1", "--key", "close-land", "--json"]),
-                    ctl::Call::new(&["wait", "task", "1", "--until", "ended", "--json"]),
+                    ctl::Call::new(&["chat", "close", "1", "--key", "close-land", "--json"]),
+                    ctl::Call::new(&["task", "show", "1", "--until", "ended", "--json"]),
                 ],
             );
             self.stage = Stage::ChatEnded;
@@ -435,7 +447,8 @@ impl Judge {
             self.queue(
                 host,
                 vec![ctl::Call::new(&[
-                    "tasks",
+                    "task",
+                    "list",
                     "--project",
                     "1",
                     "--parent",
@@ -660,8 +673,8 @@ impl Referee<cluster::Root> for Judge {
             self.queue(
                 host,
                 vec![
-                    ctl::Call::new(&["wait", "forges", "--until", "connected:1"]),
-                    ctl::Call::new(&["forges", "--json"]),
+                    ctl::Call::new(&["forge", "list", "--until", "connected:1"]),
+                    ctl::Call::new(&["forge", "list", "--json"]),
                 ],
             );
             self.stage = Stage::Restored;
@@ -814,13 +827,13 @@ fn configure_engine(value: &mut Value, forge: SocketAddr) {
 
 pub(crate) fn landing_reads() -> Vec<ctl::Call> {
     [
-        &["task", "2", "--json"][..],
-        &["task", "1", "--json"],
-        &["tasks", "--project", "1", "--parent", "1", "--ended", "--json"],
-        &["tasks", "--project", "1", "--parent", "2", "--ended", "--json"],
-        &["forges", "--json"],
-        &["tasks", "--project", "1", "--json"],
-        &["task", "5", "--json"],
+        &["task", "show", "2", "--json"][..],
+        &["task", "show", "1", "--json"],
+        &["task", "list", "--project", "1", "--parent", "1", "--ended", "--json"],
+        &["task", "list", "--project", "1", "--parent", "2", "--ended", "--json"],
+        &["forge", "list", "--json"],
+        &["task", "list", "--project", "1", "--json"],
+        &["task", "show", "5", "--json"],
     ]
     .into_iter()
     .map(ctl::Call::new)

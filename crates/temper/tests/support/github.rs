@@ -25,9 +25,9 @@ pub fn settings_setup(client: &Path, following: Vec<ctl::Call>) -> Vec<ctl::Step
     let file = client.join("settings.json");
     let mut steps = vec![
         Step::Run(Call::sign_in()),
-        Step::Run(Call::new(&["settings", "--json"])),
-        Step::Run(Call::new(&["setting", "charter", "1", "--json"])),
-        Step::Run(Call::new(&["setting", "template", "1", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
+        Step::Run(Call::new(&["settings", "show", "template", "1", "--json"])),
         Step::Then(Box::new(move |calls| {
             let charter = ctl::json(&calls[2]);
             let template = ctl::json(&calls[3]);
@@ -175,6 +175,7 @@ impl Judge {
                 &self.client,
                 vec![
                     Call::new(&[
+                        "account",
                         "add-key",
                         "1",
                         self.key.to_str().expect("key path"),
@@ -182,9 +183,10 @@ impl Judge {
                         "--key",
                         "github-llm",
                     ]),
-                    Call::new(&["wait", "accounts", "--until", "usable"]),
+                    Call::new(&["account", "list", "--until", "usable"]),
                     Call::new(&[
-                        "forge-connect",
+                        "forge",
+                        "connect",
                         "1",
                         "github-app",
                         &self.app.as_ref().expect("made App").id.to_string(),
@@ -192,8 +194,8 @@ impl Judge {
                         "--key",
                         "github-app",
                     ]),
-                    Call::new(&["wait", "forges", "--until", "connected:1"]),
-                    Call::new(&["forge-install", "1", "--key", "github-install"]),
+                    Call::new(&["forge", "list", "--until", "connected:1"]),
+                    Call::new(&["forge", "install", "1", "--key", "github-install"]),
                 ],
             ),
         );
@@ -201,6 +203,7 @@ impl Judge {
     }
     fn adoption() -> ctl::Call {
         ctl::Call::new(&[
+            "repository",
             "adopt",
             "--project",
             "1",
@@ -235,7 +238,7 @@ impl Judge {
             .is_some_and(|rows| !rows.is_empty() && rows.iter().any(|row| row["account"].is_null()))
         {
             let digest = packet["digest"].as_str().expect("forges digest");
-            self.queue(host, vec![ctl::Call::new(&["wait", "forges", "--since", digest, "--json"])]);
+            self.queue(host, vec![ctl::Call::new(&["forge", "list", "--since", digest, "--json"])]);
             return;
         }
         self.restored = Some(row);
@@ -261,7 +264,7 @@ impl Judge {
             "the setup page says so"
         );
         self.outputs.push(accepted.body);
-        self.queue(host, vec![ctl::Call::new(&["wait", "forges", "--until", "settled"]), Self::adoption()]);
+        self.queue(host, vec![ctl::Call::new(&["forge", "list", "--until", "settled"]), Self::adoption()]);
         self.stage = Stage::Adopt;
     }
     fn called(&mut self, now: Time, host: &mut cluster::Root, calls: &ctl::Calls) {
@@ -288,6 +291,7 @@ impl Judge {
                     host,
                     vec![ctl::Call::new(&[
                         "chat",
+                        "start",
                         "--project",
                         "1",
                         "--key",
@@ -302,14 +306,14 @@ impl Judge {
                 self.mark("signed in, key usable, adopted, chat created");
                 let packet = ctl::json(calls.ends().last().expect("chat creation"));
                 assert_eq!(packet["outcome"]["done"]["owner"]["created"]["first"], 1, "{packet}");
-                self.queue(host, vec![ctl::Call::new(&["task", "1", "--tree", "--json"])]);
+                self.queue(host, vec![ctl::Call::new(&["task", "show", "1", "--tree", "--json"])]);
                 self.stage = Stage::Tree;
             }
             Stage::Tree => self.tree(host, &ctl::json(&calls.ends()[0])),
             Stage::Coder => {
                 Self::coder(&ctl::json(&calls.ends()[0]));
                 self.mark("coder delivered");
-                self.queue(host, vec![ctl::Call::new(&["forges", "--json"])]);
+                self.queue(host, vec![ctl::Call::new(&["forge", "list", "--json"])]);
                 self.stage = Stage::BeforeRestart;
             }
             Stage::BeforeRestart => {
@@ -354,11 +358,11 @@ impl Judge {
         // Watches carry their last digest forward, so discovering a new child never polls.
         if tree["rows"].as_array().expect("tree rows").iter().any(|row| row["chip"]["task"] == CODER) {
             self.mark("coder created");
-            self.queue(host, vec![ctl::Call::new(&["wait", "task", &CODER.to_string(), "--until", "ended", "--json"])]);
+            self.queue(host, vec![ctl::Call::new(&["task", "show", &CODER.to_string(), "--until", "ended", "--json"])]);
             self.stage = Stage::Coder;
         } else {
             let digest = tree["digest"].as_str().unwrap_or_else(|| panic!("tree digest: {packet}"));
-            self.queue(host, vec![ctl::Call::new(&["wait", "tree", "1", "--since", digest, "--json"])]);
+            self.queue(host, vec![ctl::Call::new(&["task", "tree", "1", "--since", digest, "--json"])]);
         }
     }
     fn coder(task: &Value) {
@@ -494,8 +498,8 @@ impl Referee<cluster::Root> for Judge {
             self.queue(
                 host,
                 vec![
-                    ctl::Call::new(&["wait", "forges", "--until", "connected:1"]),
-                    ctl::Call::new(&["forges", "--json"]),
+                    ctl::Call::new(&["forge", "list", "--until", "connected:1"]),
+                    ctl::Call::new(&["forge", "list", "--json"]),
                 ],
             );
             self.stage = Stage::Restored;

@@ -40,7 +40,7 @@ pub(super) fn own_app() {
             forges(),
             Act::After(Box::new(move |seen| {
                 offered(seen);
-                Call::new(&["forge-connect", "2", "github-app", "1", path(&pem), "--key", "walk-own-app", "--json"])
+                Call::new(&["forge", "connect", "2", "github-app", "1", path(&pem), "--key", "walk-own-app", "--json"])
             })),
             wait_forges(),
             Act::After(Box::new(|seen| {
@@ -49,7 +49,7 @@ pub(super) fn own_app() {
                     panic!("one seeded installation")
                 };
                 assert_eq!(installation["stray"], true, "Connecting still offers Install until the tab comes back");
-                Call::new(&["forge-install", "2", "--key", "walk-install"])
+                Call::new(&["forge", "install", "2", "--key", "walk-install"])
             })),
             Act::Visit,
             wait_forges(),
@@ -71,7 +71,7 @@ pub(super) fn manifest_acts() -> Vec<Act> {
         forges(),
         Act::After(Box::new(|seen| {
             offered(seen);
-            Call::new(&["forge-connect", "2", "github", "--key", "walk-github"])
+            Call::new(&["forge", "connect", "2", "github", "--key", "walk-github"])
         })),
         Act::Visit,
         wait_forges(),

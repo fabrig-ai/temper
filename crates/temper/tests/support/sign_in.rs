@@ -305,7 +305,7 @@ pub fn run(directory: &Path, issuer: oauth::Peer) {
             root,
             vec![
                 ctl::Step::Run(ctl::Call::sign_in()),
-                ctl::Step::Run(ctl::Call::new(&["connect", "1", "--key", "connect-llm", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "connect", "1", "--key", "connect-llm", "--json"])),
             ],
             Some(&streams),
             None,
@@ -396,9 +396,16 @@ impl Referee<Process> for AnswerJudge {
             let revision = exceeded_hold(&calls.ends()[8], self.allowance);
             assert_eq!(model_requests(procs), 1, "one model request before release");
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl calls") };
-            calls.push(ctl::Step::Run(ctl::Call::new(&["release", "1", "--hold", &revision.to_string(), "--json"])));
-            calls.push(ctl::Step::Run(ctl::Call::new(&["wait", "task", "1", "--until", "held", "--json"])));
-            calls.push(ctl::Step::Run(ctl::Call::new(&["task", "1", "--json"])));
+            calls.push(ctl::Step::Run(ctl::Call::new(&[
+                "task",
+                "release",
+                "1",
+                "--hold",
+                &revision.to_string(),
+                "--json",
+            ])));
+            calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--until", "held", "--json"])));
+            calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--json"])));
             calls.release();
             self.plan = PlanChat::Released;
         }
@@ -412,13 +419,20 @@ impl Referee<Process> for AnswerJudge {
             if chat["activity"]["before"].is_null() {
                 // ctl reads a chat through its watch, which an ended chat ends: read
                 // the whole conversation, then Close.
-                calls.push(ctl::Step::Run(ctl::Call::new(&["close", "1", "--key", "close-plan-chat", "--json"])));
-                calls.push(ctl::Step::Run(ctl::Call::new(&["wait", "task", "1", "--until", "ended", "--json"])));
+                calls.push(ctl::Step::Run(ctl::Call::new(&[
+                    "chat",
+                    "close",
+                    "1",
+                    "--key",
+                    "close-plan-chat",
+                    "--json",
+                ])));
+                calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--until", "ended", "--json"])));
                 calls.release();
                 self.conversation_read = true;
             } else {
                 let before = chat["activity"]["before"]["value"].as_str().expect("older conversation cursor");
-                calls.push(ctl::Step::Run(ctl::Call::new(&["chat", "1", "--before", before, "--json"])));
+                calls.push(ctl::Step::Run(ctl::Call::new(&["chat", "show", "1", "--before", before, "--json"])));
             }
         }
         let Process::Calls(calls) = &procs[1] else { panic!("ctl calls") };
@@ -606,12 +620,13 @@ fn plan_chat(directory: &Path, issuer: oauth::Peer, exceeded: bool) {
             vec![
                 ctl::Step::Run(ctl::Call::sign_in()),
                 ctl::Step::Run(ctl::Call::new(&["me", "--json"])),
-                ctl::Step::Run(ctl::Call::new(&["connect", "1", "--key", "connect-llm"])),
-                ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])),
-                ctl::Step::Run(ctl::Call::new(&["wait", "accounts", "--until", "settled", "--json"])),
-                ctl::Step::Run(ctl::Call::new(&["accounts", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "connect", "1", "--key", "connect-llm"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "list", "--until", "settled", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["account", "list", "--json"])),
                 ctl::Step::Run(ctl::Call::new(&[
                     "chat",
+                    "start",
                     "--project",
                     "1",
                     "--model",
@@ -622,14 +637,14 @@ fn plan_chat(directory: &Path, issuer: oauth::Peer, exceeded: bool) {
                     "--json",
                 ])),
                 ctl::Step::Run(ctl::Call::new(&[
-                    "wait",
                     "task",
+                    "show",
                     "1",
                     "--until",
                     if exceeded { "held" } else { "replied" },
                     "--json",
                 ])),
-                ctl::Step::Run(ctl::Call::new(&["task", "1", "--json"])),
+                ctl::Step::Run(ctl::Call::new(&["task", "show", "1", "--json"])),
             ],
             Some(&streams),
             None,
@@ -638,10 +653,10 @@ fn plan_chat(directory: &Path, issuer: oauth::Peer, exceeded: bool) {
         calls.hold();
         if !exceeded {
             for arguments in [
-                &["message", "1", "More", "--key", "more-on-plan", "--json"][..],
-                &["wait", "task", "1", "--until", "replied", "--json"],
-                &["task", "1", "--json"],
-                &["chat", "1", "--json"],
+                &["task", "message", "1", "More", "--key", "more-on-plan", "--json"][..],
+                &["task", "show", "1", "--until", "replied", "--json"],
+                &["task", "show", "1", "--json"],
+                &["chat", "show", "1", "--json"],
             ] {
                 calls.push(ctl::Step::Run(ctl::Call::new(arguments)));
             }

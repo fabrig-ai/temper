@@ -680,8 +680,8 @@ fn native_settings_setup(directory: &Path) -> Vec<ctl::Step> {
     let file = directory.join("settings.json");
     vec![
         Step::Run(Call::sign_in().in_directory("private")),
-        Step::Run(Call::new(&["settings", "--json"]).in_directory("private")),
-        Step::Run(Call::new(&["setting", "template", "1", "--json"]).in_directory("private")),
+        Step::Run(Call::new(&["settings", "show", "--json"]).in_directory("private")),
+        Step::Run(Call::new(&["settings", "show", "template", "1", "--json"]).in_directory("private")),
         Step::Then(Box::new(move |calls| {
             // These scripts deliver their answer through finish; preserve the
             // inherited result ending before the native client makes its chat.

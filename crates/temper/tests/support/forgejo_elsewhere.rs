@@ -232,7 +232,8 @@ fn life(root: &Path, restarted: bool) {
     let mut steps = vec![ctl::Step::Run(ctl::Call::sign_in())];
     if !restarted {
         steps.push(ctl::Step::Run(ctl::Call::new(&[
-            "forge-connect",
+            "forge",
+            "connect",
             "1",
             "forgejo-admin",
             root.join("admin-paste").to_str().expect("paste path"),
@@ -244,10 +245,10 @@ fn life(root: &Path, restarted: bool) {
             "elsewhere-connect",
             "--json",
         ])));
-        steps.push(ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "made:1", "--timeout", "60s"])));
+        steps.push(ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "made:1", "--timeout", "60s"])));
     }
-    steps.push(ctl::Step::Run(ctl::Call::new(&["wait", "forges", "--until", "connected:1", "--timeout", "30s"])));
-    steps.push(ctl::Step::Run(ctl::Call::new(&["forges", "--json"])));
+    steps.push(ctl::Step::Run(ctl::Call::new(&["forge", "list", "--until", "connected:1", "--timeout", "30s"])));
+    steps.push(ctl::Step::Run(ctl::Call::new(&["forge", "list", "--json"])));
     let mut world = real::World::new(Judge {
         root: root.into(),
         restarted,
@@ -329,7 +330,7 @@ impl Referee<Process> for Judge {
             assert_eq!(row["mode"], "managed");
             if self.restarted {
                 assert!(row["first"].is_null(), "restart does not repeat Create");
-                calls.push(ctl::Step::Run(ctl::Call::new(&["task", "2"])));
+                calls.push(ctl::Step::Run(ctl::Call::new(&["task", "show", "2"])));
             } else {
                 assert_eq!(row["first"]["state"], "made");
                 // Progress and the terminal answer are separate JSON lines, as for setup.
@@ -345,10 +346,18 @@ impl Referee<Process> for Judge {
                 let key = self.root.join("llm-key");
                 write_private(&key, jig_channel_world::fixtures::KEY);
                 for call in [
-                    ctl::Call::new(&["add-key", "1", key.to_str().expect("key path"), "--key", "elsewhere-model"]),
-                    ctl::Call::new(&["wait", "accounts", "--until", "usable", "--timeout", "10s"]),
+                    ctl::Call::new(&[
+                        "account",
+                        "add-key",
+                        "1",
+                        key.to_str().expect("key path"),
+                        "--key",
+                        "elsewhere-model",
+                    ]),
+                    ctl::Call::new(&["account", "list", "--until", "usable", "--timeout", "10s"]),
                     ctl::Call::new(&[
                         "chat",
+                        "start",
                         "--project",
                         &project.to_string(),
                         "--key",
@@ -356,9 +365,9 @@ impl Referee<Process> for Judge {
                         "@elsewhere-chat Land a README change in elsewhere/first",
                         "--json",
                     ]),
-                    ctl::Call::new(&["wait", "task", "1", "--until", "replied", "--timeout", "120s", "--json"]),
-                    ctl::Call::new(&["wait", "task", "2", "--until", "ended", "--timeout", "120s", "--json"]),
-                    ctl::Call::new(&["task", "2"]),
+                    ctl::Call::new(&["task", "show", "1", "--until", "replied", "--timeout", "120s", "--json"]),
+                    ctl::Call::new(&["task", "show", "2", "--until", "ended", "--timeout", "120s", "--json"]),
+                    ctl::Call::new(&["task", "show", "2"]),
                 ] {
                     calls.push(ctl::Step::Run(call));
                 }
