@@ -1,5 +1,5 @@
 //! One oracle per hour-0 judgement, over ctl reads and fake-peer observations.
-use super::{Cast, MemberKind, PROJECT, acts::Read};
+use super::{COORDINATORS, COORDINATORS_CHARTER, Cast, MemberKind, PROJECT, acts::Read};
 use crate::{Exit, Ran, calls::ReadCondition};
 use serde_json::Value;
 use skein_fake_forge_domain::Observation;
@@ -84,7 +84,10 @@ pub fn hour_0_p_and_its_implementers_run(cast: &Cast, observed: &Observed) -> bo
         for query in &observed.queries {
             if skein_lib::bytes::find(&query.system, member.cue.as_bytes()).is_some() {
                 queries += 1;
-                if query.model.as_ref() != member.model.name().as_bytes() {
+                if (member.charter == COORDINATORS_CHARTER
+                    && skein_lib::bytes::find(&query.system, COORDINATORS.as_bytes()).is_none())
+                    || query.model.as_ref() != member.model.name().as_bytes()
+                {
                     return false;
                 }
             }

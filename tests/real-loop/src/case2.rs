@@ -10,13 +10,15 @@ pub mod acts;
 pub mod cast;
 pub mod oracle;
 pub mod scripts;
+pub use acts::acts;
 pub use cast::*;
+pub use scripts::scripts;
 
 pub const PROJECT: u64 = 1;
 pub const WORKERS: &[&str] = &["director", "owner", "i1", "i2"];
-// As in the first edition's implementers: five units per run; a delegator
-// reserves its descendants' purses as well. CAST spends twenty of the chat's fifty.
-pub const RUN_SPEND: u64 = 5;
+// The first edition permits ten units per run. A delegator also reserves
+// its descendants' purses; CAST fits forty units under the chat's fifty.
+pub const RUN_SPEND: u64 = 10;
 
 /// Materialized fixture input. The adapters below supply the harness's function
 /// pointers, while this value keeps each cast and its landing together.
@@ -33,8 +35,8 @@ pub fn fixture(cast: &Cast) -> Fixture {
         homes += usize::from(repository.home);
     }
     assert_eq!(homes, 1, "one home repository");
-    // A parent's direct children are created as one batch before their runs
-    // start. Require the data's order to agree, so numbers cannot silently lie.
+    // Direct children are delegated in cast order. Require the creation order
+    // to agree, so numbers cannot silently lie.
     let mut next = 1;
     for (at, member) in cast.members.iter().enumerate() {
         assert_eq!(cast.number(member.name), u64::try_from(at).expect("cast length") + 1, "unique names");
@@ -139,13 +141,16 @@ impl Fixture {
 }
 
 /// Use the coordinator's charter for Claude members and the coding charter for
-/// GPT members, retaining stock text and limits. Both models use the fake wire.
+/// GPT members, retaining stock limits. Both models use the fake wire.
 pub(crate) fn defaults(defaults: &mut jig_domain_core::settings::Defaults, flags: &Value) {
     let Some(charters) = flags["case2_charters"].as_array() else { return };
     for configured in charters {
         let number = configured["number"].as_u64().expect("charter number");
         for charter in &mut defaults.charters {
             if u64::from(charter.number) == number {
+                if charter.number == COORDINATORS_CHARTER {
+                    charter.policy.instructions = skein_lib::bytes::copy_of(COORDINATORS.as_bytes());
+                }
                 let name = configured["model"].as_str().expect("model").as_bytes();
                 if charter.policy.model.name.as_ref() != name {
                     for alternative in &mut charter.policy.alternatives {
