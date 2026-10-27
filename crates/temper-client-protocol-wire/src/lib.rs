@@ -100,6 +100,19 @@ pub fn limits(bounds: &Bounds) -> Option<v1::Limits> {
         connect_stopped_why: CONNECT_WHY_BYTES,
         stopped_reason: bounds.field_bytes,
         pull_address: ADDRESS_BYTES,
+        receipted_address: 2048,
+        gate_proof_name: 32,
+        member_owner: 1024,
+        member_name: 1024,
+        member_branch: 1024,
+        member_landing: 1024,
+        member_gates: 8,
+        landing_panel_members: 8,
+        landing_line_changes: 8,
+        landing_line_repositories: 8,
+        landing_line_repositories_item: 2048,
+        landing_line_landed: 8,
+        landings_panel_landings: 64,
         queued_ahead: TASKS_AHEAD,
         change_panel_owner: bounds.field_bytes,
         change_panel_name: bounds.field_bytes,
@@ -303,4 +316,34 @@ pub fn runner_label(label: &[u8]) -> bool {
         }
     }
     true
+}
+
+/// Encode the watched landing view (domain/landing.md, 14).
+#[must_use]
+pub fn landing_panel(record: &v1::LandingPanel) -> Box<[u8]> {
+    let mut writer = Writer::new(usize::try_from(record.measure()).expect("measured length fits usize"));
+    record.encode(&mut writer).expect("measured room");
+    writer.finish()
+}
+/// Decode one complete landing view (domain/landing.md, 14).
+#[must_use]
+pub fn decode_landing_panel(bytes: &[u8], limits: &v1::Limits) -> Option<v1::LandingPanel> {
+    let mut reader = Reader::new(bytes);
+    let record = v1::LandingPanel::decode(limits, &mut reader).ok()?;
+    if reader.is_empty() { Some(record) } else { None }
+}
+
+/// Encode the watched landing view (domain/landing.md, 14).
+#[must_use]
+pub fn landings_panel(record: &v1::LandingsPanel) -> Box<[u8]> {
+    let mut writer = Writer::new(usize::try_from(record.measure()).expect("measured length fits usize"));
+    record.encode(&mut writer).expect("measured room");
+    writer.finish()
+}
+/// Decode one complete landing view (domain/landing.md, 14).
+#[must_use]
+pub fn decode_landings_panel(bytes: &[u8], limits: &v1::Limits) -> Option<v1::LandingsPanel> {
+    let mut reader = Reader::new(bytes);
+    let record = v1::LandingsPanel::decode(limits, &mut reader).ok()?;
+    if reader.is_empty() { Some(record) } else { None }
 }
