@@ -880,6 +880,7 @@ impl World {
             | Delivery::Host(_)
             | Delivery::Procedure { .. }
             | Delivery::Forges { .. }
+            | Delivery::ForgeDocument { .. }
             | Delivery::Panel { .. }
             | Delivery::Refuse { .. }
             | Delivery::Read { .. }
