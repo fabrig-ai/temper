@@ -18,9 +18,9 @@ mod queue;
 mod tests;
 
 pub use boundary::{
-    AuthorityHold, AuthorityLack, AuthorityRecovery, Change, Ci, Decision, Delegate, DelegateSpend, Effect,
+    Ask, AuthorityHold, AuthorityLack, AuthorityRecovery, Change, Ci, Decision, Delegate, DelegateSpend, Effect,
     EffectResult, Facts, Freshness, Gate, GateFailure, GateKind, GateReport, Heard, Hold, Limits, Pull, Ready, Repair,
-    State, Status, Stepped, Ask, Way,
+    State, Status, Stepped, Way,
 };
 pub use domain::{authority_words, released, review_failed, step};
 pub use queue::first;
