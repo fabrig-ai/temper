@@ -1,0 +1,17 @@
+[package]
+name = "temper-settings-form"
+description = "Neutral bounded settings file form and read text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+skein-lib.workspace = true
+skein-json.workspace = true
+skein-codec.workspace = true
+jig-client-protocol-wire.workspace = true
+
+[lints]
+workspace = true
