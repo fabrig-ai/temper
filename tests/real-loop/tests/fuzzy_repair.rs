@@ -114,7 +114,7 @@ fn scripts(forge: SocketAddr) -> Box<[Script]> {
             {"name":2,"kind":"bytes","value":"main"}]},
         "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
         "authority":{"tools":1,"grants":grants,
-            "delegation":{"kinds":[{"kind":"agent","number":1}],"tasks":4,"depth":2},
+            "delegation":{"kinds":[{"kind":"agent","number":1},{"kind":"agent","number":4}],"tasks":4,"depth":2},
             "budget":{"spend":10},"notes":0}
     }]});
     Box::new([

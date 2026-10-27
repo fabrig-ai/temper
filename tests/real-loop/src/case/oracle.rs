@@ -10366,6 +10366,14 @@ pub fn step_6_6(observed: &Observed) -> Vec<Miss> {
     waiting_release(observed, &mut misses);
     misses
 }
+fn ending_charter(read: Read) -> u64 {
+    if matches!(read, Read::WaitingE1ReviewerEnded | Read::WaitingRepinReviewerEnded | Read::QaReviewerEnded) {
+        4
+    } else {
+        1
+    }
+}
+
 fn waiting_identities(observed: &Observed, misses: &mut Vec<Miss>) {
     for (read, task, parent, agent) in waiting_tasks() {
         let doc = task_document(observed, read);
@@ -10381,7 +10389,7 @@ fn waiting_identities(observed: &Observed, misses: &mut Vec<Miss>) {
                     number(doc, "/requester/task") == Some(parent)
                 })
                 && (if agent {
-                    number(doc, "/chip/executor/agent/charter") == Some(1)
+                    number(doc, "/chip/executor/agent/charter") == Some(ending_charter(read))
                 } else {
                     doc.pointer("/chip/executor/procedure") == Some(&serde_json::json!({"connector":1,"kind":2}))
                 }),
@@ -10811,7 +10819,7 @@ mod waiting_tests {
         for (read, task, parent, agent) in waiting_tasks() {
             let page = journal(task, if task == REPIN_CODER { APP_STARTED } else { 10 }, &[], &[]);
             docs.insert(read, json!({"task":{
-                "chip":{"task":task,"phase":"ended","executor":if agent {json!({"agent":{"charter":1}})} else {json!({"procedure":{"connector":1,"kind":2}})}},
+                "chip":{"task":task,"phase":"ended","executor":if agent {json!({"agent":{"charter":ending_charter(read)}})} else {json!({"procedure":{"connector":1,"kind":2}})}},
                 "project":PROJECT,"spec_revision":{"value":0},"requester":if parent==0 {json!({"person":1})} else {json!({"task":parent})},
                 "goal":A1,"priority":1,"activity":page["rows"].as_array().expect("rows").len(),"delegates":[],
                 "result":{"at":KIT_ENDED,"ending":{"task":{"done":{}}}},
@@ -11550,7 +11558,7 @@ fn qa_ended(observed: &Observed) -> bool {
                 number(doc, "/requester/task") == Some(*parent)
             })
             && (if *agent {
-                number(doc, "/chip/executor/agent/charter") == Some(1)
+                number(doc, "/chip/executor/agent/charter") == Some(ending_charter(*read))
             } else {
                 doc.pointer("/chip/executor/procedure") == Some(&serde_json::json!({"connector":1,"kind":2}))
                     && check_activity(observed, *read)

@@ -1483,7 +1483,7 @@ pub fn step_6_4(forge: SocketAddr) -> Box<[Script]> {
         },
         Script { cue: review_cue(RED_FIRST_HEAD), turns: Box::new([direction_held(RED_REVIEW_HOLD, verdict())]) },
         Script {
-            cue: Agent::RedRepairCoder.cue().into(),
+            cue: task_cue(Agent::RedRepairCoder.cue()),
             turns: Box::new([direction_held(
                 RED_REPAIR_HOLD,
                 finish_change(
