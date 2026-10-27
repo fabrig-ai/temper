@@ -16,6 +16,7 @@ pub struct ChangeSettings {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Charter {
+    pub tools: u64,
     /// Resume, inspect, modify, shell and agents, in that order.
     pub switches: [bool; 5],
     pub number: u32,

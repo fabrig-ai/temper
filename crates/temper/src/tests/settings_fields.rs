@@ -11,6 +11,14 @@ fn the_page_is_what_fields_renders() {
     let checked_in = include_str!("../../../../docs/help/reference/settings-fields.md");
     let rendered = fields::page(&temper_client_tools::limits::form());
     let rendered = std::str::from_utf8(&rendered).expect("printable ASCII page");
+    if std::env::var_os("SKEIN_CODEGEN_WRITE").is_some_and(|value| value == "1") {
+        std::fs::write(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/help/reference/settings-fields.md"),
+            rendered,
+        )
+        .expect("write fields page");
+        return;
+    }
     if checked_in != rendered {
         let mut line = 1;
         for (left, right) in checked_in.lines().zip(rendered.lines()) {
@@ -23,7 +31,7 @@ fn the_page_is_what_fields_renders() {
     }
 }
 
-fn llm() -> jig_protocol_config::Llm {
+pub(super) fn llm() -> jig_protocol_config::Llm {
     jig_protocol_config::Llm {
         endpoints: Box::new([]),
         models: Box::new([jig_domain_core::Model {

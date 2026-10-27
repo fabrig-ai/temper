@@ -30,6 +30,7 @@ pub fn client_authority_models(v: &n::AuthorityModels) -> c::AuthorityModels {
 
 pub fn form_charter(v: &c::Charter) -> n::Charter {
     n::Charter {
+        tools: v.tools,
         number: v.number,
         instructions: form_text(&v.instructions),
         waiting: v.waiting,
@@ -53,6 +54,7 @@ pub fn form_charter(v: &c::Charter) -> n::Charter {
 }
 pub fn client_charter(v: &n::Charter) -> c::Charter {
     c::Charter {
+        tools: v.tools,
         number: v.number,
         instructions: client_text(&v.instructions),
         waiting: v.waiting,

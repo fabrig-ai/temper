@@ -67,7 +67,7 @@ pub static FORMS: [Form; 41] = [
     },
     Form { shape: Shape::Observed, name: b"observed", choice: Choice::Every, line: b"A requirement judged from facts read before the effect." },
 ];
-pub static FIELDS: [Field; 152] = [
+pub static FIELDS: [Field; 153] = [
     Field {
         shape: Shape::File,
         name: b"items",
@@ -122,6 +122,7 @@ pub static FIELDS: [Field; 152] = [
         null: false,
         line: b"The charter's number, the same as `setting.number`.",
     },
+    Field { shape: Shape::Charter, name: b"tools", value: Value::Integer(Width::U64), list: None, null: false, line: b"The host families its runs are offered, where their task's authority holds them too" },
     Field {
         shape: Shape::Charter,
         name: b"instructions",
