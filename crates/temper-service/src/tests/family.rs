@@ -548,6 +548,8 @@ fn invalid_change_watches_are_refused_unknown_without_the_root() {
 }
 fn panel() -> forge::Panel {
     forge::Panel {
+        way: change::Way::Queue,
+        in_landing: None,
         task: CHANGE_TASK,
         forge: 1,
         owner: b"acme".as_slice().into(),
@@ -616,6 +618,8 @@ fn a_panel_encodes_and_decodes_back_whole() {
     let expected = w::ChangePanel::new(
         &w::CEILINGS,
         w::ChangePanelParts {
+            way: w::Way::Queue,
+            in_landing: None,
             task: CHANGE_TASK,
             forge: 1,
             owner: b"acme".as_slice().into(),
@@ -643,6 +647,18 @@ fn repairing(reason: w::Reason) -> w::Step {
 #[test]
 fn every_panel_step_keeps_its_payload_on_the_wire() {
     for (input, expected) in [
+        (
+            forge::PanelStep::Ready { landing: Some(61) },
+            w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap()),
+        ),
+        (
+            forge::PanelStep::Ready { landing: None },
+            w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: None }).unwrap()),
+        ),
+        (
+            forge::PanelStep::Preparing { landing: Some(61) },
+            w::Step::Preparing(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap()),
+        ),
         (forge::PanelStep::Producing, w::Step::Producing),
         (forge::PanelStep::Opening, w::Step::Opening),
         (forge::PanelStep::Recreating, w::Step::Recreating),
@@ -666,8 +682,17 @@ fn every_panel_step_keeps_its_payload_on_the_wire() {
         ),
     ] {
         let mut value = panel();
-        value.step = input;
-        assert_eq!(*decoded_panel(value, &[]).step(), expected);
+        for (way, expected_way) in [(change::Way::Queue, w::Way::Queue), (change::Way::Turn, w::Way::Turn)] {
+            for landing in [None, Some(61)] {
+                value.step = input.clone();
+                value.way = way;
+                value.in_landing = landing;
+                let got = decoded_panel(value.clone(), &[]);
+                assert_eq!(*got.step(), expected);
+                assert_eq!(*got.way(), expected_way);
+                assert_eq!(*got.in_landing(), landing);
+            }
+        }
     }
 }
 #[test]
