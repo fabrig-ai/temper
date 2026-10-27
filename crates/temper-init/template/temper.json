@@ -412,6 +412,10 @@
                   "number": 2
                 },
                 {
+                  "kind": "charter",
+                  "number": 4
+                },
+                {
                   "kind": "procedure",
                   "number": 2
                 }
@@ -555,6 +559,10 @@
                     {
                       "kind": "charter",
                       "number": 2
+                    },
+                    {
+                      "kind": "charter",
+                      "number": 4
                     },
                     {
                       "kind": "procedure",

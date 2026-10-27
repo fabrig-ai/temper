@@ -59,6 +59,7 @@ pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     let mut charters = Box::new([
         charter(1, include_bytes!("stock/chat.txt"), llm),
         charter(2, include_bytes!("stock/coding.txt"), llm),
+        reviewer(llm),
     ]);
     // jig prices the costliest completion; one reserve turn plus one is 2C.
     // Its existing admission helper keeps the stock on that same rounding rule.
@@ -139,6 +140,12 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
         },
     }
 }
+fn reviewer(llm: &jig_protocol_config::Llm) -> Charter {
+    let mut value = charter(4, include_bytes!("stock/review.txt"), llm);
+    value.policy.modify = false;
+    value.policy.agents = false;
+    value
+}
 fn grants() -> Box<[authority::Grant]> {
     let mut grants = List::with_capacity(10);
     for kind in [1, 2, 3, 4, 7, 8, 10, 11, 12, 13] {
@@ -164,6 +171,7 @@ fn ceiling(ceiling_spend: u64) -> authority::Authority {
             kinds: Box::new([
                 authority::Executor::Charter(1),
                 authority::Executor::Charter(2),
+                authority::Executor::Charter(4),
                 authority::Executor::Procedure(2),
             ]),
             tasks: 14,
