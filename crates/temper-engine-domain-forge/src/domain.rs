@@ -2531,6 +2531,7 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
         | change::State::Landing { .. }
+        | change::State::Ended
         | change::State::Held { .. } => {}
     }
     let mut owner = None;
@@ -3675,6 +3676,8 @@ fn end_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Requ
     }
     row.change.state = match &row.change.state {
         change::State::Landed { merge } => change::State::Landed { merge: *merge },
+        change::State::Red { merge } => change::State::Red { merge: *merge },
+        change::State::Cleared { merge } => change::State::Cleared { merge: *merge },
         change::State::Producing { .. }
         | change::State::Opening { .. }
         | change::State::Recreating { .. }
