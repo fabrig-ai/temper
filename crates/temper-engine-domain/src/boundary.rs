@@ -810,6 +810,7 @@ pub(crate) fn delivery_output(delivery: Delivery) -> Request {
         | Delivery::TurnBusy { .. }) => Request::Worker(WorkerRequest::Deliver(delivery)),
         delivery @ (Delivery::DemoNote { .. }
         | Delivery::Forges { .. }
+        | Delivery::ForgeDocument { .. }
         | Delivery::Panel { .. }
         | Delivery::Application { .. }
         | Delivery::WebReply { .. }

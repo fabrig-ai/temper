@@ -914,6 +914,7 @@ impl World {
             | Delivery::Procedure { .. }
             | Delivery::Application { .. }
             | Delivery::Forges { .. }
+            | Delivery::ForgeDocument { .. }
             | Delivery::Panel { .. }
             | Delivery::WebReply { .. }
             | Delivery::CarriedUnused { .. }

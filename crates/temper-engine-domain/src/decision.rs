@@ -76,6 +76,11 @@ pub enum Delivery {
         watcher: Token,
         panel: Box<temper_engine_domain_forge::Panel>,
     },
+    /// A landing document held by its asking decision (domain/landing.md, 14).
+    ForgeDocument {
+        watcher: Token,
+        document: Box<temper_engine_domain_forge::Document>,
+    },
     /// The deployment's connection document (domain/root.md, 5.1).
     Forges {
         watcher: Token,
@@ -429,6 +434,10 @@ impl Decision {
         let within = match &delivery {
             Delivery::Result { words, .. } => {
                 words.len() <= usize::try_from(limits.result_bytes).expect("u32 fits usize")
+            }
+            Delivery::ForgeDocument { document, .. } => {
+                document.owned_bytes()
+                    <= usize::try_from(limits.result_bytes.max(limits.transcript_bytes)).expect("u32 fits usize")
             }
             Delivery::Panel { panel, .. } => {
                 let mut owned = panel
