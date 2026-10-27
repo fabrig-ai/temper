@@ -643,6 +643,7 @@ fn repairing(reason: w::Reason) -> w::Step {
 #[test]
 fn every_panel_step_keeps_its_payload_on_the_wire() {
     for (input, expected) in [
+        (forge::PanelStep::Ended, w::Step::Ended),
         (forge::PanelStep::Producing, w::Step::Producing),
         (forge::PanelStep::Opening, w::Step::Opening),
         (forge::PanelStep::Recreating, w::Step::Recreating),

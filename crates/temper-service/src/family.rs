@@ -359,6 +359,7 @@ fn used(value: forge::PanelUsed, limits: &w::Limits) -> Option<w::Used> {
 
 fn panel_step(value: forge::PanelStep, limits: &w::Limits) -> Option<w::Step> {
     Some(match value {
+        forge::PanelStep::Ended => w::Step::Ended,
         forge::PanelStep::Producing => w::Step::Producing,
         forge::PanelStep::Opening => w::Step::Opening,
         forge::PanelStep::Recreating => w::Step::Recreating,

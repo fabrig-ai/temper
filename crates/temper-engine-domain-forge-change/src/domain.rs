@@ -29,12 +29,7 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
     }
     match &change.state {
         State::Landed { merge } => return Stepped { change: next, decision: Decision::Finish { merge: *merge } },
-        State::Held { was, why } => {
-            if standing.released {
-                return release(next, was, *why, facts, now);
-            }
-            return Stepped { change: next, decision: Decision::None };
-        }
+        State::Ended => return Stepped { change: next, decision: Decision::Cancel },
         State::Producing { .. }
         | State::Opening { .. }
         | State::Recreating { .. }
@@ -46,17 +41,29 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         | State::Updating { .. }
         | State::Resolving { .. }
         | State::Repairing { .. }
-        | State::Landing { .. } => {}
+        | State::Landing { .. }
+        | State::Held { .. } => {}
     }
-    match facts.pull {
-        Pull::Merged { commit } => {
-            next.state = State::Landed { merge: commit };
-            return Stepped { change: next, decision: Decision::Finish { merge: commit } };
-        }
-        Pull::Missing | Pull::Open { .. } | Pull::Closed => {}
+    if let Pull::Merged { commit } = facts.pull {
+        next.state = State::Landed { merge: commit };
+        next.released = None;
+        return Stepped { change: next, decision: Decision::Finish { merge: commit } };
     }
     if standing.cancelled {
+        next.state = State::Ended;
+        next.released = None;
+        next.owns_turn = false;
         return Stepped { change: next, decision: Decision::Cancel };
+    }
+    if standing.released {
+        next = released(&next, now);
+    }
+    if let Some(why) = next.released.take() {
+        let was = next.state.clone();
+        return release(next, &was, why, facts);
+    }
+    if let State::Held { .. } = next.state {
+        return Stepped { change: next, decision: Decision::None };
     }
     if facts.writer_taken {
         return waiting(next, now, limits);
@@ -78,6 +85,7 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
             | State::Repairing { .. }
             | State::Landing { .. }
             | State::Landed { .. }
+            | State::Ended
             | State::Held { .. } => return hold(next, Hold::PullClosed),
         },
         // The connector reports a changed target branch through facts.drift.
@@ -99,16 +107,49 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
         State::Resolving { requested, base } => resolving(next, *requested, *base, facts, standing, now, limits),
         State::Repairing { requested, why } => repairing(next, *requested, *why, facts, standing, now, limits),
         State::Landing { head } => landing(next, *head, standing, now, limits),
-        State::Landed { .. } | State::Held { .. } => unreachable!("terminal states returned above"),
+        State::Landed { .. } | State::Ended | State::Held { .. } => unreachable!("terminal states returned above"),
     }
 }
 
-fn release(mut change: Change, was: &State, why: Hold, facts: &Facts, now: Wall) -> Stepped {
-    change.repairs = 0;
-    change.resolutions = 0;
-    change.updates = 0;
-    change.since = now;
-    change.owns_turn = false;
+fn is_reopening(state: &State) -> bool {
+    match state {
+        State::Reopening { .. } => true,
+        State::Producing { .. }
+        | State::Opening { .. }
+        | State::Recreating { .. }
+        | State::Checking { .. }
+        | State::Gating { .. }
+        | State::Queued { .. }
+        | State::First { .. }
+        | State::Updating { .. }
+        | State::Resolving { .. }
+        | State::Repairing { .. }
+        | State::Landing { .. }
+        | State::Landed { .. }
+        | State::Ended
+        | State::Held { .. } => false,
+    }
+}
+
+/// Lift a task's own change hold in the same decision as the task's release.
+/// The persisted cause lets the next fresh snapshot perform drift recovery.
+#[must_use]
+pub fn released(change: &Change, now: Wall) -> Change {
+    let mut next = change.clone();
+    if let State::Held { was, why } = &change.state {
+        next.state = *was.clone();
+        next.released = Some(*why);
+        next.gate_failures = Box::new([]);
+        next.repairs = 0;
+        next.resolutions = 0;
+        next.updates = 0;
+        next.since = now;
+        next.owns_turn = false;
+    }
+    next
+}
+
+fn release(mut change: Change, was: &State, why: Hold, facts: &Facts) -> Stepped {
     match why {
         Hold::PullClosed => {
             change.state = State::Reopening { requested: true, retarget: false };
@@ -131,7 +172,10 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts, now: Wall)
         Hold::BranchMoved => {
             change.clean = Box::new([]);
             change.state = match facts.branch {
-                Some(head) => State::Checking { head },
+                Some(head) => {
+                    change.last_head = Some(head);
+                    State::Checking { head }
+                }
                 None => State::Producing { requested: false },
             };
             Stepped { change, decision: Decision::None }
@@ -141,7 +185,9 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts, now: Wall)
                 State::Queued { head, .. } | State::First { head, .. } | State::Gating { head, .. } => {
                     State::Gating { head: *head, asked: Box::new([]) }
                 }
-                State::Held { .. } | State::Landed { .. } => unreachable!("held state retains a live predecessor"),
+                State::Held { .. } | State::Landed { .. } | State::Ended => {
+                    unreachable!("held state retains a live predecessor")
+                }
                 State::Producing { .. }
                 | State::Opening { .. }
                 | State::Recreating { .. }

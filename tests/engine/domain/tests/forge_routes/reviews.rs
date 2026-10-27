@@ -350,3 +350,230 @@ fn a_request_for_changes_is_still_a_repair() {
     assert!(row.change.gate_failures.is_empty());
     assert_eq!(row.verdicts[0].status, temper_engine_domain_forge_change::Status::Failed);
 }
+
+fn held_review() -> (World, u64, [u8; 32]) {
+    let (mut world, first, head) = review_world();
+    let change = requester(&world, first.task);
+    finish_review(&mut world, &first, tasks::TaskResult::Failure { reason: b"cannot read the pull".as_slice().into() });
+    let second = next_assignment(&mut world, 3);
+    finish_review(&mut world, &second, tasks::TaskResult::Failure { reason: b"still cannot read".as_slice().into() });
+    for _ in 0..MAX_TICKS {
+        world.tick();
+    }
+    assert!(matches!(live_task(&world, change).phase, tasks::Phase::Held { .. }));
+    (world, change, head)
+}
+
+fn release(world: &mut World, task: u64) {
+    let revision = live_task(world, task).revisions.hold;
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(950)),
+        sign_in: world.signed_in.expect("owner signed in"),
+        key: [95; 16],
+        ask: people::Ask::Release { project: 1, task, revision, again: None },
+    }));
+    // Inspect the decision before either row is durable or any forge read answers.
+    let writes = world
+        .store
+        .pending
+        .iter()
+        .find_map(|(_, writes)| {
+            writes
+                .iter()
+                .any(|write| {
+                    matches!(write,
+                        engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))))
+                            if row.number == task && !matches!(row.phase, tasks::Phase::Held { .. })
+                    )
+                })
+                .then_some(writes)
+        })
+        .expect("the task's release commit");
+    assert!(
+        writes.iter().any(|write| matches!(write,
+            engine::Write::Save(Record::Forge { row }) if matches!(row.as_ref(),
+                forge_top::Stored::Change(row) if row.task == task
+                    && !matches!(row.change.state, temper_engine_domain_forge_change::State::Held { .. })
+                    && row.change.gate_failures.is_empty()
+                    && row.change.released.is_some())
+        )),
+        "the same commit clears the change's hold and review tries"
+    );
+}
+
+fn approve(world: &mut World, reviewer: &engine::Assignment) {
+    finish_review(
+        world,
+        reviewer,
+        tasks::TaskResult::Verdict { code: 1, fields: Box::new([]), words: b"approved".as_slice().into() },
+    );
+}
+
+fn assert_lands(world: &mut World, task: u64) {
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if matches!(change_row(world, task).change.state, temper_engine_domain_forge_change::State::Landed { .. }) {
+            assert_eq!(world.merges, 1);
+            return;
+        }
+    }
+    panic!("released change did not land: {:?}", change_row(world, task));
+}
+
+#[test]
+fn a_released_change_asks_its_review_afresh() {
+    let (mut world, change, head) = held_review();
+    release(&mut world, change);
+    let fresh = next_assignment(&mut world, 4);
+    assert_review_head(&world, &fresh, head);
+    assert!(change_row(&world, change).change.gate_failures.is_empty());
+    approve(&mut world, &fresh);
+    assert_lands(&mut world, change);
+}
+
+#[test]
+fn a_released_change_counts_its_review_tries_anew() {
+    let (mut world, change, head) = held_review();
+    release(&mut world, change);
+    let fresh = next_assignment(&mut world, 4);
+    finish_review(&mut world, &fresh, tasks::TaskResult::Failure { reason: b"cannot read again".as_slice().into() });
+    let retry = next_assignment(&mut world, 5);
+    assert_review_head(&world, &retry, head);
+    assert_eq!(
+        change_row(&world, change).change.gate_failures.as_ref(),
+        &[temper_engine_domain_forge_change::GateFailure { number: 1, count: 1 }]
+    );
+    assert!(!matches!(live_task(&world, change).phase, tasks::Phase::Held { .. }));
+    approve(&mut world, &retry);
+    assert_lands(&mut world, change);
+}
+
+fn cancel_and_assert_panel_ended(world: &mut World, task: u64) {
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(951)),
+        sign_in: world.signed_in.expect("owner signed in"),
+        key: [96; 16],
+        ask: people::Ask::Cancel { project: 1, task, reason: b"cancel held change".as_slice().into(), grace: None },
+    }));
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if world.store.rows.contains_key(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(task)))) {
+            assert_eq!(change_row(world, task).change.state, temper_engine_domain_forge_change::State::Ended);
+            world.send(engine::Event::Party(engine::PartyInput::Watch {
+                watcher: Token::new(952),
+                sign_in: world.signed_in.expect("owner signed in"),
+                subject: jig_domain_core::documents::Watched::Application {
+                    scope: people::ApplicationScope::Project(1),
+                    connector: 0,
+                    subject: Token::new(task),
+                },
+                window: jig_domain_core::documents::Window { rows: 0, after: None },
+            }));
+            for _ in 0..MAX_TICKS {
+                world.tick();
+                if let Some((_, panel)) = world.panels.iter().find(|(watcher, _)| *watcher == Token::new(952)) {
+                    assert_eq!(panel.step, forge_top::PanelStep::Ended);
+                    assert_eq!(panel.hold, None);
+                    assert_eq!(panel.runs, None);
+                    assert_eq!(world.merges, 0);
+                    return;
+                }
+            }
+            panic!("ended change's retained panel was not delivered");
+            assert_eq!(world.merges, 0);
+            return;
+        }
+    }
+    panic!("cancel did not end the held task");
+}
+
+#[test]
+fn a_cancelled_held_change_ends_its_panel() {
+    let (mut world, change, _) = held_review();
+    cancel_and_assert_panel_ended(&mut world, change);
+}
+
+/// Restore the held snapshot for each cause, then exercise the person's real release/cancel route.
+fn held_for(why: temper_engine_domain_forge_change::Hold) -> (World, u64, [u8; 32]) {
+    use temper_engine_domain_forge_change::{GateKind, GateReport, Hold, State, Status};
+    let (mut world, task, head) = held_review();
+    let mut row = change_row(&world, task).clone();
+    row.change.state = State::Held { was: Box::new(State::Gating { head, asked: Box::new([]) }), why };
+    row.change.gate_failures = Box::new([]);
+    match why {
+        Hold::Repairs => {
+            row.change.repairs = world.env.limits.forge.change_policy.repairs;
+            row.verdicts = Box::new([GateReport { number: 1, head, status: Status::Failed }]);
+        }
+        Hold::Rejected => {
+            row.change.gates[0].kind = GateKind::Person;
+            row.verdicts = Box::new([GateReport { number: 1, head, status: Status::Failed }]);
+        }
+        Hold::BranchMoved => row.drift = Some(Hold::BranchMoved),
+        _ => panic!("not a held fixture for {why:?}"),
+    }
+    world.send(engine::Event::Forge(Box::new(forge_top::Event::Restore { record: forge_top::Stored::Change(row) })));
+    (world, task, head)
+}
+
+#[test]
+fn a_released_change_counts_its_repairs_anew() {
+    let (mut world, task, _) = held_for(temper_engine_domain_forge_change::Hold::Repairs);
+    release(&mut world, task);
+    let repair = next_assignment(&mut world, 4);
+    assert!(matches!(live_task(&world, repair.task).contract, tasks::Contract::Change { .. }));
+    assert_eq!(change_row(&world, task).change.repairs, 1);
+    assert!(!matches!(live_task(&world, task).phase, tasks::Phase::Held { .. }));
+}
+
+#[test]
+fn a_released_change_with_a_declined_approval_is_held_again() {
+    use temper_engine_domain_forge_change::{Hold, State};
+    let (mut world, task, _) = held_for(Hold::Rejected);
+    let revision = live_task(&world, task).revisions.hold;
+    release(&mut world, task);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+    }
+    assert!(matches!(change_row(&world, task).change.state, State::Held { why: Hold::Rejected, .. }));
+    assert!(matches!(live_task(&world, task).phase, tasks::Phase::Held { .. }));
+    assert!(live_task(&world, task).revisions.hold > revision, "a fresh task hold matches the unchanged verdict");
+    assert_eq!(world.assigned.len(), 4, "a declined approval is not asked again at the same head");
+}
+
+#[test]
+fn a_released_change_checks_its_moved_branch_afresh() {
+    let (mut world, task, old) = held_for(temper_engine_domain_forge_change::Hold::BranchMoved);
+    let branch = change_row(&world, task).branch.clone();
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, FILE, b"a person's new diff", 2)
+        .expect("person moved the held branch");
+    let head = translate::commit(head);
+    assert_ne!(head, old);
+    release(&mut world, task);
+    let fresh = next_assignment(&mut world, 4);
+    assert_review_head(&world, &fresh, head);
+    assert_eq!(change_row(&world, task).change.last_head, Some(head));
+    assert_eq!(change_row(&world, task).drift, None);
+    approve(&mut world, &fresh);
+    assert_lands(&mut world, task);
+}
+
+#[test]
+fn a_cancelled_change_held_for_repairs_ends_its_panel() {
+    let (mut world, task, _) = held_for(temper_engine_domain_forge_change::Hold::Repairs);
+    cancel_and_assert_panel_ended(&mut world, task);
+}
+
+#[test]
+fn a_cancelled_change_with_a_declined_approval_ends_its_panel() {
+    let (mut world, task, _) = held_for(temper_engine_domain_forge_change::Hold::Rejected);
+    cancel_and_assert_panel_ended(&mut world, task);
+}
+
+#[test]
+fn a_cancelled_change_with_a_moved_branch_ends_its_panel() {
+    let (mut world, task, _) = held_for(temper_engine_domain_forge_change::Hold::BranchMoved);
+    cancel_and_assert_panel_ended(&mut world, task);
+}
