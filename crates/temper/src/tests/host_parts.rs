@@ -149,6 +149,8 @@ fn measure(number: u32, settings: bool, name: &str, sections: &[run::Section], l
         tools,
         if number == 4 {
             19
+        } else if number == 2 {
+            21
         } else if settings {
             39
         } else {
@@ -232,9 +234,9 @@ fn a_large_prepared_brief_keeps_the_host_part_hold_reason() {
     let scratch = skein_scratch::Scratch::new("large-brief-hold");
     let limits = limits(scratch.path());
     let run::Request::Answer { answer, .. } =
-        entrance(&assignment(2, false), &largest_brief(), &limits, limits.host_part)
+        entrance(&assignment(1, false), &largest_brief(), &limits, limits.host_part)
     else {
-        panic!("the full producer brief exceeds the stock host part")
+        panic!("the full chat brief exceeds the stock host part")
     };
     let terminal = temper_engine_smith::result(answer, None).expect("typed refusal reaches the hold");
     assert_eq!(

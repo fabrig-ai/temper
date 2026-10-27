@@ -326,7 +326,13 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
 fn no_settings_tools(run: &engine::Assignment) {
     assert_eq!(run.run.authority.tools.0 & core::ToolFamilies::JIG.settings, 0);
     let charter = temper_engine_smith::charter(run);
-    assert_eq!(charter.grants.host_tools.len(), if run.charter == 4 { 19 } else { 37 });
+    let expected = match run.charter {
+        1 => 37,
+        2 => 21,
+        4 => 19,
+        other => panic!("unexpected stock charter {other}"),
+    };
+    assert_eq!(charter.grants.host_tools.len(), expected);
     for tool in &charter.grants.host_tools {
         assert!(tool.name.as_ref() != b"settings" && tool.name.as_ref() != b"propose_settings");
     }
