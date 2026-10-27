@@ -1628,7 +1628,7 @@ dependencies = [
 [[package]]
 name = "skein-playground"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/skein.git#b368945a51af9eda77fb000c64ba365a70a14aff"
+source = "git+https://github.com/fabrig-dev/skein.git#598cb85a843de34c98ff4e13cb40d5587c1f9e21"
 dependencies = [
  "js-sys",
  "skein-http",
