@@ -529,3 +529,275 @@ fn a_stored_change_that_no_longer_checks_refuses_the_start() {
         })
     );
 }
+
+// The host boundary is real here: JSON goes to smith's decoder and the core's
+// document goes back through smith's ctl-shared renderer, over the root's fleet.
+fn settings_agent_config(allowed: bool) -> engine::Config {
+    let mut config = walking::config(SEED);
+    if allowed {
+        config.core.defaults.rules.ceiling.tools.0 |= core::ToolFamilies::JIG.settings;
+        for project in &mut config.core.seed_projects {
+            project.policy.policy.ceiling.tools.0 |= core::ToolFamilies::JIG.settings;
+            for role in &mut project.policy.policy.roles {
+                role.authority.tools.0 |= core::ToolFamilies::JIG.settings;
+            }
+        }
+    }
+    // The deployment owner creates the project through the root, acquiring
+    // its project role within the fixture's existing owner and holding bounds.
+    config.core.owners[0].project = people::DEPLOYMENT;
+    let mut policy = config.core.seed_projects[0].policy.clone();
+    policy.permissions = Box::new([]);
+    config.core.seed_projects = Box::new([]);
+    config.core.defaults.policies.insert(1, policy).expect("one default policy");
+    config
+}
+
+fn settings_agent(allowed: bool) -> (Driver, engine::Assignment) {
+    let mut driver = Driver::configured(
+        Store::new(),
+        [settings_agent_config(allowed), settings_agent_config(allowed)],
+        &walking::limits(),
+    );
+    driver.hello(Token::new(7));
+    driver.settle();
+    driver.sign_in();
+    driver.settle();
+    driver.send(Event::Party(PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(991)),
+        sign_in: driver.session(),
+        key: [91; 16],
+        ask: people::Ask::MakeProject { name: "Settings project".into(), policy: 1 },
+    }));
+    driver.settle();
+    driver.period();
+    driver.settle();
+    driver.send(Event::Party(PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(992)),
+        sign_in: driver.session(),
+        key: [92; 16],
+        ask: walking::configured_chat(
+            &jig_core_world::fixtures::Creating::new(&walking::config(SEED).core, walking::limits().tasks.tree_tasks),
+            &driver.store.rows,
+            driver.env.limits.tasks.tree_tasks,
+            1,
+            b"Read settings",
+        ),
+    }));
+    driver.settle();
+    let run = driver.last_assignment();
+    (driver, run)
+}
+
+fn host_tool(
+    driver: &mut Driver,
+    run: &engine::Assignment,
+    completion: u32,
+    tool: &[u8],
+    input: &[u8],
+) -> (Box<[u8]>, bool) {
+    use jig_domain_host as host;
+    use smith_domain_run as smith;
+    use temper_engine_domain_world::protocol;
+    let mut name = skein_lib::Writer::new(16);
+    name.put(&run.attempt.to_be_bytes()).expect("activation");
+    name.put(&completion.to_be_bytes()).expect("completion");
+    name.put(&0_u32.to_be_bytes()).expect("position");
+    let name = name.finish();
+    driver.protocol.defer_render = true;
+    driver.send(protocol::up(
+        Token::new(7),
+        host::LinkUp::Call {
+            run: Token::new(run.task),
+            attempt: Token::new(run.attempt),
+            call: name.clone(),
+            tool: tool.into(),
+            writes: tool != b"settings",
+            input: input.into(),
+            deadline: Duration::from_secs(10),
+        },
+        engine::Parts::none(),
+    ));
+    driver.pump();
+    let request = driver.host_requests.pop().expect("host decoder called");
+    let engine::HostRequest::Decode { to, call, .. } = *request else { panic!("decode") };
+    assert_eq!(call.name, name);
+    let input = smith::HostInput::attested(call.input).expect("host input");
+    let decoded = temper_engine_smith::call_configured(
+        smith::CallName { activation: run.attempt, completion, position: 0 },
+        &call.tool,
+        &input,
+        driver.root.models(),
+    )
+    .expect("valid host call");
+    let temper_engine_smith::Decoded::Call(body) = decoded else { panic!("valid settings tool enters the root") };
+    driver.send(Event::Worker(engine::WorkerInput::DecodedHostCall { to, body }));
+    driver.pump();
+    let mut settings_delivery = None;
+    for (index, delivery) in driver.delivered.iter().enumerate() {
+        if let Delivery::Host(delivery) = delivery
+            && matches!(delivery.as_ref(), engine::HostDelivery::Settings { .. })
+        {
+            settings_delivery = Some(index);
+            break;
+        }
+    }
+    let (to, answer) = if let Some(index) = settings_delivery {
+        let Delivery::Host(delivery) = driver.delivered.remove(index) else { panic!("settings delivery") };
+        let engine::HostDelivery::Settings { to, answer, from, requested } = *delivery else { panic!("settings read") };
+        (to, temper_engine_smith::settings_answer(&answer, from, requested, driver.root.models()))
+    } else {
+        let (to, rendered_name) = driver.protocol.pending_renders.pop().expect("host answer to render");
+        assert_eq!(rendered_name, name);
+        let (_, answer) = driver.protocol.answers.last().expect("typed answer");
+        (to, temper_engine_smith::answer(answer))
+    };
+    let (body, error) = answer.into_parts();
+    driver.send(Event::Worker(engine::WorkerInput::RenderedHostCall {
+        to,
+        answer: core::SettledAnswer::Host { error, body },
+    }));
+    driver.pump();
+    for delivery in driver.delivered.iter().rev() {
+        if let Delivery::Link {
+            down: host::LinkDown::Relayed { call, answer: host::Relayed::Answer { text, error }, .. },
+            ..
+        } = delivery
+            && *call == name
+        {
+            return (text.clone(), *error);
+        }
+    }
+    panic!("settings tool answer reached the run");
+}
+
+fn owner_reviews_run_proposal(driver: &mut Driver, task: u64, proposal: u64) {
+    driver.send(Event::Party(PartyInput::Read {
+        reply_to: ReplyTo::new(Token::new(995)),
+        sign_in: driver.session(),
+        read: core::reads::Read::Proposal { proposer: people::Proposer::Task(task), proposal },
+    }));
+    driver.settle();
+    let mut reviewed = false;
+    for delivery in &driver.delivered {
+        if let Delivery::Read { answer: core::reads::Answer::Document(document), .. } = delivery
+            && let core::documents::Document::Proposal(document) = document.as_ref()
+            && let core::documents::ProposalAction::Settings { against, review: Some(review), .. } = &document.action
+        {
+            assert_eq!((*against, review.newest), (1, 1));
+            let item = review.items.get(0).expect("reviewed charter");
+            let Some(s::Value::Charter(charter)) = &item.would_be else { panic!("proposed charter") };
+            assert_eq!(charter.policy.instructions.as_ref(), b"Read settings and report.");
+            reviewed = true;
+        }
+    }
+    assert!(reviewed, "the owner reads the real settings review");
+    driver.send(Event::Party(PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(996)),
+        sign_in: driver.session(),
+        key: [96; 16],
+        ask: people::Ask::DecideProposal {
+            project: people::DEPLOYMENT,
+            proposer: people::Proposer::Task(task),
+            proposal,
+            decision: people::ProposalDecision::Accept,
+            running: Some(people::Running::Stays),
+        },
+    }));
+    driver.settle();
+    let mut accepted = false;
+    for delivery in &driver.delivered {
+        if let Delivery::WebReply {
+            reply:
+                people::Reply::Outcome(people::Outcome::ProposalDecided {
+                    choice: people::ProposalChoice::Accepted, ..
+                }),
+            ..
+        } = delivery
+        {
+            accepted = true;
+        }
+    }
+    assert!(accepted, "the owner's acceptance passes through the root");
+}
+
+#[test]
+fn a_run_reads_the_settings_and_proposes_a_change_an_owner_accepts() {
+    use jig_domain_tasks as tasks;
+    let (mut driver, run) = settings_agent(true);
+    let original = driver.store.rows.clone();
+    let (inventory, error) = host_tool(&mut driver, &run, 1, b"settings", br"{}");
+    assert!(!error);
+    assert!(inventory.starts_with(b"newest revision 1\n"));
+    let (charter, error) =
+        host_tool(&mut driver, &run, 2, b"settings", br#"{"setting":{"kind":"charter","number":1},"revision":1}"#);
+    assert!(!error);
+    assert!(charter.starts_with(b"charter 1, revision 1\n"));
+    assert_eq!(driver.store.rows, original, "settings reads save no call record or other row");
+    let charter = std::str::from_utf8(&charter).expect("charter text");
+    let (_, value) = charter.split_once('\n').expect("value line");
+    let value = value.strip_suffix("end\n").expect("whole charter fits this page").trim();
+    assert!(value.contains("Complete the task within its authority."));
+    let value = value.replace("Complete the task within its authority.", "Read settings and report.");
+    let proposal_json = format!(
+        "{{\"against\":1,\"reason\":\"clarify the task\",\"items\":[{{\"setting\":{{\"kind\":\"charter\",\"number\":1}},\"set\":{value}}}]}}"
+    );
+    let (proposed, error) = host_tool(&mut driver, &run, 3, b"propose_settings", proposal_json.as_bytes());
+    assert!(!error, "{}", String::from_utf8_lossy(&proposed));
+    let text = std::str::from_utf8(&proposed).expect("proposal text");
+    let proposal: u64 = text
+        .strip_prefix("proposed as proposal ")
+        .expect("proposal number")
+        .strip_suffix(" to the deployment's owners")
+        .expect("owners")
+        .parse()
+        .expect("number");
+    owner_reviews_run_proposal(&mut driver, run.task, proposal);
+    let before = driver.store.rows.clone();
+    // A retry under the same read name is fresh even after a write changed settings.
+    let (inventory, error) = host_tool(&mut driver, &run, 1, b"settings", br"{}");
+    assert!(!error);
+    assert!(inventory.starts_with(b"newest revision 2\n"));
+    assert_eq!(driver.store.rows, before);
+    driver.answer(Token::new(7), run.task, run.attempt, 0, tasks::End::Parked, engine::Parts::none());
+    driver.settle();
+    let next = driver.last_assignment();
+    assert_ne!(next.attempt, run.attempt);
+    let smith_domain::Event::Start { messages, .. } = temper_engine_smith::start(
+        &next,
+        None,
+        None,
+        ReplyTo::new(Token::new(997)),
+        Token::new(run.task),
+        smith_domain::Window { turns: 1, bytes: 100_000 },
+    ) else {
+        panic!("smith start")
+    };
+    let mut heard = false;
+    for message in &messages {
+        heard |= message.text.as_ref() == b"accepted: revision 2 made";
+    }
+    assert!(heard, "the next run hears the accepted revision in its starting inbox");
+}
+
+#[test]
+fn a_run_without_the_settings_family_is_denied() {
+    let (mut driver, run) = settings_agent(false);
+    let original = driver.store.rows.clone();
+    let (answer, error) = host_tool(&mut driver, &run, 1, b"settings", br"{}");
+    assert!(error, "settings family is required: {}", String::from_utf8_lossy(&answer));
+    assert_eq!(driver.store.rows, original, "a denied read also saves no call record");
+    let (answer, error) = host_tool(
+        &mut driver,
+        &run,
+        2,
+        b"propose_settings",
+        br#"{"against":1,"items":[{"setting":{"kind":"charter","number":1},"edit":"reset"}],"reason":"restore"}"#,
+    );
+    assert!(error, "settings proposal is denied: {}", String::from_utf8_lossy(&answer));
+    let (_, part) = driver.protocol.answers.last().expect("denial");
+    assert!(matches!(part, engine::CallAnswer::ToolDenied { .. }));
+}
