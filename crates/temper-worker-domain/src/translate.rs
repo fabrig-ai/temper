@@ -362,8 +362,8 @@ pub(crate) fn grant(value: host::Grant) -> Option<agent::Grant> {
 pub const fn start_cause(why: agent::RunInvalid) -> host::StartCause {
     match why {
         agent::RunInvalid::Grants => host::StartCause::Grants,
-        agent::RunInvalid::HostPart { .. }
-        | agent::RunInvalid::Room { .. }
+        agent::RunInvalid::HostPart { bound } => host::StartCause::HostPart { bound },
+        agent::RunInvalid::Room { .. }
         | agent::RunInvalid::Messages
         | agent::RunInvalid::CharterVersion
         | agent::RunInvalid::MalformedCharter

@@ -58,3 +58,38 @@ fn a_run_that_meets_a_bound_is_held_after_one_activation() {
         assert_held(&driver, &run, task);
     }
 }
+
+#[test]
+fn a_host_part_start_refusal_is_held_with_its_bound_without_a_try() {
+    let (mut driver, run) = Driver::chat();
+    let answer = host::Answer {
+        read: None,
+        refused: Box::new([]),
+        turns: 0,
+        spent: 0,
+        ending: host::Ending::Refused(host::Refusal::Invalid(host::Invalid::Start {
+            cause: host::StartCause::HostPart { bound: 33419 },
+            why: b"invalid".as_slice().into(),
+        })),
+    };
+    driver.send(protocol::up(
+        Token::new(7),
+        host::LinkUp::Answer { run: Token::new(run.task), attempt: Token::new(run.attempt), answer },
+        engine::Parts::none(),
+    ));
+    driver.settle();
+    let row = live(&driver, run.task);
+    assert!(
+        matches!(
+            row.phase,
+            tasks::Phase::Held {
+                why: tasks::Hold::Exceeded(tasks::Exceeded { bound: tasks::Bound::HostPart, value: 33419 }),
+                ..
+            }
+        ),
+        "{:?}",
+        row.phase
+    );
+    assert_eq!(row.tries, tasks::Tries::NONE);
+    assert_eq!(row.retry_notice, None);
+}
