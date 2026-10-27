@@ -160,7 +160,7 @@ impl World {
     pub fn configured_stock_limits(
         defaults: &jig_domain_core::settings::Defaults,
         model: &engine::Model,
-        limits: engine::Limits,
+        limits: &engine::Limits,
     ) -> Self {
         Self::configured_settings(
             true,
@@ -200,7 +200,7 @@ impl World {
         gate: paths::Gate,
         documents: Option<jig_domain_core::documents::DocumentLimits>,
         timing: StoryLimits,
-        stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<engine::Limits>)>,
+        stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
         let StoryLimits { brief, stall } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
@@ -396,10 +396,21 @@ impl World {
                 config.core.defaults.rules = domain.rules().clone();
             }
             if let Some((defaults, model, _)) = stock {
+                const STOCK_CHARTERS: u32 = 2;
+                const STOCK_EXECUTORS: u32 = 3;
+                const TREE_TASKS: u32 = 12; // Stock lifetime ceiling, including the root.
+                const LANDED_CHANGES: u32 = 2;
+                const RETAINED_HOLDINGS: u32 = 1 + LANDED_CHANGES * 2;
+                const CONTROL_OUTPUT: u32 = 9;
+                const TREE_ISSUE_BYTES: u32 = 8192;
+                const TREE_MILESTONES: u32 = 64;
+                const MILESTONE_BYTES: u32 = 1024; // A 512-byte result plus its lifecycle heading.
+                const TREE_FORGE_BYTES: u32 = TREE_ISSUE_BYTES + 1024;
+                const RESULT_INBOX_BYTES: u32 = 4096;
                 // Keep policy 1, the run limits, charters and templates exactly as supplied.
                 config.core.defaults.rules = defaults.rules.clone();
-                config.core.defaults.charters = defaults.charters.clone();
-                config.core.defaults.templates = defaults.templates.clone();
+                config.core.defaults.charters.clone_from(&defaults.charters);
+                config.core.defaults.templates.clone_from(&defaults.templates);
                 config
                     .core
                     .defaults
@@ -419,23 +430,17 @@ impl World {
                 }
                 config.landing.projects = skein_lib::Map::with_capacity(1);
                 // Stock names two charters and three executor kinds; all ten forge grants fit.
-                const STOCK_CHARTERS: u32 = 2;
-                const STOCK_EXECUTORS: u32 = 3;
                 limits.tasks.charters = STOCK_CHARTERS;
                 limits.tasks.executor_kinds = STOCK_EXECUTORS;
                 limits.authority.executors = STOCK_EXECUTORS;
                 // B2 retains eleven tasks (chat, work, advisor, two procedures and six agents).
-                const TREE_TASKS: u32 = 12; // Stock lifetime ceiling, including the root.
                 limits.tasks.funders = TREE_TASKS;
                 limits.tasks.project_goals = TREE_TASKS;
                 // The root retains its run branch and both landed changes' branch/pull pairs.
-                const LANDED_CHANGES: u32 = 2;
-                const RETAINED_HOLDINGS: u32 = 1 + LANDED_CHANGES * 2;
                 limits.tasks.holdings = RETAINED_HOLDINGS;
                 // Names for every task's permitted workspace resources can coexist in watches.
                 limits.forge.client.resources = TREE_TASKS * limits.forge.resources_per_task;
                 // The connector's declared worst-case client/retirement output burst.
-                const CONTROL_OUTPUT: u32 = 9;
                 limits.forge.output = skein_forge_client::max_out(&limits.forge.client)
                     + limits.forge.subscriptions * 3
                     + limits.forge.holds * 3
@@ -444,19 +449,14 @@ impl World {
                 // Twelve 512-byte specs plus headings fit in 8 KiB, rather than the tiny
                 // fixture's 512-byte body. Milestones are retained for the whole walk:
                 // eleven task endings, both changes' state transitions and W's wakes.
-                const TREE_ISSUE_BYTES: u32 = 8192;
-                const TREE_MILESTONES: u32 = 64;
-                const MILESTONE_BYTES: u32 = 1024; // A 512-byte result plus its lifecycle heading.
                 limits.forge.issue_policy.plan_items = TREE_TASKS;
                 limits.forge.issue_policy.milestones = TREE_MILESTONES;
                 limits.forge.issue_policy.body_bytes = TREE_ISSUE_BYTES;
                 limits.forge.issue_policy.comment_bytes = MILESTONE_BYTES;
                 // The forge client carries that body plus its title, purpose key and framing.
-                const TREE_FORGE_BYTES: u32 = TREE_ISSUE_BYTES + 1024;
                 limits.forge.client.op_bytes = TREE_FORGE_BYTES;
                 limits.forge.client.answer_bytes = TREE_FORGE_BYTES;
                 // Reports use jig's deployment result bound.
-                const RESULT_INBOX_BYTES: u32 = 4096;
                 limits.tasks.result_bytes =
                     jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.result_bytes;
                 limits.tasks.inbox_bytes = RESULT_INBOX_BYTES;
@@ -478,7 +478,7 @@ impl World {
                 limits.journal.writes = limits.journal.writes.max(walking::writes(&limits));
             }
             if let Some((_, _, Some(deployment))) = stock {
-                limits = deployment;
+                limits = *deployment;
             }
             (config, limits)
         });
