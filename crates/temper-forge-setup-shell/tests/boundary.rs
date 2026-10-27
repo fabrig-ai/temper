@@ -13,6 +13,10 @@ fn forbidden_at(path: &Path, source: &str) -> bool {
         // Terminal sign-in execs smith's command (protocol/credentials.md, 3).
         // Other process types and every lock operation retain the same guard.
         source.replace("std::process::Command", "TerminalCommand").replace("process::CommandExt", "TerminalExec")
+    } else if path.ends_with("temper/src/restart_fault.rs") {
+        // The process tier's exact-listener fault aborts its own serve only.
+        // Process creation, exec and every lock still belong to their boundaries.
+        source.replace("std::process::abort", "RestartFaultAbort")
     } else {
         source.into()
     };
@@ -58,6 +62,10 @@ fn the_scan_catches_each_form_and_passes_other_process_modules() {
         ("temper/src/program_login.rs", "std::process::Child", true),
         ("temper/src/program_login.rs", "std::process::exit(1)", true),
         ("temper/src/program_login.rs", "try_lock", true),
+        ("temper/src/host.rs", "std::process::abort()", true),
+        ("temper/src/restart_fault.rs", "std::process::abort()", false),
+        ("temper/src/restart_fault.rs", "std::process::Command", true),
+        ("temper/src/restart_fault.rs", "try_lock", true),
         ("other.rs", "std::process::Command", true),
     ] {
         assert_eq!(forbidden_at(Path::new(path), source), expected, "{path}: {source}");

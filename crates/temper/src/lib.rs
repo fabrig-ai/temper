@@ -36,6 +36,7 @@ mod host;
 mod init;
 pub mod open;
 mod program_login;
+mod restart_fault;
 mod setup;
 mod worker_alone;
 pub use host::{Host, ending as service_ending};
