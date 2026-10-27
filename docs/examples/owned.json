@@ -3,7 +3,7 @@
     "limits": {
       "profile": "small",
       "overrides": {
-        "authority.executors": 5,
+        "authority.executors": 6,
         "authority.grants": 14,
         "authority.segments": 8,
         "core.resume_bytes": 1590049,
@@ -18,7 +18,7 @@
         "tasks.authority_grants": 14,
         "tasks.authority_segments": 8,
         "tasks.batch": 1,
-        "tasks.executor_kinds": 5,
+        "tasks.executor_kinds": 6,
         "tasks.hold_segments": 8,
         "views.watchers": 16,
         "views.watchers_per_party": 16
