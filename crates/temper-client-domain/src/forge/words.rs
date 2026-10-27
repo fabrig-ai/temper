@@ -746,10 +746,18 @@ pub fn change_name_bytes(word: ChangeWord, index: usize) -> u32 {
         }
         ChangeWord::QueueSt | ChangeWord::QueueNd | ChangeWord::QueueRd | ChangeWord::QueueTh if index == 1 => 256,
         ChangeWord::Held if index == 0 => 18,
-        ChangeWord::PrepareLine | ChangeWord::FirstLine | ChangeWord::UpdateLine | ChangeWord::ResolveLine | ChangeWord::RepairSemantic => 256,
+        ChangeWord::PrepareLine
+        | ChangeWord::FirstLine
+        | ChangeWord::UpdateLine
+        | ChangeWord::ResolveLine
+        | ChangeWord::RepairSemantic => 256,
         ChangeWord::AuthorityHold | ChangeWord::Held => 512,
         ChangeWord::LandedLine => 7,
-        ChangeWord::ReadyLine | ChangeWord::ReadyAloneLine | ChangeWord::HeldReady | ChangeWord::HeldPreparing | ChangeWord::QueueSt
+        ChangeWord::ReadyLine
+        | ChangeWord::ReadyAloneLine
+        | ChangeWord::HeldReady
+        | ChangeWord::HeldPreparing
+        | ChangeWord::QueueSt
         | ChangeWord::QueueNd
         | ChangeWord::QueueRd
         | ChangeWord::QueueTh

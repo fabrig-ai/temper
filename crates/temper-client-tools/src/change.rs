@@ -739,7 +739,9 @@ fn step(step: &w::Step) -> &'static [u8] {
     match step {
         w::Step::First => b"first",
         w::Step::Ended => b"ended",
-        w::Step::Ready(_) | w::Step::Preparing(_) | w::Step::Producing
+        w::Step::Ready(_)
+        | w::Step::Preparing(_)
+        | w::Step::Producing
         | w::Step::Opening
         | w::Step::Recreating
         | w::Step::Reopening
