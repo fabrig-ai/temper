@@ -8,6 +8,77 @@ const FIRST_ENTRY: u64 = fixtures::OPEN + 1;
 const LATER_ENTRY: u64 = FIRST_ENTRY + 1;
 const LATER_BRANCH: &[u8] = b"temper/52";
 
+#[test]
+fn a_pending_prepare_rebase_is_not_branch_drift() {
+    use skein_forge::api::{Answer, Hint, Op, Read, UpdateStyle, Write};
+    use temper_engine_domain_forge_change as change;
+    for pending in [true, false] {
+        let mut d = domain();
+        outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+        let name = run_branch(b"51");
+        outputs(&mut d, Event::Hold { task: fixtures::CHANGE, resource: name.clone(), from: None });
+        outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+        outputs(&mut d, Event::ReadAfresh);
+        outputs(&mut d, Event::SettleOutbox);
+        outputs(&mut d, Event::Names { task: fixtures::CHANGE, resources: Box::new([name.clone()]) });
+        fixtures::answer_next(&mut d, Ok(Answer::Items { items: Box::new([]), more: false, now: env().now }));
+        fixtures::answer_next(&mut d, Ok(Answer::Commit(fixtures::HEAD)));
+        outputs(
+            &mut d,
+            Event::Client(skein_forge_client::Event::Pushed {
+                resource: skein_forge_client::Resource {
+                    repository: REPO,
+                    what: skein_forge_client::What::Branch(Box::from(b"temper/51".as_slice())),
+                },
+                commit: fixtures::HEAD,
+            }),
+        );
+        let mut row = fixtures::opening_row();
+        row.change.way = change::Way::Turn;
+        row.change.state =
+            change::State::Preparing { from: fixtures::HEAD, main: fixtures::BASE, ready_since: env().wall };
+        row.pending = if pending { Some(FIRST_ENTRY) } else { None };
+        outputs(&mut d, Event::Change { row });
+        outputs(
+            &mut d,
+            Event::Enqueue {
+                entry: skein_forge_client::Entry {
+                    number: FIRST_ENTRY,
+                    task: fixtures::CHANGE,
+                    repository: REPO,
+                    effect: skein_forge_client::Effect {
+                        write: Write::Update { number: 1, style: UpdateStyle::Rebase },
+                        condition: skein_forge_client::Condition::Update { head: fixtures::HEAD, base: fixtures::BASE },
+                    },
+                    start: None,
+                    attempt: None,
+                    failures: 0,
+                    queued: false,
+                },
+            },
+        );
+        outputs(
+            &mut d,
+            Event::Hint {
+                hint: Hint {
+                    repository: REPO,
+                    change: skein_forge::api::Change::Branch(Box::from(b"temper/51".as_slice())),
+                    key: None,
+                },
+            },
+        );
+        let mut later = env();
+        later.now = later.now.saturating_add(LIMITS.client.hinted);
+        let mut out = Queue::with_capacity(max_out(&LIMITS));
+        fire(&mut d, &later, &mut out);
+        let (call, op) = fixtures::next_call(&mut d);
+        assert_eq!(op, Op::Read(Read::Branch { branch: Box::from(b"temper/51".as_slice()) }));
+        fixtures::answer(&mut d, call, Ok(Answer::Commit(fixtures::BASE)));
+        assert_eq!(d.hold(&name).expect("held branch").drift.is_none(), pending);
+        assert_eq!(d.change(fixtures::CHANGE).expect("preparing change").drift.is_none(), pending);
+    }
+}
+
 fn start_opening(d: &mut Domain, task: u64, entry: u64) {
     start_opening_kept(d, task, entry, false);
 }
