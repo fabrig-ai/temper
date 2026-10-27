@@ -1089,6 +1089,9 @@ pub fn fixture_6_4() -> forge::Fixture {
         },
         configure: |value, agent, forge| {
             (fixture().configure)(value, agent, forge);
+            // These small change/repair allotments retain the world's
+            // one-unit admission floor for their final reviews.
+            value["world_settings"]["minimum_run_spend"] = 1.into();
             // Small, with each capacity/allowance below checked by a passing
             // whole story and a failing one-less probe in a fresh process.
             // calls_per_response 1 admits the aggregate turn; hub.run_calls

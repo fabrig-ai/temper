@@ -66,6 +66,9 @@ fn fixture() -> forge::Fixture {
         },
         configure: |value, agent, forge| {
             (landing::fixture().configure)(value, agent, forge);
+            // Coder and repair leave four units for the review; this story
+            // retains its one-unit admission floor through its own defaults.
+            value["world_settings"]["minimum_run_spend"] = 1.into();
             // The small profile's 128-byte CI section keeps only the log's end;
             // the repair is told the failure whole.
             let limits = &mut value["application"]["limits"]["overrides"];
