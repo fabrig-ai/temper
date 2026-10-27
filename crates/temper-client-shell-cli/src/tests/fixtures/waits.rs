@@ -3,7 +3,7 @@ pub const LONG_LIVE: Duration = Duration::from_secs(31); // Exceeds the ordinary
 pub const BEFORE_DEADLINE: Duration = Duration::from_secs(29); // Proves the stopping wait cannot finish one second early.
 impl Frame {
     pub fn socket_wait() -> Self {
-        let mut frame = Self::read(&["wait", "task", "41"]);
+        let mut frame = Self::read(&["task", "show", "41", "--until", "changed"]);
         frame.host.test_connections = Some(jig_client_shell_native::Limits {
             // The live stream and the two completed watches occupy all three sockets.
             exchanges: 2,

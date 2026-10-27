@@ -1,0 +1,11 @@
+task tree TASK [--since DIGEST] [--until CONDITION] [--timeout DURATION]
+  TASK (task): a number; required. The task's number
+  --since DIGEST: a digest, as a read prints it; optional. Wait until it differs from the read that printed DIGEST
+  --until CONDITION: a condition; optional. Wait until it holds: ended, or changed
+  --timeout DURATION: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. How long a wait lasts; 300 seconds when absent, at most 3600
+Read a task's live tree: the task and each delegate its window holds, a line each
+Prints: `tree:`, the task, then a line per delegate; `cut:` and the call that reads the rest when it folds some; and `digest: tree`
+--json: the record tree.
+Key: none.
+A large tree folds what does not fit: read the rest with task list
+--parent TASK, a page at a time.

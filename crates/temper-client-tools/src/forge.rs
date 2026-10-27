@@ -150,7 +150,6 @@ fn form(call: &Call, project: u32, limits: forge::Limits) -> forge::Form {
                 | Value::Proposal(_)
                 | Value::Digest(_)
                 | Value::Condition(_)
-                | Value::Subject(_)
                 | Value::Switch
                 | Value::Project(_)
                 | Value::Turn(_)

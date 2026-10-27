@@ -88,6 +88,13 @@ impl OneShot {
                     self.call = Some(Parsed::Call { call, json });
                     self.prepare_start();
                 }
+                Err(why @ (jig::argv::Usage::Timeout | jig::argv::Usage::WaitPart { .. })) => {
+                    let mut measured = skein_lib::Writer::new(1024);
+                    temper_client_tools::table::refusal(why, &[], &mut measured).expect("refusal");
+                    let mut exact = skein_lib::Writer::new(measured.written());
+                    temper_client_tools::table::refusal(why, &[], &mut exact).expect("refusal");
+                    self.fail(&exact.finish());
+                }
                 Err(jig::argv::Usage::AmendmentRevision) => self.fail(b"task amend needs --rev REV"),
                 Err(_) => self.fail(temper_client_tools::table::USAGE),
             },
@@ -399,6 +406,31 @@ mod settings_input_tests {
                     .windows(b"settings file: file bytes: bound 1048576".len())
                     .any(|window| window == b"settings file: file bytes: bound 1048576")
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod wait_input_tests {
+    use crate::tests::fixtures::Frame;
+    #[test]
+    fn invalid_json_waits_print_the_specific_refusal_before_directory() {
+        for (json, expected) in [
+            (
+                br#"{"tool":"me","arguments":{"timeout":5}}"#.as_slice(),
+                b"temper ctl: --timeout needs --since or --until\n".as_slice(),
+            ),
+            (
+                br#"{"tool":"task show","arguments":{"task":1,"tree":true,"until":"ended"}}"#,
+                b"temper ctl: task show waits on its subject alone: drop --tree\n",
+            ),
+        ] {
+            let mut frame = Frame::read(&["--call", "call.json"]);
+            frame.link = json;
+            frame.drain();
+            assert_eq!(frame.stderr(), expected);
+            assert!(!frame.opened(b"directory"));
+            assert_eq!(frame.requests(), 0);
         }
     }
 }

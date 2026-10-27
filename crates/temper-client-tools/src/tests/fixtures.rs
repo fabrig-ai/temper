@@ -74,7 +74,7 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["task", "release", "41", "--hold", "2"],
     STOP_CALL,
     &["task", "cancel", "41", "finished"],
-    &["wait", "me"],
+    &["task", "tree", "41"],
     ADOPTION,
     &["sign-in", "-"],
     &["sign-out"],
@@ -101,8 +101,6 @@ pub(crate) const EVERY_TOOL: &[&[&str]] = &[
     &["forge", "connect", "3", "forgejo-admin", "token", "--key", "admin"],
     &["forge", "install", "3"],
     &["forge", "repositories", "3"],
-    &["wait", "forges"],
-    &["wait", "change", "2"],
     &["change", "show", "2"],
     &["account", "export", "43", "record"],
     &["account", "import", "record", "--key", "move-in"],
@@ -172,7 +170,28 @@ pub(crate) fn json_wait(subject: &str, until: Option<&str>) -> Box<[u8]> {
 fn encode_wait(out: &mut skein_json::writer::Encoder, subject: &str, until: Option<&str>) {
     out.object_start();
     out.key(b"tool");
-    out.string(b"wait");
+    let mut words = subject.split_ascii_whitespace();
+    let first = words.next().expect("read name");
+    let verb = if first == "task" || first == "account" || first == "forge" || first == "change" {
+        Some(words.next().expect("verb"))
+    } else {
+        None
+    };
+    let size = first
+        .len()
+        .checked_add(match verb {
+            Some(verb) => verb.len().checked_add(1).expect("fixture verb size"),
+            None => 0,
+        })
+        .expect("fixture tool size");
+    let mut name = skein_lib::Writer::new(size);
+    name.put(first.as_bytes()).unwrap();
+    if let Some(verb) = verb {
+        name.put(b" ").unwrap();
+        name.put(verb.as_bytes()).unwrap();
+    }
+    let name = name.finish();
+    out.string(&name);
     out.key(b"arguments");
     out.object_start();
     if let Some(until) = until {
@@ -181,14 +200,25 @@ fn encode_wait(out: &mut skein_json::writer::Encoder, subject: &str, until: Opti
     }
     out.key(b"since");
     out.string(b"0011223344556677");
-    out.key(b"subject");
-    out.string(subject.as_bytes());
+    while let Some(word) = words.next() {
+        if let Some(flag) = word.strip_prefix("--") {
+            out.key(flag.as_bytes());
+            if flag == "mine" || flag == "ended" || flag == "tracked" {
+                out.boolean(true);
+            } else {
+                out.string(words.next().expect("flag value").as_bytes());
+            }
+        } else {
+            out.key(b"task");
+            assert_eq!(word, TASK_CALL[2]);
+            out.unsigned(TASK);
+        }
+    }
     out.object_end();
     out.object_end();
 }
 pub(crate) fn wait_call(subject: &str, until: Option<&str>) -> crate::jig::call::Call {
     let mut words = List::with_capacity(WORDS);
-    words.push(b"wait".as_slice()).expect("bounded words");
     for word in subject.split_ascii_whitespace() {
         words.push(word.as_bytes()).expect("bounded words");
     }
@@ -514,25 +544,29 @@ impl Harness {
         if json {
             self.json_calls.insert(self.next);
         }
-        let count = match call.tool {
-            1
-            | 2
-            | 4
-            | 5
-            | 6
-            | 9..=15
-            | crate::jig::rows::TASK_DECIDE_AT
-            | 31
-            | 42..=45
-            | crate::jig::rows::PROPOSAL_AT => SINGLE_READ,
-            3 => {
-                if crate::jig::call::number(&call, 2).is_some() {
-                    COMPOSITE_READS
-                } else {
-                    SINGLE_READ
+        let count = if crate::jig::call::waiting(crate::table::TOOLS[usize::from(call.tool)], &call) {
+            0
+        } else {
+            match call.tool {
+                1
+                | 2
+                | 4
+                | 5
+                | 6
+                | 9..=15
+                | crate::jig::rows::TASK_DECIDE_AT
+                | 31
+                | 42..=45
+                | crate::jig::rows::PROPOSAL_AT => SINGLE_READ,
+                3 => {
+                    if crate::jig::call::number(&call, 2).is_some() {
+                        COMPOSITE_READS
+                    } else {
+                        SINGLE_READ
+                    }
                 }
+                _ => 0,
             }
-            _ => 0,
         };
         for _ in 0..count {
             self.pending_reads.push(self.next);
@@ -672,7 +706,7 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 /// A stable stored request's engine key, unrelated to its client call prefix.
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 59;
+pub(super) const TOOL_FORMS: u32 = 57;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.

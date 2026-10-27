@@ -103,8 +103,8 @@ fn change_calls_round_trip_and_reject_other_conditions() {
         &["change", "show", "2"][..],
         &["change", "show", "2", "--project", "shop"],
         &[
-            "wait",
             "change",
+            "show",
             "2",
             "--project",
             "1",
@@ -115,7 +115,7 @@ fn change_calls_round_trip_and_reject_other_conditions() {
             "--timeout",
             "1s",
         ],
-        &["wait", "change", "2", "--until", "ci:failed"],
+        &["change", "show", "2", "--until", "ci:failed"],
     ] {
         let call = f::call(argv);
         assert_eq!(f::printed(&call), Parsed::Call { call: call.clone(), json: false });
@@ -123,8 +123,8 @@ fn change_calls_round_trip_and_reject_other_conditions() {
     }
     for argv in [
         &["change", "show", "0"][..],
-        &["wait", "change", "2", "--until", "ended"],
-        &["wait", "change", "2", "--until", "ci:unknown"],
+        &["change", "show", "2", "--until", "ended"],
+        &["change", "show", "2", "--until", "ci:unknown"],
         &["change", "show", "2", "--key", "no"],
     ] {
         f::parse(argv).unwrap_err();
@@ -218,7 +218,7 @@ fn waits_test_each_delivery_including_the_first() {
         ("ci:failed", w::Ci::Failed),
     ] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", condition, "--json"]);
+        let call = root.submit(&["change", "show", "2", "--project", "1", "--until", condition, "--json"]);
         let mut parts = panel(w::Step::Checking).into_parts();
         parts.ci = ci;
         deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
@@ -227,7 +227,7 @@ fn waits_test_each_delivery_including_the_first() {
         contains(&answer.stdout, br#""met":true"#);
     }
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "landed"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "landed"]);
     deliver(&mut root, panel(w::Step::Checking));
     assert!(root.answer(call).is_none());
     deliver(&mut root, panel(landed()));
@@ -237,7 +237,7 @@ fn waits_test_each_delivery_including_the_first() {
 fn a_wait_reopens_the_last_panel_after_the_watch_ends_at_landing() {
     for end in [c::WatchEnd::Unknown, c::WatchEnd::SubjectEnded] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "landed", "--json"]);
+        let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "landed", "--json"]);
         deliver(&mut root, panel(w::Step::Checking));
         end_panel(&mut root, call, end);
         assert!(root.answer(call).is_none());
@@ -251,7 +251,7 @@ fn a_wait_reopens_the_last_panel_after_the_watch_ends_at_landing() {
 #[test]
 fn live_task_waits_for_the_next_document_then_reopens_the_panel() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "landed"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "landed"]);
     end_panel(&mut root, call, c::WatchEnd::Unknown);
     serve(&mut root, call, false, false);
     let subject = client::Watchable::Jig(c::Subject::Task { task: 2 });
@@ -275,7 +275,7 @@ fn live_task_waits_for_the_next_document_then_reopens_the_panel() {
 fn unmet_final_panel_exits_three_and_no_change_result_exits_two() {
     for change_result in [false, true] {
         let mut root = f::signed_in(f::PARTY);
-        let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "ci:passed", "--json"]);
+        let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "ci:passed", "--json"]);
         deliver(&mut root, panel(w::Step::Checking));
         end_panel(&mut root, call, c::WatchEnd::SubjectEnded);
         serve(&mut root, call, true, change_result);
@@ -299,8 +299,8 @@ fn since_and_condition_both_must_hold_and_timeout_keeps_last_digest() {
     let start = skein_lib::bytes::find(&answer.stdout, marker).unwrap() + marker.len();
     let digest = &answer.stdout[start..start + 16];
     let mut call = f::call(&[
-        "wait",
         "change",
+        "show",
         "2",
         "--project",
         "1",
@@ -311,7 +311,7 @@ fn since_and_condition_both_must_hold_and_timeout_keeps_last_digest() {
         "--timeout",
         "1s",
     ]);
-    *call.values.get_mut(3).unwrap() = Some(jig::call::Values::One(
+    *call.values.get_mut(2).unwrap() = Some(jig::call::Values::One(
         jig::argv::value::decode(crate::table::TOOLS, jig::table::Kind::Digest, jig::table::Bound::None, digest)
             .unwrap(),
     ));
@@ -329,16 +329,31 @@ fn since_and_condition_both_must_hold_and_timeout_keeps_last_digest() {
 #[test]
 fn a_held_wait_and_a_wait_without_a_condition_use_the_panel_facts() {
     let mut root = f::signed_in(f::PARTY);
-    let call = root.submit(&["wait", "change", "2", "--project", "1", "--until", "held"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "held"]);
     let mut parts = panel(w::Step::Checking).into_parts();
     parts.hold = Some(w::Hold::Stalled);
     deliver(&mut root, w::ChangePanel::new(&w::CEILINGS, parts).unwrap());
     assert_eq!(root.answer(call).unwrap().status, 0);
-    let call = root.submit(&["wait", "change", "2", "--project", "1"]);
+    let call = root.submit(&["change", "show", "2", "--project", "1", "--until", "changed"]);
     deliver(&mut root, panel(w::Step::Checking));
     assert!(root.answer(call).is_none(), "first delivery only establishes the digest");
     deliver(&mut root, panel(w::Step::Checking));
     assert!(root.answer(call).is_none(), "repeated digest is no change");
     deliver(&mut root, panel(w::Step::Gating));
+    assert_eq!(root.answer(call).unwrap().status, 0);
+}
+
+#[test]
+fn changed_with_since_waits_for_a_panel_change_after_the_baseline() {
+    let mut root = f::signed_in(f::PARTY);
+    let read = root.submit(&["change", "show", "2", "--project", "1", "--json"]);
+    deliver(&mut root, panel(w::Step::Gating));
+    let digest = f::last_digest(&root.answer(read).unwrap().stdout);
+    let call = root.wait_since(&["change", "show", "2", "--project", "1"], &["--until", "changed"], &digest);
+    for step in [w::Step::Checking, w::Step::Gating] {
+        deliver(&mut root, panel(step));
+        assert!(root.answer(call).is_none());
+    }
+    deliver(&mut root, panel(w::Step::Checking));
     assert_eq!(root.answer(call).unwrap().status, 0);
 }

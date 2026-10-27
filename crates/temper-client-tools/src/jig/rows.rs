@@ -9,7 +9,11 @@ pub const ME: Tool = Tool {
     line: b"Read your party: its projects, what it may start, and what waits on it",
     prints: b"`party N`, its login and name, its projects and bounds, what waits on it, the requests' retention, the providers it may use, and `digest: me`",
     result: b"me",
-    forms: &[&[]],
+    forms: &[&[
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: waiting, or changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
+    ]],
     keyed: Keyed::Never,
     area: 1,
     notes: b"Read it first: it gives the project and provider numbers other\ncalls take, and how long the engine keeps a keyed request.\n",
@@ -21,9 +25,12 @@ pub const INBOX: Tool = Tool {
     result: b"inbox",
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Optional, b"Only this project"),
-        flag(b"kind", b"needs|updates", Kind::Group, Optional, b"Only this group"),
+        flag(b"kind", b"questions|proposals|escalations|person-tasks|results|replies", Kind::Group, Optional, b"Only this group"),
         flag(b"root", b"TASK", Kind::Number, Optional, b"Only what waits under this goal, by its task number"),
         flag(b"after", b"CURSOR", Kind::Cursor, Optional, b"The cursor a page printed, to read on"),
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: waiting, updates, or changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
     ]],
     keyed: Keyed::Never,
     area: 1,
@@ -43,6 +50,9 @@ pub const TASKS: Tool = Tool {
         flag(b"order", b"activity|priority", Kind::Order, Optional, b"By last activity or by priority; by number when absent"),
         flag(b"after", b"CURSOR", Kind::Cursor, Optional, b"The cursor a page printed, to read on"),
         flag(b"parent", b"TASK", Kind::Number, Optional, b"Only this task's delegates"),
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
     ]],
     keyed: Keyed::Never,
     area: 1,
@@ -58,6 +68,9 @@ pub const TASK: Tool = Tool {
         switch(b"tree", b"Add its live tree of delegates"),
         flag(b"activity", b"COUNT", Kind::Count, Optional, b"Add its latest K lines of activity"),
         switch(b"run", b"Add its live run"),
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: ended, waiting-on-me, held, replied, phase:PHASE, or changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
     ]],
     keyed: Keyed::Never,
     area: 1,
@@ -110,7 +123,18 @@ pub const RUN: Tool = Tool {
     line: b"Read a task's live run: its attempt, its call in flight, its words so far",
     prints: b"`run: A` or `run: none`, the call in flight, the words so far, and `digest: run`",
     result: b"run",
-    forms: &[&[positional(b"task", b"TASK", Kind::Number, Required, b"The task's number")]],
+    forms: &[&[
+        positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: ended, or changed"),
+        flag(
+            b"timeout",
+            b"DURATION",
+            Kind::Duration,
+            Optional,
+            b"How long a wait lasts; 300 seconds when absent, at most 3600",
+        ),
+    ]],
     keyed: Keyed::Never,
     area: 1,
     notes: b"`wait run N --until ended` returns when the run ends.\n",
@@ -287,20 +311,20 @@ pub const CANCEL: Tool = Tool {
     area: 1,
     notes: b"",
 };
-pub const WAIT: Tool = Tool {
-    name: b"wait",
-    line: b"Wait for a watch's change or condition",
-    prints: b"",
-    result: b"wait",
+pub const TREE: Tool = Tool {
+    name: b"task tree",
+    line: b"Read a task's live tree: the task and each delegate its window holds, a line each",
+    prints: b"`tree:`, the task, then a line per delegate; `cut:` and the call that reads the rest when it folds some; and `digest: tree`",
+    result: b"tree",
     forms: &[&[
-        positional(b"subject", b"", Kind::Subject, Required, b"What to watch, from the list below"),
-        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"The digest of your last read of the subject"),
-        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"A condition of the subject, from the list below"),
-        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long to wait; 300 seconds when absent"),
+        positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: ended, or changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
     ]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"",
+    notes: b"A large tree folds what does not fit: read the rest with task list\n--parent TASK, a page at a time.\n",
 };
 
 /// Area 5 reads append to preserve earlier tool and keyed-call identities.
@@ -309,7 +333,11 @@ pub const ACCOUNTS: Tool = Tool {
     line: b"Read the accounts and their sources, never their values",
     prints: b"`current: true`, then each account, its sources, their state and readiness, and `digest: accounts`",
     result: b"accounts",
-    forms: &[&[]],
+    forms: &[&[
+        flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait until it differs from the read that printed DIGEST"),
+        flag(b"until", b"CONDITION", Kind::Condition, Optional, b"Wait until it holds: usable, settled, or changed"),
+        flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long a wait lasts; 300 seconds when absent, at most 3600"),
+    ]],
     keyed: Keyed::Never,
     area: 5,
     notes: b"The deployment's own accounts show beside your party's when your\nparty owns the deployment. `wait accounts` takes this read's\ndigest.\n",
@@ -741,5 +769,19 @@ pub const AMEND_AT: u8 = 31;
 pub const DECLARE_AT: u8 = 32;
 pub const VERIFY_AT: u8 = 33;
 
-/// The host extends the generic wait at this same durable position.
-pub const WAIT_AT: u8 = 16;
+/// The tree-only read's durable position.
+pub const TREE_AT: u8 = 16;
+
+/// The generic watched reads, at their published positions.
+pub(crate) fn watched(tool: u8) -> Option<&'static Tool> {
+    Some(match tool {
+        ME_AT => &ME,
+        INBOX_AT => &INBOX,
+        TASKS_AT => &TASKS,
+        TASK_AT => &TASK,
+        TREE_AT => &TREE,
+        RUN_AT => &RUN,
+        ACCOUNTS_AT => &ACCOUNTS,
+        _ => return None,
+    })
+}

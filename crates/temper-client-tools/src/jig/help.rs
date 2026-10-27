@@ -89,9 +89,6 @@ pub fn tool(tool: &Tool, limits: &Limits, out: &mut Writer) -> Result<(), Overfl
         Keyed::Required => b"Key: --key KEY, required.\n",
     })?;
     out.put(tool.notes)?;
-    if tool.name == b"wait" {
-        wait(out)?;
-    }
     Ok(())
 }
 fn argument_record(argument: &Argument, limits: &Limits, out: &mut Writer) -> Result<(), Overflow> {
@@ -147,7 +144,6 @@ fn argument_type(kind: Kind, out: &mut Writer) -> Result<(), Overflow> {
         Kind::Proposal => b"a proposal, tN/K or pN/K",
         Kind::Digest => b"a digest, as a read prints it",
         Kind::Condition => b"a condition",
-        Kind::Subject => b"a subject",
         Kind::Project { .. } => b"a project's name or number",
         Kind::Turn => b"an attempt and a turn, A.T",
         Kind::Cursor => b"a cursor, as a read prints it",
@@ -195,17 +191,4 @@ fn argument_bound(argument: &Argument, limits: &Limits, out: &mut Writer) -> Res
         }
     }
     Ok(())
-}
-
-fn wait(out: &mut Writer) -> Result<(), Overflow> {
-    out.put(b"Live phases: ")?;
-    let mut separator = b"".as_slice();
-    for phase in super::subject::PHASES {
-        if super::subject::live(*phase) {
-            out.put(separator)?;
-            out.put(super::subject::phase_word(*phase))?;
-            separator = b"|";
-        }
-    }
-    out.put(b"\n")
 }

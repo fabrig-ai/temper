@@ -1,7 +1,7 @@
 //! Level-triggered waits over the client's current documents (tools contract, 5.4).
 use crate::jig::{
     Limits,
-    call::{Value, value},
+    call::{Value, argument},
     conditions::{self, Facts},
     digest::{self, Digest},
     render::{self, Part},
@@ -38,9 +38,10 @@ impl Wait {
     }
 }
 pub(crate) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
-    let Some(Value::Subject(subject)) = value(&called.call, 0) else { unreachable!("checked subject") };
+    let subject = crate::jig::subject::of(&called.call).expect("watched read");
+    let row = crate::jig::rows::watched(called.call.tool).expect("watched read");
     let me = live_me(client, runner.me()).expect("signed-in call");
-    let Some((subject, name)) = watch(subject, me, env.limits.rows) else {
+    let Some((subject, name)) = watch(&subject, &called.call, me, env.limits.rows) else {
         let printed = render::failure(b"unknown project", called.json, 1);
         runner::finish(called, printed, out);
         return;
@@ -50,15 +51,17 @@ pub(crate) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
     } else {
         Handle { asker: runner.asker, number: u64::from(called.call_number) << 32u32 }
     };
-    let until = match value(&called.call, 2) {
+    let until = match argument(row, &called.call, b"until") {
         Some(Value::Condition(until)) => Some(*until),
         _ => None,
     };
-    let since = match value(&called.call, 1) {
+    let since = match argument(row, &called.call, b"since") {
         Some(Value::Digest(bytes)) => Some(Digest::from_bytes(*bytes)),
         _ => None,
     };
-    let Some(Value::Duration(timeout)) = value(&called.call, 3) else { unreachable!("checked timeout") };
+    let Some(Value::Duration(timeout)) = argument(row, &called.call, b"timeout") else {
+        unreachable!("checked timeout")
+    };
     let deadline = env.now.checked_add(*timeout).unwrap_or(Time::from_nanos(u64::MAX));
     let wait = Wait {
         called,
@@ -88,7 +91,12 @@ pub(crate) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
         out.push(Out::Client { event: Event::Watch { handle, subject: Watchable::Jig(subject) } });
     }
 }
-fn watch(subject: &Subject, me: &c::Me, window: u32) -> Option<(c::Subject, &'static [u8])> {
+fn watch(
+    subject: &Subject,
+    call: &crate::jig::call::Call,
+    me: &c::Me,
+    window: u32,
+) -> Option<(c::Subject, &'static [u8])> {
     Some(match subject {
         Subject::Me => (c::Subject::Me, b"me"),
         Subject::Accounts => (c::Subject::Accounts, b"accounts"),
@@ -96,7 +104,7 @@ fn watch(subject: &Subject, me: &c::Me, window: u32) -> Option<(c::Subject, &'st
         Subject::Task(task) => (c::Subject::Task { task: *task }, b"task"),
         Subject::Tree(task) => (c::Subject::Tree { task: *task, window }, b"tree"),
         Subject::Run(task) => (c::Subject::Run { task: *task, turn: None, offset: 0 }, b"run"),
-        Subject::Tasks(call) => (c::Subject::Tasks { query: runner::reads::task_query(call, me)?, window }, b"tasks"),
+        Subject::Tasks => (c::Subject::Tasks { query: runner::reads::task_query(call, me)?, window }, b"tasks"),
     })
 }
 fn live_me(client: &Client, handle: Handle) -> Option<&c::Me> {
@@ -177,6 +185,7 @@ fn changed(runner: &mut Runner, client: &Client, env: &Env<Limits>, number: u32,
         digest::part(&part, &env.limits)
     };
     let holds = match wait.until {
+        Some(Condition::Changed) => Some(wait.first.is_some() && met(wait.since, wait.first, digest, None)),
         Some(until) => conditions::holds(
             &until,
             &Facts { subject: latest, me: live_me(client, Handle { asker: runner.asker, number: 0 }) },
@@ -265,12 +274,12 @@ pub(crate) fn next_deadline(runner: &Runner) -> Option<Time> {
 
 fn finishing(runner: &mut Runner, number: u32, out: &mut Queue<Out>) {
     let wait = runner.waits.get_mut(&number).expect("active wait");
-    let Some(Value::Subject(Subject::Task(task))) = value(&wait.called.call, 0) else { unreachable!("task wait") };
+    let task = crate::jig::call::number(&wait.called.call, 0).expect("task wait");
     let read = Handle { asker: runner.asker, number: (u64::from(number) << 32u32) | 1 };
     wait.stage = Stage::Finishing { read };
     runner.wait_timers.as_mut().expect("wait timers").cancel(number);
     out.push(Out::Client { event: Event::Unwatch { handle: wait.handle } });
-    out.push(Out::Client { event: Event::Read { handle: read, read: Readable::Jig(c::Read::Task { task: *task }) } });
+    out.push(Out::Client { event: Event::Read { handle: read, read: Readable::Jig(c::Read::Task { task }) } });
 }
 fn ended(
     runner: &mut Runner,
@@ -349,12 +358,10 @@ fn page(
         return false;
     }
     let wait = runner.waits.remove(&number).expect("finishing wait");
-    let Some(Value::Subject(Subject::Task(expected))) = value(&wait.called.call, 0) else {
-        unreachable!("finishing task wait")
-    };
+    let expected = crate::jig::call::number(&wait.called.call, 0).expect("finishing task wait");
     let printed = match page {
-        Readout::Jig(c::ReadResult::Value(value)) if final_task(*expected, value).is_some() => {
-            let (task, result) = final_task(*expected, value).expect("matching terminal task read");
+        Readout::Jig(c::ReadResult::Value(value)) if final_task(expected, value).is_some() => {
+            let (task, result) = final_task(expected, value).expect("matching terminal task read");
             let latest = Latest::Jig(c::Delivery::Task(Box::new(task.clone())));
             let me = live_me(client, runner.me());
             let met = conditions::holds(&wait.until.expect("finishing condition"), &Facts { subject: &latest, me })

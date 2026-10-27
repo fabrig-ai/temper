@@ -24,9 +24,7 @@ fn every_tool_names_a_group() {
     }
     for group in table::GROUPS {
         let rows: Vec<_> = table::TOOLS.iter().filter(|row| jig::table::name_words(row.name).0 == group.name).collect();
-        if group.name != b"wait" {
-            assert!(!rows.is_empty(), "{group:?}");
-        }
+        assert!(!rows.is_empty(), "{group:?}");
         if rows.iter().any(|row| row.name == group.name) {
             assert!(rows.iter().all(|row| row.name == group.name), "{group:?}");
         }
@@ -38,15 +36,23 @@ fn every_shown_is_in_the_vocabulary() {
     for row in table::TOOLS {
         for form in row.forms {
             for argument in *form {
-                // names.md omits the retained wait subject's shown word. common.md
-                // holds missing documentation empty until the owner supplies it.
-                let missing_wait_subject = row.name == jig::rows::WAIT.name && argument.kind == Kind::Subject;
-                let valid = if argument.place == Place::Switch || missing_wait_subject {
+                let valid = if argument.place == Place::Switch {
                     argument.shown.is_empty()
                 } else if argument.kind == Kind::Group {
-                    argument.shown == b"needs|updates"
+                    argument.shown
+                        == [
+                            b"questions".as_slice(),
+                            b"proposals",
+                            b"escalations",
+                            b"person-tasks",
+                            b"results",
+                            b"replies",
+                        ]
+                        .join(&b'|')
                 } else if argument.kind == Kind::Order {
                     argument.shown == b"activity|priority"
+                } else if argument.name == b"until" {
+                    argument.shown == b"CONDITION"
                 } else if let Kind::Word { set } = argument.kind {
                     argument.shown == set.join(&b'|')
                 } else {
@@ -72,9 +78,13 @@ type ArgvCase = (&'static [&'static str], u8, &'static [Option<Values>]);
 #[test]
 fn argv_takes_a_group_and_a_verb() {
     let cases: &[ArgvCase] = &[
-        (&["task", "show", "41"], jig::rows::TASK_AT, &[Some(Values::One(Value::Number(41))), None, None, None]),
+        (
+            &["task", "show", "41"],
+            jig::rows::TASK_AT,
+            &[Some(Values::One(Value::Number(41))), None, None, None, None, None, None],
+        ),
         (&["forge", "setup", "3", "--key", "k"], 35, &[Some(Values::One(Value::Number(3))), None, None, None, None]),
-        (&["me"], jig::rows::ME_AT, &[]),
+        (&["me"], jig::rows::ME_AT, &[None, None, None]),
         (
             &["settings", "show", "charter", "2"],
             jig::rows::SETTING_AT,
@@ -179,7 +189,7 @@ const KEPT_INDICES: &[&[u8]] = &[
     b"task release",
     b"task stop",
     b"task cancel",
-    b"wait",
+    b"task tree",
     b"repository adopt",
     b"sign-in",
     b"sign-out",
@@ -241,4 +251,73 @@ fn indices_are_kept() {
             "{group:?}"
         );
     }
+}
+
+const WATCHED: &[&[&str]] = &[
+    &["me"],
+    &["inbox"],
+    &["task", "show", "1"],
+    &["task", "tree", "1"],
+    &["task", "run", "1"],
+    &["task", "list", "--project", "1"],
+    &["account", "list"],
+    &["forge", "list"],
+    &["change", "show", "1"],
+];
+#[test]
+fn each_watched_read_waits_given_since_or_until() {
+    for read in WATCHED {
+        for flags in [&["--until", "changed"][..], &["--since", "0123456789abcdef"], &[]] {
+            let words = fixtures::extended(read, flags);
+            let call = fixtures::call(words.as_slice());
+            let row = table::TOOLS[usize::from(call.tool)];
+            assert_eq!(jig::call::waiting(row, &call), !flags.is_empty(), "{words:?}");
+            assert_eq!(fixtures::printed(&call), jig::call::Parsed::Call { call: call.clone(), json: false });
+            let encoded = jig::json::write_call(table::TOOLS, &call).unwrap();
+            assert_eq!(fixtures::from_json(&encoded), call);
+        }
+    }
+}
+#[test]
+fn a_read_with_parts_refuses_a_wait() {
+    for (words, expected) in [
+        (
+            &["inbox", "--kind", "needs", "--until", "waiting"][..],
+            "temper ctl: inbox waits on its subject alone: drop --kind\n",
+        ),
+        (
+            &["task", "show", "1", "--tree", "--until", "ended"],
+            "temper ctl: task show waits on its subject alone: drop --tree\n",
+        ),
+        (
+            &["task", "list", "--project", "1", "--ended", "--until", "changed"],
+            "temper ctl: task list waits on its subject alone: drop --ended\n",
+        ),
+        (
+            &["task", "show", "1", "--run", "--tree", "--until", "ended"],
+            "temper ctl: task show waits on its subject alone: drop --run\n",
+        ),
+        (
+            &["inbox", "--root", "1", "--kind", "needs", "--until", "waiting"],
+            "temper ctl: inbox waits on its subject alone: drop --root\n",
+        ),
+    ] {
+        assert_eq!(refusal(words).as_ref(), expected.as_bytes());
+    }
+}
+#[test]
+fn timeout_alone_is_refused() {
+    assert_eq!(refusal(&["me", "--timeout", "5s"]).as_ref(), b"temper ctl: --timeout needs --since or --until\n");
+    for read in WATCHED {
+        let words = fixtures::extended(read, &["--timeout", "5s"]);
+        assert_eq!(fixtures::parse(words.as_slice()), Err(Usage::Timeout));
+    }
+    assert_eq!(fixtures::json(br#"{"tool":"me","arguments":{"timeout":5}}"#), Err(Usage::Timeout));
+}
+#[test]
+fn no_tool_is_named_wait() {
+    assert!(table::TOOLS.iter().all(|row| row.name != b"wait"));
+    assert!(table::GROUPS.iter().all(|row| row.name != b"wait"));
+    assert_eq!(refusal(&["wait", "me"]).as_ref(), b"temper ctl: no group wait; temper ctl help lists them\n");
+    assert_eq!(fixtures::json(br#"{"tool":"wait","arguments":{"subject":"me"}}"#), Err(Usage::Tool));
 }

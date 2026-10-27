@@ -47,7 +47,7 @@ fn a_busy_directory_is_refused_after_60_s_of_retries() {
 }
 #[test]
 fn calls_that_send_nothing_take_no_lock() {
-    let cases: &[&[&[u8]]] = &[&[b"me"], &[b"wait", b"task", b"41"], &[b"pending"], &[b"help"]];
+    let cases: &[&[&[u8]]] = &[&[b"me"], &[b"task", b"show", b"41", b"--until", b"changed"], &[b"pending"], &[b"help"]];
     for words in cases {
         let mut f = fixtures::Frame::act(words);
         f.run();
@@ -547,7 +547,7 @@ fn adopt_is_an_act() {
 #[test]
 fn a_stopping_engine_exits_the_wait_only_at_the_link_deadline() {
     for (span, expected) in [(fixtures::waits::BEFORE_DEADLINE, None), (limits::DEADLINE, Some(Exit::Code(1)))] {
-        let mut f = fixtures::Engine::wait(&["wait", "task", "41"]);
+        let mut f = fixtures::Engine::wait(&["task", "show", "41", "--until", "changed"]);
         f.engine_stopping();
         f.advance_past(span);
         assert_eq!(f.exit(), expected, "{span:?}");
@@ -564,13 +564,13 @@ fn a_stopping_engine_exits_the_wait_only_at_the_link_deadline() {
 }
 #[test]
 fn a_live_wait_passes_30_seconds() {
-    let mut f = fixtures::Engine::wait(&["wait", "task", "41"]);
+    let mut f = fixtures::Engine::wait(&["task", "show", "41", "--until", "changed"]);
     f.advance_live(fixtures::waits::LONG_LIVE);
     assert_eq!(f.exit(), None);
 }
 #[test]
 fn a_wait_timeout_exits_3() {
-    let mut f = fixtures::Engine::wait(&["wait", "task", "41"]);
+    let mut f = fixtures::Engine::wait(&["task", "show", "41", "--until", "changed"]);
     f.advance_live(temper_client_tools::limits::WAIT);
     assert_eq!(f.exit(), Some(Exit::Code(3)));
     assert_eq!(f.stderr(), b"");
@@ -578,20 +578,19 @@ fn a_wait_timeout_exits_3() {
 }
 #[test]
 fn a_changed_wait_exits_0() {
-    let mut f = fixtures::Engine::wait(&["wait", "task", "41"]);
+    let mut f = fixtures::Engine::wait(&["task", "show", "41", "--until", "changed"]);
     f.change_task();
     assert_eq!(f.exit(), Some(Exit::Code(0)));
 }
 #[test]
 fn a_refused_wait_exits_2() {
-    let mut f = fixtures::Engine::wait(&["wait", "task", "41"]);
+    let mut f = fixtures::Engine::wait(&["task", "show", "41", "--until", "changed"]);
     f.refuse_wait();
     assert_eq!(f.exit(), Some(Exit::Code(2)));
 }
 #[test]
 fn help_opens_nothing() {
-    for words in [&[b"help".as_slice()][..], &[b"help".as_slice(), b"wait"], &[b"help".as_slice(), b"wait", b"--json"]]
-    {
+    for words in [&[b"help".as_slice()][..], &[b"help".as_slice(), b"me"], &[b"help".as_slice(), b"me", b"--json"]] {
         let mut f = fixtures::Frame::act(words);
         f.drain();
         assert_eq!(f.exit(), Some(Exit::Code(0)), "{words:?}");
@@ -687,7 +686,7 @@ fn text_dash_reads_stdin() {
 #[test]
 fn a_wait_exposes_its_root_policy_deadline() {
     use skein_shell::Host;
-    let f = fixtures::Engine::wait(&["wait", "task", "41"]);
+    let f = fixtures::Engine::wait(&["task", "show", "41", "--until", "changed"]);
     let expected = temper_client_tools::root::next_deadline(&f.host.root).expect("live wait has a deadline");
     assert_eq!(f.host.next_policy_deadline(), Some(expected));
 }
@@ -749,3 +748,31 @@ fn repeated_again_keeps_the_original_sign_in_deadline() {
 mod keys;
 
 mod moves;
+
+#[test]
+fn every_watched_read_is_classified_from_its_wait_flags() {
+    use crate::arguments::{self, Class};
+    let reads: &[&[&str]] = &[
+        &["me"],
+        &["inbox"],
+        &["task", "show", "1"],
+        &["task", "tree", "1"],
+        &["task", "run", "1"],
+        &["task", "list", "--project", "1"],
+        &["account", "list"],
+        &["forge", "list"],
+        &["change", "show", "1"],
+    ];
+    for read in reads {
+        for flags in [&[][..], &["--until", "changed"], &["--since", "0123456789abcdef"]] {
+            let words: Vec<_> = read.iter().chain(flags).map(|word| word.as_bytes()).collect();
+            let temper_client_tools::jig::call::Parsed::Call { call, .. } =
+                arguments::parse(&words).expect("watched read")
+            else {
+                panic!("call")
+            };
+            assert_eq!(arguments::class(&call), if flags.is_empty() { Class::Read } else { Class::Wait });
+            assert!(!arguments::class(&call).locks());
+        }
+    }
+}
