@@ -200,7 +200,8 @@ impl Domain {
             "forge judge table covers authority policy bounds"
         );
         assert!(
-            config.landing.projects.capacity() <= limits.authority.projects,
+            config.landing.projects.capacity() <= limits.authority.projects
+                && config.landing.landings.capacity() <= limits.authority.projects,
             "typed landing project table fits the policy bound"
         );
 
@@ -299,7 +300,14 @@ impl Domain {
         )
         .expect("landing gate templates bounded");
         assert!(forge.gate_policy(gate_policy, &limits.forge), "forge owns bounded landing templates");
-        let root_config = RootConfig { forge_connector, forge_charter: config.forge_charter };
+        for (&project, landing) in &config.landing.landings {
+            assert!(
+                crate::translate::project_landing(&mut forge, project, landing),
+                "project landing configuration bounded and supported"
+            );
+        }
+        let root_config =
+            RootConfig { forge_connector, forge_charter: config.forge_charter, landings: config.landing.landings };
         let mut core = Core::new(config.core, &core_limits(limits))?;
         let core_env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: core_limits(limits) };
         let configured = jig_domain_core::step(
@@ -1073,6 +1081,7 @@ pub fn refused(mut config: Config, limits: &Limits) -> Box<[Refused]> {
         .expect("bounded configuration")
         .saturating_add(u32::try_from(config.core.seed_projects.len()).expect("bounded projects").saturating_mul(2))
         .saturating_add(config.landing.projects.len())
+        .saturating_add(config.landing.landings.len())
         .saturating_add(7);
     let mut refused = List::with_capacity(room);
     if let Err(problem) = fleet::Membership::check(
@@ -1189,6 +1198,14 @@ pub fn refused(mut config: Config, limits: &Limits) -> Box<[Refused]> {
             limits,
         );
         if !joined && judges {
+            refused.push(Refused::Landing { project: Some(project) }).expect("counted refusals");
+        }
+    }
+    if config.landing.landings.capacity() > limits.authority.projects {
+        refused.push(Refused::Landing { project: None }).expect("counted refusals");
+    }
+    for (&project, landing) in &config.landing.landings {
+        if !crate::translate::project_landing(&mut forge, project, landing) {
             refused.push(Refused::Landing { project: Some(project) }).expect("counted refusals");
         }
     }
