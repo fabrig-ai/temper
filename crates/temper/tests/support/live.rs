@@ -381,7 +381,7 @@ pub fn run(directory: &Path, forge: &Throwaway, instructions: &str, deadline: Du
     let Process::Person(person) = &outcome.procs[1] else { panic!("native person") };
     let (branch, pushed) = pushed.borrow_mut().take().expect("a new run commit was pushed");
     Pushed {
-        seen: Seen { signed_in: 1, finished: person.finished, stderr: binary.stderr().to_vec() },
+        seen: Seen { signed_in: 1, finished: person.finished, stderr: binary.stderr().to_vec(), change_chat: None },
         branch,
         pushed,
         wall_seconds: clock.now().now.saturating_since(started).as_nanos() / 1_000_000_000,
