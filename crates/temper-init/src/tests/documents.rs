@@ -151,7 +151,7 @@ fn the_default_is_the_owned_example_so_edited() {
         let policy = &mut expected["engine"]["projects"][0]["policy"];
         for path in ["/ceiling/grants", "/projections", "/roles/0/authority/grants"] {
             let grants = policy.pointer_mut(path).unwrap().as_array_mut().unwrap();
-            for kind in [6_u32, 9, 15, 16, 17] {
+            for kind in [6_u32, 9, 16, 17] {
                 grants.push(
                     json!({"connector":1_u16,"kind":kind,"pattern":{"segments":["forge"],"last":"open","value":""}}),
                 );
@@ -166,7 +166,14 @@ fn the_default_is_the_owned_example_so_edited() {
             }
         }
         for path in ["/ceiling/delegation/kinds", "/roles/0/authority/delegation/kinds"] {
-            policy.pointer_mut(path).unwrap().as_array_mut().unwrap().push(json!({"kind":"procedure","number":3_u32}));
+            for number in [3_u32, 4] {
+                policy
+                    .pointer_mut(path)
+                    .unwrap()
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"kind":"procedure","number":number}));
+            }
         }
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
         expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(12_288_u32);
