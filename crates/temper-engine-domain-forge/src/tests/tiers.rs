@@ -12,10 +12,7 @@ fn a_tiered_main_is_watched_with_no_task_naming_it() {
 fn the_first_tip_seen_starts_each_tiers_baseline() {
     let mut d = fixtures::tiered();
     let out = fixtures::tier_baseline(&mut d);
-    assert_eq!(
-        out.into_iter().filter(|r| matches!(r, Request::TierRun { number: 1, tip: BASE, .. })).count(),
-        TWO_TIERS
-    );
+    assert_eq!(tier_runs(&out).as_slice(), &[(1, BASE); TWO_TIERS]);
     assert!(fixtures::browser(&d).record.run.as_ref().expect("baseline").landings.is_empty());
 }
 #[test]
@@ -25,10 +22,7 @@ fn a_merge_moving_the_main_starts_the_next_run_over_its_landing() {
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::verification::landed(&mut d, REPO, MERGE, CHANGE, &mut out);
     let out = fixtures::tier_move(&mut d, MERGE, Some(&[MERGE]));
-    assert_eq!(
-        out.into_iter().filter(|r| matches!(r, Request::TierRun { number: 2, tip: MERGE, .. })).count(),
-        TWO_TIERS
-    );
+    assert_eq!(tier_runs(&out).as_slice(), &[(2, MERGE); TWO_TIERS]);
     assert_eq!(
         fixtures::browser(&d).record.run.as_ref().expect("next run").landings.as_ref(),
         &[policy::Landing { commit: MERGE, key: MERGE }]
@@ -41,7 +35,7 @@ fn a_move_during_a_run_waits_for_the_next_range() {
     outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: CHANGE });
     outputs(&mut d, Event::TierTask { repository: REPO, tier: fixtures::FUZZY.into(), number: 1, task: OPEN });
     let out = fixtures::tier_move(&mut d, HEAD, None);
-    assert!(!out.into_iter().any(|r| matches!(r, Request::TierRun { .. })));
+    assert!(tier_runs(&out).is_empty());
     assert_eq!(fixtures::browser(&d).pending.as_ref(), &[policy::Landing { commit: HEAD, key: HEAD }]);
 }
 #[test]
@@ -78,6 +72,9 @@ fn a_move_seen_without_its_commits_is_one_landing_at_the_tip() {
 }
 #[test]
 fn the_tier_task_first_creates_its_branch_at_the_tip() {
+    // Tag 8, repository 1/2 (eight bytes each), tier index 0, run 1, branch operation 1, part 0.
+    const PURPOSE_BYTES: [u8; 30] =
+        [8, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0];
     let mut d = fixtures::tiered();
     fixtures::tier_baseline(&mut d);
     outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: CHANGE });
@@ -85,16 +82,16 @@ fn the_tier_task_first_creates_its_branch_at_the_tip() {
     let entry = d.entries.get(&OPEN).expect("branch outbox");
     assert_eq!(
         entry.entry.effect.write,
-        skein_forge::api::Write::CreateBranch { branch: b"temper/tier/browser/1".as_slice().into(), commit: BASE }
+        skein_forge::api::Write::CreateBranch { branch: b"temper/tier/browser.1".as_slice().into(), commit: BASE }
     );
     assert_eq!(fixtures::browser(&d).branch, TierBranch::Pending { entry: OPEN });
-    assert!(out.iter().any(|r| matches!(
-        r,
-        Request::TierEffect {
-            purpose: crate::purpose::EffectPurpose::Tier { tier: 0, run: 1, operation: 1, part: 0, .. },
-            ..
+    let mut identity = None;
+    for request in &out {
+        if let Request::TierEffect { purpose, .. } = request {
+            identity = purpose.identity();
         }
-    )));
+    }
+    assert_eq!(identity.as_deref(), Some(PURPOSE_BYTES.as_slice()));
 }
 #[test]
 fn a_tier_row_is_restored_at_restart() {
@@ -152,20 +149,20 @@ fn project_tiers_accepts_each_new_members_bound() {
         fixtures::PROJECT,
         fixtures::tier_settings(),
         fixtures::configured_tier(
-            WORKFLOW_BYTES as usize,
-            LIMITS.ignored_paths as usize,
-            LIMITS.name_bytes as usize,
-            CHECK_NAME_BYTES as usize
+            usize::try_from(WORKFLOW_BYTES).expect("fixture bound fits usize"),
+            usize::try_from(LIMITS.ignored_paths).expect("fixture bound fits usize"),
+            usize::try_from(LIMITS.name_bytes).expect("fixture bound fits usize"),
+            usize::try_from(CHECK_NAME_BYTES).expect("fixture bound fits usize")
         )
     ));
 }
 #[test]
 fn project_tiers_refuses_each_member_one_past_its_bound() {
     for (workflow, paths, path_bytes, artifact) in [
-        (WORKFLOW_BYTES as usize + 1, 0, 1, 1),
-        (1, LIMITS.ignored_paths as usize + 1, 1, 1),
-        (1, 1, LIMITS.name_bytes as usize + 1, 1),
-        (1, 0, 1, CHECK_NAME_BYTES as usize + 1),
+        (usize::try_from(WORKFLOW_BYTES).expect("fixture bound fits usize") + 1, 0, 1, 1),
+        (1, usize::try_from(LIMITS.ignored_paths).expect("fixture bound fits usize") + 1, 1, 1),
+        (1, 1, usize::try_from(LIMITS.name_bytes).expect("fixture bound fits usize") + 1, 1),
+        (1, 0, 1, usize::try_from(CHECK_NAME_BYTES).expect("fixture bound fits usize") + 1),
     ] {
         let mut d = domain();
         assert!(!d.project_tiers(
@@ -185,4 +182,40 @@ fn a_made_branch_is_not_emitted_again_after_restore() {
     outputs(&mut d, Event::Restore { record: Stored::Tier(row) });
     let out = outputs(&mut d, Event::StepTier { task: CHANGE, entry: OPEN });
     assert_eq!(out.as_ref(), &[Request::TierDecision { task: CHANGE, decision: TierDecision::Wait }]);
+}
+
+#[test]
+fn project_tiers_refuses_invalid_workflows_artifacts_and_ignored_paths() {
+    let rows: &[(&[u8], &[u8], &[u8])] = &[
+        (b"", b"report", b"docs"),
+        (b"a/b", b"report", b"docs"),
+        (b"tier.yml", b"", b"docs"),
+        (b"tier.yml", b"a/b", b"docs"),
+        (b"tier.yml", b"report", b""),
+        (b"tier.yml", b"report", b"/"),
+        (b"tier.yml", b"report", b"/docs"),
+        (b"tier.yml", b"report", b"docs/"),
+        (b"tier.yml", b"report", b"a//b"),
+        (b"tier.yml", b"report", b"."),
+        (b"tier.yml", b"report", b".."),
+        (b"tier.yml", b"report", b"a/../b"),
+    ];
+    for (workflow, artifact, path) in rows {
+        let mut d = domain();
+        let mut configured = fixtures::repository_tiers(&[BROWSER]);
+        configured[0].tiers[0].workflow = Box::from(*workflow);
+        configured[0].tiers[0].artifact = Box::from(*artifact);
+        configured[0].tiers[0].ignored = Box::new([Box::from(*path)]);
+        assert!(!d.project_tiers(fixtures::PROJECT, fixtures::tier_settings(), configured));
+    }
+}
+
+fn tier_runs(out: &Queue<Request>) -> skein_lib::List<(u64, [u8; 32])> {
+    let mut runs = skein_lib::List::with_capacity(out.len());
+    for request in out {
+        if let Request::TierRun { number, tip, .. } = request {
+            runs.push((*number, *tip)).expect("output bounds tier requests");
+        }
+    }
+    runs
 }
