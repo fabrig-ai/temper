@@ -866,6 +866,7 @@ fn a_github_change_waits_out_a_ninety_second_ci_and_merges_on_its_verdict() {
                         change::Decision::Finish { .. } => finished = true,
                         change::Decision::None
                         | change::Decision::Delegate(_)
+                        | change::Decision::CancelGates { .. }
                         | change::Decision::Effect(_)
                         | change::Decision::Ready
                         | change::Decision::QueueRepair

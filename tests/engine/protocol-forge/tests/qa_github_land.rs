@@ -153,6 +153,7 @@ fn scheduled_landing(world: &mut Protocol, first_entry: u64, seconds: u64) -> Ve
                     change::Decision::Hold(why) => panic!("QA: healthy path held: {why:?}"),
                     change::Decision::Finish { merge } => finishes.push(merge),
                     change::Decision::Delegate(delegate) => panic!("unexpected delegate: {delegate:?}"),
+                    change::Decision::CancelGates { .. } => panic!("unexpected gate cancellation"),
                     change::Decision::None
                     | change::Decision::Effect(_)
                     | change::Decision::Ready
@@ -350,6 +351,7 @@ fn ruleset_refuses_merge_without_landing() {
             change::Decision::None
             | change::Decision::Wait { .. }
             | change::Decision::Delegate(_)
+            | change::Decision::CancelGates { .. }
             | change::Decision::Effect(_)
             | change::Decision::Ready
             | change::Decision::QueueRepair
