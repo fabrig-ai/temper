@@ -310,16 +310,16 @@ it as any `delegate`:
   is projected on the forge; reads alone, no grant of a forge effect, no
   delegation (no kinds, tasks or depth) and no notes, so that it reads
   and reports and can change nothing beyond its own workspace, which it
-  has no grant to push (the reference case's tester, 6.8: a rail, not
-  an instruction).
+  has no grant to push (the retired first edition's tester,
+  testing.md, 5.3: a rail, not an instruction).
 
 The root builds it where it builds `change`'s delegate, in the engine's
 route of host tools, and decides it as any `delegate`; the smith
 translation only decodes the call.
 
 The goal's own run takes `goal` too: an advisor it asks for, before it
-asks its requester, is how the reference case's survey before a plan
-goes (6.1).
+asks its requester, is how the retired first edition's survey before a plan
+goes (testing.md, 5.3).
 
 ### 4.4 Result contracts
 
@@ -499,7 +499,7 @@ a person says they work into a proposal of settings
 
 A person who wants to agree a plan before anything is changed: the
 reference case's question to a requester and to the chat
-(`../draft/reference-case-2.md`, 4.2 and 7.2; the first edition's 4.1),
+(`../draft/reference-case.md`, 4.2 and 7.2),
 and rung B0 of `../draft/v0.1.0.md`. Where the second edition keeps a
 question to the chat with the chat, which answers it or asks its person
 itself (`../draft/process-model.md`, J7 and J8), the route below is

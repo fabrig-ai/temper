@@ -19,23 +19,10 @@ fn write(tool: Option<u8>, out: &mut Writer) -> Result<(), Overflow> {
             let row = table::TOOLS.get(usize::from(index)).ok_or(Overflow)?;
             for later in table::TOOLS.get(usize::from(index)..).ok_or(Overflow)? {
                 if later.name == row.name {
-                    jig::help::tool(later, out)?;
-                    if later.name == b"pending" {
-                        out.put(PENDING)?;
-                    }
+                    jig::help::tool(later, &limits::tools(), out)?;
                 }
             }
             Ok(())
         }
     }
 }
-
-/// The local pending tool's result, without opening a client.
-const PENDING: &[u8] = br#"Reads only the store: no lock, client or send.
-Rows: operation, party N, first sending in wall-time words or not sent.
-chat, party 3, not sent
-{"pending":[{"operation":"chat","party":3,"first_sent":null}],"unread":2}
-2 kept records these tools cannot read; a call that sends drops them
-Unread records are counted, never listed; exit 0.
-An invalid store: DIRECTORY's store cannot be read (exit 1).
-"#;

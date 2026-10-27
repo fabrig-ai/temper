@@ -187,7 +187,10 @@ fn the_agent_runs_as_temper_agent_with_no_credential_in_its_environment() {
     worker.link(fixtures::NOW, fixtures::chat_assignment());
     let (_, launched) = fixtures::spawn(&mut worker);
     assert_eq!(launched.program.as_ref(), fixtures::TEMPER);
-    assert_eq!(launched.args.as_ref(), [Box::from(&b"agent"[..]), Box::from(fixtures::AGENT_JSON)]);
+    assert_eq!(
+        launched.args.as_ref(),
+        [Box::from(&b"internal"[..]), Box::from(&b"agent"[..]), Box::from(fixtures::AGENT_JSON)]
+    );
     assert_eq!(launched.root, io::kernel::Fd::new(9));
     assert!(launched.env.is_empty(), "no credential reaches an agent");
 }

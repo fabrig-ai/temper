@@ -1,11 +1,15 @@
 # Only scripts/after-landing.sh loads this tool config. The repository's
 # profiles retain their filters, concurrency, timeouts and retry settings.
 # Paths are relative to target/nextest/<profile>/, within outer cleanup.
+# Keep passing tests' output so the tier can name starved passes.
 [profile.process.junit]
 path = "after-landing.xml"
+store-success-output = true
 
 [profile.qa.junit]
 path = "after-landing.xml"
+store-success-output = true
 
 [profile.browser.junit]
 path = "after-landing.xml"
+store-success-output = true

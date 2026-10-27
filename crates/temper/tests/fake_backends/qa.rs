@@ -266,7 +266,7 @@ fn qa_split_directories_isolate_source_records_and_rewrite_every_public_root() {
     }
     let worker = &document["workers"][0]["agent"];
     assert_eq!(worker["configuration"], json!(effective.join("config/agent.json")));
-    assert_eq!(worker["arguments"], json!(["agent", effective.join("config/agent.json")]));
+    assert_eq!(worker["arguments"], json!(["internal", "agent", effective.join("config/agent.json")]));
     assert_eq!(worker["program"], source["workers"][0]["agent"]["program"]);
 
     let github = row(&document["application"]["forges"], "number", &json!(GITHUB_FORGE));

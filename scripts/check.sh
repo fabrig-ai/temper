@@ -36,6 +36,7 @@ fi
 
 # skein's programming-model.md, 2: every binary installs the fail-stop hook first.
 step fail-stop python3 -I -B scripts/fail_stop.py
+step scripts python3 -I -B -m unittest discover -s scripts -p 'test_*.py'
 step fmt cargo fmt --check
 step clippy cargo clippy --workspace --all-targets -- -D warnings
 # The browser's client crates (client/browser.md, 4.3).
@@ -49,5 +50,6 @@ step wasm cargo clippy --target wasm32-unknown-unknown \
 # skein's testing-strategy.md, section 8: a test is a process.
 export NEXTEST_DOUBLE_SPAWN=0
 step build cargo nextest run --workspace --no-run
-step focused cargo nextest run --workspace
-step fuzzy cargo nextest run --workspace --profile fuzzy
+step focused cargo nextest run --workspace --tool-config-file "gate:$PWD/.config/nextest-gate.toml"
+step fuzzy cargo nextest run --workspace --profile fuzzy --tool-config-file "gate:$PWD/.config/nextest-gate.toml"
+python3 -I -B scripts/gate_starved.py default fuzzy

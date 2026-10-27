@@ -1172,7 +1172,7 @@ fn paths_are_resolved_by_kind_and_absolute_only_members_refuse_relative_values()
         (b"application.clients.bundle", br#""/kept/bundle""#, b"/kept/bundle", false),
         (b"workers[0].agent.program", br#""temper""#, b"", true),
         (b"workers[0].agent.configuration", br#""agent.json""#, b"", true),
-        (b"workers[0].agent.arguments", br#"["agent","agent.json"]"#, b"", true),
+        (b"workers[0].agent.arguments", br#"["internal", "agent","agent.json"]"#, b"", true),
     ] {
         let document = fixtures::with(&fixtures::document(), member, input);
         let result = crate::named(&document, &directories);

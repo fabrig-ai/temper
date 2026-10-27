@@ -262,6 +262,8 @@ impl Protocol {
                 commit: self.branch(branch),
                 context: Box::from(&b"build"[..]),
                 state: check,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
             self.fixture.writer,
         );
@@ -531,6 +533,7 @@ impl Protocol {
                 | top::Request::TierRun { .. }
                 | top::Request::TierEffect { .. }
                 | top::Request::TierDecision { .. }
+                | top::Request::LandingDecision { .. }
                 | top::Request::ChangeDecision { .. }
                 | top::Request::News { .. }
                 | top::Request::Read { .. }
@@ -646,6 +649,8 @@ impl Protocol {
 }
 fn key(row: &top::Stored) -> top::Key {
     match row {
+        top::Stored::Landing(row) => top::Key::Landing(row.landing.task),
+        top::Stored::Receipt { key, .. } => top::Key::Receipt(key.clone()),
         top::Stored::Call { key, .. } => top::Key::Call(*key),
         top::Stored::Repository(row) => top::Key::Repository(row.provider),
         top::Stored::Hold(row) => top::Key::Hold(row.name.clone()),

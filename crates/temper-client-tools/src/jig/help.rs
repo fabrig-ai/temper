@@ -1,25 +1,29 @@
 //! Usage and records derived from the tools' table.
-use super::table::{Argument, Keyed, Kind, Occurs, Place, Tool};
-use skein_lib::{Overflow, Writer};
+use super::table::{Argument, Bound, Keyed, Kind, Limits, Occurs, Place, Tool, bound};
+use skein_lib::{Decimal, Overflow, Writer};
 /// Write every form in the table's published argument order.
 pub fn usage(tool: &Tool, out: &mut Writer) -> Result<(), Overflow> {
-    if tool.name == b"amend" {
-        return out.put(b"amend N [--rev R] [--priority P | --untracked] [--deadline T | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency M]... [--no-dependencies] [--model M [--effort E]] REASON [--key NAME]\n");
-    }
     for form in tool.forms {
-        out.put(tool.name)?;
-        for argument in *form {
-            argument_usage(argument, out)?;
-        }
-        out.put(match tool.keyed {
-            Keyed::Never => b"",
-            Keyed::Optional => b" [--key NAME]",
-            Keyed::Required => b" --key NAME",
-        })?;
-        out.put(b"\n")?;
+        form_usage(tool, form, out)?;
     }
     Ok(())
 }
+fn form_usage(tool: &Tool, form: &[Argument], out: &mut Writer) -> Result<(), Overflow> {
+    if tool.name == b"amend" {
+        return out.put(b"amend N [--rev R] [--priority P | --untracked] [--deadline T | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency M]... [--no-dependencies] [--model M [--effort E]] REASON [--key NAME]\n");
+    }
+    out.put(tool.name)?;
+    for argument in form {
+        argument_usage(argument, out)?;
+    }
+    out.put(match tool.keyed {
+        Keyed::Never => b"",
+        Keyed::Optional => b" [--key NAME]",
+        Keyed::Required => b" --key NAME",
+    })?;
+    out.put(b"\n")
+}
+
 fn argument_usage(argument: &Argument, out: &mut Writer) -> Result<(), Overflow> {
     out.put(b" ")?;
     let optional = argument.occurs != Occurs::Required;
@@ -86,29 +90,140 @@ pub fn tools(table: &[&Tool], out: &mut Writer) -> Result<(), Overflow> {
     }
     Ok(())
 }
-/// One tool's forms, descriptions and result tag.
-pub fn tool(tool: &Tool, out: &mut Writer) -> Result<(), Overflow> {
-    usage(tool, out)?;
-    out.put(tool.line)?;
-    out.put(b"\nResult: ")?;
-    out.put(tool.result)?;
-    out.put(b"\n")?;
+/// One tool's complete record, with the host's argument bounds.
+pub fn tool(tool: &Tool, limits: &Limits, out: &mut Writer) -> Result<(), Overflow> {
     for form in tool.forms {
+        form_usage(tool, form, out)?;
         for argument in *form {
-            out.put(b"  ")?;
-            out.put(argument.name)?;
-            out.put(b": ")?;
-            out.put(argument.line)?;
-            out.put(b"\n")?;
+            argument_record(argument, limits, out)?;
         }
     }
+    out.put(tool.line)?;
+    out.put(b"\n")?;
+    if !tool.prints.is_empty() {
+        out.put(b"Prints: ")?;
+        out.put(tool.prints)?;
+        out.put(b"\n")?;
+    }
+    out.put(b"--json: the record ")?;
+    out.put(tool.result)?;
+    out.put(b".\n")?;
+    out.put(match tool.keyed {
+        Keyed::Never => b"Key: none.\n",
+        Keyed::Optional => b"Key: --key NAME, optional.\n",
+        Keyed::Required => b"Key: --key NAME, required.\n",
+    })?;
+    out.put(tool.notes)?;
     if tool.name == b"wait" {
         wait(out)?;
     }
     Ok(())
 }
+fn argument_record(argument: &Argument, limits: &Limits, out: &mut Writer) -> Result<(), Overflow> {
+    out.put(b"  ")?;
+    match argument.place {
+        Place::Positional => {
+            out.put(argument.shown)?;
+            out.put(b" (")?;
+            out.put(argument.name)?;
+            out.put(b")")?;
+        }
+        Place::Flag | Place::Switch => {
+            out.put(b"--")?;
+            out.put(argument.name)?;
+            if argument.place == Place::Flag {
+                out.put(b" ")?;
+                out.put(argument.shown)?;
+            }
+        }
+    }
+    out.put(b": ")?;
+    if argument.place == Place::Switch {
+        out.put(b"a switch")?;
+    } else {
+        argument_type(argument.kind, out)?;
+        argument_bound(argument, limits, out)?;
+        if argument.kind == Kind::Text {
+            out.put(b", or - to read stdin")?;
+        }
+        out.put(b"; ")?;
+        match argument.occurs {
+            Occurs::Required => out.put(b"required")?,
+            Occurs::Optional => out.put(b"optional")?,
+            Occurs::Repeated { most } => {
+                out.put(b"repeated, at most ")?;
+                out.put(Decimal::of(u64::from(most)).as_bytes())?;
+            }
+        }
+    }
+    out.put(b". ")?;
+    out.put(argument.line)?;
+    out.put(b"\n")
+}
+fn argument_type(kind: Kind, out: &mut Writer) -> Result<(), Overflow> {
+    out.put(match kind {
+        Kind::Number | Kind::NumberRange { .. } => b"a number",
+        Kind::Count => b"a count",
+        Kind::NamedNumber { words, prefixes, .. } => return choices(words, prefixes, out),
+        Kind::Word { set } => return choices(set, &[], out),
+        Kind::Text | Kind::Literal => b"text",
+        Kind::File => b"a file",
+        Kind::Duration => b"a duration: seconds, or a number with s, m or h",
+        Kind::Proposal => b"a proposal, tN/K or pN/K",
+        Kind::Digest => b"a digest, as a read prints it",
+        Kind::Condition => b"a condition",
+        Kind::Subject => b"a subject",
+        Kind::Project { .. } => b"a project's name or number",
+        Kind::Turn => b"an attempt and a turn, A.T",
+        Kind::Cursor => b"a cursor, as a read prints it",
+        Kind::Group => b"one of questions, proposals, escalations, person-tasks, results or replies",
+        Kind::Order => b"one of activity or priority",
+        Kind::Tool => b"a tool's name",
+    })
+}
+fn choices(words: &[&[u8]], prefixes: &[&[u8]], out: &mut Writer) -> Result<(), Overflow> {
+    out.put(b"one of ")?;
+    let count = words.len().checked_add(prefixes.len()).ok_or(Overflow)?;
+    for (index, word) in words.iter().chain(prefixes).enumerate() {
+        if index != 0 {
+            out.put(if index.checked_add(1) == Some(count) { b" or " } else { b", " })?;
+        }
+        out.put(word)?;
+        if index >= words.len() {
+            out.put(b"N")?;
+        }
+    }
+    Ok(())
+}
+fn argument_bound(argument: &Argument, limits: &Limits, out: &mut Writer) -> Result<(), Overflow> {
+    match bound(argument, limits) {
+        Bound::None => {}
+        Bound::Numbers { least, most } => {
+            if let Kind::NamedNumber { .. } = argument.kind {
+                out.put(b" with N from ")?;
+            } else {
+                out.put(b" from ")?;
+            }
+            out.put(Decimal::of(least).as_bytes())?;
+            out.put(b" to ")?;
+            out.put(Decimal::of(most).as_bytes())?;
+        }
+        Bound::Bytes { most } => {
+            out.put(b", at most ")?;
+            out.put(Decimal::of(most).as_bytes())?;
+            out.put(b" bytes")?;
+        }
+        Bound::Seconds { most } => {
+            out.put(b", at most ")?;
+            out.put(Decimal::of(most).as_bytes())?;
+            out.put(b" seconds")?;
+        }
+    }
+    Ok(())
+}
+
 fn wait(out: &mut Writer) -> Result<(), Overflow> {
-    out.put(b"Subjects and --until conditions:\n  me: waiting\n  inbox: waiting|updates (no subject flags)\n  task N: ended|waiting-on-me|held|replied|phase:<phase>\n  tree N: ended\n  run N: ended\n  accounts: usable|settled\n  tasks: no condition; its read arguments except --after and --ended\nLive phases: ")?;
+    out.put(b"Live phases: ")?;
     let mut separator = b"".as_slice();
     for phase in super::subject::PHASES {
         if super::subject::live(*phase) {
@@ -117,5 +232,5 @@ fn wait(out: &mut Writer) -> Result<(), Overflow> {
             separator = b"|";
         }
     }
-    out.put(b"\nUse --until ended for done, failed, cancelled or ended; terminal phase conditions are usage errors.\nwaiting-on-me covers the task's tree. An ended task answers with its ended read.\n--since is the matching read's digest of the watched document, not its cursor.\n--since and --until together require both change and condition.\nTimeout: 300 seconds by default, at most 3600 seconds.\n")
+    out.put(b"\n")
 }

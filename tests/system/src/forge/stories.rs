@@ -241,6 +241,8 @@ fn a_smith_change_with_failed_ci_is_repaired_reviewed_and_landed() {
             commit: 1,
             context: b"build".as_slice().into(),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     assert!(matches!(
@@ -255,6 +257,8 @@ fn a_smith_change_with_failed_ci_is_repaired_reviewed_and_landed() {
             commit: failed_head,
             context: b"build".as_slice().into(),
             state: raw::Check::Failed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     let producer_agent = run_smith(
@@ -298,6 +302,8 @@ fn a_smith_change_with_failed_ci_is_repaired_reviewed_and_landed() {
             commit: repaired_head,
             context: b"build".as_slice().into(),
             state: raw::Check::Passed,
+            description: Box::new([]),
+            link: Box::new([]),
         }),
     );
     let pull = world

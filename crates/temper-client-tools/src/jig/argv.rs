@@ -5,7 +5,7 @@ use super::{
     call::{Call, Parsed, Source, Value, Values},
     key::Name,
     subject::{self, Subject},
-    table::{Argument, Keyed, Kind, Occurs, Place, Tool},
+    table::{Argument, Keyed, Kind, Occurs, Place, Tool, bound},
 };
 use alloc::boxed::Box;
 use jig_client::contract::QueryOrder;
@@ -179,7 +179,7 @@ fn form_values(
             } else {
                 *word
             };
-            decode(table, spec.kind, text).ok_or(if spec.kind == Kind::Condition {
+            decode(table, spec.kind, bound(spec, limits), text).ok_or(if spec.kind == Kind::Condition {
                 Usage::Condition
             } else {
                 Usage::Kind { argument }

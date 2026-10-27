@@ -1,4 +1,4 @@
-//! Reference case 4.1's opener followed by 4.3's timer check on three workers.
+//! Retained first-edition story (domain/testing.md, 5.3): opener followed by its timer check on three workers.
 use temper_real_loop_world::{
     End, Exit,
     case::{

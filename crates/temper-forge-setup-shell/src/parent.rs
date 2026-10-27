@@ -44,8 +44,8 @@ pub fn run(limits: &Limits, launch: &Launch, address: std::net::SocketAddr) -> R
         // Kill: a Forgejo left shutting down gracefully would meet a restarted
         // forge run's on the box's socket and its database (protocol/setup.md, 6.4).
         [
-            b"forge".as_slice(),
-            b"child",
+            b"internal".as_slice(),
+            b"forge-child",
             b"--parent",
             crate::process::id().to_string().as_bytes(),
             b"--signal",

@@ -1,4 +1,4 @@
-//! Reference case 6.4: one deployment repair before the waiting change.
+//! Retained first-edition story (domain/testing.md, 5.3): one deployment repair before the waiting change.
 use temper_real_loop_world::{Exit, case, run_cluster_forge};
 
 #[test]

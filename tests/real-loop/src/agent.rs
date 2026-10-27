@@ -4,7 +4,7 @@ use skein_io::kernel::Spawn;
 use skein_world::{Inherited, StartupRoot};
 use std::{os::unix::ffi::OsStrExt, path::Path};
 pub(crate) fn agent(spawn: &Spawn, inherited: &Inherited) -> Proc {
-    let configuration = Path::new(std::ffi::OsStr::from_bytes(&spawn.args[1]));
+    let configuration = Path::new(std::ffi::OsStr::from_bytes(&spawn.args[2]));
     let configuration = smith_agent_shell::config::read(configuration).expect("shipped agent configuration");
     let stderr = inherited.pipes.iter().find(|(child, _)| *child == 2).expect("stderr").1;
     let (errors, capture) = smith_agent_process_world::AgentErrors::pipe(stderr);

@@ -14,15 +14,21 @@ pub struct Limits {
     pub wait: Duration,
     pub wait_most: Duration,
 }
+/// A tool's notes are at most this many bytes (client/tools.md, 5.1).
+pub const NOTES_BYTES: usize = 1_024;
 /// A tool and each of its argument forms, tried in order.
 #[derive(Debug)]
 pub struct Tool {
     pub name: &'static [u8],
     pub line: &'static [u8],
+    /// What it prints, one line.
+    pub prints: &'static [u8],
     pub result: &'static [u8],
     pub forms: &'static [&'static [Argument]],
     pub keyed: Keyed,
     pub area: u8,
+    /// What this tool alone does beyond its line; lines end with `\n`.
+    pub notes: &'static [u8],
 }
 #[derive(Debug)]
 pub struct Argument {
@@ -87,6 +93,44 @@ pub enum Kind {
     Group,
     Order,
     Tool,
+}
+/// What the parser accepts of an argument beyond its kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    None,
+    Numbers { least: u64, most: u64 },
+    Bytes { most: u64 },
+    Seconds { most: u64 },
+}
+/// One source for the parser's checks and the help.
+#[must_use]
+pub fn bound(argument: &Argument, limits: &Limits) -> Bound {
+    match argument.kind {
+        Kind::NumberRange { min, max } | Kind::NamedNumber { min, max, .. } => Bound::Numbers { least: min, most: max },
+        Kind::Count => Bound::Numbers { least: 1, most: u64::from(limits.rows) },
+        Kind::Number if argument.name == b"forge" => Bound::Numbers { least: 0, most: 65_535 },
+        Kind::Text | Kind::Literal => Bound::Bytes { most: limits.ask_bytes },
+        Kind::File if argument.name == b"items" || argument.name == b"instructions" || argument.name == b"spec" => {
+            Bound::Bytes { most: limits.ask_bytes }
+        }
+        Kind::Duration if argument.name == b"timeout" => {
+            Bound::Seconds { most: limits.wait_most.as_nanos().checked_div(1_000_000_000).expect("nonzero divisor") }
+        }
+        Kind::Number
+        | Kind::File
+        | Kind::Duration
+        | Kind::Word { .. }
+        | Kind::Proposal
+        | Kind::Digest
+        | Kind::Condition
+        | Kind::Subject
+        | Kind::Project { .. }
+        | Kind::Turn
+        | Kind::Cursor
+        | Kind::Group
+        | Kind::Order
+        | Kind::Tool => Bound::None,
+    }
 }
 #[must_use]
 pub const fn positional(

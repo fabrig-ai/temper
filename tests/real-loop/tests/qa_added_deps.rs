@@ -63,7 +63,7 @@ fn landed_report() -> Ran {
 
 #[test]
 fn landing_releases_the_kept_report_delegate() {
-    // draft/reference-case.md 6.2, 7.2; jig's tasks.md 5.7, 8.1.
+    // draft/reference-case.md 4.2, 4.3; jig's tasks.md 5.7, 8.1.
     let ran = landed_report();
     let waited = &ran.calls()[REPORT_WAIT];
     assert_eq!(

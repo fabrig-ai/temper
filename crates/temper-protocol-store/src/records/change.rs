@@ -98,6 +98,9 @@ fn encode_repair(value: d::Repair) -> w::Repair {
             w::Repair::Gate(w::Number::new(&w::CEILINGS, w::NumberParts { number }).expect(FITS))
         }
         d::Repair::Semantic => w::Repair::Semantic,
+        d::Repair::Landing { gate } => {
+            w::Repair::Landing(w::LandingRepair::new(&w::CEILINGS, w::LandingRepairParts { gate }).expect(FITS))
+        }
     }
 }
 fn decode_repair(value: w::Repair) -> d::Repair {
@@ -105,6 +108,7 @@ fn decode_repair(value: w::Repair) -> d::Repair {
         w::Repair::Ci => d::Repair::Ci,
         w::Repair::Gate(value) => d::Repair::Gate(value.number()),
         w::Repair::Semantic => d::Repair::Semantic,
+        w::Repair::Landing(value) => d::Repair::Landing { gate: value.gate() },
     }
 }
 fn encode_delegate(value: d::Delegate) -> w::Delegate {
@@ -152,6 +156,17 @@ fn encode_live(value: &d::State) -> w::ChangeLive {
         }
         d::State::Gating { head, asked } => w::ChangeLive::Gating(
             w::Gating::new(&w::CEILINGS, w::GatingParts { head: *head, asked: encode_numbers(asked) }).expect(FITS),
+        ),
+        d::State::Ready { head, ready_since } => w::ChangeLive::Ready(
+            w::ReadyHead::new(&w::CEILINGS, w::ReadyHeadParts { head: *head, ready_since: ready_since.as_nanos() })
+                .expect(FITS),
+        ),
+        d::State::Preparing { from, main, ready_since } => w::ChangeLive::Preparing(
+            w::Preparing::new(
+                &w::CEILINGS,
+                w::PreparingParts { from: *from, main: *main, ready_since: ready_since.as_nanos() },
+            )
+            .expect(FITS),
         ),
         d::State::Queued { head, ready_since } => w::ChangeLive::Queued(
             w::ReadyHead::new(&w::CEILINGS, w::ReadyHeadParts { head: *head, ready_since: ready_since.as_nanos() })
@@ -215,6 +230,14 @@ fn decode_live(value: w::ChangeLive) -> d::State {
         w::ChangeLive::Gating(value) => {
             let w::GatingParts { head, asked } = value.into_parts();
             d::State::Gating { head, asked: asked.into_boxed() }
+        }
+        w::ChangeLive::Ready(value) => {
+            let w::ReadyHeadParts { head, ready_since } = value.into_parts();
+            d::State::Ready { head, ready_since: Wall::from_nanos(ready_since) }
+        }
+        w::ChangeLive::Preparing(value) => {
+            let w::PreparingParts { from, main, ready_since } = value.into_parts();
+            d::State::Preparing { from, main, ready_since: Wall::from_nanos(ready_since) }
         }
         w::ChangeLive::Queued(value) => {
             let w::ReadyHeadParts { head, ready_since } = value.into_parts();
@@ -322,6 +345,8 @@ pub(super) fn encode_change(value: &d::Change) -> w::Change {
         owns_turn,
         last_head,
         gate_failures,
+        way,
+        landing,
     } = value;
     w::Change::new(
         &w::CEILINGS,
@@ -341,6 +366,11 @@ pub(super) fn encode_change(value: &d::Change) -> w::Change {
             owns_turn: *owns_turn,
             last_head: *last_head,
             gate_failures: encode_gate_failures(gate_failures),
+            way: match way {
+                d::Way::Queue => w::Way::Queue,
+                d::Way::Turn => w::Way::Turn,
+            },
+            landing: *landing,
         },
     )
     .expect(FITS)
@@ -360,6 +390,8 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
         owns_turn,
         last_head,
         gate_failures,
+        way,
+        landing,
     } = value.into_parts();
     d::Change {
         task,
@@ -377,6 +409,11 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
         owns_turn,
         last_head,
         gate_failures: decode_gate_failures(gate_failures),
+        way: match way {
+            w::Way::Queue => d::Way::Queue,
+            w::Way::Turn => d::Way::Turn,
+        },
+        landing,
     }
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]

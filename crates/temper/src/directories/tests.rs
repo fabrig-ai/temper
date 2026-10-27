@@ -42,10 +42,10 @@ fn settings_refusals_name_the_flag_and_its_reason() {
     let long = "/".to_owned() + &"a".repeat(4096);
     for (arguments, expected) in [
         (vec!["--config", "/a", "--config", "/b"], "--config is given twice"),
-        (vec!["--config"], "--config takes a value: DIR"),
+        (vec!["--config"], "--config takes a value: CONFIG"),
         (
             vec![],
-            "--config DIR is not given, TEMPER_CONFIG is not set, and its default $XDG_CONFIG_HOME/temper needs XDG_CONFIG_HOME or HOME as an absolute path",
+            "--config CONFIG is not given, TEMPER_CONFIG is not set, and its default $XDG_CONFIG_HOME/temper needs XDG_CONFIG_HOME or HOME as an absolute path",
         ),
         (vec!["--config", &long, "--data", "/d", "--cache", "/c"], "--config DIR: absolute path is past 4096 bytes"),
     ] {

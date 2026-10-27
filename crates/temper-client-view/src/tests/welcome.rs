@@ -250,7 +250,7 @@ fn the_welcome_step_says_its_words_and_offers_both_cards() {
         "You describe what you want and how you want it done, and it happens.",
         "Try the playground",
         "A built-in scripted model and forge. Get a taste of how temper feels.",
-        "Fully offline, no costs or external services. · Ready at once",
+        "Fully offline · Ready at once",
         "Try the playground",
         "Set up temper",
         "Your forge: GitHub or Forgejo",

@@ -604,8 +604,11 @@ fn help_opens_nothing() {
             _ => None,
         });
         let expected = if let Some(n) = selected.filter(|_| json) {
-            temper_client_tools::jig::json::write_tool(temper_client_tools::table::TOOLS[usize::from(n)])
-                .expect("JSON help")
+            temper_client_tools::jig::json::write_tool(
+                temper_client_tools::table::TOOLS[usize::from(n)],
+                &temper_client_tools::limits::tools(),
+            )
+            .expect("JSON help")
         } else {
             let mut out = skein_lib::Writer::new(temper_client_tools::limits::TEXT as usize);
             temper_client_tools::help::text(selected, &mut out).expect("help");

@@ -1,4 +1,4 @@
-//! Reference case 4.4: the person answers the pace question and the director keeps it.
+//! Retained first-edition story (domain/testing.md, 5.3): the person answers the pace question and the director keeps it.
 use temper_real_loop_world::{
     case::{
         self,

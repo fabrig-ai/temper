@@ -963,7 +963,7 @@ fn bounded_document(directory: &Path, mut value: serde_json::Value, forge: tempe
     use temper_service::settings::{Files, PROGRAM_PATH_BYTES, Seeds};
     let path = format!("/{}", "p".repeat(PROGRAM_PATH_BYTES - 1));
     value["workers"][0]["agent"]["program"] = path.clone().into();
-    value["workers"][0]["agent"]["arguments"][1] = path.clone().into();
+    value["workers"][0]["agent"]["arguments"][2] = path.clone().into();
     let document = serde_json::to_vec(&value).expect("bounded JSON");
     let named =
         temper_service::named(&document, &jig_protocol_config::Directories::working()).expect("bounded example named");

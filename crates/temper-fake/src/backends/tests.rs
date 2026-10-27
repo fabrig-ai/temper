@@ -151,7 +151,10 @@ fn init_targets_change_together_and_preserve_registration_terms() {
     assert_eq!(effective["engine"]["deployment"]["seed"], 99);
     assert_eq!(effective["application"]["clients"]["bundle"], "/effective/config/bundle-loopback");
     assert_eq!(effective["workers"][0]["agent"]["configuration"], "/effective/config/agent.json");
-    assert_eq!(effective["workers"][0]["agent"]["arguments"], json!(["agent", "/effective/config/agent.json"]));
+    assert_eq!(
+        effective["workers"][0]["agent"]["arguments"],
+        json!(["internal", "agent", "/effective/config/agent.json"])
+    );
     assert_eq!(effective_agent["endpoints"][1], agent["endpoints"][1]);
     assert_eq!(docs, write(&temper, &agent, &paths, &peers).expect("deterministic rewrite"));
 }
@@ -227,7 +230,7 @@ fn malformed_targets_have_named_refusals() {
             "expected agent and its configuration",
         ),
         (
-            "/workers/0/agent/arguments/1",
+            "/workers/0/agent/arguments/2",
             json!("/other/agent.json"),
             "configuration and argv must name the same agent document",
         ),

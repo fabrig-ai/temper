@@ -1324,7 +1324,7 @@ fn check_activity(observed: &Observed, read: Read) -> Vec<&Value> {
         .collect()
 }
 
-/// Reference case 4.3's supported timer, cancel and empty-worker checkpoint.
+/// Retained first-edition story (domain/testing.md, 5.3): supported timer, cancel and empty-worker checkpoint.
 #[must_use]
 pub fn step_4_3(observed: &Observed) -> Vec<Miss> {
     use super::{B, B_REPORT, BENCHMARK, CHECK, CHECK_REASON, CHECK_REPORT};
@@ -1437,7 +1437,7 @@ const FENCED: Promise = Promise::Must("one run per task, the lost attempt fenced
 const QUESTIONS_WAIT: Promise = Promise::Step("A's questions wait, since the director lives there");
 const ONCE: Promise = Promise::Add("nothing resumes twice");
 
-/// Reference case 4.6's supported retry, retained question and single answer checkpoint.
+/// Retained first-edition story (domain/testing.md, 5.3): supported retry, retained question and single answer checkpoint.
 #[must_use]
 pub fn step_4_6(observed: &Observed) -> Vec<Miss> {
     use super::{HANG, HANG_REPORT, PHASE, PHASE_QUESTION_NUMBER, PHASE_REPORT};
@@ -4258,6 +4258,7 @@ fn pull_digest(records: &[skein_fake_forge_domain::Observation]) -> Vec<Pull> {
             | Observation::Dequeued { .. }
             | Observation::Refused { .. }
             | Observation::Rejected { .. }
+            | Observation::Rebased { .. }
             | Observation::Wiki { .. } => {}
         }
     }

@@ -58,6 +58,7 @@ impl FakeForge {
             &mut domain,
             &config,
             raw::Setup {
+                workflows: Box::new([]),
                 id: 2,
                 name: b"org/repo".as_slice().into(),
                 default: b"main".as_slice().into(),
@@ -439,6 +440,8 @@ impl FakeForge {
                 commit,
                 context: b"build".as_slice().into(),
                 state: raw::Check::Failed,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
         );
     }
@@ -504,7 +507,7 @@ fn raw_parts(write: &raw::Write) -> (u16, Vec<r::Name>, Option<u64>, u64) {
             name.path.extend([b"issue".to_vec(), number.to_string().into_bytes()]);
             (13, None, 1)
         }
-        raw::Write::Merge { number, head } => {
+        raw::Write::Merge { number, head, .. } => {
             name.path.extend([b"branch".to_vec(), b"main".to_vec()]);
             (4, Some(observations::value(&translate::commit(*head))), *number)
         }

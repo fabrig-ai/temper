@@ -9,7 +9,7 @@ adopted. It covers three things:
 - what stays outside temper;
 - the order in which the process can move onto temper, step by step.
 
-`reference-case-2.md` is the same process, invented and condensed.
+`reference-case.md` is the same process, invented and condensed.
 Section 7 maps the real episodes onto its steps. Once temper has the
 model's gaps, this draft becomes the migration guide. It names
 agents' documents, which are private, but no machine, account or
@@ -253,7 +253,7 @@ repositories on our forge, with workers on the build machines.
 
 ## 7. Episodes and the case
 
-The real episodes behind each step of `reference-case-2.md`, by
+The real episodes behind each step of `reference-case.md`, by
 decision number, mission or design.
 
 | Step | Episodes |

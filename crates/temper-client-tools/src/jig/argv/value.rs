@@ -4,7 +4,7 @@ use crate::jig::subject::{self, Condition};
 use crate::jig::{
     Limits,
     call::{Project, Value},
-    table::{Argument, Kind, Place, Tool},
+    table::{Argument, Bound, Kind, Place, Tool, bound},
 };
 use alloc::boxed::Box;
 use jig_client::contract::{InboxGroup, ProposalKey, Proposer, QueryOrder, TurnName};
@@ -20,18 +20,15 @@ pub(super) fn valid(
         return if *value == Value::Switch { Ok(()) } else { Err(Usage::Kind { argument }) };
     }
     let correct = match spec.kind {
-        Kind::Number | Kind::Count => return valid_number(spec, value, argument, limits),
-        Kind::NumberRange { min, max } => {
-            let Value::Number(n) = value else {
-                return Err(Usage::Kind { argument });
-            };
-            *n >= min && *n <= max
-        }
-        Kind::NamedNumber { words, prefixes, min, max } => {
+        Kind::Number | Kind::Count | Kind::NumberRange { .. } => return valid_number(spec, value, argument, limits),
+        Kind::NamedNumber { words, prefixes, .. } => {
             let Value::Text(bytes) = value else {
                 return Err(Usage::Kind { argument });
             };
-            named_number(bytes, words, prefixes, min, max)
+            let Bound::Numbers { least, most } = bound(spec, limits) else {
+                return Err(Usage::Kind { argument });
+            };
+            named_number(bytes, words, prefixes, least, most)
         }
         Kind::Word { set } => {
             let Value::Word(index) = value else {
@@ -40,7 +37,7 @@ pub(super) fn valid(
             set.get(usize::from(*index)).is_some()
         }
         Kind::Literal if *value == Value::Stdin => false,
-        Kind::Literal | Kind::Text => return valid_text(value, argument, limits),
+        Kind::Literal | Kind::Text => return valid_text(spec, value, argument, limits),
         Kind::File => return valid_file(spec, value, argument, limits),
         Kind::Project { empty } => return valid_project(value, argument, empty),
         Kind::Turn => {
@@ -101,11 +98,17 @@ pub(super) fn valid(
     };
     if correct { Ok(()) } else { Err(Usage::Kind { argument }) }
 }
-pub(crate) fn decode(table: &[&Tool], kind: Kind, word: &[u8]) -> Option<Value> {
+pub(crate) fn decode(table: &[&Tool], kind: Kind, bounds: Bound, word: &[u8]) -> Option<Value> {
     Some(match kind {
         Kind::Number | Kind::Count => Value::Number(number(word)?),
-        Kind::NumberRange { min, max } => Value::Number(bounded_number(word, min, max)?),
-        Kind::NamedNumber { words, prefixes, min, max } => Value::Text(named_text(word, words, prefixes, min, max)?),
+        Kind::NumberRange { .. } => {
+            let Bound::Numbers { least, most } = bounds else { return None };
+            Value::Number(bounded_number(word, least, most)?)
+        }
+        Kind::NamedNumber { words, prefixes, .. } => {
+            let Bound::Numbers { least, most } = bounds else { return None };
+            Value::Text(named_text(word, words, prefixes, least, most)?)
+        }
         Kind::Word { set } => {
             let mut found = None;
             for (index, name) in set.iter().enumerate() {
@@ -133,21 +136,7 @@ pub(crate) fn decode(table: &[&Tool], kind: Kind, word: &[u8]) -> Option<Value> 
                 Project::Name(Box::from(word))
             })
         }
-        Kind::Turn => {
-            let mut dot = None;
-            for (index, byte) in word.iter().enumerate() {
-                if *byte == b'.' {
-                    dot = Some(index);
-                    break;
-                }
-            }
-            let split = dot?;
-            let end = split.checked_add(1)?;
-            Value::Turn(TurnName {
-                attempt: number(word.get(..split)?)?,
-                number: u32::try_from(number(word.get(end..)?)?).ok()?,
-            })
-        }
+        Kind::Turn => Value::Turn(turn(word)?),
         Kind::Cursor => Value::Cursor(hex(word)?),
         Kind::Group => Value::Group(match word {
             b"questions" => InboxGroup::Questions,
@@ -336,14 +325,16 @@ fn hexadecimal(bytes: &[u8]) -> Result<Box<[u8]>, Unwritten> {
     Ok(hex.finish())
 }
 
-fn valid_text(value: &Value, argument: u8, limits: &Limits) -> Result<(), Usage> {
+fn valid_text(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> Result<(), Usage> {
     if *value == Value::Stdin {
         return Ok(());
     }
     let Value::Text(text) = value else {
         return Err(Usage::Kind { argument });
     };
-    if u64::try_from(text.len()).unwrap_or(u64::MAX) > limits.ask_bytes {
+    if let Bound::Bytes { most } = bound(spec, limits)
+        && u64::try_from(text.len()).unwrap_or(u64::MAX) > most
+    {
         return Err(Usage::Long { argument });
     }
     Ok(())
@@ -382,11 +373,10 @@ fn valid_number(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -
     let Value::Number(number) = value else {
         return Err(Usage::Kind { argument });
     };
-    if spec.kind == Kind::Count && (*number == 0 || *number > u64::from(limits.rows)) {
-        return Err(Usage::Rows { argument });
-    }
-    if spec.name == b"forge" && u16::try_from(*number).is_err() {
-        return Err(Usage::Kind { argument });
+    if let Bound::Numbers { least, most } = bound(spec, limits)
+        && (*number < least || *number > most)
+    {
+        return Err(if spec.kind == Kind::Count { Usage::Rows { argument } } else { Usage::Kind { argument } });
     }
     Ok(())
 }
@@ -409,7 +399,9 @@ fn valid_duration(spec: &Argument, value: &Value, argument: u8, limits: &Limits)
     let Value::Duration(duration) = value else {
         return Err(Usage::Kind { argument });
     };
-    if spec.name == b"timeout" && *duration > limits.wait_most {
+    if let Bound::Seconds { most } = bound(spec, limits)
+        && *duration > Duration::from_secs(most)
+    {
         return Err(Usage::Rows { argument });
     }
     if duration.as_nanos().checked_rem(1_000_000_000) == Some(0) { Ok(()) } else { Err(Usage::Kind { argument }) }
@@ -423,18 +415,10 @@ fn named_text(word: &[u8], words: &[&[u8]], prefixes: &[&[u8]], min: u64, max: u
 }
 
 fn valid_file(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> Result<(), Usage> {
-    if let Value::Text(bytes) = value
-        && spec.name == b"items"
-    {
-        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limits.ask_bytes {
-            return Err(Usage::Long { argument });
-        }
-        return Ok(());
-    }
     if let Value::Text(_) = value
-        && (spec.name == b"instructions" || spec.name == b"spec")
+        && let Bound::Bytes { .. } = bound(spec, limits)
     {
-        return valid_text(value, argument, limits);
+        return valid_text(spec, value, argument, limits);
     }
     if *value == Value::Stdin {
         return Ok(());
@@ -443,4 +427,17 @@ fn valid_file(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> 
         return Err(Usage::Kind { argument });
     };
     Ok(())
+}
+
+fn turn(word: &[u8]) -> Option<TurnName> {
+    let mut dot = None;
+    for (index, byte) in word.iter().enumerate() {
+        if *byte == b'.' {
+            dot = Some(index);
+            break;
+        }
+    }
+    let split = dot?;
+    let end = split.checked_add(1)?;
+    Some(TurnName { attempt: number(word.get(..split)?)?, number: u32::try_from(number(word.get(end..)?)?).ok()? })
 }

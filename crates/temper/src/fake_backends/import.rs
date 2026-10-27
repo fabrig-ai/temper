@@ -18,7 +18,7 @@ const RESOURCES: &[(&str, bool, &str)] = &[
     ("engine/hosts/workers/0/digest", false, "worker.digest"),
     ("workers/0/secret", false, "worker.secret"),
     ("workers/0/agent/configuration", true, "agent.json"),
-    ("workers/0/agent/arguments/1", true, "agent.json"),
+    ("workers/0/agent/arguments/2", true, "agent.json"),
     ("application/setup/0/directory", false, "demo/forge"),
     ("application/setup/0/mode/fake/git", false, "demo/bin/git"),
     ("application/setup/1/directory", false, "forge-3"),
@@ -117,7 +117,7 @@ impl Source {
         let Some((mut temper, mut agent)) = self.documents.clone() else { return Ok(None) };
         let agent_name = bytes(&crate::path(&effective.config).join("agent.json"));
         temper.set("workers/0/agent/configuration", Json::String(agent_name.clone()))?;
-        temper.set("workers/0/agent/arguments/1", Json::String(agent_name))?;
+        temper.set("workers/0/agent/arguments/2", Json::String(agent_name))?;
         if let Ok(program) = agent.at_mut("programs/claude_code/directory") {
             *program = Json::String(bytes(&crate::path(&effective.data).join("programs")));
         }

@@ -13,7 +13,7 @@ On 2026-10-21 owners.md and director.md moved to a new shape: owners
 reach their drafts through milestones under a cap, each on a fresh
 session. Since that evening each owner takes one mission of at most
 four milestones, and then stops. Sections 4.2, 4.4 and 6 take it in.
-`reference-case.md` condenses this analysis, the change of shape and
+The retired first edition (superseded by `reference-case.md`) condenses this analysis, the change of shape and
 the new shape's first milestone into one story.
 
 ## 1. In one page
@@ -41,7 +41,7 @@ the new shape's first milestone into one story.
   show it what the director saw (the information), let it act (the
   power), and do what followed (the mechanics). Every judgement can be
   expressed, except two powers (section 5).
-- **The reference case** (`reference-case.md`) is one story that holds
+- **The retired first edition** (superseded by `reference-case.md`) is one story that holds
   every mechanic here once, the change of shape included. The mockups,
   the lab and the director work from it.
 - **What falls short needs design:**
@@ -419,8 +419,8 @@ the new shape's first milestone into one story.
 ## 5. Replays
 
 Each replay names what happened, then T (trigger), I (information), P
-(power), M (mechanics) and R (rails) in temper. `reference-case.md`
-puts all six into one story, with the change of shape on 10-21 and the
+(power), M (mechanics) and R (rails) in temper. The retired first edition
+(superseded by `reference-case.md`) puts all six into one story, with the change of shape on 10-21 and the
 new shape's first milestone.
 
 ### 5.1 o/qa starts (decision 242, 16:52Z)
@@ -712,7 +712,8 @@ Each of these needs assessment and design, in a draft of its own.
 ### 6.8 From the new shape
 
 The change of shape on 10-21 and the new shape's first milestone
-(o/first-run's D1) showed seven more. `reference-case.md` names the
+(o/first-run's D1) showed seven more. The retired first edition
+(superseded by `reference-case.md`) names the
 step each comes from.
 
 - **An open finding at a change's head.**

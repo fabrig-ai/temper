@@ -5,7 +5,7 @@ adopted. How temper runs a development process in which agents, under a
 person's direction, change several repositories at once. It covers who
 decides, how changes land together and are proved, how a branch is
 verified after landing, how findings flow, and how the person steers
-and holds the work. It names no real process. `reference-case-2.md`
+and holds the work. It names no real process. `reference-case.md`
 applies it to an invented one, and `porting.md` maps a real one onto
 it. Its gaps against jig's and temper's designs are section 12.
 Unqualified, forge.md is temper's `../domain/forge.md`.

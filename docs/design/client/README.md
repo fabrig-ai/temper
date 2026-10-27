@@ -3885,7 +3885,7 @@ own tests:
   saying why and sending nothing; an amendment of a goal's
   specification from its page, and one refused as moved asking to look
   again; roadmap B2 whole, on fixtures shaped on the reference case
-  (`../draft/reference-case.md`, 6.1, 6.8 and 7.3): a goal's advisor
+  (`../draft/reference-case.md`, 4.1 and 4.2): a goal's advisor
   reports, the goal's latest activity names it by its link, and its
   page, opened from there, shows its result and reaches the goal by
   its lineage bar; the goal declares two delegates, the second

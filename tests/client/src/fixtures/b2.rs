@@ -1,5 +1,5 @@
-//! Roadmap B2 (wave 2) on the engine, shaped on the reference case
-//! (docs/design/draft/reference-case.md, 6.1, 6.8 and 7.3) for later stories to adopt.
+//! Roadmap B2 (wave 2), retaining the first-edition fixture (domain/testing.md, 5.3).
+//! B2 maps to draft/reference-case.md, 4.1 and 4.2 (domain/testing.md, 2.7).
 use super::{
     DELEGATE_COMPLETION, Joint, QUESTION_WORKER, SEED, delegate_turn, domain_limits, engine, make_goal_with_delegation,
     report_task, tasks,
@@ -14,7 +14,7 @@ pub const SECOND_BRIEF: &[u8] = b"Write the export's story";
 pub const SECOND_REPORT: &[u8] = b"The story passes";
 pub const GOAL_REPORT: &[u8] = b"The export's first milestone landed";
 const GOAL_PROGRESS: &[u8] = b"Plan the export's first milestone";
-// Reference case 6.1: one survey followed by two implementation tasks.
+// B2: one survey followed by two implementation tasks.
 const DELEGATES: u32 = 3;
 const ADVISOR_CALL: u64 = 1301;
 const FIRST_CALL: u64 = 1302;
@@ -34,7 +34,7 @@ pub struct Planned {
     pub second: u64,
 }
 
-/// Reference case 6.1's survey and 6.8's report to its requester: a tracked goal
+/// B2's survey and report to its requester: a tracked goal
 /// with authority for three delegates delegates one report task, which runs a
 /// turn and reports. The goal's next run is out, with no call yet.
 pub fn advisor_reported(front: &mut Joint) -> Advised {
@@ -48,7 +48,7 @@ pub fn advisor_reported(front: &mut Joint) -> Advised {
     Advised { goal, advisor }
 }
 
-/// Reference case 6.1's tasks with a dependency: in that run the goal delegates
+/// B2's tasks with a dependency: in that run the goal delegates
 /// first, then, in a later call, second depending on it (`Dependency::Existing`),
 /// and parks. First runs a turn; second waits for it.
 pub fn tasks_declared(front: &mut Joint, advised: Advised) -> Planned {
@@ -67,14 +67,14 @@ pub fn tasks_declared(front: &mut Joint, advised: Advised) -> Planned {
     Planned { goal: advised.goal, advisor: advised.advisor, first, second }
 }
 
-/// Reference case 6.1's dependency is met: first reports; second is assigned
+/// B2's dependency is met: first reports; second is assigned
 /// and runs a turn on the same joint world.
 pub fn first_reported(front: &mut Joint, planned: &Planned) {
     report_task(front, planned.first, FIRST_REPORT);
     delegate_turn(front, planned.second, None, SECOND_BRIEF);
 }
 
-/// Reference case 7.3's end: second reports, the goal's next run finishes with
+/// B2's end: second reports, the goal's next run finishes with
 /// its report (returned), and the engine settles the goal's spend.
 pub fn goal_reported(front: &mut Joint, planned: &Planned) -> Box<[u8]> {
     report_task(front, planned.second, SECOND_REPORT);

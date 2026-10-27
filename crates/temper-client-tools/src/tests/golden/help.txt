@@ -1,30 +1,30 @@
 me
-  Read the party, projects and waiting counts
+  Read your party: its projects, what it may start, and what waits on it
 inbox [--project P] [--kind K] [--root N] [--after C]
-  Read what needs the party and its updates
+  Read what waits on your party, then its updates
 tasks --project P [--label chat|goal] [--tracked] [--mine] [--ended] [--order activity|priority] [--after C] [--parent N]
-  Read task lines
+  Read a project's tasks, a line each
 task N [--tree] [--activity K] [--run]
-  Read a task and selected related documents
+  Read a task: its state, what it waits on, and the acts you may take
 chat N [--before C]
-  Read a conversation from its end
+  Read a chat's conversation from its end
 activity N [--before C] [--limit K]
-  Read task activity from its end
+  Read a task's activity from its end
 turn N A.T [--part K] [--from B]
-  Read one turn and its parts
+  Read one turn of a task's run, part by part
 run N
-  Read a task's live run
+  Read a task's live run: its attempt, its call in flight, its words so far
 chat --project P TEXT [--model M] [--effort E] --key NAME
-  Start a chat
+  Start a chat in a project
 message N TEXT --key NAME
   Send words to a task
 close N [--move D]... [--reason TEXT] --key NAME
-  Close a chat and cancel or move its delegates
+  Close a chat: move the delegates you name to your party, cancel the rest
 answer N M TEXT [--key NAME]
   Answer a task's question
 decide tN/K|pN/K accept|reject|pass-up [REASON] [--running stays|moves] [--key NAME]
 decide N --hold R release|leave|pass-up [REASON] [--key NAME]
-  Decide a proposal or an escalation
+  Decide a proposal, or the escalation of a held task
 release N --hold R [--again] [--key NAME]
   Lift a task's hold
 stop N [--key NAME]
@@ -34,78 +34,78 @@ cancel N [--grace D] REASON [--key NAME]
 wait SUBJECT [--since DIGEST] [--until CONDITION] [--timeout DURATION]
 wait forges [--since DIGEST] [--until settled|connected:F|made:F] [--timeout DURATION]
 wait change N [--project P] [--since DIGEST] [--until pull|ci:pending|ci:passed|ci:failed|held|landed] [--timeout DURATION]
-  Wait for a subject's change or condition
+  Wait for a subject to change or to meet a condition
 adopt --project P [--forge F] --owner O --name N --landing B [--role owned|fork|context] [--prefix X] [--no-home] [--no-ci] [--check G]... --key NAME
-  Adopt a repository
+  Adopt a forge's repository into a project
 sign-in FILE|-
-  Sign in with the link the engine's host printed
+  Sign in with the link the deployment printed
 sign-out
-  End sign-in and leave the token empty
+  End the sign-in and leave the token empty
 pending
-  List requests kept in the store
+  List the requests DIR keeps, without reaching the engine
 help [TOOL]
-  Read the guide or one tool's record
+  Read the page ctl and every tool, or one tool's record
 accounts
-  Read accounts and their sources without values
+  Read the accounts and their sources, never their values
 models [--project P]
-  Read authorized models grouped by provider
+  Read the models your projects may use, by provider
 connect PROVIDER --key NAME
-  Start an LLM provider sign-in
+  Start a sign-in to an LLM provider
 disconnect ACCOUNT [--source sign_in|key|program] [--key NAME]
-  Sign an account source out
+  Sign an account's source out
 add-key PROVIDER FILE [--account A] [--deployment] --key NAME
-  Add a key from a private file
+  Add an API key from a private file
 replace-key ACCOUNT FILE [--key NAME]
   Replace an account's key from a private file
 forget ACCOUNT [--source sign_in|key|program] [--key NAME]
-  Remove an account or one source
+  Remove an account, or one of its sources
 rank ACCOUNT POSITION [--source sign_in|key|program] [--key NAME]
-  Move an account or source to a one-based position
+  Move an account, or one of its sources, to a place in its order
 retry ACCOUNT [--source sign_in|key|program] [--key NAME]
-  Resume a limited source
+  Resume a source that reached a limit
 amend N [--rev R] [--priority P | --untracked] [--deadline T | --no-deadline] [--instructions FILE] [--spec FILE] [--dependency M]... [--no-dependencies] [--model M [--effort E]] REASON [--key NAME]
-  Amend a task: each change named, the rest kept
+  Amend a task: each control you name is replaced, the rest kept
 declare PROVIDER ADAPTER NAME [--account A] --key NAME
-  Declare a program login; the answer names the command for each host
+  Declare a program's login for a provider
 verify ACCOUNT [--source sign_in|key|program] [--key NAME]
-  Ask hosts to check a program login; then wait accounts --until settled
+  Ask the hosts to check a program's login
 forges
   Read the deployment's forges
 forge-setup F [--org O] [--repository R] [--project P] [--playground] [--key NAME]
-  Set up an owned Forgejo here
+  Set up the owned Forgejo on this machine, with a first repository
 demo-start [--key NAME]
-  Start the playground; run again to finish what is not done
+  Start the playground; run it again to finish what is not done
 forge-connect F github-app ID FILE --key NAME
 forge-connect F github --key NAME
 forge-connect F forgejo FILE --key NAME
 forge-connect F forgejo-admin FILE [--first ORG/NAME] [--project P] [--label L] --key NAME
-  Connect GitHub or Forgejo as its admin
+  Connect GitHub through an App, or a Forgejo as its site admin
 forge-install F [--key NAME]
-  Print a fresh GitHub App installation link
+  Print a fresh link that installs GitHub's App on another account
 repositories F [--installation I] [--page N]
-  Read one page of reachable repositories
+  Read a page of the repositories a forge reaches
 export ACCOUNT FILE
-  Move a signed-in account out to a new private file, synced before written
+  Move a signed-in account out to a new private file
 import FILE --key NAME
-  Move a record in from a private file, then remove the spent file
+  Move an account in from the file export wrote, then remove the file
 settings
-  Read the settings, held revisions and pending proposals
+  Read the settings, the revisions running work holds, and pending proposals
 setting charter|template|policy N [--revision R]
 setting rules
-  Read one setting's value whole; JSON values feed change-settings
+  Read one setting's value whole
 revision R
-  Read a revision and its whole items, or the oldest kept if forgotten
+  Read one revision of the settings and its items
 revisions [--before R]
-  Read history newest first, a page at a time
+  Read the settings' history, newest first, a page at a time
 change-settings FILE --against R [--running stays|moves] --key NAME
-  Change deployment settings in one keyed decision
+  Change the deployment's settings in one decision
 propose-settings FILE [REASON] --against R --key NAME
-  Propose a change of deployment settings to its owners
+  Propose a change of the settings to the deployment's owners
 proposal tN/K|pN/K
-  Read a proposal, with its review for settings
+  Read a proposal; for settings, what each item would change
 change N [--project P]
   Read a change's way to landing: its pull request, CI and step
 forge-accept F I [--key NAME]
-  Accept an existing GitHub App installation
+  Accept a GitHub App installation made already
 move-to-newest R --key NAME
-  Move every live agent task on held revision R that may move to the newest
+  Move the live tasks on revision R to the newest revision

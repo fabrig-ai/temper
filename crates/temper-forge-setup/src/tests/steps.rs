@@ -39,7 +39,7 @@ fn a_managed_and_an_owned_forge_run_the_design_tree() {
         &[b"forge", b"run", b"--config", b"/config", b"--data", b"/data", b"--cache", b"/cache", b"2", b"forgejo"],
         &[b"forge", b"run", b"--config", b"/config", b"--data", b"/data", b"--cache", b"/cache", b"2", b"runner"],
         &[b"forge", b"reconcile", b"--config", b"/config", b"--data", b"/data", b"--cache", b"/cache", b"1"],
-        &[b"serve", b"--config", b"/config", b"--data", b"/data", b"--cache", b"/cache", b"--box"],
+        &[b"internal", b"serve", b"--config", b"/config", b"--data", b"/data", b"--cache", b"/cache", b"--box"],
     ];
     for (step, expected) in commands.iter().zip(expected) {
         assert_eq!(step.arguments().len(), expected.len());

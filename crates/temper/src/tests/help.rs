@@ -244,7 +244,7 @@ fn help_requires_one_page_or_search_words() {
         let words = words.iter().map(|word| Box::from(word.as_bytes())).collect::<Vec<_>>();
         assert_eq!(
             configure_with(&words, &[], b"/unused"),
-            Err(format!("temper: invalid arguments\n{}", crate::usage()))
+            Err("temper help: invalid arguments\nusage: temper help [NAME | --search WORDS...]\n".into())
         );
     }
 }

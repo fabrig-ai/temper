@@ -578,12 +578,15 @@ fn worker(d: &Document, config: &[u8], edits: &mut Edits) -> Result<(), Refusal>
     let configuration = member(d, agent_at, b"configuration", &wp.member(b"agent"))?;
     let arguments = member(d, agent_at, b"arguments", &wp.member(b"agent"))?;
     let args = read::list(d, arguments, 1, &wp.member(b"agent").member(b"arguments"))?;
-    if args.len() != 2 || read::text(d, *args.get(0).expect("nonempty argv"), 16, &wp)?.as_ref() != b"agent" {
+    if args.len() != 3
+        || read::text(d, *args.get(0).expect("nonempty argv"), 16, &wp)?.as_ref() != b"internal"
+        || read::text(d, *args.get(1).expect("three argv entries"), 16, &wp)?.as_ref() != b"agent"
+    {
         return Err(read::why(&wp.member(b"agent").member(b"arguments"), b"expected agent and its configuration"));
     }
     let previous = read::text(d, configuration, 4096, &wp.member(b"agent").member(b"configuration"))?;
     let argument =
-        read::text(d, *args.get(1).expect("two argv entries"), 4096, &wp.member(b"agent").member(b"arguments"))?;
+        read::text(d, *args.get(2).expect("three argv entries"), 4096, &wp.member(b"agent").member(b"arguments"))?;
     if previous != argument {
         return Err(read::why(
             &wp.member(b"agent").member(b"arguments"),
@@ -592,7 +595,7 @@ fn worker(d: &Document, config: &[u8], edits: &mut Edits) -> Result<(), Refusal>
     }
     let name = path(config, b"agent.json");
     edits.text(d, configuration, &name, &wp)?;
-    edits.set(d, arguments, &read::joined(&[b"[\"agent\",", &text(&name)?, b"]"]), &wp)?;
+    edits.set(d, arguments, &read::joined(&[b"[\"internal\",\"agent\",", &text(&name)?, b"]"]), &wp)?;
     Ok(())
 }
 fn forge_document(socket: &[u8], data: &[u8], d: &Document, clients: u32) -> Result<Box<[u8]>, Refusal> {

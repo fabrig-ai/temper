@@ -1,4 +1,6 @@
 move-to-newest R --key NAME
-Move every live agent task on held revision R that may move to the newest
-Result: move_to_newest
-  revision: Held revision number
+  R (revision): a number from 0 to 4294967295; required. The held revision
+Move the live tasks on revision R to the newest revision
+Prints: `moved N tasks to revision R`, then how many could not, which finish on their revision
+--json: the record move_to_newest.
+Key: --key NAME, required.

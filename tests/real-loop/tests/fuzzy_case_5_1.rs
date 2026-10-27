@@ -1,4 +1,4 @@
-//! Reference case 5.1: held chat, retained question, fresh conventions.
+//! Retained first-edition story (domain/testing.md, 5.3): held chat, retained question, fresh conventions.
 use temper_real_loop_world::{
     Exit,
     case::{

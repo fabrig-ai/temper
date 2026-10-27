@@ -1,4 +1,4 @@
-//! Reference case 6.7: deadline admission, escalation, split and release.
+//! Retained first-edition story (domain/testing.md, 5.3): deadline admission, escalation, split and release.
 use temper_real_loop_world::{
     Exit,
     case::{self, oracle::Observed},

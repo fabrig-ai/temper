@@ -916,8 +916,9 @@ Each document keeps its own; these cross them:
 The cluster is temper on several processes of one machine: one engine
 alone, its workers alone, and the fakes, each a process of its own,
 joined over loopback. It is a primitive of temper's tests and of the QA
-lab, the reference case's shape on fakes: an engine and its workers, one
-of them added later (`../draft/reference-case.md`, section 3). It is no
+lab, the retained reference-case tests' shape on fakes: an engine and its
+workers, one of them added later (../domain/testing.md, 5.3;
+`../draft/reference-case.md` is the second edition). It is no
 deployment's: `temper init` writes standalone, and a box keeps its one
 worker inside `temper serve` (setup.md, 7.1). TLS, containment and other
 hosts are later (15.7).
@@ -965,7 +966,8 @@ nothing else: no flag, no command of its own.
 - **`temper program-login`** takes a worker alone's directories as it
   takes standalone's, and reads only the worker's part: each worker
   signs its programs in on its own, and none is copied to another
-  (`../draft/reference-case.md`, 4.5).
+  (credentials.md, section 3; `../draft/reference-case.md`, the second
+  edition, leaves sign-ins out).
 
 ### 15.2 Its processes
 
@@ -1195,11 +1197,12 @@ workers need no more; a worker of several slots is later (15.7).
 - **A mixed document,** each shape's departures, refuses its start,
   exiting 1 and naming the path.
 
-These are the reference case's multi-worker steps at their smallest:
+These are the retired first edition's multi-worker steps at their smallest:
 4.1's placement by free slots, 4.3's worker added later, 4.6's hung
-worker (`../draft/reference-case.md`).
+worker (../domain/testing.md, 5.3; `../draft/reference-case.md` is the
+second edition).
 
-- **The reference case's steps,** each a story of its own on the same
+- **The retained first-edition steps,** each a story of its own on the same
   description, the case's workers named ws, s1 and s2, its fixture
   applied to the engine's and the workers' documents, its acts by real
   `temper ctl`, and its oracle over what the processes observed
@@ -1220,8 +1223,9 @@ worker (`../draft/reference-case.md`).
 - **The reference case's multi-worker steps driven in the lab,** by a
   driver (the lab's `lab.md`, section 6), once temper's experiments have
   one; the cluster's description runs with none until then (15.5).
-- **A worker of several slots,** as the reference case's s1 with its
-  three (`../draft/reference-case.md`, 3 and 4.1): a worker's change,
+- **A worker of several slots,** as in the retained reference-case
+  tests (../domain/testing.md, 5.3; `../draft/reference-case.md` is the
+  second edition): a worker's change,
   in smith's runs and the worker's limits, and not the cluster's. Until
   then each of the cluster's workers takes one slot.
 - **`temper init` for the cluster's shapes** (section 14).

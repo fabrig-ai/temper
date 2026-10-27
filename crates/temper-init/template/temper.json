@@ -294,6 +294,28 @@
                 "last": "open",
                 "value": ""
               }
+            },
+{
+              "connector": 1,
+              "kind": 16,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+{
+              "connector": 1,
+              "kind": 17,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
             }
           ],
           "requirements": [],
@@ -420,6 +442,28 @@
                   "last": "open",
                   "value": ""
                 }
+              },
+{
+                "connector": 1,
+                "kind": 16,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
+              },
+{
+                "connector": 1,
+                "kind": 17,
+                "pattern": {
+                  "segments": [
+                    "forge"
+                  ],
+                  "last": "open",
+                  "value": ""
+                }
               }
             ],
             "delegation": {
@@ -435,6 +479,10 @@
                 {
                   "kind": "procedure",
                   "number": 2
+                },
+{
+                  "kind": "procedure",
+                  "number": 3
                 },
                 {
                   "kind": "procedure",
@@ -580,6 +628,28 @@
                       "last": "open",
                       "value": ""
                     }
+                  },
+{
+                    "connector": 1,
+                    "kind": 16,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
+                  },
+{
+                    "connector": 1,
+                    "kind": 17,
+                    "pattern": {
+                      "segments": [
+                        "forge"
+                      ],
+                      "last": "open",
+                      "value": ""
+                    }
                   }
                 ],
                 "delegation": {
@@ -595,6 +665,10 @@
                     {
                       "kind": "procedure",
                       "number": 2
+                    },
+{
+                      "kind": "procedure",
+                      "number": 3
                     },
                     {
                       "kind": "procedure",
@@ -638,6 +712,7 @@
         "program": "$binary",
         "configuration": "$agent",
         "arguments": [
+          "internal",
           "agent",
           "$agent"
         ]

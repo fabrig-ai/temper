@@ -171,18 +171,20 @@ temper                       the binary: `temper ctl` runs the host
 - **A tool's name is its words** (`../draft/agent-docs.md`, 7.2): a
   group, one of the map's nouns (`task`, `chat`, `goal`, `change`,
   `proposal`, `settings`, `revision`, `account`, `model`, `forge`,
-  `repository`, `playground`, and area 3's `project`, `party` and
-  `deployment`), then a verb of the closed vocabulary, `task show`; or
+  `repository`, `playground`, `hold`, `landing`, `finding`, `qa`, and
+  area 3's `project`, `party` and `deployment`), then a verb of the closed vocabulary, `task show`; or
   one of the six names of the client and the party, `me`, `inbox`,
   `sign-in`, `sign-out`, `pending` and `help`. A read of a part of the
   group's noun is the part's name: `task tree`, `task run`, `task
-  activity`, `task turn`, `forge repositories`. `help GROUP` lists a
+  activity`, `task turn`, `forge repositories`, `repository receipts`,
+  `qa marks`, `qa passes`. `help GROUP` lists a
   group's rows; `--call`'s `tool` is the name's words, one space
   between (8.1).
 - **One vocabulary of placeholders** shows the arguments, in the usage
   and in the pages alike (`../draft/agent-docs.md`, section 5): `TASK`,
   `PROJECT`, `FORGE`, `INSTALLATION`, `ACCOUNT`, `PROVIDER`, `ADAPTER`,
-  `SOURCE`, `POSITION`, `NAME` (a program source's), `REVISION` (a
+  `SOURCE`, `POSITION`, `NAME` (a program source's), `HOLD` (a placed
+  hold's number), `LANDING`, `FINDING`, `REVISION` (a
   settings revision), `REV` (a revision a read printed of the object
   acted on: a spec's, a hold's), `PROPOSAL`, `QUESTION`, `NUMBER` (a
   setting's), `TEMPLATE`, `CURSOR`, `COUNT`, `PART`, `OFFSET`, `PAGE`,
@@ -209,6 +211,13 @@ watch's subject, its digest (5.4). It needs no key.
 | `inbox [--project PROJECT] [--kind needs\|updates] [--root TASK] [--after CURSOR]` | what needs the party, then updates, each with its acts | `inbox` |
 | `task list --project PROJECT [--parent TASK] [--label chat\|goal] [--tracked] [--mine] [--ended] [--order activity\|priority] [--after CURSOR]` | task lines of one group: the live tasks, or with `--ended` the ended; with `--parent`, that task's delegates alone | `tasks{query}` (jig's `client/domain/contract.md`, 6.1, its parent key) |
 | `task show TASK [--tree] [--activity COUNT] [--run]` | a task's document, with its acts; with its live tree, its COUNT latest activity lines, its live run, in one answer | `task{n}`, `tree{root}`, `activity{n}`, `run{n}` |
+| `landing show LANDING`, designed, not built | a landing: its members, each candidate with its base, each gate's key with its receipt or run, the proof's state, the turn, its stale proofs and faults (`../domain/landing.md`, section 14) | the forge's family |
+| `landing list --project PROJECT [--ended] [--since TIME]`, designed, not built | the project's landings, newest first, with their phases, the turn's holder first; with `--since`, every landing since TIME with its verdicts and its trailers (`../domain/after-landing.md`, section 8) | the forge's family |
+| `repository receipts REPOSITORY [--gate GATE]`, designed, not built | a repository's receipts, newest first: gate, key, verdict, run, candidate, time (`../domain/landing.md`, 6.2) | the forge's family |
+| `finding list --project PROJECT [--state new\|routed\|backlog\|dropped]`, designed, not built | the project's findings: issue, kind, severity, area, state, signature, times seen, goal (`../domain/findings.md`, section 2) | the forge's family |
+| `finding show FINDING`, designed, not built | one finding whole, its state as its word set | the forge's family |
+| `qa marks --project PROJECT`, designed, not built | the project's marks: landing, words, chosen, waiting or tested (`../domain/findings.md`, section 8) | the forge's family |
+| `qa passes --project PROJECT`, designed, not built | the project's QA passes: the cleared main, the marks covered, the tester, its outcome and findings | the forge's family |
 | `hold list --project PROJECT`, designed, not built | the project's placed holds: owner, mode, scope, reason, what lifts it, the tasks it holds and exempts, and whether the party may lift it | `holds{project}` |
 | `chat show TASK [--before CURSOR]` | a conversation: turns, words and, where the run's host gives it, provisional text, in order, a page from its end | `activity{n}`, `run{n}`, through `thread` |
 | `task activity TASK [--before CURSOR] [--limit COUNT]` | a task's activity, a page from its end | `activity{n}` |
@@ -315,6 +324,10 @@ agent must name.
 | `task stop TASK` | cancels a task's run, the task held | `Stop` | |
 | `task move TASK --under TASK`, designed, not built | makes the second task the first's requester (jig's `domain/tasks.md`, section 7) | `Move` | yes |
 | `task succeed TASK --by TASK`, designed, not built | names a live task the successor of an ended one: its open questions, subscriptions and kept news go to it | `Succeed` | yes |
+| `finding route FINDING --goal TASK`, designed, not built | routes a finding to a goal: news to it, `state:routed` (`../domain/findings.md`, section 6) | the forge's request | yes |
+| `finding backlog FINDING`, designed, not built | puts a finding in the backlog, `state:backlog` | the forge's request | yes |
+| `finding drop FINDING REASON`, designed, not built | drops a finding: `state:dropped`, its issue closed with the reason | the forge's request | yes |
+| `qa choose LANDING`, designed, not built | chooses a landing's mark for the next QA pass (`../domain/findings.md`, section 8) | the forge's request | yes |
 | `task hold TASK --stop\|--drain REASON`, designed, not built | places a hold of the party's over TASK's subtree: stop cancels its runs at once, drain lets them finish their turns; a party's hold lifts by `hold lift` alone (jig's `domain/tasks.md`, 5.9) | `Hold` | yes |
 | `project hold PROJECT --stop\|--drain REASON`, designed, not built | places a hold of the party's over the whole project, the party's chats exempt | `Hold` | yes |
 | `hold lift HOLD --rev REV [--with-tasks]`, designed, not built | ends a placed hold; with `--with-tasks`, releases every task it held that nothing else holds | `Lift` | yes |
@@ -923,7 +936,7 @@ subject, its digest (5.4). A goal waiting on the agent:
 ```
 task 41 · goal · Running · shop · priority 2
 asked: Add a /health endpoint that reports the store's state
-requester: you · spent 1.20 of 5.00 · deadline 2026-10-24 17:00 UTC
+requester: you · spent 120 of 500 · deadline 2026-10-24 17:00 UTC
 instructions: Answer on port 8080 unless the store's file names another one, and keep the /hea… (412 bytes; --json prints them whole)
 waiting on: you: question 3 of task 44, "Which port should it listen on?"
 plan: 4 live (2 running, 1 waiting, 1 held below)
@@ -934,6 +947,9 @@ acts:
 digest: task 7c1e09a2b44f0d13
 ```
 
+- **Spend in the deployment's units,** as `me`, the settings and the
+  stock state budgets (`../protocol/configuration.md`, 13.4): a task's
+  spent and budget print as those numbers, never scaled.
 - **The header** is the task's number, its kind, its phase in jig's
   words, its project and its tracking. Its kind is `chat` for a
   conversation, `goal` for a goal (the task its own goal), and

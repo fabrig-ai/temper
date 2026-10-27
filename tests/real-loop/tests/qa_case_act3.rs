@@ -1,5 +1,5 @@
-//! Adversarial real-loop runs for draft/reference-case.md, 6.1, 6.2 and 6.5,
-//! on domain/testing.md, 5.3's case library.
+//! Adversarial real-loop runs of the retired first edition,
+//! retained in domain/testing.md, 5.3; draft/reference-case.md is the second edition.
 use serde_json::{Value, json};
 use skein_fake_llm_domain::api::{Line, Script};
 use std::net::SocketAddr;
@@ -276,7 +276,7 @@ fn correct_advice_without_the_evidence_does_not_pass() {
         });
         scripts
     });
-    // draft/reference-case.md, 6.5: the advisor reads the report and its evidence.
+    // Retained first edition (domain/testing.md, 5.3): the advisor reads the report and its evidence.
     // Its scripted correct answer alone cannot prove it received either.
     let misses = oracle::step_6_5(&observed);
     only_miss(&misses, "6.5", Promise::Must("one advisor reads a5's report on the owner's model"));

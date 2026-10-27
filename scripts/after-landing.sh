@@ -1,16 +1,18 @@
 #!/bin/sh
 # The tiers outside the gate, with named failures and narrow reruns for the
 # after-landing runner (agents' docs/design/landing-flow.md, 4, step 8).
+# --part K/N deals whole test phases by time, with the builds they need.
 set -eu
 umask 077
 cd -P "$(dirname "$0")/.."
 exec python3 -I -B - "$@" <<'PY'
-"""Run the selected slow phases and print the runner's failure contract."""
+"""Run the slow phases, or --part K/N dealt by time with its needed builds."""
 
 import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -62,27 +64,53 @@ def expression(tests):
                       for binary, test in sorted(tests)) or "none()"
 
 
-def junit_failures(profile):
+def junit(profile):
     report = ET.parse(TARGET / "nextest" / profile / "after-landing.xml")
-    names = set()
+    failures = set()
+    starved = set()
     for suite in report.iter("testsuite"):
         for test in suite.findall("testcase"):
-            if test.find("failure") is not None or test.find("error") is not None:
+            failed = test.find("failure") is not None or test.find("error") is not None
+            passed_starved = not failed and test.find("skipped") is None and any(
+                line.startswith("skein-world: starved:")
+                for output in (*test.findall("system-out"), *test.findall("system-err"))
+                for line in (output.text or "").splitlines())
+            if failed or passed_starved:
                 binary = test.get("classname") or suite.get("name")
                 name = test.get("name")
                 if not binary or not name or any(c.isspace() or not c.isprintable() for c in binary + name):
-                    raise ValueError("JUnit failure lacks a printable binary/test name")
-                names.add(f"{profile} {binary} {name}")
-    return names
+                    raise ValueError("JUnit testcase lacks a printable binary/test name")
+                (failures if failed else starved).add(f"{profile} {binary} {name}")
+    return failures, starved
+
+
+def deal(phases, count):
+    parts = [[] for _ in range(count)]
+    seconds = [0] * count
+    tests = (phase for phase in phases if phase[1] is not None)
+    for name, weight, _, _, _ in sorted(tests, key=lambda phase: -phase[1]):
+        part = min(range(count), key=lambda index: seconds[index])
+        parts[part].append(name)
+        seconds[part] += weight
+    return parts
 
 
 def run(phases):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", action="append", default=[], metavar="NAME")
+    parser.add_argument("--part", action="append", default=[], metavar="K/N")
     args = parser.parse_args()
+    part = None
+    if args.part:
+        if len(args.part) != 1 or not re.fullmatch(r"[1-9][0-9]*/[1-9][0-9]*", args.part[0]):
+            parser.error("--part must be given once as K/N, with 1 <= K <= N")
+        number, count = map(int, args.part[0].split("/"))
+        if number > count:
+            parser.error("--part requires K <= N")
+        part = number - 1, count
     by_name = {name: (profile, prerequisites, command)
-               for name, profile, prerequisites, command in phases}
-    profiles = {profile: name for name, profile, _, _ in phases if profile}
+               for name, _, profile, prerequisites, command in phases}
+    profiles = {profile: name for name, _, profile, _, _ in phases if profile}
     selected = set()
     filters = {}
     unfiltered = set()
@@ -107,7 +135,15 @@ def run(phases):
         select(phase)
         filters.setdefault(phase, set()).add((binary, test))
     if not args.only:
-        selected.update(by_name)
+        if part is None:
+            selected.update(by_name)
+        else:
+            number, count = part
+            for name in deal(phases, count)[number]:
+                select(name)
+
+    if not selected:
+        return 0
 
     missing = requirements(selected)
     if missing:
@@ -123,7 +159,8 @@ def run(phases):
                       NEXTEST_USER_CONFIG_FILE="none")
     statuses = {}
     failures = set()
-    for name, profile, prerequisites, command in phases:
+    starved = set()
+    for name, _, profile, prerequisites, command in phases:
         if name not in selected:
             continue
         if any(not statuses[prerequisite] for prerequisite in prerequisites):
@@ -159,7 +196,8 @@ def run(phases):
         names = set()
         if profile and not (filtered and code == 4):
             try:
-                names = junit_failures(profile)
+                names, passed_starved = junit(profile)
+                starved.update(passed_starved)
             except (OSError, ET.ParseError, ValueError) as error:
                 if code:
                     print(f"{name}: JUnit unavailable: {error}", flush=True)
@@ -170,6 +208,8 @@ def run(phases):
             failures.add(name)
     for name in sorted(failures):
         print(f"after-landing: failed {name}", flush=True)
+    for name in sorted(starved):
+        print(f"after-landing: starved {name}", flush=True)
     return 1 if failures else 0
 
 
@@ -198,18 +238,21 @@ PROGRAMS = ["cargo", "build", "-p", "temper", "--bin", "temper",
             "-p", "temper-fake-claude", "--bin", "fake-claude"]
 PROCESS = nextest("process", "-p", "temper")
 QA = nextest("qa", "--workspace")
+# A test phase's seconds on a quiet machine, from hetzner3's runner logs of
+# 10-26, by which --part deals them (agents' build-infrastructure.md 11).
+# A build, None, runs in each part whose phases need it.
 PHASES = [
-    ("process-lab", None, (), ["python3", "-I", "-B", "-m", "unittest", "discover",
-                              "-s", "lab/tests/process", "-v"]),
-    ("process-programs", None, (), PROGRAMS),
-    ("process-build", None, ("process-programs",), [*PROCESS, "--no-run"]),
-    ("process-tests", "process", ("process-build",),
+    ("process-lab", 35, None, (), ["python3", "-I", "-B", "-m", "unittest", "discover",
+                                  "-s", "lab/tests/process", "-v"]),
+    ("process-programs", None, None, (), PROGRAMS),
+    ("process-build", None, None, ("process-programs",), [*PROCESS, "--no-run"]),
+    ("process-tests", 390, "process", ("process-build",),
      [*PROCESS, "--failure-output", "immediate-final"]),
-    ("qa-bundle", None, (), ["scripts/bundle.sh", "--loopback", "target/temper-bundle"]),
-    ("qa-build", None, ("qa-bundle", "process-programs"), [*QA, "--no-run"]),
-    ("qa-tests", "qa", ("qa-build",),
+    ("qa-bundle", None, None, (), ["scripts/bundle.sh", "--loopback", "target/temper-bundle"]),
+    ("qa-build", None, None, ("qa-bundle", "process-programs"), [*QA, "--no-run"]),
+    ("qa-tests", 410, "qa", ("qa-build",),
      [*QA, "--retries", "0", "--failure-output", "immediate-final"]),
-    ("browser-tests", "browser", ("qa-bundle", "process-programs"),
+    ("browser-tests", 25, "browser", ("qa-bundle", "process-programs"),
      nextest("browser", "--workspace", "--failure-output", "immediate-final")),
 ]
 

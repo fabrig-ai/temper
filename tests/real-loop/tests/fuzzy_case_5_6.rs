@@ -1,4 +1,4 @@
-//! Reference case 5.6: an informative direction, cancelled helper and persistent timer.
+//! Retained first-edition story (domain/testing.md, 5.3): an informative direction, cancelled helper and persistent timer.
 //! Fuzzy, though within the 2 s guide (testing.md 6.1): at about 1.56 s it would
 //! take the real loop's default suite past its 13 s ceiling.
 use temper_real_loop_world::{

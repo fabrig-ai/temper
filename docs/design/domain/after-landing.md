@@ -227,10 +227,18 @@ red by earlier failures it does not run (5.3).
   of a range with their messages, oldest first.
 - **In the store,** designed, not built: `Tier`, keyed by repository and
   tier, its run in flight, its last judged tip and failures, its
-  flakes; `Verification`, keyed by repository and landing commit, the
-  landing's changes, each tier's verdict, the failures blamed on it and
-  what repaired it; the `Change` family grows `verifying`, `red` and
-  `cleared`. Through the baseline's rules (`landing.md`, section 12).
+  flakes, and the reds of landings temper did not make until findings
+  take them; `Verification`, keyed by repository and landing commit,
+  for temper's own landings alone, made with the landing's `Landed`
+  row and erased when its last change closes, so bounded by `changes`:
+  the changes it landed, each tier's verdict (cleared, owns failures,
+  or suspected of them), the failures blamed on it and the commit that
+  repaired it; the `Change` family's landed state means verifying, and
+  `Red` and `Cleared` join it. Through the baseline's rules
+  (`landing.md`, section 12).
+- **Limits,** the forge's: `tiers` per repository (2 in `small`),
+  `failing_tests` per run (16), `test_id_bytes` (256), and a tier's
+  name at most 32 bytes.
 
 ## 11. Settings
 

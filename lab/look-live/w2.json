@@ -20,6 +20,7 @@
         "program": "{artifact.temper}",
         "configuration": "{proc.w2.dir}/config/agent.json",
         "arguments": [
+          "internal",
           "agent",
           "{proc.w2.dir}/config/agent.json"
         ]

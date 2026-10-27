@@ -9,7 +9,7 @@ pub const BINDING: u8 = 18;
 /// The `DemoAct` family's byte (protocol/setup.md, 8.4).
 pub const DEMO_ACT: u8 = 19;
 /// A write with a committed attempt (protocol/store.md, 2).
-pub const FLIGHT: u8 = 21;
+pub const FLIGHT: u8 = 22;
 /// One landing's verification (protocol/store.md, 2; domain/after-landing.md, 10).
 pub const VERIFICATION: u8 = 26;
 /// One repository tier (domain/after-landing.md, 10).
@@ -77,7 +77,7 @@ pub fn largest(limits: &forge::Limits) -> Option<u32> {
     let topic = limits.name_bytes.checked_mul(2)?.checked_add(28)?;
     // Writer is one family byte and an eight-byte forge number: 9 bytes.
     // Binding: family byte, visible address bytes (no zero escapes), and byte-string terminator.
-    Some(name.max(topic).max(92).max(1 + 254 + 2))
+    Some(name.max(topic).max(159).max(1 + 254 + 2))
 }
 
 /// Encode one relative key, or refuse it when it exceeds `limit`.
@@ -85,6 +85,22 @@ pub fn largest(limits: &forge::Limits) -> Option<u32> {
 pub fn encode(key: &forge::Key, limit: u32) -> Option<Box<[u8]>> {
     let mut writer = KeyWriter::new(limit);
     match key {
+        forge::Key::Landing(task) => {
+            writer.tag(23).u64(*task);
+        }
+        forge::Key::Receipt(key) => {
+            writer.tag(24).u64(u64::from(key.project));
+            write_repository(&mut writer, key.repository);
+            match &key.check {
+                forge::Check::Gate(name) => {
+                    writer.tag(0).bytes(name);
+                }
+                forge::Check::Tier(name) => {
+                    writer.tag(1).bytes(name);
+                }
+            }
+            writer.bytes(&key.key);
+        }
         forge::Key::Call(call) => {
             writer
                 .tag(0)
@@ -232,6 +248,22 @@ pub fn decode(bytes: &[u8], limits: &forge::Limits) -> Option<forge::Key> {
                 return None;
             }
             forge::Key::Binding(address)
+        }
+        23 => forge::Key::Landing(reader.u64()?),
+        24 => {
+            let project = u32::try_from(reader.u64()?).ok()?;
+            let repository = read_repository(&mut reader)?;
+            let tag = reader.tag()?;
+            let name = reader.bytes()?;
+            if name.is_empty() || name.len() > 32 {
+                return None;
+            }
+            let check = match tag {
+                0 => forge::Check::Gate(name),
+                1 => forge::Check::Tier(name),
+                _ => return None,
+            };
+            forge::Key::Receipt(forge::ReceiptKey { project, repository, check, key: read_commit(&mut reader)? })
         }
         _ => return None,
     };

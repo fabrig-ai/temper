@@ -344,16 +344,7 @@ fn refused_deployment_start(root: &Path) {
         ("no_entry", "2", "fake", None, false, false, "the setup has no entry for it", false),
         ("owned", "1", "owned", None, false, false, "it is owned, not fake", false),
         ("managed", "1", "managed", None, false, false, "it is managed, not fake", false),
-        (
-            "both",
-            "1",
-            "fake",
-            None,
-            true,
-            false,
-            "usage: temper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]",
-            false,
-        ),
+        ("both", "1", "fake", None, true, false, "invalid arguments", false),
         ("observations", "1", "fake", Some(TOKEN), false, true, "File exists (os error 17)", true),
     ] {
         let dir = directory.join(name);
@@ -402,19 +393,41 @@ fn refused_deployment_start(root: &Path) {
         let location = if names_file { format!("{}: ", dir.join(file).display()) } else { String::new() };
         assert_eq!(
             String::from_utf8(output.stderr).expect("refusal"),
-            format!("temper fake forge: {location}{reason}\n"),
+            if own_document {
+                "temper fake forge: invalid arguments\nusage: temper fake forge [DIRECTORIES] FORGE [--ready PREFIX] [--seed N] [--observations FILE]\nusage: temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n".into()
+            } else {
+                format!("temper fake forge: {location}{reason}\n")
+            },
             "{name}"
         );
         assert_eq!(snapshot(&dir), before, "{name}: refused startup leaves directories unchanged");
     }
     let bound = usize::try_from(temper_fake::demo::KEY_FILE_BYTES).expect("key file bound");
     for (name, kind, demo, file, mode, extra, reason, names_file) in [
-        ("llm_null", "llm", false, None, 0o600, false, "application.demo is null: the deployment has no demo".to_owned(), false),
+        (
+            "llm_null",
+            "llm",
+            false,
+            None,
+            0o600,
+            false,
+            "application.demo is null: the deployment has no demo".to_owned(),
+            false,
+        ),
         ("llm_absent", "llm", true, None, 0o600, false, "absent".to_owned(), true),
-        ("llm_public", "llm", true, Some(TOKEN.to_vec()), 0o644, false, "readable by others or reached through a link".to_owned(), true),
+        (
+            "llm_public",
+            "llm",
+            true,
+            Some(TOKEN.to_vec()),
+            0o644,
+            false,
+            "readable by others or reached through a link".to_owned(),
+            true,
+        ),
         ("llm_empty", "llm", true, Some(b"\n".to_vec()), 0o600, false, "holds no key".to_owned(), true),
         ("llm_long", "llm", true, Some(vec![b'k'; bound + 1]), 0o600, false, format!("past {bound} bytes"), true),
-        ("llm_word", "llm", true, None, 0o600, true, "usage: temper fake llm [DIRECTORIES] [--ready PREFIX] [--seed N] [--observations FILE] | temper fake llm --document FILE [--ready PREFIX] [--seed N] [--observations FILE]".to_owned(), false),
+        ("llm_word", "llm", true, None, 0o600, true, "invalid arguments".to_owned(), false),
     ] {
         let dir = directory.join(name);
         fs::create_dir(&dir).expect("case directory");
@@ -438,7 +451,12 @@ fn refused_deployment_start(root: &Path) {
         assert_eq!(output.status.code(), Some(1), "{name}");
         assert!(output.stdout.is_empty(), "{name}");
         let location = if names_file { format!("{}: ", path.display()) } else { String::new() };
-        assert_eq!(output.stderr, format!("temper fake {kind}: {location}{reason}\n").as_bytes(), "{name}");
+        let expected = if extra {
+            "temper fake llm: invalid arguments\nusage: temper fake llm [DIRECTORIES] [--ready PREFIX] [--seed N] [--observations FILE]\nusage: temper fake llm --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n".into()
+        } else {
+            format!("temper fake {kind}: {location}{reason}\n")
+        };
+        assert_eq!(output.stderr, expected.as_bytes(), "{name}");
         assert_eq!(snapshot(&dir), before, "{name}: refused startup leaves directories unchanged");
     }
 }

@@ -18,6 +18,8 @@ fn at(seconds: u64) -> Wall {
 }
 fn change(state: State) -> Change {
     Change {
+        way: crate::Way::Queue,
+        landing: None,
         task: 7,
         state,
         gates: Box::new([]),
@@ -35,6 +37,7 @@ fn change(state: State) -> Change {
 fn facts() -> Facts {
     Facts {
         verification: Verification::Cleared,
+        ask: None,
         branch: Some(HEAD),
         expected_base: BASE,
         pull: Pull::Open { head: HEAD, base: BASE },
@@ -243,6 +246,20 @@ fn release_reopens_a_closed_pull_and_recreates_a_deleted_branch() {
     assert_eq!(two.decision, Decision::Effect(Effect::CreateBranch { head: HEAD }));
     assert_eq!(two.change.state, State::Recreating { head: HEAD });
 }
+#[test]
+fn a_reopened_pull_keeps_its_target_when_the_landing_tip_advances() {
+    let c = change(State::Reopening { requested: true, retarget: false });
+    let mut f = facts();
+    f.base_tip = NEW;
+    f.expected_base = NEW;
+    let next = decide(&c, &f, &heard());
+    assert_eq!(next.change.state, State::Checking { head: HEAD });
+    assert_eq!(next.decision, Decision::None);
+
+    f.drift = Some(Hold::Retargeted);
+    assert_eq!(decide(&c, &f, &heard()).decision, Decision::Hold(Hold::Retargeted));
+}
+
 #[test]
 fn drift_writer_slots_and_stalls_do_not_write_over_a_branch() {
     let mut f = facts();
@@ -455,9 +472,13 @@ fn a_merged_change_waits_verifying() {
     let mut f = facts();
     f.pull = Pull::Merged { commit: MERGE };
     f.verification = Verification::Verifying;
-    let next = decide(&change(State::Landing { head: HEAD }), &f, &heard());
-    assert_eq!(next.change.state, State::Landed { merge: MERGE });
-    assert_eq!(next.decision, Decision::None);
+    for way in [Way::Queue, Way::Turn] {
+        let mut c = change(State::Landing { head: HEAD });
+        c.way = way;
+        let next = decide(&c, &f, &heard());
+        assert_eq!(next.change.state, State::Landed { merge: MERGE });
+        assert_eq!(next.decision, Decision::None);
+    }
 }
 
 #[test]
@@ -500,3 +521,4 @@ fn a_cancelled_verifying_change_finishes_with_its_landing() {
         assert_eq!(next.decision, Decision::Finish { merge: MERGE });
     }
 }
+mod turn;

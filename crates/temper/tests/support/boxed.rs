@@ -773,8 +773,8 @@ fn run_ctl_peers<T>(
 pub fn dying_with_test(mut command: Command) -> Command {
     if cfg!(target_os = "linux") {
         let mut arguments = vec![
-            "forge".into(),
-            "child".into(),
+            "internal".into(),
+            "forge-child".into(),
             "--parent".into(),
             std::process::id().to_string().into(),
             // Terminate, so the box stops its steps as on any stop.

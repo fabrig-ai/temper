@@ -1,4 +1,4 @@
-//! Reference case 6.6: two landings, with a fresh waiting sibling dependency.
+//! Retained first-edition story (domain/testing.md, 5.3): two landings, with a fresh waiting sibling dependency.
 use temper_real_loop_world::{Exit, case, run_cluster_forge};
 
 #[test]

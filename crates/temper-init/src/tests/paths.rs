@@ -104,7 +104,7 @@ fn paths_join_once_and_accept_the_bound() {
             "{row}"
         );
         assert_eq!(
-            *document.pointer("/workers/0/agent/arguments/1").expect("the agent has its configuration argument"),
+            *document.pointer("/workers/0/agent/arguments/2").expect("the agent has its configuration argument"),
             json!(agent),
             "{row}"
         );

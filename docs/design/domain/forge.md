@@ -296,8 +296,18 @@ temper-engine-domain-forge              the connector's top: resources and holds
   so a retry that reaches setting up or connecting fails at its own
   step. Both fields are volatile; no store or record version changes.
   Making the first repository has its own `first.state` failure.
-- **A forge not connected answers `NotConnected`,** at once, at cost 0,
-  and so does a connecting or stopped one (`../protocol/forge.md`, 2.7).
+- **A forge not connected answers `NotConnected`,** at once, at cost 0:
+  one stopped, never connected, or whose connect failed
+  (`../protocol/forge.md`, 2.7).
+- **A connecting forge is waited for, not refused.** While a forge
+  connects (a start's connect, a set up's, a reconnect), a person's act
+  on it (an adoption) and an agent's read or effect wait for the
+  connection within the call's own deadline (ctl's patience, a host
+  call's timeout), then go on as on a connected forge; past the
+  deadline, or once the connect fails, they answer `NotConnected`,
+  naming connecting or the failure. So an agent that follows the box's
+  walk straight from its start to an adoption is not refused for the
+  moment the start takes to connect.
   A read it answers is final; a write's entry fails at once, as a typed
   refusal does, having reached no forge (skein's `forge-client.md`,
   sections 5 and 7). The connector takes it as the forge's access
@@ -392,7 +402,8 @@ temper-engine-domain-forge              the connector's top: resources and holds
   before.
 - **An adoption on a forge not connected** is refused as such, before
   any read, and the client offers Connect; the picker offers none of
-  that forge's repositories (4.3).
+  that forge's repositories (4.3). One on a connecting forge waits for
+  it, as above.
 - **The writer given at runtime.** The forge client refuses every effect
   on a forge with no writer, `Forbidden` (skein's `forge-client.md`,
   7.1). The configuration names none (`../protocol/configuration.md`,
@@ -1534,6 +1545,12 @@ history they keep if temper is unplugged. Issues are projections (jig's
   of it that still fails holds the projection alone, retried after the
   policy's interval while the goal lives and settled failed when the
   goal closes, never holding the goal, its runs or its close.
+  A creation lost to a crash and not found again (section 6: never
+  sent again by temper on its own) keeps the projection's at most once:
+  a milestone comment so lost counts as posted, and the projection goes
+  on to its next milestone, the finishing one and the close; the issue's
+  open so lost fails the projection, which has nothing to write on, and
+  settles failed at the goal's close.
 - **Issues others open** in an adopted repository are participating
   objects, which may become intake later.
 

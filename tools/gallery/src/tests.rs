@@ -840,7 +840,9 @@ fn print_writes_every_page_and_the_bundle() {
         }
     }
     let digest = digest.expect("digest directory");
-    assert!(bundle.join(&digest).join("files/menu.svg").is_file(), "bundled menu mask");
+    for file in ["brand.svg", "menu.svg", "send.svg"] {
+        assert!(bundle.join(&digest).join("files").join(file).is_file(), "bundled decorative image {file}");
+    }
     for file in ["skein-ui.css", "temper.css", "task-pages.css"] {
         assert!(bundle.join(&digest).join(file).is_file(), "bundled {file}");
     }

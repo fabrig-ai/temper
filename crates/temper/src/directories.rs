@@ -11,19 +11,19 @@ pub const SETTINGS: Settings = Settings {
     table: &[
         Setting {
             name: "config",
-            value: "DIR",
+            value: "CONFIG",
             about: "Configuration, including temper.json.",
             fallback: Fallback::Base(Base::Config),
         },
         Setting {
             name: "data",
-            value: "DIR",
+            value: "DATA",
             about: "The deployment's data and secrets.",
             fallback: Fallback::Base(Base::Data),
         },
         Setting {
             name: "cache",
-            value: "DIR",
+            value: "CACHE",
             about: "Binaries that can be fetched again.",
             fallback: Fallback::Base(Base::Cache),
         },

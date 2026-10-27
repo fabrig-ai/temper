@@ -346,6 +346,9 @@ fn read_name(repository: &forge::Repository, read: &skein_forge::api::Read, limi
         | skein_forge::api::Read::Branches { .. }
         | skein_forge::api::Read::Settings
         | skein_forge::api::Read::Collaborators { .. }
+        | skein_forge::api::Read::Runs { .. }
+        | skein_forge::api::Read::Run { .. }
+        | skein_forge::api::Read::Tree { .. }
         | skein_forge::api::Read::Permission { .. } => None,
     };
     if let Some((kind, part)) = what {
@@ -1555,6 +1558,8 @@ fn describe_change_effect(
     }
     let pull_what = pull_what(row.pull);
     let (kind, what, state) = match effect {
+        // landing.md 3: the top's task
+        forge_change::Effect::Prepare { .. } => return None,
         forge_change::Effect::Open => {
             (3, branch_what(&row.branch, env.limits.forge.name_bytes), evidence.head.unwrap_or([0; 32]))
         }
@@ -1701,6 +1706,8 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 },
                 priority,
                 change: forge_change::Change {
+                    way: forge_change::Way::Queue,
+                    landing: None,
                     task,
                     state: forge_change::State::Producing { requested: false },
                     gates,
@@ -2074,6 +2081,8 @@ fn change_delegate(
                 forge_change::Repair::Ci => b"Repair the failed CI on the change branch",
                 forge_change::Repair::Semantic => b"Repair the base update's semantic conflict",
                 forge_change::Repair::Gate(_) => b"Repair the requested gate changes",
+                // landing.md 3: the top's task
+                forge_change::Repair::Landing { .. } => return None,
             };
             (
                 tasks::Executor::Agent { charter: domain.config.forge_charter },
@@ -2930,6 +2939,7 @@ pub(crate) fn outputs(
                     tier_decision(domain, task, forge::TierDecision::Held);
                 }
             }
+            forge::Request::LandingDecision { .. } => {}
             forge::Request::ChangeDecision { task, decision: choice, entry, evidence } => match choice {
                 forge_change::Decision::Effect(effect) => {
                     if let Some(entry) = entry

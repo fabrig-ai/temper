@@ -516,7 +516,7 @@ fn groups_fetch_before_preparation() {
         if which == Some("forgejo") { step.with_ready(([127, 0, 0, 1], 3000).into()) } else { step }
     };
     let serve = || {
-        let mut args = vec![b"serve".as_slice().into()];
+        let mut args = vec![b"internal".as_slice().into(), b"serve".as_slice().into()];
         args.extend_from_slice(&flags);
         args.push(b"--box".as_slice().into());
         crate::Step::new(b"serve".as_slice().into(), args.into_boxed_slice(), crate::Kind::Long)

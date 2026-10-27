@@ -1,4 +1,4 @@
-//! Reference case 5.5: an answered plan, fresh owner and depth-zero sub-owner.
+//! Retained first-edition story (domain/testing.md, 5.3): an answered plan, fresh owner and depth-zero sub-owner.
 use temper_real_loop_world::{
     Exit,
     case::{

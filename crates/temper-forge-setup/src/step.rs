@@ -191,8 +191,9 @@ pub fn steps(
         }
     }
     let mut serve = List::with_capacity(
-        u32::try_from(flags.len()).expect("bounded flags").checked_add(2).expect("bounded arguments"),
+        u32::try_from(flags.len()).expect("bounded flags").checked_add(3).expect("bounded arguments"),
     );
+    serve.push(bytes::copy_of(b"internal")).expect("command word");
     serve.push(bytes::copy_of(b"serve")).expect("command word");
     for flag in flags {
         serve.push(flag.clone()).expect("flags counted");

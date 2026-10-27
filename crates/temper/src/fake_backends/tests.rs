@@ -364,7 +364,7 @@ fn missing_bundle_refuses(source: &Directories) {
     let error = start(source, None).err().expect("no bundle");
     assert!(error.contains("scripts/bundle.sh --loopback DIR"), "{error}");
     assert!(error.contains("application.clients.bundle"), "{error}");
-    assert!(error.contains("temper box --fake-backends --bundle DIR"), "{error}");
+    assert!(error.contains("temper box --fake-backends --bundle BUNDLE"), "{error}");
     assert!(!crate::path(&source.data).exists(), "refuse before data mutation");
     assert!(!crate::path(&source.cache).exists(), "refuse before cache mutation");
 }
@@ -516,7 +516,7 @@ fn invalid_retained_configuration_refuses_a_valid_replacement_without_mutation()
     let (source, first) = prepared_source(&scratch);
     let document = first.directories.document();
     let mut edited = read_json(&document);
-    edited["workers"][0]["agent"]["arguments"] = serde_json::json!(["agent", "/outside/agent.json"]);
+    edited["workers"][0]["agent"]["arguments"] = serde_json::json!(["internal", "agent", "/outside/agent.json"]);
     store_json(&document, &edited);
     drop(first);
     let replacement = provision_bundle(&scratch.0.join("valid-replacement"));
@@ -603,7 +603,8 @@ fn unsupported_imports_refuse_with_the_public_member_named() {
     let scratch = Scratch::new("unsupported");
     let source = provisioned_source(&scratch);
     let mut temper = read_json(&source.document());
-    temper["workers"][0]["agent"]["arguments"] = serde_json::json!(["agent", "/elsewhere/agent.json", "extra"]);
+    temper["workers"][0]["agent"]["arguments"] =
+        serde_json::json!(["internal", "agent", "/elsewhere/agent.json", "extra"]);
     store_json(&source.document(), &temper);
     let error = start(&source, None).err().expect("custom argv refused");
     assert!(error.contains("workers/0/agent/arguments"), "{error}");

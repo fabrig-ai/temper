@@ -133,10 +133,14 @@ with the part that makes it true of `main`.
 | forge | `forge` | `forge` | kinds, modes (connected, managed, owned), GitHub's App and installations, the repositories a forge reaches |
 | repository | `repository` | `repository` | adoption, its role, the home, the landing branch, CI and checks |
 | account | `account` | `account`, `model` | LLM providers, accounts, sources, keys, a provider's sign-in, a program's login, a move between deployments, models |
-| task | `task` | `task` | tasks and their parts (tree, activity, turns, run), delegates, phases, holds, stop and cancel, amendments, a task's settings revision |
+| task | `task` | `task` | tasks and their parts (tree, activity, turns, run), delegates, phases, a task's own holds and their release, stop and cancel, amendments, a task's settings revision |
+| hold | `hold` | `hold` | a placed hold: its owner, its mode (stop or drain), its scope (a task's subtree or a project), what lifts it; placed by `task hold` and `project hold` |
 | chat | `chat` | `chat` | a conversation, its template, following it as a task, closing it |
 | goal | `goal` | `goal` | tracked work, priority, plans, advisors |
 | change | `change` | `change` | a change's way to landing: its pull request, CI, gates, queue, repairs, holds, merge; what the forge shows and temper does not |
+| landing | `landing` | `landing` | a landing task: its members, each candidate with its base, its gates' receipts and runs, its proof, the turn; a repository's receipts (`repository receipts`) |
+| finding | `finding` | `finding` | something found that is not its finder's to fix now: a labelled issue in the project's home, its kind, severity, area and state; triage (route, backlog, drop) |
+| qa | `qa` | `qa` | QA after landing: the marks of what a user can now do, the chooser, the passes on the newest cleared `main` |
 | inbox | `inbox` | `inbox` | what waits on the party: questions, proposals, escalations; updates |
 | proposal | `proposal` | `proposal` | proposals of every kind, deciding, withdrawing |
 | settings | `settings` | `settings` | the settings and their kinds, applying, proposing, running work |
@@ -224,9 +228,14 @@ temper ctl help [GROUP [VERB]]
   each with one meaning in every group:
   - reads: `show` (one), `list` (many), and a part of the group's noun
     by the part's name, as its concept names it: `task tree`, `task
-    activity`, `task turn`, `task run`, `forge repositories`;
+    activity`, `task turn`, `task run`, `forge repositories`,
+    `repository receipts`, `qa marks`, `qa passes`;
   - acts: `start`, `close`, `message`, `answer`, `amend`, `stop`,
-    `cancel`, `release`, `decide`, `withdraw`, `take`, `hand-back`,
+    `cancel`, `release`, `hold` (a placed hold, over the group's object),
+    `lift` (a placed hold, ended), `decide`, `withdraw`, `take`, `hand-back`,
+    `succeed` (a successor named), `choose` (what QA tries next), `route`
+    (a finding to a goal), `backlog` (a finding set aside), `drop` (a
+    finding dismissed, with a reason),
     `move` (a task to another party), `seen`, `apply`, `propose`,
     `restore`, `advance` (running work to the newest revision), `adopt`,
     `setup`, `connect`, `disconnect`, `install`, `accept`, `add-key`,

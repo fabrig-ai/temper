@@ -20,6 +20,7 @@ temper-engine-domain-forge-change.workspace = true
 temper-engine-domain-forge-issues.workspace = true
 
 temper-engine-domain-forge-tiers = { path = "../temper-engine-domain-forge-tiers" }
+temper-engine-domain-forge-landing = { path = "../temper-engine-domain-forge-landing" }
 
 [dev-dependencies]
 temper-engine-domain.workspace = true

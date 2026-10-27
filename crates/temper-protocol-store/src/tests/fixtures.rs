@@ -48,13 +48,16 @@ pub const LIMITS: top::Limits = top::Limits {
     bindings: 4,
     collaborators: 8,
     landings: 8,
+    landing_members: 2,
+    gates: 2,
+    receipts_per_gate: 4,
+    ignored_paths: 4,
+    key_entries: 16,
+    key_path_bytes: 1024,
+    trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
-    // Test gates per repository (domain/landing.md, 13.1).
-    gates: 2,
-    // Ignored paths per gate or tier (domain/landing.md, 6.1).
-    ignored_paths: 4,
     failing_tests: 16,
     test_id_bytes: 256,
     brief_sections: 32,
@@ -148,7 +151,7 @@ fn client_key(random: &mut Rng) -> skein_forge_client::Key {
 #[expect(clippy::disallowed_macros, reason = "property inputs number canonical member addresses")]
 pub fn key(random: &mut Rng) -> top::Key {
     let number = random.next_u64();
-    match random.below(22) {
+    match random.below(25) {
         0 => top::Key::Call(top::NamedCall {
             task: number,
             attempt: random.next_u64(),
@@ -175,6 +178,18 @@ pub fn key(random: &mut Rng) -> top::Key {
         18 => top::Key::Binding(alloc::format!("member{number}@example.com").into_bytes().into_boxed_slice()),
         19 => top::Key::DemoAct([u8::try_from(random.below(256)).expect("byte"); 16]),
         20 => top::Key::Flight { task: number, entry: random.next_u64() },
+        21 => top::Key::Landing(number),
+        22 => top::Key::Receipt(top::ReceiptKey {
+            project: u32::try_from(random.below(4_294_967_296)).expect("u32"),
+            repository: repository(random),
+            check: if random.below(2) == 0 {
+                top::Check::Gate(Box::from(b"gate".as_slice()))
+            } else {
+                top::Check::Tier(Box::from(b"tier".as_slice()))
+            },
+            key: commit(random),
+        }),
+        23 => top::Key::Tier { repository: repository(random), tier: Box::from(b"tier".as_slice()) },
         _ => top::Key::Verification { repository: repository(random), commit: commit(random) },
     }
 }
@@ -411,9 +426,18 @@ pub fn writes() -> [(&'static str, skein_forge::api::Write); 13] {
         ("reviewers", Write::SetReviewers { number: 1, reviewers: Box::new([2, 3]) }),
         ("close", Write::Close { number: 1 }),
         ("reopen", Write::Reopen { number: 2 }),
-        ("merge", Write::Merge { number: 1, head: [3; 32] }),
-        ("update", Write::Update { number: 1 }),
-        ("status", Write::Status { commit: [1; 32], context: Box::new([2]), check: Check::Failed }),
+        ("merge", Write::Merge { number: 1, head: [3; 32], how: skein_forge::api::MergeHow::Style }),
+        ("update", Write::Update { number: 1, style: skein_forge::api::UpdateStyle::Merge }),
+        (
+            "status",
+            Write::Status {
+                commit: [1; 32],
+                context: Box::new([2]),
+                check: Check::Failed,
+                description: Box::new([]),
+                link: Box::new([]),
+            },
+        ),
         ("create branch", Write::CreateBranch { branch: Box::new([2]), commit: [3; 32] }),
         ("delete branch", Write::DeleteBranch { branch: Box::new([2]) }),
     ]
@@ -730,6 +754,8 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         body: Box::new([5]),
         priority: -6,
         change: Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: 1,
             state,
             gates: Box::new([Gate {

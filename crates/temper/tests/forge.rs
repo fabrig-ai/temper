@@ -516,7 +516,7 @@ fn forge_fetch_command() {
             }
             "present" => format!("temper forge fetch: forge 3: {}: does not match the pinned digest\n", file.display()),
             "missing-roots" => format!("temper forge fetch: forge 3: {}: roots: Absent\n", root.display()),
-            "usage" => format!("temper: invalid arguments\n{}", temper::usage()),
+            "usage" => "temper forge fetch: invalid arguments\nusage: temper forge fetch [DIRECTORIES] FORGE\n".into(),
             _ => unreachable!(),
         };
         assert_eq!(result.status.code(), Some(1), "{row}");
@@ -534,8 +534,8 @@ fn forge_fetch_command() {
         scratch.remove();
     }
     assert_eq!(
-        temper::USAGE.split(" | ").find(|part| part.starts_with("temper forge fetch")),
-        Some("temper forge fetch [DIRECTORIES] FORGE")
+        temper::commands::COMMANDS.iter().find(|row| row.words == ["forge", "fetch"]).expect("fetch row").forms,
+        ["[DIRECTORIES] FORGE"]
     );
 }
 

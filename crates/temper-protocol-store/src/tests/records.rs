@@ -79,7 +79,7 @@ fn a_proposed_effect_round_trips_unchanged() {
         number: 1,
         resource: forge::What::Branch(Box::new([Box::new([0_u8, 255])])),
         entry: fixtures::entry(
-            skein_forge::api::Write::Merge { number: 2, head: [3; 32] },
+            skein_forge::api::Write::Merge { number: 2, head: [3; 32], how: skein_forge::api::MergeHow::Style },
             skein_forge_client::Condition::Merge { base: Box::new([4]) },
         ),
     });
@@ -306,6 +306,7 @@ fn each_change_delegate_round_trips_unchanged() {
         Delegate::Repair(Repair::Ci),
         Delegate::Repair(Repair::Gate(1)),
         Delegate::Repair(Repair::Semantic),
+        Delegate::Repair(Repair::Landing { gate: 3 }),
         Delegate::Resolve { base: [2; 32] },
         Delegate::Gate { number: 3, head: [4; 32] },
     ] {
@@ -898,6 +899,146 @@ fn review_failure_counts_take_the_gate_bound() {
             assert_eq!(records::decode(&bytes, &bounds), Ok(row));
         } else {
             assert_eq!(records::decode(&bytes, &bounds), Err(crate::Undecodable));
+        }
+    }
+}
+
+#[test]
+fn a_turn_change_ready_or_preparing_round_trips_with_its_landing() {
+    use temper_engine_domain_forge_change::{State, Way};
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    for state in [
+        State::Ready { head: [1; 32], ready_since: skein_lib::Wall::from_nanos(2) },
+        State::Preparing { from: [1; 32], main: [3; 32], ready_since: skein_lib::Wall::from_nanos(2) },
+    ] {
+        for landing in [None, Some(8)] {
+            let mut row = fixtures::change_row(state.clone());
+            row.change.way = Way::Turn;
+            row.change.landing = landing;
+            let row = forge::Stored::Change(row);
+            let bytes = records::encode(&row);
+            assert_eq!(records::decode(&bytes, &bounds), Ok(row));
+        }
+    }
+}
+
+#[test]
+fn turn_writes_round_trip_with_their_parameters() {
+    use skein_forge::api as a;
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    for write in [
+        a::Write::Merge { number: 7, head: [3; 32], how: a::MergeHow::FastForwardOnly },
+        a::Write::Update { number: 7, style: a::UpdateStyle::Rebase },
+        a::Write::Status {
+            commit: [3; 32],
+            context: Box::from(b"temper/gate/gate".as_slice()),
+            check: a::Check::Passed,
+            description: Box::from(b"key 0123456789abcdef passed".as_slice()),
+            link: Box::from(b"https://forge/run/7".as_slice()),
+        },
+        a::Write::Dispatch {
+            workflow: Box::from(b"gate.yml".as_slice()),
+            branch: Box::from(b"temper/51".as_slice()),
+            inputs: Box::new([a::Input {
+                name: Box::from(b"temper_key".as_slice()),
+                value: Box::from(b"0123456789abcdef".as_slice()),
+            }]),
+        },
+        a::Write::Rerun { attempt: a::JobAttempt { head: [3; 32], run: 7, job: 8, attempt: 2 } },
+    ] {
+        let row =
+            forge::Stored::Entry { entry: fixtures::entry(write, skein_forge_client::Condition::None), held: false };
+        assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+    }
+}
+
+#[test]
+fn landing_rows_preserve_phases_proofs_asks_and_effects() {
+    use skein_lib::Wall;
+    use temper_engine_domain_forge_change as c;
+    use temper_engine_domain_forge_landing as l;
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let at = Wall::from_nanos(17);
+    for phase in [
+        l::Phase::Waiting,
+        l::Phase::Preparing,
+        l::Phase::Proving,
+        l::Phase::Proved { at },
+        l::Phase::Turn { at },
+        l::Phase::Landed,
+        l::Phase::Cancelled,
+        l::Phase::Held { was: Box::new(l::Phase::Proving), why: l::Hold::Faults { member: 0, gate: 0 } },
+    ] {
+        for proof in [
+            l::Proof::Unkeyed,
+            l::Proof::Keyed { key: [3; 32] },
+            l::Proof::Dispatched { key: [3; 32], try_: 2 },
+            l::Proof::Passed { key: [3; 32] },
+            l::Proof::Failed { key: [3; 32] },
+        ] {
+            for ask in [
+                None,
+                Some(c::Ask::Prepare { head: [1; 32], main: [2; 32] }),
+                Some(c::Ask::Repair { gate: 0, candidate: [1; 32] }),
+            ] {
+                let row = forge::Stored::Landing(forge::LandingRow {
+                    landing: l::Landing {
+                        task: 61,
+                        project: 5,
+                        phase: phase.clone(),
+                        members: Box::new([l::Member {
+                            change: 51,
+                            repository: l::Repository { forge: 1, repository: 2 },
+                            pull: 7,
+                            head: Some([1; 32]),
+                            base: Some([2; 32]),
+                            candidate: Some([1; 32]),
+                            gates: Box::new([l::GateProof { proof, posted: l::Posted::Pending, faults: 2 }]),
+                            asked: Some(1),
+                            landed: None,
+                        }]),
+                        preparation: 1,
+                        stale_proofs: 3,
+                    },
+                    asks: Box::new([ask]),
+                    entries: Box::new([forge::LandingEntry {
+                        entry: 7,
+                        member: 0,
+                        gate: 0,
+                        operation: forge::Operation::Dispatch,
+                    }]),
+                });
+                let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("landing key");
+                assert_eq!(key.as_ref(), &[23, 0, 0, 0, 0, 0, 0, 0, 61]);
+                assert_eq!(records::row(&key, &records::encode(&row), &bounds), Ok(row));
+            }
+        }
+    }
+}
+#[test]
+fn receipts_preserve_the_check_key_run_and_verdict() {
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    for check in [forge::Check::Gate(Box::from(b"gate".as_slice())), forge::Check::Tier(Box::from(b"tier".as_slice()))]
+    {
+        for passed in [false, true] {
+            let row = forge::Stored::Receipt {
+                key: forge::ReceiptKey {
+                    project: 5,
+                    repository: skein_forge::api::Repository { forge: 1, repository: 2 },
+                    check: check.clone(),
+                    key: [3; 32],
+                },
+                receipt: forge::Receipt {
+                    passed,
+                    run: forge::ReceiptRun { id: 7, number: 8, url: Box::from(b"https://forge/run/7".as_slice()) },
+                    candidate: [4; 32],
+                    ended: skein_lib::Wall::from_nanos(9),
+                },
+            };
+            let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("receipt key");
+            assert_eq!(key[0], 24);
+            assert_eq!(crate::keys::decode(&key, &fixtures::LIMITS), Some(forge::stored_key(&row)));
+            assert_eq!(records::row(&key, &records::encode(&row), &bounds), Ok(row));
         }
     }
 }

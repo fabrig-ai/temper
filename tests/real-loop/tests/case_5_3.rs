@@ -1,4 +1,4 @@
-//! Reference case 5.3: A's amended instructions, waiting on jig for a deadline's hold.
+//! Retained first-edition story (domain/testing.md, 5.3): A's amended instructions, waiting on jig for a deadline's hold.
 use temper_real_loop_world::{
     Exit,
     case::{
@@ -22,7 +22,7 @@ fn an_owners_amended_instructions_reach_its_next_run_without_a_deadlines_hold_or
     // crates/temper-client-tools/src/jig/render.rs:55 maps ReadValue::History to
     // nothing). A ctl read alone wouldn't show what was replaced; this story
     // covers it only by what A was told before and after. No x3 is delegated, and the two hours remain words. Also leaves
-    // out reference-case 6.8(c)'s charter run policy:
+    // out the retained first edition's charter run policy (domain/testing.md, 5.3):
     // a charter changes only in config, across a restart; this amends A's task.
     // Pruning A's notes into an archive is A's own work (domain/testing.md, 5.3).
     let ran = run_cluster_forge(

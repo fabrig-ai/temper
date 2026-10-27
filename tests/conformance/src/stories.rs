@@ -110,6 +110,8 @@ fn positive_change(world: &mut World, repair: bool) -> Result<(), Violation> {
                 commit: world.systems.domain.branch(b"org/repo", b"main").expect("initial main"),
                 context: b"build".as_slice().into(),
                 state: raw::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
         );
     }
@@ -132,6 +134,8 @@ fn positive_change(world: &mut World, repair: bool) -> Result<(), Violation> {
                 commit: world.systems.domain.branch(b"org/repo", &branch).expect("repaired branch"),
                 context: b"build".as_slice().into(),
                 state: raw::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
         );
         world.peers.produced.insert(child, repaired);

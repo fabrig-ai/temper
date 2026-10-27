@@ -592,6 +592,7 @@
         "program": "/usr/local/bin/temper",
         "configuration": "/home/me/temper/owned/agent.json",
         "arguments": [
+          "internal",
           "agent",
           "/home/me/temper/owned/agent.json"
         ]

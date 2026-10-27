@@ -1,4 +1,4 @@
-//! Reference case 5.4: new direction and overlap news wakes B once released.
+//! Retained first-edition story (domain/testing.md, 5.3): new direction and overlap news wakes B once released.
 use temper_real_loop_world::{
     Exit,
     case::{

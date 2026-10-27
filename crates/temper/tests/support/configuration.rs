@@ -31,7 +31,7 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     value["workers"][0]["engine"] = serde_json::json!({"in_process":"workers"});
     value["workers"][0]["agent"]["program"] = program.into();
     value["workers"][0]["agent"]["configuration"] = directory.join("agent.json").to_str().expect("agent path").into();
-    value["workers"][0]["agent"]["arguments"] = serde_json::json!(["agent", directory.join("agent.json")]);
+    value["workers"][0]["agent"]["arguments"] = serde_json::json!(["internal", "agent", directory.join("agent.json")]);
     value["workers"][0]["limits"]["overrides"]["hub.accounts"] = 4.into();
     value["workers"][0]["limits"]["overrides"]["hub.event_bytes"] = 2046.into();
     value["engine"]["hosts"]["listener"] = serde_json::json!([{"in_process":"workers"}]);

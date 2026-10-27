@@ -186,8 +186,8 @@ is open is section 10.
   name, color }` makes one.
 - **Views and acts** (`../client/tools.md`, a group `finding` and a
   group `qa`): `finding list --project PROJECT [--state STATE]`,
-  `finding show NUMBER`, `finding route NUMBER --goal TASK`, `finding
-  backlog NUMBER`, `finding drop NUMBER REASON`; `qa marks --project
+  `finding show FINDING`, `finding route FINDING --goal TASK`, `finding
+  backlog FINDING`, `finding drop FINDING REASON`; `qa marks --project
   PROJECT`, `qa choose LANDING`, `qa passes --project PROJECT`.
 - **In the store:** `Finding` (by the home's issue), `Mark` (by
   landing), `QaPass` (by its task), through the baseline's rules.

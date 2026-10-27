@@ -1,5 +1,5 @@
-// The reference case's world: its state at hour 0, and the steps that
-// move it on (draft/reference-case.md). Times are minutes from hour 0,
+// The retired first edition's world: its state at hour 0, and the steps that
+// move it on (domain/testing.md, 5.3; draft/reference-case.md is the second edition). Times are minutes from hour 0,
 // which is Thursday 22 October, 08:00 UTC.
 //
 // A world holds facts as the engine keeps them (a phase, what a task
@@ -360,7 +360,7 @@
 
   MOCKUPS.worlds.reference = {
     name: 'Reference case',
-    about: 'the reference case (docs/design/draft/reference-case.md): a director, owners on two machines, pools, findings, an ops application, moved on step by step',
+    about: 'the retired first edition (docs/design/domain/testing.md, 5.3; docs/design/draft/reference-case.md is the second edition): a director, owners on two machines, pools, findings, an ops application, moved on step by step',
     HOUR0: Date.UTC(2026, 9, 22, 8, 0),
     initial, steps, upcoming, acts,
   };

@@ -24,6 +24,7 @@ mod accounts_runtime;
 mod agent;
 pub mod box_command;
 pub mod bundle;
+pub mod commands;
 pub mod ctl;
 pub mod fake;
 mod fake_backends;
@@ -38,11 +39,11 @@ mod program_login;
 mod setup;
 mod worker_alone;
 pub use host::Host;
-pub const USAGE: &str = "usage: temper init [DIRECTORIES] | temper serve [DIRECTORIES] [--box] | temper agent AGENT.json | temper program-login [DIRECTORIES] NAME | temper open DIRECTORY LINK_OR_ADDRESS | temper forge fetch [DIRECTORIES] FORGE | temper forge prepare [DIRECTORIES] FORGE | temper forge run [DIRECTORIES] FORGE forgejo|runner | temper forge reconcile [DIRECTORIES] FORGE | temper forge sign-in [DIRECTORIES] FORGE | temper box [DIRECTORIES] [--echo none|steps] | temper box [DIRECTORIES] --fake-backends [--bundle DIR] | temper fake llm --document FILE [--ready PREFIX] [--seed N] | temper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge check [DIRECTORIES] N OBSERVATIONS STORE | temper fake oauth --document FILE [--ready PREFIX] [--seed N] | temper fake git ARGS... | temper ctl DIRECTORY TOOL [ARGUMENT...] | temper ctl help [TOOL] | temper help [NAME | --search WORDS...]";
 const CONFIG_BYTES: u32 = 1 << 20;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
+    Usage(&'static commands::Row),
     Init { directories: Directories },
     Serve { directories: Directories, boxed: bool },
     Box { directories: Directories, echo: temper_box::host::Echo },
@@ -57,23 +58,6 @@ pub enum Command {
     FakeGit { arguments: Box<[Box<[u8]>]> },
     ForgeChild { parent: u32, signal: skein_io::kernel::Signal, program: OsString, arguments: Vec<OsString> },
     Forge { directories: Directories, arguments: Vec<OsString>, ssl_cert_file: Option<PathBuf> },
-}
-#[must_use]
-pub fn usage() -> String {
-    let mut help = format!("{USAGE}\nDIRECTORIES: [--config DIR] [--data DIR] [--cache DIR]\n").into_bytes();
-    skein_shell::help(&directories::SETTINGS, &mut help);
-    help.extend_from_slice(b"\ntemper box:\n");
-    skein_shell::help(&box_command::ECHO_SETTINGS, &mut help);
-    help.extend_from_slice(b"\ntemper fake llm --document FILE [--ready PREFIX] [--seed N]\n");
-    skein_shell::help(&fake::LLM_SETTINGS, &mut help);
-    help.extend_from_slice(b"\ntemper fake oauth --document FILE [--ready PREFIX] [--seed N]\n");
-    skein_shell::help(&fake::OAUTH_SETTINGS, &mut help);
-    help.extend_from_slice(b"\ntemper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE]\n");
-    help.extend_from_slice(b"\ntemper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n");
-    skein_shell::help(&fake::FORGE_SETTINGS, &mut help);
-    help.extend_from_slice(b"\ntemper fake forge check [DIRECTORIES] N OBSERVATIONS STORE\n");
-    help.extend_from_slice(b"\ntemper fake git ARGS...\n");
-    String::from_utf8(help).expect("help is UTF-8")
 }
 fn prefixed(command: &str, why: &str) -> String {
     let mut lines = String::new();
@@ -96,87 +80,84 @@ pub fn configure_with(
     environment: &[EnvironmentEntry],
     working: &[u8],
 ) -> Result<Command, String> {
-    let invalid = || format!("temper: invalid arguments\n{}", usage());
-    let Some((command, arguments)) = arguments.split_first() else { return Err(invalid()) };
+    let row = commands::find(arguments).ok_or_else(|| commands::unknown(arguments))?;
+    let arguments = &arguments[row.words.len()..];
+    if arguments.len() == 1 && arguments[0].as_ref() == b"--help" {
+        return Ok(Command::Usage(row));
+    }
+    configure_row(row, arguments, environment, working).map_err(|why| commands::refused(row, &why))
+}
+fn configure_row(
+    row: &commands::Row,
+    arguments: &[Box<[u8]>],
+    environment: &[EnvironmentEntry],
+    working: &[u8],
+) -> Result<Command, String> {
+    let invalid = || "invalid arguments".to_string();
     let os =
         |args: &[Box<[u8]>]| args.iter().map(|arg| std::ffi::OsStr::from_bytes(arg).to_owned()).collect::<Vec<_>>();
-    match command.as_ref() {
-        b"fake" => return fake::configure(arguments, environment, working),
-        b"ctl" => return Ok(Command::Ctl { arguments: os(arguments) }),
-        b"help" => return help::request(arguments).map(|request| Command::Help { request }).ok_or_else(invalid),
-        b"open" => return Ok(Command::Open { arguments: os(arguments) }),
-        b"agent" => {
+    match row.words {
+        ["fake", ..] => return fake::configure(row, arguments, environment, working),
+        ["ctl"] => return Ok(Command::Ctl { arguments: os(arguments) }),
+        ["help"] => return help::request(arguments).map(|request| Command::Help { request }).ok_or_else(invalid),
+        ["open"] => return Ok(Command::Open { arguments: os(arguments) }),
+        ["internal", "agent"] => {
             return match arguments {
                 [configuration] => Ok(Command::Agent { configuration: path(configuration).into() }),
                 _ => Err(invalid()),
             };
         }
-        b"init" | b"serve" | b"box" | b"program-login" | b"forge" => {}
-        _ => return Err(invalid()),
-    }
-    if command.as_ref() == b"forge" && arguments.first().is_some_and(|arg| arg.as_ref() == b"child") {
-        let bad = || {
-            "temper forge child: usage: temper forge child --parent PID --signal kill|terminate -- PROGRAM ARGS…\n"
-                .to_string()
-        };
-        let [_, flag, parent, signal_flag, signal, separator, program, rest @ ..] = arguments else {
-            return Err(bad());
-        };
-        if flag.as_ref() != b"--parent"
-            || signal_flag.as_ref() != b"--signal"
-            || separator.as_ref() != b"--"
-            || program.is_empty()
-        {
-            return Err(bad());
+        ["internal", "forge-child"] => {
+            let [flag, parent, signal_flag, signal, separator, program, rest @ ..] = arguments else {
+                return Err(invalid());
+            };
+            if flag.as_ref() != b"--parent"
+                || signal_flag.as_ref() != b"--signal"
+                || separator.as_ref() != b"--"
+                || program.is_empty()
+            {
+                return Err(invalid());
+            }
+            let parent =
+                std::str::from_utf8(parent).ok().and_then(|pid| pid.parse::<u32>().ok()).ok_or_else(invalid)?;
+            let signal = match signal.as_ref() {
+                b"kill" => skein_io::kernel::Signal::Kill,
+                b"terminate" => skein_io::kernel::Signal::Terminate,
+                _ => return Err(invalid()),
+            };
+            return Ok(Command::ForgeChild {
+                parent,
+                signal,
+                program: std::ffi::OsStr::from_bytes(program).into(),
+                arguments: os(rest),
+            });
         }
-        let parent = std::str::from_utf8(parent).ok().and_then(|pid| pid.parse::<u32>().ok()).ok_or_else(bad)?;
-        let signal = match signal.as_ref() {
-            b"kill" => skein_io::kernel::Signal::Kill,
-            b"terminate" => skein_io::kernel::Signal::Terminate,
-            _ => return Err(bad()),
-        };
-        return Ok(Command::ForgeChild {
-            parent,
-            signal,
-            program: std::ffi::OsStr::from_bytes(program).into(),
-            arguments: os(rest),
-        });
+        _ => {}
     }
-    let (verb, arguments) = if command.as_ref() == b"forge" {
-        let Some((verb, arguments)) = arguments.split_first() else { return Err(invalid()) };
-        if ![b"fetch".as_slice(), b"prepare", b"run", b"reconcile", b"sign-in"].contains(&verb.as_ref()) {
-            return Err(invalid());
-        }
-        (Some(verb), arguments)
-    } else {
-        (None, arguments)
-    };
-    let (directories, rest) =
-        directories::resolve(arguments, environment, working).map_err(|why| format!("temper: {why}\n{}", usage()))?;
-    let (echo, rest) = if command.as_ref() == b"box" {
+    let (directories, rest) = directories::resolve(arguments, environment, working).map_err(|why| why.to_string())?;
+    let (echo, rest) = if row.words == ["box"] {
         if rest.iter().any(|word| word.as_ref() == b"--fake-backends") {
-            let (echo, _) = box_command::echo(&[], environment).map_err(|why| format!("temper: {why}\n{}", usage()))?;
+            let (echo, _) = box_command::echo(&[], environment)?;
             (echo, rest)
         } else {
-            box_command::echo(&rest, environment).map_err(|why| format!("temper: {why}\n{}", usage()))?
+            box_command::echo(&rest, environment)?
         }
     } else {
         (temper_box::host::Echo::None, rest)
     };
     let rest = os(&rest);
-    match command.as_ref() {
-        b"init" if rest.is_empty() => Ok(Command::Init { directories }),
-        b"serve" if rest.is_empty() || rest == ["--box"] => Ok(Command::Serve { directories, boxed: !rest.is_empty() }),
-        b"box" if rest.is_empty() => Ok(Command::Box { directories, echo }),
-        b"box" => {
-            let bundle =
-                fake_backends::configure(&rest, working).map_err(|why| format!("temper: {why}\n{}", usage()))?;
+    match row.words {
+        ["init"] if rest.is_empty() => Ok(Command::Init { directories }),
+        ["serve"] if rest.is_empty() => Ok(Command::Serve { directories, boxed: false }),
+        ["internal", "serve"] if rest == ["--box"] => Ok(Command::Serve { directories, boxed: true }),
+        ["box"] if rest.is_empty() => Ok(Command::Box { directories, echo }),
+        ["box"] => {
+            let bundle = fake_backends::configure(&rest, working)?;
             Ok(Command::BoxFakeBackends { directories, bundle, echo })
         }
-        b"program-login" if rest.len() == 1 => Ok(Command::ProgramLogin { directories, name: rest[0].clone() }),
-        b"forge" => {
-            let verb = verb.expect("forge command word");
-            let valid = if verb.as_ref() == b"run" {
+        ["program-login"] if rest.len() == 1 => Ok(Command::ProgramLogin { directories, name: rest[0].clone() }),
+        ["forge", verb] => {
+            let valid = if *verb == "run" {
                 rest.len() == 2 && (rest[1] == "forgejo" || rest[1] == "runner")
             } else {
                 rest.len() == 1
@@ -184,7 +165,7 @@ pub fn configure_with(
             if !valid || rest[0].to_str().and_then(|n| n.parse::<u16>().ok()).is_none() {
                 return Err(invalid());
             }
-            let mut arguments = os(std::slice::from_ref(verb));
+            let mut arguments = vec![OsString::from(verb)];
             arguments.extend(rest);
             let ssl_cert_file = environment
                 .iter()
@@ -196,8 +177,13 @@ pub fn configure_with(
         _ => Err(invalid()),
     }
 }
+
 pub fn run(command: Command) -> Result<u8, String> {
     let exit = match command {
+        Command::Usage(row) => {
+            print!("{}", commands::row(row));
+            return Ok(0);
+        }
         Command::Init { directories } => return init::run(&directories).map_err(|why| prefixed("temper init", &why)),
         Command::Serve { directories, boxed } => {
             serve(&directories, boxed).map_err(|why| prefixed("temper serve", &why))?
@@ -209,7 +195,7 @@ pub fn run(command: Command) -> Result<u8, String> {
             box_command::run(&directories, echo).map_err(|why| prefixed("temper box", &why))?
         }
         Command::Agent { configuration } => smith_agent_shell::run(&configuration, Box::new(std::io::stderr()))
-            .map_err(|why| prefixed("temper agent", &why))?,
+            .map_err(|why| prefixed("temper internal agent", &why))?,
         Command::ProgramLogin { directories, name } => {
             return program_login::run(&directories, &name)
                 .map_err(|why| prefixed("temper program-login", &why.lines().collect::<Vec<_>>().join("; ")));
@@ -219,7 +205,7 @@ pub fn run(command: Command) -> Result<u8, String> {
         Command::FakeGit { arguments } => return Ok(fake::git::run(&arguments)),
         Command::ForgeChild { parent, signal, program, arguments } => {
             let why = forge_exec::child(parent, signal, &program, &arguments);
-            return Err(prefixed("temper forge child", &why.to_string()));
+            return Err(prefixed("temper internal forge-child", &why.to_string()));
         }
         Command::Forge { directories, arguments, ssl_cert_file } => {
             return Ok(forge::run(&directories, &arguments, ssl_cert_file));
@@ -652,6 +638,7 @@ mod box_tests {
                 .map(|word| Box::from(word.as_bytes()))
                 .collect::<Vec<_>>();
             if boxed {
+                args.insert(0, Box::from(b"internal".as_slice()));
                 args.push(Box::from(b"--box".as_slice()));
             }
             let super::Command::Serve { boxed: found, .. } =

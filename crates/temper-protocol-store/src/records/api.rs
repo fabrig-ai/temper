@@ -30,8 +30,31 @@ fn decode_check(value: w::Check) -> d::Check {
         w::Check::Failed => d::Check::Failed,
     }
 }
+#[expect(clippy::too_many_lines, reason = "one exhaustive durable write translation")]
 pub(super) fn encode_write(value: &d::Write) -> w::Write {
     match value {
+        d::Write::Dispatch { workflow, branch, inputs } => {
+            let mut values = List::with_capacity(u32::try_from(inputs.len()).expect(FITS));
+            for input in inputs {
+                values
+                    .push(
+                        w::DispatchInput::new(
+                            &w::CEILINGS,
+                            w::DispatchInputParts { name: input.name.clone(), value: input.value.clone() },
+                        )
+                        .expect(FITS),
+                    )
+                    .expect(FITS);
+            }
+            w::Write::Dispatch(
+                w::DispatchWrite::new(
+                    &w::CEILINGS,
+                    w::DispatchWriteParts { workflow: workflow.clone(), branch: branch.clone(), inputs: values },
+                )
+                .expect(FITS),
+            )
+        }
+        d::Write::Rerun { attempt } => w::Write::Rerun(super::answers::encode_job_attempt(attempt)),
         d::Write::CreateIssue { key, title, body } => w::Write::CreateIssue(
             w::CreateIssue::new(
                 &w::CEILINGS,
@@ -79,16 +102,34 @@ pub(super) fn encode_write(value: &d::Write) -> w::Write {
         d::Write::Reopen { number } => {
             w::Write::Reopen(w::Number::new(&w::CEILINGS, w::NumberParts { number: *number }).expect(FITS))
         }
-        d::Write::Merge { number, head } => w::Write::Merge(
-            w::MergeWrite::new(&w::CEILINGS, w::MergeWriteParts { number: *number, head: *head }).expect(FITS),
-        ),
-        d::Write::Update { number } => {
-            w::Write::Update(w::Number::new(&w::CEILINGS, w::NumberParts { number: *number }).expect(FITS))
+        d::Write::Merge { number, head, how } => {
+            let how = match how {
+                d::MergeHow::Style => w::MergeHow::Style,
+                d::MergeHow::FastForwardOnly => w::MergeHow::FastForwardOnly,
+            };
+            w::Write::Merge(
+                w::MergeWrite::new(&w::CEILINGS, w::MergeWriteParts { number: *number, head: *head, how }).expect(FITS),
+            )
         }
-        d::Write::Status { commit, context, check } => w::Write::Status(
+        d::Write::Update { number, style } => {
+            let style = match style {
+                d::UpdateStyle::Merge => w::UpdateStyle::Merge,
+                d::UpdateStyle::Rebase => w::UpdateStyle::Rebase,
+            };
+            w::Write::Update(
+                w::UpdateWrite::new(&w::CEILINGS, w::UpdateWriteParts { number: *number, style }).expect(FITS),
+            )
+        }
+        d::Write::Status { commit, context, check, description, link } => w::Write::Status(
             w::SetStatus::new(
                 &w::CEILINGS,
-                w::SetStatusParts { commit: *commit, context: context.clone(), status: encode_check(*check) },
+                w::SetStatusParts {
+                    commit: *commit,
+                    context: context.clone(),
+                    status: encode_check(*check),
+                    description: description.clone(),
+                    link: link.clone(),
+                },
             )
             .expect(FITS),
         ),
@@ -103,6 +144,16 @@ pub(super) fn encode_write(value: &d::Write) -> w::Write {
 }
 pub(super) fn decode_write(value: w::Write) -> d::Write {
     match value {
+        w::Write::Dispatch(value) => {
+            let w::DispatchWriteParts { workflow, branch, inputs } = value.into_parts();
+            let mut values = List::with_capacity(inputs.len());
+            for input in inputs.into_boxed() {
+                let w::DispatchInputParts { name, value } = input.into_parts();
+                values.push(d::Input { name, value }).expect(FITS);
+            }
+            d::Write::Dispatch { workflow, branch, inputs: values.into_boxed() }
+        }
+        w::Write::Rerun(value) => d::Write::Rerun { attempt: super::answers::decode_job_attempt(value) },
         w::Write::CreateIssue(value) => {
             let w::CreateIssueParts { key, title, body } = value.into_parts();
             d::Write::CreateIssue { key, title, body }
@@ -136,16 +187,29 @@ pub(super) fn decode_write(value: w::Write) -> d::Write {
             d::Write::Reopen { number }
         }
         w::Write::Merge(value) => {
-            let w::MergeWriteParts { number, head } = value.into_parts();
-            d::Write::Merge { number, head }
+            let w::MergeWriteParts { number, head, how } = value.into_parts();
+            d::Write::Merge {
+                number,
+                head,
+                how: match how {
+                    w::MergeHow::Style => d::MergeHow::Style,
+                    w::MergeHow::FastForwardOnly => d::MergeHow::FastForwardOnly,
+                },
+            }
         }
         w::Write::Update(value) => {
-            let w::NumberParts { number } = value.into_parts();
-            d::Write::Update { number }
+            let w::UpdateWriteParts { number, style } = value.into_parts();
+            d::Write::Update {
+                number,
+                style: match style {
+                    w::UpdateStyle::Merge => d::UpdateStyle::Merge,
+                    w::UpdateStyle::Rebase => d::UpdateStyle::Rebase,
+                },
+            }
         }
         w::Write::Status(value) => {
-            let w::SetStatusParts { commit, context, status } = value.into_parts();
-            d::Write::Status { commit, context, check: decode_check(status) }
+            let w::SetStatusParts { commit, context, status, description, link } = value.into_parts();
+            d::Write::Status { commit, context, check: decode_check(status), description, link }
         }
         w::Write::CreateBranch(value) => {
             let w::CreateBranchParts { branch, commit } = value.into_parts();

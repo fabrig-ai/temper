@@ -172,7 +172,7 @@ pub fn worker_settings() -> crate::settings::Worker {
             stop_bound: skein_lib::Duration::from_secs(60),
             agent: config::Agent {
                 program: TEMPER.into(),
-                arguments: Box::new([b"agent".as_slice().into(), AGENT_JSON.into()]),
+                arguments: Box::new([b"internal".as_slice().into(), b"agent".as_slice().into(), AGENT_JSON.into()]),
                 configuration: AGENT_JSON.into(),
             },
             limits,

@@ -16,6 +16,8 @@ fn change_row() -> top::ChangeRow {
         body: Box::from(&b"Fix the file"[..]),
         priority: 1,
         change: change::Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: 51,
             state: change::State::Producing { requested: false },
             gates: Box::new([]),
@@ -526,6 +528,7 @@ fn land_change(world: &mut Protocol) -> bool {
                 | top::Request::ApplicationDone { .. }
                 | top::Request::ApplicationAgain { .. }
                 | top::Request::RestartDone { .. }
+                | top::Request::LandingDecision { .. }
                 | top::Request::Call { .. } => {}
             }
         }
@@ -580,7 +583,7 @@ fn enqueue_merge(world: &mut Protocol, pull: u64, head: skein_forge::api::Commit
             task: 51,
             repository: REPO,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Merge { number: pull, head },
+                write: skein_forge::api::Write::Merge { number: pull, head, how: skein_forge::api::MergeHow::Style },
                 condition: skein_forge_client::Condition::Merge { base: Box::from(&b"main"[..]) },
             },
             start: None,

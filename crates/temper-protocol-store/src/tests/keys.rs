@@ -170,11 +170,11 @@ fn demo_act_keys_follow_demo_and_require_sixteen_bytes() {
 }
 
 #[test]
-fn flight_keys_name_task_then_entry_under_family_twenty_one() {
+fn flight_keys_name_task_then_entry_under_family_twenty_two() {
     const KEY_BYTES: u32 = 17; // Family byte and two u64s (protocol/store.md, 2).
     let key = Key::Flight { task: 7, entry: 11 };
     let bytes = keys::encode(&key, KEY_BYTES).expect("exact flight key room");
-    assert_eq!(bytes.as_ref(), &[21, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 11]);
+    assert_eq!(bytes.as_ref(), &[22, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 11]);
     assert_eq!(keys::decode(&bytes, &fixtures::LIMITS), Some(key));
     assert_eq!(keys::flight(&bytes), Some((7, 11)));
     assert_eq!(keys::encode(&Key::Flight { task: 7, entry: 11 }, KEY_BYTES - 1), None);

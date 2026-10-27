@@ -139,16 +139,16 @@ pub fn standalone(
         if !in_process(&worker.engine) {
             problems.push(path.member(b"engine"), What::Standalone);
         }
-        let command = match worker.agent.arguments.first() {
-            Some(value) => value.as_ref() == b"agent",
-            None => false,
+        let command = match (worker.agent.arguments.first(), worker.agent.arguments.get(1)) {
+            (Some(first), Some(second)) => first.as_ref() == b"internal" && second.as_ref() == b"agent",
+            _ => false,
         };
         if command {
-            let absolute = match worker.agent.arguments.get(1) {
+            let absolute = match worker.agent.arguments.get(2) {
                 Some(value) => value.starts_with(b"/"),
                 None => false,
             };
-            if worker.agent.arguments.len() != 2 || !absolute {
+            if worker.agent.arguments.len() != 3 || !absolute {
                 problems.push(path.member(b"agent").member(b"arguments"), What::Absolute);
             }
         } else {

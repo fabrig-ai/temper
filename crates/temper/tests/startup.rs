@@ -1373,7 +1373,7 @@ fn serve_box_refuses_closed_or_non_pipe_descriptors_before_starting() {
             let answers = requests + 1;
             let redirections = redirections.replace("{r}", &requests.to_string()).replace("{a}", &answers.to_string());
             let script = format!(
-                "exec \"$1\" serve --config /unused --data /unused --cache /unused --box {} {redirections}",
+                "exec \"$1\" internal serve --config /unused --data /unused --cache /unused --box {} {redirections}",
                 if inherited { "3<&0" } else { "" }
             );
             let mut command = if inherited {
@@ -1416,6 +1416,9 @@ fn serve_claims_its_clients_listener_and_box_pipes_follow_it() {
         support::write_private(&path, &serde_json::to_vec(&value).expect("JSON"));
         let script = if boxed { "exec \"$@\" 3<&0 4>&1 5<&2 0</dev/null 2>&1" } else { "exec \"$@\" 3<&0 0</dev/null" };
         let mut command = listeners::command(listener, script);
+        if boxed {
+            command.arg("internal");
+        }
         command.arg("serve").args(support::configuration::flags(scratch.path()));
         let (answers, keep_answers_open) = std::io::pipe().expect("box answers");
         if boxed {
@@ -2029,14 +2032,14 @@ fn listener_refusals_name_the_fd_before_serve_or_a_fake_opens_files() {
 fn forge_child_refuses_a_wrong_parent_or_missing_program_without_reading_a_document() {
     for (parent, program) in [(0, "/bin/true"), (std::process::id(), "/no-such-forge-child-program")] {
         let ended = std::process::Command::new(skein_scratch::paths::binary("temper"))
-            .args(["forge", "child", "--parent", &parent.to_string(), "--signal", "kill", "--", program])
+            .args(["internal", "forge-child", "--parent", &parent.to_string(), "--signal", "kill", "--", program])
             .env_clear()
             .output()
             .expect("child refusal");
         assert_eq!(ended.status.code(), Some(1));
         assert!(ended.stdout.is_empty());
         let why = String::from_utf8(ended.stderr).expect("diagnostic");
-        assert!(why.starts_with("temper forge child: "), "{why}");
+        assert!(why.starts_with("temper internal forge-child: "), "{why}");
         assert_eq!(why.lines().count(), 1, "{why}");
         assert!(!why.contains("document"), "{why}");
     }

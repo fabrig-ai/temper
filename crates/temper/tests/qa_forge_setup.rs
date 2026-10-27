@@ -254,7 +254,7 @@ fn serve_with_box_refuses_without_the_boxs_pipes() {
     let scratch = support::Scratch::startup("qa-setup-no-pipes");
     init(scratch.path());
     boxed(scratch.path());
-    let mut arguments = vec!["serve".into(), "--box".into()];
+    let mut arguments = vec!["internal".into(), "serve".into(), "--box".into()];
     arguments.extend(support::configuration::flags(scratch.path()));
     let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
     let mut command = listeners::command(listener, "exec \"$@\" 3<&0 4>&- 5>&- 0</dev/null");

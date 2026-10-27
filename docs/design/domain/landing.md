@@ -533,7 +533,7 @@ Under `../client/tools.md`, 5.1's names (a group `landing`):
 
 | Tool | What it answers or does |
 |---|---|
-| `landing show TASK` | a landing: its members, each candidate with its base, each gate's key, receipt or run, the proof's state, the turn, its stale proofs and faults |
+| `landing show LANDING` | a landing: its members, each candidate with its base, each gate's key, receipt or run, the proof's state, the turn, its stale proofs and faults |
 | `landing list --project PROJECT [--ended]` | the project's landings, newest first, with their phases; the turn's holder first |
 | `repository receipts REPOSITORY [--gate GATE]` | a repository's receipts, newest first: gate, key, verdict, run, candidate, time |
 

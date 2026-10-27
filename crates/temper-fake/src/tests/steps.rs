@@ -72,7 +72,8 @@ fn documents_give_the_box_its_whole_ordered_steps() {
         &["forge", "reconcile", "--config", "C", "--data", "D", "--cache", "K", "1"],
         Kind::Once,
     );
-    let serve = command("serve", &["serve", "--config", "C", "--data", "D", "--cache", "K", "--box"], Kind::Long);
+    let serve =
+        command("serve", &["internal", "serve", "--config", "C", "--data", "D", "--cache", "K", "--box"], Kind::Long);
     let serve_listeners = ["127.0.0.1:8367".parse().unwrap(), "127.0.0.1:8371".parse().unwrap()];
     let serve = serve.listening(Box::new(serve_listeners));
     let demo_group = Group {

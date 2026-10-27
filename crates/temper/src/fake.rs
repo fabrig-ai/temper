@@ -140,48 +140,38 @@ pub struct Check {
 }
 type Bytes = Box<[u8]>;
 type EnvironmentEntry = (Bytes, Bytes);
-pub fn configure(
+pub(crate) fn configure(
+    row: &crate::commands::Row,
     arguments: &[Bytes],
     environment: &[EnvironmentEntry],
     working: &[u8],
 ) -> Result<super::Command, String> {
-    let Some((verb, arguments)) = arguments.split_first() else {
-        return Err("temper fake: expected llm, forge, oauth or git\n".into());
+    let (kind, table) = match row.words {
+        ["fake", "git"] => return Ok(super::Command::FakeGit { arguments: arguments.into() }),
+        ["fake", "forge", "check"] => return check_command(arguments, environment, working),
+        ["fake", "llm"] => (Kind::Llm, &LLM_SETTINGS),
+        ["fake", "forge"] => (Kind::Forge, &FORGE_SETTINGS),
+        ["fake", "oauth"] => (Kind::Oauth, &OAUTH_SETTINGS),
+        _ => unreachable!("the command table dispatches fake rows"),
     };
-    if verb.as_ref() == b"git" {
-        return Ok(super::Command::FakeGit { arguments: arguments.into() });
-    }
-    if verb.as_ref() == b"forge"
-        && let Some((word, arguments)) = arguments.split_first()
-        && word.as_ref() == b"check"
-    {
-        return check_command(arguments, environment, working);
-    }
-    let (kind, table) = match verb.as_ref() {
-        b"llm" => (Kind::Llm, &LLM_SETTINGS),
-        b"forge" => (Kind::Forge, &FORGE_SETTINGS),
-        b"oauth" => (Kind::Oauth, &OAUTH_SETTINGS),
-        _ => return Err(format!("temper fake: unknown fake {}\n", String::from_utf8_lossy(verb))),
-    };
-    let resolved = skein_shell::resolve(table, arguments, environment)
-        .map_err(|why| super::prefixed(kind.command(), &why.to_string()))?;
+    let resolved = skein_shell::resolve(table, arguments, environment).map_err(|why| why.to_string())?;
     let source = if resolved.value(0).origin == Origin::Default {
         if kind == Kind::Oauth {
-            return Err(super::prefixed(kind.command(), OAUTH_USAGE));
+            return Err("invalid arguments".into());
         }
-        let (directories, rest) = super::directories::resolve(resolved.rest(), environment, working)
-            .map_err(|why| super::prefixed(kind.command(), &why.to_string()))?;
+        let (directories, rest) =
+            super::directories::resolve(resolved.rest(), environment, working).map_err(|why| why.to_string())?;
         match kind {
             Kind::Forge => {
                 let [number] = rest.as_ref() else {
-                    return Err(super::prefixed(kind.command(), FORGE_USAGE));
+                    return Err("invalid arguments".into());
                 };
-                let forge = forge_number(number).map_err(|why| super::prefixed(kind.command(), why))?;
+                let forge = forge_number(number).map_err(str::to_string)?;
                 Source::Setup { directories, forge }
             }
             Kind::Llm => {
                 if !rest.is_empty() {
-                    return Err(super::prefixed(kind.command(), LLM_USAGE));
+                    return Err("invalid arguments".into());
                 }
                 Source::Demo { directories }
             }
@@ -190,11 +180,11 @@ pub fn configure(
     } else {
         if let Some(word) = resolved.rest().first() {
             let why = if kind == Kind::Forge {
-                FORGE_USAGE.into()
+                "invalid arguments".into()
             } else {
                 format!("unexpected argument {}", String::from_utf8_lossy(word))
             };
-            return Err(super::prefixed(kind.command(), &why));
+            return Err(why);
         }
         Source::Document(super::path(&resolved.value(0).bytes).to_path_buf())
     };
@@ -203,7 +193,7 @@ pub fn configure(
         .ok()
         .filter(|text| !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit()))
         .and_then(|text| text.parse::<u64>().ok())
-        .ok_or_else(|| super::prefixed(kind.command(), "--seed N (TEMPER_SEED): expected a decimal u64"))?;
+        .ok_or_else(|| "--seed N (TEMPER_SEED): expected a decimal u64".to_string())?;
     // shell.md 6.5 has no absent setting; Default alone means absent.
     // In particular --ready "" is a present, empty prefix.
     let ready = if resolved.value(1).origin == Origin::Default { None } else { Some(resolved.value(1).bytes.clone()) };
@@ -215,15 +205,12 @@ pub fn configure(
     Ok(super::Command::Fake { arguments: Arguments { kind, source, ready, seed, observations } })
 }
 
-const LLM_USAGE: &str = "usage: temper fake llm [DIRECTORIES] [--ready PREFIX] [--seed N] [--observations FILE] | temper fake llm --document FILE [--ready PREFIX] [--seed N] [--observations FILE]";
-const FORGE_USAGE: &str = "usage: temper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]";
-const OAUTH_USAGE: &str = "usage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]";
 fn forge_number(number: &[u8]) -> Result<u16, &'static str> {
     std::str::from_utf8(number)
         .ok()
         .filter(|text| !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit()))
         .and_then(|text| text.parse::<u16>().ok())
-        .ok_or("N: expected a forge number, a decimal u16")
+        .ok_or("FORGE: expected a forge number, a decimal u16")
 }
 
 fn check_command(
@@ -231,11 +218,11 @@ fn check_command(
     environment: &[EnvironmentEntry],
     working: &[u8],
 ) -> Result<super::Command, String> {
-    let refused = |why: &str| super::prefixed("temper fake forge check", why);
+    let refused = |why: &str| why.to_string();
     let (directories, rest) =
         super::directories::resolve(arguments, environment, working).map_err(|why| refused(&why.to_string()))?;
     let [number, observations, store] = rest.as_ref() else {
-        return Err(refused("expected N OBSERVATIONS STORE"));
+        return Err(refused("expected FORGE OBSERVATIONS STORE"));
     };
     let forge = forge_number(number).map_err(refused)?;
     Ok(super::Command::FakeCheck {
@@ -453,7 +440,9 @@ fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_sh
             (Peer::Forge(peer), Some(shared), observations, writer, buffer)
         }
         Kind::Oauth => {
-            let Source::Document(path) = &arguments.source else { return Err(OAUTH_USAGE.into()) };
+            let Source::Document(path) = &arguments.source else {
+                unreachable!("OAuth requires a document when configured")
+            };
             let bytes = read_document(path, oauth::DOCUMENT_BYTES)?;
             let document =
                 oauth::Document::decode(&bytes).map_err(|why| String::from_utf8_lossy(&why.line()).into_owned())?;

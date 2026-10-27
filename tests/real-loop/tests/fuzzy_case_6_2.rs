@@ -1,4 +1,4 @@
-//! Reference case 6.2: two levels of questions and a live landing dependency.
+//! Retained first-edition story (domain/testing.md, 5.3): two levels of questions and a live landing dependency.
 use temper_real_loop_world::{
     Exit,
     case::{self, oracle::Observed},

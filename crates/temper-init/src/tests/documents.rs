@@ -239,7 +239,7 @@ fn the_default_is_the_owned_example_so_edited() {
             ("/workers/0/secret", json!("worker.secret")),
             ("/workers/0/agent/program", json!(text(facts.binary))),
             ("/workers/0/agent/configuration", json!("/c/temper/agent.json")),
-            ("/workers/0/agent/arguments/1", json!("/c/temper/agent.json")),
+            ("/workers/0/agent/arguments/2", json!("/c/temper/agent.json")),
         ] {
             set(&mut expected, path, value);
         }

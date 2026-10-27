@@ -1,3 +1,4 @@
+mod commands;
 mod help;
 
 #[test]
@@ -239,7 +240,12 @@ fn program_login_refuses_arguments_outside_the_required_source_name() {
         vec!["program-login", "config.json", "source", "extra"],
         vec!["sign-in", "source"],
     ] {
-        assert_eq!(configure_program_login(&arguments), Err(format!("temper: invalid arguments\n{}", super::usage())));
+        let expected = if arguments[0] == "sign-in" {
+            "temper: no command sign-in; temper --help lists them\n"
+        } else {
+            "temper program-login: invalid arguments\nusage: temper program-login [DIRECTORIES] NAME\n"
+        };
+        assert_eq!(configure_program_login(&arguments), Err(expected.into()));
     }
 }
 #[test]
@@ -260,8 +266,8 @@ fn forge_child_names_its_death_signal_or_prints_its_usage() {
     for (word, signal) in [("kill", Signal::Kill), ("terminate", Signal::Terminate)] {
         assert_eq!(
             configure_program_login(&[
-                "forge",
-                "child",
+                "internal",
+                "forge-child",
                 "--parent",
                 "7",
                 "--signal",
@@ -278,11 +284,11 @@ fn forge_child_names_its_death_signal_or_prints_its_usage() {
             })
         );
     }
-    let usage = "temper forge child: usage: temper forge child --parent PID --signal kill|terminate -- PROGRAM ARGS…\n";
+    let usage = "temper internal forge-child: invalid arguments\nusage: temper internal forge-child --parent PID --signal kill|terminate -- PROGRAM ARGS...\n";
     for arguments in [
-        vec!["forge", "child", "--parent", "7", "--", "/bin/forgejo"],
-        vec!["forge", "child", "--parent", "7", "--signal", "interrupt", "--", "/bin/forgejo"],
-        vec!["forge", "child", "--signal", "kill", "--parent", "7", "--", "/bin/forgejo"],
+        vec!["internal", "forge-child", "--parent", "7", "--", "/bin/forgejo"],
+        vec!["internal", "forge-child", "--parent", "7", "--signal", "interrupt", "--", "/bin/forgejo"],
+        vec!["internal", "forge-child", "--signal", "kill", "--parent", "7", "--", "/bin/forgejo"],
     ] {
         assert_eq!(configure_program_login(&arguments), Err(usage.into()), "{arguments:?}");
     }
@@ -439,7 +445,7 @@ fn box_echo_resolves_its_default_variable_and_flag_without_consuming_other_argum
             .collect::<Vec<_>>();
         let environment = [(Box::from(b"TEMPER_ECHO".as_slice()), Box::from(variable.as_bytes()))];
         let why = super::configure_with(&words, &environment, b"/").expect_err("echo refused");
-        assert!(why.starts_with(&format!("temper: {origin}: expected none or steps")), "{why}");
+        assert!(why.starts_with(&format!("temper box: {origin}: expected none or steps")), "{why}");
     }
     for flags in [
         vec!["--echo", "steps", "extra"],

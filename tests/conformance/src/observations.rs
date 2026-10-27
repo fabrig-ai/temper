@@ -24,7 +24,7 @@ pub fn repository() -> r::Name {
 pub fn parts(write: &skein_forge::api::Write) -> (u16, Vec<r::Name>, Option<u64>, u64, u64) {
     let mut name = repository();
     let (kind, condition, target, state) = match write {
-        skein_forge::api::Write::Status { commit, context, check } => {
+        skein_forge::api::Write::Status { commit, context, check, .. } => {
             (6, None, value(format!("{context:?}:{check:?}").as_bytes()), value(commit))
         }
         skein_forge::api::Write::CreateIssue { title, body, .. } => {
@@ -42,7 +42,7 @@ pub fn parts(write: &skein_forge::api::Write) -> (u16, Vec<r::Name>, Option<u64>
             name.path.extend([b"issue".to_vec(), number.to_string().into_bytes()]);
             (13, None, 1, 0)
         }
-        skein_forge::api::Write::Merge { number, head } => {
+        skein_forge::api::Write::Merge { number, head, .. } => {
             name.path.extend([b"branch".to_vec(), b"main".to_vec()]);
             (4, Some(value(head)), *number, value(head))
         }

@@ -100,7 +100,10 @@ fn managed_string_starts_serve_without_legacy_reconcile() {
     let checked = checked(SETUP, &members()).unwrap();
     let steps = crate::step::steps(&checked.setup, &[], Box::new([]), false);
     assert_eq!(steps.always.len(), 1);
-    assert_eq!(steps.always[0].arguments()[0].as_ref(), b"serve");
+    assert_eq!(
+        steps.always[0].arguments(),
+        [Box::from(b"internal".as_slice()), Box::from(b"serve".as_slice()), Box::from(b"--box".as_slice())]
+    );
 }
 #[test]
 fn legacy_managed_still_requires_orgs() {

@@ -1,4 +1,4 @@
-//! Reference case 6.5: the person's budget answer, a raised investigation and one advisor.
+//! Retained first-edition story (domain/testing.md, 5.3): the person's budget answer, a raised investigation and one advisor.
 use temper_real_loop_world::{
     Exit,
     case::{self, oracle::Observed},

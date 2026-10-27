@@ -1542,6 +1542,11 @@ forge's connector, which judges them (jig's `domain/engine.md`, 17.5):
   requirements 1 to 4 that each rule's criteria became, one per
   criterion, in the rules and in each seeded project's policy
   (`../domain/forge.md`, 8.7).
+- **A rule that does not enforce is advice:** its gates, blocking or
+  not, are asked for and their verdicts shown on the change's panel,
+  none holding the merge, and its approvals are not asked; only rules
+  that enforce hold a merge, below. Built with 13.6's second step, when
+  the forge holds the rules itself.
 - **Judged over the rules the forge holds then.** At a merge, the forge
   takes every rule covering its branch that enforces, the deployment's
   and the project's: requirement 5 meets when each one's CI, gates and

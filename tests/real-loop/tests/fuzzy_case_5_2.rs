@@ -1,4 +1,4 @@
-//! Reference case 5.2: Stop holds B alone; its delegates continue and news waits.
+//! Retained first-edition story (domain/testing.md, 5.3): Stop holds B alone; its delegates continue and news waits.
 use temper_real_loop_world::{
     Exit,
     case::{

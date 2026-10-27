@@ -1,4 +1,8 @@
 forge-install F [--key NAME]
-Print a fresh GitHub App installation link
-Result: forge-install
-  forge: Forge number
+  F (forge): a number from 1 to 65535; required. GitHub's forge number
+Print a fresh link that installs GitHub's App on another account
+Prints: `Open this address in a browser on the engine's machine:`, the address, then `wait forges --until settled`
+--json: the record forge-install.
+Key: --key NAME, optional.
+An installation made through this link is accepted. One made on
+GitHub without it is accepted with `forge-accept`.

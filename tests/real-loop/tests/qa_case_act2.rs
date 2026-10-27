@@ -1,5 +1,5 @@
-//! Adversarial real-loop runs for draft/reference-case.md, 5.4-5.6,
-//! on domain/testing.md, 5.3's case library.
+//! Adversarial real-loop runs of the retired first edition,
+//! retained in domain/testing.md, 5.3; draft/reference-case.md is the second edition.
 use serde_json::Value;
 use skein_fake_llm_domain::api::{Line, Script};
 use std::net::SocketAddr;

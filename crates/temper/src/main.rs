@@ -12,7 +12,7 @@ fn main() -> ExitCode {
     }
     let arguments = skein_shell::arguments();
     if arguments.as_ref() == [Box::from(b"--help".as_slice())] {
-        print!("{}", temper::usage());
+        print!("{}", temper::commands::help());
         return ExitCode::SUCCESS;
     }
     let working = match env::current_dir() {

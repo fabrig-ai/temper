@@ -44,23 +44,23 @@ pub(crate) fn configure(rest: &[std::ffi::OsString], working: &[u8]) -> Result<O
         match word.as_bytes() {
             b"--fake-backends" if !fake => fake = true,
             b"--bundle" if bundle.is_none() => {
-                let value = words.next().ok_or("--bundle DIR: missing directory")?;
+                let value = words.next().ok_or("--bundle BUNDLE: missing directory")?;
                 let value = value.as_bytes();
                 if value.is_empty() || value.contains(&0) || value.starts_with(b"--") {
-                    return Err("--bundle DIR: expected a nonempty path without NUL".into());
+                    return Err("--bundle BUNDLE: expected a nonempty path without NUL".into());
                 }
                 let path = crate::path(working).join(crate::path(value));
                 let name = path.as_os_str().as_bytes();
                 if !path.is_absolute() || name.contains(&0) || name.len() > 4096 {
-                    return Err("--bundle DIR: expected an absolute path of at most 4096 bytes without NUL".into());
+                    return Err("--bundle BUNDLE: expected an absolute path of at most 4096 bytes without NUL".into());
                 }
                 bundle = Some(path);
             }
-            _ => return Err("invalid box arguments: expected --fake-backends [--bundle DIR]".into()),
+            _ => return Err("invalid box arguments: expected --fake-backends [--bundle BUNDLE]".into()),
         }
     }
     if !fake {
-        return Err("--bundle DIR requires --fake-backends".into());
+        return Err("--bundle BUNDLE requires --fake-backends".into());
     }
     Ok(bundle)
 }
@@ -357,7 +357,11 @@ fn validate(dirs: &Directories, bytes: &[u8], expected: &Path) -> Result<(), Str
     let tree = Json::decode(bytes)?;
     let configuration = tree.string("workers/0/agent/configuration")?;
     let argv = tree.at("workers/0/agent/arguments")?;
-    let wanted = Json::Array(vec![Json::String(b"agent".as_slice().into()), Json::String(configuration.into())]);
+    let wanted = Json::Array(vec![
+        Json::String(b"internal".as_slice().into()),
+        Json::String(b"agent".as_slice().into()),
+        Json::String(configuration.into()),
+    ]);
     argv.same(&wanted, "workers/0/agent/arguments")?;
     let agent_document = public(&crate::path(&dirs.config).join("agent.json"))?;
     let agent_tree = Json::decode(&agent_document)?;
@@ -394,7 +398,7 @@ fn validate(dirs: &Directories, bytes: &[u8], expected: &Path) -> Result<(), Str
 }
 fn provisioned_bundle(path: Option<&Path>, limits: temper_service::limits::Clients) -> Result<PathBuf, String> {
     let instructions =
-        "run scripts/bundle.sh --loopback DIR && temper box --fake-backends --bundle DIR (directory flags as usual)";
+        "run scripts/bundle.sh --loopback DIR && temper box --fake-backends --bundle BUNDLE (directory flags as usual)";
     let path =
         path.ok_or_else(|| format!("application.clients.bundle: no provisioned loopback bundle; {instructions}"))?;
     let page = path.join("index.html");

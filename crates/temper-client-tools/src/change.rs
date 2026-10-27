@@ -26,27 +26,29 @@ use temper_client_protocol_wire::{self as wire, v1 as w};
 pub const READ: Tool = Tool {
     name: b"change",
     line: b"Read a change's way to landing: its pull request, CI and step",
+    prints: b"`change N`, its repository, branch and landing branch, its pull request, step and CI at its head, and a digest",
     result: b"change",
     forms: &[&[
         positional(b"task", b"N", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
-        flag(b"project", b"P", Kind::Project { empty: false }, Optional, b"Its project; default the task's"),
+        flag(b"project", b"P", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
     ]],
     keyed: Keyed::Never,
     area: 6,
+    notes: b"Until it lands, it prints `next: temper ctl DIRECTORY wait change N\n--until landed`; landed, its merge commit. A task with no change\nfails, `no change panel for task N` (exit 2). The forge holds its\ndiff, reviews and logs: read them there.\n",
 };
 pub const WAIT_FORM: &[jig::table::Argument] = &[
-    positional(b"subject", b"change", Kind::Word { set: &[b"change"] }, Required, b"A change's panel"),
+    positional(b"subject", b"change", Kind::Word { set: &[b"change"] }, Required, b"A change's way to landing"),
     positional(b"task", b"N", Kind::NumberRange { min: 1, max: u64::MAX }, Required, b"The change task's number"),
-    flag(b"project", b"P", Kind::Project { empty: false }, Optional, b"Its project; default the task's"),
-    flag(b"since", b"DIGEST", Kind::Digest, Optional, b"Wait past this digest"),
+    flag(b"project", b"P", Kind::Project { empty: false }, Optional, b"Its project; the task's when absent"),
+    flag(b"since", b"DIGEST", Kind::Digest, Optional, b"The digest of your last read of the change"),
     flag(
         b"until",
         b"pull|ci:pending|ci:passed|ci:failed|held|landed",
         Kind::Word { set: &[b"pull", b"ci:pending", b"ci:passed", b"ci:failed", b"held", b"landed"] },
         Optional,
-        b"The panel's condition",
+        b"pull: its pull request opened; ci:STATE: CI at its head in that state; held: a hold on it; landed: merged",
     ),
-    flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"At most 3600 seconds; default 300 seconds"),
+    flag(b"timeout", b"DURATION", Kind::Duration, Optional, b"How long to wait; 300 seconds when absent"),
 ];
 
 #[derive(Debug)]

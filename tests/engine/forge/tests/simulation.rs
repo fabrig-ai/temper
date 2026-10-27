@@ -8,6 +8,34 @@ use temper_engine_forge_world::changes::{
 use temper_engine_forge_world::{REPO, World, translate};
 
 #[test]
+fn a_merge_seen_by_the_base_read_before_the_pull_read_is_not_a_retarget() {
+    let mut world = World::new(141);
+    world.adopt();
+    world.produce(b"temper/51");
+    world.status(b"temper/51", skein_fake_forge_domain::api::Check::Passed);
+    let pull = world.open_pull(b"temper/51", b"main");
+    let head = translate::commit(world.branch(b"temper/51"));
+    let mut row = change_row();
+    row.pull = Some(pull);
+    row.change.state = change::State::Landing { head };
+    row.change.last_head = Some(head);
+    row.change.since = world.wall();
+    row.effect = change::EffectResult::Made;
+    world.event(top::Event::Change { row });
+    let merge = world.merge_before_pull_read(pull);
+
+    let decision = change_step(&mut world, 100, change::Status::Passed, Box::new([]));
+    assert!(matches!(decision, change::Decision::Wait { .. }), "await the merged pull: {decision:?}");
+    let Some(top::Stored::Change(saved)) = world.stored().get(&top::Key::Change(51)) else { panic!("change retained") };
+    assert_eq!(saved.change.state, change::State::Landing { head });
+    assert_eq!(saved.base.as_ref(), b"main");
+
+    world.restart();
+    assert_eq!(change_step(&mut world, 101, change::Status::Passed, Box::new([])), change::Decision::Finish { merge });
+    assert_eq!(world.writes(), 0, "the completed merge is never sent again");
+}
+
+#[test]
 fn an_existing_repository_is_adopted_after_its_permission_and_collaborators_are_read() {
     let mut world = World::new(3);
     world.adopt();
@@ -115,6 +143,8 @@ fn a_permission_refusal_rereads_capabilities_and_narrows_later_writes() {
                 commit: translate::commit(1),
                 context: Box::from(&b"build"[..]),
                 check: skein_forge::api::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
             },
             condition: skein_forge_client::Condition::None,
         },
@@ -791,6 +821,7 @@ fn a_change_produced_opened_checked_queued_and_landed() {
                 | top::Request::TierRun { .. }
                 | top::Request::TierEffect { .. }
                 | top::Request::TierDecision { .. }
+                | top::Request::LandingDecision { .. }
                 | top::Request::ChangeDecision { .. }
                 | top::Request::Resource { .. }
                 | top::Request::Adopted { .. }
@@ -1077,7 +1108,7 @@ fn a_merge_with_its_answer_lost_is_found_after_restart_without_merging_twice() {
             task: 51,
             repository: REPO,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Merge { number: pull, head },
+                write: skein_forge::api::Write::Merge { number: pull, head, how: skein_forge::api::MergeHow::Style },
                 condition: skein_forge_client::Condition::Merge { base: Box::from(&b"main"[..]) },
             },
             start: None,
@@ -1113,7 +1144,11 @@ fn a_merge_decided_for_an_old_head_cannot_land_the_new_head() {
             task: 51,
             repository: REPO,
             effect: skein_forge_client::Effect {
-                write: skein_forge::api::Write::Merge { number: pull, head: old_head },
+                write: skein_forge::api::Write::Merge {
+                    number: pull,
+                    head: old_head,
+                    how: skein_forge::api::MergeHow::Style,
+                },
                 condition: skein_forge_client::Condition::Merge { base: Box::from(&b"main"[..]) },
             },
             start: None,

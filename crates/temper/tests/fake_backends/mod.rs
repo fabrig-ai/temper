@@ -125,7 +125,7 @@ fn the_serve_child_reads_retained_effective_documents_across_restart() {
     );
     assert_eq!(
         generated["workers"][0]["agent"]["arguments"],
-        serde_json::json!(["agent", effective.join("agent.json")])
+        serde_json::json!(["internal", "agent", effective.join("agent.json")])
     );
     let adapter = value(&effective.join("agent.json"));
     let sibling = skein_scratch::paths::binary("temper").parent().expect("temper parent").join("fake-claude");

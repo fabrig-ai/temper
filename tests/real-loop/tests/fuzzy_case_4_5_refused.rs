@@ -1,4 +1,4 @@
-//! Reference case 4.5: a refused key holds A until the person replaces it.
+//! Retained first-edition story (domain/testing.md, 5.3): a refused key holds A until the person replaces it.
 use temper_real_loop_world::{
     case::{
         self,

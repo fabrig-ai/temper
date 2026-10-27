@@ -142,7 +142,7 @@ pub struct Domain {
     pull_mergeable: Map<Name, bool>,
     ci: Map<(skein_forge::api::Repository, skein_forge::api::Commit), CiState>,
     pub(crate) entries: Map<u64, Outboxed>,
-    flights: Map<(u64, u64), ()>,
+    pub(crate) flights: Map<(u64, u64), ()>,
     named_calls: Map<crate::NamedCall, crate::CallPayload>,
     proposed_effects: Map<u64, crate::ProposedEffect>,
     pub(crate) landed: Map<skein_forge::api::Commit, u64>,
@@ -170,7 +170,8 @@ pub struct Domain {
     /// and fetch with (protocol/credentials.md).
     pub(crate) identities: Map<u16, u32>,
     pub(crate) capabilities: Map<Token, crate::capabilities::Pending>,
-    stopping: bool,
+    pub(crate) stopping: bool,
+    pub(crate) landing: crate::landing::State,
     /// Restored timers stay passive until the scripted fresh-read stage (domain/root.md, 9.1).
     restore_phase: RestorePhase,
     pub(crate) reconciliation: crate::reconcile::Reconciliation,
@@ -579,14 +580,14 @@ impl Domain {
             flights: Map::with_capacity(l.entries),
             named_calls: Map::with_capacity(l.named_calls),
             proposed_effects: Map::with_capacity(l.tasks),
-            landed: Map::with_capacity(l.landings),
+            landed: Map::with_capacity(l.landings.max(l.changes)),
             verifications: Map::with_capacity(l.changes),
             tiers: Map::with_capacity(l.judge_projects),
             tier_limits: (l.repositories, l.tiers),
             tier_settings: Map::with_capacity(l.judge_projects),
             tier_rows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier rows bound")),
             tier_config_limits: *l,
-            landings: Map::with_capacity(l.landings),
+            landings: Map::with_capacity(l.landings.max(l.client.resources)),
             lost: Map::with_capacity(l.holds),
             pending_ci: Map::with_capacity(l.subscriptions),
             restart_fresh: None,
@@ -603,6 +604,7 @@ impl Domain {
             writers,
             identities: credentials,
             stopping: false,
+            landing: crate::landing::State::new(l),
             restore_phase: RestorePhase::Cold,
             reconciliation: crate::reconcile::Reconciliation::new(l),
             restored_demo: None,
@@ -680,6 +682,9 @@ impl Domain {
         };
         if !matching {
             return None;
+        }
+        if let Some(row) = self.landing.rows.get(&task) {
+            return crate::landing::judge(self, row, criterion, head, evidence, reviewers);
         }
         let row = self.changes.get(&task)?;
         let repository = self.repositories.get(&row.repository)?;
@@ -1047,12 +1052,17 @@ pub const fn max_out(l: &Limits) -> u32 {
         .saturating_mul(2)
         .saturating_add(l.applications)
         .saturating_add(l.tasks.saturating_add(1).saturating_mul(2))
+        .saturating_add(l.landings)
+        .saturating_add(l.landing_members)
+        .saturating_add(l.entries)
 }
 
 /// Decide one parent event and collect its durable records and outputs.
 #[expect(clippy::too_many_lines, reason = "one exhaustive connector input dispatcher")]
 pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Request>) {
     match event {
+        Event::Landing { row } => crate::landing::register(d, env, row, out),
+        Event::StepLanding { task, entry, heard } => crate::landing::step(d, env, task, entry, heard, out),
         Event::Settle => {
             d.stopping = true;
             child(d, env, skein_forge_client::Event::Settle, out);
@@ -1385,6 +1395,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         Event::Subscribe { subscription } => subscribe(d, env, subscription, out),
         Event::Unsubscribe { task, topic } => unsubscribe(d, task, topic, out),
         Event::Hint { hint } => {
+            crate::landing::hinted(d, &hint, out);
             let changes = d.changes_for(hint.repository, env.limits.changes);
             // An unrecognised resource (for example after a rename) cannot
             // establish irrelevance: retain the repository-wide fallback.
@@ -1528,6 +1539,7 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
             skein_forge_client::Request::Outcome { entry, task, outcome } => {
                 d.named_outcome(entry, outcome);
                 outcome_facts(d, env, entry, task, outcome, out);
+                let retain = crate::landing::outcome(d, entry, outcome, out);
                 match outcome {
                     skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {}
                     skein_forge_client::Outcome::Held => {
@@ -1544,8 +1556,10 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                     | skein_forge_client::Outcome::Failed(_)
                     | skein_forge_client::Outcome::Raced { .. }
                     | skein_forge_client::Outcome::Withdrawn => {
-                        d.entries.remove(&entry);
-                        emit(out, Request::Erase { key: Key::Entry(entry) });
+                        if !retain {
+                            d.entries.remove(&entry);
+                            emit(out, Request::Erase { key: Key::Entry(entry) });
+                        }
                         erase_flight(d, task, entry, out);
                     }
                 }
@@ -1573,7 +1587,9 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                 }
             }
             skein_forge_client::Request::Read { owner, result } => {
-                if d.capabilities.contains_key(&owner) {
+                if d.landing.pending.contains_key(&owner) {
+                    crate::landing::answered(d, env, owner, result, out);
+                } else if d.capabilities.contains_key(&owner) {
                     crate::capabilities::answered(d, env, owner, result, out);
                 } else if d.brief_fetches.contains_key(&owner) {
                     brief::brief_answer(d, owner, result, out);
@@ -1644,6 +1660,8 @@ fn outcome_facts(
                     | skein_forge::api::Write::Merge { .. }
                     | skein_forge::api::Write::Update { .. }
                     | skein_forge::api::Write::Status { .. }
+                    | skein_forge::api::Write::Dispatch { .. }
+                    | skein_forge::api::Write::Rerun { .. }
                     | skein_forge::api::Write::DeleteBranch { .. } => None,
                 };
                 if let Some(branch) = branch {
@@ -1667,7 +1685,7 @@ fn outcome_facts(
             if let Some(kept) = d.entries.get(&entry) {
                 crate::verification::landed(d, kept.entry.repository, commit, task, out);
             }
-            if d.landed.len() < env.limits.landings || d.landed.contains_key(&commit) {
+            if d.landed.len() < env.limits.landings.max(env.limits.changes) || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");
                 emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Landed { commit, task } });
             }
@@ -2275,12 +2293,14 @@ fn effect_permitted(kinds: Kinds, write: &skein_forge::api::Write) -> bool {
         skein_forge::api::Write::Merge { .. } => kinds.land,
         skein_forge::api::Write::Update { .. }
         | skein_forge::api::Write::CreateBranch { .. }
+        | skein_forge::api::Write::Dispatch { .. }
+        | skein_forge::api::Write::Rerun { .. }
         | skein_forge::api::Write::DeleteBranch { .. } => kinds.branch,
         skein_forge::api::Write::Status { .. } => kinds.status,
     }
 }
 
-fn register_change(d: &mut Domain, env: &Env<Limits>, row: ChangeRow, out: &mut Queue<Request>) {
+fn register_change(d: &mut Domain, env: &Env<Limits>, mut row: ChangeRow, out: &mut Queue<Request>) {
     let task = row.task;
     if !d.repositories.contains_key(&row.repository)
         || row.change.task != task
@@ -2296,6 +2316,7 @@ fn register_change(d: &mut Domain, env: &Env<Limits>, row: ChangeRow, out: &mut 
         emit(out, Request::Refused { task });
         return;
     }
+    row.change.way = d.landing.way(d.repositories.get(&row.repository).expect("adopted").project);
     d.changes.insert(task, row.clone()).expect("change capacity checked");
     save_queue_change(d, env, None, row, out);
 }
@@ -2585,7 +2606,10 @@ fn step_read(
         }
         StepStage::Base => {
             match result {
-                Ok(skein_forge::api::Answer::Commit(commit)) => pending.base_tip = Some(commit),
+                Ok(skein_forge::api::Answer::Commit(commit)) => {
+                    pending.base_tip =
+                        Some(if let change::State::Preparing { main, .. } = row.change.state { main } else { commit });
+                }
                 Ok(_) | Err(_) => {
                     emit(out, Request::Refused { task: pending.task });
                     return;
@@ -2747,6 +2771,8 @@ pub(crate) fn queue_ready(d: &Domain, row: &ChangeRow, l: &Limits) -> (List<chan
             | change::State::Reopening { .. }
             | change::State::Checking { .. }
             | change::State::Gating { .. }
+            | change::State::Ready { .. }
+            | change::State::Preparing { .. }
             | change::State::Updating { .. }
             | change::State::Resolving { .. }
             | change::State::Repairing { .. }
@@ -2840,7 +2866,8 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
         let stepped = change::step(&row.change, &facts, &heard, env.wall, &env.limits.change_policy);
         let advanced = stepped.change != row.change;
         row.change = stepped.change;
-        match stepped.decision {
+        let decision = stepped.decision;
+        match decision {
             change::Decision::None if advanced => {}
             change::Decision::Effect(effect) => {
                 emit_change_effect(d, env, &mut row, pending, prior, effect, out);
@@ -2854,6 +2881,7 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
             | change::Decision::Finish { .. }
             | change::Decision::Cancel
             | change::Decision::Hold(_)) => {
+                crate::landing::change_advanced(d, &row, &prior, decision, out);
                 d.changes.insert(row.task, row.clone()).expect("replaces change");
                 if in_queue(&prior.state) && !in_queue(&row.change.state) {
                     wake_queue(d, &row);
@@ -2886,6 +2914,8 @@ fn in_queue(state: &change::State) -> bool {
         | change::State::Reopening { .. }
         | change::State::Checking { .. }
         | change::State::Gating { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
         | change::State::Updating { .. }
         | change::State::Resolving { .. }
         | change::State::Repairing { .. }
@@ -2952,6 +2982,7 @@ fn change_facts(
             change::Pull::Merged { commit } => crate::verification::verification(d, row.repository, commit),
             change::Pull::Missing | change::Pull::Open { .. } | change::Pull::Closed => change::Verification::Cleared,
         },
+        ask: crate::landing::ask_for(d, row),
         branch: pending.branch,
         expected_base: base_tip,
         pull,
@@ -3011,8 +3042,11 @@ fn emit_change_effect(
         return;
     }
     let condition = match effect {
-        change::Effect::Update { head, base } => skein_forge_client::Condition::Update { head, base },
+        change::Effect::Update { head, base } | change::Effect::Prepare { head, main: base } => {
+            skein_forge_client::Condition::Update { head, base }
+        }
         change::Effect::Merge { .. } => skein_forge_client::Condition::Merge { base: row.base.clone() },
+        // landing.md 3: the top's task
         change::Effect::Open
         | change::Effect::CreateBranch { .. }
         | change::Effect::Reopen
@@ -3028,6 +3062,7 @@ fn emit_change_effect(
         failures: 0,
         queued: false,
     };
+    crate::landing::change_advanced(d, row, &prior, change::Decision::Effect(effect), out);
     row.pending = Some(pending.entry);
     row.effect = change::EffectResult::Pending;
     let before = match d.changes.get(&row.task) {
@@ -3076,9 +3111,16 @@ fn change_write(row: &ChangeRow, effect: change::Effect) -> Option<skein_forge::
             Some(skein_forge::api::Write::CreateBranch { branch: row.branch.clone(), commit: head })
         }
         change::Effect::Reopen => Some(skein_forge::api::Write::Reopen { number: row.pull? }),
+        change::Effect::Prepare { .. } => {
+            Some(skein_forge::api::Write::Update { number: row.pull?, style: skein_forge::api::UpdateStyle::Rebase })
+        }
         change::Effect::Retarget => None,
-        change::Effect::Update { .. } => Some(skein_forge::api::Write::Update { number: row.pull? }),
-        change::Effect::Merge { head, .. } => Some(skein_forge::api::Write::Merge { number: row.pull?, head }),
+        change::Effect::Update { .. } => {
+            Some(skein_forge::api::Write::Update { number: row.pull?, style: skein_forge::api::UpdateStyle::Merge })
+        }
+        change::Effect::Merge { head, .. } => {
+            Some(skein_forge::api::Write::Merge { number: row.pull?, head, how: skein_forge::api::MergeHow::Style })
+        }
     }
 }
 
@@ -4073,6 +4115,9 @@ fn changed(
             | skein_forge::api::Answer::Commented(_)
             | skein_forge::api::Answer::Reviewed(_)
             | skein_forge::api::Answer::Merged(_)
+            | skein_forge::api::Answer::Runs { .. }
+            | skein_forge::api::Answer::Run(_)
+            | skein_forge::api::Answer::Tree { .. }
             | skein_forge::api::Answer::Queued
             | skein_forge::api::Answer::Branch(_)
             | skein_forge::api::Answer::Done,
@@ -4156,7 +4201,7 @@ fn branch_changed(
         return;
     }
     let topic = Topic::Landings { repository: resource.repository, branch: branch.clone() };
-    if d.landings.len() >= env.limits.landings {
+    if d.landings.len() >= env.limits.landings.max(env.limits.client.resources) {
         if crate::tiers::is_main(d, resource.repository, &branch) {
             crate::tiers::moved(d, env, resource.repository, before, commit, None, out);
         }
@@ -4444,6 +4489,8 @@ fn deleting_entry(d: &Domain, task: u64, resource: &skein_forge_client::Resource
         | skein_forge::api::Write::Merge { .. }
         | skein_forge::api::Write::Update { .. }
         | skein_forge::api::Write::Status { .. }
+        | skein_forge::api::Write::Dispatch { .. }
+        | skein_forge::api::Write::Rerun { .. }
         | skein_forge::api::Write::CreateBranch { .. } => false,
     }
 }
@@ -4457,6 +4504,12 @@ fn restore(d: &mut Domain, env: &Env<Limits>, record: Stored) {
         d.reconciliation.restore(&record);
     }
     match record {
+        Stored::Landing(row) => {
+            d.landing.rows.insert(row.landing.task, row).expect("restored landing within limits");
+        }
+        Stored::Receipt { key, receipt } => {
+            d.landing.receipts.insert(key, receipt).expect("restored receipt within limits");
+        }
         Stored::Application { token, until, outcome } => d.application.restore(token, until, outcome),
         Stored::Call { key, answer } => {
             d.keep_named_answer(&env.limits, key, answer).expect("restored named-call payload within limits");
@@ -4603,6 +4656,7 @@ fn settle_outbox(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 }
 
 fn read_afresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    crate::landing::rebuild(d);
     d.restore_phase = RestorePhase::Active;
     crate::demo::restart(d, out);
     crate::tiers::restart(d, env, out);
@@ -4637,6 +4691,7 @@ fn read_afresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     for (repository, head) in &ci {
         ci_refresh(d, env, *repository, *head, out);
     }
+    crate::landing::refresh(d, env, out);
     child(d, env, skein_forge_client::Event::ReadAfresh, out);
 }
 
@@ -4697,7 +4752,12 @@ fn retire_ended(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 }
 
 fn read_afresh_complete(d: &mut Domain, out: &mut Queue<Request>) {
-    if d.restart_fresh == Some(true) && d.pending_ci.is_empty() && d.goal_file_reads.is_empty() && d.lost.is_empty() {
+    if d.restart_fresh == Some(true)
+        && d.landing.pending.is_empty()
+        && d.pending_ci.is_empty()
+        && d.goal_file_reads.is_empty()
+        && d.lost.is_empty()
+    {
         d.restart_fresh = None;
         emit(out, Request::RestartDone { stage: RestartStage::ReadAfresh });
     }

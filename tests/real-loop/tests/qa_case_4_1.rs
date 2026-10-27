@@ -1,4 +1,4 @@
-//! Adversarial stories for domain/testing.md, 5.3 and draft/reference-case.md, 4.1.
+//! Adversarial stories for domain/testing.md, 5.3 and draft/reference-case.md, 4.2 and 7.2.
 //! Only scripts, fixture inputs and the person's reads are changed. A story whose
 //! mutation stalls it (A untracked, authority beyond the director's, the answer before
 //! the question or none, CI red) fails before the oracle, on the settle deadline or the

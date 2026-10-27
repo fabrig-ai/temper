@@ -1,4 +1,4 @@
-//! Reference case 6.1: a sub-owner's batch and two dependencies.
+//! Retained first-edition story (domain/testing.md, 5.3): a sub-owner's batch and two dependencies.
 use temper_real_loop_world::{
     Exit,
     case::{

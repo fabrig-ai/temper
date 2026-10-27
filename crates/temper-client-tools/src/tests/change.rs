@@ -312,7 +312,8 @@ fn since_and_condition_both_must_hold_and_timeout_keeps_last_digest() {
         "1s",
     ]);
     *call.values.get_mut(3).unwrap() = Some(jig::call::Values::One(
-        jig::argv::value::decode(crate::table::TOOLS, jig::table::Kind::Digest, digest).unwrap(),
+        jig::argv::value::decode(crate::table::TOOLS, jig::table::Kind::Digest, jig::table::Bound::None, digest)
+            .unwrap(),
     ));
     let call = root.submit_prepared(call, true, None);
     deliver(&mut root, panel(w::Step::Checking));

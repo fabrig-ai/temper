@@ -163,35 +163,35 @@ fn arguments() {
 #[test]
 fn argument_refusals() {
     for (words, expected) in [
-        (vec!["fake"], "temper fake: expected llm, forge, oauth or git\n"),
+        (vec!["fake"], "temper: no command fake; temper --help lists them\n"),
         (
             vec!["fake", "oauth"],
-            "temper fake oauth: usage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
+            "temper fake oauth: invalid arguments\nusage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
         ),
         (
             vec!["fake", "oauth", "1"],
-            "temper fake oauth: usage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
+            "temper fake oauth: invalid arguments\nusage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
         ),
         (
             vec!["fake", "oauth", "--document", "doc", "--seed", "no"],
-            "temper fake oauth: --seed N (TEMPER_SEED): expected a decimal u64\n",
+            "temper fake oauth: --seed N (TEMPER_SEED): expected a decimal u64\nusage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
         ),
         (
             vec!["fake", "oauth", "--document", "doc", "--observations", "seen"],
-            "temper fake oauth: unexpected argument --observations\n",
+            "temper fake oauth: unexpected argument --observations\nusage: temper fake oauth --document FILE [--ready PREFIX] [--seed N]\n",
         ),
-        (vec!["fake", "other"], "temper fake: unknown fake other\n"),
+        (vec!["fake", "other"], "temper: no command fake other; temper --help lists them\n"),
         (
             vec!["fake", "llm"],
-            "temper fake llm: --config DIR is not given, TEMPER_CONFIG is not set, and its default $XDG_CONFIG_HOME/temper needs XDG_CONFIG_HOME or HOME as an absolute path\n",
+            "temper fake llm: --config CONFIG is not given, TEMPER_CONFIG is not set, and its default $XDG_CONFIG_HOME/temper needs XDG_CONFIG_HOME or HOME as an absolute path\nusage: temper fake llm [DIRECTORIES] [--ready PREFIX] [--seed N] [--observations FILE]\nusage: temper fake llm --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n",
         ),
         (
             vec!["fake", "llm", "--document", "doc", "--seed", "no"],
-            "temper fake llm: --seed N (TEMPER_SEED): expected a decimal u64\n",
+            "temper fake llm: --seed N (TEMPER_SEED): expected a decimal u64\nusage: temper fake llm [DIRECTORIES] [--ready PREFIX] [--seed N] [--observations FILE]\nusage: temper fake llm --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n",
         ),
         (
             vec!["fake", "forge", "--document", "doc", "extra"],
-            "temper fake forge: usage: temper fake forge [DIRECTORIES] N [--ready PREFIX] [--seed N] [--observations FILE] | temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n",
+            "temper fake forge: invalid arguments\nusage: temper fake forge [DIRECTORIES] FORGE [--ready PREFIX] [--seed N] [--observations FILE]\nusage: temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n",
         ),
     ] {
         assert_eq!(configured(&words, &[]).expect_err("refused fixture"), expected);
@@ -249,37 +249,46 @@ fn check_arguments() {
         );
     }
     for (words, expected) in [
-        (vec!["fake", "forge", "check"], "temper fake forge check: expected N OBSERVATIONS STORE\n"),
-        (vec!["fake", "forge", "check", "1"], "temper fake forge check: expected N OBSERVATIONS STORE\n"),
+        (
+            vec!["fake", "forge", "check"],
+            "temper fake forge check: expected FORGE OBSERVATIONS STORE\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
+        ),
+        (
+            vec!["fake", "forge", "check", "1"],
+            "temper fake forge check: expected FORGE OBSERVATIONS STORE\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
+        ),
         (
             vec!["fake", "forge", "check", "1", "observations"],
-            "temper fake forge check: expected N OBSERVATIONS STORE\n",
+            "temper fake forge check: expected FORGE OBSERVATIONS STORE\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
         (
             vec!["fake", "forge", "check", "1", "observations", "copy", "extra"],
-            "temper fake forge check: expected N OBSERVATIONS STORE\n",
+            "temper fake forge check: expected FORGE OBSERVATIONS STORE\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
         (
             vec!["fake", "forge", "check", "x", "observations", "copy"],
-            "temper fake forge check: N: expected a forge number, a decimal u16\n",
+            "temper fake forge check: FORGE: expected a forge number, a decimal u16\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
         (
             vec!["fake", "forge", "check", "65536", "observations", "copy"],
-            "temper fake forge check: N: expected a forge number, a decimal u16\n",
+            "temper fake forge check: FORGE: expected a forge number, a decimal u16\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
         (
             vec!["fake", "forge", "check", "-1", "observations", "copy"],
-            "temper fake forge check: N: expected a forge number, a decimal u16\n",
+            "temper fake forge check: FORGE: expected a forge number, a decimal u16\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
         (
             vec!["fake", "forge", "check", "+1", "observations", "copy"],
-            "temper fake forge check: N: expected a forge number, a decimal u16\n",
+            "temper fake forge check: FORGE: expected a forge number, a decimal u16\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
         (
             vec!["fake", "forge", "check", "1", "observations", "copy", "--unknown"],
-            "temper fake forge check: expected N OBSERVATIONS STORE\n",
+            "temper fake forge check: expected FORGE OBSERVATIONS STORE\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
         ),
-        (vec!["fake", "forge", "check", "--config"], "temper fake forge check: --config takes a value: DIR\n"),
+        (
+            vec!["fake", "forge", "check", "--config"],
+            "temper fake forge check: --config takes a value: CONFIG\nusage: temper fake forge check [DIRECTORIES] FORGE OBSERVATIONS STORE\n",
+        ),
     ] {
         assert_eq!(configured(&words, &[("HOME", "/home/test")]).expect_err("refused fixture"), expected);
     }
@@ -587,7 +596,7 @@ fn deployment_arguments() {
     for number in ["-1", "+1", "65536", "forge", ""] {
         assert_eq!(
             configured(&["fake", "forge", number], &[("HOME", "/home/test")]),
-            Err("temper fake forge: N: expected a forge number, a decimal u16\n".into())
+            Err("temper fake forge: FORGE: expected a forge number, a decimal u16\nusage: temper fake forge [DIRECTORIES] FORGE [--ready PREFIX] [--seed N] [--observations FILE]\nusage: temper fake forge --document FILE [--ready PREFIX] [--seed N] [--observations FILE]\n".into())
         );
     }
     for (words, environment, directories) in [
