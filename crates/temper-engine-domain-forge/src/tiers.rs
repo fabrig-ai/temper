@@ -4,7 +4,55 @@ use alloc::boxed::Box;
 use core::mem::size_of;
 use skein_forge::api::{Commit, Repository, Write};
 use skein_lib::{Env, List, Map, Queue, Token};
+use temper_engine_domain_forge_landing as landing;
 use temper_engine_domain_forge_tiers as policy;
+
+/// Workflow, ignored-path count and paths, artifact (u16 lengths), then
+/// format: `JUnit` = 0, lines = 1 (domain/landing.md, 6.1).
+pub(crate) fn definition(tier: &Tier) -> Box<[u8]> {
+    let mut length = tier
+        .workflow
+        .len()
+        .checked_add(tier.artifact.len())
+        .expect("bounded definition")
+        .checked_add(7)
+        .expect("three words and format");
+    for path in &tier.ignored {
+        length = length.checked_add(2).expect("path word").checked_add(path.len()).expect("bounded path");
+    }
+    let mut out = skein_lib::Writer::new(length);
+    word(&mut out, tier.workflow.len());
+    out.put(&tier.workflow).expect("sized workflow");
+    word(&mut out, tier.ignored.len());
+    for path in &tier.ignored {
+        word(&mut out, path.len());
+        out.put(path).expect("sized path");
+    }
+    word(&mut out, tier.artifact.len());
+    out.put(&tier.artifact).expect("sized artifact");
+    out.put(&[match tier.format {
+        policy::Format::Junit => 0,
+        policy::Format::Lines => 1,
+    }])
+    .expect("format byte");
+    out.finish()
+}
+fn word(out: &mut skein_lib::Writer, value: usize) {
+    out.put(&u16::try_from(value).expect("bounded definition word").to_be_bytes()).expect("sized word");
+}
+
+/// Transient trees are deliberately re-read after restart; resolved keys live
+/// in family 25. One walk and one workflow read may coexist for a tier.
+#[derive(Debug)]
+pub(crate) struct Walk {
+    owner: Token,
+    commit: Commit,
+    object: Commit,
+    page: u32,
+    trees: List<landing::Tree>,
+    entries: List<landing::Entry>,
+    next: Option<skein_lib::Time>,
+}
 
 pub(crate) fn valid(tier: &Tier, l: &Limits) -> bool {
     if tier.workflow.is_empty()
@@ -136,6 +184,15 @@ pub(crate) fn restart(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request
 }
 
 pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repository, out: &mut Queue<Request>) {
+    start_due_for(d, env, repository, None, out);
+}
+fn start_due_for(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    repository: Repository,
+    only: Option<&[u8]>,
+    out: &mut Queue<Request>,
+) {
     let Some(name) = main_name(d, repository) else { return };
     let Some(head) = d.heads.get(&name) else { return };
     let tip = head.commit;
@@ -147,6 +204,11 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
         names.push(tier.name.clone()).expect("configured tiers");
     }
     for tier in names.into_boxed() {
+        if let Some(only) = only
+            && only != tier.as_ref()
+        {
+            continue;
+        }
         let key = (repository, tier.clone());
         let mut row = match d.tier_rows.remove(&key) {
             Some(row) => row,
@@ -161,15 +223,36 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
                     run: None,
                 },
                 pending: Box::new([]),
+                baseline: None,
                 task: None,
                 branch: TierBranch::Absent,
                 flight: None,
                 result: None,
             },
         };
-        if policy::due(&row.record, tip) {
-            let pending = core::mem::replace(&mut row.pending, Box::new([]));
-            let receipt_key = receipt_key(d, &row, tip);
+        if row.record.judged.is_none() && row.record.run.is_none() && row.baseline.is_none() {
+            row.baseline = Some(crate::TierLanding { commit: tip, key: None });
+            save(&row, out);
+        }
+        let mut ready = true;
+        for landing in &row.pending {
+            if landing.key.is_none() {
+                ready = false;
+            }
+        }
+        let (tip, tip_key) = match row.baseline {
+            Some(baseline) => (baseline.commit, baseline.key),
+            None if ready => match row.pending.last() {
+                Some(landing) => (tip, landing.key),
+                None => (tip, None),
+            },
+            None => (tip, None),
+        };
+        if let Some(tip_key) = tip_key
+            && policy::due(&row.record, tip)
+        {
+            let pending = keyed_range(&mut row);
+            let receipt_key = receipt_key(d, &row, tip_key);
             let receipt = d.landing.receipts.get(&receipt_key).cloned();
             let cached = match &receipt {
                 Some(receipt) if receipt.passed => Some(policy::Receipt::Passed),
@@ -181,7 +264,7 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
             // Retain the range even when the policy judges immediately: its task
             // must admit the status before committing the rest of the judgement.
             let policy::Next::Dispatch(run) =
-                policy::start(&row.record, tip, tip, pending.clone(), None, &settings.verdict)
+                policy::start(&row.record, tip, tip_key, pending.clone(), None, &settings.verdict)
             else {
                 unreachable!("without a receipt start dispatches the whole run")
             };
@@ -190,7 +273,7 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
             row.branch = TierBranch::Absent;
             row.flight = None;
             row.result = None;
-            match policy::start(&row.record, tip, tip, pending, cached, &settings.verdict) {
+            match policy::start(&row.record, tip, tip_key, pending, cached, &settings.verdict) {
                 policy::Next::Dispatch(next) | policy::Next::Held(next) => row.record.run = Some(next),
                 policy::Next::Judged(verdict) => {
                     row.result = Some(crate::TierResult {
@@ -208,8 +291,154 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
         {
             out.push(Request::TierRun { repository, tier: row.tier.clone(), number: run.number, tip: run.tip });
         }
-        d.tier_rows.insert(key, row).expect("one row per repository and tier");
+        d.tier_rows.insert(key.clone(), row).expect("one row per repository and tier");
+        walk(d, env, &key, out);
     }
+}
+
+/// A baseline covers no arrivals; its growing range waits for the next run.
+fn keyed_range(row: &mut TierRow) -> Box<[policy::Landing]> {
+    if row.baseline.take().is_some() {
+        return Box::new([]);
+    }
+    let mut pending = List::with_capacity(u32::try_from(row.pending.len()).expect("bounded range"));
+    for landing in &row.pending {
+        pending
+            .push(policy::Landing { commit: landing.commit, key: landing.key.expect("resolved range") })
+            .expect("sized range");
+    }
+    row.pending = Box::new([]);
+    pending.into_boxed()
+}
+
+fn walk(d: &mut Domain, env: &Env<Limits>, key: &(Repository, Box<[u8]>), out: &mut Queue<Request>) {
+    if d.tier_walks.contains_key(key) || d.stopping {
+        return;
+    }
+    let row = d.tier_rows.get(key).expect("tier to key");
+    let mut commit = None;
+    if let Some(baseline) = row.baseline
+        && baseline.key.is_none()
+    {
+        commit = Some(baseline.commit);
+    }
+    if commit.is_none() {
+        for landing in &row.pending {
+            if landing.key.is_none() {
+                commit = Some(landing.commit);
+                break;
+            }
+        }
+    }
+    if let Some(commit) = commit {
+        d.sequence = d.sequence.checked_add(1).expect("tier tree read sequence");
+        let walk = Walk {
+            owner: Token::new(d.sequence | (1_u64 << 59)),
+            commit,
+            object: commit,
+            page: 1,
+            trees: List::with_capacity(env.limits.trees_in_flight),
+            entries: List::with_capacity(env.limits.key_entries),
+            next: None,
+        };
+        ask_tree(d, env, key.clone(), walk, out);
+    }
+}
+
+fn ask_tree(d: &mut Domain, env: &Env<Limits>, key: (Repository, Box<[u8]>), walk: Walk, out: &mut Queue<Request>) {
+    let read = skein_forge::api::Read::Tree { object: walk.object, page: walk.page };
+    let owner = walk.owner;
+    let repository = key.0;
+    d.tier_reads.insert(owner, key.clone()).expect("walk and follower per tier");
+    d.tier_walks.insert(key, walk).expect("one walk per tier");
+    crate::domain::child(d, env, skein_forge_client::Event::Read { owner, repository, read }, out);
+}
+fn tree_answer(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    key: (Repository, Box<[u8]>),
+    answer: Result<skein_forge::api::Answer, skein_forge::api::Error>,
+    out: &mut Queue<Request>,
+) {
+    let mut walk = d.tier_walks.remove(&key).expect("tree walk");
+    if d.stopping {
+        return;
+    }
+    if answer == Err(skein_forge::api::Error::Busy) {
+        walk.next = Some(env.now.saturating_add(env.limits.client.poll));
+        d.tier_walks.insert(key, walk).expect("replaces walk");
+        return;
+    }
+    let mut keyed = landing::Keyed::TooLarge;
+    if let Ok(skein_forge::api::Answer::Tree { entries, more }) = answer {
+        let mut fits = true;
+        for entry in entries {
+            if walk
+                .entries
+                .push(landing::Entry {
+                    name: entry.name,
+                    mode: entry.mode,
+                    object: entry.object,
+                    kind: match entry.kind {
+                        skein_forge::api::EntryKind::Blob => landing::EntryKind::Blob,
+                        skein_forge::api::EntryKind::Tree => landing::EntryKind::Tree,
+                        skein_forge::api::EntryKind::Commit => landing::EntryKind::Commit,
+                    },
+                })
+                .is_err()
+            {
+                fits = false;
+                break;
+            }
+        }
+        if fits && more {
+            if let Some(page) = walk.page.checked_add(1) {
+                walk.page = page;
+                ask_tree(d, env, key, walk, out);
+                return;
+            }
+            fits = false;
+        }
+        if fits {
+            let entries = core::mem::replace(&mut walk.entries, List::with_capacity(env.limits.key_entries));
+            if walk.trees.push(landing::Tree { object: walk.object, entries: entries.into_boxed() }).is_ok() {
+                let row = d.tier_rows.get(&key).expect("walk tier");
+                let tier = configured(d, row);
+                keyed = landing::key(
+                    landing::Repository { forge: key.0.forge, repository: key.0.repository },
+                    &tier.name,
+                    &definition(&tier),
+                    &tier.ignored,
+                    walk.commit,
+                    walk.trees.as_slice(),
+                    &landing::KeyLimits { entries: env.limits.key_entries, path_bytes: env.limits.key_path_bytes },
+                );
+            }
+        }
+    }
+    let resolved = match keyed {
+        landing::Keyed::Need(object) if walk.trees.len() < env.limits.trees_in_flight => {
+            walk.object = object;
+            walk.page = 1;
+            ask_tree(d, env, key, walk, out);
+            return;
+        }
+        landing::Keyed::Key(key) => key,
+        landing::Keyed::Need(_) | landing::Keyed::TooLarge => walk.commit,
+    };
+    let Some(row) = d.tier_rows.get_mut(&key) else { return };
+    if let Some(baseline) = &mut row.baseline
+        && baseline.commit == walk.commit
+    {
+        baseline.key = Some(resolved);
+    }
+    for landing in &mut row.pending {
+        if landing.commit == walk.commit {
+            landing.key = Some(resolved);
+        }
+    }
+    save(row, out);
+    start_due_for(d, env, key.0, Some(&key.1), out);
 }
 
 fn own(d: &Domain, repository: Repository, commit: Commit) -> bool {
@@ -273,7 +502,7 @@ fn append(d: &Domain, env: &Env<Limits>, row: &mut TierRow, commit: Commit) {
     for landing in &row.pending {
         pending.push(*landing).expect("existing range");
     }
-    pending.push(policy::Landing { commit, key: commit }).expect("one incoming landing");
+    pending.push(crate::TierLanding { commit, key: None }).expect("one incoming landing");
     let mut skip = None;
     if pending.len() > bound {
         for (index, pair) in pending.as_slice().windows(2).enumerate() {
@@ -519,6 +748,11 @@ pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, out
         let mut owner = None;
         for (token, candidate) in &d.tier_reads {
             if *candidate == key {
+                if let Some(walk) = d.tier_walks.get(&key)
+                    && walk.owner == *token
+                {
+                    continue;
+                }
                 owner = Some(*token);
                 break;
             }
@@ -621,8 +855,13 @@ fn step_row(
     }
 }
 fn reading(d: &Domain, key: &(Repository, Box<[u8]>)) -> bool {
-    for (_, candidate) in &d.tier_reads {
+    for (owner, candidate) in &d.tier_reads {
         if candidate == key {
+            if let Some(walk) = d.tier_walks.get(key)
+                && walk.owner == *owner
+            {
+                continue;
+            }
             return true;
         }
     }
@@ -742,6 +981,12 @@ pub(crate) fn answered(
     out: &mut Queue<Request>,
 ) {
     let Some(key) = d.tier_reads.remove(&owner) else { return };
+    if let Some(walk) = d.tier_walks.get(&key)
+        && walk.owner == owner
+    {
+        tree_answer(d, env, key, answer, out);
+        return;
+    }
     let Some(mut row) = d.tier_rows.remove(&key) else { return };
     let mut follow = d.tier_follows.remove(&key).expect("read's follower");
     let writer = d.writers.get(&row.repository.forge).copied().unwrap_or(0);
@@ -777,6 +1022,14 @@ pub(crate) fn deadline(d: &Domain) -> Option<skein_lib::Time> {
         return None;
     }
     let mut next: Option<skein_lib::Time> = None;
+    for (_, walk) in &d.tier_walks {
+        if let Some(at) = walk.next {
+            next = Some(match next {
+                Some(old) => old.min(at),
+                None => at,
+            });
+        }
+    }
     for (_, row) in &d.tier_rows {
         if let Some(flight) = &row.flight
             && row.result.is_none()
@@ -791,6 +1044,21 @@ pub(crate) fn deadline(d: &Domain) -> Option<skein_lib::Time> {
     next
 }
 pub(crate) fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    let mut due = None;
+    for (key, walk) in &d.tier_walks {
+        if let Some(at) = walk.next
+            && at <= env.now
+        {
+            due = Some(key.clone());
+            break;
+        }
+    }
+    if let Some(key) = due {
+        let mut walk = d.tier_walks.remove(&key).expect("due walk");
+        walk.next = None;
+        ask_tree(d, env, key, walk, out);
+        return;
+    }
     let mut found = None;
     for (key, row) in &d.tier_rows {
         if row.result.is_none()
@@ -920,7 +1188,7 @@ fn save(row: &TierRow, out: &mut Queue<Request>) {
 pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
     let mut bytes = u64::try_from(row.tier.len())
         .ok()?
-        .checked_add(array_bytes(row.pending.len(), size_of::<policy::Landing>())?)?;
+        .checked_add(array_bytes(row.pending.len(), size_of::<crate::TierLanding>())?)?;
     bytes = bytes.checked_add(failures_bytes(&row.record.failing)?)?;
     for flake in &row.record.flakes {
         bytes = bytes
@@ -988,7 +1256,9 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_mul(u64::from(l.test_id_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?)?;
     let payload = u64::try_from(crate::CHECK_NAME_BYTES)
         .ok()?
-        .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Landing>()).ok()?.checked_mul(2)?)?)?
+        .checked_add(landings.checked_mul(
+            u64::try_from(size_of::<policy::Landing>().checked_add(size_of::<crate::TierLanding>())?).ok()?,
+        )?)?
         .checked_add(tests.checked_mul(5)?)?
         .checked_add(u64::from(l.failing_tests).checked_mul(u64::try_from(size_of::<policy::Flake>()).ok()?)?)?
         .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Blame>()).ok()?.checked_add(tests)?)?)?;
@@ -1014,14 +1284,44 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_mul(u64::try_from(size_of::<policy::Blame>()).ok()?.checked_add(tests)?)?
         .checked_add(tests.checked_mul(2)?)?
         .checked_add(2048)?;
+    // Match the landing walk's tree, entry and pure-key scratch bounds. Each
+    // tier may key incoming landings while its workflow is still running.
+    let entry = u64::try_from(size_of::<landing::Entry>()).ok()?.checked_add(u64::from(l.name_bytes))?;
+    let trees = u64::from(l.trees_in_flight).checked_mul(
+        u64::try_from(size_of::<landing::Tree>()).ok()?.checked_add(u64::from(l.key_entries).checked_mul(entry)?)?,
+    )?;
+    let nodes = l.key_entries.checked_mul(l.trees_in_flight)?.checked_add(1)?;
+    let scratch = Map::<Box<[u8]>, [u8; 64]>::worst_case(nodes)?
+        .checked_add(Map::<[u8; 32], ()>::worst_case(l.trees_in_flight)?)?
+        .checked_add(
+            u64::from(nodes)
+                .checked_mul(u64::from(l.trees_in_flight.checked_add(1)?).checked_mul(u64::from(l.name_bytes))?)?,
+        )?;
+    // The configured tier clone and its length-prefixed definition coexist
+    // during hashing, as do the page being accumulated and supplied trees.
+    let definition = u64::try_from(crate::WORKFLOW_BYTES.checked_add(crate::CHECK_NAME_BYTES)?.checked_add(7)?)
+        .ok()?
+        .checked_add(u64::from(l.ignored_paths).checked_mul(u64::from(l.name_bytes).checked_add(2)?)?)?;
+    let config =
+        u64::try_from(crate::WORKFLOW_BYTES.checked_add(crate::CHECK_NAME_BYTES.checked_mul(2)?)?).ok()?.checked_add(
+            u64::from(l.ignored_paths)
+                .checked_mul(u64::try_from(size_of::<Box<[u8]>>()).ok()?.checked_add(u64::from(l.name_bytes))?)?,
+        )?;
+    let walk_payload = trees
+        .checked_add(u64::from(l.key_entries).checked_mul(entry)?)?
+        .checked_add(scratch)?
+        .checked_add(definition)?
+        .checked_add(config)?;
     Map::<(Repository, Box<[u8]>), TierRow>::worst_case(rows)?
+        .checked_add(Map::<(Repository, Box<[u8]>), Walk>::worst_case(rows)?)?
         .checked_add(Map::<(Repository, Box<[u8]>), crate::runs::Follow>::worst_case(rows)?)?
-        .checked_add(Map::<Token, (Repository, Box<[u8]>)>::worst_case(rows)?)?
+        .checked_add(Map::<Token, (Repository, Box<[u8]>)>::worst_case(rows.checked_mul(2)?)?)?
         .checked_add(
             u64::from(rows).checked_mul(
                 payload
-                    .checked_add(u64::try_from(crate::CHECK_NAME_BYTES).ok()?.checked_mul(3)?)?
+                    .checked_add(u64::try_from(crate::CHECK_NAME_BYTES).ok()?.checked_mul(5)?)?
                     .checked_add(follow_payload)?
+                    .checked_add(walk_payload)?
                     .checked_add(result_payload)?
                     .checked_add(
                         u64::from(l.client.rows)
