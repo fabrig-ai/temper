@@ -4,10 +4,10 @@ use temper_engine_domain_forge as forge;
 
 #[test]
 fn the_application_sizes_are_the_largest_key_and_row() {
-    // Tier's full probing finding and pending range are the largest row.
+    // Tier's full finding, pending range, flight and staged judgement are the largest row.
     assert_eq!(
         application(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes),
-        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 94_115 })
+        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 175_879 })
     );
 }
 #[test]
