@@ -1,6 +1,6 @@
 //! The core's held outputs, each released after its decision commits
 //! (jig's `domain/root.md`, 4; `testing/jig-test-domain/src/routes.rs`).
-use super::{Decision, Delivery, Domain, Env, Limits, Read, Token, Work, emit, forge_route, host_route, relay_call};
+use super::{Decision, Delivery, Domain, Env, Limits, Read, Token, emit, forge_route, host_route, relay_call};
 use crate::Range;
 use crate::assemble::take_payload;
 use crate::boundary::Payload;
@@ -156,14 +156,7 @@ pub(crate) fn held(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisi
         core::Held::StopRun { task, attempt } => {
             emit(decision, &env.limits, Delivery::Fleet(core::Core::stop_run(task, attempt)));
         }
-        core::Held::NotesLoad { owner, range } => match domain.archive_reads.insert(Some(Read::Notes { owner })) {
-            Ok(id) => emit(
-                decision,
-                &env.limits,
-                Delivery::Load { waiter: id.token(), range: Range::Core(crate::CoreRange::Notes(range)), after: None },
-            ),
-            Err(_) => domain.work.push(Work::Core(core::Event::Notes(jig_domain_notes::Event::LoadFailed { owner }))),
-        },
+        core::Held::NotesLoad { owner, range } => notes_load(domain, env, decision, owner, range),
         core::Held::ReadLoad { load, range } => emit(decision, &env.limits, Delivery::ReadLoad { load, range }),
         core::Held::Read { reply, answer } => emit(decision, &env.limits, Delivery::Read { reply, answer }),
         core::Held::Delivery { watcher, document } => {
@@ -195,4 +188,76 @@ pub(crate) fn held(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisi
         }
         core::Held::Acted { to, outcome } => emit(decision, &env.limits, Delivery::DemoActed { to, outcome }),
     }
+}
+
+// LoadFailed makes the core retry a pending brief immediately. Archive pressure
+// must yield to a later iteration, when earlier reads can finish and reclaim.
+pub(crate) fn notes_load(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    decision: &mut Decision,
+    owner: Token,
+    range: jig_domain_notes::Range,
+) {
+    let delivery = match domain.archive_reads.insert(Some(Read::Notes { owner })) {
+        Ok(id) => {
+            Delivery::Load { waiter: id.token(), range: Range::Core(crate::CoreRange::Notes(range)), after: None }
+        }
+        Err(_) => Delivery::NotesLoad { owner, range },
+    };
+    emit(decision, &env.limits, delivery);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_notes_load_waits_for_archive_room_without_a_synchronous_failure_loop() {
+        let (mut domain, env) = crate::tests::resume_fixture::root();
+        let mut reads = Vec::new();
+        for _ in 0..env.limits.loads.loads {
+            reads.push(domain.archive_reads.insert(Some(Read::Transcript { task: 1 })).unwrap());
+        }
+        let mut decision = Decision::new(&env.limits.journal);
+        held(
+            &mut domain,
+            &env,
+            &mut decision,
+            core::Held::NotesLoad {
+                owner: Token::new(1),
+                range: jig_domain_notes::Range::Lines { scope: jig_domain_notes::Scope::Deployment, after: None },
+            },
+        );
+        assert!(domain.work.is_empty(), "a full archive must not synchronously fail and retry the same notes load");
+        let retry = delivery(&mut domain, &env.limits, decision);
+        assert!(matches!(&retry, Delivery::NotesLoad { owner, .. } if *owner == Token::new(1)));
+        for id in reads {
+            domain.archive_reads.get_mut(id).unwrap().take();
+            domain.archive_reads.retire(id);
+        }
+        domain.reclaim();
+        let Delivery::NotesLoad { owner, range } = retry else { unreachable!() };
+        let mut decision = Decision::new(&env.limits.journal);
+        notes_load(&mut domain, &env, &mut decision, owner, range);
+        let Delivery::Load { waiter, range, after } = delivery(&mut domain, &env.limits, decision) else {
+            panic!("the deferred load is issued when room returns")
+        };
+        assert!(after.is_none());
+        assert!(matches!(range, Range::Core(crate::CoreRange::Notes(jig_domain_notes::Range::Lines { scope: jig_domain_notes::Scope::Deployment, after: None }))));
+        assert!(matches!(domain.archive_reads.get(skein_lib::Id::from_token(waiter)), Some(Some(Read::Notes { owner })) if *owner == Token::new(1)));
+        assert!(domain.work.is_empty());
+    }
+    fn delivery(domain: &mut Domain, limits: &Limits, decision: Decision) -> Delivery {
+        crate::decision::accept_pending(&mut domain.journal, &mut domain.core.counters, &limits.journal, decision).unwrap();
+        while let Some(output) = crate::decision::commit(&mut domain.journal, &limits.journal) {
+            let crate::decision::JournalOutput::Commit { number, .. } = output else { panic!("store commit") };
+            crate::decision::committed(&mut domain.journal, number);
+        }
+        let mut out = skein_lib::Queue::with_capacity(1);
+        crate::decision::resume(&mut domain.journal, &mut out);
+        let Some(crate::decision::JournalOutput::Deliver(delivery)) = out.pop() else { panic!("one deferred delivery") };
+        delivery
+    }
+
 }
