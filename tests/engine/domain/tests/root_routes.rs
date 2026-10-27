@@ -4591,6 +4591,7 @@ fn restart_refuses_live_tasks_or_claims_past_lowered_limits_without_dropping_the
     let mut task_bounds = limits();
     task_bounds.people.operations = 1;
     task_bounds.tasks.tasks = 1;
+    task_bounds.tasks.exemptions = 1;
     task_bounds.tasks.project_tasks = 1;
     task_bounds.tasks.tree_tasks = 1;
     let mut claim_bounds = limits();
