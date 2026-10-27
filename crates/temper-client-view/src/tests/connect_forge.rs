@@ -98,7 +98,6 @@ fn choose_draws_a_card_per_choice_in_order() {
             "Your repositories on GitHub. temper makes its own App there; you choose the account and the repositories it may use.",
             "In this tab, on GitHub · about two minutes",
             "Connect GitHub",
-            "Use an App of your own ›",
             "Forgejo on this machine",
             "A forge of your own, run by temper box. No account needed: temper makes your first repository, and you start in it.",
             "Here · about a minute",
@@ -121,11 +120,9 @@ fn choose_draws_a_card_per_choice_in_order() {
         .map(|n| n.name.as_deref().unwrap())
         .collect();
     assert_eq!(primary, [b"Connect GitHub".as_slice()]);
-    for (name, style) in [
-        (b"Choose".as_slice(), crate::look::FLOW_SECONDARY),
-        (b"Show how".as_slice(), crate::look::FLOW_SECONDARY),
-        ("Use an App of your own ›".as_bytes(), crate::look::FLOW_QUIET),
-    ] {
+    for (name, style) in
+        [(b"Choose".as_slice(), crate::look::FLOW_SECONDARY), (b"Show how".as_slice(), crate::look::FLOW_SECONDARY)]
+    {
         let id = node(view.tree(), Role::Link, name);
         assert!(view.tree().nodes().iter().find(|n| n.id == id).unwrap().styles.as_slice().contains(&style));
     }
@@ -137,6 +134,23 @@ fn choose_draws_a_card_per_choice_in_order() {
         press(&root, Role::Link, b"Show how"),
         d::Action::Pages(pages::Act::Go { address: Address::ConnectForge { forge: Some(Choice::Elsewhere) } })
     );
+}
+#[test]
+fn github_cards_offer_connect_github_alone_in_both_flows() {
+    for address in [Address::ConnectForge { forge: None }, Address::Welcome { step: Step::Forge { forge: None } }] {
+        let root = f::forge_root(address, rows(w::Connection::NotSetUp, w::Offer::Offered));
+        let view = f::browser_page_view(&root);
+        let tree = view.tree();
+        let card = node(tree, Role::Region, b"GitHub");
+        let start = tree.nodes().iter().position(|n| n.id == card).unwrap();
+        let end = start + usize::try_from(tree.nodes()[start].size).unwrap();
+        let actions: Vec<_> = tree.nodes()[start..end]
+            .iter()
+            .filter(|n| n.role == Role::Button || n.role == Role::Link)
+            .map(|n| n.name.as_deref().unwrap())
+            .collect();
+        assert_eq!(actions, [b"Connect GitHub".as_slice()]);
+    }
 }
 #[test]
 fn github_details_offer_only_the_app_of_ones_own_with_a_masked_key() {
@@ -1072,10 +1086,7 @@ fn connect_github_refusal_shows_under_its_button() {
         ),
     );
     let view = f::browser_page_view(&root);
-    words_in_order(
-        view.tree(),
-        &["Connect GitHub", "temper is busy with forge 2: try again when it ends.", "Use an App of your own"],
-    );
+    words_in_order(view.tree(), &["Connect GitHub", "temper is busy with forge 2: try again when it ends."]);
 }
 #[test]
 fn connect_github_link_leaves_the_tab_once() {

@@ -291,7 +291,9 @@ temper**. On **Forge**, take one path:
 
 - **Connect GitHub**: follow the fake's App creation and installation
   pages back to temper, then choose `fake-person/widget` to start in.
-- **Use an App of your own**: give **App id** `1`, paste the key
+- **Use an App of your own**: open `/welcome?at=forge&forge=N`, where
+  `N` is the GitHub forge’s number (`2` on the fake box). Give **App id**
+  `1`, paste the key
   file's text into **Private key**, then choose **Connect the App**.
   Follow the installation link, then choose `fake-person/widget`.
 - **Forgejo on this machine**: choose **Choose**, fill in the first

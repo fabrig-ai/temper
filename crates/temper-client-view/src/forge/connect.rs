@@ -249,7 +249,6 @@ fn choose(b: &mut Builder, root: &Domain, w: &Words, bindings: &mut Bindings, fo
             if let Choice::Forge(number) = *choice {
                 app_control(b, root, w, forge, number, Word::ForgeConnectGitHub, Some(place.address(Some(*choice))));
             }
-            link(b, w, bindings, Word::ForgeUseApp, place.address(Some(*choice)));
             b.close();
             b.close();
             continue;

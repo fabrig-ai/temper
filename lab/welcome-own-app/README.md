@@ -2,7 +2,8 @@
 
 A fresh ordinary `temper box --fake-backends`, driven by the lab's hand.
 The Welcome phase opens `/welcome` and presses Set up temper. Forge
-chooses Use an App of your own ›, types App id 1 and the bytes from the
+opens the own App’s Details at `/welcome?at=forge&forge=2` (GitHub is
+forge 2 in the fake box), types App id 1 and the bytes from the
 key file the box names, connects, installs on the fake GitHub and chooses
 `fake-person/widget`. Model chooses the program way, labelled Use your
 Claude subscription on the fake box’s Anthropic provider, backed by the
