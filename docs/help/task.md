@@ -93,8 +93,7 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
 - **Acting:** the acts `task show` lists under `acts:`, among them
   `task message`, `task answer`, `task amend`, `task stop`, `task
   cancel`, `task release`, `hold lift`, `task decide` and `proposal
-  decide`; an act
-  marked `(no tool)` has no ctl tool yet.
+  decide`; an act marked `(no tool)` has no ctl tool yet.
 - **temper's runs** act on their delegates with the host tools
   `delegate`, `change`, `goal`, `amend`, `message`, `cancel`, `release`,
   `subscribe`, `introduce`, `decide_escalation` and `propose`.
