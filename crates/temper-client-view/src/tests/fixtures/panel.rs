@@ -26,6 +26,8 @@ pub fn panel(task: u64, step: w::Step) -> w::ChangePanel {
     w::ChangePanel::new(
         &limits,
         w::ChangePanelParts {
+            way: w::Way::Queue,
+            in_landing: None,
             task,
             forge: 13,
             owner: field(b'o', limits.change_panel_owner),

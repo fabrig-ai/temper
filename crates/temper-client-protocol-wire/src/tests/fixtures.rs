@@ -129,6 +129,8 @@ pub fn gates(count: u32) -> List<v1::Gate> {
 pub fn panel_parts() -> v1::ChangePanelParts {
     let limits = limits();
     v1::ChangePanelParts {
+        way: v1::Way::Queue,
+        in_landing: None,
         task: 17,
         forge: crate::FORGE,
         owner: b"acme".as_slice().into(),
@@ -148,12 +150,31 @@ pub fn panel_parts() -> v1::ChangePanelParts {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "table covers every step and the optional panel facts")]
 pub fn panel_rows() -> List<v1::ChangePanel> {
     use v1::{Ci, Hold, Reason, Step};
     let limits = limits();
     let gate = Reason::Gate(v1::GateReason::new(&limits, v1::GateReasonParts { gate: 9 }).expect("gate reason"));
-    let mut panels = List::with_capacity(15);
+    let mut panels = List::with_capacity(18);
     for (step, hold, ci, [head, pull, runs]) in [
+        (
+            Step::Ready(v1::InLanding::new(&limits, v1::InLandingParts { landing: None }).unwrap()),
+            None,
+            Ci::Passed,
+            [true, true, true],
+        ),
+        (
+            Step::Ready(v1::InLanding::new(&limits, v1::InLandingParts { landing: Some(61) }).unwrap()),
+            None,
+            Ci::Passed,
+            [true, true, true],
+        ),
+        (
+            Step::Preparing(v1::InLanding::new(&limits, v1::InLandingParts { landing: Some(61) }).unwrap()),
+            None,
+            Ci::Passed,
+            [true, true, true],
+        ),
         (Step::Producing, None, Ci::Unknown, [false, false, false]),
         (Step::Opening, Some(Hold::Stalled), Ci::Pending, [true, false, false]),
         (Step::Recreating, Some(Hold::Repairs), Ci::Passed, [false, true, false]),
@@ -193,6 +214,25 @@ pub fn panel_rows() -> List<v1::ChangePanel> {
         ),
     ] {
         let mut parts = panel_parts();
+        match &step {
+            Step::Ready(member) | Step::Preparing(member) => {
+                parts.way = v1::Way::Turn;
+                parts.in_landing = *member.landing();
+            }
+            Step::Producing
+            | Step::Opening
+            | Step::Recreating
+            | Step::Reopening
+            | Step::Checking
+            | Step::Gating
+            | Step::Queued(_)
+            | Step::First
+            | Step::Updating
+            | Step::Resolving
+            | Step::Repairing(_)
+            | Step::Landing
+            | Step::Landed(_) => {}
+        }
         parts.step = step;
         parts.hold = hold;
         parts.ci = ci;
