@@ -18,20 +18,20 @@ pub enum Given {
     Own(Box<Defaults>),
 }
 impl Given {
-    pub(crate) fn defaults(&self, llm: &jig_protocol_config::Llm) -> Defaults {
+    pub(crate) fn defaults(&self, llm: &jig_protocol_config::Llm) -> Option<Defaults> {
         match self {
-            Self::Stock => defaults(llm),
+            Self::Stock => checked(llm),
             Self::Own(own) => {
                 let mut policies = Map::with_capacity(own.policies.len());
                 for (number, policy) in &own.policies {
                     policies.insert(*number, policy.clone()).expect("counted policies");
                 }
-                Defaults {
+                Some(Defaults {
                     charters: own.charters.clone(),
                     templates: own.templates.clone(),
                     policies,
                     rules: own.rules.clone(),
-                }
+                })
             }
         }
     }
@@ -47,30 +47,45 @@ const CHAT_TOOLS: authority::Tools = authority::Tools(1 | 2 | 512);
 /// The defaults temper passes jig's builder at each start. Each charter offers every
 /// model `llm` configures, in its order, the first its default.
 /// # Panics
-/// If `llm` offers no model; temper's startup refuses that document before calling this.
+/// If `llm` offers no model or its budgets overflow; startup checks both before calling this.
 #[must_use]
 pub fn defaults(llm: &jig_protocol_config::Llm) -> Defaults {
-    let charters = Box::new([
+    checked(llm).expect("startup checked the default model and its stock budgets")
+}
+
+/// Checked stock construction lets startup refuse unrepresentable model-based budgets.
+pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
+    llm.models.first()?;
+    let mut charters = Box::new([
         charter(1, include_bytes!("stock/chat.txt"), llm),
         charter(2, include_bytes!("stock/coding.txt"), llm),
     ]);
+    // jig prices the costliest completion; one reserve turn plus one is 2C.
+    // Its existing admission helper keeps the stock on that same rounding rule.
+    let minimum_run = jig_domain_core::reserve_floor(&charters.first()?.policy)?;
+    let run = minimum_run.checked_mul(2)?; // K = 4C.
+    let chat_spend = run.checked_mul(24)?;
+    let ceiling_spend = run.checked_mul(48)?;
+    for charter in charters.iter_mut() {
+        charter.spend = run;
+    }
     let templates = Box::new([chat(), goal()]);
     let mut policies = Map::with_capacity(1);
-    let mut role_authority = ceiling();
-    role_authority.budget.spend = 40;
+    let mut role_authority = ceiling(ceiling_spend);
+    role_authority.budget.spend = chat_spend;
     policies
         .insert(
             1,
             ConfiguredPolicy {
                 policy: authority::Policy {
                     escalation_role: Some(0),
-                    ceiling: ceiling(),
+                    ceiling: ceiling(ceiling_spend),
                     projections: grants(),
-                    period_spend: 100,
+                    period_spend: ceiling_spend,
                     roles: Box::new([authority::Role {
                         number: 0,
                         authority: role_authority,
-                        period_spend: 100,
+                        period_spend: ceiling_spend,
                         requests: authority::Requests(511),
                         decides: authority::Proposals(31),
                     }]),
@@ -81,19 +96,19 @@ pub fn defaults(llm: &jig_protocol_config::Llm) -> Defaults {
             },
         )
         .expect("one stock policy");
-    Defaults {
+    Some(Defaults {
         charters,
         templates,
         policies,
         rules: authority::Rules {
-            ceiling: ceiling(),
-            period_spend: 100,
-            minimum_run_spend: 1,
-            maximum_run_spend: 10,
+            ceiling: ceiling(ceiling_spend),
+            period_spend: ceiling_spend,
+            minimum_run_spend: minimum_run,
+            maximum_run_spend: run,
             implies: authority::Implies::new(Box::default(), 0).expect("empty stock implications"),
             requirements: Box::default(),
         },
-    }
+    })
 }
 
 fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> Charter {
@@ -105,7 +120,7 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
     Charter {
         number,
         hosts: jig_domain_fleet::Kinds::Workers,
-        spend: 20,
+        spend: 0,
         policy: RunPolicy {
             instructions: bytes::copy_of(instructions),
             model,
@@ -140,7 +155,7 @@ fn grants() -> Box<[authority::Grant]> {
     }
     grants.into_boxed()
 }
-fn ceiling() -> authority::Authority {
+fn ceiling(ceiling_spend: u64) -> authority::Authority {
     authority::Authority {
         tools: CHAT_TOOLS,
         models: authority::Models::ALL,
@@ -151,10 +166,10 @@ fn ceiling() -> authority::Authority {
                 authority::Executor::Charter(2),
                 authority::Executor::Procedure(2),
             ]),
-            tasks: 12,
+            tasks: 14,
             depth: 4,
         },
-        budget: authority::Budget { spend: 100, deadline: None },
+        budget: authority::Budget { spend: ceiling_spend, deadline: None },
         notes: authority::Scopes(0),
         note_resources: Box::default(),
     }

@@ -136,9 +136,14 @@ fn the_default_is_the_owned_example_so_edited() {
         assert_eq!(replace_org_patterns(&mut expected), 30, "{row}");
         expected["engine"]["projects"][0]["policy"]["ceiling"]["tools"] = json!(515_u64);
         expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["tools"] = json!(515_u64);
-        expected["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["tasks"] = json!(12_u32);
-        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["delegation"]["tasks"] = json!(12_u32);
+        expected["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["tasks"] = json!(14_u32);
+        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["delegation"]["tasks"] = json!(14_u32);
+        expected["engine"]["projects"][0]["policy"]["ceiling"]["budget"]["spend"] = json!(202_944_u64);
+        expected["engine"]["projects"][0]["policy"]["period_spend"] = json!(202_944_u64);
+        expected["engine"]["projects"][0]["policy"]["roles"][0]["period_spend"] = json!(202_944_u64);
+        expected["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = json!(101_472_u64);
         expected["engine"]["policies"] = expected["engine"]["projects"].clone();
+        expected["engine"]["limits"]["overrides"]["tasks.inbox_bytes"] = json!(8192_u32);
         expected["application"]["limits"]["overrides"]["forge.client.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.repositories"] = json!(3_u32);
         expected["application"]["limits"]["overrides"]["forge.output"] = json!(82_u32);
@@ -228,6 +233,7 @@ fn the_default_is_the_owned_example_so_edited() {
             expected["engine"].as_object_mut().unwrap().remove(member);
             assert!(actual["engine"].get(member).is_none(), "{row}: {member}");
         }
+        expected["engine"]["llm"]["models"][0]["prices"]["unit"] = json!(1000_u64);
         assert_eq!(actual, expected, "{row}");
     }
 }
@@ -293,7 +299,7 @@ fn csv_chat() -> Value {
                 "contract": {"kind": "change", "connector": 1, "change_kind": 1, "words": 128},
                 "authority": {"tools": 1, "grants": [demo_grant(2), demo_grant(3), demo_grant(4), demo_grant(10), demo_grant(11), demo_grant(12)],
                     "delegation": {"kinds": [{"kind": "agent", "number": 2}], "tasks": 4, "depth": 2},
-                    "budget": {"spend": 10}, "notes": 0}
+                    "budget": {"spend": 21_140}, "notes": 0}
             }]}}
         ])),
         scripted_turn(json!([{"call": "wait", "arguments": {}}])),
@@ -360,7 +366,7 @@ fn demo_turn(text: &str) -> Value {
 
 fn demo_model() -> Value {
     json!({"name": "demo", "endpoint": "demo", "window": 131_072_u64, "output": 8_192_u64,
-           "prices": {"input": 1_u64, "cached": 1_u64, "output": 1_u64, "unit": 1_000_000_u64}})
+           "prices": {"input": 1_u64, "cached": 1_u64, "output": 1_u64, "unit": 1_000_u64}})
 }
 
 fn demo_agent(port: u16) -> Value {
@@ -368,7 +374,7 @@ fn demo_agent(port: u16) -> Value {
            "address": format!("127.0.0.1:{port}"), "transport": "plaintext",
            "identity": "plain", "connect": 10_000_u64, "handshake": 10_000_u64, "headers": parse(b"[]"),
            "models": [{"name": "demo", "window": 131_072_u64, "output": 8_192_u64,
-                       "prices": {"input": 1_u64, "cached": 1_u64, "output": 1_u64, "unit": 1_000_000_u64},
+                       "prices": {"input": 1_u64, "cached": 1_u64, "output": 1_u64, "unit": 1_000_u64},
                        "reasoning_item": 2_048_u64, "head": 60_000_u64, "idle": 30_000_u64}]})
 }
 
@@ -384,6 +390,7 @@ fn the_agent_configuration_is_the_owned_examples_but_its_programs() {
         };
         set(&mut expected, "/programs", programs);
         set(&mut expected, "/endpoints", json!([owned["endpoints"][0], demo_agent(facts.ports.llm.get())]));
+        expected["endpoints"][0]["models"][0]["prices"]["unit"] = json!(1000_u64);
         assert_eq!(parse(content(&answered, b"agent.json")), expected, "{row}");
     }
 }

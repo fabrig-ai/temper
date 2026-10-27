@@ -2,10 +2,9 @@
 use jig_domain_authority as authority;
 use jig_domain_core::{self as core, settings as s};
 use jig_domain_people as people;
-use jig_domain_tasks as tasks;
 use skein_lib::{Duration, ReplyTo, Token};
 use temper_engine_domain::{self as engine, Delivery, Event, Key, PartyInput, Record, Write};
-use temper_engine_domain_world::{direct::Driver, fixtures, protocol, store::Store, walking};
+use temper_engine_domain_world::{direct::Driver, store::Store, walking};
 
 const SEED: u64 = 9761;
 // Restoration keeps two archived revisions; pruning keeps one (jig's domain/engine.md, 17.7).
@@ -335,182 +334,12 @@ fn an_owner_of_a_deployment_with_no_project_makes_one_from_policy_1() {
     assert_eq!(task.authority.tools.0, widened.0);
 }
 
-// Four actors, with both coordinators reserving four descendants for their
-// change procedure, producer, repair and review. The stock keeps those lifetime
-// slots even after the advisor has reported (protocol/configuration.md, 13.4).
-fn b2_limits() -> engine::Limits {
-    let mut limits = stock_limits();
-    limits.tasks.tasks = 16;
-    limits.tasks.project_tasks = 16;
-    limits.tasks.tree_tasks = 16;
-    limits.tasks.depth = 4;
-    limits.tasks.delegates = 4;
-    limits.tasks.references = 4;
-    limits.tasks.inbox_messages = 8;
-    limits.tasks.inbox_bytes = 512;
-    limits.tasks.batch = 2;
-    limits.tasks.authority_grants = 16;
-    limits.tasks.executor_kinds = 4;
-    limits.tasks.authority_bytes = 64;
-    limits.people.amendment_bytes = 1024;
-    limits.people.inbox_tasks = 32;
-    limits.people.inbox_recipients = 32;
-    limits.authority.batch = 2;
-    limits.fleet.slots = 4;
-    limits.fleet.attempts = 4;
-    limits.forge.tasks = 16;
-    limits.journal.deliveries = 128;
-    limits.journal.held = 512;
-    limits.journal.run_bytes = 8192;
-    limits.brief.sections = 5;
-    limits.call_records = 4;
-    limits.journal.writes = walking::writes(&limits);
-    limits
-}
-
-fn assigned(driver: &Driver, task: u64) -> Option<engine::Assignment> {
-    driver.delivered.iter().rev().find_map(|delivery| {
-        if let Delivery::Assigned { assignment, .. } = delivery {
-            (assignment.task == task).then(|| assignment.clone())
-        } else {
-            None
-        }
-    })
-}
-
-fn stock_delegate(driver: &Driver, chat: u64, words: &[u8], descendants: u32) -> engine::Delegate {
-    let mut delegate = fixtures::report_delegate(words, Box::new([]));
-    delegate.authority = driver.task(chat).expect("stock chat").authority.clone();
-    delegate.authority.budget.spend = 10;
-    delegate.authority.delegation.tasks = descendants;
-    delegate.authority.delegation.depth = if descendants == 0 { 0 } else { 2 };
-    delegate
-}
-
-fn delegate_batch(
-    driver: &mut Driver,
-    chat: &engine::Assignment,
-    call: u64,
-    batch: Box<[engine::Delegate]>,
-) -> Vec<u64> {
-    fixtures::tool_call(driver, chat, call, engine::Tool::Delegate { batch });
-    let Some(engine::CallAnswer::Delegated(made)) = driver.answered(call) else {
-        panic!("stock admits delegation call {call} without Tool or Tasks findings: {:?}", driver.answered(call));
-    };
-    made.iter().map(|member| member.task).collect()
-}
-
-fn finish_report(driver: &mut Driver, run: &engine::Assignment, report: &[u8]) {
-    driver.answer(
-        Token::new(7),
-        run.task,
-        run.attempt,
-        0,
-        tasks::End::Finished { result: tasks::TaskResult::Report { words: report.into() }, cancel_delegates: false },
-        engine::Parts::none(),
-    );
-    driver.pump();
-}
-
-fn stock_project_config() -> engine::Config {
-    let mut config = stock_config();
-    config.core.seed_projects = walking::config(SEED).core.seed_projects;
-    config.core.seed_projects[0].policy =
-        config.core.defaults.policies.get(&POLICY_NUMBER).expect("stock policy 1").clone();
-    config.core.owners[0].project = 1;
-    config
-}
-
-fn stock_chat() -> (Driver, engine::Assignment) {
-    let limits = b2_limits();
-    let mut driver =
-        Driver::configured(Store::with_limits(&limits), [stock_project_config(), stock_project_config()], &limits);
-    driver.period_sent = true;
-    let mut greeting = protocol::hello_slots(Token::new(7), limits.fleet.slots, Box::new([]));
-    let Event::Worker(engine::WorkerInput::Link { link: engine::Link::Hello { hello, .. }, .. }) = &mut greeting else {
-        unreachable!("worker hello")
-    };
-    hello.bounds.time = Duration::from_secs(120); // The actual stock charters' run bound.
-    driver.send(greeting);
-    driver.settle();
-    driver.send(Event::Party(PartyInput::Period { project: 1, period: 1, budget: 100, next: None }));
-    driver.settle();
-    driver.sign_in();
-    driver.settle();
-    let ask = driver.chat_ask(1, b"Advise, then coordinate two dependent changes");
-    driver.send(Event::Party(PartyInput::Ask {
-        reply_to: ReplyTo::new(Token::new(41)),
-        sign_in: driver.session(),
-        key: [41; 16],
-        models: Box::new([]),
-        ask,
-    }));
-    driver.pump();
-    let chat = assigned(&driver, 1).expect("stock template 1 admits its owner's chat");
-    assert_eq!(chat.charter, 1);
-    (driver, chat)
-}
+#[path = "settings/b2.rs"]
+mod b2;
 
 #[test]
-fn a_chat_delegates_an_advisor_and_two_dependent_delegates_with_a_question() {
-    let (mut driver, chat) = stock_chat();
-    let advisor = stock_delegate(&driver, chat.task, b"Advise with a report", 0);
-    let advisor = delegate_batch(&mut driver, &chat, 42, Box::new([advisor]))[0];
-    let advisor_run = assigned(&driver, advisor).expect("advisor runs on stock charter 1");
-    finish_report(&mut driver, &advisor_run, b"Proceed with the two changes");
-    assert!(driver.task(chat.task).expect("chat").inbox.iter().any(|word| {
-        word.from == tasks::Party::Task(advisor)
-            && word.kind == tasks::MessageKind::Result(tasks::ResultKind::Report)
-            && word.words.as_ref() == b"Proceed with the two changes"
-    }));
-    let first = stock_delegate(&driver, chat.task, b"D1", 4);
-    let mut second = stock_delegate(&driver, chat.task, b"D2", 4);
-    second.dependencies = Box::new([engine::Dependency::Batch(0)]);
-    let coordinators = delegate_batch(&mut driver, &chat, 43, Box::new([first, second]));
-    let [first, second] = coordinators.as_slice() else { panic!("two admitted coordinators") };
-    let first_run = assigned(&driver, *first).expect("D1 runs");
-    assert!(assigned(&driver, *second).is_none(), "D2 does not run while D1 is live, with worker slots free");
-    fixtures::tool_call(
-        &mut driver,
-        &first_run,
-        44,
-        engine::Tool::Message {
-            target: chat.task,
-            form: engine::MessageForm::Question,
-            words: b"Green light?".as_slice().into(),
-        },
-    );
-    let Some(engine::CallAnswer::Sent { message: question }) = driver.answered(44).cloned() else {
-        panic!("D1's question admitted without Finding::Tool: {:?}", driver.answered(44));
-    };
-    assert!(driver.task(chat.task).expect("chat").inbox.iter().any(|word| {
-        word.number == question
-            && word.from == tasks::Party::Task(*first)
-            && word.kind == tasks::MessageKind::Question
-            && word.words.as_ref() == b"Green light?"
-    }));
-    fixtures::tool_call(
-        &mut driver,
-        &chat,
-        45,
-        engine::Tool::Message {
-            target: *first,
-            form: engine::MessageForm::Answer { question },
-            words: b"Go ahead".as_slice().into(),
-        },
-    );
-    let Some(engine::CallAnswer::Sent { message: answer }) = driver.answered(45) else {
-        panic!("chat's answer admitted without Finding::Tool: {:?}", driver.answered(45));
-    };
-    assert!(driver.task(*first).expect("D1").inbox.iter().any(|word| {
-        word.number == *answer
-            && word.from == tasks::Party::Task(chat.task)
-            && word.kind == tasks::MessageKind::Answer { question }
-            && word.words.as_ref() == b"Go ahead"
-    }));
-    assert!(assigned(&driver, *second).is_none(), "the question and answer do not release D2");
-    finish_report(&mut driver, &first_run, b"D1 done");
-    assert!(assigned(&driver, *second).is_some(), "D2 runs after D1's report");
+fn a_stock_chat_funds_two_dependent_changes_with_two_repairs_each() {
+    b2::story();
 }
 
 fn started(history: u32) -> Driver {
