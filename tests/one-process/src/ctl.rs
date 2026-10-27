@@ -53,9 +53,11 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
     .expect("shipped ctl limits");
     Recorded {
         host,
-        wire: crate::referee::client::Wire::default(),
+        wire: crate::referee::client::Wire::cli(),
         seen: 0,
         sign_in: spawn.args.get(1).is_some_and(|word| word.as_ref() == b"sign-in"),
+        forge_before: (crate::stories::continuing() && spawn.args.get(1).is_some_and(|word| word.as_ref() == b"adopt"))
+            .then(crate::world::forge_calls),
     }
 }
 
@@ -115,6 +117,8 @@ impl Caller {
     fn words(&self) -> &'static [&'static [u8]] {
         if self.at == 0 {
             &[b"/client/private", b"sign-in", b"-"]
+        } else if crate::stories::is_golden() && (crate::stories::continuing() || self.at == 3) {
+            crate::golden::ADOPT
         } else if crate::stories::is_golden() && self.at == 1 {
             &[
                 b"/client/private",
@@ -208,7 +212,7 @@ impl Host for Caller {
             self.error.clear();
         }
         // forge-connect answers Connecting; wait for its credentials before adoption.
-        let steps = if crate::stories::is_golden() { 3 } else { 2 };
+        let steps = if crate::stories::is_golden() && !crate::stories::continuing() { 4 } else { 2 };
         if self.at >= steps {
             self.finished = true;
             return;
@@ -257,21 +261,27 @@ impl Host for Caller {
 /// Observe actual sign-in bytes before starting the native person on its saved token.
 pub(crate) struct Recorded {
     host: OneShot,
-    wire: crate::referee::client::Wire,
+    pub(crate) wire: crate::referee::client::Wire,
     seen: usize,
     sign_in: bool,
+    forge_before: Option<u32>,
 }
 impl Host for Recorded {
     fn iterate(&mut self, now: Time, wall: Wall) {
-        if self.sign_in {
-            for complete in self.host.completions().iter() {
-                self.wire.complete(complete);
-            }
+        for complete in self.host.completions().iter() {
+            self.wire.complete(complete);
         }
         for event in &self.wire.received[self.seen..] {
-            if let crate::referee::client::Received::SignedIn(party) = event {
+            if let crate::referee::client::Received::SignedIn(party) = event
+                && self.sign_in
+            {
                 crate::world::setup_signed(*party);
             }
+        }
+        if !self.wire.answers.is_empty()
+            && let Some(before) = self.forge_before.take()
+        {
+            assert_eq!(crate::world::forge_calls(), before, "replaying the kept adoption makes no forge call");
         }
         self.seen = self.wire.received.len();
         self.host.iterate(now, wall);

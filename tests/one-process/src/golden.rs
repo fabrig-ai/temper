@@ -30,6 +30,24 @@ pub const ADMIN_TOKEN: &[u8] = b"golden-admin-token";
 // The fake setup issuer gives the admin token 1, then makes API 2 and git 3.
 pub const API_TOKEN: &[u8] = b"0000000000000000000000000000000000000002";
 pub const GIT_TOKEN: &[u8] = b"0000000000000000000000000000000000000003";
+pub(crate) const ADOPT: &[&[u8]] = &[
+    b"/client/private",
+    b"adopt",
+    b"--project",
+    b"1",
+    b"--forge",
+    b"1",
+    b"--owner",
+    b"acme",
+    b"--name",
+    b"app",
+    b"--landing",
+    b"main",
+    b"--key",
+    b"golden-adopt",
+    // The native story toggles off the form's initially checked home box.
+    b"--no-home",
+];
 pub const MID_RUN_WORDS: &[u8] = b"@midrun Keep working";
 
 /// A completed API call, including refused attempts, without connection-local IDs.
@@ -49,6 +67,8 @@ pub struct Ledger {
     pub calls: Vec<Call>,
     /// Sanitized HTTP heads also cover setup writes that stay outside the domain.
     pub requests: Vec<skein_http::server::Call>,
+    /// Application answers actually read by the shipped CLI, with their request keys.
+    pub answers: Vec<([u8; 16], jig_client::Family)>,
     pub(crate) story: Story,
     pub(crate) transport: temper_fake_git_hosted::Typed,
 }
@@ -63,7 +83,7 @@ impl std::fmt::Debug for Ledger {
 }
 impl Ledger {
     pub(crate) fn new(transport: temper_fake_git_hosted::Typed, story: Story) -> Self {
-        Self { effects: Vec::new(), calls: Vec::new(), requests: Vec::new(), transport, story }
+        Self { effects: Vec::new(), calls: Vec::new(), requests: Vec::new(), answers: Vec::new(), transport, story }
     }
     /// Read the retained forge without making another call or recording an effect.
     ///
@@ -75,6 +95,9 @@ impl Ledger {
     }
     pub(crate) fn observe(&mut self, procs: &[Proc]) {
         for proc in procs {
+            if let Proc::Ctl(cli) = proc {
+                self.answers.extend(cli.wire.answers.iter().cloned());
+            }
             let Proc::Forge(peer) = proc else { continue };
             for record in peer.observations() {
                 if let skein_fake_peers::forge::Observation::Head { call, .. } = record {
@@ -102,7 +125,9 @@ pub fn golden() -> (Deployment, Ledger) {
 }
 
 pub(crate) fn person() -> Vec<Step<temper_client_domain::Address>> {
-    let mut steps = crate::stories::person();
+    // The shipped CLI has already adopted the repository with a named request
+    // that later builds can replay from a fresh client directory.
+    let mut steps = crate::stories::person().into_iter().skip(crate::fixtures::ADOPTION_CHAT_START).collect::<Vec<_>>();
     steps.extend([
         Step::See { find: Find::text(PAUSED_WORDS), within: fixtures::PERSON_WAIT },
         Step::See { find: Find::named(Role::Status, b"waiting on your words"), within: fixtures::PERSON_WAIT },

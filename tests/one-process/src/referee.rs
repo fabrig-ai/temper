@@ -316,6 +316,7 @@ impl skein_world::Referee<Proc> for Referee {
             }
             crate::world::Phase::Restart => self.run.borrow().settled > 0 && self.cold.is_none(),
             crate::world::Phase::Open => self.handed,
+            crate::world::Phase::Continue => crate::later::complete(&self.store.borrow()),
             crate::world::Phase::Fault { .. } => {
                 self.run.borrow().restarts > 0
                     && self.cold.is_none()
@@ -324,7 +325,11 @@ impl skein_world::Referee<Proc> for Referee {
             crate::world::Phase::Story => self.story_complete(other),
         };
         if self.done.is_none()
-            && (done || !matches!(self.phase, crate::world::Phase::Story | crate::world::Phase::Fault { .. }))
+            && (done
+                || !matches!(
+                    self.phase,
+                    crate::world::Phase::Story | crate::world::Phase::Continue | crate::world::Phase::Fault { .. }
+                ))
             && complete
         {
             for proc in other.iter_mut() {

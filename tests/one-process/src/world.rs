@@ -50,6 +50,7 @@ pub(crate) enum Phase {
     Drain,
     Restart,
     Open,
+    Continue,
     Fault { cut: skein_world::Cut, before: u32 },
 }
 #[derive(Default)]
@@ -252,7 +253,13 @@ impl Person {
             ],
             Story::Adoption => stories::adoption_person(),
             Story::Adopt | Story::Merge => stories::person(),
-            Story::Golden => crate::golden::person(),
+            Story::Golden => {
+                if stories::continuing() {
+                    crate::later::person()
+                } else {
+                    crate::golden::person()
+                }
+            }
         };
         let mut offset = PROGRESS.with(|progress| progress.borrow().at);
         if matches!(scenario, Story::Adoption) && offset < fixtures::ADOPTION_REPLY_STEP {
@@ -276,7 +283,8 @@ impl Person {
             client: None,
             root: Some(root),
             actor: skein_fake_person::Person::new(remaining.into_boxed_slice()),
-            provision: (offset == 0).then(|| skein_fake_person::Person::new(fixtures::account_steps())),
+            provision: (offset == 0 && !stories::continuing())
+                .then(|| skein_fake_person::Person::new(fixtures::account_steps())),
             wake: None,
             signed_in: 0,
             finished: false,
@@ -776,6 +784,9 @@ fn share(transport: Option<temper_fake_git_hosted::Typed>) {
 fn transport() -> temper_fake_git_hosted::Typed {
     SHARED.with(|shared| shared.borrow().as_ref().expect("world's forge").clone())
 }
+pub(crate) fn forge_calls() -> u32 {
+    transport().forge.borrow().domain.tally().answered
+}
 fn peer() -> Peer {
     let mut peer = Peer::new(
         fixtures::FORGE,
@@ -951,6 +962,7 @@ fn run_phase_with_inputs(
     inputs: Inputs,
 ) -> (Outcome, skein_fake_machine::Machine, Store, crate::deployment::Startup, crate::golden::Ledger) {
     stories::set(scenario);
+    stories::continue_work(matches!(phase, Phase::Continue));
     stories::setup_settings(phase);
     let startup = inputs.startup.unwrap_or_else(crate::deployment::Startup::fixture);
     STARTUP.with(|slot| *slot.borrow_mut() = Some(startup));
@@ -958,7 +970,8 @@ fn run_phase_with_inputs(
         write_settings(&mut disk);
     }
     PROGRESS.with(|progress| *progress.borrow_mut() = Progress::default());
-    let client = matches!(phase, Phase::Story | Phase::SignIn | Phase::Drain).then(|| disk.reopen_root(2));
+    let client =
+        matches!(phase, Phase::Story | Phase::SignIn | Phase::Drain | Phase::Continue).then(|| disk.reopen_root(2));
     let store = Rc::new(RefCell::new(previous));
     STORE.with(|cell| {
         *cell.borrow_mut() = Some(store.clone());
@@ -996,7 +1009,7 @@ fn run_phase_with_inputs(
             world.spawn(|| Proc::Peer(Box::new(SignalHost::new(stories::provider(scenario), None))));
             world.spawn(|| Proc::Forge(Box::new(SignalHost::new(peer(), None))));
         }
-        Phase::Story | Phase::SignIn | Phase::Drain => {
+        Phase::Story | Phase::SignIn | Phase::Drain | Phase::Continue => {
             world.spawn_root(skein_sim::Handle::new(client.expect("story client root").raw()), |root| {
                 Proc::Client(Box::new(SignalHost::new(Person::new(root, scenario), None)))
             });
@@ -1080,6 +1093,21 @@ impl World {
     #[must_use]
     pub fn deployment(&mut self) -> crate::deployment::Deployment {
         crate::deployment::Deployment::capture(&mut self.disk, &self.startup)
+    }
+    /// Continue the golden story with a real client on the retained deployment.
+    #[must_use]
+    pub(crate) fn continue_work(mut self, settings: Settings) -> Self {
+        let deployment = self.deployment();
+        let (outcome, disk, _, startup, ledger) = run_phase_with_inputs(
+            settings,
+            self.ledger.story,
+            Phase::Continue,
+            self.disk,
+            Store::over(&deployment),
+            Rc::new(RefCell::new(referee::Run::default())),
+            Inputs { startup: Some(self.startup), ledger: Some(self.ledger) },
+        );
+        Self { disk, startup, outcome, ledger }
     }
 }
 /// Lay a kept deployment on a fresh machine and run startup, then drain.

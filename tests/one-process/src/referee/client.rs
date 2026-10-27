@@ -41,11 +41,16 @@ struct Connection {
 pub(crate) struct Wire {
     connections: BTreeMap<i32, Connection>,
     pub(crate) received: Vec<Received>,
+    pub(crate) answers: Vec<([u8; 16], jig_client::Family)>,
+    raw: bool,
 }
 fn mark(bytes: &[u8], marker: &[u8]) -> Option<usize> {
     bytes.windows(marker.len()).position(|window| window == marker)
 }
 impl Wire {
+    pub(crate) fn cli() -> Self {
+        Self { raw: true, ..Self::default() }
+    }
     pub(crate) fn complete(&mut self, complete: &Complete) {
         match (&complete.kind, &complete.result) {
             (Op::Send { fd, bytes, from }, Ok(Done::Count(count))) => {
@@ -56,7 +61,7 @@ impl Wire {
             (Op::Recv { fd, buf }, Ok(Done::Count(count))) => {
                 let connection = self.connections.entry(fd.raw()).or_default();
                 connection.incoming.extend_from_slice(&buf[..*count as usize]);
-                connection.progress(&mut self.received);
+                connection.progress(&mut self.received, &mut self.answers, self.raw);
             }
             (Op::Connect { .. }, Ok(Done::Fd(fd))) => {
                 self.connections.insert(fd.raw(), Connection::default());
@@ -94,7 +99,7 @@ impl Connection {
             received.push(Received::ApplicationSent { key: *keyed.key() });
         }
     }
-    fn progress(&mut self, received: &mut Vec<Received>) {
+    fn progress(&mut self, received: &mut Vec<Received>, answers: &mut Vec<([u8; 16], jig_client::Family)>, raw: bool) {
         if !self.header {
             let Some(end) = mark(&self.incoming, b"\r\n\r\n") else { return };
             let header = std::str::from_utf8(&self.incoming[..end]).expect("HTTP response header");
@@ -125,11 +130,17 @@ impl Connection {
             self.stream(received);
         } else if !self.answered && self.remaining.is_some_and(|size| self.incoming.len() >= size) {
             let size = self.remaining.expect("length-framed reply");
-            self.answer(&self.incoming[..size], received);
+            self.answer(&self.incoming[..size], received, answers, raw);
             self.answered = true;
         }
     }
-    fn answer(&self, bytes: &[u8], received: &mut Vec<Received>) {
+    fn answer(
+        &self,
+        bytes: &[u8],
+        received: &mut Vec<Received>,
+        answers: &mut Vec<([u8; 16], jig_client::Family)>,
+        raw: bool,
+    ) {
         let end = mark(&self.sent, b"\r\n\r\n").expect("sent request header");
         let path = self.sent.split(|byte| *byte == b' ').nth(1).expect("request target");
         let limits = native_link_limits();
@@ -159,6 +170,10 @@ impl Connection {
                         version: document.version(),
                         bytes: document.record().into(),
                     };
+                    answers.push((*keyed.key(), record.clone()));
+                    if raw {
+                        return;
+                    }
                     let bounds = temper_client_domain::forge::wire_limits(
                         &temper_client_shell_terminal::limits::native().client.forge,
                     )
