@@ -44,7 +44,9 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         next.gate_failures = Box::new([]);
     }
     let held = match &change.state {
-        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } => unreachable!("verified states returned first"),
+        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } => {
+            unreachable!("verified states returned first")
+        }
         State::Ended => return Stepped { change: next, decision: Decision::Cancel },
         State::Held { .. } => true,
         State::Producing { .. }
@@ -118,7 +120,9 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         State::Resolving { requested, base } => resolving(next, *requested, *base, facts, standing, now, limits),
         State::Repairing { requested, why } => repairing(next, *requested, *why, facts, standing, now, limits),
         State::Landing { head } => landing(next, *head, standing, now, limits),
-        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Ended | State::Held { .. } => unreachable!("terminal states returned above"),
+        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Ended | State::Held { .. } => {
+            unreachable!("terminal states returned above")
+        }
     }
 }
 
@@ -259,7 +263,11 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts) -> Stepped
                 | State::Queued { head, .. }
                 | State::First { head, .. }
                 | State::Gating { head, .. } => State::Gating { head: *head, asked: Box::new([]) },
-                State::Held { .. } | State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Ended => {
+                State::Held { .. }
+                | State::Landed { .. }
+                | State::Red { .. }
+                | State::Cleared { .. }
+                | State::Ended => {
                     unreachable!("held state retains a live predecessor")
                 }
                 State::Producing { .. }

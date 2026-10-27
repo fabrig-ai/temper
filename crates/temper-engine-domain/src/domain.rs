@@ -305,6 +305,17 @@ impl Domain {
                 crate::translate::project_landing(&mut forge, project, landing),
                 "project landing configuration bounded and supported"
             );
+            let mut repositories = List::with_capacity(limits.forge.repositories);
+            for repository in &landing.repositories {
+                let mut tiers = List::with_capacity(limits.forge.tiers);
+                for tier in &repository.tiers {
+                    tiers.push(forge::Tier { name: tier.name.clone() }).expect("parsed tier bound");
+                }
+                repositories
+                    .push(forge::RepositoryTiers { repository: repository.repository, tiers: tiers.into_boxed() })
+                    .expect("parsed repository bound");
+            }
+            assert!(forge.project_tiers(project, repositories.into_boxed()), "project tier table bounded");
         }
         let root_config =
             RootConfig { forge_connector, forge_charter: config.forge_charter, landings: config.landing.landings };
