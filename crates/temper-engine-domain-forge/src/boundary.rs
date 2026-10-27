@@ -613,7 +613,9 @@ pub struct ChangeRow {
     pub repository: skein_forge::api::Repository,
     pub branch: Box<[u8]>,
     pub base: Box<[u8]>,
+    /// Whole change words for the producer; the root accounts for task spec bytes.
     pub title: Box<[u8]>,
+    /// Whole pull body, fitted only when the open effect is made.
     pub body: Box<[u8]>,
     pub priority: i32,
     pub change: change::Change,

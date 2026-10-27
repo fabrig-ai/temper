@@ -9,7 +9,8 @@ mod protection;
 
 #[test]
 fn protection_fields_have_v10_golden_bytes_and_round_trip() {
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     assert_eq!(STORE_VERSION, 10);
     for (name, flags, bypass) in [
         ("unset", 0, Bypass::Never),
@@ -40,7 +41,8 @@ fn protection_fields_have_v10_golden_bytes_and_round_trip() {
 
 #[test]
 fn every_protection_flag_combination_and_bypass_survives_the_store() {
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     for flags in 0..16 {
         for bypass in [Bypass::Never, Bypass::PullsOnly, Bypass::Always] {
             for row in protection::rows(protection::rule(flags, bypass)) {
@@ -53,7 +55,8 @@ fn every_protection_flag_combination_and_bypass_survives_the_store() {
 #[test]
 fn protection_bounds_accept_the_limit_and_refuse_one_past() {
     let limits = fixture::LIMITS.client;
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     for (field, at) in
         [("branch", limits.answer_bytes), ("contexts bytes", limits.answer_bytes), ("contexts count", limits.rows)]
     {

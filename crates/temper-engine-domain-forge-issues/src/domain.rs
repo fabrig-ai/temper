@@ -213,19 +213,13 @@ pub fn gather(prior: Option<&GoalView>, mut next: GoalView, limits: &Limits) -> 
 }
 
 /// The marker is included in the allowance, and the prefix ends on UTF-8.
+#[expect(clippy::disallowed_methods, reason = "the shared cutter preserves already validated UTF-8")]
 fn cut(words: &str, allowance: usize) -> Box<str> {
     if words.len() <= allowance {
         return Box::from(words);
     }
-    let Some(mut end) = allowance.checked_sub("…".len()) else { return Box::from("") };
-    while !words.is_char_boundary(end) {
-        end = end.checked_sub(1).expect("UTF-8 prefix boundary");
-    }
-    let mut text =
-        List::with_capacity(u32::try_from(end.checked_add("…".len()).expect("bounded cut")).expect("bounded text"));
-    append(&mut text, words.as_bytes().get(..end).expect("measured UTF-8 prefix"));
-    append(&mut text, "…".as_bytes());
-    boxed_text(text)
+    let bytes = crate::text::fit(words.as_bytes(), allowance, "…".as_bytes());
+    Box::from(core::str::from_utf8(&bytes).expect("fitted UTF-8 text"))
 }
 
 #[expect(clippy::disallowed_methods, reason = "rendering joins already validated UTF-8 text and fixed ASCII")]

@@ -496,3 +496,58 @@ fn a_settling_change_relies_on_its_own_pull_watch_but_keeps_its_deadline() {
         );
     }
 }
+
+// Exercise admission, retained words, and the actual operation handed to the client.
+fn projected_words(words: &[u8]) -> skein_forge::api::Write {
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    let mut row = fixtures::opening_row();
+    row.pending = None;
+    row.effect = temper_engine_domain_forge_change::EffectResult::None;
+    row.change.state = temper_engine_domain_forge_change::State::Opening { requested: false };
+    row.title = words.into();
+    row.body = words.into();
+    let registered = outputs(&mut d, Event::Change { row });
+    for request in &registered {
+        if let Request::Refused { .. } = request {
+            panic!("change registration refused: {request:?}");
+        }
+    }
+    assert_eq!(d.change(fixtures::CHANGE).unwrap().title.as_ref(), words);
+    assert_eq!(d.change(fixtures::CHANGE).unwrap().body.as_ref(), words);
+    start_opening(&mut d, fixtures::CHANGE, FIRST_ENTRY);
+    fixtures::missing_pull_reads(&mut d);
+    let built = fixtures::finish_missing(&mut d);
+    assert!(built_entry(&built, FIRST_ENTRY));
+    outputs(&mut d, Event::Committed { entry: FIRST_ENTRY });
+    answer_entry_clock(&mut d);
+    let (_, op) = fixtures::next_call(&mut d);
+    let skein_forge::api::Op::Write(write) = op else { panic!("open write") };
+    assert!(skein_forge::measure::write(&write).unwrap() <= u64::from(CLIENT.op_bytes));
+    write
+}
+
+#[test]
+fn change_words_past_operation_bound_register_whole_and_open_with_marked_cuts() {
+    let words = "界".repeat(700);
+    let skein_forge::api::Write::OpenPull { title, body, .. } = projected_words(words.as_bytes()) else {
+        panic!("open pull")
+    };
+    assert!(title.len() <= 256);
+    let title_prefix = title.strip_suffix("…".as_bytes()).expect("marked title");
+    assert_eq!(title_prefix, "界".repeat(title_prefix.len() / 3).as_bytes());
+    let body_prefix =
+        body.strip_suffix("…\nThe change's full words are on its task in temper.".as_bytes()).expect("marked body");
+    assert_eq!(body_prefix, "界".repeat(body_prefix.len() / 3).as_bytes());
+}
+
+#[test]
+fn change_words_within_operation_bound_open_unchanged_with_first_line_title() {
+    let words = b"Small fix\nKeep the full specification.";
+    let skein_forge::api::Write::OpenPull { title, body, .. } = projected_words(words) else { panic!("open pull") };
+    assert_eq!(title.as_ref(), b"Small fix");
+    assert_eq!(body.as_ref(), words);
+}

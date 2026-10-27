@@ -266,3 +266,16 @@ fn undoing_the_deadline_leaves_a_priority_alone() {
     draft.deadline(Some(DEADLINE)).unwrap();
     assert_eq!(draft.amendment(), Some(Drafted { revision: None, change: priority_change() }));
 }
+
+#[test]
+fn words_replace_a_cut_read_while_preserving_parameters_inputs_and_revision() {
+    let mut task = goal();
+    task.spec.specification.words.cut = true;
+    let mut draft = Draft::of(&task);
+    draft.words(text(b"Replacement")).unwrap();
+    let amended = draft.amendment().unwrap();
+    assert_eq!(amended.revision, Some(REVISION));
+    let mut expected = spec();
+    expected.words = text(b"Replacement");
+    assert_eq!(amended.change.spec, Some(expected));
+}

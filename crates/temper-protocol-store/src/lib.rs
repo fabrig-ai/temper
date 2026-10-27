@@ -14,10 +14,13 @@ mod tests;
 /// One version for every durable family (protocol/store.md, section 4).
 pub const STORE_VERSION: u32 = 10;
 
-/// Largest encodings under the forge's checked bounds, before jig's key tag.
+/// Largest encodings under the forge's and task spec's bounds, before jig's key tag.
 #[must_use]
-pub fn application(limits: &temper_engine_domain_forge::Limits) -> Option<jig_protocol_store::sizes::Application> {
-    let bounds = bounds(limits)?;
+pub fn application(
+    limits: &temper_engine_domain_forge::Limits,
+    change_words: u32,
+) -> Option<jig_protocol_store::sizes::Application> {
+    let bounds = bounds(limits, change_words)?;
     Some(jig_protocol_store::sizes::Application {
         version: STORE_VERSION,
         key: keys::largest(limits)?,
@@ -48,10 +51,13 @@ impl Bounds {
     }
 }
 
-/// Make schema bounds from the domain, refusing any ceiling overflow.
+/// Make schema bounds from the forge and task spec bytes, refusing any ceiling overflow.
 #[must_use]
-pub fn bounds(forge: &temper_engine_domain_forge::Limits) -> Option<Bounds> {
+pub fn bounds(forge: &temper_engine_domain_forge::Limits, change_words: u32) -> Option<Bounds> {
     let limits = v10::Limits {
+        // A change retains its task's spec, independently of forge operation bytes.
+        change_row_title: change_words,
+        change_row_body: change_words,
         create_issue_key: forge.client.op_bytes,
         create_issue_title: forge.client.op_bytes,
         create_issue_body: forge.client.op_bytes,

@@ -258,7 +258,10 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_mul(2)?
         .checked_add(u64::from(route_bound(limits)?))?
         .checked_mul(settings_row)?;
-    let forge_bytes = forge::worst_case(&limits.forge)?;
+    // Change words belong to tasks, independently of the forge operation bound.
+    let forge_bytes = forge::worst_case(&limits.forge)?.checked_add(
+        u64::from(limits.forge.changes).checked_mul(u64::from(limits.tasks.spec_bytes))?.checked_mul(2)?,
+    )?;
     let landing_bytes = Map::<u32, Box<[LandingRule]>>::worst_case(limits.authority.projects)?.checked_add(
         u64::from(limits.authority.projects).checked_add(1)?.checked_mul(u64::from(limits.journal.transcript_bytes))?,
     )?;
@@ -633,6 +636,12 @@ pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
         bytes
             .max(u64::from(people.identity_bytes))
             .max(u64::from(people.words))
+            // A retained change and its queued copies own both whole word fields.
+            .max(
+                u64::from(tasks.spec_bytes)
+                    .checked_mul(2)?
+                    .checked_add(u64::try_from(size_of::<forge::ChangeRow>()).ok()?)?,
+            )
             .max(u64::from(limits.forge.client.answer_bytes))
             .max(u64::from(people.holdings).checked_mul(u64::try_from(size_of::<people::Holding>()).ok()?)?),
     )
