@@ -19,15 +19,19 @@ use support::{
 };
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "the two sittings and forge assertions form one owned turn story")]
 fn a_change_lands_by_turn_on_the_owned_forge() {
     // domain/landing.md, 5.2, 6, 7, 8 and 10: the proved candidate is main's exact tip.
-    let began = std::time::Instant::now();
+    const TASK_START_STEPS: usize = 3; // Account key, usable account, then the owner's first chat.
+    const REBASED_PARENTS: usize = 1; // The one change commit is rebased onto the advanced main.
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
     let scratch = Scratch::new("qa-landing-by-turn");
     let root = scratch.path();
     generated(root);
     stage_binaries(root);
     let settings_root = root.to_path_buf();
-    let sitting = std::time::Instant::now();
+    let sitting = clock.now().now;
     let first = boxed::run_ctl(
         root,
         flags(root),
@@ -49,7 +53,7 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
         Duration::from_secs(180),
         || landing_by_turn::configure_repository(root),
     );
-    eprintln!("owned turn first sitting: {:.3}s", sitting.elapsed().as_secs_f64());
+    eprintln!("owned turn first sitting: {}", landing_by_turn::elapsed(&clock, sitting));
     assert_box(&first);
     for call in &first.calls {
         assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
@@ -58,7 +62,6 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     landing_by_turn::configure_turn(root, &setup);
     let task = first_repository::Task { project: setup.project, ..first_repository::FIRST };
     let mut steps = first_repository::task_steps_for(root, task);
-    const TASK_START_STEPS: usize = 3; // Account key, usable account, then the owner's first chat.
     let remaining = steps.split_off(TASK_START_STEPS);
     steps.push(Step::Until(Call::new(&["task", "show", &task.producer.to_string(), "--json"]), br#""phase":"ended""#));
     steps.push(Step::Until(Call::new(&["change", "show", &task.change.to_string(), "--json"]), br#""pull":{"#));
@@ -88,7 +91,7 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     steps.push(Step::Join);
     steps.extend(remaining);
     steps.insert(0, Step::Run(Call::new(&["forge", "list", "--until", "settled", "--timeout", "60s"])));
-    let sitting = std::time::Instant::now();
+    let sitting = clock.now().now;
     let second = boxed::run_ctl_with_llm(
         root,
         flags(root),
@@ -98,7 +101,7 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
         |_| landing_by_turn::evidence(root, &setup, task.change),
         first_repository::restarted_llm(root),
     );
-    eprintln!("owned turn second sitting: {:.3}s", sitting.elapsed().as_secs_f64());
+    eprintln!("owned turn second sitting: {}", landing_by_turn::elapsed(&clock, sitting));
     assert_box(&second);
     let stderr = String::from_utf8_lossy(&second.stderr);
     for call in &second.calls {
@@ -123,7 +126,6 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
     assert_eq!(evidence.pull["head"]["sha"], commit);
     let (original, moved) = advanced.take().expect("main moved after the pull opened");
     assert_ne!(original, commit, "the forge rewrote the change's head");
-    const REBASED_PARENTS: usize = 1; // The one change commit is rebased onto the advanced main.
     assert_eq!(evidence.commit["parents"].as_array().expect("parents").len(), REBASED_PARENTS);
     assert_eq!(evidence.commit["parents"][0]["sha"], moved);
     assert!(
@@ -160,5 +162,5 @@ fn a_change_lands_by_turn_on_the_owned_forge() {
             "gate_status":status, "merge":evidence.pull["merge_commit_sha"]})
     );
     scratch.remove();
-    eprintln!("owned turn story wall time: {:.3}s", began.elapsed().as_secs_f64());
+    eprintln!("owned turn story wall time: {}", landing_by_turn::elapsed(&clock, began));
 }
