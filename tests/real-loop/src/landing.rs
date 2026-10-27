@@ -60,6 +60,7 @@ pub fn fixture() -> crate::forge::Fixture {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "one landing fixture keeps its authority and dependent bounds together")]
 pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     let grant = |kind| {
         // A program story is laid before the forge gets its loopback address;
