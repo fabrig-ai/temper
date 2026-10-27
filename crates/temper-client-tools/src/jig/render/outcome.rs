@@ -133,6 +133,7 @@ pub(crate) fn print(
         | Outcome::Answered(Answered::Family(_))
         | Outcome::Unknown
         | Outcome::Limit
+        | Outcome::Full { .. }
         | Outcome::Unconfirmed
         | Outcome::Held
         | Outcome::Unsent
@@ -184,7 +185,7 @@ fn bytes(
 }
 fn client_reason<'a>(operation: &'a Operation, outcome: &Outcome) -> Option<[&'a [u8]; 4]> {
     let reason: Option<&[u8]> = match outcome {
-        Outcome::NotKept => Some(b"request not kept"),
+        Outcome::NotKept | Outcome::Full { .. } => Some(b"request not kept"),
         Outcome::Unknown => Some(b"unknown past retention"),
         Outcome::Limit => Some(b"request limit"),
         Outcome::Held => Some(b"name held by another request"),
@@ -508,6 +509,7 @@ fn account_follow_up(operation: &Operation, outcome: &Outcome) -> Option<&'stati
         | Outcome::Answered(_)
         | Outcome::Unknown
         | Outcome::Limit
+        | Outcome::Full { .. }
         | Outcome::Unconfirmed
         | Outcome::Held
         | Outcome::Unsent

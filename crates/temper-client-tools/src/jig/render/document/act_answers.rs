@@ -495,7 +495,7 @@ fn owner_moved(value: &jig_client::contract::OwnerOutcome, out: &mut Encoder, _b
     out.object_end();
 }
 fn owner_proposal_decided(value: &jig_client::contract::OwnerOutcome, out: &mut Encoder, budget: &mut super::Cut) {
-    let jig_client::contract::OwnerOutcome::ProposalDecided { proposal, by, at, choice } = value else {
+    let jig_client::contract::OwnerOutcome::ProposalDecided { proposal, by, at, choice, .. } = value else {
         unreachable!("dispatched outcome")
     };
 

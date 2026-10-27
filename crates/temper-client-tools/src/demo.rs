@@ -95,7 +95,13 @@ pub(crate) fn print(outcome: &Outcome, as_json: bool, kept: bool, limits: &Limit
     let answer = match outcome {
         Outcome::Answered(answer) => demo::answer(answer, &limits.domain.forge),
         Outcome::Unknown => Some(StartAnswer::Unknown),
-        Outcome::Held | Outcome::Limit | Outcome::Unconfirmed | Outcome::NotKept | Outcome::Unsent | Outcome::Lost => {
+        Outcome::Held
+        | Outcome::Limit
+        | Outcome::Full { .. }
+        | Outcome::Unconfirmed
+        | Outcome::NotKept
+        | Outcome::Unsent
+        | Outcome::Lost => {
             let mut operation =
                 render::outcome::Operation::of(&demo::ask(&limits.domain.forge).expect("checked limits"));
             operation.word = b"demo-start";

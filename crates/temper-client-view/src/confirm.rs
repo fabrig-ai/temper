@@ -75,7 +75,7 @@ pub(crate) fn card_controls(b: &mut Builder, root: &Domain, card: &Card, words: 
                     words.card_text(b, P::LookAgain, &[]);
                 }
             }
-            Outcome::NotKept | Outcome::Held => words.status(b, P::RequestNotKept, &[]),
+            Outcome::NotKept | Outcome::Held | Outcome::Full { .. } => words.status(b, P::RequestNotKept, &[]),
             Outcome::Unknown => words.status(b, P::Unknown, &[]),
             Outcome::Limit => words.status(b, P::RequestsInFlight, &[]),
             Outcome::Unconfirmed => words.status(b, P::RequestUnconfirmed, &[]),

@@ -280,6 +280,22 @@ pub(crate) fn text_end(bytes: &[u8], most: usize) -> usize {
     }
     end
 }
+fn too_linked(joins: u32, json: bool) -> Printed {
+    const PREFIX: &[u8] = b"join limit: more than ";
+    const SUFFIX: &[u8] = b" per read";
+    let number = skein_lib::Decimal::of(u64::from(joins));
+    let size = PREFIX
+        .len()
+        .checked_add(number.as_bytes().len())
+        .expect("join reason size")
+        .checked_add(SUFFIX.len())
+        .expect("join reason size");
+    let mut reason = Writer::new(size);
+    reason.put(PREFIX).expect("measured reason");
+    reason.put(number.as_bytes()).expect("measured reason");
+    reason.put(SUFFIX).expect("measured reason");
+    failure(&reason.finish(), json, 1)
+}
 #[must_use]
 pub fn failure(reason: &[u8], json: bool, status: u8) -> Printed {
     let stderr = if json {
@@ -347,6 +363,7 @@ pub fn read(
                 ReadNone::SignedOut => (b"signed out", 1),
                 ReadNone::Unreachable => (b"unreachable", 1),
                 ReadNone::Malformed => (b"malformed document", 1),
+                ReadNone::TooLinked { joins } => return too_linked(*joins, json),
                 ReadNone::TooLarge { .. } => (b"document limit", 1),
             };
             failure(reason, json, status)

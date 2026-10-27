@@ -1118,6 +1118,7 @@ fn github_picker(b: &mut Builder, root: &Domain, w: &Words, forge: &mut ForgeBin
             jig_client::Outcome::NotKept
             | jig_client::Outcome::Unknown
             | jig_client::Outcome::Limit
+            | jig_client::Outcome::Full { .. }
             | jig_client::Outcome::Unconfirmed
             | jig_client::Outcome::Held
             | jig_client::Outcome::Unsent

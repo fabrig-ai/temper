@@ -331,6 +331,7 @@ fn lasting_task_read_ends_ask_nothing_again() {
         (Readout::Jig(c::ReadResult::None(c::ReadNone::Gone)), ReadEnd::Gone),
         (Readout::Jig(c::ReadResult::None(c::ReadNone::TooLarge { bytes: 1 })), ReadEnd::TooLarge),
         (Readout::Jig(c::ReadResult::None(c::ReadNone::Malformed)), ReadEnd::Malformed),
+        (Readout::Jig(c::ReadResult::None(c::ReadNone::TooLinked { joins: 4 })), ReadEnd::TooLinked { joins: 4 }),
         (Readout::NotServed { family: None, served: None }, ReadEnd::NotServed),
     ] {
         let (mut root, read) = ended_task_read();
@@ -464,4 +465,22 @@ fn sign_out_ending_a_pending_task_read_asks_nothing_again() {
         pages::task::DocumentRead::Ended { why: pages::task::ReadEnd::SignedOut, retry_at: None }
     );
     assert_eq!(take_document_read(&mut out), None);
+}
+
+#[test]
+fn a_too_linked_task_page_says_so() {
+    use crate::pages::task::{DocumentRead, ReadEnd};
+    let (mut root, read) = ended_task_read();
+    end_document_read(
+        &mut root,
+        &fixtures::env(&fixtures::limits()),
+        read,
+        jig_client::Readout::Jig(jig_client::contract::ReadResult::None(jig_client::contract::ReadNone::TooLinked {
+            joins: 4,
+        })),
+    );
+    assert_eq!(
+        root.pages().task().expect("task page").document_read,
+        DocumentRead::Ended { why: ReadEnd::TooLinked { joins: 4 }, retry_at: None }
+    );
 }

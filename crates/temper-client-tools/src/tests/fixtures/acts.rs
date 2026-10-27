@@ -173,7 +173,7 @@ pub(crate) fn act_document(call: &crate::jig::call::Call) -> c::ReadResult {
             task: task.chip,
             from: None,
             message: 3,
-            words: act_text(b"Which port?"),
+            words: document_text(b"Which port?"),
             since: Wall::EPOCH,
             acts: task.acts,
             ending: None,

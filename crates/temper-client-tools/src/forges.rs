@@ -996,7 +996,13 @@ pub(crate) fn setup_print(forge: u16, outcome: &Outcome, json: bool, kept: bool,
     let answer = match outcome {
         Outcome::Answered(answer) => domain::answer(answer, &limits.domain.forge),
         Outcome::Unknown => Some(SetUpAnswer::Outcome(SetUpOutcome::Unknown)),
-        Outcome::Held | Outcome::Limit | Outcome::Unconfirmed | Outcome::NotKept | Outcome::Unsent | Outcome::Lost => {
+        Outcome::Held
+        | Outcome::Limit
+        | Outcome::Full { .. }
+        | Outcome::Unconfirmed
+        | Outcome::NotKept
+        | Outcome::Unsent
+        | Outcome::Lost => {
             let mut operation = render::outcome::Operation::of(
                 &domain::ask(
                     forge,

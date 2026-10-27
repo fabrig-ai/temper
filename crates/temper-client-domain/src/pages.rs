@@ -635,6 +635,7 @@ fn seen_answered(outcome: &jig_client::Outcome) -> bool {
         | jig_client::Outcome::NotKept
         | jig_client::Outcome::Unknown
         | jig_client::Outcome::Limit
+        | jig_client::Outcome::Full { .. }
         | jig_client::Outcome::Unconfirmed
         | jig_client::Outcome::Held
         | jig_client::Outcome::Unsent

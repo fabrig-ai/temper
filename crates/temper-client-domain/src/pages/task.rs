@@ -291,6 +291,9 @@ pub enum ReadEnd {
     NotServed,
     Gone,
     TooLarge,
+    TooLinked {
+        joins: u32,
+    },
     Malformed,
 }
 impl ReadEnd {
@@ -304,6 +307,7 @@ impl ReadEnd {
             | Self::NotServed
             | Self::Gone
             | Self::TooLarge
+            | Self::TooLinked { .. }
             | Self::Malformed => false,
         }
     }
@@ -803,6 +807,7 @@ impl Task {
                 c::ReadNone::Unknown => ReadEnd::Unknown,
                 c::ReadNone::Refused => ReadEnd::NotAllowed,
                 c::ReadNone::Gone => ReadEnd::Gone,
+                c::ReadNone::TooLinked { joins } => ReadEnd::TooLinked { joins: *joins },
                 c::ReadNone::TooLarge { .. } => ReadEnd::TooLarge,
                 c::ReadNone::Malformed => ReadEnd::Malformed,
             },

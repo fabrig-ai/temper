@@ -430,3 +430,23 @@ fn a_document_at_its_byte_bound_prints_worst_case_json_escapes() {
     assert!(u64::try_from(printed.stdout.len()).expect("output length fits") > crate::limits::DOCUMENT);
     assert!(skein_lib::bytes::find(&printed.stdout, br"\u0000").is_some(), "control text is JSON escaped");
 }
+
+#[test]
+fn a_too_linked_read_names_its_join_bound() {
+    // Small's bound, carried as a refusal fact rather than inferred by the renderer.
+    const JOINS: u32 = 4;
+    for call in [fixtures::TASK_CALL, fixtures::PROPOSAL_CALL] {
+        for (extra, expected) in [
+            (&[][..], b"join limit: more than 4 per read\n".as_slice()),
+            (&["--json"][..], br#"{"error":"join limit: more than 4 per read"}"#.as_slice()),
+        ] {
+            let argv = fixtures::extended(call, extra);
+            let (mut root, call) = fixtures::read_call(argv.as_slice());
+            root.serve(call, ReadResult::None(ReadNone::TooLinked { joins: JOINS }));
+            let answer = root.answer(call).expect("join refusal is terminal");
+            assert_eq!(answer.status, 1);
+            assert_eq!(answer.stderr.as_ref(), expected);
+            assert!(answer.stdout.is_empty());
+        }
+    }
+}

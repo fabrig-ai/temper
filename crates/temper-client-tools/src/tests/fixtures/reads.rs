@@ -439,3 +439,6 @@ fn resource_pieces(link: &jig_client_protocol_link::Limits, payload: u32) -> Box
     }
     out.finish()
 }
+
+/// The shared proposal identity used by the command fixtures.
+pub(crate) const PROPOSAL_CALL: &[&str] = &["proposal", "show", "p73/7"];

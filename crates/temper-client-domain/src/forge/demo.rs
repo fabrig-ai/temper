@@ -139,6 +139,7 @@ pub(crate) fn told(side: &mut Side, told: &Told, limits: Limits, out: &mut Queue
                 | jig_client::Outcome::NotKept
                 | jig_client::Outcome::Unsent
                 | jig_client::Outcome::Lost
+                | jig_client::Outcome::Full { .. }
                 | jig_client::Outcome::Unconfirmed => Some(StartAnswer::Unknown),
             };
             side.demo.start = None;

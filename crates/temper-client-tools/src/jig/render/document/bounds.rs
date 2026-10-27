@@ -7,6 +7,10 @@ pub(super) fn encode_admission_limit(
 ) {
     let value = &value;
     match value {
+        jig_client::contract::AdmissionLimit::PlacedHolds => out.string(b"placed_holds"),
+        jig_client::contract::AdmissionLimit::ProjectPlacedHolds => out.string(b"project_placed_holds"),
+        jig_client::contract::AdmissionLimit::PartyPlacedHolds => out.string(b"party_placed_holds"),
+        jig_client::contract::AdmissionLimit::Exemptions => out.string(b"exemptions"),
         jig_client::contract::AdmissionLimit::SettingsProposals => out.string(b"settings_proposals"),
         jig_client::contract::AdmissionLimit::Accounts => out.string(b"accounts"),
         jig_client::contract::AdmissionLimit::HolderAccounts => out.string(b"holder_accounts"),

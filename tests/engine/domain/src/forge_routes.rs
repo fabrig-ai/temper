@@ -1492,6 +1492,45 @@ pub fn add_reader(policy: &mut authority::Policy) {
 }
 
 impl World {
+    /// One authenticated read through the root and its real store routing.
+    #[must_use]
+    pub fn party_read(&mut self, read: jig_domain_core::reads::Read) -> jig_domain_core::reads::Answer {
+        const REPLY: Token = Token::new(0x4e31);
+        // The world's existing bound for a durable round trip (until).
+        const STEPS: u32 = 200;
+        self.reads.clear();
+        self.send(engine::Event::Party(engine::PartyInput::Read {
+            reply_to: ReplyTo::new(REPLY),
+            sign_in: self.signed_in.expect("reader session"),
+            read,
+        }));
+        for _ in 0..STEPS {
+            if let Some(index) = self.reads.iter().position(|(reply, _)| *reply == ReplyTo::new(REPLY)) {
+                return self.reads.remove(index).1;
+            }
+            self.tick();
+        }
+        panic!("party read did not finish");
+    }
+
+    /// Inspect the transport evidence under the same party read caps, also for live tasks.
+    #[must_use]
+    pub fn party_load(
+        &mut self,
+        party: u64,
+        scope: jig_domain_core::reads::Scope,
+        after: Option<jig_domain_core::reads::Position>,
+    ) -> jig_domain_core::reads::Loaded {
+        self.store.read(Box::new(jig_domain_core::reads::Range {
+            party,
+            scope,
+            after,
+            backwards: false,
+            rows: self.env.limits.documents.rows,
+            bytes: self.env.limits.loads.read_bytes,
+        }))
+    }
+
     pub(super) fn stored_read(&mut self, request: engine::Request) -> Option<engine::Request> {
         if let engine::Request::Store(engine::StoreRequest::Read { load, range }) = request {
             let result = self.store.read(range);
@@ -1562,6 +1601,18 @@ pub fn failed_ci_with_delayed_brief() -> (World, u64, u64) {
 /// Effective box limits, read through the shipped init template.
 #[must_use]
 pub fn box_limits() -> engine::Limits {
+    let jig = box_profile();
+    let temper = temper_service::limits::profile(temper_service::limits::Profile::Small);
+    temper_service::limits::engine(&jig, &temper).expect("coherent box limits")
+}
+
+/// The store join allowance from the same init template projection as box_limits.
+#[must_use]
+pub fn box_joins() -> u32 {
+    box_profile().store.joins
+}
+
+fn box_profile() -> jig_protocol_config::Limits {
     use jig_protocol_config as config;
     let document = config::document(
         include_bytes!("../../../../crates/temper-init/template/temper.json"),
@@ -1572,8 +1623,6 @@ pub fn box_limits() -> engine::Limits {
     let engine = root.member(&document, b"engine").expect("engine member");
     let mut engine = config::read::Object::new(&document, engine).expect("engine object");
     let at = engine.member(&document, b"limits").expect("engine limits");
-    let jig = config::overrides::parse(&document, at, &config::Path::root().member(b"engine").member(b"limits"))
-        .expect("init limits");
-    let temper = temper_service::limits::profile(temper_service::limits::Profile::Small);
-    temper_service::limits::engine(&jig, &temper).expect("coherent box limits")
+    config::overrides::parse(&document, at, &config::Path::root().member(b"engine").member(b"limits"))
+        .expect("init limits")
 }

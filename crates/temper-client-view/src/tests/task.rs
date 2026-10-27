@@ -3212,3 +3212,17 @@ fn a_task_document_replaces_its_reading_status() {
     assert!(fixtures::find(tree, Role::Status, "Reading task 9…".as_bytes()).is_none());
     assert!(fixtures::find(tree, Role::Heading { level: 2 }, b"Task details").is_some());
 }
+
+#[test]
+fn a_too_linked_task_page_says_so() {
+    let (mut root, watch) = unread_task();
+    end_task_read(&mut root, watch, jig_client::Readout::Jig(c::ReadResult::None(c::ReadNone::TooLinked { joins: 4 })));
+    for words in [fixtures::words(), fixtures::browser_words()] {
+        let mut view = fixtures::view_of(words);
+        let tree = fixtures::build(&mut view, &root);
+        assert!(
+            fixtures::find(tree, Role::Status, b"Too linked to show: it needs more than 4 joins in one read.")
+                .is_some()
+        );
+    }
+}

@@ -72,7 +72,7 @@ pub fn question() -> ReadValue {
         task: chip(),
         from: None,
         message: MESSAGE,
-        words: text(b"Which?"),
+        words: chat::document_text(b"Which?"),
         since: Wall::EPOCH,
         acts: offered(ActKind::Answer, Admission::Allowed),
         ending: None,

@@ -7,6 +7,37 @@ pub(super) fn encode_owner_message_kind(
     budget: &mut super::Cut,
 ) {
     match value {
+        jig_client::contract::OwnerMessageKind::SettingsDecision { proposal, outcome } => {
+            out.object_start();
+            out.key(b"settings_decision");
+            out.object_start();
+            out.key(b"proposal");
+            out.unsigned(*proposal);
+            out.key(b"outcome");
+            match outcome {
+                jig_client::contract::SettingsOutcome::Accepted { revision } => {
+                    out.object_start();
+                    out.key(b"accepted");
+                    out.object_start();
+                    out.key(b"revision");
+                    out.unsigned(u64::from(*revision));
+                    out.object_end();
+                    out.object_end();
+                }
+                jig_client::contract::SettingsOutcome::Rejected => out.string(b"rejected"),
+                jig_client::contract::SettingsOutcome::Stale { newest } => {
+                    out.object_start();
+                    out.key(b"stale");
+                    out.object_start();
+                    out.key(b"newest");
+                    out.unsigned(u64::from(*newest));
+                    out.object_end();
+                    out.object_end();
+                }
+            }
+            out.object_end();
+            out.object_end();
+        }
         jig_client::contract::OwnerMessageKind::Escalation { task, revision } => {
             out.object_start();
             out.key(b"escalation");

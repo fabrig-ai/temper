@@ -156,6 +156,7 @@ impl Request {
                 | jig_client::Outcome::Held
                 | jig_client::Outcome::Unknown
                 | jig_client::Outcome::Limit
+                | jig_client::Outcome::Full { .. }
                 | jig_client::Outcome::Unconfirmed,
             ) => PasteState::Again,
         }

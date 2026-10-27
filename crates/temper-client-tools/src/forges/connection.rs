@@ -483,7 +483,13 @@ fn print(pending: &Pending, outcome: &Outcome, structured: bool, limits: &Limits
     let answer = match outcome {
         Outcome::Answered(value) => answer(value, limits),
         Outcome::Unknown => Some(Answer::Unknown),
-        Outcome::Held | Outcome::Limit | Outcome::Unconfirmed | Outcome::NotKept | Outcome::Unsent | Outcome::Lost => {
+        Outcome::Held
+        | Outcome::Limit
+        | Outcome::Full { .. }
+        | Outcome::Unconfirmed
+        | Outcome::NotKept
+        | Outcome::Unsent
+        | Outcome::Lost => {
             let mut operation = render::outcome::Operation::of(
                 &request(forge, None, pending.installation, pending.manifest, None, limits)
                     .expect("checked forge limits"),

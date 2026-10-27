@@ -482,6 +482,7 @@ fn settings_reads_request_the_exact_contract_and_do_not_watch_settings() {
             c::Read::Setting(c::ReadSetting {
                 setting: c::Setting::Charter(c::SettingNumber { number: 3 }),
                 revision: 5,
+                proposal: None,
             }),
         ),
         (vec!["settings", "show", "rules"], c::Read::Settings),
@@ -508,7 +509,7 @@ fn an_unqualified_setting_reads_the_inventoried_revision_before_its_value() {
         assert!(root.answer(call).is_none());
         assert_eq!(
             root.reads.get(&call).expect("value read").1,
-            c::Read::Setting(c::ReadSetting { setting, revision: 5 })
+            c::Read::Setting(c::ReadSetting { setting, revision: 5, proposal: None })
         );
         root.serve(call, c::ReadResult::None(c::ReadNone::Unknown));
         assert_eq!(root.answer(call).expect("value refusal").status, 2);

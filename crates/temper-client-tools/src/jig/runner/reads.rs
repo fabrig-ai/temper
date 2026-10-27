@@ -162,7 +162,7 @@ pub(super) fn page(
         && let Readout::Jig(c::ReadResult::Value(c::ReadValue::Settings(settings))) = &page
     {
         let setting = super::super::settings_file::selector(&reading.called.call);
-        let what = c::Read::Setting(c::ReadSetting { setting, revision: settings.newest });
+        let what = c::Read::Setting(c::ReadSetting { setting, revision: settings.newest, proposal: None });
         read(runner, &mut reading, 1, what, out);
         complete(runner, client, env, reading, out);
         return;
@@ -375,7 +375,13 @@ fn settings_start(runner: &Runner, reading: &mut Reading, out: &mut Queue<Out>) 
             match number(call, 2) {
                 Some(n) => {
                     let revision = u32::try_from(n).expect("parsed revision");
-                    read(runner, reading, 1, c::Read::Setting(c::ReadSetting { setting, revision }), out);
+                    read(
+                        runner,
+                        reading,
+                        1,
+                        c::Read::Setting(c::ReadSetting { setting, revision, proposal: None }),
+                        out,
+                    );
                 }
                 None => read(runner, reading, 6, c::Read::Settings, out),
             }

@@ -180,7 +180,13 @@ fn print(pending: &Pending, outcome: &Outcome, structured: bool, limits: &Limits
         }
         Outcome::Unknown => w::Outcome::Unknown,
         Outcome::Answered(_) => return render::failure(b"repositories decoding failed", structured, 1),
-        Outcome::Held | Outcome::Limit | Outcome::Unconfirmed | Outcome::NotKept | Outcome::Unsent | Outcome::Lost => {
+        Outcome::Held
+        | Outcome::Limit
+        | Outcome::Full { .. }
+        | Outcome::Unconfirmed
+        | Outcome::NotKept
+        | Outcome::Unsent
+        | Outcome::Lost => {
             let mut operation = render::outcome::Operation::of(
                 &request(pending.forge, pending.installation, pending.page, limits).expect("checked bounds"),
             );
