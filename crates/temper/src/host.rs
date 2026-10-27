@@ -24,7 +24,9 @@ impl Host {
             store,
             output: Box::new(io::stdout()),
             output_failed: false,
-            wait_check: std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some(),
+            // QA launches sanitized child environments. Test/debug programs
+            // always check; release programs can opt in with the same flag.
+            wait_check: cfg!(debug_assertions) || std::env::var_os("TEMPER_R8_WAIT_CHECK").is_some(),
             now: Time::ZERO,
         }
     }
