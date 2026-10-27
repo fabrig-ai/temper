@@ -521,6 +521,7 @@ fn land_change(world: &mut Protocol) -> bool {
                 | top::Request::ApplicationPart { .. }
                 | top::Request::ApplicationDone { .. }
                 | top::Request::ApplicationAgain { .. }
+                | top::Request::ApplicationRefused { .. }
                 | top::Request::RestartDone { .. }
                 | top::Request::Call { .. } => {}
             }

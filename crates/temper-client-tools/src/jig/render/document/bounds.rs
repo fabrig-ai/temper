@@ -7,6 +7,15 @@ pub(super) fn encode_admission_limit(
 ) {
     let value = &value;
     match value {
+        jig_client::contract::AdmissionLimit::ApplicationAnswers { limit } => {
+            out.object_start();
+            out.key(b"application_answers");
+            out.object_start();
+            out.key(b"limit");
+            out.unsigned(u64::from(*limit));
+            out.object_end();
+            out.object_end();
+        }
         jig_client::contract::AdmissionLimit::SettingsProposals => out.string(b"settings_proposals"),
         jig_client::contract::AdmissionLimit::Accounts => out.string(b"accounts"),
         jig_client::contract::AdmissionLimit::HolderAccounts => out.string(b"holder_accounts"),

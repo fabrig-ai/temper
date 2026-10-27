@@ -217,8 +217,11 @@ pub(super) fn decode_lack(value: w::Lack) -> p::Lack {
         w::Lack::Models => p::Lack::Models,
     }
 }
-pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::LimitKind {
-    match value {
+pub(super) fn encode_limit_kind(value: p::LimitKind, l: &w::Limits) -> Result<w::LimitKind, w::Problem> {
+    Ok(match value {
+        p::LimitKind::ApplicationAnswers { limit } => w::LimitKind::ApplicationAnswers(
+            w::LimitKindApplicationAnswers::new(l, w::LimitKindApplicationAnswersParts { limit })?,
+        ),
         p::LimitKind::SettingsProposals => unreachable!("forge applications cannot propose settings"),
         p::LimitKind::Projects => w::LimitKind::Projects,
         p::LimitKind::Words => w::LimitKind::Words,
@@ -263,10 +266,11 @@ pub(super) fn encode_limit_kind(value: p::LimitKind, _l: &w::Limits) -> w::Limit
         p::LimitKind::Operations => w::LimitKind::Operations,
         p::LimitKind::Grace => w::LimitKind::Grace,
         p::LimitKind::Goals => w::LimitKind::Goals,
-    }
+    })
 }
 pub(super) fn decode_limit_kind(value: w::LimitKind) -> p::LimitKind {
     match value {
+        w::LimitKind::ApplicationAnswers(row) => p::LimitKind::ApplicationAnswers { limit: row.limit() },
         w::LimitKind::SettingsProposals => unreachable!("forge applications cannot store a settings proposal limit"),
         w::LimitKind::Projects => p::LimitKind::Projects,
         w::LimitKind::Words => p::LimitKind::Words,
@@ -395,7 +399,7 @@ pub(super) fn encode_refusal(value: &p::Refusal, l: &w::Limits) -> Result<w::Ref
             },
         )?),
         p::Refusal::Limit { which } => {
-            w::Refusal::Limit(w::RefusalLimit::new(l, w::RefusalLimitParts { which: encode_limit_kind(*which, l) })?)
+            w::Refusal::Limit(w::RefusalLimit::new(l, w::RefusalLimitParts { which: encode_limit_kind(*which, l)? })?)
         }
         p::Refusal::Moved { now } => {
             w::Refusal::Moved(w::RefusalMoved::new(l, w::RefusalMovedParts { now: encode_moved(now, l)? })?)

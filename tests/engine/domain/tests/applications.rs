@@ -299,3 +299,81 @@ fn a_return_replayed_after_restart_is_unknown_without_a_second_output() {
     assert_eq!(outcomes(&restarted), [&None]);
     assert!(restarted.protocol.returns.is_empty());
 }
+
+#[test]
+fn a_full_answer_table_refuses_through_people_and_keeps_the_key_when_room_returns() {
+    use skein_lib::{Duration, Wall};
+    use temper_engine_domain_world::{store::Store, walking};
+
+    let mut limits = fixtures::forge_limits();
+    limits.people.sign_in_lifetime = Duration::from_secs(600);
+    limits.forge.applications = 2;
+    limits.forge.adoptions = 1;
+    let mut driver = Driver::configured(Store::new(), [walking::config(71), walking::config(71)], &limits);
+    driver.forge = Some(temper_engine_domain_world::forge_stand::ForgeStand::new());
+    driver.settle();
+    driver.sign_in();
+    driver.settle();
+    for key in [1, 2] {
+        keyed_adopt(&mut driver, key);
+        assert!(matches!(outcomes(&driver).last(), Some(Some(engine::ApplicationAnswer::Adopt(_)))));
+    }
+    // Keep this refusal past the earlier forge answers' expiry.
+    driver.env.now = driver.env.now.saturating_add(Duration::from_secs(60));
+    driver.env.wall = Wall::from_nanos(Duration::from_secs(60).as_nanos());
+    let calls = driver.forge.as_ref().expect("forge stand").calls;
+    keyed_adopt(&mut driver, 3);
+    let refusal =
+        people::Outcome::Refused(people::Refusal::Limit { which: people::LimitKind::ApplicationAnswers { limit: 2 } });
+    assert!(driver.delivered.iter().any(|delivery| matches!(delivery,
+        Delivery::WebReply { reply: people::Reply::Outcome(outcome), .. } if *outcome == refusal
+    )));
+    assert_eq!(driver.forge.as_ref().expect("forge stand").calls, calls, "no core part or forge read starts");
+    assert!(
+        driver.store.rows.values().any(|record| matches!(record,
+            engine::Record::Core(jig_domain_core::Record::People(people::Stored::Answer { outcome, .. }))
+                if *outcome == refusal
+        )),
+        "people keeps the refusal"
+    );
+    let forge = driver.forge.take();
+    let mut driver = Driver::configured(driver.store, [walking::config(71), walking::config(71)], &limits);
+    driver.forge = forge;
+    driver.env.now = driver.env.now.saturating_add(Duration::from_secs(121));
+    driver.env.wall = Wall::from_nanos(Duration::from_secs(121).as_nanos());
+    driver.settle();
+    driver.sign_in();
+    driver.settle();
+    let calls = driver.forge.as_ref().expect("forge stand").calls;
+    keyed_adopt(&mut driver, 3);
+    assert!(
+        driver.delivered.iter().any(|delivery| matches!(delivery,
+            Delivery::WebReply { reply: people::Reply::Outcome(outcome), .. } if *outcome == refusal
+        )),
+        "same key replays the refusal after restart, even with room"
+    );
+    assert_eq!(driver.forge.as_ref().expect("forge stand").calls, calls);
+    keyed_adopt(&mut driver, 4);
+    assert!(
+        matches!(
+            outcomes(&driver).last(),
+            Some(Some(engine::ApplicationAnswer::Adopt(forge::ApplicationOutcome::Adopted(_))))
+        ),
+        "a fresh key is answered normally once room returns"
+    );
+}
+
+fn keyed_adopt(driver: &mut Driver, key: u8) {
+    let mut adoption = fixtures::adoption(1);
+    adoption.home = false;
+    driver.send(engine::Event::Party(engine::PartyInput::Application {
+        scope: people::ApplicationScope::Project(1),
+        reply_to: ReplyTo::new(Token::new(u64::from(key))),
+        sign_in: driver.session(),
+        key: [key; 16],
+        digest: [5; 32],
+        carried: None,
+        request: engine::Application::Forge(forge::Ask::Adopt(adoption)),
+    }));
+    driver.settle();
+}

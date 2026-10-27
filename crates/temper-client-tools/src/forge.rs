@@ -364,9 +364,9 @@ fn answer_text(a: &forge::Adoption, answer: &forge::Answer, kept: bool, text: u3
             }
         }
         forge::Answer::Unknown => phrase(Word::Unknown, &[name], out),
-        forge::Answer::CoreRefused(why) => render::acts::refusal(why, &render::document::phrasebook(text), out),
+        forge::Answer::CoreRefused(why) => adoption_refusal(why, text, out),
         forge::Answer::EntranceRefused(why) => {
-            render::acts::refusal(why.refusal(), &render::document::phrasebook(text), out);
+            adoption_refusal(why.refusal(), text, out);
         }
         forge::Answer::ForgeRefused(why) => match why {
             forge::Reason::NoSuchForge => phrase(Word::NoSuchForge, &[number], out),
@@ -390,6 +390,18 @@ fn answer_text(a: &forge::Adoption, answer: &forge::Answer, kept: bool, text: u3
     }
     out.put(b"\n");
 }
+fn adoption_refusal(why: &c::Refusal, text: u32, out: &mut Text) {
+    if let c::Refusal::Limit { which: c::Limit::Admission { which: c::AdmissionLimit::ApplicationAnswers { limit } } } =
+        why
+    {
+        out.put(b"temper keeps at most ");
+        out.number(u64::from(*limit));
+        out.put(b" answers to requests like this within a day: ask again later, under a new key");
+    } else {
+        render::acts::refusal(why, &render::document::phrasebook(text), out);
+    }
+}
+
 fn adoption_retry(a: &forge::Adoption, no_home: bool, new_prefix: bool, out: &mut Text) {
     out.put(b"\n  temper ctl DIRECTORY adopt --project ");
     out.put(skein_lib::Decimal::of(u64::from(a.project)).as_bytes());

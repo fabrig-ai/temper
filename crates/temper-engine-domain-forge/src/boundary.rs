@@ -1256,6 +1256,11 @@ pub enum Request {
         request: Token,
         token: Token,
     },
+    /// A final refusal kept by people, without a forge outcome row.
+    ApplicationRefused {
+        request: Token,
+        why: jig_domain_people::Refusal,
+    },
     ApplicationAgain {
         request: Token,
         why: jig_domain_people::Again,

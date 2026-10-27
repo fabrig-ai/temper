@@ -304,6 +304,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::ApplicationPart { .. }
         | Request::ApplicationDone { .. }
         | Request::ApplicationAgain { .. }
+        | Request::ApplicationRefused { .. }
         | Request::MarkedForges
         | Request::StopGroup { .. }
         | Request::SetUpGroup { .. }
@@ -374,6 +375,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::ApplicationPart { .. }
         | Request::ApplicationDone { .. }
         | Request::ApplicationAgain { .. }
+        | Request::ApplicationRefused { .. }
         | Request::MarkedForges
         | Request::StopGroup { .. }
         | Request::SetUpGroup { .. }
@@ -441,6 +443,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::ApplicationPart { .. }
         | Request::ApplicationDone { .. }
         | Request::ApplicationAgain { .. }
+        | Request::ApplicationRefused { .. }
         | Request::MarkedForges
         | Request::StopGroup { .. }
         | Request::SetUpGroup { .. }

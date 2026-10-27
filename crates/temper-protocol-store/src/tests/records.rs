@@ -485,6 +485,9 @@ fn application_refusals() -> Box<[jig_domain_people::Refusal]> {
 fn application_limit_refusals(rows: &mut skein_lib::List<jig_domain_people::Refusal>) {
     use jig_domain_people as p;
     for which in [
+        p::LimitKind::ApplicationAnswers { limit: 0 },
+        p::LimitKind::ApplicationAnswers { limit: 4 },
+        p::LimitKind::ApplicationAnswers { limit: u32::MAX },
         p::LimitKind::Projects,
         p::LimitKind::Words,
         p::LimitKind::Identity,

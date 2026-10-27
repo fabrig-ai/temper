@@ -68,9 +68,16 @@ pub(crate) fn start(
         d.application.kept.remove(&token);
         out.push(Request::Erase { key: Key::Application(token.raw()) });
     }
-    if d.application.kept.len().saturating_add(d.application.pending.len()) >= env.limits.applications
-        || d.application.pending.len() >= env.limits.adoptions
-    {
+    if d.application.kept.len().saturating_add(d.application.pending.len()) >= env.limits.applications {
+        out.push(Request::ApplicationRefused {
+            request,
+            why: people::Refusal::Limit {
+                which: people::LimitKind::ApplicationAnswers { limit: env.limits.applications },
+            },
+        });
+        return;
+    }
+    if d.application.pending.len() >= env.limits.adoptions {
         return again(request, people::Again::Busy, out);
     }
     let pending = Pending { token, retention, observed: None };

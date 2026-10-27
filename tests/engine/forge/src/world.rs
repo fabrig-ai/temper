@@ -612,7 +612,9 @@ impl World {
                     top::step(&mut self.top, &self.env, top::Event::Adopt { request }, &mut self.top_out);
                 }
                 top::Request::ApplicationDone { .. } | top::Request::MarkedForges | top::Request::Marked { .. } => {}
-                top::Request::ApplicationAgain { .. } => panic!("application capacity available"),
+                top::Request::ApplicationAgain { .. } | top::Request::ApplicationRefused { .. } => {
+                    panic!("application capacity available")
+                }
                 top::Request::Adopted { reply_to, result } => {
                     let outcome = match &result {
                         Ok(adopted) => jig_domain_people::Outcome::Adopted { project: adopted.repository.project },

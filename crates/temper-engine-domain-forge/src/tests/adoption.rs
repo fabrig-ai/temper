@@ -131,7 +131,7 @@ fn a_core_refusal_is_kept_as_jigs_refusal() {
 }
 
 #[test]
-fn a_full_outcome_table_answers_the_application_again_busy() {
+fn a_full_outcome_table_refuses_the_application_without_keeping_an_outcome() {
     let mut d = domain();
     for index in 1..=LIMITS.applications {
         let request = Token::new(u64::from(index));
@@ -162,7 +162,13 @@ fn a_full_outcome_table_answers_the_application_again_busy() {
             ask: Ask::Adopt(fixtures::adoption()),
         },
     );
-    assert_eq!(requests.as_ref(), &[Request::ApplicationAgain { request: Token::new(99), why: people::Again::Busy }]);
+    assert_eq!(
+        requests.as_ref(),
+        &[Request::ApplicationRefused {
+            request: Token::new(99),
+            why: people::Refusal::Limit { which: people::LimitKind::ApplicationAnswers { limit: LIMITS.applications } },
+        }]
+    );
     assert_eq!(d.application_outcome(Token::new(99)), None);
 }
 
@@ -407,6 +413,49 @@ fn thirty_two_adoptions_are_answered_during_retention() {
         },
         &mut out,
     );
-    assert_eq!(out.pop(), Some(Request::ApplicationAgain { request, why: people::Again::Busy }));
+    assert_eq!(
+        out.pop(),
+        Some(Request::ApplicationRefused {
+            request,
+            why: people::Refusal::Limit { which: people::LimitKind::ApplicationAnswers { limit: limits.applications } },
+        })
+    );
     assert!(out.is_empty());
+}
+
+#[test]
+fn a_full_adoption_flight_table_stays_busy_while_answers_have_room() {
+    let mut d = domain();
+    const { assert!(LIMITS.adoptions < LIMITS.applications) };
+    for number in 1..=LIMITS.adoptions {
+        let request = Token::new(u64::from(number));
+        outputs(
+            &mut d,
+            Event::Application {
+                role: None,
+                carried: None,
+                request,
+                token: request,
+                retention: Duration::from_secs(60),
+                ask: Ask::Adopt(fixtures::adoption()),
+            },
+        );
+    }
+    let request = Token::new(99);
+    assert_eq!(
+        outputs(
+            &mut d,
+            Event::Application {
+                role: None,
+                carried: None,
+                request,
+                token: request,
+                retention: Duration::from_secs(60),
+                ask: Ask::Adopt(fixtures::adoption()),
+            }
+        )
+        .as_ref(),
+        &[Request::ApplicationAgain { request, why: people::Again::Busy }]
+    );
+    assert_eq!(d.application_outcome(request), None);
 }

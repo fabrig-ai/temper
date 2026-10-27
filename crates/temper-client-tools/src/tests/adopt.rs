@@ -370,3 +370,26 @@ fn a_retry_keeps_the_adoptions_nondefault_options_and_quotes_arguments() {
     let printed = root.answer(call).expect("refused durably");
     assert!(skein_lib::bytes::find(&printed.stderr, b"adopt --project 1 --forge 2 --owner o --name n --landing main --role fork --prefix 'old'\\''/' --no-home --no-ci --check 3 --key NEW-KEY").is_some());
 }
+
+#[test]
+fn a_full_application_answer_table_exits_two_with_its_bound_and_new_key_advice() {
+    for json in [false, true] {
+        let (mut root, call) = fixtures::adopt_root(if json { fixtures::JSON_FLAG } else { &[] });
+        root.answered(
+            call,
+            c::Answer::Refused {
+                refusal: c::Refusal::Limit {
+                    which: c::Limit::Admission { which: c::AdmissionLimit::ApplicationAnswers { limit: 4 } },
+                },
+                at: None,
+            },
+        );
+        let printed = root.answer(call).expect("capacity refusal");
+        assert_eq!(printed.status, 2);
+        if json {
+            assert_eq!(printed.stderr.as_ref(), br#"{"entrance_refused":{"refusal":{"limit":{"which":{"admission":{"which":{"application_answers":{"limit":4}}}}}}}}"#);
+        } else {
+            assert_eq!(printed.stderr.as_ref(), b"temper keeps at most 4 answers to requests like this within a day: ask again later, under a new key\n");
+        }
+    }
+}

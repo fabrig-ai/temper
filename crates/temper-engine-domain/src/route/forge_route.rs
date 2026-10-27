@@ -2344,6 +2344,13 @@ pub(crate) fn outputs(
                 super::demo::done(domain, env, decision, request, true);
                 super::applications::finished(domain, request, Ok(token));
             }
+            forge::Request::ApplicationRefused { request, why } => {
+                super::demo::done(domain, env, decision, request, false);
+                domain.work.push(Work::Core(jig_domain_core::Event::People(people::Event::Decided {
+                    request,
+                    outcome: people::Outcome::Refused(why),
+                })));
+            }
             forge::Request::ApplicationAgain { request, why } => {
                 super::demo::done(domain, env, decision, request, false);
                 super::applications::finished(domain, request, Err(why));
