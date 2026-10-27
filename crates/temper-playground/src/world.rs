@@ -63,12 +63,16 @@ pub fn world(story: &'static Story, seed: u64, start: Wall) -> World<Process, Ma
     let printer = world.printer(b"temper", Stream::Output);
     CONTEXT.with(|context| *context.borrow_mut() = Some(Context { story, seeds, printer, shared, table }));
     let agents = smith_agent_shell::config::parse(story.agent).expect("story agent");
+    // Smith's prepare: service routes + one inherited base + requested directories
+    // + the error descriptor; PipeCapture adds one diagnostic write. Story A
+    // has no trace or program backend, so neither adds operations.
+    let agent_operations = agents.service.limits.routes + 1 + agents.service.limits.domain.run.directories + 1 + 1;
     world.host_roots(
         HostedProgram {
             program: crate::AGENT.into(),
             make: agent,
             instances: 8,
-            operations: agents.service.limits.routes + 3,
+            operations: agent_operations,
         },
         crate::agent_roots,
     );
