@@ -788,7 +788,12 @@ fn forges_rows_are_folded_and_keep_state_account_and_actions() {
                 b"Forgejo 17.0.0 and its runner 13.2.0, on this machine. CI jobs run here, as you.",
             );
             node(&world, client, Role::Term, b"First password");
-            node(&world, client, Role::Description, b"Your first password is in /fake/forge/person_password. Forgejo asks you to change it when you sign in.");
+            node(
+                &world,
+                client,
+                Role::Description,
+                b"Your first password is in /fake/forge/person_password. Change it on Forgejo when you like.",
+            );
         } else {
             assert!(!drawing.contains("First password"));
             assert!(!drawing.contains("Your first password is in"));
