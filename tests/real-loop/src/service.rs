@@ -31,6 +31,10 @@ enum LifeState {
     Second,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "restart, completion, bootstrap and signal ownership are independent"
+)]
 pub struct ServiceHost {
     restartable: bool,
     lives: Vec<Life>,
@@ -63,6 +67,7 @@ pub struct ServiceHost {
     links: u32,
     path: PathBuf,
     signals: Fd,
+    signals_adopted: bool,
     forge: Option<TcpListener>,
     envelope: (u64, u32),
     completions: Queue<Complete>,
@@ -169,6 +174,7 @@ impl ServiceHost {
             links: 0,
             path,
             signals,
+            signals_adopted: false,
             forge,
             envelope,
             completions: Queue::with_capacity(queued),
@@ -269,6 +275,20 @@ impl ServiceHost {
             directories(path)
         }
     }
+    fn finish_bootstrap(&mut self) {
+        let Some(service) = &mut self.service else { return };
+        if !self.signals_adopted && service.end().is_some_and(|end| *end != crate::End::Drained) {
+            // A failed bootstrap will not reopen: close its retained signal
+            // reader through the ended service's ordinary io lifecycle.
+            service.adopt_signals(self.signals).expect("failed bootstrap signal pipe");
+            self.signals_adopted = true;
+        }
+        if !self.github_seeded && service.is_empty() && service.end() == Some(&crate::End::Drained) {
+            self.service = None;
+            self.github_documents(self.forge_address.expect("GitHub peer address"));
+            self.github_seeded = true;
+        }
+    }
     fn ready(&self) -> bool {
         self.cluster.as_ref().is_none_or(crate::cluster::Shape::ready)
             && ((self.fixture.is_none() && self.github.is_none()) || self.forge_address.is_some())
@@ -280,6 +300,20 @@ impl ServiceHost {
     #[must_use]
     pub fn end(&self) -> Option<&crate::End> {
         self.service.as_ref().and_then(temper_service::Service::end)
+    }
+    pub(crate) fn early_exit(&self, process: usize) -> String {
+        const STDERR_TAIL: usize = 4096;
+        let service = self.service.as_ref().expect("an ended service was prepared");
+        let directories = Self::directories(&self.path, self.cluster.is_some());
+        let (stderr, code) =
+            temper::service_ending(service.end(), false, &directories, &directories.data, service.unsettled());
+        let tail = &stderr.as_bytes()[stderr.len().saturating_sub(STDERR_TAIL)..];
+        format!(
+            "service {process} exited before caller release: {:?}; end={:?}\nstderr tail:\n{}",
+            skein_io::kernel::Exit::Code(code),
+            service.end(),
+            String::from_utf8_lossy(tail)
+        )
     }
     #[must_use]
     pub fn started_at(&self) -> Option<Time> {
@@ -367,6 +401,7 @@ impl Host for ServiceHost {
             }
             if self.github_seeded {
                 service.adopt_signals(self.signals).expect("service signal pipe");
+                self.signals_adopted = true;
                 self.started_at.get_or_insert(now);
             }
             self.service = Some(service);
@@ -427,12 +462,7 @@ impl Host for ServiceHost {
                 self.forge = None;
             }
         }
-        if !self.github_seeded && self.service.as_ref().is_some_and(temper_service::Service::is_empty) {
-            assert_eq!(self.end(), Some(&crate::End::Drained), "GitHub fixture first start");
-            self.service = None;
-            self.github_documents(self.forge_address.expect("GitHub peer address"));
-            self.github_seeded = true;
-        }
+        self.finish_bootstrap();
         self.record_life();
     }
     fn completions(&mut self) -> &mut Queue<Complete> {
