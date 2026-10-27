@@ -70,20 +70,22 @@ pub(super) fn encode_task_flags(value: jig_client::contract::TaskFlags, out: &mu
 }
 
 pub(super) fn encode_task_hold(value: &jig_client::contract::TaskHold, out: &mut Encoder, budget: &mut super::Cut) {
+    out.object_start();
+    if let Some(placed) = value.placed() {
+        out.key(b"placed");
+        super::placed_hold::encode(placed, out, budget);
+    }
     match value {
         jig_client::contract::TaskHold::Document(field_0) => {
-            out.object_start();
             out.key(b"document");
             super::encode_hold(field_0, out, budget);
-            out.object_end();
         }
         jig_client::contract::TaskHold::Owner(field_0) => {
-            out.object_start();
             out.key(b"owner");
             super::encode_owner_chip_hold(field_0, out, budget);
-            out.object_end();
         }
     }
+    out.object_end();
 }
 
 pub(super) fn encode_task_resource(

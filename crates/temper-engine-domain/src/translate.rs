@@ -403,6 +403,7 @@ pub(crate) fn keep_connector_answer(
         | CallAnswer::NoteRecalled { .. }
         | CallAnswer::NoteRefused(_)
         | CallAnswer::SettingsRefused(_)
+        | CallAnswer::HoldOwner { .. }
         | CallAnswer::Unavailable) => return Err(answer),
     };
     match domain.forge.keep_named_answer(&domain.limits.forge, named_call(key), payload) {
