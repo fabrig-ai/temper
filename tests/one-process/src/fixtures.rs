@@ -154,7 +154,13 @@ pub(crate) fn world_document() -> serde_json::Value {
                 role["authority"]["delegation"]["depth"] = 4.into();
             }
         }
-        for (name, count) in [("core.policy_bytes", 4096), ("authority.grants", 16), ("notes.scopes", 32)] {
+        for (name, count) in [
+            ("core.policy_bytes", 4096),
+            ("authority.grants", 16),
+            ("authority.executors", 6),
+            ("tasks.executor_kinds", 6),
+            ("notes.scopes", 32),
+        ] {
             value["engine"]["limits"]["overrides"][name] = count.into();
         }
     }
