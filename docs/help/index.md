@@ -42,6 +42,8 @@ temper runs software work for people: agents take tasks on the repositories of a
   and their sources, a move between deployments, and the models.
 - temper help task: a numbered piece of work, its delegates, phases,
   holds and parts.
+- temper help hold: what holds a task, who may lift a hold a party
+  placed, and how its release is proposed to its owner.
 - temper help chat: a conversation with an agent, parked between
   messages, closed by its party.
 - temper help goal: a tracked task, its priority and its plan.

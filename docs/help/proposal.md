@@ -12,6 +12,8 @@ A proposal asks someone with more authority to authorize one act:
 - one effect, such as a write to the forge;
 - a widening of a task's authority;
 - an amendment that needs more authority than its task has;
+- the release of a task a party's hold holds, which only the hold's
+  owner decides (`temper help hold`);
 - a change of settings, which only the deployment's owners decide
   (`temper help settings`).
 
@@ -32,6 +34,9 @@ kind and whose authority covers the act. It is then:
 - rejected, with a reason its proposer hears;
 - passed up, to the holder above;
 - withdrawn by its proposer.
+
+A proposal of a release waits for the hold's owner alone and is never
+passed up; lifting the hold, or a newer revision of it, withdraws it.
 
 A pending proposal of settings is withdrawn as stale when another
 change, or a start, makes a new revision.
