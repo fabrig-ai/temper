@@ -14,9 +14,9 @@ A budget is what a task may spend, in units its models' prices make of their usa
 - **A task's budget** is the spend its authority allows, and its
   deadline, a wall time, where it has one.
 - **A project's period** funds all of its work: temper may spend up
-  to N units in all for a project, N its period spend when it was
-  made. Its one period opens at the project's making and never
-  renews.
+  to N units in it, N the project's period spend. Its one period opens
+  at the project's making and never renews; `project fund PROJECT
+  AMOUNT` sets N, and resizes the open period with it at once.
 - **Funding** comes from a person's pool, carved from the project's
   period up to their role's period spend, from an ancestor task, or
   from a recurring task.
@@ -48,9 +48,14 @@ A budget is what a task may spend, in units its models' prices make of their usa
   budget, one past its deadline for its deadline, which comes first
   when both hold; `task show` prints `Held`, and its record names the
   reason.
-- **The period spent:** nothing more in the project is funded. Raising
-  the period spend afterwards does not refill it; a project made after
-  a change of policy 1 starts with the new period spend.
+- **The period spent:** nothing more in the project is funded until
+  it is raised. `project fund PROJECT AMOUNT` raises the project's
+  period spend, and the open period's budget with it. A person's chats
+  are funded from their pool, which their role's period spend sizes and
+  which reserves from the period, so raise the role's next: `project
+  fund PROJECT AMOUNT --role ROLE`. A cut keeps each budget at what it
+  has used: nothing is taken back. A project made after a change of
+  policy 1 starts with the new period spend.
 
 ## What temper guarantees
 
@@ -69,7 +74,9 @@ A budget is what a task may spend, in units its models' prices make of their usa
 
 - **ctl:** `task show` shows a task's spend, its budget and its
   funding; `me` prints what is left of your pool in each project;
-  `settings show` reads the rules' run cap and floor, a charter's
+  `project show` prints a project's open period and each pool in it,
+  with what each has left; `project fund` raises the project's period
+  spend or a role's; `settings show` reads the rules' run cap and floor, a charter's
   turns, and policy 1's period spend, which a new project takes;
   `settings apply` changes policy 1; `proposal decide` accepts a
   proposal that widens a task's authority; `task amend` changes a
@@ -84,9 +91,9 @@ A budget is what a task may spend, in units its models' prices make of their usa
   accepted proposal or an amendment within its funder's authority.
 - temper does not refill a task when settings change: a new run cap
   applies to later runs.
-- temper does not renew a project's period, nor refill it when the
-  period spend is raised: what it funded is all the project gets.
-  temper has no weekly budget.
-- temper has no ctl tool that reads a project's own period or
-  changes its own policy: `settings show` reads policy 1, which only new
-  projects copy.
+- temper does not renew a project's period: what its period spend
+  allows, raised or not, is all the project gets. temper has no weekly
+  budget.
+- ctl changes a project's own policy in its spends alone (`project
+  fund`); `settings show` reads policy 1, which only new projects
+  copy.
