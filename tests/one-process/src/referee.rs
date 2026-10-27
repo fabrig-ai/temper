@@ -242,6 +242,28 @@ fn snapshot(store: &Store) -> rules::Snapshot {
     }
     snapshot
 }
+/// As jig's core-world observer, a committed parent inbox witnesses delivery
+/// of its delegate's result; no live task state enters the referee.
+fn result_receipts(store: &Store) -> Vec<rules::Receipt> {
+    let mut reached = Vec::new();
+    for row in store.rows.values() {
+        let root::Record::Core(core::Record::Tasks(
+            jig_domain_tasks::Stored::Live(task) | jig_domain_tasks::Stored::Ended(task),
+        )) = row
+        else {
+            continue;
+        };
+        for word in &task.inbox {
+            if matches!(word.kind, jig_domain_tasks::MessageKind::Result(_))
+                && let jig_domain_tasks::Party::Task(child) = word.from
+            {
+                reached.push(rules::Receipt::Ended(child));
+            }
+        }
+    }
+    reached
+}
+
 impl skein_world::Referee<Proc> for Referee {
     fn act(&mut self, now: Time, procs: &mut [Proc]) {
         let (service, other) = procs.split_at_mut(1);
@@ -351,7 +373,6 @@ impl skein_world::Referee<Proc> for Referee {
         if self.page.is_none() {
             self.adoption_window(service);
         }
-        let store = self.store.borrow();
         for commit in &service.commits {
             if commit.number <= self.applied {
                 continue;
@@ -366,11 +387,13 @@ impl skein_world::Referee<Proc> for Referee {
                     rules::Observed::Durable { number: commit.number, snapshot: snapshot(&self.committed) },
                 )
                 .expect("durable conformance");
+            for receipt in result_receipts(&self.committed) {
+                self.say(now, rules::Observed::Reached(receipt));
+            }
             self.applied = commit.number;
             self.run.borrow_mut().applied = self.applied;
             self.run.borrow_mut().rows.clone_from(&self.committed.rows);
         }
-        drop(store);
         let restored = self.store.borrow_mut().restored.take();
         if self.cold.is_some()
             && let Some(rows) = restored
