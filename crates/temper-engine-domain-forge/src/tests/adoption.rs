@@ -3,6 +3,58 @@ use super::*;
 use jig_domain_people as people;
 
 #[test]
+fn context_beside_a_writer_preserves_its_home_and_readoption() {
+    use skein_forge::api;
+    let mut d = domain();
+    let writer = adopted();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(writer.clone()) });
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    let mut context = fixtures::adoption();
+    context.project += 1;
+    context.role = Role::Context;
+    context.home = false;
+    fixtures::begin_adoption(&mut d, Token::new(4), context);
+    for answer in [
+        api::Answer::Permission(api::Permission::Read),
+        api::Answer::Settings(writer.settings.clone()),
+        api::Answer::Protection(None),
+    ] {
+        fixtures::answer_next(&mut d, Ok(answer));
+    }
+    let requests =
+        fixtures::answer_next(&mut d, Ok(api::Answer::Collaborators { collaborators: Box::new([]), more: false }));
+    let [.., Request::Adopted { result: Ok(value), .. }] = requests.as_ref() else { panic!("context adopted") };
+    assert_eq!(value.repository.role, Role::Context);
+    assert_eq!(value.repository.project, writer.project + 1);
+    assert!(value.repository.kinds.read && !value.repository.kinds.push && !value.repository.home);
+    for request in &requests {
+        if let Request::Save { record: Stored::Repository(_), .. } = request {
+            panic!("context must not replace the stored writer");
+        }
+    }
+    assert_eq!(d.repository(REPO), Some(&writer));
+    assert_eq!(d.home(writer.project), Some(&writer));
+
+    fixtures::begin_adoption(&mut d, Token::new(5), fixtures::adoption());
+    for answer in [
+        api::Answer::Permission(api::Permission::Write),
+        api::Answer::Branches(Box::new([])),
+        api::Answer::Settings(writer.settings),
+        api::Answer::Protection(None),
+    ] {
+        fixtures::answer_next(&mut d, Ok(answer));
+    }
+    let requests =
+        fixtures::answer_next(&mut d, Ok(api::Answer::Collaborators { collaborators: Box::new([]), more: false }));
+    let Some(Request::Adopted { result: Ok(_), .. }) = requests.last() else { panic!("writer re-adopts") };
+    let home = d.home(writer.project).expect("writer keeps its home");
+    assert_eq!(home.role, Role::Owned);
+    assert!(home.kinds.push);
+}
+
+#[test]
 fn an_adoption_refuses_a_prefix_whose_branches_exceed_authority_segments_before_a_call() {
     let mut d = domain();
     let mut adoption = fixtures::adoption();

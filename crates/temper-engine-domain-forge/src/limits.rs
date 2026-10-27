@@ -119,7 +119,8 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<skein_lib::Token, crate::StartAnswer>::worst_case(l.applications)?)?
         .checked_add(u64::from(l.applications).checked_mul(256)?)?
         .checked_add(5 * 1024)?
-        .checked_add(Map::<skein_lib::Token, skein_lib::Token>::worst_case(l.applications)?)?
+        .checked_add(Map::<skein_lib::Token, (skein_lib::Token, skein_lib::Duration)>::worst_case(l.applications)?)?
+        .checked_add(Map::<skein_lib::Token, (skein_lib::Wall, crate::SetUpAnswer)>::worst_case(l.applications)?)?
         .checked_add(Map::<u16, crate::Configured>::worst_case(l.client.repositories)?)?
         // Public startup details: the git/web addresses and setup entry's bot login.
         .checked_add(u64::from(l.client.repositories).checked_mul(2048 + 2048 + 40)?)?
