@@ -23,8 +23,8 @@ Prints: `connecting`, then the wait to make; for github, the address to open in 
 Key: --key KEY, required.
 The key or token file holds 1 to 4089 bytes after one final
 newline is trimmed. An App another owns is set read-only in the
-configuration before the start (temper help github). Then `wait
-forges --until connected:F`, or, after a browser, `--until
-settled`. With `--first`, it goes on to make and adopt that
-repository, and prints its project. `connected already` (exit 2):
-the forge holds a key, which this build cannot replace.
+configuration before the start (temper help github). Then forge
+list --until connected:FORGE, or, after a browser, --until settled.
+With `--first`, it goes on to make and adopt that repository, and
+prints its project. `connected already` (exit 2): the forge holds a
+key, which this build cannot replace.

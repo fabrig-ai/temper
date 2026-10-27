@@ -52,7 +52,7 @@ fn build(reading: &reads::Reading) -> Result<acts::Request, &'static [u8]> {
                 for row in &doc.accounts {
                     if row.number == account {
                         if found.is_some() {
-                            return Err(b"account number is ambiguous; read accounts again");
+                            return Err(b"account number is ambiguous; read account list again");
                         }
                         found = Some((row.holder, &row.sources, row.cut, row.provider, row.provider_name.as_ref()));
                     }
@@ -62,7 +62,7 @@ fn build(reading: &reads::Reading) -> Result<acts::Request, &'static [u8]> {
                 for row in &doc.accounts {
                     if row.number == account {
                         if found.is_some() {
-                            return Err(b"account number is ambiguous; read accounts again");
+                            return Err(b"account number is ambiguous; read account list again");
                         }
                         found = Some((row.holder, &row.sources, row.cut, row.provider, row.provider_name.as_ref()));
                     }
@@ -85,7 +85,7 @@ fn build(reading: &reads::Reading) -> Result<acts::Request, &'static [u8]> {
         }
     }
     let (holder, sources, cut, provider, provider_name) =
-        found.ok_or(b"account unavailable; read accounts again".as_slice())?;
+        found.ok_or(b"account unavailable; read account list again".as_slice())?;
     let holder = match holder {
         c::OwnerAccountHolder::Party(_) => c::AccountHolder::Own,
         c::OwnerAccountHolder::Deployment => c::AccountHolder::Deployment,
@@ -139,7 +139,9 @@ fn change(
         match call.tool {
             33 => {
                 if source.kind != c::OwnerAccountKind::Program {
-                    return Err(b"verify needs a program source; sign-in and key sources have no host login to check");
+                    return Err(
+                        b"account verify needs a program source; sign-in and key sources have no host login to check",
+                    );
                 }
                 return Ok(acts::Request::CheckProgram { holder, source: source.number });
             }
@@ -199,7 +201,7 @@ fn source(
     cut: bool,
 ) -> Result<&c::OwnerAccountSource, &'static [u8]> {
     if cut {
-        return Err(b"source list is incomplete; read accounts again");
+        return Err(b"source list is incomplete; read account list again");
     }
     let mut source = None;
     for candidate in sources {
@@ -216,5 +218,5 @@ fn source(
             source = Some(candidate);
         }
     }
-    source.ok_or(b"source unavailable; read accounts again".as_slice())
+    source.ok_or(b"source unavailable; read account list again".as_slice())
 }

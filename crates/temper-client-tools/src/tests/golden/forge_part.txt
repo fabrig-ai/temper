@@ -5,6 +5,6 @@ settings: revision 1
 waiting on: you: question of task 42 · 1 waiting
 resource: o/n on example.com
 acts:
-  stop 41 --key NAME
-  cancel 41 REASON --key NAME
+  task stop 41 --key KEY
+  task cancel 41 REASON --key KEY
 digest: task a16e0fe026e4c183

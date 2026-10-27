@@ -1,2 +1,2 @@
 2 · Pat: words
-read on with: activity 41 --before 1122
+read on with: task activity 41 --before 1122

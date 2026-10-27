@@ -360,10 +360,10 @@ fn dropped_kept_counts_use_the_selected_format() {
 fn a_refusal_exits_2_with_its_alternatives() {
     let json = fixtures::json_message();
     for (argv, refusal, expected) in [
-        (fixtures::MESSAGE_CALL, c::Refusal::Moved { now: c::Revision { value: fixtures::HOLD }, what: c::Moved::Spec }, b"message: The object changed\nread again: task 41\n".as_slice()),
-        (json.as_slice(), c::Refusal::Moved { now: c::Revision { value: fixtures::HOLD }, what: c::Moved::Spec }, b"{\"operation\":\"message\",\"outcome\":{\"refused\":{\"refusal\":{\"moved\":{\"now\":{\"value\":2},\"what\":\"spec\"}},\"at\":null}},\"task\":41,\"to\":null,\"read_again\":\"task 41\"}".as_slice()),
-        (fixtures::MESSAGE_CALL, c::Refusal::Authority { lacking: c::Lacking::Approver, proposable: Some(true) }, b"message: Authority missing\npropose instead: message 41 'Use port 8080' --key port-answer\n".as_slice()),
-        (json.as_slice(), c::Refusal::Authority { lacking: c::Lacking::Approver, proposable: Some(true) }, b"{\"operation\":\"message\",\"outcome\":{\"refused\":{\"refusal\":{\"authority\":{\"lacking\":\"approver\",\"proposable\":true}},\"at\":null}},\"task\":41,\"to\":null,\"propose_instead\":\"message 41 'Use port 8080' --key port-answer\"}".as_slice()),
+        (fixtures::MESSAGE_CALL, c::Refusal::Moved { now: c::Revision { value: fixtures::HOLD }, what: c::Moved::Spec }, b"message: The object changed\nread again: task show 41\n".as_slice()),
+        (json.as_slice(), c::Refusal::Moved { now: c::Revision { value: fixtures::HOLD }, what: c::Moved::Spec }, b"{\"operation\":\"message\",\"outcome\":{\"refused\":{\"refusal\":{\"moved\":{\"now\":{\"value\":2},\"what\":\"spec\"}},\"at\":null}},\"task\":41,\"to\":null,\"read_again\":\"task show 41\"}".as_slice()),
+        (fixtures::MESSAGE_CALL, c::Refusal::Authority { lacking: c::Lacking::Approver, proposable: Some(true) }, b"message: Authority missing\npropose instead: task message 41 'Use port 8080' --key port-answer\n".as_slice()),
+        (json.as_slice(), c::Refusal::Authority { lacking: c::Lacking::Approver, proposable: Some(true) }, b"{\"operation\":\"message\",\"outcome\":{\"refused\":{\"refusal\":{\"authority\":{\"lacking\":\"approver\",\"proposable\":true}},\"at\":null}},\"task\":41,\"to\":null,\"propose_instead\":\"task message 41 'Use port 8080' --key port-answer\"}".as_slice()),
     ] {
         let (mut root, call) = fixtures::send_act(argv, fixtures::SEED, fixtures::EMPTY.into());
         root.answered(call, c::Answer::Refused { refusal, at: None });

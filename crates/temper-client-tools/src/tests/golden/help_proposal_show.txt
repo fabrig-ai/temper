@@ -1,8 +1,8 @@
 proposal show PROPOSAL
-  PROPOSAL (proposal): a proposal, tN/K or pN/K; required. The proposal, tN/K or pN/K
+  PROPOSAL (proposal): a proposal, tN/K or pN/K; required. The proposal, tN/K or pN/K, as a read prints it
 Read a proposal; for settings, what each item would change
 Prints: `proposal P/K` and its action, its reason, and, for settings, each item now and as it would be
 --json: the record proposal.
 Key: none.
 A decided proposal prints how it was decided. Decide a live one
-with `decide`.
+with proposal decide.

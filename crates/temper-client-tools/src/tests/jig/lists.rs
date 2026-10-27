@@ -292,7 +292,7 @@ fn an_activity_page_cut_before_its_first_row_reads_on() {
         c::ReadResult::Value(c::ReadValue::Activity(page)),
     );
     for field in
-        [br#""cut":true"#.as_slice(), br#""before":{"value":"1122"}"#, br#""read_on":"activity 41 --before 1122""#]
+        [br#""cut":true"#.as_slice(), br#""before":{"value":"1122"}"#, br#""read_on":"task activity 41 --before 1122""#]
     {
         assert!(skein_lib::bytes::find(&printed.stdout, field).is_some());
     }

@@ -176,7 +176,7 @@ fn the_terminal_shows_ctl_or_the_web_page_instead_of_the_key_field() {
     words_in_order(
         view.tree(),
         &[
-            "Paste the key on this page in a browser, or run temper ctl forge-connect 2 github-app ID FILE, FILE the key's file, readable by you alone.",
+            "Paste the key on this page in a browser, or run temper ctl DIR forge connect 2 github-app ID FILE, FILE the key's file, readable by you alone.",
         ],
     );
 }

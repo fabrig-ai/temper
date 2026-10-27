@@ -45,7 +45,7 @@ impl Problems {
                 config::What::CodecCeiling { .. } => b"required bound exceeds the people-v13 codec ceiling".as_slice(),
                 config::What::CodecArithmetic => b"people-v13 codec bound arithmetic overflows".as_slice(),
                 config::What::StoreCodec => b"effective limits exceed the combined store codec envelope".as_slice(),
-                config::What::Stored => b"settings live in the store; read them with temper ctl settings",
+                config::What::Stored => b"settings live in the store; read them with temper ctl DIR settings show",
                 config::What::Unknown => b"unknown member".as_slice(),
                 config::What::Missing => b"missing",
                 config::What::Duplicate => b"duplicate",

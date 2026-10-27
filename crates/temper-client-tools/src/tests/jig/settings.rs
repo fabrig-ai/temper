@@ -752,7 +752,7 @@ fn non_charter_revision_hints_explicitly_read_the_current_value() {
                 }]),
             }))),
         );
-        let line = format!("  {name}: too large, 1000000 bytes; read current value with setting {name}\n");
+        let line = format!("  {name}: too large, 1000000 bytes; read current value with settings show {name}\n");
         assert!(answer.stdout.ends_with(line.as_bytes()), "{}", String::from_utf8_lossy(&answer.stdout));
     }
 }
