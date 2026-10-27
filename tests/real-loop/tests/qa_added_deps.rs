@@ -167,6 +167,12 @@ fn refusal_fixture() -> forge::Fixture {
         for project in value["engine"]["projects"].as_array_mut().expect("projects") {
             project["policy"]["ceiling"]["tools"] = 13.into();
             project["policy"]["roles"][0]["authority"]["tools"] = 13.into();
+            // The unrelated root and the amender each keep a 64-unit chat purse.
+            let policy = &mut project["policy"];
+            for path in ["/ceiling/budget/spend", "/period_spend", "/roles/0/period_spend"] {
+                let spend = policy.pointer_mut(path).expect("fixture spend member");
+                *spend = spend.as_u64().expect("fixture spend").max(128).into();
+            }
         }
     };
     fixture
