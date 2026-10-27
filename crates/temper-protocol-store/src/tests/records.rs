@@ -1034,3 +1034,94 @@ fn turn_writes_round_trip_with_their_parameters() {
         assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
     }
 }
+
+#[test]
+fn landing_rows_preserve_phases_proofs_asks_and_effects() {
+    use skein_lib::Wall;
+    use temper_engine_domain_forge_change as c;
+    use temper_engine_domain_forge_landing as l;
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let at = Wall::from_nanos(17);
+    for phase in [
+        l::Phase::Waiting,
+        l::Phase::Preparing,
+        l::Phase::Proving,
+        l::Phase::Proved { at },
+        l::Phase::Turn { at },
+        l::Phase::Landed,
+        l::Phase::Cancelled,
+        l::Phase::Held { was: Box::new(l::Phase::Proving), why: l::Hold::Faults { member: 0, gate: 0 } },
+    ] {
+        for proof in [
+            l::Proof::Unkeyed,
+            l::Proof::Keyed { key: [3; 32] },
+            l::Proof::Dispatched { key: [3; 32], try_: 2 },
+            l::Proof::Passed { key: [3; 32] },
+            l::Proof::Failed { key: [3; 32] },
+        ] {
+            for ask in [
+                None,
+                Some(c::Ask::Prepare { head: [1; 32], main: [2; 32] }),
+                Some(c::Ask::Repair { gate: 0, candidate: [1; 32] }),
+            ] {
+                let row = forge::Stored::Landing(forge::LandingRow {
+                    landing: l::Landing {
+                        task: 61,
+                        project: 5,
+                        phase: phase.clone(),
+                        members: Box::new([l::Member {
+                            change: 51,
+                            repository: l::Repository { forge: 1, repository: 2 },
+                            pull: 7,
+                            head: Some([1; 32]),
+                            base: Some([2; 32]),
+                            candidate: Some([1; 32]),
+                            gates: Box::new([l::GateProof { proof, posted: l::Posted::Pending, faults: 2 }]),
+                            asked: Some(1),
+                            landed: None,
+                        }]),
+                        preparation: 1,
+                        stale_proofs: 3,
+                    },
+                    asks: Box::new([ask]),
+                    entries: Box::new([forge::LandingEntry {
+                        entry: 7,
+                        member: 0,
+                        gate: 0,
+                        operation: forge::Operation::Dispatch,
+                    }]),
+                });
+                let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("landing key");
+                assert_eq!(key.as_ref(), &[23, 0, 0, 0, 0, 0, 0, 0, 61]);
+                assert_eq!(records::row(&key, &records::encode(&row), &bounds), Ok(row));
+            }
+        }
+    }
+}
+#[test]
+fn receipts_preserve_the_check_key_run_and_verdict() {
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    for check in [forge::Check::Gate(Box::from(b"gate".as_slice())), forge::Check::Tier(Box::from(b"tier".as_slice()))]
+    {
+        for passed in [false, true] {
+            let row = forge::Stored::Receipt {
+                key: forge::ReceiptKey {
+                    project: 5,
+                    repository: skein_forge::api::Repository { forge: 1, repository: 2 },
+                    check: check.clone(),
+                    key: [3; 32],
+                },
+                receipt: forge::Receipt {
+                    passed,
+                    run: forge::ReceiptRun { id: 7, number: 8, url: Box::from(b"https://forge/run/7".as_slice()) },
+                    candidate: [4; 32],
+                    ended: skein_lib::Wall::from_nanos(9),
+                },
+            };
+            let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("receipt key");
+            assert_eq!(key[0], 24);
+            assert_eq!(crate::keys::decode(&key, &fixtures::LIMITS), Some(forge::stored_key(&row)));
+            assert_eq!(records::row(&key, &records::encode(&row), &bounds), Ok(row));
+        }
+    }
+}
