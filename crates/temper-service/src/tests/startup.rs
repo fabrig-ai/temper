@@ -2509,11 +2509,29 @@ fn a_turn_project_on_github_is_refused_at_start() {
     assert_eq!(lines(&problems).as_ref(), b"application.landing.projects[0].gates[0].repository: invalid form\n");
 }
 
+fn turn_configuration(project: u32) -> (Option<application::Members>, Problems) {
+    let jig = fixtures::engine().jig;
+    let input = format!(r#"[{{"project":{project},"rules":[],"by":"turn","gates":[{{"forge":1,"repository":2,"gates":[{{"name":"gate","workflow":"gate.yml","ignored":["docs"],"blocking":true}}]}}]}}]"#);
+    let input = fixtures::with(fixtures::APPLICATION, b"landing.projects", input.as_bytes());
+    application(&input, &jig)
+}
+
+#[test]
+fn turn_configuration_can_name_a_project_adopted_after_the_seed() {
+    const ADOPTED: u32 = 2;
+    let (members, problems) = turn_configuration(ADOPTED);
+    assert!(problems.is_empty(), "{:?}", lines(&problems));
+    let members = members.unwrap();
+    let landing = members.landing.landings.get(&ADOPTED).unwrap();
+    assert_eq!(landing.by, temper_engine_domain::Way::Turn);
+    assert_eq!(landing.repositories[0].gates[0].workflow.as_ref(), b"gate.yml");
+    assert!(members.landing.projects.get(&ADOPTED).unwrap().is_empty());
+}
+
 #[test]
 fn landing_configuration_reads_the_way_and_bounded_repository_gates() {
     let jig = fixtures::engine().jig;
-    let input = fixtures::with(fixtures::APPLICATION, b"landing.projects", br#"[{"project":1,"rules":[],"by":"turn","gates":[{"forge":1,"repository":2,"gates":[{"name":"gate","workflow":"gate.yml","ignored":["docs"],"blocking":true}]}]}]"#);
-    let (members, problems) = application(&input, &jig);
+    let (members, problems) = turn_configuration(1);
     assert!(problems.is_empty(), "{:?}", lines(&problems));
     let members = members.unwrap();
     let landing = members.landing.landings.get(&1).unwrap();
