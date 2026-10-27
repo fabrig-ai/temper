@@ -74,7 +74,10 @@ pub(crate) fn owns(call: &jig::call::Call) -> bool {
 }
 pub(crate) fn call(state: &mut Landings, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
     if called.value.is_some() || jig::argv::check(crate::table::TOOLS, &called.call, &env.limits.tools).is_err() {
-        out.push(Out::Printed { number: called.number, printed: render::failure(b"", called.json, 1) });
+        out.push(Out::Printed {
+            number: called.number,
+            printed: render::failure(b"invalid landing call", called.json, 1),
+        });
         return;
     }
     let task = if crate::table::TOOLS.get(usize::from(called.call.tool)).expect("parsed tool").name == READ.name {
@@ -119,7 +122,7 @@ pub(crate) fn ready(state: &mut Landings, client: &Client, env: &Env<Limits>, ou
             _ => None,
         };
         if project.is_some() && watch.project.is_none() {
-            let printed = render::failure(b"", watch.called.json, 1);
+            let printed = render::failure(b"unknown project", watch.called.json, 1);
             complete(state, number, printed, out);
         } else if watch.project.is_some() {
             open(watch, &env.limits, out);
@@ -226,7 +229,7 @@ pub(crate) fn told(state: &mut Landings, client: &Client, env: &Env<Limits>, tol
             };
             if let Some((task, _)) = task {
                 if Some(task.chip.task) != watch.task {
-                    let printed = render::failure(b"", watch.called.json, 1);
+                    let printed = render::failure(b"unexpected task document", watch.called.json, 1);
                     complete(state, number, printed, out);
                     return;
                 }
@@ -263,13 +266,13 @@ pub(crate) fn told(state: &mut Landings, client: &Client, env: &Env<Limits>, tol
                             Some(panel) if panel.task() == task && Some(panel.project()) == watch.project => {
                                 print(&panel, watch.called.json, &env.limits)
                             }
-                            _ => render::failure(b"", watch.called.json, 1),
+                            _ => render::failure(b"unexpected landing document", watch.called.json, 1),
                         },
                         None => match wire::decode_landings_panel(&record.bytes, &limits) {
                             Some(panel) if Some(panel.project()) == watch.project => {
                                 print_list(&panel, watch.called.json, &env.limits)
                             }
-                            _ => render::failure(b"", watch.called.json, 1),
+                            _ => render::failure(b"unexpected landings document", watch.called.json, 1),
                         },
                     }
                 }
@@ -278,8 +281,10 @@ pub(crate) fn told(state: &mut Landings, client: &Client, env: &Env<Limits>, tol
         }
         Told::Ended { why, .. } if watch.panel == Some(handle) => match why {
             Why::Unknown | Why::SubjectEnded => gone(watch, &env.limits),
-            Why::NotAllowed => render::failure(b"", watch.called.json, 2),
-            Why::SignedOut | Why::NotServed | Why::Limit => render::failure(b"", watch.called.json, 1),
+            Why::NotAllowed => render::failure(b"not_allowed", watch.called.json, 2),
+            Why::SignedOut => render::failure(b"signed out", watch.called.json, 1),
+            Why::NotServed => render::failure(b"version not served", watch.called.json, 1),
+            Why::Limit => render::failure(b"watch table limit", watch.called.json, 1),
         },
         Told::Link { .. }
         | Told::Pending { .. }
@@ -675,7 +680,7 @@ fn render_panel(
             (None, Some(panel)) => encode_list(panel, &mut measure),
             _ => unreachable!("one panel"),
         }
-        let Ok(size) = measure.measured() else { return render::failure(b"", json, 1) };
+        let Ok(size) = measure.measured() else { return render::failure(b"result limit", json, 1) };
         let mut out = Encoder::write(size, &bounds);
         match (one, list) {
             (Some(panel), None) => encode(panel, &mut out),
@@ -699,7 +704,7 @@ fn render_panel(
         out.finish()
     };
     if bytes.len() > usize::try_from(limits.tools.text).expect("text fits") {
-        return render::failure(b"", json, 1);
+        return render::failure(b"result limit", json, 1);
     }
     jig::Printed { file: jig::FileEnd::Keep, status: 0, stdout: bytes, stderr: Box::default() }
 }
