@@ -319,3 +319,73 @@ fn ci_replacements_mark_once_and_repeated_reads_are_inert() {
     assert_eq!(out.pop(), Some(Request::Marked { tasks: Box::new([fixtures::CHANGE]) }));
     assert_eq!(panel(&d).ci, change::Status::Unknown);
 }
+
+/// The parent commits every save; replaying them in order restores each key's
+/// last value without copying any of the connector's volatile working set.
+fn commit_panel_records(records: &mut skein_lib::List<Stored>, requests: Box<[Request]>) {
+    for request in requests {
+        if let Request::Save { record, .. } = request {
+            records.push(record).expect("fixture's durable records fit");
+        }
+    }
+}
+
+#[test]
+fn landed_panel_keeps_passed_ci_across_a_restart() {
+    use skein_forge::api::{Answer, State};
+    use skein_forge_client::RecoveryClock;
+
+    // Repository, initial change, head-CI update, and landed change.
+    const RESTART_RECORDS: u32 = 4;
+    let repository = Stored::Repository(adopted());
+    let mut records = skein_lib::List::with_capacity(RESTART_RECORDS);
+    records.push(repository.clone()).expect("repository fits");
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: repository });
+    outputs(&mut d, Event::Restored { clock: RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
+    let mut row = fixtures::opening_row();
+    row.pending = None;
+    row.effect = change::EffectResult::None;
+    row.pull = Some(fixtures::open_pull().number);
+    row.change.state = change::State::Landing { head: fixtures::HEAD };
+    commit_panel_records(&mut records, outputs(&mut d, Event::Change { row }));
+
+    fixtures::step_change(&mut d);
+    let mut merged = fixtures::open_pull();
+    merged.state = State::Closed;
+    merged.merged = Some(fixtures::BASE);
+    for answer in [
+        Answer::Commit(fixtures::HEAD),
+        Answer::Commit(fixtures::BASE),
+        Answer::Pull(merged),
+        fixtures::checks(skein_forge::api::Check::Passed),
+        Answer::Compare {
+            before: fixtures::BASE,
+            after: fixtures::HEAD,
+            contains_before: true,
+            files: Box::new([]),
+            commits: Box::new([]),
+        },
+        Answer::Reviews { reviews: Box::new([]), more: false },
+    ] {
+        commit_panel_records(&mut records, fixtures::answer_next(&mut d, Ok(answer)));
+    }
+    let before = panel(&d);
+    commit_panel_records(&mut records, outputs(&mut d, Event::Settle));
+    drop(d);
+
+    let mut restarted = domain();
+    for record in records.into_boxed() {
+        outputs(&mut restarted, Event::Restore { record });
+    }
+    outputs(&mut restarted, Event::Restored { clock: RecoveryClock::Monotonic });
+    outputs(&mut restarted, Event::ReadAfresh);
+    outputs(&mut restarted, Event::SettleOutbox);
+    let after = panel(&restarted);
+    assert_eq!(before.step, PanelStep::Landed { merge: fixtures::BASE });
+    assert_eq!(after.step, PanelStep::Landed { merge: fixtures::BASE });
+    assert_eq!(after.head, Some(fixtures::HEAD));
+    assert_eq!((before.ci, after.ci), (change::Status::Passed, change::Status::Passed));
+}
