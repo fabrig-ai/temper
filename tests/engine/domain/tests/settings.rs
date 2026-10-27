@@ -553,8 +553,8 @@ fn a_stock_reviewer_reads_and_gives_a_verdict_but_cannot_delegate() {
 }
 
 #[test]
-fn a_changes_delegates_do_not_inherit_settings_tools() {
-    b2::changes_without_settings();
+fn a_changes_delegates_read_the_coding_words_without_settings_or_message_tools() {
+    b2::changes_without_settings_or_message();
 }
 
 // The host boundary is real here: JSON goes to smith's decoder and the core's
