@@ -19,6 +19,7 @@ fn call(name: &[u8], arguments: &serde_json::Value) -> Turn {
 }
 #[must_use]
 pub fn scripts() -> Box<[Script]> {
+    let spend = super::configuration::run_spend(2);
     Box::new([
         Script {
             cue: b"@revision-chat".as_slice().into(),
@@ -30,7 +31,7 @@ pub fn scripts() -> Box<[Script]> {
                         "spec":{"words":"@revision-delegate Wait for the owner's message","parameters":[]},
                         "contract":{"kind":"report","words":128},
                         "authority":{"tools":0,"grants":[],"delegation":{"kinds":[],"tasks":0,"depth":0},
-                            "budget":{"spend":10},"notes":0}
+                            "budget":{"spend":spend},"notes":0}
                     }]}),
                 ),
                 call(b"wait", &json!({})),
