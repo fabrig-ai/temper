@@ -500,9 +500,9 @@ fn finish_adoption(
             None => false,
         };
     if !writer_held {
+        d.repositories.insert(row.provider, row.clone()).expect("adoption capacity checked");
         crate::tiers::watch(d, env, out);
         crate::tiers::start_due(d, env, row.provider, out);
-        d.repositories.insert(row.provider, row.clone()).expect("adoption capacity checked");
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Repository(row.clone()) });
     }
     // The forges row lists its adoptions (client/forge.md, 5.4).
