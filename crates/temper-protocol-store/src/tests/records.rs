@@ -79,7 +79,7 @@ fn a_proposed_effect_round_trips_unchanged() {
         number: 1,
         resource: forge::What::Branch(Box::new([Box::new([0_u8, 255])])),
         entry: fixtures::entry(
-            skein_forge::api::Write::Merge { number: 2, head: [3; 32] },
+            skein_forge::api::Write::Merge { number: 2, head: [3; 32], how: skein_forge::api::MergeHow::Style },
             skein_forge_client::Condition::Merge { base: Box::new([4]) },
         ),
     });

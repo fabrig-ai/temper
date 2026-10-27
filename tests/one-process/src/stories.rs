@@ -142,6 +142,7 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
         &mut domain,
         &config,
         skein_fake_forge_domain::api::Setup {
+            workflows: Box::new([]),
             id: fixtures::REPOSITORY,
             name: b"acme/app".as_slice().into(),
             default: b"main".as_slice().into(),
