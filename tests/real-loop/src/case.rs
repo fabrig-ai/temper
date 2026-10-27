@@ -460,7 +460,7 @@ pub fn fixture_4_6() -> forge::Fixture {
 // Act 2, step 5.1 (domain/testing.md, 5.3)
 pub const RULES: u64 = 1;
 pub const SCOPE: u64 = 2;
-pub const SCOPE_QUESTION_NUMBER: u64 = 2;
+pub const SCOPE_QUESTION_NUMBER: u64 = 3;
 pub const RULES_HOLD_REVISION: u64 = 1;
 pub const RULES_PERSON: &str = "@case_rules Delegate A to ask about x3's scope and wait for its report.";
 pub const SCOPE_SPEC: &str = "@case_scope Own x3's scope; ask the director and report on its answer.";
