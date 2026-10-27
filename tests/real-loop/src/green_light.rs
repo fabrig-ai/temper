@@ -182,6 +182,7 @@ pub fn acts() -> Vec<calls::Step> {
         call(
             D1,
             argv![
+                "repository",
                 "adopt",
                 "--project",
                 "1",
@@ -195,19 +196,19 @@ pub fn acts() -> Vec<calls::Step> {
                 "adopt-app"
             ],
         ),
-        call(D1, argv!["chat", "--project", "1", "--key", "green", REQUEST]),
-        start(D1, argv!["wait", "task", number(CHAT), "--until", "ended", "--json"]),
-        call(D1, argv!["wait", "inbox", "--until", "waiting"]),
+        call(D1, argv!["chat", "start", "--project", "1", "--key", "green", REQUEST]),
+        start(D1, argv!["task", "show", number(CHAT), "--until", "ended", "--json"]),
+        call(D1, argv!["inbox", "--until", "waiting"]),
         // The question must outlive the chat's acknowledgement run, parked here.
-        call(D1, argv!["wait", "task", number(CHAT), "--until", "phase:idle"]),
-        call(D1, argv!["task", number(CHAT), "--tree", "--json"]),
+        call(D1, argv!["task", "show", number(CHAT), "--until", "phase:idle"]),
+        call(D1, argv!["task", "show", number(CHAT), "--tree", "--json"]),
         call(D1, argv!["inbox", "--kind", "questions", "--json"]),
-        call(D1, argv!["task", number(CHAT), "--activity", "32", "--json"]),
-        call(D1, argv!["answer", number(CHAT), number(QUESTION), ANSWER, "--key", "green-answer"]),
+        call(D1, argv!["task", "show", number(CHAT), "--activity", "32", "--json"]),
+        call(D1, argv!["task", "answer", number(CHAT), number(QUESTION), ANSWER, "--key", "green-answer"]),
         join(CHAT_ENDED),
         call(D1, argv!["inbox", "--kind", "questions", "--json"]),
-        call(D1, argv!["task", number(WORK), "--json"]),
-        call(D1, argv!["task", number(PRODUCER), "--json"]),
+        call(D1, argv!["task", "show", number(WORK), "--json"]),
+        call(D1, argv!["task", "show", number(PRODUCER), "--json"]),
     ]
 }
 

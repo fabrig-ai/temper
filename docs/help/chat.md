@@ -22,7 +22,7 @@ A chat is a conversation between a party and an agent in a project: an untracked
   `goal` and the party's words (temper help goal), and says a question
   will wait in the party's inbox. The goal asks its plan with
   `message`; the question waits in the party's inbox; the party
-  answers it there (`answer`), the chat relays the answer to the goal,
+  answers it there (`task answer`), the chat relays the answer to the goal,
   and only then does the goal call `change`. The chat says what
   landed.
 
