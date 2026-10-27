@@ -9,6 +9,8 @@ mod connect;
 mod demo;
 mod fixtures;
 mod flight;
+#[path = "tests/landing.rs"]
+mod landing_routes;
 mod panel;
 mod projection;
 mod purpose;
