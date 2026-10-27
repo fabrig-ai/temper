@@ -469,6 +469,9 @@ pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -
     if let Some(spend) = flags["minimum_run_spend"].as_u64() {
         defaults.rules.minimum_run_spend = spend;
     }
+    if let Some(spend) = flags["maximum_run_spend"].as_u64() {
+        defaults.rules.maximum_run_spend = spend;
+    }
     if flags["case"] == true {
         crate::case::defaults::apply(&mut defaults, flags, stock_period_spend);
     }
