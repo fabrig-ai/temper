@@ -50,6 +50,13 @@ pub const LIMITS: top::Limits = top::Limits {
     bindings: 4,
     collaborators: 8,
     landings: 8,
+    landing_members: 2,
+    gates: 2,
+    receipts_per_gate: 4,
+    ignored_paths: 4,
+    key_entries: 16,
+    key_path_bytes: 1024,
+    trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
     brief_sections: 32,
@@ -105,9 +112,47 @@ pub struct World {
     hints: Vec<skein_forge::api::Hint>,
     signatures: bool,
     pull_snapshot: Option<skein_forge::api::Pull>,
+    landing_config: Option<(u32, temper_engine_domain_forge_change::Way, Box<[top::RepositoryGates]>)>,
 }
 
 impl World {
+    #[must_use]
+    pub fn turn() -> World {
+        Self::configured(
+            11,
+            LIMITS.facts,
+            false,
+            Some(skein_forge_client::Writer { forge: REPO.forge, author: 1 }),
+            None,
+            false,
+            4,
+            true,
+        )
+    }
+    pub fn project_landing(
+        &mut self,
+        project: u32,
+        way: temper_engine_domain_forge_change::Way,
+        gates: Box<[top::RepositoryGates]>,
+    ) -> bool {
+        let accepted = self.top.project_landing(project, way, gates.clone());
+        if accepted {
+            self.landing_config = Some((project, way, gates));
+        }
+        accepted
+    }
+    #[must_use]
+    pub fn change(&self, task: u64) -> &top::ChangeRow {
+        self.top.change(task).expect("fixture change")
+    }
+    #[must_use]
+    pub fn landing(&self, task: u64) -> &top::LandingRow {
+        self.top.landing(task).expect("fixture landing")
+    }
+    #[must_use]
+    pub fn inspect(&self, read: &raw::Read) -> raw::Answer {
+        self.forge.inspect(&self.forge_env.limits, b"org/repo", read).expect("fixture read")
+    }
     #[must_use]
     pub fn new(seed: u64) -> World {
         Self::with_facts(seed, LIMITS.facts)
@@ -123,6 +168,7 @@ impl World {
             None,
             false,
             4,
+            false,
         )
     }
 
@@ -137,6 +183,7 @@ impl World {
             Some(protection),
             signatures,
             4,
+            false,
         )
     }
 
@@ -150,6 +197,7 @@ impl World {
             None,
             false,
             branches,
+            false,
         )
     }
 
@@ -169,6 +217,7 @@ impl World {
         self.signatures = required;
     }
 
+    #[expect(clippy::too_many_arguments, reason = "one shared fake fixture with independent scenario switches")]
     fn configured(
         seed: u64,
         facts: u32,
@@ -177,10 +226,18 @@ impl World {
         protection: Option<raw::Protection>,
         signatures: bool,
         branches: u32,
+        turn: bool,
     ) -> World {
-        let limits = top::Limits { facts, client: skein_forge_client::Limits { facts, ..CLIENT }, ..LIMITS };
+        let limits = top::Limits {
+            landings: if turn { 2 } else { LIMITS.landings },
+            facts,
+            client: skein_forge_client::Limits { facts, ..CLIENT },
+            ..LIMITS
+        };
         let mut config = fake_config();
         config.limits.branches = branches;
+        config.limits.workflows = u32::from(turn);
+        config.limits.workflow_runs = if turn { 4 } else { 0 };
         config.limits.bypassing_users = protection
             .as_ref()
             .map_or(0, |rule| u32::try_from(rule.bypassing_users.len()).expect("fixture bypass list"));
@@ -189,14 +246,26 @@ impl World {
             &mut fake,
             &config,
             raw::Setup {
-                workflows: Box::new([]),
+                workflows: if turn {
+                    Box::new([raw::Workflow {
+                        file: Box::from(b"gate.yml".as_slice()),
+                        jobs: Box::new([Box::from(b"test".as_slice())]),
+                        latency_min: Duration::from_secs(2),
+                        latency_max: Duration::from_secs(2),
+                        silent: 0,
+                        passes: 1000,
+                        cue: None,
+                    }])
+                } else {
+                    Box::new([])
+                },
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
                 default: Box::from(&b"main"[..]),
                 tree: Box::new([]),
                 labels: Box::new([]),
                 checks: raw::Checks {
-                    contexts: Box::new([Box::from(&b"build"[..])]),
+                    contexts: if turn { Box::new([]) } else { Box::new([Box::from(&b"build"[..])]) },
                     latency_min: Duration::ZERO,
                     latency_max: Duration::ZERO,
                     silent: 0,
@@ -243,6 +312,7 @@ impl World {
             hints: Vec::new(),
             signatures,
             pull_snapshot: None,
+            landing_config: None,
         };
         world.event(top::Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
         world
@@ -251,7 +321,7 @@ impl World {
     /// Construct and restart without any configured writer.
     #[must_use]
     pub fn writerless(seed: u64) -> World {
-        Self::configured(seed, LIMITS.facts, false, None, None, false, 4)
+        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false)
     }
     pub fn give_writer(&mut self, writer: skein_forge_client::Writer) -> bool {
         let accepted = top::writer(&mut self.top, &self.env, writer, &mut self.top_out);
@@ -274,6 +344,7 @@ impl World {
             None,
             false,
             4,
+            false,
         )
     }
 
@@ -431,6 +502,9 @@ impl World {
             false,
         )
         .expect("same configured connector");
+        if let Some((project, way, gates)) = &self.landing_config {
+            assert!(self.top.project_landing(*project, *way, gates.clone()));
+        }
         let mut rows = List::with_capacity(self.stored.len());
         for (_, record) in &self.stored {
             rows.push(record.clone()).expect("store snapshot capacity");
@@ -719,6 +793,7 @@ impl World {
                 | top::Request::GoalTopic { .. }
                 | top::Request::GoalUntopic { .. }
                 | top::Request::ProjectionFailed { .. }
+                | top::Request::LandingDecision { .. }
                 | top::Request::ChangeDecision { .. }
                 | top::Request::News { .. }
                 | top::Request::Read { .. }
@@ -806,6 +881,8 @@ impl World {
 
 fn key(row: &top::Stored) -> top::Key {
     match row {
+        top::Stored::Landing(row) => top::Key::Landing(row.landing.task),
+        top::Stored::Receipt { key, .. } => top::Key::Receipt(key.clone()),
         top::Stored::Call { key, .. } => top::Key::Call(*key),
         top::Stored::Repository(row) => top::Key::Repository(row.provider),
         top::Stored::Hold(row) => top::Key::Hold(row.name.clone()),

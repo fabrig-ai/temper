@@ -9,6 +9,7 @@ mod flight;
 mod panel;
 mod purpose;
 mod reconcile;
+mod runs;
 mod stopping;
 use alloc::boxed::Box;
 use skein_lib::{Duration, Env, Queue, Time, Token, Wall};
@@ -61,6 +62,13 @@ const LIMITS: Limits = Limits {
     bindings: 4,
     collaborators: 8,
     landings: 8,
+    landing_members: 2,
+    gates: 2,
+    receipts_per_gate: 4,
+    ignored_paths: 4,
+    key_entries: 16,
+    key_path_bytes: 1024,
+    trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
     brief_sections: 32,
@@ -297,6 +305,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::ProjectionSettled { .. }
         | Request::GoalTopic { .. }
         | Request::GoalUntopic { .. }
+        | Request::LandingDecision { .. }
         | Request::ChangeDecision { .. }
         | Request::Read { .. }
         | Request::BriefClient { .. }
@@ -367,6 +376,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::ProjectionSettled { .. }
         | Request::GoalTopic { .. }
         | Request::GoalUntopic { .. }
+        | Request::LandingDecision { .. }
         | Request::ChangeDecision { .. }
         | Request::Read { .. }
         | Request::BriefClient { .. }
@@ -434,6 +444,7 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::ProjectionSettled { .. }
         | Request::GoalTopic { .. }
         | Request::GoalUntopic { .. }
+        | Request::LandingDecision { .. }
         | Request::ChangeDecision { .. }
         | Request::Read { .. }
         | Request::BriefClient { .. }
@@ -2033,4 +2044,87 @@ fn workspace_landing_is_only_for_an_existing_inherited_writable_producer() {
             }
         }
     }
+}
+
+#[test]
+fn landing_and_baseline_purposes_have_their_fixed_bytes() {
+    use crate::purpose::EffectPurpose;
+    assert_eq!(
+        EffectPurpose::Landing { task: 1, member: 2, gate: 3, operation: 4, preparation: 5, attempt: 6 }
+            .identity()
+            .as_deref(),
+        Some([6, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 3, 4, 0, 5, 0, 6].as_slice())
+    );
+    assert_eq!(
+        EffectPurpose::Baseline { repository: REPO, gate: 3, key: [4; 8] }.identity().as_deref(),
+        Some([7, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 3, 4, 4, 4, 4, 4, 4, 4, 4].as_slice())
+    );
+    assert_eq!(effect_shape(16), Some((EffectForm::Creation, Recovery::Unrecoverable)));
+    assert_eq!(effect_shape(17), Some((EffectForm::Transition, Recovery::Unrecoverable)));
+}
+
+#[test]
+fn turn_refuses_github_but_queue_remains_available() {
+    use temper_engine_domain_forge_change::Way;
+    for (forge, way, expected) in [(1, Way::Turn, true), (2, Way::Turn, false), (2, Way::Queue, true)] {
+        let mut d = setup_domain(&configured(), false);
+        assert_eq!(
+            d.project_landing(
+                5,
+                way,
+                Box::new([RepositoryGates {
+                    repository: skein_forge::api::Repository { forge, repository: 2 },
+                    gates: Box::new([])
+                }])
+            ),
+            expected
+        );
+    }
+}
+
+#[test]
+fn repository_gate_and_ignored_path_counts_hold_at_their_bounds() {
+    use temper_engine_domain_forge_change::Way;
+    use temper_engine_domain_forge_landing::Gate;
+    for (gate_count, ignored_count, expected) in [(2, 4, true), (3, 4, false), (2, 5, false)] {
+        let mut d = domain();
+        let mut gates = skein_lib::List::with_capacity(gate_count);
+        for number in 0..gate_count {
+            let mut ignored = skein_lib::List::with_capacity(ignored_count);
+            for _ in 0..ignored_count {
+                ignored.push(Box::from(b"docs".as_slice())).expect("test paths");
+            }
+            gates
+                .push(Gate {
+                    name: Box::new([b'a' + u8::try_from(number).expect("small count")]),
+                    workflow: Box::from(b"gate.yml".as_slice()),
+                    ignored: ignored.into_boxed(),
+                    blocking: true,
+                })
+                .expect("test gates");
+        }
+        assert_eq!(
+            d.project_landing(
+                5,
+                Way::Turn,
+                Box::new([RepositoryGates { repository: REPO, gates: gates.into_boxed() }])
+            ),
+            expected
+        );
+    }
+}
+
+#[test]
+fn another_landing_owns_the_key_while_a_faulted_owner_waits() {
+    use temper_engine_domain_forge_landing::{Fault, Flight, Verdict};
+    let mut d = domain();
+    let key =
+        ReceiptKey { project: 5, repository: REPO, check: Check::Gate(Box::from(b"gate".as_slice())), key: [3; 32] };
+    let mut fault = runs::follow();
+    fault.outcome = Some(Verdict::Fault(Fault::Lost));
+    d.landing.faults.insert((61, 0, 0), fault).expect("fault room");
+    let mut other = runs::follow();
+    other.task = 62;
+    d.landing.flights.insert(key.clone(), other).expect("flight room");
+    assert_eq!(landing::flight_fact(&d.landing, &key, (61, 0, 0)), Flight::Other);
 }

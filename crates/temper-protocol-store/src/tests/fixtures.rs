@@ -48,6 +48,13 @@ pub const LIMITS: top::Limits = top::Limits {
     bindings: 4,
     collaborators: 8,
     landings: 8,
+    landing_members: 2,
+    gates: 2,
+    receipts_per_gate: 4,
+    ignored_paths: 4,
+    key_entries: 16,
+    key_path_bytes: 1024,
+    trees_in_flight: 2,
     judge_projects: 2,
     judge_criteria: 8,
     brief_sections: 32,
@@ -141,7 +148,7 @@ fn client_key(random: &mut Rng) -> skein_forge_client::Key {
 #[expect(clippy::disallowed_macros, reason = "property inputs number canonical member addresses")]
 pub fn key(random: &mut Rng) -> top::Key {
     let number = random.next_u64();
-    match random.below(21) {
+    match random.below(23) {
         0 => top::Key::Call(top::NamedCall {
             task: number,
             attempt: random.next_u64(),
@@ -167,7 +174,18 @@ pub fn key(random: &mut Rng) -> top::Key {
         17 => top::Key::Demo(u16::try_from(random.below(65_536)).expect("u16")),
         18 => top::Key::Binding(alloc::format!("member{number}@example.com").into_bytes().into_boxed_slice()),
         19 => top::Key::DemoAct([u8::try_from(random.below(256)).expect("byte"); 16]),
-        _ => top::Key::Flight { task: number, entry: random.next_u64() },
+        20 => top::Key::Flight { task: number, entry: random.next_u64() },
+        21 => top::Key::Landing(number),
+        _ => top::Key::Receipt(top::ReceiptKey {
+            project: u32::try_from(random.below(4_294_967_296)).expect("u32"),
+            repository: repository(random),
+            check: if random.below(2) == 0 {
+                top::Check::Gate(Box::from(b"gate".as_slice()))
+            } else {
+                top::Check::Tier(Box::from(b"tier".as_slice()))
+            },
+            key: commit(random),
+        }),
     }
 }
 pub fn core_keys() -> [jig_domain_core::Key; 4] {

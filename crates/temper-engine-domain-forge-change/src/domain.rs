@@ -115,7 +115,6 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
     }
 }
 
-
 fn release(mut change: Change, was: &State, why: Hold, facts: &Facts, now: Wall) -> Stepped {
     change.repairs = 0;
     change.resolutions = 0;

@@ -2758,6 +2758,7 @@ pub(crate) fn outputs(
             forge::Request::Drift { task, .. } => {
                 domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Drift }));
             }
+            forge::Request::LandingDecision { .. } => {}
             forge::Request::ChangeDecision { task, decision: choice, entry, evidence } => match choice {
                 forge_change::Decision::Effect(effect) => {
                     if let Some(entry) = entry

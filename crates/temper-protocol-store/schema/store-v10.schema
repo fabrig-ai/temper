@@ -64,7 +64,7 @@ enum UpdateStyle { merge, rebase }
 record MergeWrite { number: u64 head: fixed 32 how: MergeHow }
 record UpdateWrite { number: u64 style: UpdateStyle }
 record DispatchInput { name: bytes 255 value: bytes 1048576 }
-record DispatchWrite { workflow: bytes 255 branch: bytes 4096 inputs: list 32 DispatchInput }
+record DispatchWrite { workflow: bytes 255 branch: bytes 4096 inputs: list 10 DispatchInput }
 record SetStatus { commit: fixed 32 context: bytes 1048576 status: Check description: bytes 140 link: bytes 2048 }
 record CreateBranch { branch: bytes 1048576 commit: fixed 32 }
 record DeleteBranch { branch: bytes 1048576 }
@@ -207,5 +207,30 @@ record DemoAct { key: fixed 16 act: DemoActKind }
 # Family 21: writes with a committed attempt (protocol/store.md, 2).
 # Key family 20 is reserved for Setting, still design-only. Value tags are codec-local.
 record Flight { task: u64 entry: u64 }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight }
+# Families 23 and 24: landing state and receipts (domain/landing.md, 12).
+record LandingAt { at: u64 }
+enum LandingPlace { waiting, preparing, proving, proved: LandingAt, turn: LandingAt, landed, cancelled }
+record LandingFaults { member: u16 gate: u16 }
+record LandingPhase { place: LandingPlace held: option LandingFaults }
+record GateKey { key: fixed 32 }
+record DispatchedKey { key: fixed 32 try_: u16 }
+enum GateProofState { unkeyed, keyed: GateKey, dispatched: DispatchedKey, passed: GateKey, failed: GateKey }
+enum GatePosted { nothing, pending, verdict }
+record GateProof { proof: GateProofState posted: GatePosted faults: u32 }
+record LandingMember { change: u64 repository: Repository pull: u64 head: option fixed 32 base: option fixed 32 candidate: option fixed 32 gates: list 64 GateProof asked: option u16 landed: option fixed 32 }
+record LandingState { task: u64 project: u32 phase: LandingPhase members: list 64 LandingMember preparation: u16 stale_proofs: u32 }
+record LandingPrepare { head: fixed 32 main: fixed 32 }
+record LandingRepairAsk { gate: u16 candidate: fixed 32 }
+enum LandingAsk { prepare: LandingPrepare, repair: LandingRepairAsk }
+record LandingAskSlot { ask: option LandingAsk }
+enum LandingOperation { dispatch, rerun, pending, verdict, merge }
+record LandingEntry { entry: u64 member: u16 gate: u16 operation: LandingOperation }
+record LandingRow { landing: LandingState asks: list 64 LandingAskSlot entries: list 65536 LandingEntry }
+record ReceiptName { name: bytes 32 }
+enum ReceiptCheck { gate: ReceiptName, tier: ReceiptName }
+record ReceiptKey { project: u32 repository: Repository check_name: ReceiptCheck key: fixed 32 }
+record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
+record Receipt { passed: bool run: ReceiptRun candidate: fixed 32 ended: u64 }
+record ReceiptRow { key: ReceiptKey receipt: Receipt }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow }
 versioned record Row { value: Value }

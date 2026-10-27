@@ -56,7 +56,7 @@ pub fn bounds(forge: &temper_engine_domain_forge::Limits) -> Option<Bounds> {
         dispatch_input_value: forge.client.op_bytes,
         dispatch_write_workflow: 255,
         dispatch_write_branch: forge.name_bytes,
-        dispatch_write_inputs: 32,
+        dispatch_write_inputs: u32::try_from(skein_forge::api::INPUTS).ok()?,
         set_status_description: 140,
         set_status_link: 2048,
         create_issue_key: forge.client.op_bytes,

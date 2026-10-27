@@ -27,6 +27,8 @@ pub enum RecordKind {
     Binding,
     DemoAct,
     Flight,
+    Landing,
+    Receipt,
 }
 /// A refused restore reports each unresolved row once.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -71,6 +73,8 @@ pub(crate) fn capacity(l: &Limits) -> Option<u32> {
         .checked_add(l.tasks.checked_mul(3)?)? // Release: task, root, pending name.
         .checked_add(l.applications)? // Application: adopted repository, if any.
         .checked_add(l.client.repositories)? // Writer: configured forge.
+        .checked_add(l.landings.checked_mul(l.landing_members)?)?
+        .checked_add(l.repositories.checked_mul(l.gates)?.checked_mul(l.receipts_per_gate)?)?
         .checked_add(1) // Demo: configured demo's forge.
 }
 impl Reconciliation {
@@ -104,6 +108,15 @@ impl Reconciliation {
         // offset avoids counting arbitrarily long reference-free history.
         self.row_start = self.references.len();
         match row {
+            Stored::Landing(row) => {
+                for member in &row.landing.members {
+                    self.repository(
+                        RecordKind::Landing,
+                        Repository { forge: member.repository.forge, repository: member.repository.repository },
+                    );
+                }
+            }
+            Stored::Receipt { key, .. } => self.repository(RecordKind::Receipt, key.repository),
             Stored::Call { key, .. } => self.task(RecordKind::Call, key.task, None),
             Stored::ProposedEffect(row) => self.entry(RecordKind::ProposedEffect, &row.entry),
             Stored::Repository(row) => self.need(RecordKind::Repository, Need::Forge(row.provider.forge)),
