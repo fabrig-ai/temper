@@ -7,8 +7,8 @@ use alloc::boxed::Box;
 use skein_lib::{List, Wall};
 
 use crate::{
-    AuthorityHold, AuthorityLack, Change, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate,
-    GateFailure, GateKind, Heard, Hold, Limits, Pull, Repair, State, Status, Stepped, Ask, Way,
+    Ask, AuthorityHold, AuthorityLack, Change, Decision, Delegate, Effect, EffectResult, Facts, Freshness, Gate,
+    GateFailure, GateKind, Heard, Hold, Limits, Pull, Repair, State, Status, Stepped, Way,
 };
 
 /// Decide one change from current forge and task facts, independent of its wake.
@@ -230,9 +230,10 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts) -> Stepped
         | Hold::Rejected
         | Hold::Authority(_) => {
             change.state = match was {
-                State::Ready { head, .. } | State::Queued { head, .. } | State::First { head, .. } | State::Gating { head, .. } => {
-                    State::Gating { head: *head, asked: Box::new([]) }
-                }
+                State::Ready { head, .. }
+                | State::Queued { head, .. }
+                | State::First { head, .. }
+                | State::Gating { head, .. } => State::Gating { head: *head, asked: Box::new([]) },
                 State::Held { .. } | State::Landed { .. } | State::Ended => {
                     unreachable!("held state retains a live predecessor")
                 }
