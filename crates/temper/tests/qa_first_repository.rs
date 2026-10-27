@@ -9,8 +9,8 @@ mod support;
 
 use serde_json::{Value, json};
 use skein_io::kernel::Exit;
-use std::{fs, num::NonZeroU16, os::unix::ffi::OsStrExt, path::Path};
 use skein_lib::Duration;
+use std::{fs, num::NonZeroU16, os::unix::ffi::OsStrExt, path::Path};
 use support::{
     Scratch, boxed,
     ctl::{self, Call, Step},
