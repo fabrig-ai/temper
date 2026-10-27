@@ -67,7 +67,8 @@ Tasks made before keep it, on their revision.
   charter's spend must still hold its reserve.
 - temper does not hold which charter the forge uses as a setting: naming
   another in `application.charter` needs a restart. The charter it names
-  is a setting like any other.
+  is a setting like any other. The reviewer's charter is `charter 4`,
+  fixed by temper; its contents are a setting like any other.
 - temper does not check, when a charter changes, that a connected host
   can run it.
 - A charter's instructions and models are within the deployment's bytes
