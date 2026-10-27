@@ -254,7 +254,11 @@ pub fn run(bytes: &[u8]) -> Result<Outcome, Error> {
 }
 
 fn run_log(log: Log) -> Result<Outcome, Differs> {
-    assert_eq!(log.start.story.as_ref(), A.name.as_bytes(), "the fixture names story A");
+    assert!(
+        log.start.story.as_ref() == A.name.as_bytes()
+            || log.start.story.as_ref() == A.name.to_ascii_lowercase().as_bytes(),
+        "the log names story A by its native name or browser directory"
+    );
     let start = temper_playground::story_start(&A, log.start.seed);
     let machine = Machine(start.machine());
     let config = skein_sim::Config { wall: log.start.start, trace: skein_sim::Trace::Off, ..skein_sim::Config::calm() };
