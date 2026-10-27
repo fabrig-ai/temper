@@ -190,6 +190,24 @@ fn shown_header_has_its_tag_pull_and_optional_safe_external_link() {
 #[test]
 fn each_step_draws_its_current_done_slots_and_its_sentence() {
     for (step, current, sentence, queue_word) in [
+        (
+            w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap()),
+            Some(4),
+            "Ready: its landing, task 61, lands it.",
+            "Queued",
+        ),
+        (
+            w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: None }).unwrap()),
+            Some(4),
+            "Ready: waiting for room for its landing.",
+            "Queued",
+        ),
+        (
+            w::Step::Preparing(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap()),
+            Some(4),
+            "Being rebased onto main for its landing.",
+            "Queued",
+        ),
         (w::Step::Producing, Some(0), "Producing its branch.", "Queued"),
         (w::Step::Opening, Some(1), "Opening its pull request.", "Queued"),
         (w::Step::Recreating, Some(1), "Making its branch again at the head temper last knew.", "Queued"),

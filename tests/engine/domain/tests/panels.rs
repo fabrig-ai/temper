@@ -151,3 +151,41 @@ fn a_task_that_is_no_change_ends_the_watch_as_gone() {
     assert!(panels(&driver).is_empty());
     assert!(driver.delivered.iter().any(|delivery| matches!(delivery, root::Delivery::WatchEnded { watcher, why: jig_domain_views::End::Gone } if *watcher == WATCHER)));
 }
+
+#[test]
+fn a_project_landings_watch_delivers_its_list_after_the_commit_barrier() {
+    for ended in [false, true] {
+        let mut driver = driver();
+        // A preceding save supplies the durability barrier for this read-only watch.
+        driver.send(root::Event::Forge(Box::new(forge::Event::Delegated {
+            task: CHANGE,
+            child: 73,
+            kind: temper_engine_domain_forge_change::Delegate::Produce,
+        })));
+        watch(&mut driver, 1, forge::landings_subject(1, ended));
+        for _ in 0..8 {
+            driver.advance(false);
+        }
+        assert!(
+            !driver.delivered.iter().any(|delivery| matches!(delivery, root::Delivery::ForgeDocument { .. })),
+            "the whole list remains held until durability"
+        );
+        driver.settle();
+        let documents: Vec<_> = driver
+            .delivered
+            .iter()
+            .filter_map(|delivery| {
+                if let root::Delivery::ForgeDocument { watcher, document } = delivery {
+                    assert_eq!(*watcher, WATCHER);
+                    Some(document.as_ref())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let [forge::Document::Landings(list)] = documents.as_slice() else { panic!("one whole list: {documents:?}") };
+        assert_eq!(list.project, 1);
+        assert_eq!(list.turn, None);
+        assert!(list.landings.is_empty());
+    }
+}

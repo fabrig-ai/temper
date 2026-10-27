@@ -4966,11 +4966,15 @@ fn retain_terminal_ci(d: &mut Domain, row: &mut ChangeRow) {
 }
 
 /// Every saved record invalidates its own panel (domain/forge.md, 8.8).
-fn save_change(d: &mut Domain, out: &mut Queue<Request>, mut row: ChangeRow) {
+pub(crate) fn save_change(d: &mut Domain, out: &mut Queue<Request>, mut row: ChangeRow) {
     retain_terminal_ci(d, &mut row);
     let task = row.task;
+    let tasks = match row.change.landing {
+        Some(landing) => Box::from([task, landing]),
+        None => Box::from([task]),
+    };
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(row) });
-    emit(out, Request::Marked { tasks: Box::new([task]) });
+    emit(out, Request::Marked { tasks });
 }
 
 /// Include the nearest affected followers when a saved row changes its queue order.
@@ -5007,6 +5011,9 @@ fn save_queue_change(
     }
     let mut tasks = List::with_capacity(crate::MARKED);
     tasks.push(row.task).expect("own subject");
+    if let Some(landing) = row.change.landing {
+        tasks.push(landing).expect("member landing subject");
+    }
     let mut previous = None;
     while tasks.room() > 0 {
         let mut next = None;
