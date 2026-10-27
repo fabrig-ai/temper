@@ -190,7 +190,7 @@ Read a page of a repository's issues and pull requests, those updated least rece
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `since`: an integer from 0 to 18446744073709551615, 0 when absent; optional. Only items updated at or after this time, in nanoseconds.
 - `page`: an integer from 1 to 4294967295, 1 when absent; optional. The page.
 - `item_kind`: one of `issue` or `pull`; optional. Issues or pull requests alone; both when absent.
@@ -201,7 +201,7 @@ Read an issue or a pull request with its comments.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `number`: an integer from 1 to 18446744073709551615; required. The issue's or pull request's number.
 - `after`: an integer from 0 to 18446744073709551615, 0 when absent; optional. Only the comments after this comment's id.
 
@@ -211,7 +211,7 @@ Read a pull request.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `number`: an integer from 1 to 18446744073709551615; required. The pull request's number.
 
 ## read_pull_for
@@ -220,7 +220,7 @@ Find the pull request from one branch into another.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `head`: text; required. The branch it merges from.
 - `base`: text; required. The branch it merges into.
 
@@ -230,7 +230,7 @@ Read a page of a pull request's reviews.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `number`: an integer from 1 to 18446744073709551615; required. The pull request's number.
 - `page`: an integer from 1 to 4294967295, 1 when absent; optional. The page.
 
@@ -240,7 +240,7 @@ Read a page of the statuses posted on a commit.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `commit`: text; required. The commit's id: 40 or 64 lowercase hexadecimal digits.
 - `page`: an integer from 1 to 4294967295, 1 when absent; optional. The page.
 
@@ -250,7 +250,7 @@ Read a page of one review's remarks on a pull request.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `number`: an integer from 1 to 18446744073709551615; required. The pull request's number.
 - `review`: an integer from 1 to 18446744073709551615; required. The review's id, as read_reviews answers it.
 - `page`: an integer from 1 to 4294967295, 1 when absent; optional. The page.
@@ -261,7 +261,7 @@ Read a branch's head.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `branch`: text; required. The branch's name.
 
 ## read_branches
@@ -270,7 +270,7 @@ List the branches whose names start with a prefix.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `prefix`: text; required. The names' prefix.
 
 ## read_pull_files
@@ -279,7 +279,7 @@ Read a page of the files a pull request changes at one head.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `number`: an integer from 1 to 18446744073709551615; required. The pull request's number.
 - `head`: text; required. The head's commit id: 40 or 64 lowercase hexadecimal digits.
 - `page`: an integer from 1 to 4294967295, 1 when absent; optional. The page.
@@ -290,7 +290,7 @@ Compare two commits.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `before`: text; required. The earlier commit's id: 40 or 64 lowercase hexadecimal digits.
 - `after`: text; required. The later commit's id: 40 or 64 lowercase hexadecimal digits.
 
@@ -300,7 +300,7 @@ Read a commit's combined checks.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `commit`: text; required. The commit's id: 40 or 64 lowercase hexadecimal digits.
 
 ## read_file
@@ -309,7 +309,7 @@ Read a file at one head, cut at a byte limit.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `head`: text; required. The commit's id: 40 or 64 lowercase hexadecimal digits.
 - `path`: text; required. The file's path in the repository.
 - `max_bytes`: an integer from 1 to 4294967295; optional. At most this many bytes; the read's limit when absent.
@@ -320,7 +320,7 @@ Read one CI job's log, cut at a byte limit.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `head`: text; required. The commit's id the CI ran on: 40 or 64 lowercase hexadecimal digits.
 - `run`: an integer from 1 to 18446744073709551615; required. The CI run's id.
 - `job`: an integer from 0 to 18446744073709551615; required. The CI job's id, which may be 0 on Forgejo.
@@ -333,7 +333,7 @@ Read a branch's protection.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `branch`: text; required. The branch's name.
 
 ## read_settings
@@ -342,7 +342,7 @@ Read the repository's settings.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 
 ## read_collaborators
 
@@ -350,7 +350,7 @@ Read a page of the repository's collaborators.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `page`: an integer from 1 to 4294967295, 1 when absent; optional. The page.
 
 ## read_permission
@@ -359,7 +359,7 @@ Read a forge user's permission on the repository.
 
 A read.
 
-- `repository`: text; optional. The repository, as owner/name; leave it out when the project has one.
+- `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `user`: an integer from 1 to 18446744073709551615; required. The forge user's id.
 
 ## read_docs

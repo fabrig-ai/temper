@@ -394,6 +394,9 @@ mod tests;
 #[derive(Debug)]
 pub struct Parts;
 impl jig::render::Parts for Parts {
+    fn phrasebook(&self, text: u32) -> skein_ui::phrases::Phrasebook {
+        temper_client_domain::words::phrasebook(text)
+    }
     fn task_next(&self, task: &jig_client::contract::Task, out: &mut jig::render::Text) {
         if let jig_client::contract::TaskContractDocument::Change { connector, kind: 1, .. } = task.result_contract
             && connector == temper_client_protocol_wire::FORGE
