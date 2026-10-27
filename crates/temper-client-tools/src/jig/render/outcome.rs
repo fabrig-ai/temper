@@ -454,6 +454,7 @@ pub(crate) fn retry(call: &crate::jig::call::Call) -> Box<[u8]> {
         rows::DECIDE_AT => &rows::DECIDE,
         rows::TASK_DECIDE_AT => &rows::TASK_DECIDE,
         rows::RELEASE_AT => &rows::RELEASE,
+        rows::LIFT_AT => &rows::LIFT,
         rows::STOP_AT => &rows::STOP,
         rows::CANCEL_AT => &rows::CANCEL,
         rows::CONNECT_AT..=rows::RETRY_AT | rows::DECLARE_AT | rows::VERIFY_AT | rows::EXPORT_AT | rows::IMPORT_AT => {

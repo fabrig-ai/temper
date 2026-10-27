@@ -232,6 +232,10 @@ pub(super) fn encode_owner_chip_hold(
     budget: &mut super::Cut,
 ) {
     out.object_start();
+    if let Some(placed) = &value.placed {
+        out.key(b"placed");
+        super::placed_hold::encode(placed, out, budget);
+    }
     out.key(b"account");
     match &value.account {
         Some(item_1) => {

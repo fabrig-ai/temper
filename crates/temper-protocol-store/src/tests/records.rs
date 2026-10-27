@@ -452,6 +452,8 @@ fn application_refusals() -> Box<[jig_domain_people::Refusal]> {
         rows.push(p::Refusal::Role { held: Some(held) }).expect("bounded application cases");
     }
     for lacking in [
+        p::Lack::HoldOwner { hold: u64::MAX, owner: p::HoldOwner::Party { person: u64::MAX } },
+        p::Lack::HoldOwner { hold: u64::MAX, owner: p::HoldOwner::Task { task: u64::MAX } },
         p::Lack::Approver,
         p::Lack::Budget { needs: u64::MAX, left: 42 },
         p::Lack::Grant { kind: u16::MAX },
@@ -549,6 +551,8 @@ fn application_refusal_lists(rows: &mut skein_lib::List<jig_domain_people::Refus
 }
 fn application_moved_and_ended(rows: &mut skein_lib::List<jig_domain_people::Refusal>) {
     use jig_domain_people as p;
+    rows.push(p::Refusal::Moved { now: p::Moved::PlacedHold { revision: u64::MAX } })
+        .expect("bounded application cases");
     for bound in [
         p::Bound::Reasoning,
         p::Bound::Metadata,

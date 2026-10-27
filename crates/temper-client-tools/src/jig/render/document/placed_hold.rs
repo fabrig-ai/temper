@@ -17,7 +17,14 @@ pub(super) fn text(task: &c::Task, me: Option<&c::Me>, out: &mut Text) {
             out.put(b" and below");
         }
         c::HoldScope::Project => {
-            out.put(b"project ");
+            if let Some(me) = me {
+                for project in &me.projects {
+                    if project.project == task.project {
+                        out.put(b"project ");
+                        break;
+                    }
+                }
+            }
             super::project(task.project, me, out);
         }
     }
