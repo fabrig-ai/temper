@@ -51,6 +51,8 @@ temper runs software work for people: agents take tasks on the repositories of a
   merges it.
 - temper help budget: what work spends, where it comes from, and what
   happens when it runs out.
+- temper help landing: how a project that lands by turn lands a
+  change: its candidate, its gates proved by receipts, the turn.
 
 ## The walks
 
