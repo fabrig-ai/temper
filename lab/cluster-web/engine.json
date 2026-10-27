@@ -35,7 +35,7 @@
         "link.silence_ms": 1000,
         "notes.entries_per_scope": 1,
         "notes.recalled": 1,
-        "notes.scopes": 15,
+        "notes.scopes": 17,
         "people.amendment_bytes": 2048,
         "people.holdings": 1,
         "people.inbox_tasks": 16,

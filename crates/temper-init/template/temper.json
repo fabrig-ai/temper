@@ -14,7 +14,7 @@
         "hub.transcript_bytes": 4158192,
         "hub.turn_bytes": 1039544,
         "hub.turn_queue_bytes": 8316352,
-        "notes.scopes": 15,
+        "notes.scopes": 17,
         "tasks.authority_bytes": 512,
         "tasks.authority_grants": 14,
         "tasks.executor_kinds": 5,

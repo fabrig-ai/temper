@@ -513,6 +513,7 @@ impl Domain {
     }
     /// Construct a connector with the deployment namespace and any writers
     /// known at start; invalid limits or writer configuration are refused.
+    #[expect(clippy::too_many_lines, reason = "one constructor reserves every connector owner from checked limits")]
     pub fn new(
         l: &Limits,
         seed: u64,

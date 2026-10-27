@@ -3,8 +3,8 @@ pub mod support;
 // The process configuration reader admits a MiB, 64K tokens and 32 levels.
 const DOCUMENT: jig_protocol_config::DocumentLimits =
     jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 65_536, depth: 32 };
-// client/README.md 5.4 admits twelve entries independently of document rows.
-const AUTHORITY_ENTRIES: u32 = 12;
+// client/README.md 5.4 requires complete engine authority lists, independently of document rows.
+const AUTHORITY_ENTRIES: u32 = 14;
 
 fn process_engine() -> jig_protocol_config::Engine {
     let scratch = support::Scratch::startup("native-document-limits");
@@ -14,7 +14,7 @@ fn process_engine() -> jig_protocol_config::Engine {
     // Forge::Unreached omits Forgejo's overrides; include its whole-authority bounds here.
     value["engine"]["limits"]["overrides"]["authority.grants"] = 14.into();
     value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 14.into();
-    value["engine"]["limits"]["overrides"]["notes.scopes"] = 15.into();
+    value["engine"]["limits"]["overrides"]["notes.scopes"] = 17.into();
     let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(&bytes, &DOCUMENT).expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
@@ -83,7 +83,7 @@ fn assert_owned_limits(limits: &serde_json::Value) {
         "authority.segments":8,"tasks.hold_segments":8,"tasks.authority_segments":8,
         "documents.rows":2,"documents.lines":2,"documents.text_bytes":128,
         "views.watchers":16,"views.watchers_per_party":16,
-        "authority.grants":14,"authority.executors":5,"tasks.authority_grants":14,"tasks.executor_kinds":5,"notes.scopes":15,
+        "authority.grants":14,"authority.executors":5,"tasks.authority_grants":14,"tasks.executor_kinds":5,"notes.scopes":17,
         "tasks.authority_bytes":512,"tasks.batch":1
     }}}});
     let agent: serde_json::Value =
