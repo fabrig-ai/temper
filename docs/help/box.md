@@ -75,7 +75,8 @@ jq --arg model MODEL --arg claude "$(command -v claude)" --arg programs PROGRAMS
 Expect: no output; `jq -c '[.engine.llm.models[].name]'
 CONFIG/temper.json` prints `["MODEL","demo"]`, and `me` later lists
 provider 2, Anthropic, with its program `claude_code`. Provider 1 is
-gone: step 5's way is then Claude Code's.
+gone: step 5's way is then Claude Code's. Keep the demo: without it a
+run's turn outgrows init's limits.
 
 If not: `temper init: CONFIG/temper.json: already exists` (exit 1):
 `CONFIG` holds a configuration; start from empty directories.
@@ -229,8 +230,8 @@ temper ctl DIR task show TASK --until replied
 temper ctl DIR task show TASK --tree
 ```
 
-`TASK` is the chat's number, which the first call prints. The tree
-lists the change task the chat started: that is `CHANGE`.
+`TASK` is the chat's number, which the first call prints; the tree
+lists the change task it started, `CHANGE`.
 
 Expect: `done: task TASK, chat`; the wait prints the task, its first
 line `task TASK · chat · ` and its phase, then `met`.
@@ -294,14 +295,13 @@ move at its deadline: account export again after it.
 ## Clean up
 
 - `CONFIG`, `DATA` and `CACHE` hold the deployment: start the box
-  again with the same three to resume. On fake backends, removing
+  on the same three to resume. On fake backends, removing
   `DATA/box/fake-backends` resets it.
 - Keep `FILE` from step 8 private until an import on the next
   deployment removes it.
-- Remove a key file once its account is usable, and `DIR` once you
-  are done.
+- Remove a key file once its account is usable, and `DIR` when done.
 
 ## Next
 
-- temper help ctl: the loop, keys and exit statuses for every call.
+- temper help ctl: the loop, keys and exit statuses of every call.
 - temper help github: GitHub beside this box's Forgejo.
