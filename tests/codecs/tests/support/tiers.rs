@@ -17,6 +17,7 @@ pub fn smallest() -> Stored {
             run: None,
         },
         pending: Box::new([]),
+        baseline: None,
         task: None,
         branch: TierBranch::Absent,
         flight: None,
@@ -59,7 +60,11 @@ pub fn fullest() -> Stored {
                 },
             }),
         },
-        pending: landings,
+        baseline: None,
+        pending: landings
+            .iter()
+            .map(|l| temper_engine_domain_forge::TierLanding { commit: l.commit, key: Some(l.key) })
+            .collect(),
         task: Some(51),
         branch: TierBranch::Pending { entry: 11 },
         flight: Some(temper_engine_domain_forge::TierFlight {
