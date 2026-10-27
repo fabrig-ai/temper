@@ -42,9 +42,10 @@ fn a_deployment_reads_its_format_rows_manifest_and_turns() {
     assert_eq!(held.generation, 1);
     assert_eq!(held.manifest.generation, 1);
     let unkept = Levels { skein: None, smith: None, jig: None, application: None };
-    assert_eq!(held.format.levels, unkept);
+    let baseline = Levels { skein: Some(0), smith: Some(0), jig: Some(0), application: Some(0) };
+    assert_eq!(held.format.levels, baseline);
     assert_eq!(held.manifest.before, unkept);
-    assert_eq!(held.manifest.after, unkept);
+    assert_eq!(held.manifest.after, baseline);
     assert_eq!(held.store.len(), STORE_ROWS);
     assert_eq!(held.jig.len(), JIG_ROWS);
     assert_eq!(held.application.len(), APPLICATION_ROWS);

@@ -1,5 +1,7 @@
 //! The deployment store and its three file drivers (protocol/store.md, 3–5;
 //! jig's protocol/store.md, 13).
+#[cfg(test)]
+mod baseline;
 mod ranges;
 pub mod route;
 use jig_protocol_store as protocol;
@@ -694,7 +696,7 @@ pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) 
     let room = root::max_out(application).max(protocol::MAX_OUT_DOWN).checked_mul(2)?;
     // Queues and load flights price the same immutable payload envelope.
     let payload = root::payload_worst_case(application)?;
-    protocol::worst_case(limits)?
+    protocol::worst_case_with_patches(limits, &PATCH_SETS)?
         .checked_add(u64::try_from(size_of::<Store>()).ok()?)?
         .checked_add(FileIo::worst_case(handles(limits), max_read(limits), 32, max_whole(limits))?.checked_mul(3)?)?
         .checked_add(Queue::<file::Request>::worst_case(room)?.checked_mul(3)?)?
