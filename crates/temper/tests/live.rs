@@ -43,6 +43,13 @@ fn a_person_asks_chatgpt_to_land_a_change_on_the_owned_forge() {
     owned_forge_landing(support::forge_land::LiveModel::ChatGpt { account: account.as_deref() });
 }
 
+/// domain/testing.md, 2.7: B0's passing walk, with its original phase bounds.
+#[test]
+#[ignore = "live: owner-run only, through scripts/proof-live.sh rung-b0"]
+fn rung_b0_a_person_agrees_a_plan_before_the_change_lands() {
+    support::forge_land::rung::green_light();
+}
+
 /// domain/testing.md, 2.7 and protocol/credentials.md, 3: a held login used in place.
 #[test]
 #[ignore = "live: owner-run only, through scripts/proof-live.sh forge-land-claude"]

@@ -7,6 +7,8 @@ use skein_lib::Duration;
 use skein_world::{Referee, real};
 use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 
+pub mod rung;
+
 /// forge-setup's first repository goes into a project of its own, made after
 /// project 1 (tools.md 5.5): work/hello is project 2's.
 const FIRST_PROJECT: &str = "2";

@@ -5,7 +5,74 @@ use std::{
     fmt::Write,
     fs,
     os::unix::fs::{PermissionsExt, symlink},
+    path::Path,
 };
+
+#[test]
+fn rung_b0s_live_configuration_is_admitted_without_an_account_or_backend() {
+    use std::os::unix::ffi::OsStrExt;
+    let scratch = support::Scratch::startup("rung-b0-admission");
+    let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
+    support::forge_land::rung::deployment(&paths);
+    let mut directories = support::configuration::directories(scratch.path());
+    directories.config = paths[0].as_os_str().as_bytes().into();
+    directories.data = paths[1].as_os_str().as_bytes().into();
+    directories.cache = paths[2].as_os_str().as_bytes().into();
+    let result =
+        temper::boxed_envelope_in(&directories, &fs::read(paths[0].join("temper.json")).expect("configuration"));
+    assert!(result.is_ok(), "B0's real configuration admits before any live account: {:?}", result.err());
+    scratch.remove();
+}
+
+#[test]
+fn a_rungs_return_hook_is_idempotent_and_refuses_unsafe_metadata_without_reading_the_file() {
+    let scratch = support::Scratch::startup("rung-return-hook");
+    let root = scratch.path();
+    let account = root.join("synthetic-record");
+    // This is a synthetic file, never an account or a real login. A command
+    // that should never be needed makes an accidental export fail the test.
+    support::write_private(&account, b"synthetic fixture");
+    support::forge_land::rung::return_hook(Path::new("/must-not-export"), root, root, &account);
+    let run = || std::process::Command::new(root.join("give-back")).output().expect("return hook");
+    assert!(run().status.success(), "already returned file is accepted by stat");
+    assert!(run().status.success(), "the launcher's second return is harmless");
+    assert!(root.join("returning").is_file(), "cleanup prevents an import starting afterwards");
+    fs::set_permissions(&account, fs::Permissions::from_mode(0o644)).expect("unsafe mode");
+    assert!(!run().status.success(), "public metadata is refused");
+    support::write_private(&account, b"");
+    assert!(!run().status.success(), "empty file is refused");
+    fs::remove_file(&account).expect("remove fixture");
+    symlink("missing", &account).expect("fixture link");
+    assert!(!run().status.success(), "a link never counts as a returned record");
+    fs::remove_file(&account).expect("remove fixture link");
+    let stub = root.join("ctl-stub's path");
+    support::write_private(
+        &stub,
+        br#"#!/bin/sh
+set -eu
+case "$4" in
+list) printf '%s\n' '{"accounts":{"party":[{"provider":1,"plan":true,"number":7}]}}' ;;
+export) test "$5" = 7; umask 077; printf '%s' synthetic > "$6" ;;
+*) exit 1 ;;
+esac
+"#,
+    );
+    fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).expect("executable synthetic ctl");
+    support::forge_land::rung::return_hook(&stub, root, root, &account);
+    assert!(run().status.success(), "export selects the actual account number from public ctl metadata");
+    let returned = fs::symlink_metadata(&account).expect("returned synthetic record");
+    assert!(returned.is_file() && returned.len() > 0);
+    assert_eq!(returned.permissions().mode() & 0o777, 0o600);
+    scratch.remove();
+}
+
+#[test]
+fn a_rungs_setup_keeps_the_final_json_answer_after_progress_and_refuses_a_broken_stream() {
+    use support::forge_land::rung::ctl_json;
+    assert_eq!(ctl_json(b"{\"setting_up\":3}\n{\"project\":2}\n"), Ok(serde_json::json!({"project":2})));
+    assert!(ctl_json(b"{\"setting_up\":3}\nnot JSON\n{\"project\":2}").is_err());
+    assert!(ctl_json(b"").is_err());
+}
 
 #[test]
 fn a_configuration_file_past_its_bound_is_refused() {

@@ -9,10 +9,11 @@ heavy=$(command -v heavy || true)
 case ${1-} in
     '') test_name=a_real_model_answers_a_chat_and_pushes_a_small_change ;;
     forge-land) test_name=a_person_asks_chatgpt_to_land_a_change_on_the_owned_forge ;;
+    rung-b0) test_name=rung_b0_a_person_agrees_a_plan_before_the_change_lands ;;
     forge-land-claude) test_name=a_person_asks_claude_code_to_land_a_change_on_the_owned_forge ;;
-    *) printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude]' >&2; exit 2 ;;
+    *) printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude|rung-b0]' >&2; exit 2 ;;
 esac
-[ "$#" -le 1 ] || { printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude]' >&2; exit 2; }
+[ "$#" -le 1 ] || { printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude|rung-b0]' >&2; exit 2; }
 # The held directory is opened without following a link and listed once.
 # Only its metadata and entry names are inspected; no entry is opened.
 claude_identity=
@@ -67,9 +68,19 @@ elif [ -n "${TEMPER_LIVE_CLAUDE-}" ]; then
     exit 2
 fi
 store=
+rung=false
 rerun=false
-if [ "${1-}" = forge-land ] || [ "${1-}" = forge-land-claude ]; then
-    store=${TEMPER_LIVE_STORE:-$HOME/src/rust/tmp/live-store/$1}
+if [ "${1-}" = forge-land ] || [ "${1-}" = forge-land-claude ] || [ "${1-}" = rung-b0 ]; then
+    if [ "${1-}" = rung-b0 ]; then
+        rung=true
+        [ -n "${TEMPER_LIVE_ACCOUNT-}" ] || { printf '%s\n' 'TEMPER_LIVE_ACCOUNT is required for rung-b0' >&2; exit 2; }
+        store=${TEMPER_LIVE_STORE:-$PWD/../rung-b0-$(date -u +%Y%m%dT%H%M%SZ)-$$}
+        # Rung boxes and their retained evidence belong to this task directory.
+        export TMPDIR=${TMPDIR:-$PWD/..}
+        export TEMPER_LIVE_KEEP=${TEMPER_LIVE_KEEP:-$PWD/../live-evidence}
+    else
+        store=${TEMPER_LIVE_STORE:-$HOME/src/rust/tmp/live-store/$1}
+    fi
     if [ -e "$store" ] || [ -L "$store" ]; then
         if [ ! -d "$store" ] || [ -n "$(ls -A -- "$store")" ]; then
             rerun=true
@@ -94,10 +105,11 @@ if [ "${1-}" = forge-land ] || [ "${1-}" = forge-land-claude ]; then
         printf '%s\n' 'moving the held ChatGPT account in; needs no person'
     fi
 elif [ -n "${TEMPER_LIVE_ACCOUNT-}" ]; then
-    printf '%s\n' 'TEMPER_LIVE_ACCOUNT is for forge-land' >&2
+    printf '%s\n' 'TEMPER_LIVE_ACCOUNT is for forge-land or rung-b0' >&2
     exit 2
 fi
 export NEXTEST_DOUBLE_SPAWN=0
+export TEMPER_BUNDLE=${TEMPER_BUNDLE:-none}
 scratch=$(readlink -f "$(mktemp -d "${TMPDIR:-/tmp}/temper-live.XXXXXX")")
 # A kept deployment may already have processes. Only this sitting's new
 # processes belong to its cleanup, even when its box refuses a busy store.
@@ -155,6 +167,26 @@ finish() {
     status=$?
     trap - EXIT INT TERM HUP
     set +e
+    # The rung installs this before account import. Return while its box is
+    # still alive, including when nextest or this script received a signal.
+    # A failed return leaves the deployment alive for the owner's recovery.
+    if [ "$rung" = true ] && [ -x "$store/give-back" ]; then
+        if ! timeout 60 "$store/give-back" >> "$notice" 2>&1; then
+            printf '%s\n' 'LOGIN NOT BACK: export/stat failed; box retained for recovery' >&2
+            printf 'return hook %s/give-back\n' "$store" >&2
+            exit 1
+        fi
+    fi
+    # This also covers a failed build or a signal before import/hook creation.
+    if [ "$rung" = true ]; then
+        if [ "$(LC_ALL=C stat -c %F -- "$TEMPER_LIVE_ACCOUNT" 2>/dev/null)" != 'regular file' ] ||
+           [ "$(stat -c %a -- "$TEMPER_LIVE_ACCOUNT" 2>/dev/null)" != 600 ] ||
+           ! [ "$(stat -c %s -- "$TEMPER_LIVE_ACCOUNT" 2>/dev/null)" -gt 0 ]; then
+            printf '%s\n' 'LOGIN NOT BACK: final stat failed; box retained for recovery' >&2
+            exit 1
+        fi
+        stat -c 'LOGIN BACK: %F mode=%a bytes=%s owner=%u' -- "$TEMPER_LIVE_ACCOUNT" >> "$notice"
+    fi
     if [ -n "$runner" ]; then
         kill -TERM "$runner" 2>/dev/null
         wait "$runner" 2>/dev/null
