@@ -32,6 +32,7 @@ Which setting: its kind and, but for the rules, its number.
 How an agent's run works: its instructions, models, tools, hosts and budget. A task's runs read the charter of the settings revision the task was made in.
 
 - `number`: integer, 0 to 4,294,967,295. The charter's number, the same as `setting.number`.
+- `tools`: integer. The host families its runs are offered, where their task's authority holds them too
 - `instructions`: text, at most 1,048,576 bytes. What the run's agent reads first, before its task's brief.
 - `waiting`: nanoseconds. How long a run with nothing to do waits for words or news before it parks.
 - `resume`: true or false. Whether a run resumes its task's transcript, when there is one, rather than start afresh.

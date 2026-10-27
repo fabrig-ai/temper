@@ -35,7 +35,7 @@ pub fn stock(deployment: &Value) -> Value {
     let p = &c.policy;
     let charter = json!({"number":c.number,"instructions":text(&p.instructions),"model":model(&p.model),"alternatives":p.alternatives.iter().map(model).collect::<Vec<_>>(),
         "waiting":p.waiting.as_nanos(),"resume":p.resume,"turns":p.turns,"time":p.time.as_nanos(),"reserve_turns":p.reserve_turns,"reserve_time":p.reserve_time.as_nanos(),
-        "inspect":p.inspect,"modify":p.modify,"shell":p.shell,"agents":p.agents,"call_timeout":p.call_timeout.as_nanos(),"hosts":match c.hosts { jig_domain_fleet::Kinds::Workers=>"workers",jig_domain_fleet::Kinds::Engine=>"engine",jig_domain_fleet::Kinds::Both=>"both" },"spend":c.spend});
+        "inspect":p.inspect,"modify":p.modify,"shell":p.shell,"agents":p.agents,"tools":p.tools.0,"call_timeout":p.call_timeout.as_nanos(),"hosts":match c.hosts { jig_domain_fleet::Kinds::Workers=>"workers",jig_domain_fleet::Kinds::Engine=>"engine",jig_domain_fleet::Kinds::Both=>"both" },"spend":c.spend});
     let t = &defaults.templates[0];
     let jig_domain_people::TemplateExecutor::Charter(executor) = t.executor else { panic!("stock chat executor") };
     let jig_domain_tasks::Contract::Report { words } = t.contract else { panic!("stock chat report") };

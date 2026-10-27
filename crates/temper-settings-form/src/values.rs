@@ -14,6 +14,8 @@ pub fn encode_document_text(value: &c::DocumentText, out: &mut Encoder) {
 }
 pub fn encode_charter(value: &c::Charter, out: &mut Encoder) {
     out.object_start();
+    out.key(b"tools");
+    out.unsigned(value.tools);
     out.key(b"number");
     out.unsigned(u64::from(value.number));
     out.key(b"instructions");
