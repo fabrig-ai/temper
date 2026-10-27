@@ -104,13 +104,12 @@ fn every_row_is_a_name_apply_takes_at_its_small_value() {
 
 #[test]
 fn a_name_with_no_row_is_refused() {
+    let name = b"box.unknown";
     let small = limits::small();
-    for name in ["box.unknown"] {
-        let mut copy = small;
-        assert_eq!(limits::apply(&mut copy, name.as_bytes(), u64::MAX), Err(limits::Refused::Unknown));
-        assert_eq!(limits::value(&copy, name.as_bytes()), None);
-        assert_eq!(copy, small);
-    }
+    let mut copy = small;
+    assert_eq!(limits::apply(&mut copy, name, u64::MAX), Err(Refused::Unknown));
+    assert_eq!(limits::value(&copy, name), None);
+    assert_eq!(copy, small);
 }
 
 #[test]
