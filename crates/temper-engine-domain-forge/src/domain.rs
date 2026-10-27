@@ -2345,7 +2345,8 @@ fn delegate_result(
             // A result racing the CI cancellation is no verdict or review failure.
             let cancelling = row.change.state == (change::State::CancellingGates { head });
             if cancelled || cancelling {
-                save_change(out, row.clone());
+                let saved = row.clone();
+                save_change(d, out, saved);
                 return;
             }
             let report = change::GateReport { number, head, status };
@@ -3473,6 +3474,7 @@ fn end_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Requ
         | change::State::Reopening { .. }
         | change::State::Checking { .. }
         | change::State::Gating { .. }
+        | change::State::CancellingGates { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
         | change::State::Updating { .. }
