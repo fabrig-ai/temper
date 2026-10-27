@@ -326,7 +326,7 @@ fn repair_change(driver: &mut Driver, coordinator: &engine::Assignment, number: 
 fn no_settings_tools(run: &engine::Assignment) {
     assert_eq!(run.run.authority.tools.0 & core::ToolFamilies::JIG.settings, 0);
     let charter = temper_engine_smith::charter(run);
-    assert_eq!(charter.grants.host_tools.len(), 37);
+    assert_eq!(charter.grants.host_tools.len(), if run.charter == 4 { 19 } else { 37 });
     for tool in &charter.grants.host_tools {
         assert!(tool.name.as_ref() != b"settings" && tool.name.as_ref() != b"propose_settings");
     }
@@ -437,6 +437,8 @@ pub(super) fn reviewer() {
     let engine::CallAnswer::Delegated(made) = answer else { panic!("review admitted: {answer:?}") };
     let review = assigned(&driver, made[0].task).expect("stock charter 4 offered and assigned");
     assert_eq!(review.charter, 4);
+    no_settings_tools(&review);
+    assert_eq!(review.run.policy.tools, core::ToolFamilies::JIG.read);
     assert_eq!(review.run.policy.model, box_model());
     assert_eq!(review.run.authority.tools, tasks::Tools(jig_domain_core::ToolFamilies::JIG.read.0));
     assert!(review.run.authority.delegation.kinds.is_empty());
