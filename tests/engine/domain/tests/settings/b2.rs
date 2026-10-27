@@ -70,7 +70,8 @@ fn limits() -> engine::Limits {
     limits.authority.requirements = 4;
     limits.authority.facts = 4;
     limits.authority.writes = 2;
-    limits.people.amendment_bytes = 1024;
+    // The request carrier holds the stock's fourteen grants and six executor kinds.
+    limits.people.amendment_bytes = 2048;
     limits.people.inbox_tasks = 32;
     limits.people.inbox_recipients = 32;
     limits.fleet.slots = 4;
