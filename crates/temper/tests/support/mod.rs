@@ -12,6 +12,7 @@ pub mod fetch;
 pub mod first_repository;
 pub mod github;
 pub mod github_land;
+pub mod landing_by_turn;
 pub mod owned;
 pub mod running_revision;
 pub mod terminal;
