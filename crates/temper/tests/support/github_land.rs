@@ -796,8 +796,8 @@ fn configure_engine(value: &mut Value, forge: SocketAddr) {
         engine.remove(member);
     }
     engine.insert("projects".into(), init["engine"]["projects"].clone());
-    // The stock offers both chat and coding charters; the old fixture held one.
-    value["engine"]["limits"]["overrides"]["tasks.charters"] = 2.into();
+    // Four slots hold the stock chat, coding and reviewer charters.
+    value["engine"]["limits"]["overrides"]["tasks.charters"] = 4.into();
     // Keep App setup and log polling aligned with the live GitHub story.
     value["application"]["forges"][0]["app_read_only"] = true.into();
     let limits = &mut value["application"]["limits"]["overrides"];
