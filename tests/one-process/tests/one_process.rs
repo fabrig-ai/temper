@@ -56,3 +56,14 @@ fn an_adopted_repository_gets_its_change_pushed_through_git() {
     assert_eq!(outcome.pushed.len(), 1);
     assert_eq!(outcome.deliveries, [Delivery::NoAddress, Delivery::Written]);
 }
+
+#[test]
+fn a_second_run_pushes_its_own_agents_edit() {
+    let outcome = world::run(fixtures::calm(fixtures::SEED), world::Story::TwoChanges);
+    assert_eq!(outcome.verdict, Verdict::Passed);
+    let [first, second] = outcome.pushed.as_slice() else { panic!("two pushes: {:?}", outcome.pushed) };
+    for (push, content) in [(first, b"first\n".as_slice()), (second, b"second\n".as_slice())] {
+        assert_eq!(push.tree, std::collections::BTreeMap::from([(b"conflict.txt".to_vec(), content.to_vec())]));
+    }
+    assert_ne!(first.branch, second.branch);
+}

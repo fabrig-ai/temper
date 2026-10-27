@@ -26,6 +26,7 @@ pub enum Story {
     ChatReadThenWait { words: &'static [u8] },
     Adoption,
     Adopt,
+    TwoChanges,
     Merge,
 }
 #[derive(Debug)]
@@ -66,6 +67,7 @@ pub struct Pushed {
     pub branch: Box<[u8]>,
     pub commit: u64,
     pub parents: Vec<u64>,
+    pub tree: std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
 }
 thread_local! {
     static STORE: RefCell<Option<Rc<RefCell<Store>>>> = const { RefCell::new(None) };
@@ -235,7 +237,7 @@ impl Person {
                 Step::See { find: Find::text(fixtures::ANSWER), within: CHAT_WITHIN },
             ],
             Story::Adoption => stories::adoption_person(),
-            Story::Adopt | Story::Merge => stories::person(),
+            Story::Adopt | Story::TwoChanges | Story::Merge => stories::person(),
         };
         let mut offset = PROGRESS.with(|progress| progress.borrow().at);
         if matches!(scenario, Story::Adoption) && offset < fixtures::ADOPTION_REPLY_STEP {

@@ -15,6 +15,7 @@ pub(crate) struct Forge {
     edited: bool,
     prepared: bool,
     hooks: Option<std::net::SocketAddr>,
+    file_edits: bool,
 }
 impl Forge {
     pub(crate) fn new(transport: temper_fake_git_hosted::Typed, story: Story) -> Self {
@@ -27,6 +28,7 @@ impl Forge {
             edited: false,
             prepared: false,
             hooks: None,
+            file_edits: matches!(story, Story::TwoChanges),
         }
     }
     pub(crate) fn hand_hooks(&mut self, bound: std::net::SocketAddr) {
@@ -72,15 +74,17 @@ impl Forge {
             }
             // Git may create the remote branch at the editor's first committed change.
             // Earlier preparation has no completed agent write.
-            if !self.edited || from == Some(to) || branch == metadata.default_branch {
+            if (!self.edited && !self.file_edits) || from == Some(to) || branch == metadata.default_branch {
                 continue;
             }
             let object = forge.domain.object(to).expect("observed pushed object");
             let tree: BTreeMap<_, _> =
                 object.tree.iter().map(|(path, bytes)| (path.to_vec(), bytes.to_vec())).collect();
-            assert_eq!(tree, self.tree, "pushed tree is the completed agent edits");
+            if !self.file_edits {
+                assert_eq!(tree, self.tree, "pushed tree is the completed agent edits");
+            }
             let parents = object.parent.into_iter().chain(object.merge_parent).collect();
-            self.pushed.push(Pushed { branch, commit: to, parents });
+            self.pushed.push(Pushed { branch, commit: to, parents, tree });
         }
     }
     pub(crate) fn hooks_complete(procs: &[Proc], hooks: usize) -> bool {

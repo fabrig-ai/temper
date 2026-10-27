@@ -18,7 +18,7 @@ pub(crate) fn set(story: Story) {
 
 pub(crate) fn client_limits() -> temper_client_shell_terminal::limits::Limits {
     let mut limits = fixtures::client_limits();
-    if STORY.with(|slot| matches!(slot.get(), Story::Adopt)) {
+    if STORY.with(|slot| matches!(slot.get(), Story::Adopt | Story::TwoChanges)) {
         // Batch this whole-exchange story without changing the other stories' schedule.
         limits.io.receive = 16_384;
         limits.io.intake = limits.io.receive;
@@ -100,11 +100,14 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
             .expect("parameters")
             .push(serde_json::json!({"name":fixtures::PARAMETER_NAMES[2],"kind":"bytes","value":std::str::from_utf8(fixtures::MERGE_BRANCH).expect("fixture branch")}));
     }
-    let delegate = serde_json::to_vec(&delegate).expect("delegate JSON");
     let finish = call(
         b"finish",
         br#"{"form":"change","text":"","fields":{"title":"Fix the file","body":"The file is fixed."}}"#,
     );
+    if matches!(story, Story::TwoChanges) {
+        return two_changes(delegate, finish);
+    }
+    let delegate = serde_json::to_vec(&delegate).expect("delegate JSON");
     let edits = if matches!(story, Story::Merge) {
         vec![finish.clone()]
     } else {
@@ -121,6 +124,23 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
             turns: Box::new([call(b"shell", br#"{"command":"echo fixed > conflict.txt"}"#), finish]),
         },
     ]))
+}
+fn two_changes(mut delegate: serde_json::Value, finish: Turn) -> skein_fake_peers::llm::Peer {
+    let mut planning = Vec::new();
+    let mut scripts = Vec::new();
+    for (cue, content) in [("@first", "first\n"), ("@second", "second\n")] {
+        delegate["batch"][0]["spec"]["words"] = cue.into();
+        planning.push(call(b"delegate", &serde_json::to_vec(&delegate).expect("delegate JSON")));
+        planning.push(call(b"wait", b"{}"));
+        let edit = serde_json::json!({"path":"conflict.txt","edits":[{"old":"base\n","new":content}]});
+        scripts.push(Script {
+            cue: cue.as_bytes().into(),
+            turns: vec![call(b"edit", &serde_json::to_vec(&edit).expect("edit JSON")), finish.clone()].into(),
+        });
+    }
+    planning.push(call(b"wait", b"{}"));
+    scripts.push(Script { cue: b"@plan".as_slice().into(), turns: planning.into() });
+    fixtures::scripted_provider(scripts.into())
 }
 pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
     let config = skein_fake_forge_domain::Config {

@@ -78,7 +78,13 @@ impl Referee {
             ..rules::Scope::default()
         };
         let mut implications = BTreeSet::new();
-        if matches!(scenario, crate::world::Story::Adoption | crate::world::Story::Adopt | crate::world::Story::Merge) {
+        if matches!(
+            scenario,
+            crate::world::Story::Adoption
+                | crate::world::Story::Adopt
+                | crate::world::Story::TwoChanges
+                | crate::world::Story::Merge
+        ) {
             scope.tools = 3;
             scope.depth = 3;
             scope.executors.insert((1, 2));
@@ -303,6 +309,7 @@ impl skein_world::Referee<Proc> for Referee {
                     forge.complete() && forge::Forge::hooks_complete(other, crate::stories::ADOPT_HOOKS)
                 }
                 crate::world::Story::Merge => self.forge.borrow().complete(),
+                crate::world::Story::TwoChanges => self.forge.borrow().pushed.len() == 2,
             },
         };
         if self.done.is_none()
