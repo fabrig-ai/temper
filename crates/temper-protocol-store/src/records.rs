@@ -44,7 +44,7 @@ pub fn encode(value: &d::Stored) -> Box<[u8]> {
             w::Binding::new(&w::CEILINGS, w::BindingParts { address: address.clone(), subject: subject.clone() })
                 .expect(FITS),
         ),
-        d::Stored::Tier(row) => w::Value::Tier(tiers::encode(row)),
+        d::Stored::Tier(row) => w::Value::Tier(Box::new(tiers::encode(row))),
         d::Stored::Verification(row) => w::Value::Verification(verification::encode(row)),
         d::Stored::Flight { task, entry } => {
             w::Value::Flight(w::Flight::new(&w::CEILINGS, w::FlightParts { task: *task, entry: *entry }).expect(FITS))
@@ -98,7 +98,7 @@ pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
     let row = w::Row::decode(bounds.limits(), &mut Reader::new(bytes)).or(Err(Undecodable))?;
     Ok(match row.into_parts().value {
         w::Value::Landing(row) => d::Stored::Landing(landing::decode(row)),
-        w::Value::Receipt(row) => landing::decode_receipt(row),
+        w::Value::Receipt(row) => landing::decode_receipt(row)?,
         w::Value::Application(value) => application::decode(value, bounds)?,
         w::Value::Issue(value) => d::Stored::Issue(issues::decode(*value)),
         w::Value::Change(value) => d::Stored::Change(change::decode_change_row(*value)),
@@ -109,7 +109,7 @@ pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
             }
             d::Stored::Binding { address, subject }
         }
-        w::Value::Tier(row) => d::Stored::Tier(tiers::decode(row)?),
+        w::Value::Tier(row) => d::Stored::Tier(tiers::decode(*row)?),
         w::Value::Verification(row) => d::Stored::Verification(verification::decode(row)?),
         w::Value::Flight(row) => {
             let w::FlightParts { task, entry } = row.into_parts();
@@ -180,6 +180,7 @@ pub fn row(key: &[u8], value: &[u8], bounds: &Bounds) -> Result<d::Stored, Undec
 
 pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
     Some(w::Limits {
+        tier_flight_pending: forge.client.rows,
         tier_row_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         tier_row_pending: forge.changes.checked_mul(2)?.checked_add(1)?,
         tier_run_landings: forge.changes.checked_mul(2)?.checked_add(1)?,

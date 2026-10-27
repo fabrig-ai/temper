@@ -43,29 +43,7 @@ fn next_assignment(world: &mut World, index: usize) -> engine::Assignment {
     panic!("delegate {index} was not assigned: {:?}", world.answers);
 }
 
-pub(super) fn produce(world: &mut World, producer: &engine::Assignment, branch: &[u8]) -> [u8; 32] {
-    world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.into(), commit: 1 }));
-    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", branch, FILE, CONTENT, 1)
-        .expect("producer pushed review head");
-    let event = world.protocol.answer(
-        CHANNEL,
-        producer.task,
-        producer.attempt,
-        5,
-        tasks::End::Finished {
-            result: tasks::TaskResult::Change {
-                connector: 0,
-                kind: 2,
-                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
-                words: b"pushed".as_slice().into(),
-            },
-            cancel_delegates: false,
-        },
-        engine::Parts::none(),
-    );
-    world.send(event);
-    translate::commit(head)
-}
+pub(super) use temper_engine_domain_world::forge_routes::produce;
 
 fn review_world() -> (World, engine::Assignment, [u8; 32]) {
     let (mut world, _, producer, branch) = change_world_with_gate(false, 1000, None, true);

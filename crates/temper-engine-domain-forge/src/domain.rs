@@ -150,6 +150,8 @@ pub struct Domain {
     pub(crate) tiers: Map<u32, Box<[crate::RepositoryTiers]>>,
     pub(crate) tier_settings: Map<u32, crate::TierSettings>,
     pub(crate) tier_rows: Map<(skein_forge::api::Repository, Box<[u8]>), crate::TierRow>,
+    pub(crate) tier_follows: Map<(skein_forge::api::Repository, Box<[u8]>), crate::runs::Follow>,
+    pub(crate) tier_reads: Map<Token, (skein_forge::api::Repository, Box<[u8]>)>,
     pub(crate) tier_config_limits: Limits,
     pub(crate) tier_limits: (u32, u32),
     landings: Map<Token, PendingLanding>,
@@ -587,6 +589,8 @@ impl Domain {
             tier_limits: (l.repositories, l.tiers),
             tier_settings: Map::with_capacity(l.judge_projects),
             tier_rows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier rows bound")),
+            tier_follows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier follows bound")),
+            tier_reads: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier reads bound")),
             tier_config_limits: *l,
             landings: Map::with_capacity(l.landings.max(l.client.resources)),
             lost: Map::with_capacity(l.holds),
@@ -698,7 +702,11 @@ impl Domain {
         if self.restore_phase == RestorePhase::Restoring {
             return None;
         }
-        self.client.next_deadline()
+        match (self.client.next_deadline(), crate::tiers::deadline(self)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, None) => a,
+            (None, b) => b,
+        }
     }
 
     /// Earliest procedure or projection wait, reported to the root's clock.
@@ -1397,6 +1405,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         Event::Unsubscribe { task, topic } => unsubscribe(d, task, topic, out),
         Event::Hint { hint } => {
             crate::landing::hinted(d, &hint, out);
+            crate::tiers::hinted(d, &hint, out);
             let changes = d.changes_for(hint.repository, env.limits.changes);
             // An unrecognised resource (for example after a rename) cannot
             // establish irrelevance: retain the repository-wide fallback.
@@ -1465,6 +1474,7 @@ pub fn fire(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
         drain(d, env, out);
         return;
     }
+    crate::tiers::fire(d, env, out);
     // Keep the client child's whole cohort available. Excess ready timers stay
     // in their owner's bounded tables for the next iteration.
     let room = out.room().saturating_sub(skein_forge_client::max_out(&env.limits.client));
@@ -1588,7 +1598,9 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                 }
             }
             skein_forge_client::Request::Read { owner, result } => {
-                if d.landing.pending.contains_key(&owner) {
+                if d.tier_reads.contains_key(&owner) {
+                    crate::tiers::answered(d, env, owner, result, out);
+                } else if d.landing.pending.contains_key(&owner) {
                     crate::landing::answered(d, env, owner, result, out);
                 } else if d.capabilities.contains_key(&owner) {
                     crate::capabilities::answered(d, env, owner, result, out);
@@ -4661,6 +4673,7 @@ fn settle_outbox(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 
 fn read_afresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     crate::landing::rebuild(d);
+    crate::tiers::rebuild(d);
     d.restore_phase = RestorePhase::Active;
     crate::demo::restart(d, out);
     crate::tiers::restart(d, env, out);

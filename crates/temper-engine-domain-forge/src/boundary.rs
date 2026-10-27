@@ -673,6 +673,7 @@ pub struct LandingHeard {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Receipt {
     pub passed: bool,
+    pub failures: Option<temper_engine_domain_forge_tiers::Failures>,
     pub run: ReceiptRun,
     pub candidate: skein_forge::api::Commit,
     pub ended: skein_lib::Wall,
@@ -758,6 +759,27 @@ pub struct TierRow {
     pub pending: Box<[temper_engine_domain_forge_tiers::Landing]>,
     pub task: Option<u64>,
     pub branch: TierBranch,
+    pub flight: Option<TierFlight>,
+    pub result: Option<TierResult>,
+}
+/// Dispatch window and writes still to make. The run is rediscovered after restart.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierFlight {
+    pub next: Option<skein_lib::Time>,
+    pub entry: u64,
+    pub start: Option<skein_lib::Time>,
+    pub since: Option<skein_lib::Time>,
+    pub waiting: bool,
+    pub fault: bool,
+    pub pending: Box<[skein_forge::api::JobAttempt]>,
+}
+/// A terminal observation, committed before the verdict's status is admitted.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierResult {
+    pub verdict: temper_engine_domain_forge_tiers::Verdict,
+    pub run: ReceiptRun,
+    pub received: bool,
+    pub status: TierBranch,
 }
 /// Durable progress of the run's branch.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -767,10 +789,11 @@ pub enum TierBranch {
     Made,
 }
 /// The tier procedure waits after making its branch.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TierDecision {
     Wait,
     Held,
+    Done { words: Box<[u8]> },
 }
 
 /// One repository's tiers, in the configuration's order.

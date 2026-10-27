@@ -2217,7 +2217,19 @@ fn start_tier_run(
         inputs: Box::new([]),
     };
     let executor = tasks::Executor::Procedure { connector: domain.config.forge_connector, code: 4 };
-    let Some(holdings) = task_holdings(domain, env, project, task, task, executor, &spec, None) else { return false };
+    let Some(row) = domain.forge.tier_row(repository, &tier) else { return false };
+    let received = match &row.result {
+        Some(result) => result.received,
+        None => false,
+    };
+    let holdings = if received {
+        Box::new([])
+    } else {
+        let Some(holdings) = task_holdings(domain, env, project, task, task, executor, &spec, None) else {
+            return false;
+        };
+        holdings
+    };
     domain.work.push(Work::Forge(forge::Event::TierTask { repository, tier, number, task }));
     domain.work.push(Work::Core(jig_domain_core::Event::ConnectorRepair {
         seed: Box::new(seed),
@@ -2289,6 +2301,7 @@ fn tier_decision(domain: &mut Domain, task: u64, decision: forge::TierDecision) 
     let end = match decision {
         forge::TierDecision::Wait => StepEnd::Wait,
         forge::TierDecision::Held => StepEnd::Hold(tasks::Hold::Effects),
+        forge::TierDecision::Done { words } => StepEnd::Result(tasks::TaskResult::Report { words }),
     };
     domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep {
         task,
@@ -2310,32 +2323,38 @@ fn describe_tier_effect(
     if entry.task != task || entry.repository != row.repository {
         return None;
     }
-    let skein_forge::api::Write::CreateBranch { branch, commit } = &entry.effect.write else { return None };
-    if *branch != forge::tier_branch(&row.tier, run.number) || *commit != run.tip {
-        return None;
-    }
+    let (kind, what) = domain.forge.tier_effect_kind(entry)?;
     let repository = domain.forge.repository(row.repository)?;
     let context = domain.core.tasks.delegation(task)?;
     if repository.project != context.project || repository.role == forge::Role::Context {
         return None;
     }
-    let what = branch_what(branch, env.limits.forge.name_bytes)?;
+    let (form, recovery) = forge::effect_shape(kind)?;
     Some(EffectDescription {
         connector: domain.config.forge_connector,
-        purpose: 1,
+        purpose: entry.number,
         effect: authority::Effect {
             connector: domain.config.forge_connector,
-            kind: 9,
+            kind,
             name: resource_name(repository, &what, env.limits.authority.segments)?,
-            state: *commit,
+            state: run.tip,
             price: None,
-            access: effect_access(repository, &what, 9),
+            access: effect_access(repository, &what, kind),
             additional: Box::new([]),
             guards: Box::new([]),
         },
-        form: EffectForm::Creation,
-        recovery: Recovery::Unrecoverable,
-        waits_for_dependencies: forge::waits_for_dependencies(9),
+        form: match form {
+            forge::EffectForm::Creation => EffectForm::Creation,
+            forge::EffectForm::Transition => EffectForm::Transition,
+            forge::EffectForm::Set => EffectForm::Set,
+        },
+        recovery: match recovery {
+            forge::Recovery::Keyed => Recovery::Keyed,
+            forge::Recovery::Conditional => Recovery::Conditional,
+            forge::Recovery::Idempotent => Recovery::Idempotent,
+            forge::Recovery::Unrecoverable => Recovery::Unrecoverable,
+        },
+        waits_for_dependencies: forge::waits_for_dependencies(kind),
     })
 }
 

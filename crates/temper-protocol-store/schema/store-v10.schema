@@ -228,7 +228,11 @@ enum TierPart { whole, rerun: TierTests, probe: TierProbe }
 record TierRun { number: u64 tip: fixed 32 key: fixed 32 landings: list 257 TierLanding part: TierPart faults: u32 }
 record TierRecord { sequence: u64 judged: option TierJudged failing: Failures flakes: list 1024 TierFlake run: option TierRun }
 enum TierBranch { absent, pending: Number, made }
-record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierLanding task: option u64 branch: TierBranch }
+record TierFlight { next: option u64 entry: u64 start: option u64 since: option u64 waiting: bool fault: bool pending: list 65536 JobAttempt }
+record TierJudgement { number: u64 tip: fixed 32 key: fixed 32 finding: TierFinding }
+record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
+record TierResult { verdict: TierJudgement run: ReceiptRun received: bool status: TierBranch }
+record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierLanding task: option u64 branch: TierBranch flight: option TierFlight result: option TierResult }
 # Families 23 and 24: landing state and receipts (domain/landing.md, 12).
 record LandingAt { at: u64 }
 enum LandingPlace { waiting, preparing, proving, proved: LandingAt, turn: LandingAt, landed, cancelled }
@@ -251,8 +255,7 @@ record LandingRow { landing: LandingState asks: list 64 LandingAskSlot entries: 
 record ReceiptName { name: bytes 32 }
 enum ReceiptCheck { gate: ReceiptName, tier: ReceiptName }
 record ReceiptKey { project: u32 repository: Repository check_name: ReceiptCheck key: fixed 32 }
-record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
-record Receipt { passed: bool run: ReceiptRun candidate: fixed 32 ended: u64 }
+record Receipt { failures: option Failures passed: bool run: ReceiptRun candidate: fixed 32 ended: u64 }
 record ReceiptRow { key: ReceiptKey receipt: Receipt }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, tier: TierRow, verification: Verification }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, tier: boxed TierRow, verification: Verification }
 versioned record Row { value: Value }

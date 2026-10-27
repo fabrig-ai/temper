@@ -289,6 +289,7 @@ pub(super) fn decode(row: w::LandingRow) -> top::LandingRow {
         entries: decoded_entries.into_boxed(),
     }
 }
+#[expect(clippy::manual_map, reason = "the foundation uses explicit options without callbacks")]
 pub(super) fn encode_receipt(key: &top::ReceiptKey, receipt: &top::Receipt) -> w::ReceiptRow {
     let (name, tier) = match &key.check {
         top::Check::Gate(name) => (name.clone(), false),
@@ -312,27 +313,40 @@ pub(super) fn encode_receipt(key: &top::ReceiptKey, receipt: &top::Receipt) -> w
     .expect(FITS);
     let receipt = w::Receipt::new(
         &w::CEILINGS,
-        w::ReceiptParts { passed: receipt.passed, run, candidate: receipt.candidate, ended: receipt.ended.as_nanos() },
+        w::ReceiptParts {
+            failures: match &receipt.failures {
+                Some(f) => Some(super::verification::encode_failures(f)),
+                None => None,
+            },
+            passed: receipt.passed,
+            run,
+            candidate: receipt.candidate,
+            ended: receipt.ended.as_nanos(),
+        },
     )
     .expect(FITS);
     w::ReceiptRow::new(&w::CEILINGS, w::ReceiptRowParts { key, receipt }).expect(FITS)
 }
-pub(super) fn decode_receipt(row: w::ReceiptRow) -> top::Stored {
+pub(super) fn decode_receipt(row: w::ReceiptRow) -> Result<top::Stored, super::Undecodable> {
     let w::ReceiptRowParts { key, receipt } = row.into_parts();
     let w::ReceiptKeyParts { project, repository, check_name, key } = key.into_parts();
     let check = match check_name {
         w::ReceiptCheck::Gate(name) => top::Check::Gate(name.into_parts().name),
         w::ReceiptCheck::Tier(name) => top::Check::Tier(name.into_parts().name),
     };
-    let w::ReceiptParts { passed, run, candidate, ended } = receipt.into_parts();
+    let w::ReceiptParts { failures, passed, run, candidate, ended } = receipt.into_parts();
     let w::ReceiptRunParts { id, number, url } = run.into_parts();
-    top::Stored::Receipt {
+    Ok(top::Stored::Receipt {
         key: top::ReceiptKey { project, repository: names::decode_repository(repository), check, key },
         receipt: top::Receipt {
             passed,
+            failures: match failures {
+                Some(f) => Some(super::verification::decode_failures(f)?),
+                None => None,
+            },
             run: top::ReceiptRun { id, number, url },
             candidate,
             ended: Wall::from_nanos(ended),
         },
-    }
+    })
 }

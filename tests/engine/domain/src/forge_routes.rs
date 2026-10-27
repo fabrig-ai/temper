@@ -24,6 +24,7 @@ pub enum HoldWrite {
     Merge,
 }
 
+#[expect(clippy::struct_excessive_bools, reason = "independent fixture switches select the forge stories")]
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
     pub root: engine::Domain,
@@ -61,6 +62,7 @@ pub struct World {
     pub drained: Option<u64>,
     pub unsettled: Vec<engine::Unsettled>,
     pub busy_calls: u32,
+    pub tier: bool,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -167,6 +169,9 @@ impl World {
             limits.journal.writes += (people::max_out(&limits.people) - people::max_out(&walking::limits().people)) * 4;
             let mut config = walking::config(71);
             if tier {
+                // Nine steady watches, plus the next tier branch while the prior one releases.
+                limits.forge.client.resources = 10;
+                limits.forge.output = 84; // client max_out 27 + 3*subscriptions(8) + 3*holds(8) + 9.
                 let mut landings = skein_lib::Map::with_capacity(limits.authority.projects);
                 landings
                     .insert(
@@ -178,7 +183,7 @@ impl World {
                                 gates: Box::new([]),
                                 tiers: Box::new([engine::TierCheck {
                                     name: b"browser".as_slice().into(),
-                                    workflow: b"fuzzy.yml".as_slice().into(),
+                                    workflow: b"browser.yml".as_slice().into(),
                                     ignored: Box::new([]),
                                     artifact: b"report".as_slice().into(),
                                     format: temper_engine_domain_forge_tiers::Format::Lines,
@@ -230,7 +235,7 @@ impl World {
                 limits.tasks.parameters = 8;
                 limits.tasks.spec_bytes = 512;
                 limits.tasks.executor_kinds = 3;
-                limits.tasks.authority_grants = 11;
+                limits.tasks.authority_grants = if tier { 14 } else { 11 };
                 limits.journal.run_bytes = 8192;
                 limits.tasks.authority_segments = 9;
                 limits.tasks.authority_bytes = 512;
@@ -239,7 +244,7 @@ impl World {
                 limits.tasks.inbox_bytes = 1024;
                 limits.authority.executors = 3;
                 limits.authority.batch = 2;
-                limits.authority.grants = 11;
+                limits.authority.grants = if tier { 14 } else { 11 };
                 limits.authority.segments = 8;
                 limits.authority.segment_bytes = 64;
                 limits.authority.writes = 2;
@@ -250,8 +255,10 @@ impl World {
                 limits.journal.held = 1024;
                 limits.journal.result_bytes = 4096;
                 limits.journal.transcript_bytes = 32_768;
-                limits.fleet.slots = 2;
-                limits.fleet.workstreams = 2;
+                // A tier story has O1, P and P's producer active together.
+                limits.fleet.slots = if tier { 3 } else { 2 };
+                limits.fleet.workstreams = if tier { 3 } else { 2 };
+                limits.fleet.attempts = if tier { 3 } else { 2 };
                 // The core's inbox census and waiting entries cover every live task.
                 limits.people.inbox_tasks = 24;
                 limits.people.inbox_recipients = 32;
@@ -300,7 +307,7 @@ impl World {
                     rules.maximum_run_spend = 60;
                 }
                 rules.ceiling.tools = authority::Tools(1023);
-                let grants: Box<[authority::Grant]> = if with_change {
+                let mut grants: Box<[authority::Grant]> = if with_change {
                     Box::new([
                         grant.clone(),
                         effect_grant.clone(),
@@ -315,6 +322,16 @@ impl World {
                 } else {
                     Box::new([grant.clone(), effect_grant.clone()])
                 };
+                if tier {
+                    let mut expanded = List::with_capacity(limits.tasks.authority_grants);
+                    for item in grants {
+                        expanded.push(item).expect("task grant bound");
+                    }
+                    for kind in [6, 16, 17] {
+                        expanded.push(authority::Grant { kind, ..grant.clone() }).expect("tier grant bound");
+                    }
+                    grants = expanded.into_boxed();
+                }
                 let mut ceiling_grants = List::with_capacity(limits.authority.grants);
                 for grant in &grants {
                     ceiling_grants.push(grant.clone()).expect("configured task grants");
@@ -405,12 +422,29 @@ impl World {
         });
         let mut fake_config = forge_world::fake_config();
         fake_config.limits.repositories = 2;
+        if tier {
+            fake_config.limits.branches = 5;
+        } // main, two changes, and overlapping tier releases.
+        fake_config.limits.workflows = u32::from(tier);
+        fake_config.limits.workflow_runs = if tier { 4 } else { 0 };
         let mut fake = fake::Domain::new(&fake_config, 71);
         fake::repository(
             &mut fake,
             &fake_config,
             raw::Setup {
-                workflows: Box::new([]),
+                workflows: if tier {
+                    Box::new([raw::Workflow {
+                        file: b"browser.yml".as_slice().into(),
+                        jobs: Box::new([b"browser".as_slice().into()]),
+                        latency_min: Duration::from_secs(90),
+                        latency_max: Duration::from_secs(90),
+                        silent: 0,
+                        passes: 1000,
+                        cue: None,
+                    }])
+                } else {
+                    Box::new([])
+                },
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
                 default: Box::from(&b"main"[..]),
@@ -438,6 +472,17 @@ impl World {
         }
         // Keep the world's broad page bounds and align its message codec with the root.
         let mut store_limits = temper_engine_domain_world::store::widest();
+        if tier {
+            store_limits.forge.client.resources = 10;
+            store_limits.forge.output = 84;
+            store_limits.fleet.slots = 3;
+            store_limits.fleet.workstreams = 3;
+            store_limits.fleet.attempts = 3;
+            store_limits.authority.grants = store_limits.authority.grants.max(limits.authority.grants);
+            store_limits.tasks.authority_grants =
+                store_limits.tasks.authority_grants.max(limits.tasks.authority_grants);
+            store_limits.notes.scopes = 3 + store_limits.authority.grants;
+        }
         store_limits.people.words = limits.people.words;
         store_limits.tasks.message_bytes = limits.tasks.message_bytes;
         let store =
@@ -473,6 +518,7 @@ impl World {
             drained: None,
             unsettled: Vec::new(),
             busy_calls: 0,
+            tier,
             merges: 0,
         }
     }
@@ -963,10 +1009,12 @@ pub fn change_world_in(
     policy: paths::Change,
 ) -> (World, engine::Assignment, engine::Assignment, Box<[u8]>) {
     let paths::Change { no_ci, owner_gate, tracked } = policy;
-    if no_ci {
-        world.adopt_with_checks(false, Box::new([1]));
-    } else {
-        world.adopt();
+    if world.adopted.is_empty() {
+        if no_ci {
+            world.adopt_with_checks(false, Box::new([1]));
+        } else {
+            world.adopt();
+        }
     }
     if owner_gate {
         let branch = people::Pattern {
@@ -1024,7 +1072,11 @@ pub fn change_world_in(
         world.restart(true, true);
         world.until(Until::Ready);
     }
-    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    let chat_index = world.assigned.len();
+    let known: Vec<_> = world.assigned.iter().map(|run| run.task).collect();
+    if chat_index == 0 {
+        world.send(protocol::hello_slots(Token::new(7), if world.tier { 3 } else { 2 }, Box::new([])));
+    }
     let ask = if tracked {
         walking::goal_from(
             world.chat(1, b"make the fix"),
@@ -1034,15 +1086,31 @@ pub fn change_world_in(
     } else {
         world.chat(1, &b"make the fix"[..])
     };
+    let request = 92_u64 + u64::try_from(chat_index).expect("bounded assignments");
+    let mut ask_key = [92; 16];
+    if chat_index > 0 {
+        ask_key[..8].copy_from_slice(&request.to_be_bytes());
+    }
     world.send(engine::Event::Party(engine::PartyInput::Ask {
         models: Box::new([]),
-        reply_to: ReplyTo::new(Token::new(92)),
+        reply_to: ReplyTo::new(Token::new(request)),
         sign_in: world.signed_in.expect("owner session"),
-        key: [92; 16],
+        key: ask_key,
         ask,
     }));
-    world.until(Until::Assigned);
-    let chat = world.assigned[0].clone();
+    for _ in 0..200 {
+        if world.assigned.iter().skip(chat_index).any(|run| !known.contains(&run.task)) {
+            break;
+        }
+        world.tick();
+    }
+    let chat = world
+        .assigned
+        .iter()
+        .skip(chat_index)
+        .find(|run| !known.contains(&run.task))
+        .expect("new chat assigned")
+        .clone();
     // Tracked stories put the owner below another tracked task, as in the
     // director's chat. Both goals must gather the change in their subtree.
     let chat = if tracked { delegated_goal(&mut world, &chat) } else { chat };
@@ -1076,7 +1144,7 @@ pub fn change_world_in(
         Token::new(7),
         chat.task,
         chat.attempt,
-        93,
+        93 + u64::try_from(chat_index).expect("bounded chat index"),
         engine::Call {
             completion: 1,
             position: 1,
@@ -1125,24 +1193,34 @@ pub fn change_world_in(
         },
     );
     world.send(event);
-    world.until(Until::Delegated);
+    let mut change = None;
+    let mut producer = None;
     for _ in 0..200 {
-        if world.assigned.len() > producer_index {
-            break;
-        }
         world.tick();
+        if change.is_none() {
+            change = world.store.rows.values().find_map(|row| match row {
+                Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))
+                    if row.requester == tasks::Party::Task(chat.task)
+                        && matches!(row.executor, tasks::Executor::Procedure { code: 2, .. }) =>
+                {
+                    Some(row.number)
+                }
+                _ => None,
+            });
+        }
+        if let Some(change) = change {
+            producer = world.assigned.iter().skip(producer_index).find(|run| {
+                matches!(world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(run.task)))),
+                    Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) if row.requester == tasks::Party::Task(change))
+            }).cloned();
+            if producer.is_some() {
+                break;
+            }
+        }
     }
-    let producer = world.assigned.get(producer_index).expect("change producer assigned").clone();
+    let change = change.expect("change task number");
+    let producer = producer.expect("change producer assigned");
     assert_eq!(producer.workspace.repositories[0].landing, None, "initial producer starts from Base");
-    let change = world
-        .answers
-        .iter()
-        .rev()
-        .find_map(|answer| match answer {
-            temper_engine_domain::CallAnswer::Delegated(numbers) => numbers.first().map(|made| made.task),
-            _ => None,
-        })
-        .expect("change task number");
     assert!(
         world.store.rows.values().any(|stored| matches!(stored,
             Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(task)))
@@ -1370,4 +1448,38 @@ pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_
         | State::Landing { .. }
         | State::Held { .. } => None,
     }
+}
+
+pub fn produce(world: &mut World, producer: &engine::Assignment, branch: &[u8]) -> [u8; 32] {
+    produce_content(world, producer, branch, b"review this diff")
+}
+pub fn produce_content(world: &mut World, producer: &engine::Assignment, branch: &[u8], content: &[u8]) -> [u8; 32] {
+    const CHANNEL: Token = Token::new(7);
+    const FILE: &[u8] = b"file";
+    let raw::Answer::Commit(base) =
+        world.external(2, raw::Op::Read(raw::Read::Branch { branch: b"main".as_slice().into() }))
+    else {
+        panic!("producer starts at current main")
+    };
+    world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.into(), commit: base }));
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", branch, FILE, content, 1)
+        .expect("producer pushed review head");
+    let event = world.protocol.answer(
+        CHANNEL,
+        producer.task,
+        producer.attempt,
+        5,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"pushed".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    translate::commit(head)
 }

@@ -56,7 +56,7 @@ fn result_slots(l: &Limits) -> Option<u32> {
     slots(l)?.checked_mul(4)?.checked_add(l.landings.checked_mul(l.landing_members)?)
 }
 fn receipt_slots(l: &Limits) -> Option<u32> {
-    l.repositories.checked_mul(l.gates)?.checked_mul(l.receipts_per_gate)
+    l.repositories.checked_mul(l.gates.checked_add(l.tiers)?)?.checked_mul(l.receipts_per_gate)
 }
 impl State {
     pub fn new(l: &Limits) -> Self {
@@ -429,6 +429,7 @@ pub(crate) fn answered(
                         let run = ended.run.expect("a verdict has a run");
                         let receipt = Receipt {
                             passed: ended.outcome == policy::Verdict::Passed,
+                            failures: None,
                             candidate: flight.commit,
                             ended: env.wall,
                             run: ReceiptRun { id: run.id, number: run.number, url: run.url },
@@ -872,7 +873,7 @@ fn purpose_identity(row: &LandingRow, member: u16, gate: u16, operation: u8, att
     .identity()
     .expect("fixed purpose")
 }
-fn inputs(candidate: api::Commit, key: policy::Key) -> Box<[api::Input]> {
+pub(crate) fn inputs(candidate: api::Commit, key: policy::Key) -> Box<[api::Input]> {
     let mut length = 32;
     if candidate[20..] == [0; 12] {
         length = 20;
@@ -979,12 +980,28 @@ fn keep(
     );
 }
 
-fn put_receipt(d: &mut Domain, env: &Env<Limits>, key: ReceiptKey, receipt: Receipt, out: &mut Queue<Request>) {
+#[expect(clippy::manual_map, reason = "the foundation uses explicit options without callbacks")]
+pub(crate) fn put_receipt(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    key: ReceiptKey,
+    receipt: Receipt,
+    out: &mut Queue<Request>,
+) {
     let mut count = 0_u32;
     let mut oldest: Option<(Wall, ReceiptKey)> = None;
     let protected = match &key.check {
         Check::Gate(name) => d.landing.main_keys.get(&(key.repository, name.clone())).copied(),
-        Check::Tier(_) => None,
+        Check::Tier(name) => match d.tier_rows.get(&(key.repository, name.clone())) {
+            Some(row) => match &row.record.run {
+                Some(run) => Some((run.tip, run.key)),
+                None => match row.record.judged {
+                    Some(judged) => Some((judged.tip, judged.key)),
+                    None => None,
+                },
+            },
+            None => None,
+        },
     };
     for (saved, value) in &d.landing.receipts {
         if saved.project != key.project || saved.repository != key.repository || saved.check != key.check {
@@ -1306,7 +1323,11 @@ pub(crate) fn receipt_bytes(key: &ReceiptKey, receipt: &Receipt) -> Option<u64> 
     let name = match &key.check {
         Check::Gate(name) | Check::Tier(name) => name,
     };
-    u64::try_from(name.len()).ok()?.checked_add(u64::try_from(receipt.run.url.len()).ok()?)
+    let failures = match &receipt.failures {
+        Some(f) => crate::tiers::failures_bytes(f)?,
+        None => 0,
+    };
+    u64::try_from(name.len()).ok()?.checked_add(u64::try_from(receipt.run.url.len()).ok()?)?.checked_add(failures)
 }
 /// The bounded tables, nested payloads, transient read snapshots and key walker.
 pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
@@ -1363,7 +1384,13 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     Map::<u64, LandingRow>::worst_case(l.landings)?
         .checked_add(rows.checked_mul(4)?)?
         .checked_add(Map::<ReceiptKey, Receipt>::worst_case(receipt_slots(l)?)?)?
-        .checked_add(u64::from(receipt_slots(l)?).checked_mul(32 + 2048)?)?
+        .checked_add(u64::from(receipt_slots(l)?).checked_mul(
+            32_u64.checked_add(2048)?.checked_add(
+                u64::from(l.failing_tests).checked_mul(
+                    u64::from(l.test_id_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?,
+                )?,
+            )?,
+        )?)?
         .checked_add(Map::<u32, (change::Way, Box<[RepositoryGates]>)>::worst_case(l.judge_projects)?)?
         .checked_add(u64::from(l.judge_projects).checked_mul(u64::from(l.repositories).checked_mul(
             u64::try_from(size_of::<RepositoryGates>()).ok()?.checked_add(u64::from(l.gates).checked_mul(gate)?)?,

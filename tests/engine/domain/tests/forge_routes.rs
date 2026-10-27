@@ -3211,7 +3211,7 @@ fn a_change_landed_where_its_project_names_a_tier_gives_no_result_yet() {
 }
 
 #[test]
-fn a_tiered_repositorys_baseline_makes_a_tier_task_that_creates_its_branch() {
+fn a_tiered_repositorys_baseline_runs_to_green() {
     const SETTLE_TICKS: u32 = 600; // the existing focused change story's settling bound.
     const ONE_BASELINE: usize = 1; // the configured browser tier.
     let world = World::configured_limits(
@@ -3256,8 +3256,30 @@ fn a_tiered_repositorys_baseline_makes_a_tier_task_that_creates_its_branch() {
         world.tick();
     }
     assert_eq!(world.merges, 1);
-    assert!(world.store.rows.values().any(|stored| matches!(stored, Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Tier(row) if row.pending.len() == ONE_BASELINE && row.record.run.as_ref().is_some_and(|run| run.number == 1)))));
-    let tier_tasks = world.store.rows.values().filter(|stored| matches!(stored, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))) if matches!(row.executor, tasks::Executor::Procedure { code: 4, .. }))).count();
-    assert_eq!(tier_tasks, ONE_BASELINE);
-    assert!(world.store.rows.values().any(|stored| matches!(stored, Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(row) if merged(&row.change.state).is_some()))));
+    for _ in 0..SETTLE_TICKS * 3 {
+        world.tick();
+    }
+    assert!(world.store.rows.values().any(|stored| matches!(stored, Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Tier(row) if row.record.sequence == 2 && row.record.run.is_none()))));
+    let tasks = world.store.rows.values().filter(|stored| matches!(stored, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row))) if matches!(row.executor, tasks::Executor::Procedure { code: 4, .. }) && matches!(row.phase, tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { .. }))))).count();
+    assert_eq!(tasks, 2, "baseline and the landing's run finish green");
+    assert!(
+        world
+            .fake
+            .inspect(
+                &world.fake_env.limits,
+                b"org/repo",
+                &raw::Read::Branch { branch: b"temper/tier/browser.1".as_slice().into() }
+            )
+            .is_err()
+    );
+    assert!(
+        world
+            .fake
+            .inspect(
+                &world.fake_env.limits,
+                b"org/repo",
+                &raw::Read::Branch { branch: b"temper/tier/browser.2".as_slice().into() }
+            )
+            .is_err()
+    );
 }

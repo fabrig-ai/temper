@@ -113,7 +113,6 @@ fn fact(row: &Verification) -> change::Verification {
 }
 
 /// Lay a judged run's verdict on each named landing; T4 supplies the judged range.
-#[cfg_attr(not(test), expect(dead_code, reason = "T4 calls this entry point when tier runs are wired"))]
 pub(crate) fn judged(
     d: &mut Domain,
     repository: Repository,
