@@ -21,6 +21,8 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
         project["policy"] = 1.into();
         project.as_object_mut().expect("seed").remove("roles");
     }
+    // A Create member owns stock's ten grants and four executors, plus its words.
+    value["engine"]["limits"]["overrides"]["people.amendment_bytes"] = 1024.into();
     let worker: serde_json::Value =
         serde_json::from_slice(jig_channel_world::fixtures::WORKER_DOCUMENT).expect("worker JSON");
     value["workers"] = worker["workers"].clone();
@@ -37,6 +39,8 @@ pub fn documents(directory: &Path, program: &str) -> (Vec<u8>, Vec<u8>) {
     // The stock carries three charters and ten forge grants; four charter slots hold them.
     value["engine"]["limits"]["overrides"]["tasks.charters"] = 4.into();
     value["engine"]["limits"]["overrides"]["authority.grants"] = 16.into();
+    // A chat copies stock policy 1's ten grants into its task authority.
+    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 16.into();
     value["engine"]["limits"]["overrides"]["notes.scopes"] = 32.into();
     value["engine"]["limits"]["overrides"]["core.policy_bytes"] = 4096.into();
     value["engine"]["limits"]["overrides"]["core.load_slots"] = 8.into();

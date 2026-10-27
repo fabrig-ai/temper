@@ -8,7 +8,10 @@ use std::path::Path;
 const KEY: client::Key = client::Key { asker: client::Asker::JIG, number: 1 };
 const PROJECT: u32 = 1;
 const ME: client::Handle = client::Handle { asker: client::Asker::JIG, number: 0 };
-const SEED: u64 = 713;
+// Independent setup clients need distinct operation-key streams.
+const MEMBER_SEED: u64 = 713;
+const PROJECT_SEED: u64 = 714;
+const MAINTAINER_SEED: u64 = 715;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
@@ -37,9 +40,9 @@ pub struct Member {
 }
 impl Member {
     pub fn new(root: Fd, base: &Path, owner: &Path, directory: &str) -> Self {
-        Self::seeded(root, base, owner, directory, SEED)
+        Self::with_seed(root, base, owner, directory, MEMBER_SEED)
     }
-    fn seeded(root: Fd, base: &Path, owner: &Path, directory: &str, seed: u64) -> Self {
+    fn with_seed(root: Fd, base: &Path, owner: &Path, directory: &str, seed: u64) -> Self {
         let address = std::fs::read(owner.join("address")).expect("fixture owner address");
         let host = std::str::from_utf8(&address)
             .expect("fixture address text")
@@ -74,14 +77,14 @@ impl Member {
     pub fn maintainer(root: Fd, base: &Path, owner: &Path, directory: &str, project: u32) -> Self {
         // A distinct client seed keeps its generated act name separate from
         // the project provisioner's first act in this same deployment.
-        let mut host = Self::seeded(root, base, owner, directory, SEED + 1);
+        let mut host = Self::with_seed(root, base, owner, directory, MAINTAINER_SEED);
         host.key = client::Key { asker: client::Asker::JIG, number: 3 };
         host.role = c::HeldRole::Maintainer;
         host.service_project = project;
         host
     }
     pub fn project(root: Fd, base: &Path, owner: &Path, name: &'static str, number: u32) -> Self {
-        let mut host = Self::new(root, base, owner, "case-project");
+        let mut host = Self::with_seed(root, base, owner, "case-project", PROJECT_SEED);
         host.project = Some((name, number));
         host.key = client::Key { asker: client::Asker::JIG, number: 2 };
         host
