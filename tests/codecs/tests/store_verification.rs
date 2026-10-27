@@ -101,3 +101,26 @@ fn tier_ranges_and_tests_refuse_one_past_each_runtime_bound() {
         assert_eq!(records::decode(&bytes, &bounds), Err(temper_protocol_store::Undecodable));
     }
 }
+
+#[test]
+fn a_tiers_unresolved_and_fallback_keys_round_trip() {
+    const FIRST: [u8; 32] = [7; 32];
+    const SECOND: [u8; 32] = [8; 32];
+    let Stored::Tier(mut row) = tiers::smallest() else { panic!("tier fixture") };
+    row.pending = Box::new([
+        temper_engine_domain_forge::TierLanding { commit: FIRST, key: None },
+        temper_engine_domain_forge::TierLanding { commit: SECOND, key: Some(SECOND) },
+    ]);
+    let row = Stored::Tier(row);
+    let bounds = temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("bounds");
+    assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+}
+
+#[test]
+fn a_tiers_baseline_key_walk_survives_the_store() {
+    let Stored::Tier(mut row) = tiers::smallest() else { panic!("tier fixture") };
+    row.baseline = Some(temper_engine_domain_forge::TierLanding { commit: [7; 32], key: None });
+    let row = Stored::Tier(row);
+    let bounds = temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("bounds");
+    assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+}
