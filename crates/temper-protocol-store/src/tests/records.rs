@@ -1008,7 +1008,7 @@ fn a_turn_change_ready_or_preparing_round_trips_with_its_landing() {
 #[test]
 fn turn_writes_round_trip_with_their_parameters() {
     use skein_forge::api as a;
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     for write in [
         a::Write::Merge { number: 7, head: [3; 32], how: a::MergeHow::FastForwardOnly },
         a::Write::Update { number: 7, style: a::UpdateStyle::Rebase },
@@ -1040,7 +1040,7 @@ fn landing_rows_preserve_phases_proofs_asks_and_effects() {
     use skein_lib::Wall;
     use temper_engine_domain_forge_change as c;
     use temper_engine_domain_forge_landing as l;
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     let at = Wall::from_nanos(17);
     for phase in [
         l::Phase::Waiting,
@@ -1100,7 +1100,7 @@ fn landing_rows_preserve_phases_proofs_asks_and_effects() {
 }
 #[test]
 fn receipts_preserve_the_check_key_run_and_verdict() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for check in [forge::Check::Gate(Box::from(b"gate".as_slice())), forge::Check::Tier(Box::from(b"tier".as_slice()))]
     {
         for passed in [false, true] {
