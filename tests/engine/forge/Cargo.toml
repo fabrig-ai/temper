@@ -18,7 +18,7 @@ temper-engine-domain-forge-issues = { path = "../../../crates/temper-engine-doma
 temper-engine-domain-forge-change = { path = "../../../crates/temper-engine-domain-forge-change" }
 skein-fake-forge-domain.workspace = true
 
-[dev-dependencies]
+temper-engine-domain-forge-landing = { path = "../../../crates/temper-engine-domain-forge-landing" }
 
 [lints.rust]
 unsafe_code = "forbid"
