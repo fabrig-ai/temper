@@ -38,7 +38,7 @@ wait change N [--project P] [--since DIGEST] [--until pull|ci:pending|ci:passed|
 adopt --project P [--forge F] --owner O --name N --landing B [--role owned|fork|context] [--prefix X] [--no-home] [--no-ci] [--check G]... --key NAME
   Adopt a forge's repository into a project
 sign-in FILE|-
-  Sign in with the link a box or temper serve printed
+  Sign in with the link the deployment printed
 sign-out
   End the sign-in and leave the token empty
 pending

@@ -7,4 +7,4 @@ Key: --key NAME, required.
 The file holds 1 to 131072 bytes, read whole. It is removed once
 the engine holds the account, and kept otherwise: the same call
 with the same key and file gets the first answer. A record of a
-newer form asks for a newer temper.
+newer form than this binary reads asks for an upgrade.

@@ -61,7 +61,7 @@ pub const TASK: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"`acts:` lists the calls the engine offers your party, ready to copy.\nAn act marked `(no tool)` has no ctl tool yet; one followed by a\ncolon and a reason is refused as it stands; one marked `proposed\nto` asks another party first. A change task adds `next: temper ctl\nDIRECTORY change N`. An ended task prints its result.\n",
+    notes: b"`acts:` lists the calls the engine offers your party, ready to copy.\nAn act marked `(no tool)` has no tool here yet; one followed by a\ncolon and a reason is refused as it stands; one marked `proposed\nto` asks another party first. A change task adds `next:` and the\ncall that reads its change. An ended task prints its result.\n",
 };
 pub const CHAT: Tool = Tool {
     name: b"chat",
@@ -117,7 +117,7 @@ pub const RUN: Tool = Tool {
 };
 pub const SIGN_IN: Tool = Tool {
     name: b"sign-in",
-    line: b"Sign in with the link a box or temper serve printed",
+    line: b"Sign in with the link the deployment printed",
     prints: b"Your party, as me prints it",
     result: b"sign_in",
     forms: &[&[positional(b"file", b"FILE|-", Kind::File, Required, b"The file holding the link, or - for stdin")]],
@@ -153,7 +153,7 @@ pub const HELP: Tool = Tool {
     forms: &[&[positional(b"tool", b"TOOL", Kind::Tool, Optional, b"The tool to describe")]],
     keyed: Keyed::Never,
     area: 1,
-    notes: b"It needs no DIR: `temper ctl help TOOL`. With `--json`, it prints\nthe first row of the tool's name.\n",
+    notes: b"It takes no DIR. With `--json`, it prints the first row of the\ntool's name.\n",
 };
 pub const CHAT_CREATE: Tool = Tool {
     name: b"chat",
@@ -360,7 +360,7 @@ pub const DISCONNECT: Tool = Tool {
     forms: &[&[positional(b"account", b"ACCOUNT", Kind::Number, Required, b"The account's number, as accounts prints it"), SOURCE]],
     keyed: Keyed::Optional,
     area: 5,
-    notes: b"Without `--source`, the account has one source. Where temper cannot\nrevoke the provider's grant itself, it says so: `temper removed its\ntokens. Disconnect temper in PROVIDER's settings, under Apps.`\n",
+    notes: b"Without `--source`, the account has one source. Where the\nprovider's grant cannot be revoked from here, the answer says where\nto revoke it, in the provider's settings.\n",
 };
 pub const ADD_KEY: Tool = Tool {
     name: b"add-key",
@@ -471,7 +471,7 @@ pub const AMEND: Tool = Tool {
 pub const DECLARE: Tool = Tool {
     name: b"declare",
     line: b"Declare a program's login for a provider",
-    prints: b"`Program source S: NAME`, then `Run on each host: temper program-login NAME`",
+    prints: b"`Program source S: NAME`, then the command to run on each host",
     result: b"declare",
     forms: &[&[
         positional(b"provider", b"PROVIDER", Kind::Number, Required, b"The provider's number, as me prints it"),
@@ -487,7 +487,7 @@ pub const DECLARE: Tool = Tool {
     ]],
     keyed: Keyed::Required,
     area: 5,
-    notes: b"temper runs no program: run the printed command on each host that\nruns the program, then `verify`.\n",
+    notes: b"No program runs for you: run the printed command on each host that\nruns the program, then `verify`.\n",
 };
 pub const VERIFY: Tool = Tool {
     name: b"verify",
@@ -525,7 +525,7 @@ pub const IMPORT: Tool = Tool {
     forms: &[&[positional(b"file", b"FILE", Kind::File, Required, b"The private file export wrote")]],
     keyed: Keyed::Required,
     area: 5,
-    notes: b"The file holds 1 to 131072 bytes, read whole. It is removed once\nthe engine holds the account, and kept otherwise: the same call\nwith the same key and file gets the first answer. A record of a\nnewer form asks for a newer temper.\n",
+    notes: b"The file holds 1 to 131072 bytes, read whole. It is removed once\nthe engine holds the account, and kept otherwise: the same call\nwith the same key and file gets the first answer. A record of a\nnewer form than this binary reads asks for an upgrade.\n",
 };
 /// `export`'s and `import`'s places in the host's table, `table::TOOLS`,
 /// after every row before them (tests/help.rs checks them).
