@@ -481,6 +481,9 @@ fn load(
         }
         return if problems.is_empty() { Ok((shape, None)) } else { Err(problems) };
     }
+    if check_start && let Some(engine) = &engine {
+        checks::stock(engine, &mut problems);
+    }
     let application = match &engine {
         Some(engine) => match application_at {
             Some(at) => application::parse(&document, at, engine, directories, &mut problems),

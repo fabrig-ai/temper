@@ -51,6 +51,35 @@ fn single_model() -> Box<[u8]> {
 fn engine(document: &[u8]) -> config::Engine {
     fixtures::parse_engine(&fixtures::value(document, b"engine"))
 }
+fn without_projects() -> Box<[u8]> {
+    let mut document = generated();
+    for (path, value) in [
+        (b"engine.projects".as_slice(), b"[]".as_slice()),
+        (b"application.demo", b"null"),
+        (b"application.landing", br#"{"deployment":[],"projects":[]}"#),
+    ] {
+        document = fixtures::with(&document, path, value);
+    }
+    document
+}
+fn limited(document: &[u8], name: &[u8], value: u64) -> Box<[u8]> {
+    let original = fixtures::value(document, b"engine.limits.overrides");
+    let parsed =
+        config::document(&original, &config::DocumentLimits { bytes: 16_384, tokens: 4096, depth: 4 }).unwrap();
+    let mut overrides = format!("{{\"{}\":{value}", core::str::from_utf8(name).unwrap());
+    for at in (1..parsed.len().checked_sub(1).unwrap()).step_by(2) {
+        let key = parsed.text(parsed.token(at).unwrap()).unwrap();
+        if key != name {
+            let value = config::read::integer(&parsed, at.checked_add(1).unwrap(), u64::MAX).unwrap();
+            overrides.push_str(",\"");
+            overrides.push_str(core::str::from_utf8(key).unwrap());
+            overrides.push_str("\":");
+            overrides.push_str(&value.to_string());
+        }
+    }
+    overrides.push('}');
+    fixtures::with(document, b"engine.limits.overrides", overrides.as_bytes())
+}
 
 #[test]
 fn stock_chats_can_delegate_and_read_the_forge() {
@@ -97,6 +126,95 @@ fn the_stock_passes_jigs_one_check() {
             "{row}"
         );
     }
+}
+
+#[test]
+fn each_floor_refuses_one_below_the_stocks_need() {
+    use jig_domain_core::settings::{self, Setting};
+    let document = without_projects();
+    let engine = engine(&document);
+    let core = config::core(&engine, [1; 16], 7);
+    let defaults = crate::stock::defaults(&engine.llm);
+    let mut run = (0, Setting::Charter(1));
+    for charter in &defaults.charters {
+        let bytes = jig_domain_core::policy_owned_bytes(&charter.policy).unwrap();
+        if bytes > run.0 {
+            run = (bytes, Setting::Charter(charter.number));
+        }
+    }
+    let current = settings::Current::new(defaults, &engine.limits.core);
+    let rows: &[(&[u8], u64, Setting, &str)] = &[
+        (b"core.policy_bytes", 2374, Setting::Policy(1), "the stock's policy 1 needs 2374 bytes"),
+        (b"core.run_bytes", run.0, run.1, ""),
+        (b"authority.grants", 10, Setting::Rules, "the stock's rules need 10 grants"),
+        (b"authority.executors", 3, Setting::Rules, "the stock's rules need 3 executors"),
+        (b"authority.segments", 1, Setting::Rules, "the stock's rules need 1 segment"),
+        (b"authority.segment_bytes", 5, Setting::Rules, "the stock's rules need 5 bytes"),
+        (b"authority.roles", 1, Setting::Policy(1), "the stock's policy 1 needs 1 role"),
+        (b"authority.projects", 1, Setting::Policy(1), "the stock offers 1 policy"),
+        (b"tasks.charters", 2, Setting::Charter(1), "the stock offers 2 charters"),
+        (b"core.templates", 2, Setting::Template(1), "the stock offers 2 templates"),
+        (b"documents.text_bytes", 4, Setting::Template(1), "the stock's template 1 needs 4 bytes"),
+        (b"tasks.result_bytes", 32, Setting::Template(1), "the stock's template 1 needs 32 bytes"),
+        (b"tasks.grace_ms", 5000, Setting::Template(1), "the stock's template 1 needs 5000 ms of grace"),
+        (b"core.settings.alternatives", 1, Setting::Charter(1), "the stock's charter 1 needs 1 alternative"),
+        (b"core.settings.permissions", 1, Setting::Policy(1), "the stock's policy 1 needs 1 permission"),
+    ];
+    // Every positive scalar bound reached by jig's whole-set check is at its
+    // floor together. This catches a stock value acquiring another unmet bound.
+    let mut minimum = engine.limits;
+    for &(name, needed, _, _) in rows {
+        config::overrides::apply(&mut minimum, name, needed).unwrap();
+    }
+    assert_eq!(settings::check(&current, &core.settings, &core.connectors, &minimum.core), Ok(()));
+    assert_eq!(crate::stock::floors(&crate::stock::defaults(&engine.llm), &minimum), Ok(()));
+    for &(name, needed, setting, words) in rows {
+        let mut at = fixtures::parse_engine(&fixtures::value(&document, b"engine"));
+        config::overrides::apply(&mut at.limits, name, needed).unwrap();
+        let mut problems = crate::startup::Problems::empty();
+        crate::startup::checks::stock(&at, &mut problems);
+        assert!(problems.is_empty(), "{name:?}");
+        assert_eq!(settings::check(&current, &core.settings, &core.connectors, &at.limits.core), Ok(()));
+        if let Err(why) = crate::startup::named(&limited(&document, name, needed), &config::Directories::working()) {
+            panic!("{name:?} at its floor: {:?}", crate::startup::lines(&why));
+        }
+        config::overrides::apply(&mut at.limits, name, needed - 1).unwrap();
+        assert!(settings::check(&current, &core.settings, &core.connectors, &at.limits.core).is_err(), "{name:?}");
+        let found = crate::stock::floors(&crate::stock::defaults(&engine.llm), &at.limits).unwrap_err();
+        assert_eq!(found, crate::stock::Floor { limit: name, configured: needed - 1, needed, setting });
+        crate::startup::checks::stock(&at, &mut problems);
+        let words = if name == b"core.run_bytes" {
+            let Setting::Charter(number) = setting else { panic!("run policy's charter") };
+            format!("the stock's charter {number} needs {needed} bytes")
+        } else {
+            words.to_owned()
+        };
+        let name = core::str::from_utf8(name).unwrap();
+        assert_eq!(
+            crate::startup::lines(&problems).as_ref(),
+            format!(
+                "engine.limits.overrides.{name}: {name} is {}; {words}; raise it in engine.limits.overrides\n",
+                needed - 1
+            )
+            .as_bytes()
+        );
+        let refused =
+            crate::startup::named(&limited(&document, name.as_bytes(), needed - 1), &config::Directories::working())
+                .unwrap_err();
+        assert_eq!(crate::startup::lines(&refused), crate::startup::lines(&problems));
+    }
+}
+
+#[test]
+fn a_stock_policy_past_its_limit_is_refused_while_naming_files() {
+    let document = limited(&without_projects(), b"core.policy_bytes", 100);
+    // named only parses the document and lists its files. No file read or
+    // listener opening can occur before this refusal.
+    let found = crate::startup::named(&document, &config::Directories::working()).unwrap_err();
+    assert_eq!(
+        crate::startup::lines(&found).as_ref(),
+        b"engine.limits.overrides.core.policy_bytes: core.policy_bytes is 100; the stock's policy 1 needs 2374 bytes; raise it in engine.limits.overrides\n"
+    );
 }
 #[test]
 fn each_charter_offers_every_configured_model() {

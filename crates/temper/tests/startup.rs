@@ -8,6 +8,38 @@ use std::{
 };
 
 #[test]
+fn a_stock_policy_past_its_limit_refuses_before_listening() {
+    let scratch = support::Scratch::startup("stock-policy-floor");
+    let output = std::process::Command::new(skein_scratch::paths::binary("temper"))
+        .arg("init")
+        .args(support::configuration::flags(scratch.path()))
+        .output()
+        .expect("init");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let path = scratch.path().join("temper.json");
+    let mut document: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("deployment")).expect("JSON");
+    document["engine"]["projects"] = serde_json::json!([]);
+    document["engine"]["limits"]["overrides"]["core.policy_bytes"] = 100.into();
+    document["application"]["demo"] = serde_json::Value::Null;
+    document["application"]["landing"] = serde_json::json!({"deployment": [], "projects": []});
+    fs::write(&path, serde_json::to_vec(&document).expect("JSON")).expect("deployment");
+    let output = std::process::Command::new(skein_scratch::paths::binary("temper"))
+        .arg("serve")
+        .args(support::configuration::flags(scratch.path()))
+        .output()
+        .expect("serve");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "temper serve: engine.limits.overrides.core.policy_bytes: core.policy_bytes is 100; the stock's policy 1 needs 2374 bytes; raise it in engine.limits.overrides\n",
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(output.stdout.is_empty(), "no sign-in link: {}", String::from_utf8_lossy(&output.stdout));
+    scratch.remove();
+}
+
+#[test]
 fn a_configuration_file_past_its_bound_is_refused() {
     let scratch = support::Scratch::startup("configuration-bound");
     let directory = scratch.path();

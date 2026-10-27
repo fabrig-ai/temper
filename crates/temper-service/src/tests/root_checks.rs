@@ -10,7 +10,7 @@
 use super::fixtures;
 use crate::startup::{Problems, checks, lines};
 
-const ENGINE_OVERRIDES: &str = r#""tasks.result_bytes":32,"tasks.run_inbox":2,"hub.turns":1,"people.amendment_bytes":64,"core.policy_bytes":512,"tasks.spec_bytes":128,"tasks.message_bytes":512,"tasks.hold_bytes":64,"tasks.authority_bytes":64,"people.words":512,"core.call_answer_bytes":2048,"notes.recalled":1"#;
+const ENGINE_OVERRIDES: &str = r#""tasks.result_bytes":32,"tasks.run_inbox":2,"hub.turns":1,"people.amendment_bytes":64,"core.policy_bytes":4096,"tasks.spec_bytes":128,"tasks.message_bytes":512,"tasks.hold_bytes":64,"tasks.authority_bytes":64,"people.words":512,"core.call_answer_bytes":2048,"notes.recalled":1"#;
 const WORKER_OVERRIDES: &str = r#""hub.slots":1,"hub.run_calls":1,"tasks.run_inbox":2,"hub.turns":1,"tasks.message_bytes":512,"people.words":512,"core.call_answer_bytes":2048"#;
 
 fn started(document: &[u8]) -> Box<[u8]> {
@@ -255,10 +255,34 @@ fn a_joined_policy_past_its_bytes_returns_problems_before_construction() {
         b"application.landing.projects[0].rules[0].approvals",
         br#"[{"role":0,"people":1,"freshness":"clean"}]"#,
     );
-    assert_eq!(
-        started(&document).as_ref(),
-        b"engine.projects[0].policy.bytes: 761 bytes, past core.policy_bytes of 512\n"
-    );
+    // Exercise the joining guard directly: the document check now refuses a
+    // 512-byte policy bound for the stock before reaching this guard.
+    let mut engine = fixtures::guard_engine();
+    engine.jig = fixtures::parse_engine(&fixtures::value(&document, b"engine"));
+    let parsed = jig_protocol_config::document(
+        &document,
+        &jig_protocol_config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 },
+    )
+    .unwrap();
+    let at = jig_protocol_config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"application").unwrap();
+    let mut found = Problems::empty();
+    let application = crate::startup::application::parse(
+        &parsed,
+        at,
+        &engine.jig,
+        &jig_protocol_config::Directories::working(),
+        &mut found,
+    )
+    .unwrap();
+    assert!(found.is_empty());
+    engine.landing = application.landing;
+    engine.limits = application.limits;
+    engine.jig.limits.core.policy_bytes = 512;
+    let limits = crate::limits::engine(&engine.jig.limits, &engine.limits).unwrap();
+    let seeds = fixtures::seeds();
+    let core = jig_protocol_config::core(&engine.jig, seeds.deployment, seeds.seed);
+    checks::root(core, &engine, &seeds, &application.landing_projects, &limits, &mut found);
+    assert_eq!(lines(&found).as_ref(), b"engine.projects[0].policy.bytes: 761 bytes, past core.policy_bytes of 512\n");
 }
 
 #[test]

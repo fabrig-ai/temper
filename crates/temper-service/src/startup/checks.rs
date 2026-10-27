@@ -32,6 +32,18 @@ fn rules_path(engine: &config::Engine) -> Path {
 fn own(name: &[u8]) -> Path {
     Path::root().member(b"application").member(b"limits").member(b"overrides").member(name)
 }
+/// The binary's stock fits before any listener opens. A document's own defaults
+/// keep jig's checks during the transitional first slice (configuration.md, 13.6).
+pub(crate) fn stock(engine: &config::Engine, problems: &mut Problems) {
+    if engine.defaults == config::Defaults::Passed
+        && let Err(floor) = crate::stock::floors(&crate::stock::defaults(&engine.llm), &engine.limits)
+    {
+        problems.push(
+            Path::root().member(b"engine").member(b"limits").member(b"overrides").member(floor.limit),
+            What::Stock(floor),
+        );
+    }
+}
 fn against(problems: &mut Problems, name: &[u8], other: &'static [u8]) {
     problems.push(own(name), What::Against { other });
 }

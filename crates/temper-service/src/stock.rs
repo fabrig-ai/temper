@@ -5,7 +5,10 @@
 )]
 use alloc::boxed::Box;
 use jig_domain_authority as authority;
-use jig_domain_core::{Charter, ConfiguredPolicy, RunPolicy, Template, settings::Defaults};
+use jig_domain_core::{
+    Charter, ConfiguredPolicy, RunPolicy, Template,
+    settings::{Defaults, Setting},
+};
 use jig_domain_people::{TemplateBudget, TemplateDeadline, TemplateExecutor};
 use jig_domain_tasks::{Contract, EndedBy, Flags, Retention};
 use skein_lib::{Duration, List, Map, bytes};
@@ -15,6 +18,98 @@ const FORGE: u16 = 1;
 /// Delegate (a chat's `change` and `delegate`) and Read (the forge's reads), jig's families
 /// (jig's `domain/authority.md`); a chat answers from its own forge (protocol/configuration.md, 13.4).
 const CHAT_TOOLS: authority::Tools = authority::Tools(1 | 512);
+
+/// One stock value past a limit the document set (protocol/configuration.md, 13.4).
+/// `limit` is its override name under `engine.limits`; `setting` needs `needed`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Floor {
+    pub limit: &'static [u8],
+    pub configured: u64,
+    pub needed: u64,
+    pub setting: Setting,
+}
+
+fn floor(limit: &'static [u8], configured: u64, needed: u64, setting: Setting) -> Result<(), Floor> {
+    if configured < needed { Err(Floor { limit, configured, needed, setting }) } else { Ok(()) }
+}
+fn count(value: usize) -> u64 {
+    u64::try_from(value).expect("stock value fits u64")
+}
+
+/// Each floor the stock sets under `limits`, the first past it named.
+/// # Errors
+/// The first stock value past its limit. Byte prices are jig's own prices.
+/// # Panics
+/// If the stock's bounded byte prices overflow or its policy cannot be encoded.
+pub fn floors(defaults: &Defaults, limits: &jig_protocol_config::Limits) -> Result<(), Floor> {
+    let core = &limits.core;
+    floor(b"tasks.charters", u64::from(core.tasks.charters), count(defaults.charters.len()), Setting::Charter(1))?;
+    floor(b"core.templates", u64::from(core.templates), count(defaults.templates.len()), Setting::Template(1))?;
+    floor(
+        b"authority.projects",
+        u64::from(core.authority.projects),
+        u64::from(defaults.policies.len()),
+        Setting::Policy(1),
+    )?;
+    for charter in &defaults.charters {
+        let setting = Setting::Charter(charter.number);
+        let needed = jig_domain_core::policy_owned_bytes(&charter.policy).expect("bounded stock run policy");
+        floor(b"core.run_bytes", u64::from(core.run_bytes), needed, setting)?;
+        floor(
+            b"core.settings.alternatives",
+            u64::from(core.settings.alternatives.min(jig_domain_tasks::MODELS)),
+            count(charter.policy.alternatives.len()),
+            setting,
+        )?;
+    }
+    for template in &defaults.templates {
+        let setting = Setting::Template(template.number);
+        floor(b"documents.text_bytes", u64::from(core.documents.text_bytes), count(template.name.len()), setting)?;
+        if let Contract::Report { words } = template.contract {
+            floor(b"tasks.result_bytes", u64::from(core.tasks.result_bytes), u64::from(words), setting)?;
+        }
+        if let Some(grace) = template.grace {
+            floor(b"tasks.grace_ms", core.tasks.grace.as_nanos() / 1_000_000, grace.as_nanos() / 1_000_000, setting)?;
+        }
+    }
+    authority_floors(&defaults.rules.ceiling, &core.authority, Setting::Rules)?;
+    for (&number, policy) in &defaults.policies {
+        let setting = Setting::Policy(number);
+        let snapshot = jig_domain_core::policy_snapshot(&policy.policy, &policy.permissions, &policy.templates)
+            .expect("stock policy snapshot");
+        let needed = jig_domain_people::policy_bytes(&snapshot).expect("bounded stock policy encoding");
+        floor(b"core.policy_bytes", core.policy_bytes, needed, setting)?;
+        floor(
+            b"core.settings.permissions",
+            u64::from(core.settings.permissions),
+            count(policy.permissions.len()),
+            setting,
+        )?;
+        floor(b"authority.roles", u64::from(core.authority.roles), count(policy.policy.roles.len()), setting)?;
+        authority_floors(&policy.policy.ceiling, &core.authority, setting)?;
+        grant_floors(&policy.policy.projections, &core.authority, setting)?;
+        for role in &policy.policy.roles {
+            authority_floors(&role.authority, &core.authority, setting)?;
+        }
+    }
+    Ok(())
+}
+fn authority_floors(value: &authority::Authority, limits: &authority::Limits, setting: Setting) -> Result<(), Floor> {
+    grant_floors(&value.grants, limits, setting)?;
+    floor(b"authority.executors", u64::from(limits.executors), count(value.delegation.kinds.len()), setting)
+}
+fn grant_floors(grants: &[authority::Grant], limits: &authority::Limits, setting: Setting) -> Result<(), Floor> {
+    floor(b"authority.grants", u64::from(limits.grants), count(grants.len()), setting)?;
+    for grant in grants {
+        floor(b"authority.segments", u64::from(limits.segments), count(grant.pattern.segments.len()), setting)?;
+        for segment in &grant.pattern.segments {
+            floor(b"authority.segment_bytes", u64::from(limits.segment_bytes), count(segment.len()), setting)?;
+        }
+        let (authority::Last::Exact(last) | authority::Last::Open(last)) = &grant.pattern.last;
+        floor(b"authority.segment_bytes", u64::from(limits.segment_bytes), count(last.len()), setting)?;
+    }
+    Ok(())
+}
 
 /// The defaults temper passes jig's builder at each start. Each charter offers every
 /// model `llm` configures, in its order, the first its default.

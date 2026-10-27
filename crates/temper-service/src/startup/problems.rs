@@ -6,6 +6,7 @@ use skein_lib::{Decimal, List, Writer};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum What {
+    Stock(crate::stock::Floor),
     Jig(config::What),
     Standalone,
     EngineAlone,
@@ -131,7 +132,8 @@ fn words(what: What) -> &'static [u8] {
         What::Override(limits::Refused::Unknown) => b"no limit of temper's has this name",
         What::Override(limits::Refused::Range) => b"outside its type",
         What::Against { .. } => b"must agree with ",
-        What::Past { .. }
+        What::Stock(_)
+        | What::Past { .. }
         | What::Within { .. }
         | What::Short { .. }
         | What::CallInput { .. }
@@ -309,6 +311,48 @@ fn store_map(why: jig_protocol_store::sizes::SizeRefusal, writer: &mut Writer, l
     put(writer, length, measuring, b" ");
     put(writer, length, measuring, unit);
 }
+fn stock(floor: crate::stock::Floor, writer: &mut Writer, length: &mut usize, measuring: bool) {
+    use jig_domain_core::settings::Setting;
+    put(writer, length, measuring, floor.limit);
+    put(writer, length, measuring, b" is ");
+    put(writer, length, measuring, Decimal::of(floor.configured).as_bytes());
+    let (offered, unit): (bool, &[u8]) = match floor.limit {
+        b"tasks.charters" => (true, b" charters"),
+        b"core.templates" => (true, b" templates"),
+        b"authority.projects" if floor.needed == 1 => (true, b" policy"),
+        b"authority.projects" => (true, b" policies"),
+        b"core.settings.alternatives" => (false, b" alternatives"),
+        b"core.settings.permissions" => (false, b" permissions"),
+        b"authority.grants" => (false, b" grants"),
+        b"authority.executors" => (false, b" executors"),
+        b"authority.segments" => (false, b" segments"),
+        b"authority.roles" => (false, b" roles"),
+        b"tasks.grace_ms" => (false, b" ms of grace"),
+        _ => (false, b" bytes"),
+    };
+    let unit = if floor.needed == 1 { unit.strip_suffix(b"s").unwrap_or(unit) } else { unit };
+    if offered {
+        put(writer, length, measuring, b"; the stock offers ");
+    } else {
+        put(writer, length, measuring, b"; the stock's ");
+        let (kind, number): (&[u8], Option<u32>) = match floor.setting {
+            Setting::Charter(number) => (b"charter ", Some(number)),
+            Setting::Template(number) => (b"template ", Some(number)),
+            Setting::Policy(number) => (b"policy ", Some(number)),
+            Setting::Rules => (b"rules", None),
+        };
+        put(writer, length, measuring, kind);
+        if let Some(number) = number {
+            put(writer, length, measuring, Decimal::of(u64::from(number)).as_bytes());
+            put(writer, length, measuring, b" needs ");
+        } else {
+            put(writer, length, measuring, b" need ");
+        }
+    }
+    put(writer, length, measuring, Decimal::of(floor.needed).as_bytes());
+    put(writer, length, measuring, unit);
+    put(writer, length, measuring, b"; raise it in engine.limits.overrides");
+}
 #[expect(clippy::too_many_lines, reason = "one exhaustive diagnostic vocabulary shared by both rendering passes")]
 fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
     let mut length = 0_usize;
@@ -321,6 +365,7 @@ fn render(problems: &Problems, writer: &mut Writer, measuring: bool) -> usize {
         }
         put(writer, &mut length, measuring, words(problem.what));
         match problem.what {
+            What::Stock(floor) => stock(floor, writer, &mut length, measuring),
             What::Jig(
                 what @ (config::What::PolicyEnvelope { .. }
                 | config::What::AmendmentEnvelope { .. }
