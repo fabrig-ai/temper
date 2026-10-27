@@ -415,20 +415,22 @@ pub fn step_5_1(_forge: SocketAddr) -> Box<[Script]> {
     }];
     lines.extend(question.lines);
     question.lines = lines.into();
+    let director: Box<[Turn]> = Box::new([
+        owner(SCOPE_SPEC, false),
+        wait(RULES_DELEGATED),
+        call(
+            b"message",
+            &json!({"target":SCOPE,"form":"answer","question":SCOPE_QUESTION_NUMBER,"words":SCOPE_ANSWER}),
+        ),
+        wait(RULES_ANSWERED),
+        report(RULES_REPORT),
+    ]);
     Box::new([
-        Script {
-            cue: super::Agent::Rules.cue().into(),
-            turns: Box::new([
-                owner(SCOPE_SPEC, false),
-                wait(RULES_DELEGATED),
-                call(
-                    b"message",
-                    &json!({"target":SCOPE,"form":"answer","question":SCOPE_QUESTION_NUMBER,"words":SCOPE_ANSWER}),
-                ),
-                wait(RULES_ANSWERED),
-                report(RULES_REPORT),
-            ]),
-        },
+        // The committed delegation in the fresh brief selects the resumed
+        // script before the ordinary director cue. Its Begin waits, instead
+        // of repeating the delegation while A's cancelled turn resumes.
+        Script { cue: format!("result: Delegated tasks: {SCOPE}").into_bytes().into(), turns: director.clone() },
+        Script { cue: super::Agent::Rules.cue().into(), turns: director },
         Script {
             cue: super::Agent::Scope.cue().into(),
             turns: Box::new([question, wait(SCOPE_ASKED), report(SCOPE_REPORT)]),
@@ -452,7 +454,13 @@ pub fn step_5_1_rules() -> Box<[Box<[Rule]>]> {
         ("", 1),
     ]
     .map(|(cue, turn)| Rule { cue: cue.as_bytes().into(), turn });
-    Box::new([Box::new(director), Box::new([])])
+    let mut resumed = director.clone();
+    for rule in &mut resumed {
+        if rule.cue.as_ref() == BEGIN.as_bytes() {
+            rule.turn = 1;
+        }
+    }
+    Box::new([Box::new(resumed), Box::new(director), Box::new([])])
 }
 
 // Act 2, step 5.3 (domain/testing.md, 5.3)
