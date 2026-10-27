@@ -277,19 +277,19 @@ fn assert_contexts(status: &Value, event: &str, changes: &str) {
 
 #[must_use]
 pub fn steps(paths: &[PathBuf; 3], client: &Path, began: Time) -> Vec<Step> {
-    let mut steps = vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["forge-setup", "3", "--playground"]))];
+    let mut steps = vec![Step::Run(Call::sign_in()), Step::Run(Call::new(&["forge", "setup", "3", "--playground"]))];
     let gate_paths = paths.clone();
     steps.push(Step::Then(Box::new(move |_| {
         Forge::person(&gate_paths).install();
         eprintln!("owned CSV main gate passed: {} ms", now().saturating_since(began).as_nanos() / 1_000_000);
-        Call::new(&["forges", "--json"])
+        Call::new(&["forge", "list", "--json"])
     })));
     let mut task = first_repository::csv_task_steps(client);
     // The existing CSV steps up to the first reply, followed by the repair's
     // phase, then the existing pending-review/approval/landing steps.
     let tail = task.split_off(5);
     steps.extend(task);
-    steps.push(Step::Until(Call::new(&["change", "2", "--json"]), br#""step":"repairing""#));
+    steps.push(Step::Until(Call::new(&["change", "show", "2", "--json"]), br#""step":"repairing""#));
     let red_paths = paths.clone();
     steps.push(Step::Then(Box::new(move |calls| {
         let panel = super::ctl::json(calls.last().expect("repairing panel"));
@@ -297,7 +297,7 @@ pub fn steps(paths: &[PathBuf; 3], client: &Path, began: Time) -> Vec<Step> {
         assert_eq!(panel["repairs"]["used"], 1);
         Forge::at(&red_paths).head(&panel, "failure");
         eprintln!("owned CSV H1 failed, repair delegated: {} ms", now().saturating_since(began).as_nanos() / 1_000_000);
-        Call::new(&["task", &panel["runs"].as_u64().expect("repair task").to_string(), "--json"])
+        Call::new(&["task", "show", &panel["runs"].as_u64().expect("repair task").to_string(), "--json"])
     })));
     steps.push(Step::ReleaseLlm { name: b"csv-repair", cue: REPAIR.as_bytes() });
     // The shared steps capture pending review at H2; add the forge observation
@@ -318,7 +318,7 @@ pub fn steps(paths: &[PathBuf; 3], client: &Path, began: Time) -> Vec<Step> {
                     "owned CSV H2 passed, review pending: {} ms",
                     now().saturating_since(began).as_nanos() / 1_000_000
                 );
-                Call::new(&["change", "2", "--json"])
+                Call::new(&["change", "show", "2", "--json"])
             })));
         }
         steps.push(step);
@@ -328,7 +328,7 @@ pub fn steps(paths: &[PathBuf; 3], client: &Path, began: Time) -> Vec<Step> {
 
 #[must_use]
 pub fn landed(paths: &[PathBuf; 3], client: &Path, began: Time) -> Value {
-    let panel = super::ctl::alone(client, Call::new(&["change", "2", "--json"]));
+    let panel = super::ctl::alone(client, Call::new(&["change", "show", "2", "--json"]));
     let panel = super::ctl::json(&panel);
     let forge = Forge::at(paths);
     let pull = forge.get("pulls/1");
