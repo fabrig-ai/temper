@@ -73,6 +73,7 @@ fn values() -> Vec<(c::Setting, c::SettingValue)> {
         (
             c::Setting::Charter(c::SettingNumber { number: 3 }),
             c::SettingValue::Charter(Box::new(c::Charter {
+                documents: charter_documents(),
                 number: 3,
                 instructions: words("keep \"boundaries\"\nwhole"),
                 waiting: Duration::from_secs(1),
@@ -414,6 +415,11 @@ fn settings_values_refuse_each_nonempty_byte_and_list_bound_on_both_sides() {
     for (index, name, length) in [
         (0, "charter_instructions", 23),
         (0, "charter_alternatives", 1),
+        (0, "charter_documents", 2),
+        (0, "path", 8),
+        (0, "heading", 5),
+        (0, "name", 6),
+        (0, "forge", 13),
         (0, "setting_model_program_some", 7),
         (0, "setting_model_name", 5),
         (0, "setting_model_efforts", 1),
@@ -442,6 +448,11 @@ fn settings_values_refuse_each_nonempty_byte_and_list_bound_on_both_sides() {
             match name {
                 "charter_instructions" => wire.charter_instructions = bound,
                 "charter_alternatives" => wire.charter_alternatives = bound,
+                "charter_documents" => wire.charter_documents = bound,
+                "path" => wire.charter_document_path = bound,
+                "heading" => wire.charter_document_heading_some = bound,
+                "name" => wire.charter_document_name = bound,
+                "forge" => wire.charter_document_name_item = bound,
                 "setting_model_program_some" => wire.setting_model_program_some = bound,
                 "setting_model_name" => wire.setting_model_name = bound,
                 "setting_model_efforts" => wire.setting_model_efforts = bound,
@@ -1161,4 +1172,83 @@ fn move_to_newest_sends_the_revision_and_renders_both_counts() {
             assert_eq!(printed.stdout.as_ref(), expected.as_bytes());
         }
     }
+}
+
+fn charter_documents() -> List<c::CharterDocument> {
+    let name = list([
+        b"forge".as_slice().into(),
+        b"forge.example".as_slice().into(),
+        b"org".as_slice().into(),
+        b"repo".as_slice().into(),
+        b"branch".as_slice().into(),
+        b"main".as_slice().into(),
+    ]);
+    list([
+        c::CharterDocument {
+            connector: 0,
+            name: name.clone(),
+            path: b"rules.md".as_slice().into(),
+            heading: Some(b"Rules".as_slice().into()),
+        },
+        c::CharterDocument { connector: 0, name, path: b"notes.md".as_slice().into(), heading: None },
+    ])
+}
+
+#[test]
+fn charter_document_branch_names_round_trip_and_invalid_forms_are_refused() {
+    let (setting, value) = values().remove(0);
+    let file = String::from_utf8(file_from_setting(&setting_json(setting, value))).expect("JSON");
+    let limits = crate::limits::tools();
+    let branch = file.replace("\"branch\":\"main\"", "\"branch\":\"topic/rules\"");
+    let decoded = settings_file::decode(branch.as_bytes(), &limits).expect("branch segments");
+    let c::SettingEdit::Set(c::SettingSet { value: c::SettingValue::Charter(charter) }) =
+        &decoded.get(0).expect("charter").edit
+    else {
+        panic!("set charter")
+    };
+    assert_eq!(
+        charter.documents.get(0).expect("document").name.as_slice()[5..],
+        [b"topic".as_slice().into(), b"rules".as_slice().into()]
+    );
+    for (from, to, field) in [
+        ("\"repository\":\"org/repo\"", "\"repository\":\"org\"", "repository"),
+        ("\"repository\":\"org/repo\"", "\"repository\":\"org/repo/extra\"", "repository"),
+        ("\"branch\":\"main\"", "\"branch\":\"topic//rules\"", "name"),
+        ("\"path\":\"rules.md\"", "\"path\":\"rules.md\",\"unknown\":0", "unknown"),
+        ("\"path\":\"rules.md\"", "\"path\":\"rules.md\",\"path\":\"other\"", "path"),
+    ] {
+        let error = settings_file::decode(file.replace(from, to).as_bytes(), &limits).expect_err("invalid document");
+        let error = core::str::from_utf8(&error).expect("message");
+        assert!(error.contains("item 1") && error.contains(field), "{error}");
+    }
+}
+
+#[test]
+fn charter_documents_keep_opaque_jig_bytes_in_whole_setting_round_trips() {
+    let (setting, mut value) = values().remove(0);
+    let c::SettingValue::Charter(charter) = &mut value else { panic!("charter") };
+    charter.documents = list([
+        c::CharterDocument {
+            connector: 9,
+            name: list([b"a/b".as_slice().into(), b"\xff".as_slice().into()]),
+            path: b"\xfe".as_slice().into(),
+            heading: Some(b"\xfd".as_slice().into()),
+        },
+        c::CharterDocument {
+            connector: 0,
+            name: list([
+                b"forge".as_slice().into(),
+                b"forge.example".as_slice().into(),
+                b"org".as_slice().into(),
+                b"repo".as_slice().into(),
+                b"branch".as_slice().into(),
+                b"topic/rules".as_slice().into(),
+            ]),
+            path: b"rules.md".as_slice().into(),
+            heading: None,
+        },
+    ]);
+    let file = file_from_setting(&setting_json(setting, value.clone()));
+    let items = settings_file::decode(&file, &crate::limits::tools()).expect("opaque document round trip");
+    assert_eq!(items.as_slice(), &[c::SettingItem { setting, edit: c::SettingEdit::Set(c::SettingSet { value }) }]);
 }

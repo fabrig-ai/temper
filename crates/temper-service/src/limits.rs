@@ -279,7 +279,7 @@ const ROOT: Root = Root {
         // Concurrent gathers, from the root world.
         briefs: 2,
         // Sections per gather, from the root world.
-        sections: 3,
+        sections: 8,
         // Parts per section, from the root world.
         parts: 2,
         // One section's read bytes: at least the task section's.

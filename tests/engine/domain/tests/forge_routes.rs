@@ -3141,3 +3141,45 @@ fn a_stop_waits_for_a_sent_merge_to_be_proved() {
     assert!(world.unsettled.is_empty());
     assert_eq!(world.merges, 1);
 }
+
+#[test]
+fn a_planned_charter_document_is_missing_and_the_run_starts() {
+    use jig_domain_core::settings as s;
+    let small = temper_service::limits::profile(temper_service::limits::Profile::Small);
+    let mut world =
+        World::configured_brief(true, false, false, 1000, paths::Gate::default(), None, Some(small.root.brief));
+    world.sign_in();
+    let mut charter = walking::config(71).core.defaults.charters[0].clone();
+    charter.documents = Box::new([jig_domain_core::Document {
+        connector: 0,
+        name: Box::new([Box::from(b"resource".as_slice())]),
+        path: Box::from(b"rules.md".as_slice()),
+        heading: None,
+    }]);
+    world.send(engine::Event::Party(engine::PartyInput::ChangeSettings {
+        reply_to: ReplyTo::new(Token::new(193)),
+        sign_in: world.signed_in.expect("owner sign in"),
+        key: [193; 16],
+        digest: [193; 32],
+        change: Box::new(s::Change {
+            against: 1,
+            items: Box::new([s::Item {
+                setting: s::Setting::Charter(charter.number),
+                edit: s::Edit::Set(s::Value::Charter(Box::new(charter))),
+            }]),
+            running: s::Running::Stays,
+        }),
+    }));
+    world.until(Until::Ready);
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    let ask = world.chat(1, b"read the charter document");
+    let assignment = assigned_chat(&mut world, 194, ask);
+    let section = assignment
+        .sections
+        .iter()
+        .find(|section| section.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Document))
+        .expect("optional document section");
+    assert_eq!(section.body, engine::BriefBody::Missing(jig_domain_brief::GatherMissing::Failed));
+    assert_eq!(temper_engine_smith::section(section).text.as_ref(), b"The document is not gathered yet.");
+    assert!(matches!(live_task(&world, assignment.task).phase, tasks::Phase::Active(tasks::Active::Running { .. })));
+}

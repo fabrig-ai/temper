@@ -173,7 +173,8 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
         core::Now::HistoricalEscalation { request, person, project, task, revision } => {
             escalation::historical_begin(domain, env, decision, request, person, project, task, revision);
         }
-        core::Now::BriefCorePlanned { task, parent, sections } => {
+        core::Now::BriefCorePlanned { task, parent, mut sections, documents } => {
+            crate::assemble::bind_documents(domain, task, &mut sections, documents);
             finish_brief_plan(domain, env, task, parent, sections);
         }
         core::Now::CompleteBrief { brief, order } => {

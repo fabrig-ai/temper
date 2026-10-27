@@ -1,4 +1,5 @@
 //! Whole values for settings JSON; no display truncation is applied.
+use alloc::boxed::Box;
 use jig_client::contract as c;
 use skein_json::writer::Encoder;
 fn encode_text(value: &c::Text, out: &mut Encoder) {
@@ -52,6 +53,12 @@ pub(super) fn encode_charter(value: &c::Charter, out: &mut Encoder) {
     encode_setting_hosts(&value.hosts, out);
     out.key(b"spend");
     out.unsigned(value.spend);
+    out.key(b"documents");
+    out.array_start();
+    for document in &value.documents {
+        encode_charter_document(document, out);
+    }
+    out.array_end();
     out.object_end();
 }
 pub(super) fn encode_template(value: &c::Template, out: &mut Encoder) {
@@ -694,4 +701,83 @@ pub(super) fn encode_owner_pattern_end(value: &c::OwnerPatternEnd, out: &mut Enc
             out.object_end();
         }
     }
+}
+
+fn encode_charter_document(value: &c::CharterDocument, out: &mut Encoder) {
+    let name = value.name.as_slice();
+    out.object_start();
+    let branch_form = branch_document(value);
+    if branch_form {
+        out.key(b"forge");
+        out.string(name.get(1).expect("validated branch host"));
+        out.key(b"repository");
+        out.string(&joined(name.get(2..4).expect("validated repository name")));
+        out.key(b"branch");
+        out.string(&joined(name.get(5..).expect("validated branch segments")));
+    } else {
+        // Preserve opaque jig names that this application's branch form cannot express.
+        out.key(b"connector");
+        out.unsigned(u64::from(value.connector));
+        out.key(b"name");
+        out.array_start();
+        for segment in name {
+            super::hex(segment, out);
+        }
+        out.array_end();
+    }
+    out.key(b"path");
+    if branch_form {
+        out.string(&value.path);
+    } else {
+        super::hex(&value.path, out);
+    }
+    if let Some(heading) = &value.heading {
+        out.key(b"heading");
+        if branch_form {
+            out.string(heading);
+        } else {
+            super::hex(heading, out);
+        }
+    }
+    out.object_end();
+}
+fn joined(parts: &[Box<[u8]>]) -> Box<[u8]> {
+    let mut size = 0_u32;
+    for part in parts {
+        size = size.checked_add(u32::try_from(part.len()).expect("bounded segment")).expect("name bytes");
+    }
+    size = size.checked_add(u32::try_from(parts.len().saturating_sub(1)).expect("name count")).expect("joined name");
+    let mut bytes = skein_lib::List::with_capacity(size);
+    for (index, part) in parts.iter().enumerate() {
+        if index > 0 {
+            bytes.push(b'/').expect("separator room");
+        }
+        for byte in part {
+            bytes.push(*byte).expect("segment room");
+        }
+    }
+    bytes.into_boxed()
+}
+
+fn branch_document(value: &c::CharterDocument) -> bool {
+    let name = value.name.as_slice();
+    if value.connector != 0
+        || name.len() < 6
+        || name.first().expect("branch name length").as_ref() != b"forge"
+        || name.get(4).expect("branch name length").as_ref() != b"branch"
+        || c::Text::new(value.path.clone(), u32::MAX).is_err()
+    {
+        return false;
+    }
+    if let Some(heading) = &value.heading
+        && c::Text::new(heading.clone(), u32::MAX).is_err()
+    {
+        return false;
+    }
+    for part in name {
+        if part.is_empty() || part.contains(&b'/') || c::Text::new(part.clone(), u32::MAX).is_err() {
+            return false;
+        }
+    }
+    true
 }

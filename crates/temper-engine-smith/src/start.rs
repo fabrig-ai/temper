@@ -44,6 +44,7 @@ pub fn section(section: &engine::BriefSection) -> run::Section {
         engine::BriefKind::Core(brief::Core::Waiting) => b"Waiting",
         engine::BriefKind::Core(brief::Core::NotesIndex) => b"Notes",
         engine::BriefKind::Core(brief::Core::TranscriptTail) => b"Transcript tail",
+        engine::BriefKind::Forge(engine::ForgeBriefKind::Document) => b"Charter document",
         engine::BriefKind::Forge(engine::ForgeBriefKind::Home) => b"Home",
         engine::BriefKind::Forge(engine::ForgeBriefKind::Ci) => b"CI",
         engine::BriefKind::Forge(engine::ForgeBriefKind::Reviews) => b"Reviews",
@@ -51,6 +52,9 @@ pub fn section(section: &engine::BriefSection) -> run::Section {
     };
     let text = match &section.body {
         engine::BriefBody::Text(text) => text.clone(),
+        engine::BriefBody::Missing(_) if section.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Document) => {
+            bytes::copy_of(b"The document is not gathered yet.")
+        }
         engine::BriefBody::Missing(reason) => match reason {
             brief::GatherMissing::Failed => bytes::copy_of(b"[read failed]"),
             brief::GatherMissing::Late => bytes::copy_of(b"[read timed out]"),

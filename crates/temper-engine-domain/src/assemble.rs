@@ -4,6 +4,7 @@ use crate::boundary::{BriefBody, BriefConnector, BriefKind, BriefSection, ForgeB
 use crate::domain::Domain;
 use crate::limits::{BriefBudgets, Limits};
 use crate::route::forge_route::unheld_run_branch;
+use alloc::boxed::Box;
 use jig_domain_brief as brief;
 use skein_lib::{Env, Id, List, Queue, Token};
 use temper_engine_domain_forge as forge;
@@ -17,7 +18,17 @@ pub(crate) fn brief_outputs(
 ) {
     for _ in 0..out.len() {
         match out.pop().expect("brief output count") {
-            brief::GatherRequest::Gather { connector: 0, section, budget } => {
+            brief::GatherRequest::Gather { connector, section, budget } => {
+                if let Some(row) = domain.brief_connectors.get(Id::from_token(section))
+                    && row.kind == ForgeBriefKind::Document
+                {
+                    domain.work.push(Work::Core(jig_domain_core::Event::Brief(brief::GatherEvent::Missing {
+                        brief: Token::new(row.task),
+                        section,
+                    })));
+                    continue;
+                }
+                assert_eq!(connector, 0, "forge owns resource sections");
                 if domain.brief_connectors.get(Id::from_token(section)).is_none() {
                     continue;
                 }
@@ -34,16 +45,17 @@ pub(crate) fn brief_outputs(
                     domain.work.push(Work::Forge(forge::Event::CutBrief { section, bytes: size }));
                 }
             }
-            brief::GatherRequest::Drop { connector: 0, section } => {
+            brief::GatherRequest::Drop { connector: _, section } => {
                 let id = Id::from_token(section);
-                if domain.brief_connectors.get(id).is_some() {
+                if let Some(row) = domain.brief_connectors.get(id) {
+                    let document = row.kind == ForgeBriefKind::Document;
                     domain.brief_connectors.retire(id);
-                    domain.work.push(Work::Forge(forge::Event::DropBrief { section }));
+                    if !document {
+                        domain.work.push(Work::Forge(forge::Event::DropBrief { section }));
+                    }
                 }
             }
-            brief::GatherRequest::Gather { .. }
-            | brief::GatherRequest::CutTo { .. }
-            | brief::GatherRequest::Drop { .. } => unreachable!("temper's sole connector is numbered zero"),
+            brief::GatherRequest::CutTo { .. } => unreachable!("temper's sole connector is numbered zero"),
             brief::GatherRequest::Complete { brief, order } => {
                 let task = brief.raw();
                 let mut sections = List::with_capacity(u32::try_from(order.len()).expect("bounded section count"));
@@ -98,11 +110,12 @@ pub(crate) fn brief_outputs(
 
 pub(crate) fn numbered_brief_kind(kind: u16) -> ForgeBriefKind {
     match kind {
+        0 => ForgeBriefKind::Document,
         1 => ForgeBriefKind::Ci,
         2 => ForgeBriefKind::Reviews,
         3 => ForgeBriefKind::Pull,
         4 => ForgeBriefKind::Home,
-        _ => unreachable!("temper's forge connector uses four section kinds"),
+        _ => unreachable!("temper's forge connector uses five section kinds"),
     }
 }
 
@@ -142,7 +155,7 @@ fn plan_home_access(
     // slot is already required, preparation fails rather than omitting Home.
     let mut optional = None;
     for (index, section) in wanted.iter().enumerate() {
-        if !section.required() {
+        if let brief::Planned::Core { required: false, .. } = section {
             optional = Some(index);
         }
     }
@@ -169,8 +182,14 @@ fn plan_home_access(
     if wanted.room() > 0 {
         wanted.push(section).expect("home section room");
     } else {
-        *wanted.get_mut(u32::try_from(optional.expect("optional slot")).expect("section index")).expect("section") =
-            section;
+        let previous = core::mem::replace(wanted, List::with_capacity(env.limits.brief.sections));
+        let removed = optional.expect("optional core slot");
+        for (index, retained) in previous.into_boxed().into_iter().enumerate() {
+            if index != removed {
+                wanted.push(retained).expect("reclaimed optional slot");
+            }
+        }
+        wanted.push(section).expect("required home section");
     }
     true
 }
@@ -277,6 +296,7 @@ pub(crate) fn forge_brief_kind(source: forge::BriefSource) -> ForgeBriefKind {
 
 pub(crate) fn forge_kind_number(kind: ForgeBriefKind) -> u16 {
     match kind {
+        ForgeBriefKind::Document => 0,
         ForgeBriefKind::Home => 4,
         ForgeBriefKind::Ci => 1,
         ForgeBriefKind::Reviews => 2,
@@ -286,10 +306,38 @@ pub(crate) fn forge_kind_number(kind: ForgeBriefKind) -> u16 {
 
 pub(crate) fn forge_brief_budget(kind: ForgeBriefKind, budgets: &BriefBudgets) -> u32 {
     match kind {
+        ForgeBriefKind::Document => budgets.task,
         ForgeBriefKind::Home => forge::HOME_SECTION_BYTES,
         ForgeBriefKind::Ci => budgets.ci,
         ForgeBriefKind::Reviews => budgets.reviews,
         ForgeBriefKind::Pull => budgets.pull,
+    }
+}
+
+/// Translate plan-local document tokens into the root's connector token space.
+pub(crate) fn bind_documents(
+    domain: &mut Domain,
+    task: u64,
+    sections: &mut List<brief::Planned>,
+    documents: Box<[(Token, jig_domain_core::Document)]>,
+) {
+    let first = sections
+        .len()
+        .checked_sub(u32::try_from(documents.len()).expect("bounded documents"))
+        .expect("documents in plan");
+    for (index, (from, document)) in documents.into_iter().enumerate() {
+        let at = first.checked_add(u32::try_from(index).expect("document position")).expect("section position");
+        let brief::Planned::Connector { connector, token, kind, .. } = sections.get_mut(at).expect("document section")
+        else {
+            unreachable!("document binding names connector section")
+        };
+        assert_eq!((*token, *connector), (from, document.connector), "bound document section");
+        *token = domain
+            .brief_connectors
+            .insert(BriefConnector { task, kind: ForgeBriefKind::Document, cutting: false })
+            .expect("bounded connector sections")
+            .token();
+        *kind = 0;
     }
 }
 

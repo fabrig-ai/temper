@@ -70,6 +70,7 @@ pub enum BriefKind {
 /// The forge connector's brief section kinds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ForgeBriefKind {
+    Document,
     Ci,
     Reviews,
     Pull,

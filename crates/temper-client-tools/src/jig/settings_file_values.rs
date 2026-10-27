@@ -1,5 +1,6 @@
 //! Concrete whole-value decoders; the schema has fixed depth, with no recursive calls.
 use super::{Decoder, Error, error, field, optional};
+use alloc::boxed::Box;
 use jig_client::contract as c;
 use skein_json::Kind;
 use skein_lib::{Duration, List, Wall};
@@ -24,9 +25,14 @@ pub(super) fn charter(d: &Decoder, at: u32) -> Result<c::Charter, Error> {
             b"call_timeout",
             b"hosts",
             b"spend",
+            b"documents",
         ],
     )?;
     Ok(c::Charter {
+        documents: match optional(&fields, b"documents") {
+            Some(at) => documents(d, at)?,
+            None => List::with_capacity(0),
+        },
         number: u32::try_from(d.number(field(&fields, b"number")?)?)
             .or(Err(error(b"charter_number", b"integer bound")))?,
         instructions: d.words(
@@ -832,4 +838,97 @@ fn owner_pattern_end(d: &Decoder, at: u32) -> Result<c::OwnerPatternEnd, Error> 
         )?));
     }
     Err(error(b"owner_pattern_end", b"unknown variant"))
+}
+
+fn documents(d: &Decoder, at: u32) -> Result<List<c::CharterDocument>, Error> {
+    let positions = d.array(at, d.limits.charter_documents, b"charter_documents")?;
+    let mut values = List::with_capacity(positions.len());
+    for at in &positions {
+        values.push(document(d, *at)?).expect("bounded documents");
+    }
+    Ok(values)
+}
+fn document(d: &Decoder, at: u32) -> Result<c::CharterDocument, Error> {
+    let fields = d.object(at, &[b"forge", b"repository", b"branch", b"path", b"heading", b"connector", b"name"])?;
+    let branch_form = optional(&fields, b"forge").is_some();
+    let (connector, name) = if let Some(forge) = optional(&fields, b"forge") {
+        if optional(&fields, b"connector").is_some() || optional(&fields, b"name").is_some() {
+            return Err(error(b"documents", b"mixed resource forms"));
+        }
+        let host = document_text(d, forge, d.limits.charter_document_name_item, b"forge")?;
+        let repository = d.string(field(&fields, b"repository")?)?;
+        let branch = d.string(field(&fields, b"branch")?)?;
+        (0, branch_name(d, &host, repository, branch)?)
+    } else {
+        if optional(&fields, b"repository").is_some() || optional(&fields, b"branch").is_some() {
+            return Err(error(b"documents", b"mixed resource forms"));
+        }
+        let connector =
+            u16::try_from(d.number(field(&fields, b"connector")?)?).or(Err(error(b"connector", b"integer bound")))?;
+        let positions = d.array(field(&fields, b"name")?, d.limits.charter_document_name, b"charter_document_name")?;
+        let mut name = List::with_capacity(positions.len());
+        for at in &positions {
+            name.push(d.hex(*at, d.limits.charter_document_name_item, b"name")?).expect("bounded name");
+        }
+        (connector, name)
+    };
+    Ok(c::CharterDocument {
+        connector,
+        name,
+        path: if branch_form {
+            document_text(d, field(&fields, b"path")?, d.limits.charter_document_path, b"path")?
+        } else {
+            d.hex(field(&fields, b"path")?, d.limits.charter_document_path, b"path")?
+        },
+        heading: match optional(&fields, b"heading") {
+            Some(at) => Some(if branch_form {
+                document_text(d, at, d.limits.charter_document_heading_some, b"heading")?
+            } else {
+                d.hex(at, d.limits.charter_document_heading_some, b"heading")?
+            }),
+            None => None,
+        },
+    })
+}
+fn document_text(d: &Decoder, at: u32, most: u32, member: &[u8]) -> Result<Box<[u8]>, Error> {
+    let value = d.words(at, most, member)?;
+    Ok(value.bytes().into())
+}
+fn branch_name(d: &Decoder, host: &[u8], repository: &[u8], branch: &[u8]) -> Result<List<Box<[u8]>>, Error> {
+    let slash = skein_lib::bytes::find(repository, b"/").ok_or(error(b"repository", b"owner/name required"))?;
+    let owner = repository.get(..slash).ok_or(error(b"repository", b"owner/name required"))?;
+    let repository = repository
+        .get(slash.checked_add(1).expect("slash position")..)
+        .ok_or(error(b"repository", b"owner/name required"))?;
+    if repository.contains(&b'/') || owner.is_empty() || repository.is_empty() || host.is_empty() {
+        return Err(error(b"repository", b"owner/name required"));
+    }
+    let mut name = List::with_capacity(d.limits.charter_document_name);
+    for part in [b"forge".as_slice(), host, owner, repository, b"branch".as_slice()] {
+        push_name(&mut name, part, d.limits.charter_document_name_item)?;
+    }
+    let mut rest = branch;
+    loop {
+        match skein_lib::bytes::find(rest, b"/") {
+            Some(at) => {
+                push_name(
+                    &mut name,
+                    rest.get(..at).expect("located branch separator"),
+                    d.limits.charter_document_name_item,
+                )?;
+                rest = rest.get(at.checked_add(1).expect("slash position")..).expect("after branch separator");
+            }
+            None => {
+                push_name(&mut name, rest, d.limits.charter_document_name_item)?;
+                break;
+            }
+        }
+    }
+    Ok(name)
+}
+fn push_name(name: &mut List<Box<[u8]>>, part: &[u8], most: u32) -> Result<(), Error> {
+    if part.is_empty() || part.len() > usize::try_from(most).expect("name bound") {
+        return Err(error(b"name", b"segment bound"));
+    }
+    name.push(part.into()).or(Err(error(b"name", b"segment count bound")))
 }

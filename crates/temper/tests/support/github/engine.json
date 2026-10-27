@@ -9,7 +9,7 @@
         "authority.roles": 1,
         "authority.segments": 8,
         "brief.briefs": 2,
-        "brief.sections": 4,
+        "brief.sections": 8,
         "core.call_answer_bytes": 4096,
         "core.load_bytes": 8192,
         "core.load_slots": 8,

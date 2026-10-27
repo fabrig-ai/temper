@@ -102,6 +102,7 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
         alternatives.push(alternative.clone()).expect("one per remaining configured model");
     }
     Charter {
+        documents: Box::new([]),
         number,
         hosts: jig_domain_fleet::Kinds::Workers,
         spend: 20,

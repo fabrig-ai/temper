@@ -14,9 +14,7 @@ pub(super) fn record(row: &Record) -> Option<u64> {
         Record::Revision { revision, .. } => items(&revision.items),
         Record::Proposal { value, .. } => items(&value.items),
         Record::Charter { value: version, .. } => match &version.charter {
-            Some(charter) => u64::try_from(size_of::<jig_domain_core::Charter>())
-                .ok()?
-                .checked_add(jig_domain_core::policy_owned_bytes(&charter.policy)?),
+            Some(charter) => charter_bytes(charter),
             None => Some(0),
         },
         Record::Extent { .. } => Some(0),
@@ -33,9 +31,7 @@ fn items(items: &[Item]) -> Option<u64> {
 }
 fn value(value: &Value) -> Option<u64> {
     match value {
-        Value::Charter(charter) => u64::try_from(size_of::<jig_domain_core::Charter>())
-            .ok()?
-            .checked_add(jig_domain_core::policy_owned_bytes(&charter.policy)?),
+        Value::Charter(charter) => charter_bytes(charter),
         Value::Template(template) => {
             let mut bytes = u64::try_from(size_of::<jig_domain_core::Template>())
                 .ok()?
@@ -164,6 +160,30 @@ fn contract(contract: &tasks::Contract) -> Option<u64> {
             Some(bytes)
         }
     }
+}
+
+fn charter_bytes(charter: &jig_domain_core::Charter) -> Option<u64> {
+    let mut bytes = u64::try_from(size_of::<jig_domain_core::Charter>())
+        .ok()?
+        .checked_add(jig_domain_core::policy_owned_bytes(&charter.policy)?)?;
+    bytes = bytes.checked_add(
+        u64::try_from(charter.documents.len())
+            .ok()?
+            .checked_mul(u64::try_from(size_of::<jig_domain_core::Document>()).ok()?)?,
+    )?;
+    for document in &charter.documents {
+        bytes = bytes.checked_add(
+            u64::try_from(document.name.len()).ok()?.checked_mul(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?,
+        )?;
+        for segment in &document.name {
+            bytes = bytes.checked_add(u64::try_from(segment.len()).ok()?)?;
+        }
+        bytes = bytes.checked_add(u64::try_from(document.path.len()).ok()?)?;
+        if let Some(heading) = &document.heading {
+            bytes = bytes.checked_add(u64::try_from(heading.len()).ok()?)?;
+        }
+    }
+    Some(bytes)
 }
 
 #[cfg(test)]
