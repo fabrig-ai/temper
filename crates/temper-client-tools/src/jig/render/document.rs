@@ -253,6 +253,7 @@ fn task_text(
             clock::deadline(wall, out);
         }
     }
+    placed_hold::text(task, me, out);
     if let Some(instructions) = &task.instructions {
         instruction_words::text(instructions, out);
     }
@@ -459,6 +460,7 @@ mod owner_links;
 mod owner_resources;
 mod parties;
 mod parts;
+mod placed_hold;
 mod results;
 mod runs;
 mod runtime;

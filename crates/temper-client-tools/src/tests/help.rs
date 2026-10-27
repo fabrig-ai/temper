@@ -104,6 +104,7 @@ const USAGES: &[&[u8]] = &[
     b"task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]\n",
     b"project show PROJECT\n",
     b"project fund PROJECT AMOUNT [--role ROLE] --key KEY\n",
+    b"hold lift HOLD --rev REV [--with-tasks] [--key KEY]\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {

@@ -179,6 +179,10 @@ fn rendered(answer: &CallAnswer) -> Result<HostAnswer, Problem> {
                 true
             }
         },
+        CallAnswer::HoldOwner { task, hold, revision, owner } => {
+            hold_owner(&mut text, *task, *hold, *revision, *owner)?;
+            true
+        }
         CallAnswer::EscalationDecided { task, revision, .. } => {
             text.add(b"Escalation for task ")?;
             text.number(*task)?;
@@ -837,6 +841,7 @@ fn moved(text: &mut Text, task: u64, now: &jig_domain_people::Moved) -> Result<(
     text.add(b"Moved: task ")?;
     text.number(task)?;
     let (kind, revision) = match now {
+        Moved::PlacedHold { revision } => (b" is held at placed hold revision ".as_slice(), *revision),
         Moved::Spec { revision } => (b" is at spec revision ".as_slice(), *revision),
         Moved::Person { revision } => (b" is at person revision ".as_slice(), *revision),
         Moved::Note { revision } => (b" is at note revision ".as_slice(), u64::from(*revision)),
@@ -885,4 +890,39 @@ fn hold_reason(reason: &jig_domain_people::HoldReason) -> &'static [u8] {
 
 fn settings_refused(text: &mut Text, why: &jig_domain_people::Refusal) -> Result<(), Problem> {
     text.add(&crate::settings::refusal(why))
+}
+
+fn hold_owner(
+    text: &mut Text,
+    task: u64,
+    hold: u64,
+    revision: u64,
+    owner: jig_domain_people::HoldOwner,
+) -> Result<(), Problem> {
+    text.add(b"Refused: task ")?;
+    text.number(task)?;
+    text.add(b" is held by hold ")?;
+    text.number(hold)?;
+    text.add(b" (revision ")?;
+    text.number(revision)?;
+    text.add(b"), placed by ")?;
+    match owner {
+        jig_domain_people::HoldOwner::Party { person } => {
+            text.add(b"person ")?;
+            text.number(person)?;
+            text.add(b"; only they may release it. Propose it: ")?;
+        }
+        jig_domain_people::HoldOwner::Task { task } => {
+            text.add(b"task ")?;
+            text.number(task)?;
+            text.add(b"; only it or a task above it may release it. Propose it: ")?;
+        }
+    }
+    text.add(b"{\"action\": \"release\", \"task\": ")?;
+    text.number(task)?;
+    text.add(b", \"hold\": ")?;
+    text.number(hold)?;
+    text.add(b", \"revision\": ")?;
+    text.number(revision)?;
+    text.add(b", \"reason\": \"...\"}")
 }

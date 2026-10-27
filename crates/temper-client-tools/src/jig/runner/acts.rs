@@ -37,6 +37,15 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
         prepared(runner, client, env, called, request, out);
         return;
     }
+    if called.call.tool == rows::LIFT_AT {
+        let ask = c::Ask::Lift {
+            hold: number(&called.call, 0).expect("hold argument"),
+            revision: c::Revision { value: number(&called.call, 1).expect("revision argument") },
+            with_tasks: value(&called.call, 2).is_some(),
+        };
+        prepared(runner, client, env, called, Ok((Request::Ask(ask), None)), out);
+        return;
+    }
     if called.call.tool == rows::MOVE_TO_NEWEST_AT {
         let revision = u32::try_from(number(&called.call, 0).expect("revision argument")).expect("revision fits u32");
         prepared(

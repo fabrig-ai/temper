@@ -128,7 +128,9 @@ pub(crate) fn propose_call(
             tasks::ProposalAction::Amend { task, revision, amendment }
         }
         ProposedAction::Widen { task, authority } => tasks::ProposalAction::Widen { task, authority },
-        ProposedAction::Release { task } => tasks::ProposalAction::Release { task },
+        ProposedAction::Release { task, hold, revision } => {
+            tasks::ProposalAction::ReleasePlaced { task, hold, revision }
+        }
     };
     domain.work.push(Work::Core(jig_domain_core::Event::NamedAction {
         to,
