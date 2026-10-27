@@ -589,7 +589,11 @@ pub fn fixture_5_2() -> forge::Fixture {
                 value["application"]["limits"]["overrides"][format!("forge.client.{name}")] = (story_ms + 1).into();
             }
             value["world_settings"]["helper"] = true.into();
-            value["engine"]["limits"]["overrides"]["tasks.charters"] = 3.into();
+            // Four charters (the placed director, chat, helper and reviewer)
+            // plus the change procedure must fit the delegation's kinds.
+            for (name, size) in [("tasks.charters", 4), ("tasks.executor_kinds", 5), ("authority.executors", 5)] {
+                value["engine"]["limits"]["overrides"][name] = size.into();
+            }
             let mut kinds = value["engine"]["projects"][0]["policy"]["ceiling"]["delegation"]["kinds"].clone();
             kinds.as_array_mut().expect("kinds").push(json!({"kind":"charter","number":HELPER_CHARTER}));
             for project in value["engine"]["projects"].as_array_mut().expect("projects") {
