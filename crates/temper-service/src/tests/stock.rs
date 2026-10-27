@@ -115,8 +115,8 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
     let words = include_str!("../stock/chat.txt");
     assert!(words.contains("When a task, not a person, requested you"), "a goal is told apart by its requester");
     assert!(
-        words.contains("before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, and wait for the answer. Then call change with what was agreed"),
-        "the goal asks its requester with message and waits before change"
+        words.contains("before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, and wait for the answer."),
+        "the goal asks its requester with message and waits for the answer"
     );
     assert!(
         words.contains("When they want to agree a plan before anything is changed, never call change yourself: call goal with their words"),
@@ -129,6 +129,24 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
     assert!(
         words.contains("send their answer to the goal with message, as the answer to that question's number"),
         "the chat relays the answer with message to the question's number"
+    );
+}
+
+#[test]
+fn the_chats_words_mark_an_advisors_read_only_report() {
+    let words = include_str!("../stock/chat.txt");
+    assert!(words.split("\n\n").any(|paragraph| paragraph == "When your words start with \"Advise:\", you are an advisor: read what they ask with the forge's reads, change nothing, ask no one, and report what you found."), "the advisor has its own paragraph");
+}
+
+#[test]
+fn the_goals_words_survey_before_planning_and_sequence_changes() {
+    let words = include_str!("../stock/chat.txt");
+    assert!(words.contains("If your words ask for an advisor, or you need the code read before you can plan, first call goal with advisor set, its words starting \"Advise:\" and saying what to read and report; wait for its report, and name what it found in your plan. Make each agreed change with change, one at a time: when one builds on another, call change for it only after the first's result says it landed, and say in its words what to reuse."), "the goal surveys first and waits for landing before dependent changes");
+    assert!(
+        words.contains(
+            "Then call change with what was agreed, wait for its result, and report once every change has landed."
+        ),
+        "the goal reports after every agreed change lands"
     );
 }
 
