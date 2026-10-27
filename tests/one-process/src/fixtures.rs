@@ -388,7 +388,7 @@ fn engine_from(bytes: &[u8]) -> jig_protocol_config::Engine {
         &doc,
         at,
         &jig_protocol_config::Directories::working(),
-        &crate::stories::given(&serde_json::from_slice(&bytes).expect("deployment JSON")),
+        &crate::stories::given(&serde_json::from_slice(bytes).expect("deployment JSON")),
     )
     .expect("engine")
 }

@@ -32,6 +32,7 @@ pub const API_TOKEN: &[u8] = b"0000000000000000000000000000000000000002";
 pub const GIT_TOKEN: &[u8] = b"0000000000000000000000000000000000000003";
 pub(crate) const ADOPT: &[&[u8]] = &[
     b"/client/private",
+    b"repository",
     b"adopt",
     b"--project",
     b"1",

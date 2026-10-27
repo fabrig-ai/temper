@@ -56,8 +56,10 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
         wire: crate::referee::client::Wire::cli(),
         seen: 0,
         sign_in: spawn.args.get(1).is_some_and(|word| word.as_ref() == b"sign-in"),
-        forge_before: (crate::stories::continuing() && spawn.args.get(1).is_some_and(|word| word.as_ref() == b"adopt"))
-            .then(crate::world::forge_calls),
+        forge_before: (crate::stories::continuing()
+            && spawn.args.get(1).is_some_and(|word| word.as_ref() == b"repository")
+            && spawn.args.get(2).is_some_and(|word| word.as_ref() == b"adopt"))
+        .then(crate::world::forge_calls),
     }
 }
 
@@ -211,7 +213,7 @@ impl Host for Caller {
             self.output.clear();
             self.error.clear();
         }
-        // forge-connect answers Connecting; wait for its credentials before adoption.
+        // forge connect answers Connecting; wait for its credentials before adoption.
         let steps = if crate::stories::is_golden() && !crate::stories::continuing() { 4 } else { 2 };
         if self.at >= steps {
             self.finished = true;

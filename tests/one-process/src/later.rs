@@ -24,6 +24,8 @@ const CONTINUED: &[u8] = b"Golden task continued";
 const CLI_ANSWERS: usize = 2;
 // The continuation replays only the retained adoption request.
 const REPLAY_ANSWERS: usize = 1;
+// Startup and settled shutdown each persist a lifecycle commit.
+const REOPEN_COMMITS: u64 = 2;
 
 /// Start the candidate on a kept deployment, then exercise its promised history
 /// and continued work. At the tag only the caller's input changes to kept files.
@@ -58,7 +60,9 @@ pub fn assert_later(kept: &Deployment, ledger: Ledger) {
 }
 
 fn assert_identities_and_counters(before: &Held, after: &Held) {
-    assert_eq!(numbers(after), numbers(before), "every deployment high-water mark and identity survives startup");
+    let mut expected = *numbers(before);
+    expected.commits = expected.commits.checked_add(REOPEN_COMMITS).expect("lifecycle commits");
+    assert_eq!(numbers(after), &expected, "identities and high-water marks survive; lifecycle commits advance");
     for (key, row) in &before.jig {
         if matches!(
             row,
