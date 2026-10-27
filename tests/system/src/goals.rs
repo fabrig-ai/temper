@@ -102,6 +102,8 @@ fn configured() -> Driver {
         config.core.defaults.rules = domain.rules().clone();
         config
     });
+    // Size journal writes from the placed subtree's complete child route.
+    limits.journal.writes = limits.journal.writes.max(walking::writes(&limits));
     Driver::configured(Store::new(), config, &limits)
 }
 
