@@ -1208,3 +1208,20 @@ pub fn model_world(seed: u64) -> World<Temper, Joint> {
 pub fn accounts_world(seed: u64) -> World<Temper, Joint> {
     world_with(seed, Joint::with_accounts(seed, domain_limits()))
 }
+
+/// Finish the chat's assigned run at the spend this funding story scripts.
+pub fn finish_chat(front: &mut Joint, task: u64, spent: u64) {
+    let attempt = front.hosted_attempt(task).expect("the chat reached its worker");
+    front.engine.answer(
+        QUESTION_WORKER,
+        task,
+        attempt,
+        spent,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: b"Answered by the chat".as_slice().into() },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    front.engine.settle();
+}

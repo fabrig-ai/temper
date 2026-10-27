@@ -122,6 +122,15 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
                 watch(runner, &mut reading, 4, c::Subject::Deployment, out);
             }
         }
+        rows::PROJECT_SHOW_AT | rows::PROJECT_FUND_AT => {
+            let Some(me) = super::acts::me(runner, client) else { return };
+            let Some(project) = project(&reading.called.call, me) else {
+                let printed = render::failure(b"unknown project", reading.called.json, 1);
+                finish(reading.called, printed, out);
+                return;
+            };
+            read(runner, &mut reading, 1, c::Read::Project { project }, out);
+        }
         rows::PROPOSAL_AT => {
             let Some(Value::Proposal(proposal)) = value(&reading.called.call, 0) else { unreachable!("proposal form") };
             let what = c::Read::Proposal { proposal: *proposal };

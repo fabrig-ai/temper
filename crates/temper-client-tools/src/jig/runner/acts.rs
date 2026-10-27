@@ -29,6 +29,12 @@ pub(crate) fn me<'a>(runner: &Runner, client: &'a Client) -> Option<&'a c::Me> {
     }
 }
 pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
+    if called.call.tool == rows::PROJECT_FUND_AT {
+        let Some(me) = me(runner, client) else { return };
+        let request = project_fund(&called.call, me);
+        prepared(runner, client, env, called, request, out);
+        return;
+    }
     if called.call.tool == rows::MOVE_TO_NEWEST_AT {
         let revision = u32::try_from(number(&called.call, 0).expect("revision argument")).expect("revision fits u32");
         prepared(
@@ -101,6 +107,19 @@ pub(crate) enum Failed {
     Detail(Box<[u8]>),
 }
 pub(crate) type Prepared = Result<(Request, Option<c::Recipient>), Failed>;
+fn project_fund(call: &Call, me: &c::Me) -> Prepared {
+    match super::reads::project(call, me) {
+        Some(project) => {
+            let period_spend = number(call, 1).expect("amount argument");
+            let edit = match number(call, 2) {
+                Some(role) => c::PolicyEdit::RoleSpend { role: u32::try_from(role).expect("role fits"), period_spend },
+                None => c::PolicyEdit::ProjectSpend { period_spend },
+            };
+            Ok((Request::Ask(c::Ask::ChangePolicy { project, edit }), None))
+        }
+        None => Err(Failed::Fixed(b"unknown project")),
+    }
+}
 fn chat(call: &Call, me: &c::Me, limits: &Limits) -> Prepared {
     let project = super::reads::project(call, me).ok_or(Failed::Fixed(b"unknown project"))?;
     let Ok(mut ask) = shapes::chat(me, project, words(call, 1, limits)?) else {
@@ -596,6 +615,17 @@ pub(super) fn answered(
         }
         if sent.called.call.tool == rows::EXPORT_AT {
             super::moves::answered(runner, client, env, sent, outcome, out);
+            return;
+        }
+        if sent.called.call.tool == rows::PROJECT_FUND_AT
+            && let jig_client::Outcome::Answered(jig_client::Answered::Jig(c::Answer::Done(c::Outcome::Owner(
+                c::OwnerOutcome::PolicyChanged { project },
+            )))) = outcome
+        {
+            // Read the committed project once, resolving names to the answered identity.
+            *sent.called.call.values.get_mut(0).expect("project argument") =
+                Some(Values::One(Value::Project(crate::jig::call::Project::Number(*project))));
+            super::reads::start(runner, client, env, sent.called, out);
             return;
         }
         let mut printed =
