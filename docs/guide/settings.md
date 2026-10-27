@@ -167,11 +167,11 @@ The recorded `--running moves` choice moves eligible existing tasks
 with the change; `stays` keeps their recorded revisions. Conversations
 still move at their next run.
 
-A revision lists what each item changed and what it replaced. The `was:`
-line shows the previous chosen value, `its default`, `removed`, or
-`not offered`. A value past the read bound shows its size and a setting
-read hint. JSON includes the same information under `replaced`.
-The `revisions` pages keep compact previews without values.
+Each item of a revision also says what it replaced, on a `was:` line:
+the value chosen before it, `its default`, `removed`, or `not offered`. A
+value too long for one read shows its size and the `setting` read that
+prints it whole. With `--json`, the same is under `replaced`. The
+`revisions` pages list items without values.
 
 ## Proposals
 
@@ -226,26 +226,29 @@ settings proposals with `temper ctl` using the commands above.
 
 ## Restoring a revision
 
-A party with a deployment or project role can ask the owners to restore
-an earlier revision:
+Restoring a revision never changes the settings by itself: it asks the
+owners, as a proposal, to put back the settings as that revision left
+them. Anyone with a role in the deployment or in a project may ask:
 
 ```sh
 temper ctl me restore 5 because --key restore-settings-5
 ```
 
-The answer names a proposal, for example `proposed restoring revision 5
-as proposal p73/7, to the owners`. Read it with `proposal p73/7` and
-accept it with the explicit running choice shown above. Restore proposes
-one item per setting changed since that revision. Previously chosen values
-return; settings that followed their defaults follow today's defaults.
-Application settings whose historical values are unavailable are left out
-and named in the answer.
+It answers with the proposal it made, for example `proposed restoring
+revision 5 as proposal p73/7, to the owners`. Read its review with
+`temper ctl me proposal p73/7`; an owner accepts it as any proposal of
+settings, choosing whether running work moves. It has one item for each
+setting a later revision changed: a value chosen then comes back, and a
+setting that followed its default then follows today's default, which a
+release may have changed since. Settings of the application's own kinds
+keep no past values; the answer names any it leaves out.
 
-The revision must remain within the history window, even if older running
-work still holds it. A forgotten refusal names the oldest kept revision.
-Restoring the newest revision is empty; a settings decision made while
-the history loads makes the request stale. A restore larger than one whole
-settings set is refused; try a later revision.
+You can restore any revision the history still keeps, but not an older
+one, even while running work holds it: that is refused as forgotten,
+naming the oldest kept. Restoring the newest is refused as empty. A
+settings change made while the history is being read refuses the restore
+as stale; ask again. One that would need more than a whole set of
+settings is refused as too large; restore a later revision instead.
 
 ## What needs a restart
 
