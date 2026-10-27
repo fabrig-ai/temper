@@ -24,8 +24,6 @@ const CHILD_REPORT: &[u8] = b"Task complete";
 const GOAL_BUDGET: u64 = 100_000;
 const CHILD_BUDGET: u64 = 10;
 const SPEND: u64 = 1_000_000; // Funding is incidental to this issue-bound story.
-const DELEGATION_TASKS: u32 = 13; // configuring's 13.4 sizing, not yet landed.
-const INBOX_BYTES: u32 = 12_288; // configuring, director 1353: a tracked goal can delegate.
 const MODEL_WINDOW: u32 = 1_048_576; // The init template's scripted stock model.
 const MODEL_OUTPUT: u32 = 8192;
 const PRICE_UNIT: u32 = 1_000_000;
@@ -59,18 +57,15 @@ fn defaults() -> jig_domain_core::settings::Defaults {
     let mut defaults = temper_service::stock::defaults(&llm);
     defaults.rules.period_spend = SPEND;
     defaults.rules.ceiling.budget.spend = SPEND;
-    defaults.rules.ceiling.delegation.tasks = DELEGATION_TASKS;
     for charter in &mut defaults.charters {
         charter.spend = SPEND;
     }
     let policy = &mut defaults.policies.get_mut(&PROJECT).expect("stock policy").policy;
     policy.period_spend = SPEND;
     policy.ceiling.budget.spend = SPEND;
-    policy.ceiling.delegation.tasks = DELEGATION_TASKS;
     for role in &mut policy.roles {
         role.period_spend = SPEND;
         role.authority.budget.spend = SPEND;
-        role.authority.delegation.tasks = DELEGATION_TASKS;
     }
     defaults
 }
@@ -208,8 +203,7 @@ fn configured_world(
     failing: bool,
     defaults: &jig_domain_core::settings::Defaults,
 ) -> (World, engine::Assignment, engine::Assignment) {
-    let mut limits = box_limits();
-    limits.tasks.inbox_bytes = INBOX_BYTES;
+    let limits = box_limits();
     let mut world = World::configured_stock_limits(defaults, &model(), &limits);
     world.adopt();
     world.fail_issue_writes = failing;
