@@ -289,7 +289,7 @@ pub fn run(bytes: &[u8]) -> Result<Outcome, Error> {
 }
 
 fn run_log(log: Log) -> Result<Outcome, Differs> {
-    assert_eq!(log.start.story.as_ref(), A.name.as_bytes(), "the fixture names story A");
+    assert_eq!(log.start.story.as_ref(), A.key.as_bytes(), "the fixture names story A");
     let start = temper_playground::story_start(&A, log.start.seed);
     let machine = Machine(start.machine());
     let config = skein_sim::Config { wall: log.start.start, trace: skein_sim::Trace::Off, ..skein_sim::Config::calm() };
@@ -408,7 +408,7 @@ mod tests {
     fn a_browser_named_snapshot_replays_before_its_stream_closes() {
         let text = std::str::from_utf8(include_bytes!("../../playground/fixtures/welcome.log"))
             .expect("text log")
-            .replace("native QQ==", "browser-build YQ==");
+            .replace("native YQ==", "browser-build YQ==");
         let mut lines: Vec<_> = text.lines().map(str::to_owned).collect();
         lines.pop().expect("end");
         let close = lines.pop().expect("close");

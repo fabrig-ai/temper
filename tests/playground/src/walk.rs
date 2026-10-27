@@ -88,7 +88,7 @@ impl Walk {
     pub fn new(story: &'static Story, seed: u64, start: Wall) -> Self {
         let mut native = Native::new(
             world(story, seed, start),
-            Start { story: story.name.as_bytes().into(), seed, start },
+            Start { story: story.key.as_bytes().into(), seed, start },
             SLICE_STEPS,
             b"native",
             Limits { exchanges: VISITOR_EXCHANGES, log: SESSION_LOG },
