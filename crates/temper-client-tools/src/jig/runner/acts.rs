@@ -291,6 +291,18 @@ fn settings_history(call: &Call, document: &c::ReadValue) -> bool {
     false
 }
 
+fn settings_action(action: &c::OwnerProposalAction) -> bool {
+    match action {
+        c::OwnerProposalAction::Settings(_) => true,
+        c::OwnerProposalAction::Batch(_)
+        | c::OwnerProposalAction::Effect { .. }
+        | c::OwnerProposalAction::ProcedureEffect { .. }
+        | c::OwnerProposalAction::Amend { .. }
+        | c::OwnerProposalAction::Widen { .. }
+        | c::OwnerProposalAction::Release { .. } => false,
+    }
+}
+
 fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, project: Option<u32>) -> Prepared {
     if call.tool == rows::AMEND_AT {
         return Err(Failed::Fixed(b"unexpected amendment document"));
@@ -299,19 +311,23 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
         return close_request(call, document, me, limits);
     }
     if settings_history(call, document) {
-        return Ok((Request::Ask(c::Ask::Decide { project: 0, on: decide(call, 0, limits)? }), None));
+        return Ok((Request::Ask(c::Ask::Decide { project: 0, on: decide(call, 0, limits, true)? }), None));
     }
-    let (project, offers) = match document {
-        c::ReadValue::Task(task) => (task.project, &task.acts),
-        c::ReadValue::Question(question) => {
-            (chip_project(&question.task).or(project).ok_or(Failed::Fixed(b"project unavailable"))?, &question.acts)
-        }
-        c::ReadValue::Proposal(proposal) => (proposal.project, &proposal.acts),
-        c::ReadValue::OwnerProposal(proposal) => (proposal.project, &proposal.acts),
-        c::ReadValue::Escalation(escalation) => {
-            (chip_project(&escalation.task).or(project).ok_or(Failed::Fixed(b"project unavailable"))?, &escalation.acts)
-        }
-        c::ReadValue::OwnerEscalation(escalation) => (escalation.task.project, &escalation.acts),
+    let (project, offers, settings) = match document {
+        c::ReadValue::Task(task) => (task.project, &task.acts, false),
+        c::ReadValue::Question(question) => (
+            chip_project(&question.task).or(project).ok_or(Failed::Fixed(b"project unavailable"))?,
+            &question.acts,
+            false,
+        ),
+        c::ReadValue::Proposal(proposal) => (proposal.project, &proposal.acts, false),
+        c::ReadValue::OwnerProposal(proposal) => (proposal.project, &proposal.acts, settings_action(&proposal.action)),
+        c::ReadValue::Escalation(escalation) => (
+            chip_project(&escalation.task).or(project).ok_or(Failed::Fixed(b"project unavailable"))?,
+            &escalation.acts,
+            false,
+        ),
+        c::ReadValue::OwnerEscalation(escalation) => (escalation.task.project, &escalation.acts, false),
         c::ReadValue::Settings(_)
         | c::ReadValue::Setting(_)
         | c::ReadValue::Revision(_)
@@ -363,7 +379,7 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
                 words: words(call, 2, limits)?,
             },
         },
-        rows::DECIDE_AT | rows::TASK_DECIDE_AT => c::Ask::Decide { project, on: decide(call, task, limits)? },
+        rows::DECIDE_AT | rows::TASK_DECIDE_AT => c::Ask::Decide { project, on: decide(call, task, limits, settings)? },
         rows::RELEASE_AT => c::Ask::Release {
             project,
             task,
@@ -384,18 +400,17 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
     };
     Ok((Request::Ask(ask), to))
 }
-fn decide(call: &Call, task: u64, limits: &Limits) -> Result<c::DecideOn, Failed> {
+fn decide(call: &Call, task: u64, limits: &Limits, settings: bool) -> Result<c::DecideOn, Failed> {
     Ok(if call.tool == rows::DECIDE_AT {
         let Some(Value::Proposal(proposal)) = value(call, 0) else { unreachable!("proposal form") };
-        c::DecideOn::Proposal {
-            proposal: *proposal,
-            decision: decision(call, limits)?,
-            running: match value(call, 3) {
-                Some(Value::Word(0)) => Some(c::Running::Stays),
-                Some(Value::Word(1)) => Some(c::Running::Moves),
-                Some(_) | None => None,
-            },
-        }
+        let decision = decision(call, limits)?;
+        let running = match value(call, 3) {
+            Some(Value::Word(0)) => Some(c::Running::Stays),
+            Some(Value::Word(1)) => Some(c::Running::Moves),
+            None if settings && decision == c::Decision::Accepted => Some(c::Running::Stays),
+            Some(_) | None => None,
+        };
+        c::DecideOn::Proposal { proposal: *proposal, decision, running }
     } else {
         c::DecideOn::Escalation {
             task,

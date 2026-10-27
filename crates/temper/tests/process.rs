@@ -3916,9 +3916,9 @@ fn temper_ctl_repeated_settings_decisions() {
             steps.push(Step::Then(Box::new(move |calls| {
                 let proposal = support::ctl::proposal_key(&calls[5]);
                 let mut argv = vec!["proposal", "decide", &proposal, if accept { "accept" } else { "reject" }];
-                if accept {
+                if accept && key == "first-decision" {
                     argv.extend(["--running", "stays"]);
-                } else {
+                } else if !accept {
                     argv.push("Keep it");
                 }
                 argv.extend(["--key", key]);
@@ -3940,6 +3940,24 @@ fn temper_ctl_repeated_settings_decisions() {
         assert_eq!(support::ctl::newest(&calls[10]), before + u64::from(accepted), "repeats make no revision");
         scratch.remove();
     }
+
+    let scratch = ctl_scratch("ctl_accept_settings_default");
+    let mut steps = ctl_settings_member_setup(scratch.path());
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["proposal", "decide", &support::ctl::proposal_key(&calls[5]), "accept", "--key", "default-stays"])
+    })));
+    steps.push(Step::Run(Call::new(&["settings", "show", "--json"])));
+    steps.push(Step::Then(Box::new(|calls| {
+        Call::new(&["revision", "show", &support::ctl::newest(&calls[7]).to_string(), "--json"])
+    })));
+    let seen = support::ctl::run(Story::new(scratch.path(), steps));
+    ctl_assert_success(&seen.calls);
+    assert_eq!(seen.calls[6].stdout, b"done: decide\n");
+    assert_eq!(support::ctl::newest(&seen.calls[7]), support::ctl::newest(&seen.calls[3]) + 1);
+    let revision = support::ctl::json(&seen.calls[8]);
+    assert_eq!(revision["head"]["moved"], false, "the default leaves running work on its revision");
+    assert!(!revision["head"]["proposal"].is_null());
+    scratch.remove();
 }
 
 #[test]

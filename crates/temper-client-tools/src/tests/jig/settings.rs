@@ -1283,60 +1283,106 @@ fn proposal_review_reads_both_large_values_whole_and_keeps_refusals_in_place() {
 }
 
 #[test]
+fn settings_acceptance_defaults_to_stays_and_preserves_other_decisions() {
+    for json in [false, true] {
+        for settings in [false, true] {
+            for (decision, extra, expected) in [
+                ("accept", &[][..], if settings { Some(c::Running::Stays) } else { None }),
+                ("accept", &["--running", "stays"][..], Some(c::Running::Stays)),
+                ("accept", &["--running", "moves"][..], Some(c::Running::Moves)),
+                ("reject", &[][..], None),
+                ("pass-up", &[][..], None),
+            ] {
+                let mut root = fixtures::signed_in(fixtures::PARTY);
+                let mut argv = vec!["proposal", "decide", "p73/7", decision, "--key", "decision"];
+                argv.extend(extra);
+                let call = root.submit_prepared(fixtures::call(&argv), json, None);
+                let mut document = review_proposal(None);
+                let c::ReadValue::OwnerProposal(proposal) = &mut document else { unreachable!() };
+                proposal.acts = fixtures::offered(&[c::ActKind::Accept, c::ActKind::Reject, c::ActKind::PassUp]).acts;
+                if !settings {
+                    proposal.action = c::OwnerProposalAction::Batch(list([]));
+                }
+                root.serve(call, c::ReadResult::Value(document));
+                let c::Ask::Decide { on: c::DecideOn::Proposal { running, .. }, .. } = fixtures::act_ask(&root, call)
+                else {
+                    panic!("proposal decision")
+                };
+                assert_eq!(*running, expected, "settings {settings}, {argv:?}, json {json}");
+                root.done(call, c::Outcome::Changed);
+                assert_eq!(root.answer(call).expect("decision answered").status, 0);
+            }
+        }
+    }
+}
+
+#[test]
 fn repeated_settings_decisions_send_the_given_key_and_print_the_engine_answer() {
     let proposal = c::ProposalKey { proposer: c::Proposer::Party(73), number: 7 };
-    for accepted in [false, true] {
-        for (key, accept) in [("first", accepted), ("new-accept", true), ("new-reject", false)] {
-            let mut root = fixtures::signed_in(fixtures::PARTY);
-            let mut argv = vec!["proposal", "decide", "p73/7", if accept { "accept" } else { "reject" }];
-            if accept {
-                argv.extend(["--running", "stays"]);
-            } else {
-                argv.push("because");
-            }
-            argv.extend(["--key", key]);
-            let call = root.submit(&argv);
-            let mut history = retained_proposal(
-                proposal,
-                c::OwnerRetainedAction::Settings(c::OwnerRetainedActionSettings {
-                    against: 5,
-                    items: list([]),
-                    made: if accepted { Some(6) } else { None },
-                }),
-            );
-            if !accepted {
-                let c::ReadValue::Historical(history) = &mut history else { unreachable!() };
-                let c::OwnerHistoricalValue::Proposal(proposal) = &mut history.value else { unreachable!() };
-                proposal.state = c::OwnerProposalHistoryState::Rejected {
-                    by: c::OwnerRequester::Person(19),
-                    reason: c::DocumentText::complete(words("first reason")),
-                };
-            }
-            root.serve(call, c::ReadResult::Value(history));
-            assert_eq!(root.sent_name(call), Some(fixtures::named(key)));
-            let c::Ask::Decide { project, on: c::DecideOn::Proposal { proposal: sent, .. } } =
-                fixtures::act_ask(&root, call)
-            else {
-                panic!("proposal decision")
-            };
-            assert_eq!((*project, *sent), (0, proposal));
-            root.done(
-                call,
-                c::Outcome::Owner(c::OwnerOutcome::ProposalDecided {
+    for json in [false, true] {
+        for accepted in [false, true] {
+            for (key, accept) in [("first", accepted), ("new-accept", true), ("new-reject", false)] {
+                let mut root = fixtures::signed_in(fixtures::PARTY);
+                let mut argv = vec!["proposal", "decide", "p73/7", if accept { "accept" } else { "reject" }];
+                if !accept {
+                    argv.push("because");
+                }
+                argv.extend(["--key", key]);
+                let call = root.submit_prepared(fixtures::call(&argv), json, None);
+                let mut history = retained_proposal(
                     proposal,
-                    by: 19,
-                    at: fixtures::DECIDED_AT,
-                    choice: if accepted { c::OwnerProposalChoice::Accepted } else { c::OwnerProposalChoice::Rejected },
-                    repeated: key != "first",
-                }),
-            );
-            let answer = root.answer(call).expect("first decision answer");
-            assert_eq!(answer.status, 0);
-            let output = core::str::from_utf8(&answer.stdout).expect("text");
-            if key == "first" {
-                assert_eq!(output, "done: decide\n");
-            } else {
-                assert!(output.starts_with("decided first: by party 19,"));
+                    c::OwnerRetainedAction::Settings(c::OwnerRetainedActionSettings {
+                        against: 5,
+                        items: list([]),
+                        made: if accepted { Some(6) } else { None },
+                    }),
+                );
+                if !accepted {
+                    let c::ReadValue::Historical(history) = &mut history else { unreachable!() };
+                    let c::OwnerHistoricalValue::Proposal(proposal) = &mut history.value else { unreachable!() };
+                    proposal.state = c::OwnerProposalHistoryState::Rejected {
+                        by: c::OwnerRequester::Person(19),
+                        reason: c::DocumentText::complete(words("first reason")),
+                    };
+                }
+                root.serve(call, c::ReadResult::Value(history));
+                assert_eq!(root.sent_name(call), Some(fixtures::named(key)));
+                let c::Ask::Decide { project, on: c::DecideOn::Proposal { proposal: sent, running, .. } } =
+                    fixtures::act_ask(&root, call)
+                else {
+                    panic!("proposal decision")
+                };
+                assert_eq!((*project, *sent), (0, proposal));
+                assert_eq!(*running, if accept { Some(c::Running::Stays) } else { None });
+                root.done(
+                    call,
+                    c::Outcome::Owner(c::OwnerOutcome::ProposalDecided {
+                        proposal,
+                        by: 19,
+                        at: fixtures::DECIDED_AT,
+                        choice: if accepted {
+                            c::OwnerProposalChoice::Accepted
+                        } else {
+                            c::OwnerProposalChoice::Rejected
+                        },
+                        repeated: key != "first",
+                    }),
+                );
+                let answer = root.answer(call).expect("first decision answer");
+                assert_eq!(answer.status, 0);
+                let output = core::str::from_utf8(&answer.stdout).expect("text or JSON");
+                if json {
+                    assert!(output.contains("\"operation\":\"decide\""), "{output}");
+                    assert!(
+                        output.contains(if key == "first" { "\"repeated\":false" } else { "\"repeated\":true" }),
+                        "{output}"
+                    );
+                } else if key == "first" {
+                    assert_eq!(output, "done: decide\n");
+                } else {
+                    assert!(output.starts_with("decided first: by party 19,"));
+                    assert!(output.contains(if accepted { "accepted" } else { "rejected" }));
+                }
             }
         }
     }
