@@ -61,7 +61,7 @@ fn change_world_with_lines(lines: u32) -> (World, engine::Assignment, engine::As
     change_world_in(world, Change::default())
 }
 
-fn read(world: &mut World, read: reads::Read) -> Option<reads::Answer> {
+pub(super) fn read(world: &mut World, read: reads::Read) -> Option<reads::Answer> {
     world.reads.clear();
     world.send(engine::Event::Party(engine::PartyInput::Read {
         reply_to: ReplyTo::new(READ),
