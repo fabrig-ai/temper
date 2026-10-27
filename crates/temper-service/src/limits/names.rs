@@ -621,7 +621,7 @@ pub const NAMES: [Name; 148] = [
     },
     Name {
         name: "forge_component.body_bytes_in",
-        unit: Unit::Count,
+        unit: Unit::Bytes,
         line: "A forge's answer body as it streams in; a longer one fails to decode.",
     },
     Name {

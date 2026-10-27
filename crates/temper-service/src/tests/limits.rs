@@ -579,6 +579,7 @@ fn rows_are_unique_and_well_formed() {
         "forge_component.",
     ];
     let byte_names: &[&str] = &[
+        "forge_component.body_bytes_in",
         "forge_component.chunk",
         "forge_component.tls.read",
         "forge_component.tls.send",
