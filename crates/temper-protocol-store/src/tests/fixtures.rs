@@ -760,7 +760,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {
     use temper_engine_domain_forge_change::{Hold, Repair, State};
-    let mut states = List::with_capacity(18);
+    let mut states = List::with_capacity(19);
     for state in [
         State::Producing { requested: true },
         State::Opening { requested: false },
