@@ -4,9 +4,13 @@ use skein_fake_person_browser::{Harness, Lent, Outcome, Script, Sent, Step};
 use skein_ui::Role;
 use temper_client_browser_world::{Tier, WITHIN};
 
+mod manifest_history;
+use manifest_history::{History, Observed};
+
 #[test]
-fn the_manifest_page_posts_itself_to_the_configured_github_web() {
-    let (tier, mut github) = Tier::github("github-manifest");
+fn the_manifest_posts_once_and_back_waits_for_continue() {
+    let (tier, github) = Tier::github("github-manifest");
+    let mut github = Observed::new(github);
     let mut setup = tier.setup();
     // Hold the service's sign-in link for ctl; the tab first opens ctl's manifest link.
     setup.printed.sent = Sent::Command;
@@ -15,11 +19,11 @@ fn the_manifest_page_posts_itself_to_the_configured_github_web() {
         find: Find::exactly_named(Role::Link, b"Create GitHub App"),
         within: WITHIN,
     }));
-    let mut script = Script::new(steps.into_boxed_slice());
+    let mut script = History::new(Script::new(steps.into_boxed_slice()), github.counts());
     let mut harness = Harness::new(setup);
     let outcome = harness.run_lending(&mut [&mut script], &mut [Lent { name: b"github", peer: &mut github }]);
     let mut posts = 0;
-    for record in github.observations() {
+    for record in github.peer.observations() {
         if let skein_fake_peers::forge::Observation::Head { call, .. } = record {
             let path = call.target.split(|byte| *byte == b'?').next().expect("path");
             match (call.method, path) {
@@ -29,14 +33,14 @@ fn the_manifest_page_posts_itself_to_the_configured_github_web() {
             }
         }
     }
-    assert_eq!(posts, 1, "the page posts once, without following create");
+    assert_eq!(posts, 2, "one automatic post, then one explicitly continued post");
     let link = harness.kept().iter().find(|kept| kept.name.as_ref() == b"manifest-link").expect("ctl manifest link");
     let link = std::str::from_utf8(&link.value).expect("manifest link UTF-8");
     let (page, state) = link.split_once("?state=").expect("manifest state");
     assert!(page.ends_with("/forges/1/github/manifest"));
     assert!(!state.is_empty());
     let origin = page.strip_suffix("forges/1/github/manifest").expect("clients origin");
-    let layer = github.github_layer().expect("GitHub layer");
+    let layer = github.peer.github_layer().expect("GitHub layer");
     let manifest = layer.manifest(state.as_bytes()).expect("page posted its manifest with ctl's state");
     assert_eq!(outcome, Outcome::Done);
     assert_eq!(manifest.url.as_ref(), origin.as_bytes());
@@ -54,39 +58,6 @@ fn the_manifest_page_posts_itself_to_the_configured_github_web() {
     assert_eq!(events, skein_forge::github::setup::EVENTS);
     assert_eq!(layer.installations().iter().count(), 0, "the test stops before create or installation");
     // Reaching the fake's link proves the automatic form post passed the page's CSP.
-}
-
-#[test]
-fn back_from_github_shows_the_manifest_without_posting_again_until_continue() {
-    let (tier, mut github) = Tier::github("github-manifest-history");
-    let mut setup = tier.setup();
-    setup.printed.sent = Sent::Command;
-    let see =
-        |role, name: &[u8]| Step::Person(PersonStep::See { find: Find::exactly_named(role, name), within: WITHIN });
-    let mut steps = tier.github_connect();
-    steps.extend([
-        see(Role::Link, b"Create GitHub App"),
-        Step::Back,
-        see(Role::Heading { level: 2 }, "temper’s App, on GitHub".as_bytes()),
-        see(Role::Button, b"Continue to GitHub"),
-        see(Role::Link, b"Back to temper"),
-        Step::Person(PersonStep::Press { find: Find::exactly_named(Role::Button, b"Continue to GitHub") }),
-        see(Role::Link, b"Create GitHub App"),
-    ]);
-    let mut script = Script::new(steps.into_boxed_slice());
-    let outcome =
-        Harness::new(setup).run_lending(&mut [&mut script], &mut [Lent { name: b"github", peer: &mut github }]);
-    assert_eq!(outcome, Outcome::Done);
-    let mut posts = 0;
-    for record in github.observations() {
-        if let skein_fake_peers::forge::Observation::Head { call, .. } = record
-            && call.method == skein_http::Method::Post
-            && call.target.starts_with(b"/settings/apps/new?")
-        {
-            posts += 1;
-        }
-    }
-    assert_eq!(posts, 2, "one automatic post, then one explicitly continued post");
 }
 
 #[test]
