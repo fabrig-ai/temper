@@ -595,14 +595,7 @@ pub fn run(seen: &Rc<RefCell<Seen>>) {
             program: fixtures::AGENT.into(),
             make: |spawn, inherited| Proc::Hosted(agent::agent(spawn, inherited)),
             instances: 1,
-            operations: configuration
-                .service
-                .limits
-                .routes
-                .checked_add(3)
-                // smith reserves one hosted open per permitted requested root.
-                .and_then(|count| count.checked_add(configuration.service.limits.domain.run.directories))
-                .expect("hosted agent operations"),
+            operations: hosted_agent_operations(&configuration),
         },
         agent::roots,
     );
@@ -618,4 +611,15 @@ pub fn run(seen: &Rc<RefCell<Seen>>) {
     let Proc::Hosted(Service(service)) = &outcome.procs[1] else { panic!("service") };
     assert_eq!(service.service.as_ref().and_then(temper_service::Service::end), Some(&crate::End::Drained));
     assert!(outcome.killed.is_empty(), "no requested kills");
+}
+
+fn hosted_agent_operations(configuration: &smith_agent_shell::config::Configuration) -> u32 {
+    configuration
+        .service
+        .limits
+        .routes
+        .checked_add(3)
+        // smith reserves one hosted open per permitted requested root.
+        .and_then(|count| count.checked_add(configuration.service.limits.domain.run.directories))
+        .expect("hosted agent operations")
 }
