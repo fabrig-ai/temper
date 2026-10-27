@@ -62,8 +62,8 @@ change, or a start, makes a new revision.
 - A run proposes with the host tool `propose` (a batch, an effect, an
   amendment, a widening or a release), decides with `decide`, and
   withdraws its own with `withdraw`.
-- A run proposes a change of settings with the host tool
-  `propose_settings`.
+- A run whose charter and authority have the settings family proposes
+  a change of settings with the host tool `propose_settings`.
 
 ## Limits
 

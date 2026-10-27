@@ -14,6 +14,9 @@ the task reads its charter, whole:
 - its models: `model`, the default, then `alternatives`, in order;
 - its tools in the workspace: to inspect, to modify, to run a shell, to
   open sub-agents;
+- its host families, `tools`: which of temper's tool families its runs
+  are offered, where their task's authority holds them too. The stock
+  charters name every family but settings;
 - the hosts that may run it: the deployment's workers, the engine, or
   both;
 - a run's limits: its turns and time, a reserve of each for finishing,
@@ -62,7 +65,8 @@ Tasks made before keep it, on their revision.
 
 - `temper ctl`: `settings show` reads one, as the newest revision or a
   held one has it; `settings apply` and `settings propose` change it.
-- A run reads charters with the host tool `settings`.
+- A run whose charter and authority have the settings family reads
+  charters with the host tool `settings`.
 
 ## Limits
 
@@ -74,6 +78,8 @@ Tasks made before keep it, on their revision.
   is a setting like any other. The reviewer's charter is `charter 4`,
   fixed by temper; its contents are a setting like any other.
 - temper does not check, when a charter changes, that a connected host
-  can run it.
+  can run it, nor yet that its runs' host tools, with its text, fit the
+  worker's bound: a run past it is held, naming the bound (`temper help
+  task`).
 - A charter's instructions and models are within the deployment's bytes
   for a run; past them, the change is refused.
