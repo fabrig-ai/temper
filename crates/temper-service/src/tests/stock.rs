@@ -354,6 +354,7 @@ fn stock_and_init_admit_the_landing_procedure_and_its_effects() {
             [
                 Executor::Charter(1),
                 Executor::Charter(2),
+                Executor::Charter(4),
                 Executor::Procedure(2),
                 Executor::Procedure(3),
                 Executor::Procedure(4)
