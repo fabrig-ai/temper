@@ -675,12 +675,16 @@ fn an_adopt_cut_by_a_signal_is_made_once() {
     let (party, listed) = (json(me)["party"]["number"].as_u64().expect("signed in"), json(listed));
     let first_sent = listed["pending"][0]["first_sent"].clone();
     assert!(first_sent.is_u64() || first_sent.is_null(), "{listed}");
-    let row = serde_json::json!({"operation": "adopt", "party": party, "first_sent": first_sent});
+    let row = serde_json::json!({
+        "operation": "adopt", "party": party, "first_sent": first_sent,
+        "unanswered": "it clears when the engine answers it, or past its retention; pending lists it"
+    });
     assert_eq!(listed, serde_json::json!({"pending": [row], "unread": 0}));
     assert_eq!(again.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&again.stderr));
     let adopted = json(again);
-    let kept: serde_json::Value = serde_json::from_slice(&again.stderr).expect("one kept line, JSON");
-    assert_eq!(kept, serde_json::json!({"operation": "adopt", "outcome": adopted}), "the first answer");
+    assert_eq!(adopted["adopted"]["owner"], "acme");
+    assert_eq!(adopted["adopted"]["name"], "widget");
+    assert!(again.stderr.is_empty(), "the resumed call prints its first answer once, on stdout");
     assert_eq!((empty.exit, empty.stdout.as_slice()), (Some(Exit::Code(0)), b"".as_slice()));
     forgejo.stop();
     scratch.remove();
