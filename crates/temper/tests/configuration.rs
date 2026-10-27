@@ -10,9 +10,11 @@ fn process_engine() -> jig_protocol_config::Engine {
     let bytes = std::fs::read(scratch.path().join("temper.json")).expect("process configuration");
     let mut value: serde_json::Value = serde_json::from_slice(&bytes).expect("deployment JSON");
     // Forge::Unreached omits Forgejo's overrides; include its whole-authority bounds here.
-    value["engine"]["limits"]["overrides"]["authority.grants"] = 16.into();
-    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 16.into();
-    value["engine"]["limits"]["overrides"]["notes.scopes"] = 19.into();
+    value["engine"]["limits"]["overrides"]["authority.grants"] = 14.into();
+    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 14.into();
+    value["engine"]["limits"]["overrides"]["authority.executors"] = 5.into();
+    value["engine"]["limits"]["overrides"]["tasks.executor_kinds"] = 5.into();
+    value["engine"]["limits"]["overrides"]["notes.scopes"] = 17.into();
     let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
     let document = jig_protocol_config::document(&bytes, &DOCUMENT).expect("engine document");
     // Parsing a fixture without a deployment; only its limits are used.
@@ -81,7 +83,8 @@ fn assert_owned_limits(limits: &serde_json::Value) {
         "authority.segments":8,"tasks.hold_segments":8,"tasks.authority_segments":8,
         "documents.rows":2,"documents.lines":2,"documents.text_bytes":128,
         "views.watchers":16,"views.watchers_per_party":16,
-        "authority.grants":16,"tasks.authority_grants":16,"notes.scopes":19,
+        "authority.grants":14,"tasks.authority_grants":14,"notes.scopes":17,
+        "authority.executors":5,"tasks.executor_kinds":5,
         "tasks.authority_bytes":512,"tasks.batch":1
     }}}});
     let agent: serde_json::Value =

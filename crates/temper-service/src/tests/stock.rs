@@ -235,9 +235,20 @@ fn stock_and_init_admit_the_landing_procedure_and_its_effects() {
         &defaults.policies.get(&1).unwrap().policy.ceiling,
         &core.seed_projects[0].policy.policy.ceiling,
     ] {
-        assert!(ceiling.delegation.kinds.contains(&jig_domain_authority::Executor::Procedure(3)));
-        for kind in [3, 4, 6, 9, 12, 15, 16, 17] {
-            assert!(ceiling.grants.iter().any(|grant| grant.kind == kind), "kind {kind}");
+        use jig_domain_authority::Executor;
+        assert_eq!(
+            ceiling.delegation.kinds.as_ref(),
+            [
+                Executor::Charter(1),
+                Executor::Charter(2),
+                Executor::Procedure(2),
+                Executor::Procedure(3),
+                Executor::Procedure(4)
+            ]
+        );
+        assert_eq!(ceiling.grants.len(), 14);
+        for (grant, kind) in ceiling.grants.iter().zip([1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17]) {
+            assert_eq!(grant.kind, kind);
         }
     }
 }
