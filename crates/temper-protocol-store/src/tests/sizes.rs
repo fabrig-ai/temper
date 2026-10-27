@@ -6,7 +6,7 @@ use temper_engine_domain_forge as forge;
 fn the_application_sizes_are_the_largest_key_and_row() {
     // Change's eight remarks hold 4096 bytes each; eight failure counts add 100 bytes.
     assert_eq!(
-        application(&fixtures::LIMITS),
+        application(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes),
         Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 35_503 })
     );
 }
@@ -19,12 +19,12 @@ fn limits_past_a_ceiling_have_no_sizes() {
             1 => limits.client.answer_bytes = value,
             _ => panic!("table field"),
         }
-        assert_eq!(application(&limits), None, "{name}");
+        assert_eq!(application(&limits, limits.client.op_bytes), None, "{name}");
     }
 }
 #[test]
 fn a_row_whose_key_disagrees_with_its_record_is_undecodable() {
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture limits fit");
     let row = forge::Stored::Landed { commit: [1; 32], task: 2 };
     let value = records::encode(&row);
     for (name, other) in [
@@ -52,7 +52,7 @@ fn the_store_version_is_ten() {
 fn demo_row_sizes_fit_the_existing_application_ceiling() {
     use crate::v10 as w;
     assert_eq!(w::Demo::worst_case_bytes(&w::CEILINGS), Some(3));
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     for state in [forge::DemoState::Running, forge::DemoState::Ended] {
         let row = forge::Stored::Demo(forge::Demo { forge: u16::MAX, state });
         let value = records::encode(&row);
@@ -67,7 +67,7 @@ fn demo_row_sizes_fit_the_existing_application_ceiling() {
 fn plan_text_uses_the_body_bound_without_changing_the_format() {
     // Eight items grow from 256 bytes of text each to 512 bytes each.
     const EXTRA_PLAN_BYTES: u64 = 2048;
-    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture bounds");
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
     let after = *bounds.limits();
     let before = crate::v10::Limits { plan_item_text: fixtures::LIMITS.issue_policy.comment_bytes, ..after };
     let old_view = crate::v10::GoalView::worst_case_bytes(&before).expect("old view size");

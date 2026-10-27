@@ -282,16 +282,7 @@ fn task_text(
             out.put(b"\n");
         }
     }
-    if let Some(jig_client::contract::TaskHold::Owner(hold)) = &task.hold
-        && hold.reason == jig_client::contract::HoldCategory::Budget
-    {
-        budget_hold_text(task.chip.task, book, out);
-    }
-    if let Some(jig_client::contract::TaskHold::Document(hold)) = &task.hold
-        && let jig_client::contract::HoldReason::Budget { .. } = hold.reason
-    {
-        budget_hold_text(task.chip.task, book, out);
-    }
+    super::holds::text(task, vocabulary, out);
     acts::text(task, me, book, out);
 }
 pub(super) fn budget_hold_text(task: u64, book: &Phrasebook, out: &mut Text) {
@@ -592,7 +583,7 @@ pub(crate) mod waiting;
 
 pub(crate) mod accounts;
 
-mod clock;
+pub(super) mod clock;
 mod dependencies;
 mod instruction_words;
 mod result_words;

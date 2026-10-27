@@ -16,7 +16,7 @@ fn civil(wall: Wall) -> (u64, u64, u64) {
     let month = if march_month < 10 { march_month + 3 } else { march_month - 9 };
     (year + era * 400 + u64::from(month <= 2), month, day)
 }
-pub(super) fn deadline(wall: Wall, out: &mut Text) {
+pub(crate) fn deadline(wall: Wall, out: &mut Text) {
     let (year, month, day) = civil(wall);
     out.number(year);
     out.put(b"-");

@@ -26,7 +26,8 @@ fn entry(queued: bool) -> Stored {
 }
 #[test]
 fn queued_and_unqueued_entries_have_v10_golden_bytes_and_round_trip() {
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     assert_eq!(STORE_VERSION, 10);
     for queued in [false, true] {
         let value = entry(queued);
@@ -42,7 +43,8 @@ fn queued_and_unqueued_entries_have_v10_golden_bytes_and_round_trip() {
 }
 #[test]
 fn queued_effect_outcomes_and_merge_answers_round_trip_durably() {
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     for answer in [
         CallPayload::Effect { entry: 1, deadline: skein_lib::Wall::EPOCH, outcome: Some(Outcome::Queued) },
         CallPayload::Read(Box::new(Ok(Answer::Queued))),
@@ -56,7 +58,8 @@ fn queued_effect_outcomes_and_merge_answers_round_trip_durably() {
 #[test]
 fn not_installed_call_and_application_reasons_round_trip_distinctly_at_v10() {
     use temper_engine_domain_forge::{AdoptionRefusal, ApplicationOutcome};
-    let bounds = temper_protocol_store::bounds(&fixture::LIMITS).expect("fixture bounds");
+    let bounds =
+        temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("fixture bounds");
     for value in [
         Stored::Call {
             key: NamedCall { task: 1, attempt: 2, completion: 3, position: 4 },

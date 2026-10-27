@@ -27,7 +27,8 @@ pub(super) fn run(data: &Path, records: &[(u64, Box<[u8]>)], load: bool) -> Resu
     {
         return Err("fixture record exceeds the secrets store value bound".into());
     }
-    let application = temper_protocol_store::application(&root.forge).ok_or("fixture application sizes")?;
+    let application =
+        temper_protocol_store::application(&root.forge, root.tasks.spec_bytes).ok_or("fixture application sizes")?;
     // The caller supplies an existing private data directory, just as start does.
     let fd = skein_shell::open_root(data).map_err(|why| format!("data directory: errno {why}"))?;
     let mut kernel = match skein_shell::Kernel::open(skein_shell::Config { operations: OPERATIONS }) {

@@ -139,7 +139,7 @@ pub fn forges() -> Box<[settings::Forge]> {
 pub const OWNER: Token = Token::new(91);
 pub fn routes() -> crate::store::route::Routes {
     let (root, _, _) = store_limits();
-    let bounds = temper_protocol_store::bounds(&root.forge).expect("family bounds");
+    let bounds = temper_protocol_store::bounds(&root.forge, root.tasks.spec_bytes).expect("family bounds");
     crate::store::route::Routes::new(2, &root, bounds)
 }
 
@@ -254,7 +254,7 @@ pub fn records_store() -> crate::store::Store {
     let mut store = memory_store_for(&root, &profile, &models);
     store.component = jig_protocol_store::Store::over(
         &limits,
-        temper_protocol_store::application(&root.forge).expect("fixture families"),
+        temper_protocol_store::application(&root.forge, root.tasks.spec_bytes).expect("fixture families"),
         &models,
         maps,
     );
@@ -277,7 +277,7 @@ fn memory_store_for(
     let mut store = crate::store::Store::new(root, &limits, models, seeds().installation);
     store.component = jig_protocol_store::Store::over(
         &limits,
-        temper_protocol_store::application(&root.forge).expect("application sizes"),
+        temper_protocol_store::application(&root.forge, root.tasks.spec_bytes).expect("application sizes"),
         models,
         jig_protocol_store::Stores {
             store: skein_kv::Store::memory(&limits.store),
@@ -1072,7 +1072,7 @@ pub fn reopened_store(mut store: crate::store::Store, root: &temper_engine_domai
     let maps = store.component.into_stores();
     store.component = jig_protocol_store::Store::over(
         &limits,
-        temper_protocol_store::application(&root.forge).expect("fixture families"),
+        temper_protocol_store::application(&root.forge, root.tasks.spec_bytes).expect("fixture families"),
         &models,
         maps,
     );

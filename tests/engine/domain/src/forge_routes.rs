@@ -76,6 +76,7 @@ pub struct World {
 pub struct StoryLimits {
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
+    pub spec_bytes: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -208,7 +209,7 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall } = timing;
+        let StoryLimits { brief, stall, spec_bytes } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -484,6 +485,9 @@ impl World {
                 // A shipped brief brings its own room: results hold it, forge sections read it.
                 limits.journal.result_bytes = limits.journal.result_bytes.max(brief.brief_bytes);
                 limits.forge.brief_bytes = limits.forge.brief_bytes.max(brief.read_bytes);
+            }
+            if let Some(spec_bytes) = spec_bytes {
+                limits.tasks.spec_bytes = spec_bytes;
             }
             if let Some(stall) = stall {
                 limits.forge.change_policy.stall = stall;
