@@ -518,3 +518,30 @@ fn close_names_an_archived_chat_end_only_when_the_authorized_read_proves_it() {
         assert_eq!(skein_lib::bytes::find(&answer.stderr, b"chat 41 has ended").is_some(), names_end);
     }
 }
+
+#[test]
+fn a_cut_question_is_answered_as_any_other() {
+    let mut root = fixtures::signed_in(fixtures::PARTY);
+    let call = root.submit(&["task", "answer", "41", "3", "Go ahead.", "--key", "long-answer"]);
+    let crate::jig::call::Parsed::Call { call: parsed, .. } =
+        fixtures::parse(&["task", "answer", "41", "3", "Go ahead."]).expect("answer call")
+    else {
+        panic!("call")
+    };
+    let c::ReadResult::Value(c::ReadValue::Question(mut question)) = fixtures::act_document(&parsed) else {
+        panic!("question")
+    };
+    question.words.cut = true;
+    root.serve(call, c::ReadResult::Value(c::ReadValue::Question(question)));
+    root.serve(call, fixtures::task_result(fixtures::offered(&[c::ActKind::Answer])));
+    let (_, _, ask) = root.sends.get(&call).expect("answer sent despite cut words");
+    assert_eq!(
+        ask,
+        &jig_client::Ask::Jig(Box::new(c::Ask::Answer {
+            project: fixtures::PROJECT,
+            on: c::AnswerOn::Question { task: 41, message: 3, words: fixtures::act_text(b"Go ahead.") },
+        }))
+    );
+    root.done(call, c::Outcome::Changed);
+    assert_eq!(root.answer(call).expect("answer completed").status, 0);
+}

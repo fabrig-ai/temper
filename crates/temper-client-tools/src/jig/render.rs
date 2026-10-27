@@ -177,6 +177,7 @@ impl Part<'_> {
 }
 /// Application vocabulary for enum phrases, parts and changes, borrowed for this step alone.
 pub trait Parts: core::fmt::Debug {
+    fn command_prefix(&self) -> &'static [u8];
     fn phrasebook(&self, text: u32) -> skein_ui::phrases::Phrasebook;
     fn task_next(&self, task: &contract::Task, out: &mut Text);
     fn owner_part(&self, part: &contract::OwnerPart, out: &mut Text);

@@ -394,6 +394,9 @@ mod tests;
 #[derive(Debug)]
 pub struct Parts;
 impl jig::render::Parts for Parts {
+    fn command_prefix(&self) -> &'static [u8] {
+        b"temper ctl DIR "
+    }
     fn phrasebook(&self, text: u32) -> skein_ui::phrases::Phrasebook {
         temper_client_domain::words::phrasebook(text)
     }

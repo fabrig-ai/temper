@@ -194,6 +194,7 @@ pub(super) fn encode(reading: &Reading, limits: &Limits, out: &mut Encoder, budg
     }
     encode_documents(reading, limits, compound, out);
     if reading.called.call.tool == 1 {
+        super::question::encode(reading, out);
         out.key(b"read_on");
         match super::super::lists::inbox_cursor(reading, limits.rows) {
             Some(cursor) => out.string(&super::super::lists::read_on(&reading.called.call, 3, &cursor)),

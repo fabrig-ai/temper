@@ -181,3 +181,44 @@ fn a_held_task_the_agent_releases_from_the_printed_act_runs_again() {
     assert_eq!((printed.status, printed.stdout.as_ref()), (0, format!("done: task {held}, release\n").as_bytes()));
     assert_eq!(world.front().engine.task(held).expect("released delegate").tries, jig_domain_tasks::Tries::NONE);
 }
+
+#[test]
+fn a_cut_question_is_answered_through_the_tools_and_reaches_the_chat() {
+    use jig_domain_tasks::{MessageKind, Party};
+    const TEXT_BOUND: u32 = 60;
+    const QUESTION_BYTES: usize = 61;
+    let mut world = fixtures::world(fixtures::SEED);
+    let words = vec![b'q'; QUESTION_BYTES];
+    let chat = fixtures::question_with_text_bound(world.front(), &words, Some(TEXT_BOUND));
+    let (question, asking) = {
+        let task = world.front().engine.task(chat).expect("asked chat");
+        let question = task.inbox.iter().find(|word| word.kind == MessageKind::Question).expect("question");
+        let Party::Task(asking) = question.from else { panic!("asking delegate") };
+        (question.number, asking)
+    };
+    let agent = fixtures::agent(&mut world);
+    let inbox = call(&mut world, agent, &[b"inbox", b"--kind", b"questions"]);
+    assert_eq!(inbox.status, 0, "{inbox:?}");
+    let shown = std::str::from_utf8(&inbox.stdout).expect("UTF-8");
+    assert!(shown.contains(&format!("{} (cut)\n", "q".repeat(usize::try_from(TEXT_BOUND).expect("bound")))), "{shown}");
+    assert!(shown.contains(&format!("read whole: temper ctl DIR task activity {asking}")), "{shown}");
+    let answer = call(
+        &mut world,
+        agent,
+        &[
+            b"task",
+            b"answer",
+            chat.to_string().as_bytes(),
+            question.to_string().as_bytes(),
+            b"Go ahead.",
+            b"--key",
+            b"long-question-answer",
+        ],
+    );
+    assert_eq!(answer.status, 0, "{answer:?}");
+    assert!(world.front().engine.task(chat).expect("answered chat").inbox.iter().any(|word| {
+        word.from == Party::Person(fixtures::PARTY)
+            && word.kind == MessageKind::Answer { question }
+            && word.words.as_ref() == b"Go ahead."
+    }));
+}

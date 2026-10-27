@@ -14,11 +14,14 @@ use skein_lib::{Env, Queue};
 #[derive(Debug)]
 pub(crate) struct Reading {
     pub called: Called,
+    pub command_prefix: &'static [u8],
     pub pending: u8,
     pub pages: BTreeMap<u32, Readout>,
     pub documents: BTreeMap<u32, c::Delivery>,
     pub text: Option<c::RunText>,
     pub thread: Option<Thread>,
+    pub questions: BTreeMap<(u64, u64), Option<Box<c::Question>>>,
+    pub question: Option<(u64, u64)>,
 }
 fn handle(runner: &Runner, prefix: u32, local: u32) -> Handle {
     Handle { asker: runner.asker, number: (u64::from(prefix) << 32u32) | u64::from(local) }
@@ -39,8 +42,17 @@ fn watch(runner: &Runner, reading: &mut Reading, local: u32, subject: c::Subject
     });
 }
 pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
-    let mut reading =
-        Reading { called, pending: 0, pages: BTreeMap::new(), documents: BTreeMap::new(), text: None, thread: None };
+    let mut reading = Reading {
+        called,
+        command_prefix: runner.parts.expect("host vocabulary").command_prefix(),
+        pending: 0,
+        pages: BTreeMap::new(),
+        documents: BTreeMap::new(),
+        text: None,
+        thread: None,
+        questions: BTreeMap::new(),
+        question: None,
+    };
     let task = number(&reading.called.call, 0).unwrap_or(0);
     match reading.called.call.tool {
         1 => {
@@ -170,6 +182,31 @@ pub(super) fn page(
     let local = u32::try_from(handle.number & u64::from(u32::MAX)).expect("low half");
     let Some(mut reading) = runner.active.remove(&prefix) else { return };
     reading.pending &= !1u8.checked_shl(local).expect("fixed read slot");
+    if reading.called.call.tool == 1 && local == 6 {
+        let key = reading.question.take().expect("one question read in flight");
+        let question = match page {
+            Readout::Jig(c::ReadResult::Value(c::ReadValue::Question(question)))
+                if (question.task.task, question.message) == key =>
+            {
+                Some(question)
+            }
+            Readout::Jig(c::ReadResult::Value(c::ReadValue::Historical(value))) => match value.value {
+                c::OwnerHistoricalValue::Question { question, .. } if (question.task.task, question.message) == key => {
+                    Some(Box::new(question))
+                }
+                c::OwnerHistoricalValue::Task { .. }
+                | c::OwnerHistoricalValue::Proposal(_)
+                | c::OwnerHistoricalValue::PersonProposal { .. }
+                | c::OwnerHistoricalValue::Escalation { .. }
+                | c::OwnerHistoricalValue::Question { .. }
+                | c::OwnerHistoricalValue::PersonTask { .. } => None,
+            },
+            Readout::Limit | Readout::NotServed { .. } | Readout::Jig(_) | Readout::Family { .. } => None,
+        };
+        reading.questions.insert(key, question);
+        complete(runner, client, env, reading, out);
+        return;
+    }
     // An opening Unknown can mean an ended task, but proves no identity or
     // authority. Only the authorized task read may establish that end.
     if local == 6 && (reading.called.call.tool == 3 || reading.called.call.tool == 4) {
@@ -296,6 +333,16 @@ fn close(runner: &Runner, reading: &Reading, out: &mut Queue<Out>) {
     }
 }
 fn complete(runner: &mut Runner, client: &Client, env: &Env<Limits>, mut reading: Reading, out: &mut Queue<Out>) {
+    if reading.called.call.tool == 1
+        && reading.question.is_none()
+        && let Some((task, message)) = next_question(&reading, env.limits.rows)
+    {
+        reading.question = Some((task, message));
+        read(runner, &mut reading, 6, c::Read::Question { task, message }, out);
+        runner.active.insert(reading.called.call_number, reading);
+        return;
+    }
+
     if reading.pending != 0 {
         runner.active.insert(reading.called.call_number, reading);
         return;
@@ -497,4 +544,32 @@ fn terminal_read(
         };
         finish(reading.called, printed, out);
     }
+}
+
+// At most the displayed needs page is joined, one read in flight at a time.
+fn next_question(reading: &Reading, maximum: u32) -> Option<(u64, u64)> {
+    let mut keys = skein_lib::List::with_capacity(maximum);
+    match reading.pages.get(&1) {
+        Some(Readout::Jig(c::ReadResult::Value(c::ReadValue::Inbox(page)))) => {
+            for row in page.rows.as_slice().iter().take(usize::try_from(maximum).expect("rows fit")) {
+                if let c::ObjectKey::Question { task, message } = row.object {
+                    keys.push((task, message)).expect("one bounded page");
+                }
+            }
+        }
+        Some(Readout::Jig(c::ReadResult::Value(c::ReadValue::OwnerInbox(page)))) => {
+            for row in page.rows.as_slice().iter().take(usize::try_from(maximum).expect("rows fit")) {
+                if let c::OwnerInboxObject::Question { message } = row.object {
+                    keys.push((row.task.number(), message)).expect("one bounded page");
+                }
+            }
+        }
+        _ => return None,
+    }
+    for key in &keys {
+        if !reading.questions.contains_key(key) {
+            return Some(*key);
+        }
+    }
+    None
 }

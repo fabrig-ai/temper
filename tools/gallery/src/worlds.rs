@@ -820,7 +820,7 @@ fn read_value(w: World, what: &c::Read, then: Then) -> Option<c::ReadValue> {
             task: document(Solo, 3).chip,
             from: Some(c::OwnerRequester::Task(3)),
             message: 1,
-            words: text(QUESTION),
+            words: c::DocumentText::complete(text(QUESTION)),
             since: offset(Solo, -18),
             acts: offers(&[c::ActKind::Answer]),
             ending: None,

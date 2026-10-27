@@ -164,6 +164,7 @@ pub(crate) fn encode_inbox_read(reading: &crate::jig::runner::reads::Reading, li
     out.object_start();
     out.key(b"inbox");
     encode_as(&displayed, limits, Some(digest), out);
+    super::question::encode(reading, out);
     out.key(b"read_on");
     match super::super::lists::inbox_cursor(reading, limits.rows) {
         Some(cursor) => out.string(&super::super::lists::read_on(&reading.called.call, 3, &cursor)),

@@ -464,6 +464,9 @@ fn body(b: &mut Builder, page: &ReadValue, words: &Words) {
     match page {
         ReadValue::Question(question) => {
             text(b, Role::Paragraph, question.words.bytes());
+            if question.words.cut {
+                crate::cards::status(b, words, crate::cards::P::Cut, &[]);
+            }
         }
         ReadValue::Escalation(held) => title(b, held.task.title.bytes()),
         ReadValue::OwnerEscalation(held) => {

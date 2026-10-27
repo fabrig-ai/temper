@@ -391,6 +391,9 @@ impl Joint {
         Self::with_engine(seed, &limits, Store::new(), [bootstrap, config], &engine_limits, 2)
     }
     pub(crate) fn with_questions(seed: u64, limits: &client::Limits) -> Self {
+        Self::with_question_text_bound(seed, limits, None)
+    }
+    pub(crate) fn with_question_text_bound(seed: u64, limits: &client::Limits, text: Option<u32>) -> Self {
         use jig_domain_authority as authority;
         let [(bootstrap, engine_limits), (config, _)] = std::array::from_fn(|_| {
             let mut config = walking::config(seed);
@@ -412,6 +415,9 @@ impl Joint {
             config.core.defaults.rules = domain.rules().clone();
             let mut engine_limits = engine_limits();
             engine_limits.tasks.inbox_bytes = 512;
+            if let Some(text) = text {
+                engine_limits.documents.text_bytes = text;
+            }
             engine_limits.fleet.slots = 2;
             engine_limits.fleet.attempts = 4;
             engine_limits.journal.writes = 4096;

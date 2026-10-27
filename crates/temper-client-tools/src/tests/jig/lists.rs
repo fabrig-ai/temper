@@ -303,3 +303,44 @@ fn an_activity_page_cut_before_its_first_row_reads_on() {
         assert!(skein_lib::bytes::find(&printed.stdout, field).is_some());
     }
 }
+
+#[test]
+fn a_cut_question_prints_its_marker_and_the_asking_tasks_activity() {
+    use jig_client::contract as c;
+    for json in [false, true] {
+        let argv: &[&str] =
+            if json { &["inbox", "--kind", "questions", "--json"] } else { &["inbox", "--kind", "questions"] };
+        let (mut root, call) = fixtures::read_call(argv);
+        root.serve(call, fixtures::inbox_rows(c::InboxReadGroup::Needs, 1, false));
+        let task = fixtures::goal(fixtures::TASK, c::WaitsOn::Nothing);
+        let mut words = fixtures::document_text(b"The plan continues");
+        words.cut = true;
+        root.serve(
+            call,
+            c::ReadResult::Value(c::ReadValue::Question(Box::new(c::Question {
+                task: task.chip,
+                message: 2,
+                from: Some(c::OwnerRequester::Task(42)),
+                words,
+                since: skein_lib::Wall::EPOCH,
+                acts: skein_lib::List::with_capacity(0),
+                ending: None,
+            }))),
+        );
+        let answer = root.answer(call).expect("question printed");
+        assert_eq!(answer.status, 0);
+        let printed = answer.stdout;
+        if json {
+            assert!(skein_lib::bytes::find(&printed, b"\"cut\":true").is_some());
+            assert!(skein_lib::bytes::find(&printed, b"temper ctl DIR task activity 42").is_some());
+        } else {
+            assert!(
+                skein_lib::bytes::find(
+                    &printed,
+                    b"The plan continues (cut)\nread whole: temper ctl DIR task activity 42\n"
+                )
+                .is_some()
+            );
+        }
+    }
+}

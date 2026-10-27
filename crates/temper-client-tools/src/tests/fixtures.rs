@@ -396,6 +396,7 @@ pub(crate) struct Harness {
     pub closed: List<client::Watchable>,
     pub watches: BTreeMap<Token, client::Watchable>,
     pub answers: BTreeMap<u32, crate::jig::Printed>,
+    pub inbox_calls: alloc::collections::BTreeSet<u32>,
     pub json_calls: alloc::collections::BTreeSet<u32>,
     pub sends: BTreeMap<u32, (Token, skein_lib::RequestKey, client::Ask)>,
     pub carried: BTreeMap<u32, skein_lib::Secret>,
@@ -433,6 +434,7 @@ pub(crate) fn started_with_limits(
         watches: BTreeMap::new(),
         answers: BTreeMap::new(),
         json_calls: alloc::collections::BTreeSet::new(),
+        inbox_calls: alloc::collections::BTreeSet::new(),
         sends: BTreeMap::new(),
         saved: BTreeMap::new(),
         carried: BTreeMap::new(),
@@ -543,6 +545,9 @@ impl Harness {
         value: Option<skein_lib::Secret>,
     ) -> u32 {
         self.next = self.next.checked_add(1).expect("fixture calls fit");
+        if call.tool == 1 {
+            self.inbox_calls.insert(self.next);
+        }
         if json {
             self.json_calls.insert(self.next);
         }
@@ -605,6 +610,12 @@ impl Harness {
         self.serving = None;
     }
     pub fn answer(&mut self, call: u32) -> Option<crate::jig::Printed> {
+        if self.inbox_calls.contains(&call) {
+            for _ in 0..self.limits.tools.rows {
+                let Some((_, c::Read::Question { .. })) = self.reads.get(&call) else { break };
+                self.serve(call, c::ReadResult::None(c::ReadNone::Unknown));
+            }
+        }
         self.answers.remove(&call)
     }
 }

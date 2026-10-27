@@ -329,7 +329,11 @@ const QUESTION_POSITION: u32 = 1;
 const QUESTION_ASSIGN_AT: Time = Time::from_nanos(2_000_000_000);
 /// A question committed by the running chat for its person.
 pub fn question(front: &mut Joint, words: &[u8]) -> u64 {
-    *front = Joint::with_questions(SEED, &domain_limits());
+    question_with_text_bound(front, words, None)
+}
+/// Choose the document text bound before the engine starts, without changing message admission.
+pub fn question_with_text_bound(front: &mut Joint, words: &[u8], text: Option<u32>) -> u64 {
+    *front = Joint::with_question_text_bound(SEED, &domain_limits(), text);
     let driver = &mut front.engine;
     driver.sign_in();
     driver.settle();

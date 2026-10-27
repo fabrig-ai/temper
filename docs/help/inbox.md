@@ -38,6 +38,10 @@ A party's inbox is what waits on it, questions, proposals, escalations and perso
   wait of `me` for `waiting`.
 - **Each need is one subject's:** its line names the task or proposal
   whose read lists the acts that meet it.
+- **Every question is answerable:** a question's words past what a read
+  holds are cut at a character and marked as cut; read them whole in
+  the asking task's activity (`task activity TASK`), and answer it with
+  `task answer` as any other.
 
 ## Acting on it
 

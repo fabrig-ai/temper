@@ -4,6 +4,7 @@ mod account_programs;
 mod projects;
 mod projects_json;
 mod proposal;
+pub(super) mod question;
 pub(crate) mod settings;
 mod settings_values;
 use super::{Text, acts};

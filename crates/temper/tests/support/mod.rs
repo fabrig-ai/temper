@@ -25,6 +25,7 @@ pub mod forgejo_sign_in;
 pub mod live;
 pub mod live_github;
 pub mod llm;
+pub mod long_question;
 pub mod parent;
 pub mod person;
 pub mod playground;

@@ -234,11 +234,17 @@ pub(super) fn inboxes(reading: &Reading, limits: &crate::jig::Limits, book: &Phr
             Readout::Jig(c::ReadResult::Value(c::ReadValue::Inbox(page))) => {
                 for row in page.rows.as_slice().iter().take(usize::try_from(rows).expect("rows fit")) {
                     object(row.object, out);
+                    if let c::ObjectKey::Question { task, message } = row.object {
+                        question(reading, (task, message), out);
+                    }
                 }
             }
             Readout::Jig(c::ReadResult::Value(c::ReadValue::OwnerInbox(page))) => {
                 for row in page.rows.as_slice().iter().take(usize::try_from(rows).expect("rows fit")) {
                     owner_inbox_row(row, book, out);
+                    if let c::OwnerInboxObject::Question { message } = row.object {
+                        question(reading, (row.task.number(), message), out);
+                    }
                 }
             }
             Readout::Limit | Readout::NotServed { .. } | Readout::Jig(_) | Readout::Family { .. } => {
@@ -338,4 +344,21 @@ pub(super) fn object(key: c::ObjectKey, out: &mut Text) {
         }
     }
     out.put(b"\n");
+}
+
+fn question(reading: &Reading, key: (u64, u64), out: &mut Text) {
+    let Some(Some(question)) = reading.questions.get(&key) else { return };
+    out.words(question.words.bytes());
+    if question.words.cut {
+        out.put(b" (cut)");
+    }
+    out.put(b"\n");
+    if question.words.cut {
+        out.put(b"read whole: ");
+        out.put(reading.command_prefix);
+        out.put(b"task activity ");
+        let task = super::document::question::asking_task(question);
+        out.number(task);
+        out.put(b"\n");
+    }
 }

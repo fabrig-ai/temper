@@ -4069,3 +4069,54 @@ fn playground_setup_adopts_widget_and_the_worker_reads_its_source_on_the_owned_f
     assert_eq!(panel["pull"]["address"], format!("http://{}/playground/widget/pulls/1", evidence.address));
     scratch.remove();
 }
+
+#[test]
+fn a_goals_207_byte_question_is_answered_from_the_inbox_and_the_goal_calls_change() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    use support::{
+        forge_land::{self, Plan},
+        long_question,
+    };
+    let scratch = support::Scratch::new("long-question");
+    let paths = ["config", "data", "cache"].map(|name| scratch.path().join(name));
+    let issuer = forge_land::fake_deployment(&paths);
+    let config: serde_json::Value =
+        serde_json::from_slice(&fs::read(paths[0].join("temper.json")).expect("box config")).expect("JSON");
+    assert_eq!(
+        config.pointer("/engine/limits/overrides/documents.text_bytes").and_then(serde_json::Value::as_u64),
+        Some(128)
+    );
+    let _cached = cache_forgejo_binaries(&paths[2]);
+    let client = scratch.path().join("client");
+    fs::create_dir(&client).expect("client directory");
+    fs::set_permissions(&client, fs::Permissions::from_mode(0o700)).expect("private client");
+    let (steps, inbox_at, answer_at) = long_question::steps();
+    let scripts = long_question::scripts(&Plan {
+        words: long_question::REQUEST.as_bytes(),
+        line: b"The agreed plan was completed.",
+        repository: temper_engine_domain_forge::tag(3, 1),
+        readme: b"# hello\n\n",
+    });
+    let (outcome, seen) = support::boxed::run_ctl_with_face(
+        scratch.path(),
+        support::boxed::echo_steps(deployment_flags(&paths)),
+        &client,
+        steps,
+        BOX_DEADLINE,
+        || (),
+        forge_land::plan_face(issuer, scripts, true),
+    );
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    assert_plan_box("long-question", true, &outcome, &stderr);
+    let inbox = String::from_utf8_lossy(&outcome.calls[inbox_at].stdout);
+    assert!(inbox.contains("(cut)\nread whole: temper ctl DIR task activity 2\n"), "{inbox}");
+    // Activity is paged at init's two-line bound; the first page need not
+    // contain the older question. The printed command succeeds and reads on.
+    assert_eq!(outcome.calls[inbox_at + 1].exit, Some(Exit::Code(0)));
+    assert_eq!(outcome.calls[answer_at].exit, Some(Exit::Code(0)));
+    let change = support::ctl::json(&outcome.calls[answer_at + 2]);
+    let task = change.get("task").unwrap_or(&change);
+    assert_eq!(task.pointer("/chip/task").and_then(serde_json::Value::as_u64), Some(3));
+    assert!(seen.answers.iter().all(Result::is_ok));
+    scratch.remove();
+}
