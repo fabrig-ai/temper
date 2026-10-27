@@ -134,7 +134,7 @@ fn pause(cast: &Cast) -> Vec<calls::Step> {
         steps.push(calls::until(
             D1,
             argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"],
-            b"\"phase\":\"held\"",
+            b"\"run_ended\"",
             b"\"task\"",
         ));
         steps.push(call(D1, argv!["task", "run", number(cast.number(member.name)), "--json"]));
@@ -157,19 +157,22 @@ fn pause(cast: &Cast) -> Vec<calls::Step> {
     for member in &cast.members[1..] {
         steps.push(calls::writing_task(D1, cast.number(member.name)));
         steps.push(call(D1, argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"]));
+    }
+    // Let the implementers' stock waiting periods overlap. Their scripts all
+    // finish before the unchanged world patience, without changing any period.
+    for member in &cast.members[1..] {
         steps.push(calls::release_hold(member.cue.as_bytes()));
-        steps.push(calls::until(
-            D1,
-            argv!["task", "show", number(cast.number(member.name)), "--activity", "32", "--json"],
-            b"\"phase\":\"idle\"",
-            b"\"task\"",
-        ));
+    }
+    for member in &cast.members[1..] {
+        steps
+            .push(call(D1, argv!["task", "show", number(cast.number(member.name)), "--until", "phase:idle", "--json"]));
     }
     steps
 }
 #[must_use]
 pub fn step_8_1_reads(cast: &Cast) -> Vec<(Read, usize)> {
-    let mut result = reads(cast);
+    let mut result = Vec::with_capacity(8 * cast.members.len() + 2);
+    result.extend(reads(cast));
     let mut at = result.last().expect("opening reads").1 + 2; // Stop follows the last opening read.
     for member in &cast.members[1..] {
         result.push((Read::Held(member.name), at));
@@ -187,8 +190,11 @@ pub fn step_8_1_reads(cast: &Cast) -> Vec<(Read, usize)> {
     at += 1; // acceptance
     for member in &cast.members[1..] {
         result.push((Read::Resumed(member.name), at + 1));
-        result.push((Read::Parked(member.name), at + 2));
-        at += 3;
+        at += 2;
+    }
+    for member in &cast.members[1..] {
+        result.push((Read::Parked(member.name), at));
+        at += 1;
     }
     result
 }
