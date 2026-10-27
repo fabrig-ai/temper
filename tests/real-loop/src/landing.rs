@@ -69,7 +69,8 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
     }
     value["engine"]["projects"][0]["policy"]["ceiling"] = authority.clone();
     value["engine"]["projects"][0]["policy"]["roles"][0]["authority"] = authority;
-    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = 40.into();
+    // The stock's 32-unit run and the reference cases' 20-unit delegate fit in 64.
+    value["engine"]["projects"][0]["policy"]["roles"][0]["authority"]["budget"]["spend"] = 64.into();
     value["engine"]["projects"][0]["policy"]["projections"] = grants;
     // A deployment project zero, which the binary's fixture clones from project one, keeps that
     // mirror: its policy too must sit under the rules ceiling set above.

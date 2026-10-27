@@ -251,21 +251,20 @@ fn init_inbox_holds_three_message_credits_within_the_store_codec() {
 }
 
 #[test]
-fn stock_budgets_follow_the_default_models_costliest_completion() {
+fn stock_budgets_follow_the_default_models_completion_and_run_turn_floor() {
     let mut engine = engine(&generated());
-    for (row, altered, c) in [("init", false, 1057), ("costliest prices and rounding", true, 7)] {
-        if altered {
-            let model = &mut engine.llm.models[0];
-            model.window = 1501;
-            model.output = 503;
-            model.input_price = 1;
-            model.cached_price = 2;
-            model.cache_write_price = Some(3);
-            model.output_price = 4;
-            model.price_unit = 1000;
-        }
+    let init = engine.llm.models[0].clone();
+    let mut cheap = init.clone();
+    cheap.window = 1501;
+    cheap.output = 503;
+    cheap.input_price = 1;
+    cheap.cached_price = 2;
+    cheap.cache_write_price = Some(3);
+    cheap.output_price = 4;
+    cheap.price_unit = 1000;
+    for (row, model, c, k) in [("init", init, 1057, 4228), ("cheap with costliest prices and rounding", cheap, 7, 32)] {
+        engine.llm.models[0] = model;
         let stock = crate::stock::defaults(&engine.llm);
-        let k = 4 * c;
         assert_eq!(stock.rules.minimum_run_spend, 2 * c, "{row}");
         assert_eq!(stock.rules.maximum_run_spend, k, "{row}");
         for charter in &stock.charters {

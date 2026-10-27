@@ -334,7 +334,7 @@ pub(crate) fn document_defaults(value: &mut serde_json::Value) {
     }
     value["engine"]["charters"][0]["waiting_ms"] = 1.into();
     value["engine"]["templates"][0]["grace_ms"] = 1.into();
-    value["engine"]["templates"][0]["budget"] = serde_json::json!({"as_allowed":50});
+    value["engine"]["templates"][0]["budget"] = serde_json::json!({"as_allowed":64});
 }
 fn beyond_stock(value: &serde_json::Value) -> bool {
     value["engine"]["projects"].as_array().expect("projects").iter().any(|project| {
@@ -399,7 +399,7 @@ pub fn setup_items(directory: &Path) -> Option<serde_json::Value> {
     charter["waiting"] = 1_000_000.into();
     let mut template = stock["template"].clone();
     template["grace"] = 1_000_000.into();
-    template["budget"]["as_allowed"]["cap"] = 50.into();
+    template["budget"]["as_allowed"]["cap"] = 64.into();
     if flags["requester"] != true {
         template["flags"]["ended_by"] = "result".into();
     }
@@ -442,7 +442,8 @@ pub fn own_defaults(deployment: &serde_json::Value, flags: &serde_json::Value) -
     let stock_period_spend = defaults.rules.period_spend;
     defaults.charters[0].policy.waiting = skein_lib::Duration::from_millis(1);
     defaults.templates[0].grace = Some(skein_lib::Duration::from_millis(1));
-    defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(50) };
+    // A 32-unit stock run and the stories' 20-unit delegate need at least 52.
+    defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(64) };
     if flags["requester"] != true {
         defaults.templates[0].flags.ended_by = jig_domain_tasks::EndedBy::Result;
     }
