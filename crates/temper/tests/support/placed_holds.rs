@@ -287,7 +287,7 @@ pub fn proposal(scratch: &Path, config: &Path, flags: Vec<String>) {
     let owner = hold["owner"]["person"].as_u64().expect("placed hold owner");
     let number = hold["hold"].as_u64().expect("placed hold number");
     let revision = hold["revision"].as_u64().expect("placed hold revision");
-    assert_eq!(seen.calls[17].stderr, format!("release: Held by hold {number}, placed by person {owner}: only they, or a role above theirs, may release it\n").as_bytes());
+    assert_eq!(seen.calls[17].stderr, format!("task release: Held by hold {number}, placed by person {owner}: only they, or a role above theirs, may release it\n").as_bytes());
     assert!(
         String::from_utf8_lossy(&seen.calls[18].stdout)
             .contains(&format!("only person {owner}, or a role above theirs, may release it"))
