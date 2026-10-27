@@ -80,6 +80,25 @@ pub fn op(op: &client::Op, l: &Limits) -> forge::Op {
 }
 fn read_op(read: &client::Read, l: &Limits) -> forge::Read {
     match read {
+        client::Read::Runs { workflow, commit, page } => forge::Read::Runs {
+            workflow: Some(workflow.clone()),
+            commit: Some(number(*commit)),
+            number: None,
+            page: *page,
+            limit: l.rows,
+        },
+        client::Read::Run { run } => forge::Read::Run { run: *run },
+        client::Read::Tree { object, page } => forge::Read::GitTree {
+            object: if commit(u64::from_be_bytes(object[8..16].try_into().expect("object count bytes"))) == *object {
+                forge::TreeOf::Commit(number(*object))
+            } else {
+                let mut id = [0; 20];
+                id.copy_from_slice(&object[..20]);
+                forge::TreeOf::Tree(id)
+            },
+            page: *page,
+            limit: l.rows,
+        },
         client::Read::Locate { .. } => forge::Read::Locate,
         client::Read::Items { since, page, kind } => forge::Read::Items {
             order: forge::Order::LeastUpdated,
@@ -120,6 +139,12 @@ fn read_op(read: &client::Read, l: &Limits) -> forge::Read {
 }
 fn write_op(write: &client::Write) -> forge::Write {
     match write {
+        client::Write::Dispatch { workflow, branch, inputs } => forge::Write::Dispatch {
+            workflow: workflow.clone(),
+            branch: branch.clone(),
+            inputs: inputs.iter().map(|input| (input.name.clone(), input.value.clone())).collect(),
+        },
+        client::Write::Rerun { attempt } => forge::Write::Rerun { job: attempt.job },
         client::Write::CreateIssue { key, title, body } => {
             forge::Write::CreateIssue { title: title.clone(), body: keyed(key, body), labels: Box::new([]) }
         }
@@ -142,11 +167,28 @@ fn write_op(write: &client::Write) -> forge::Write {
         }
         client::Write::Close { number } => forge::Write::Close { number: *number },
         client::Write::Reopen { number } => forge::Write::Reopen { number: *number },
-        client::Write::Merge { number: pull, head } => forge::Write::Merge { number: *pull, head: number(*head) },
-        client::Write::Update { number } => forge::Write::Update { number: *number },
-        client::Write::Status { commit, context, check } => {
-            forge::Write::Status { commit: number(*commit), context: context.clone(), state: check_out(*check) }
-        }
+        client::Write::Merge { number: pull, head, how, .. } => forge::Write::Merge {
+            number: *pull,
+            head: number(*head),
+            how: match how {
+                client::MergeHow::Style => forge::MergeHow::Style,
+                client::MergeHow::FastForwardOnly => forge::MergeHow::FastForwardOnly,
+            },
+        },
+        client::Write::Update { number, style, .. } => forge::Write::Update {
+            number: *number,
+            style: match style {
+                client::UpdateStyle::Merge => forge::UpdateStyle::Merge,
+                client::UpdateStyle::Rebase => forge::UpdateStyle::Rebase,
+            },
+        },
+        client::Write::Status { commit, context, check, description, link, .. } => forge::Write::Status {
+            commit: number(*commit),
+            context: context.clone(),
+            state: check_out(*check),
+            description: description.clone(),
+            link: link.clone(),
+        },
         client::Write::CreateBranch { branch, commit } => {
             forge::Write::CreateBranch { branch: branch.clone(), commit: number(*commit) }
         }
@@ -194,6 +236,7 @@ pub fn answer(asked: &client::Op, answer: forge::Answer, l: &Limits) -> client::
 
 /// Translate protection for the acting user, with the layer's signatures setting.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "each domain answer has an independent client projection")]
 pub fn answer_as(
     asked: &client::Op,
     answer: forge::Answer,
@@ -285,6 +328,30 @@ pub fn answer_as(
             forge::Created::Exists => client::BranchCreation::Exists,
         }),
         forge::Answer::Done => client::Answer::Done,
+        forge::Answer::Runs(runs) => client::Answer::Runs {
+            more: runs.len() == usize::try_from(l.rows).expect("world page size"),
+            runs: runs.into_iter().map(run).collect(),
+        },
+        forge::Answer::Run(value) => client::Answer::Run(run(value)),
+        forge::Answer::GitTree { entries, truncated } => client::Answer::Tree {
+            more: truncated || entries.len() == usize::try_from(l.rows).expect("world page size"),
+            entries: entries
+                .into_iter()
+                .map(|entry| {
+                    let mut object = [0; 32];
+                    object[..20].copy_from_slice(&entry.object);
+                    client::Entry {
+                        name: entry.name,
+                        mode: entry.mode,
+                        kind: match entry.kind {
+                            forge::EntryKind::Tree => client::EntryKind::Tree,
+                            forge::EntryKind::Blob => client::EntryKind::Blob,
+                        },
+                        object,
+                    }
+                })
+                .collect(),
+        },
         forge::Answer::Comment { .. }
         | forge::Answer::Dependencies(_)
         | forge::Answer::Labels(_)
@@ -292,8 +359,6 @@ pub fn answer_as(
         | forge::Answer::Pages { .. }
         | forge::Answer::Page(_)
         | forge::Answer::Revision(_)
-        | forge::Answer::Runs(_)
-        | forge::Answer::Run(_)
         | forge::Answer::Jobs(_)
         | forge::Answer::Comments(_)
         | forge::Answer::Pulls(_)
@@ -408,6 +473,9 @@ fn pull_answer(asked: &client::Op, pull: forge::Pull, l: &Limits) -> client::Ans
             | client::Read::Branches { .. }
             | client::Read::PullFiles { .. }
             | client::Read::Compare { .. }
+            | client::Read::Runs { .. }
+            | client::Read::Run { .. }
+            | client::Read::Tree { .. }
             | client::Read::Checks { .. }
             | client::Read::Job { .. }
             | client::Read::Protection { .. }
@@ -497,8 +565,8 @@ fn status(s: &forge::Status) -> client::Status {
         at: s.at,
         context: s.context.clone(),
         check: check(s.state),
-        description: Box::new([]),
-        url: Box::new([]),
+        description: s.description.clone(),
+        url: s.link.clone(),
         job: None,
     }
 }
@@ -597,4 +665,61 @@ pub fn hint(repository: client::Repository, request: &skein_fake_forge_domain::R
         }
     };
     Some(client::Hint { repository, change, key: body.as_deref().and_then(key_of) })
+}
+fn state_in(state: forge::RunState) -> client::RunState {
+    match state {
+        forge::RunState::Running => client::RunState::Running,
+        forge::RunState::Completed => client::RunState::Completed,
+    }
+}
+fn conclusion_in(conclusion: Option<forge::Conclusion>) -> Option<client::Conclusion> {
+    match conclusion {
+        Some(forge::Conclusion::Success) => Some(client::Conclusion::Success),
+        Some(forge::Conclusion::Failure) => Some(client::Conclusion::Failure),
+        None => None,
+    }
+}
+fn run(run: forge::Run) -> client::Run {
+    client::Run {
+        id: run.id,
+        number: run.number,
+        commit: commit(run.commit),
+        workflow: run.workflow.unwrap_or_else(|| Box::from(b"ci".as_slice())),
+        event: match run.event {
+            forge::RunEvent::Push => client::Event::Other,
+            forge::RunEvent::Dispatch => client::Event::Dispatch,
+        },
+        actor: run.user,
+        state: state_in(run.state),
+        conclusion: conclusion_in(run.conclusion),
+        url: format!("http://forge/org/repo/actions/runs/{}", run.number).into_bytes().into_boxed_slice(),
+        created: run.created,
+        jobs: Box::new([]),
+    }
+}
+/// A run read also asks for its jobs, as the dialect does (forge.md, 5.2).
+#[must_use]
+pub fn run_jobs(jobs: Box<[forge::Job]>) -> Box<[client::RunJob]> {
+    jobs.into_iter()
+        .map(|job| {
+            let failed = job.conclusion == Some(forge::Conclusion::Failure);
+            let step = if failed {
+                job.steps
+                    .iter()
+                    .find(|step| step.status == forge::StepStatus::Failure)
+                    .map(|step| client::Step { number: step.number, name: step.name.clone() })
+            } else {
+                None
+            };
+            client::RunJob {
+                id: job.id,
+                name: job.name,
+                attempt: job.attempt,
+                state: state_in(job.state),
+                conclusion: conclusion_in(job.conclusion),
+                steps: if failed { u32::try_from(job.steps.len()).expect("world steps") } else { 0 },
+                step,
+            }
+        })
+        .collect()
 }
