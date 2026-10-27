@@ -2827,6 +2827,7 @@ dependencies = [
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
  "temper-engine-domain-forge-landing",
+ "temper-engine-domain-forge-tiers",
 ]
 
 [[package]]

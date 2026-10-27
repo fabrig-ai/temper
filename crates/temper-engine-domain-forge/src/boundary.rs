@@ -784,6 +784,40 @@ pub enum CallPayload {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tier {
     pub name: Box<[u8]>,
+    pub workflow: Box<[u8]>,
+    pub ignored: Box<[Box<[u8]>]>,
+    pub artifact: Box<[u8]>,
+    pub format: temper_engine_domain_forge_tiers::Format,
+}
+/// A project's after-landing settings (domain/after-landing.md, 11).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TierSettings {
+    pub verdict: temper_engine_domain_forge_tiers::Settings,
+    pub bound: skein_lib::Duration,
+    pub pause_on_red: bool,
+}
+/// Store family 25: one repository's tier (domain/after-landing.md, 10).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierRow {
+    pub repository: skein_forge::api::Repository,
+    pub tier: Box<[u8]>,
+    pub record: temper_engine_domain_forge_tiers::Record,
+    pub pending: Box<[temper_engine_domain_forge_tiers::Landing]>,
+    pub task: Option<u64>,
+    pub branch: TierBranch,
+}
+/// Durable progress of the run's branch.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TierBranch {
+    Absent,
+    Pending { entry: u64 },
+    Made,
+}
+/// The tier procedure waits after making its branch.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TierDecision {
+    Wait,
+    Held,
 }
 
 /// One repository's tiers, in the configuration's order.
@@ -896,6 +930,7 @@ pub enum Stored {
         key: ReceiptKey,
         receipt: Receipt,
     },
+    Tier(TierRow),
     Verification(Verification),
 }
 /// A bounded connector payload awaiting an authority holder's decision.
@@ -942,6 +977,10 @@ pub enum Key {
     },
     Landing(u64),
     Receipt(ReceiptKey),
+    Tier {
+        repository: skein_forge::api::Repository,
+        tier: Box<[u8]>,
+    },
     Verification {
         repository: skein_forge::api::Repository,
         commit: skein_forge::api::Commit,
@@ -1275,6 +1314,25 @@ pub enum Event {
         words: Box<[u8]>,
     },
     /// Gather fresh forge facts and step one registered change.
+    TierTask {
+        repository: skein_forge::api::Repository,
+        tier: Box<[u8]>,
+        number: u64,
+        task: u64,
+    },
+    TierRefused {
+        repository: skein_forge::api::Repository,
+        tier: Box<[u8]>,
+        number: u64,
+    },
+    StepTier {
+        task: u64,
+        entry: u64,
+    },
+    VetoTier {
+        task: u64,
+        entry: u64,
+    },
     StepChange {
         task: u64,
         entry: u64,
@@ -1576,6 +1634,21 @@ pub enum Request {
         goal: u64,
     },
     /// A change policy step and its checked effect entry, when any.
+    TierRun {
+        repository: skein_forge::api::Repository,
+        tier: Box<[u8]>,
+        number: u64,
+        tip: skein_forge::api::Commit,
+    },
+    TierDecision {
+        task: u64,
+        decision: TierDecision,
+    },
+    TierEffect {
+        task: u64,
+        entry: skein_forge_client::Entry,
+        purpose: crate::purpose::EffectPurpose,
+    },
     ChangeDecision {
         task: u64,
         decision: change::Decision,

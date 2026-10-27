@@ -1,6 +1,14 @@
 {
   "engine": {
-    "acts": [{"connector": 1, "may": ["close", "remove_account"]}],
+    "acts": [
+      {
+        "connector": 1,
+        "may": [
+          "close",
+          "remove_account"
+        ]
+      }
+    ],
     "limits": {
       "profile": "small",
       "overrides": {
@@ -35,7 +43,9 @@
           "number": 1,
           "signed_in_plan": true,
           "manage_usage": "https://chatgpt.com/settings/usage",
-          "models": ["gpt-6-luna"],
+          "models": [
+            "gpt-6-luna"
+          ],
           "sources": {
             "keys": true,
             "sign_in": {
@@ -48,8 +58,17 @@
               "keys": "https://auth.openai.com/.well-known/jwks.json",
               "transport": "tls",
               "server_name": "auth.openai.com",
-              "scopes": ["openid", "profile", "email", "offline_access", "resource.invoke", "chatgpt.tokens.use.direct"],
-              "must_grant": ["chatgpt.tokens.use.direct"],
+              "scopes": [
+                "openid",
+                "profile",
+                "email",
+                "offline_access",
+                "resource.invoke",
+                "chatgpt.tokens.use.direct"
+              ],
+              "must_grant": [
+                "chatgpt.tokens.use.direct"
+              ],
               "resource": "https://api.openai.com/v1",
               "redirect_path": "auth/callback",
               "redirect_port": 1455
@@ -60,8 +79,12 @@
           "name": "demo",
           "number": 3,
           "signed_in_plan": false,
-          "models": ["demo"],
-          "sources": {"keys": true}
+          "models": [
+            "demo"
+          ],
+          "sources": {
+            "keys": true
+          }
         }
       ],
       "endpoints": [
@@ -246,6 +269,17 @@
             {
               "connector": 1,
               "kind": 8,
+              "pattern": {
+                "segments": [
+                  "forge"
+                ],
+                "last": "open",
+                "value": ""
+              }
+            },
+            {
+              "connector": 1,
+              "kind": 9,
               "pattern": {
                 "segments": [
                   "forge"
@@ -847,7 +881,11 @@
           "ci": true,
           "up_to_date": true,
           "gates": [
-            {"number": 1, "blocking": true, "freshness": "clean"}
+            {
+              "number": 1,
+              "blocking": true,
+              "freshness": "clean"
+            }
           ],
           "approvals": []
         }
@@ -936,7 +974,7 @@
               {
                 "lines": [
                   {
-                    "text": "I’ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge."
+                    "text": "I\u2019ll delegate this change in playground/widget. It will push a branch, open a pull request, check CI and land into main on Playground forge."
                   },
                   {
                     "call": "delegate",
@@ -1068,7 +1106,7 @@
               {
                 "lines": [
                   {
-                    "text": "CSV export is available from widget’s table. The change landed on Playground forge. This was a scripted change."
+                    "text": "CSV export is available from widget\u2019s table. The change landed on Playground forge. This was a scripted change."
                   },
                   {
                     "call": "wait",
@@ -1166,7 +1204,16 @@
             "turns": [
               {
                 "lines": [
-                  {"call": "finish", "arguments": {"form": "verdict", "label": "1", "text": "Checked widget CSV export.", "fields": {}, "items": []}}
+                  {
+                    "call": "finish",
+                    "arguments": {
+                      "form": "verdict",
+                      "label": "1",
+                      "text": "Checked widget CSV export.",
+                      "fields": {},
+                      "items": []
+                    }
+                  }
                 ],
                 "finish": "tool_calls",
                 "tokens": 24
@@ -1178,7 +1225,7 @@
           {
             "lines": [
               {
-                "text": "I am the scripted model, the playground’s: I answer only the suggested requests, from a script. To ask for other work, connect a model from Accounts: a ChatGPT plan, a Claude subscription or an API key."
+                "text": "I am the scripted model, the playground\u2019s: I answer only the suggested requests, from a script. To ask for other work, connect a model from Accounts: a ChatGPT plan, a Claude subscription or an API key."
               }
             ],
             "finish": "stop",

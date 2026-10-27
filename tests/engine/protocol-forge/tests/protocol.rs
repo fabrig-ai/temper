@@ -509,6 +509,9 @@ fn land_change(world: &mut Protocol) -> bool {
                 | top::Request::CarriedUnused { .. }
                 | top::Request::EraseCarried { .. }
                 | top::Request::SetUp { .. }
+                | top::Request::TierRun { .. }
+                | top::Request::TierEffect { .. }
+                | top::Request::TierDecision { .. }
                 | top::Request::ChangeDecision { .. }
                 | top::Request::Resource { .. }
                 | top::Request::Adopted { .. }

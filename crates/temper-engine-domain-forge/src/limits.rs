@@ -206,6 +206,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
             l.landings.max(l.client.resources),
         )?)?
         .checked_add(crate::verification::worst_case(l)?)?
+        .checked_add(crate::tiers::worst_case(l)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLost>::worst_case(l.holds)?)?
         .checked_add(Map::<u64, crate::ChangeRow>::worst_case(l.changes)?)?
         .checked_add(

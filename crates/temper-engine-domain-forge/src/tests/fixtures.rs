@@ -266,7 +266,15 @@ pub const FUZZY: &[u8] = b"fuzzy";
 pub fn repository_tiers(names: &[&[u8]]) -> Box<[RepositoryTiers]> {
     let mut tiers = skein_lib::List::with_capacity(u32::try_from(names.len()).expect("fixture names"));
     for name in names {
-        tiers.push(Tier { name: Box::from(*name) }).expect("fixture names");
+        tiers
+            .push(Tier {
+                name: Box::from(*name),
+                workflow: Box::from(b"tier.yml".as_slice()),
+                ignored: Box::new([]),
+                artifact: Box::from(b"report".as_slice()),
+                format: temper_engine_domain_forge_tiers::Format::Lines,
+            })
+            .expect("fixture names");
     }
     Box::new([RepositoryTiers { repository: REPO, tiers: tiers.into_boxed() }])
 }
@@ -275,7 +283,7 @@ pub fn verifying() -> Domain {
     use temper_engine_domain_forge_change as change;
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
-    d.project_tiers(PROJECT, repository_tiers(&[BROWSER, FUZZY]));
+    d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
     let mut row = opening_row();
     row.change.state = change::State::Landed { merge: MERGE };
     row.pending = None;
@@ -325,7 +333,7 @@ pub fn merged(tiers: bool) -> (Domain, Box<[Request]>) {
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
     if tiers {
-        d.project_tiers(PROJECT, repository_tiers(&[BROWSER, FUZZY]));
+        d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
     }
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
@@ -362,4 +370,84 @@ fn answer_after(d: &mut Domain, requests: &[Request], result: skein_forge::api::
         }
     }
     answer_next(d, Ok(result))
+}
+
+/// The after-landing fixture uses the project's usual two retries.
+pub fn tier_settings() -> TierSettings {
+    TierSettings {
+        verdict: temper_engine_domain_forge_tiers::Settings {
+            retries: 2,
+            suspects: temper_engine_domain_forge_tiers::Suspects::Bisect,
+        },
+        bound: Duration::from_secs(7200),
+        pause_on_red: false,
+    }
+}
+
+/// A tiered repository at its first observed landing tip.
+pub fn tiered() -> Domain {
+    let mut d = domain();
+    d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    tier_tip(&mut d, BASE);
+    d
+}
+pub fn main_name() -> Name {
+    Name {
+        forge: REPO.forge,
+        repository: REPO.repository,
+        what: What::Branch(Box::new([Box::from(b"main".as_slice())])),
+    }
+}
+pub fn tier_tip(d: &mut Domain, commit: [u8; 32]) {
+    outputs(d, Event::Restore { record: Stored::BranchHead(BranchHead { name: main_name(), commit, owned: false }) });
+}
+pub fn tier_baseline(d: &mut Domain) -> Queue<Request> {
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::start_due(d, &env(), REPO, &mut out);
+    out
+}
+pub fn tier_judged(d: &mut Domain) {
+    tier_baseline(d);
+    let keys: Vec<_> = (&d.tier_rows).into_iter().map(|(key, _)| key.clone()).collect();
+    for key in keys {
+        let row = d.tier_rows.get_mut(&key).expect("fixture tier");
+        row.record.sequence = 1;
+        row.record.judged = Some(temper_engine_domain_forge_tiers::Judged { tip: BASE, key: BASE });
+        row.record.run = None;
+    }
+}
+pub fn tier_move(d: &mut Domain, tip: [u8; 32], commits: Option<&[[u8; 32]]>) -> Queue<Request> {
+    tier_tip(d, tip);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::moved(d, &env(), REPO, BASE, tip, commits, &mut out);
+    out
+}
+pub fn browser(d: &Domain) -> &TierRow {
+    d.tier_rows.get(&(REPO, Box::from(BROWSER))).expect("browser tier")
+}
+
+/// One live tier and one protected landing: the range bound is 2 * 1 + 1.
+pub fn full_tier_range(length: usize) -> (Domain, Env<Limits>) {
+    let mut d = tiered();
+    tier_baseline(&mut d);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::landed(&mut d, REPO, MERGE, CHANGE, &mut out);
+    let pending = [
+        temper_engine_domain_forge_tiers::Landing { commit: [10; 32], key: [10; 32] },
+        temper_engine_domain_forge_tiers::Landing { commit: [11; 32], key: [11; 32] },
+        temper_engine_domain_forge_tiers::Landing { commit: MERGE, key: MERGE },
+    ];
+    d.tier_rows.get_mut(&(REPO, Box::from(BROWSER))).expect("tier").pending = Box::from(&pending[..length]);
+    let mut env = env();
+    env.limits.changes = 1;
+    (d, env)
+}
+pub fn configured_tier(workflow: usize, paths: usize, path_bytes: usize, artifact: usize) -> Box<[RepositoryTiers]> {
+    let mut repositories = repository_tiers(&[BROWSER]);
+    let tier = &mut repositories[0].tiers[0];
+    tier.workflow = vec![b'w'; workflow].into_boxed_slice();
+    tier.ignored = vec![vec![b'p'; path_bytes].into_boxed_slice(); paths].into_boxed_slice();
+    tier.artifact = vec![b'a'; artifact].into_boxed_slice();
+    repositories
 }

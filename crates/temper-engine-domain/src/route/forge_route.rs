@@ -466,7 +466,7 @@ fn describe_agent(
     for (_, flight) in &domain.forge_effects {
         match flight {
             EffectFlight::Call { .. } => staged = staged.saturating_add(1),
-            EffectFlight::Procedure { .. } | EffectFlight::Landing { .. } | EffectFlight::Projection { .. } => {}
+            EffectFlight::Procedure { .. } | EffectFlight::Landing { .. } | EffectFlight::Tier { .. } | EffectFlight::Projection { .. } => {}
         }
     }
     if !domain.forge.effect_room(&env.limits.forge, staged) {
@@ -767,7 +767,7 @@ pub(crate) fn task_holdings(
     let eligible = match executor {
         tasks::Executor::Person(_) => false,
         tasks::Executor::Procedure { connector, code } => {
-            connector == domain.config.forge_connector && (code == 1 || code == CHANGE_CODE)
+            connector == domain.config.forge_connector && (code == 1 || code == CHANGE_CODE || code == 4)
         }
         tasks::Executor::Agent { .. } => !child_of_change,
     };
@@ -775,7 +775,7 @@ pub(crate) fn task_holdings(
         return Some(Box::new([]));
     }
     let mut selected = List::with_capacity(env.limits.forge.resources_per_task);
-    if let tasks::Executor::Procedure { connector, code: 1 | CHANGE_CODE } = executor
+    if let tasks::Executor::Procedure { connector, code: 1 | CHANGE_CODE | 4 } = executor
         && connector == domain.config.forge_connector
     {
         let mut repository = None;
@@ -2438,6 +2438,164 @@ fn gate_executor(row: &forge::ChangeRow, kind: forge_change::GateKind) -> tasks:
 
 /// Admit one project-funded repair of a broken landing branch. The owner row
 /// records its identity in the same root decision as the new task.
+
+/// Deployment-owned tier runs use the project's connector-repair seed.
+fn start_tier_run(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    repository: skein_forge::api::Repository,
+    tier: Box<[u8]>,
+    number: u64,
+) -> bool {
+    let Some(adopted) = domain.forge.repository(repository) else { return false };
+    let project = adopted.project;
+    let Some(seed) = domain.core.repair_seed(project) else { return false };
+    let task = seed.number();
+    let branch = forge::tier_branch(&tier, number);
+    let mut words = List::with_capacity(env.limits.tasks.spec_bytes);
+    if !append_tier_words(&mut words, &tier, number) {
+        return false;
+    }
+    let spec = tasks::Spec {
+        words: words.into_boxed(),
+        parameters: Box::new([
+            tasks::Parameter::Resource {
+                name: 1,
+                connector: domain.config.forge_connector,
+                resource: forge::tag(repository.forge, repository.repository),
+            },
+            tasks::Parameter::Bytes { name: 3, value: branch },
+            tasks::Parameter::Bytes { name: 10, value: tier.clone() },
+            tasks::Parameter::Number { name: 11, value: number },
+        ]),
+        inputs: Box::new([]),
+    };
+    let executor = tasks::Executor::Procedure { connector: domain.config.forge_connector, code: 4 };
+    let Some(holdings) = task_holdings(domain, env, project, task, task, executor, &spec, None) else { return false };
+    domain.work.push(Work::Forge(forge::Event::TierTask { repository, tier, number, task }));
+    domain.work.push(Work::Core(jig_domain_core::Event::ConnectorRepair {
+        seed: Box::new(seed),
+        executor,
+        spec,
+        contract: tasks::Contract::Report { words: env.limits.tasks.result_bytes },
+        holdings,
+    }));
+    true
+}
+fn append_tier_words(words: &mut List<u8>, tier: &[u8], number: u64) -> bool {
+    for byte in b"Tier ".iter().chain(tier).chain(b" run ") {
+        if words.push(*byte).is_err() {
+            return false;
+        }
+    }
+    let branch = forge::tier_branch(&[], number);
+    let mut from = 0;
+    for (at, byte) in branch.iter().enumerate() {
+        if *byte == b'/' {
+            from = at;
+        }
+    }
+    for byte in &branch[from + 1..] {
+        if words.push(*byte).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+pub(crate) fn start_tier(domain: &mut Domain, _env: &Env<Limits>, context: &tasks::RunContext) -> bool {
+    if !matches!(context.requester, tasks::Party::Deployment { .. }) {
+        return false;
+    }
+    let Some(row) = domain.forge.tier_task(context.task) else { return false };
+    let Some(run) = &row.record.run else { return false };
+    let Some(adopted) = domain.forge.repository(row.repository) else { return false };
+    if adopted.project != context.project {
+        return false;
+    }
+    let expected_branch = forge::tier_branch(&row.tier, run.number);
+    let mut repository = false;
+    let mut branch = false;
+    let mut tier = false;
+    let mut number = false;
+    for parameter in &context.spec.parameters {
+        match parameter {
+            tasks::Parameter::Resource { name: 1, connector, resource } => {
+                repository = *connector == domain.config.forge_connector
+                    && *resource == forge::tag(row.repository.forge, row.repository.repository)
+            }
+            tasks::Parameter::Bytes { name: 3, value } => branch = *value == expected_branch,
+            tasks::Parameter::Bytes { name: 10, value } => tier = *value == row.tier,
+            tasks::Parameter::Number { name: 11, value } => number = *value == run.number,
+            _ => return false,
+        }
+    }
+    if !(repository && branch && tier && number) {
+        return false;
+    }
+    let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return false };
+    domain.work.push(Work::Forge(forge::Event::StepTier { task: context.task, entry }));
+    true
+}
+
+fn tier_decision(domain: &mut Domain, task: u64, decision: forge::TierDecision) {
+    let Some((connector, 4, step)) = domain.core.tasks.procedure_due(task) else { return };
+    if connector != domain.config.forge_connector {
+        return;
+    }
+    let end = match decision {
+        forge::TierDecision::Wait => StepEnd::Wait,
+        forge::TierDecision::Held => StepEnd::Hold(tasks::Hold::Effects),
+    };
+    domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep {
+        task,
+        step,
+        connector,
+        code: 4,
+        decision: ProcedureStep::new(end),
+    }));
+}
+
+fn describe_tier_effect(
+    domain: &Domain,
+    env: &Env<Limits>,
+    task: u64,
+    entry: &skein_forge_client::Entry,
+) -> Option<EffectDescription> {
+    let row = domain.forge.tier_task(task)?;
+    let run = row.record.run.as_ref()?;
+    if entry.task != task || entry.repository != row.repository {
+        return None;
+    }
+    let skein_forge::api::Write::CreateBranch { branch, commit } = &entry.effect.write else { return None };
+    if *branch != forge::tier_branch(&row.tier, run.number) || *commit != run.tip {
+        return None;
+    }
+    let repository = domain.forge.repository(row.repository)?;
+    let context = domain.core.tasks.delegation(task)?;
+    if repository.project != context.project || repository.role == forge::Role::Context {
+        return None;
+    }
+    let what = branch_what(branch, env.limits.forge.name_bytes)?;
+    Some(EffectDescription {
+        connector: domain.config.forge_connector,
+        purpose: 1,
+        effect: authority::Effect {
+            connector: domain.config.forge_connector,
+            kind: 9,
+            name: resource_name(repository, &what, env.limits.authority.segments)?,
+            state: *commit,
+            price: None,
+            access: effect_access(repository, &what, 9),
+            additional: Box::new([]),
+            guards: Box::new([]),
+        },
+        form: EffectForm::Creation,
+        recovery: Recovery::Idempotent,
+        waits_for_dependencies: forge::waits_for_dependencies(9),
+    })
+}
+
 fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool {
     let Some(row) = domain.forge.change(task) else { return false };
     if let Some((_, repair)) = domain.forge.queue_repair(row.repository, &row.base)
@@ -3120,6 +3278,34 @@ pub(crate) fn outputs(
                     landing_decision(domain, env, task, choice);
                 }
             }
+            forge::Request::TierRun { repository, tier, number, tip: _ } => {
+                if !start_tier_run(domain, env, repository, tier.clone(), number) {
+                    domain.work.push(Work::Forge(forge::Event::TierRefused { repository, tier, number }));
+                }
+            }
+            forge::Request::TierDecision { task, decision } => tier_decision(domain, task, decision),
+            forge::Request::TierEffect { task, entry, purpose: _ } => {
+                if let Some(description) = describe_tier_effect(domain, env, task, &entry)
+                    && let Some((_, 4, step)) = domain.core.tasks.procedure_due(task)
+                {
+                    let owner = effect_owner(domain);
+                    domain
+                        .forge_effects
+                        .insert(
+                            owner,
+                            EffectFlight::Tier { description: Box::new(description), task, entry: entry.number },
+                        )
+                        .expect("bounded tier admission");
+                    domain.work.push(Work::Core(jig_domain_core::Event::EffectStart {
+                        owner,
+                        connector: domain.config.forge_connector,
+                        origin: jig_domain_core::EffectOrigin::Procedure { task, step, entry: Some(entry.number) },
+                    }));
+                } else {
+                    domain.work.push(Work::Forge(forge::Event::VetoTier { task, entry: entry.number }));
+                    tier_decision(domain, task, forge::TierDecision::Held);
+                }
+            }
             forge::Request::ChangeDecision { task, decision: choice, entry, evidence } => match choice {
                 forge_change::Decision::Effect(effect) => {
                     if let Some(entry) = entry
@@ -3219,6 +3405,11 @@ pub(crate) enum EffectFlight {
         entry: u64,
         task: u64,
         evidence: Option<Box<forge::LandingEvidence>>,
+    },
+    Tier {
+        description: Box<EffectDescription>,
+        entry: u64,
+        task: u64,
     },
     Procedure {
         description: Box<EffectDescription>,
@@ -3325,6 +3516,7 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     EffectFlight::Call { description, .. }
                     | EffectFlight::Procedure { description, .. }
                     | EffectFlight::Landing { description, .. }
+                    | EffectFlight::Tier { description, .. }
                     | EffectFlight::Projection { description, .. },
                 ) => description.clone(),
                 None => return,
@@ -3397,7 +3589,7 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     }));
                 }
                 Some(
-                    EffectFlight::Procedure { .. } | EffectFlight::Landing { .. } | EffectFlight::Projection { .. },
+                    EffectFlight::Procedure { .. } | EffectFlight::Tier { .. } | EffectFlight::Landing { .. } | EffectFlight::Projection { .. },
                 )
                 | None => {
                     unreachable!("agent effect proposal was described")
@@ -3445,13 +3637,17 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                     assert!(kept.number == entry && kept.task == task, "admitted projection entry");
                     domain.work.push(Work::Forge(forge::Event::KeepProjection { row: *row, entry: kept }));
                 }
-                Some(EffectFlight::Procedure { entry: kept, .. } | EffectFlight::Landing { entry: kept, .. }) => {
+                Some(EffectFlight::Procedure { entry: kept, .. } | EffectFlight::Landing { entry: kept, .. } | EffectFlight::Tier { entry: kept, .. }) => {
                     assert!(kept == entry, "core releases the described procedure entry");
                 }
                 None => {}
             }
         }
         jig_domain_core::connector::Ask::Drop { owner, answer } => match domain.forge_effects.remove(&owner) {
+            Some(EffectFlight::Tier { entry, task, .. }) => {
+                domain.work.push(Work::Forge(forge::Event::VetoTier { task, entry }));
+                tier_decision(domain, task, forge::TierDecision::Held);
+            }
             Some(EffectFlight::Procedure { entry, task, evidence, .. }) => {
                 domain.work.push(Work::Forge(forge::Event::VetoChange { task, entry, prior: evidence.prior }));
                 if answer == authority::Answer::Wait {
@@ -3583,7 +3779,7 @@ fn judge_effect(
             )
         }
         Some(EffectFlight::Landing { evidence: None, .. }) => (authority::Verdict::Refuse, false),
-        Some(EffectFlight::Call { .. } | EffectFlight::Projection { .. }) | None => (authority::Verdict::Wait, false),
+        Some(EffectFlight::Call { .. } | EffectFlight::Tier { .. } | EffectFlight::Projection { .. }) | None => (authority::Verdict::Wait, false),
     }
 }
 

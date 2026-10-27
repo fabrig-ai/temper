@@ -15,6 +15,7 @@ mod purpose;
 mod reconcile;
 mod runs;
 mod stopping;
+mod tiers;
 mod verification;
 mod views;
 use alloc::boxed::Box;
@@ -346,6 +347,9 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::SendDemoAct(_)
         | Request::DemoStart { .. }
         | Request::Settled { .. }
+        | Request::TierRun { .. }
+        | Request::TierDecision { .. }
+        | Request::TierEffect { .. }
         | Request::RestartDone { .. } => panic!("permission call"),
     };
     assert_eq!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Permission { user: 7 }));
@@ -418,6 +422,9 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::SendDemoAct(_)
         | Request::DemoStart { .. }
         | Request::Settled { .. }
+        | Request::TierRun { .. }
+        | Request::TierDecision { .. }
+        | Request::TierEffect { .. }
         | Request::RestartDone { .. } => panic!("branches call"),
     };
     assert!(
@@ -487,6 +494,9 @@ fn adoption_reads_permission_before_committing_its_role() {
         | Request::SendDemoAct(_)
         | Request::DemoStart { .. }
         | Request::Settled { .. }
+        | Request::TierRun { .. }
+        | Request::TierDecision { .. }
+        | Request::TierEffect { .. }
         | Request::RestartDone { .. } => panic!("settings follows collision read"),
     }
 }

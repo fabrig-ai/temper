@@ -40,9 +40,11 @@ mod settle;
 #[cfg(test)]
 mod tests;
 pub mod text;
+mod tiers;
 mod topics;
 mod verification;
 pub use boundary::*;
+pub use tiers::branch as tier_branch;
 /// A gate's or a tier's workflow file name (domain/landing.md, 12).
 pub const WORKFLOW_BYTES: u32 = 255;
 
@@ -249,6 +251,7 @@ pub fn stored_key(row: &Stored) -> Key {
         Stored::Binding { address, .. } => Key::Binding(address.clone()),
         Stored::DemoAct(row) => Key::DemoAct(row.key),
         Stored::Flight { task, entry } => Key::Flight { task: *task, entry: *entry },
+        Stored::Tier(row) => Key::Tier { repository: row.repository, tier: row.tier.clone() },
         Stored::Verification(row) => Key::Verification { repository: row.repository, commit: row.commit },
     }
 }
@@ -485,6 +488,7 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             Some(held)
         }
         Stored::Verification(row) => verification::stored_bytes(row),
+        Stored::Tier(row) => tiers::stored_bytes(row),
         Stored::Release(row) => {
             let comment = match &row.comment {
                 Some(comment) => bytes(comment)?,

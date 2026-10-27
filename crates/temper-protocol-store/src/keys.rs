@@ -12,6 +12,8 @@ pub const DEMO_ACT: u8 = 19;
 pub const FLIGHT: u8 = 21;
 /// One landing's verification (protocol/store.md, 2; domain/after-landing.md, 10).
 pub const VERIFICATION: u8 = 26;
+/// One repository tier (domain/after-landing.md, 10).
+pub const TIER: u8 = 25;
 
 fn write_name(writer: &mut KeyWriter, name: &forge::Name) {
     writer.u64(u64::from(name.forge)).u64(u64::from(name.repository));
@@ -166,6 +168,11 @@ pub fn encode(key: &forge::Key, limit: u32) -> Option<Box<[u8]>> {
             }
             writer.tag(BINDING).bytes(address);
         }
+        forge::Key::Tier { repository, tier } => {
+            writer.tag(TIER);
+            write_repository(&mut writer, *repository);
+            writer.bytes(tier);
+        }
         forge::Key::Verification { repository, commit } => {
             writer.tag(VERIFICATION);
             write_repository(&mut writer, *repository);
@@ -214,6 +221,19 @@ pub fn decode(bytes: &[u8], limits: &forge::Limits) -> Option<forge::Key> {
         14 => forge::Key::Release(reader.u64()?),
         15 => forge::Key::Application(reader.u64()?),
         16 => forge::Key::Writer(u16::try_from(reader.u64()?).ok()?),
+        TIER => {
+            let repository = read_repository(&mut reader)?;
+            let tier = reader.bytes()?;
+            if tier.is_empty() || tier.len() > forge::CHECK_NAME_BYTES as usize {
+                return None;
+            }
+            for byte in &tier {
+                if !byte.is_ascii_alphanumeric() && *byte != b'-' && *byte != b'_' {
+                    return None;
+                }
+            }
+            forge::Key::Tier { repository, tier }
+        }
         VERIFICATION => {
             forge::Key::Verification { repository: read_repository(&mut reader)?, commit: read_commit(&mut reader)? }
         }

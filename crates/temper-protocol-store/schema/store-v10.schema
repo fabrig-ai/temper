@@ -236,7 +236,7 @@ record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
 record Receipt { passed: bool run: ReceiptRun candidate: fixed 32 ended: u64 }
 record ReceiptRow { key: ReceiptKey receipt: Receipt }
 # Family 26: verification of one landing (domain/after-landing.md, 10).
-# Families 23–25 remain reserved for Landing, Receipt and Tier.
+# Families 23 and 24 remain reserved for Landing and Receipt.
 record FailingTest { test_id: bytes 4096 }
 record FailedTests { tests: list 1024 FailingTest }
 enum Failures { tests: FailedTests, many }
@@ -245,5 +245,18 @@ enum Blame { cleared, owns: BlamedFailures, suspect: BlamedFailures }
 record TierVerdict { run: u64 blame: Blame }
 record TierVerification { tier: bytes 32 verdict: option TierVerdict repaired: option fixed 32 }
 record Verification { repository: Repository commit: fixed 32 changes: list 65536 u64 tiers: list 32 TierVerification }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, verification: Verification }
+# Family 25: one tier and its run in flight (domain/after-landing.md, 10).
+record TierJudged { tip: fixed 32 key: fixed 32 }
+record TierFlake { test: bytes 4096 count: u32 }
+record TierLanding { commit: fixed 32 key: fixed 32 }
+record TierTests { tests: list 1024 FailingTest }
+enum TierSelection { tests: TierTests, all }
+record TierFinding { failing: Failures flakes: list 1024 FailingTest blamed: list 257 Blame }
+record TierProbe { landing: u32 tests: TierSelection finding: TierFinding }
+enum TierPart { whole, rerun: TierTests, probe: TierProbe }
+record TierRun { number: u64 tip: fixed 32 key: fixed 32 landings: list 257 TierLanding part: TierPart faults: u32 }
+record TierRecord { sequence: u64 judged: option TierJudged failing: Failures flakes: list 1024 TierFlake run: option TierRun }
+enum TierBranch { absent, pending: Number, made }
+record TierRow { repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierLanding task: option u64 branch: TierBranch }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, tier: TierRow, verification: Verification }
 versioned record Row { value: Value }

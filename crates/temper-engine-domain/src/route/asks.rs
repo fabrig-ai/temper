@@ -300,6 +300,18 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
         }
         core::Ask::RepairRefused { repair } => {
             if connector == domain.config.forge_connector
+                && let Some(task) = repair
+                && let Some(row) = domain.forge.tier_task(task)
+                && let Some(run) = &row.record.run
+            {
+                domain.work.push(Work::Forge(forge::Event::TierRefused {
+                    repository: row.repository,
+                    tier: row.tier.clone(),
+                    number: run.number,
+                }));
+            }
+
+            if connector == domain.config.forge_connector
                 && let Some(repair) = repair
                 && let Some(owner) = domain.forge.queue_repair_owner(repair)
             {
@@ -332,6 +344,10 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                 }
             } else if connector == domain.config.forge_connector && code == forge_route::LANDING_CODE {
                 forge_route::start_landing_step(domain, env, &context);
+            } else if connector == domain.config.forge_connector && code == 4 {
+                if !forge_route::start_tier(domain, env, &context) {
+                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                }
             } else {
                 emit(decision, &env.limits, Delivery::Procedure { task, step, connector, code });
             }
