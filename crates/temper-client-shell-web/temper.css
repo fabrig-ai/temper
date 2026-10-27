@@ -837,7 +837,7 @@ body > noscript, #app:not(:empty):not(:has(*)) { margin-top: 213px; }
 .temper-welcome-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; list-style: none; margin: 14px 0 20px; padding: 0; }
 .temper-welcome-step { border-top: 3px solid var(--temper-line); padding-top: 9px; font-size: 10px; color: var(--temper-faint); }
 .temper-welcome-step[aria-current] { border-color: var(--temper-accent); color: var(--temper-accent-dark); font-weight: 700; }
-.temper-welcome-lead { margin: 12px 0 24px; color: var(--temper-muted); }
+.temper-welcome-lead { margin: 12px 0 24px; }
 .temper-welcome-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .temper-welcome-card { border: 1px solid var(--temper-line); border-radius: 5px; background: var(--temper-paper); padding: 15px 18px; display: flex; flex-direction: column; align-items: flex-start; }
 .temper-welcome-card > button, .temper-welcome-card > a { margin-top: auto; display: inline-flex; border: 1px solid var(--temper-accent); border-radius: 5px; padding: 7px 11px; background: var(--temper-paper); color: var(--temper-accent-dark); }
