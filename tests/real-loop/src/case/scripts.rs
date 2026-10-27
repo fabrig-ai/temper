@@ -909,7 +909,7 @@ pub fn step_5_4(forge: SocketAddr) -> Box<[Script]> {
             ]),
         },
         Script {
-            cue: Agent::X3Writer.cue().into(),
+            cue: task_cue(Agent::X3Writer.cue()),
             turns: Box::new([
                 call(b"write", &json!({"path":X3_FILE,"content":X3_WORDS})),
                 call(b"finish", &json!({"form":"change","fields":{"title":"x3","body":"The deferred plan."}})),
@@ -920,7 +920,7 @@ pub fn step_5_4(forge: SocketAddr) -> Box<[Script]> {
             turns: Box::new([direction_held(PLANNED_CODING_HOLD, report("h1 did not produce a change."))]),
         },
         Script {
-            cue: Agent::StoryWriter.cue().into(),
+            cue: task_cue(Agent::StoryWriter.cue()),
             turns: Box::new([
                 call(b"edit", &json!({"path":B_FILE,"edits":[{"old":B_WORDS,"new":STORY_WORDS}]})),
                 call(b"finish", &json!({"form":"change","fields":{"title":"a1","body":STORY_GREEN}})),
@@ -1262,7 +1262,7 @@ pub fn step_6_2_rules() -> Box<[Box<[Rule]>]> {
 fn blocker_coder() -> Script {
     use super::{BLOCKER_FILE, BLOCKER_FIXED, BLOCKER_WRONG};
     Script {
-        cue: Agent::BlockerCoder.cue().into(),
+        cue: task_cue(Agent::BlockerCoder.cue()),
         turns: Box::new([
             call(b"read", &json!({"path":BLOCKER_FILE})),
             call(b"edit", &json!({"path":BLOCKER_FILE,"edits":[{"old":BLOCKER_WRONG,"new":BLOCKER_FIXED}]})),
@@ -1474,7 +1474,7 @@ pub fn step_6_4(forge: SocketAddr) -> Box<[Script]> {
             ]),
         },
         Script {
-            cue: Agent::RedCoder.cue().into(),
+            cue: task_cue(Agent::RedCoder.cue()),
             turns: Box::new([finish_change(
                 call(b"write", &json!({"path":RED_A4_FILE,"content":RED_A4})),
                 "a4",
@@ -1523,6 +1523,13 @@ pub fn step_6_4_rules() -> Box<[Box<[Rule]>]> {
         Box::new([]),
         Box::new([]),
     ])
+}
+
+// A review now includes the change's words before its requester and head.
+// Select a producer by the start of its task, so its cue in a review's
+// quoted change cannot hide the review script's later, more specific cue.
+fn task_cue(words: &[u8]) -> Box<[u8]> {
+    [b"## Task\n\n".as_slice(), words].concat().into()
 }
 
 fn review_cue(head: u64) -> Box<[u8]> {
@@ -1676,7 +1683,7 @@ pub fn step_6_6(forge: SocketAddr) -> Box<[Script]> {
             ]),
         },
         Script {
-            cue: Agent::WaitingKitCoder.cue().into(),
+            cue: task_cue(Agent::WaitingKitCoder.cue()),
             turns: Box::new([finish_change(
                 call(b"write", &json!({"path":FILE,"content":FIXED})),
                 "e1",
@@ -1685,7 +1692,7 @@ pub fn step_6_6(forge: SocketAddr) -> Box<[Script]> {
         },
         Script { cue: review_cue(KIT_REVIEW_HEAD), turns: Box::new([direction_held(REVIEW_HOLD, verdict())]) },
         Script {
-            cue: Agent::WaitingAppCoder.cue().into(),
+            cue: task_cue(Agent::WaitingAppCoder.cue()),
             turns: Box::new([finish_change(
                 call(b"write", &json!({"path":PIN,"content":pin_input()})),
                 "Repin kit",

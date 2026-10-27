@@ -24,7 +24,7 @@ fn edit_call(
     select: impl Fn(&Value) -> bool,
     edit: impl Fn(&mut Value),
 ) {
-    let script = scripts.iter_mut().find(|s| s.cue.as_ref() == agent.cue()).expect("case agent");
+    let script = scripts.iter_mut().find(|s| s.cue.ends_with(agent.cue())).expect("case agent");
     let mut edited = 0;
     for turn in &mut script.turns {
         for line in &mut turn.lines {
