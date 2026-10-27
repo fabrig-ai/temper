@@ -1,6 +1,6 @@
 //! QA-B process probes: client/tools.md 5.5 area 5 and 6.3; jig domain/accounts.md 6
 //! and client/domain/client.md 6. The terminal composition talks to the shipped server.
-use super::{Process, ctl, sign_in};
+use super::{Process, ctl, ctl::Call, sign_in};
 use skein_fake_peers::oauth;
 use skein_io::kernel::{Exit, Signal};
 use skein_lib::{Duration, Time};
@@ -174,18 +174,15 @@ impl Referee<Process> for Files {
                 let address = sign_in::authorization_address(&ended[1]).expect("fake authorization").to_vec();
                 let Process::Visitor(visitor) = &mut procs[3] else { panic!("visitor") };
                 visitor.hand(&address);
-                queue(procs, ctl::Call::new(&["account", "list", "--until", "settled", "--json"]));
-                queue(procs, ctl::Call::new(&["account", "list", "--json"]));
+                queue(procs, Call::new(&["account", "list", "--until", "settled", "--json"]));
+                queue(procs, Call::new(&["account", "list", "--json"]));
                 self.phase = Phase::Account;
             }
             Phase::Account if ended.len() == 4 => {
                 success(&ended[2]);
                 self.number = account(&ended[3])["number"].as_u64().expect("account number");
                 let file = self.directory.join("valid.move");
-                queue(
-                    procs,
-                    ctl::Call::new(&["account", "export", &self.number.to_string(), file.to_str().expect("path")]),
-                );
+                queue(procs, Call::new(&["account", "export", &self.number.to_string(), file.to_str().expect("path")]));
                 self.phase = Phase::Export;
             }
             Phase::Export if ended.len() == 5 => {
@@ -193,17 +190,14 @@ impl Referee<Process> for Files {
                 let file = self.directory.join("valid.move");
                 let record = fs::read(&file).expect("one real export shared by all FILE probes");
                 self.probes = probes(&self.directory, &record);
-                queue(
-                    procs,
-                    ctl::Call::new(&["account", "import", file.to_str().expect("path"), "--key", "qa-b-restore"]),
-                );
+                queue(procs, Call::new(&["account", "import", file.to_str().expect("path"), "--key", "qa-b-restore"]));
                 self.phase = Phase::Import;
             }
             Phase::Import if ended.len() == 6 => {
                 success(&ended[5]);
                 assert!(!self.directory.join("valid.move").exists(), "spent export removed");
-                queue(procs, ctl::Call::new(&["account", "list", "--until", "usable", "--json"]));
-                queue(procs, ctl::Call::new(&["account", "list", "--json"]));
+                queue(procs, Call::new(&["account", "list", "--until", "usable", "--json"]));
+                queue(procs, Call::new(&["account", "list", "--json"]));
                 self.phase = Phase::Ready;
             }
             Phase::Ready if ended.len() == 8 => {
