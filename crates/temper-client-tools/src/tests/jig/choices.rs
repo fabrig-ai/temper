@@ -294,3 +294,43 @@ fn unknown_model_echo_keeps_a_utf8_boundary() {
         answer.stderr.strip_prefix(b"unknown model: ").expect("prefix").strip_suffix(b"...\n").expect("cut marker");
     assert_eq!(echo, "x".repeat(255).as_bytes());
 }
+
+// The stock configuring chat is template 3, run by charter 3.
+const CONFIGURING: u32 = 3;
+fn configuring_me() -> c::Me {
+    let mut me = f::chat_me(f::CHAT_BUDGET);
+    let project = me.projects.get_mut(0).expect("project");
+    let mut template = project.templates.get(0).expect("chat").clone();
+    template.number = CONFIGURING;
+    template.executor = c::TemplateExecutor::Charter(CONFIGURING);
+    let mut templates = List::with_capacity(2);
+    templates.push(project.templates.get(0).expect("chat").clone()).expect("chat");
+    templates.push(template).expect("configuring");
+    project.templates = templates;
+    project.creating.as_mut().expect("creating").within.charters = List::with_capacity(2);
+    project.creating.as_mut().expect("creating").within.charters.push(1).expect("chat");
+    project.creating.as_mut().expect("creating").within.charters.push(CONFIGURING).expect("configuring");
+    me
+}
+#[test]
+fn chat_start_uses_the_named_template() {
+    let mut root = f::choice_root(configuring_me());
+    let call = root.submit(&["chat", "start", "hello", "--project", "shop", "--template", "3", "--key", "configuring"]);
+    assert_eq!(f::chat_task(&root, call).executor, c::OwnerExecutor::Agent { charter: CONFIGURING });
+}
+#[test]
+fn chat_start_refuses_unknown_or_non_conversation_templates_with_the_offers() {
+    for number in ["2", "3"] {
+        let mut me = configuring_me();
+        me.projects.get_mut(0).expect("project").templates.get_mut(1).expect("configuring").flags.conversation = false;
+        let mut root = f::choice_root(me);
+        let call =
+            root.submit(&["chat", "start", "hello", "--project", "shop", "--template", number, "--key", "refused"]);
+        assert!(root.sends.is_empty());
+        let answer = root.answer(call).expect("usage error");
+        assert_eq!(
+            (answer.status, answer.stderr.as_ref()),
+            (1, b"chat template not offered; offered chat templates: 1\n".as_slice())
+        );
+    }
+}

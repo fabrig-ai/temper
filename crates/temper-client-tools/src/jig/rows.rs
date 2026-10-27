@@ -192,6 +192,7 @@ pub const CHAT_CREATE: Tool = Tool {
         positional(b"text", b"TEXT", Kind::Text, Required, b"The opening words"),
         super::table::Argument { line: b"A model the chat may use, as models lists it", ..MODEL },
         super::table::Argument { line: b"An effort that model offers", ..EFFORT },
+        flag(b"template", b"TEMPLATE", Kind::NumberRange { min: 1, max: 4_294_967_295 }, Optional, b"An offered conversation template; the project's chat template when absent"),
     ]],
     keyed: Keyed::Required,
     area: 1,

@@ -124,8 +124,14 @@ fn project_fund(call: &Call, me: &c::Me) -> Prepared {
 }
 fn chat(call: &Call, me: &c::Me, limits: &Limits) -> Prepared {
     let project = super::reads::project(call, me).ok_or(Failed::Fixed(b"unknown project"))?;
-    let Ok(mut ask) = shapes::chat(me, project, words(call, 1, limits)?) else {
-        return Err(Failed::Fixed(b"chat not offered"));
+    let template = match number(call, 4) {
+        Some(number) => u32::try_from(number).expect("template fits u32"),
+        None => shapes::CHAT,
+    };
+    let mut ask = match shapes::chat_from(me, project, template, words(call, 1, limits)?) {
+        Ok(ask) => ask,
+        Err(shapes::NotOffered::Template) => return Err(chat_templates(me, project)),
+        Err(_) => return Err(Failed::Fixed(b"chat not offered")),
     };
     let c::Ask::Create { tasks, .. } = &mut ask else { unreachable!("chat creates") };
     let task = tasks.get_mut(0).expect("chat creates one task");
@@ -159,6 +165,31 @@ fn chat(call: &Call, me: &c::Me, limits: &Limits) -> Prepared {
             ))
         }
         shapes::Fall::Refused(_) | shapes::Fall::NotOffered(_) => Err(Failed::Fixed(b"chat exceeds offered bounds")),
+    }
+}
+fn chat_templates(me: &c::Me, project: u32) -> Failed {
+    let mut measured = render::Text::measure();
+    offered_chat_templates(me, project, &mut measured);
+    let mut out = render::Text::writing_exact(measured);
+    offered_chat_templates(me, project, &mut out);
+    Failed::Detail(out.finish())
+}
+fn offered_chat_templates(me: &c::Me, project: u32, out: &mut render::Text) {
+    out.put(b"chat template not offered; offered chat templates:");
+    let mut any = false;
+    for membership in &me.projects {
+        if membership.project == project {
+            for template in &membership.templates {
+                if template.flags.conversation {
+                    any = true;
+                    out.put(b" ");
+                    out.number(u64::from(template.number));
+                }
+            }
+        }
+    }
+    if !any {
+        out.put(b" none");
     }
 }
 pub(crate) fn words(call: &Call, index: usize, limits: &Limits) -> Result<c::Text, Failed> {

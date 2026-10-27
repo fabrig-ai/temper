@@ -21,11 +21,12 @@ adds its words so far.
 ## chat start
 
 ```
-chat start --project PROJECT TEXT [--model MODEL] [--effort EFFORT] --key KEY
+chat start --project PROJECT TEXT [--model MODEL] [--effort EFFORT] [--template TEMPLATE] --key KEY
   --project PROJECT: a project's name or number; required. The project
   TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. The opening words
   --model MODEL: text, at most 1048576 bytes, or - to read stdin; optional. A model the chat may use, as models lists it
   --effort EFFORT: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
+  --template TEMPLATE: a number from 1 to 4294967295; optional. An offered conversation template; the project's chat template when absent
 Start a chat in a project
 Prints: `done: task N, chat`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree
 --json: the record chat_create.

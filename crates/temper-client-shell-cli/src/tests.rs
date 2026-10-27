@@ -640,7 +640,7 @@ fn help_json_prints_every_record() {
     assert_eq!(chat[2]["name"], "chat close");
     let arguments = chat[1]["forms"][0].as_array().expect("chat start arguments");
     let names = arguments.iter().map(|arg| arg["name"].as_str().expect("argument name")).collect::<Vec<_>>();
-    assert_eq!(names, ["project", "text", "model", "effort"]);
+    assert_eq!(names, ["project", "text", "model", "effort", "template"]);
     assert_eq!(chat[1]["keyed"], "required");
 
     let settings = records(&["help", "settings", "show", "--json"]);
