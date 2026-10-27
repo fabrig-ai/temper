@@ -55,7 +55,10 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   are the other decisions. Only an uncertain effect asks whether to
   repeat it. `task show` prints `held:` and its reason, then `way
   out:`, what to mend and the call that releases it: `task release
-  TASK --hold REV`.
+  TASK --hold REV`. A run its worker refuses before any turn, its host
+  tools, charter text and brief past the worker's bound, is held at
+  once: `held: smith refused its host part, past its bound of B bytes`,
+  then `fix first:`, the charter to narrow, before `way out:`.
 - **Stopped:** stopping places a hold of yours over the task and every
   task below it, those made later included, and ends their runs;
   releasing the stopped task runs them all again (temper help hold).

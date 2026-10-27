@@ -57,7 +57,8 @@ when its last task ends or moves.
   revision's tasks.
 - `task show` prints an agent task's `settings:` line: its revision,
   its live run's when that differs, and the newest when that differs.
-- A run reads revisions with the host tool `settings`.
+- A run whose charter and authority have the settings family reads
+  revisions with the host tool `settings`.
 
 ## Limits
 
