@@ -12,6 +12,24 @@ fn repair(reason: w::Reason) -> w::Step {
 #[test]
 fn each_step_supplies_its_slot_line_and_held_word() {
     let cases = [
+        (
+            w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap()),
+            Some(4),
+            W::ReadyLine,
+            W::HeldReady,
+        ),
+        (
+            w::Step::Ready(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: None }).unwrap()),
+            Some(4),
+            W::ReadyAloneLine,
+            W::HeldReady,
+        ),
+        (
+            w::Step::Preparing(w::InLanding::new(&w::CEILINGS, w::InLandingParts { landing: Some(61) }).unwrap()),
+            Some(4),
+            W::PrepareLine,
+            W::HeldPreparing,
+        ),
         (w::Step::Producing, Some(0), W::ProduceLine, W::HeldProducing),
         (w::Step::Opening, Some(1), W::OpenLine, W::HeldOpening),
         (w::Step::Recreating, Some(1), W::RecreateLine, W::HeldRecreating),
@@ -46,8 +64,15 @@ fn each_step_supplies_its_slot_line_and_held_word() {
         assert_eq!(line, word);
         let expected: Box<[Hole]> = if word == W::QueueTh {
             Box::new([Hole::Number(65), Hole::Name(Box::from(panel.landing()))])
-        } else if word == W::FirstLine || word == W::UpdateLine || word == W::ResolveLine || word == W::RepairSemantic {
+        } else if word == W::PrepareLine
+            || word == W::FirstLine
+            || word == W::UpdateLine
+            || word == W::ResolveLine
+            || word == W::RepairSemantic
+        {
             Box::new([Hole::Name(Box::from(panel.landing()))])
+        } else if word == W::ReadyLine {
+            Box::new([Hole::Number(61)])
         } else if word == W::RepairGate {
             Box::new([Hole::Number(123)])
         } else if word == W::LandedLine {

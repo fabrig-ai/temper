@@ -23,7 +23,12 @@ pub fn slot(step: &w::Step) -> Slots {
         w::Step::Opening | w::Step::Recreating | w::Step::Reopening => 1,
         w::Step::Checking => 2,
         w::Step::Gating => 3,
-        w::Step::Queued(_) | w::Step::First | w::Step::Updating | w::Step::Resolving => 4,
+        w::Step::Ready(_)
+        | w::Step::Preparing(_)
+        | w::Step::Queued(_)
+        | w::Step::First
+        | w::Step::Updating
+        | w::Step::Resolving => 4,
         w::Step::Repairing(repair) => match repair.reason() {
             w::Reason::Ci => 2,
             w::Reason::Gate(_) => 3,
@@ -69,7 +74,9 @@ pub fn queue(step: &w::Step) -> Option<Queue<'_>> {
             unnamed: q.place().saturating_sub(1).saturating_sub(q.ahead().len()),
         }),
         w::Step::First => Some(Queue { place: 1, ahead: &[], unnamed: 0 }),
-        w::Step::Producing
+        w::Step::Ready(_)
+        | w::Step::Preparing(_)
+        | w::Step::Producing
         | w::Step::Opening
         | w::Step::Recreating
         | w::Step::Reopening
@@ -100,6 +107,11 @@ pub const fn ordinal_word(n: u32, bar: bool) -> W {
 pub fn line(panel: &w::ChangePanel) -> Said {
     let word = match panel.step() {
         w::Step::Ended => W::EndedLine,
+        w::Step::Ready(ready) => match ready.landing() {
+            Some(task) => return (W::ReadyLine, Box::new([Hole::Number(*task)])),
+            None => W::ReadyAloneLine,
+        },
+        w::Step::Preparing(_) => return landing_line(W::PrepareLine, panel),
         w::Step::Producing => W::ProduceLine,
         w::Step::Opening => W::OpenLine,
         w::Step::Recreating => W::RecreateLine,
@@ -139,6 +151,8 @@ fn landing_line(word: W, panel: &w::ChangePanel) -> Said {
 #[must_use]
 pub const fn held_step(step: &w::Step) -> W {
     match step {
+        w::Step::Ready(_) => W::HeldReady,
+        w::Step::Preparing(_) => W::HeldPreparing,
         w::Step::Producing => W::HeldProducing,
         w::Step::Opening => W::HeldOpening,
         w::Step::Recreating => W::HeldRecreating,
@@ -286,7 +300,7 @@ impl<'a> Change<'a> {
         match self.panel.ci() {
             w::Ci::Unknown => match self.panel.step() {
                 w::Step::Landed(_) | w::Step::Ended => W::NotRead,
-                w::Step::Producing
+                w::Step::Ready(_) | w::Step::Preparing(_) | w::Step::Producing
                 | w::Step::Opening
                 | w::Step::Recreating
                 | w::Step::Reopening

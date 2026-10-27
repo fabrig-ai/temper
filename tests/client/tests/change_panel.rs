@@ -98,6 +98,8 @@ fn order(step: &w::Step) -> u8 {
         w::Step::Landing => 6,
         w::Step::Landed(_) => 7,
         w::Step::Ended
+        | w::Step::Ready(_)
+        | w::Step::Preparing(_)
         | w::Step::Recreating
         | w::Step::Reopening
         | w::Step::Updating

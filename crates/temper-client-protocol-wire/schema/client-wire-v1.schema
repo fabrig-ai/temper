@@ -97,7 +97,8 @@ record GateReason { gate: u64 }
 enum Reason { ci, gate: GateReason, semantic }
 record Repairing { reason: Reason }
 record Landed { merge: fixed 32 }
-enum Step { producing, opening, recreating, reopening, checking, gating, queued: Queued, first, updating, resolving, repairing: Repairing, landing, landed: Landed, ended }
+record InLanding { landing: option u64 }
+enum Step { producing, opening, recreating, reopening, checking, gating, queued: Queued, first, updating, resolving, repairing: Repairing, landing, landed: Landed, ended, ready: InLanding, preparing: InLanding }
 record AuthorityHold { reason: bytes 512 }
 enum Hold { stalled, repairs, resolutions, updates, moved, missing, closed, retargeted, failed, rejected, authority: AuthorityHold }
 enum Ci { unknown, pending, passed, failed }
@@ -105,7 +106,8 @@ enum GateKind { review, approval, check }
 enum Verdict { none, pending, approved, changes }
 record Gate { number: u64 kind: GateKind blocks: bool verdict: Verdict }
 record Used { used: u32 limit: u32 }
-versioned record ChangePanel { task: u64 forge: u16 owner: bytes 1024 name: bytes 1024 branch: bytes 1024 landing: bytes 1024 head: option fixed 32 pull: option Pull step: Step hold: option Hold runs: option u64 ci: Ci gates: list 64 Gate repairs: Used resolutions: Used updates: Used }
+enum Way { queue, turn }
+versioned record ChangePanel { task: u64 forge: u16 owner: bytes 1024 name: bytes 1024 branch: bytes 1024 landing: bytes 1024 head: option fixed 32 pull: option Pull step: Step hold: option Hold runs: option u64 ci: Ci gates: list 64 Gate repairs: Used resolutions: Used updates: Used way: Way in_landing: option u64 }
 
 # Its outcome (client/README.md, 4.6 and 4.7).
 record Kinds { read: bool push: bool open: bool land: bool review: bool status: bool comment: bool issue: bool branch: bool }
