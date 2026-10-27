@@ -140,7 +140,7 @@ fn a_ready_change_whose_pull_its_landing_merged_is_landed() {
     let mut f = facts();
     f.pull = Pull::Merged { commit: NEW };
     let next = decide(&ready(), &f, &heard());
-    assert_eq!(next.change.state, State::Landed { merge: NEW });
+    assert_eq!(next.change.state, State::Cleared { merge: NEW });
     assert_eq!(next.decision, Decision::Finish { merge: NEW });
 }
 
