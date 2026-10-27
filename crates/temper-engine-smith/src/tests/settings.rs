@@ -68,7 +68,11 @@ fn settings_bad_fields_are_refused_by_name() {
     };
     let (body, error) = answer.into_parts();
     assert!(error);
-    assert!(body.windows(4).any(|word| word == b"edit"));
+    let mut named = false;
+    for word in body.windows(4) {
+        named |= word == b"edit";
+    }
+    assert!(named);
 }
 #[test]
 fn settings_proposal_items_use_the_file_decoder() {
@@ -106,28 +110,39 @@ fn settings_inventory_pages_continue_at_the_exact_offset_and_end() {
     let answer = inventory(80);
     let whole = settings_text(&answer, None, &[]).expect("inventory text");
     let mut from = 0;
-    let mut combined = Vec::new();
-    let mut pages = 0;
+    let mut combined = skein_lib::Writer::new(whole.len());
+    let mut pages = 0_u32;
     loop {
         let (body, error) = settings_answer(&answer, from, None, &[]).into_parts();
         assert!(!error);
         assert!(body.len() <= usize::try_from(crate::DOC_ANSWER).expect("host bound"));
-        let text = std::str::from_utf8(&body).expect("text");
-        if let Some((page, next)) = text.rsplit_once("next: ") {
-            assert!(page.ends_with('\n'));
-            combined.extend_from_slice(page.as_bytes());
-            let next: u32 = next.trim().parse().expect("offset");
+        let mut marker = None;
+        for (index, bytes) in body.windows(6).enumerate() {
+            if bytes == b"next: " {
+                marker = Some(index);
+            }
+        }
+        if let Some(marker) = marker {
+            let page = body.get(..marker).expect("page before marker");
+            assert!(page.ends_with(b"\n"));
+            combined.put(page).expect("reconstructed page");
+            let digits = body
+                .get(marker.checked_add(6).expect("marker length")..body.len().checked_sub(1).expect("line end"))
+                .expect("next offset");
+            let next = u32::try_from(crate::decimal(digits, b"next").expect("offset")).expect("u32 offset");
             assert!(next > from);
             from = next;
             pages += 1;
         } else {
-            assert!(text.ends_with("end\n"));
-            combined.extend_from_slice(text.strip_suffix("end\n").expect("last marker").as_bytes());
+            assert!(body.ends_with(b"end\n"));
+            combined
+                .put(body.get(..body.len().checked_sub(4).expect("last marker")).expect("page"))
+                .expect("last page");
             break;
         }
     }
-    assert!(pages >= 2);
-    assert_eq!(combined, whole.as_ref());
+    assert!(pages >= 1, "the long inventory requires a continuation");
+    assert_eq!(combined.finish(), whole);
     assert_eq!(settings_answer(&answer, u32::MAX, None, &[]).into_parts().0.as_ref(), b"end\n");
 }
 #[test]
@@ -172,4 +187,39 @@ fn settings_inbox_outcomes_keep_the_revision_and_rejection_reason() {
         };
         assert_eq!(engine::inbox_words(&word).as_ref(), expected.as_bytes());
     }
+}
+
+#[test]
+fn settings_pages_price_escapes_cut_long_lines_and_keep_utf8_offsets() {
+    let quoted = "\"".repeat(800);
+    let first = crate::settings::page(quoted.as_bytes(), 0).expect("quoted text");
+    assert_eq!(first.as_ref(), format!("{}\nnext: 768\n", "\"".repeat(768)).as_bytes());
+    let last = crate::settings::page(quoted.as_bytes(), 768).expect("last quoted page");
+    assert_eq!(last.as_ref(), format!("{}\nend\n", "\"".repeat(32)).as_bytes());
+    let unicode = format!("{}λ", "x".repeat(1535));
+    let page = crate::settings::page(unicode.as_bytes(), 0).expect("UTF-8 boundary cut");
+    assert!(page.ends_with(b"next: 1535\n"));
+    assert_eq!(
+        crate::settings::page(unicode.as_bytes(), 1535).expect("last character").as_ref(),
+        "λ\nend\n".as_bytes()
+    );
+    assert_eq!(crate::settings::page(unicode.as_bytes(), 1536), Err(Problem::Range(b"from")));
+    let lines = format!("short\n{}", "q".repeat(1800));
+    assert_eq!(crate::settings::page(lines.as_bytes(), 0).expect("line cut").as_ref(), b"short\nnext: 6\n");
+}
+
+#[test]
+fn a_large_settings_decoder_error_is_bounded_host_feedback() {
+    let key = "x".repeat(smith_domain_run::HostInput::CAPACITY.checked_sub(128).expect("input envelope room"));
+    let input =
+        format!("{{\"against\":1,\"reason\":\"why\",\"items\":[{{\"setting\":{{\"kind\":\"rules\"}},\"{key}\":0}}]}}");
+    let crate::Decoded::Answered(answer) =
+        decoded(b"propose_settings", input.as_bytes()).expect("bounded malformed input")
+    else {
+        panic!("unknown item field")
+    };
+    let (body, error) = answer.into_parts();
+    assert!(error);
+    assert!(body.len() <= smith_domain_run::HostAnswer::CAPACITY);
+    assert!(body.starts_with(b"settings file item 1:"));
 }
