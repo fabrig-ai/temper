@@ -144,7 +144,16 @@ pub(super) struct Frame {
 }
 impl Frame {
     fn new(story: &str, build: String, inbox: &Rc<Inbox<ShellReport>>) -> Self {
-        element("playground-version").set_text_content(Some(env!("CARGO_PKG_VERSION")));
+        let mut version = env!("CARGO_PKG_VERSION").to_owned();
+        // release.md, 3: 0.0.0 between release tags.
+        if version == "0.0.0"
+            && let Some(commit) = option_env!("TEMPER_COMMIT")
+        {
+            version.push_str(" (");
+            version.extend(commit.chars().take(12));
+            version.push(')');
+        }
+        element("playground-version").set_text_content(Some(&version));
         let select = element("playground-story").dyn_into::<web_sys::HtmlSelectElement>().expect("story select");
         if story != "a" {
             let option = web_sys::window()
