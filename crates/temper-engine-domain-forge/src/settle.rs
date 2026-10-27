@@ -140,6 +140,7 @@ pub(crate) fn cap(
                 | change::State::Resolving { .. }
                 | change::State::Repairing { .. }
                 | change::State::Landing { .. }
+                | change::State::Ended
                 | change::State::Landed { .. }
                 | change::State::Held { .. } => false,
             };

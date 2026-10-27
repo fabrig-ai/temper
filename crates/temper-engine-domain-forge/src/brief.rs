@@ -172,6 +172,7 @@ pub(super) fn brief_pull(
         | change::State::Updating { .. }
         | change::State::Repairing { .. }
         | change::State::Landing { .. }
+        | change::State::Ended
         | change::State::Landed { .. }
         | change::State::Held { .. } => PullMode::Other,
     };
@@ -552,6 +553,7 @@ pub(super) fn brief_ci(
         | change::State::Gating { .. }
         | change::State::Resolving { .. }
         | change::State::Landing { .. }
+        | change::State::Ended
         | change::State::Landed { .. }
         | change::State::Held { .. } => false,
     };

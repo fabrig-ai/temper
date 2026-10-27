@@ -83,7 +83,7 @@ record GateReason { gate: u64 }
 enum Reason { ci, gate: GateReason, semantic }
 record Repairing { reason: Reason }
 record Landed { merge: fixed 32 }
-enum Step { producing, opening, recreating, reopening, checking, gating, queued: Queued, first, updating, resolving, repairing: Repairing, landing, landed: Landed }
+enum Step { producing, opening, recreating, reopening, checking, gating, queued: Queued, first, updating, resolving, repairing: Repairing, landing, landed: Landed, ended }
 enum Hold { stalled, repairs, resolutions, updates, moved, missing, closed, retargeted, failed, rejected }
 enum Ci { unknown, pending, passed, failed }
 enum GateKind { review, approval, check }
