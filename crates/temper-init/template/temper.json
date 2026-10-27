@@ -240,7 +240,7 @@
                 "value": ""
               }
             },
-{
+            {
               "connector": 1,
               "kind": 9,
               "pattern": {
@@ -366,7 +366,7 @@
                   "value": ""
                 }
               },
-{
+              {
                 "connector": 1,
                 "kind": 9,
                 "pattern": {
@@ -436,7 +436,7 @@
                   "kind": "procedure",
                   "number": 2
                 },
-{
+                {
                   "kind": "procedure",
                   "number": 4
                 }
@@ -526,7 +526,7 @@
                       "value": ""
                     }
                   },
-{
+                  {
                     "connector": 1,
                     "kind": 9,
                     "pattern": {
@@ -596,7 +596,7 @@
                       "kind": "procedure",
                       "number": 2
                     },
-{
+                    {
                       "kind": "procedure",
                       "number": 4
                     }

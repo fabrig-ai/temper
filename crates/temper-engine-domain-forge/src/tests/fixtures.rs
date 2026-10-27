@@ -286,6 +286,7 @@ pub fn verifying() -> Domain {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    prime_tier_main(&mut d);
     d
 }
 
@@ -330,6 +331,9 @@ pub fn merged(tiers: bool) -> (Domain, Box<[Request]>) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    if tiers {
+        prime_tier_main(&mut d);
+    }
     let entry = skein_forge_client::Entry {
         number: OPEN,
         task: CHANGE,
@@ -401,9 +405,12 @@ pub fn tier_baseline(d: &mut Domain) -> Queue<Request> {
 }
 pub fn tier_judged(d: &mut Domain) {
     tier_baseline(d);
-    let keys: Vec<_> = (&d.tier_rows).into_iter().map(|(key, _)| key.clone()).collect();
-    for key in keys {
-        let row = d.tier_rows.get_mut(&key).expect("fixture tier");
+    let mut keys = skein_lib::List::with_capacity(d.tier_rows.len());
+    for (key, _) in &d.tier_rows {
+        keys.push(key.clone()).expect("fixture tier bound");
+    }
+    for key in &keys {
+        let row = d.tier_rows.get_mut(key).expect("fixture tier");
         row.record.sequence = 1;
         row.record.judged = Some(temper_engine_domain_forge_tiers::Judged { tip: BASE, key: BASE });
         row.record.run = None;
@@ -438,8 +445,26 @@ pub fn full_tier_range(length: usize) -> (Domain, Env<Limits>) {
 pub fn configured_tier(workflow: usize, paths: usize, path_bytes: usize, artifact: usize) -> Box<[RepositoryTiers]> {
     let mut repositories = repository_tiers(&[BROWSER]);
     let tier = &mut repositories[0].tiers[0];
-    tier.workflow = vec![b'w'; workflow].into_boxed_slice();
-    tier.ignored = vec![vec![b'p'; path_bytes].into_boxed_slice(); paths].into_boxed_slice();
-    tier.artifact = vec![b'a'; artifact].into_boxed_slice();
+    tier.workflow = tier_bytes(b'w', workflow);
+    let mut ignored = skein_lib::List::with_capacity(u32::try_from(paths).expect("fixture path count"));
+    for _ in 0..paths {
+        ignored.push(tier_bytes(b'p', path_bytes)).expect("fixture path count");
+    }
+    tier.ignored = ignored.into_boxed();
+    tier.artifact = tier_bytes(b'a', artifact);
     repositories
+}
+
+/// Finish the standing main watch's initial read before scripting a change's calls.
+fn prime_tier_main(d: &mut Domain) {
+    answer_next(d, Ok(skein_forge::api::Answer::Commit(BASE)));
+    ready(d);
+}
+
+fn tier_bytes(byte: u8, length: usize) -> Box<[u8]> {
+    let mut bytes = skein_lib::List::with_capacity(u32::try_from(length).expect("fixture byte count"));
+    for _ in 0..length {
+        bytes.push(byte).expect("fixture byte count");
+    }
+    bytes.into_boxed()
 }

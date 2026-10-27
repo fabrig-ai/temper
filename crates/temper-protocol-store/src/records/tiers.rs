@@ -126,7 +126,7 @@ fn decode_run(run: w::TierRun) -> Result<p::Run, Undecodable> {
                 w::TierSelection::Tests(tests) => p::Selection::Tests(decode_tests(tests.into_parts().tests)?),
             };
             let finding = decode_finding(finding)?;
-            if usize::try_from(landing).map_err(|_| Undecodable)? >= landings.len()
+            if usize::try_from(landing).or(Err(Undecodable))? >= landings.len()
                 || finding.blamed.len() != landings.len()
             {
                 return Err(Undecodable);
@@ -186,7 +186,6 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     )
     .expect(FITS)
 }
-#[expect(clippy::manual_map, reason = "step translations use explicit matches")]
 pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
     let w::TierRowParts { repository, tier, record, pending, task, branch } = row.into_parts();
     if tier.is_empty() {

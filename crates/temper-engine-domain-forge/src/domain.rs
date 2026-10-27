@@ -1365,7 +1365,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             delegate_result(d, env, task, child, status, failed, &words, out);
         }
         Event::TierTask { repository, tier, number, task } => {
-            crate::tiers::task(d, repository, tier, number, Some(task), out)
+            crate::tiers::task(d, repository, tier, number, Some(task), out);
         }
         Event::TierRefused { repository, tier, number } => crate::tiers::task(d, repository, tier, number, None, out),
         Event::StepTier { task, entry } => crate::tiers::step(d, env, task, entry, out),
@@ -4197,10 +4197,10 @@ fn landing_read(
         Ok(skein_forge::api::Answer::Compare { before, after, files, commits, contains_before: _ })
             if before == pending.before && after == pending.after =>
         {
-            if let Topic::Landings { repository, branch } = &pending.topic {
-                if crate::tiers::is_main(d, *repository, branch) {
-                    crate::tiers::moved(d, env, *repository, pending.before, pending.after, Some(&commits), out);
-                }
+            if let Topic::Landings { repository, branch } = &pending.topic
+                && crate::tiers::is_main(d, *repository, branch)
+            {
+                crate::tiers::moved(d, env, *repository, pending.before, pending.after, Some(&commits), out);
             }
             let mut names = List::with_capacity(u32::try_from(files.len()).unwrap_or(u32::MAX));
             for file in files {
@@ -4210,12 +4210,11 @@ fn landing_read(
         }
         Ok(_) | Err(_) => None,
     };
-    if files.is_none() {
-        if let Topic::Landings { repository, branch } = &pending.topic {
-            if crate::tiers::is_main(d, *repository, branch) {
-                crate::tiers::moved(d, env, *repository, pending.before, pending.after, None, out);
-            }
-        }
+    if files.is_none()
+        && let Topic::Landings { repository, branch } = &pending.topic
+        && crate::tiers::is_main(d, *repository, branch)
+    {
+        crate::tiers::moved(d, env, *repository, pending.before, pending.after, None, out);
     }
     publish(d, pending.topic, News::Landing { before: pending.before, after: pending.after, files }, out);
 }
@@ -4449,6 +4448,7 @@ fn deleting_entry(d: &Domain, task: u64, resource: &skein_forge_client::Resource
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "one exhaustive durable family restore")]
 fn restore(d: &mut Domain, env: &Env<Limits>, record: Stored) {
     if d.restore_phase != RestorePhase::Active {
         d.restore_phase = RestorePhase::Restoring;
