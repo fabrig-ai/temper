@@ -31,7 +31,7 @@ fn a_terminal_sign_in_returns_to_the_real_listener() {
             Step::Authorize,
             Step::Return,
             terminal::see(b"Signed in to ChatGPT"),
-            call(D1, argv!["accounts", "--json"]),
+            call(D1, argv!["account", "list", "--json"]),
             terminal::close(),
         ]
     });
@@ -79,7 +79,7 @@ fn a_terminal_sign_in_finishes_by_the_pasted_address() {
             terminal::see(b"Signed in to ChatGPT"),
             // The browser returns only after the paste has ended this sign-in.
             Step::Return,
-            call(D1, argv!["accounts", "--json"]),
+            call(D1, argv!["account", "list", "--json"]),
             terminal::close(),
         ]
     });

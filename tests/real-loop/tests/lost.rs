@@ -20,9 +20,20 @@ fn a_lost_answer_reaches_its_name_from_another_directory() {
             let mut steps = fixtures::lost_chat();
             steps.extend([
                 same_party(D2),
-                call(D2, argv!["chat", "--project", fixtures::PROJECT, "--key", fixtures::LOST_NAME, scripts::WORDS]),
-                until(D2, argv!["chat", task(AGAIN)], scripts::REPLY, scripts::EARLY),
-                call(D2, argv!["tasks", "--project", fixtures::PROJECT, "--label", "chat"]),
+                call(
+                    D2,
+                    argv![
+                        "chat",
+                        "start",
+                        "--project",
+                        fixtures::PROJECT,
+                        "--key",
+                        fixtures::LOST_NAME,
+                        scripts::WORDS
+                    ],
+                ),
+                until(D2, argv!["chat", "show", task(AGAIN)], scripts::REPLY, scripts::EARLY),
+                call(D2, argv!["task", "list", "--project", fixtures::PROJECT, "--label", "chat"]),
             ]);
             steps
         },

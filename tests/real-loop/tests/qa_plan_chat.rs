@@ -149,10 +149,11 @@ fn calls_succeed(ran: &temper_real_loop_world::Ran) {
 fn queued_steps() -> Vec<calls::Step> {
     let mut steps = fixtures::signed_chat("qa-plan-chat-queued");
     steps.extend([
-        calls::until(PERSON, Argv(vec!["run".into(), calls::task(CHAT)]), PREFIX, b"not expected"),
+        calls::until(PERSON, Argv(vec!["task".into(), "run".into(), calls::task(CHAT)]), PREFIX, b"not expected"),
         calls::call(
             PERSON,
             Argv(vec![
+                "task".into(),
                 "message".into(),
                 calls::task(CHAT),
                 "These are the queued QA words.".into(),
@@ -161,30 +162,31 @@ fn queued_steps() -> Vec<calls::Step> {
             ]),
         ),
         calls::release_hold(HOLD),
-        calls::until(PERSON, Argv(vec!["chat".into(), calls::task(CHAT)]), SECOND, b"not expected"),
+        calls::until(PERSON, Argv(vec!["chat".into(), "show".into(), calls::task(CHAT)]), SECOND, b"not expected"),
         calls::call(
             PERSON,
             Argv(vec![
-                "wait".into(),
                 "task".into(),
+                "show".into(),
                 calls::task(CHAT),
                 "--until".into(),
                 "replied".into(),
                 "--json".into(),
             ]),
         ),
-        calls::call(PERSON, Argv(vec!["activity".into(), calls::task(CHAT), "--json".into()])),
+        calls::call(PERSON, Argv(vec!["task".into(), "activity".into(), calls::task(CHAT), "--json".into()])),
         calls::call(
             PERSON,
             Argv(vec![
                 "chat".into(),
+                "show".into(),
                 calls::task(CHAT),
                 "--before".into(),
                 calls::activity_before(LATEST_ACTIVITY_CALL),
             ]),
         ),
-        calls::call(PERSON, Argv(vec!["chat".into(), calls::task(CHAT)])),
-        calls::call(PERSON, Argv(vec!["task".into(), calls::task(CHAT), "--json".into()])),
+        calls::call(PERSON, Argv(vec!["chat".into(), "show".into(), calls::task(CHAT)])),
+        calls::call(PERSON, Argv(vec!["task".into(), "show".into(), calls::task(CHAT), "--json".into()])),
     ]);
     steps
 }
@@ -192,10 +194,11 @@ fn queued_steps() -> Vec<calls::Step> {
 fn close_steps() -> Vec<calls::Step> {
     let mut steps = fixtures::signed_chat("qa-plan-chat-close-running");
     steps.extend([
-        calls::until(PERSON, Argv(vec!["run".into(), calls::task(CHAT)]), PREFIX, b"not expected"),
+        calls::until(PERSON, Argv(vec!["task".into(), "run".into(), calls::task(CHAT)]), PREFIX, b"not expected"),
         calls::call(
             PERSON,
             Argv(vec![
+                "chat".into(),
                 "close".into(),
                 calls::task(CHAT),
                 "--reason".into(),
@@ -208,16 +211,16 @@ fn close_steps() -> Vec<calls::Step> {
         calls::call(
             PERSON,
             Argv(vec![
-                "wait".into(),
                 "task".into(),
+                "show".into(),
                 calls::task(CHAT),
                 "--until".into(),
                 "ended".into(),
                 "--json".into(),
             ]),
         ),
-        calls::call(PERSON, Argv(vec!["chat".into(), calls::task(CHAT)])),
-        calls::call(PERSON, Argv(vec!["task".into(), calls::task(CHAT), "--json".into()])),
+        calls::call(PERSON, Argv(vec!["chat".into(), "show".into(), calls::task(CHAT)])),
+        calls::call(PERSON, Argv(vec!["task".into(), "show".into(), calls::task(CHAT), "--json".into()])),
     ]);
     steps
 }

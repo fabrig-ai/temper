@@ -172,6 +172,7 @@ fn acts() -> Vec<calls::Step> {
         call(
             D1,
             argv![
+                "repository",
                 "adopt",
                 "--project",
                 "1",
@@ -185,10 +186,10 @@ fn acts() -> Vec<calls::Step> {
                 "adopt-app"
             ],
         ),
-        call(D1, argv!["chat", "--project", "1", "--key", "repair", REQUEST]),
-        call(D1, argv!["wait", "task", number(CHAT), "--until", "ended", "--json"]),
-        call(D1, argv!["task", number(CHANGE), "--json"]),
-        call(D1, argv!["task", number(REPAIR), "--json"]),
+        call(D1, argv!["chat", "start", "--project", "1", "--key", "repair", REQUEST]),
+        call(D1, argv!["task", "show", number(CHAT), "--until", "ended", "--json"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--json"]),
+        call(D1, argv!["task", "show", number(REPAIR), "--json"]),
     ]
 }
 

@@ -21,7 +21,7 @@ fn a_signed_in_chat_shows_its_reply_only_once_committed() {
         || scripts::chat_scripts(CHATS),
         || {
             let mut steps = fixtures::signed_chat("first");
-            steps.push(until(D1, argv!["chat", task(CHAT)], scripts::REPLY, scripts::EARLY));
+            steps.push(until(D1, argv!["chat", "show", task(CHAT)], scripts::REPLY, scripts::EARLY));
             steps
         },
     );
@@ -75,10 +75,10 @@ fn another_clients_close_meets_a_running_wait() {
         || {
             let mut steps = fixtures::signed_chat("waiting");
             steps.extend([
-                call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
-                start(D1, argv!["wait", "task", task(CHAT), "--until", "ended"]),
+                call(D1, argv!["task", "show", task(CHAT), "--until", "replied"]),
+                start(D1, argv!["task", "show", task(CHAT), "--until", "ended"]),
                 watching(WAIT),
-                call(D1, argv!["close", task(CHAT), "--key", "close-waiting"]),
+                call(D1, argv!["chat", "close", task(CHAT), "--key", "close-waiting"]),
                 join(WAIT),
             ]);
             steps

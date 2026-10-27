@@ -182,7 +182,8 @@ impl Host for Caller {
         } else {
             &[
                 b"/client/private",
-                b"change-settings",
+                b"settings",
+                b"apply",
                 b"/setup/settings.json",
                 b"--against",
                 b"1",

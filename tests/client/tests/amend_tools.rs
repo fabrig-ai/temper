@@ -16,10 +16,10 @@ fn a_person_amends_a_tasks_controls_and_reads_them_back() {
     let (goal, dependency) = fixtures::amend_tasks(&mut front);
     let goal = goal.to_string();
     let dependency = dependency.to_string();
-    call(&mut front, &mut root, 2, &[b"amend", goal.as_bytes(), b"--priority", b"3", b"Move this first"]);
-    let priority = call(&mut front, &mut root, 3, &[b"task", goal.as_bytes()]);
+    call(&mut front, &mut root, 2, &[b"task", b"amend", goal.as_bytes(), b"--priority", b"3", b"Move this first"]);
+    let priority = call(&mut front, &mut root, 3, &[b"task", b"show", goal.as_bytes()]);
     assert!(priority.contains("priority 3"), "{priority}");
-    let document = call(&mut front, &mut root, 4, &[b"task", goal.as_bytes(), b"--json"]);
+    let document = call(&mut front, &mut root, 4, &[b"task", b"show", goal.as_bytes(), b"--json"]);
     let revision = document
         .split("\"spec_revision\":{\"value\":")
         .nth(1)
@@ -37,6 +37,7 @@ fn a_person_amends_a_tasks_controls_and_reads_them_back() {
         &mut root,
         5,
         &[
+            b"task",
             b"amend",
             goal.as_bytes(),
             b"--rev",
@@ -51,12 +52,12 @@ fn a_person_amends_a_tasks_controls_and_reads_them_back() {
         ],
     );
     std::fs::remove_dir_all(&scratch).expect("remove world scratch directory");
-    let text = call(&mut front, &mut root, 6, &[b"task", goal.as_bytes()]);
+    let text = call(&mut front, &mut root, 6, &[b"task", b"show", goal.as_bytes()]);
     assert!(text.contains("deadline 2030-01-02 03:04 UTC"), "{text}");
     assert!(text.contains("instructions: Run the focused checks"), "{text}");
     assert!(text.contains(&format!("\ndependencies:\n  task {dependency} ")), "{text}");
     assert!(text.contains("added by you at "), "{text}");
-    let document = call(&mut front, &mut root, 7, &[b"task", goal.as_bytes(), b"--json"]);
+    let document = call(&mut front, &mut root, 7, &[b"task", b"show", goal.as_bytes(), b"--json"]);
     assert!(
         document.contains(&format!("\"dependency_facts\":[{{\"number\":{dependency},\"pending\":true,\"added\":{{")),
         "{document}"
@@ -64,6 +65,7 @@ fn a_person_amends_a_tasks_controls_and_reads_them_back() {
     assert!(document.contains("\"instructions\":{\"bytes\":\"Run the focused checks\""), "{document}");
     assert_eq!(
         temper_client_tools::table::parse(&[
+            b"task",
             b"amend",
             goal.as_bytes(),
             b"--spec",

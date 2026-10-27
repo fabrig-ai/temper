@@ -299,7 +299,7 @@ impl World {
         panic!("joined roots did not settle");
     }
     fn setup(&mut self) -> u32 {
-        self.call(&[b"forge-setup", b"3"])
+        self.call(&[b"forge", b"setup", b"3"])
     }
     fn started(&mut self) {
         let call = self.setup();
@@ -309,7 +309,7 @@ impl World {
         assert_eq!(self.progress.last().expect("setup progress").as_ref(), b"setting up\n");
     }
     fn read(&mut self) -> tools::jig::Printed {
-        self.invoke(&[b"forges", b"--json"])
+        self.invoke(&[b"forge", b"list", b"--json"])
     }
     fn last_rows(&self) -> Box<[temper_client_domain::forge::forges::Row]> {
         temper_client_domain::forge::forges::rows(
@@ -338,7 +338,7 @@ fn under_the_box_setup_is_followed_through_each_step_to_settled() {
         (d::Mode::Owned, d::Connection::NotSetUp, d::Offer::Offered)
     );
     world.started();
-    let wait = world.call(&[b"wait", b"forges", b"--until", b"settled"]);
+    let wait = world.call(&[b"forge", b"list", b"--until", b"settled"]);
     assert!(!world.printed.contains_key(&wait));
     assert_eq!(row(&world, FORGE).connection, d::Connection::SettingUp { step: None });
     for (step, expected) in [(forge::SetUpStep::Prepare, d::Step::Prepare), (forge::SetUpStep::Run, d::Step::Run)] {
@@ -360,9 +360,9 @@ fn without_the_box_the_row_and_setup_refusal_name_the_manual_commands() {
     let mut world = World::new(false);
     world.read();
     assert_eq!(row(&world, FORGE).offer, Offer::NotUnderTheBox);
-    let printed = world.invoke(&[b"forges"]);
+    let printed = world.invoke(&[b"forge", b"list"]);
     assert!(contains(&printed.stdout, &words::set_up_commands(FORGE)));
-    let printed = world.invoke(&[b"forge-setup", b"3"]);
+    let printed = world.invoke(&[b"forge", b"setup", b"3"]);
     assert_eq!(printed.status, 2);
     assert!(contains(&printed.stderr, b"refused: not under the box"));
     assert!(contains(&printed.stderr, &words::set_up_commands(FORGE)));
@@ -372,7 +372,7 @@ fn without_the_box_the_row_and_setup_refusal_name_the_manual_commands() {
 fn a_forge_not_owned_or_not_asked_does_not_offer_setup() {
     let mut world = World::new(true);
     for number in [b"5".as_slice(), b"6", b"9"] {
-        let printed = world.invoke(&[b"forge-setup", number]);
+        let printed = world.invoke(&[b"forge", b"setup", number]);
         assert_eq!((printed.status, printed.stderr.as_ref()), (2, b"refused: not offered\n".as_slice()));
     }
     assert_eq!(world.box_calls, 0);
@@ -384,7 +384,7 @@ fn a_second_setup_of_the_same_or_another_forge_is_busy() {
     let mut world = World::new(true);
     world.started();
     for number in [b"3".as_slice(), b"4"] {
-        let printed = world.invoke(&[b"forge-setup", number]);
+        let printed = world.invoke(&[b"forge", b"setup", number]);
         assert_eq!((printed.status, printed.stderr.as_ref()), (2, b"refused: busy\n".as_slice()));
     }
     assert_eq!(world.box_calls, 1);
@@ -396,7 +396,7 @@ fn a_closed_box_pipe_fails_the_setup_and_withdraws_its_offer() {
     use temper_client_domain::forge::forges as d;
     let mut world = World::new(true);
     world.started();
-    let wait = world.call(&[b"wait", b"forges", b"--until", b"settled"]);
+    let wait = world.call(&[b"forge", b"list", b"--until", b"settled"]);
     assert!(!world.printed.contains_key(&wait));
     world.engine.send(engine::Event::Forge(Box::new(forge::Event::BoxClosed)));
     world.settle();
@@ -409,7 +409,7 @@ fn a_closed_box_pipe_fails_the_setup_and_withdraws_its_offer() {
         d::Connection::SetUpFailed { why: b"the box closed the pipe".as_slice().into(), at: None }
     );
     assert_eq!(failed.offer, d::Offer::NotUnderTheBox);
-    let printed = world.invoke(&[b"forge-setup", b"3"]);
+    let printed = world.invoke(&[b"forge", b"setup", b"3"]);
     assert_eq!(printed.status, 2);
     assert!(contains(&printed.stderr, b"refused: not under the box"));
     assert_eq!(world.box_calls, 1);
@@ -419,7 +419,7 @@ fn a_failed_setup_settles_with_its_why_and_can_be_asked_again() {
     use temper_client_domain::forge::forges as d;
     let mut world = World::new(true);
     world.started();
-    let wait = world.call(&[b"wait", b"forges", b"--until", b"settled"]);
+    let wait = world.call(&[b"forge", b"list", b"--until", b"settled"]);
     world.connection(FORGE, forge::Connection::SetUpFailed { why: b"runner did not start".as_slice().into() });
     let printed = world.answer(wait);
     assert_eq!(printed.status, 0);
@@ -440,7 +440,8 @@ fn a_failed_setup_settles_with_its_why_and_can_be_asked_again() {
 fn setup_fields_reach_the_engine_and_unknown_project_names_are_admitted() {
     use temper_client_domain::forge::forges as d;
     let mut world = World::new(true);
-    let call = world.call(&[b"forge-setup", b"3", b"--org", b"team", b"--repository", b"widget", b"--project", b"1"]);
+    let call =
+        world.call(&[b"forge", b"setup", b"3", b"--org", b"team", b"--repository", b"widget", b"--project", b"1"]);
     assert!(!world.printed.contains_key(&call));
     world.box_started();
     assert_eq!(world.progress.last().expect("setup progress").as_ref(), b"setting up\n");
@@ -463,7 +464,7 @@ fn setup_fields_reach_the_engine_and_unknown_project_names_are_admitted() {
     assert_eq!(failed.status, 1);
     assert!(contains(&failed.stderr, b"Set up failed: the box closed the pipe"));
     let mut world = World::new(true);
-    let next = world.call(&[b"forge-setup", b"3", b"--project", b"Next"]);
+    let next = world.call(&[b"forge", b"setup", b"3", b"--project", b"Next"]);
     assert!(!world.printed.contains_key(&next));
     assert_eq!(world.box_calls, 1, "new project is admitted to the box");
     world.read();
@@ -476,7 +477,7 @@ fn setup_fields_reach_the_engine_and_unknown_project_names_are_admitted() {
 fn invalid_setup_names_are_refused_without_a_box_effect() {
     let mut world = World::new(true);
     for flag in [b"--org".as_slice(), b"--repository"] {
-        let printed = world.invoke(&[b"forge-setup", b"3", flag, b""]);
+        let printed = world.invoke(&[b"forge", b"setup", b"3", flag, b""]);
         assert_eq!(printed.status, 2);
         assert!(contains(
             &printed.stderr,

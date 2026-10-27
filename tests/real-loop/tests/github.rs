@@ -27,7 +27,7 @@ fn a_seeded_app_reopens_with_its_deployments_settings_and_owner() {
         || {
             vec![
                 sign_in(D1),
-                call(D1, argv!["wait", "forges", "--until", "settled", "--json"]),
+                call(D1, argv!["forge", "list", "--until", "settled", "--json"]),
                 call(D1, argv!["me", "--json"]),
             ]
         },
@@ -105,15 +105,16 @@ fn a_person_connects_their_app_and_a_chats_push_carries_its_installations_token(
 fn steps() -> Vec<temper_real_loop_world::calls::Step> {
     vec![
         sign_in(D1),
-        call(D1, argv!["add-key", "1", file("fixture.key"), "--deployment", "--key", "github-llm"]),
-        call(D1, argv!["wait", "accounts", "--until", "usable"]),
-        call(D1, argv!["forge-connect", "1", "github", "--key", "github-connect"]),
+        call(D1, argv!["account", "add-key", "1", file("fixture.key"), "--deployment", "--key", "github-llm"]),
+        call(D1, argv!["account", "list", "--until", "usable"]),
+        call(D1, argv!["forge", "connect", "1", "github", "--key", "github-connect"]),
         browse(CONNECT),
-        call(D1, argv!["wait", "forges", "--until", "settled", "--json"]),
-        call(D1, argv!["repositories", "1", "--installation", "1", "--json"]),
+        call(D1, argv!["forge", "list", "--until", "settled", "--json"]),
+        call(D1, argv!["forge", "repositories", "1", "--installation", "1", "--json"]),
         call(
             D1,
             argv![
+                "repository",
                 "adopt",
                 "--project",
                 "1",
@@ -133,6 +134,7 @@ fn steps() -> Vec<temper_real_loop_world::calls::Step> {
         call(
             D1,
             argv![
+                "repository",
                 "adopt",
                 "--project",
                 "1",
@@ -148,11 +150,11 @@ fn steps() -> Vec<temper_real_loop_world::calls::Step> {
                 "adopt-app"
             ],
         ),
-        call(D1, argv!["chat", "--project", "1", "--key", "github-change", "@forge_chat Update README"]),
-        call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
+        call(D1, argv!["chat", "start", "--project", "1", "--key", "github-change", "@forge_chat Update README"]),
+        call(D1, argv!["task", "show", task(CHAT), "--until", "replied"]),
         // An idle procedure has durably made its coder before we watch that task.
-        call(D1, argv!["wait", "task", number(PROCEDURE), "--until", "phase:idle"]),
-        call(D1, argv!["wait", "task", number(CODER), "--until", "ended", "--json"]),
+        call(D1, argv!["task", "show", number(PROCEDURE), "--until", "phase:idle"]),
+        call(D1, argv!["task", "show", number(CODER), "--until", "ended", "--json"]),
         ends_leaving(&[Leftover {
             task: PROCEDURE,
             may_be: &[Left::Due, Left::Preparing, Left::Claimed, Left::Running],

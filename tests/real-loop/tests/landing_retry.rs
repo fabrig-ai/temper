@@ -73,6 +73,7 @@ fn a_retried_producer_finishes_its_existing_change() {
             calls::call(
                 D1,
                 argv![
+                    "repository",
                     "adopt",
                     "--project",
                     "1",
@@ -86,12 +87,16 @@ fn a_retried_producer_finishes_its_existing_change() {
                     "adopt-app"
                 ],
             ),
-            calls::call(D1, argv!["chat", "--project", "1", "--key", "retry", "@forge_chat Land a small change"]),
-            calls::call(D1, argv!["wait", "task", "1", "--until", "replied"]),
-            calls::call(D1, argv!["wait", "task", calls::number(PRODUCER), "--until", "phase:idle", "--json"]),
+            calls::call(
+                D1,
+                argv!["chat", "start", "--project", "1", "--key", "retry", "@forge_chat Land a small change"],
+            ),
+            calls::call(D1, argv!["task", "show", "1", "--until", "replied"]),
+            calls::call(D1, argv!["task", "show", calls::number(PRODUCER), "--until", "phase:idle", "--json"]),
             calls::call(
                 D1,
                 argv![
+                    "task",
                     "message",
                     calls::number(PRODUCER),
                     "Finish the existing change without another edit.",
@@ -99,14 +104,19 @@ fn a_retried_producer_finishes_its_existing_change() {
                     "retry-producer"
                 ],
             ),
-            calls::until(D1, argv!["task", calls::number(PRODUCER), "--json"], b"\"work\":\"writing\"", b"\"task\""),
-            calls::call(D1, argv!["task", "2", "--json"]),
+            calls::until(
+                D1,
+                argv!["task", "show", calls::number(PRODUCER), "--json"],
+                b"\"work\":\"writing\"",
+                b"\"task\"",
+            ),
+            calls::call(D1, argv!["task", "show", "2", "--json"]),
             calls::release_hold(RETRY),
-            calls::call(D1, argv!["wait", "task", "2", "--until", "ended"]),
+            calls::call(D1, argv!["task", "show", "2", "--until", "ended"]),
             // Landing wakes the requesting chat. Finish its existing reply before
             // teardown can abort that activation's workspace preparation.
-            calls::call(D1, argv!["wait", "task", "1", "--until", "ended", "--json"]),
-            calls::call(D1, argv!["task", calls::number(PRODUCER), "--json"]),
+            calls::call(D1, argv!["task", "show", "1", "--until", "ended", "--json"]),
+            calls::call(D1, argv!["task", "show", calls::number(PRODUCER), "--json"]),
         ]
     });
     for (index, call) in ran.calls().iter().enumerate() {

@@ -27,6 +27,7 @@ fn a_chat_lands_its_change_on_the_forge() {
                 call(
                     D1,
                     argv![
+                        "repository",
                         "adopt",
                         "--project",
                         "1",
@@ -40,14 +41,14 @@ fn a_chat_lands_its_change_on_the_forge() {
                         "adopt-app"
                     ],
                 ),
-                call(D1, argv!["chat", "--project", "1", "--key", "land", "@forge_chat Land a small change"]),
-                call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
-                call(D1, argv!["task", task(CHAT), "--tree", "--json"]),
-                call(D1, argv!["wait", "task", delegate(TREE), "--until", "ended"]),
-                call(D1, argv!["wait", "task", task(CHAT), "--since", digest(TREE), "--until", "replied"]),
+                call(D1, argv!["chat", "start", "--project", "1", "--key", "land", "@forge_chat Land a small change"]),
+                call(D1, argv!["task", "show", task(CHAT), "--until", "replied"]),
+                call(D1, argv!["task", "show", task(CHAT), "--tree", "--json"]),
+                call(D1, argv!["task", "show", delegate(TREE), "--until", "ended"]),
+                call(D1, argv!["task", "show", task(CHAT), "--since", digest(TREE), "--until", "replied"]),
                 // A replied watch accepts closing before the run has ended.
                 // Finish the requesting chat before service teardown.
-                call(D1, argv!["wait", "task", task(CHAT), "--until", "ended", "--json"]),
+                call(D1, argv!["task", "show", task(CHAT), "--until", "ended", "--json"]),
             ]
         },
     );
@@ -80,6 +81,7 @@ fn a_chat_keeps_its_live_delegate_until_the_change_lands() {
                 call(
                     D1,
                     argv![
+                        "repository",
                         "adopt",
                         "--project",
                         "1",
@@ -93,11 +95,11 @@ fn a_chat_keeps_its_live_delegate_until_the_change_lands() {
                         "adopt-app"
                     ],
                 ),
-                call(D1, argv!["chat", "--project", "1", "--key", "kept", "@kept_chat Add a landing wait"]),
-                call(D1, argv!["wait", "task", task(CHAT), "--until", "replied"]),
-                call(D1, argv!["wait", "task", number(E1), "--until", "ended", "--json"]),
-                call(D1, argv!["wait", "task", number(A3), "--until", "ended", "--json"]),
-                call(D1, argv!["wait", "task", task(CHAT), "--until", "ended", "--json"]),
+                call(D1, argv!["chat", "start", "--project", "1", "--key", "kept", "@kept_chat Add a landing wait"]),
+                call(D1, argv!["task", "show", task(CHAT), "--until", "replied"]),
+                call(D1, argv!["task", "show", number(E1), "--until", "ended", "--json"]),
+                call(D1, argv!["task", "show", number(A3), "--until", "ended", "--json"]),
+                call(D1, argv!["task", "show", task(CHAT), "--until", "ended", "--json"]),
             ]
         },
     );
