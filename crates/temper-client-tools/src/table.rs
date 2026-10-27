@@ -13,7 +13,6 @@ pub struct Group {
 }
 /// In `temper ctl help`'s order.
 pub const GROUPS: &[Group] = &[
-    Group { name: b"hold", line: b"" },
     Group { name: b"sign-in", line: b"Sign in with the link the deployment printed" },
     Group { name: b"sign-out", line: b"End the sign-in and leave the token empty" },
     Group { name: b"pending", line: b"List the requests DIR keeps, without reaching the engine" },
@@ -23,6 +22,7 @@ pub const GROUPS: &[Group] = &[
     Group { name: b"task", line: b"Tasks: read one and its parts, and act on it" },
     Group { name: b"chat", line: b"Chats: start one, read its conversation, close it" },
     Group { name: b"proposal", line: b"Proposals: read one, decide it" },
+    Group { name: b"hold", line: b"Placed holds: lift one you may lift" },
     Group { name: b"change", line: b"Changes: read a change's way to landing" },
     Group { name: b"repository", line: b"Repositories: adopt one into a project" },
     Group {

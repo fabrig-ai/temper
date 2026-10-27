@@ -15,7 +15,7 @@ task answer TASK QUESTION TEXT [--key KEY]
 task release TASK --hold REV [--again] [--key KEY]
   Lift a task's hold
 task stop TASK [--key KEY]
-  Stop a task's run and hold it
+  Hold a task and every task below it, stopping their runs
 task cancel TASK [--grace DURATION] REASON [--key KEY]
   Cancel a task and its tree
 task tree TASK [--since DIGEST] [--until CONDITION] [--timeout DURATION]
