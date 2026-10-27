@@ -456,7 +456,7 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         let Process::Calls(calls) = &procs[1] else { panic!("ctl") };
         let failed = calls.ends().iter().enumerate().any(|(index, call)| {
             let expected = self.expected_exits.iter().find(|(at, _)| *at == index).map_or(0, |(_, code)| *code);
-            call.exit != Some(Exit::Code(expected))
+            calls.observed_at()[index].is_some() && call.exit != Some(Exit::Code(expected))
         });
         if let Some(face) = &self.face {
             let Process::Calls(calls) = &mut procs[1] else { panic!("ctl") };
@@ -509,7 +509,7 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
         // The box's stderr may end a call: judge the calls again after it.
         let failed = calls.ends().iter().enumerate().any(|(index, call)| {
             let expected = self.expected_exits.iter().find(|(at, _)| *at == index).map_or(0, |(_, code)| *code);
-            call.exit != Some(Exit::Code(expected))
+            calls.observed_at()[index].is_some() && call.exit != Some(Exit::Code(expected))
         });
         let expired = now >= self.deadline;
         if expired

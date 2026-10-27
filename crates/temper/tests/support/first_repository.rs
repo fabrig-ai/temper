@@ -1,16 +1,23 @@
 //! The first owned repository's task, using only temper's client reads.
 use super::{
-    boxed::CtlLlm,
+    boxed::{self, CtlLlm},
     ctl::{Call, Step},
     write_private,
 };
 use serde_json::{Value, json};
 use skein_fake_llm_domain::api::{Finish, Line, Script, Turn};
-use std::{fs, path::Path};
+use std::{fs, num::NonZeroU16, os::unix::ffi::OsStrExt, path::Path};
 
 #[must_use]
 pub fn llm(config: &Path) -> CtlLlm {
     model(config, scripts())
+}
+/// A restart reads an existing agent configuration before printing its link.
+#[must_use]
+pub fn restarted_llm(config: &Path) -> CtlLlm {
+    let CtlLlm { peer, expected_exits, on_link } = llm(config);
+    on_link();
+    CtlLlm { peer, expected_exits, on_link: Box::new(|| {}) }
 }
 /// The copy uses the same procedure, with its own README and a read of its source.
 #[must_use]
@@ -61,6 +68,9 @@ fn call(name: &[u8], value: &Value) -> Turn {
         tokens: 20,
     }
 }
+// One producer and one review can each reserve a stock run (4,228 units).
+// The first repository uses init's shipped gpt-6-luna prices and run policy.
+const CHANGE_SPEND: u64 = 8_456;
 fn scripts() -> Box<[Script]> {
     // work/hello is forge 3's first repository; playground/widget is on forge 1.
     let repository = temper_engine_domain_forge::tag(3, 1);
@@ -79,7 +89,7 @@ fn scripts() -> Box<[Script]> {
                         "contract":{"kind":"change","connector":1,"change_kind":1,"words":128},
                         "authority":{"tools":1,"grants":[grant(2),grant(3),grant(4),grant(10),grant(11),grant(12)],
                             "delegation":{"kinds":[{"kind":"agent","number":2}],"tasks":4,"depth":2},
-                            "budget":{"spend":10},"notes":0}
+                            "budget":{"spend":CHANGE_SPEND},"notes":0}
                     }]}),
                 ),
                 call(b"wait", &json!({})),
@@ -224,7 +234,7 @@ pub struct Task {
     pub change: u64,
     pub producer: u64,
 }
-const FIRST: Task = Task { project: 2, chat: 1, change: 2, producer: 3 };
+pub const FIRST: Task = Task { project: 2, chat: 1, change: 2, producer: 3 };
 
 #[must_use]
 pub fn task_steps(root: &Path) -> Vec<Step> {
@@ -378,7 +388,7 @@ pub fn live_from_hands(config: &Path, data: &Path, client: &Path, stderr: &[u8])
     evidence
 }
 
-fn header_request(api: &str, header: &str, method: &str, route: &str, body: Option<&str>) -> (u16, Value) {
+pub fn header_request(api: &str, header: &str, method: &str, route: &str, body: Option<&str>) -> (u16, Value) {
     let mut command = std::process::Command::new("curl");
     command.args([
         "--silent",
@@ -563,4 +573,65 @@ pub fn assert_task(run: &str, calls: &[super::Ended], stderr: &str, evidence: &E
         // A restart forgets CI at the head, and a landed change's is not read again (domain/forge.md, 8.8).
         assert!(page.contains("CI at its head\nNot read since the restart"), "{run}: a restart forgets CI: {page}");
     }
+}
+
+pub fn flags(root: &Path) -> Vec<String> {
+    super::configuration::flags(root).into_iter().map(|flag| flag.into_string().expect("scratch UTF-8")).collect()
+}
+pub fn generated(root: &Path) {
+    use temper_init::{Content, Directories, Facts, Ports};
+    let addresses = super::free_addresses::<5>(&[]);
+    let ports = addresses.map(|address| NonZeroU16::new(address.port()).expect("ephemeral port"));
+    let answer = temper_init::files(
+        &Facts {
+            binary: skein_scratch::paths::binary("temper").as_os_str().as_bytes(),
+            git: Some(b"/usr/bin/git"),
+            claude: None,
+            login: Some(b"qa-person"),
+            ports: Ports { clients: ports[0], owned: ports[1], forge: ports[2], llm: ports[3], webhooks: ports[4] },
+        },
+        &Directories { config: root.as_os_str().as_bytes(), data: root.as_os_str().as_bytes() },
+        &[7; 32],
+        &[8; 32],
+    )
+    .expect("generated deployment");
+    for file in answer.files {
+        if let Content::Bytes { bytes, .. } = file.content {
+            let path = root.join(std::ffi::OsStr::from_bytes(file.name));
+            fs::create_dir_all(path.parent().expect("file parent")).expect("fixture directories");
+            super::write_private(&path, &bytes);
+        }
+    }
+    let path = root.join("temper.json");
+    let mut document: Value = serde_json::from_slice(&fs::read(&path).expect("template")).expect("JSON");
+    // Keep the owned forge only: this story never connects an external service.
+    for member in ["forges", "identities", "setup"] {
+        document["application"][member]
+            .as_array_mut()
+            .expect("template list")
+            .retain(|row| row[if member == "forges" { "number" } else { "forge" }] == 3);
+    }
+    document["application"]["demo"] = Value::Null;
+    super::write_private(&path, &serde_json::to_vec(&document).expect("JSON"));
+}
+pub fn stage_binaries(root: &Path) {
+    use skein_forge::forgejo::pin::{RUNNER_VERSION, VERSION};
+    let (forgejo, runner) = super::owned::binaries();
+    for (source, relative) in [
+        (forgejo, format!("forgejo/{VERSION}/forgejo")),
+        (runner, format!("forgejo-runner/{RUNNER_VERSION}/forgejo-runner")),
+    ] {
+        let target = root.join(relative);
+        fs::create_dir_all(target.parent().expect("cache parent")).expect("cache directory");
+        fs::copy(source, target).expect("stage pinned binary without network");
+    }
+}
+pub fn assert_box<T>(outcome: &boxed::CtlOutcome<T>) {
+    assert_eq!(
+        outcome.exit,
+        Some(skein_io::kernel::Exit::Code(0)),
+        "box must drain: {}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert!(outcome.left.as_ref().is_none_or(Vec::is_empty), "no process may outlive the box");
 }
