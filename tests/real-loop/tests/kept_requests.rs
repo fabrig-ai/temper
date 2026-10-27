@@ -40,6 +40,20 @@ fn scripts(at: std::net::SocketAddr) -> Box<[Script]> {
 }
 #[test]
 fn an_unanswered_fifth_adoption_holds_no_close_or_export_after_landing() {
+    const SIGNED_IN: usize = 0;
+    const ADOPTED: usize = 1;
+    const REFUSED: usize = 2;
+    const ADOPTED_AGAIN: usize = 3;
+    const CHAT_CREATED: usize = 4;
+    const CHAT_REPLIED: usize = 5;
+    const LANDED: usize = 6;
+    const REFUSED_AGAIN: usize = 8;
+    const KEPT_ADOPTION: usize = 9;
+    const PENDING_BEFORE: usize = 10;
+    const CLOSED: usize = 11;
+    const EXPORTED: usize = 12;
+    const PENDING_AFTER: usize = 13;
+    const ENDED: usize = 14;
     let ran = world::run_forge(fixture(), scripts, || {
         vec![
             calls::sign_in(D1),          // 0
@@ -69,8 +83,8 @@ fn an_unanswered_fifth_adoption_holds_no_close_or_export_after_landing() {
             ), // 9
             // Observe the durable request before ending the invocation; no 30 s timeout is needed.
             calls::until(D1, argv!["pending"], b"adopt, party 1, first sent ", b"not sent"), // 10
-            calls::kill(9),
-            calls::join(9),
+            calls::kill(KEPT_ADOPTION),
+            calls::join(KEPT_ADOPTION),
             calls::call(D1, argv!["close", "1", "--key", "close"]), // 11
             // The fixture's account is a key: a prompt 'not signed in' refusal proves admission.
             calls::call(D1, argv!["export", "1", calls::file("returned")]), // 12
@@ -78,13 +92,29 @@ fn an_unanswered_fifth_adoption_holds_no_close_or_export_after_landing() {
             calls::call(D1, argv!["wait", "task", "1", "--until", "ended"]), // 14
         ]
     });
-    for (index, status) in [(0, 0), (1, 0), (2, 2), (3, 0), (4, 0), (5, 0), (6, 0), (8, 2), (11, 0), (12, 2), (14, 0)] {
+    for (index, status) in [
+        (SIGNED_IN, 0),
+        (ADOPTED, 0),
+        (REFUSED, 2),
+        (ADOPTED_AGAIN, 0),
+        (CHAT_CREATED, 0),
+        (CHAT_REPLIED, 0),
+        (LANDED, 0),
+        (REFUSED_AGAIN, 2),
+        (CLOSED, 0),
+        (EXPORTED, 2),
+        (ENDED, 0),
+    ] {
         assert_eq!(ran.calls()[index].exit, Some(Exit::Code(status)), "call {index}: {:?}", ran.calls()[index]);
     }
     assert!(ran.forge().merged_green());
     assert!(ran.forge().main_file(b"README.md").ends_with(landing::EDIT));
-    assert_eq!(ran.calls()[10].stdout, ran.calls()[13].stdout, "close and export preserve the kept adoption");
-    for index in [11, 12] {
+    assert_eq!(
+        ran.calls()[PENDING_BEFORE].stdout,
+        ran.calls()[PENDING_AFTER].stdout,
+        "close and export preserve the kept adoption"
+    );
+    for index in [CLOSED, EXPORTED] {
         let call = &ran.calls()[index];
         assert!(call.ended.as_nanos() - call.spawned.as_nanos() < 2_000_000_000, "prompt answer: {call:?}");
         assert!(calls::occurrences(&call.stderr, b"kept: adopt, first sent ") == 1, "{call:?}");
@@ -95,7 +125,7 @@ fn an_unanswered_fifth_adoption_holds_no_close_or_export_after_landing() {
             ) == 1
         );
     }
-    assert!(calls::occurrences(&ran.calls()[12].stderr, b"not signed in") == 1);
+    assert!(calls::occurrences(&ran.calls()[EXPORTED].stderr, b"not signed in") == 1);
 }
 
 fn cancelling_scripts(at: std::net::SocketAddr) -> Box<[Script]> {
@@ -114,6 +144,7 @@ fn cancelling_scripts(at: std::net::SocketAddr) -> Box<[Script]> {
 }
 #[test]
 fn cancelling_a_change_answers_its_landing_wait_with_the_last_panel() {
+    const LANDING_WAIT: usize = 5;
     let ran = world::run_forge(fixture(), cancelling_scripts, || {
         vec![
             calls::sign_in(D1),
@@ -122,20 +153,20 @@ fn cancelling_a_change_answers_its_landing_wait_with_the_last_panel() {
             calls::call(D1, argv!["wait", "task", "1", "--until", "replied"]), // 3
             calls::call(D1, argv!["change", "2", "--json"]),                   // 4
             calls::start(D1, argv!["wait", "change", "2", "--until", "landed", "--timeout", "10s", "--json"]), // 5
-            calls::watching(5),
+            calls::watching(LANDING_WAIT),
             calls::call(D1, argv!["close", "1", "--key", "close"]), // 6
             calls::release_hold(b"producing"),
             calls::call(D1, argv!["wait", "task", "2", "--until", "ended"]), // 7
-            calls::join(5),
+            calls::join(LANDING_WAIT),
             calls::call(D1, argv!["wait", "task", "1", "--until", "ended"]),
         ]
     });
-    assert_eq!(ran.calls()[5].exit, Some(Exit::Code(3)));
-    let answer: serde_json::Value = serde_json::from_slice(&ran.calls()[5].stdout).expect("wait JSON");
+    assert_eq!(ran.calls()[LANDING_WAIT].exit, Some(Exit::Code(3)));
+    let answer: serde_json::Value = serde_json::from_slice(&ran.calls()[LANDING_WAIT].stdout).expect("wait JSON");
     assert_eq!(answer["met"], false);
     assert_eq!(answer["why"], "ended: cancelled");
     assert_eq!(answer["change"]["step"], "producing");
     assert!(answer["change"]["digest"].is_string());
-    let wait = &ran.calls()[5];
+    let wait = &ran.calls()[LANDING_WAIT];
     assert!(wait.ended.as_nanos() - wait.spawned.as_nanos() < 2_000_000_000, "{wait:?}");
 }
