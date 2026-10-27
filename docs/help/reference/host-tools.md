@@ -184,6 +184,27 @@ A write.
 - `resource`: an object; required. What it writes on: {kind: repository}, {kind: pull, number}, {kind: issue, number} or {kind: branch, segments}.
 - `write`: an object; required. {kind: create_issue, key, title, body}, {kind: post, number, key, body} or {kind: status, commit, context, check}.
 
+## settings
+
+Read the deployment's settings: the inventory with no member, or a setting, a revision's record or a page of the history; a long answer goes on from an offset.
+
+A read.
+
+- `setting`: an object; optional. One setting's whole value, named as a settings file names it.
+- `revision`: an integer from 1 to 4294967295; optional. Alone, that revision's record: its items and who decided it. With a charter, the charter as that held revision has it.
+- `history`: an object; optional. A page of the revisions, the newest first.
+- `from`: an integer from 0 to 4294967295; optional. Where to go on in the answer's text: the offset after next: on its last line; 0 when absent.
+
+## propose_settings
+
+Propose a change of the deployment's settings to its owners, with a reason. You hear in your messages whether it was accepted, rejected or went stale.
+
+A write.
+
+- `against`: an integer from 1 to 4294967295; required. The newest revision you read. A proposal against an older one is stale, and you hear the newest.
+- `reason`: text; required. Why; the owners read it.
+- `items`: a list; required. The changes, at most one per setting.
+
 ## read_items
 
 Read a page of a repository's issues and pull requests, those updated least recently first, from a time on.
