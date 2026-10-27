@@ -102,13 +102,13 @@ pub(crate) fn proposal(name: run::CallName, bytes: &[u8], configured: &[engine::
     let limits = temper_client_tools::limits::tools();
     let items = match temper_client_tools::jig::settings_file::proposal_items(bytes, &limits) {
         Ok(items) => items,
-        Err(why) => return Ok(Decoded::Answered(run::HostAnswer::new(why, true).expect("bounded settings error"))),
+        Err(why) => return Ok(Decoded::Answered(run::HostAnswer::new(why, true).ok_or(Problem::TooLarge)?)),
     };
     let wire = client::wire_change_settings(
         &c::ChangeSettings { against, items, running: c::Running::Stays },
         &limits.settings,
     )
-    .map_err(items_error)?;
+    .or(Err(Problem::Range(b"items")))?;
     let items = match wire::items(wire.into_parts().items, &models(configured), &limits.settings) {
         Ok(items) => items,
         Err(why) => {
@@ -124,64 +124,71 @@ pub(crate) fn proposal(name: run::CallName, bytes: &[u8], configured: &[engine::
         tool: engine::Tool::ProposeSettings { against, items, reason },
     }))
 }
-fn items_error(_: jig_client_protocol_wire::v19::Problem) -> Problem {
-    Problem::Range(b"items")
-}
 
 /// Render the same settings document through the same text layer as ctl.
 pub fn settings_text(
     answer: &SettingsAnswer,
-    requested: Option<u32>,
+    requested: Option<u64>,
     configured: &[engine::Model],
 ) -> Result<Box<[u8]>, Problem> {
     let preset = temper_client_tools::limits::client().client;
-    let link = jig_client_protocol_link::Limits::new(preset.domain, preset.exchanges).map_err(link_error)?;
+    let link = jig_client_protocol_link::Limits::new(preset.domain, preset.exchanges).or(Err(Problem::TooLarge))?;
     let limits = temper_client_tools::limits::tools();
     let model = models(configured);
     let value = match answer {
         SettingsAnswer::Inventory(value) => c::ReadValue::Settings(Box::new(
-            client::restore_settings_document(&wire::document(value, &limits.settings).map_err(items_error)?, &link)
-                .map_err(items_error)?,
+            client::restore_settings_document(
+                &wire::document(value, &limits.settings).or(Err(Problem::Range(b"items")))?,
+                &link,
+            )
+            .or(Err(Problem::Range(b"items")))?,
         )),
         SettingsAnswer::Setting(value) => c::ReadValue::Setting(Box::new(
             client::restore_setting_document(
-                &wire::setting_document(value, &model, &limits.settings).map_err(items_error)?,
+                &wire::setting_document(value, &model, &limits.settings).or(Err(Problem::Range(b"items")))?,
                 &link,
             )
-            .map_err(items_error)?,
+            .or(Err(Problem::Range(b"items")))?,
         )),
         SettingsAnswer::Revision(value) => c::ReadValue::Revision(Box::new(
             client::restore_revision_answer(
-                &wire::revision(value, &model, &limits.settings).map_err(items_error)?,
+                &wire::revision(value, &model, &limits.settings).or(Err(Problem::Range(b"items")))?,
                 &link,
             )
-            .map_err(items_error)?,
+            .or(Err(Problem::Range(b"items")))?,
         )),
         SettingsAnswer::Revisions(value) => c::ReadValue::Revisions(Box::new(
-            client::restore_revisions_page(&wire::revisions(value, &limits.settings).map_err(items_error)?, &link)
-                .map_err(items_error)?,
+            client::restore_revisions_page(
+                &wire::revisions(value, &limits.settings).or(Err(Problem::Range(b"items")))?,
+                &link,
+            )
+            .or(Err(Problem::Range(b"items")))?,
         )),
-        SettingsAnswer::Unknown => return Ok(Box::from(b"unknown settings\n".as_slice())),
+        SettingsAnswer::Unknown => return Ok(Box::from(b"unknown\n".as_slice())),
     };
-    Ok(temper_client_tools::jig::render::settings_text(&value, requested.map(u64::from), &limits))
-}
-fn link_error(_: jig_client_protocol_link::Unusable) -> Problem {
-    Problem::TooLarge
+    Ok(temper_client_tools::jig::render::settings_text(&value, requested, &limits))
 }
 
 /// A bounded host page. Offsets count original text bytes; JSON escaping is
-/// priced as read_docs prices it, with a line cut before a long-line cut.
+/// priced as `read_docs` prices it, with a line cut before a long-line cut.
 #[must_use]
 pub fn settings_answer(
     answer: &SettingsAnswer,
     from: u32,
-    requested: Option<u32>,
+    requested: Option<u64>,
     models: &[engine::Model],
 ) -> run::HostAnswer {
     match settings_text(answer, requested, models) {
         Ok(text) => match page(&text, from) {
             Ok(body) => {
-                run::HostAnswer::new(body, matches!(answer, SettingsAnswer::Unknown)).expect("settings page bound")
+                let error = match answer {
+                    SettingsAnswer::Unknown => true,
+                    SettingsAnswer::Inventory(_)
+                    | SettingsAnswer::Setting(_)
+                    | SettingsAnswer::Revision(_)
+                    | SettingsAnswer::Revisions(_) => false,
+                };
+                run::HostAnswer::new(body, error).expect("settings page bound")
             }
             Err(_) => run::HostAnswer::new(Box::from(b"from: not a UTF-8 text offset".as_slice()), true)
                 .expect("fixed feedback"),
@@ -194,7 +201,10 @@ pub fn settings_answer(
 pub(crate) fn page(text: &[u8], from: u32) -> Result<Box<[u8]>, Problem> {
     let start = usize::try_from(from).expect("u32 fits").min(text.len());
     let rest = text.get(start..).expect("text suffix");
-    ::core::str::from_utf8(rest).map_err(text_error)?;
+    // The shared renderer produces validated UTF-8; an offset may not split it.
+    if !boundary(text, start) {
+        return Err(Problem::Range(b"from"));
+    }
     let mut end = start;
     let mut line = start;
     let mut size = 0_u32;
@@ -212,26 +222,34 @@ pub(crate) fn page(text: &[u8], from: u32) -> Result<Box<[u8]>, Problem> {
     if end < text.len() && line > start {
         end = line;
     }
-    while ::core::str::from_utf8(text.get(start..end).expect("page range")).is_err() {
+    while !boundary(text, end) {
         end = end.checked_sub(1).ok_or(Problem::Range(b"from"))?;
     }
     let body = text.get(start..end).expect("page range");
-    let mut out = Writer::new(body.len().checked_add(32).ok_or(Problem::TooLarge)?);
+    let next = Decimal::of(u64::try_from(end).expect("text offset"));
+    let marker = if end < text.len() { next.as_bytes().len().checked_add(7).ok_or(Problem::TooLarge)? } else { 4 };
+    let separator = usize::from(!body.is_empty() && !body.ends_with(b"\n"));
+    let size = body.len().checked_add(separator).ok_or(Problem::TooLarge)?;
+    let mut out = Writer::new(size.checked_add(marker).ok_or(Problem::TooLarge)?);
     out.put(body).expect("page room");
     if !body.is_empty() && !body.ends_with(b"\n") {
         out.put(b"\n").expect("separator room");
     }
     if end < text.len() {
         out.put(b"next: ").expect("marker room");
-        out.put(Decimal::of(u64::try_from(end).expect("text offset")).as_bytes()).expect("offset room");
+        out.put(next.as_bytes()).expect("offset room");
         out.put(b"\n").expect("marker room");
     } else {
         out.put(b"end\n").expect("marker room");
     }
     Ok(out.finish())
 }
-fn text_error(_: ::core::str::Utf8Error) -> Problem {
-    Problem::Range(b"from")
+
+fn boundary(text: &[u8], at: usize) -> bool {
+    match text.get(at) {
+        Some(byte) => byte & 0xc0 != 0x80,
+        None => true,
+    }
 }
 
 pub(crate) fn refusal(why: &jig_domain_people::Refusal) -> Box<[u8]> {
