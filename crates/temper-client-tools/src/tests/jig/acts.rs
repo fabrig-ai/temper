@@ -516,7 +516,7 @@ fn hold_lift_sends_without_a_read_and_prints_done_refused_and_moved() {
                 at: None,
             },
             2,
-            "lift: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n",
+            "hold lift: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n",
         ),
         (
             c::Answer::Refused {
@@ -527,7 +527,7 @@ fn hold_lift_sends_without_a_read_and_prints_done_refused_and_moved() {
                 at: None,
             },
             2,
-            "lift: The object changed\nrevision now: 2\n",
+            "hold lift: The object changed\nrevision now: 2\n",
         ),
     ];
     for (answer, status, expected) in cases {
@@ -651,6 +651,6 @@ fn an_owner_refused_release_reaches_the_engine_and_gives_no_propose_advice() {
     assert_eq!(answer.status, 2);
     assert_eq!(
         answer.stderr.as_ref(),
-        b"release: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n"
+        b"task release: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n"
     );
 }
