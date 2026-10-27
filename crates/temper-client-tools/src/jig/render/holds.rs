@@ -22,6 +22,11 @@ pub(crate) fn text(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
     out.put(b"held: ");
     reason(task, vocabulary, out);
     out.put(b"\nway out: ");
+    way_out(task, out);
+    out.put(b"\n");
+}
+
+pub(crate) fn way_out(task: &c::Task, out: &mut Text) {
     let uncertain = task.hold.as_ref().expect("supplied hold").uncertain();
     if uncertain {
         out.put(b"check whether the effect happened before deciding to repeat it; ");
@@ -35,7 +40,6 @@ pub(crate) fn text(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
     if uncertain {
         out.put(b" --again (only to repeat the effect)");
     }
-    out.put(b"\n");
 }
 
 fn recovery(hold: &c::TaskHold) -> &'static [u8] {
