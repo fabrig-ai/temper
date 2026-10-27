@@ -753,6 +753,8 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         base_repair: true,
         queue_repair: Some(26),
         queue_repairs: 27,
+        producing_charter: 2,
+        review_charter: 4,
     }
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {

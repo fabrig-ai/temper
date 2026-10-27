@@ -74,6 +74,7 @@ pub struct StoryLimits {
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
     pub spec_bytes: Option<u32>,
+    pub forge_charter: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -206,7 +207,7 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes } = timing;
+        let StoryLimits { brief, stall, spec_bytes, forge_charter } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -251,7 +252,16 @@ impl World {
                 limits.tasks.depth = 4;
                 limits.tasks.parameters = 8;
                 limits.tasks.spec_bytes = 512;
-                limits.tasks.executor_kinds = 2;
+                limits.tasks.executor_kinds = 4;
+                limits.tasks.charters = 4;
+                let mut producer = walking::charter();
+                producer.number = 2;
+                let mut reviewer = walking::charter();
+                reviewer.number = 4;
+                reviewer.policy.modify = false;
+                reviewer.policy.agents = false;
+                config.core.defaults.charters = Box::new([walking::charter(), producer, reviewer]);
+                config.forge_charter = forge_charter.unwrap_or(1);
                 limits.tasks.authority_grants = 10;
                 limits.journal.run_bytes = 8192;
                 limits.tasks.authority_segments = 9;
@@ -259,7 +269,7 @@ impl World {
                 limits.tasks.contract_choices = 2;
                 limits.tasks.inbox_messages = 8;
                 limits.tasks.inbox_bytes = 1024;
-                limits.authority.executors = 2;
+                limits.authority.executors = 4;
                 limits.authority.batch = 2;
                 limits.authority.grants = 10;
                 limits.authority.segments = 8;
@@ -376,8 +386,12 @@ impl World {
                     assert!(config.landing.projects.insert(1, landing).is_ok());
                 }
                 if with_change {
-                    rules.ceiling.delegation.kinds =
-                        Box::new([authority::Executor::Charter(1), authority::Executor::Procedure(2)]);
+                    rules.ceiling.delegation.kinds = Box::new([
+                        authority::Executor::Charter(1),
+                        authority::Executor::Charter(2),
+                        authority::Executor::Charter(4),
+                        authority::Executor::Procedure(2),
+                    ]);
                     rules.ceiling.delegation.tasks = 12;
                     rules.ceiling.delegation.depth = 4;
                 }
@@ -410,8 +424,8 @@ impl World {
                 config.core.defaults.rules = domain.rules().clone();
             }
             if let Some((defaults, model, _)) = stock {
-                const STOCK_CHARTERS: u32 = 2;
-                const STOCK_EXECUTORS: u32 = 3;
+                const STOCK_CHARTERS: u32 = 4;
+                const STOCK_EXECUTORS: u32 = 5;
                 const TREE_TASKS: u32 = 12; // Stock lifetime ceiling, including the root.
                 const LANDED_CHANGES: u32 = 2;
                 const RETAINED_HOLDINGS: u32 = 1 + LANDED_CHANGES * 2;
@@ -443,7 +457,7 @@ impl World {
                     }
                 }
                 config.landing.projects = skein_lib::Map::with_capacity(1);
-                // Stock names two charters and three executor kinds; all ten forge grants fit.
+                // Stock includes the review and configuring charters; all ten forge grants fit.
                 limits.tasks.charters = STOCK_CHARTERS;
                 limits.tasks.executor_kinds = STOCK_EXECUTORS;
                 limits.authority.executors = STOCK_EXECUTORS;
@@ -631,16 +645,21 @@ impl World {
     /// worker's hosted attempt. Outstanding API terminals belong to the old
     /// process; startup has to rediscover the outbox by its durable key.
     pub fn restart(&mut self, with_read: bool, with_change: bool) {
+        self.restart_with_charter(with_read, with_change, None);
+    }
+
+    /// Restart with a different deployment charter while retaining the change rows.
+    pub fn restart_with_charter(&mut self, with_read: bool, with_change: bool, forge_charter: Option<u32>) {
         assert!(self.store.pending.is_empty(), "the chosen cut resolves store uncertainty first");
         assert!(self.pending.is_empty(), "old API terminals are drained at this cut");
-        let mut fresh = Self::configured_brief(
+        let mut fresh = Self::configured_limits(
             with_read,
             with_change,
             false,
             if self.gate.owner { 0 } else { 1000 },
             self.gate,
             None,
-            Some(self.env.limits.brief),
+            StoryLimits { brief: Some(self.env.limits.brief), forge_charter, ..StoryLimits::default() },
         );
         std::mem::swap(&mut self.root, &mut fresh.root);
         std::mem::swap(&mut self.out, &mut fresh.out);
@@ -1283,7 +1302,15 @@ pub fn change_world_in(
         tools: tasks::Tools(1023),
         grants: [1, 3, 4, 10, 11, 12].map(|kind| tasks::Grant { kind, ..grant.clone() }).into(),
         // The change's six tasks: a producer and five review attempts.
-        delegation: tasks::Delegation { kinds: Box::new([tasks::AuthorityExecutor::Charter(1)]), tasks: 6, depth: 1 },
+        delegation: tasks::Delegation {
+            kinds: Box::new([
+                tasks::AuthorityExecutor::Charter(1),
+                tasks::AuthorityExecutor::Charter(2),
+                tasks::AuthorityExecutor::Charter(4),
+            ]),
+            tasks: 6,
+            depth: 1,
+        },
         // Each run's spend must fund its finishing reserve, six with the
         // world's charter (jig a020bf1c): room for six attempts of five.
         budget: tasks::Budget { spend: 40, deadline: None },

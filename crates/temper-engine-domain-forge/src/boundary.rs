@@ -637,6 +637,9 @@ pub struct ChangeRow {
     pub queue_repair: Option<u64>,
     /// Repairs attempted for this landing queue while this change owned it.
     pub queue_repairs: u32,
+    /// Charter numbers captured when the change is made (protocol/configuration.md, 13.6).
+    pub producing_charter: u32,
+    pub review_charter: u32,
 }
 /// One gate's explanation, retained with its verdict for a repair brief.
 #[derive(Clone, PartialEq, Eq, Debug)]
