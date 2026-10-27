@@ -1,4 +1,4 @@
 <!-- Original temper artwork: our plain three-bar menu icon. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#6c655d">
   <path d="M3 5h18v2H3zm0 6h18v2H3zm0 6h18v2H3z"/>
 </svg>
