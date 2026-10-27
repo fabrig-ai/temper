@@ -83,7 +83,7 @@ pub fn configure(value: &mut Value, agent: &mut Value, forge: SocketAddr) {
             configured["policy"] = policy.clone();
         }
     }
-    let charters = if value["engine"].get("charters").is_some() { 1 } else { 2 };
+    let charters = if value["engine"].get("charters").is_some() { 1 } else { 4 };
     let limits = value["engine"]["limits"]["overrides"].as_object_mut().expect("engine overrides");
     for (name, size) in [
         ("people.operations", 5),

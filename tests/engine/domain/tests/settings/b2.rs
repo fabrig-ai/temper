@@ -379,18 +379,20 @@ pub(super) fn reviewer() {
     let (mut driver, chat) = chat();
     let mut review = delegate(&driver, chat.task, b"Review the named head", 0, K);
     review.executor = tasks::Executor::Agent { charter: 4 };
-    review.contract = tasks::Contract::Verdict { choices: Box::new([
-        tasks::Verdict { code: 1, words: 512, fields: Box::new([]), followups: 0 },
-        tasks::Verdict { code: 2, words: 512, fields: Box::new([]), followups: 0 },
-    ]) };
-    review.authority.tools = jig_domain_core::ToolFamilies::JIG.read;
+    review.contract = tasks::Contract::Verdict {
+        choices: Box::new([
+            tasks::Verdict { code: 1, words: 512, fields: Box::new([]), followups: 0 },
+            tasks::Verdict { code: 2, words: 512, fields: Box::new([]), followups: 0 },
+        ]),
+    };
+    review.authority.tools = tasks::Tools(jig_domain_core::ToolFamilies::JIG.read.0);
     review.authority.delegation.kinds = Box::new([]);
     let answer = call(&mut driver, &chat, 42, engine::Tool::Delegate { batch: Box::new([review]) });
     let engine::CallAnswer::Delegated(made) = answer else { panic!("review admitted: {answer:?}") };
     let review = assigned(&driver, made[0].task).expect("stock charter 4 offered and assigned");
     assert_eq!(review.charter, 4);
     assert_eq!(review.run.policy.model, box_model());
-    assert_eq!(review.run.authority.tools, jig_domain_core::ToolFamilies::JIG.read);
+    assert_eq!(review.run.authority.tools, tasks::Tools(jig_domain_core::ToolFamilies::JIG.read.0));
     assert!(review.run.authority.delegation.kinds.is_empty());
     assert_eq!(review.run.authority.delegation.tasks, 0);
     let smith = temper_engine_smith::charter(&review);
@@ -401,19 +403,34 @@ pub(super) fn reviewer() {
     assert!(smith.outcome.change.is_none());
     assert!(smith.outcome.report.is_none());
     assert_eq!(smith.outcome.verdicts.len(), 2);
-    let answer = call(&mut driver, &review, 43, engine::Tool::ReadNamed {
-        repository: None,
-        read: skein_forge::api::Read::Branch { branch: b"main".as_slice().into() },
-    });
+    let answer = call(
+        &mut driver,
+        &review,
+        43,
+        engine::Tool::ReadNamed {
+            repository: None,
+            read: skein_forge::api::Read::Branch { branch: b"main".as_slice().into() },
+        },
+    );
     assert!(matches!(answer, engine::CallAnswer::ForgeRead(ref result) if result.is_ok()), "{answer:?}");
     let child = delegate(&driver, review.task, b"Forbidden delegation", 0, K);
     let answer = call(&mut driver, &review, 44, engine::Tool::Delegate { batch: Box::new([child]) });
-    assert!(matches!(answer, engine::CallAnswer::DelegationDenied { .. }
-        | engine::CallAnswer::DelegationRefused(_) | engine::CallAnswer::ToolDenied { .. }), "{answer:?}");
+    assert!(
+        matches!(&answer, engine::CallAnswer::ToolDenied { findings, .. }
+        if findings.contains(&authority::Finding::Tool)),
+        "{answer:?}"
+    );
     assert_eq!(driver.store.header().tasks, 2, "refused delegation creates no task");
-    finish(&mut driver, &review, tasks::TaskResult::Verdict {
-        code: 1, fields: Box::new([]), words: b"Approved".as_slice().into(),
-    });
-    assert!(inbox(&driver, chat.task, review.task,
-        &tasks::MessageKind::Result(tasks::ResultKind::Verdict { code: 1, fields: Box::new([]) }), b"Approved"));
+    finish(
+        &mut driver,
+        &review,
+        tasks::TaskResult::Verdict { code: 1, fields: Box::new([]), words: b"Approved".as_slice().into() },
+    );
+    assert!(inbox(
+        &driver,
+        chat.task,
+        review.task,
+        &tasks::MessageKind::Result(tasks::ResultKind::Verdict { code: 1, fields: Box::new([]) }),
+        b"Approved"
+    ));
 }

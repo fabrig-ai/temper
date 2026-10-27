@@ -270,8 +270,7 @@ fn live_github_seed_policy_admission_checks_both_projection_shapes() {
         .replace("{proc.forge.ready.address}", "127.0.0.1:31002")
         .replace("{proc.llm.ready.address}", "127.0.0.1:31004")
         .replace("{story.clients}", "127.0.0.1:31005")
-        .replace("secrets/w1.digest", "secrets/worker-a.digest")
-        .replace("\"tasks.charters\": 1", "\"tasks.charters\": 2");
+        .replace("secrets/w1.digest", "secrets/worker-a.digest");
     for (owner, policy_bytes) in [("freeekanayaka", 4299_u64), ("fabrig-ai", 4167_u64)] {
         let document = fixtures::without_settings(template.replace("\"acme\"", &format!("\"{owner}\"")).as_bytes());
         let document = fixtures::with(
