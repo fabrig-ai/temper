@@ -17,6 +17,8 @@ fn change_row() -> top::ChangeRow {
         priority: 1,
         ci: None,
         change: change::Change {
+            way: temper_engine_domain_forge_change::Way::Queue,
+            landing: None,
             task: 51,
             state: change::State::Producing { requested: false },
             gates: Box::new([]),

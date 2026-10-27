@@ -145,7 +145,8 @@ enum AuthorityLack { tasks, depth, spend }
 record AuthorityHold { lack: AuthorityLack had: u64 released: bool task: u64 spec: u64 hold: u64 tasks: u64 }
 enum ChangeHold { stalled, repairs, resolutions, updates, branch_moved, branch_missing, pull_closed, retargeted, failed, rejected, authority: AuthorityHold }
 enum EffectResult { none, pending, made, conflict, failed }
-enum Repair { ci, gate: Number, semantic }
+record LandingRepair { gate: u16 }
+enum Repair { ci, gate: Number, semantic, landing: LandingRepair }
 record RepairValue { why: Repair }
 record DelegateGate { number: u64 head: fixed 32 }
 enum Delegate { produce, repair: RepairValue, resolve: Commit, gate: DelegateGate }
@@ -159,13 +160,15 @@ record Updating { from: fixed 32 base: fixed 32 ready_since: u64 }
 record Resolving { requested: bool base: fixed 32 }
 record Repairing { requested: bool why: Repair }
 record LandedChange { merge: fixed 32 }
-enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange, ended, cancelling_gates: ChangeHead }
+record Preparing { from: fixed 32 main: fixed 32 ready_since: u64 }
+enum ChangeLive { producing: Producing, opening: Producing, recreating: ChangeHead, reopening: Reopening, checking: ChangeHead, gating: Gating, queued: ReadyHead, first: ReadyHead, updating: Updating, resolving: Resolving, repairing: Repairing, landing: ChangeHead, landed: LandedChange, ended, cancelling_gates: ChangeHead, ready: ReadyHead, preparing: Preparing }
 record ChangeState { live: ChangeLive holds: list 8 ChangeHold }
 record Gate { number: u64 kind: GateKind blocking: bool freshness: Freshness eager: bool }
 record GateReport { number: u64 head: fixed 32 status: ChangeStatus }
 record GateFailure { number: u64 count: u32 }
 record GateRemark { number: u64 head: fixed 32 words: bytes 1048576 }
-record Change { task: u64 state: ChangeState gates: list 1024 Gate clean: list 1024 fixed 32 repairs: u32 resolutions: u32 updates: u32 since: u64 ready_since: option u64 owns_turn: bool last_head: option fixed 32 gate_failures: list 1024 GateFailure released: option ChangeHold }
+enum Way { queue, turn }
+record Change { task: u64 state: ChangeState gates: list 1024 Gate clean: list 1024 fixed 32 repairs: u32 resolutions: u32 updates: u32 since: u64 ready_since: option u64 owns_turn: bool last_head: option fixed 32 gate_failures: list 1024 GateFailure released: option ChangeHold way: Way landing: option u64 }
 record ChangeCi { head: fixed 32 status: ChangeStatus }
 record ChangeRow { task: u64 repository: Repository branch: bytes 4096 base: bytes 4096 title: bytes 1048576 body: bytes 1048576 priority: u32 change: Change ci: option ChangeCi pull: option u64 pending: option u64 effect: EffectResult delegate: option DelegateRef delegate_status: ChangeStatus verdicts: list 1024 GateReport gate_remarks: list 1024 GateRemark drift: option ChangeHold base_repair: bool queue_repair: option u64 queue_repairs: u32 producing_charter: u32 review_charter: u32 }
 # 04.4ac: goal issue projections and the root-authorized desired view.

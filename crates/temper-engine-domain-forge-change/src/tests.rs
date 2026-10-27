@@ -17,6 +17,8 @@ fn at(seconds: u64) -> Wall {
 }
 fn change(state: State) -> Change {
     Change {
+        way: crate::Way::Queue,
+        landing: None,
         task: 7,
         state,
         gates: Box::new([]),
@@ -34,6 +36,7 @@ fn change(state: State) -> Change {
 }
 fn facts() -> Facts {
     Facts {
+        ask: None,
         branch: Some(HEAD),
         expected_base: BASE,
         pull: Pull::Open { head: HEAD, base: BASE },
@@ -563,6 +566,7 @@ fn a_bare_authority_release_holds_again_and_a_funded_one_retries() {
         assert_eq!(retry.decision, Decision::Delegate(Delegate::Produce));
     }
 }
+mod turn;
 
 #[test]
 fn ci_failing_while_a_review_runs_cancels_it_then_repairs() {
