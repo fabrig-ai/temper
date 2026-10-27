@@ -597,3 +597,78 @@ fn a_decoded_job_zero_read_reaches_the_fake_and_is_answered() {
         matches!(world.answers.as_slice(), [engine::CallAnswer::ForgeRead(result)] if result.as_ref() == &Err(skein_forge::api::Error::MissingJob))
     );
 }
+
+#[test]
+fn a_chats_two_kib_change_lands_with_its_words_whole_in_the_producers_brief() {
+    const WORD_BYTES: usize = 2048;
+    let mut words = vec![b'x'; WORD_BYTES];
+    words[..b"Export CSV\n".len()].copy_from_slice(b"Export CSV\n");
+    let small = temper_service::limits::profile(temper_service::limits::Profile::Small);
+    let mut world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { brief: Some(small.root.brief), spec_bytes: Some(4096), ..StoryLimits::default() },
+    );
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    let ask = adoption_chat(&world);
+    let chat = assigned_chat(&mut world, 92, ask);
+    let engine::CallAnswer::Delegated(made) = change(&mut world, &chat, 93, None, &words) else { panic!("delegated") };
+    let change_task = made[0].task;
+    world.until(Until::SecondAssignment);
+    let producer = world.assigned[1].clone();
+    assert!(task_brief(&producer).windows(words.len()).any(|part| part == words));
+    let row = world
+        .store
+        .rows
+        .values()
+        .find_map(|record| match record {
+            Record::Forge { row } => match row.as_ref() {
+                forge_top::Stored::Change(row) if row.task == change_task => Some(row),
+                _ => None,
+            },
+            Record::Core(_) => None,
+        })
+        .expect("registered past the operation bound");
+    assert_eq!(row.title.as_ref(), words.as_slice());
+    let branch = row.branch.clone();
+    world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"fixed", 1)
+        .expect("producer pushes its work");
+    world.external(
+        1,
+        raw::Op::Write(raw::Write::Status {
+            commit: head,
+            context: b"build".as_slice().into(),
+            state: raw::Check::Passed,
+        }),
+    );
+    let event = world.protocol.answer(
+        Token::new(7),
+        producer.task,
+        producer.attempt,
+        5,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"pushed".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    for _ in 0..1000 {
+        if world.merges == 1 {
+            break;
+        }
+        world.tick();
+    }
+    assert_eq!(world.merges, 1, "the long change lands on the independent fake forge");
+}

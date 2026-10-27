@@ -373,3 +373,20 @@ fn amend_needs_a_revision_for_any_other_change() {
         assert_eq!(f::parse(argv.as_slice()), Err(Usage::AmendmentRevision), "{flags:?}");
     }
 }
+
+#[test]
+fn amend_sends_and_answers_a_replacement_when_only_the_old_words_are_cut() {
+    let mut task = task();
+    let mut spec = task.spec.whole().unwrap();
+    spec.words = f::act_text(b"Build and check");
+    task.spec.specification.words.cut = true;
+    let mut call = f::call(&["amend", "41", "--rev", "7", "--spec", "replacement.txt", "because"]);
+    call.values[7] = Some(Values::One(Value::Text(b"Build and check".as_slice().into())));
+    let mut root = f::choice_root(f::choice_me(f::CHAT_BUDGET));
+    let call = root.submit_prepared(call, false, None);
+    root.serve(call, f::task_result(task));
+    assert_eq!(f::act_ask(&root, call), &expected(c::Amendment { spec: Some(spec), ..no_change() }, REVISION));
+    root.done(call, c::Outcome::Owner(c::OwnerOutcome::Amended { task: f::TASK }));
+    let answer = root.answer(call).expect("engine answered the replacement");
+    assert_eq!(answer.status, 0);
+}

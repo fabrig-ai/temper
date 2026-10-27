@@ -282,6 +282,7 @@ fn task_text(
             out.put(b"\n");
         }
     }
+    super::holds::text(task, vocabulary, out);
     acts::text(task, me, book, out);
 }
 fn requester(value: OwnerRequester, me: Option<&Me>, out: &mut Text) {
@@ -577,7 +578,7 @@ pub(crate) mod waiting;
 
 pub(crate) mod accounts;
 
-mod clock;
+pub(super) mod clock;
 mod dependencies;
 mod instruction_words;
 mod result_words;

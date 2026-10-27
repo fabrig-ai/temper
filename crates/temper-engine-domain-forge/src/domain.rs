@@ -2269,8 +2269,6 @@ fn register_change(d: &mut Domain, env: &Env<Limits>, row: ChangeRow, out: &mut 
         || row.base.is_empty()
         || row.branch.len() > usize::try_from(env.limits.name_bytes).expect("u32 fits usize")
         || row.base.len() > usize::try_from(env.limits.name_bytes).expect("u32 fits usize")
-        || row.title.len() > usize::try_from(env.limits.client.op_bytes).expect("u32 fits usize")
-        || row.body.len() > usize::try_from(env.limits.client.op_bytes).expect("u32 fits usize")
         || (!d.changes.contains_key(&task) && d.changes.len() == env.limits.changes)
         || d.changes.contains_key(&task)
     {
@@ -2913,7 +2911,7 @@ fn emit_change_effect(
     effect: change::Effect,
     out: &mut Queue<Request>,
 ) {
-    let Some(write) = change_write(row, effect) else {
+    let Some(write) = change_write(row, effect, &env.limits) else {
         emit(
             out,
             Request::ChangeDecision {
@@ -2983,14 +2981,29 @@ fn emit_change_effect(
     );
 }
 
-fn change_write(row: &ChangeRow, effect: change::Effect) -> Option<skein_forge::api::Write> {
+fn change_write(row: &ChangeRow, effect: change::Effect, limits: &Limits) -> Option<skein_forge::api::Write> {
     match effect {
-        change::Effect::Open => Some(skein_forge::api::Write::OpenPull {
-            title: row.title.clone(),
-            body: row.body.clone(),
-            head: row.branch.clone(),
-            base: row.base.clone(),
-        }),
+        change::Effect::Open => {
+            // domain/forge.md, 8.1: retain the spec; fit only its forge projection.
+            let room = usize::try_from(limits.client.op_bytes)
+                .expect("u32 fits usize")
+                .saturating_sub(row.branch.len())
+                .saturating_sub(row.base.len());
+            let mut end = row.title.len();
+            for (index, byte) in row.title.iter().enumerate() {
+                if *byte == b'\n' {
+                    end = index;
+                    break;
+                }
+            }
+            let first = row.title.get(..end).expect("first line");
+            let first = first.strip_suffix(b"\r").unwrap_or(first);
+            let marker = "…\nThe change's full words are on its task in temper.".as_bytes();
+            let title_room = room.saturating_sub(marker.len().min(row.body.len()));
+            let title = crate::text::fit(first, title_room.min(256), "…".as_bytes());
+            let body = crate::text::fit(&row.body, room.saturating_sub(title.len()), marker);
+            Some(skein_forge::api::Write::OpenPull { title, body, head: row.branch.clone(), base: row.base.clone() })
+        }
         change::Effect::CreateBranch { head } => {
             Some(skein_forge::api::Write::CreateBranch { branch: row.branch.clone(), commit: head })
         }

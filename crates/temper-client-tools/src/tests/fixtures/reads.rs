@@ -437,3 +437,20 @@ fn resource_pieces(link: &jig_client_protocol_link::Limits, payload: u32) -> Box
     }
     out.finish()
 }
+
+/// The owner read's exact hold facts, including its independent revision.
+pub(crate) fn held_task(mut task: c::Task, reason: c::HoldCategory) -> c::Task {
+    task.chip.phase = c::Phase::Held;
+    task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+        circle: None,
+        account: None,
+        source: None,
+        reason,
+        revision: 9,
+        before: c::OwnerPriorPhase::Waiting,
+        escalation: None,
+        tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
+        hold_wait_since: None,
+    })));
+    task
+}

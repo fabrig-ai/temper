@@ -168,7 +168,7 @@ pub(crate) fn admit(value: &Value) {
     let root = temper_service::limits::engine(&jig.limits, &own).expect("engine root admits the fixture");
     jig_protocol_store::sizes::check(
         &jig.limits.core,
-        &temper_protocol_store::application(&root.forge).expect("application sizes"),
+        &temper_protocol_store::application(&root.forge, root.tasks.spec_bytes).expect("application sizes"),
         &temper_engine_domain::journal_limits(&root.journal),
         &jig.limits.store.store,
         jig.limits.store.orphan_erases,
