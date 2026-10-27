@@ -49,12 +49,14 @@ pub fn print(out: &Path) -> Result<(), Refusal> {
         stylesheets,
         pictures: vec![],
         page: None,
+        worker: None,
         files: Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../crates/temper-client-shell-web/files"))),
         noscript: "temper needs WebAssembly and scripts.".to_owned(),
     };
     let digest = match skein_ui_bundle::bundle(
         &inputs,
         &skein_ui_bundle::Glue { js: vec![], wasm: vec![], snippets: vec![] },
+        None,
         &out.join("bundle"),
     ) {
         Ok(digest) => digest,
