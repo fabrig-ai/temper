@@ -37,7 +37,7 @@ pub const READ: Tool = Tool {
     ]],
     keyed: Keyed::Never,
     area: 6,
-    notes: b"Until it lands, it prints `next: temper ctl DIR change show TASK\n--until landed`; landed, its merge commit. A task with no change\nfails, `no change panel for task N` (exit 2). The forge holds its\ndiff, reviews and logs: read them there.\n",
+    notes: b"Until it lands, it prints `next: temper ctl DIR change show TASK\n--until landed`, or, while a task is held, `next: temper ctl DIR\ntask show N`; landed, its merge commit. A wait for its landing ends\nat a hold, `not met: held` (exit 3). A task with no change fails,\n`no change panel for task N` (exit 2). The forge holds its diff,\nreviews and logs: read them there.\n",
 };
 #[derive(Debug)]
 pub(crate) struct Changes {

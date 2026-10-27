@@ -9,6 +9,8 @@ Prints: `change N`, its repository, branch and landing branch, its pull request,
 --json: the record change.
 Key: none.
 Until it lands, it prints `next: temper ctl DIR change show TASK
---until landed`; landed, its merge commit. A task with no change
-fails, `no change panel for task N` (exit 2). The forge holds its
-diff, reviews and logs: read them there.
+--until landed`, or, while a task is held, `next: temper ctl DIR
+task show N`; landed, its merge commit. A wait for its landing ends
+at a hold, `not met: held` (exit 3). A task with no change fails,
+`no change panel for task N` (exit 2). The forge holds its diff,
+reviews and logs: read them there.
