@@ -347,7 +347,7 @@ pub fn merged(tiers: bool) -> (Domain, Box<[Request]>) {
         task: CHANGE,
         repository: REPO,
         effect: skein_forge_client::Effect {
-            write: Write::Merge { number: 1, head: HEAD },
+            write: Write::Merge { number: 1, head: HEAD, how: skein_forge::api::MergeHow::Style },
             condition: skein_forge_client::Condition::Merge { base: Box::from(b"main".as_slice()) },
         },
         start: None,

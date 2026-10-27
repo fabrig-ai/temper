@@ -131,3 +131,28 @@ pub fn reviewed_change(queued: bool, freshness: change::Freshness) -> (World, sk
     world.event(top::Event::Change { row });
     (world, head)
 }
+
+/// A merged change retains its commit through verification and clearing.
+#[must_use]
+pub fn merged(state: &change::State) -> Option<skein_forge::api::Commit> {
+    match state {
+        change::State::Landed { merge } | change::State::Red { merge } | change::State::Cleared { merge } => {
+            Some(*merge)
+        }
+        change::State::Producing { .. }
+        | change::State::Opening { .. }
+        | change::State::Recreating { .. }
+        | change::State::Reopening { .. }
+        | change::State::Checking { .. }
+        | change::State::Gating { .. }
+        | change::State::Queued { .. }
+        | change::State::First { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
+        | change::State::Updating { .. }
+        | change::State::Resolving { .. }
+        | change::State::Repairing { .. }
+        | change::State::Landing { .. }
+        | change::State::Held { .. } => None,
+    }
+}

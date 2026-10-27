@@ -581,9 +581,13 @@ fn a_merged_change_waits_verifying() {
     let mut f = facts();
     f.pull = Pull::Merged { commit: MERGE };
     f.verification = Verification::Verifying;
-    let next = decide(&change(State::Landing { head: HEAD }), &f, &heard());
-    assert_eq!(next.change.state, State::Landed { merge: MERGE });
-    assert_eq!(next.decision, Decision::None);
+    for way in [crate::Way::Queue, crate::Way::Turn] {
+        let mut c = change(State::Landing { head: HEAD });
+        c.way = way;
+        let next = decide(&c, &f, &heard());
+        assert_eq!(next.change.state, State::Landed { merge: MERGE });
+        assert_eq!(next.decision, Decision::None);
+    }
 }
 
 #[test]
