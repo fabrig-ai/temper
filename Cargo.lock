@@ -1745,7 +1745,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 [[package]]
 name = "smith-agent-process-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1787,7 +1787,7 @@ dependencies = [
 [[package]]
 name = "smith-agent-service"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-channel",
  "skein-http",
@@ -1810,7 +1810,7 @@ dependencies = [
 [[package]]
 name = "smith-agent-shell"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "libc",
  "serde",
@@ -1838,7 +1838,7 @@ dependencies = [
 [[package]]
 name = "smith-agent-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-fake-checkout",
  "skein-fake-llm-domain",
@@ -1854,7 +1854,7 @@ dependencies = [
 [[package]]
 name = "smith-channel"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-channel",
  "skein-codec",
@@ -1864,7 +1864,7 @@ dependencies = [
 [[package]]
 name = "smith-charter"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-codec",
  "skein-lib",
@@ -1873,7 +1873,7 @@ dependencies = [
 [[package]]
 name = "smith-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
  "smith-domain-run",
@@ -1884,7 +1884,7 @@ dependencies = [
 [[package]]
 name = "smith-domain-run"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
  "smith-charter",
@@ -1893,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "smith-domain-session"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
  "smith-domain-tools",
@@ -1902,7 +1902,7 @@ dependencies = [
 [[package]]
 name = "smith-domain-tools"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
 ]
@@ -1910,7 +1910,7 @@ dependencies = [
 [[package]]
 name = "smith-events"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-json",
  "skein-lib",
@@ -1919,7 +1919,7 @@ dependencies = [
 [[package]]
 name = "smith-fake-claude"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1933,7 +1933,7 @@ dependencies = [
 [[package]]
 name = "smith-host-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
  "smith-domain",
@@ -1942,7 +1942,7 @@ dependencies = [
 [[package]]
 name = "smith-host-protocol"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-channel",
  "skein-io",
@@ -1959,7 +1959,7 @@ dependencies = [
 [[package]]
 name = "smith-host-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-fake-llm-domain",
  "skein-fake-machine",
@@ -1976,7 +1976,7 @@ dependencies = [
 [[package]]
 name = "smith-inline-agent"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
  "smith-domain",
@@ -1986,7 +1986,7 @@ dependencies = [
 [[package]]
 name = "smith-local-domain"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-lib",
  "smith-domain",
@@ -1998,7 +1998,7 @@ dependencies = [
 [[package]]
 name = "smith-local-process-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2044,7 +2044,7 @@ dependencies = [
 [[package]]
 name = "smith-local-protocol"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-codec",
  "skein-io",
@@ -2064,7 +2064,7 @@ dependencies = [
 [[package]]
 name = "smith-local-service"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-channel",
  "skein-http",
@@ -2090,7 +2090,7 @@ dependencies = [
 [[package]]
 name = "smith-local-shell"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2125,7 +2125,7 @@ dependencies = [
 [[package]]
 name = "smith-local-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-fake-checkout",
  "skein-fake-llm-domain",
@@ -2142,7 +2142,7 @@ dependencies = [
 [[package]]
 name = "smith-machine-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-fake-machine",
  "skein-io",
@@ -2157,7 +2157,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-channel"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-channel",
  "skein-lib",
@@ -2172,7 +2172,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-llm"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-io",
  "skein-json",
@@ -2187,7 +2187,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-machine"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-io",
  "skein-json",
@@ -2198,7 +2198,7 @@ dependencies = [
 [[package]]
 name = "smith-protocol-program"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-io",
  "skein-json",
@@ -2211,7 +2211,7 @@ dependencies = [
 [[package]]
 name = "smith-session-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-fake-checkout",
  "skein-fake-llm-domain",
@@ -2229,7 +2229,7 @@ dependencies = [
 [[package]]
 name = "smith-tools-world"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-fake-checkout",
  "skein-io",
@@ -2242,7 +2242,7 @@ dependencies = [
 [[package]]
 name = "smith-transcript"
 version = "0.0.0"
-source = "git+https://github.com/fabrig-dev/smith.git#0690b8b8679f11f37d707013c78a0f1e47bef63a"
+source = "git+https://github.com/fabrig-dev/smith.git#4a557b3610fef5c09789629624d6d79c974ec3f1"
 dependencies = [
  "skein-codec",
  "skein-lib",
