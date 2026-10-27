@@ -371,6 +371,7 @@ pub(crate) fn end_acted(
         | people::Outcome::AccountProgramDeclared { .. }
         | people::Outcome::AccountChanged
         | people::Outcome::AccountMovingOut { .. }
+        | people::Outcome::Lifted { .. }
         | people::Outcome::AccountMovedIn { .. } => unreachable!("close or remove account answer"),
     };
     if let Some(why) = why {

@@ -180,7 +180,7 @@ pub enum ProposedAction {
     Batch(Box<[Delegate]>),
     Amend { task: u64, revision: u64, amendment: tasks::Amendment },
     Widen { task: u64, authority: tasks::Authority },
-    Release { task: u64 },
+    Release { task: u64, hold: u64, revision: u64 },
 }
 
 /// A task holder's answer to one proposal.

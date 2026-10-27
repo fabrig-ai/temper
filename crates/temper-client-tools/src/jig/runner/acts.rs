@@ -29,6 +29,15 @@ pub(crate) fn me<'a>(runner: &Runner, client: &'a Client) -> Option<&'a c::Me> {
     }
 }
 pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, called: Called, out: &mut Queue<Out>) {
+    if called.call.tool == rows::LIFT_AT {
+        let ask = c::Ask::Lift {
+            hold: number(&called.call, 0).expect("hold argument"),
+            revision: c::Revision { value: number(&called.call, 1).expect("revision argument") },
+            with_tasks: value(&called.call, 2).is_some(),
+        };
+        prepared(runner, client, env, called, Ok((Request::Ask(ask), None)), out);
+        return;
+    }
     if called.call.tool == rows::MOVE_TO_NEWEST_AT {
         let revision = u32::try_from(number(&called.call, 0).expect("revision argument")).expect("revision fits u32");
         prepared(
@@ -304,6 +313,11 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
         Some(c::Admission::Allowed) => None,
         Some(c::Admission::Proposed { to }) => Some(to.clone()),
         Some(c::Admission::Bounded { .. }) => return Err(Failed::Fixed(b"act has no bounded draft")),
+        Some(c::Admission::Refused(c::Refusal::Authority { lacking: c::Lacking::HoldOwner { .. }, .. }))
+            if call.tool == rows::RELEASE_AT =>
+        {
+            None
+        }
         Some(c::Admission::Refused(_)) | None => return Err(Failed::Fixed(b"act not offered")),
     };
     let task = number(call, 0).unwrap_or(0);

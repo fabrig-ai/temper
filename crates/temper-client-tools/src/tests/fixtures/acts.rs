@@ -94,6 +94,7 @@ pub(crate) const OTHER_MESSAGE: &[&str] = &["task", "message", "41", "different 
 pub(crate) const JSON_FLAG: &[&str] = &["--json"];
 /// Every act form is stable under clocks and seeds; the row carries its arguments.
 pub(crate) const ACT_CALLS: &[&[&str]] = &[
+    &["hold", "lift", "12", "--rev", "1", "--with-tasks", "--key", "lift-name"],
     MESSAGE_CALL,
     CLOSE_CALL,
     &["task", "answer", "41", "3", "yes", "--key", "act-name"],
@@ -199,6 +200,9 @@ pub(crate) fn send_act(argv: &[&str], seed: u64, now: u64) -> (Harness, u32) {
     let crate::jig::call::Parsed::Call { call: parsed, .. } = parse(argv).expect("act argv") else {
         panic!("act call")
     };
+    if parsed.tool == crate::jig::rows::LIFT_AT {
+        return (root, call);
+    }
     root.serve(call, act_document(&parsed));
     if root.reads.contains_key(&call) {
         root.serve(call, task_result(act_task()));

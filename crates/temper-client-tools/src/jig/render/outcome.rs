@@ -63,6 +63,7 @@ impl Operation {
                         },
                     },
                 ),
+                c::Ask::Lift { .. } => (b"lift", None),
                 c::Ask::Release { task, .. } => (b"release", Some(*task)),
                 c::Ask::Stop { task, .. } => (b"stop", Some(*task)),
                 c::Ask::Cancel { task, .. } => (b"cancel", Some(*task)),
@@ -267,6 +268,13 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
             out.put(b"revision ");
             out.number(u64::from(changed.revision));
         }
+        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Lifted { hold, released })) => {
+            out.put(b"done: hold ");
+            out.number(*hold);
+            out.put(b" lifted, ");
+            out.number(u64::from(*released));
+            out.put(b" released");
+        }
         c::Answer::Done(done) => {
             out.put(b"done: ");
             let task = match done {
@@ -417,7 +425,9 @@ fn encode(
             out.key(b"read_again");
             out.string(&write.finish());
         }
-        if let c::Refusal::Authority { proposable: Some(true), .. } = refusal {
+        if let c::Refusal::Authority { lacking, proposable: Some(true) } = refusal
+            && !owner_lack(lacking)
+        {
             out.key(b"propose_instead");
             out.string(operation.retry.as_deref().unwrap_or(operation.word));
         }
@@ -607,13 +617,21 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, limits: &Limits, ou
     out.put(operation.word);
     out.put(b": ");
     acts::refusal(refusal, &document::phrasebook(limits.text), out);
+    if let c::Refusal::Moved { what: c::Moved::PlacedHold { revision }, .. } = refusal
+        && operation.word == b"lift"
+    {
+        out.put(b"\nrevision now: ");
+        out.number(revision.value);
+    }
     if let c::Refusal::Moved { .. } = refusal
         && let Some(task) = operation.task
     {
         out.put(b"\nread again: task show ");
         out.number(task);
     }
-    if let c::Refusal::Authority { proposable: Some(true), .. } = refusal {
+    if let c::Refusal::Authority { lacking, proposable: Some(true) } = refusal
+        && !owner_lack(lacking)
+    {
         out.put(b"\npropose instead: ");
         match &operation.retry {
             Some(call) => out.put(call),
@@ -636,6 +654,7 @@ fn proposal_project(ask: &Ask) -> Option<u32> {
             | c::Ask::Take { .. }
             | c::Ask::HandBack { .. }
             | c::Ask::Decide { .. }
+            | c::Ask::Lift { .. }
             | c::Ask::Release { .. }
             | c::Ask::Amend { .. }
             | c::Ask::Stop { .. }
@@ -680,4 +699,11 @@ fn moved_text(operation: &Operation, value: &c::OutcomeMovedToNewest, out: &mut 
         out.put(if value.stayed == 1 { b" could not, and finishes on " } else { b" could not, and finish on " });
         out.number(u64::from(operation.revision.expect("move request's revision")));
     }
+}
+
+fn owner_lack(lacking: &c::Lacking) -> bool {
+    if let c::Lacking::HoldOwner { .. } = lacking {
+        return true;
+    }
+    false
 }

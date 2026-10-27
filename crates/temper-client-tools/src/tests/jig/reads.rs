@@ -440,3 +440,122 @@ fn a_document_at_its_byte_bound_prints_worst_case_json_escapes() {
     assert!(u64::try_from(printed.stdout.len()).expect("output length fits") > crate::limits::DOCUMENT);
     assert!(skein_lib::bytes::find(&printed.stdout, br"\u0000").is_some(), "control text is JSON escaped");
 }
+
+#[test]
+fn placed_holds_print_ownership_scope_permission_and_json_facts() {
+    use jig_client::contract as c;
+    for (owner, may_lift, lifted, mode, scope, owner_words, permission) in [
+        (
+            c::HoldOwner::Party { person: 3 },
+            true,
+            false,
+            c::HoldMode::Stop,
+            c::HoldScope::Subtree { task: 41 },
+            "person 3",
+            "you may lift it",
+        ),
+        (
+            c::HoldOwner::Party { person: 3 },
+            false,
+            false,
+            c::HoldMode::Stop,
+            c::HoldScope::Subtree { task: 41 },
+            "person 3",
+            "only person 3, or a role above theirs, may release it",
+        ),
+        (
+            c::HoldOwner::Party { person: fixtures::PARTY },
+            true,
+            false,
+            c::HoldMode::Stop,
+            c::HoldScope::Subtree { task: 41 },
+            "you",
+            "you may lift it",
+        ),
+        (
+            c::HoldOwner::Task { task: 9 },
+            false,
+            false,
+            c::HoldMode::Stop,
+            c::HoldScope::Subtree { task: 41 },
+            "task 9",
+            "only task 9 or a task above it may release it",
+        ),
+        (
+            c::HoldOwner::Task { task: 9 },
+            true,
+            true,
+            c::HoldMode::Drain,
+            c::HoldScope::Project,
+            "task 9",
+            "you may lift it",
+        ),
+    ] {
+        for document in [false, true] {
+            let mut task = fixtures::offered(&[c::ActKind::Release]);
+            let placed = c::PlacedHold {
+                number: 12,
+                owner,
+                mode,
+                scope,
+                reason: b"Pause for review".as_slice().into(),
+                placed_at: skein_lib::Wall::EPOCH,
+                revision: c::Revision { value: 1 },
+                lifted,
+                may_lift,
+            };
+            task.hold = Some(c::TaskHold::Document(Box::new(c::Hold {
+                placed: Some(placed.clone()),
+                revision: c::Revision { value: 7 },
+                reason: c::HoldReason::Budget { spent: 1, limit: 0 },
+                before: c::Phase::Running,
+                since: skein_lib::Wall::EPOCH,
+                result: None,
+                spend: skein_lib::List::with_capacity(0),
+            })));
+            if !document {
+                task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+                    placed: Some(placed.clone()),
+                    circle: None,
+                    account: None,
+                    source: None,
+                    reason: c::HoldCategory::Placed { hold: 12 },
+                    revision: 7,
+                    before: c::OwnerPriorPhase::Waiting,
+                    escalation: None,
+                    tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
+                    hold_wait_since: None,
+                })));
+            }
+            let text = fixtures::read_answer(fixtures::TASK_CALL, fixtures::task_result(task.clone()));
+            let text = std::str::from_utf8(&text.stdout).unwrap();
+            let scope_words = match scope {
+                c::HoldScope::Subtree { .. } => "task 41 and below",
+                c::HoldScope::Project => "project shop",
+            };
+            let mode_words = match mode {
+                c::HoldMode::Stop => "stop",
+                c::HoldMode::Drain => "drain",
+            };
+            let lifted_words = if lifted { " · lifted" } else { "" };
+            assert!(text.contains(&format!("\nhold: 12 · {mode_words} · {scope_words} · placed by {owner_words} at 1970-01-01 00:00 UTC · revision 1{lifted_words} · {permission}\nhold reason: Pause for review")), "{text}");
+            assert_eq!(text.contains("  hold lift 12 --rev 1 --with-tasks\n"), may_lift);
+            if may_lift {
+                assert!(text.find("  task release").unwrap() < text.find("  hold lift").unwrap());
+            }
+            let json = fixtures::read_answer(&["task", "show", "41", "--json"], fixtures::task_result(task));
+            let owner_json = match owner {
+                c::HoldOwner::Party { person } => format!("{{\"person\":{person}}}"),
+                c::HoldOwner::Task { task } => format!("{{\"task\":{task}}}"),
+            };
+            let scope_json = match scope {
+                c::HoldScope::Subtree { task } => format!("{{\"task\":{task}}}"),
+                c::HoldScope::Project => "\"project\"".into(),
+            };
+            let expected = format!(
+                "\"placed\":{{\"hold\":12,\"owner\":{owner_json},\"mode\":\"{mode_words}\",\"scope\":{scope_json},\"reason\":\"Pause for review\",\"placed_at\":0,\"revision\":1,\"lifted\":{lifted},\"may_lift\":{may_lift}}}"
+            );
+            assert!(std::str::from_utf8(&json.stdout).unwrap().contains(&expected));
+        }
+    }
+}

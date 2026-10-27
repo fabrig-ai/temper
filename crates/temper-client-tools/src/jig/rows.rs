@@ -281,6 +281,20 @@ pub const RELEASE: Tool = Tool {
     area: 1,
     notes: b"",
 };
+pub const LIFT: Tool = Tool {
+    name: b"hold lift",
+    line: b"Lift a placed hold you may lift",
+    prints: b"",
+    result: b"lift",
+    forms: &[&[
+        positional(b"hold", b"HOLD", Kind::Number, Required, b"Hold number, as task show prints it"),
+        flag(b"rev", b"REV", Kind::Number, Required, b"Hold revision, as task show prints it"),
+        switch(b"with-tasks", b"Also release every task it holds that nothing else holds"),
+    ]],
+    keyed: Keyed::Optional,
+    area: 1,
+    notes: b"",
+};
 pub const STOP: Tool = Tool {
     name: b"task stop",
     line: b"Stop a task's run and hold it",
@@ -798,3 +812,5 @@ pub(crate) fn watched(tool: u8) -> Option<&'static Tool> {
         _ => return None,
     })
 }
+
+pub const LIFT_AT: u8 = 53;

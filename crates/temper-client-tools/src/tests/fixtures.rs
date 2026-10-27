@@ -57,6 +57,7 @@ pub(crate) fn owned(words: &[&str]) -> Box<[Box<[u8]>]> {
 }
 /// One argv per table row and form; the help derivation shares these examples.
 pub(crate) const EVERY_TOOL: &[&[&str]] = &[
+    &["hold", "lift", "12", "--rev", "1", "--with-tasks"],
     &["me"],
     &["inbox"],
     &["task", "list", "--project", "shop"],
@@ -706,7 +707,7 @@ pub(crate) const UNKNOWN_ASKER: client::Asker = client::Asker(999);
 /// A stable stored request's engine key, unrelated to its client call prefix.
 const KEPT_KEY: skein_lib::RequestKey = [9; 16];
 /// One slot per row and form; fewer omits decide's second form.
-pub(super) const TOOL_FORMS: u32 = 57;
+pub(super) const TOOL_FORMS: u32 = 58;
 /// Exactly one example exercises each row and form; zero misses it entirely.
 pub(super) const EXAMPLES_PER_FORM: u32 = 1;
 /// One missing byte exercises the first refused destination; zero would fit.
