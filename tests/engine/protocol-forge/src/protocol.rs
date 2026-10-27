@@ -262,6 +262,8 @@ impl Protocol {
                 commit: self.branch(branch),
                 context: Box::from(&b"build"[..]),
                 state: check,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
             self.fixture.writer,
         );

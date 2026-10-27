@@ -104,7 +104,11 @@ fn store_decoders_never_panic_and_reencode_the_same() {
                 task: 2,
                 repository: skein_forge::api::Repository { forge: 1, repository: 3 },
                 effect: skein_forge_client::Effect {
-                    write: skein_forge::api::Write::Merge { number: 4, head: [5; 32] },
+                    write: skein_forge::api::Write::Merge {
+                        number: 4,
+                        head: [5; 32],
+                        how: skein_forge::api::MergeHow::Style,
+                    },
                     condition: skein_forge_client::Condition::None,
                 },
                 start: None,

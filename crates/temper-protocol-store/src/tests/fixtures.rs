@@ -403,9 +403,18 @@ pub fn writes() -> [(&'static str, skein_forge::api::Write); 13] {
         ("reviewers", Write::SetReviewers { number: 1, reviewers: Box::new([2, 3]) }),
         ("close", Write::Close { number: 1 }),
         ("reopen", Write::Reopen { number: 2 }),
-        ("merge", Write::Merge { number: 1, head: [3; 32] }),
-        ("update", Write::Update { number: 1 }),
-        ("status", Write::Status { commit: [1; 32], context: Box::new([2]), check: Check::Failed }),
+        ("merge", Write::Merge { number: 1, head: [3; 32], how: skein_forge::api::MergeHow::Style }),
+        ("update", Write::Update { number: 1, style: skein_forge::api::UpdateStyle::Merge }),
+        (
+            "status",
+            Write::Status {
+                commit: [1; 32],
+                context: Box::new([2]),
+                check: Check::Failed,
+                description: Box::new([]),
+                link: Box::new([]),
+            },
+        ),
         ("create branch", Write::CreateBranch { branch: Box::new([2]), commit: [3; 32] }),
         ("delete branch", Write::DeleteBranch { branch: Box::new([2]) }),
     ]
