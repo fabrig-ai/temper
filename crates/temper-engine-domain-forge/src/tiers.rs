@@ -8,10 +8,10 @@ use temper_engine_domain_forge_tiers as policy;
 
 pub(crate) fn valid(tier: &Tier, l: &Limits) -> bool {
     if tier.workflow.is_empty()
-        || tier.workflow.len() > usize::try_from(crate::WORKFLOW_BYTES).expect("workflow bound fits usize")
+        || tier.workflow.len() > crate::WORKFLOW_BYTES
         || tier.workflow.contains(&b'/')
         || tier.artifact.is_empty()
-        || tier.artifact.len() > usize::try_from(crate::CHECK_NAME_BYTES).expect("tier name bound fits usize")
+        || tier.artifact.len() > crate::CHECK_NAME_BYTES
         || tier.artifact.contains(&b'/')
         || tier.ignored.len() > usize::try_from(l.ignored_paths).expect("path count fits usize")
     {
@@ -497,13 +497,14 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let landings = u64::from(l.changes.checked_mul(2)?.checked_add(1)?);
     let tests = u64::from(l.failing_tests)
         .checked_mul(u64::from(l.test_id_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?)?;
-    let payload = u64::from(crate::CHECK_NAME_BYTES)
+    let payload = u64::try_from(crate::CHECK_NAME_BYTES)
+        .ok()?
         .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Landing>()).ok()?.checked_mul(2)?)?)?
         .checked_add(tests.checked_mul(5)?)?
         .checked_add(u64::from(l.failing_tests).checked_mul(u64::try_from(size_of::<policy::Flake>()).ok()?)?)?
         .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Blame>()).ok()?.checked_add(tests)?)?)?;
     Map::<(Repository, Box<[u8]>), TierRow>::worst_case(rows)?
-        .checked_add(u64::from(rows).checked_mul(payload.checked_add(u64::from(crate::CHECK_NAME_BYTES))?)?)
+        .checked_add(u64::from(rows).checked_mul(payload.checked_add(u64::try_from(crate::CHECK_NAME_BYTES).ok()?)?)?)
 }
 
 impl Domain {
