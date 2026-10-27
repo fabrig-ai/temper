@@ -1498,3 +1498,11 @@ fn a_refused_release_names_its_owner_and_the_exact_proposal() {
         assert_eq!(rendered.text(), format!("Refused: task 41 is held by hold 12 (revision 1), placed by {words}. Propose it: {{\"action\": \"release\", \"task\": 41, \"hold\": 12, \"revision\": 1, \"reason\": \"...\"}}").as_bytes());
     }
 }
+
+#[test]
+fn a_host_part_refusal_keeps_the_bound_in_a_hold() {
+    let terminal =
+        result(run::Answer::Refused(run::Refusal::Invalid(run::Invalid::HostPart { bound: 33419 })), None).unwrap();
+    assert_eq!(terminal.end, tasks::End::Exceeded(tasks::Exceeded { bound: tasks::Bound::HostPart, value: 33419 }));
+    assert_eq!((terminal.cumulative, terminal.turns), (0, 0));
+}
