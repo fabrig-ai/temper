@@ -62,6 +62,7 @@ pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     let mut charters = Box::new([
         charter(1, include_bytes!("stock/chat.txt"), llm),
         charter(2, include_bytes!("stock/coding.txt"), llm),
+        configuring(llm),
         reviewer(llm),
     ]);
     // jig prices the costliest completion; one reserve turn plus one is 2C.
@@ -77,7 +78,7 @@ pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     for charter in charters.iter_mut() {
         charter.spend = run;
     }
-    let templates = Box::new([chat(), goal()]);
+    let templates = Box::new([chat(), goal(), configuring_chat()]);
     let mut policies = Map::with_capacity(1);
     let mut role_authority = ceiling(ceiling_spend);
     role_authority.budget.spend = chat_spend;
@@ -147,6 +148,13 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
         },
     }
 }
+fn configuring(llm: &jig_protocol_config::Llm) -> Charter {
+    let mut value = charter(3, include_bytes!("stock/configuring.txt"), llm);
+    value.policy.inspect = false;
+    value.policy.modify = false;
+    value.policy.agents = false;
+    value
+}
 fn reviewer(llm: &jig_protocol_config::Llm) -> Charter {
     let mut value = charter(4, include_bytes!("stock/review.txt"), llm);
     value.policy.modify = false;
@@ -178,6 +186,7 @@ fn ceiling(ceiling_spend: u64) -> authority::Authority {
             kinds: Box::new([
                 authority::Executor::Charter(1),
                 authority::Executor::Charter(2),
+                authority::Executor::Charter(3),
                 authority::Executor::Charter(4),
                 authority::Executor::Procedure(2),
             ]),
@@ -220,4 +229,12 @@ fn goal() -> Template {
         grace: None,
         llm: None,
     }
+}
+
+fn configuring_chat() -> Template {
+    let mut value = chat();
+    value.number = 3;
+    value.name = bytes::copy_of(b"configuring");
+    value.executor = TemplateExecutor::Charter(3);
+    value
 }

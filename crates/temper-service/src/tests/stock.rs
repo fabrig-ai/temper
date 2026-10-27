@@ -310,7 +310,7 @@ fn the_reviewer_keeps_the_coding_run_with_read_only_workspace_families() {
     expected.policy.instructions = include_bytes!("../stock/review.txt").as_slice().into();
     expected.policy.modify = false;
     expected.policy.agents = false;
-    assert_eq!(defaults.charters[2], expected);
+    assert_eq!(defaults.charters[3], expected);
     for authority in [
         &defaults.rules.ceiling,
         &defaults.policies.get(&1).expect("policy 1").policy.ceiling,
@@ -318,4 +318,36 @@ fn the_reviewer_keeps_the_coding_run_with_read_only_workspace_families() {
     ] {
         assert!(authority.delegation.kinds.contains(&jig_domain_authority::Executor::Charter(4)));
     }
+}
+
+#[test]
+fn the_configuring_charter_keeps_the_chat_run_without_workspace_or_agents() {
+    let engine = engine(&generated());
+    let defaults = crate::stock::defaults(&engine.llm);
+    let mut expected = defaults.charters[0].clone();
+    expected.number = 3;
+    expected.policy.instructions = include_bytes!("../stock/configuring.txt").as_slice().into();
+    expected.policy.inspect = false;
+    expected.policy.modify = false;
+    expected.policy.agents = false;
+    assert_eq!(defaults.charters[2], expected);
+    assert_eq!(engine.charters[2], expected, "init starts with the configuring charter");
+    for authority in [
+        &defaults.rules.ceiling,
+        &defaults.policies.get(&1).expect("policy 1").policy.ceiling,
+        &defaults.policies.get(&1).expect("policy 1").policy.roles[0].authority,
+    ] {
+        assert!(authority.delegation.kinds.contains(&jig_domain_authority::Executor::Charter(3)));
+    }
+}
+#[test]
+fn the_configuring_template_keeps_the_chat_with_charter_three() {
+    let engine = engine(&generated());
+    let defaults = crate::stock::defaults(&engine.llm);
+    let mut expected = defaults.templates[0].clone();
+    expected.number = 3;
+    expected.name = b"configuring".as_slice().into();
+    expected.executor = jig_domain_people::TemplateExecutor::Charter(3);
+    assert_eq!(defaults.templates[2], expected);
+    assert_eq!(engine.templates[2], expected, "init starts with the configuring template");
 }

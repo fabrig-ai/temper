@@ -608,10 +608,10 @@ fn the_worker_channels_count_the_retained_fake_git_program() {
     assert_eq!(crate::workers::worst_case(&settings, 4).unwrap() - before, u64::try_from(program.len()).unwrap());
 }
 #[test]
-fn the_example_engine_keeps_jigs_chat_and_goal_templates() {
+fn the_example_engine_keeps_the_stock_chat_goal_and_configuring_templates() {
     let jig = fixtures::engine().jig;
     let labels: Box<[u32]> = jig.templates.iter().map(|template| template.label).collect();
-    assert_eq!(*labels, [1, 2], "jig's chat and goal templates, in order");
+    assert_eq!(*labels, [1, 2, 1], "stock chat, goal and configuring labels, in order");
     assert_eq!(jig.templates[0].number, 1);
     assert_eq!(jig.templates[0].flags.ended_by, jig_domain_tasks::EndedBy::Requester);
     assert_eq!(jig.templates[1].flags.ended_by, jig_domain_tasks::EndedBy::Result);
@@ -787,7 +787,7 @@ fn members_and_references_are_checked() {
     let input = application_with_landing_requirements();
     let input = core::str::from_utf8(&input).unwrap();
     for (from, to, expected) in [
-        ("\"charter\":1", "\"charter\":3", "application.charter: unknown reference\n"),
+        ("\"charter\":1", "\"charter\":5", "application.charter: unknown reference\n"),
         ("\"kind\":4", "\"kind\":3", "application.landing.projects[0].rules[0].kind: invalid form\n"),
         ("\"role\":0", "\"role\":1", "application.landing.projects[0].rules[0].approvals[0].role: unknown reference\n"),
         ("\"project\":1", "\"project\":2", "application.landing.projects[0].project: unknown reference\n"),
