@@ -435,7 +435,7 @@ fn template() -> Value {
 
 const CHAT: &str = "Help the person plan their work. When they ask for a change to a repository, call change with what to change, then tell them what landed. Explain each result.\n\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n";
 const RESUMED_CHAT: &str = "Help the person plan their work. When they ask for a change to a repository, call change with what to change, then tell them what landed. Explain each result.\n\n## Task\n\nAdd CSV export to widget\n[Report: at most 32 bytes]\n[Requested by person 1]\n\n## Plan\n\ndelegate 2: ended, spec revision 1\n";
-const CODING: &str = "Read the repository and make the requested change. Check the result, then finish with a clear change summary.\n\n## Task\n\nExport widget's table as CSV\n[Change connector 1, kind 2, at most 4096 bytes]\n[Requested by task 2]\n\n";
+const CODING: &str = "Read the repository and make the requested change in its files, then read back what you wrote and finish with a clear change summary. You can run nothing, and the change has no pull request yet: once you finish, your work is committed, its pull request opened and its checks run; what fails there, or needs the pull request's number, comes back as a repair that names it.\n\n## Task\n\nExport widget's table as CSV\n[Change connector 1, kind 2, at most 4096 bytes]\n[Requested by task 2]\n\n";
 
 #[test]
 fn the_templates_demo_fits_the_fakes_bounds() {
