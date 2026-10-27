@@ -2300,7 +2300,7 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::WelcomeSetupTime => (&[b"About five minutes"], &[]),
         Word::WelcomeAfter => (&[b"Started in the playground? Connect your own forge and model whenever you like; the playground then steps aside."], &[]),
         Word::WelcomeForgeTitle => (&[b"Connect a forge"], &[]),
-        Word::WelcomeForgeLead => (&[b"Where your repositories live: temper\xe2\x80\x99s agents push branches and open pull requests there."], &[]),
+        Word::WelcomeForgeLead => (&[b"Where your code lives: you file issues, agents push and land code."], &[]),
         Word::WelcomeModelTitle => (&[b"Connect a model"], &[]),
         Word::WelcomeModelLead => (&[b"temper\xe2\x80\x99s agents run on it: on a plan you sign in to, or on a key."], &[]),
         Word::WelcomeReadyTitle => (&[b"Almost ready"], &[]),
