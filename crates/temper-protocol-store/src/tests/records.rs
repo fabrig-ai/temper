@@ -988,3 +988,33 @@ fn a_turn_change_ready_or_preparing_round_trips_with_its_landing() {
         }
     }
 }
+
+#[test]
+fn turn_writes_round_trip_with_their_parameters() {
+    use skein_forge::api as a;
+    let bounds = crate::bounds(&fixtures::LIMITS).expect("fixture limits fit");
+    for write in [
+        a::Write::Merge { number: 7, head: [3; 32], how: a::MergeHow::FastForwardOnly },
+        a::Write::Update { number: 7, style: a::UpdateStyle::Rebase },
+        a::Write::Status {
+            commit: [3; 32],
+            context: Box::from(b"temper/gate/gate".as_slice()),
+            check: a::Check::Passed,
+            description: Box::from(b"key 0123456789abcdef passed".as_slice()),
+            link: Box::from(b"https://forge/run/7".as_slice()),
+        },
+        a::Write::Dispatch {
+            workflow: Box::from(b"gate.yml".as_slice()),
+            branch: Box::from(b"temper/51".as_slice()),
+            inputs: Box::new([a::Input {
+                name: Box::from(b"temper_key".as_slice()),
+                value: Box::from(b"0123456789abcdef".as_slice()),
+            }]),
+        },
+        a::Write::Rerun { attempt: a::JobAttempt { head: [3; 32], run: 7, job: 8, attempt: 2 } },
+    ] {
+        let row =
+            forge::Stored::Entry { entry: fixtures::entry(write, skein_forge_client::Condition::None), held: false };
+        assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+    }
+}
