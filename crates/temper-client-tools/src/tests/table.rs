@@ -351,3 +351,90 @@ fn text_is_bounded_for_argv_and_typed_calls() {
         assert_eq!(argv::check(crate::table::TOOLS, &call, &limits), result, "{text}");
     }
 }
+
+/// Small host limits let every bounded kind reach its edge in one row.
+const BOUNDED: Tool = Tool {
+    name: b"bounded",
+    line: b"",
+    result: b"",
+    forms: &[&[
+        crate::jig::table::flag(b"range", b"N", Kind::NumberRange { min: 2, max: 4 }, Occurs::Optional, b""),
+        crate::jig::table::flag(b"count", b"K", Kind::Count, Occurs::Optional, b""),
+        crate::jig::table::flag(b"forge", b"F", Kind::Number, Occurs::Optional, b""),
+        crate::jig::table::flag(b"text", b"TEXT", Kind::Text, Occurs::Optional, b""),
+        crate::jig::table::flag(b"timeout", b"D", Kind::Duration, Occurs::Optional, b""),
+        crate::jig::table::flag(
+            b"named",
+            b"K",
+            Kind::NamedNumber { words: &[b"settled"], prefixes: &[b"made:"], min: 2, max: 4 },
+            Occurs::Optional,
+            b"",
+        ),
+        crate::jig::table::flag(b"literal", b"TEXT", Kind::Literal, Occurs::Optional, b""),
+        crate::jig::table::flag(b"items", b"FILE", Kind::File, Occurs::Optional, b""),
+        crate::jig::table::flag(b"instructions", b"FILE", Kind::File, Occurs::Optional, b""),
+        crate::jig::table::flag(b"spec", b"FILE", Kind::File, Occurs::Optional, b""),
+    ]],
+    keyed: Keyed::Never,
+    area: 1,
+};
+#[test]
+fn bound_is_what_the_parser_accepts() {
+    use crate::jig::table::{Bound, bound};
+    let mut limits = crate::limits::tools();
+    limits.rows = 2;
+    limits.ask_bytes = 3;
+    limits.wait = skein_lib::Duration::from_secs(1);
+    limits.wait_most = skein_lib::Duration::from_secs(4);
+    let edges: &[(&[u8], &[u8], &[u8], Bound, Usage)] = &[
+        (b"--range", b"4", b"5", Bound::Numbers { least: 2, most: 4 }, Usage::Kind { argument: 0 }),
+        (b"--count", b"2", b"3", Bound::Numbers { least: 1, most: 2 }, Usage::Rows { argument: 1 }),
+        (b"--forge", b"65535", b"65536", Bound::Numbers { least: 0, most: 65535 }, Usage::Kind { argument: 2 }),
+        (b"--text", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 3 }),
+        (b"--timeout", b"4", b"5", Bound::Seconds { most: 4 }, Usage::Rows { argument: 4 }),
+        (b"--named", b"made:4", b"made:5", Bound::Numbers { least: 2, most: 4 }, Usage::Kind { argument: 5 }),
+        (b"--literal", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 6 }),
+        (b"--items", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 7 }),
+        (b"--instructions", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 8 }),
+        (b"--spec", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 9 }),
+    ];
+    for (spec, (flag, at, past, expected, error)) in BOUNDED.forms[0].iter().zip(edges) {
+        assert_eq!(bound(spec, &limits), *expected, "{spec:?}");
+        let Parsed::Call { mut call, .. } =
+            argv::parse(&[&BOUNDED], &[b"bounded", flag, at], &limits).expect("value at the bound parses")
+        else {
+            panic!("a call")
+        };
+        assert_eq!(argv::check(&[&BOUNDED], &call, &limits), Ok(()));
+        let index = usize::from(match error {
+            Usage::Kind { argument } | Usage::Rows { argument } | Usage::Long { argument } => *argument,
+            _ => panic!("fixture refusal names its argument"),
+        });
+        if spec.kind == Kind::File {
+            // argv names a path; the host supplies its text before checking again.
+            call.values[index] = Some(Values::One(Value::Text(Box::from(*at))));
+            assert_eq!(argv::check(&[&BOUNDED], &call, &limits), Ok(()));
+            call.values[index] = Some(Values::One(Value::Text(Box::from(*past))));
+        } else {
+            assert_eq!(argv::parse(&[&BOUNDED], &[b"bounded", flag, past], &limits), Err(*error));
+            call.values[index] = Some(Values::One(match spec.kind {
+                Kind::NamedNumber { .. } | Kind::Text | Kind::Literal => Value::Text(Box::from(*past)),
+                Kind::Duration => Value::Duration(skein_lib::Duration::from_secs(5)),
+                _ => argv::value::decode(&[&BOUNDED], Kind::Number, Bound::None, past).expect("number"),
+            }));
+        }
+        assert_eq!(argv::check(&[&BOUNDED], &call, &limits), Err(*error));
+    }
+    for (flag, least, below) in [
+        (b"--range".as_slice(), b"2".as_slice(), b"1".as_slice()),
+        (b"--count", b"1", b"0"),
+        (b"--named", b"made:2", b"made:1"),
+    ] {
+        argv::parse(&[&BOUNDED], &[b"bounded", flag, least], &limits).expect("inclusive lower bound");
+        assert!(argv::parse(&[&BOUNDED], &[b"bounded", flag, below], &limits).is_err());
+    }
+    argv::parse(&[&BOUNDED], &[b"bounded", b"--forge", b"0"], &limits).expect("forge zero stays accepted");
+    for kind in [Kind::Number, Kind::File, Kind::Duration, Kind::Word { set: &[b"word"] }] {
+        assert_eq!(bound(&positional(b"other", b"VALUE", kind, Occurs::Required, b""), &limits), Bound::None);
+    }
+}

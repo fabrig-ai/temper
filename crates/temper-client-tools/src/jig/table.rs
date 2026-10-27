@@ -88,6 +88,44 @@ pub enum Kind {
     Order,
     Tool,
 }
+/// What the parser accepts of an argument beyond its kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    None,
+    Numbers { least: u64, most: u64 },
+    Bytes { most: u64 },
+    Seconds { most: u64 },
+}
+/// One source for the parser's checks and the help.
+#[must_use]
+pub fn bound(argument: &Argument, limits: &Limits) -> Bound {
+    match argument.kind {
+        Kind::NumberRange { min, max } | Kind::NamedNumber { min, max, .. } => Bound::Numbers { least: min, most: max },
+        Kind::Count => Bound::Numbers { least: 1, most: u64::from(limits.rows) },
+        Kind::Number if argument.name == b"forge" => Bound::Numbers { least: 0, most: 65_535 },
+        Kind::Text | Kind::Literal => Bound::Bytes { most: limits.ask_bytes },
+        Kind::File if matches!(argument.name, b"items" | b"instructions" | b"spec") => {
+            Bound::Bytes { most: limits.ask_bytes }
+        }
+        Kind::Duration if argument.name == b"timeout" => {
+            Bound::Seconds { most: limits.wait_most.as_nanos().checked_div(1_000_000_000).expect("nonzero divisor") }
+        }
+        Kind::Number
+        | Kind::File
+        | Kind::Duration
+        | Kind::Word { .. }
+        | Kind::Proposal
+        | Kind::Digest
+        | Kind::Condition
+        | Kind::Subject
+        | Kind::Project { .. }
+        | Kind::Turn
+        | Kind::Cursor
+        | Kind::Group
+        | Kind::Order
+        | Kind::Tool => Bound::None,
+    }
+}
 #[must_use]
 pub const fn positional(
     name: &'static [u8],

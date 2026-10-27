@@ -3,7 +3,7 @@ use crate::jig::{
     argv::{self, Usage},
     call::{Call, Source, Value, Values},
     key::Name,
-    table::{Argument, Keyed, Kind, Limits, Occurs, Place, Tool},
+    table::{Argument, Keyed, Kind, Limits, Occurs, Place, Tool, bound},
 };
 use alloc::boxed::Box;
 use jig_client::contract::QueryOrder;
@@ -284,7 +284,7 @@ fn decode_value(table: &[&Tool], doc: &Document, at: u32, spec: &Argument, limit
             }
         }
     }
-    argv::value::decode(table, spec.kind, bytes).ok_or(Usage::Json)
+    argv::value::decode(table, spec.kind, bound(spec, limits), bytes).ok_or(Usage::Json)
 }
 /// Measure then encode a checked call, with its row and form unchanged.
 pub fn write_call(table: &[&Tool], call: &Call) -> Result<Box<[u8]>, Refusal> {
