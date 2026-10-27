@@ -90,3 +90,76 @@ fn logs_hold_a_whole_record_and_tails_hold_one_to_a_hundred_lines() {
     }
     assert_eq!(Unfit::TailLines.names(), &[b"box.tail_lines".as_slice()]);
 }
+
+#[test]
+fn every_row_is_a_name_apply_takes_at_its_small_value() {
+    let small = limits::small();
+    for row in &limits::NAMES {
+        let value = limits::value(&small, row.name.as_bytes()).expect("every row has a value");
+        let mut copy = small;
+        assert_eq!(limits::apply(&mut copy, row.name.as_bytes(), value), Ok(()), "{}", row.name);
+        assert_eq!(copy, small, "{}", row.name);
+    }
+}
+
+#[test]
+fn a_name_with_no_row_is_refused() {
+    let small = limits::small();
+    for name in ["box.unknown"] {
+        let mut copy = small;
+        assert_eq!(limits::apply(&mut copy, name.as_bytes(), u64::MAX), Err(limits::Refused::Unknown));
+        assert_eq!(limits::value(&copy, name.as_bytes()), None);
+        assert_eq!(copy, small);
+    }
+}
+
+#[test]
+fn rows_are_unique_and_well_formed() {
+    use jig_protocol_config::names::Unit;
+    const PREFIXES: [&str; 1] = ["box."];
+    let byte_names: &[&str] = &[];
+    let mut groups = [false; PREFIXES.len()];
+    let mut previous = 0;
+    for (index, row) in limits::NAMES.iter().enumerate() {
+        for other in limits::NAMES.iter().skip(index + 1) {
+            assert_ne!(row.name, other.name);
+        }
+        let mut prefix = None;
+        for (index, candidate) in PREFIXES.iter().enumerate() {
+            if row.name.starts_with(candidate) {
+                prefix = Some(index);
+            }
+        }
+        let prefix = prefix.expect("owner prefix");
+        assert!(prefix >= previous, "{}", row.name);
+        previous = prefix;
+        groups[prefix] = true;
+        for byte in row.name.bytes() {
+            assert!(byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_.".contains(&byte));
+        }
+        let unit = if row.name.ends_with("_ms") {
+            Unit::Milliseconds
+        } else if row.name.ends_with("_bytes")
+            || row.name.as_bytes().ends_with(b".bytes")
+            || byte_names.contains(&row.name)
+        {
+            Unit::Bytes
+        } else {
+            Unit::Count
+        };
+        assert_eq!(row.unit, unit, "{}", row.name);
+    }
+    for seen in groups {
+        assert!(seen);
+    }
+}
+#[test]
+fn each_line_is_one_sentence_of_at_most_160_bytes() {
+    const LINE_BYTES: usize = 160; // The names table's documentation bound.
+    for row in &limits::NAMES {
+        assert!(!row.line.is_empty(), "{}", row.name);
+        assert!(row.line.len() <= LINE_BYTES, "{}", row.name);
+        assert!(!row.line.contains(['\r', '\n']), "{}", row.name);
+        assert!(row.line.ends_with('.'), "{}", row.name);
+    }
+}

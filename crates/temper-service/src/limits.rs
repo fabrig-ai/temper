@@ -1,5 +1,6 @@
 //! The small profile and checked field overrides (protocol/configuration.md, section 7).
 mod names;
+pub use names::{NAMES, value};
 use skein_lib::Duration;
 use temper_engine_domain as engine;
 use temper_engine_domain_forge as forge;

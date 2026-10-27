@@ -6,6 +6,7 @@ mod golden;
 mod limits;
 mod managed;
 mod members;
+mod names;
 mod parent;
 mod prepare;
 mod read;

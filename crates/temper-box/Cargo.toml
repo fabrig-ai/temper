@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+jig-protocol-config.workspace = true
 temper-forge-setup.workspace = true
 skein-lib.workspace = true
 skein-io.workspace = true

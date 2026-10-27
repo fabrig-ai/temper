@@ -1,4 +1,59 @@
 //! Restart and shutdown bounds (protocol/configuration.md, 7).
+use jig_protocol_config::names::{Name, Unit};
+/// Every name this parser takes, in the order of its owner prefixes.
+pub const NAMES: [Name; 8] = [
+    Name {
+        name: "box.backoff_ms",
+        unit: Unit::Milliseconds,
+        line: "The first wait before the box restarts a step that exited, doubling up to `box.backoff_max_ms`.",
+    },
+    Name {
+        name: "box.backoff_max_ms",
+        unit: Unit::Milliseconds,
+        line: "The longest wait before the box restarts a step, below `box.window_ms`.",
+    },
+    Name {
+        name: "box.restarts",
+        unit: Unit::Count,
+        line: "A step's exits within `box.window_ms` past which the box gives up, at most 64.",
+    },
+    Name {
+        name: "box.window_ms",
+        unit: Unit::Milliseconds,
+        line: "The window in which a step's exits count against `box.restarts`.",
+    },
+    Name {
+        name: "box.grace_ms",
+        unit: Unit::Milliseconds,
+        line: "A step's grace after each of its stop's two signals.",
+    },
+    Name {
+        name: "box.line_bytes",
+        unit: Unit::Bytes,
+        line: "A line of the box's pipe either way, its line feed among them, at least 64; a longer line is dropped.",
+    },
+    Name {
+        name: "box.log_bytes",
+        unit: Unit::Bytes,
+        line: "A step's log file, past which it moves to the same name ending `.log.1` and a new one starts.",
+    },
+    Name {
+        name: "box.tail_lines",
+        unit: Unit::Count,
+        line: "The lines of a step's log the box keeps and writes under a failure's line, from 1 to 100.",
+    },
+];
+
+#[expect(clippy::manual_find, reason = "step code uses a loop rather than a closure")]
+fn find(name: &[u8]) -> Option<&'static Name> {
+    for row in &NAMES {
+        if row.name.as_bytes() == name {
+            return Some(row);
+        }
+    }
+    None
+}
+
 use skein_lib::{Duration, Queue, Time};
 /// The box limits, durations in milliseconds at configuration boundaries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -68,34 +123,44 @@ pub fn small() -> Limits {
 }
 /// Applies one whole dotted name.
 pub fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), Refused> {
-    if ![
-        b"box.backoff_ms".as_slice(),
-        b"box.backoff_max_ms",
-        b"box.restarts",
-        b"box.window_ms",
-        b"box.grace_ms",
-        b"box.line_bytes",
-        b"box.log_bytes",
-        b"box.tail_lines",
-    ]
-    .contains(&name)
-    {
-        return Err(Refused::Unknown);
-    }
-    let value = u32::try_from(value).or(Err(Refused::Range))?;
-    let duration = Duration::from_millis(u64::from(value));
-    match name {
-        b"box.backoff_ms" => limits.backoff = duration,
-        b"box.backoff_max_ms" => limits.backoff_max = duration,
-        b"box.restarts" => limits.restarts = value,
-        b"box.window_ms" => limits.window = duration,
-        b"box.grace_ms" => limits.grace = duration,
-        b"box.line_bytes" => limits.line_bytes = value,
-        b"box.log_bytes" => limits.log_bytes = value,
-        b"box.tail_lines" => limits.tail_lines = value,
-        _ => return Err(Refused::Unknown),
-    }
+    let row = find(name).ok_or(Refused::Unknown)?;
+    field(limits, row.name.as_bytes(), Some(value))?;
     Ok(())
+}
+/// A named limit's value, a duration's in milliseconds; none for a name
+/// with no row.
+#[must_use]
+pub fn value(limits: &Limits, name: &[u8]) -> Option<u64> {
+    let row = find(name)?;
+    let mut copy = *limits;
+    field(&mut copy, row.name.as_bytes(), None).ok()
+}
+fn field(limits: &mut Limits, name: &[u8], to: Option<u64>) -> Result<u64, Refused> {
+    match name {
+        b"box.backoff_ms" => millis(&mut limits.backoff, to),
+        b"box.backoff_max_ms" => millis(&mut limits.backoff_max, to),
+        b"box.restarts" => count(&mut limits.restarts, to),
+        b"box.window_ms" => millis(&mut limits.window, to),
+        b"box.grace_ms" => millis(&mut limits.grace, to),
+        b"box.line_bytes" => count(&mut limits.line_bytes, to),
+        b"box.log_bytes" => count(&mut limits.log_bytes, to),
+        b"box.tail_lines" => count(&mut limits.tail_lines, to),
+        _ => Err(Refused::Unknown),
+    }
+}
+
+fn count(field: &mut u32, to: Option<u64>) -> Result<u64, Refused> {
+    if let Some(value) = to {
+        *field = u32::try_from(value).or(Err(Refused::Range))?;
+    }
+    Ok(u64::from(*field))
+}
+fn millis(field: &mut Duration, to: Option<u64>) -> Result<u64, Refused> {
+    if let Some(value) = to {
+        let value = u32::try_from(value).or(Err(Refused::Range))?;
+        *field = Duration::from_millis(u64::from(value));
+    }
+    Ok(field.as_nanos() / 1_000_000)
 }
 /// Checks relationships in their documented order.
 pub fn check(limits: &Limits) -> Result<(), Unfit> {

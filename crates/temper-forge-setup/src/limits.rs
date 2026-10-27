@@ -1,5 +1,59 @@
 //! Managed orgs and reconcile's deadline and wait (protocol/configuration.md, 7).
+use jig_protocol_config::names::{Name, Unit};
 use skein_forge_setup::limits::Limits;
+/// Every name this parser takes, in the order of its owner prefixes.
+pub const NAMES: [Name; 8] = [
+    Name {
+        name: "setup.orgs",
+        unit: Unit::Count,
+        line: "The orgs a managed forge's setup entry may name; more refuse the start.",
+    },
+    Name {
+        name: "setup.deadline_ms",
+        unit: Unit::Milliseconds,
+        line: "A forge's setup run, its wait for the forge among it, above `setup.backoff_max_ms`; past it, the run stops.",
+    },
+    Name {
+        name: "setup.backoff_ms",
+        unit: Unit::Milliseconds,
+        line: "The first wait before a setup request is made again, doubling up to `setup.backoff_max_ms`.",
+    },
+    Name {
+        name: "setup.backoff_max_ms",
+        unit: Unit::Milliseconds,
+        line: "The longest wait between two tries of a setup request, below `setup.deadline_ms`.",
+    },
+    Name {
+        name: "setup.runs",
+        unit: Unit::Count,
+        line: "Setup runs at once, a forge's writing run and its reachability read both counted; a request past them is answered busy.",
+    },
+    Name {
+        name: "setup.states",
+        unit: Unit::Count,
+        line: "One-time states held for a GitHub App's manifest and installation returns; past it, the oldest goes.",
+    },
+    Name {
+        name: "setup.state_life_ms",
+        unit: Unit::Milliseconds,
+        line: "A one-time return state's life, at most an hour; a return after it fails.",
+    },
+    Name {
+        name: "setup.fetch_bytes",
+        unit: Unit::Bytes,
+        line: "A fetched binary, written to its part file as it streams; one past it removes the part file and is refused, naming the URL.",
+    },
+];
+
+#[expect(clippy::manual_find, reason = "step code uses a loop rather than a closure")]
+fn find(name: &[u8]) -> Option<&'static Name> {
+    for row in &NAMES {
+        if row.name.as_bytes() == name {
+            return Some(row);
+        }
+    }
+    None
+}
 
 /// A fetched binary's cap; largest pin: Forgejo 17.0.0 amd64, 122,053,192 bytes.
 pub const FETCH_BYTES: u64 = 268_435_456;
@@ -61,34 +115,35 @@ impl Host {
 }
 /// Applies host overrides, including the pure plan's dotted names.
 pub fn apply_host(limits: &mut Host, name: &[u8], value: u64) -> Result<(), Refused> {
-    match name {
-        b"setup.runs" | b"setup.states" => {
-            let count = u32::try_from(value).or(Err(Refused::Range))?;
-            if count == 0 {
-                return Err(Refused::Range);
-            }
-            if name == b"setup.runs" {
-                limits.runs = count;
-            } else {
-                limits.states = count;
-            }
-        }
-        b"setup.state_life_ms" => {
-            if value == 0 || value > 3_600_000 {
-                return Err(Refused::Range);
-            }
-            limits.state_life = duration(value)?;
-        }
-        _ => {
-            let mut plan = limits.plan();
-            apply(&mut plan, name, value)?;
-            limits.orgs = plan.orgs;
-            limits.deadline = plan.deadline;
-            limits.backoff = plan.backoff;
-            limits.backoff_max = plan.backoff_max;
-        }
+    // The resolved service input was accepted through the plan without changing the host.
+    if name == b"forge.client.repositories" {
+        return apply(&mut limits.plan(), name, value);
     }
+    let row = find(name).ok_or(Refused::Unknown)?;
+    if row.name == "setup.fetch_bytes" {
+        return Err(Refused::Unknown);
+    }
+    let mut fetch = FETCH_BYTES;
+    field(limits, &mut fetch, row.name.as_bytes(), Some(value))?;
     Ok(())
+}
+/// Applies the fetch override used by `check::checked`.
+pub fn apply_fetch_bytes(fetch: &mut u64, name: &[u8], value: u64) -> Result<(), Refused> {
+    let row = find(name).ok_or(Refused::Unknown)?;
+    if row.name != "setup.fetch_bytes" {
+        return Err(Refused::Unknown);
+    }
+    field(&mut host(), fetch, row.name.as_bytes(), Some(value))?;
+    Ok(())
+}
+/// A named limit's value, a duration's in milliseconds; none for a name
+/// with no row. The fetched binary's cap is kept outside `Host`.
+#[must_use]
+pub fn value(host: &Host, fetch_bytes: u64, name: &[u8]) -> Option<u64> {
+    let row = find(name)?;
+    let mut copy = *host;
+    let mut fetch = fetch_bytes;
+    field(&mut copy, &mut fetch, row.name.as_bytes(), None).ok()
 }
 
 use skein_lib::Duration;
@@ -116,29 +171,78 @@ pub fn small() -> Limits {
 }
 /// Applies a dotted setup override, refusing zero and overflow.
 pub fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), Refused> {
-    if ![
-        b"setup.orgs".as_slice(),
-        b"setup.deadline_ms",
-        b"setup.backoff_ms",
-        b"setup.backoff_max_ms",
-        b"forge.client.repositories",
-    ]
-    .contains(&name)
-    {
-        return Err(Refused::Unknown);
+    // The start hands this resolved service input to the plan, not a setup row.
+    if name != b"forge.client.repositories" {
+        let row = find(name).ok_or(Refused::Unknown)?;
+        if row.name == "setup.runs"
+            || row.name == "setup.states"
+            || row.name == "setup.state_life_ms"
+            || row.name == "setup.fetch_bytes"
+        {
+            return Err(Refused::Unknown);
+        }
     }
-    if value == 0 {
-        return Err(Refused::Range);
-    }
-    match name {
-        b"forge.client.repositories" => limits.repositories = u32::try_from(value).or(Err(Refused::Range))?,
-        b"setup.orgs" => limits.orgs = u32::try_from(value).or(Err(Refused::Range))?,
-        b"setup.deadline_ms" => limits.deadline = duration(value)?,
-        b"setup.backoff_ms" => limits.backoff = duration(value)?,
-        b"setup.backoff_max_ms" => limits.backoff_max = duration(value)?,
-        _ => return Err(Refused::Unknown),
-    }
+    let mut copy = Host {
+        orgs: limits.orgs,
+        repositories: limits.repositories,
+        deadline: limits.deadline,
+        backoff: limits.backoff,
+        backoff_max: limits.backoff_max,
+        ..host()
+    };
+    let mut fetch = FETCH_BYTES;
+    field(&mut copy, &mut fetch, name, Some(value))?;
+    limits.orgs = copy.orgs;
+    limits.repositories = copy.repositories;
+    limits.deadline = copy.deadline;
+    limits.backoff = copy.backoff;
+    limits.backoff_max = copy.backoff_max;
     Ok(())
+}
+fn field(limits: &mut Host, fetch: &mut u64, name: &[u8], to: Option<u64>) -> Result<u64, Refused> {
+    match name {
+        b"setup.orgs" => count(&mut limits.orgs, to),
+        b"setup.deadline_ms" => millis(&mut limits.deadline, to),
+        b"setup.backoff_ms" => millis(&mut limits.backoff, to),
+        b"setup.backoff_max_ms" => millis(&mut limits.backoff_max, to),
+        b"setup.runs" => count(&mut limits.runs, to),
+        b"setup.states" => count(&mut limits.states, to),
+        b"setup.state_life_ms" => {
+            if let Some(value) = to
+                && value > 3_600_000
+            {
+                return Err(Refused::Range);
+            }
+            millis(&mut limits.state_life, to)
+        }
+        b"setup.fetch_bytes" => {
+            if let Some(value) = to {
+                *fetch = fetch_bytes(value)?;
+            }
+            Ok(*fetch)
+        }
+        // Resolved service input, deliberately absent from NAMES.
+        b"forge.client.repositories" => count(&mut limits.repositories, to),
+        _ => Err(Refused::Unknown),
+    }
+}
+fn count(field: &mut u32, to: Option<u64>) -> Result<u64, Refused> {
+    if let Some(value) = to {
+        if value == 0 {
+            return Err(Refused::Range);
+        }
+        *field = u32::try_from(value).or(Err(Refused::Range))?;
+    }
+    Ok(u64::from(*field))
+}
+fn millis(field: &mut Duration, to: Option<u64>) -> Result<u64, Refused> {
+    if let Some(value) = to {
+        if value == 0 {
+            return Err(Refused::Range);
+        }
+        *field = duration(value)?;
+    }
+    Ok(field.as_nanos() / 1_000_000)
 }
 fn duration(value: u64) -> Result<Duration, Refused> {
     match value.checked_mul(1_000_000) {

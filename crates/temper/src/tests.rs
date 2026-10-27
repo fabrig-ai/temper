@@ -1,5 +1,6 @@
 mod commands;
 mod help;
+mod names;
 
 #[test]
 fn directory_commands_take_flags_after_their_command_words() {

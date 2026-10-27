@@ -192,13 +192,7 @@ pub fn checked(
     let lp = Path::root().member(b"application").member(b"limits").member(b"overrides");
     for (name, value) in overrides {
         let result = if name.as_ref() == b"setup.fetch_bytes" {
-            match limits::fetch_bytes(*value) {
-                Ok(value) => {
-                    fetch_bytes = value;
-                    Ok(())
-                }
-                Err(why) => Err(why),
-            }
+            limits::apply_fetch_bytes(&mut fetch_bytes, name, *value)
         } else {
             limits::apply(&mut limits, name, *value)
         };

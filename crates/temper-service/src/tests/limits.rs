@@ -539,3 +539,101 @@ fn token_rows_include_schema_framing_in_startup_admission() {
         assert_eq!(crate::startup::lines(&problems).as_ref(), expected.as_bytes());
     }
 }
+
+#[test]
+fn every_row_is_a_name_apply_takes_at_its_small_value() {
+    let small = limits::profile(limits::Profile::Small);
+    for row in &limits::NAMES {
+        let value = limits::value(&small, row.name.as_bytes()).expect("every row has a value");
+        let mut copy = small;
+        assert_eq!(limits::apply(&mut copy, row.name.as_bytes(), value), Ok(()), "{}", row.name);
+        assert_eq!(copy, small, "{}", row.name);
+    }
+}
+
+#[test]
+fn a_name_with_no_row_is_refused() {
+    let small = limits::profile(limits::Profile::Small);
+    for name in ["forge.unknown", "forge.bindings", "forge.authority_segments"] {
+        let mut copy = small;
+        assert_eq!(limits::apply(&mut copy, name.as_bytes(), u64::MAX), Err(limits::Refused::Unknown));
+        assert_eq!(limits::value(&copy, name.as_bytes()), None);
+        assert_eq!(copy, small);
+    }
+}
+
+#[test]
+fn rows_are_unique_and_well_formed() {
+    use jig_protocol_config::names::Unit;
+    const PREFIXES: [&str; 11] = [
+        "sign_in.",
+        "picker.",
+        "routes.",
+        "root.",
+        "forge.",
+        "checkout.",
+        "git_component.",
+        "clients.",
+        "records.",
+        "forges.",
+        "forge_component.",
+    ];
+    let byte_names: &[&str] = &[
+        "forge_component.chunk",
+        "forge_component.tls.read",
+        "forge_component.tls.send",
+        "forge_component.tls.records",
+        "root.brief.budgets.task",
+        "root.brief.budgets.dependencies",
+        "root.brief.budgets.ci",
+        "root.brief.budgets.reviews",
+        "root.brief.budgets.pull",
+        "root.brief.budgets.attempts",
+        "root.brief.budgets.plan",
+        "root.brief.budgets.notes",
+    ];
+    let mut groups = [false; PREFIXES.len()];
+    let mut previous = 0;
+    for (index, row) in limits::NAMES.iter().enumerate() {
+        for other in limits::NAMES.iter().skip(index + 1) {
+            assert_ne!(row.name, other.name);
+        }
+        let mut prefix = None;
+        for (index, candidate) in PREFIXES.iter().enumerate() {
+            if row.name.starts_with(candidate) {
+                prefix = Some(index);
+            }
+        }
+        let prefix = prefix.expect("owner prefix");
+        assert!(prefix >= previous, "{}", row.name);
+        previous = prefix;
+        groups[prefix] = true;
+        for byte in row.name.bytes() {
+            assert!(byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_.".contains(&byte));
+        }
+        let unit = if row.name.ends_with("_ms") {
+            Unit::Milliseconds
+        } else if row.name.ends_with("_bytes")
+            || row.name.as_bytes().ends_with(b".bytes")
+            || byte_names.contains(&row.name)
+        {
+            Unit::Bytes
+        } else {
+            Unit::Count
+        };
+        assert_eq!(row.unit, unit, "{}", row.name);
+    }
+    for seen in groups {
+        assert!(seen);
+    }
+}
+#[test]
+fn each_line_is_one_sentence_of_at_most_160_bytes() {
+    const LINE_BYTES: usize = 160; // The names table's documentation bound.
+    for row in &limits::NAMES {
+        assert!(!row.line.is_empty(), "{}", row.name);
+        assert!(row.line.len() <= LINE_BYTES, "{}", row.name);
+        assert!(!row.line.contains(['\r', '\n']), "{}", row.name);
+        assert!(row.line.ends_with('.'), "{}", row.name);
+    }
+}
