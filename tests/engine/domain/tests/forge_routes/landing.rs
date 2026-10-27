@@ -139,6 +139,83 @@ fn a_chats_change_lands_by_turn() {
 }
 
 #[test]
+fn a_goal_is_kept_on_its_own_changes_landing_by_turn() {
+    let world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { turn: true, ..StoryLimits::default() },
+    );
+    let (mut world, goal, producer, branch) = change_world_in(world, Change { tracked: true, ..Change::default() });
+    let owner = live_task(&world, goal.task);
+    assert_ne!(owner.root, goal.task, "goal is delegated");
+    let tasks::Party::Task(change) = live_task(&world, producer.task).requester else {
+        panic!("producer belongs to change")
+    };
+    assert_eq!(live_task(&world, change).requester, tasks::Party::Task(goal.task));
+    let subscription = world.store.rows.values().find_map(|record| match record {
+        Record::Forge { row } => match row.as_ref() {
+            forge_top::Stored::Subscription(row) if row.task == goal.task
+                && matches!(&row.topic, forge_top::Topic::Landings { branch, .. } if branch.as_ref() == b"main") => Some(row.number),
+            _ => None,
+        },
+        Record::Core(_) => None,
+    }).expect("goal's landing subscription");
+    let event =
+        world.protocol.answer(Token::new(7), goal.task, goal.attempt, 0, tasks::End::Parked, engine::Parts::none());
+    world.send(event);
+    for _ in 0..30 {
+        world.tick();
+    }
+    world.external(1, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
+    fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"fixed", 1)
+        .expect("producer pushes");
+    let event = world.protocol.answer(
+        Token::new(7),
+        producer.task,
+        producer.attempt,
+        5,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"pushed".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    for _ in 0..600 {
+        world.tick();
+    }
+    assert_eq!(world.merges, 1);
+    let inbox = &live_task(&world, goal.task).inbox;
+    let news: Vec<_> = inbox
+        .iter()
+        .filter_map(|word| match word.kind {
+            tasks::MessageKind::News { subscription: number, class, .. } if number == subscription => Some(class),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(news, [tasks::NewsClass::Kept], "own landing never wakes goal");
+    assert!(
+        inbox
+            .iter()
+            .any(|word| word.from == tasks::Party::Task(change) && matches!(word.kind, tasks::MessageKind::Result(_))),
+        "change result reaches goal"
+    );
+    assert!(task_row(&world, change).is_some_and(|row| matches!(
+        row.phase,
+        tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Change { .. }))
+    )));
+}
+
+#[test]
 fn a_ready_change_waits_when_landing_room_is_full() {
     let (mut world, change) = produced_turn_change(Some(0));
     for _ in 0..300 {
