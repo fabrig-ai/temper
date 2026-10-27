@@ -1,0 +1,9 @@
+project 1, shop
+homes: src/lib.rs
+spend per period: 100
+role 0, owner: spend per period 100; parties: party 1 alice
+role 2, member: spend per period 50; parties: party 2 bob
+period 3, from 2026-10-27T06:00Z, next start 2026-11-03T06:00Z: budget 100, reserved 40, spent 20, left 40
+pool, party 1 alice: budget 100, reserved 40, spent 20, left 40
+pool, party 2 bob: budget 100, reserved 40, spent 20, left 40
+digest: 190efd9157dcea47

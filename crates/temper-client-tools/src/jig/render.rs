@@ -449,6 +449,9 @@ pub(crate) fn reads(
 
 fn check_selected(call: &crate::jig::call::Call, local: u32, value: &ReadValue) -> Result<(), ()> {
     match (call.tool, local, value) {
+        (crate::jig::rows::PROJECT_SHOW_AT | crate::jig::rows::PROJECT_FUND_AT, 1, ReadValue::OwnerProject(_)) => {
+            Ok(())
+        }
         (1, _, ReadValue::Inbox(_) | ReadValue::OwnerInbox(_))
         | (2, 1, ReadValue::Tasks(_))
         | (3, 1, ReadValue::Task(_))
