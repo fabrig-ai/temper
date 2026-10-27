@@ -462,6 +462,20 @@ pub(crate) fn prepared(
     };
     send(runner, client, called, request, to, out);
 }
+fn context(request: Request) -> (Request, Option<render::outcome::Account>, bool) {
+    match request {
+        Request::Close { ask, ended } => (Request::Ask(ask), None, ended),
+        Request::Account { ask, context } => (Request::Ask(ask), Some(context), false),
+        request @ (Request::MoveOut { .. }
+        | Request::Written { .. }
+        | Request::MoveIn
+        | Request::Ask(_)
+        | Request::AddKey { .. }
+        | Request::ReplaceKey { .. }
+        | Request::DeclareProgram { .. }
+        | Request::CheckProgram { .. }) => (request, None, false),
+    }
+}
 fn send(
     runner: &mut Runner,
     client: &Client,
@@ -481,18 +495,7 @@ fn send(
         Some(name) => Some(crate::jig::key::named(runner.salt, name)),
         None => None,
     };
-    let (request, account, ended_chat) = match request {
-        Request::Close { ask, ended } => (Request::Ask(ask), None, ended),
-        Request::Account { ask, context } => (Request::Ask(ask), Some(context), false),
-        request @ (Request::MoveOut { .. }
-        | Request::Written { .. }
-        | Request::MoveIn
-        | Request::Ask(_)
-        | Request::AddKey { .. }
-        | Request::ReplaceKey { .. }
-        | Request::DeclareProgram { .. }
-        | Request::CheckProgram { .. }) => (request, None, false),
-    };
+    let (request, account, ended_chat) = context(request);
     let mut holder = None;
     let mut exported = None;
     let event = match request {

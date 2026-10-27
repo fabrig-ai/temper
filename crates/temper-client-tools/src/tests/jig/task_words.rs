@@ -551,6 +551,7 @@ fn instruction_previews_count_characters_and_keep_utf8_whole() {
 fn a_held_tasks_text_names_its_reason_and_release_revision() {
     for (reason, words) in [
         (c::HoldCategory::Effects, b"Effects need a decision".as_slice()),
+        (c::HoldCategory::Placed { hold: 7 }, b"Held by a placed hold 7".as_slice()),
         (
             c::HoldCategory::Exceeded(c::Exceeded { bound: c::Bound::Items, value: 4 }),
             b"configured allowance of 4".as_slice(),
@@ -574,6 +575,7 @@ fn a_held_tasks_text_keeps_the_effect_source_supplied_by_the_read() {
     assert!(skein_lib::bytes::find(&answer.stdout, b"source: ").is_some());
     assert!(skein_lib::bytes::find(&answer.stdout, b"temper/1/c2").is_some());
     assert!(
-        skein_lib::bytes::find(&answer.stdout, b"review and resolve the effects, then task release 41 --hold 9").is_some()
+        skein_lib::bytes::find(&answer.stdout, b"review and resolve the effects, then task release 41 --hold 9")
+            .is_some()
     );
 }

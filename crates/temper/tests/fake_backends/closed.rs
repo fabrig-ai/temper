@@ -20,7 +20,8 @@ fn a_closed_chat_keeps_its_turns_and_replays_its_first_close() {
         vec![
             Step::Run(Call::sign_in()),
             Step::Run(Call::new(&[
-                "account", "add-key",
+                "account",
+                "add-key",
                 "1",
                 key.to_str().expect("fake key path"),
                 "--deployment",

@@ -30,7 +30,7 @@ pub fn hold_number(task: u64, reason: &c::HoldCategory) -> Option<Hole> {
         | c::HoldCategory::Failures { .. }
         | c::HoldCategory::Stalled
         | c::HoldCategory::Stopped
-        | c::HoldCategory::StoppedBy { .. }
+        | c::HoldCategory::Placed { .. }
         | c::HoldCategory::Drift
         | c::HoldCategory::Effects
         | c::HoldCategory::EffectFailed

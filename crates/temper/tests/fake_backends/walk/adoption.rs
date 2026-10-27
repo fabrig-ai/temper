@@ -4,7 +4,8 @@ use skein_io::kernel::Exit;
 
 fn adopt(project: &str, role: &str, key: &str) -> Call {
     Call::new(&[
-        "repository", "adopt",
+        "repository",
+        "adopt",
         "--project",
         project,
         "--forge",
@@ -78,10 +79,11 @@ fn context_preserves_the_writer_and_a_refused_setup_preserves_the_first_key() {
         .collect::<Result<Vec<_>, _>>()
         .expect("setup JSON");
     assert_eq!(answers.len(), 2, "progress and adoption");
+    assert_eq!(answers[1]["project"], 2, "setup made the writer's project");
     assert_eq!(answers[0], serde_json::json!({"setting_up":{}}));
-    assert_eq!(answers[1]["adopted"]["owner"], "playground");
-    assert_eq!(answers[1]["adopted"]["name"], "widget");
-    assert_eq!(answers[1]["adopted"]["home"], true);
+    assert_eq!(answers[1]["outcome"]["adopted"]["owner"], "playground");
+    assert_eq!(answers[1]["outcome"]["adopted"]["name"], "widget");
+    assert_eq!(answers[1]["outcome"]["adopted"]["home"], true);
     assert_eq!(first.stdout, replay.stdout, "first key replays before the refusal");
     assert_eq!(first.stdout, replay_after.stdout, "first key replays after the refusal");
     let context = ctl::json(reader);

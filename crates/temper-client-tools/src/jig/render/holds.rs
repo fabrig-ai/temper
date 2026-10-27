@@ -49,7 +49,7 @@ fn recovery(hold: &c::TaskHold) -> &'static [u8] {
             | c::HoldCategory::Stalled
             | c::HoldCategory::Dependency { .. }
             | c::HoldCategory::Stopped
-            | c::HoldCategory::StoppedBy { .. }
+            | c::HoldCategory::Placed { .. }
             | c::HoldCategory::Drift
             | c::HoldCategory::Uncertain { .. }
             | c::HoldCategory::HoldsWaited
@@ -88,23 +88,35 @@ fn budget(hold: Option<&c::TaskHold>) -> bool {
     false
 }
 
+fn budget_reason(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
+    let book = vocabulary.phrasebook(4096);
+    let said = book
+        .say(0, Word::hold(&c::HoldCategory::Budget).id(), &[Hole::Number(task.chip.task)])
+        .expect("budget hold phrase");
+    out.put(&said.text);
+}
+
 fn reason(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
-    if budget(task.hold.as_ref()) {
-        let book = vocabulary.phrasebook(4096);
-        let said = book.say(0, Word::hold(&c::HoldCategory::Budget).id(), &[Hole::Number(task.chip.task)]).expect("budget hold phrase");
-        out.put(&said.text);
-        return;
-    }
     match task.hold.as_ref() {
         None => out.put(b"reason unavailable"),
         Some(c::TaskHold::Owner(hold)) => {
-            owner(&hold.reason, out);
+            if budget(task.hold.as_ref()) {
+                budget_reason(task, vocabulary, out);
+            } else {
+                owner(&hold.reason, out);
+            }
             if let Some(source) = &hold.source {
                 out.put(b"; source: ");
                 vocabulary.owner_part(source, out);
             }
         }
-        Some(c::TaskHold::Document(hold)) => detailed(&hold.reason, out),
+        Some(c::TaskHold::Document(hold)) => {
+            if budget(task.hold.as_ref()) {
+                budget_reason(task, vocabulary, out);
+            } else {
+                detailed(&hold.reason, out);
+            }
+        }
     }
 }
 
@@ -118,7 +130,7 @@ fn owner(reason: &c::HoldCategory, out: &mut Text) {
         | c::HoldCategory::Failures { .. }
         | c::HoldCategory::Stalled
         | c::HoldCategory::Stopped
-        | c::HoldCategory::StoppedBy { .. }
+        | c::HoldCategory::Placed { .. }
         | c::HoldCategory::Drift
         | c::HoldCategory::Effects
         | c::HoldCategory::EffectFailed
@@ -138,9 +150,9 @@ fn owner(reason: &c::HoldCategory, out: &mut Text) {
     let said = book.say(0, Word::hold(reason).id(), &holes).expect("hold phrase");
     out.put(said.text.strip_prefix(b"Held: ").unwrap_or(&said.text));
     match reason {
-        c::HoldCategory::StoppedBy { party } => {
-            out.put(b" by party ");
-            out.number(*party);
+        c::HoldCategory::Placed { hold } => {
+            out.put(b" ");
+            out.number(*hold);
         }
         c::HoldCategory::Failures { class } => {
             out.put(b": ");

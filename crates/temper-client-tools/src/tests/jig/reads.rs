@@ -583,6 +583,8 @@ fn a_budget_held_task_explains_how_to_run_or_cancel_it() {
     root.serve(call, fixtures::task_result(task));
     let answer = root.answer(call).expect("held task answered");
     assert_eq!(answer.status, 0);
+    assert!(skein_lib::bytes::find(&answer.stdout, b"\nway out: task release 41 --hold 2\n").is_some());
+    assert!(skein_lib::bytes::find(&answer.stdout, b"raise the task's budget, then").is_none());
     assert!(skein_lib::bytes::find(&answer.stdout,
         b"Insufficient activation budget. A release alone holds it again: give the task more budget (task amend 41 with a larger budget, or decide its budget proposal), then release it; or cancel it.").is_some(), "{:?}", answer.stdout);
 }
