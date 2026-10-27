@@ -27,6 +27,21 @@ pub(crate) fn relay_payload(
     };
     assert!(key.task == run.raw() && key.attempt == attempt.raw(), "fleet call envelope is unchanged");
     assert!(current_proof(domain, key.task, key.attempt), "fleet only relays a current claim");
+    // Settings reads enter before replay and admission to the durable call map.
+    // The core checks their family and answers denials through its immediate lane.
+    if let Tool::Settings { mut read, .. } = body.tool {
+        if let core::SettingsRead::Setting { revision, .. } = &mut read
+            && *revision == 0
+        {
+            *revision = domain.core.current.newest();
+        }
+        domain.work.push(Work::Core(core::Event::NamedAction {
+            to: reply_to,
+            key,
+            action: core::NamedAction::Settings(read),
+        }));
+        return;
+    }
     if let Some(core::CallPart::Effect {
         deadline,
         outcome: None | Some(core::connector::OutboxOutcome::Uncertain | core::connector::OutboxOutcome::Held { .. }),
@@ -41,21 +56,6 @@ pub(crate) fn relay_payload(
             origin: core::EffectOrigin::Call { to: reply_to, key, deadline },
         }));
         domain.next_effect_owner = domain.next_effect_owner.checked_add(1).expect("transient effect owner");
-        return;
-    }
-    // Settings reads enter before replay and admission to the durable call map.
-    // The core checks their family and answers denials through its immediate lane.
-    if let Tool::Settings { mut read, .. } = body.tool {
-        if let core::SettingsRead::Setting { revision, .. } = &mut read
-            && *revision == 0
-        {
-            *revision = domain.core.current.newest();
-        }
-        domain.work.push(Work::Core(core::Event::NamedAction {
-            to: reply_to,
-            key,
-            action: core::NamedAction::Settings(read),
-        }));
         return;
     }
     match call_answer(domain, key) {
@@ -105,7 +105,7 @@ pub(crate) fn relay_payload(
                         to: reply_to,
                         key,
                         action: core::NamedAction::ProposeSettings { against, items, reason },
-                    }))
+                    }));
                 }
                 Tool::ReadNamed { .. } => unreachable!("named reads resolved before deciding"),
                 Tool::Change { words, repository } => {
