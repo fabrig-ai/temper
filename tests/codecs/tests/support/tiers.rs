@@ -22,10 +22,14 @@ pub fn smallest() -> Stored {
     })
 }
 pub fn fullest() -> Stored {
-    let tests: Box<[_]> =
-        (0..TESTS).map(|n| vec![u8::try_from(n + 1).unwrap(); TEST_BYTES].into_boxed_slice()).collect();
+    let tests: Box<[_]> = (0..TESTS)
+        .map(|n| vec![u8::try_from(n + 1).expect("bounded test index"); TEST_BYTES].into_boxed_slice())
+        .collect();
     let landings: Box<[_]> = (0..RANGE)
-        .map(|n| p::Landing { commit: [u8::try_from(n).unwrap(); 32], key: [u8::try_from(n).unwrap(); 32] })
+        .map(|n| p::Landing {
+            commit: [u8::try_from(n).expect("bounded landing index"); 32],
+            key: [u8::try_from(n).expect("bounded landing index"); 32],
+        })
         .collect();
     let failures = p::Failures::Tests(tests.clone());
     Stored::Tier(TierRow {
