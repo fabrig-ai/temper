@@ -3,7 +3,7 @@
 //! worlds.
 
 use jig_domain_people::Role;
-use jig_domain_tasks::{Party, SettingsRevision};
+use jig_domain_tasks::Party;
 use jig_people_world::referee::{People, RouteKind, Seen as PersonSeen};
 use jig_tasks_world::referee::{Seen as TaskSeen, Tasks};
 use skein_fake_forge_domain::{self as fake, Observation, api as raw};
@@ -82,45 +82,20 @@ fn commit_referee_rejects_an_ack_if_its_transcript_was_lost() {
 
 #[test]
 fn order_referee_rejects_an_early_dependency_and_overlapping_runs() {
-    let made = TaskSeen::Made {
-        task: 1,
-        parent: Party::Person(1),
-        dependencies: vec![],
-        depth: 0,
-        settings: SettingsRevision { task: 1, run: Some(1) },
-        newest: 1,
-    };
-    let dependent = TaskSeen::Made {
-        task: 2,
-        parent: Party::Person(1),
-        dependencies: vec![1],
-        depth: 0,
-        settings: SettingsRevision { task: 1, run: Some(1) },
-        newest: 1,
-    };
-    task_rejects(&[
-        made.clone(),
-        dependent,
-        TaskSeen::Assigned { task: 2, attempt: 1, after: 0, adopted: false, settings: 1 },
-    ]);
+    let made = TaskSeen::Made { task: 1, parent: Party::Person(1), dependencies: vec![], depth: 0 };
+    let dependent = TaskSeen::Made { task: 2, parent: Party::Person(1), dependencies: vec![1], depth: 0 };
+    task_rejects(&[made.clone(), dependent, TaskSeen::Assigned { task: 2, attempt: 1, after: 0, adopted: false }]);
     task_rejects(&[
         made,
-        TaskSeen::Assigned { task: 1, attempt: 1, after: 0, adopted: false, settings: 1 },
-        TaskSeen::Assigned { task: 1, attempt: 2, after: 0, adopted: false, settings: 1 },
+        TaskSeen::Assigned { task: 1, attempt: 1, after: 0, adopted: false },
+        TaskSeen::Assigned { task: 1, attempt: 2, after: 0, adopted: false },
     ]);
 }
 
 #[test]
 fn no_loss_referee_rejects_an_unfinished_cancelled_task() {
     task_rejects(&[
-        TaskSeen::Made {
-            task: 1,
-            parent: Party::Person(1),
-            dependencies: vec![],
-            depth: 0,
-            settings: SettingsRevision { task: 1, run: Some(1) },
-            newest: 1,
-        },
+        TaskSeen::Made { task: 1, parent: Party::Person(1), dependencies: vec![], depth: 0 },
         TaskSeen::Cancelled { task: 1 },
         TaskSeen::Finished,
     ]);
@@ -224,14 +199,7 @@ fn no_overwrite_referee_observes_and_rejects_a_divergent_push() {
 fn bounded_referee_rejects_more_live_tasks_than_the_world_allows() {
     task_rejects(&[TaskSeen::Limit { live: 3, cap: 2 }]);
     task_rejects(&[
-        TaskSeen::Made {
-            task: 1,
-            parent: Party::Person(1),
-            dependencies: vec![],
-            depth: 0,
-            settings: SettingsRevision { task: 1, run: Some(1) },
-            newest: 1,
-        },
+        TaskSeen::Made { task: 1, parent: Party::Person(1), dependencies: vec![], depth: 0 },
         TaskSeen::Cancelled { task: 1 },
         TaskSeen::Finished,
     ]);

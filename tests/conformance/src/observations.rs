@@ -147,12 +147,6 @@ pub fn snapshot(store: &Store) -> r::Snapshot {
     let mut decisions = Vec::new();
     for record in store.rows.values() {
         match record {
-            root::Record::Core(core::Record::Core(core::CoreRecord::Settings(core::settings::Record::Revision {
-                revision,
-                history: false,
-            }))) => {
-                snapshot.newest = snapshot.newest.max(revision.head.number);
-            }
             root::Record::Core(core::Record::Tasks(tasks::Stored::Live(row) | tasks::Stored::Ended(row))) => {
                 snapshot.tasks.insert(row.number, jig_core_world::observations::task(row));
                 snapshot.receipts.insert(r::Receipt::Task(row.number));

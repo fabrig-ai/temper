@@ -125,7 +125,6 @@ pub(crate) fn assigned(peers: &mut Peers, channel: Token, assignment: engine::As
         conversation: assignment.conversation,
         resumed: !assignment.transcript.is_empty(),
         budget: assignment.run.budget,
-        settings: assignment.run.revision,
     });
     for word in &assignment.messages {
         peers.observed.push(r::Observed::Reached(r::Receipt::Word(assignment.task, word.number)));
