@@ -523,6 +523,8 @@ fn make_project_copies_policy_one_and_the_root_hears_it_only_after_commit() {
             } else if let Request::Party(PartyRequest::Deliver(Delivery::WebReply { reply, .. })) = request {
                 assert_eq!(reply, people::Reply::Outcome(people::Outcome::ProjectMade { project: 2 }));
                 answered = true;
+            } else if let Request::Store(StoreRequest::Commit { number, .. }) = request {
+                crate::try_step(&mut domain, &env, Event::Store(StoreInput::Committed { number, fill: 0 })).unwrap();
             } else {
                 panic!("only the root and maker hear the committed project: {request:?}");
             }
@@ -531,6 +533,7 @@ fn make_project_copies_policy_one_and_the_root_hears_it_only_after_commit() {
     assert!(heard && answered);
     assert_eq!(domain.core.projects.as_slice(), &[1, 2]);
     assert_eq!(domain.core.people.role(1, 2), Some(people::Role::Owner));
+    assert!(domain.core.repair_seed(2).is_some(), "the new project's first period can fund deployment work");
 }
 
 #[test]
