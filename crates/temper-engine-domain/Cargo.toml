@@ -23,6 +23,7 @@ jig-domain-notes.workspace = true
 temper-engine-domain-forge.workspace = true
 temper-engine-domain-calendar.workspace = true
 temper-engine-domain-forge-landing.workspace = true
+temper-engine-domain-forge-tiers.workspace = true
 skein-forge-client.workspace = true
 temper-engine-domain-forge-change.workspace = true
 temper-engine-domain-forge-issues.workspace = true

@@ -43,7 +43,7 @@ pub(super) fn next_assignment(world: &mut World, index: usize) -> engine::Assign
     panic!("delegate {index} was not assigned: {:?}", world.answers);
 }
 
-fn produce(world: &mut World, producer: &engine::Assignment, branch: &[u8]) -> [u8; 32] {
+pub(super) fn produce(world: &mut World, producer: &engine::Assignment, branch: &[u8]) -> [u8; 32] {
     world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.into(), commit: 1 }));
     let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", branch, FILE, CONTENT, 1)
         .expect("producer pushed review head");

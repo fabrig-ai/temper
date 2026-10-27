@@ -194,6 +194,10 @@ const FORGE: forge::Limits = forge::Limits {
     judge_criteria: 8,
     // Tiers per repository (domain/after-landing.md, 2).
     tiers: 2,
+    // Test gates per repository (domain/landing.md, 13.1).
+    gates: 2,
+    // Ignored paths per gate or tier (domain/landing.md, 6.1).
+    ignored_paths: 4,
     // Failing tests named by one tier run (domain/after-landing.md, 4).
     failing_tests: 16,
     // Bytes of one failing test id (domain/after-landing.md, 4).
