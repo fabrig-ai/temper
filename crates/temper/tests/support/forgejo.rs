@@ -156,11 +156,18 @@ impl Throwaway {
                 eprintln!(
                     "forge run: {}",
                     json!({"id":run["id"], "workflow":run["workflow_id"], "commit":run["commit_sha"],
-                        "event":run["event"], "status":run["status"],
+                        "event":run["trigger_event"], "status":run["status"],
                         "user":run["trigger_user"]["login"], "user_id":run["trigger_user"]["id"]})
                 );
             }
-            runs.extend(entries.iter().filter(|run| run["workflow_id"] == workflow).cloned());
+            runs.extend(entries.iter().filter(|run| run["workflow_id"] == workflow).map(|run| {
+                // Forgejo 17's API-dispatched runs have an empty `event`;
+                // `trigger_event` is their dispatch provenance.
+                let event = run["trigger_event"].as_str().expect("Forgejo trigger event");
+                let mut observed = run.clone();
+                observed["event"] = event.into();
+                observed
+            }));
         }
         runs
     }
@@ -274,6 +281,27 @@ impl Throwaway {
             .exchange(&Outgoing::json("POST", &path, Some(self.person.as_ref().expect("fixture person")), &body))
             .expect("contents answer");
         assert_eq!(response.status, 201, "contents commit");
+    }
+}
+
+pub fn tier_authority(value: &mut Value) {
+    // The four extra ceiling grants and procedure 4 make this fixture's
+    // serialized policy 4216 bytes, including the smaller person allotment.
+    value["engine"]["limits"]["overrides"]["core.policy_bytes"] = 4216.into();
+    for project in value["engine"]["projects"].as_array_mut().expect("projects") {
+        // Keep the project's 100 units; leave two capped 10-unit tier
+        // reservations outside the person's pool.
+        project["policy"]["roles"][0]["period_spend"] = 80.into();
+        let ceiling = &mut project["policy"]["ceiling"];
+        let mut grant = ceiling["grants"][0].clone();
+        for kind in [6, 9, 16, 17] {
+            grant["kind"] = kind.into();
+            ceiling["grants"].as_array_mut().expect("ceiling grants").push(grant.clone());
+        }
+        ceiling["delegation"]["kinds"]
+            .as_array_mut()
+            .expect("executor kinds")
+            .push(json!({"kind":"procedure","number":4}));
     }
 }
 
