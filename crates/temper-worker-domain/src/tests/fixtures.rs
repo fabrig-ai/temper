@@ -16,6 +16,7 @@ pub const ACCOUNT_RESET: Duration = Duration::from_millis(5);
 /// at a time, with smith's limits around the hub's.
 pub fn limits() -> Limits {
     Limits {
+        watermark: crate::WATERMARK,
         host: host::Limits {
             program_sources: 12,
             source_interval: Duration::from_secs(60),

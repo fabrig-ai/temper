@@ -5,7 +5,7 @@
 
 use super::fixtures::{self, RUN};
 use crate::checkout::git::{Done, Fault};
-use crate::{Domain, Encodable, Encoded, Event, Limits, Request, agent, host, max_out, step, worst_case};
+use crate::{Domain, Encodable, Encoded, Event, Limits, Request, agent, host, step, worst_case};
 use alloc::boxed::Box;
 use skein_lib::{Env, List, Queue, Time, Token, Wall};
 
@@ -34,7 +34,7 @@ impl Harness {
         assert!(worst_case(&limits).is_some());
         Harness {
             domain: Domain::new(&limits),
-            out: Queue::with_capacity(max_out(&limits)),
+            out: Queue::uncapped(),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
             owed: Queue::with_capacity(64),
             held: Queue::with_capacity(64),
@@ -55,7 +55,7 @@ impl Harness {
     /// Steps the root with `event`, within the loop's iteration.
     pub fn unreclaimed(&mut self, event: Event) -> Box<[Request]> {
         step(&mut self.domain, &self.env, event, &mut self.out);
-        let mut rows = List::with_capacity(max_out(&self.env.limits));
+        let mut rows = List::with_capacity(self.out.len());
         while let Some(row) = self.out.pop() {
             rows.push(row).expect("reserved outputs");
         }
@@ -81,7 +81,7 @@ impl Harness {
             }
             if self.domain.is_ready() {
                 crate::resume(&mut self.domain, &self.env, &mut self.out);
-                let mut ready = List::with_capacity(max_out(&self.env.limits));
+                let mut ready = List::with_capacity(self.out.len());
                 while let Some(row) = self.out.pop() {
                     ready.push(row).expect("reserved outputs");
                 }

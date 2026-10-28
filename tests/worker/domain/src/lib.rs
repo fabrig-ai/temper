@@ -42,6 +42,7 @@ pub fn turn_bytes() -> (u64, u64) {
 pub fn limits() -> Limits {
     let (encoded, owned) = turn_bytes();
     Limits {
+        watermark: temper_worker_domain::WATERMARK,
         host: host::Limits {
             program_sources: 12,
             source_interval: skein_lib::Duration::from_secs(60),

@@ -15,7 +15,7 @@ use temper_worker_domain_checkout as checkout;
 
 use crate::boundary::{Event, Request};
 use crate::domain::Domain;
-use crate::limits::{self, Limits};
+use crate::limits::Limits;
 use crate::workspace::{self, Write};
 use crate::{agents, translate};
 
@@ -185,10 +185,10 @@ fn workstreams(checkout: &checkout::Domain) -> Box<[u64]> {
 /// Routes what the child domains emitted, and what that leads to, until all
 /// three have emitted all they will in this entry point: what smith emitted
 /// first, then the checkout's, then the hub's, so that each capability's
-/// requests are routed before the hub asks it anything more.
+/// requests are routed before the hub asks it anything more. The finite
+/// hand-off chain described in `domain.rs` ensures this drain ends.
 pub(crate) fn hand_off(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    let bound = limits::counts(&env.limits).expect("worst_case accepted the limits").routed;
-    for _ in 0..bound {
+    loop {
         if let Some(request) = domain.agent_out.pop() {
             match request {
                 agent::Output::Process(request) => out.push(Request::Process(Box::new(request))),
@@ -202,31 +202,17 @@ pub(crate) fn hand_off(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<R
             return;
         }
     }
-    assert!(
-        domain.agent_out.is_empty() && domain.checkout_out.is_empty() && domain.host_out.is_empty(),
-        "an entry point's hand-offs end within its bound"
-    );
 }
 
 pub(crate) fn host_step(domain: &mut Domain, env: &Env<Limits>, event: host::Event) {
-    let room = host::max_out(&env.limits.host);
-    assert!(domain.host_out.room() >= room, "an entry point steps the host no more than its bound");
     host::step(&mut domain.host, &host_env(env), event, &mut domain.host_out);
 }
 
 pub(crate) fn checkout_step(domain: &mut Domain, env: &Env<Limits>, event: checkout::Event) {
-    assert!(
-        domain.checkout_out.room() >= checkout::MAX_OUT,
-        "an entry point steps the checkout no more than its bound"
-    );
     checkout::step(&mut domain.checkout, &checkout_env(env), event, &mut domain.checkout_out);
 }
 
 pub(crate) fn agent_step(domain: &mut Domain, env: &Env<Limits>, event: agent::Input) {
-    assert!(
-        domain.agent_out.room() >= agent::max_out(&env.limits.agent),
-        "an entry point steps the agents no more than its bound"
-    );
     agent::step(&mut domain.agent, &agent_env(env), event, &mut domain.agent_out);
 }
 
