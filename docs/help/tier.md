@@ -71,7 +71,8 @@ A tier is a slow check a repository runs on its main after landing, one run at a
   change's task live, and shows a tier run's task, live, held or done,
   its result naming the run's verdict.
 - **`landing list --project PROJECT --newer-than TIME`** lists every
-  landing the project's repositories took after TIME, newest first, by
+  landing temper saw on the project's repositories after TIME, newest
+  first, by
   queue, by turn or from outside temper, with each tier's verdict
   (temper help landing).
 - **A held run** is released by the project's maintainers, as any held
