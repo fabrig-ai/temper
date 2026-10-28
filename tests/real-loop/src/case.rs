@@ -183,7 +183,7 @@ impl Agent {
             Self::RedDirector => b"@case_red_director",
             Self::RedOwner => b"@case_red_owner",
             Self::RedCoder => b"@case_red_coder",
-            Self::RedRepairCoder => b"Repair landing branch CI",
+            Self::RedRepairCoder => b"Repair main CI at ",
             Self::BatchDirector => b"@case_batch_director",
             Self::BatchOwner => b"@case_batch_owner",
             Self::BatchSubowner => b"@case_batch_subowner",

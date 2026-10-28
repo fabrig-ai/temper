@@ -8667,6 +8667,13 @@ fn red_landings(observed: &Observed, misses: &mut Vec<Miss>) {
 
 fn red_repair(observed: &Observed, misses: &mut Vec<Miss>) {
     use super::{Agent, PROJECT, RED_CHANGE, RED_REPAIR, RED_REPAIR_CODER, RED_REVIEW};
+    let opening = observed.kit.records.iter().find_map(|record| {
+        let skein_fake_forge_domain::Observation::Moved { repository, branch, to, by, .. } = record else {
+            return None;
+        };
+        (repository.as_ref() == b"acme/app" && branch.as_ref() == b"main" && *by == crate::forge::OTHER)
+            .then(|| format!("Repair main CI at {}: check", &direction_commit(*to)[..12]))
+    });
     let repair = task_document(observed, Read::RedRepairPending);
     let final_repair = task_document(observed, Read::RedRepairEnded);
     let agents = [Agent::RedDirector, Agent::RedOwner, Agent::RedCoder, Agent::RedRepairCoder, Agent::Review];
@@ -8708,10 +8715,12 @@ fn red_repair(observed: &Observed, misses: &mut Vec<Miss>) {
                 && number(doc, "/project") == Some(PROJECT)
                 && doc.pointer("/requester/task").is_none()
                 && number(doc, "/requester/deployment/project") == Some(PROJECT)
-                && text(doc, "/spec/specification/words/bytes") == "Repair landing branch CI"
+                && opening.as_ref().is_some_and(|expected| {
+                    text(doc, "/spec/specification/words/bytes").lines().next() == Some(expected.as_str())
+                })
         }),
         RED_DEPLOYMENT,
-        "the repair's documents name the deployment and its words",
+        "the repair's documents name the deployment, landing branch, failed tip and check",
     );
     step_check(
         misses,
@@ -8720,7 +8729,10 @@ fn red_repair(observed: &Observed, misses: &mut Vec<Miss>) {
             && delegates.iter().all(|(_, args, output)| {
                 !contains(output, &format!("Delegated tasks: {RED_REPAIR}"))
                     && args["batch"].as_array().is_some_and(|batch| {
-                        batch.len() == 1 && batch[0]["spec"]["words"] != "Repair landing branch CI"
+                        batch.len() == 1
+                            && batch[0]["spec"]["words"]
+                                .as_str()
+                                .is_some_and(|words| !words.as_bytes().starts_with(Agent::RedRepairCoder.cue()))
                     })
             }),
         RED_DEPLOYMENT,
@@ -8899,7 +8911,7 @@ mod red_tests {
             documents.insert(read, json!({"task":{
                 "chip":{"task":task,"phase":"ended"},"project":PROJECT,"spec_revision":{"value":RED_REVISION},
                 "requester":if task == RED_REPAIR {json!({"deployment":{"project":PROJECT}})} else {json!({"task":parent})},
-                "goal":RED_OWNER,"spec":{"specification":{"words":{"bytes":"Repair landing branch CI"}}},
+                "goal":RED_OWNER,"spec":{"specification":{"words":{"bytes":format!("Repair main CI at {}: check", &direction_commit(3)[..12])}}},
                 "subscriptions":{"entries":[]},
                 "result":{"ending":{"task":{"done":{}}},"value":{"change":{"words":{"bytes":direction_commit(if task == RED_REPAIR {5} else {7})}}}}
             },"activity":journal(task, &[
@@ -9150,6 +9162,16 @@ mod red_tests {
                 bad.documents.get_mut(&read).expect("task")["task"]["requester"] = requester;
                 rejects(&bad, RED_DEPLOYMENT);
             }
+            for words in [
+                "Repair landing branch CI".to_owned(),
+                "Repair main CI at ffffffffffff: check".to_owned(),
+                format!("Repair main CI at {}: another check", &direction_commit(3)[..12]),
+            ] {
+                let mut bad = fixture.clone();
+                bad.documents.get_mut(&read).expect("task")["task"]["spec"]["specification"]["words"]["bytes"] =
+                    json!(words);
+                rejects(&bad, RED_DEPLOYMENT);
+            }
         }
         let mut bad = fixture.clone();
         bad.told.push(told(
@@ -9157,7 +9179,7 @@ mod red_tests {
             &tool(
                 "repair",
                 "delegate",
-                &json!({"batch":[{"spec":{"words":"Repair landing branch CI"}}]}),
+                &json!({"batch":[{"spec":{"words":format!("Repair main CI at {}: check", &direction_commit(3)[..12])}}]}),
                 &format!("Delegated tasks: {RED_REPAIR}"),
             ),
         ));
