@@ -96,7 +96,7 @@ fn read(kind: &[u8], value: &Value) -> Result<api::Read, Problem> {
         }),
         b"file" => Ok(api::Read::File {
             head: commit(value.required(b"head")?, b"head")?,
-            path: value.required(b"path")?.text(b"path")?,
+            path: file_path(value)?,
             max_bytes: max_bytes(value)?,
         }),
         b"protection" => Ok(api::Read::Protection { branch: value.required(b"branch")?.text(b"branch")? }),
@@ -286,4 +286,9 @@ fn numbers(value: &Value) -> Result<Box<[u64]>, Problem> {
         let Ok(()) = out.push(item.number(b"reviewers")?) else { return Err(Problem::TooLarge) };
     }
     Ok(out.into_boxed())
+}
+
+fn file_path(value: &Value) -> Result<Box<[u8]>, Problem> {
+    let path = value.required(b"path")?.text(b"path")?;
+    if path.as_ref() == b"." || path.as_ref() == b"./" { Ok(Box::from([])) } else { Ok(path) }
 }

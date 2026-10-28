@@ -984,3 +984,27 @@ fn a_changes_result_evidence_survives_restart_with_its_cut_counts() {
     let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
 }
+
+#[test]
+fn a_directory_answer_round_trips_with_its_entries() {
+    use skein_forge::api::{Answer, Entry, EntryKind};
+    let mut limits = fixtures::LIMITS;
+    limits.client.rows = 1; // Directory entries use the existing byte budget alone.
+    let bounds = crate::bounds(&limits, limits.client.op_bytes).expect("fixture bounds");
+    for path in [b"".as_slice(), b"src"] {
+        for truncated in [false, true] {
+            let answer = Answer::Directory {
+                head: [15; 32],
+                path: path.into(),
+                entries: Box::new([
+                    Entry { name: b"main.rs".as_slice().into(), kind: EntryKind::File },
+                    Entry { name: b"lib".as_slice().into(), kind: EntryKind::Directory },
+                    Entry { name: b"vendor".as_slice().into(), kind: EntryKind::Submodule },
+                ]),
+                truncated,
+            };
+            let row = fixtures::named_call(forge::CallPayload::Read(Box::new(Ok(answer))));
+            assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+        }
+    }
+}

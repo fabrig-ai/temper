@@ -252,6 +252,7 @@ pub fn answer_as(
             }
         }
         forge::Answer::Checks(checks) => checks_answer(asked, checks),
+        forge::Answer::Directory(entries) => directory_answer(asked, &entries, l),
         forge::Answer::File(content) => byte_answer(asked, &content),
         forge::Answer::Job { job, steps } => job_answer(asked, &job, &steps),
         forge::Answer::Protection(protection) => client::Answer::Protection(match protection {
@@ -597,4 +598,34 @@ pub fn hint(repository: client::Repository, request: &skein_fake_forge_domain::R
         }
     };
     Some(client::Hint { repository, change, key: body.as_deref().and_then(key_of) })
+}
+
+fn directory_answer(
+    asked: &client::Op,
+    entries: &[forge::Entry],
+    limits: &skein_forge_client::Limits,
+) -> client::Answer {
+    let client::Op::Read(client::Read::File { head, path, max_bytes }) = asked else {
+        panic!("directory requires a file read")
+    };
+    let mut room =
+        (*max_bytes).min(limits.answer_bytes.saturating_sub(u32::try_from(path.len()).expect("bounded path")));
+    let mut kept = Vec::new();
+    let mut truncated = false;
+    for entry in entries {
+        let charge = u32::try_from(entry.name.len() + skein_forge::measure::ENTRY_BYTES).expect("bounded entry");
+        let Some(left) = room.checked_sub(charge) else {
+            truncated = true;
+            break;
+        };
+        kept.push(client::Entry {
+            name: entry.name.clone(),
+            kind: match entry.kind {
+                forge::EntryKind::File => client::EntryKind::File,
+                forge::EntryKind::Directory => client::EntryKind::Directory,
+            },
+        });
+        room = left;
+    }
+    client::Answer::Directory { head: *head, path: path.clone(), entries: kept.into_boxed_slice(), truncated }
 }

@@ -88,6 +88,9 @@ record JobAttempt { head: fixed 32 run: u64 job: u64 attempt: u32 }
 record Step { number: u32 name: bytes 1048576 }
 record JobAnswer { attempt: JobAttempt step: option Step log: bytes 1048576 truncated: bool }
 record FileAnswer { head: fixed 32 path: bytes 1048576 bytes: bytes 1048576 truncated: bool }
+enum DirectoryKind { file, directory, submodule }
+record DirectoryEntry { name: bytes 1048576 kind: DirectoryKind }
+record DirectoryAnswer { head: fixed 32 path: bytes 1048576 entries: bytes 2097152 pieces DirectoryEntry truncated: bool }
 record BranchesAnswer { branches: bytes 2097152 pieces AnswerName }
 record ProtectionAnswer { protection: option Protection }
 record PermissionValue { permission: Permission }
@@ -115,7 +118,7 @@ record CompareAnswer { before: fixed 32 after: fixed 32 contains_before: bool fi
 record ChecksAnswer { statuses: bytes 2097152 pieces Status }
 record CollaboratorsAnswer { collaborators: list 65536 Collaborator more: bool }
 record Located { repository: u32 }
-enum Answer { items: ItemsAnswer, item: ItemAnswer, pull: Pull, reviews: ReviewsAnswer, statuses: StatusesAnswer, remarks: RemarksAnswer, commit: Commit, branches: BranchesAnswer, pull_files: PullFilesAnswer, compare: CompareAnswer, checks: ChecksAnswer, job: JobAnswer, file: FileAnswer, protection: ProtectionAnswer, settings: Settings, collaborators: CollaboratorsAnswer, permission: PermissionValue, created: Number, commented: Number, reviewed: Number, merged: Commit, branch: BranchCreationValue, done, located: Located, queued }
+enum Answer { items: ItemsAnswer, item: ItemAnswer, pull: Pull, reviews: ReviewsAnswer, statuses: StatusesAnswer, remarks: RemarksAnswer, commit: Commit, branches: BranchesAnswer, pull_files: PullFilesAnswer, compare: CompareAnswer, checks: ChecksAnswer, job: JobAnswer, file: FileAnswer, protection: ProtectionAnswer, settings: Settings, collaborators: CollaboratorsAnswer, permission: PermissionValue, created: Number, commented: Number, reviewed: Number, merged: Commit, branch: BranchCreationValue, done, located: Located, queued, directory: DirectoryAnswer }
 record AnswerValue { answer: Answer }
 enum ReadResult { answer: boxed AnswerValue, error: ErrorValue }
 record CallRead { result: ReadResult }

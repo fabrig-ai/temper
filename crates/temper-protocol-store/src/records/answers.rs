@@ -149,6 +149,18 @@ pub(super) fn encode(value: &d::Answer) -> w::Answer {
             )
             .expect(FITS),
         ),
+        d::Answer::Directory { head, path, entries, truncated } => w::Answer::Directory(
+            w::DirectoryAnswer::new(
+                &w::CEILINGS,
+                w::DirectoryAnswerParts {
+                    head: *head,
+                    path: path.clone(),
+                    entries: encode_directory(entries),
+                    truncated: *truncated,
+                },
+            )
+            .expect(FITS),
+        ),
         d::Answer::File { head, path, bytes, truncated } => w::Answer::File(
             w::FileAnswer::new(
                 &w::CEILINGS,
@@ -264,6 +276,16 @@ pub(super) fn decode(value: w::Answer, bounds: &Bounds) -> Result<d::Answer, Und
                 log,
                 truncated,
             }
+        }
+        w::Answer::Directory(value) => {
+            let w::DirectoryAnswerParts { head, path, entries, truncated } = value.into_parts();
+            let room = bounds
+                .forge()
+                .client
+                .answer_bytes
+                .checked_sub(u32::try_from(path.len()).or(Err(Undecodable))?)
+                .ok_or(Undecodable)?;
+            d::Answer::Directory { head, path, entries: decode_directory(&entries, bounds, room)?, truncated }
         }
         w::Answer::File(value) => {
             let w::FileAnswerParts { head, path, bytes, truncated } = value.into_parts();
@@ -594,4 +616,53 @@ fn encode_collaborators_answer(collaborators: &[d::Collaborator], more: bool) ->
         w::CollaboratorsAnswerParts { collaborators: encode_collaborators(collaborators), more },
     )
     .expect(FITS)
+}
+
+fn directory_entry(value: &d::Entry) -> w::DirectoryEntry {
+    let kind = match value.kind {
+        d::EntryKind::File => w::DirectoryKind::File,
+        d::EntryKind::Directory => w::DirectoryKind::Directory,
+        d::EntryKind::Submodule => w::DirectoryKind::Submodule,
+    };
+    w::DirectoryEntry::new(&w::CEILINGS, w::DirectoryEntryParts { name: value.name.clone(), kind }).expect(FITS)
+}
+fn encode_directory(values: &[d::Entry]) -> Box<[u8]> {
+    let mut size = 0_usize;
+    for value in values {
+        size = size
+            .checked_add(usize::try_from(directory_entry(value).measure()).expect("entry length fits"))
+            .expect("bounded piece")
+            .checked_add(4)
+            .expect("bounded piece");
+    }
+    let mut writer = Writer::new(size);
+    for value in values {
+        let item = directory_entry(value);
+        let mut encoded = Writer::new(usize::try_from(item.measure()).expect("entry length fits"));
+        item.encode(&mut encoded).expect("measured entry room");
+        skein_codec::piece::write(&mut writer, &encoded.finish()).expect("measured piece room");
+    }
+    writer.finish()
+}
+fn decode_directory(bytes: &[u8], bounds: &Bounds, mut room: u32) -> Result<Box<[d::Entry]>, Undecodable> {
+    let width = u32::try_from(skein_forge::measure::ENTRY_BYTES).or(Err(Undecodable))?;
+    let capacity = room.checked_div(width).ok_or(Undecodable)?;
+    let mut values = List::with_capacity(capacity);
+    let mut reader = Reader::new(bytes);
+    for _ in 0..=capacity {
+        let Some(item) = skein_codec::piece::split(&mut reader).or(Err(Undecodable))? else {
+            return Ok(values.into_boxed());
+        };
+        let item = w::DirectoryEntry::decode(bounds.limits(), &mut Reader::new(&item)).or(Err(Undecodable))?;
+        let w::DirectoryEntryParts { name, kind } = item.into_parts();
+        let charge = u32::try_from(name.len()).or(Err(Undecodable))?.checked_add(width).ok_or(Undecodable)?;
+        room = room.checked_sub(charge).ok_or(Undecodable)?;
+        let kind = match kind {
+            w::DirectoryKind::File => d::EntryKind::File,
+            w::DirectoryKind::Directory => d::EntryKind::Directory,
+            w::DirectoryKind::Submodule => d::EntryKind::Submodule,
+        };
+        values.push(d::Entry { name, kind }).or(Err(Undecodable))?;
+    }
+    Err(Undecodable)
 }

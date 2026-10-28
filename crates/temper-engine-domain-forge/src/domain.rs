@@ -4274,6 +4274,7 @@ fn changed(
             | skein_forge::api::Answer::PullFiles { .. }
             | skein_forge::api::Answer::Compare { .. }
             | skein_forge::api::Answer::Checks(_)
+            | skein_forge::api::Answer::Directory { .. }
             | skein_forge::api::Answer::File { .. }
             | skein_forge::api::Answer::Job { .. }
             | skein_forge::api::Answer::Protection(_)

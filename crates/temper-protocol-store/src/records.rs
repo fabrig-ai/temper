@@ -227,6 +227,10 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         pull_base: forge.client.answer_bytes,
         step_name: forge.client.answer_bytes,
         job_answer_log: forge.client.answer_bytes,
+        directory_entry_name: forge.client.answer_bytes,
+        directory_answer_path: forge.client.answer_bytes,
+        // A stored entry uses fewer bytes than its public fixed entry charge.
+        directory_answer_entries: forge.client.answer_bytes,
         file_answer_path: forge.client.answer_bytes,
         file_answer_bytes: forge.client.answer_bytes,
         branches_answer_branches: forge.client.answer_bytes.checked_add(forge.client.rows.checked_mul(8)?)?,
