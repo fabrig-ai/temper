@@ -1125,8 +1125,14 @@ fn landing_rows_preserve_phases_proofs_asks_and_effects() {
 #[test]
 fn receipts_preserve_the_check_key_run_and_verdict() {
     let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
-    for check in [forge::Check::Gate(Box::from(b"gate".as_slice())), forge::Check::Tier(Box::from(b"tier".as_slice()))]
-    {
+    for check in [
+        forge::Check::Gate(Box::new([])),
+        forge::Check::Tier(Box::new([])),
+        forge::Check::Gate(Box::from(b"gate".as_slice())),
+        forge::Check::Tier(Box::from(b"tier".as_slice())),
+        forge::Check::Gate(Box::from([0; 32])),
+        forge::Check::Tier(Box::from([0; 32])),
+    ] {
         for passed in [false, true] {
             let row = forge::Stored::Receipt {
                 key: forge::ReceiptKey {
