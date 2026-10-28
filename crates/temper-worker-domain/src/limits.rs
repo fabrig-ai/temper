@@ -239,24 +239,3 @@ fn len(bytes: &[u8]) -> u64 {
 pub(crate) fn facts(limits: &Limits) -> Option<u32> {
     limits.host.facts.checked_add(limits.checkout.facts)?.checked_add(limits.agent.facts)
 }
-
-/// Compatibility for the service's room predicate, removed in the service swap.
-#[must_use]
-pub fn max_out(limits: &Limits) -> u32 {
-    let requests = host::max_out(&limits.host).checked_mul(8).expect("root output bound");
-    let capabilities = requests.checked_add(2).expect("root output bound");
-    let routed = capabilities
-        .checked_mul(agent::max_out(&limits.agent).checked_add(checkout::MAX_OUT).expect("root output bound"))
-        .and_then(|count| count.checked_add(requests))
-        .expect("root output bound");
-    let replays = limits
-        .host
-        .slots
-        .checked_mul(limits.host.turns.checked_mul(2).and_then(|count| count.checked_add(1)).expect("replay bound"))
-        .expect("replay bound");
-    routed
-        .checked_add(replays)
-        .and_then(|count| count.checked_add(limits.host.told))
-        .and_then(|count| count.checked_add(2))
-        .expect("root output bound")
-}

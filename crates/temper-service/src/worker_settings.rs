@@ -19,8 +19,6 @@ pub struct Prepared {
     pub root: root::Limits,
     pub link: link::Limits,
     pub payload: v1::Limits,
-    pub room: u32,
-    pub lower: u32,
     pub prefix: u64,
     pub address: io::Addr,
 }
@@ -46,8 +44,6 @@ pub fn prepare(worker: &settings::Worker, agent: &settings::Agent, own: &limits:
     let payload = payload_limits(own).ok_or(problem(b"limits", What::Bound))?;
     let link = link_limits(&worker.jig, &payload).ok_or(problem(b"limits", What::Bound))?;
     link::worst_case(&link).ok_or(problem(b"limits", What::Bound))?;
-    let room = root::max_out(&domain_limits).checked_mul(2).ok_or(problem(b"limits", What::Bound))?;
-    let lower = room.checked_mul(link::MAX_OUT_DOWN).ok_or(problem(b"limits", What::Bound))?;
     let prefix = crate::tokens::worker(0).ok_or(problem(b"slots", What::Bound))?;
     worker.jig.slots.checked_mul(4).ok_or(problem(b"slots", What::Bound))?;
     worker.jig.limits.core.accounts.accounts.checked_add(1).ok_or(problem(b"limits", What::Bound))?;
@@ -57,7 +53,7 @@ pub fn prepare(worker: &settings::Worker, agent: &settings::Agent, own: &limits:
     {
         return Err(problem(b"limits", What::Bound));
     }
-    Ok(Prepared { root: domain_limits, link, payload, room, lower, prefix, address })
+    Ok(Prepared { root: domain_limits, link, payload, prefix, address })
 }
 
 #[must_use]
@@ -193,8 +189,6 @@ pub(crate) fn memory_terms(
 ) -> Option<[crate::startup::MemoryTerm; 11]> {
     let prepared = prepare(worker, agent, own).ok()?;
     let jig = &worker.jig;
-    let room = prepared.room;
-    let payload = smith_host_domain::worst_case(&agent.host_limits)?.checked_add(host::worst_case(&agent.limits)?)?;
     let mut command =
         u64::try_from(worker.root.len()).ok()?.checked_add(u64::try_from(jig.agent.program.len()).ok()?)?;
     for argument in &jig.agent.arguments {
@@ -202,18 +196,14 @@ pub(crate) fn memory_terms(
     }
     let remote = match prepared.address {
         io::Addr::InProcess(_) => 0,
-        io::Addr::Ip(_) => crate::worker::remote_worst_case(u32::try_from(jig.name.len()).ok()?, prepared.lower)?,
+        io::Addr::Ip(_) => crate::worker::remote_worst_case(u32::try_from(jig.name.len()).ok()?, crate::worker::NOTES)?,
     };
-    let routing = Queue::<root::Request>::worst_case(room)?
-        .checked_add(Queue::<root::Event>::worst_case(room)?)?
-        .checked_add(Queue::<host::ProcessEvent>::worst_case(room)?)?
+    let routing = Queue::<root::Event>::worst_case(crate::worker::ENGINE_EVENTS)?
         .checked_add(Queue::<link::Request>::worst_case(link::MAX_OUT_DOWN)?)?
-        .checked_add(Queue::<io::Request>::worst_case(prepared.lower)?)?
         .checked_add(Map::<Token, host::Process>::worst_case(jig.slots)?)?
         .checked_add(Map::<Token, Token>::worst_case(jig.slots.checked_mul(5)?)?)?
         .checked_add(List::<Token>::worst_case(jig.slots)?.checked_mul(6)?)?
         .checked_add(Queue::<io::kernel::Submit>::worst_case(1)?)?
-        .checked_add(payload.checked_mul(u64::from(room).checked_mul(3)?)?)?
         .checked_add(command.checked_mul(u64::from(jig.slots).checked_add(1)?)?)?
         .checked_add(u64::try_from(crate::worker::WORKER_PATH_BYTES).ok()?)?;
     Some([
