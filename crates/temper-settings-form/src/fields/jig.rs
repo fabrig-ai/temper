@@ -1,4 +1,4 @@
-use super::{Bound, Choice, Field, Form, Limit, Shape, Value, Width, Word};
+use super::{Bound, Choice, Default, Field, Form, Limit, Presence, Shape, Value, Width, Word};
 pub static FORMS: [Form; 41] = [
     Form { shape: Shape::File, name: b"file", choice: Choice::Every, line: b"A settings file, as `settings apply` and `settings propose` read it." },
     Form { shape: Shape::Item, name: b"item", choice: Choice::Every, line: b"One setting, and what becomes of it: `setting`, then exactly one of `set` and `edit`." },
@@ -74,6 +74,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Item),
         list: Some(Bound::Most(1024)),
         null: false,
+        presence: Presence::Required,
         line: b"The change: an item for each setting it touches, each setting once.",
     },
     Field {
@@ -82,15 +83,17 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Setting),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The setting the item changes.",
     },
-    Field { shape: Shape::Item, name: b"set", value: Value::Setting, list: None, null: false, line: b"Its new value, whole, which replaces the one before." },
+    Field { shape: Shape::Item, name: b"set", value: Value::Setting, list: None, null: false, presence: Presence::Required, line: b"Its new value, whole, which replaces the one before." },
     Field {
         shape: Shape::Item,
         name: b"edit",
         value: Value::Words(&[Word { word: b"removed", line: b"No longer offered, its default included; the rules cannot be removed." }, Word { word: b"reset", line: b"Its change erased, so that it follows its default again." }]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What becomes of the setting, in place of a value.",
     },
     Field {
@@ -104,6 +107,7 @@ pub static FIELDS: [Field; 152] = [
         ]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The setting's kind.",
     },
     Field {
@@ -112,6 +116,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The setting's number, from 1; left out for the rules.",
     },
     Field {
@@ -120,6 +125,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The charter's number, the same as `setting.number`.",
     },
     Field {
@@ -128,25 +134,28 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::CharterInstructions)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What the run's agent reads first, before its task's brief.",
     },
-    Field { shape: Shape::Charter, name: b"waiting", value: Value::Nanoseconds, list: None, null: false, line: b"How long a run with nothing to do waits for words or news before it parks." },
-    Field { shape: Shape::Charter, name: b"resume", value: Value::Boolean, list: None, null: false, line: b"Whether a run resumes its task's transcript, when there is one, rather than start afresh." },
+    Field { shape: Shape::Charter, name: b"waiting", value: Value::Nanoseconds, list: None, null: false, presence: Presence::Required, line: b"How long a run with nothing to do waits for words or news before it parks." },
+    Field { shape: Shape::Charter, name: b"resume", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether a run resumes its task's transcript, when there is one, rather than start afresh." },
     Field {
         shape: Shape::Charter,
         name: b"turns",
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most model turns a run takes; more than `reserve_turns`, else refused as `budget`.",
     },
-    Field { shape: Shape::Charter, name: b"time", value: Value::Nanoseconds, list: None, null: false, line: b"The longest a run lasts before it is cancelled; more than `reserve_time`, else refused as `budget`." },
+    Field { shape: Shape::Charter, name: b"time", value: Value::Nanoseconds, list: None, null: false, presence: Presence::Required, line: b"The longest a run lasts before it is cancelled; more than `reserve_time`, else refused as `budget`." },
     Field {
         shape: Shape::Charter,
         name: b"reserve_turns",
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Of `turns`, those kept for the run to finish its work and report.",
     },
     Field {
@@ -155,6 +164,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Nanoseconds,
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Of `time`, the part kept for the run to finish its work and report.",
     },
     Field {
@@ -163,6 +173,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Model),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The default model: a task that names none takes the first of `model` and `alternatives` whose provider has an account that can pay.",
     },
     Field {
@@ -171,18 +182,20 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Model),
         list: Some(Bound::Limit(Limit::CharterAlternatives)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The other models the charter offers, in order after `model`, each named once; a run's sub-agents may use them too.",
     },
-    Field { shape: Shape::Charter, name: b"inspect", value: Value::Boolean, list: None, null: false, line: b"Whether the run's agent may read, list and search its workspace." },
-    Field { shape: Shape::Charter, name: b"modify", value: Value::Boolean, list: None, null: false, line: b"Whether the run's agent may write and edit files in its workspace." },
-    Field { shape: Shape::Charter, name: b"shell", value: Value::Boolean, list: None, null: false, line: b"Whether the run's agent may run commands in its workspace." },
-    Field { shape: Shape::Charter, name: b"agents", value: Value::Boolean, list: None, null: false, line: b"Whether the run's agent may open sub-agents, each with no more tools than its own." },
+    Field { shape: Shape::Charter, name: b"inspect", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether the run's agent may read, list and search its workspace." },
+    Field { shape: Shape::Charter, name: b"modify", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether the run's agent may write and edit files in its workspace." },
+    Field { shape: Shape::Charter, name: b"shell", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether the run's agent may run commands in its workspace." },
+    Field { shape: Shape::Charter, name: b"agents", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether the run's agent may open sub-agents, each with no more tools than its own." },
     Field {
         shape: Shape::Charter,
         name: b"call_timeout",
         value: Value::Nanoseconds,
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The longest one of the run's calls to temper's tools may take.",
     },
     Field {
@@ -195,6 +208,7 @@ pub static FIELDS: [Field; 152] = [
         ]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Which hosts may run it.",
     },
     Field {
@@ -203,6 +217,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A spend the charter must hold: at least `reserve_turns` plus one of the default model's completions at their costliest, else refused as `budget`. A run is given its task's funds left, at most `rules.maximum_run_spend`.",
     },
     Field {
@@ -211,6 +226,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The protocol the model is spoken to in, as configured.",
     },
     Field {
@@ -219,6 +235,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The number of the configured endpoint that serves it.",
     },
     Field {
@@ -227,6 +244,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::SettingModelProgramSome)),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"The program that runs it, as configured, or null for none.",
     },
     Field {
@@ -235,6 +253,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::SettingModelName)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The model's name, as its provider knows it.",
     },
     Field {
@@ -243,6 +262,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most tokens of input it reads.",
     },
     Field {
@@ -251,6 +271,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most tokens it writes in one completion, thinking included.",
     },
     Field {
@@ -259,6 +280,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What fresh input costs, in spend units per `price_unit` tokens.",
     },
     Field {
@@ -267,6 +289,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What cached input costs, in spend units per `price_unit` tokens.",
     },
     Field {
@@ -275,6 +298,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"What writing its cache costs, in spend units per `price_unit` tokens, or null to price it as fresh input.",
     },
     Field {
@@ -283,6 +307,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What output costs, in spend units per `price_unit` tokens.",
     },
     Field {
@@ -291,6 +316,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The number of tokens each price is for.",
     },
     Field {
@@ -299,6 +325,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::SettingModelEffortsItem)),
         list: Some(Bound::Limit(Limit::SettingModelEfforts)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The efforts it takes, in order, as configured.",
     },
     Field {
@@ -307,6 +334,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::SettingModelEffortSome)),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"The effort a run asks of it, one of `efforts`, or null for its default.",
     },
     Field {
@@ -315,6 +343,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The template's number, the same as `setting.number`; a chat is filled from template 1 and a goal from template 2.",
     },
     Field {
@@ -323,6 +352,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Text),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Its name, as clients show it.",
     },
     Field {
@@ -331,6 +361,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Executor),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Who runs the task.",
     },
     Field {
@@ -339,6 +370,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Contract),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The result the task must give.",
     },
     Field {
@@ -347,6 +379,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"How many levels of delegation the task has below its creator's role: 1 is one level; 0 leaves the template unusable.",
     },
     Field {
@@ -355,6 +388,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Budget),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What the task may spend.",
     },
     Field {
@@ -363,6 +397,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Deadline),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"By when the task must end.",
     },
     Field {
@@ -371,6 +406,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"Its default priority as tracked work, lower first, or null for untracked.",
     },
     Field {
@@ -379,6 +415,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Flags),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"How the task behaves and is kept.",
     },
     Field {
@@ -387,25 +424,28 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A number that groups the task in the lists of ended tasks; temper reads nothing else from it.",
     },
-    Field { shape: Shape::Template, name: b"grace", value: Value::Nanoseconds, list: None, null: true, line: b"How long a chat's close lets its runs finish before it cancels them, or null; past the deployment's limit, refused as `grace`." },
-    Field { shape: Shape::Template, name: b"llm", value: Value::Shape(Shape::Llm), list: None, null: true, line: b"The models the task asks for, or null for its charter's default." },
+    Field { shape: Shape::Template, name: b"grace", value: Value::Nanoseconds, list: None, null: true, presence: Presence::Optional(Default::Null), line: b"How long a chat's close lets its runs finish before it cancels them, or null; past the deployment's limit, refused as `grace`." },
+    Field { shape: Shape::Template, name: b"llm", value: Value::Shape(Shape::Llm), list: None, null: true, presence: Presence::Optional(Default::Null), line: b"The models the task asks for, or null for its charter's default." },
     Field {
         shape: Shape::Text,
         name: b"bytes",
         value: Value::Text(Bound::Limit(Limit::DocumentTextBytes)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The text.",
     },
-    Field { shape: Shape::Text, name: b"cut", value: Value::Boolean, list: None, null: false, line: b"Always false: a value is set whole." },
+    Field { shape: Shape::Text, name: b"cut", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Always false: a value is set whole." },
     Field {
         shape: Shape::Executor,
         name: b"charter",
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"An agent under this charter, which must be offered, else refused as `reference`.",
     },
     Field {
@@ -414,6 +454,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Approval),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A person's approval of an exact state; an agent given one can only fail.",
     },
     Field {
@@ -422,6 +463,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Report),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A report.",
     },
     Field {
@@ -430,6 +472,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Verdict),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"One of a set of verdicts.",
     },
     Field {
@@ -438,6 +481,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Change),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A connector's result.",
     },
     Field {
@@ -446,6 +490,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Hex(Bound::Limit(Limit::TaskContractDocumentApprovalState)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The state approved, which the approval must give back byte for byte.",
     },
     Field {
@@ -454,6 +499,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Part),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What a client shows the approval with.",
     },
     Field {
@@ -462,6 +508,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector that owns it: 1 is the forge.",
     },
     Field {
@@ -478,24 +525,27 @@ pub static FIELDS: [Field; 152] = [
         ]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What kind of thing it is.",
     },
-    Field { shape: Shape::Part, name: b"key", value: Value::Shape(Shape::Key), list: None, null: false, line: b"Which one." },
+    Field { shape: Shape::Part, name: b"key", value: Value::Shape(Shape::Key), list: None, null: false, presence: Presence::Required, line: b"Which one." },
     Field {
         shape: Shape::Key,
         name: b"path",
         value: Value::Hex(Bound::Limit(Limit::OwnerPartKeyPathValueItem)),
         list: Some(Bound::Limit(Limit::OwnerPartKeyPathValue)),
         null: false,
+        presence: Presence::Required,
         line: b"A resource's name, its segments as hex: `forge`, the host, the owner and the repository, then `branch` and the branch's segments.",
     },
-    Field { shape: Shape::Key, name: b"number", value: Value::Integer(Width::U64), list: None, null: false, line: b"A number the connector knows it by." },
+    Field { shape: Shape::Key, name: b"number", value: Value::Integer(Width::U64), list: None, null: false, presence: Presence::Required, line: b"A number the connector knows it by." },
     Field {
         shape: Shape::Report,
         name: b"words",
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most bytes the report may hold.",
     },
     Field {
@@ -504,15 +554,17 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Choice),
         list: Some(Bound::Limit(Limit::TaskContractDocumentVerdictChoices)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The choices the task gives one of.",
     },
-    Field { shape: Shape::Verdict, name: b"cut", value: Value::Boolean, list: None, null: false, line: b"Always false: a value is set whole." },
+    Field { shape: Shape::Verdict, name: b"cut", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Always false: a value is set whole." },
     Field {
         shape: Shape::Choice,
         name: b"code",
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Its number, unique among the choices.",
     },
     Field {
@@ -521,6 +573,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most bytes of the verdict's explanation.",
     },
     Field {
@@ -529,6 +582,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most follow-up delegates the verdict may ask for.",
     },
     Field {
@@ -537,6 +591,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::ChoiceField),
         list: Some(Bound::Limit(Limit::VerdictChoiceFields)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The fields the verdict must fill, each named once.",
     },
     Field {
@@ -545,6 +600,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Hex(Bound::Limit(Limit::FieldRuleName)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Its name as hex, not empty.",
     },
     Field {
@@ -553,6 +609,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most bytes of its value.",
     },
     Field {
@@ -561,6 +618,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector that gives the result: 1 is the forge.",
     },
     Field {
@@ -569,6 +627,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The kind of result: the forge's 1 is a landed change, its 2 a change made but not landed.",
     },
     Field {
@@ -577,6 +636,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most bytes of the result's report, each of the change's title and body.",
     },
     Field {
@@ -585,6 +645,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"This much.",
     },
     Field {
@@ -593,6 +654,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::AsAllowed),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"As much as the creator has left when the task is made.",
     },
     Field {
@@ -601,17 +663,19 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"The most it may be, or null for no cap.",
     },
-    Field { shape: Shape::Deadline, name: b"span", value: Value::Nanoseconds, list: None, null: false, line: b"This long after the task is made." },
-    Field { shape: Shape::Flags, name: b"conversation", value: Value::Boolean, list: None, null: false, line: b"Whether the task is a conversation: its requester's words are its turns, and it moves to the newest revision at its next run." },
-    Field { shape: Shape::Flags, name: b"listed", value: Value::Boolean, list: None, null: false, line: b"Whether it is listed, by project and label, once it has ended." },
+    Field { shape: Shape::Deadline, name: b"span", value: Value::Nanoseconds, list: None, null: false, presence: Presence::Required, line: b"This long after the task is made." },
+    Field { shape: Shape::Flags, name: b"conversation", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether the task is a conversation: its requester's words are its turns, and it moves to the newest revision at its next run." },
+    Field { shape: Shape::Flags, name: b"listed", value: Value::Boolean, list: None, null: false, presence: Presence::Required, line: b"Whether it is listed, by project and label, once it has ended." },
     Field {
         shape: Shape::Flags,
         name: b"retention",
         value: Value::Words(&[Word { word: b"kept", line: b"Until the deployment's retention horizon." }, Word { word: b"forgotten_once_read", line: b"Until its requester has read it and no live task names it." }]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"How long it is kept.",
     },
     Field {
@@ -620,15 +684,17 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Words(&[Word { word: b"result", line: b"Its run's result." }, Word { word: b"requester", line: b"Its requester alone; it needs `conversation` and a charter as `executor`, else refused as `shape`." }]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What ends it.",
     },
-    Field { shape: Shape::Llm, name: b"account", value: Value::Integer(Width::U32), list: None, null: true, line: b"The account to pay with, or null for any that can." },
+    Field { shape: Shape::Llm, name: b"account", value: Value::Integer(Width::U32), list: None, null: true, presence: Presence::Optional(Default::Null), line: b"The account to pay with, or null for any that can." },
     Field {
         shape: Shape::Llm,
         name: b"main",
         value: Value::Shape(Shape::ModelEffort),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The main model and its effort.",
     },
     Field {
@@ -637,6 +703,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::ModelEffort),
         list: Some(Bound::Limit(Limit::LlmChoiceSubagents)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The models its runs' sub-agents may use, each named once.",
     },
     Field {
@@ -645,6 +712,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::ModelEffortModel)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A configured model's name, one the task's charter offers.",
     },
     Field {
@@ -653,6 +721,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Text(Bound::Limit(Limit::ModelEffortEffortSome)),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"One of the model's efforts, or null for a model that takes none.",
     },
     Field {
@@ -661,6 +730,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"The role an escalation reaches last, or null; that role must accept proposals and decide escalations.",
     },
     Field {
@@ -669,6 +739,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Authority),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most any task in the project may have; within the rules, else refused as `rules`.",
     },
     Field {
@@ -677,6 +748,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Grant),
         list: Some(Bound::Limit(Limit::SettingPolicyProjections)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The grants under which temper writes goals' projections into the project's homes; each within `ceiling`.",
     },
     Field {
@@ -685,6 +757,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What the project may spend in a period; within `rules.period_spend`.",
     },
     Field {
@@ -693,6 +766,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Role),
         list: Some(Bound::Limit(Limit::SettingPolicyRoles)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The project's roles: what a party in each may do.",
     },
     Field {
@@ -701,6 +775,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Requirement),
         list: Some(Bound::Limit(Limit::SettingPolicyRequirements)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"What an effect in the project needs, beside the rules' requirements.",
     },
     Field {
@@ -709,6 +784,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Permission),
         list: Some(Bound::Limit(Limit::SettingPolicyPermissions)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The project role each forge collaborator's permission gives, at adoption.",
     },
     Field {
@@ -717,6 +793,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::TemplateOverride),
         list: Some(Bound::Limit(Limit::SettingPolicyTemplates)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The project's overrides of templates.",
     },
     Field {
@@ -725,6 +802,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Its number: 0 is owner, 1 maintainer, 2 member, 3 observer; others are the policy's own. Role 0 must be able to create tasks, else refused as `owner`.",
     },
     Field {
@@ -733,6 +811,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Authority),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most a party in it may give a task; within the policy's `ceiling`.",
     },
     Field {
@@ -741,6 +820,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What a party in it may allot in a period; within the policy's `period_spend`.",
     },
     Field {
@@ -749,6 +829,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"What a party in it may ask, a bit each: 1 create, 2 allot, 4 accept, 8 amend, 16 cancel, 32 release, 64 move, 128 watch, 256 change the policy.",
     },
     Field {
@@ -757,6 +838,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U8),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The proposals a party in it may decide, a bit each: 1 a batch of tasks, 2 an effect, 4 a widening, 8 an amendment, 16 an escalation.",
     },
     Field {
@@ -765,6 +847,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The template's number; offered, and once in the policy.",
     },
     Field {
@@ -773,6 +856,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Executor),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"Its executor, or null.",
     },
     Field {
@@ -781,6 +865,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Budget),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"Its budget, or null.",
     },
     Field {
@@ -789,6 +874,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Deadline),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"Its deadline, or null.",
     },
     Field {
@@ -797,6 +883,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: true,
+        presence: Presence::Optional(Default::Null),
         line: b"Its default priority, or null; an untracked template ignores it.",
     },
     Field {
@@ -805,6 +892,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector: 1 is the forge.",
     },
     Field {
@@ -813,6 +901,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The permission: 0 none, 1 read, 2 write, 3 admin.",
     },
     Field {
@@ -821,6 +910,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The role it gives, one of the policy's `roles`.",
     },
     Field {
@@ -829,6 +919,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Authority),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most any project may have.",
     },
     Field {
@@ -837,6 +928,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most a project's period spend may be.",
     },
     Field {
@@ -845,6 +937,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A run starts only with more than this to spend.",
     },
     Field {
@@ -853,6 +946,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most a run is given of its task's funds; more than `minimum_run_spend`, and within `ceiling`'s spend.",
     },
     Field {
@@ -861,6 +955,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Implication),
         list: Some(Bound::Limit(Limit::RulesImplies)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"Kinds of a connector's whose grant grants other kinds too.",
     },
     Field {
@@ -869,6 +964,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Requirement),
         list: Some(Bound::Limit(Limit::RulesRequirements)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"What an effect needs, in every project.",
     },
     Field {
@@ -877,6 +973,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector: 1 is the forge.",
     },
     Field {
@@ -885,6 +982,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The kind whose grant also grants `implies`.",
     },
     Field {
@@ -893,6 +991,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The kind it grants.",
     },
     Field {
@@ -901,6 +1000,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Models),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The models its runs may use.",
     },
     Field {
@@ -909,6 +1009,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The engine's tool families its runs may call, a bit each: 1 delegate, 2 message, 4 amend, cancel and release, 8 decide and withdraw, 16 propose, 32 subscribe, 64 effect, 128 note, 256 recall, 512 the forge's reads, 1024 settings.",
     },
     Field {
@@ -917,6 +1018,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Grant),
         list: Some(Bound::Limit(Limit::OwnerAuthorityGrants)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The effects and reads it may make, each a connector's kind on some resources.",
     },
     Field {
@@ -925,6 +1027,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Delegation),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The delegates it may make.",
     },
     Field {
@@ -933,15 +1036,17 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The most its tree may spend.",
     },
-    Field { shape: Shape::Authority, name: b"deadline", value: Value::Time, list: None, null: true, line: b"The latest it may end, or null for no deadline." },
+    Field { shape: Shape::Authority, name: b"deadline", value: Value::Time, list: None, null: true, presence: Presence::Optional(Default::Null), line: b"The latest it may end, or null for no deadline." },
     Field {
         shape: Shape::Authority,
         name: b"notes",
         value: Value::Integer(Width::U8),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The scopes it may write notes in, a bit each: 1 its goal, 2 its project, 4 the deployment.",
     },
     Field {
@@ -950,6 +1055,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Resource),
         list: Some(Bound::Limit(Limit::OwnerAuthorityNoteResources)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The resources it may write notes on.",
     },
     Field {
@@ -958,6 +1064,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Hex(Bound::Limit(Limit::ModelSetNamesNamesItem)),
         list: Some(Bound::Limit(Limit::ModelSetNamesNames)),
         null: false,
+        presence: Presence::Required,
         line: b"These models alone, each name as hex; an empty list allows none.",
     },
     Field {
@@ -966,15 +1073,17 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector: 1 is the forge.",
     },
-    Field { shape: Shape::Grant, name: b"kind", value: Value::Integer(Width::U16), list: None, null: false, line: b"The kind; the forge's are 1 read, 2 push, 3 open a pull request, 4 merge, 5 review, 6 set a status, 7 comment, 8 open an issue, 9 make a branch, 10 edit a pull request, 11 update it from its base, 12 close or reopen it, 13 edit an issue, 14 set reviewers, 15 delete a branch." },
+    Field { shape: Shape::Grant, name: b"kind", value: Value::Integer(Width::U16), list: None, null: false, presence: Presence::Required, line: b"The kind; the forge's are 1 read, 2 push, 3 open a pull request, 4 merge, 5 review, 6 set a status, 7 comment, 8 open an issue, 9 make a branch, 10 edit a pull request, 11 update it from its base, 12 close or reopen it, 13 edit an issue, 14 set reviewers, 15 delete a branch." },
     Field {
         shape: Shape::Grant,
         name: b"pattern",
         value: Value::Shape(Shape::Pattern),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The resources it covers.",
     },
     Field {
@@ -983,6 +1092,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Hex(Bound::Limit(Limit::OwnerPatternSegmentsItem)),
         list: Some(Bound::Limit(Limit::OwnerPatternSegments)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"The first segments, each as hex, each matched exactly.",
     },
     Field {
@@ -991,6 +1101,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Last),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The segment after them.",
     },
     Field {
@@ -999,6 +1110,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Hex(Bound::Limit(Limit::OwnerPatternEndExactValue)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Exactly this segment, as hex, and nothing beneath it.",
     },
     Field {
@@ -1007,6 +1119,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Hex(Bound::Limit(Limit::OwnerPatternEndOpenValue)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Any segment that begins with this, as hex, and everything beneath it; empty covers every segment.",
     },
     Field {
@@ -1015,6 +1128,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Delegate),
         list: Some(Bound::Limit(Limit::OwnerDelegationKinds)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"Who its delegates may be.",
     },
     Field {
@@ -1023,6 +1137,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"How many tasks its tree may make over its life, not at once.",
     },
     Field {
@@ -1031,6 +1146,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"How far below it its tree may go; 0 allows no delegate.",
     },
     Field {
@@ -1039,6 +1155,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"An agent under this charter, which must be offered.",
     },
     Field {
@@ -1047,6 +1164,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"This procedure: 2 is the forge's change.",
     },
     Field {
@@ -1055,6 +1173,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A person in this role.",
     },
     Field {
@@ -1063,6 +1182,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector: 1 is the forge.",
     },
     Field {
@@ -1071,6 +1191,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Pattern),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The resources.",
     },
     Field {
@@ -1079,6 +1200,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The connector whose effect it constrains: 1 is the forge.",
     },
     Field {
@@ -1087,6 +1209,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The kind of effect; implications do not apply.",
     },
     Field {
@@ -1095,6 +1218,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Pattern),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The resources it applies to.",
     },
     Field {
@@ -1103,6 +1227,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Judge),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Who judges it.",
     },
     Field {
@@ -1111,6 +1236,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Guard),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"When it is judged.",
     },
     Field {
@@ -1119,6 +1245,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Boolean,
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Whether the system that makes the effect must check it as it does; an effect that system cannot guard is refused.",
     },
     Field {
@@ -1127,6 +1254,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"The judging connector: 1 is the forge.",
     },
     Field {
@@ -1135,6 +1263,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Its criterion; the forge's are 1 CI passed at the head, 2 the head up to date with its base, 3 a gate, 4 approvals.",
     },
     Field {
@@ -1143,6 +1272,7 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Integer(Width::U32),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"A number the judging connector reads the criterion's terms by.",
     },
     Field {
@@ -1151,7 +1281,8 @@ pub static FIELDS: [Field; 152] = [
         value: Value::Shape(Shape::Observed),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"Before the effect is made, from facts read recently enough.",
     },
-    Field { shape: Shape::Observed, name: b"freshness", value: Value::Nanoseconds, list: None, null: false, line: b"How old those facts may be." },
+    Field { shape: Shape::Observed, name: b"freshness", value: Value::Nanoseconds, list: None, null: false, presence: Presence::Required, line: b"How old those facts may be." },
 ];

@@ -1,4 +1,4 @@
-use super::{Choice, FIELDS, FORMS, Field, Form, Value, Width, Word, most};
+use super::{Choice, Default, FIELDS, FORMS, Field, Form, Presence, Value, Width, Word, most};
 use crate::{Limits, Text};
 use alloc::boxed::Box;
 use skein_lib::Decimal;
@@ -63,6 +63,16 @@ fn write(forms: &[Form], fields: &[Field], limits: &Limits, out: &mut Text) {
             value(&field.value, forms, limits, out);
             if field.null {
                 out.put(b", or null");
+            }
+            match field.presence {
+                Presence::Required => out.put(b", required"),
+                Presence::Optional(default) => {
+                    out.put(b", optional, default ");
+                    out.put(match default {
+                        Default::Null => b"null",
+                        Default::EmptyList => b"[]",
+                    });
+                }
             }
             out.put(b".");
             line(field.line, out);

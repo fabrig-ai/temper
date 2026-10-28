@@ -75,7 +75,19 @@ pub struct Field {
     pub value: Value,
     pub list: Option<Bound>,
     pub null: bool,
+    pub presence: Presence,
     pub line: &'static [u8],
+}
+/// Whether an absent member is refused, or takes a JSON default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presence {
+    Required,
+    Optional(Default),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Default {
+    Null,
+    EmptyList,
 }
 #[derive(Debug)]
 pub enum Value {

@@ -2,11 +2,28 @@
 use crate::Limits;
 #[path = "settings_file_values.rs"]
 mod values;
+use crate::fields::{self, Default, Presence, Shape};
 use crate::view as c;
 use alloc::boxed::Box;
 use skein_json::{Document, Kind};
 use skein_lib::{List, Writer};
-type Fields = List<(Box<[u8]>, u32)>;
+pub(super) struct Fields {
+    shape: Shape,
+    members: List<(Box<[u8]>, u32)>,
+}
+// Synthetic positions represent the table's defaults without copying or
+// extending the input document. Neither is a possible token in a bounded file.
+const DEFAULT_NULL: u32 = u32::MAX;
+const DEFAULT_LIST: u32 = u32::MAX - 1;
+fn member_error(shape: Shape, name: &[u8], rule: &'static [u8]) -> Error {
+    let shape = fields::form(shape).name;
+    let mut path =
+        Writer::new(shape.len().checked_add(1).expect("shape path").checked_add(name.len()).expect("member path"));
+    path.put(shape).expect("measured path");
+    path.put(b".").expect("measured path");
+    path.put(name).expect("measured path");
+    Error { member: path.finish(), rule, bound: None }
+}
 
 pub(super) struct Error {
     member: Box<[u8]>,
@@ -17,7 +34,7 @@ pub(super) fn error(member: &[u8], rule: &'static [u8]) -> Error {
     Error { member: member.into(), rule, bound: None }
 }
 fn bound(member: &[u8], maximum: u32) -> Error {
-    Error { member: member.into(), rule: b"bound", bound: Some(u64::from(maximum)) }
+    Error { member: member.into(), rule: b"at most", bound: Some(u64::from(maximum)) }
 }
 fn message(item: Option<u32>, why: Error) -> Box<[u8]> {
     let mut measured = crate::Text::measure();
@@ -47,7 +64,11 @@ pub(super) struct Decoder {
 }
 impl Decoder {
     pub fn kind(&self, at: u32) -> Result<Kind, Error> {
-        Ok(self.doc.token(at).ok_or(error(b"JSON", b"missing value"))?.kind)
+        match at {
+            DEFAULT_NULL => Ok(Kind::Null),
+            DEFAULT_LIST => Ok(Kind::ArrayStart),
+            _ => Ok(self.doc.token(at).ok_or(error(b"JSON", b"missing value"))?.kind),
+        }
     }
     pub fn string(&self, at: u32) -> Result<&[u8], Error> {
         let token = self.doc.token(at).ok_or(error(b"JSON", b"missing string"))?;
@@ -56,26 +77,26 @@ impl Decoder {
         }
         self.doc.text(token).ok_or(error(b"JSON", b"invalid string"))
     }
-    pub fn number(&self, at: u32) -> Result<u64, Error> {
+    pub fn number(&self, at: u32, shape: Shape, name: &[u8]) -> Result<u64, Error> {
         if self.kind(at)? != Kind::Number {
-            return Err(error(b"JSON", b"expected unsigned integer"));
+            return Err(member_error(shape, name, b"expected unsigned integer"));
         }
         let bytes = self
             .doc
-            .text(self.doc.token(at).ok_or(error(b"JSON", b"missing number"))?)
-            .ok_or(error(b"JSON", b"invalid number"))?;
+            .text(self.doc.token(at).ok_or(member_error(shape, name, b"missing number"))?)
+            .ok_or(member_error(shape, name, b"invalid number"))?;
         let mut number = 0_u64;
         if bytes.is_empty() {
-            return Err(error(b"JSON", b"expected unsigned integer"));
+            return Err(member_error(shape, name, b"expected unsigned integer"));
         }
         for byte in bytes {
             if !byte.is_ascii_digit() {
-                return Err(error(b"JSON", b"expected unsigned integer"));
+                return Err(member_error(shape, name, b"expected unsigned integer"));
             }
-            number = number.checked_mul(10).ok_or(error(b"JSON", b"integer bound"))?;
+            number = number.checked_mul(10).ok_or(member_error(shape, name, b"integer bound"))?;
             number = number
                 .checked_add(u64::from(byte.checked_sub(b'0').expect("ASCII digit")))
-                .ok_or(error(b"JSON", b"integer bound"))?;
+                .ok_or(member_error(shape, name, b"integer bound"))?;
         }
         Ok(number)
     }
@@ -102,14 +123,14 @@ impl Decoder {
         c::Text::new(bytes.into(), most).or(Err(error(name, b"UTF-8 required")))
     }
     pub fn document_text(&self, at: u32) -> Result<c::DocumentText, Error> {
-        let fields = self.object(at, &[b"bytes", b"cut"])?;
+        let fields = self.object(at, Shape::Text)?;
         if self.boolean(field(&fields, b"cut")?)? {
             return Err(error(b"cut", b"whole value required"));
         }
         Ok(c::DocumentText::complete(self.words(
             field(&fields, b"bytes")?,
             self.limits.document_text_bytes,
-            b"document_text_bytes",
+            b"text.bytes",
         )?))
     }
     pub fn hex(&self, at: u32, most: u32, name: &[u8]) -> Result<Box<[u8]>, Error> {
@@ -130,23 +151,45 @@ impl Decoder {
         }
         Ok(out.finish())
     }
-    pub fn object(&self, start: u32, allowed: &[&[u8]]) -> Result<Fields, Error> {
+    pub fn object(&self, start: u32, shape: Shape) -> Result<Fields, Error> {
+        self.object_fields(start, shape, false)
+    }
+    fn object_fields(&self, start: u32, shape: Shape, proposal: bool) -> Result<Fields, Error> {
+        let allowed = fields::members(shape);
         if self.kind(start)? != Kind::ObjectStart {
             return Err(error(b"JSON", b"expected object"));
         }
-        let mut fields = List::with_capacity(u32::try_from(allowed.len()).expect("schema field count"));
+        // A proposal's outer envelope adds against and reason; its items use
+        // exactly the file form. Value-object storage stays sized by FIELDS.
+        let capacity = u32::try_from(allowed.len()).expect("schema field count");
+        let capacity = capacity.checked_add(if proposal { 2 } else { 0 }).expect("envelope field count");
+        let mut fields = Fields { shape, members: List::with_capacity(capacity) };
         let mut depth = 0_u32;
         for at in start.checked_add(1).ok_or(error(b"JSON", b"position bound"))?..self.doc.len() {
             match self.kind(at)? {
                 Kind::Key if depth == 0 => {
                     let key = self.string(at)?;
-                    if !allowed.contains(&key) {
-                        return Err(error(key, b"unknown member"));
+                    let mut row = None;
+                    for candidate in allowed {
+                        if candidate.name == key {
+                            row = Some(candidate);
+                            break;
+                        }
+                    }
+                    match row {
+                        Some(row) => {
+                            if !row.null && self.kind(at.checked_add(1).expect("value position"))? == Kind::Null {
+                                return Err(member_error(shape, key, b"value required"));
+                            }
+                        }
+                        None if proposal && (key == b"against" || key == b"reason") => {}
+                        None => return Err(member_error(shape, key, b"unknown member")),
                     }
                     if optional(&fields, key).is_some() {
-                        return Err(error(key, b"duplicate member"));
+                        return Err(member_error(shape, key, b"duplicate member"));
                     }
                     fields
+                        .members
                         .push((key.into(), at.checked_add(1).ok_or(error(key, b"position bound"))?))
                         .or(Err(error(key, b"field count bound")))?;
                 }
@@ -165,6 +208,9 @@ impl Decoder {
     pub fn array(&self, start: u32, most: u32, name: &[u8]) -> Result<List<u32>, Error> {
         if self.kind(start)? != Kind::ArrayStart {
             return Err(error(name, b"expected array"));
+        }
+        if start == DEFAULT_LIST {
+            return Ok(List::with_capacity(0));
         }
         // Count before allocating; every element costs at least one token.
         let mut count = 0_u32;
@@ -213,7 +259,7 @@ fn digit(byte: u8) -> Result<u8, Error> {
     }
 }
 pub(super) fn optional(fields: &Fields, name: &[u8]) -> Option<u32> {
-    for (key, at) in fields {
+    for (key, at) in &fields.members {
         if key.as_ref() == name {
             return Some(*at);
         }
@@ -221,20 +267,33 @@ pub(super) fn optional(fields: &Fields, name: &[u8]) -> Option<u32> {
     None
 }
 pub(super) fn field(fields: &Fields, name: &[u8]) -> Result<u32, Error> {
-    optional(fields, name).ok_or(error(name, b"missing member"))
+    if let Some(at) = optional(fields, name) {
+        return Ok(at);
+    }
+    for row in fields::members(fields.shape) {
+        if row.name == name {
+            return match row.presence {
+                Presence::Required => Err(member_error(fields.shape, name, b"missing member")),
+                Presence::Optional(Default::Null) => Ok(DEFAULT_NULL),
+                Presence::Optional(Default::EmptyList) => Ok(DEFAULT_LIST),
+            };
+        }
+    }
+    unreachable!("decoder members belong to FIELDS")
 }
 
 fn setting(d: &Decoder, at: u32) -> Result<c::Setting, Error> {
-    let fields = d.object(at, &[b"kind", b"number"])?;
+    let fields = d.object(at, Shape::Setting)?;
     let kind = d.string(field(&fields, b"kind")?)?;
     if kind == b"rules" {
-        if fields.len() != 1 {
+        if fields.members.len() != 1 {
             return Err(error(b"number", b"rules has no number"));
         }
         return Ok(c::Setting::Rules);
     }
     let number = c::SettingNumber {
-        number: u32::try_from(d.number(field(&fields, b"number")?)?).or(Err(error(b"number", b"u32 bound")))?,
+        number: u32::try_from(d.number(field(&fields, b"number")?, fields.shape, b"number")?)
+            .or(Err(error(b"setting.number", b"u32 bound")))?,
     };
     match kind {
         b"charter" => Ok(c::Setting::Charter(number)),
@@ -244,7 +303,7 @@ fn setting(d: &Decoder, at: u32) -> Result<c::Setting, Error> {
     }
 }
 fn item(d: &Decoder, at: u32) -> Result<c::SettingItem, Error> {
-    let fields = d.object(at, &[b"setting", b"set", b"edit"])?;
+    let fields = d.object(at, Shape::Item)?;
     let setting = setting(d, field(&fields, b"setting")?)?;
     let edit = match (optional(&fields, b"set"), optional(&fields, b"edit")) {
         (Some(at), None) => {
@@ -280,7 +339,7 @@ fn decode_root(bytes: &[u8], limits: &Limits, proposal: bool) -> Result<List<c::
     let doc = crate::json::document_depth(bytes, 32)
         .or(Err(message(None, error(b"JSON", b"invalid JSON or depth bound 32"))))?;
     let d = Decoder { doc, limits: limits.settings };
-    let fields = match d.object(0, if proposal { &[b"items", b"against", b"reason"] } else { &[b"items"] }) {
+    let fields = match d.object_fields(0, Shape::File, proposal) {
         Ok(fields) => fields,
         Err(why) => return Err(message(None, why)),
     };
@@ -339,43 +398,39 @@ fn decode_root(bytes: &[u8], limits: &Limits, proposal: bool) -> Result<List<c::
 fn wire_error(problem: jig_client_protocol_wire::Problem, limits: &jig_client_protocol_wire::Limits) -> Error {
     use jig_client_protocol_wire::Path;
     match problem.path {
-        Path::CharterAlternatives => bound(b"charter_alternatives", limits.charter_alternatives),
-        Path::CharterInstructions => bound(b"charter_instructions", limits.charter_instructions),
-        Path::FieldRuleName => bound(b"field_rule_name", limits.field_rule_name),
-        Path::LlmChoiceSubagents => bound(b"llm_choice_subagents", limits.llm_choice_subagents),
-        Path::ModelEffortEffort => bound(b"model_effort_effort_some", limits.model_effort_effort_some),
-        Path::ModelEffortModel => bound(b"model_effort_model", limits.model_effort_model),
-        Path::ModelSetNamesNames => bound(b"model_set_names_names", limits.model_set_names_names),
-        Path::OwnedRecord => bound(b"owned_record", limits.owned_record),
-        Path::OwnerAuthorityGrants => bound(b"owner_authority_grants", limits.owner_authority_grants),
-        Path::OwnerAuthorityNoteResources => {
-            bound(b"owner_authority_note_resources", limits.owner_authority_note_resources)
-        }
-        Path::OwnerDelegationKinds => bound(b"owner_delegation_kinds", limits.owner_delegation_kinds),
-        Path::OwnerPartKeyPathValue => bound(b"owner_part_key_path_value", limits.owner_part_key_path_value),
-        Path::OwnerPatternEndExactValue => {
-            bound(b"owner_pattern_end_exact_value", limits.owner_pattern_end_exact_value)
-        }
-        Path::OwnerPatternEndOpenValue => bound(b"owner_pattern_end_open_value", limits.owner_pattern_end_open_value),
-        Path::OwnerPatternSegments => bound(b"owner_pattern_segments", limits.owner_pattern_segments),
-        Path::RulesImplies => bound(b"rules_implies", limits.rules_implies),
-        Path::RulesRequirements => bound(b"rules_requirements", limits.rules_requirements),
-        Path::SettingModelEffort => bound(b"setting_model_effort_some", limits.setting_model_effort_some),
-        Path::SettingModelEfforts => bound(b"setting_model_efforts", limits.setting_model_efforts),
-        Path::SettingModelName => bound(b"setting_model_name", limits.setting_model_name),
-        Path::SettingModelProgram => bound(b"setting_model_program_some", limits.setting_model_program_some),
-        Path::SettingPolicyPermissions => bound(b"setting_policy_permissions", limits.setting_policy_permissions),
-        Path::SettingPolicyProjections => bound(b"setting_policy_projections", limits.setting_policy_projections),
-        Path::SettingPolicyRequirements => bound(b"setting_policy_requirements", limits.setting_policy_requirements),
-        Path::SettingPolicyRoles => bound(b"setting_policy_roles", limits.setting_policy_roles),
-        Path::SettingPolicyTemplates => bound(b"setting_policy_templates", limits.setting_policy_templates),
+        Path::CharterAlternatives => bound(b"charter.alternatives", limits.charter_alternatives),
+        Path::CharterInstructions => bound(b"charter.instructions", limits.charter_instructions),
+        Path::FieldRuleName => bound(b"choice_field.name", limits.field_rule_name),
+        Path::LlmChoiceSubagents => bound(b"llm.subagents", limits.llm_choice_subagents),
+        Path::ModelEffortEffort => bound(b"model_effort.effort", limits.model_effort_effort_some),
+        Path::ModelEffortModel => bound(b"model_effort.model", limits.model_effort_model),
+        Path::ModelSetNamesNames => bound(b"models.named", limits.model_set_names_names),
+        Path::OwnedRecord => bound(b"item.set", limits.owned_record),
+        Path::OwnerAuthorityGrants => bound(b"authority.grants", limits.owner_authority_grants),
+        Path::OwnerAuthorityNoteResources => bound(b"authority.note_resources", limits.owner_authority_note_resources),
+        Path::OwnerDelegationKinds => bound(b"delegation.kinds", limits.owner_delegation_kinds),
+        Path::OwnerPartKeyPathValue => bound(b"key.path", limits.owner_part_key_path_value),
+        Path::OwnerPatternEndExactValue => bound(b"last.exact", limits.owner_pattern_end_exact_value),
+        Path::OwnerPatternEndOpenValue => bound(b"last.open", limits.owner_pattern_end_open_value),
+        Path::OwnerPatternSegments => bound(b"pattern.segments", limits.owner_pattern_segments),
+        Path::RulesImplies => bound(b"rules.implies", limits.rules_implies),
+        Path::RulesRequirements => bound(b"rules.requirements", limits.rules_requirements),
+        Path::SettingModelEffort => bound(b"model.effort", limits.setting_model_effort_some),
+        Path::SettingModelEfforts => bound(b"model.efforts", limits.setting_model_efforts),
+        Path::SettingModelName => bound(b"model.name", limits.setting_model_name),
+        Path::SettingModelProgram => bound(b"model.program", limits.setting_model_program_some),
+        Path::SettingPolicyPermissions => bound(b"policy.permissions", limits.setting_policy_permissions),
+        Path::SettingPolicyProjections => bound(b"policy.projections", limits.setting_policy_projections),
+        Path::SettingPolicyRequirements => bound(b"policy.requirements", limits.setting_policy_requirements),
+        Path::SettingPolicyRoles => bound(b"policy.roles", limits.setting_policy_roles),
+        Path::SettingPolicyTemplates => bound(b"policy.templates", limits.setting_policy_templates),
         Path::TaskContractDocumentApprovalState => {
-            bound(b"task_contract_document_approval_state", limits.task_contract_document_approval_state)
+            bound(b"approval.state", limits.task_contract_document_approval_state)
         }
         Path::TaskContractDocumentVerdictChoices => {
-            bound(b"task_contract_document_verdict_choices", limits.task_contract_document_verdict_choices)
+            bound(b"verdict.choices", limits.task_contract_document_verdict_choices)
         }
-        Path::VerdictChoiceFields => bound(b"verdict_choice_fields", limits.verdict_choice_fields),
+        Path::VerdictChoiceFields => bound(b"choice.fields", limits.verdict_choice_fields),
         _ => error(b"value", b"wire value bound"),
     }
 }
@@ -407,15 +462,10 @@ pub(super) fn verdict_bound(
         };
         size = size
             .checked_add(row.measure())
-            .ok_or(bound(b"task_contract_document_verdict_choices", limits.task_contract_document_verdict_choices))?;
-        size = size
-            .checked_add(4)
-            .ok_or(bound(b"task_contract_document_verdict_choices", limits.task_contract_document_verdict_choices))?;
+            .ok_or(bound(b"verdict.choices", limits.task_contract_document_verdict_choices))?;
+        size = size.checked_add(4).ok_or(bound(b"verdict.choices", limits.task_contract_document_verdict_choices))?;
         if size > limits.task_contract_document_verdict_choices {
-            return Err(bound(
-                b"task_contract_document_verdict_choices",
-                limits.task_contract_document_verdict_choices,
-            ));
+            return Err(bound(b"verdict.choices", limits.task_contract_document_verdict_choices));
         }
     }
     Ok(())

@@ -1,4 +1,7 @@
-use super::{Bound, Choice, FIELDS, FORMS, Field, Form, Limit, Shape, Value, Width, Word, form, members, resolve};
+use super::{
+    Bound, Choice, Default, FIELDS, FORMS, Field, Form, Limit, Presence, Shape, Value, Width, Word, form, members,
+    resolve,
+};
 use crate::Limits;
 use alloc::boxed::Box;
 use skein_json::writer::{Encoder, Limits as JsonLimits};
@@ -350,7 +353,7 @@ fn every_generated_file_decodes() {
 }
 
 #[test]
-fn a_member_left_out_is_refused_naming_it() {
+fn absent_members_take_their_default_or_are_refused_by_path() {
     for field in &FIELDS {
         if field.shape == Shape::Item {
             continue;
@@ -360,10 +363,20 @@ fn a_member_left_out_is_refused_naming_it() {
         }
         let (bytes, changed) = generated(Edit::Omit(field));
         assert!(changed, "generated file reaches {field:?}");
+        if let Presence::Optional(_) = field.presence {
+            crate::file::decode(&bytes, &Limits::standard()).expect("optional member takes its default");
+            continue;
+        }
         let why = crate::file::decode(&bytes, &Limits::standard()).expect_err("required member absent");
+        let shape = form(field.shape).name;
+        let mut path = skein_lib::Writer::new(shape.len() + 1 + field.name.len());
+        path.put(shape).expect("measured path");
+        path.put(b".").expect("measured path");
+        path.put(field.name).expect("measured path");
+        let path = path.finish();
         let mut named = false;
-        for word in why.windows(field.name.len()) {
-            if word == field.name {
+        for word in why.windows(path.len()) {
+            if word == path.as_ref() {
                 named = true;
                 break;
             }
@@ -405,33 +418,76 @@ const PAGE_FORMS: [Form; 2] = [
     },
 ];
 const PAGE_FIELDS: [Field; 14] = [
-    Field { shape: Shape::File, name: b"number", value: Value::Integer(Width::U8), list: None, null: false, line: b"" },
+    Field {
+        shape: Shape::File,
+        name: b"number",
+        value: Value::Integer(Width::U8),
+        list: None,
+        null: false,
+        presence: Presence::Required,
+        line: b"",
+    },
     Field {
         shape: Shape::File,
         name: b"connector",
         value: Value::Integer(Width::U16),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"",
     },
-    Field { shape: Shape::File, name: b"turns", value: Value::Integer(Width::U32), list: None, null: false, line: b"" },
+    Field {
+        shape: Shape::File,
+        name: b"turns",
+        value: Value::Integer(Width::U32),
+        list: None,
+        null: false,
+        presence: Presence::Required,
+        line: b"",
+    },
     Field {
         shape: Shape::File,
         name: b"spend",
         value: Value::Integer(Width::U64),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"LINE",
     },
-    Field { shape: Shape::File, name: b"waiting", value: Value::Nanoseconds, list: None, null: false, line: b"" },
-    Field { shape: Shape::File, name: b"deadline", value: Value::Time, list: None, null: true, line: b"" },
-    Field { shape: Shape::File, name: b"cut", value: Value::Boolean, list: None, null: false, line: b"" },
+    Field {
+        shape: Shape::File,
+        name: b"waiting",
+        value: Value::Nanoseconds,
+        list: None,
+        null: false,
+        presence: Presence::Required,
+        line: b"",
+    },
+    Field {
+        shape: Shape::File,
+        name: b"deadline",
+        value: Value::Time,
+        list: None,
+        null: true,
+        presence: Presence::Optional(Default::Null),
+        line: b"",
+    },
+    Field {
+        shape: Shape::File,
+        name: b"cut",
+        value: Value::Boolean,
+        list: None,
+        null: false,
+        presence: Presence::Required,
+        line: b"",
+    },
     Field {
         shape: Shape::File,
         name: b"instructions",
         value: Value::Text(Bound::Limit(Limit::DocumentTextBytes)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"",
     },
     Field {
@@ -440,6 +496,7 @@ const PAGE_FIELDS: [Field; 14] = [
         value: Value::Hex(Bound::Most(1_000_000)),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"",
     },
     Field {
@@ -452,6 +509,7 @@ const PAGE_FIELDS: [Field; 14] = [
         ]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"LINE",
     },
     Field {
@@ -460,6 +518,7 @@ const PAGE_FIELDS: [Field; 14] = [
         value: Value::Words(&[Word { word: b"removed", line: b"" }, Word { word: b"reset", line: b"" }]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"",
     },
     Field {
@@ -468,6 +527,7 @@ const PAGE_FIELDS: [Field; 14] = [
         value: Value::Words(&[Word { word: b"workers", line: b"" }]),
         list: None,
         null: false,
+        presence: Presence::Required,
         line: b"",
     },
     Field {
@@ -476,6 +536,7 @@ const PAGE_FIELDS: [Field; 14] = [
         value: Value::Shape(Shape::Model),
         list: Some(Bound::Most(32)),
         null: false,
+        presence: Presence::Optional(Default::EmptyList),
         line: b"",
     },
     Field {
@@ -484,6 +545,7 @@ const PAGE_FIELDS: [Field; 14] = [
         value: Value::Setting,
         list: Some(Bound::Limit(Limit::CharterAlternatives)),
         null: true,
+        presence: Presence::Required,
         line: b"",
     },
 ];
@@ -503,24 +565,24 @@ A settings file is a `file`, below; each section is one shape of JSON object, an
 
 LINE
 
-- `number`: integer, 0 to 255.
-- `connector`: integer, 0 to 65,535.
-- `turns`: integer, 0 to 4,294,967,295.
-- `spend`: integer. LINE
-- `waiting`: nanoseconds.
-- `deadline`: nanoseconds since 1970 UTC, or null.
-- `cut`: true or false.
-- `instructions`: text, at most 32,768 bytes.
-- `state`: hex, at most 1,000,000 bytes.
-- `kind`: `"a"`, `"b"` or `"c"`. LINE `"a"`: LINE `"c"`: LINE
-- `edit`: `"removed"` or `"reset"`.
-- `hosts`: `"workers"`.
-- `alternatives`: list of at most 32, each `model`.
+- `number`: integer, 0 to 255, required.
+- `connector`: integer, 0 to 65,535, required.
+- `turns`: integer, 0 to 4,294,967,295, required.
+- `spend`: integer, required. LINE
+- `waiting`: nanoseconds, required.
+- `deadline`: nanoseconds since 1970 UTC, or null, optional, default null.
+- `cut`: true or false, required.
+- `instructions`: text, at most 32,768 bytes, required.
+- `state`: hex, at most 1,000,000 bytes, required.
+- `kind`: `"a"`, `"b"` or `"c"`, required. LINE `"a"`: LINE `"c"`: LINE
+- `edit`: `"removed"` or `"reset"`, required.
+- `hosts`: `"workers"`, required.
+- `alternatives`: list of at most 32, each `model`, optional, default [].
 
 ## model
 
 - `"chosen"`: LINE
-- `set`: list of at most 16, each the setting's kind's value: `charter`, `template`, `policy` or `rules`, or null.
+- `set`: list of at most 16, each the setting's kind's value: `charter`, `template`, `policy` or `rules`, or null, required.
 "#;
     assert_eq!(page.as_ref(), expected);
 }
@@ -614,5 +676,28 @@ fn line_paths_resolve(line: &[u8]) {
 fn every_path_a_line_names_resolves() {
     for line in &lines() {
         line_paths_resolve(line.bytes);
+    }
+}
+
+#[test]
+fn bound_and_null_errors_name_the_file_members() {
+    let (bytes, _) = generated(Edit::Base);
+    let mut limits = Limits::standard();
+    limits.settings.charter_alternatives = 0;
+    assert_eq!(
+        crate::file::decode(&bytes, &limits).expect_err("alternatives bound").as_ref(),
+        b"settings file item 1: charter.alternatives: at most 0"
+    );
+    for (path, expected) in [
+        (b"charter.model".as_slice(), b"settings file item 1: charter.model: value required".as_slice()),
+        (b"authority.models", b"settings file item 3: authority.models: value required"),
+    ] {
+        let field = resolve(path).expect("model member");
+        let (bytes, reached) = generated(Edit::Null(field));
+        assert!(reached);
+        assert_eq!(
+            crate::file::decode(&bytes, &Limits::standard()).expect_err("models take a value").as_ref(),
+            expected
+        );
     }
 }

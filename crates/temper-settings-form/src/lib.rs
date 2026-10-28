@@ -160,7 +160,7 @@ pub fn refusal(why: &Refusal, out: &mut Text) {
         }
         Refusal::Malformed { at, setting, fault } => {
             out.put(b"out of shape; item ");
-            out.number(u64::from(*at));
+            out.number(u64::from(*at).checked_add(1).expect("u32 item index fits u64"));
             out.put(b"; ");
             render::setting_text(*setting, out);
             out.put(b": ");

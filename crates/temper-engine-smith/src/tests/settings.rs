@@ -86,6 +86,42 @@ fn settings_proposal_items_use_the_file_decoder() {
         }
     );
 }
+#[test]
+fn settings_proposals_accept_the_short_model_choice_with_file_defaults() {
+    let mut model = super::assignment().run.policy.model;
+    model.name = b"opus".as_slice().into();
+    model.efforts = Box::new([Box::from(b"high".as_slice())]);
+    let input = smith_domain_run::HostInput::attested(Box::from(
+        br#"{
+        "against":1,"reason":"choose a model","items":[{
+            "setting":{"kind":"template","number":1},
+            "set":{
+                "number":1,"name":{"bytes":"chat","cut":false},
+                "executor":{"charter":1},"contract":{"report":{"words":100}},
+                "shallower":0,"budget":{"amount":100},"deadline":"none",
+                "flags":{"conversation":true,"listed":true,"retention":"kept","ended_by":"requester"},
+                "label":0,"llm":{"main":{"model":"opus","effort":"high"}}
+            }
+        }]
+    }"#
+        .as_slice(),
+    ))
+    .expect("proposal input");
+    let answer = crate::call_configured(
+        smith_domain_run::CallName { activation: 7, completion: 2, position: 1 },
+        b"propose_settings",
+        &input,
+        &[model],
+    )
+    .expect("short model choice proposal");
+    let crate::Decoded::Call(answer) = answer else { panic!("proposal call") };
+    let engine::Tool::ProposeSettings { items, .. } = answer.tool else { panic!("settings proposal") };
+    let s::Edit::Set(s::Value::Template(template)) = &items[0].edit else { panic!("template value") };
+    let choice = template.llm.as_ref().expect("model choice");
+    assert_eq!(choice.account, None);
+    assert!(choice.subagents.is_empty());
+}
+
 fn inventory(count: u32) -> SettingsAnswer {
     let mut settings = List::with_capacity(count);
     for number in 1..=count {

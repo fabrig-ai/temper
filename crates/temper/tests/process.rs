@@ -513,6 +513,53 @@ fn temper_ctl_change_settings() {
 }
 
 #[test]
+fn temper_ctl_template_model_choice_defaults() {
+    use support::ctl::{Call, Step, Story};
+    let scratch = ctl_scratch("ctl_template_model_choice_defaults");
+    let file = scratch.path().join("settings.json");
+    let seen = support::ctl::run(Story::new(
+        scratch.path(),
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["settings", "show", "--json"])),
+            Step::Run(Call::new(&["settings", "show", "charter", "1", "--json"])),
+            Step::Run(Call::new(&["settings", "show", "template", "1", "--json"])),
+            Step::Then(Box::new(move |calls| {
+                let charter = support::ctl::json(&calls[2]);
+                let model = &charter["value"]["model"];
+                support::ctl::setting_change_file(&file, &calls[3], |value| {
+                    value["llm"] = serde_json::json!({"main":{
+                        "model":model["name"], "effort":model["effort"]
+                    }});
+                });
+                support::ctl::settings_change(&calls[1], &file, "short-model-choice")
+            })),
+            Step::Run(Call::new(&["settings", "show", "template", "1", "--json"])),
+        ],
+    ));
+    let [signed, inventory, charter, original, changed, template] = seen.calls.as_slice() else {
+        panic!("read the model and template, apply the short choice, then read its defaults")
+    };
+    for call in [signed, inventory, charter, original, changed, template] {
+        assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
+        assert!(call.stderr.is_empty());
+    }
+    let charter = support::ctl::json(charter);
+    let mut expected = support::ctl::json(original)["value"].clone();
+    expected["llm"] = serde_json::json!({
+        "account":null,
+        "main":{"model":charter["value"]["model"]["name"], "effort":charter["value"]["model"]["effort"]},
+        "subagents":[]
+    });
+    let document = support::ctl::json(template);
+    assert_eq!(document["value"], expected);
+    let revision = support::ctl::newest(inventory) + 1;
+    assert_eq!(document["revision"], revision);
+    assert_eq!(changed.stdout, format!("revision {revision}\n").as_bytes());
+    scratch.remove();
+}
+
+#[test]
 fn a_fresh_link_keeps_the_sign_in_held() {
     use support::ctl::{Call, Step, Story};
     let scratch = ctl_scratch("fresh_link_keeps_sign_in");

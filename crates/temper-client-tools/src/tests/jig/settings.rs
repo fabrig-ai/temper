@@ -307,13 +307,13 @@ fn settings_file_checks_file_and_item_count_bounds_before_sending() {
     assert!(
         core::str::from_utf8(&settings_file::decode(br#"{"items":[]}"#, &limits).expect_err("bytes bound"))
             .expect("message")
-            .contains("file bytes: bound 10")
+            .contains("file bytes: at most 10")
     );
     let file = format!("{{\"items\":[{}]}}", vec![r#"{"setting":{"kind":"rules"},"edit":"reset"}"#; 1025].join(","));
     assert!(
         core::str::from_utf8(&settings_file::decode(file.as_bytes(), &crate::limits::tools()).expect_err("item count"))
             .expect("message")
-            .contains("items: bound 1024")
+            .contains("items: at most 1024")
     );
 }
 #[test]
@@ -377,7 +377,7 @@ fn whole_settings_document_renderings_are_stable() {
 }
 #[test]
 fn settings_change_outcomes_name_the_revision_and_refusal_facts() {
-    let file = br#"{"items":[{"setting":{"kind":"rules"},"edit":"reset"}]}"#;
+    let file = br#"{"items":[{"setting":{"kind":"charter","number":1},"edit":"reset"}]}"#;
     let (mut root, call) = changed(file, false);
     root.done(call, c::Outcome::SettingsChanged(c::OutcomeSettingsChanged { revision: 6 }));
     assert_eq!(root.answer(call).expect("changed").stdout.as_ref(), b"revision 6\n");
@@ -385,13 +385,13 @@ fn settings_change_outcomes_name_the_revision_and_refusal_facts() {
         (c::Refusal::Stale(c::RefusalStale { newest: 6 }), "stale; newest revision 6"),
         (
             c::Refusal::Malformed {
-                at: 1,
+                at: 0,
                 why: c::Malformed::Settings(c::MalformedSettings {
-                    setting: c::Setting::Rules,
-                    fault: c::SettingFault::Owner,
+                    setting: c::Setting::Charter(c::SettingNumber { number: 1 }),
+                    fault: c::SettingFault::Budget,
                 }),
             },
-            "out of shape; item 1; rules: owner",
+            "out of shape; item 1; charter 1: budget",
         ),
         (
             c::Refusal::Full(c::RefusalFull { revision: 2, tasks: list([41, 42]), more: 3 }),
@@ -404,6 +404,9 @@ fn settings_change_outcomes_name_the_revision_and_refusal_facts() {
             root.answered(call, c::Answer::Refused { refusal: refusal.clone(), at: None });
             let answer = root.answer(call).expect("refused");
             assert_eq!(answer.status, 2);
+            if json && let c::Refusal::Malformed { .. } = refusal {
+                assert!(core::str::from_utf8(&answer.stderr).expect("JSON").contains("\"at\":0"));
+            }
             if !json && expected != "role" {
                 assert!(core::str::from_utf8(&answer.stderr).expect("text").contains(expected));
             }
@@ -423,28 +426,28 @@ fn settings_values_refuse_each_nonempty_byte_and_list_bound_on_both_sides() {
         jig_client_protocol_link::translate::settings::wire_setting_policy(&policy, &crate::limits::tools().settings)
             .expect("wire policy");
     let grant_bytes = u32::try_from(wire.ceiling().grants().len()).expect("grant bytes");
-    for (index, name, length) in [
-        (0, "charter_instructions", 23),
-        (0, "charter_alternatives", 1),
-        (0, "setting_model_program_some", 7),
-        (0, "setting_model_name", 5),
-        (0, "setting_model_efforts", 1),
-        (0, "setting_model_efforts_item", 4),
-        (0, "setting_model_effort_some", 4),
-        (1, "document_text_bytes", 4),
-        (1, "model_effort_model", 5),
-        (1, "model_effort_effort_some", 4),
-        (2, "setting_policy_roles", 1),
-        (2, "setting_policy_permissions", 1),
-        (2, "setting_policy_templates", 1),
-        (2, "owner_authority_grants", grant_bytes),
-        (2, "owner_delegation_kinds", 1),
-        (2, "owner_pattern_segments", 2),
-        (2, "owner_pattern_segments_item", 3),
-        (2, "owner_pattern_end_open_value", 4),
-        (2, "model_set_names_names", 1),
-        (2, "model_set_names_names_item", 5),
-        (3, "rules_implies", 1),
+    for (index, name, path, length) in [
+        (0, "charter_instructions", "charter.instructions", 23),
+        (0, "charter_alternatives", "charter.alternatives", 1),
+        (0, "setting_model_program_some", "model.program", 7),
+        (0, "setting_model_name", "model.name", 5),
+        (0, "setting_model_efforts", "model.efforts", 1),
+        (0, "setting_model_efforts_item", "model.efforts", 4),
+        (0, "setting_model_effort_some", "model.effort", 4),
+        (1, "document_text_bytes", "text.bytes", 4),
+        (1, "model_effort_model", "model_effort.model", 5),
+        (1, "model_effort_effort_some", "model_effort.effort", 4),
+        (2, "setting_policy_roles", "policy.roles", 1),
+        (2, "setting_policy_permissions", "policy.permissions", 1),
+        (2, "setting_policy_templates", "policy.templates", 1),
+        (2, "owner_authority_grants", "authority.grants", grant_bytes),
+        (2, "owner_delegation_kinds", "delegation.kinds", 1),
+        (2, "owner_pattern_segments", "pattern.segments", 2),
+        (2, "owner_pattern_segments_item", "pattern.segments", 3),
+        (2, "owner_pattern_end_open_value", "last.open", 4),
+        (2, "model_set_names_names", "models.named", 1),
+        (2, "model_set_names_names_item", "models.named", 5),
+        (3, "rules_implies", "rules.implies", 1),
     ] {
         let (setting, value) = values().remove(index);
         let file = file_from_setting(&setting_json(setting, value));
@@ -479,7 +482,7 @@ fn settings_values_refuse_each_nonempty_byte_and_list_bound_on_both_sides() {
             assert_eq!(result.is_ok(), allowed, "{name} bound {bound}: {result:?}");
             if let Err(error) = result {
                 let text = core::str::from_utf8(&error).expect("message");
-                assert!(text.contains("item 1") && text.contains(name), "{text}");
+                assert!(text.contains("item 1") && text.contains(path), "{text}");
             }
         }
     }
@@ -621,7 +624,7 @@ fn requirement() -> c::PolicyRequirement {
 #[test]
 fn remaining_nested_collections_and_bytes_obey_jigs_bounds() {
     macro_rules! boundary {
-        ($setting:expr, $value:expr, $field:ident, $length:expr) => {{
+        ($setting:expr, $value:expr, $field:ident, $path:literal, $length:expr) => {{
             let file = file_from_setting(&setting_json($setting, $value));
             let mut limits = crate::limits::tools();
             limits.settings.$field = $length;
@@ -629,11 +632,11 @@ fn remaining_nested_collections_and_bytes_obey_jigs_bounds() {
             limits.settings.$field = $length - 1;
             let why = settings_file::decode(&file, &limits).expect_err("past the bound");
             let why = core::str::from_utf8(&why).expect("bound text");
-            assert!(why.contains("item 1") && why.contains(stringify!($field)), "{why}");
+            assert!(why.contains("item 1") && why.contains($path), "{why}");
         }};
     }
     let (setting, value) = values().remove(2);
-    boundary!(setting, value.clone(), setting_policy_projections, 1);
+    boundary!(setting, value.clone(), setting_policy_projections, "policy.projections", 1);
     let c::SettingValue::Policy(policy) = &value else {
         panic!("policy");
     };
@@ -641,17 +644,17 @@ fn remaining_nested_collections_and_bytes_obey_jigs_bounds() {
         jig_client_protocol_link::translate::settings::wire_setting_policy(policy, &crate::limits::tools().settings)
             .expect("wire policy");
     let resource_bytes = u32::try_from(wire.ceiling().note_resources().len()).expect("resource bytes");
-    boundary!(setting, value.clone(), owner_authority_note_resources, resource_bytes);
-    boundary!(setting, value.clone(), owner_pattern_end_exact_value, 3);
+    boundary!(setting, value.clone(), owner_authority_note_resources, "authority.note_resources", resource_bytes);
+    boundary!(setting, value.clone(), owner_pattern_end_exact_value, "last.exact", 3);
     let c::SettingValue::Policy(mut policy) = value else { panic!("policy") };
     policy.requirements = list([requirement()]);
-    boundary!(setting, c::SettingValue::Policy(policy), setting_policy_requirements, 1);
+    boundary!(setting, c::SettingValue::Policy(policy), setting_policy_requirements, "policy.requirements", 1);
     let (setting, value) = values().remove(3);
     let c::SettingValue::Rules(mut rules) = value else { panic!("rules") };
     rules.requirements = list([requirement()]);
-    boundary!(setting, c::SettingValue::Rules(rules), rules_requirements, 1);
+    boundary!(setting, c::SettingValue::Rules(rules), rules_requirements, "rules.requirements", 1);
     let (setting, value) = values().remove(1);
-    boundary!(setting, value.clone(), llm_choice_subagents, 1);
+    boundary!(setting, value.clone(), llm_choice_subagents, "llm.subagents", 1);
     let c::SettingValue::Template(mut template) = value else { panic!("template") };
     template.contract = c::TaskContractDocument::Approval {
         state: b"yes".as_slice().into(),
@@ -661,9 +664,15 @@ fn remaining_nested_collections_and_bytes_obey_jigs_bounds() {
             key: c::OwnerPartKey::Path(list([b"path".as_slice().into()])),
         },
     };
-    boundary!(setting, c::SettingValue::Template(template.clone()), task_contract_document_approval_state, 3);
-    boundary!(setting, c::SettingValue::Template(template.clone()), owner_part_key_path_value, 1);
-    boundary!(setting, c::SettingValue::Template(template.clone()), owner_part_key_path_value_item, 4);
+    boundary!(
+        setting,
+        c::SettingValue::Template(template.clone()),
+        task_contract_document_approval_state,
+        "approval.state",
+        3
+    );
+    boundary!(setting, c::SettingValue::Template(template.clone()), owner_part_key_path_value, "key.path", 1);
+    boundary!(setting, c::SettingValue::Template(template.clone()), owner_part_key_path_value_item, "key.path", 4);
     template.contract = c::TaskContractDocument::Verdict {
         choices: list([c::VerdictChoice {
             code: 1,
@@ -689,10 +698,11 @@ fn remaining_nested_collections_and_bytes_obey_jigs_bounds() {
         setting,
         c::SettingValue::Template(template.clone()),
         task_contract_document_verdict_choices,
+        "verdict.choices",
         choice_bytes
     );
-    boundary!(setting, c::SettingValue::Template(template.clone()), verdict_choice_fields, 1);
-    boundary!(setting, c::SettingValue::Template(template), field_rule_name, 5);
+    boundary!(setting, c::SettingValue::Template(template.clone()), verdict_choice_fields, "choice.fields", 1);
+    boundary!(setting, c::SettingValue::Template(template), field_rule_name, "choice_field.name", 5);
 }
 
 #[test]
@@ -737,7 +747,7 @@ fn settings_items_check_the_aggregate_wire_byte_bound_and_maximum_count() {
     settings_file::decode(file, &limits).expect("at item bytes bound");
     limits.settings.change_settings_items = size - 1;
     let why = settings_file::decode(file, &limits).expect_err("past item bytes bound");
-    assert!(core::str::from_utf8(&why).expect("message").contains("item 1: encoded items bytes: bound"));
+    assert!(core::str::from_utf8(&why).expect("message").contains("item 1: encoded items bytes: at most"));
     let items: Vec<String> = (0_u32..1024)
         .map(|number| format!(r#"{{"setting":{{"kind":"charter","number":{number}}},"edit":"reset"}}"#))
         .collect();
