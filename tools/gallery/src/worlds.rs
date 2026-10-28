@@ -2193,8 +2193,9 @@ fn base_frame(person: &str, project: &str) -> c::Me {
         redirect_bytes: 4096,
     }
 }
-fn base_task(number: u64, title: &str) -> c::Task {
-    let wake = c::OwnerWakePolicy {
+fn base_wake() -> c::OwnerWakePolicy {
+    c::OwnerWakePolicy {
+        markers: 0,
         words: c::WakeRule::Immediate,
         notices: c::WakeRule::Never,
         news: c::WakeRule::Never,
@@ -2202,7 +2203,10 @@ fn base_task(number: u64, title: &str) -> c::Task {
         questions: true,
         answers: true,
         timers: false,
-    };
+    }
+}
+fn base_task(number: u64, title: &str) -> c::Task {
+    let wake = base_wake();
     let budget = c::OwnerBudget {
         numbers: c::OwnerNumbers { budget: 0, spent: 0, spent_below: 0, reserved: 0 },
         left: 0,

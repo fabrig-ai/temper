@@ -59,6 +59,8 @@ fn limits_take_each_bound_from_its_source_field() {
     assert_eq!(
         fixtures::limits(),
         v1::Limits {
+            logged_line_trailers: 64,
+            logged_line_trailers_item: 4096,
             authority_hold_reason: 512,
             owned_forge_forgejo: 64,
             owned_forge_runner_some: 64,

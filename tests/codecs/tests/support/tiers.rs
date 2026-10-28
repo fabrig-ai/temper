@@ -105,13 +105,7 @@ pub fn fullest() -> Stored {
             pending: Box::new([skein_forge::api::JobAttempt { head: TIP, run: 71, job: 81, attempt: 2 }]),
         }),
         result: Some(temper_engine_domain_forge::TierResult {
-            comments: Box::new([temper_engine_domain_forge::TierComment {
-                pull: 1,
-                operation: 8,
-                part: 0,
-                body: b"temper: tier browser run 2: red, failing suite.test".as_slice().into(),
-                state: TierBranch::Pending { entry: 15 },
-            }]),
+            comments: Box::new([pending_comment()]),
             told: landings
                 .iter()
                 .map(|landing| temper_engine_domain_forge::LateTold { landing: landing.commit, goal: 101 })
@@ -134,4 +128,14 @@ pub fn fullest() -> Stored {
             applied: true,
         }),
     })
+}
+
+fn pending_comment() -> temper_engine_domain_forge::TierComment {
+    temper_engine_domain_forge::TierComment {
+        pull: 1,
+        operation: 8,
+        part: 0,
+        body: b"temper: tier browser run 2: red, failing suite.test".as_slice().into(),
+        state: TierBranch::Pending { entry: 15 },
+    }
 }

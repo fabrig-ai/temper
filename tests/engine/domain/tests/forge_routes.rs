@@ -3371,7 +3371,7 @@ fn an_amended_policys_markers_reach_the_subscriber() {
     world.send(engine::Event::Party(engine::PartyInput::Ask {
         models: Box::new([]),
         reply_to: ReplyTo::new(Token::new(970)),
-        sign_in: world.signed_in.unwrap(),
+        sign_in: world.signed_in.expect("person signed in"),
         key: [97; 16],
         ask: people::Ask::Amend {
             project: 1,
@@ -3405,7 +3405,7 @@ fn an_amended_policys_markers_reach_the_subscriber() {
                 forge_top::Stored::Subscription(s) if s.task == goal.task => Some(s.markers),
                 _ => None,
             },
-            _ => None,
+            Record::Core(_) => None,
         })
         .collect();
     assert_eq!(markers, vec![1]);

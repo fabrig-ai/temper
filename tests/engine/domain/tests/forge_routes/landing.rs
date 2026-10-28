@@ -257,7 +257,7 @@ fn a_change_landed_by_turn_verifies_until_its_tier_clears_it() {
 
 const COLD_TICKS: u32 = 2400; // Four 600-tick windows cover a 90 s baseline and its next run.
 const COLD_SEED: u64 = 71; // The root forge world's deployment/store seed.
-const TIER_CUTS: [&str; 14] = [
+const TIER_CUTS: [&str; 15] = [
     "baseline keyless",
     "baseline keyed",
     "directory walk",
@@ -267,6 +267,7 @@ const TIER_CUTS: [&str; 14] = [
     "dispatched",
     "followed",
     "status being posted",
+    "comment being posted",
     "verification verifying",
     "verification cleared",
     "change landed",
@@ -342,6 +343,11 @@ fn tier_cuts(world: &World) -> Vec<&'static str> {
             && let forge_top::TierBranch::Pending { .. } = result.status
         {
             found.push("status being posted");
+        }
+        if let Some(result) = &row.result
+            && result.comments.iter().any(|comment| matches!(comment.state, forge_top::TierBranch::Pending { .. }))
+        {
+            found.push("comment being posted");
         }
         if let Some(baseline) = row.baseline
             && world.pending.values().any(|op| {
@@ -442,6 +448,7 @@ fn a_cold_restart_reads_back_every_tier_record() {
         world.tick();
         if task_row(&world, change).is_some_and(|row| matches!(row.phase, tasks::Phase::Ended(_)))
             && seen.len() == TIER_CUTS.len()
+            && green_baseline(&world)
         {
             break;
         }
@@ -459,7 +466,9 @@ fn a_cold_restart_reads_back_every_tier_record() {
     let (mut control, control_change) = produced_turn_change_in(control, false);
     for _ in 0..COLD_TICKS {
         control.tick();
-        if task_row(&control, control_change).is_some_and(|row| matches!(row.phase, tasks::Phase::Ended(_))) {
+        if task_row(&control, control_change).is_some_and(|row| matches!(row.phase, tasks::Phase::Ended(_)))
+            && green_baseline(&control)
+        {
             break;
         }
     }

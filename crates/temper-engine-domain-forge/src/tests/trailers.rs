@@ -26,11 +26,11 @@ fn only_a_messages_terminal_trailer_block_counts() {
         b"title\n\nTaught: embedded\nprose",
         b"title\nTaught: no paragraph",
     ] {
-        assert_eq!(parsed(message, &LIMITS), (Vec::<Box<[u8]>>::new().into_boxed_slice(), false));
+        assert_eq!(parsed(message, &LIMITS), (Box::<[Box<[u8]>]>::from([]), false));
     }
     assert_eq!(
         parsed(b"Taught: earlier\n\nQA: terminal\nCo-Authored-By: someone\n", &LIMITS),
-        (vec![Box::from(b"QA: terminal".as_slice())].into_boxed_slice(), false)
+        (Box::<[Box<[u8]>]>::from([Box::from(b"QA: terminal".as_slice())]), false)
     );
 }
 #[test]
@@ -38,11 +38,11 @@ fn trailers_past_their_bound_are_cut_and_said_so() {
     let limits = Limits { trailers: 1, trailer_bytes: 9, ..LIMITS }; // One nine-byte 'Taught: a' line.
     assert_eq!(
         parsed(b"title\n\nTaught: a\n", &limits),
-        (vec![Box::from(b"Taught: a".as_slice())].into_boxed_slice(), false)
+        (Box::<[Box<[u8]>]>::from([Box::from(b"Taught: a".as_slice())]), false)
     );
     assert_eq!(
         parsed(b"title\n\nTaught: ab\nQA: extra", &limits),
-        (vec![Box::from(b"Taught: a".as_slice())].into_boxed_slice(), true)
+        (Box::<[Box<[u8]>]>::from([Box::from(b"Taught: a".as_slice())]), true)
     );
 }
 fn reading_compare(result: Result<Answer, skein_forge::api::Error>) -> Domain {
@@ -86,32 +86,38 @@ fn reading() -> Domain {
 fn a_failed_landing_read_keeps_its_trailers_and_marks_the_news_cut() {
     let mut d = reading_compare(Err(skein_forge::api::Error::Forbidden));
     let out = fixtures::answer_next(&mut d, Ok(messages(&[b"title\n\nTaught: retained"], false)));
-    assert!(matches!(landing(&out), News::Landing { cut: true, trailers, .. } if trailers.len() == 1));
+    let (trailers, cut) = landing(&out);
+    assert_eq!((trailers.len(), cut), (1, true));
 
     let mut d = reading();
     fixtures::answer_next(&mut d, Ok(messages(&[b"title\n\nTaught: retained"], true)));
     let out = fixtures::answer_next(&mut d, Err(skein_forge::api::Error::Forbidden));
-    assert!(matches!(landing(&out), News::Landing { cut: true, trailers, .. } if trailers.len() == 1));
+    let (trailers, cut) = landing(&out);
+    assert_eq!((trailers.len(), cut), (1, true));
 }
 fn messages(values: &[&[u8]], more: bool) -> Answer {
-    let commits = values
-        .iter()
-        .enumerate()
-        .map(|(index, message)| CommitMessage {
-            id: [u8::try_from(index + 1).unwrap(); 32],
-            parents: Box::new([]),
-            message: Box::from(*message),
-        })
-        .collect();
-    Answer::Commits { more, commits }
+    let mut commits = skein_lib::List::with_capacity(CLIENT.rows);
+    for (index, message) in values.iter().enumerate() {
+        commits
+            .push(CommitMessage {
+                id: [u8::try_from(index.checked_add(1).expect("message index")).expect("fixture id"); 32],
+                parents: Box::new([]),
+                message: Box::from(*message),
+            })
+            .expect("fixture page bound");
+    }
+    Answer::Commits { more, commits: commits.into_boxed() }
 }
-fn landing(out: &[Request]) -> &News {
-    out.iter()
-        .find_map(|request| match request {
-            Request::News { news, .. } => Some(news),
-            _ => None,
-        })
-        .expect("landing news")
+fn landing(out: &[Request]) -> (&[Box<[u8]>], bool) {
+    for request in out {
+        if let Request::News { news, .. } = request {
+            match news {
+                News::Landing { trailers, cut, .. } => return (trailers, *cut),
+                News::Red { .. } | News::Cleared { .. } | News::Ci { .. } | News::Changed { .. } => {}
+            }
+        }
+    }
+    panic!("landing news")
 }
 #[test]
 fn a_landings_trailers_are_read_from_its_commits() {
@@ -119,8 +125,8 @@ fn a_landings_trailers_are_read_from_its_commits() {
     let (call, op) = fixtures::next_call(&mut d);
     assert_eq!(op, Op::Read(Read::Commits { before: BASE, after: MERGE, page: 1 }));
     let out = fixtures::answer(&mut d, call, Ok(messages(&[b"one\n\nTaught: first", b"two\n\nQA: second"], false)));
-    let News::Landing { trailers, cut, .. } = landing(&out) else { panic!("landing") };
-    assert_eq!(trailers.as_ref(), &[Box::from(b"Taught: first".as_slice()), Box::from(b"QA: second".as_slice())]);
+    let (trailers, cut) = landing(&out);
+    assert_eq!(trailers, &[Box::from(b"Taught: first".as_slice()), Box::from(b"QA: second".as_slice())]);
     assert!(!cut);
 }
 #[test]
@@ -131,17 +137,23 @@ fn a_range_past_its_pages_keeps_what_it_read() {
         fixtures::answer_next(&mut d, Ok(messages(&[], true)));
     }
     let out = fixtures::answer_next(&mut d, Ok(messages(&[], true)));
-    let News::Landing { trailers, cut, .. } = landing(&out) else { panic!("landing") };
-    assert_eq!(trailers.as_ref(), &[Box::from(b"Taught: first".as_slice())]);
+    let (trailers, cut) = landing(&out);
+    assert_eq!(trailers, &[Box::from(b"Taught: first".as_slice())]);
     assert!(cut);
 }
 #[test]
 fn landing_news_and_the_log_carry_the_trailers() {
     let mut d = reading();
     let out = fixtures::answer_next(&mut d, Ok(messages(&[b"title\n\nRepairs: item"], false)));
-    let News::Landing { trailers, .. } = landing(&out) else { panic!("landing") };
-    assert_eq!(d.landing_logs.get(&REPO).unwrap().landings[0].trailers, *trailers);
-    assert!(out.iter().any(|request| matches!(request, Request::Save { record: Stored::LandingLog(row), .. } if row.landings[0].trailers == *trailers)));
+    let (trailers, _) = landing(&out);
+    assert_eq!(d.landing_logs.get(&REPO).unwrap().landings[0].trailers.as_ref(), trailers);
+    let mut saved = false;
+    for request in &out {
+        if let Request::Save { record: Stored::LandingLog(row), .. } = request {
+            saved |= row.landings[0].trailers.as_ref() == trailers;
+        }
+    }
+    assert!(saved);
 }
 fn classified(markers: u32, own: bool) -> Class {
     let mut d = domain();

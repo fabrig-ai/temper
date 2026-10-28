@@ -2885,9 +2885,12 @@ fn a_designers_goal_wakes_on_taught_alone() {
     let kept: Vec<_> = world
         .take_seen()
         .into_iter()
-        .filter_map(|request| match request {
-            top::Request::News { task: DESIGNER, news: top::News::Landing { .. }, class, .. } => Some(class),
-            _ => None,
+        .filter_map(|request| {
+            if let top::Request::News { task: DESIGNER, news: top::News::Landing { .. }, class, .. } = request {
+                Some(class)
+            } else {
+                None
+            }
         })
         .collect();
     world.restart();
@@ -2905,11 +2908,13 @@ fn a_designers_goal_wakes_on_taught_alone() {
     let waking: Vec<_> = world
         .take_seen()
         .into_iter()
-        .filter_map(|request| match request {
-            top::Request::News { task: DESIGNER, news: top::News::Landing { trailers, .. }, class, .. } => {
+        .filter_map(|request| {
+            if let top::Request::News { task: DESIGNER, news: top::News::Landing { trailers, .. }, class, .. } = request
+            {
                 Some((class, trailers))
+            } else {
+                None
             }
-            _ => None,
         })
         .collect();
     assert_eq!(kept, vec![top::Class::Kept]);
@@ -2940,11 +2945,15 @@ fn a_cold_restart_mid_trailer_pages_keeps_the_range_and_read_trailers() {
     let news: Vec<_> = world
         .take_seen()
         .into_iter()
-        .filter_map(|request| match request {
-            top::Request::News { task: DESIGNER, news: top::News::Landing { trailers, cut, .. }, class, .. } => {
+        .filter_map(|request| {
+            if let top::Request::News {
+                task: DESIGNER, news: top::News::Landing { trailers, cut, .. }, class, ..
+            } = request
+            {
                 Some((trailers, cut, class))
+            } else {
+                None
             }
-            _ => None,
         })
         .collect();
     let expected: Box<[Box<[u8]>]> = [

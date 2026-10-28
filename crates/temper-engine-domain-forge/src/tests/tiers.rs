@@ -368,6 +368,13 @@ fn tier_decision(out: &[Request]) -> Option<&TierDecision> {
     None
 }
 
+fn tier_done(out: &[Request]) -> bool {
+    match tier_decision(out) {
+        Some(TierDecision::Done { .. }) => true,
+        Some(TierDecision::Wait | TierDecision::Held) | None => false,
+    }
+}
+
 #[test]
 fn a_made_branch_dispatches_the_tiers_workflow_with_its_inputs() {
     const HEX_TIP: &[u8] = b"0404040404040404040404040404040404040404040404040404040404040404";
@@ -1363,7 +1370,7 @@ fn a_red_of_no_goal_past_the_bound_drops_the_oldest_and_counts_it() {
     let capacity = LIMITS.changes * 2 + 1; // The existing tier range.
     let mut d = retained_reds(capacity);
     let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
-    assert!(matches!(tier_decision(&out), Some(TierDecision::Done { .. })));
+    assert!(tier_done(&out));
     assert_eq!(fixtures::browser(&d).reds.len(), usize::try_from(capacity).unwrap());
     assert_eq!(fixtures::browser(&d).dropped_reds, 1);
     assert_eq!(fixtures::browser(&d).reds[0].landing, [101; 32]);
@@ -1420,7 +1427,7 @@ fn each_member_hears_its_tiers_verdict_once() {
         settle_comment(&mut d, entry);
     }
     let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS + RETRY });
-    assert!(matches!(tier_decision(&out), Some(TierDecision::Done { .. })));
+    assert!(tier_done(&out));
 }
 #[test]
 fn a_restart_mid_comment_posts_it_once() {
@@ -1435,7 +1442,7 @@ fn a_restart_mid_comment_posts_it_once() {
     assert_eq!(tier_decision(&waiting), Some(&TierDecision::Wait));
     settle_comment(&mut restarted, STATUS);
     let out = outputs(&mut restarted, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
-    assert!(matches!(tier_decision(&out), Some(TierDecision::Done { .. })));
+    assert!(tier_done(&out));
 }
 #[test]
 fn a_comment_that_fails_for_good_holds_the_task_and_keeps_the_verdict() {
@@ -1445,11 +1452,12 @@ fn a_comment_that_fails_for_good_holds_the_task_and_keeps_the_verdict() {
     crate::tiers::outcome(&mut d, STATUS, skein_forge_client::Outcome::Failed(api::Error::Forbidden), &mut out);
     let mut held = false;
     while let Some(request) = out.pop() {
-        if matches!(request, Request::TierDecision { decision: TierDecision::Held, .. }) {
+        if let Request::TierDecision { decision, .. } = request {
+            assert_eq!(decision, TierDecision::Held);
             held = true;
         }
     }
-    assert!(held, "comment failure holds the task");
+    assert!(held);
     assert!(fixtures::browser(&d).result.as_ref().unwrap().applied);
 }
 
