@@ -3,6 +3,8 @@ use crate::{jig, table};
 use skein_lib::List;
 const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::LIFT_AT), "help_hold_lift"),
+    (Some(jig::rows::TASK_HOLD_AT), "help_task_hold"),
+    (Some(jig::rows::PROJECT_HOLD_AT), "help_project_hold"),
     (Some(3), "help_task_show"),
     (Some(12), "help_proposal_decide"),
     (Some(jig::rows::TASK_DECIDE_AT), "help_task_decide"),
@@ -106,6 +108,8 @@ const USAGES: &[&[u8]] = &[
     b"project show PROJECT\n",
     b"project fund PROJECT AMOUNT [--role ROLE] --key KEY\n",
     b"hold lift HOLD --rev REV [--with-tasks] [--key KEY]\n",
+    b"task hold TASK --stop REASON [--key KEY]\n",
+    b"project hold PROJECT --stop REASON [--key KEY]\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {

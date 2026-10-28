@@ -544,6 +544,71 @@ fn hold_lift_sends_without_a_read_and_prints_done_refused_and_moved() {
 }
 
 #[test]
+fn task_hold_and_project_hold_send_with_their_scope_and_print_the_hold() {
+    for (group, subject, scope) in [
+        ("task", "41", c::HoldScope::Subtree { task: 41 }),
+        ("project", "shop", c::HoldScope::Project),
+    ] {
+        for json in [false, true] {
+            let mut root = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
+            let mut argv = vec![group, "hold", subject, "--stop", "Review all this work, please.", "--key", "place-hold"];
+            if json { argv.push("--json"); }
+            let call = root.submit(&argv);
+            if group == "task" {
+                assert_eq!(root.reads.get(&call).expect("one task read").1, c::Read::Task { task: 41 });
+                assert!(!root.sends.contains_key(&call), "project is needed before send");
+                root.serve(call, fixtures::task_result(fixtures::offered(&[])));
+            }
+            assert!(!root.reads.contains_key(&call), "no remaining read");
+            assert_eq!(fixtures::act_ask(&root, call), &c::Ask::Hold {
+                project: fixtures::PROJECT, mode: c::HoldMode::Stop, scope,
+                reason: fixtures::act_text(b"Review all this work, please."),
+            });
+            assert_eq!(root.sent_name(call), Some(fixtures::named("place-hold")));
+            root.done(call, c::Outcome::Owner(c::OwnerOutcome::Placed { hold: 12, revision: c::Revision { value: 1 } }));
+            let printed = root.answer(call).expect("placed answer");
+            assert_eq!(printed.status, 0);
+            if json {
+                assert!(skein_lib::bytes::find(&printed.stdout, br#""hold":{"hold":12,"revision":1}"#).is_some(), "{printed:?}");
+            } else {
+                assert_eq!(printed.stdout.as_ref(), b"done: hold 12 placed, rev 1\n");
+            }
+        }
+        for refusal in [c::Refusal::Role { held: None }, c::Refusal::Limit { which: c::Limit::Words { limit: 8 } }, c::Refusal::Limit { which: c::Limit::Admission { which: c::AdmissionLimit::PlacedHolds } }] {
+            let (mut root, call) = fixtures::send_act(&[group, "hold", subject, "--stop", "Review the work"], fixtures::SEED, 0);
+            root.answered(call, c::Answer::Refused { refusal, at: None });
+            let printed = root.answer(call).expect("refusal");
+            assert_eq!(printed.status, 2);
+            assert!(printed.stdout.is_empty());
+            assert!(printed.stderr.starts_with(format!("{group} hold: ").as_bytes()));
+        }
+    }
+}
+
+#[test]
+fn a_hold_without_its_mode_or_reason_is_a_usage_error() {
+    use crate::jig::argv::Usage;
+    for group in ["task", "project"] {
+        assert_eq!(fixtures::parse(&[group, "hold", "1", "Review"]), Err(Usage::Missing { argument: 1 }));
+        assert_eq!(fixtures::parse(&[group, "hold", "1", "--stop"]), Err(Usage::Missing { argument: 2 }));
+    }
+}
+
+#[test]
+fn a_task_hold_whose_task_is_unknown_prints_the_existing_control_answer() {
+    let mut root = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
+    let call = root.submit(&["task", "hold", "41", "--stop", "Review"]);
+    root.serve(call, c::ReadResult::None(c::ReadNone::Unknown));
+    assert!(!root.sends.contains_key(&call));
+    let held = root.answer(call).expect("unknown task");
+    let mut root = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
+    let call = root.submit(&["task", "stop", "41"]);
+    root.serve(call, c::ReadResult::None(c::ReadNone::Unknown));
+    let stopped = root.answer(call).expect("unknown stop task");
+    assert_eq!((held.status, held.stdout, held.stderr), (stopped.status, stopped.stdout, stopped.stderr));
+}
+
+#[test]
 fn close_names_an_archived_chat_end_only_when_the_authorized_read_proves_it() {
     let ending = c::Ending::Task(Box::new(c::OwnerChipEnding::Done(c::ResultValue::Report(fixtures::document_text(
         b"finished",

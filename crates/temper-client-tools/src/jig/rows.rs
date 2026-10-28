@@ -295,6 +295,39 @@ pub const LIFT: Tool = Tool {
     area: 1,
     notes: b"Only the hold's owner, or a party whose role ranks above theirs,\nlifts it. Lifted alone, the tasks it holds stay held, each\nreleased with task release; with --with-tasks, every task it\nholds that nothing else holds runs again. A lift moves the hold's\nrevision.\n",
 };
+// Each mode has a form with the same argument positions; drain adds one form.
+const HOLD_STOP: super::table::Argument = super::table::Argument {
+    occurs: Required,
+    ..switch(b"stop", b"Stop their runs at once")
+};
+pub const TASK_HOLD: Tool = Tool {
+    name: b"task hold",
+    line: b"Place a hold of yours over a task and every task below it",
+    prints: b"`done: hold N placed, rev REV`",
+    result: b"hold",
+    forms: &[&[
+        positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
+        HOLD_STOP,
+        positional(b"reason", b"REASON", Kind::Text, Required, b"Why, in words the hold keeps"),
+    ]],
+    keyed: Keyed::Optional,
+    area: 1,
+    notes: b"Each task in scope is held, those made later included, and\neach live run among them is cancelled at once. The hold is\nyours: only you, or a role above yours, lift it, with hold\nlift; task release of the task itself lifts it whole.\n",
+};
+pub const PROJECT_HOLD: Tool = Tool {
+    name: b"project hold",
+    line: b"Place a hold of yours over a whole project",
+    prints: b"`done: hold N placed, rev REV`",
+    result: b"hold",
+    forms: &[&[
+        positional(b"project", b"PROJECT", Kind::Project { empty: false }, Required, b"The project's number"),
+        super::table::Argument { occurs: Required, ..switch(b"stop", b"Stop its runs at once") },
+        positional(b"reason", b"REASON", Kind::Text, Required, b"Why, in words the hold keeps"),
+    ]],
+    keyed: Keyed::Optional,
+    area: 1,
+    notes: b"Every task of the project is held, those made later\nincluded, but the chats you or another person started, which\ngo on; each live run in scope is cancelled at once, and a run\nasks for no delegate while it stands. task release releases\none task under it, which then runs; hold lift lifts it. A\nproject's owner or a maintainer places one.\n",
+};
 pub const STOP: Tool = Tool {
     name: b"task stop",
     line: b"Hold a task and every task below it, stopping their runs",
@@ -841,3 +874,6 @@ pub const PROJECT_FUND: Tool = Tool {
     notes: b"An owner's chats are funded from their pool, and pools reserve from the project's period. Raise both with two calls: project fund PROJECT AMOUNT first, then project fund PROJECT AMOUNT --role ROLE. A role's raise past the period's room is refused, exit 2, naming what the period has left. A cut keeps each budget at what it has used. A key replay prints the original edit, then today's balances marked now:. JSON has answer (project, optional role, period_spend) and now (the project read).\n",
 };
 pub const LIFT_AT: u8 = 55;
+
+pub const TASK_HOLD_AT: u8 = 56;
+pub const PROJECT_HOLD_AT: u8 = 57;

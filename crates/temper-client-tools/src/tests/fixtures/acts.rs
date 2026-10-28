@@ -214,7 +214,7 @@ pub(crate) fn send_act(argv: &[&str], seed: u64, now: u64) -> (Harness, u32) {
     let crate::jig::call::Parsed::Call { call: parsed, .. } = parse(argv).expect("act argv") else {
         panic!("act call")
     };
-    if parsed.tool == crate::jig::rows::LIFT_AT {
+    if parsed.tool == crate::jig::rows::LIFT_AT || parsed.tool == crate::jig::rows::PROJECT_HOLD_AT {
         return (root, call);
     }
     root.serve(call, act_document(&parsed));

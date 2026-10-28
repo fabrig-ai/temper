@@ -1,0 +1,14 @@
+project hold PROJECT --stop REASON [--key KEY]
+  PROJECT (project): a project's name or number; required. The project's number
+  --stop: a switch. Stop its runs at once
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why, in words the hold keeps
+Place a hold of yours over a whole project
+Prints: `done: hold N placed, rev REV`
+--json: the record hold.
+Key: --key KEY, optional.
+Every task of the project is held, those made later
+included, but the chats you or another person started, which
+go on; each live run in scope is cancelled at once, and a run
+asks for no delegate while it stands. task release releases
+one task under it, which then runs; hold lift lifts it. A
+project's owner or a maintainer places one.

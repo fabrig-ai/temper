@@ -37,6 +37,15 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
         prepared(runner, client, env, called, request, out);
         return;
     }
+    if called.call.tool == rows::PROJECT_HOLD_AT {
+        let Some(me) = me(runner, client) else { return };
+        let request = match super::reads::project(&called.call, me) {
+            Some(project) => hold(&called.call, project, c::HoldScope::Project, &env.limits),
+            None => Err(Failed::Fixed(b"unknown project")),
+        };
+        prepared(runner, client, env, called, request, out);
+        return;
+    }
     if called.call.tool == rows::LIFT_AT {
         let ask = c::Ask::Lift {
             hold: number(&called.call, 0).expect("hold argument"),
@@ -118,6 +127,9 @@ pub(crate) enum Failed {
     Detail(Box<[u8]>),
 }
 pub(crate) type Prepared = Result<(Request, Option<c::Recipient>), Failed>;
+fn hold(call: &Call, project: u32, scope: c::HoldScope, limits: &Limits) -> Prepared {
+    Ok((Request::Ask(c::Ask::Hold { project, mode: c::HoldMode::Stop, scope, reason: words(call, 2, limits)? }), None))
+}
 fn project_fund(call: &Call, me: &c::Me) -> Prepared {
     match super::reads::project(call, me) {
         Some(project) => {
@@ -297,6 +309,9 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
         subject::Scope::Project(project) => project,
         subject::Scope::Task(_) => project.ok_or(Failed::Fixed(b"project unavailable"))?,
     };
+    if call.tool == rows::TASK_HOLD_AT {
+        return hold(call, project, c::HoldScope::Subtree { task: number(call, 0).expect("task argument") }, limits);
+    }
     let offers = subject::offers(document);
     let act = kind(call);
     let mut admission = None;

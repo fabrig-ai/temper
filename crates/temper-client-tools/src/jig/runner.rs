@@ -187,6 +187,8 @@ fn run(runner: &mut Runner, client: &Client, env: &Env<crate::jig::Limits>, call
             accounts::start(runner, client, env, called, out);
         }
         rows::CHAT_CREATE_AT..=rows::CANCEL_AT
+        | rows::TASK_HOLD_AT
+        | rows::PROJECT_HOLD_AT
         | rows::LIFT_AT
         | rows::TASK_DECIDE_AT
         | rows::AMEND_AT
