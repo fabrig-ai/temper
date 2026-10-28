@@ -104,7 +104,6 @@ impl OneShot {
             Parsed::File { .. } => Class::Help,
         };
         let root = root::Root::new(&limits.root, startup.seed)?;
-        let request_room = root::max_out(&limits.root);
         let mut io = io::Io::new(&limits.io);
         let output = Output::new(&mut io, startup.stdout, startup.stderr, limits.io.output);
         let stdin = Some(io.adopt_read_pipe(startup.stdin).expect("stdin slot"));
@@ -144,12 +143,12 @@ impl OneShot {
             root,
             connections: limits.connections,
             root_env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: limits.root },
-            requests: Queue::with_capacity(request_room),
+            requests: Queue::uncapped(),
             transport: None,
             #[cfg(test)]
             test_connections: None,
             signing: None,
-            recovery: Recovery::new(request_room),
+            recovery: Recovery::new(),
             startup,
             until: None,
             link: jig_client::Link::SignedOut,
@@ -164,7 +163,7 @@ impl OneShot {
             complete: Queue::with_capacity(ROOM),
             submit: Queue::with_capacity(ROOM),
             raw: Queue::with_capacity(ROOM),
-            told: Queue::with_capacity(ROOM),
+            told: Queue::uncapped(),
             status: None,
             closed: false,
         };
@@ -677,25 +676,16 @@ impl Host for OneShot {
         self.env.wall = wall;
         self.root_env.now = now;
         self.root_env.wall = wall;
-        while self.io.is_ready()
-            && self.raw.room() >= io::MAX_OUT_RESUME.submissions
-            && self.told.room() >= io::MAX_OUT_RESUME.events
-        {
+        while self.io.is_ready() && self.raw.room() >= io::MAX_OUT_RESUME.submissions {
             io::resume(&mut self.io, &self.env, &mut self.told, &mut self.raw);
         }
-        while !self.io.is_ready()
-            && self.raw.room() >= io::MAX_OUT_UP.submissions
-            && self.told.room() >= io::MAX_OUT_UP.events
-        {
+        while !self.io.is_ready() && self.raw.room() >= io::MAX_OUT_UP.submissions {
             let Some(complete) = self.complete.pop() else {
                 break;
             };
             self.complete(complete);
         }
-        while self.io.is_due(now)
-            && self.raw.room() >= io::MAX_OUT_FIRE.submissions
-            && self.told.room() >= io::MAX_OUT_FIRE.events
-        {
+        while self.io.is_due(now) && self.raw.room() >= io::MAX_OUT_FIRE.submissions {
             io::fire(&mut self.io, &self.env, &mut self.told, &mut self.raw);
         }
         self.events(now);

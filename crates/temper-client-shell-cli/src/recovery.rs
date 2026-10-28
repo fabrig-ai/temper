@@ -12,15 +12,8 @@ pub(crate) struct Recovery {
     writes: Queue<Request>,
 }
 impl Recovery {
-    pub(crate) fn new(room: u32) -> Self {
-        Self {
-            loaded: false,
-            ready: false,
-            sending: 0,
-            printed: None,
-            writing: false,
-            writes: Queue::with_capacity(room),
-        }
+    pub(crate) fn new() -> Self {
+        Self { loaded: false, ready: false, sending: 0, printed: None, writing: false, writes: Queue::uncapped() }
     }
     pub(crate) fn event(&mut self, event: &Event) -> bool {
         match event {

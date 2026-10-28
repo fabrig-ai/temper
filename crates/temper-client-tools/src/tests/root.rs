@@ -166,9 +166,10 @@ fn queued_owner_outputs(
     // Route the completed read to its owner, retaining that owner's follow-on
     // outputs until the previous act's terminal is ready beside them.
     while let Some(request) = client.pop() {
-        match request {
-            client::Request::Told { told } => super::route(&mut root.root, &env, told, &mut child, &mut out),
-            request => out.push(super::Request::Client { request }),
+        if let client::Request::Told { told } = request {
+            super::route(&mut root.root, &env, told, &mut child, &mut out);
+        } else {
+            out.push(super::Request::Client { request });
         }
     }
     root.root.client.step(
@@ -204,7 +205,7 @@ fn a_follow_on_named_request_waits_for_the_previous_erase() {
     for request in &out {
         match request {
             super::Request::Client { request: client::Request::Down { down: client::Down::Erase { .. } } } => {
-                erased = true
+                erased = true;
             }
             super::Request::Client { request: client::Request::Down { down: client::Down::Save { record } } } => {
                 assert!(erased, "previous erase leaves before the follow-on named request");
@@ -214,7 +215,13 @@ fn a_follow_on_named_request_waits_for_the_previous_erase() {
             super::Request::Printed { number, .. } if *number == previous => {
                 assert!(erased, "previous erase leaves before its result permits another named call");
             }
-            _ => {}
+            super::Request::Client { .. }
+            | super::Request::Ready
+            | super::Request::Record { .. }
+            | super::Request::Kept { .. }
+            | super::Request::Progress { .. }
+            | super::Request::Printed { .. }
+            | super::Request::Fact { .. } => {}
         }
     }
     assert!(erased && saved, "both the retirement and the new request leave");

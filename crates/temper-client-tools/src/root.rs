@@ -9,7 +9,7 @@ pub const RUNNER: Owner = Owner::Runner;
 #[derive(Debug)]
 #[expect(
     clippy::partial_pub_fields,
-    reason = "callers may replace preset inputs; only checked constructors own the derived bounds"
+    reason = "callers may replace preset inputs; the constructor retains inputs for the legacy output-count helper"
 )]
 pub struct Limits {
     pub domain: temper_client_domain::Limits,
@@ -33,7 +33,9 @@ impl Limits {
 #[must_use]
 pub fn max_out(limits: &Limits) -> u32 {
     let bounds = limits.bounds();
-    bounds.routing
+    jig_client::max_out(&bounds.client)
+        .checked_mul(bounds.rows.checked_add(1).expect("rows fit"))
+        .expect("routing bound fits")
 }
 #[derive(Debug)]
 pub struct Root {
@@ -45,29 +47,18 @@ pub struct Root {
     landings: crate::landing::Landings,
     next: Option<u32>,
     recovery: crate::recovery::Recovery,
-    bounds: Bounds,
     deadline: Option<Time>,
     patience: BTreeMap<u32, (u32, Time)>,
 }
-/// Derived from the complete preset, never from a call's changing state.
+/// Preset inputs for the legacy output-count helper, never a call's changing state.
 #[derive(Clone, Copy, Debug)]
 struct Bounds {
     client: jig_client::Limits,
     rows: u32,
-    client_out: u32,
-    child_out: u32,
-    routing: u32,
 }
 impl Bounds {
     fn new(client: jig_client::Limits, rows: u32) -> Self {
-        let client_out = jig_client::max_out(&client);
-        Self {
-            client,
-            rows,
-            client_out,
-            child_out: rows.checked_mul(2).expect("tools outputs fit"),
-            routing: client_out.checked_mul(rows.checked_add(1).expect("rows fit")).expect("routing bound fits"),
-        }
+        Self { client, rows }
     }
 }
 #[derive(Debug)]
@@ -89,14 +80,14 @@ impl Root {
     /// # Errors
     /// Refuses client limits that cannot be represented.
     pub fn new(limits: &Limits, seed: u64) -> Result<Self, jig_client::Unusable> {
-        Ok(Self::with_client(Client::new(&limits.domain.client, seed)?, limits, seed))
+        Ok(Self::with_client(Client::new(&limits.domain.client, seed)?, seed))
     }
     /// # Errors
     /// Refuses client limits that cannot be represented.
     pub fn unlinked(limits: &Limits, seed: u64) -> Result<Self, jig_client::Unusable> {
-        Ok(Self::with_client(Client::unlinked(&limits.domain.client, seed)?, limits, seed))
+        Ok(Self::with_client(Client::unlinked(&limits.domain.client, seed)?, seed))
     }
-    fn with_client(client: Client, limits: &Limits, seed: u64) -> Self {
+    fn with_client(client: Client, seed: u64) -> Self {
         let mut runner = runner::Runner::new(RUNNER.asker(), crate::key::TOOLS, seed);
         runner.parts(&Parts);
         let mut root = Self {
@@ -108,20 +99,11 @@ impl Root {
             landings: crate::landing::Landings::new(),
             next: Some(1),
             recovery: crate::recovery::Recovery::new(),
-            bounds: limits.bounds(),
             deadline: None,
             patience: BTreeMap::new(),
         };
         root.changed();
         root
-    }
-    fn bounds(&mut self, limits: &Limits) -> Bounds {
-        // Env limits normally stay fixed. Compare every input, so replacing
-        // the preset also replaces all its derived queue and routing bounds.
-        if self.bounds.client != limits.domain.client || self.bounds.rows != limits.tools.rows {
-            self.bounds = limits.bounds();
-        }
-        self.bounds
     }
     fn changed(&mut self) {
         // Every mutating entry point settles this snapshot after draining and
@@ -164,9 +146,8 @@ impl Root {
     }
 }
 pub fn step(root: &mut Root, env: &Env<Limits>, event: Event, out: &mut Queue<Request>) {
-    let bounds = root.bounds(&env.limits);
-    let mut client = Queue::with_capacity(bounds.client_out);
-    let mut child = Queue::with_capacity(bounds.child_out);
+    let mut client = Queue::uncapped();
+    let mut child = Queue::uncapped();
     match event {
         Event::Client { event } => {
             if let jig_client::Event::Start { .. } | jig_client::Event::StartUnlinked { .. } = &event {
@@ -238,9 +219,12 @@ fn drain(
     child: &mut Queue<runner::Out>,
     out: &mut Queue<Request>,
 ) {
-    let bound = root.bounds(&env.limits).routing;
-    for _ in 0..bound {
-        if let Some(request) = client.pop() {
+    // Settle admitted calls: owner fan-out is bounded by their retained state;
+    // subsequent engine, storage and timer answers arrive in later inputs.
+    while !client.is_empty() || !child.is_empty() {
+        let client_outputs_dispatched = client.is_empty();
+        if !client_outputs_dispatched {
+            let request = client.pop().expect("client output pending");
             match request {
                 jig_client::Request::Told { told } => route(root, env, told, child, out),
                 // M4's Authorize place answers it
@@ -302,11 +286,9 @@ fn drain(
                     runner::acts::prepared(&mut root.runner, &root.client, &tools_env(env), *called, prepared, child);
                 }
             }
-        } else {
-            return;
         }
     }
-    assert!(client.is_empty() && child.is_empty(), "bounded routing completes");
+    assert!(client.is_empty() && child.is_empty(), "client and child hand-offs settled");
 }
 fn past_patience(root: &Root, env: &Env<Limits>, key: jig_client::Key, room_at: skein_lib::Wall) -> bool {
     let prefix = u32::try_from(key.number >> 32u32).expect("call prefix");
@@ -362,7 +344,7 @@ fn route(root: &mut Root, env: &Env<Limits>, told: Told, child: &mut Queue<runne
         }
         if !joined.is_empty() {
             // Clear the restored owners' bookkeeping without printing a second answer.
-            let mut discard = Queue::with_capacity(env.limits.tools.rows.checked_mul(2).expect("tools outputs fit"));
+            let mut discard = Queue::uncapped();
             route_owner(root, env, told.clone(), &mut discard, out);
             for key in &joined {
                 root.recovery.joined.remove(key);
@@ -437,9 +419,8 @@ fn route_owner(
     }
 }
 pub fn fire(root: &mut Root, env: &Env<Limits>, out: &mut Queue<Request>) {
-    let bounds = root.bounds(&env.limits);
-    let mut client = Queue::with_capacity(bounds.client_out);
-    let mut child = Queue::with_capacity(bounds.child_out);
+    let mut client = Queue::uncapped();
+    let mut child = Queue::uncapped();
     root.client.fire(env.now, env.wall, &mut client);
     drain(root, env, &mut client, &mut child, out);
     jig::wait::fire(&mut root.runner, &root.client, &tools_env(env), &mut child);
@@ -534,9 +515,8 @@ impl Root {
         result: Result<(), Box<[u8]>>,
         out: &mut Queue<Request>,
     ) {
-        let bounds = self.bounds(&env.limits);
-        let mut client = Queue::with_capacity(bounds.client_out);
-        let mut child = Queue::with_capacity(bounds.child_out);
+        let mut client = Queue::uncapped();
+        let mut child = Queue::uncapped();
         runner::recorded(&mut self.runner, &self.client, &tools_env(env), number, result, &mut child);
         drain(self, env, &mut client, &mut child, out);
         self.client.reclaim();

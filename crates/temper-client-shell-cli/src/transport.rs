@@ -12,11 +12,10 @@ pub(crate) struct Memory {
 impl Memory {
     pub(crate) fn new(engine: Addr, limits: &jig_client_shell_native::Limits) -> Self {
         let sockets = limits.exchanges.checked_add(1).expect("connections fit");
-        let room = sockets.checked_mul(64).expect("queue bound");
         Self {
             transport: Transport::new(engine, limits, sockets, OWNER),
-            events: Queue::with_capacity(room),
-            requests: Queue::with_capacity(room),
+            events: Queue::uncapped(),
+            requests: Queue::uncapped(),
         }
     }
     pub(crate) fn down(&mut self, now: Time, request: client::Request) {

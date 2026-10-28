@@ -120,7 +120,7 @@ impl Directory {
             address: None,
             token: None,
             error: None,
-            events: Queue::with_capacity(16),
+            events: Queue::uncapped(),
             submissions: Queue::with_capacity(16),
         }
     }
