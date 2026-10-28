@@ -97,7 +97,7 @@ fn the_csv_changes_requester_reads_the_failed_context_repair_and_approved_review
         panic!("change row")
     };
     let forge_top::Stored::Change(row) = row.as_ref() else { panic!("change row") };
-    let temper_engine_domain_forge_change::State::Landed { merge } = row.change.state else { panic!("landed") };
+    let merge = merged(&row.change.state).expect("landed");
     let merge = String::from_utf8(forge_top::commit_text(&merge).into_vec()).expect("hexadecimal merge id");
     let mut head = [0; 32];
     head[..20].copy_from_slice(&fake::object_bytes(h2));
