@@ -772,7 +772,7 @@ pub(crate) fn task_holdings(
     let eligible = match executor {
         tasks::Executor::Person(_) => false,
         tasks::Executor::Procedure { connector, code } => {
-            connector == domain.config.forge_connector && (code == 1 || code == CHANGE_CODE || code == 4)
+            connector == domain.config.forge_connector && (code == 1 || code == CHANGE_CODE)
         }
         tasks::Executor::Agent { .. } => !child_of_change,
     };
@@ -780,7 +780,7 @@ pub(crate) fn task_holdings(
         return Some(Box::new([]));
     }
     let mut selected = List::with_capacity(env.limits.forge.resources_per_task);
-    if let tasks::Executor::Procedure { connector, code: 1 | CHANGE_CODE | 4 } = executor
+    if let tasks::Executor::Procedure { connector, code: 1 | CHANGE_CODE } = executor
         && connector == domain.config.forge_connector
     {
         let mut repository = None;
@@ -2475,26 +2475,14 @@ fn start_tier_run(
         inputs: Box::new([]),
     };
     let executor = tasks::Executor::Procedure { connector: domain.config.forge_connector, code: 4 };
-    let Some(row) = domain.forge.tier_row(repository, &tier) else { return false };
-    let received = match &row.result {
-        Some(result) => result.received,
-        None => false,
-    };
-    let holdings = if received {
-        Box::new([])
-    } else {
-        let Some(holdings) = task_holdings(domain, env, project, task, task, executor, &spec, None) else {
-            return false;
-        };
-        holdings
-    };
     domain.work.push(Work::Forge(forge::Event::TierTask { repository, tier, number, task }));
     domain.work.push(Work::Core(jig_domain_core::Event::ConnectorRepair {
         seed: Box::new(seed),
         executor,
         spec,
         contract: tasks::Contract::Report { words: env.limits.tasks.result_bytes },
-        holdings,
+        // The tier row owns its branches and releases them before Done.
+        holdings: Box::new([]),
     }));
     true
 }
