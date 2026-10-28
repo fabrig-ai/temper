@@ -87,12 +87,18 @@ pub fn holds(condition: &Condition, facts: &Facts<'_>) -> Option<bool> {
             | Condition::Changed
             | Condition::Phase(_) => None,
         },
+        c::Delivery::RunState(run) => {
+            if *condition == Condition::Ended {
+                Some(run.attempt.is_none())
+            } else {
+                None
+            }
+        }
         c::Delivery::OwnerProject(_)
         | c::Delivery::OwnerProposal(_)
         | c::Delivery::Chips(_)
         | c::Delivery::Tasks(_)
         | c::Delivery::Run(_)
-        | c::Delivery::RunState(_)
         | c::Delivery::Settings(_)
         | c::Delivery::Deployment(_)
         | c::Delivery::OwnerDeployment(_) => None,

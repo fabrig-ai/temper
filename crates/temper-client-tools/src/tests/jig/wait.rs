@@ -771,3 +771,34 @@ fn an_inbox_wait_since_its_reads_digest_answers_at_a_new_update() {
     assert_eq!(root.watches.len(), f::SHARED_WATCHES);
     assert_eq!(crate::root::next_deadline(&root.root), None);
 }
+
+#[test]
+fn run_ended_uses_the_current_attempt_even_without_a_terminal_event() {
+    for initially_live in [false, true] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let flags = f::extended(f::UNTIL_ENDED, if json { &["--json"] } else { &[] });
+            let argv = f::extended(f::WAIT_RUN, flags.as_slice());
+            let call = root.submit(argv.as_slice());
+            let c::Delivery::RunState(mut run) = f::no_provisional() else { panic!("run state") };
+            if initially_live {
+                // No provider call or provisional text does not mean the run ended.
+                root.deliver_subject(&f::run_watch(), c::Delivery::RunState(run.clone()));
+                assert!(root.answer(call).is_none());
+            }
+            run.attempt = None;
+            root.deliver_subject(&f::run_watch(), c::Delivery::RunState(run));
+            let answer = root.answer(call).expect("no live attempt meets ended immediately");
+            assert_eq!(answer.status, 0, "{answer:?}");
+            if json {
+                assert!(f::has(&answer, b"\"attempt\":null"));
+                assert!(answer.stdout.ends_with(b",\"met\":true}"));
+            } else {
+                assert!(answer.stdout.starts_with(b"run: none\n"), "{answer:?}");
+                assert!(answer.stdout.ends_with(b"met\n"), "{answer:?}");
+            }
+            assert_eq!(crate::root::next_deadline(&root.root), None);
+            assert_eq!(root.watches.len(), f::SHARED_WATCHES);
+        }
+    }
+}

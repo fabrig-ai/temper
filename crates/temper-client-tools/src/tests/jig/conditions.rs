@@ -155,7 +155,6 @@ fn a_condition_waits_for_each_document_it_reads_to_be_live() {
     for (condition, subject) in [
         (Condition::Replied, &task),
         (Condition::WaitingOnMe, &task),
-        (Condition::Ended, &run),
         (Condition::WaitingOnMe, &run),
         (Condition::Waiting, &task),
         (Condition::Updates, &task),

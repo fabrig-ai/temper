@@ -243,3 +243,34 @@ fn a_waiting_question_fits_in_the_plain_inbox_with_its_read_and_answer_calls() {
     assert!(shown.contains(&format!("next: temper ctl DIR task activity {asking}\n")), "{shown}");
     assert!(shown.contains(&format!("next: temper ctl DIR task answer {chat} {question} TEXT --key KEY\n")), "{shown}");
 }
+
+fn run_ended_without_waiting(world: &mut World<Temper, Joint>, agent: ClientId, task: u64) {
+    let start = world.now();
+    let printed =
+        call(world, agent, &[b"task", b"run", task.to_string().as_bytes(), b"--until", b"ended", b"--timeout", b"60"]);
+    assert_eq!(printed.status, 0, "{printed:?}");
+    assert!(printed.stdout.starts_with(b"run: none\n"), "{printed:?}");
+    assert!(printed.stdout.ends_with(b"met\n"), "{printed:?}");
+    assert!(world.now() < start.saturating_add(skein_lib::Duration::from_secs(1)), "answers before the timeout");
+}
+
+#[test]
+fn run_until_ended_answers_at_once_after_the_chats_run_ended() {
+    let (mut world, agent, task, _) = chat(true);
+    wait_for_reply(&mut world, agent, task);
+    let current = world.front().engine.task(task).expect("parked chat");
+    assert!(current.attempt > 0, "a run took place");
+    assert_eq!(current.phase, jig_domain_tasks::Phase::Active(jig_domain_tasks::Active::Idle));
+    run_ended_without_waiting(&mut world, agent, task);
+}
+
+#[test]
+fn run_until_ended_answers_at_once_for_a_task_that_never_had_a_run() {
+    let mut world = fixtures::refused_hello_world(fixtures::SEED);
+    let agent = fixtures::agent(&mut world);
+    let printed = call(&mut world, agent, &[b"chat", b"start", b"--project", b"1", b"--key", b"no-run", b"Hello"]);
+    let task = fixtures::done_task(&printed);
+    assert_eq!(world.front().engine.task(task).expect("unstarted chat").attempt, 0);
+    run_ended_without_waiting(&mut world, agent, task);
+    assert_eq!(world.front().engine.task(task).expect("unstarted chat").attempt, 0);
+}
