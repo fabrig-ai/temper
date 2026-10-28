@@ -137,6 +137,7 @@ fn landed_merge(state: &State) -> Option<[u8; 32]> {
         | State::Gating { .. }
         | State::Ready { .. }
         | State::Preparing { .. }
+        | State::CancellingGates { .. }
         | State::Queued { .. }
         | State::First { .. }
         | State::Updating { .. }

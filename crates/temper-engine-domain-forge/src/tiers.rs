@@ -387,9 +387,9 @@ fn tree_answer(
                     mode: entry.mode,
                     object: entry.object,
                     kind: match entry.kind {
-                        skein_forge::api::EntryKind::Blob => landing::EntryKind::Blob,
-                        skein_forge::api::EntryKind::Tree => landing::EntryKind::Tree,
-                        skein_forge::api::EntryKind::Commit => landing::EntryKind::Commit,
+                        skein_forge::api::TreeEntryKind::Blob => landing::EntryKind::Blob,
+                        skein_forge::api::TreeEntryKind::Tree => landing::EntryKind::Tree,
+                        skein_forge::api::TreeEntryKind::Commit => landing::EntryKind::Commit,
                     },
                 })
                 .is_err()
