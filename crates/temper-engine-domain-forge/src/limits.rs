@@ -92,19 +92,15 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
     {
         return None;
     }
-    if l.output
-        < skein_forge_client::max_out(&l.client)
-            .checked_add(l.subscriptions.checked_mul(3)?)?
-            .checked_add(l.holds.checked_mul(3)?)?
-            .checked_add(9)?
-        || l.output < skein_forge_client::max_out(&l.client).checked_add(l.resources_per_task)?.checked_add(1)?
+    if l.output < l.subscriptions.checked_mul(3)?.checked_add(l.holds.checked_mul(3)?)?.checked_add(9)?
+        || l.output < l.resources_per_task.checked_add(1)?
     {
         return None;
     }
-    // Connection and Restored emit no panel marks. Their ordinary cohort and
-    // retirement's Keep each fit output (Keep <= client.max_out <= output),
-    // so 2 * output covers both. Other events use that second cohort for
-    // panel marks instead; application answers and demo acts are separate.
+    // Retain the configured output cohorts for the top's remaining envelope
+    // readers. Connection and Restored use the second cohort for retirement's
+    // Keep; other events use it for panel marks. Application answers and demo
+    // acts are separate.
     l.output
         .checked_mul(2)?
         .checked_add(l.applications)?
