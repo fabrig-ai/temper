@@ -59,6 +59,9 @@ impl Proc {
 }
 impl Host for Proc {
     fn iterate(&mut self, now: Time, wall: Wall) {
+        if matches!(self, Self::Llm(peer) if peer.paused()) {
+            return;
+        }
         if !matches!(self, Self::Llm(llm) if llm.scripts.is_some()) {
             if let Self::Llm(llm) = self
                 && std::mem::take(&mut llm.cue)
@@ -96,6 +99,11 @@ impl Host for Proc {
             {
                 host.iterate(now, wall);
             }
+            if let Self::Llm(peer) = self
+                && let Some(gate) = &mut peer.gate
+            {
+                gate.observe(peer.peer.observations());
+            }
         }
     }
     fn drain(&mut self) {
@@ -105,16 +113,25 @@ impl Host for Proc {
         self.host_mut().completions()
     }
     fn submissions(&mut self) -> &mut Queue<Submit> {
+        if let Self::Llm(peer) = self {
+            return if peer.paused() { &mut peer.held_submissions } else { peer.peer.submissions() };
+        }
         self.host_mut().submissions()
     }
     fn work_pending(&self, now: Time) -> bool {
-        !matches!(self, Self::Llm(llm) if llm.scripts.is_some())
+        !matches!(self, Self::Llm(llm) if llm.scripts.is_some() || llm.paused())
             && (matches!(self, Self::Llm(llm) if llm.release.is_some()) || self.host().work_pending(now))
     }
     fn next_deadline(&self) -> Option<Time> {
+        if matches!(self, Self::Llm(peer) if peer.paused()) {
+            return None;
+        }
         self.host().next_deadline()
     }
     fn next_policy_deadline(&self) -> Option<Time> {
+        if matches!(self, Self::Llm(peer) if peer.paused()) {
+            return None;
+        }
         self.host().next_policy_deadline()
     }
     fn is_empty(&self) -> bool {
@@ -168,6 +185,8 @@ pub(crate) fn run(
             cue: false,
             release: None,
             released: None,
+            gate: None,
+            held_submissions: Queue::with_capacity(0),
         }))
     });
     world.spawn_signals(|signals| {
@@ -221,8 +240,18 @@ pub(crate) struct Llm {
     cue: bool,
     pub(crate) release: Option<&'static [u8]>,
     pub(crate) released: Option<&'static [u8]>,
+    gate: Option<llm::ReplyGate>,
+    held_submissions: Queue<Submit>,
 }
 impl Llm {
+    fn paused(&self) -> bool {
+        self.gate.as_ref().is_some_and(llm::ReplyGate::paused)
+    }
+    fn release_after_merge(&mut self, green: bool) {
+        if green && let Some(gate) = &mut self.gate {
+            gate.release();
+        }
+    }
     fn release_hold(&mut self, caller: &Caller) {
         if let Some(name) = caller.releasing_hold() {
             if self.released == Some(name) {
@@ -269,7 +298,7 @@ pub(crate) fn run_forge(
     recipe: Option<crate::ForgeRecipe>,
     steps: impl FnOnce() -> Vec<crate::calls::Step>,
 ) -> skein_world::real::Outcome<Proc> {
-    let patience = crate::PATIENCE;
+    let patience = fixture.patience;
     let state = std::rc::Rc::new(std::cell::RefCell::new(None));
     let mut world = World::new_controlled(|controls| Judge {
         patience: crate::patience::Patience::new(patience),
@@ -296,6 +325,8 @@ pub(crate) fn run_forge(
             cue: false,
             release: None,
             released: None,
+            gate: fixture.reply_gate.map(|(cue, turn)| llm::ReplyGate::new(cue, turn)),
+            held_submissions: Queue::with_capacity(0),
         }))
     });
     world.spawn_signals(|signals| {
@@ -335,6 +366,8 @@ pub(crate) fn run_github(
             cue: false,
             release: None,
             released: None,
+            gate: None,
+            held_submissions: Queue::with_capacity(0),
         }))
     });
     world.spawn_signals(|signals| {
@@ -704,6 +737,7 @@ impl Referee<Proc> for Judge {
             }
             person_push(now, caller, state, &mut service.seen);
             service.seen.collect(now, forge, &state.handle, &state.repository);
+            peer.release_after_merge(service.seen.merged_green());
             caller.advanced.set(
                 state.moved
                     && (caller.pushing().is_some()
@@ -976,6 +1010,8 @@ fn cluster_roots<R: Referee<Proc>>(
             cue: false,
             release: None,
             released: None,
+            gate: None,
+            held_submissions: Queue::with_capacity(0),
         }))
     });
     world.spawn_signals(|signals| {

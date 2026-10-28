@@ -1,0 +1,29 @@
+{
+  "listen": {
+    "socket": "127.0.0.1:0"
+  },
+  "admin_token": "/twin/forge.key",
+  "owner": "playground",
+  "repositories": [
+    {
+      "id": 2,
+      "name": "widget",
+      "landing": "main",
+      "ci": null,
+      "tree": [
+        {
+          "path": "README.md",
+          "content": "# widget\n"
+        },
+        {
+          "path": "src/main.rs",
+          "content": "const TABLE: [(&str, u32); 3] = [(\"apples\", 3), (\"pears\", 5), (\"plums\", 2)];\n\nfn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n"
+        },
+        {
+          "path": ".forgejo/workflows/ci.yml",
+          "content": "on:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n  check:\n    runs-on: temper-host\n    steps:\n      - run: echo \"temper's starter check passed; replace this step with your own checks\"\n"
+        }
+      ]
+    }
+  ]
+}

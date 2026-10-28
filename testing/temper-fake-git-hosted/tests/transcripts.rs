@@ -422,3 +422,68 @@ fn hosted_commit_tree_stores_unchanged_trees_with_exactly_the_requested_parents(
         assert_eq!(disk.read(&scenario.at, b".git/temper-head"), 1_u64.to_le_bytes(), "commit {number}: HEAD");
     }
 }
+
+#[test]
+fn another_due_reply_does_not_hide_the_typed_git_reply() {
+    use skein_fake_forge_domain::{self as domain, Request, api};
+    use skein_fake_peers::forge::Forge;
+    use skein_lib::{Duration, Env, ReplyTo, Time, Token, Wall};
+    use std::{cell::RefCell, rc::Rc};
+    use temper_fake_checkout::git::{Remote, Want};
+
+    let mut config = fixtures::CONFIG;
+    config.limits.calls = 2;
+    let mut domain = domain::Domain::new(&config, 1);
+    let head = domain::repository(
+        &mut domain,
+        &config,
+        api::Setup {
+            id: 2,
+            name: b"acme/app".as_slice().into(),
+            default: b"main".as_slice().into(),
+            tree: Box::new([]),
+            labels: Box::new([]),
+            checks: api::Checks {
+                contexts: Box::new([]),
+                latency_min: Duration::ZERO,
+                latency_max: Duration::ZERO,
+                silent: 0,
+                passes: 1000,
+                reruns: 0,
+                cue: None,
+            },
+            protection: None,
+            hooked: false,
+        },
+    );
+    domain::grant(&mut domain, b"acme/app", 1, api::Permission::Write);
+    let shared = Rc::new(RefCell::new(Forge::new(domain, config)));
+    let mut transport = temper_fake_git_hosted::Typed::new(shared.clone(), &fixtures::table(b"acme/app", None));
+    let identity = fixtures::identity();
+    transport.authenticate(Some(&(identity.login, identity.token)));
+    let other = Token::new(44);
+    {
+        let mut forge = shared.borrow_mut();
+        let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: config };
+        let Forge { domain, pending, .. } = &mut *forge;
+        domain::step(
+            domain,
+            &env,
+            domain::Event::Call {
+                reply_to: ReplyTo::new(other),
+                user: 1,
+                repository: b"acme/app".as_slice().into(),
+                op: api::Op::Read(api::Read::Branch { branch: b"main".as_slice().into() }),
+            },
+            pending,
+        );
+    }
+    assert_eq!(transport.fetch(b"http://127.0.0.1:3000/acme/app.git", Want::Default).expect("git reply"), head);
+    let mut forge = shared.borrow_mut();
+    let Some(Request::Reply { to, result: Ok(api::Answer::Commit(commit)) }) = forge.pending.pop() else {
+        panic!("other caller's reply retained");
+    };
+    assert_eq!(to.into_token(), other);
+    assert_eq!(commit, head);
+    assert!(forge.pending.is_empty());
+}

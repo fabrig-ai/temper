@@ -107,25 +107,36 @@ impl Typed {
             },
             pending,
         );
-        assert!(pending.room() >= domain::MAX_OUT, "reserve external domain output");
-        domain::fire(domain, &env, pending);
-        forge.domain.reclaim();
-        let mut terminal = None;
-        for _ in 0..forge.pending.len() {
-            let request = forge.pending.pop().expect("pending pass length");
-            match request {
-                domain::Request::Reply { to, result } => {
-                    let replied = to.into_token();
-                    if replied == token {
-                        terminal = Some(result.map_err(fault));
-                    } else {
-                        forge.pending.push(domain::Request::Reply { to: ReplyTo::new(replied), result });
+        // Another caller's reply, CI or hook may be due before this call's timer.
+        // Drain due alarms without advancing time or taking another caller's reply.
+        loop {
+            let mut terminal = None;
+            for _ in 0..forge.pending.len() {
+                let request = forge.pending.pop().expect("pending pass length");
+                match request {
+                    domain::Request::Reply { to, result } => {
+                        let replied = to.into_token();
+                        if replied == token {
+                            terminal = Some(result.map_err(fault));
+                        } else {
+                            forge.pending.push(domain::Request::Reply { to: ReplyTo::new(replied), result });
+                        }
                     }
+                    request @ domain::Request::Hook { .. } => forge.pending.push(request),
                 }
-                request @ domain::Request::Hook { .. } => forge.pending.push(request),
             }
+            if let Some(result) = terminal {
+                return result;
+            }
+            assert!(
+                forge.domain.next_deadline().is_some_and(|at| at <= env.now),
+                "the world's git transport uses an immediate forge domain"
+            );
+            assert!(forge.pending.room() >= domain::MAX_OUT, "reserve external domain output");
+            let Forge { domain, pending, .. } = &mut *forge;
+            domain::fire(domain, &env, pending);
+            domain.reclaim();
         }
-        terminal.expect("the world's git transport uses an immediate forge domain")
     }
     #[must_use]
     pub fn branch(&self, remote: &[u8], branch: &[u8]) -> Option<u64> {

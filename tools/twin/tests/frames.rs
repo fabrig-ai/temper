@@ -301,11 +301,11 @@ fn a_document_past_the_fakes_bounds_is_refused() {
         takes.push(Take { task: CHAT, cue: format!("cue {i}").into_bytes().into_boxed_slice() });
     }
     input.takes = takes.into_boxed_slice();
-    assert_eq!(twin(&input).expect_err("nine scripts"), Refusal::Bounds { what: "scripts" });
+    assert_eq!(twin(&input).expect_err("twelve scripts"), Refusal::Bounds { what: "scripts" });
 }
 
 #[test]
-fn eight_scripts_fit_the_fakes_bound() {
+fn eleven_scripts_fit_the_fakes_bound() {
     let (_scratch, mut input) = fixture(&[REVIEWER]);
     let mut takes = Vec::new();
     for i in 0..AT_BOUND {
