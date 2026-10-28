@@ -3309,3 +3309,36 @@ fn a_tiered_repositorys_baseline_runs_to_green() {
             .is_err()
     );
 }
+
+#[test]
+fn a_tier_run_is_made_while_the_period_is_reserved_whole() {
+    const TIER_TICKS: u32 = 1800; // Three existing 600-tick windows cover the 90 s workflow.
+    const PROJECT: u32 = 1;
+    const PERIOD: u64 = 1;
+    let mut world = World::configured_limits(
+        true, true, false, 1000, Gate::default(), None,
+        StoryLimits { tier: true, reserve_whole_period: true, ..StoryLimits::default() },
+    );
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    world.sign_in();
+    let ask = adoption_chat(&world);
+    assigned_chat(&mut world, 92, ask);
+    world.adopt();
+    for _ in 0..TIER_TICKS {
+        world.tick();
+    }
+    let period = world.root.tasks().funding(tasks::Funder::Period { project: PROJECT, period: PERIOD })
+        .expect("opened project period");
+    assert_eq!(period.numbers.reserved, period.numbers.budget, "the people's pool reserves the whole period");
+    let tiers: Vec<_> = world.store.rows.values().filter_map(|record| match record {
+        Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row)))
+            if matches!(row.executor, tasks::Executor::Procedure { code: 4, .. }) => Some(row),
+        _ => None,
+    }).collect();
+    assert_eq!(tiers.len(), 1, "one baseline task finishes");
+    assert_eq!(tiers[0].numbers.budget, 0);
+    assert!(matches!(tiers[0].phase, tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { .. }))));
+    assert!(world.store.rows.values().any(|record| matches!(record,
+        Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Tier(row)
+            if row.record.judged.is_some() && row.record.run.is_none()))));
+}
