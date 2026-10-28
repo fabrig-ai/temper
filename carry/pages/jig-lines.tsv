@@ -1,0 +1,210 @@
+tasks.tasks	Live tasks in the engine at once; a request that would make more is refused.
+tasks.funders	Funders the engine keeps, as periods, pools and recurring allotments; past it, a request is answered busy.
+tasks.project_tasks	Live tasks in one project; a batch that would pass it is refused.
+tasks.project_goals	Live goals, tracked tasks, in one project; one more is refused.
+tasks.tree_tasks	Tasks ever made in one requester's tree, its root among them; an ended task gives no room back, and one more is refused.
+tasks.depth	How deep a task may be below its tree's root; a deeper one is refused.
+tasks.delegates	Live direct delegates of one task; one more is refused.
+tasks.references	Other tasks one live task may name; one more is answered busy.
+tasks.subscriptions	Standing interests of one task; one more is answered busy.
+tasks.batch	Tasks made by one request; a larger batch is refused.
+tasks.dependencies	Tasks one task may depend on; more are refused.
+tasks.circle	Tasks named when waits form a circle; the rest are cut.
+tasks.holdings	Resources one task may hold; more are refused.
+tasks.hold_kinds	Kinds of resource the connectors may install.
+tasks.resource_reports	Connectors' reports on named resources kept; past it, an unreported resource counts as unavailable.
+tasks.pools	Pools whose free slots the engine keeps.
+tasks.hold_segments	Segments in one resource's name; a longer name is refused.
+tasks.hold_bytes	Bytes in one resource's name; a longer name is refused.
+tasks.hold_waiters	Tasks waiting on one resource; one more is refused.
+tasks.hold_wait_ms	How long a task waits for its holds before it is held for review.
+tasks.grace_ms	The longest grace a cancellation may give; a configured template's grace must fit it.
+tasks.inputs	Inputs one task's specification may name; more are refused.
+tasks.spec_bytes	A task's specification, its words and its parameters' bytes; a longer one is refused.
+tasks.parameters	Parameters of one task's specification; more are refused.
+tasks.result_bytes	A task's result or reason; a contract may allow no more, and a longer result is refused.
+tasks.run_inbox	Messages a run starts with or has unread, at most `tasks.inbox_messages`.
+tasks.inbox_messages	Unread messages kept for one live task; past it, a message is answered busy.
+tasks.inbox_bytes	The unread messages' bytes kept for one live task, at least `tasks.message_bytes`.
+tasks.message_bytes	One message to a task, at least `people.words` and `tasks.result_bytes`; a longer one is refused.
+tasks.person_stall_ms	How long a person's task waits before its requester hears that it has stalled.
+tasks.proposal_stall_ms	How long a proposal waits undecided at one holder before it passes up to the next.
+tasks.escalation_stall_ms	How long an escalation waits undecided at one holder before it passes up to the next.
+tasks.saved_resources	Resources a run's end may save its work to; a longer list fails the run's end.
+tasks.contract_choices	Choices in one verdict contract; more are refused.
+tasks.charters	Charters the deployment may hold; more are refused.
+tasks.authority_grants	Grants in one task's authority; more are refused.
+tasks.authority_segments	Segments of one pattern in a task's authority; more are refused.
+tasks.authority_bytes	The patterns' bytes in one task's authority; more are refused.
+tasks.executor_kinds	Executors one task's authority may name; more are refused.
+tasks.facts	The tasks' diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+tasks.room_refusals	Recent refusals for want of room that are kept; past it, the oldest goes.
+tasks.retries.transient.retries	Transient failures of a task's runs before the task is held.
+tasks.retries.transient.base_ms	The first wait after a transient failure, doubling with jitter up to `tasks.retries.transient.max_ms`.
+tasks.retries.transient.max_ms	The longest wait after a transient failure.
+tasks.retries.permanent.retries	Failures that need an outside fix before the task is held.
+tasks.retries.permanent.base_ms	The first wait after a failure that needs an outside fix, doubling with jitter up to `tasks.retries.permanent.max_ms`.
+tasks.retries.permanent.max_ms	The longest wait after a failure that needs an outside fix.
+tasks.retries.run.retries	Failures of a run itself before the task is held.
+tasks.retries.run.base_ms	The first wait after a run's failure, doubling with jitter up to `tasks.retries.run.max_ms`.
+tasks.retries.run.max_ms	The longest wait after a run's failure.
+tasks.retries.agent.retries	Failures of the agent before the task is held.
+tasks.retries.agent.base_ms	The first wait after the agent's failure, doubling with jitter up to `tasks.retries.agent.max_ms`.
+tasks.retries.agent.max_ms	The longest wait after the agent's failure.
+tasks.retries.lost.retries	Runs lost with their worker before the task is held.
+tasks.retries.lost.base_ms	The first wait after a run is lost, doubling with jitter up to `tasks.retries.lost.max_ms`.
+tasks.retries.lost.max_ms	The longest wait after a run is lost.
+tasks.retries.invalid.retries	Runs that end with an invalid result before the task is held.
+tasks.retries.invalid.base_ms	The first wait after an invalid result, doubling with jitter up to `tasks.retries.invalid.max_ms`.
+tasks.retries.invalid.max_ms	The longest wait after an invalid result.
+people.program_hosts	Hosts named in a program sign-in's answer, the configured workers and the engine, at least `fleet.configured_workers` plus 1.
+people.program_host_name_bytes	A worker's name in a program sign-in's answer, at least `fleet.worker_name_bytes`.
+people.operations	Task operations in one compound request, at least `tasks.delegates` plus 1 and `tasks.project_goals`; more are refused.
+people.batch	Tasks in one requested or proposed batch; a larger one is refused.
+people.people	Parties the engine keeps, people and services; a new one past it is answered busy.
+people.inbox_entries	Entries an inbox shows; past it, its count stops and says that there are more.
+people.inbox_tasks	Live tasks and proposals the inboxes follow, at least twice `tasks.tasks`.
+people.inbox_recipients	Recipients one task's inbox entry may reach, at least twice `tasks.inbox_messages`, plus `authority.roles`, plus 4.
+people.sign_ins	People signed in at once; past it, an expired sign-in goes, and with none a new sign-in is refused as full.
+people.projects	Role rosters held, each project's and the deployment's, at least the projects configured plus 1.
+people.holdings	People holding roles in one roster; a larger roster is refused.
+people.initial_owners	Owners the configuration names; more refuse the start.
+people.requests	Answers kept for requests asked again, with those under way, across the engine; past it, a new request is answered busy.
+people.room_refusals	Recent refusals at the entrance that are kept; past it, the oldest goes.
+people.pending	Requests in flight at once; one more is answered busy.
+people.waiters	Callers waiting on one request in flight, the first among them; one more is answered busy.
+people.identity_bytes	A party's subject, login and name together; a longer identity is refused.
+people.words	The words of one ask, as an opening or a reason; longer words are refused.
+people.amendment_bytes	One amendment of a task; a larger one is refused.
+people.sign_in_lifetime_ms	How long a person's sign-in lasts before they are signed out.
+people.request_retention_ms	How long a request's answer is kept for the same request asked again.
+people.facts	The people's diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+fleet.configured_workers	Workers the configuration names, those not connected among them; more refuse the start.
+fleet.worker_name_bytes	A configured worker's name, within `link.name` too; a longer one refuses the start.
+fleet.program_sources	Program sources one connected worker may offer, whatever its slots; a worker offering more loses its channel.
+fleet.source_detail_bytes	A program source's sign-in or sign-out failure, as kept; a longer one loses its worker's channel.
+fleet.workers	Workers connected at once; another worker's hello is refused.
+fleet.needs_bytes	A run's needs for its placement, its charter's and its model's.
+fleet.engine_slots	Runs the engine hosts itself, beside its workers.
+fleet.slots	Runs one worker may host at once; a worker listing more has the rest cancelled.
+fleet.workstreams	Workstreams a worker is known to hold, which places a run where its work already is; past it, the oldest is forgotten.
+fleet.attempts	Attempts of runs at once, those being replaced among them; a start past it is answered busy.
+fleet.grants	Credentials one run may be granted, at least `accounts.credentials` and the accounts it may use.
+fleet.calls	Runs' calls relayed at once; another is answered busy.
+fleet.call_name_bytes	A run's call's name as relayed; a longer one is dropped.
+fleet.progress_bytes	A tool's name in a run's progress; a longer one is left out.
+fleet.turns	A run's turns awaiting their record, across all runs; another is answered busy.
+fleet.grace_ms	How long a run on a lost worker is waited for, and an unclaimed run kept, before it is given up.
+fleet.facts	The fleet's diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+fleet.history	Lost channels and refused hellos remembered, this many of each; past it, the oldest goes.
+authority.projects	Projects with a policy at once; another is refused as full.
+authority.roles	Roles in one project's policy; more are refused.
+authority.requirements	Requirements in the deployment's rules or one project's policy; more are refused.
+authority.facts	Verdicts and guards one question of authority may weigh; more are refused.
+authority.grants	Grants in one authority or one policy's role; more are refused.
+authority.executors	Executors one authority may permit; more are refused.
+authority.segments	Segments in a resource's name or a pattern; a longer one is refused.
+authority.segment_bytes	One segment of a resource's name or a pattern; a longer one is refused.
+authority.implications	Implications in the rules, a kind of grant that implies another; more are refused.
+authority.batch	Delegates asked for in one question of authority; more are refused.
+authority.accounts	Accounts one run's question of authority may weigh; more are refused.
+authority.writes	Resources one question of authority may write; more are refused.
+brief.briefs	Briefs gathered at once, a brief being what a run reads when it starts; another is refused.
+brief.sections	Sections in one brief; a larger gather is refused.
+brief.read_bytes	The largest section a connector may give a brief; a larger one is missing from it.
+brief.brief_bytes	A whole brief, which its sections share, each cut to fit.
+accounts.program_hosts	Hosts one program's sign-out waits on, the workers and the engine.
+accounts.accounts	LLM accounts in the deployment; another is refused.
+accounts.holder_accounts	LLM accounts one party, or the deployment, may hold; another is refused.
+accounts.program_names	Program names ever issued, those retired among them; another is refused.
+accounts.sources	Sources of one account, as keys, a sign-in or a program; another is refused.
+accounts.sign_ins	Sign-ins, kept keys and moves of accounts under way at once; another is refused.
+accounts.credentials	The application's own credentials that runs may be granted, apart from LLM accounts; past it, a new one is not kept.
+accounts.backoff_base_ms	The first wait before a failed source is tried again, doubling up to `accounts.backoff_max_ms`.
+accounts.backoff_max_ms	The longest wait before a failed source is tried again.
+accounts.retry_ms	The wait before a source that must sign in again, or lacks a scope, is tried again.
+accounts.move_deadline_ms	How long a move out waits for its client to write the account; past it, the move is cancelled.
+accounts.spent_attention_ms	How long a source may stay spent before its holder is asked to see to it.
+accounts.facts	The accounts' diagnostic facts and ended sign-ins awaiting the log; past it, one is dropped.
+accounts.token	A credential's bytes, as a key or a sign-in's token; a longer one fails.
+accounts.sign_in_deadline_ms	How long a provider's sign-in waits for its return before it fails.
+views.runs	Runs whose text in progress is kept to watch; another run's is not.
+views.watchers	Watches open at once; another is answered busy.
+views.watchers_per_party	Watches one party may hold open; another is answered busy.
+views.subjects_per_change	Subjects one change of a watched view may name.
+views.text_bytes	A run's text in progress, as kept to watch; past it, the oldest is cut and marked.
+views.facts	The views' diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+notes.scopes	Note scopes kept and read at once, at least `authority.grants` plus 3; past it, the oldest not needed goes.
+notes.entries_per_scope	Notes in one scope; another is refused as full.
+notes.pattern_bytes	A note's resource pattern; a longer one is refused.
+notes.description_bytes	A note's one-line description, and a search's words; a longer one is refused.
+notes.body_bytes	A note's body; a longer one is refused.
+notes.references	Tasks one note may name; more are refused.
+notes.load_rows	Notes read from the store in one page.
+notes.lines	Lines of the notes' index in one answer; the rest are counted.
+notes.recalled	Notes in one recalled page; the rest follow on the next.
+hub.program_sources	Program sources a worker's hub keeps, apart from its run slots; a declaration past it is refused.
+hub.slots	Runs a worker's hub hosts at once; another assignment is answered busy.
+hub.accounts	Accounts one hosted run may be granted; an assignment with more fails.
+hub.charter_bytes	One hosted run's charter; an assignment with a larger one fails.
+hub.transcript_bytes	A run's conversation as it resumes, with what its calls kept; a larger one fails to resume.
+hub.delivery_evidence_bytes	The evidence of a settled delivery kept in a resumed conversation; more fails it.
+hub.turn_bytes	One whole turn of a run's agent; a larger turn fails the run.
+hub.outcome_bytes	A run's declared outcome; a larger one fails the run.
+hub.detail_bytes	The tail kept of a run's or a source's diagnostic.
+hub.held	Messages held for a run until it is live; another is refused as full.
+hub.inbox	Messages a run starts with, and the refused messages it keeps; a start with more fails.
+hub.event_bytes	One message to a run, its sender among it, and one call's input; a larger one is refused.
+hub.run_calls	Calls one run may have in flight, its delivery among them; another is answered busy.
+hub.facts	The hub's diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+hub.told	Activity and live text queued while the link cannot take them; past it, activity is dropped and counted.
+hub.turns	Turns of one run kept until recorded, with as many again held for its stop; past it, the run waits.
+hub.turn_queue_bytes	The bytes of the turns one run keeps until recorded, with as much again for its stop; past it, the run waits.
+hub.piece_bytes	One piece of a run's live text; a larger piece is dropped.
+documents.rows	Rows in one page of a document a client reads; the rest follow on the next page.
+documents.text_bytes	A text in a document a client reads; a longer one is cut and marked.
+documents.chips	Tasks in one chips document; a larger set is refused.
+documents.lines	Entries in a document's short lists; the rest are cut and marked.
+documents.versions.minimum	The oldest contract version of the documents served, checked at the start alone.
+documents.versions.maximum	The newest contract version of the documents served, checked at the start alone.
+core.settings.proposals	Settings proposals pending at once; another is refused.
+core.settings.revisions	Settings revisions held besides the newest, for running work that reads them; past it, a change is refused as full.
+core.settings.versions	A charter's versions held besides the newest, for running work; past it, a change is refused as full.
+core.settings.history	Revisions the store keeps in history beyond those held; past it, the oldest goes.
+core.settings.alternatives	Alternative models one charter may name; more are refused.
+core.settings.permissions	Permission mappings in one policy; more are refused.
+core.templates	Templates, and one project's policy's overrides of them; more are refused.
+core.fill_mark	How full the store may be before new work is refused.
+core.connectors	Numbered connectors the engine holds.
+core.resume_bytes	The conversation a run resumes with; past it, the oldest turns are left out.
+core.run_bytes	A charter's run settings and its alternative models; a larger charter is refused.
+core.policy_bytes	One policy as the engine stores it; a change past it is refused.
+core.escalation_reason_bytes	The reason kept when a person refuses an escalation; a longer one is refused.
+core.load_slots	Parties' reads of the store under way at once; another is answered busy.
+core.load_bytes	What one party's read of the store brings; its page is cut to fit.
+core.call_records	Runs' calls whose answers are kept for replay, with those in flight; past it, a new call is unavailable.
+core.call_answer_bytes	One call's input and answer, as kept; a larger one is refused.
+core.brief_parts	Parts of one section of a brief that the engine writes; the rest are cut.
+core.brief_core_budgets.tail	The tail of an earlier conversation in a fresh run's brief; cut to fit.
+core.brief_core_budgets.task	The task's section of a brief; cut to fit.
+core.brief_core_budgets.dependencies	The dependencies' results in a brief; cut to fit.
+core.brief_core_budgets.attempts	The earlier attempts' section of a brief; cut or left out to fit.
+core.brief_core_budgets.plan	The plan's section of a brief, its delegates; cut or left out to fit.
+core.brief_core_budgets.notes	The notes' index in a brief; cut to fit.
+link.chunk	The piece in which a worker's channel is read; it bounds no whole.
+link.name	A worker's name as its channel carries it; a longer one is refused.
+link.secret	A worker's secret, as its file holds it; a longer one is refused.
+link.names	Workers the engine's channel knows by name; more refuse the start.
+link.opening	Channels the engine may be opening beside its connected workers; another is turned away.
+link.handshake_ms	How long a worker's channel may take to open; past it, the channel closes.
+link.hello_ms	How long the engine waits for a worker's hello once its channel opens; past it, the channel closes.
+link.ping_ms	The wait between two pings on a worker's channel.
+link.silence_ms	How long a worker's channel may stay silent before it is lost.
+link.stall_ms	How long a worker's channel may fail to send before it is lost.
+link.backoff_ms	The first wait before a worker dials its engine again, doubling up to `link.ceiling_ms`.
+link.ceiling_ms	The longest wait before a worker dials its engine again.
+link.proved_ms	How long a worker must stay connected before its wait to dial again starts afresh.
+link.busy_ms	The wait before a worker sends again a turn the engine was too busy to take.
+link.facts	Room on a worker's channel kept for its diagnostic facts.
+clients.provider_codes	Sign-in codes the engine's own sign-in provider holds at once; another sign-in is answered busy.
+clients.provider_tokens	Access tokens the engine's own sign-in provider holds at once, its pending codes counted; another is answered busy.

@@ -1,0 +1,26 @@
+application	sign_in	people's Google sign-ins on the clients' listener
+application	picker	the repository picker's reads of a forge
+application	routes	a forge's setup routes on the clients' listener
+application	root	the engine's own journal, its loads from the store and runs' briefs
+application	forge	the engine's work on forges: adoptions, changes, holds, issues and its client's calls
+application	checkout	a worker's checkouts of repositories and their merges
+application	git_component	a worker's git operations and their output
+application	clients	the web client's files, which the engine serves
+application	records	a forge's records and the values temper carries
+application	forges	each forge's GitHub installations and job-log origins
+application	forge_component	the engine's connections to forges, their webhooks, tokens and GitHub Apps
+application	setup	a forge's setup runs, their returns and fetched binaries
+application	box	the box's steps, their restarts, stop and logs
+jig	tasks	tasks: their trees, holds, inboxes, authority and retries
+jig	people	parties, their sign-ins, roles and requests
+jig	fleet	workers, their slots and the runs placed on them
+jig	authority	policies, roles and the questions of authority
+jig	accounts	LLM accounts, their sources and sign-ins
+jig	notes	notes and their scopes
+jig	documents	the documents clients read
+jig	views	watches and runs' text in progress
+jig	brief	the briefs runs read when they start
+jig	core	settings, calls, store reads and the engine's part of briefs
+jig	hub	a worker's hub: the runs it hosts, their turns and calls
+jig	link	the channel between the engine and its workers
+jig	clients	the engine's own sign-in provider for its clients

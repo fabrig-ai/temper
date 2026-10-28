@@ -1,0 +1,9 @@
+configuration: rows by shape, as settings-fields (my recommendation), not by path
+
+A survey (S3) counts 609 member paths in temper.json's decoders: engine 398 (projects 98, policies 97, llm 59, rules 48, templates 41, charters 18, the rest 37), workers 24, application 187 (setup 41, landing 39, demo 36, forges 21, sign_in 20, the rest 30). Most repeat a shape: an authority, a grant or a pattern is read at 6 to 12 paths each. By path: 609 rows, about 90 KB.
+
+Recommended: rows by shape, as settings-fields does. A section per shape (`## pattern`), naming every path it is read at, then a bullet per member: its type and bound, required, optional or null, what `temper init` writes, and a line. About 70 shapes and 350 members. jig's shapes form a table beside jig's decoder (generic lines), temper's a table beside its own; the step test generates each shape's object from its rows and decodes it with that shape's decoder (every row taken, every required one refused when left out, an unknown one refused), and walks init's document through the table (every member it writes a row). Pages: `configuration` (the intro, a restart for any change, the root, `application`) and `configuration-engine` (`engine` and `workers`), each under 32 KB.
+
+The four settings members `engine.charters`, `templates`, `policies` and `rules` (the stock's settings given in the document; init omits them; configuration.md 13 moves them to the store) are rows like the rest, their shapes included: they are what main decodes. Say if you'd rather they were one row each.
+
+Slice 1 (limits): tables, renderer task and every line written; builds wait for room on hetzner7 (42 GB free, heavy starts at 70).

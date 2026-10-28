@@ -1,0 +1,10 @@
+2026-10-27 09:27 UTC T1: 210 names implemented; shared read/write mapping preserves existing side effects.
+Registered 17 missing test attributes in 9b0379cfb; 41 override tests passed.
+Row parsing found only the two anticipated clients refusals; fixed in 2c9b03b29.
+All 250 library tests passed in 1.361s; clippy is in progress. On track.
+2026-10-27 09:33 UTC Clippy reported the loop lint and test-only Vec/format/closure uses; repaired with a scoped expectation and existing test APIs.
+Disk fell to 46 GB: cancelled queued heavy task 1157 and removed own target. No other files or caches cleaned.
+Disk then recovered to 91 GB; final clippy submitted as task 1160. Implementation committed in c3e0feece.
+2026-10-27 09:38 UTC Complete: final clippy clean; six post-repair names tests passed in 0.073s.
+Three commits on docs-reference/names, no push or landing. Final report written to reports/t1.md.
+Removed this worktree’s target again after the final checks. No pending capacity issue.

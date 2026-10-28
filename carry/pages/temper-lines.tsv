@@ -1,0 +1,164 @@
+sign_in.members	The members the Google sign-in may name, at most 64; a start naming more is refused.
+sign_in.pending	Google sign-ins under way at once; a sign-in started past them is answered the busy page.
+sign_in.deadline_ms	A Google sign-in's life, from its start to its return, and the sign-in cookie's Max-Age.
+sign_in.fetches	Exchanges with Google at once; more wait for one to end.
+sign_in.body_bytes	An answer's body from Google, its key set or a token, at most 65536; a longer answer fails the sign-in.
+sign_in.url_bytes	A configured Google endpoint, and the authorization URL given to the browser; a longer endpoint refuses the start.
+sign_in.secret_bytes	The Google client secret's file; a longer one refuses the start.
+picker.page	The repositories one read of a forge's repository picker shows, from 1 to 100; the forge's own page cap may show fewer.
+routes.query_bytes	The query of a forge's setup routes on the clients' listener, as a GitHub App's returns; a longer one is answered 400.
+root.journal.commits	The engine's commits awaiting the store's durability; past them, new decisions wait.
+root.journal.held	Outputs the engine holds until their commit is durable, at least 3 times `root.journal.deliveries`.
+root.journal.writes	Writes in one of the engine's commits, the deployment's record among them; the start checks it against the engine's worst case.
+root.journal.deliveries	Outputs of one decision of the engine's; the start checks it against `tasks.tasks`, the people's waiters and the fleet's workers.
+root.journal.transcript_bytes	A row of the engine's journal, a chat's turn among them; it holds the agent's largest turn, which the start checks.
+root.journal.result_bytes	A task's result or a brief as the engine holds it, at least `root.brief.brief_bytes`, `tasks.result_bytes` and `people.words`.
+root.journal.run_bytes	A run's charter as the engine holds it; a configured charter past it refuses the start.
+root.loads.loads	Pages the engine loads from its store at once, at least 2; more wait.
+root.loads.rows	Rows in one page the engine loads from its store, at least 2.
+root.loads.bytes	A page the engine keeps of what it loads, cut before the first row past it; it holds the agent's largest turn.
+root.loads.read_bytes	What one person's read of the store brings, its rows included; it holds the agent's largest turn with its row.
+root.loads.reply_bytes	A page the store answers the engine, decoded, at least `root.loads.bytes`; a larger page fails.
+root.loads.transcript_bytes	One row of a page the engine loads, a turn among them; it holds the agent's largest turn, which the start checks.
+root.brief.briefs	Briefs the engine gathers at once, a brief being what a run reads when it starts.
+root.brief.sections	Sections in one brief: the task, its dependencies, CI, reviews and the others.
+root.brief.parts	Parts read for one section of a brief.
+root.brief.read_bytes	What one section of a brief may read; a larger section is missing from the brief.
+root.brief.brief_bytes	A run's whole brief, which its sections share, each cut to fit, at most `root.journal.result_bytes`.
+root.brief.gather_ms	How long the engine gathers a brief before it gives up on the sections still missing.
+root.brief.budgets.task	The task's section of a brief, its spec, contract and requester; cut to fit.
+root.brief.budgets.dependencies	The dependencies' section of a brief; cut to fit.
+root.brief.budgets.ci	The CI section of a brief; cut to fit.
+root.brief.budgets.reviews	The reviews' section of a brief; cut to fit.
+root.brief.budgets.pull	The pull request's section of a brief; cut to fit.
+root.brief.budgets.attempts	The earlier attempts' section of a brief; cut to fit.
+root.brief.budgets.plan	The plan's section of a brief; cut to fit.
+root.brief.budgets.notes	The notes' section of a brief, within `root.brief.read_bytes`; cut to fit.
+forge.repositories	Repositories adopted across every forge, at most `forge.client.repositories`; an adoption past it is refused as too large.
+forge.tasks	Tasks that hold forge resources or effects at once, at least `tasks.tasks`; a task past it is refused.
+forge.holds	Forge resources held by tasks at once, at most `forge.client.resources`; a hold past it is refused.
+forge.subscriptions	Topics of the forges followed at once, CI reads among them; a subscription past it is refused.
+forge.entries	Writes to the forges awaiting them, at most `forge.client.entries`; a write past it is refused.
+forge.named_calls	Runs' calls to the forges held until answered, at least `core.call_records`.
+forge.changes	Changes on their way to landing at once; a change past it is refused.
+forge.issues	Tracked goals shown as issues at once; past it, a goal's issue fails.
+forge.resources_per_task	Repositories one task may name, equal to `checkout.repositories`; a task naming more is refused.
+forge.paths_per_subscription	Paths one subscription follows, and files read of one pull request; past it, the files are unknown.
+forge.name_bytes	A forge's name for an owner, a repository or a branch; a longer one is refused, and the longest remote must fit `checkout.name_bytes`.
+forge.output	Outputs the forge reserves for one step, at least what its holds, subscriptions and calls need, which the start checks.
+forge.facts	Counted in the forge's worst case only; nothing reads it at run time.
+forge.adoptions	Adoptions under way at once; another is answered busy.
+forge.applications	Adoption answers kept for a request asked again, with those under way; past it, an adoption is answered busy.
+forge.collaborators	Collaborators one adoption reads; a repository with more is refused as too large.
+forge.landings	Landings remembered at once; past it, a landing's news names no files.
+forge.judge_projects	Projects with landing rules of their own, at least the projects configured.
+forge.judge_criteria	Landing rules in the deployment's table or one project's; more refuse the start.
+forge.brief_sections	Brief sections the forges gather at once, at least `root.brief.briefs` times `root.brief.sections` times 2.
+forge.brief_bytes	One brief section a forge gathers, at least `root.brief.read_bytes`; a larger section fails.
+forge.queue_window_ms	How long a ready change waits before it goes ahead of every change that became ready after it, whatever their priority.
+forge.client.pending	Calls to a forge queued and in flight, at least `forge.client.calls`; a read past it is answered busy.
+forge.client.calls	Calls to a forge in flight at once, equal to `forge_component.connections`; more wait.
+forge.client.rate	Requests to a forge in one rate window; past it, calls wait for the next window.
+forge.client.reserve	Requests of each rate window reserved so that waiting work is still served, at most `forge.client.rate`.
+forge.client.window_ms	A forge's rate window, after which `forge.client.rate` requests are allowed again.
+forge.client.op_bytes	One forge call's own bytes, its rows among them; a larger call is refused as too large.
+forge.client.answer_bytes	One answer from a forge, decoded, a file or a job log among them; a larger answer fails as too large.
+forge.client.rows	Rows in one page of a forge's answer, and a listing's page size; a larger answer fails.
+forge.client.inbox	Comments and reviews remembered for one pull request or issue; one with more fails to read as too large.
+forge.client.read_attempts	Tries of a forge read before its error stands.
+forge.client.backoff_ms	The first wait before a forge read or write is tried again, doubling up to `forge.client.backoff_max_ms`.
+forge.client.backoff_max_ms	The longest wait between two tries of a forge read or write.
+forge.client.entries	Writes to a forge kept until done, at least `forge.entries`; another is answered busy.
+forge.client.write_attempts	Tries of a forge write before it fails as unavailable.
+forge.client.lifetime_ms	The longest a sent write may take to reach a forge, at least `forge_component.deadline_ms`; a write whose fate is unknown waits it out.
+forge.client.clock_margin_ms	An allowance for the clock's moves, added to `forge.client.lifetime_ms` before a write whose fate is unknown is settled.
+forge.client.resources	Forge resources watched at once, pull requests and issues among them, at least `forge.holds`; past it, a watch is answered busy.
+forge.client.repositories	Repositories watched across the forges, and a set-up forge's adopted list, at least `forge.repositories`; past it, busy.
+forge.client.poll_ms	How often a watched resource is read again, the wait doubling up to `forge.client.poll_max_ms`.
+forge.client.poll_max_ms	The longest wait between two reads of a watched resource.
+forge.client.hinted_ms	The wait before a resource is read again once a webhook or a write hints that it changed.
+forge.client.slow_ms	The wait before a slow read of a resource or a repository.
+forge.client.settle_ms	After a pull request's head or base moves, how long a not mergeable answer or a hinted job's pending CI is read again and not believed.
+forge.client.facts	A forge client's diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+forge.change_policy.repairs	Repairs one change may delegate; past it, the change is held.
+forge.change_policy.resolutions	Conflict resolutions one change may delegate; past it, the change is held.
+forge.change_policy.updates	Updates of one change's branch to its base; past it, the change is held.
+forge.change_policy.stall_ms	How long a change waits on its forge before it is held as stalled.
+forge.change_policy.gates	Gates one change keeps, and the landing rules one table holds; more rules refuse the start.
+forge.change_policy.clean_heads	A change's earlier heads remembered across clean updates; past it, the change is held.
+forge.issue_policy.plan_items	Items of a goal's plan shown in its issue.
+forge.issue_policy.milestones	Milestones listed in a goal's issue; later ones are summed up.
+forge.issue_policy.title_bytes	A goal's issue title; cut to fit.
+forge.issue_policy.body_bytes	A goal's issue body, its goal and plan; cut to fit.
+forge.issue_policy.comment_bytes	A comment on a goal's issue, for a milestone or the end; cut to fit.
+forge.issue_policy.interval_ms	The least time between two updates of a goal's issue.
+checkout.workspaces	Workspaces a worker keeps on disk, at least its slots; past it, the least recent idle one goes, and with none idle a checkout is busy.
+checkout.repositories	Repositories one checkout holds, equal to `forge.resources_per_task` and within the agent's directories.
+checkout.name_bytes	A checkout's key, a repository's name or remote, or a branch, at most the agent's; a longer one is refused.
+checkout.message_bytes	A commit's message, title and body, at least the agent's largest call; a longer one is refused.
+checkout.conflicts	Conflicted paths one repository may hold, within the agent's; 0 starts no merge.
+checkout.path_bytes	One conflicted path, within the agent's; a longer one fails the merge, and 0 starts none.
+checkout.remote_timeout_ms	How long a clone, fetch, branch or push may take before it times out.
+checkout.local_timeout_ms	How long a local checkout, merge or commit may take before it times out.
+checkout.facts	A checkout's diagnostic facts awaiting the log; past it, a fact is dropped and counted.
+git_component.operations	Git operations a worker runs at once, at least `checkout.workspaces`; another fails.
+git_component.stdout_bytes	The output kept of one git operation, at least what the checkout parses; more fails the operation.
+git_component.stderr_bytes	The tail of one git operation's errors kept for its diagnostic.
+git_component.read_bytes	One read of a conflicted file while it is scanned.
+git_component.sweep_entries	Entries read in one page while a worker clears its trash.
+git_component.sweep_bytes	The names read in one page while a worker clears its trash.
+clients.bundle_files	The web client's files, its page among them; a bundle with more refuses the start.
+clients.bundle_bytes	The web client's files in all, held in memory while `temper serve` runs; a larger bundle refuses the start.
+records.value_bytes	A forge's record or a value temper carries, such as a pasted token; a longer value is refused, named.
+forges.installations	The installations a GitHub forge accepts, at most `forge_component.installations`.
+forges.log_origins	Checked at the start alone, at most 4 and at most `forge_component.log_origins`; nothing reads it at run time.
+forge_component.log_origins	The origins a GitHub job log's redirect may reach, per forge, at least `forges.log_origins`; a redirect elsewhere is refused.
+forge_component.log_poll_ms	The wait between two reads of a GitHub App's delivery log.
+forge_component.log_catch_up_ms	How far back a GitHub App's delivery log is read when a forge starts again in one process, at most a day.
+forge_component.log_pages	Pages one read of a GitHub App's delivery log takes; the rest waits for the next read.
+forge_component.delivery_bytes	One delivery read from a GitHub App's delivery log; a larger one hints nothing.
+forge_component.installations	The installations whose tokens a GitHub forge keeps, at least `forges.installations`.
+forge_component.key_bytes	A GitHub App's private key, at least 1196 with a GitHub forge; a larger key is refused.
+forge_component.renew_before_ms	How long before an installation's token expires it is minted again, from twice `forge_component.deadline_ms` to 30 minutes.
+forge_component.forges	The forges configured, in all; more refuse the start.
+forge_component.token_bytes	A forge's token: an API token, a git token or a site admin's; a longer one is refused.
+forge_component.connections	Connections to a forge for calls, equal to `forge.client.calls`; a call waits for one.
+forge_component.head_bytes	The head of a forge's HTTP answer; a longer head fails the call.
+forge_component.headers	The header fields of a forge's answer or a webhook's request; a webhook with more is answered 431.
+forge_component.body_bytes_in	A forge's answer body as it streams in; a longer one fails to decode.
+forge_component.depth	The nesting of a forge's JSON, at least 8; a deeper document fails.
+forge_component.chunk	The piece in which a forge's answer is read and decoded; it bounds no whole.
+forge_component.string_bytes	A text in a forge's answer, a name, title, path or link, at least `forge.name_bytes`; a longer one fails the answer.
+forge_component.body_bytes	A body kept from a forge, as a pull request's or a comment's, and a write's body with its marker; a longer one fails.
+forge_component.inner	The items of a list inside one document from a forge; more fail the document.
+forge_component.target_bytes	The target of one HTTP request to a forge, its path and query; a longer one is refused.
+forge_component.repositories	Repositories whose lookups a forge keeps, at most `forge.repositories`; past it, the least recent goes.
+forge_component.users	Users whose logins a forge keeps; past it, the least recent goes.
+forge_component.tls.read	The plaintext read at once from a forge's TLS connection.
+forge_component.tls.send	The plaintext sent at once on a forge's TLS connection; a request head past it is refused.
+forge_component.tls.records	The ciphertext kept of a TLS handshake with a forge, at least 18437; a longer handshake message fails.
+forge_component.hooks	Webhook connections at once, in all; more wait.
+forge_component.hook_head_bytes	A webhook delivery's request head; a longer one is answered 431.
+forge_component.hook_body_bytes	A webhook delivery's body, read as it streams; a longer one is answered 413 and hints nothing.
+forge_component.hook_secret_bytes	A Forgejo forge's webhook secret, at least 32; a longer one is refused.
+forge_component.hook_deadline_ms	A webhook delivery's read and answer, from its connection's accept or its last answer; past it, the connection closes.
+forge_component.deadline_ms	A call to a forge, and each read as a forge starts, at most `forge.client.lifetime_ms`; past it, the call fails.
+forge_component.idle_ms	How long an idle connection to a forge stays open.
+forge_component.start_backoff_ms	The first wait before a forge's start is tried again, doubling up to `forge_component.start_backoff_max_ms`.
+forge_component.start_backoff_max_ms	The longest wait between two tries of a forge's start.
+setup.runs	Setup runs at once, a forge's writing run and its reachability read both counted; a request past them is answered busy.
+setup.states	One-time states held for a GitHub App's manifest and installation returns; past it, the oldest goes.
+setup.state_life_ms	A one-time return state's life, at most an hour; a return after it fails.
+setup.orgs	The orgs a managed forge's setup entry may name; more refuse the start.
+setup.deadline_ms	A forge's setup run, its wait for the forge among it, above `setup.backoff_max_ms`; past it, the run stops.
+setup.backoff_ms	The first wait before a setup request is made again, doubling up to `setup.backoff_max_ms`.
+setup.backoff_max_ms	The longest wait between two tries of a setup request, below `setup.deadline_ms`.
+setup.fetch_bytes	A fetched binary, written to its part file as it streams; one past it removes the part file and is refused, naming the URL.
+box.backoff_ms	The first wait before the box restarts a step that exited, doubling up to `box.backoff_max_ms`.
+box.backoff_max_ms	The longest wait before the box restarts a step, below `box.window_ms`.
+box.restarts	A step's exits within `box.window_ms` past which the box gives up, at most 64.
+box.window_ms	The window in which a step's exits count against `box.restarts`.
+box.grace_ms	A step's grace after each of its stop's two signals.
+box.line_bytes	A line of the box's pipe either way, its line feed among them, at least 64; a longer line is dropped.
+box.log_bytes	A step's log file, past which it moves to the same name ending `.log.1` and a new one starts.
+box.tail_lines	The lines of a step's log the box keeps and writes under a failure's line, from 1 to 100.

@@ -1,0 +1,8 @@
+2026-10-27: T2 implementation committed as 027ad45b5; tables contain 148/8/8 rows.
+Service 77, setup 155, box 127 and routing 1 tests passed before final lint repairs.
+Lint findings repaired; revalidation stopped at 46 GB free, below the 50 GB rule; heavy requires 70 GB.
+Only this worktree target/ was cleaned; local jig patch retained while the task awaits room.
+2026-10-27: T2 complete; body_bytes_in unit correction committed separately as 99238e0e7.
+Box lint repair committed as b4281dadf; final all-targets clippy is clean.
+All 12 narrow repair/unit/routing tests passed in 0.029 s; table rows remain 148/8/8.
+Local jig patch removed, Cargo.lock restored, own target/ removed, worktree clean; report reports/t2-3.md.

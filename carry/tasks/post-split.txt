@@ -1,0 +1,8 @@
+limits: how to split the pages (documentation.md 8 says a page per owner prefix past 32 KB)
+
+Numbers: temper's names 164 in 13 prefixes (forge 58, forge_component 34, root 27, checkout 9, setup 8, box 8, sign_in 7, git_component 6, forges 2, clients 2, routes/records/picker 1); jig's about 220 in 13 (tasks 59, people 22, core 22, hub 18, fleet 18, link 17, accounts 15, authority 12, notes 9, views 6, documents 6, brief 4, clients 2). About 190 bytes a row: some 70 KB in all, so one page cannot hold it.
+
+(a) Literal: `limits` the intro (where overrides go, the profile, units, refusals, a restart) and a line per prefix naming its page; a page `limits-PREFIX` for each of the 26 (`limits-forge-component`; temper's `clients.` and jig's share `limits-clients`). Five pages of 1 or 2 rows.
+(b) Recommended: as (a), but prefixes of under 8 names keep their rows in `limits` itself (sign_in, git_component, forges, clients x2, routes, records, picker, views, documents, brief: some 32 rows, 6 KB). 16 pages: `limits` and 15 `limits-PREFIX`, the largest about 11 KB, which read_docs walks in 8 cuts.
+
+Either way each row says on its value line where it is set (`application.`, `engine.` or `workers[N].limits.overrides`), its unit, small's value and what `temper init` writes where it differs; a search for the dotted name finds its row. Rows of jig's names that temper's engine does not take (brief., views., some core.) say what temper does instead.
