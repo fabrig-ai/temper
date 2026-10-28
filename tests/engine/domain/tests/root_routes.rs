@@ -1164,17 +1164,9 @@ fn a_nonfinal_task_restore_page_reaches_its_missing_proof_link() {
         .expect("ended fixture");
     record.spec.words = vec![b'x'; 64].into_boxed_slice();
     record.phase = tasks::Phase::Waiting;
+    let task = record.number;
     let row = Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(Box::new(record))));
     world.store.seed(Box::new([row]), Box::new([]));
-    let task = world
-        .store
-        .rows
-        .values()
-        .find_map(|row| match row {
-            Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))) => Some(row.number),
-            _ => None,
-        })
-        .expect("seeded live task");
     let mut driver = Driver::new(world.store);
     assert_missing_proof_link(&mut driver, task);
 }
