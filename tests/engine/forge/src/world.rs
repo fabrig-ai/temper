@@ -323,7 +323,6 @@ impl World {
 
     #[expect(
         clippy::too_many_arguments,
-        clippy::too_many_lines,
         clippy::fn_params_excessive_bools,
         reason = "one shared fake fixture with independent scenario switches"
     )]
