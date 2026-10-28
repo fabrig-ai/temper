@@ -90,6 +90,8 @@ fn pass_ci(world: &mut World, head: u64) {
                 commit,
                 context: b"build".as_slice().into(),
                 state: raw::Check::Passed,
+                description: Box::new([]),
+                link: Box::new([]),
             }),
         );
     }
