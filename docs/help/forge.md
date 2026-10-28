@@ -77,6 +77,9 @@ A forge is where repositories live, GitHub or Forgejo, numbered in the configura
   requests, reviews, checks, branches, files and CI logs with the forge
   reads (`read_items`, `read_pull`, `read_job`...), write with
   `effect_forge`, and hear its news with `subscribe_forge`.
+  `read_checks` and `read_statuses` name each CI job as `read_job`
+  takes it (`read_job head HEAD run RUN job JOB attempt ATTEMPT`),
+  never by its link's index.
 - **Yourself:** read diffs, reviews, CI runs and logs on the forge,
   at the numbers and links ctl prints (temper help ctl).
 
