@@ -36,10 +36,11 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                 forge_route::refused_step(domain, env, task, step, findings);
             }
             if let core::StepRefusal::Refused(problem) = why {
-                // Jig's domain/connectors.md, 6.2: a refused batch stays Due.
-                // After rollback, settle the offer as an empty wait so the
-                // forge's retry deadline or dependency news can offer fresh reads.
+                // Keep jig's live-capacity refusal Due. Other refused offers
+                // settle after rollback so the forge's retry deadline or
+                // dependency news can offer fresh reads.
                 if connector == domain.config.forge_connector
+                    && problem.why != tasks::Refusal::Live
                     && let Some((owner, code @ 2, current)) = domain.core.tasks.procedure_due(task)
                     && owner == connector
                     && current == step
