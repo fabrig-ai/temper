@@ -5,6 +5,7 @@ mod calls_tests;
 pub(crate) mod checks;
 mod memory;
 mod problems;
+mod seed;
 #[cfg(test)]
 #[path = "tests/welcome_policy.rs"]
 mod welcome_policy;
@@ -396,29 +397,52 @@ fn engine_checked(
     config::pass(&mut engine, defaults)?;
     Ok(engine)
 }
-/// Parse the engine past a sole memory refusal; startup checks the whole envelope.
+/// Parse past a sole memory refusal and name stock floors hidden by a seed.
 pub fn engine_with(
     document: &skein_json::Document,
     at: u32,
     directories: &config::Directories,
     given: &crate::stock::Given,
-) -> Result<config::Engine, config::Problems> {
+) -> Result<config::Engine, Problems> {
     let found = match engine_checked(document, at, directories, given) {
         Ok(engine) => return Ok(engine),
         Err(found) => found,
     };
-    let Some(envelope) = memory::envelope(document, at, &found) else { return Err(found) };
-    let copy = memory::raised(document, member(document, at, b"memory_bytes").expect("checked memory"), envelope.need);
-    let Ok(mut engine) = engine_checked(&copy, at, directories, given) else { return Err(found) };
-    engine.memory = envelope.declared;
-    Ok(engine)
+    if let Some(envelope) = memory::envelope(document, at, &found) {
+        let copy =
+            memory::raised(document, member(document, at, b"memory_bytes").expect("checked memory"), envelope.need);
+        if let Ok(mut engine) = engine_checked(&copy, at, directories, given) {
+            engine.memory = envelope.declared;
+            return Ok(engine);
+        }
+    }
+    Err(engine_problems(document, at, directories, given, found))
 }
 pub fn engine(
     document: &skein_json::Document,
     at: u32,
     directories: &config::Directories,
-) -> Result<config::Engine, config::Problems> {
+) -> Result<config::Engine, Problems> {
     engine_with(document, at, directories, &crate::stock::Given::Stock)
+}
+fn engine_problems(
+    document: &skein_json::Document,
+    at: u32,
+    directories: &config::Directories,
+    given: &crate::stock::Given,
+    found: config::Problems,
+) -> Problems {
+    if let crate::stock::Given::Stock = given
+        && let Some(copy) = seed::without_projects(document, at, &found)
+        && let Ok(engine) = engine_checked(&copy, at, directories, given)
+    {
+        let mut problems = Problems::empty();
+        checks::stock(&engine, &mut problems);
+        if !problems.is_empty() {
+            return problems;
+        }
+    }
+    Problems::jig(found, &Path::root().member(b"engine"))
 }
 fn parse_with(
     input: &[u8],
@@ -527,7 +551,11 @@ fn load_document(
                 Some(engine)
             }
             Err(found) => {
-                problems.append(found, &root.member(b"engine"));
+                let found = engine_problems(document, at, directories, given, found);
+                for found in &found.problems {
+                    problems.push(found.path.clone(), found.what);
+                }
+                problems.past = problems.past.saturating_add(found.past);
                 None
             }
         },
