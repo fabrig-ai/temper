@@ -26,6 +26,9 @@ A party's inbox is what waits on it, questions, proposals, escalations and perso
 - **A need leaves** once it is met: a question once answered, a
   proposal once decided or withdrawn, an escalation once decided, a
   person task once its person no longer has it.
+- **A work's question to a chat** waits in its person's inbox: their
+  answer reaches the asking task itself, and the chat hears a notice
+  that they answered; no task answers for its person.
 - **An update's unread state** is the engine's: reading the inbox
   with ctl does not change it.
 
