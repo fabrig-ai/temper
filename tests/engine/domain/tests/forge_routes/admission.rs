@@ -162,6 +162,88 @@ fn approve(world: &mut World, change: u64, gate: &engine::Assignment) {
 }
 
 #[test]
+fn a_change_held_for_effects_before_its_producer_asks_its_producer_once_released() {
+    let mut world = World::configured(true, true);
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    let ask = adoption_chat(&world);
+    let chat = assigned_chat(&mut world, 92, ask);
+    let engine::CallAnswer::Delegated(made) = super::change_tool::change(&mut world, &chat, 93, None, b"Small fix")
+    else {
+        panic!("change admitted");
+    };
+    let change = made[0].task;
+    assert_eq!(world.assigned.len(), 1, "the producer is not admitted yet");
+    let step = live_task(&world, change).attempt + 1;
+    // An effects hold is the procedure's own 5.5 hold, with its offered
+    // release action. Commit it while the first fresh reads are outstanding.
+    world.send(engine::Event::Party(engine::PartyInput::ProcedureStep {
+        task: change,
+        step,
+        connector: 0,
+        code: 2,
+        decision: jig_domain_core::ProcedureStep::new(jig_domain_core::StepEnd::Hold(tasks::Hold::Effects)),
+    }));
+    for _ in 0..80 {
+        world.tick();
+    }
+    assert!(matches!(live_task(&world, change).phase, tasks::Phase::Held { why: tasks::Hold::Effects, .. }));
+    assert!(live_task(&world, change).delegates.is_empty());
+    assert_eq!(change_row(&world, change).delegate, None);
+    assert_eq!(change_row(&world, change).change.last_head, None);
+    assert_eq!(change_row(&world, change).pull, None);
+    assert_eq!(world.assigned.len(), 1, "no producer runs while held");
+    release(&mut world, change);
+    assert!(!matches!(live_task(&world, change).phase, tasks::Phase::Held { .. }), "owner release accepted");
+    for _ in 0..20 {
+        world.tick();
+        if world.assigned.len() > 1 {
+            break;
+        }
+    }
+    assert_eq!(
+        world.assigned.len(),
+        2,
+        "release makes exactly one producer: phase={:?}, change={:?}",
+        live_task(&world, change).phase,
+        change_row(&world, change)
+    );
+    let producer = world.assigned[1].clone();
+    assert_eq!(change_row(&world, change).delegate, Some((producer.task, policy::Delegate::Produce)));
+    assert_eq!(live_task(&world, change).delegates.as_ref(), &[producer.task]);
+    let branch = producer.workspace.repositories[0].push.clone().expect("producer's branch");
+    world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 }));
+    fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"released producer's fix", 1)
+        .expect("producer pushes");
+    let event = world.protocol.answer(
+        Token::new(7),
+        producer.task,
+        producer.attempt,
+        5,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Change {
+                connector: 0,
+                kind: 2,
+                resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+                words: b"pushed".as_slice().into(),
+            },
+            cancel_delegates: false,
+        },
+        engine::Parts::none(),
+    );
+    world.send(event);
+    for _ in 0..200 {
+        world.tick();
+        if matches!(change_row(&world, change).change.state, policy::State::Landed { .. }) {
+            break;
+        }
+    }
+    assert!(matches!(change_row(&world, change).change.state, policy::State::Landed { .. }));
+    assert_eq!(world.merges, 1);
+    assert_eq!(world.assigned.len(), 2, "the producer was made only once");
+}
+
+#[test]
 fn a_change_stopped_mid_read_asks_its_review_once_released() {
     let (mut world, change, head) = checking();
     pause_checking(&mut world);
