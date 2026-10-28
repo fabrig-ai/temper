@@ -2346,9 +2346,7 @@ fn land_file_for_tier(world: &mut World, task: u64, branch: &[u8], path: &[u8]) 
     panic!("change {task} lands before the baseline ends: {:?}", world.change(task));
 }
 fn tier_world(ignored: &[&[u8]]) -> World {
-    let mut world = World::tiered();
-    world.adopt();
-    tier_history_world(world, ignored)
+    tier_history_world(World::tiered(), ignored)
 }
 
 fn tier_history_world(mut world: World, ignored: &[&[u8]]) -> World {
@@ -2373,6 +2371,7 @@ fn tier_history_world(mut world: World, ignored: &[&[u8]]) -> World {
             }]),
         }]),
     ));
+    world.adopt();
     world.event(top::Event::Names {
         task: TIER_BASELINE,
         resources: Box::new([top::Name {
@@ -2382,14 +2381,14 @@ fn tier_history_world(mut world: World, ignored: &[&[u8]]) -> World {
         }]),
     });
     world.run_for(1);
+    tier_hold(&mut world, TIER_BASELINE, 1);
+    tier_step(&mut world, TIER_BASELINE, 1000);
+    tier_step(&mut world, TIER_BASELINE, 1001);
     world
 }
 #[test]
 fn a_green_tier_run_clears_the_two_landings_in_its_range_and_each_change_gives_its_result() {
     let mut world = tier_world(&[]);
-    tier_hold(&mut world, TIER_BASELINE, 1);
-    tier_step(&mut world, TIER_BASELINE, 1000);
-    tier_step(&mut world, TIER_BASELINE, 1001);
     let first = land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
     let second = land_for_tier(&mut world, SECOND_CHANGE, b"temper/52");
     for at in 0..TIER_STEPS {
@@ -2429,7 +2428,6 @@ fn a_green_tier_run_clears_the_two_landings_in_its_range_and_each_change_gives_i
 #[test]
 fn a_documentation_landing_every_tier_ignores_clears_at_once() {
     let mut world = tier_world(&[b"docs"]);
-    tier_hold(&mut world, TIER_BASELINE, 1);
     for at in 0..TIER_STEPS {
         if tier_step(&mut world, TIER_BASELINE, 1100 + at) {
             break;
