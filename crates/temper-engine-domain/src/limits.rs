@@ -246,12 +246,12 @@ pub(crate) fn route_decision(domain: &mut Domain, limits: &Limits) -> Option<Dec
 /// workspaces (domain/root.md, 10). No cold page is a message payload.
 #[must_use]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
-    let (common, serving) = phase_peak(limits)?;
+    let (common, serving) = phase_worst_case(limits)?;
     common.checked_add(limits.restore_bytes.max(serving))
 }
 
 #[expect(clippy::too_many_lines, reason = "one checked sum of the root's bounded participating state")]
-fn phase_peak(limits: &Limits) -> Option<(u64, u64)> {
+fn phase_worst_case(limits: &Limits) -> Option<(u64, u64)> {
     if limits.forge.tasks < limits.tasks.tasks
         || limits.brief.parts == 0
         || limits.brief.gather == skein_lib::Duration::ZERO
@@ -488,7 +488,7 @@ pub fn payload_worst_case(limits: &Limits) -> Option<u64> {
     let retained = u64::from(limits.people.requests)
         .checked_add(u64::from(limits.people.pending).checked_mul(2)?)?
         .checked_add(2)?;
-    let (common, serving) = phase_peak(limits)?;
+    let (common, serving) = phase_worst_case(limits)?;
     common.checked_add(serving)?.checked_sub(retained.checked_mul(people::model_names_worst_case()?)?)
 }
 
