@@ -123,15 +123,8 @@ pub fn read(document: &Json, at: u32, facts: &Facts<'_>) -> Result<Option<Demo>,
             }
         }
     }
-    let mut combined = List::with_capacity(u32::try_from(count).expect("sixteen scripts"));
-    for script in asked.into_iter().chain(cued) {
-        combined.push(script).expect("sixteen scripts across asked and cued");
-    }
-    let scripts = api::Scripts {
-        cued: combined.into_boxed(),
-        asked: Box::new([]),
-        otherwise: llm::turns(document, otherwise_at, &lp.member(b"otherwise"))?,
-    };
+    let scripts =
+        api::Scripts { cued, asked, otherwise: llm::turns(document, otherwise_at, &lp.member(b"otherwise"))? };
     let llm = llm::Document::checked(listen, key, None, models, scripts, &lp)?;
     let forge = read::integer(document, forge_at, u64::from(u16::MAX), &p.member(b"forge"))?;
     let forge = u16::try_from(forge).expect("u16 bound");

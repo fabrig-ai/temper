@@ -660,11 +660,7 @@ fn llm_run() {
             private_hex(&dir.join("key"), &key);
             (run, dir.join("key"), key.to_vec())
         };
-        let mut chat: Value = serde_json::from_slice(CHAT).expect("valid fixture");
-        if demo {
-            chat["instructions"] = json!("say hello");
-            chat["input"][0]["content"][0]["text"] = json!("Begin the work your brief describes.");
-        }
+        let chat: Value = serde_json::from_slice(CHAT).expect("valid fixture");
         let chat = serde_json::to_vec(&chat).expect("valid fixture");
         let before = snapshot(dir);
         let auth = format!("Bearer {}", std::str::from_utf8(&key).expect("valid fixture"));
