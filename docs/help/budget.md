@@ -57,7 +57,10 @@ A budget is what a task may spend, in units its models' prices make of their usa
   are funded from their pool, which their role's period spend sizes and
   which reserves from the period, so raise the role's next: `project
   fund PROJECT AMOUNT --role ROLE`. A cut keeps each budget at what it
-  has used: nothing is taken back. A project made after a change of
+  has used: nothing is taken back. A spend past its ceiling (the rules'
+  for a project's, the project's for a role's) is refused naming the
+  ceiling, its value and what to raise first; that is judged before the
+  open period's room. A project made after a change of
   policy 1 starts with the new period spend.
 
 ## What temper guarantees

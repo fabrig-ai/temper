@@ -27,7 +27,11 @@ the rules' (`temper ctl DIR settings show rules`):
   `temper ctl DIR settings apply FILE --against REVISION`, REVISION the
   newest that `settings show` printed.
 
-An AMOUNT past the rules' period spend is refused, exit 2, naming it.
+An AMOUNT past the rules' period spend is refused, exit 2, naming it
+and how to raise it: `project fund: past the rules' period spend, N;
+raise the rules first with temper ctl settings apply`. A role's past the
+project's names the project's to fund first, and a cut below a role's
+names the role to lower first.
 
 ## Enforced and followed
 
