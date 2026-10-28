@@ -3041,6 +3041,17 @@ fn procedure_resolved(d: &mut Domain, env: &Env<Limits>, task: u64, step: u64, m
     if d.procedure_step(task) != Some(step) {
         return;
     }
+    // A hold can be admitted while this step is still reading. Its outcome
+    // does not admit the policy decision those reads will later produce.
+    if let Some(fence) = d.procedure_steps.get(&task)
+        && fence.prior.is_none()
+    {
+        for (_, pending) in &d.steps {
+            if pending.task == task {
+                return;
+            }
+        }
+    }
     let fence = d.procedure_steps.remove(&task).expect("matched admission fence");
     let Some(prior) = fence.prior else { return };
     let Some(row) = d.changes.get_mut(&task) else { return };
