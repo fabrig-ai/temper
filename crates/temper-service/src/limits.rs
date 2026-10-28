@@ -257,7 +257,7 @@ const ROOT: Root = Root {
         commits: 3,
         // At least deliveries * 3: the root's worst case.
         held: 1536,
-        // At least `route_bound` plus `call_records`: the root's worst case.
+        // A commit's unique writes: the store commit edge, checked by Decision::write.
         writes: 12288,
         // At least jig small fleet.workers * fleet.max_out + 1: the root's worst case.
         deliveries: 512,
@@ -369,6 +369,7 @@ pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engi
 /// The same effective projection, before sizing can refuse it anonymously.
 pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limits) -> engine::Limits {
     engine::Limits {
+        watermark: engine::default_watermark(&limits.root.journal),
         journal: limits.root.journal,
         loads: limits.root.loads,
         brief: limits.root.brief,

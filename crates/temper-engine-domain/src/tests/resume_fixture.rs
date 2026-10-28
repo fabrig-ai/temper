@@ -10,6 +10,9 @@ use jig_domain_tasks as tasks;
 use skein_lib::{Duration, Env, Time, Wall};
 use temper_engine_domain_forge as forge;
 
+// A commit's unique writes in this fixture, including its deployment header.
+const COMMIT_WRITES: u32 = 2118;
+
 #[expect(clippy::too_many_lines, reason = "one fixture lists the real children's tiny admission limits together")]
 pub fn limits() -> engine::Limits {
     let retry = tasks::Retry { retries: 1, base: Duration::from_millis(10), max: Duration::from_secs(1) };
@@ -117,7 +120,16 @@ pub fn limits() -> engine::Limits {
         history: 2,
     };
     let deliveries = 20_u32.max(fleet::max_out(&fleet).checked_add(1).expect("fleet burst plus continuation"));
-    let mut limits = engine::Limits {
+    let journal = JournalLimits {
+        commits: 3,
+        held: deliveries.checked_mul(3).unwrap().checked_add(16).unwrap(),
+        writes: COMMIT_WRITES,
+        deliveries,
+        transcript_bytes: 8192,
+        result_bytes: 384,
+        run_bytes: 4096,
+    };
+    engine::Limits {
         // The same configured core byte budgets as the engine world fixture.
         policy_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.policy_bytes,
         call_answer_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.call_answer_bytes,
@@ -143,15 +155,8 @@ pub fn limits() -> engine::Limits {
             versions: jig_domain_core::documents::Versions { minimum: 1, maximum: 1 },
         },
         authority: authority_limits(),
-        journal: JournalLimits {
-            commits: 3,
-            held: deliveries.checked_mul(3).unwrap().checked_add(16).unwrap(),
-            writes: 0,
-            deliveries,
-            transcript_bytes: 8192,
-            result_bytes: 384,
-            run_bytes: 4096,
-        },
+        watermark: engine::default_watermark(&journal),
+        journal,
         loads: loads::Limits {
             read_bytes: 65_536,
             loads: 2,
@@ -209,9 +214,7 @@ pub fn limits() -> engine::Limits {
             recalled: 1,
         },
         forge: FORGE_LIMITS,
-    };
-    limits.journal.writes = crate::limits::work_estimate(&limits).unwrap().checked_add(limits.call_records).unwrap();
-    limits
+    }
 }
 
 fn authority_limits() -> authority::Limits {

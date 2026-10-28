@@ -593,6 +593,7 @@ pub fn widest() -> engine::Limits {
     limits.brief.brief_bytes = 1024;
     limits.forge.brief_sections = 80;
     limits.people.inbox_recipients = 32;
+    limits.watermark = engine::default_watermark(&limits.journal);
     limits
 }
 fn component_limits(limits: &engine::Limits) -> Limits {

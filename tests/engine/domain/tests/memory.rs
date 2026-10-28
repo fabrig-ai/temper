@@ -268,7 +268,10 @@ fn full_decisions_and_maximum_held_results_fit_the_declared_root_journal_bound()
         drop(out.pop().expect("one commit"));
         meter.check(measured, bound, &LIMITS);
     }
-    assert!(journal.backlog() >= u64::from(LIMITS.commits), "retained work reaches the root's watermark");
+    assert!(
+        journal.backlog() >= u64::from(root::default_watermark(&LIMITS)),
+        "retained work reaches the root's watermark"
+    );
     root::committed(&mut journal, u64::from(LIMITS.commits));
     for _ in 0..LIMITS.held {
         meter.start();

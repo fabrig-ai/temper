@@ -1,6 +1,6 @@
 //! Child limits and checked route and heap sums (jig's domain/root.md, 10).
 use crate::boundary::{
-    Assignment, BriefConnector, BriefSection, Event, Fact, Payload, PreparedWorkspace, Read, Request, Work,
+    Assignment, BriefConnector, BriefSection, Event, Fact, Payload, PreparedWorkspace, Read, Request,
 };
 use crate::domain::{Domain, max_out};
 use crate::route::{LandingRule, forge_route, host_route};
@@ -30,7 +30,11 @@ pub const TRANSCRIPT_TAIL_BYTES: u32 = 2048;
 /// capacities and prices the root's internal queues as estimates.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Limits {
-    /// Admission watermark, per-commit store edges and journal memory estimates.
+    /// Admission watermark, in backlog entries (skein's draft
+    /// dynamic-memory.md, 4.4): new external work waits while the root's
+    /// backlog is at or past it. A limit on pacing, not on memory.
+    pub watermark: u32,
+    /// Per-commit store edges and journal memory estimates.
     pub journal: JournalLimits,
     /// Paged store reads; every startup page must fit whole.
     pub loads: loads::Limits,
@@ -186,30 +190,12 @@ pub(crate) fn payload_slots(limits: &Limits) -> Option<u32> {
         .checked_add(limits.fleet.calls.checked_mul(2)?)
 }
 
-// Each child's largest output cohort: an estimate of the work queue's peak,
-// until exact figures go. Used for pricing only.
-pub(crate) fn work_estimate(limits: &Limits) -> Option<u32> {
-    let routes = tasks::max_out(&limits.tasks)
-        .checked_mul(8)?
-        .checked_add(people::max_out(&limits.people).checked_mul(4)?)?
-        // Every in-flight historical decision may complete under journal pressure:
-        // one retained IO terminal and one people Decided callback per flight.
-        .checked_add(limits.people.pending.checked_mul(2)?)?
-        .checked_add(fleet::max_out(&limits.fleet).checked_mul(4)?)?
-        .checked_add(forge::max_out(&limits.forge))?
-        // One serialized role cohort revisits each Waiting task, then answers.
-        .checked_add(limits.tasks.tasks.checked_add(4)?)?;
-    // Each due project saves its opened ledger and then its next start.
-    let routes = routes.checked_add(limits.authority.projects.checked_mul(2)?)?;
-    Some(routes.max(jig_domain_core::settings::writes_worst_case(&core_limits(limits))?))
-}
-
-/// The root's watermark: new external work waits while the backlog is at
-/// or past it (skein's draft dynamic-memory.md, 4.4). The journal's commit
-/// count is reused so no Limits literal changes and pacing stays close to
-/// the reserved journal's unanswered commits.
-pub(crate) fn watermark(limits: &Limits) -> u64 {
-    u64::from(limits.journal.commits)
+/// The watermark's default: the journal's unanswered commits plus the
+/// outputs at its door, so that outputs waiting for release don't keep a
+/// person's reads out (skein's draft dynamic-memory.md, 4.4).
+#[must_use]
+pub const fn default_watermark(journal: &JournalLimits) -> u32 {
+    journal.commits.saturating_add(journal.deliveries)
 }
 
 /// What the root holds of admitted work, in entries (the draft's 4.1):
@@ -234,7 +220,8 @@ pub(crate) fn backlog(domain: &Domain) -> u64 {
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "one checked sum of the root's bounded participating state")]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
-    if limits.forge.tasks < limits.tasks.tasks
+    if limits.watermark == 0
+        || limits.forge.tasks < limits.tasks.tasks
         || limits.brief.parts == 0
         || limits.brief.gather == skein_lib::Duration::ZERO
     {
@@ -245,13 +232,10 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         return None;
     }
     let core_bytes = jig_domain_core::worst_case(&core_limits(limits))?;
-    // A saved settings revision owns a whole set. Both journal write cohorts and
-    // the synchronous work queue may retain one per slot, independently of Current.
+    // A saved settings revision owns a whole set. Both journal write cohorts
+    // may retain one per slot, independently of Current.
     let settings_row = jig_domain_core::settings::revision_worst_case(&core_limits(limits))?;
-    let settings_writes = u64::from(limits.journal.writes)
-        .checked_mul(2)?
-        .checked_add(u64::from(work_estimate(limits)?))?
-        .checked_mul(settings_row)?;
+    let settings_writes = u64::from(limits.journal.writes).checked_mul(2)?.checked_mul(settings_row)?;
     // Change words belong to tasks, independently of the forge operation bound.
     let forge_bytes = forge::worst_case(&limits.forge)?.checked_add(
         u64::from(limits.forge.changes).checked_mul(u64::from(limits.tasks.spec_bytes))?.checked_mul(2)?,
@@ -278,7 +262,6 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     let permission_bytes = Map::<u32, Box<[people::PermissionRole]>>::worst_case(limits.authority.projects)?
         .checked_add(u64::from(limits.authority.projects).checked_mul(u64::from(limits.journal.transcript_bytes))?)?;
     let load_bytes = loads::worst_case(&limits.loads)?;
-    let routes = work_estimate(limits)?;
     let tool_bytes = u64::from(limits.tasks.batch).checked_mul(row_bound(limits)?)?;
     if limits.forge.named_calls < limits.call_records
         || limits.call_records == 0
@@ -390,12 +373,10 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(u64::from(limits.journal.deliveries).checked_mul(
             u64::try_from(size_of::<forge::Event>()).ok()?.checked_add(u64::from(limits.forge.client.answer_bytes))?,
         )?)?
-        .checked_add(Queue::<Work>::worst_case(routes)?)?
         // One admitted client ask moves its original names into Work::People and drains
         // in this route. Child callbacks do not enqueue more client asks. Restored answers
-        // are already covered by row_bound below; core/people price their retained contexts.
-        .checked_add(people::model_names_worst_case()?)?
-        .checked_add(u64::from(routes).checked_mul(row_bound(limits)?)?)?;
+        // are priced by their owners; core/people price their retained contexts.
+        .checked_add(people::model_names_worst_case()?)?;
     let pushed =
         u64::from(limits.forge.resources_per_task).checked_mul(u64::try_from(size_of::<forge::Pushed>()).ok()?)?;
     bytes = bytes

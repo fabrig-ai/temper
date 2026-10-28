@@ -12,7 +12,7 @@ const SIGN_IN: u64 = 10;
 #[test]
 fn released_continuations_are_taken_in_arrival_order_at_the_watermark() {
     let (mut domain, env) = root();
-    for turn in 1..=env.limits.journal.commits {
+    for turn in 1..=env.limits.watermark {
         let mut decision = crate::decision::Decision::decide(&mut domain.journal, &env.limits.journal);
         decision.write(&env.limits.journal, super::turn(turn, 1)).unwrap();
         crate::decision::accept_routed(
@@ -30,7 +30,7 @@ fn released_continuations_are_taken_in_arrival_order_at_the_watermark() {
     {
         last = number;
     }
-    assert!(crate::limits::backlog(&domain) >= crate::limits::watermark(&env.limits));
+    assert!(crate::limits::backlog(&domain) >= u64::from(env.limits.watermark));
 
     let older = Event::Released(crate::Released(crate::Delivery::Fleet(jig_domain_fleet::Event::TurnKept {
         run: skein_lib::Token::new(1),
@@ -542,7 +542,7 @@ fn ordinary_root_fire_expires_sign_ins_once_by_either_clock() {
 fn refused_people_timer_stays_due_without_child_mutation_until_room_returns() {
     let (mut domain, mut env) = watched_root();
     // Header decisions bring the backlog exactly to the watermark.
-    for _ in 0..env.limits.journal.commits {
+    for _ in 0..env.limits.watermark {
         crate::fresh(&mut domain.core.counters, crate::Family::Message).unwrap();
         crate::try_step(&mut domain, &env, Event::Resume).unwrap();
     }
