@@ -653,6 +653,25 @@ fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
         prior.change.repairs = 2;
         prior.change.resolutions = 1;
         prior.change.updates = 1;
+        prior.change.landing = Some(61);
+        d.landing
+            .rows
+            .insert(
+                61,
+                LandingRow {
+                    landing: temper_engine_domain_forge_landing::Landing {
+                        task: 61,
+                        project: 5,
+                        phase: temper_engine_domain_forge_landing::Phase::Preparing,
+                        members: Box::new([]),
+                        preparation: 0,
+                        stale_proofs: 0,
+                    },
+                    asks: Box::new([]),
+                    entries: Box::new([]),
+                },
+            )
+            .expect("landing room");
         outputs(&mut d, Event::Change { row: prior.clone() });
         d.start_procedure_step(prior.task, 7);
         start_opening(&mut d, prior.task, FIRST_ENTRY);
@@ -666,6 +685,7 @@ fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
             }
         }
         assert!(!saved_early, "neither speculative record reaches the store");
+        assert!(!decided.contains(&Request::WakeProcedure { task: 61 }), "the landing waits for admission");
         let staged = d.change(prior.task).expect("change retained").clone();
         assert_eq!(staged.pending, Some(FIRST_ENTRY));
         assert_ne!(staged.change, prior.change, "the requested flag advanced");
@@ -674,6 +694,7 @@ fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
         let resolved = outputs(&mut d, Event::ProcedureResolved { task: prior.task, step: 7, made });
         assert_eq!(d.procedure_step(prior.task), None);
         assert_eq!(d.entries.contains_key(&FIRST_ENTRY), made);
+        assert_eq!(resolved.contains(&Request::WakeProcedure { task: 61 }), made);
         if made {
             let mut saved_change = false;
             let mut saved_entry = false;
