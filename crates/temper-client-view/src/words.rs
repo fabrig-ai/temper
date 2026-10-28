@@ -655,7 +655,7 @@ pub enum Word {
 // The owned row's Runs and first-password lines add two words and three phrases.
 // A failed setup's step adds five phrases.
 // Ready's refused read and exhausted busy rereads add three phrases.
-// A task document's reading line and seven lasting read ends (client/README.md, 3.5).
+// A task document's reading line and eight lasting read ends (client/README.md, 3.5).
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
 const PHRASES: u32 = 1170;
