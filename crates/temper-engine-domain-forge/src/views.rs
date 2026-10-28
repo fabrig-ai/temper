@@ -14,10 +14,6 @@ pub fn landings_subject(project: u32, ended: bool) -> u64 {
 /// At most thirty-two lines cross the panel boundary (client/tools.md, 5.2).
 pub const LANDING_PAGE: u32 = 32;
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "bounded documents move whole into the root decision; owned_bytes charges the inline enum"
-)]
 pub enum Document {
     Change(Panel),
     Landing(LandingView),

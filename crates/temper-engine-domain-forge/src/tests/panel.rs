@@ -407,6 +407,7 @@ fn landed_panel_keeps_passed_ci_across_a_restart() {
     outputs(&mut d, Event::Restored { clock: RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pending = None;
     row.effect = change::EffectResult::None;
