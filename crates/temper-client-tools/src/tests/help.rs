@@ -288,20 +288,27 @@ fn each_row_says_what_it_does_and_prints() {
 
 #[test]
 fn the_project_reference_is_what_the_table_renders() {
-    let mut project = None;
+    reference(b"project", "../../docs/help/reference/ctl-project.md");
+}
+#[test]
+fn the_task_reference_is_what_the_table_renders() {
+    reference(b"task", "../../docs/help/reference/ctl-task.md");
+}
+fn reference(name: &[u8], path: &str) {
+    let mut selected = None;
     for group in table::GROUPS {
-        if group.name == b"project" {
-            project = Some(group);
+        if group.name == name {
+            selected = Some(group);
             break;
         }
     }
-    let group = project.expect("project group");
+    let group = selected.expect("reference group");
     let mut measured = skein_lib::Writer::new(temper_docs::PAGE_BYTES);
-    crate::help::reference(group, &mut measured).expect("project reference fits");
+    crate::help::reference(group, &mut measured).expect("reference fits");
     let mut out = skein_lib::Writer::new(measured.written());
-    crate::help::reference(group, &mut out).expect("project reference measured");
+    crate::help::reference(group, &mut out).expect("reference measured");
     let rendered = out.finish();
-    let path = std::path::Path::new("../../docs/help/reference/ctl-project.md");
+    let path = std::path::Path::new(path);
     let write = match std::env::var_os("SKEIN_CODEGEN_WRITE") {
         Some(value) => value == "1",
         None => false,
@@ -310,7 +317,7 @@ fn the_project_reference_is_what_the_table_renders() {
         std::fs::write(path, &rendered).expect("write project reference");
     }
     assert_eq!(
-        std::fs::read(path).expect("project reference"),
+        std::fs::read(path).expect("reference"),
         rendered.as_ref(),
         "regenerate with SKEIN_CODEGEN_WRITE=1 and this test"
     );

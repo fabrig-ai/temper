@@ -108,9 +108,12 @@ impl Member {
                 client::Request::ServiceCredential { party, credential } => self.made = Some((party, credential)),
                 client::Request::Told { told: client::Told::Answered { key, outcome } } if key == self.key => {
                     if let Some((_, number)) = self.goal {
-                        assert!(matches!(outcome, client::Outcome::Answered(client::Answered::Jig(c::Answer::Done(
+                        assert!(
+                            matches!(outcome, client::Outcome::Answered(client::Answered::Jig(c::Answer::Done(
                             c::Outcome::Owner(c::OwnerOutcome::Created { first, last, .. })
-                        ))) if first == number && last == number), "goal creation answered: {outcome:?}");
+                        ))) if first == number && last == number),
+                            "goal creation answered: {outcome:?}"
+                        );
                         self.close();
                         continue;
                     }
@@ -174,7 +177,9 @@ impl Member {
         {
             self.phase = Phase::Creating;
             let request = if let Some((words, _)) = self.goal {
-                let Some(client::Latest::Jig(c::Delivery::Me(me))) = self.client.document(ME).and_then(|doc| doc.latest) else {
+                let Some(client::Latest::Jig(c::Delivery::Me(me))) =
+                    self.client.document(ME).and_then(|doc| doc.latest)
+                else {
                     panic!("live owner document");
                 };
                 let draft = client::shapes::GoalDraft {
@@ -186,20 +191,27 @@ impl Member {
                     llm: None,
                 };
                 let client::shapes::Judged::Create(ask) = client::shapes::set_goal(
-                    me, self.service_project, draft, c::Text::new(Box::new([]), 128).expect("empty reason"),
-                ) else { panic!("owner may create the fixture goal"); };
+                    me,
+                    self.service_project,
+                    draft,
+                    c::Text::new(Box::new([]), 128).expect("empty reason"),
+                ) else {
+                    panic!("owner may create the fixture goal");
+                };
                 ask
-            } else { match self.project {
-                Some((name, _)) => c::Ask::MakeProject {
-                    name: c::Text::new(name.as_bytes().into(), 64).expect("fixture project name"),
-                    policy: 1,
-                },
-                None => c::Ask::MakeService {
-                    project: self.service_project,
-                    name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
-                    role: self.role,
-                },
-            }};
+            } else {
+                match self.project {
+                    Some((name, _)) => c::Ask::MakeProject {
+                        name: c::Text::new(name.as_bytes().into(), 64).expect("fixture project name"),
+                        policy: 1,
+                    },
+                    None => c::Ask::MakeService {
+                        project: self.service_project,
+                        name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
+                        role: self.role,
+                    },
+                }
+            };
             self.event(
                 now,
                 wall,

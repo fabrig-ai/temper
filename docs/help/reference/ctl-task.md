@@ -228,3 +228,20 @@ Key: --key KEY, optional.
 A decision made already, by your party or another, answers
 `decided first:` with exit 0 and changes nothing.
 ```
+
+## task hold
+
+```
+task hold TASK --stop REASON [--key KEY]
+  TASK (task): a number; required. The task's number
+  --stop: a switch. Stop their runs at once
+  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why, in words the hold keeps
+Place a hold of yours over a task and every task below it
+Prints: `done: hold N placed, rev REV`
+--json: the record hold.
+Key: --key KEY, optional.
+Each task in scope is held, those made later included, and
+each live run among them is cancelled at once. The hold is
+yours: only you, or a role above yours, lift it, with hold
+lift; task release of the task itself lifts it whole.
+```

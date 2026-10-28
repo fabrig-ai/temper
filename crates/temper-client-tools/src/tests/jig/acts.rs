@@ -545,42 +545,64 @@ fn hold_lift_sends_without_a_read_and_prints_done_refused_and_moved() {
 
 #[test]
 fn task_hold_and_project_hold_send_with_their_scope_and_print_the_hold() {
-    for (group, subject, scope) in [
-        ("task", "41", c::HoldScope::Subtree { task: 41 }),
-        ("project", "shop", c::HoldScope::Project),
-    ] {
+    for (group, subject, scope) in
+        [("task", "41", c::HoldScope::Subtree { task: 41 }), ("project", "shop", c::HoldScope::Project)]
+    {
         for json in [false, true] {
             let mut root = fixtures::chat_root(fixtures::CHAT_BUDGET, fixtures::SEED);
-            let mut argv = vec![group, "hold", subject, "--stop", "Review all this work, please.", "--key", "place-hold"];
-            if json { argv.push("--json"); }
-            let call = root.submit(&argv);
+            // Seven call words and the optional JSON flag.
+            let mut argv = skein_lib::List::with_capacity(8);
+            for word in [group, "hold", subject, "--stop", "Review all this work, please.", "--key", "place-hold"] {
+                argv.push(word).expect("hold call words");
+            }
+            if json {
+                argv.push("--json").expect("optional JSON flag");
+            }
+            let call = root.submit(argv.as_slice());
             if group == "task" {
                 assert_eq!(root.reads.get(&call).expect("one task read").1, c::Read::Task { task: 41 });
                 assert!(!root.sends.contains_key(&call), "project is needed before send");
                 root.serve(call, fixtures::task_result(fixtures::offered(&[])));
             }
             assert!(!root.reads.contains_key(&call), "no remaining read");
-            assert_eq!(fixtures::act_ask(&root, call), &c::Ask::Hold {
-                project: fixtures::PROJECT, mode: c::HoldMode::Stop, scope,
-                reason: fixtures::act_text(b"Review all this work, please."),
-            });
+            assert_eq!(
+                fixtures::act_ask(&root, call),
+                &c::Ask::Hold {
+                    project: fixtures::PROJECT,
+                    mode: c::HoldMode::Stop,
+                    scope,
+                    reason: fixtures::act_text(b"Review all this work, please."),
+                }
+            );
             assert_eq!(root.sent_name(call), Some(fixtures::named("place-hold")));
-            root.done(call, c::Outcome::Owner(c::OwnerOutcome::Placed { hold: 12, revision: c::Revision { value: 1 } }));
+            root.done(
+                call,
+                c::Outcome::Owner(c::OwnerOutcome::Placed { hold: 12, revision: c::Revision { value: 1 } }),
+            );
             let printed = root.answer(call).expect("placed answer");
             assert_eq!(printed.status, 0);
             if json {
-                assert!(skein_lib::bytes::find(&printed.stdout, br#""hold":{"hold":12,"revision":1}"#).is_some(), "{printed:?}");
+                assert!(
+                    skein_lib::bytes::find(&printed.stdout, br#""hold":{"hold":12,"revision":1}"#).is_some(),
+                    "{printed:?}"
+                );
             } else {
                 assert_eq!(printed.stdout.as_ref(), b"done: hold 12 placed, rev 1\n");
             }
         }
-        for refusal in [c::Refusal::Role { held: None }, c::Refusal::Limit { which: c::Limit::Words { limit: 8 } }, c::Refusal::Limit { which: c::Limit::Admission { which: c::AdmissionLimit::PlacedHolds } }] {
-            let (mut root, call) = fixtures::send_act(&[group, "hold", subject, "--stop", "Review the work"], fixtures::SEED, 0);
+        for refusal in [
+            c::Refusal::Role { held: None },
+            c::Refusal::Limit { which: c::Limit::Words { limit: 8 } },
+            c::Refusal::Limit { which: c::Limit::Admission { which: c::AdmissionLimit::PlacedHolds } },
+        ] {
+            let (mut root, call) =
+                fixtures::send_act(&[group, "hold", subject, "--stop", "Review the work"], fixtures::SEED, 0);
             root.answered(call, c::Answer::Refused { refusal, at: None });
             let printed = root.answer(call).expect("refusal");
             assert_eq!(printed.status, 2);
             assert!(printed.stdout.is_empty());
-            assert!(printed.stderr.starts_with(format!("{group} hold: ").as_bytes()));
+            let prefix = if group == "task" { b"task hold: ".as_slice() } else { b"project hold: ".as_slice() };
+            assert!(printed.stderr.starts_with(prefix));
         }
     }
 }

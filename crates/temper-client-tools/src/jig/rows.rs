@@ -296,10 +296,8 @@ pub const LIFT: Tool = Tool {
     notes: b"Only the hold's owner, or a party whose role ranks above theirs,\nlifts it. Lifted alone, the tasks it holds stay held, each\nreleased with task release; with --with-tasks, every task it\nholds that nothing else holds runs again. A lift moves the hold's\nrevision.\n",
 };
 // Each mode has a form with the same argument positions; drain adds one form.
-const HOLD_STOP: super::table::Argument = super::table::Argument {
-    occurs: Required,
-    ..switch(b"stop", b"Stop their runs at once")
-};
+const HOLD_STOP: super::table::Argument =
+    super::table::Argument { occurs: Required, ..switch(b"stop", b"Stop their runs at once") };
 pub const TASK_HOLD: Tool = Tool {
     name: b"task hold",
     line: b"Place a hold of yours over a task and every task below it",

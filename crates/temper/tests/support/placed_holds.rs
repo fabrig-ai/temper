@@ -96,7 +96,11 @@ fn llm(config: &Path, expected_exits: Vec<(usize, u8)>) -> boxed::CtlLlm {
     );
     configured_llm(config, expected_exits, recipe)
 }
-fn configured_llm(config: &Path, expected_exits: Vec<(usize, u8)>, recipe: temper_real_loop_world::llm::Recipe) -> boxed::CtlLlm {
+fn configured_llm(
+    config: &Path,
+    expected_exits: Vec<(usize, u8)>,
+    recipe: temper_real_loop_world::llm::Recipe,
+) -> boxed::CtlLlm {
     let config = config.to_path_buf();
     let peer = super::llm::Listening::new(
         skein_fake_peers::llm::Peer::new(
@@ -409,22 +413,40 @@ fn project_llm(config: &Path) -> boxed::CtlLlm {
         17,
         skein_fake_llm_domain::api::Scripts {
             cued: Box::new([
-                Script { cue: b"@project-stop-chat".as_slice().into(), turns: Box::new([delegate(PROJECT_GOAL, false), wait(), answer]) },
-                Script { cue: PROJECT_GOAL.as_bytes().into(), turns: Box::new([call(b"read_docs", &json!({"topic":"hold"})), wait()]) },
-                Script { cue: NEW_GOAL.as_bytes().into(), turns: Box::new([call(b"finish", &json!({"form":"report", "text":"The released goal finished.", "fields":{}, "items":[]}))]) },
+                Script {
+                    cue: b"@project-stop-chat".as_slice().into(),
+                    turns: Box::new([delegate(PROJECT_GOAL, false), wait(), answer]),
+                },
+                Script {
+                    cue: PROJECT_GOAL.as_bytes().into(),
+                    turns: Box::new([call(b"read_docs", &json!({"topic":"hold"})), wait()]),
+                },
+                Script {
+                    cue: NEW_GOAL.as_bytes().into(),
+                    turns: Box::new([call(
+                        b"finish",
+                        &json!({"form":"report", "text":"The released goal finished.", "fields":{}, "items":[]}),
+                    )]),
+                },
             ]),
-            asked: Box::new([]), otherwise: Box::new([]),
+            asked: Box::new([]),
+            otherwise: Box::new([]),
         },
         skein_fake_llm_domain::api::Menu { arguments: Box::new([]), invalid: Box::new([]) },
         skein_fake_llm_domain::api::Rules {
             cued: Box::new([
-                rules(&[("Answer while the project is stopped", 2), ("Begin the work your brief describes.", 0), ("", 1)]),
+                rules(&[
+                    ("Answer while the project is stopped", 2),
+                    ("Begin the work your brief describes.", 0),
+                    ("", 1),
+                ]),
                 rules(&[("Begin the work your brief describes.", 0), ("", 1)]),
                 rules(&[("", 0)]),
             ]),
             asked: Box::new([]),
         },
-    ).expect("project stop scripts");
+    )
+    .expect("project stop scripts");
     configured_llm(config, Vec::new(), recipe)
 }
 
@@ -433,35 +455,74 @@ pub fn project_stop(scratch: &Path, config: &Path, flags: Vec<String>) {
     let mut steps = initial_steps(scratch);
     steps.truncate(9); // The shared settings, project and maintainer setup, before its old chat story.
     steps.extend([
-        Step::Run(Call::new(&["chat", "start", "--project", "2", "--key", "project-stop-chat", "@project-stop-chat Delegate and wait"])), // 7
+        Step::Run(Call::new(&[
+            "chat",
+            "start",
+            "--project",
+            "2",
+            "--key",
+            "project-stop-chat",
+            "@project-stop-chat Delegate and wait",
+        ])), // 7
         Step::Until(Call::new(&["task", "show", "2", "--json"]), b"\"title\":{\"bytes\":\"@project-stop-goal\""), // 8
-        Step::UntilMatching(Call::new(&["task", "show", "2", "--until", "phase:running", "--json"]), temper_real_loop_world::calls::ReadCondition::WritingTask { task: 2 }), // 9: a live model call
-        Step::Run(Call::new(&["project", "hold", "2", "--stop", PROJECT_REASON, "--key", "project-stop"])), // 10
-        Step::Run(Call::new(&["task", "show", "2", "--json"])), // 11
-        Step::Until(Call::new(&["task", "run", "2"]), b"run: none"), // 12
-        Step::Run(Call::new(&["task", "show", "2"])), // 13
-        Step::Run(Call::new(&["task", "message", "1", "Answer while the project is stopped", "--key", "chat-under-stop"])), // 14
-        Step::Until(Call::new(&["chat", "show", "1"]), CHAT_ANSWER), // 15
+        Step::UntilMatching(
+            Call::new(&["task", "show", "2", "--until", "phase:running", "--json"]),
+            temper_real_loop_world::calls::ReadCondition::WritingTask { task: 2 },
+        ), // 9: a live model call
+        Step::Run(Call::new(&["project", "hold", "2", "--stop", PROJECT_REASON, "--key", "project-stop"])),       // 10
+        Step::Run(Call::new(&["task", "show", "2", "--json"])),                                                   // 11
+        Step::Until(Call::new(&["task", "run", "2"]), b"run: none"),                                              // 12
+        Step::Run(Call::new(&["task", "show", "2"])),                                                             // 13
+        Step::Run(Call::new(&[
+            "task",
+            "message",
+            "1",
+            "Answer while the project is stopped",
+            "--key",
+            "chat-under-stop",
+        ])), // 14
+        Step::Until(Call::new(&["chat", "show", "1"]), CHAT_ANSWER),                                              // 15
         // A person may create a goal under the stop. The existing native setup
         // client uses the public Create request; ctl has no goal-creation row.
         Step::Goal { scratch: scratch.into(), client: scratch.join("client"), project: 2, words: NEW_GOAL, number: 3 },
         Step::Run(Call::new(&["task", "show", "3", "--json"])), // 16
-        Step::Run(Call::new(&["task", "run", "3"])), // 17
+        Step::Run(Call::new(&["task", "run", "3"])),            // 17
         Step::Then(Box::new(|calls| {
             let task = ctl::json(&calls[16]);
-            Call::new(&["task", "release", "3", "--hold", &task["hold"]["owner"]["revision"].to_string(), "--key", "release-new-goal"])
+            Call::new(&[
+                "task",
+                "release",
+                "3",
+                "--hold",
+                &task["hold"]["owner"]["revision"].to_string(),
+                "--key",
+                "release-new-goal",
+            ])
         })), // 18
         Step::Until(Call::new(&["task", "show", "3", "--json"]), b"\"phase\":\"ended\""), // 19
         Step::Run(Call::new(&["task", "show", "2", "--json"])), // 20
         Step::Then(Box::new(|calls| {
             let hold = &ctl::json(&calls[20])["hold"]["placed"];
-            Call::new(&["hold", "lift", &hold["hold"].to_string(), "--rev", &hold["revision"].to_string(), "--with-tasks", "--key", "lift-project-stop"])
+            Call::new(&[
+                "hold",
+                "lift",
+                &hold["hold"].to_string(),
+                "--rev",
+                &hold["revision"].to_string(),
+                "--with-tasks",
+                "--key",
+                "lift-project-stop",
+            ])
         })), // 21
         Step::Until(Call::new(&["task", "show", "2", "--json"]), b"\"phase\":\"idle\""), // 22
         Step::Run(Call::new(&["task", "show", "1", "--json"])), // 23
     ]);
-    let seen = boxed::run_ctl_with_llm(scratch, flags, scratch, steps, boxed::BOX_DEADLINE, |_| (), project_llm(config));
-    check_box(&seen, &[]);
+    let seen =
+        boxed::run_ctl_with_llm(scratch, flags, scratch, steps, boxed::BOX_DEADLINE, |_| (), project_llm(config));
+    check_project_stop(&seen);
+}
+fn check_project_stop(seen: &boxed::CtlOutcome<()>) {
+    check_box(seen, &[]);
     assert_eq!(seen.calls.len(), 24);
     let before = ctl::json(&seen.calls[9])["task"].clone();
     assert_eq!(before["chip"]["phase"], "running");
@@ -485,8 +546,15 @@ pub fn project_stop(scratch: &Path, config: &Path, flags: Vec<String>) {
     assert!(String::from_utf8_lossy(&seen.calls[17].stdout).starts_with("run: none"), "new goal starts without a run");
     let ended = ctl::json(&seen.calls[19]);
     assert_eq!(ended["chip"]["phase"], "ended");
-    assert_eq!(ended["chip"]["details"]["owner"]["details"]["ending"]["done"]["report"]["bytes"], "The released goal finished.");
-    assert_eq!(ctl::json(&seen.calls[20])["hold"]["placed"], *hold, "project stop still stands after the exempt goal ends");
+    assert_eq!(
+        ended["chip"]["details"]["owner"]["details"]["ending"]["done"]["report"]["bytes"],
+        "The released goal finished."
+    );
+    assert_eq!(
+        ctl::json(&seen.calls[20])["hold"]["placed"],
+        *hold,
+        "project stop still stands after the exempt goal ends"
+    );
     assert_eq!(seen.calls[21].stdout, format!("done: hold {number} lifted, 1 released\n").as_bytes());
     assert!(ctl::json(&seen.calls[22])["hold"].is_null());
     assert!(ctl::json(&seen.calls[23])["hold"].is_null(), "person's chat stays outside the stop");

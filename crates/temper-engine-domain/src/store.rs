@@ -648,7 +648,10 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                         action: jig_domain_people::Action::Settings { .. },
                         reason,
                         ..
-                    } => u64::try_from(reason.len()).ok(),
+                    }
+                    | jig_domain_people::Ask::Move { reason, .. }
+                    | jig_domain_people::Ask::Hold { reason, .. }
+                    | jig_domain_people::Ask::Cancel { reason, .. } => u64::try_from(reason.len()).ok(),
                     jig_domain_people::Ask::Propose {
                         action: jig_domain_people::Action::Amend { amendment, .. },
                         reason,
@@ -699,11 +702,6 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                     }
                     jig_domain_people::Ask::Say { words, .. }
                     | jig_domain_people::Ask::AnswerQuestion { words, .. } => u64::try_from(words.len()).ok(),
-                    jig_domain_people::Ask::Move { reason, .. }
-                    | jig_domain_people::Ask::Hold { reason, .. }
-                    | jig_domain_people::Ask::Cancel { reason, .. } => {
-                        u64::try_from(reason.len()).ok()
-                    }
                     jig_domain_people::Ask::ChangeSettings { .. }
                     | jig_domain_people::Ask::MoveToNewest { .. }
                     | jig_domain_people::Ask::Withdraw { .. }

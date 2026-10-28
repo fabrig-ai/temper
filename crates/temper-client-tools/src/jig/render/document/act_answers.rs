@@ -240,15 +240,7 @@ pub(super) fn encode_owner_outcome(
         }
         jig_client::contract::OwnerOutcome::AccountFinishing { source } => encode_account_finishing(*source, out),
         jig_client::contract::OwnerOutcome::AccountProgramDeclared { source, name } => {
-            out.object_start();
-            out.key(b"account_program_declared");
-            out.object_start();
-            out.key(b"source");
-            out.unsigned(u64::from(*source));
-            out.key(b"name");
-            budget.words(name, out);
-            out.object_end();
-            out.object_end();
+            encode_program_declared(*source, name, out, budget);
         }
         jig_client::contract::OwnerOutcome::ProjectMade { project } => {
             out.object_start();
@@ -324,6 +316,17 @@ pub(super) fn encode_owner_outcome(
         jig_client::contract::OwnerOutcome::PoolSet { .. } => owner_pool_set(value, out, budget),
         jig_client::contract::OwnerOutcome::EscalationDecided { .. } => owner_escalation_decided(value, out, budget),
     }
+}
+fn encode_program_declared(source: u32, name: &[u8], out: &mut Encoder, budget: &mut super::Cut) {
+    out.object_start();
+    out.key(b"account_program_declared");
+    out.object_start();
+    out.key(b"source");
+    out.unsigned(u64::from(source));
+    out.key(b"name");
+    budget.words(name, out);
+    out.object_end();
+    out.object_end();
 }
 fn encode_placed(hold: u64, revision: jig_client::contract::Revision, out: &mut Encoder) {
     out.object_start();

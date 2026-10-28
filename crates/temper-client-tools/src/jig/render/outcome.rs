@@ -316,12 +316,7 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
             out.put(b"revision ");
             out.number(u64::from(changed.revision));
         }
-        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Placed { hold, revision })) => {
-            out.put(b"done: hold ");
-            out.number(*hold);
-            out.put(b" placed, rev ");
-            out.number(revision.value);
-        }
+        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Placed { hold, revision })) => placed(*hold, *revision, out),
         c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Lifted { hold, released })) => lifted(*hold, *released, out),
         c::Answer::Done(done) => {
             out.put(b"done: ");
@@ -348,6 +343,12 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         c::Answer::Refused { refusal, .. } => refused_text(operation, refusal, me, limits, out),
     }
     out.put(b"\n");
+}
+fn placed(hold: u64, revision: c::Revision, out: &mut Text) {
+    out.put(b"done: hold ");
+    out.number(hold);
+    out.put(b" placed, rev ");
+    out.number(revision.value);
 }
 fn lifted(hold: u64, released: u32, out: &mut Text) {
     out.put(b"done: hold ");
