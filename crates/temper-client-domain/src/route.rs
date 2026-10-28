@@ -23,7 +23,7 @@ pub(crate) fn forge(root: &mut Domain, env: &Env<Limits>, event: forge::Event, o
             adopted_in_welcome = true;
         }
     }
-    let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut child = Queue::uncapped();
     forge::step(&mut root.forge, &Env { now: env.now, wall: env.wall, limits: env.limits.forge }, event, &mut child);
     route_forge(root, env, &mut child, out);
     if adopted_in_welcome {
@@ -87,7 +87,7 @@ fn went(root: &mut Domain, env: &Env<Limits>, place: Place, out: &mut Queue<Requ
     }
 }
 pub(crate) fn pages(root: &mut Domain, env: &Env<Limits>, event: crate::pages::Event, out: &mut Queue<Request>) {
-    let mut child = Queue::with_capacity(crate::pages::max_out(&env.limits));
+    let mut child = Queue::uncapped();
     demo_facts(root);
     let task_document = match &event {
         crate::pages::Event::Told {
@@ -151,7 +151,7 @@ fn refresh_panel(
 }
 
 pub(crate) fn fire_pages(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    let mut child = Queue::with_capacity(crate::pages::max_out(&env.limits));
+    let mut child = Queue::uncapped();
     crate::pages::fire(&mut root.pages, env, &root.client, &mut child);
     route_pages(root, env, &mut child, out);
 }
@@ -200,7 +200,7 @@ pub(crate) fn route_forge(
     }
 }
 pub(crate) fn client(root: &mut Domain, env: &Env<Limits>, event: jig_client::Event, out: &mut Queue<Request>) {
-    let mut child = Queue::with_capacity(jig_client::max_out(&env.limits.client));
+    let mut child = Queue::uncapped();
     root.client.step(env.now, env.wall, event, &mut child);
     route_client(root, env, &mut child, out);
 }
@@ -280,7 +280,7 @@ fn forge_served(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) 
 }
 
 fn forge_me(root: &mut Domain, env: &Env<Limits>, told: &jig_client::Told, out: &mut Queue<Request>) -> bool {
-    let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut child = Queue::uncapped();
     let consumed = forge::me::told(&mut root.forge, &root.client, told, &mut child);
     if consumed {
         forge::forges::configure(&mut root.forge, env.limits.forge, &mut child);
@@ -290,7 +290,7 @@ fn forge_me(root: &mut Domain, env: &Env<Limits>, told: &jig_client::Told, out: 
 }
 
 fn forge_demo(root: &mut Domain, env: &Env<Limits>, told: &jig_client::Told, out: &mut Queue<Request>) -> bool {
-    let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut child = Queue::uncapped();
     let unknown = if let jig_client::Told::Pending { key } = told {
         match root.client.pending(*key) {
             Some(pending) => pending.progress == jig_client::Progress::Unknown,
@@ -323,7 +323,7 @@ fn suggest(root: &mut Domain, env: &Env<Limits>, cue: u8, out: &mut Queue<Reques
     }
     let Some(words) = demo.cues.get(usize::from(cue)) else { return };
     let words = words.clone();
-    let mut child = Queue::with_capacity(crate::pages::max_out(&env.limits));
+    let mut child = Queue::uncapped();
     root.pages.suggest(env, &root.client, &words, &mut child);
     while let Some(request) = child.pop() {
         match request {
@@ -347,7 +347,7 @@ fn playground(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 }
 
 fn forge_forges(root: &mut Domain, env: &Env<Limits>, told: &jig_client::Told, out: &mut Queue<Request>) -> bool {
-    let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut child = Queue::uncapped();
     let consumed = forge::picker::told(&mut root.forge, &root.client, told, env.limits.forge)
         || forge::admin::told(&mut root.forge, &root.client, told, env.limits.forge, &mut child)
         || forge::github::told(&mut root.forge, &root.client, told, env.limits.forge, &mut child)
@@ -383,7 +383,7 @@ fn demo_facts(root: &mut Domain) {
 
 /// Reconcile demo lifecycle after the shared client's account and forge tells.
 pub(crate) fn demo_progress(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut child = Queue::uncapped();
     forge::demo::progress(&mut root.forge, root.pages.accounts_document(&root.client), &root.client, &mut child);
     route_forge(root, env, &mut child, out);
     demo_facts(root);
@@ -391,7 +391,7 @@ pub(crate) fn demo_progress(root: &mut Domain, env: &Env<Limits>, out: &mut Queu
 
 /// Ready reads only while its flow is shown; pending starts survive navigation.
 pub(crate) fn picker_progress(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut child = Queue::uncapped();
     forge::picker::progress(&mut root.forge, &root.client, root.pages.address(), env.limits.forge, env.now, &mut child);
     route_forge(root, env, &mut child, out);
 }

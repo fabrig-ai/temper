@@ -2331,7 +2331,7 @@ fn an_agents_older_button_reads_before_the_full_window() {
 fn confirming_stop(root: &mut Domain) -> skein_lib::Token {
     press(root, Act::Stop);
     let limits = fixtures::domain_limits();
-    let mut out = skein_lib::Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     temper_client_domain::step(
         root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: skein_lib::Wall::EPOCH, limits },
@@ -2410,7 +2410,7 @@ fn a_held_procedure_goal_shows_its_own_release_before_its_plan() {
 
 fn send_amendment(root: &mut Domain) -> skein_lib::Token {
     let limits = fixtures::domain_limits();
-    let mut out = skein_lib::Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     temper_client_domain::step(
         root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: skein_lib::Wall::EPOCH, limits },
@@ -3123,7 +3123,7 @@ fn end_task_read(root: &mut Domain, watch: skein_lib::Token, result: jig_client:
     use skein_lib::{Env, Queue, Time};
     let limits = fixtures::domain_limits();
     let env = Env { now: Time::ZERO, wall: fixtures::NOW, limits };
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     temper_client_domain::step(
         root,
         &env,

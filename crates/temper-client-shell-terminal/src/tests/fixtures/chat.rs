@@ -56,7 +56,7 @@ fn first_run_page(address: client::Address, landed: bool) -> skein_ui::Tree {
     let limits = crate::limits::native().client;
     let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits };
     let mut root = client::unlinked(&limits, 16);
-    let mut out = Queue::with_capacity(client::max_out(&limits));
+    let mut out = Queue::uncapped();
     client::step(&mut root, &env, Event::Start { address, kept: List::with_capacity(0), with: None }, &mut out);
     for event in [
         jig_client::Event::StartUnlinked { kept: List::with_capacity(0) },

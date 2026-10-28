@@ -44,12 +44,11 @@ impl MakeProject {
             io: limits.io,
         });
         shell.adopt(root, user, seed);
-        let output_capacity = client::max_out(&bounds);
         let memory = Self::memory();
         Self {
             client: client::Client::new(&bounds, seed).expect("native project client"),
             shell,
-            out: Queue::with_capacity(output_capacity),
+            out: Queue::uncapped(),
             complete: Queue::with_capacity(1024),
             submit: Queue::with_capacity(1024),
             name: Some(name),

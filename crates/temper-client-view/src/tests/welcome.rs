@@ -917,7 +917,7 @@ fn ready_ending(end: jig_client::contract::OwnerAccountEnd, message: &str, key: 
         }))
     );
     let limits = f::limits();
-    let mut out = skein_lib::Queue::with_capacity(d::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     d::step(
         &mut root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: f::NOW, limits },

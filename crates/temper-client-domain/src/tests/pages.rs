@@ -49,7 +49,7 @@ fn an_asker_naming_pages_reaches_the_pages_child() {
         &mut root,
         &fixtures::env(&limits),
         Told::Changed { handle: pages::me_handle() },
-        &mut Queue::with_capacity(crate::max_out(&limits)),
+        &mut Queue::uncapped(),
     );
     assert_eq!(pages::shown(root.pages()), before + 1);
 }
@@ -88,19 +88,14 @@ fn a_link_state_change_prints_the_page_again() {
     let limits = fixtures::limits();
     let mut root = crate::unlinked(&limits, fixtures::SEED);
     let before = crate::shown(&root);
-    crate::route::told(
-        &mut root,
-        &fixtures::env(&limits),
-        Told::Link { link: Link::Offline },
-        &mut Queue::with_capacity(crate::max_out(&limits)),
-    );
+    crate::route::told(&mut root, &fixtures::env(&limits), Told::Link { link: Link::Offline }, &mut Queue::uncapped());
     assert!(crate::shown(&root) > before);
 }
 #[test]
 fn the_pages_sign_out_act_reaches_the_shared_client() {
     let limits = fixtures::limits();
     let mut root = crate::unlinked(&limits, fixtures::SEED);
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &fixtures::env(&limits),
@@ -116,7 +111,7 @@ fn leaving_a_page_unwatches_its_handles_and_drops_their_tells() {
     let limits = fixtures::limits();
     let mut root = crate::unlinked(&limits, fixtures::SEED);
     let watch = fixtures::start(&mut root, skein_lib::List::with_capacity(0));
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     fixtures::confirm(&mut root, watch, fixtures::PARTY, &mut out);
     crate::step(
         &mut root,
@@ -161,7 +156,7 @@ fn arriving_at_chats_or_a_task_sets_its_address_filter() {
             &fixtures::env(&limits),
             root.client(),
             Event::Went { address: address.clone() },
-            &mut Queue::with_capacity(crate::max_out(&limits)),
+            &mut Queue::uncapped(),
         );
         assert_eq!(pages.address(), &address);
         if let Address::Chats { filter, .. } = address {
@@ -182,7 +177,7 @@ fn an_ended_task_opened_before_me_retries_a_busy_document_read() {
     let mut root = crate::unlinked(&limits, fixtures::SEED);
     let me = fixtures::start(&mut root, List::with_capacity(0));
     let address = Address::Task { task: TASK, filter: crate::PlanFilter::All };
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &fixtures::env(&limits),
@@ -263,7 +258,7 @@ fn ended_task_read() -> (crate::Domain, skein_lib::Token) {
     let limits = fixtures::limits();
     let mut root = crate::unlinked(&limits, fixtures::SEED);
     let me = fixtures::start(&mut root, skein_lib::List::with_capacity(0));
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     fixtures::confirm(&mut root, me, fixtures::PARTY, &mut out);
     crate::step(
         &mut root,
@@ -319,7 +314,7 @@ fn end_document_read(
         root,
         env,
         crate::Event::Client { event: jig_client::Event::Up { up: jig_client::Up::ReadDone { read, result } } },
-        &mut Queue::with_capacity(crate::max_out(&env.limits)),
+        &mut Queue::uncapped(),
     );
 }
 #[test]
@@ -343,7 +338,7 @@ fn lasting_task_read_ends_ask_nothing_again() {
         let mut env = fixtures::env(&limits);
         end_document_read(&mut root, &env, read, result);
         env.now = skein_lib::Time::ZERO.saturating_add(skein_lib::Duration::from_secs(120));
-        let mut out = Queue::with_capacity(crate::max_out(&limits));
+        let mut out = Queue::uncapped();
         crate::fire(&mut root, &env, &mut out);
         assert_eq!(root.pages().task().unwrap().document_read, DocumentRead::Ended { why, retry_at: None });
         assert_eq!(take_document_read(&mut out), None);
@@ -364,7 +359,7 @@ fn transient_task_read_ends_schedule_another_ask() {
         end_document_read(&mut root, &env, read, result);
         let due = skein_lib::Time::ZERO.saturating_add(skein_lib::Duration::from_secs(1));
         assert_eq!(pages::next_deadline(root.pages()), Some(due));
-        let mut out = Queue::with_capacity(crate::max_out(&limits));
+        let mut out = Queue::uncapped();
         crate::fire(&mut root, &env, &mut out);
         assert_eq!(take_document_read(&mut out), None);
         env.now = due;
@@ -379,7 +374,7 @@ fn task_document_backoff_reaches_thirty_seconds_and_stays() {
     let limits = fixtures::limits();
     let (mut root, mut read) = ended_task_read();
     let mut env = fixtures::env(&limits);
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     // Successive waits: 1, 2, 4, 8, 16, 30, 30, 30 seconds (client/README.md, 3.5).
     for seconds in [1, 3, 7, 15, 31, 61, 91, 121] {
         end_document_read(
@@ -404,7 +399,7 @@ fn leaving_the_task_page_cancels_its_scheduled_read() {
     let (mut root, read) = ended_task_read();
     let mut env = fixtures::env(&limits);
     end_document_read(&mut root, &env, read, jig_client::Readout::Limit);
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &env,
@@ -423,7 +418,7 @@ fn signing_out_cancels_the_task_documents_retry() {
     let (mut root, read) = ended_task_read();
     let mut env = fixtures::env(&limits);
     end_document_read(&mut root, &env, read, jig_client::Readout::Limit);
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(&mut root, &env, crate::Event::SignedOut, &mut out);
     env.now = skein_lib::Time::ZERO.saturating_add(skein_lib::Duration::from_secs(1));
     crate::fire(&mut root, &env, &mut out);
@@ -439,7 +434,7 @@ fn sign_in_ending_a_pending_task_read_schedules_another() {
     let limits = fixtures::limits();
     let (mut root, _) = ended_task_read();
     let mut env = fixtures::env(&limits);
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &env,
@@ -461,7 +456,7 @@ fn sign_out_ending_a_pending_task_read_asks_nothing_again() {
     let limits = fixtures::limits();
     let (mut root, _) = ended_task_read();
     let mut env = fixtures::env(&limits);
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(&mut root, &env, crate::Event::SignedOut, &mut out);
     env.now = skein_lib::Time::ZERO.saturating_add(skein_lib::Duration::from_secs(120));
     crate::fire(&mut root, &env, &mut out);

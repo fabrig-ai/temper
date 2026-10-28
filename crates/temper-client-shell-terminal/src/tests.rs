@@ -34,7 +34,7 @@ fn a_table_record_saved_then_kept_comes_back_the_same() {
     {
         let (name, record) = ("table", fixtures::table_record());
         let mut link = link::Link::new(&limits).expect("bounded store codec");
-        let mut out = Queue::with_capacity(link.max_out());
+        let mut out = Queue::uncapped();
         link.step(
             Time::ZERO,
             link::Event::Save { record: link::Saved { version: 2, record: record.clone() } },
@@ -67,7 +67,7 @@ fn the_native_limits_cover_wire_and_transport() {
 
 #[test]
 fn an_equal_line_waits_once_in_the_order_it_came() {
-    let mut lines = crate::terminal::waiting::Waiting::new(19);
+    let mut lines = crate::terminal::waiting::Waiting::new();
     for line in [b"sign-in again".as_slice(), b"store failed", b"sign-in again", b"credential one", b"credential two"] {
         lines.push(Box::from(line));
     }
@@ -99,7 +99,7 @@ fn the_native_limits_make_the_terminal() {
 #[test]
 fn a_kept_credential_signs_in_held_with_no_exchange() {
     let mut link = link::Link::new(&fixtures::link_limits()).expect("bounded link");
-    let mut out = Queue::with_capacity(link.max_out());
+    let mut out = Queue::uncapped();
     link.step(Time::ZERO, link::Event::SignIn { with: link::With::Held(fixtures::credential()) }, &mut out);
     assert_eq!(link.credential(), Some(&fixtures::credential()));
     assert!(out.is_empty(), "a held credential sends no sign-in exchange");

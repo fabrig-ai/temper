@@ -18,7 +18,7 @@ const SUBJECT: Subject = Subject { task: TASK, project: PROJECT };
 const PROCEDURE: c::Executor = c::Executor::Procedure { connector: f::FORGE, kind: 1234 };
 
 fn event(root: &mut Domain, event: Event) -> Queue<Request> {
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::step(root, &f::env(&f::limits()), event, &mut out);
     out
 }
@@ -45,7 +45,7 @@ fn task_page(root: &mut Domain, task: u64) -> Token {
 fn before_document() -> (Domain, Token) {
     let mut root = crate::unlinked(&f::limits(), f::SEED);
     let frame = f::start(&mut root, List::with_capacity(0));
-    f::confirm(&mut root, frame, f::PARTY, &mut Queue::with_capacity(crate::max_out(&f::limits())));
+    f::confirm(&mut root, frame, f::PARTY, &mut Queue::uncapped());
     let watch = task_page(&mut root, TASK);
     (root, watch)
 }
@@ -346,7 +346,7 @@ fn a_panel_falling_behind_before_its_first_record_retries_and_shows_the_landed_c
         let limits = f::limits();
         let mut env = f::env(&limits);
         env.now = env.now.saturating_add(skein_lib::Duration::from_secs(10));
-        let mut out = Queue::with_capacity(crate::max_out(&limits));
+        let mut out = Queue::uncapped();
         crate::fire(&mut root, &env, &mut out);
         let fresh = family_open(&mut out, TASK)
             .expect("a panel without its first record must retain jig's retry after falling behind");
@@ -471,7 +471,7 @@ fn leaving_before_a_late_panel_ending_asks_nothing() {
         let mut out = went(&mut root, Place::Address(address));
         assert!(closes(&mut out).as_slice().contains(&panel_watch));
         assert!(up(&mut root, Up::WatchEnded { watch: panel_watch, end: c::WatchEnd::SubjectEnded }).is_empty());
-        let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+        let mut out = Queue::uncapped();
         crate::route::told(&mut root, &f::env(&f::limits()), Told::Ended { handle, why: Why::SubjectEnded }, &mut out);
         assert!(out.is_empty(), "a stale child ending cannot reopen a panel after leaving");
         assert!(root.forge().panel().is_none());
@@ -601,13 +601,12 @@ fn a_late_tell_from_the_previous_subject_changes_nothing() {
     let mut out =
         event(&mut root, Event::Forge(forge::Event::Panel { subject: Some(Subject { task: NEXT, project: PROJECT }) }));
     // This event exercises the side's two-output replacement through the root.
-    assert!(out.len() <= crate::max_out(&f::limits()));
     let next = family_open(&mut out, NEXT).expect("replacement");
     let handle = root.forge().panel().unwrap().handle.unwrap();
     assert_ne!(handle, first);
     let shown = forge::shown(root.forge());
     for told in [Told::Changed { handle: first }, Told::Ended { handle: first, why: Why::Unknown }] {
-        let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+        let mut out = Queue::uncapped();
         crate::route::told(&mut root, &f::env(&f::limits()), told, &mut out);
         assert!(out.is_empty());
         assert_eq!(forge::shown(root.forge()), shown);
@@ -625,7 +624,7 @@ fn output_bounds_cover_replacement_and_a_full_panel() {
     const PANEL_HEAP_CEILING: u64 = 6_800;
     let limits = f::limits();
     let mut side = forge::Side::new(&limits.forge, f::SEED);
-    let mut out = Queue::with_capacity(forge::max_out(&limits.forge));
+    let mut out = Queue::uncapped();
     let env = skein_lib::Env { now: skein_lib::Time::ZERO, wall: skein_lib::Wall::EPOCH, limits: limits.forge };
     forge::step(&mut side, &env, forge::Event::Panel { subject: Some(SUBJECT) }, &mut out);
     let Some(forge::Request::Client { asked: jig_client::Event::Watch { handle: first, .. } }) = out.pop() else {

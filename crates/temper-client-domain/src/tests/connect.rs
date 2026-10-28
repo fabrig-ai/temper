@@ -96,7 +96,7 @@ fn event(root: &mut crate::Domain, event: Event) -> Queue<Request> {
     event_at(root, event, Time::ZERO)
 }
 fn event_at(root: &mut crate::Domain, event: Event, now: Time) -> Queue<Request> {
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     let mut env = f::env(&f::limits());
     env.now = now;
     crate::step(root, &env, event, &mut out);
@@ -203,7 +203,7 @@ fn answered(root: &mut crate::Domain, outcome: w::Outcome) -> Queue<Request> {
     let key =
         client::Key { asker: crate::owner::Owner::Forge.asker(), number: root.forge().set_up().unwrap().request.raw() };
     let limits = forge::wire_limits(&f::limits().forge).unwrap();
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::route::told(
         root,
         &f::env(&f::limits()),
@@ -304,7 +304,7 @@ fn an_unreadable_set_up_answer_is_unknown_and_allows_another_request() {
                 bytes: Box::new([255]),
             })),
         },
-        &mut Queue::with_capacity(crate::max_out(&f::limits())),
+        &mut Queue::uncapped(),
     );
     assert_eq!(
         root.forge().set_up().unwrap().answer,
@@ -323,7 +323,7 @@ fn an_out_of_date_link_unwatches_the_forges() {
         &mut root,
         &f::env(&f::limits()),
         Told::Link { link: client::Link::OutOfDate },
-        &mut Queue::with_capacity(crate::max_out(&f::limits())),
+        &mut Queue::uncapped(),
     );
     assert!(root.client().document(forges::handle()).is_none());
     let State::Unknown = root.forges() else { panic!("forges cleared") };
@@ -1063,7 +1063,7 @@ fn busy() -> w::Outcome {
 fn fire_at(root: &mut crate::Domain, now: Time) -> Queue<Request> {
     let mut env = f::env(&f::limits());
     env.now = now;
-    let mut out = Queue::with_capacity(crate::max_out(&env.limits));
+    let mut out = Queue::uncapped();
     crate::fire(root, &env, &mut out);
     crate::take(root, &env, &mut out);
     out

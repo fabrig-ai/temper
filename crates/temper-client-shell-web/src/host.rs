@@ -67,7 +67,7 @@ impl Host {
             view: view::View::with_sign_in(&bounds, &client, words, temper_client_protocol_wire::FORGE, ways),
             bounds,
             env: Env { now, wall, limits: client },
-            out: Queue::with_capacity(root::max_out(&client)),
+            out: Queue::uncapped(),
             patches: Queue::with_capacity(bounds.tree.patches),
             address: Address::Inbox { filter: Filter::ALL },
             mapping: jig_client_protocol_http::Mapping::new(b"/jig").expect("mapping prefix"),
@@ -172,7 +172,7 @@ impl Host {
         }
     }
     fn heard(&mut self, heard: Heard) {
-        let mut above = Queue::with_capacity(4096);
+        let mut above = Queue::uncapped();
         match heard {
             Heard::Answered { exchange, status, body } => {
                 if let Some(token) = self.tickets.remove(&exchange) {

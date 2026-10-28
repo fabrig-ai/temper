@@ -144,7 +144,7 @@ mod tests {
     }
     fn root_event(root: &mut Domain, event: Event) -> Vec<jig_client::Down> {
         let limits = domain_limits();
-        let mut out = Queue::with_capacity(domain::max_out(&limits));
+        let mut out = Queue::uncapped();
         domain::step(root, &Env { now: Time::ZERO, wall: Wall::EPOCH, limits }, event, &mut out);
         let mut down = Vec::new();
         while let Some(request) = out.pop() {

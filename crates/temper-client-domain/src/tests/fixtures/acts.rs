@@ -222,7 +222,7 @@ pub fn live_client() -> jig_client::Client {
     use jig_client_protocol_wire::v19 as w;
     use skein_lib::{Reader, Secret, Writer};
     let mut client = jig_client::Client::new(&limits().client, SEED).expect("client");
-    let mut out = Queue::with_capacity(jig_client::max_out(&limits().client));
+    let mut out = Queue::uncapped();
     client.step(
         Time::ZERO,
         Wall::EPOCH,

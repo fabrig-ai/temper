@@ -397,7 +397,7 @@ fn listed(live: &[TaskLine], closed: &[TaskLine], more: bool) -> Domain {
     let template = fixtures::chat::messaging_root();
     let me = template.pages().me(template.client()).expect("me").clone();
     let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits };
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     temper_client_domain::step(
         &mut root,
         &env,
@@ -515,7 +515,7 @@ fn a_live_demo_chat_is_listed_under_your_chats() {
     );
     let limits = fixtures::domain_limits();
     let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits };
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     let (watch, _) = open_chats(&mut root, &env, &mut out);
     let mut rows = List::with_capacity(1);
     rows.push(line()).expect("live row");
@@ -772,7 +772,7 @@ fn an_accepted_start_draws_no_applied_status() {
         fixtures::demo_root(d::Address::Chats { filter: ChatsFilter::All, start: false }, fixtures::PROJECT, true);
     let limits = fixtures::domain_limits();
     let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits };
-    let mut out = Queue::with_capacity(d::max_out(&limits));
+    let mut out = Queue::uncapped();
     for act in [Act::ChatWords { words: Box::from(b"Hello".as_slice()) }, Act::StartChat] {
         d::step(&mut root, &env, Event::Act { action: Action::Pages(act) }, &mut out);
     }

@@ -86,7 +86,7 @@ pub fn on_adoption_page() -> crate::Domain {
     let limits = limits();
     let mut root = crate::unlinked(&limits, SEED);
     let frame = start(&mut root, List::with_capacity(0));
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     confirm(&mut root, frame, PARTY, &mut out);
     crate::step(
         &mut root,
@@ -98,7 +98,7 @@ pub fn on_adoption_page() -> crate::Domain {
 }
 pub fn form_act(root: &mut crate::Domain, act: forge::Act) -> Queue<Request> {
     let limits = limits();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(root, &env(&limits), Event::Act { action: crate::Action::Forge(act) }, &mut out);
     crate::take(root, &env(&limits), &mut out);
     out
@@ -143,7 +143,7 @@ pub fn sends(out: &mut Queue<Request>) -> u32 {
 }
 pub fn forge_event(root: &mut crate::Domain, event: forge::Event) -> Queue<Request> {
     let limits = limits();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(root, &env(&limits), Event::Forge(event), &mut out);
     out
 }
@@ -199,7 +199,7 @@ pub fn start_accounts(
     kept: List<skein_lib::RequestRecord<jig_client::Held>>,
 ) -> (Token, Token) {
     let limits = limits();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         root,
         &env(&limits),
@@ -298,7 +298,7 @@ pub fn inbox_home(filter: crate::address::Filter) -> (crate::Domain, Token) {
     let limits = limits();
     let mut root = crate::unlinked(&limits, SEED);
     let frame = start(&mut root, List::with_capacity(0));
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     confirm(&mut root, frame, PARTY, &mut out);
     crate::step(
         &mut root,
@@ -326,7 +326,7 @@ pub fn inbox_home(filter: crate::address::Filter) -> (crate::Domain, Token) {
 }
 pub fn inbox_entries(root: &mut crate::Domain, watch: Token, rows: List<contract::InboxEntry>) -> Queue<Request> {
     let limits = limits();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     let inbox = contract::Inbox {
         entries: rows,
         needs: Needs { questions: 1, proposals: 0, escalations: 0, person_tasks: 0 },

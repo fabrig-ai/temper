@@ -286,7 +286,7 @@ fn signing_in_elsewhere_sends_the_same_sign_in_and_departs_nowhere() {
     let sent = sends(model(&mut root, Act::SignInElsewhere { name: NAME, way: WAY })).pop().unwrap();
     assert_eq!(sent.2, jig_client::Ask::Jig(Box::new(c::Ask::SignIn { holder: c::AccountHolder::Own, provider: 17 })));
     let key = root.pages().connect_model().unwrap().request.pending.as_ref().unwrap().key;
-    let mut result = Queue::with_capacity(crate::max_out(&fixtures::limits()));
+    let mut result = Queue::uncapped();
     crate::route::told(
         &mut root,
         &fixtures::env(&fixtures::limits()),

@@ -105,8 +105,7 @@ fn environment(env: &Env<domain::Limits>) -> Env<root::Limits> {
 }
 pub fn step(agent: &mut Agent, env: &Env<domain::Limits>, event: Event, out: &mut Queue<Request>) {
     let env = environment(env);
-    let mut requests =
-        Queue::with_capacity(<crate::app::Temper as jig_client_world::harness::App>::max_out(&env.limits.domain));
+    let mut requests = Queue::uncapped();
     match event {
         Event::Start { kept, .. } => {
             root::step(
@@ -166,8 +165,7 @@ fn released_tasks(printed: &Printed) -> Vec<u64> {
         .collect()
 }
 pub fn fire(agent: &mut Agent, env: &Env<domain::Limits>, out: &mut Queue<Request>) {
-    let mut requests =
-        Queue::with_capacity(<crate::app::Temper as jig_client_world::harness::App>::max_out(&env.limits));
+    let mut requests = Queue::uncapped();
     root::fire(&mut agent.root, &environment(env), &mut requests);
     drain(agent, &mut requests, out);
 }

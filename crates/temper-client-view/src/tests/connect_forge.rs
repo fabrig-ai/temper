@@ -439,7 +439,7 @@ fn a_set_up_refusal_is_said_below_its_button() {
     use temper_client_protocol_wire as wire;
     let mut root = here(w::Connection::NotSetUp);
     let limits = f::domain_limits();
-    let mut out = Queue::with_capacity(d::max_out(&limits));
+    let mut out = Queue::uncapped();
     d::step(
         &mut root,
         &Env { now: Time::ZERO, wall: f::NOW, limits },
@@ -483,7 +483,7 @@ fn a_set_up_refusal_is_said_below_its_button() {
 
 fn drive(root: &mut d::Domain, event: d::Event) -> skein_lib::Queue<d::Request> {
     let limits = f::domain_limits();
-    let mut out = skein_lib::Queue::with_capacity(d::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     d::step(root, &skein_lib::Env { now: skein_lib::Time::ZERO, wall: f::NOW, limits }, event, &mut out);
     out
 }
@@ -972,7 +972,7 @@ fn a_connect_refusal_is_said_below_its_button() {
         &mut root,
         d::Event::Forge(d::forge::Event::AppKey { value: skein_lib::Secret::new(b"fake-key".as_slice().into()) }),
     );
-    let mut out = skein_lib::Queue::with_capacity(d::max_out(&f::limits()));
+    let mut out = skein_lib::Queue::uncapped();
     d::step(
         &mut root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: f::NOW, limits: f::limits() },
@@ -1628,7 +1628,7 @@ fn github_picker_exhausted_busy_rereads_offer_reload_with_the_busy_words() {
     let (mut root, _, mut token) = picker_started(false);
     let mut env = skein_lib::Env { now: skein_lib::Time::ZERO, wall: f::NOW, limits: f::domain_limits() };
     for reread in 0_u8..=3 {
-        let mut out = skein_lib::Queue::with_capacity(d::max_out(&env.limits));
+        let mut out = skein_lib::Queue::uncapped();
         d::step(
             &mut root,
             &env,

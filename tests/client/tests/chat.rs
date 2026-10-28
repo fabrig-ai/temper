@@ -53,7 +53,7 @@ fn prepared_chat_answer_reaches_the_pages_task_watch() {
     front.bind(DIAGNOSTIC_CLIENT, fixtures::PARTY);
     let (mut root, _) = Temper::new(fixtures::SEED);
     let env = skein_lib::Env { now: DIAGNOSTIC_NOW, wall: DIAGNOSTIC_WALL, limits };
-    let mut out = skein_lib::Queue::with_capacity(Temper::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     Temper::step(&mut root, &env, Temper::start(fixtures::chat_page(task), Vec::new(), START_OFFSET), &mut out);
     for _ in 0..POLL_ROUNDS {
         Temper::take(&mut root, &env, &mut out);
@@ -242,7 +242,7 @@ fn probe(seed: u64, address: temper_client_domain::Address) -> Probe {
     use temper_client_world::app::Temper;
     let limits = fixtures::domain_limits();
     let (mut root, _) = Temper::new(seed);
-    let mut out = skein_lib::Queue::with_capacity(Temper::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     Temper::step(
         &mut root,
         &skein_lib::Env { now: DIAGNOSTIC_NOW, wall: DIAGNOSTIC_WALL, limits },

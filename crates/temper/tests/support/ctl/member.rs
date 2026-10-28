@@ -60,7 +60,7 @@ impl Member {
         Self {
             shell,
             client: client::Client::new(&bounds.root.domain.client, seed).expect("native client bounds"),
-            out: Queue::with_capacity(client::max_out(&bounds.root.domain.client)),
+            out: Queue::uncapped(),
             owner: Some(token),
             made: None,
             project: None,

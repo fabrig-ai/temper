@@ -183,7 +183,7 @@ fn the_model_half_waits_for_accounts_and_yields_to_another_provider() {
     }
 }
 fn event(root: &mut crate::Domain, event: crate::Event) -> Queue<crate::Request> {
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::step(root, &f::env(&f::limits()), event, &mut out);
     out
 }
@@ -602,7 +602,7 @@ fn ending_root_with_page(
 pub(super) fn deliver_demo_read(root: &mut crate::Domain, page: Readout) -> Queue<crate::Request> {
     demo::told(&mut root.forge, &Told::Link { link: Link::Offline }, f::limits().forge, &mut Queue::with_capacity(1));
     let handle = read(&mut root.forge);
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::route::told(root, &f::env(&f::limits()), Told::Page { handle, page }, &mut out);
     crate::route::demo_progress(root, &f::env(&f::limits()), &mut out);
     out
@@ -792,7 +792,7 @@ fn both_ends_seen_in_one_pass_send_no_remove() {
         &mut root,
         &f::env(&f::limits()),
         jig_client::Event::Up { up: jig_client::Up::FamilyDelivered { watch: forges, record: forge_document(true) } },
-        &mut Queue::with_capacity(crate::max_out(&f::limits())),
+        &mut Queue::uncapped(),
     );
     let mut out = deliver_accounts(&mut root, account, ending_accounts(true));
     let read = demo_reread(&mut out);

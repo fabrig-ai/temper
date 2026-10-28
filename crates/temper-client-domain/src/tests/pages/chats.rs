@@ -332,7 +332,7 @@ fn opened_chats() -> (crate::Domain, skein_lib::Token, skein_lib::Token) {
     let env = fixtures::env(&limits);
     let mut root = crate::unlinked(&limits, fixtures::SEED);
     let me = fixtures::start(&mut root, List::with_capacity(0));
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &env,
@@ -382,7 +382,7 @@ fn an_ending_chat_refreshes_the_first_closed_page_and_remains_listed() {
     let limits = fixtures::limits();
     let env = fixtures::env(&limits);
     let (mut root, watch, first_read) = opened_chats();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &env,

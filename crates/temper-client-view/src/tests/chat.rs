@@ -687,7 +687,7 @@ fn history() -> (temper_client_domain::Domain, skein_lib::Queue<temper_client_do
         Address::Inbox { filter: temper_client_domain::address::Filter::ALL },
         &fixtures::domain_limits(),
     );
-    let mut out = skein_lib::Queue::with_capacity(temper_client_domain::max_out(&fixtures::domain_limits()));
+    let mut out = skein_lib::Queue::uncapped();
     chat_event(&mut root, Event::Went { place: Place::Address(Address::Chat { task: TASK }) }, &mut out);
     let mut watch = None;
     let mut activity = None;

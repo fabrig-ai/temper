@@ -233,7 +233,7 @@ fn assert_link_main(answer: jig_client_protocol_wire::SignInAnswer, expected: &[
     let limits = fixtures::domain_limits();
     let env = Env { now: Time::ZERO, wall: fixtures::NOW, limits };
     let mut root = temper_client_domain::new(&limits, fixtures::SEED);
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     temper_client_domain::step(
         &mut root,
         &env,

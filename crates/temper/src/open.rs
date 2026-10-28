@@ -98,13 +98,7 @@ pub(crate) fn start(arguments: &[OsString], clock: &Clock) -> Result<u8, Refused
             start,
         )
         .map_err(|_| Refused::NotALink(argument.as_bytes().into()))?;
-        let state = Loop::new(
-            &limits::terminal(),
-            &view.tree,
-            directory.as_os_str().as_bytes().into(),
-            link,
-            bounds.client.client.domain.requests.requests,
-        );
+        let state = Loop::new(&limits::terminal(), &view.tree, directory.as_os_str().as_bytes().into(), link);
         let signals = skein_shell::open_termination_signals().expect("termination signals");
         owned.push(signals);
         let mut terminal = Terminal::new(client, state, Fd::new(0), Fd::new(1), signals).expect("terminal descriptors");

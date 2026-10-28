@@ -96,7 +96,7 @@ fn adding_a_key_requires_the_value_written_for_that_row() {
 
 pub(super) fn event(root: &mut crate::Domain, event: Event) -> Queue<Request> {
     let limits = fixtures::limits();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(root, &fixtures::env(&limits), event, &mut out);
     crate::take(root, &fixtures::env(&limits), &mut out);
     out
@@ -552,7 +552,7 @@ pub(super) fn started(root: &mut crate::Domain, pending: jig_client::Key) {
                 },
             )))),
         },
-        &mut Queue::with_capacity(crate::max_out(&fixtures::limits())),
+        &mut Queue::uncapped(),
     );
 }
 
@@ -663,7 +663,7 @@ fn cancel_abandons_a_restored_lost_account_act() {
     for outcome in [jig_client::Outcome::Lost, jig_client::Outcome::Unsent] {
         let (mut root, _, _) = opened(c::HeldRole::Member);
         let key = jig_client::Key { asker: pages::me_handle().asker, number: 991 };
-        let mut out = Queue::with_capacity(crate::max_out(&fixtures::limits()));
+        let mut out = Queue::uncapped();
         crate::route::told(
             &mut root,
             &fixtures::env(&fixtures::limits()),

@@ -4,7 +4,7 @@ use jig_client::{Down, contract as c};
 use skein_lib::{Queue, Secret};
 use temper_client_protocol_wire::{self as wire, v1 as w};
 fn event(root: &mut crate::Domain, event: Event) -> Queue<Request> {
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::step(root, &f::env(&f::limits()), event, &mut out);
     out
 }

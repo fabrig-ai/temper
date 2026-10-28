@@ -9,7 +9,7 @@ use skein_lib::{List, Queue, Secret, Token};
 use temper_client_protocol_wire::{self as wire, v1 as w};
 
 fn event(root: &mut Domain, event: Event) -> Queue<Request> {
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::step(root, &f::env(&f::limits()), event, &mut out);
     out
 }
@@ -40,12 +40,7 @@ fn answer(root: &mut Domain, present: bool) {
     } else {
         Readout::NotServed { family: Some(wire::FORGE), served: None }
     };
-    crate::route::told(
-        root,
-        &f::env(&f::limits()),
-        Told::Page { handle, page },
-        &mut Queue::with_capacity(crate::max_out(&f::limits())),
-    );
+    crate::route::told(root, &f::env(&f::limits()), Told::Page { handle, page }, &mut Queue::uncapped());
 }
 fn opened(owner: bool, step: Step) -> (Domain, Token, Token, Option<Token>) {
     let mut root = crate::unlinked(&f::limits(), f::SEED);
@@ -188,7 +183,7 @@ fn the_welcome_waits_for_its_facts() {
     rows(&mut root, forges.unwrap(), wire::FORGE + 1);
     assert!(!decided(&root));
     answer(&mut root, true);
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::fire(&mut root, &f::env(&f::limits()), &mut out);
     assert!(decided(&root));
     assert!(moved(out, true));

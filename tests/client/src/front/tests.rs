@@ -32,7 +32,7 @@ fn settle_root(
     kept: Vec<skein_lib::RequestRecord<jig_client::Held>>,
 ) {
     let mut env = Env { now: front.now, wall: WALL, limits: *limits };
-    let mut out = Queue::with_capacity(Temper::max_out(limits));
+    let mut out = Queue::uncapped();
     Temper::step(root, &env, Temper::start(fixtures::project(), kept, 0), &mut out);
     assert_eq!(flush(front, root, &env, &mut out), 1, "startup shares the own Me with the UI");
     for _ in 0..8 {
@@ -82,7 +82,7 @@ fn pending_adoption(
 ) -> Vec<skein_lib::RequestRecord<jig_client::Held>> {
     use client::forge::{Act, Text, Typed};
     let env = Env { now: front.now, wall: WALL, limits: *limits };
-    let mut out = Queue::with_capacity(Temper::max_out(limits));
+    let mut out = Queue::uncapped();
     Temper::step(
         root,
         &env,

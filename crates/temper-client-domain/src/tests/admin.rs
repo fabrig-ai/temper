@@ -9,7 +9,7 @@ use temper_client_protocol_wire::{self as wire, v1 as w};
 const FORGE: u16 = 3;
 const TOKEN: &[u8] = b"admin-token-placeholder-0123";
 fn event(root: &mut crate::Domain, event: Event) -> Queue<Request> {
-    let mut out = Queue::with_capacity(crate::max_out(&f::limits()));
+    let mut out = Queue::uncapped();
     crate::step(root, &f::env(&f::limits()), event, &mut out);
     out
 }

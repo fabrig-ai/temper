@@ -1,5 +1,5 @@
 //! The promised names, in client/browser.md, 7.2's order.
-use crate::driver::{limits, step};
+use crate::driver::step;
 use jig_client::contract as c;
 use skein_lib::{Queue, Token};
 use temper_client_domain::{Action, Address, Domain, Event, Request, address::Filter, pages::Act};
@@ -341,7 +341,7 @@ pub fn mockup(sample: &Sample) -> Option<String> {
 #[must_use]
 pub fn domain(sample: &Sample) -> Domain {
     let (mut root, accounts_watch) = crate::worlds::world(sample.world, sample.address.clone(), sample.then);
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits()));
+    let mut out = Queue::uncapped();
     match sample.then {
         Then::Shown | Then::Held => {}
         Then::Filled | Then::Refused => adoption(&mut root, sample.then == Then::Refused, &mut out),

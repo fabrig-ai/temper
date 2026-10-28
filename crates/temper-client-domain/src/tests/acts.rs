@@ -103,7 +103,7 @@ fn each_inbox_act_is_one_keyed_request() {
 #[test]
 fn an_act_made_offline_shows_parked_until_the_link_is_live() {
     let mut client = f::live_client();
-    let mut out = skein_lib::Queue::with_capacity(jig_client::max_out(&fixtures::limits().client));
+    let mut out = skein_lib::Queue::uncapped();
     client.step(skein_lib::Time::ZERO, skein_lib::Wall::EPOCH, jig_client::Event::StreamGone, &mut out);
     assert_eq!(client.link().state, jig_client::Link::Offline);
     let mut pages = f::pages(PROPOSAL, f::proposal(ActKind::Accept, Admission::Allowed));
@@ -158,7 +158,7 @@ fn a_deciding_card_survives_its_removal_from_inbox() {
     f::act(&mut pages, Act::Confirm);
     let entries = pages.inbox().expect("inbox").entries;
     let limits = fixtures::limits();
-    let mut out = skein_lib::Queue::with_capacity(crate::pages::inbox::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     crate::pages::step(
         &mut pages,
         &fixtures::env(&limits),

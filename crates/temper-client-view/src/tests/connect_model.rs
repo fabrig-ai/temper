@@ -185,7 +185,7 @@ pub(super) fn flow_fixture(kind: d::WayKind) -> (d::Domain, skein_lib::Token) {
 fn sent(root: &mut d::Domain, act: M) -> skein_lib::Token {
     let limits = fixtures::limits();
     let env = skein_lib::Env { now: skein_lib::Time::ZERO, wall: fixtures::NOW, limits };
-    let mut out = skein_lib::Queue::with_capacity(d::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     d::step(root, &env, d::Event::Act { action: d::Action::Pages(d::pages::Act::ConnectModel(act)) }, &mut out);
     d::step(root, &env, d::Event::Client { event: jig_client::Event::Stored }, &mut out);
     out.iter()

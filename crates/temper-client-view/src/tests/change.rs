@@ -8,7 +8,7 @@ use temper_client_protocol_wire::{self as wire, v1 as w};
 const TASK: u64 = 9;
 fn event(root: &mut Domain, up: Up) -> Queue<Request> {
     let limits = f::limits();
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     temper_client_domain::step(
         root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: f::NOW, limits },

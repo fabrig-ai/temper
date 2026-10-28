@@ -126,13 +126,7 @@ pub(crate) fn compose(
     )
     .expect("native terminal client");
     let settings = limits::Terminal { interval: PRINT_INTERVAL, ..limits::terminal() };
-    let state = Loop::new(
-        &settings,
-        &view.tree,
-        directory.as_os_str().as_bytes().into(),
-        link,
-        bounds.client.client.domain.requests.requests,
-    );
+    let state = Loop::new(&settings, &view.tree, directory.as_os_str().as_bytes().into(), link);
     Terminal::new(client, state, stdin, stdout, signals).expect("terminal descriptors")
 }
 /// Admission uses the composition's own operation count. Construction is sans io:

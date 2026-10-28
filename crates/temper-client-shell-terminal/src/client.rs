@@ -106,7 +106,6 @@ impl NativeClient {
         let bounds = settings.limits;
         assert!(limits::valid(&bounds), "native capacities are checked");
         let (view_limits, forge_words) = limits::view(&bounds).expect("native view capacities are checked");
-        let notices = domain::max_out(&bounds.client);
         let mut shell = Shell::new(jig_client_shell_native::Settings {
             engine: settings.engine,
             directory: settings.directory,
@@ -124,7 +123,7 @@ impl NativeClient {
             root,
             view: view::View::new(&view_limits, &bounds.client, forge_words, temper_client_protocol_wire::FORGE),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: bounds.client },
-            out: Queue::with_capacity(domain::max_out(&bounds.client)),
+            out: Queue::uncapped(),
             patches: Queue::with_capacity(view_limits.tree.patches),
             credential: None,
             with,
@@ -134,8 +133,8 @@ impl NativeClient {
             phase: Phase::WaitingToken,
             dirty: false,
             signing_out: false,
-            notices: Queue::with_capacity(notices),
-            signing: Queue::with_capacity(limits::EXCHANGES),
+            notices: Queue::uncapped(),
+            signing: Queue::uncapped(),
             saving_signing: None,
             seen: Seen::default(),
             loaded: false,

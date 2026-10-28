@@ -208,7 +208,7 @@ fn creation_kept_work_belongs_to_the_open_model_flow() {
                 key: jig_client::Key { asker: pages::me_handle().asker, number: 991 },
                 request: jig_client::Ask::Jig(Box::new(ask.clone())),
             },
-            &mut Queue::with_capacity(crate::max_out(&fixtures::limits())),
+            &mut Queue::uncapped(),
         );
         assert_eq!(root.pages().connect_model().unwrap().request.pending.as_ref().unwrap().ask, ask);
         event(&mut root, Event::Went { place: crate::Place::Address(Address::Accounts) });
@@ -262,7 +262,7 @@ fn other_accounts_kept_work_belongs_to_management_while_the_flow_is_open() {
             key: jig_client::Key { asker: pages::me_handle().asker, number: 991 },
             request: jig_client::Ask::Jig(Box::new(ask.clone())),
         },
-        &mut Queue::with_capacity(crate::max_out(&fixtures::limits())),
+        &mut Queue::uncapped(),
     );
     assert!(root.pages().connect_model().unwrap().request.pending.is_none());
     event(&mut root, Event::Went { place: crate::Place::Address(Address::Accounts) });
@@ -295,7 +295,7 @@ fn a_restored_sign_in_address_is_live_only_while_the_watch_names_its_source() {
                 provider: PROVIDER,
             })),
         },
-        &mut Queue::with_capacity(crate::max_out(&fixtures::limits())),
+        &mut Queue::uncapped(),
     );
     started(&mut root, pending);
     deliver(&mut root, watch, document(true));

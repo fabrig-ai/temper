@@ -428,7 +428,7 @@ fn chat_with_loaded_turn() -> (crate::Domain, Queue<crate::Request>) {
     let limits = fixtures::limits();
     let mut root = crate::unlinked(&limits, fixtures::SEED);
     let me = fixtures::start(&mut root, skein_lib::List::with_capacity(0));
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     fixtures::confirm(&mut root, me, fixtures::PARTY, &mut out);
     root_event(
         &mut root,

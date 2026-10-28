@@ -101,7 +101,7 @@ pub fn supplied_root_watching(document: c::Task, held: bool) -> (temper_client_d
     if held && let c::Delivery::OwnerTree(value) = &mut tree {
         value.root.phase = c::Phase::Held;
     }
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     let env = Env { now: NO_TIME, wall: AT_EPOCH, limits };
     temper_client_domain::step(
         &mut root,
@@ -217,7 +217,7 @@ pub fn agent_root_with_page(
     let limits = domain_limits();
     let env = Env { now: NO_TIME, wall: AT_EPOCH, limits };
     let mut root = temper_client_domain::unlinked(&limits, SEED);
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     temper_client_domain::step(
         &mut root,
         &env,
@@ -380,7 +380,7 @@ pub fn root_with_ended_and_held(
         &limits,
     );
     let env = Env { now: NO_TIME, wall: AT_EPOCH, limits };
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     for (watch, value) in [
         (tree_watch.expect("tree watch"), tree),
         (watch.expect("task watch"), Some(c::Delivery::Task(Box::new(document)))),

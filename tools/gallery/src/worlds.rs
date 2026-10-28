@@ -166,7 +166,7 @@ pub(super) fn world(w: World, address: Address, then: Then) -> (Domain, Option<T
     );
     let limits = limits();
     let mut root = temper_client_domain::unlinked(&limits, SEED);
-    let mut out = Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = Queue::uncapped();
     step(&mut root, Event::Start { address, kept: List::with_capacity(0), with: None }, &mut out);
     for event in [
         jig_client::Event::StartUnlinked { kept: List::with_capacity(0) },

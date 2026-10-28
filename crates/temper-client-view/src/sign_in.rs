@@ -303,7 +303,7 @@ mod authorize_tests {
             let limits = fixtures::limits();
             let mut root = if signed_out { fixtures::root_in_project(None) } else { d::new(&limits, 11) };
             let env = skein_lib::Env { now: skein_lib::Time::ZERO, wall: skein_lib::Wall::EPOCH, limits };
-            let mut out = skein_lib::Queue::with_capacity(d::max_out(&limits));
+            let mut out = skein_lib::Queue::uncapped();
             if signed_out {
                 d::step(&mut root, &env, d::Event::SignedOut, &mut out);
             } else {

@@ -274,7 +274,7 @@ fn a_kept_adoption_of_another_version_is_dropped_and_its_form_shows_none_pending
 fn a_family_the_engine_does_not_serve_marks_the_form_out_of_date() {
     let mut root = fixtures::filled();
     let limits = fixtures::limits();
-    let mut out = Queue::with_capacity(crate::max_out(&limits));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &fixtures::env(&limits),
@@ -329,7 +329,7 @@ fn version_refused() -> (crate::Domain, jig_client::Key) {
     let limits = fixtures::limits();
     let bounds = link::Limits::new(limits.client.domain, limits.client.exchanges).unwrap();
     let mut link = link::Link::new(&bounds).unwrap();
-    let mut sent = Queue::with_capacity(link.max_out());
+    let mut sent = Queue::uncapped();
     link.step(skein_lib::Time::ZERO, link::Event::Send { attempt, key, ask, value }, &mut sent);
     let Some(link::Request::Exchange { exchange, .. }) = sent.pop() else { panic!("keyed exchange") };
     link.step(skein_lib::Time::ZERO, link::Event::Reply { exchange, message: version_answer(&bounds) }, &mut sent);

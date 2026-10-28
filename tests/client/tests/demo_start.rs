@@ -22,7 +22,7 @@ fn pump_holding_start(
 ) -> usize {
     let limits = f::domain_limits();
     let mut now = Time::ZERO.saturating_add(Duration::from_secs(1));
-    let mut out = Queue::with_capacity(Temper::max_out(&limits));
+    let mut out = Queue::uncapped();
     Temper::step(root, &Env { now, wall: Wall::EPOCH, limits }, event.into(), &mut out);
     let mut replaced = 0;
     for _ in 0..64 {

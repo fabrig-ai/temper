@@ -111,7 +111,7 @@ pub fn step(root: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<
     welcome(root, out);
 }
 pub fn fire(root: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    let mut client = Queue::with_capacity(jig_client::max_out(&env.limits.client));
+    let mut client = Queue::uncapped();
     root.client.fire(env.now, env.wall, &mut client);
     route::route_client(root, env, &mut client, out);
     route::fire_pages(root, env, out);

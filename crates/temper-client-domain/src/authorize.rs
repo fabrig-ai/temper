@@ -137,7 +137,7 @@ mod tests {
             root.authorization =
                 Some(Authorization { query: b"client_id=forgejo".as_slice().into(), state: State::Pending });
             root.authorizing = Flight::Pending;
-            let mut out = Queue::with_capacity(crate::max_out(&fixtures::limits()));
+            let mut out = Queue::uncapped();
             answered(&mut root, answer, &mut out);
             assert_eq!(root.authorization().expect("page").state(), state);
             if state == State::Continuing {
@@ -162,7 +162,7 @@ mod tests {
         use jig_client_protocol_wire::v19 as w;
         let limits = fixtures::limits();
         let mut root = crate::new(&limits, 11);
-        let mut out = Queue::with_capacity(crate::max_out(&limits));
+        let mut out = Queue::uncapped();
         let env = fixtures::env(&limits);
         crate::route::client(
             &mut root,
@@ -256,7 +256,7 @@ mod tests {
             let query = query(bytes);
             went(&mut root, &Place::Authorize { query: query.clone() });
             let limits = fixtures::limits();
-            let mut out = Queue::with_capacity(crate::max_out(&limits));
+            let mut out = Queue::uncapped();
             progress(&mut root, &fixtures::env(&limits), &mut out);
             assert_eq!(root.authorization().unwrap().state(), State::Pending);
             let mut sent = 0_u32;
@@ -281,7 +281,7 @@ mod tests {
             let query = query(bytes - b"/oauth/authorize?".len());
             let mut root = fixtures::on_adoption_page();
             let limits = fixtures::limits();
-            let mut out = Queue::with_capacity(crate::max_out(&limits));
+            let mut out = Queue::uncapped();
             crate::route::client(
                 &mut root,
                 &fixtures::env(&limits),
@@ -310,14 +310,14 @@ mod tests {
                     &mut root,
                     &fixtures::env(&limits),
                     jig_client::Event::Up { up: jig_client::Up::SignedOut },
-                    &mut Queue::with_capacity(crate::max_out(&limits)),
+                    &mut Queue::uncapped(),
                 );
             }
             went(
                 &mut root,
                 &Place::Authorize { query: alloc::vec![b'x'; usize::try_from(QUERY_BYTES).unwrap() + 1].into() },
             );
-            let mut out = Queue::with_capacity(crate::max_out(&limits));
+            let mut out = Queue::uncapped();
             progress(&mut root, &fixtures::env(&limits), &mut out);
             assert!(out.is_empty());
             assert_eq!(root.authorization().expect("page").state(), State::Refused(AuthorizeWhy::Malformed));

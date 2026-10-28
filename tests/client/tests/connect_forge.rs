@@ -14,7 +14,7 @@ const CLIENT: ClientId = ClientId(0);
 const PUMP_STEPS: usize = 64;
 fn pump(front: &mut Joint, root: &mut Root, now: &mut Time, event: d::Event) -> bool {
     let limits = fixtures::domain_limits();
-    let mut out = Queue::with_capacity(Temper::max_out(&limits));
+    let mut out = Queue::uncapped();
     Temper::step(root, &Env { now: *now, wall: Wall::EPOCH, limits }, event.into(), &mut out);
     let mut model = false;
     for _ in 0..PUMP_STEPS {

@@ -72,7 +72,7 @@ fn a_first_run_welcome_without_a_demo() {
         "key became usable"
     );
     let mut now = skein_lib::Time::ZERO.saturating_add(skein_lib::Duration::from_secs(1));
-    let mut out = Queue::with_capacity(Temper::max_out(&limits));
+    let mut out = Queue::uncapped();
     Temper::step(
         &mut root,
         &Env { now, wall: Wall::EPOCH, limits },

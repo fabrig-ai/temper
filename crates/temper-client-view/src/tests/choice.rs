@@ -927,7 +927,7 @@ fn pending_choice_outcome_and_wait_are_siblings_after_the_chooser() {
     delivered(&mut root, me_watch, c::Delivery::Me(Box::new(me)));
     delivered(&mut root, watch.unwrap(), c::Delivery::Task(Box::new(task)));
     edit(&mut root, d::pages::choice::Act::Model { index: 1 });
-    let mut out = skein_lib::Queue::with_capacity(d::max_out(&fixtures::limits()));
+    let mut out = skein_lib::Queue::uncapped();
     d::step(
         &mut root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: skein_lib::Wall::EPOCH, limits: fixtures::limits() },

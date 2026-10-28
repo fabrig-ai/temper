@@ -224,7 +224,7 @@ fn cards_are_grouped_in_lists_with_kinds_and_named_project_paths() {
 fn absent_groups_have_no_empty_lists() {
     let limits = fixtures::domain_limits();
     let (mut root, _, watch) = fixtures::root_at(Address::Inbox { filter: Filter::ALL }, &limits);
-    let mut out = skein_lib::Queue::with_capacity(temper_client_domain::max_out(&limits));
+    let mut out = skein_lib::Queue::uncapped();
     temper_client_domain::step(
         &mut root,
         &skein_lib::Env { now: skein_lib::Time::ZERO, wall: skein_lib::Wall::EPOCH, limits },

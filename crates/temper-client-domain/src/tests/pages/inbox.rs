@@ -63,7 +63,7 @@ fn the_inbox_watches_inbox_and_reads_each_entrys_object() {
 fn a_kind_chosen_shows_the_inbox_at_its_address() {
     let (mut root, _) = fixtures::inbox_home(Filter::ALL);
     let filter = Filter { kind: Some(Kind::Question), ..Filter::ALL };
-    let mut out = Queue::with_capacity(crate::max_out(&fixtures::limits()));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &fixtures::env(&fixtures::limits()),
@@ -77,7 +77,7 @@ fn a_kind_chosen_shows_the_inbox_at_its_address() {
 #[test]
 fn the_inbox_at_a_filtered_path_reads_that_filter() {
     let (mut root, _) = fixtures::inbox_home(Filter::ALL);
-    let mut out = Queue::with_capacity(crate::max_out(&fixtures::limits()));
+    let mut out = Queue::uncapped();
     crate::step(
         &mut root,
         &fixtures::env(&fixtures::limits()),
@@ -342,7 +342,7 @@ fn reply_counts_and_source_cut_survive_both_inbox_documents() {
                 more: true,
             }))
         };
-        let mut out = Queue::with_capacity(crate::max_out(&fixtures::limits()));
+        let mut out = Queue::uncapped();
         crate::step(
             &mut root,
             &fixtures::env(&fixtures::limits()),

@@ -4,8 +4,8 @@ pub(crate) struct Waiting {
     lines: Queue<Box<[u8]>>,
 }
 impl Waiting {
-    pub(crate) fn new(capacity: u32) -> Self {
-        Self { lines: Queue::with_capacity(capacity) }
+    pub(crate) fn new() -> Self {
+        Self { lines: Queue::uncapped() }
     }
     pub(crate) fn is_empty(&self) -> bool {
         self.lines.is_empty()

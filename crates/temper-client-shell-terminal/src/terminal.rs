@@ -56,7 +56,6 @@ impl Loop {
         view_limits: &skein_ui::Limits,
         directory: Box<[u8]>,
         link: Option<Secret>,
-        requests: u32,
     ) -> Self {
         let settings = skein_ui_text::Settings {
             name: Box::from(*b"temper"),
@@ -76,7 +75,7 @@ impl Loop {
             terminal_operations,
             directory,
             link,
-            lines: waiting::Waiting::new(requests.checked_add(4).expect("waiting line room")),
+            lines: waiting::Waiting::new(),
             built: 0,
             retry: None,
             backoff: limits.first,
