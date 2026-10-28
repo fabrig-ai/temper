@@ -675,6 +675,9 @@ fn service(inherited: &Inherited) -> Proc {
             document["engine"]["limits"]["overrides"]["clients_http.calls"] = (case.streams + 4).into();
             document["application"]["limits"]["overrides"]["server.connections"] = (case.streams + 4).into();
         }
+        if case.exchange_full {
+            document["engine"]["limits"]["overrides"]["clients.exchanges"] = 8.into();
+        }
     }
     if REFUSE_START.with(std::cell::Cell::get) {
         document["engine"]["projects"] = serde_json::json!([]);

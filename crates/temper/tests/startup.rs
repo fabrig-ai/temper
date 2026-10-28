@@ -2433,7 +2433,7 @@ fn ctl_capacity_fits_owned_alongside_t19_and_init_without_raising_declarations()
         };
         let original: serde_json::Value = serde_json::from_slice(&bounded.document).expect("bounded JSON");
         let mut baseline = original.clone();
-        for name in ["clients.streams", "clients_http.calls", "clients_http.streams"] {
+        for name in ["clients.exchanges", "clients.streams", "clients_http.calls", "clients_http.streams"] {
             baseline["engine"]["limits"]["overrides"].as_object_mut().expect("overrides").remove(name);
         }
         baseline["application"]["limits"]["overrides"].as_object_mut().expect("overrides").remove("server.connections");
@@ -2445,6 +2445,7 @@ fn ctl_capacity_fits_owned_alongside_t19_and_init_without_raising_declarations()
             candidate["engine"]["limits"]["overrides"]["clients.streams"] = n.into();
             candidate["engine"]["limits"]["overrides"]["clients_http.streams"] = n.into();
             candidate["engine"]["limits"]["overrides"]["clients_http.calls"] = (n + 4).into();
+            candidate["engine"]["limits"]["overrides"]["clients.exchanges"] = (n + 4).into();
             candidate["application"]["limits"]["overrides"]["server.connections"] = (n + 4).into();
             bounded.document = serde_json::to_vec(&candidate).expect("candidate JSON");
             let after: u64 = bounded.memory_terms().engine.iter().map(|(_, bytes)| *bytes).sum();
@@ -2466,6 +2467,7 @@ fn ctl_capacity_fits_owned_alongside_t19_and_init_without_raising_declarations()
         assert_eq!(Some(n), largest, "largest admitted capacity");
         assert_eq!(original["engine"]["limits"]["overrides"]["clients_http.streams"], n);
         assert_eq!(original["engine"]["limits"]["overrides"]["clients_http.calls"], n + 4);
+        assert_eq!(original["engine"]["limits"]["overrides"]["clients.exchanges"], n + 4);
         assert_eq!(original["application"]["limits"]["overrides"]["server.connections"], n + 4);
         bounded.document = serde_json::to_vec(&original).expect("stock JSON");
         let _ = bounded.requirements();

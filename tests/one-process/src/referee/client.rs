@@ -35,6 +35,7 @@ struct Connection {
     header: bool,
     body: Vec<u8>,
     answered: bool,
+    refused: bool,
     sent_application: Option<()>,
 }
 #[derive(Default)]
@@ -98,7 +99,12 @@ impl Connection {
         if !self.header {
             let Some(end) = mark(&self.incoming, b"\r\n\r\n") else { return };
             let header = std::str::from_utf8(&self.incoming[..end]).expect("HTTP response header");
-            assert!(header.starts_with("HTTP/1.1 200 "), "client response status");
+            if header.starts_with("HTTP/1.1 409 ") && crate::stories::capacity().is_some_and(|case| case.exchange_full)
+            {
+                self.refused = true;
+            } else {
+                assert!(header.starts_with("HTTP/1.1 200 "), "client response status");
+            }
             for line in header.lines().skip(1) {
                 let (name, value) = line.split_once(':').expect("HTTP header field");
                 if name.eq_ignore_ascii_case("content-length") {
@@ -125,7 +131,14 @@ impl Connection {
             self.stream(received);
         } else if !self.answered && self.remaining.is_some_and(|size| self.incoming.len() >= size) {
             let size = self.remaining.expect("length-framed reply");
-            self.answer(&self.incoming[..size], received);
+            if self.refused {
+                let full = wire::StreamFull::decode(&wire::CEILINGS, &mut Reader::new(&self.incoming[..size]))
+                    .expect("named map refusal");
+                assert_eq!(full.bound(), &wire::StreamBound::Exchanges);
+                assert_eq!(full.size(), 8);
+            } else {
+                self.answer(&self.incoming[..size], received);
+            }
             self.answered = true;
         }
     }

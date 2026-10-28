@@ -218,6 +218,13 @@ impl OneShot {
         self.finish(1, false);
     }
     fn print(&mut self, printed: temper_client_tools::jig::Printed) {
+        let printed = if printed.status != 0
+            && let Some(full) = self.root.client().link().stream_full
+        {
+            temper_client_tools::jig::render::stream_full(full, self.json)
+        } else {
+            printed
+        };
         self.file_end = Some(printed.file);
         self.output.push(false, printed.stdout);
         if printed.status == 1 && !printed.stderr.is_empty() {

@@ -199,6 +199,7 @@ impl Host {
             self.client(match heard {
                 Above::Reply { exchange, message } => jig_client::Event::Reply { exchange, message },
                 Above::Lost { exchange } => jig_client::Event::Lost { exchange },
+                Above::Full { exchange, full } => jig_client::Event::Full { exchange, full },
                 Above::Streamed { message } => jig_client::Event::Streamed { message },
                 Above::StreamGone => jig_client::Event::StreamGone,
             });

@@ -7,6 +7,7 @@
         "authority.executors": 6,
         "authority.grants": 14,
         "authority.segments": 8,
+        "clients.exchanges": 12,
         "clients.streams": 8,
         "clients_http.calls": 12,
         "clients_http.streams": 8,

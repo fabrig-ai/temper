@@ -11,6 +11,7 @@ pub(crate) const DEADLINE: Duration = Duration::from_millis(250);
 pub struct Case {
     pub streams: u32,
     pub init: bool,
+    pub exchange_full: bool,
     pub json: bool,
     pub export: bool,
 }
@@ -135,9 +136,24 @@ impl Caller {
             }
             Stage::Watches => {
                 let opened = self.children.len() - 1;
+                if self.case.exchange_full && opened == count && self.complete(count) {
+                    let refused = &self.children[count];
+                    assert_eq!(refused.exit, Some(Exit::Code(2)), "{}", String::from_utf8_lossy(&refused.error));
+                    assert!(refused.output.is_empty());
+                    assert!(now < self.started.expect("last watch start").saturating_add(Duration::from_secs(1)));
+                    assert_eq!(refused.error, b"the engine's 8 client exchanges are in use (clients.exchanges): end a waiting ctl call, or wait\n");
+                    for child in 1..count {
+                        self.stop(child);
+                    }
+                    self.stage = Stage::Drain;
+                    return;
+                }
                 let ready = OBSERVED.with(|o| o.borrow().live.range(1..=count).count());
                 if opened == ready {
                     if opened < count {
+                        if self.case.exchange_full && opened + 1 == count {
+                            self.started = Some(now);
+                        }
                         self.spawn(&[b"/client/private", b"inbox", b"--until", b"waiting", b"--timeout", b"90"]);
                     } else {
                         self.started = Some(now);

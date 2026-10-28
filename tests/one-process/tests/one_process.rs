@@ -66,6 +66,8 @@ fn two_ctl_watches_refuse_a_third_call_full_and_releasing_one_restores_reads() {
             world::Story::StreamCapacity(temper_one_process_world::StreamCapacity {
                 streams: 2,
                 init: false,
+                exchange_full: false,
+                exchange_full: false,
                 json,
                 export,
             }),
@@ -88,6 +90,23 @@ fn init_limits_admit_their_ctl_streams_and_an_exchange_then_name_the_full_bound(
         world::Story::StreamCapacity(temper_one_process_world::StreamCapacity {
             streams,
             init: true,
+            exchange_full: false,
+            json: false,
+            export: false,
+        }),
+    );
+    assert_eq!(outcome.verdict, Verdict::Passed);
+    assert!(outcome.drained);
+}
+
+#[test]
+fn init_ctl_names_the_full_exchange_map_without_a_panic() {
+    let outcome = world::run(
+        fixtures::calm(fixtures::SEED),
+        world::Story::StreamCapacity(temper_one_process_world::StreamCapacity {
+            streams: 8,
+            init: true,
+            exchange_full: true,
             json: false,
             export: false,
         }),

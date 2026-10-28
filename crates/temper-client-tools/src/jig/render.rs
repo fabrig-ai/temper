@@ -214,10 +214,14 @@ pub fn stream_full(full: jig_client::StreamFull, json: bool) -> Printed {
     fn reason(full: jig_client::StreamFull, out: &mut Text) {
         out.put(b"the engine's ");
         out.number(u64::from(full.size));
-        out.put(b" event streams are in use (");
+        out.put(match full.bound {
+            jig_client::StreamBound::Component | jig_client::StreamBound::Transport => b" event streams are in use (",
+            jig_client::StreamBound::Exchanges => b" client exchanges are in use (",
+        });
         out.put(match full.bound {
             jig_client::StreamBound::Component => b"clients.streams",
             jig_client::StreamBound::Transport => b"clients_http.streams",
+            jig_client::StreamBound::Exchanges => b"clients.exchanges",
         });
         out.put(b"): end a waiting ctl call, or wait");
     }
