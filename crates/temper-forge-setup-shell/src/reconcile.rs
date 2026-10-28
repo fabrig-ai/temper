@@ -224,7 +224,7 @@ impl Running {
             io: Io::new(&settings.io),
             end: began.saturating_add(settings.given.limits.deadline),
             settings,
-            needs: Queue::with_capacity(reconcile::MAX_OUT),
+            needs: Queue::uncapped(),
             event: Some(Event::Begin),
             exchange: None,
             pending: None,

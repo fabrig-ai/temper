@@ -164,10 +164,7 @@ pub(crate) fn advance(engine: &mut crate::engine::Engine) {
                 engine.forge_records.phase = Phase::Name { after: 0 };
                 return;
             };
-            if !engine.forge.room(2)
-                || engine.notes.room() == 0
-                || engine.events.room() < engine.forge_records.bounds.installations
-            {
+            if engine.notes.room() == 0 || engine.events.room() < engine.forge_records.bounds.installations {
                 return;
             }
             let number = forge.number;

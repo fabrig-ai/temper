@@ -128,7 +128,7 @@ fn clone(
             Outcome::Reply(response) => return response.status,
             Outcome::Admit(admission) => service.admit(admission, &mut forge.domain, &env, reply()),
             Outcome::Call(pending, event) => {
-                let mut out = Queue::with_capacity(domain::MAX_OUT);
+                let mut out = Queue::uncapped();
                 domain::step_admitted(&mut forge.domain, &env, event, &mut out);
                 domain::fire(&mut forge.domain, &env, &mut out);
                 let mut result = None;

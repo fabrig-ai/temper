@@ -306,7 +306,7 @@ impl World {
             forge: fake,
             forge_env: Env { now, wall: Wall::EPOCH, limits: config },
             to_forge: Queue::with_capacity(32),
-            forge_out: Queue::with_capacity(forge::MAX_OUT),
+            forge_out: Queue::uncapped(),
             to_top: Queue::with_capacity(32),
             top_out: Queue::with_capacity(top::max_out(&limits)),
             pending: Map::with_capacity(32),
