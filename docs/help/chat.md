@@ -23,14 +23,16 @@ A chat is a conversation between a party and an agent in a project: an untracked
   it starts a goal at once with `goal` and the party's words whole,
   even where they ask for an advisor first (temper help goal), and
   says a question will wait in the party's inbox. The goal asks its plan with
-  `message`, then waits for the answer, and finishes only once every
-  agreed change has landed; the question waits in the party's inbox; the party
-  answers it there (`task answer`), the chat relays the answer to the goal,
-  and only then does the goal call `change`. In the chat's
-  conversation the goal's question reads `G asks (question Q): ...`
-  and the party's answer `P answers question Q: ...`: the chat relays
-  it to the goal by that number. The chat says what landed as the
-  result says it, never a check or test it doesn't name.
+  `message` and stays until it is answered: a finish meanwhile parks
+  it (its activity reads `Kept by question: Q`), and it finishes only
+  once every agreed change has landed. The question waits in the
+  party's inbox; the party answers it there (`task answer`), and the
+  answer reaches the goal itself, which only then calls `change`. The
+  chat hears that its party answered (`Person answered question in
+  inbox: Q`) and never answers for them: its own answer is refused,
+  `Refused: your person answers question Q in their inbox`. The chat
+  says what landed as the result says it, never a check or test it
+  doesn't name.
 - **An advisor, and changes in order.** Asked for an advisor first, the
   goal, never the chat, starts one with `goal` and `advisor` set: temper opens its brief
   with a line saying it is an advisor, which reads the forge and

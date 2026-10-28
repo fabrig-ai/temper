@@ -45,7 +45,11 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
 - **What it waits on** prints after `waiting on:`: `Kept by its
   dependencies`, `Waiting for delegates`, `Waiting for news`, `Nothing
   awaited`, or a party and what it must answer: `you: question 3 of
-  task 44 · 1 waiting`.
+  task 44 · 1 waiting`. A task's own question to its requester keeps
+  it until answered: a finish meanwhile parks it, its activity reading
+  `Kept by question: 3`; a question that ends unanswered (its asked
+  task ends, or it is cancelled) lifts the keep, `Question ended
+  unanswered: 3`.
 - **Held:** a held task runs no more until someone decides. Its hold
   has a reason (out of tries, stopped, its deadline passed, an
   insufficient budget, an effect whose outcome is uncertain, among
