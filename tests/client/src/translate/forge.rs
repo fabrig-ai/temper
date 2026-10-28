@@ -401,7 +401,6 @@ fn delivered_document(
 
 /// # Errors
 /// Returns every request belonging to another owner unchanged.
-#[expect(clippy::too_many_lines, reason = "one exhaustive delivery translation, including whole forge documents")]
 pub fn incoming(
     transport: &mut Transport,
     request: engine::Request,
