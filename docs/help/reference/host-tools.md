@@ -11,7 +11,7 @@ Have one goal in your words tracked and reported; it may plan, ask you and call 
 A write.
 
 - `words`: text; required.
-- `advisor`: true or false; optional.
+- `advisor`: true or false; optional. Set only by a goal, for a survey that changes nothing; a chat agreeing a plan leaves it unset.
 
 ## change
 
