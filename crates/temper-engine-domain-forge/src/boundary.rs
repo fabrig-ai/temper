@@ -705,8 +705,10 @@ pub enum Operation {
     Verdict,
     Merge,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LandingHeard {
+    /// Live landings waiting prepared on a member of another live landing.
+    pub kept: Box<[u64]>,
     pub released: bool,
     pub cancelled: bool,
 }

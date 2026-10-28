@@ -20,7 +20,8 @@ fn changes(domain: &Domain, env: &Env<Limits>, task: u64) -> Box<[u64]> {
     domain.forge.joined_changes(repository.project, task, graph.as_slice())
 }
 
-/// Only dependencies inside the admitted closure cease keeping readiness.
+/// Joined dependencies and dependencies between live cross-repository landings
+/// permit readiness; the latter keep only the dependent landing's turn.
 /// Jig still orders the change tasks' successful results (domain/landing.md, 4.1).
 pub(super) fn kept(domain: &Domain, env: &Env<Limits>, task: u64) -> bool {
     let Some(row) = domain.core.tasks.task(task) else { return false };
@@ -28,15 +29,41 @@ pub(super) fn kept(domain: &Domain, env: &Env<Limits>, task: u64) -> bool {
         return false;
     }
     let joined = changes(domain, env, task);
-    if joined.len() > usize::try_from(env.limits.forge.landing_members).expect("member bound") {
+    let fits = joined.len() <= usize::try_from(env.limits.forge.landing_members).expect("member bound");
+    for dependency in &row.waiting_on {
+        if (fits && joined.contains(dependency)) || landing_dependency(domain, task, *dependency) {
+            continue;
+        }
         return true;
     }
-    for dependency in &row.waiting_on {
-        if !joined.contains(dependency) {
-            return true;
-        }
-    }
     false
+}
+
+fn landing_dependency(domain: &Domain, task: u64, dependency: u64) -> bool {
+    let Some(change) = domain.forge.change(task) else { return false };
+    let Some(upstream) = domain.forge.change(dependency) else { return false };
+    if change.repository == upstream.repository {
+        return false;
+    }
+    let Some(landing) = change.change.landing else { return false };
+    let Some(other) = upstream.change.landing else { return false };
+    if landing == other {
+        return true;
+    }
+    let Some(row) = domain.forge.landing(landing) else { return false };
+    let Some(other) = domain.forge.landing(other) else { return false };
+    if row.landing.project != other.landing.project {
+        return false;
+    }
+    match other.landing.phase {
+        landing::Phase::Landed | landing::Phase::Cancelled => false,
+        landing::Phase::Waiting
+        | landing::Phase::Preparing
+        | landing::Phase::Proving
+        | landing::Phase::Proved { .. }
+        | landing::Phase::Turn { .. }
+        | landing::Phase::Held { .. } => true,
+    }
 }
 
 pub(super) fn landed_step_due(domain: &Domain, task: u64) -> bool {
@@ -90,16 +117,21 @@ fn member(domain: &Domain, env: &Env<Limits>, task: u64) -> Option<landing::Memb
 /// A creation or amendment joins its closure before its next change step.
 pub(super) fn join_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
     let joined = changes(domain, env, task);
-    let mut target = None;
+    let mut targets = List::with_capacity(env.limits.forge.landings);
     for change in &joined {
         if let Some(row) = domain.forge.change(*change)
             && let Some(landing) = row.change.landing
+            && !targets.as_slice().contains(&landing)
         {
-            target = Some(landing);
-            break;
+            targets.push(landing).expect("bounded landing closure");
         }
     }
-    let Some(target) = target else { return };
+    let Some(target) = targets.as_slice().first().copied() else { return };
+    if targets.len() > 1 {
+        for landing in &targets {
+            domain.work.push(Work::Tasks(tasks::Event::WakeProcedure { task: *landing }));
+        }
+    }
     let mut after = List::with_capacity(env.limits.forge.landing_members);
     for change in &joined {
         let unjoined = match domain.forge.change(*change) {
@@ -190,17 +222,51 @@ pub(super) fn start_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
     }));
 }
 
+// Dependencies joining two existing landings order their turns, not their proofs.
+fn kept_landings(domain: &Domain, env: &Env<Limits>, project: u32) -> Box<[u64]> {
+    let mut kept = List::with_capacity(env.limits.forge.landings);
+    for repository in domain.forge.writable_repositories(project) {
+        for task in domain.forge.changes_for(repository.provider, env.limits.forge.changes) {
+            let Some(change) = domain.forge.change(task) else { continue };
+            let Some(landing) = change.change.landing else { continue };
+            let Some(row) = domain.core.tasks.task(task) else { continue };
+            for dependency in &row.waiting_on {
+                let Some(upstream) = domain.forge.change(*dependency) else { continue };
+                let Some(other) = upstream.change.landing else { continue };
+                if other == landing {
+                    continue;
+                }
+                let Some(other) = domain.forge.landing(other) else { continue };
+                match other.landing.phase {
+                    landing::Phase::Landed | landing::Phase::Cancelled => continue,
+                    landing::Phase::Waiting
+                    | landing::Phase::Preparing
+                    | landing::Phase::Proving
+                    | landing::Phase::Proved { .. }
+                    | landing::Phase::Turn { .. }
+                    | landing::Phase::Held { .. } => {}
+                }
+                if !kept.as_slice().contains(&landing) {
+                    kept.push(landing).expect("bounded landings");
+                }
+            }
+        }
+    }
+    kept.into_boxed()
+}
+
 #[expect(clippy::match_like_matches_macro, reason = "the foundation requires explicit matching")]
-pub(crate) fn start_landing_step(domain: &mut Domain, _env: &Env<Limits>, context: &tasks::RunContext) {
+pub(crate) fn start_landing_step(domain: &mut Domain, env: &Env<Limits>, context: &tasks::RunContext) {
     let task = context.task;
     let Some(row) = domain.forge.landing(task) else { return };
+    let kept = kept_landings(domain, env, row.landing.project);
     let released = if let landing::Phase::Held { .. } = row.landing.phase { true } else { false };
     let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return };
     domain.forge.offered_landing(task);
     domain.work.push(Work::Forge(forge::Event::StepLanding {
         task,
         entry,
-        heard: forge::LandingHeard { released, cancelled: false },
+        heard: forge::LandingHeard { released, cancelled: false, kept },
     }));
 }
 

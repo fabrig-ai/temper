@@ -64,7 +64,7 @@ pub fn step_landing(world: &mut World, task: u64, entry: u64) -> landing::Decisi
     world.event(top::Event::StepLanding {
         task,
         entry,
-        heard: top::LandingHeard { released: false, cancelled: false },
+        heard: top::LandingHeard { released: false, cancelled: false, kept: Box::new([]) },
     });
     world.run_for(1);
     let mut decision = None;

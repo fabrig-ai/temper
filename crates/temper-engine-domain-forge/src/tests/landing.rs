@@ -65,7 +65,11 @@ fn landing_merge_carries_coherent_evidence_and_veto_withdraws_it() {
     outputs(&mut d, Event::Landing { row });
     outputs(
         &mut d,
-        Event::StepLanding { task: 61, entry: 91, heard: LandingHeard { released: false, cancelled: false } },
+        Event::StepLanding {
+            task: 61,
+            entry: 91,
+            heard: LandingHeard { released: false, cancelled: false, kept: Box::new([]) },
+        },
     );
     fixtures::answer_next(&mut d, Ok(Answer::Commit(fixtures::HEAD)));
     fixtures::answer_next(&mut d, Ok(Answer::Commit(fixtures::BASE)));
@@ -292,7 +296,11 @@ fn cancelling_the_last_member_cancels_its_landing_without_reading_the_missing_br
     assert!(d.landing(61).expect("landing").landing.members.is_empty());
     let requests = outputs(
         &mut d,
-        Event::StepLanding { task: 61, entry: 92, heard: LandingHeard { released: false, cancelled: false } },
+        Event::StepLanding {
+            task: 61,
+            entry: 92,
+            heard: LandingHeard { released: false, cancelled: false, kept: Box::new([]) },
+        },
     );
     assert!(requests.contains(&Request::LandingDecision {
         task: 61,
@@ -344,16 +352,22 @@ fn an_upstream_join_and_a_member_leaving_remap_the_live_effects() {
         Box::new([LandingEntry { entry: 91, member: 0, gate: 0, operation: Operation::Dispatch }]);
     d.landing.results.insert((61, 0, 0, 1), policy::Status::Pending).expect("result room");
     d.landing.keys.insert((61, 0, 0), (fixtures::HEAD, key)).expect("key room");
+    d.landing.keys.insert((62, 0, 0), (fixtures::HEAD, key)).expect("other landing key room");
+    d.landing.results.insert((61, 0, 0, 5), policy::Status::Passed).expect("merge result room");
     outputs(&mut d, Event::JoinLanding { task: 61, member, after: Box::new([]) });
     let row = d.landing(61).expect("joined landing");
     assert_eq!(row.landing.members[0].change, OTHER_CHANGE);
     assert_eq!(row.entries[0].member, 1);
     assert_eq!(d.landing.results.get(&(61, 1, 0, 1)), Some(&policy::Status::Pending));
     assert_eq!(d.landing.keys.get(&(61, 1, 0)), Some(&(fixtures::HEAD, key)));
+    assert_eq!(d.landing.keys.get(&(62, 0, 0)), Some(&(fixtures::HEAD, key)));
+    assert_eq!(d.landing.results.get(&(61, 1, 0, 5)), Some(&policy::Status::Passed));
     outputs(&mut d, Event::SettleEffects { task: OTHER_CHANGE, root: OTHER_CHANGE, ending: ReleaseEnding::Cancelled });
     let row = d.landing(61).expect("remaining landing");
     assert_eq!(row.landing.members[0].change, fixtures::CHANGE);
     assert_eq!(row.entries[0].member, 0);
     assert_eq!(d.landing.results.get(&(61, 0, 0, 1)), Some(&policy::Status::Pending));
     assert_eq!(d.landing.keys.get(&(61, 0, 0)), Some(&(fixtures::HEAD, key)));
+    assert_eq!(d.landing.keys.get(&(62, 0, 0)), Some(&(fixtures::HEAD, key)));
+    assert_eq!(d.landing.results.get(&(61, 0, 0, 5)), Some(&policy::Status::Passed));
 }

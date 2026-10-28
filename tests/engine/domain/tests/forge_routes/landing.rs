@@ -338,6 +338,10 @@ struct Pair {
 }
 
 fn turn_chat() -> (World, engine::Assignment) {
+    turn_chat_with_library_gate(None)
+}
+
+fn turn_chat_with_library_gate(library_gate_latency: Option<Duration>) -> (World, engine::Assignment) {
     let mut world = World::configured_limits(
         true,
         true,
@@ -345,7 +349,7 @@ fn turn_chat() -> (World, engine::Assignment) {
         1000,
         Gate::default(),
         None,
-        StoryLimits { turn: true, across: true, ..StoryLimits::default() },
+        StoryLimits { turn: true, across: true, library_gate_latency, ..StoryLimits::default() },
     );
     world.adopt();
     adopt_library(&mut world);
@@ -356,8 +360,8 @@ fn turn_chat() -> (World, engine::Assignment) {
     (world, chat)
 }
 
-fn pair_producers(same_repository: bool) -> Pair {
-    let (mut world, chat) = turn_chat();
+fn pair_producers(same_repository: bool, library_gate_latency: Option<Duration>) -> Pair {
+    let (mut world, chat) = turn_chat_with_library_gate(library_gate_latency);
     let upstream_name = if same_repository { b"org/repo".as_slice() } else { b"org/lib".as_slice() };
     let (a, producer_a) = make_change(&mut world, &chat, 95, upstream_name);
     let (b, producer_b) = make_change(&mut world, &chat, 96, b"org/repo");
@@ -386,7 +390,11 @@ fn add_dependency(world: &mut World, chat: &engine::Assignment, a: u64, b: u64) 
 }
 
 fn pushed_pair(same_repository: bool) -> Pair {
-    let Pair { mut world, chat, a, b, producer_a, producer_b } = pair_producers(same_repository);
+    pushed_pair_with_library_gate(same_repository, None)
+}
+
+fn pushed_pair_with_library_gate(same_repository: bool, latency: Option<Duration>) -> Pair {
+    let Pair { mut world, chat, a, b, producer_a, producer_b } = pair_producers(same_repository, latency);
     let upstream_name = if same_repository { b"org/repo".as_slice() } else { b"org/lib".as_slice() };
     push_change(&mut world, &producer_a, upstream_name);
     push_change(&mut world, &producer_b, b"org/repo");
@@ -599,7 +607,61 @@ fn a_dependency_amendment_joins_a_landing_already_proving() {
 }
 
 #[test]
-#[ignore = "T9 needs jig admission of joined changes with creation-time dependencies"]
+fn a_dependency_between_two_live_landings_keeps_the_later_waiting_until_the_first_lands() {
+    let Pair { mut world, chat, a, b, producer_a, producer_b } =
+        pushed_pair_with_library_gate(false, Some(Duration::from_secs(120)));
+    finish_producer(&mut world, &producer_a, LIB);
+    finish_producer(&mut world, &producer_b, forge_world::REPO);
+    for _ in 0..PAIR_TICKS {
+        world.tick();
+        if landing_rows(&world).len() == 2 {
+            break;
+        }
+    }
+    assert_eq!(landing_rows(&world).len(), 2);
+    let ids = landing_rows(&world).iter().map(|row| row.landing.task).collect::<Vec<_>>();
+    assert!(landing_rows(&world).iter().all(|row| row.landing.members.len() == 1));
+    add_dependency(&mut world, &chat, a, b);
+    let mut proved_while_waiting = false;
+    for _ in 0..PAIR_TICKS {
+        world.tick();
+        let rows = landing_rows(&world);
+        assert_eq!(rows.iter().map(|row| row.landing.task).collect::<Vec<_>>(), ids);
+        assert!(rows.iter().all(|row| row.landing.members.len() == 1));
+        let upstream = rows.iter().find(|row| row.landing.members[0].change == a).expect("upstream landing");
+        let downstream = rows.iter().find(|row| row.landing.members[0].change == b).expect("downstream landing");
+        let upstream_read_back = upstream.landing.members[0].landed.is_some();
+        if !upstream_read_back {
+            assert!(
+                !world
+                    .repository_writes
+                    .iter()
+                    .any(|(repo, write)| *repo == forge_world::REPO && matches!(write, api::Write::Merge { .. })),
+                "dependent merge waits for upstream readback"
+            );
+            assert!(!matches!(downstream.landing.phase, forge_top::LandingPhase::Turn { .. }));
+            if matches!(downstream.landing.phase, forge_top::LandingPhase::Proved { .. }) {
+                proved_while_waiting = true;
+                assert!(world.repository_writes.iter().any(|(repo, write)|
+                    *repo == forge_world::REPO && matches!(write, api::Write::Dispatch { .. })));
+            }
+        }
+        if ended(&world, a) && ended(&world, b) {
+            break;
+        }
+    }
+    assert!(proved_while_waiting, "dependent proves before upstream lands: {:?}", landing_rows(&world));
+    assert!(ended(&world, a) && ended(&world, b));
+    let merges = world
+        .repository_writes
+        .iter()
+        .filter_map(|(repo, write)| if matches!(write, api::Write::Merge { .. }) { Some(*repo) } else { None })
+        .collect::<Vec<_>>();
+    assert_eq!(merges, [LIB, forge_world::REPO]);
+}
+
+#[test]
+#[ignore = "jig: a declared procedure made with a pending dependency starts kept (connectors.md 6.1); J0 builds it, T14 un-ignores this"]
 fn a_change_created_with_a_dependency_joins_before_production() {
     let (mut world, chat) = turn_chat();
     let (a, producer_a) = make_change(&mut world, &chat, 95, b"org/lib");

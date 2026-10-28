@@ -450,28 +450,49 @@ fn remap_members(d: &mut Domain, row: &mut LandingRow, prior: &LandingRow) {
         }
     }
     row.entries = entries.into_boxed();
-    let capacity = d.landing.keys.capacity();
-    let keys = core::mem::replace(&mut d.landing.keys, Map::with_capacity(capacity));
-    for ((task, member, gate), value) in &keys {
-        let position = if *task == row.landing.task { member_position(row, prior, *member) } else { Some(*member) };
-        if let Some(member) = position {
-            d.landing.keys.insert((*task, member, *gate), *value).expect("bounded keys");
+    // Move only this landing's values out before assigning new positions.
+    // The scratch lists live for this step and are bounded by its members.
+    let members = u32::try_from(prior.landing.members.len()).expect("member count");
+    let gates = d.landing.limits.gates;
+    let slots = members.checked_mul(gates).expect("gate slots");
+    let mut keys = List::with_capacity(slots);
+    let mut faults = List::with_capacity(slots);
+    let result_slots = slots.checked_mul(4).expect("gate result slots").checked_add(members).expect("result slots");
+    let mut results = List::with_capacity(result_slots);
+    for old in 0..members {
+        let old = u16::try_from(old).expect("member position");
+        for gate in 0..gates {
+            let gate = u16::try_from(gate).expect("gate position");
+            let key = (row.landing.task, old, gate);
+            if let Some(value) = d.landing.keys.remove(&key) {
+                keys.push((old, gate, value)).expect("member keys");
+            }
+            if let Some(value) = d.landing.faults.remove(&key) {
+                faults.push((old, gate, value)).expect("member faults");
+            }
+            for operation in 1..=4 {
+                if let Some(value) = d.landing.results.remove(&(row.landing.task, old, gate, operation)) {
+                    results.push((old, gate, operation, value)).expect("member results");
+                }
+            }
+        }
+        if let Some(value) = d.landing.results.remove(&(row.landing.task, old, 0, 5)) {
+            results.push((old, 0, 5, value)).expect("member merge result");
         }
     }
-    let capacity = d.landing.results.capacity();
-    let results = core::mem::replace(&mut d.landing.results, Map::with_capacity(capacity));
-    for ((task, member, gate, operation), value) in &results {
-        let position = if *task == row.landing.task { member_position(row, prior, *member) } else { Some(*member) };
-        if let Some(member) = position {
-            d.landing.results.insert((*task, member, *gate, *operation), *value).expect("bounded results");
+    for (old, gate, value) in keys.into_boxed() {
+        if let Some(member) = member_position(row, prior, old) {
+            d.landing.keys.insert((row.landing.task, member, gate), value).expect("bounded keys");
         }
     }
-    let capacity = d.landing.faults.capacity();
-    let faults = core::mem::replace(&mut d.landing.faults, Map::with_capacity(capacity));
-    for ((task, member, gate), value) in &faults {
-        let position = if *task == row.landing.task { member_position(row, prior, *member) } else { Some(*member) };
-        if let Some(member) = position {
-            d.landing.faults.insert((*task, member, *gate), value.clone()).expect("bounded faults");
+    for (old, gate, operation, value) in results.into_boxed() {
+        if let Some(member) = member_position(row, prior, old) {
+            d.landing.results.insert((row.landing.task, member, gate, operation), value).expect("bounded results");
+        }
+    }
+    for (old, gate, value) in faults.into_boxed() {
+        if let Some(member) = member_position(row, prior, old) {
+            d.landing.faults.insert((row.landing.task, member, gate), value).expect("bounded faults");
         }
     }
 }
@@ -1051,7 +1072,7 @@ fn collect(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out:
 fn result(d: &Domain, task: u64, member: u16, gate: u16, operation: u8) -> policy::Status {
     d.landing.results.get(&(task, member, gate, operation)).copied().unwrap_or(policy::Status::Unknown)
 }
-fn turn(d: &Domain, project: u32) -> (bool, Option<u64>) {
+fn turn(d: &Domain, project: u32, kept: &[u64]) -> (bool, Option<u64>) {
     let mut proved = List::with_capacity(d.landing.limits.landings);
     let mut free = true;
     for (_, row) in &d.landing.rows {
@@ -1061,7 +1082,9 @@ fn turn(d: &Domain, project: u32) -> (bool, Option<u64>) {
         match row.landing.phase {
             policy::Phase::Turn { .. } => free = false,
             policy::Phase::Proved { at } => {
-                proved.push(policy::Proved { task: row.landing.task, at }).expect("bounded landings");
+                if !kept.contains(&row.landing.task) {
+                    proved.push(policy::Proved { task: row.landing.task, at }).expect("bounded landings");
+                }
             }
             policy::Phase::Waiting
             | policy::Phase::Preparing
@@ -1113,7 +1136,7 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
             );
         }
     }
-    let (free, first) = turn(d, row.landing.project);
+    let (free, first) = turn(d, row.landing.project, &p.heard.kept);
     let facts = policy::Facts {
         members: p.facts.clone(),
         turn_free: free,
@@ -1291,15 +1314,12 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
         }
         policy::Decision::Proved => {
             save(d, row.clone(), out);
-            let (free, first) = turn(d, row.landing.project);
+            let (free, first) = turn(d, row.landing.project, &p.heard.kept);
             if free && let Some(first) = first {
-                let mut selected = d.landing.rows.get(&first).expect("proved landing").clone();
-                if let policy::Phase::Proved { at } = selected.landing.phase {
-                    selected.landing.phase = policy::Phase::Turn { at };
-                }
-                save(d, selected.clone(), out);
                 if first == p.task {
-                    row = selected;
+                    if let policy::Phase::Proved { at } = row.landing.phase {
+                        row.landing.phase = policy::Phase::Turn { at };
+                    }
                 } else {
                     emit(out, Request::WakeProcedure { task: first });
                 }
@@ -1328,9 +1348,11 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
         reset_results(d, &row, &prior);
     }
     let project = row.landing.project;
+    let released_turn =
+        crate::views::matches_turn(&prior.landing.phase) && !crate::views::matches_turn(&row.landing.phase);
     save(d, row, out);
-    if decision != policy::Decision::Proved {
-        assign_turn(d, project, out);
+    if released_turn {
+        wake_proved(d, project, out);
     }
     emit(out, Request::LandingDecision { task: p.task, decision, entry: committed, evidence });
 }
@@ -1854,24 +1876,26 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
             .checked_add(u64::try_from(size_of::<change::State>()).ok()?.checked_mul(16)?)?,
     )?;
     let pending = trees
+        .checked_add(u64::from(l.landings).checked_mul(8)?)?
         .checked_add(evidence.checked_mul(3)?)?
         .checked_add(walker)?
         .checked_add(u64::from(l.key_entries).checked_mul(64 + u64::from(l.name_bytes))?)?
         .checked_add(u64::from(l.key_path_bytes).checked_mul(3)?)?
         .checked_add(member_facts.checked_mul(2)?)?
         .checked_add(u64::from(slots).checked_mul(u64::try_from(size_of::<ReceiptKey>()).ok()?.checked_add(32)?)?)?;
-    // A join or leave rebuilds the positional maps while their prior values
-    // still live. Fault followers own their bounded write/read payloads too.
-    let remapping = Map::<Position, (api::Commit, policy::Key)>::worst_case(slots)?
-        .checked_add(Map::<Position, runs::Follow>::worst_case(slots)?)?
-        .checked_add(Map::<(u64, u16, u16, u8), policy::Status>::worst_case(result_slots(l)?)?)?
+    // Step-local remapping moves this landing's values; follower payloads
+    // remain owned once and are already priced with the live tables below.
+    let member_slots = l.landing_members.checked_mul(l.gates)?;
+    let remapping = u64::from(member_slots)
+        .checked_mul(
+            u64::try_from(size_of::<(u16, u16, (api::Commit, policy::Key))>())
+                .ok()?
+                .checked_add(u64::try_from(size_of::<(u16, u16, runs::Follow)>()).ok()?)?
+                .checked_add(u64::try_from(size_of::<(u16, u16, u8, policy::Status)>()).ok()?.checked_mul(4)?)?,
+        )?
         .checked_add(
-            u64::from(slots).checked_mul(
-                u64::from(l.client.op_bytes)
-                    .checked_mul(6)?
-                    .checked_add(u64::from(l.client.answer_bytes).checked_mul(2)?)?
-                    .checked_add(32)?,
-            )?,
+            u64::from(l.landing_members)
+                .checked_mul(u64::try_from(size_of::<(u16, u16, u8, policy::Status)>()).ok()?)?,
         )?
         .checked_add(u64::from(l.changes).checked_mul(24)?)?;
     Map::<u64, LandingRow>::worst_case(l.landings)?
@@ -1902,15 +1926,15 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<(u64, u16, u16, u8), policy::Status>::worst_case(result_slots(l)?)?)
 }
 
-fn assign_turn(d: &mut Domain, project: u32, out: &mut Queue<Request>) {
-    let (free, first) = turn(d, project);
-    if free && let Some(task) = first {
-        let mut row = d.landing.rows.get(&task).expect("proved landing").clone();
-        if let policy::Phase::Proved { at } = row.landing.phase {
-            row.landing.phase = policy::Phase::Turn { at };
+fn wake_proved(d: &mut Domain, project: u32, out: &mut Queue<Request>) {
+    // Permission is refreshed by the root at the next authorized step.
+    // Never grant another landing a turn using this step's dependency snapshot.
+    for (task, row) in &d.landing.rows {
+        if row.landing.project == project
+            && let policy::Phase::Proved { .. } = row.landing.phase
+        {
+            emit(out, Request::WakeProcedure { task: *task });
         }
-        save(d, row, out);
-        emit(out, Request::WakeProcedure { task });
     }
 }
 fn reset_results(d: &mut Domain, row: &LandingRow, prior: &LandingRow) {
@@ -2017,7 +2041,7 @@ pub(crate) fn refresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request
         }
     }
     for task in tasks.into_boxed() {
-        step(d, env, task, 0, LandingHeard { released: false, cancelled: false }, out);
+        step(d, env, task, 0, LandingHeard { released: false, cancelled: false, kept: Box::new([]) }, out);
     }
 }
 
@@ -2241,7 +2265,7 @@ pub(crate) fn closing(d: &mut Domain, task: u64, ending: crate::ReleaseEnding, o
         }
         let project = row.landing.project;
         save(d, row, out);
-        assign_turn(d, project, out);
+        wake_proved(d, project, out);
         wake_project_ready(d, project, out);
     } else if let Some(change) = d.changes.get(&task)
         && let Some(landing) = change.change.landing
@@ -2259,7 +2283,7 @@ pub(crate) fn closing(d: &mut Domain, task: u64, ending: crate::ReleaseEnding, o
         let project = row.landing.project;
         save(d, row, out);
         emit(out, Request::WakeProcedure { task: landing });
-        assign_turn(d, project, out);
+        wake_proved(d, project, out);
     }
 }
 

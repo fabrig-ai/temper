@@ -77,6 +77,7 @@ pub struct World {
 pub struct StoryLimits {
     pub turn: bool,
     pub across: bool,
+    pub library_gate_latency: Option<Duration>,
     pub landing_members: Option<u32>,
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
@@ -215,8 +216,17 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members, across } =
-            timing;
+        let StoryLimits {
+            brief,
+            stall,
+            spec_bytes,
+            result_bytes,
+            forge_charter,
+            turn,
+            landing_members,
+            across,
+            library_gate_latency,
+        } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -653,6 +663,13 @@ impl World {
         };
         fake::repository(&mut fake, &fake_config, setup.clone());
         if across {
+            let mut setup = setup;
+            if let Some(latency) = library_gate_latency {
+                for workflow in &mut setup.workflows {
+                    workflow.latency_min = latency;
+                    workflow.latency_max = latency;
+                }
+            }
             fake::repository(
                 &mut fake,
                 &fake_config,
