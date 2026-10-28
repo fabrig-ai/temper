@@ -270,7 +270,7 @@ fn a_repairs_pull_section_names_its_pull_request_before_its_contents() {
         panic!("pull read: {started:?}")
     };
     let owner = *owner;
-    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    let mut out = Queue::uncapped();
     let item = skein_forge::api::Summary {
         labels: Box::new([]),
         kind: skein_forge::api::Kind::Pull,
@@ -336,7 +336,7 @@ fn remarks_section(remarks: &[u8], budget: u32) -> Box<[u8]> {
     let [Request::BriefClient { event: skein_forge_client::Event::Read { owner, .. } }] = started.as_ref() else {
         panic!("review read: {started:?}")
     };
-    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    let mut out = Queue::uncapped();
     assert!(brief::brief_answer(&mut d, *owner, Ok(Answer::Reviews { reviews: Box::new([]), more: false }), &mut out));
     take(&mut d)
 }
