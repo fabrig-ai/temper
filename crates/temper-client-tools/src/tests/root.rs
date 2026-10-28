@@ -134,3 +134,95 @@ fn every_call_handle_uses_its_prefix_under_one_owner() {
         assert_eq!(handle, client::Handle { asker: super::RUNNER.asker(), number: (u64::from(prefix) << 32u32) | 1 });
     }
 }
+
+// A delayed read and the previous act's answer can arrive in the same
+// client batch, leaving owner requests queued beside client retirements.
+fn queued_owner_outputs(
+    root: &mut fixtures::Harness,
+    previous: u32,
+    follow_on: u32,
+) -> skein_lib::Queue<super::Request> {
+    let (read, _) = root.reads.remove(&follow_on).expect("follow-on read pending");
+    let (attempt, _, _) = root.sends.get(&previous).expect("previous act sent");
+    let env = skein_lib::Env {
+        now: root.now,
+        wall: root.wall,
+        limits: super::Limits::new(root.limits.domain, root.limits.tools),
+    };
+    let mut client = skein_lib::Queue::uncapped();
+    let mut child = skein_lib::Queue::uncapped();
+    let mut out = skein_lib::Queue::uncapped();
+    root.root.client.step(
+        root.now,
+        root.wall,
+        client::Event::Up {
+            up: client::Up::ReadDone {
+                read,
+                result: client::Readout::Jig(fixtures::task_result(fixtures::offered(&[c::ActKind::Message]))),
+            },
+        },
+        &mut client,
+    );
+    // Route the completed read to its owner, retaining that owner's follow-on
+    // outputs until the previous act's terminal is ready beside them.
+    while let Some(request) = client.pop() {
+        match request {
+            client::Request::Told { told } => super::route(&mut root.root, &env, told, &mut child, &mut out),
+            request => out.push(super::Request::Client { request }),
+        }
+    }
+    root.root.client.step(
+        root.now,
+        root.wall,
+        client::Event::Up {
+            up: client::Up::Answer {
+                attempt: *attempt,
+                envelope: skein_lib::RequestEnvelope::Final,
+                answer: Some(client::Answered::Jig(c::Answer::Done(c::Outcome::Changed))),
+                why: None,
+            },
+        },
+        &mut client,
+    );
+    super::drain(&mut root.root, &env, &mut client, &mut child, &mut out);
+    root.root.changed();
+    out
+}
+
+#[test]
+fn a_follow_on_named_request_waits_for_the_previous_erase() {
+    const NAMED_CALLS: u32 = 2; // The previous act and its follow-on.
+    let (mut root, previous) = fixtures::message();
+    let follow_on = root.submit(fixtures::MESSAGE_CALL);
+    // Fill the remaining admitted-call quota with reads that stay pending.
+    for _ in NAMED_CALLS..root.limits.tools.rows {
+        root.submit(fixtures::TASK_CALL);
+    }
+    let out = queued_owner_outputs(&mut root, previous, follow_on);
+    let mut erased = false;
+    let mut saved = false;
+    for request in &out {
+        match request {
+            super::Request::Client { request: client::Request::Down { down: client::Down::Erase { .. } } } => {
+                erased = true
+            }
+            super::Request::Client { request: client::Request::Down { down: client::Down::Save { record } } } => {
+                assert!(erased, "previous erase leaves before the follow-on named request");
+                assert_eq!(record.key, fixtures::named("port-answer"));
+                saved = true;
+            }
+            super::Request::Printed { number, .. } if *number == previous => {
+                assert!(erased, "previous erase leaves before its result permits another named call");
+            }
+            _ => {}
+        }
+    }
+    assert!(erased && saved, "both the retirement and the new request leave");
+    root.serving = Some(follow_on);
+    root.outputs(out);
+    root.serving = None;
+    root.done(follow_on, c::Outcome::Changed);
+    assert_eq!(root.answer(previous).expect("previous call answered once").status, 0);
+    assert_eq!(root.answer(follow_on).expect("follow-on call answered once").status, 0);
+    assert!(root.answer(previous).is_none() && root.answer(follow_on).is_none());
+}
