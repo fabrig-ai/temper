@@ -275,6 +275,8 @@ impl Driver {
                 && self.store.pending.is_empty()
                 && self.forge.as_ref().is_none_or(crate::forge_stand::ForgeStand::quiescent)
             {
+                // A stopped root is never quiescent: Domain::quiescent requires ready(),
+                // false once the journal stops. Bytes it drops uncounted never reach this check.
                 assert_eq!(self.root.held_bytes(), 0, "a quiescent root holds no transcript or turn bytes");
                 return;
             }
