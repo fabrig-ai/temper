@@ -2816,9 +2816,9 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
         drop_procedure_step(domain, task);
         return;
     };
-    if connector != domain.config.forge_connector || code != CHANGE_CODE || (offered.is_some() && offered != Some(step)) {
+    if connector != domain.config.forge_connector || code != CHANGE_CODE || (offered.is_some() && offered != Some(step))
+    {
         drop_procedure_step(domain, task);
-
         return;
     }
     domain.forge.offered_change(task);
