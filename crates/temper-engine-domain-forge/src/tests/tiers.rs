@@ -688,3 +688,22 @@ fn a_move_while_the_baseline_keys_waits_for_the_next_range() {
     assert!(row.record.run.as_ref().unwrap().landings.is_empty());
     assert_eq!(row.pending.as_ref(), &[TierLanding { commit: MERGE, key: None }]);
 }
+
+#[test]
+fn a_restart_wakes_the_tier_whose_workflow_read_was_lost() {
+    let d = dispatched();
+    let mut row = fixtures::browser(&d).clone();
+    row.flight.as_mut().expect("dispatched workflow").next = None;
+    let mut restored = made_branch();
+    outputs(&mut restored, Event::Restore { record: Stored::Tier(row) });
+    crate::tiers::rebuild(&mut restored);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::restart(&mut restored, &env(), &mut out);
+    let mut woken = false;
+    while let Some(request) = out.pop() {
+        if let Request::WakeProcedure { task: TIER_TASK } = request {
+            woken = true;
+        }
+    }
+    assert!(woken, "the lost workflow read is resumed by its procedure");
+}

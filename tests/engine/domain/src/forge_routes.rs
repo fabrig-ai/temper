@@ -82,6 +82,7 @@ pub struct World {
     pub unsettled: Vec<engine::Unsettled>,
     pub busy_calls: u32,
     pub tier: bool,
+    timing: StoryLimits,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -99,13 +100,15 @@ pub struct StoryLimits {
     pub tier: bool,
     /// Give the signing-in person the project's entire period pool.
     pub reserve_whole_period: bool,
+    /// Ignore one nested file so the key walker must read a directory.
+    pub tier_tree: bool,
 }
 
-fn tier_checks() -> Box<[engine::TierCheck]> {
+fn tier_checks(nested: bool) -> Box<[engine::TierCheck]> {
     Box::new([engine::TierCheck {
         name: b"browser".as_slice().into(),
         workflow: b"browser.yml".as_slice().into(),
-        ignored: Box::new([]),
+        ignored: if nested { Box::new([b"docs/guide.md".as_slice().into()]) } else { Box::new([]) },
         artifact: b"report".as_slice().into(),
         format: temper_engine_domain_forge_tiers::Format::Lines,
     }])
@@ -252,7 +255,18 @@ impl World {
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
         let StoryLimits {
-            brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members, slots, tasks, tier, reserve_whole_period,
+            brief,
+            stall,
+            spec_bytes,
+            result_bytes,
+            forge_charter,
+            turn,
+            landing_members,
+            slots,
+            tasks,
+            tier,
+            reserve_whole_period,
+            tier_tree,
         } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
@@ -282,7 +296,7 @@ impl World {
                             repositories: Box::new([engine::RepositoryChecks {
                                 repository: forge_world::REPO,
                                 gates: Box::new([]),
-                                tiers: tier_checks(),
+                                tiers: tier_checks(tier_tree),
                             }]),
                             after: after_landing(),
                         },
@@ -574,7 +588,7 @@ impl World {
                                         ignored: Box::new([b"docs".as_slice().into()]),
                                         blocking: true,
                                     }]),
-                                    tiers: if tier { tier_checks() } else { Box::new([]) },
+                                    tiers: if tier { tier_checks(tier_tree) } else { Box::new([]) },
                                 }]),
                                 after: after_landing(),
                             },
@@ -845,6 +859,7 @@ impl World {
             unsettled: Vec::new(),
             busy_calls: 0,
             tier,
+            timing,
             merges: 0,
             writes: Vec::new(),
         }
@@ -894,7 +909,7 @@ impl World {
             if self.gate.owner { 0 } else { 1000 },
             self.gate,
             None,
-            StoryLimits { brief: Some(self.env.limits.brief), forge_charter, ..StoryLimits::default() },
+            StoryLimits { brief: Some(self.env.limits.brief), forge_charter, ..self.timing },
         );
         std::mem::swap(&mut self.root, &mut fresh.root);
         std::mem::swap(&mut self.out, &mut fresh.out);
