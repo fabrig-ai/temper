@@ -1110,8 +1110,44 @@ fn invalid_nonfinal_people_restore_page_stops_before_issuing_its_continuation() 
     assert!(driver.events.is_empty(), "failed page did not issue another continuation");
 }
 
+fn loaded_core(driver: &mut Driver) {
+    for _ in 0..100 {
+        if driver.root.restart_step() == Some(jig_domain_core::RestartStep::LoadInbox) {
+            assert!(!driver.stopped && !driver.root.ready());
+            assert!(driver.delivered.is_empty(), "loading cannot activate a child");
+            return;
+        }
+        driver.advance(true);
+    }
+    panic!("core loading reaches its inbox boundary");
+}
+
+fn assert_missing_proof_link(driver: &mut Driver, task: u64) {
+    assert_start_link(driver, &format!("core: Live({task}) links to run proof {task}, which is absent"));
+}
+
+fn assert_start_link(driver: &mut Driver, expected: &str) {
+    let before = driver.store.rows.clone();
+    let header = driver.store.header();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        for _ in 0..100 {
+            driver.advance(true);
+        }
+    }))
+    .expect_err("a missing target is a link assertion");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .expect("link assertion text");
+    assert_eq!(message, expected);
+    assert_eq!(driver.store.rows, before, "no restoration consequence commits before links");
+    assert_eq!(driver.store.header(), header);
+    assert!(driver.delivered.is_empty(), "no effect or result before proof linking");
+}
+
 #[test]
-fn invalid_nonfinal_task_restore_page_stops_before_issuing_its_continuation() {
+fn a_nonfinal_task_restore_page_reaches_its_missing_proof_link() {
     let mut world = World::new(Settings { restart: false, ..Settings::calm(96) });
     world.run();
     let mut record = world
@@ -1126,18 +1162,21 @@ fn invalid_nonfinal_task_restore_page_stops_before_issuing_its_continuation() {
             }
         })
         .expect("ended fixture");
-    record.spec.words = vec![b'x'; 65].into_boxed_slice();
+    record.spec.words = vec![b'x'; 64].into_boxed_slice();
     record.phase = tasks::Phase::Waiting;
     let row = Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(Box::new(record))));
     world.store.seed(Box::new([row]), Box::new([]));
+    let task = world
+        .store
+        .rows
+        .values()
+        .find_map(|row| match row {
+            Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))) => Some(row.number),
+            _ => None,
+        })
+        .expect("seeded live task");
     let mut driver = Driver::new(world.store);
-    for _ in 0..60 {
-        driver.advance(true);
-    }
-    assert!(driver.stopped, "oversized child shape ends startup");
-    assert!(!driver.root.ready());
-    assert!(!driver.root.quiescent());
-    assert!(driver.events.is_empty());
+    assert_missing_proof_link(&mut driver, task);
 }
 
 #[test]
@@ -2739,7 +2778,7 @@ fn calls_under_backpressure_are_handed_back_and_decided_once_on_retry() {
 }
 
 #[test]
-fn invalid_current_proof_stops_before_any_restored_closing_effect_or_result() {
+fn bounded_current_proofs_load_and_a_missing_proof_asserts_before_effects() {
     let (driver, assignment) = running_fixture();
     for corruption in 0..5 {
         let mut store = driver.store.fork();
@@ -2825,18 +2864,18 @@ fn invalid_current_proof_stops_before_any_restored_closing_effect_or_result() {
         let header = store.header();
         let before = store.rows.clone();
         let mut restarted = Driver::new(store);
-        for _ in 0..100 {
-            restarted.advance(true);
+        if corruption == 0 {
+            assert_missing_proof_link(&mut restarted, assignment.task);
+        } else {
+            loaded_core(&mut restarted);
+            assert_eq!(restarted.store.rows, before, "bounded proof facts load unchanged");
+            assert_eq!(restarted.store.header(), header);
         }
-        assert!(restarted.stopped, "corruption {corruption}");
-        assert_eq!(restarted.store.rows, before, "no child restoration consequences committed");
-        assert_eq!(restarted.store.header(), header);
-        assert!(restarted.delivered.is_empty(), "no cancellation/result before root proof validation");
     }
 }
 
 #[test]
-fn root_restore_refuses_malformed_task_shapes() {
+fn root_loads_bounded_task_shapes_and_asserts_missing_charters() {
     let (driver, assignment) = running_fixture();
     for malformed in 0..3 {
         let mut store = driver.store.fork();
@@ -2856,12 +2895,15 @@ fn root_restore_refuses_malformed_task_shapes() {
         store.seed(rows.into_values().collect(), erases);
         let before = store.rows.clone();
         let mut restarted = Driver::new(store);
-        for _ in 0..100 {
-            restarted.advance(true);
+        if malformed == 1 {
+            assert_start_link(
+                &mut restarted,
+                &format!("core: Live({}) links to charter 99 at revision 1, which is absent", assignment.task),
+            );
+        } else {
+            loaded_core(&mut restarted);
+            assert_eq!(restarted.store.rows, before, "loading does not rejudge a bounded task");
         }
-        assert!(restarted.stopped);
-        assert_eq!(restarted.store.rows, before);
-        assert!(restarted.delivered.is_empty());
     }
 }
 
@@ -3073,7 +3115,7 @@ fn release_rejudges_a_still_expired_deadline_and_escalates_the_new_hold() {
 }
 
 #[test]
-fn restored_waiting_rechecks_snapshot_membership_and_same_holder_changes_nothing() {
+fn restored_waiting_preserves_its_holder_across_snapshot_membership_changes() {
     let store = held_waiting_store();
     let rows = store.rows.clone();
     let mut same = held_driver(store);
@@ -3110,11 +3152,15 @@ fn restored_waiting_rechecks_snapshot_membership_and_same_holder_changes_nothing
         }
     }
     store.seed(rows.into_values().collect(), Box::new([]));
+    let before = store.rows.clone();
     let mut changed = held_driver(store);
     changed.settle();
     assert!(!changed.stopped);
-    // Rerouting keeps the hold's revision (jig 00de0b8c).
-    assert!(changed.store.rows.values().any(|row| matches!(row, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(task))) if matches!(task.escalation, tasks::Escalation::Waiting { revision: 1, holder: tasks::EscalationHolder::Role { project: 1, role: 0 }, .. }))));
+    assert_eq!(
+        changed.store.rows,
+        temper_engine_domain_world::store::with_start_mark(before),
+        "restoration preserves the complete escalation, including holder, entry and since"
+    );
     assert!(!changed.delivered.iter().any(|delivery| matches!(
         delivery,
         Delivery::Assigned { .. } | Delivery::SourceSignedOut { .. } | Delivery::Result { .. }
