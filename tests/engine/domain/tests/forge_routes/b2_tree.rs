@@ -282,14 +282,6 @@ fn pushed(world: &mut World, run: &engine::Assignment, turns: u64, head: u64) {
     );
 }
 
-fn landed(world: &World, task: u64) -> bool {
-    world.store.rows.values().any(|stored| {
-        matches!(stored,
-        Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(row)
-            if row.task == task && matches!(row.change.state, temper_engine_domain_forge_change::State::Landed { .. })))
-    })
-}
-
 fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) {
     let change =
         delegated(world, work, engine::Tool::Change { words: b"Small fix".as_slice().into(), repository: None });
@@ -350,7 +342,14 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) 
             cancel_delegates: false,
         },
     );
-    assert!(landed(world, change), "change {change} lands after CI repair and agent approval");
+    assert!(
+        world.store.rows.values().any(|stored| {
+            matches!(stored,
+            Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(row)
+                if row.task == change && merged(&row.change.state).is_some()))
+        }),
+        "change {change} lands after CI repair and agent approval"
+    );
     (change, [producer_task, repair_task, review_task])
 }
 
