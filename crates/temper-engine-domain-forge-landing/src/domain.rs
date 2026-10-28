@@ -22,10 +22,12 @@ pub fn join(mut landing: Landing, member: Member, after: &[u64]) -> Option<Landi
     let mut position = 0;
     for (index, prior) in landing.members.iter().enumerate() {
         if after.contains(&prior.change) {
-            position = index + 1;
+            position = index.checked_add(1).expect("member position fits usize");
         }
     }
-    let mut members = List::with_capacity(u32::try_from(landing.members.len() + 1).expect("bounded members"));
+    let mut members = List::with_capacity(
+        u32::try_from(landing.members.len().checked_add(1).expect("member count fits usize")).expect("bounded members"),
+    );
     for prior in landing.members.get(..position).expect("member position") {
         members.push(prior.clone()).expect("member room");
     }
@@ -161,7 +163,6 @@ fn cancelled(mut landing: Landing, facts: &Facts, limits: &Limits) -> Stepped {
 }
 
 fn preparing(mut landing: Landing, facts: &Facts) -> Stepped {
-    let mut waiting = false;
     for (index, (member, fresh)) in landing.members.iter_mut().zip(&facts.members).enumerate() {
         if member.landed.is_some() {
             continue;
@@ -170,8 +171,7 @@ fn preparing(mut landing: Landing, facts: &Facts) -> Stepped {
             continue;
         }
         if fresh.asked {
-            waiting = true;
-            continue;
+            return wait(landing, None);
         }
         match fresh.contains_main {
             Status::Passed => {
@@ -188,8 +188,7 @@ fn preparing(mut landing: Landing, facts: &Facts) -> Stepped {
             }
             Status::Failed => {
                 if member.asked.is_some() && member.head == Some(fresh.head) && member.base == Some(fresh.main) {
-                    waiting = true;
-                    continue;
+                    return wait(landing, None);
                 }
                 landing.preparation = landing.preparation.checked_add(1).expect("preparation fits u16");
                 member.asked = Some(landing.preparation);
@@ -201,11 +200,8 @@ fn preparing(mut landing: Landing, facts: &Facts) -> Stepped {
                     Decision::Prepare { member: position(index), head: fresh.head, main: fresh.main },
                 );
             }
-            Status::Unknown | Status::Pending => waiting = true,
+            Status::Unknown | Status::Pending => return wait(landing, None),
         }
-    }
-    if waiting {
-        return wait(landing, None);
     }
     landing.phase = Phase::Proving;
     done(landing, Decision::None)

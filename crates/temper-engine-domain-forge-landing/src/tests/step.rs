@@ -526,3 +526,27 @@ fn a_cancelled_member_leaves_and_the_rest_lands() {
     f.members[0].merged = Some(HEAD);
     assert_eq!(decide(&owned.landing, &f).decision, Decision::Finish);
 }
+
+#[test]
+fn an_upstream_preparation_finishes_before_the_downstream_is_asked() {
+    let (mut landing, mut f) = two_members();
+    landing.phase = Phase::Preparing;
+    for member in &mut landing.members {
+        member.head = None;
+        member.base = None;
+        member.candidate = None;
+    }
+    for member in &mut f.members {
+        member.contains_main = Status::Failed;
+    }
+    let upstream = decide(&landing, &f);
+    assert_eq!(upstream.decision, Decision::Prepare { member: 0, head: HEAD, main: MAIN });
+    f.members[0].asked = true;
+    assert_eq!(decide(&upstream.landing, &f).decision, Decision::Wait { until: None });
+    f.members[0].asked = false;
+    f.members[0].head = NEW;
+    f.members[0].contains_main = Status::Passed;
+    let downstream = decide(&upstream.landing, &f);
+    assert_eq!(downstream.landing.members[0].candidate, Some(NEW));
+    assert_eq!(downstream.decision, Decision::Prepare { member: 1, head: HEAD, main: MAIN });
+}
