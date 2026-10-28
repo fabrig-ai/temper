@@ -176,17 +176,19 @@ fn programs_worst_case(programs: &[settings::Program]) -> Option<u64> {
     Some(bytes)
 }
 
-/// The layer's owned queues, processes, values, root and io, as the reference prices them.
+/// The layer's owned queues, values, root and io, excluding smith's host
+/// domain and its processes, which are smith's to bound.
 #[must_use]
 pub fn worker_worst_case(worker: &settings::Worker, agent: &settings::Agent, own: &limits::Limits) -> Option<u64> {
     crate::startup::memory_sum(&memory_terms(worker, agent, own)?)
 }
 /// Root, protocol machines, retained values and the worker's routing storage.
+/// Excludes smith's host domain and its processes, which are smith's to bound.
 pub(crate) fn memory_terms(
     worker: &settings::Worker,
     agent: &settings::Agent,
     own: &limits::Limits,
-) -> Option<[crate::startup::MemoryTerm; 11]> {
+) -> Option<[crate::startup::MemoryTerm; 10]> {
     let prepared = prepare(worker, agent, own).ok()?;
     let jig = &worker.jig;
     let mut command =
@@ -213,11 +215,6 @@ pub(crate) fn memory_terms(
         ("worker.remote", remote),
         ("worker_settings.programs", programs_worst_case(&agent.programs)?),
         ("program_sources", crate::program_sources::worst_case(jig.limits.hub.detail_bytes)?),
-        (
-            "host",
-            host::process_worst_case(&agent.limits, agent.host_limits.detail_bytes)?
-                .checked_mul(u64::from(jig.slots))?,
-        ),
         ("worker.link", link::worst_case(&prepared.link)?),
         (
             "values",

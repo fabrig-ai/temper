@@ -148,7 +148,7 @@ pub fn unfit(limits: &Limits) -> List<Unfit> {
 }
 const UNFIT: u32 = 20;
 
-/// The most memory the domain holds under `limits`, in bytes (6.3), or `None`
+/// The domain estimate under `limits`, in bytes (6.3), or `None`
 /// if it does not fit a `u64` or the limits cannot be honoured: the child
 /// domains' own, or limits under which one child domain would refuse what
 /// another passes it within its own, or a hello that promises what the hub
@@ -165,12 +165,13 @@ const UNFIT: u32 = 20;
 /// must fit a commit message; and the hello's bounds must be within the
 /// hub's inbox and events and smith's turn window.
 ///
-/// It is the child domains', plus what the root keeps: the agents it bound
+/// It counts the hub and checkout, plus what the root keeps: the agents it bound
 /// and their calls in flight with their names and what they ask, the
 /// ends waiting behind hand-outs, a record of each
 /// workspace and the map that finds those being prepared, each run's
 /// workspace items until the engine has its answer, and the bounded facts.
-/// The uncapped inter-child queues are outside this estimate. What the
+/// The uncapped inter-child queues and smith's host domain and its processes
+/// are outside this estimate: smith's memory is smith's to bound. What the
 /// queued requests own is counted where they end up.
 #[must_use]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
@@ -178,9 +179,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     if !unfit(limits).is_empty() {
         return None;
     }
-    let children = host::worst_case(host_limits)?
-        .checked_add(checkout::worst_case(checkout_limits)?)?
-        .checked_add(agent::worst_case(agent_limits)?)?;
+    let children = host::worst_case(host_limits)?.checked_add(checkout::worst_case(checkout_limits)?)?;
     let calls = agent_limits.agents.checked_mul(agent_limits.calls)?;
     let call = host_limits
         .event_bytes
