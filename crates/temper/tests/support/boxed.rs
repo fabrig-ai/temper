@@ -577,7 +577,7 @@ impl<F: FnOnce(&[u8]) -> T, T> Referee<Process> for CtlJudge<'_, F, T> {
                 report_face_stop(calls, binary.stderr(), failed, expired);
                 eprintln!("pending scripted release: {:?}", calls.llm_release());
             }
-            if calls.idle() && !failed && !expired && binary.exit_status().is_none() {
+            if (calls.idle() || failed) && !expired && binary.exit_status().is_none() {
                 self.checked.set(Some(self.check.take().expect("one live check")(binary.stderr())));
             }
             // A held batch keeps its root open for the reply referee. Release

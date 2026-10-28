@@ -122,6 +122,18 @@ impl Engine {
         self.end.is_none() && (self.ready || self.settled_revision != Some(self.domain.revision()))
     }
     pub(crate) fn step(&mut self, event: root::Event) {
+        if let root::Event::Worker(root::WorkerInput::Link {
+            link: root::Link::Up { up: jig_domain_host::LinkUp::Answer { run, attempt, answer }, .. }, ..
+        }) = &event {
+            let detail = match &answer.ending {
+                jig_domain_host::Ending::Refused(why) => Some(alloc::format!("T47 start refusal run {run:?} attempt {attempt:?}: {why:?}\n")),
+                jig_domain_host::Ending::Failed { failure, .. } => Some(alloc::format!("T47 failed run {run:?} attempt {attempt:?}: {failure:?}\n")),
+                _ => None,
+            };
+            if let Some(detail) = detail {
+                let _kept = self.notes.try_push(crate::Note::BoxLink { line: detail.into_bytes().into() });
+            }
+        }
         let watcher = watcher(&event);
         if let Err(event) = root::try_step(&mut self.domain, &self.env, event) {
             self.pending = Some(Box::new(event));

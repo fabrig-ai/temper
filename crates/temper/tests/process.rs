@@ -4750,6 +4750,21 @@ fn a_green_light_answers_the_goals_207_byte_question_from_the_inbox_and_lands_it
         forge_land::plan_face(issuer, scripts, true),
     );
     let stderr = String::from_utf8_lossy(&outcome.stderr);
+    if outcome.calls.iter().any(|call| call.exit != Some(Exit::Code(0))) {
+        eprintln!("long-question fake answers: {:?}", seen.answers);
+        if let Some((chat, goal, _)) = &outcome.checked {
+            eprintln!("long-question chat turns: {chat}; goal turns: {goal}");
+        }
+        for query in seen.requests.iter().rev().filter(|query| query.system.windows(b"@long-plan-goal".len()).any(|part| part == b"@long-plan-goal")).take(2) {
+            for message in &query.messages {
+                for part in &message.parts {
+                    if let skein_fake_llm_domain::api::Part::ToolOutput { output, .. } = part {
+                        eprintln!("long-question goal output: {}", String::from_utf8_lossy(output));
+                    }
+                }
+            }
+        }
+    }
     assert_plan_box("long-question", true, &outcome, &stderr);
     let inbox = String::from_utf8_lossy(&outcome.calls[inbox_at].stdout);
     assert!(inbox.contains("(cut)\nread whole: temper ctl DIR task activity 2\n"), "{inbox}");

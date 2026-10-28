@@ -256,6 +256,7 @@ fn life(root: &Path, restarted: bool) {
         stopped: false,
         settled: false,
         logged: 0,
+        observed_children: std::collections::BTreeSet::new(),
         deadline: clock.now().now.saturating_add(Duration::from_secs(240)),
     });
     world.spawn_with_fds(engine.descriptors(), || Process::Binary(Box::new(engine)));
@@ -298,11 +299,27 @@ struct Judge {
     stopped: bool,
     settled: bool,
     logged: usize,
+    observed_children: std::collections::BTreeSet<u32>,
     deadline: Time,
 }
 impl Referee<Process> for Judge {
     fn act(&mut self, now: Time, procs: &mut [Process]) {
         let Process::Binary(engine) = &procs[0] else { panic!("engine") };
+        if let Some(fd) = engine.descriptors().first()
+            && let Ok(pid) = skein_shell::child_id(*fd)
+        {
+            let mut pending = vec![pid];
+            while let Some(parent) = pending.pop() {
+                let children = fs::read_to_string(format!("/proc/{parent}/task/{parent}/children")).unwrap_or_default();
+                for child in children.split_whitespace().filter_map(|pid| pid.parse::<u32>().ok()) {
+                    if self.observed_children.insert(child) {
+                        let comm = fs::read_to_string(format!("/proc/{child}/comm")).unwrap_or_default();
+                        eprintln!("elsewhere descendant {child} parent {parent}: {}", comm.trim());
+                    }
+                    pending.push(child);
+                }
+            }
+        }
         if engine.exit_status().is_some() && !self.stopped || now >= self.deadline {
             eprintln!("engine stderr: {}", String::from_utf8_lossy(engine.stderr()));
         }

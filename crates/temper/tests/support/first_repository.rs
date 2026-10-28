@@ -376,6 +376,7 @@ pub fn turns(client: &Path, task: &str) -> String {
         let activity = super::ctl::alone(client, Call::new(&arguments));
         assert_eq!(activity.exit, Some(Exit::Code(0)));
         let activity = super::ctl::json(&activity);
+        eprintln!("diagnostic task {task} activity: {activity}");
         for row in activity["rows"].as_array().expect("activity rows") {
             let Some(turn) = row.pointer("/event/owner/source/line/turn") else { continue };
             let name =

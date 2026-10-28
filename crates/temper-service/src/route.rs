@@ -115,6 +115,9 @@ pub(crate) fn request(engine: &mut Engine, request: root::Request) {
         root::Request::Stop => stop::root(engine),
         root::Request::Worker(request) => worker(engine, request),
         root::Request::Party(request) => {
+            if let root::PartyRequest::Deliver(root::Delivery::WebReply { reply: jig_domain_people::Reply::Again(why) | jig_domain_people::Reply::Outcome(jig_domain_people::Outcome::Again(why)), .. }) = &request {
+                let _kept = engine.notes.try_push(crate::Note::BoxLink { line: alloc::format!("T47 client Again {why:?}\n").into_bytes().into() });
+            }
             if let root::PartyRequest::WatchRefused { watcher, .. } = &request
                 && engine.admission == Some(*watcher)
             {

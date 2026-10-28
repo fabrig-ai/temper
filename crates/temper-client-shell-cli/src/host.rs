@@ -50,6 +50,7 @@ enum Waiting {
 }
 /// The shell's one-shot host.
 pub struct OneShot {
+    probe: Vec<String>,
     directory: Directory,
     call: Option<Parsed>,
     class: Class,
@@ -150,6 +151,7 @@ impl OneShot {
             move_file,
             file_end: None,
             recording: None,
+            probe: Vec::new(),
             directory: Directory::new(
                 startup,
                 call.directory.unwrap_or_default(),
@@ -249,6 +251,20 @@ impl OneShot {
         }
     }
     fn root_event(&mut self, event: jig_client::Event) {
+        if let jig_client::Event::Reply { exchange, message } = &event {
+            use jig_client_protocol_wire::v19 as w;
+            let decoded = w::KeyedAnswer::decode(&w::CEILINGS, &mut skein_lib::Reader::new(message));
+            let kind = match decoded {
+                Ok(w::KeyedAnswer::Busy) => "Busy",
+                Ok(w::KeyedAnswer::NotReady) => "NotReady",
+                Ok(w::KeyedAnswer::SignedOut) => "SignedOut",
+                Ok(w::KeyedAnswer::FinalAnswer(_)) => "Final",
+                Ok(w::KeyedAnswer::AnswersFull(_)) => "Full",
+                Ok(w::KeyedAnswer::NotServed(_)) => "NotServed",
+                Err(_) => "Other",
+            };
+            self.probe.push(format!("reply {exchange:?}: {kind}"));
+        }
         root::step(&mut self.root, &self.root_env, root::Event::Client { event }, &mut self.requests);
     }
 
@@ -466,6 +482,15 @@ impl OneShot {
         while let Some(request) = self.requests.pop() {
             match request {
                 root::Request::Client { request } => {
+                    if let jig_client::Request::Exchange { exchange, message, .. } = &request {
+                        let kind = match message {
+                            jig_client::Message::Request(_) => "Request",
+                            jig_client::Message::Read(_) => "Read",
+                            jig_client::Message::Watch(_) => "Watch",
+                            _ => "Other",
+                        };
+                        self.probe.push(format!("post {exchange:?} {kind}, link {:?}", self.root.client().link().state));
+                    }
                     if let Some(signing) = &mut self.signing
                         && let jig_client::Request::Exchange {
                             exchange,
@@ -511,6 +536,12 @@ impl OneShot {
                     self.directory.write_record(&record);
                 }
                 root::Request::Printed { printed, .. } => {
+                    if printed.status != 0 {
+                        eprintln!("T47 ctl probe: {:?}; link {:?}", self.probe, self.root.client().link().state);
+                        if let Some(shell) = self.signing.as_ref().and_then(|s| s.shell.as_ref()) {
+                            eprintln!("T47 ctl shell: {:?}", shell.pending());
+                        }
+                    }
                     self.file_end = Some(printed.file);
                     if self.class == Class::Act {
                         self.recovery.printed = Some(printed);
