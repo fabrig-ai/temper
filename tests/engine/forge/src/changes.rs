@@ -146,6 +146,7 @@ pub fn merged(state: &change::State) -> Option<skein_forge::api::Commit> {
         | change::State::Reopening { .. }
         | change::State::Checking { .. }
         | change::State::Gating { .. }
+        | change::State::CancellingGates { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
         | change::State::Ready { .. }
