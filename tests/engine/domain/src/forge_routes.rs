@@ -94,6 +94,8 @@ pub struct StoryLimits {
     pub forge_charter: Option<u32>,
     /// Configure one after-landing tier for this story.
     pub tier: bool,
+    /// Give the signing-in person the project's entire period pool.
+    pub reserve_whole_period: bool,
 }
 
 fn tier_checks() -> Box<[engine::TierCheck]> {
@@ -246,7 +248,7 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members, tier } = timing;
+        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members, tier, reserve_whole_period } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -473,6 +475,9 @@ impl World {
                     rules.ceiling.delegation.depth = 4;
                 }
                 let mut policy = config.core.seed_projects[0].policy.policy.clone();
+                if reserve_whole_period {
+                    policy.roles[0].period_spend = policy.period_spend;
+                }
                 policy.ceiling.tools = authority::Tools(1023);
                 policy.ceiling.grants.clone_from(&rules.ceiling.grants);
                 policy.projections.clone_from(&rules.ceiling.grants);
