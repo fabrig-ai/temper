@@ -61,7 +61,6 @@ impl Engine {
         let Children { accounts, workers, mut clients, demo, forge, setup, notes, limits: own } = children;
         clients.query_bytes = own.routes.query_bytes;
         let max_out = root::max_out(limits);
-        let capacity = max_out.checked_mul(2).expect("root routing room");
         let credentials = values.identities.numbers();
         let mut domain = match root::Domain::new(config, limits) {
             Ok(domain) => domain,
@@ -89,7 +88,7 @@ impl Engine {
             admission: None,
             facts: 0,
             values,
-            events: Queue::with_capacity(capacity.checked_mul(route_out()).expect("account event room")),
+            events: Queue::uncapped(),
             requests: Queue::with_capacity(max_out),
             end: None,
             listening: Queue::with_capacity(3),
@@ -112,7 +111,6 @@ impl Engine {
             && self.workers.batch_room(self.max_out)
             && self.clients.room(self.max_out)
             && self.clients.commit_room()
-            && self.events.room() >= self.max_out.checked_mul(route_out()).expect("translated root outputs")
             && match &self.accounts {
                 Some(accounts) => accounts.batch_room(self.max_out),
                 None => true,
@@ -544,13 +542,6 @@ fn open_refused(engine: &mut Engine, why: jig_protocol_store::OpenRefusal) {
         why @ OpenRefusal::InFlight { .. } => stop::open(engine, &why),
         why @ OpenRefusal::Check { .. } => stop::open(engine, &why),
     }
-}
-
-pub(crate) fn route_out() -> u32 {
-    skein_oauth_accounts::MAX_OUT_DOWN
-        .above
-        .max(jig_protocol_engine_workers::MAX_OUT_DOWN)
-        .max(jig_protocol_engine_clients::MAX_OUT_DOWN)
 }
 
 fn watcher(event: &root::Event) -> Option<skein_lib::Token> {

@@ -149,7 +149,7 @@ fn refill_keeps_the_first_added_model_bearer_for_each_seed() {
 }
 
 fn step(issuer: &mut issuer::Issuer, event: issuer::Event) -> issuer::Request {
-    let mut out = Queue::with_capacity(issuer::MAX_OUT);
+    let mut out = Queue::uncapped();
     issuer.step(event, &mut out);
     out.pop().expect("one primitive terminal")
 }

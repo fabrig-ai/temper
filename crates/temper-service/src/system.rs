@@ -293,7 +293,7 @@ impl Service {
             completions: Queue::with_capacity(queue),
             submissions: Queue::with_capacity(queue),
             raw_submissions: Queue::with_capacity(queue),
-            told: Queue::with_capacity(queue),
+            told: Queue::uncapped(),
             kernel: accounts::Kernel::new(operations),
             box_pipe: None,
             signals: None,
@@ -337,7 +337,7 @@ impl Service {
             completions: Queue::with_capacity(queue),
             submissions: Queue::with_capacity(queue),
             raw_submissions: Queue::with_capacity(operations),
-            told: Queue::with_capacity(queue),
+            told: Queue::uncapped(),
             kernel: accounts::Kernel::new(operations),
             box_pipe: None,
             signals: None,
@@ -659,9 +659,6 @@ impl Service {
             && self.told.is_empty()
             && self.kernel.is_empty()
     }
-    fn room(&self, max: io::MaxOut) -> bool {
-        self.told.room() >= max.events && self.raw_submissions.room() >= max.submissions
-    }
     fn route_components(&mut self) {
         if let Some(engine) = &mut self.engine {
             for _ in 0..engine.store.submitted.len() {
@@ -781,14 +778,14 @@ pub fn iterate(service: &mut Service, now: Time, wall: Wall) {
         engine::clock(engine, now, wall);
     }
     for _ in 0..service.io_env.limits.sockets.checked_add(service.io_env.limits.refusals).expect("io entries") {
-        if !service.io.is_ready() || !service.room(io::MAX_OUT_RESUME) {
+        if !service.io.is_ready() || service.raw_submissions.room() < io::MAX_OUT_RESUME.submissions {
             break;
         }
         io::resume(&mut service.io, &service.io_env, &mut service.told, &mut service.raw_submissions);
     }
     if !service.io.is_ready() {
         for _ in 0..service.completions.len() {
-            if !service.room(io::MAX_OUT_UP) {
+            if service.raw_submissions.room() < io::MAX_OUT_UP.submissions {
                 break;
             }
             let complete = service.completions.pop().expect("completion count");
@@ -797,7 +794,7 @@ pub fn iterate(service: &mut Service, now: Time, wall: Wall) {
         }
         if service.completions.is_empty() {
             for _ in 0..service.io_env.limits.sockets.checked_mul(2).expect("io timers") {
-                if !service.io.is_due(now) || !service.room(io::MAX_OUT_FIRE) {
+                if !service.io.is_due(now) || service.raw_submissions.room() < io::MAX_OUT_FIRE.submissions {
                     break;
                 }
                 io::fire(&mut service.io, &service.io_env, &mut service.told, &mut service.raw_submissions);
@@ -905,15 +902,7 @@ fn held_listener_closed(service: &Service, event: &io::Event) -> bool {
 fn route_events(service: &mut Service) {
     for _ in 0..service.told.len() {
         if let Some(engine) = &service.engine
-            && (!engine.workers.room()
-                || !engine.clients.room(1)
-                || engine.events.room() < engine::route_out()
-                || !engine.setup.room()
-                || !engine.forge.room(1)
-                || match &engine.accounts {
-                    Some(accounts) => !accounts.up_room(),
-                    None => false,
-                })
+            && (!engine.workers.room() || !engine.clients.room(1) || !engine.setup.room() || !engine.forge.room(1))
         {
             break;
         }
@@ -1068,7 +1057,7 @@ pub(crate) fn worker_alone_operations(io: &io::Limits, worker_operations: u32) -
 fn startup_operations(io: &io::Limits, queue: u32, worker_operations: u32) -> Option<u32> {
     io::operations(io)?.checked_add(queue.checked_mul(4)?)?.checked_add(worker_operations)
 }
-fn handover_diagnostics(settings: &settings::Engine, queue: u32, events: u32) -> Option<u64> {
+fn handover_diagnostics(settings: &settings::Engine, queue: u32) -> Option<u64> {
     // Client reasons fit 256 bytes; only operator Notes carry the full path.
     // Supplement the root's fixed reason allowance in retained connections
     // and event/request handoffs, and price the full Note separately.
@@ -1078,11 +1067,8 @@ fn handover_diagnostics(settings: &settings::Engine, queue: u32, events: u32) ->
             file_diagnostic = file_diagnostic.max(u64::try_from(setup.entry.directory.len()).ok()?.checked_add(108)?);
         }
     }
-    let file_copies = u64::from(events)
-        .checked_mul(2)?
-        .checked_add(u64::from(queue))?
-        .checked_add(u64::try_from(settings.forges.len()).ok()?.checked_mul(2)?)?
-        .checked_add(4)?;
+    let file_copies =
+        u64::from(queue).checked_add(u64::try_from(settings.forges.len()).ok()?.checked_mul(2)?)?.checked_add(4)?;
     let reason_growth =
         if file_diagnostic == 0 { 0 } else { 256_u64.checked_sub(temper_engine_domain_forge::STOPPED_TEXT_BYTES)? };
     reason_growth
@@ -1102,20 +1088,18 @@ fn memory(
     let queue = temper_engine_domain::max_out(root).checked_mul(2)?;
     let retained = temper_engine_domain::worst_case(root)?;
     let payload = temper_engine_domain::payload_worst_case(root)?;
-    let events = queue.checked_mul(engine::route_out())?;
     let connections = temper_engine_domain_forge::connection_worst_case(
         settings.limits.forge_component.forges,
         settings.limits.forge_component.installations,
         settings.limits.forge.name_bytes.max(temper_protocol_worker_wire::v1::CEILINGS.identity_login),
     )?;
-    let system = handover_diagnostics(settings, queue, events)?
+    let system = handover_diagnostics(settings, queue)?
         .checked_add(u64::try_from(size_of::<Service>()).ok()?)?
         .checked_add(List::<Token>::worst_case(io.sockets)?)?
         .checked_add(List::<(u32, u64)>::worst_case(root.authority.projects)?)?
         .checked_add(List::<temper_engine_domain::Unsettled>::worst_case(root.forge.entries)?)?
-        .checked_add(Queue::<temper_engine_domain::Event>::worst_case(events)?)?
         .checked_add(Queue::<temper_engine_domain::Request>::worst_case(temper_engine_domain::max_out(root))?)?
-        .checked_add(payload.checked_mul(u64::from(events).checked_mul(2)?.checked_add(1)?)?)?
+        .checked_add(payload)?
         .checked_add(Queue::<Complete>::worst_case(queue)?)?
         .checked_add(Queue::<Submit>::worst_case(queue)?.checked_mul(2)?)?
         .checked_add(Queue::<io::Event>::worst_case(queue)?)?

@@ -299,9 +299,9 @@ impl Accounts {
             key_events: Queue::with_capacity(room),
             forgotten: Queue::with_capacity(room),
             early: Queue::with_capacity(room),
-            io: Queue::with_capacity(room),
-            above: Queue::with_capacity(room),
-            files: Queue::with_capacity(room),
+            io: Queue::uncapped(),
+            above: Queue::uncapped(),
+            files: Queue::uncapped(),
             aborting: false,
             closed: false,
         })
@@ -311,21 +311,9 @@ impl Accounts {
             component.down(&self.env, request, &mut self.above, &mut self.io, &mut self.files);
         }
     }
-    fn down_room(&self) -> bool {
-        self.above.room() >= driver::MAX_OUT_DOWN.above
-            && self.io.room() >= driver::MAX_OUT_DOWN.io
-            && self.files.room() >= driver::MAX_OUT_DOWN.files
-    }
-    #[must_use]
-    pub fn up_room(&self) -> bool {
-        self.above.room() >= driver::MAX_OUT_UP.above && self.io.room() >= driver::MAX_OUT_UP.io
-    }
     #[must_use]
     pub fn batch_room(&self, batch: u32) -> bool {
-        self.above.room() >= batch.checked_mul(driver::MAX_OUT_DOWN.above).expect("account above room")
-            && self.io.room() >= batch.checked_mul(driver::MAX_OUT_DOWN.io).expect("account io room")
-            && self.files.room() >= batch.checked_mul(driver::MAX_OUT_DOWN.files).expect("account files room")
-            && self.move_out.room() >= batch
+        self.move_out.room() >= batch
             && self.finish_out.room() >= batch
             && self.key_out.room() >= batch
             && self.key_events.room() >= batch
@@ -614,7 +602,7 @@ impl Accounts {
     fn driver_events(&mut self, values: &mut Values, events: &mut Queue<root::Event>, store: &mut crate::store::Store) {
         let now = self.env.now;
         for _ in 0..self.above.len() {
-            if events.room() == 0 || !store.room() || !self.down_room() || self.move_out.room() == 0 {
+            if events.room() == 0 || !store.room() || self.move_out.room() == 0 {
                 break;
             }
             let event = self.above.pop().expect("account events");
@@ -755,7 +743,7 @@ impl Accounts {
             return;
         }
         for _ in 0..self.move_out.len() {
-            if !store.room() || events.room() == 0 || !self.down_room() {
+            if !store.room() || events.room() == 0 {
                 break;
             }
             match self.move_out.pop().expect("move steps") {
@@ -957,7 +945,7 @@ impl Accounts {
     }
     fn finish_steps(&mut self, events: &mut Queue<root::Event>, store: &mut crate::store::Store) {
         for _ in 0..self.finish_out.len() {
-            if !store.room() || events.room() == 0 || !self.down_room() {
+            if !store.room() || events.room() == 0 {
                 break;
             }
             match self.finish_out.pop().expect("finish steps") {
@@ -1033,8 +1021,7 @@ impl Accounts {
     /// kept (store.md 9).
     fn answers(&mut self, store: &mut crate::store::Store, events: &mut Queue<root::Event>) {
         for _ in 0..store.sources.len() {
-            if !self.down_room()
-                || events.room() == 0
+            if events.room() == 0
                 || self.finish_out.room() == 0
                 || self.key_out.room() == 0
                 || self.move_out.room() == 0
@@ -1141,8 +1128,7 @@ impl Accounts {
             }
             Phase::Running => {
                 for _ in 0..self.early.len() {
-                    if !self.down_room()
-                        || !store.room()
+                    if !store.room()
                         || !self.move_out.is_empty()
                         || self.finish_out.room() == 0
                         || self.key_out.room() == 0

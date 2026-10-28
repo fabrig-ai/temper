@@ -239,9 +239,7 @@ impl Running {
             operations,
             complete: Queue::with_capacity(operations),
             subs: Queue::with_capacity(operations),
-            events: Queue::with_capacity(
-                skein_io::MAX_OUT_UP.events.max(skein_io::MAX_OUT_RESUME.events).max(skein_io::MAX_OUT_FIRE.events),
-            ),
+            events: Queue::uncapped(),
         }
     }
     /// The terminal answer, available once reconciliation has stopped.
