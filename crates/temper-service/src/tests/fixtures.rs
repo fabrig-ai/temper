@@ -154,6 +154,7 @@ pub fn task_record(number: u64) -> jig_domain_tasks::TaskRecord {
         settings: tasks::SettingsRevision { task: 1, run: None },
         added: Box::new([]),
         hold_bound_since: None,
+        room_wait: None,
         label: 0,
         flags: tasks::Flags::PLAIN,
         last_activity: Wall::EPOCH,
