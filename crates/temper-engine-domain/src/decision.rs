@@ -536,11 +536,12 @@ pub fn accept_routed(
     // Only writes must fit the store's commit edge: jig-protocol-store's
     // commits::operations refuses more than journal.writes, including the
     // header. Outputs are uncapped. Fail before accepting any prefix;
-    // failed(0) stops even a journal with no issued commit. Accepting the empty
+    // Journal::stop is a root stopping of its own: a decision past the store's
+    // write edge, or the commit counter at its end. Accepting the empty
     // batch then closes its open decision without emitting anything, including older outputs.
     let writing = (persist_header && counters.dirty()) || !decision.writes.is_empty();
     if decision.overrun || (writing && counters.deployment().commits == u64::MAX) {
-        journal.failed(0);
+        journal.stop();
         journal.accept(decision.batch);
         return Ok(());
     }
