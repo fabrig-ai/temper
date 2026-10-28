@@ -164,7 +164,6 @@ pub(crate) fn prepare(
     config: &crate::settings::Engine,
     forges: &mut skein_forge_connection::Settings,
     seed: &skein_lib::Secret,
-    batch: u32,
     under_box: bool,
 ) -> Result<super::Layer, Problems> {
     let (settings, limits) = fixed(config, forges)?;
@@ -176,7 +175,6 @@ pub(crate) fn prepare(
         crypto,
         own.setup.state_life,
         own.records.value_bytes,
-        batch,
         own.forge_component.installations,
     );
     for source in &config.forges {

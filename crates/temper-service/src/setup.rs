@@ -76,11 +76,7 @@ struct Held {
 pub(crate) const STATE_TEXT_BYTES: u64 = 32;
 /// Whole host plus the allocations retained by this owner (protocol/forge.md, 2.6).
 #[expect(clippy::too_many_lines, reason = "sum each retained setup owner and transient allocation")]
-pub(crate) fn worst_case(
-    config: &crate::settings::Engine,
-    forges: &skein_forge_connection::Settings,
-    _batch: u32,
-) -> Option<u64> {
+pub(crate) fn worst_case(config: &crate::settings::Engine, forges: &skein_forge_connection::Settings) -> Option<u64> {
     use temper_engine_domain_forge::{BOT_LOGIN_SUFFIX, STOPPED_TEXT_BYTES};
     let (mut settings, l) = settings::fixed(config, forges).ok()?;
     // Port 0 may bind any port: price the longest hook URL before admission.
@@ -242,7 +238,6 @@ impl Layer {
         crypto: CryptoRng,
         life: Duration,
         value_bytes: u32,
-        _batch: u32,
         installations: u32,
     ) -> Self {
         let mut listener: Box<[u8]> = Box::new([]);
