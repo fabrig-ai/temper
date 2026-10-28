@@ -57,7 +57,10 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   are the other decisions. Only an uncertain effect asks whether to
   repeat it. `task show` prints `held:` and its reason, then `way
   out:`, what to mend and the call that releases it: `task release
-  TASK --hold REV`.
+  TASK --hold REV`. An effect's hold names the effect, its operation,
+  resource and outcome; a procedure's names the step refused and why,
+  in its connector's words. An uncertain effect is repeated only by a
+  release with `--again`, once you have checked whether it happened.
 - **Stopped:** stopping places a hold of yours over the task and every
   task below it, those made later included, and ends their runs;
   releasing the stopped task runs them all again (temper help hold).

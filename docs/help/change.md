@@ -74,7 +74,8 @@ counts and goes on from where it was held; held at `producing` because
 its coder failed for good before pushing, it makes a fresh coder, one
 more of its tasks, or holds again if its authority can't cover one. Its panel also names a held
 task, the change's own or its writer's or reviewer's, `held: task N
-(REASON)`, with that task's way out.
+(REASON)`, with that task's way out: an effect vetoed or a step
+refused, and why (what it lacks, or the forge's answer).
 
 ## What temper guarantees
 
