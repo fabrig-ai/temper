@@ -6,13 +6,13 @@
         "authority.executors": 6,
         "authority.grants": 14,
         "authority.segments": 8,
-        "core.resume_bytes": 1590049,
+        "core.resume_bytes": 1589854,
         "documents.lines": 3,
         "documents.rows": 2,
         "documents.text_bytes": 128,
-        "hub.transcript_bytes": 6360193,
-        "hub.turn_bytes": 1590045,
-        "hub.turn_queue_bytes": 12720360,
+        "hub.transcript_bytes": 6359410,
+        "hub.turn_bytes": 1589850,
+        "hub.turn_queue_bytes": 12718800,
         "notes.scopes": 17,
         "tasks.authority_bytes": 512,
         "tasks.authority_grants": 14,
@@ -164,9 +164,9 @@
         "overrides": {
           "hub.accounts": 4,
           "hub.event_bytes": 4096,
-          "hub.transcript_bytes": 6360193,
-          "hub.turn_bytes": 1590045,
-          "hub.turn_queue_bytes": 12720360
+          "hub.transcript_bytes": 6359410,
+          "hub.turn_bytes": 1589850,
+          "hub.turn_queue_bytes": 12718800
         }
       },
       "memory_bytes": 3800000000000
@@ -279,11 +279,11 @@
       "profile": "small",
       "overrides": {
         "checkout.message_bytes": 4098,
-        "root.journal.transcript_bytes": 1590049,
-        "root.loads.bytes": 1590293,
-        "root.loads.read_bytes": 3180090,
-        "root.loads.reply_bytes": 1590293,
-        "root.loads.transcript_bytes": 1590045,
+        "root.journal.transcript_bytes": 1589854,
+        "root.loads.bytes": 1590098,
+        "root.loads.read_bytes": 3179700,
+        "root.loads.reply_bytes": 1590098,
+        "root.loads.transcript_bytes": 1589850,
         "routes.query_bytes": 2048
       }
     },

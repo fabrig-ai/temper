@@ -35,9 +35,9 @@
           "hub.program_sources": 0,
           "hub.run_calls": 1,
           "hub.slots": 1,
-          "hub.transcript_bytes": 5312627,
-          "hub.turn_bytes": 1328155,
-          "hub.turn_queue_bytes": 10625240,
+          "hub.transcript_bytes": 5311856,
+          "hub.turn_bytes": 1327960,
+          "hub.turn_queue_bytes": 10623680,
           "hub.turns": 1,
           "link.ping_ms": 100,
           "link.silence_ms": 1000,
@@ -64,11 +64,11 @@
         "forge.name_bytes": 64,
         "forge.resources_per_task": 2,
         "git_component.stdout_bytes": 2048,
-        "root.journal.transcript_bytes": 1328159,
-        "root.loads.bytes": 1328403,
-        "root.loads.read_bytes": 2656310,
-        "root.loads.reply_bytes": 1328403,
-        "root.loads.transcript_bytes": 1328155
+        "root.journal.transcript_bytes": 1327964,
+        "root.loads.bytes": 1328208,
+        "root.loads.read_bytes": 2655920,
+        "root.loads.reply_bytes": 1328208,
+        "root.loads.transcript_bytes": 1327960
       }}
     }}
   }}

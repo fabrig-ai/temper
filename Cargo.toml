@@ -165,6 +165,7 @@ skein-world = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-fake-checkout = { git = "https://github.com/fabrig-dev/skein.git" }
 skein-fake-llm-domain = { git = "https://github.com/fabrig-dev/skein.git" }
 smith-agent-world = { git = "https://github.com/fabrig-dev/smith.git" }
+smith-tools-world = { git = "https://github.com/fabrig-dev/smith.git" }
 smith-domain = { git = "https://github.com/fabrig-dev/smith.git" }
 smith-domain-run = { git = "https://github.com/fabrig-dev/smith.git" }
 smith-domain-session = { git = "https://github.com/fabrig-dev/smith.git" }

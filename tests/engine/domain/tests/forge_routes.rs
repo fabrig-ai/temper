@@ -590,16 +590,21 @@ fn check_gate_landing(no_ci: bool, owner_gate: bool) {
 
 #[test]
 fn a_review_asking_for_changes_is_repaired_with_its_remarks_and_reviewed_again() {
-    check_gate_repair(false);
+    check_gate_repair(false, false);
 }
 
 #[test]
 fn a_failing_check_is_repaired_and_checked_again() {
-    check_gate_repair(true);
+    check_gate_repair(true, false);
 }
 
-#[expect(clippy::too_many_lines, reason = "the check repair story spans both gate heads and their worker reports")]
-fn check_gate_repair(no_ci: bool) {
+#[test]
+fn a_review_can_request_a_file_removal_and_the_repair_lands_without_it() {
+    check_gate_repair(false, true);
+}
+
+#[expect(clippy::too_many_lines, reason = "the repair story follows two heads through review and landing")]
+fn check_gate_repair(no_ci: bool, remove: bool) {
     let (mut world, _chat, producer, branch) = change_world_with_policy(no_ci, 1000, None, true, no_ci, false, false);
     assert!(matches!(
         world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.clone(), commit: 1 })),
@@ -631,17 +636,14 @@ fn check_gate_repair(no_ci: bool) {
         }
     }
     let first = world.assigned.get(2).expect("first review assigned").clone();
+    let request = if remove { b"Please remove file".as_slice() } else { b"Please fix the unsafe edge".as_slice() };
     let event = world.protocol.answer(
         Token::new(7),
         first.task,
         first.attempt,
         5,
         tasks::End::Finished {
-            result: tasks::TaskResult::Verdict {
-                code: 2,
-                fields: Box::new([]),
-                words: Box::from(&b"Please fix the unsafe edge"[..]),
-            },
+            result: tasks::TaskResult::Verdict { code: 2, fields: Box::new([]), words: request.into() },
             cancel_delegates: false,
         },
         engine::Parts::none(),
@@ -661,12 +663,16 @@ fn check_gate_repair(no_ci: bool) {
     assert!(
         repair.sections.iter().any(|section| section.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Reviews)
             && matches!(&section.body, engine::BriefBody::Text(words)
-            if words.windows(b"Please fix the unsafe edge".len()).any(|part| part == b"Please fix the unsafe edge"))),
+            if words.windows(request.len()).any(|part| part == request))),
         "review remarks in repair brief: {:?}",
         repair.sections
     );
-    fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"safe revision", 1)
-        .expect("repair pushed second head");
+    if remove {
+        remove_requested_file(&mut world, &branch);
+    } else {
+        fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"safe revision", 1)
+            .expect("repair pushed second head");
+    }
     let event = world.protocol.answer(
         Token::new(7),
         repair.task,
@@ -722,6 +728,48 @@ fn check_gate_repair(no_ci: bool) {
         Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(change)
             if matches!(change.change.state, temper_engine_domain_forge_change::State::Landed { .. })
                 && change.change.repairs == 1))));
+    if remove {
+        let main = world.fake.branch(b"org/repo", b"main").expect("landed main");
+        assert!(!world.fake.object(main).expect("landed tree").tree.contains_key(b"file".as_slice()));
+        assert_eq!(world.merges, 1);
+    }
+}
+
+fn remove_requested_file(world: &mut World, branch: &[u8]) {
+    use smith_tools_world::{Settings, Step, World as ToolsWorld, authority, calls, repo};
+    let parent = world.fake.branch(b"org/repo", branch).expect("change head");
+    let mut checkout = skein_fake_checkout::Checkout::new();
+    let repository = repo(&mut checkout, b"/work", true);
+    for (path, content) in &world.fake.object(parent).expect("change tree").tree {
+        checkout.write(&[b"work/".as_slice(), path].concat(), content);
+    }
+    let authority =
+        authority(b"/work", vec![repository], smith_domain_tools::Grants { inspect: true, modify: true, shell: false });
+    let mut tools = ToolsWorld::new(Settings::calm(15), checkout);
+    let session = tools.session(
+        Time::ZERO,
+        authority,
+        vec![Step::Calls(vec![calls::read(b"file")]), Step::Calls(vec![calls::remove(b"file")])],
+    );
+    tools.run(100_000);
+    let answers = tools.answers(session);
+    assert!(matches!(answers[0], smith_domain_tools::Outcome::Read { .. }));
+    assert_eq!(answers[1], &smith_domain_tools::Outcome::Removed);
+    let tree = tools
+        .checkout()
+        .tree(b"work")
+        .into_iter()
+        .map(|(path, content)| raw::File { path: path.into(), content: content.into() })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let commit =
+        fake::commit(&mut world.fake, &world.fake_env.limits, parent, tree, b"Remove the file requested by review")
+            .expect("repair commit")
+            .expect("tree changed");
+    assert!(matches!(
+        world.external(1, raw::Op::Git(raw::Git::Push { branch: branch.into(), commit, expected: Some(parent) })),
+        raw::Answer::Pushed(raw::Pushed::Pushed)
+    ));
 }
 
 /// Temper 03.1's fake workflow step and log literals, read by hand.

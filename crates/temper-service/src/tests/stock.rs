@@ -541,3 +541,11 @@ fn stock_and_init_admit_the_landing_procedure_and_its_effects() {
         }
     }
 }
+
+#[test]
+fn the_coder_is_told_to_remove_dropped_files_and_finish_before_the_pull_exists() {
+    let words = include_str!("../stock/coding.txt");
+    assert!(words.contains("then write it in its files, and remove what the change drops"));
+    assert!(words.contains("You can run nothing, and the change has no pull request yet"));
+    assert!(words.contains("So write no placeholder for what you can't know yet."));
+}

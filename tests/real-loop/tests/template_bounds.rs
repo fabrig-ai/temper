@@ -15,7 +15,7 @@ fn the_two_call_agent_past_smalls_page_is_refused_by_name() {
     assert_eq!(agent["profile"]["declared"]["tool_payload"], 4096);
     assert_eq!(agent["endpoints"][0]["models"][0]["output"], 8192);
     let transcript = fixtures::turn_bounds::turn_body(&agent);
-    assert_eq!(transcript, 1_792_262);
+    assert_eq!(transcript, 1_792_067);
     fixtures::turn_bounds::apply(&mut document, transcript);
     let given = fixtures::own_defaults(&document, &document["world_settings"]);
     document.as_object_mut().expect("deployment").remove("world_settings");
@@ -24,7 +24,7 @@ fn the_two_call_agent_past_smalls_page_is_refused_by_name() {
         .expect_err("the old two-call shape exceeds Small's page");
     assert_eq!(
         temper_service::startup::lines(&refused).as_ref(),
-        b"application.limits.overrides.root.loads.transcript_bytes: its turn's transcript frame, 1792326 bytes, needs a store page past the profile's ceiling of 1590110 bytes\n"
+        b"application.limits.overrides.root.loads.transcript_bytes: its turn's transcript frame, 1792131 bytes, needs a store page past the profile's ceiling of 1590110 bytes\n"
     );
 }
 
