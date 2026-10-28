@@ -228,6 +228,9 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
+        // Sizes subscription/hold notifications and workspace-resource bookkeeping
+        // in the connector's fixture output cohorts.
+        const FORGE_OUTPUT: u32 = 80;
         let StoryLimits {
             brief,
             stall,
@@ -285,10 +288,7 @@ impl World {
                 if tasks.is_some() {
                     // Concurrent chats and changes keep all of their workspace watches.
                     limits.forge.client.resources = limits.tasks.tasks * limits.forge.resources_per_task;
-                    limits.forge.output = skein_forge_client::max_out(&limits.forge.client)
-                        + limits.forge.subscriptions * 3
-                        + limits.forge.holds * 3
-                        + 9;
+                    limits.forge.output = FORGE_OUTPUT;
                 }
                 limits.tasks.project_tasks = 12;
                 limits.tasks.delegates = 4;
@@ -559,7 +559,6 @@ impl World {
                 const TREE_TASKS: u32 = 12; // Stock lifetime ceiling, including the root.
                 const LANDED_CHANGES: u32 = 2;
                 const RETAINED_HOLDINGS: u32 = 1 + LANDED_CHANGES * 2;
-                const CONTROL_OUTPUT: u32 = 9;
                 const TREE_ISSUE_BYTES: u32 = 8192;
                 const TREE_MILESTONES: u32 = 64;
                 const MILESTONE_BYTES: u32 = 1024; // A 512-byte result plus its lifecycle heading.
@@ -598,11 +597,7 @@ impl World {
                 limits.tasks.holdings = RETAINED_HOLDINGS;
                 // Names for every task's permitted workspace resources can coexist in watches.
                 limits.forge.client.resources = TREE_TASKS * limits.forge.resources_per_task;
-                // The connector's declared worst-case client/retirement output burst.
-                limits.forge.output = skein_forge_client::max_out(&limits.forge.client)
-                    + limits.forge.subscriptions * 3
-                    + limits.forge.holds * 3
-                    + CONTROL_OUTPUT;
+                limits.forge.output = FORGE_OUTPUT;
                 // The tracked work's issue renders every descendant's spec and lifecycle.
                 // Twelve 512-byte specs plus headings fit in 8 KiB, rather than the tiny
                 // fixture's 512-byte body. Milestones are retained for the whole walk:

@@ -806,7 +806,7 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
         if domain.forge.is_ready() {
             domain.settled = None;
             let mut decision = Decision::decide(&mut domain.journal, &env.limits.journal);
-            let mut child = Queue::with_capacity(forge::max_out(&env.limits.forge));
+            let mut child = Queue::uncapped();
             forge::resume(&mut domain.forge, &environment_forge(env), &mut child);
             forge_route::outputs(domain, env, &mut decision, &mut child);
             route_into(domain, env, &mut decision);
@@ -878,7 +878,7 @@ pub(crate) fn fire_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Queu
     }
     let restarting = connector_restarting(domain);
     if (restarting || domain.ready() || domain.settling.active()) && !domain.core.stopping() {
-        let mut forge_out = Queue::with_capacity(forge::max_out(&env.limits.forge));
+        let mut forge_out = Queue::uncapped();
         forge::fire(&mut domain.forge, &environment_forge(env), &mut forge_out);
         forge_route::outputs(domain, env, &mut decision, &mut forge_out);
     }

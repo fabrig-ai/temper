@@ -543,7 +543,7 @@ fn forge_event(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decision, 
     {
         demo::connection(domain, config.adoption.forge, b"the box closed the pipe");
     }
-    let mut out = Queue::with_capacity(forge::max_out(&env.limits.forge));
+    let mut out = Queue::uncapped();
     forge::step(&mut domain.forge, &environment_forge(env), event, &mut out);
     forge_route::outputs(domain, env, decision, &mut out);
     demo::progress(domain, env, decision);
