@@ -28,10 +28,10 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             }
             step_made(domain, task, step, None);
             if let core::StepRefusal::Refused(problem) = why {
-                // Jig's domain/connectors.md, 6.2: step again on refusal. A kept change waits
-                // without a deadline; its dependency's Met wakes it (jig's domain/tasks.md, 5.7).
+                // Jig's domain/connectors.md, 6.2: a refused batch stays Due.
+                // After rollback, settle the offer as an empty wait so the
+                // forge's retry deadline or dependency news can offer fresh reads.
                 if connector == domain.config.forge_connector
-                    && domain.core.tasks.waiting_effect_problem(task).as_ref() == Some(&problem)
                     && let Some((owner, code @ 2, current)) = domain.core.tasks.procedure_due(task)
                     && owner == connector
                     && current == step
