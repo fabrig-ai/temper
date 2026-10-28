@@ -352,7 +352,9 @@ fn settings_refusals_keep_ctls_words_without_a_client_dependency() {
         ),
         (
             R::Limit { which: LimitKind::SettingsProposals },
-            c::Refusal::Limit { which: c::Limit::Admission { which: c::AdmissionLimit::SettingsProposals } },
+            c::Refusal::Limit {
+                which: c::Limit::Admission { which: c::AdmissionLimit::SettingsProposals, bound: None },
+            },
         ),
     ] {
         assert_eq!(

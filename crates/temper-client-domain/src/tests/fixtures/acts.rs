@@ -272,6 +272,8 @@ pub fn live_client() -> jig_client::Client {
             providers_cut: false,
             key_bytes: 256,
             redirect_bytes: 256,
+            words_bytes: 65_536,
+            amendment_bytes: 65_536,
             party,
             projects: Box::from([]),
             needs: w::Needs::new(

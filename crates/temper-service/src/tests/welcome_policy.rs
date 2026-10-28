@@ -199,7 +199,12 @@ fn real_init_policy_fits_with_two_long_github_repositories() {
             assert_eq!(
                 reply(&driver, key),
                 &people::Reply::Outcome(people::Outcome::Refused(people::Refusal::Limit {
-                    which: people::LimitKind::Projects
+                    which: people::LimitKind::Projects,
+                    bound: Some(people::LimitBound::configured(
+                        2,
+                        people::LimitKey::PeopleProjects,
+                        people::LimitUnit::Items
+                    )),
                 })),
                 "second welcome selection exceeds the unchanged two-project capacity"
             );

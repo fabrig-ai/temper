@@ -75,6 +75,7 @@ pub fn tools() -> crate::jig::Limits {
     let preset = client().client;
     let client = preset.domain;
     crate::jig::Limits {
+        client,
         rows: client.rows,
         settings: jig_client_protocol_link::Limits::new(client, preset.exchanges)
             .expect("checked host client limits")

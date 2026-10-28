@@ -736,6 +736,10 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, me: Option<&c::Me>,
     }
     out.put(operation.tool_name());
     out.put(b": ");
+    if let c::Refusal::Limit { which } = refusal {
+        super::limit::limit(which, limits, out);
+        return;
+    }
     acts::refusal(refusal, &document::phrasebook(limits.text), out);
     if let c::Refusal::Moved { what: c::Moved::PlacedHold { revision }, .. } = refusal
         && operation.word == b"lift"

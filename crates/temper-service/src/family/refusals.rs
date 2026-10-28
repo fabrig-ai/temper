@@ -79,9 +79,9 @@ pub(crate) fn refusal(value: p::Refusal, limits: &w::Limits) -> Result<w::Refusa
                 },
             },
         )?),
-        p::Refusal::Limit { which } => {
+        p::Refusal::Limit { which, bound } => {
             let which =
-                w::Limit::Admission(w::LimitAdmission::new(limits, w::LimitAdmissionParts { which: limit(which) })?);
+                w::Limit::Admission(w::LimitAdmission::new(limits, w::LimitAdmissionParts { which: limit(which), bound: jig_protocol_engine_clients::translate::limit_bound(bound, limits)? })?);
             w::Refusal::Limit(w::RefusalLimit::new(limits, w::RefusalLimitParts { which })?)
         }
         p::Refusal::Moved { now } => moved(now, limits)?,
@@ -212,6 +212,9 @@ pub(super) fn limit(value: p::LimitKind) -> w::AdmissionLimit {
     match value {
         p::LimitKind::SettingsProposals => w::AdmissionLimit::SettingsProposals,
         p::LimitKind::Words => w::AdmissionLimit::Words,
+        p::LimitKind::Name => w::AdmissionLimit::Name,
+        p::LimitKind::Key => w::AdmissionLimit::Key,
+        p::LimitKind::Amendment => w::AdmissionLimit::Amendment,
         p::LimitKind::Identity => w::AdmissionLimit::Identity,
         p::LimitKind::Roles => w::AdmissionLimit::Roles,
         p::LimitKind::Arithmetic => w::AdmissionLimit::Arithmetic,

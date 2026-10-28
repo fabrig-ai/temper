@@ -183,7 +183,11 @@ pub(super) fn text(me: &c::Me, limits: &Limits, out: &mut Text) {
         }
         out.put(b"\n");
     }
-    out.put(b"providers_cut: ");
+    out.put(b"words_bytes: ");
+    out.number(u64::from(me.words_bytes));
+    out.put(b"\namendment_bytes: ");
+    out.number(u64::from(me.amendment_bytes));
+    out.put(b"\nproviders_cut: ");
     flag(me.providers_cut, out);
     out.put(b"\nkey_bytes: ");
     out.number(u64::from(me.key_bytes));

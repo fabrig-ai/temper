@@ -19,6 +19,8 @@ pub struct Limits {
 impl Limits {
     #[must_use]
     pub fn new(domain: temper_client_domain::Limits, tools: jig::Limits) -> Self {
+        let mut tools = tools;
+        tools.client = domain.client.domain;
         Self { bounds: Bounds::new(domain.client, tools.rows), domain, tools }
     }
     fn bounds(&self) -> Bounds {

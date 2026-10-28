@@ -3312,7 +3312,7 @@ fn adoption_failure(error: skein_forge::api::Error) -> people::Outcome {
         | skein_forge::api::Error::Timeout
         | skein_forge::api::Error::RateLimited { .. } => people::Outcome::Again(people::Again::Busy),
         skein_forge::api::Error::TooLarge | skein_forge::api::Error::Full => {
-            people::Outcome::Refused(people::Refusal::Limit { which: people::LimitKind::Resource })
+            people::Outcome::Refused(people::Refusal::Limit { which: people::LimitKind::Resource, bound: None })
         }
         skein_forge::api::Error::NotInstalled
         | skein_forge::api::Error::Forbidden

@@ -280,6 +280,36 @@ fn ctl_scratch(case: &str) -> support::Scratch {
 }
 
 #[test]
+fn temper_ctl_chat_past_the_request_size_names_the_typed_limit() {
+    use support::ctl::{Call, Step, Story};
+    const REQUEST_BYTES: usize = 2048;
+    let scratch = ctl_scratch("ctl-request-limit");
+    let text = "x".repeat(REQUEST_BYTES + 1);
+    let seen = support::ctl::run(Story::new(
+        scratch.path(),
+        vec![
+            Step::Run(Call::sign_in()),
+            Step::Run(Call::new(&["chat", "start", "--project", "1", &text, "--key", "request-limit-text"])),
+            Step::Run(Call::new(&["chat", "start", "--project", "1", &text, "--key", "request-limit-json"]).json()),
+        ],
+    ));
+    assert_eq!(seen.calls.len(), 3);
+    assert_eq!(seen.calls[0].exit, Some(Exit::Code(0)));
+    for call in &seen.calls[1..] {
+        assert_eq!(call.exit, Some(Exit::Code(2)), "{}", String::from_utf8_lossy(&call.stderr));
+    }
+    assert_eq!(seen.calls[1].stderr, b"chat start: past the engine's request size, 2,048 bytes; shorten it, or raise people.words (temper help configuration)\n");
+    let value: serde_json::Value = serde_json::from_slice(&seen.calls[2].stderr).expect("typed refusal JSON");
+    assert_eq!(
+        value["outcome"]["refused"]["refusal"]["limit"]["which"]["admission"],
+        serde_json::json!({
+            "which":"words", "bound":{"value":2048,"key":"people.words","unit":"bytes"}
+        })
+    );
+    scratch.remove();
+}
+
+#[test]
 fn temper_ctl_help_prints_the_page_ctl_then_the_tools() {
     let scratch = ctl_scratch("ctl_help");
     let ended = support::ctl::alone(scratch.path(), support::ctl::Call::bare(&["help"]));

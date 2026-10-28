@@ -216,12 +216,14 @@ fn encode_lacking_tasks(needed: Option<&u32>, left: u32, out: &mut Encoder, _bud
 }
 pub(super) fn encode_limit(value: &jig_client::contract::Limit, out: &mut Encoder, budget: &mut super::Cut) {
     match value {
-        jig_client::contract::Limit::Admission { which } => {
+        jig_client::contract::Limit::Admission { which, bound } => {
             out.object_start();
             out.key(b"admission");
             out.object_start();
             out.key(b"which");
             super::encode_admission_limit(*(which), out, budget);
+            out.key(b"bound");
+            encode_bound(bound, out);
             out.object_end();
             out.object_end();
         }
@@ -263,4 +265,26 @@ pub(super) fn encode_limit(value: &jig_client::contract::Limit, out: &mut Encode
         jig_client::contract::Limit::Watches => out.string(b"watches"),
         jig_client::contract::Limit::Objects => out.string(b"objects"),
     }
+}
+
+fn encode_bound(bound: &Option<jig_client::contract::LimitBound>, out: &mut Encoder) {
+    let Some(bound) = bound else {
+        out.null();
+        return;
+    };
+    out.object_start();
+    out.key(b"value");
+    out.unsigned(bound.value);
+    out.key(b"key");
+    match bound.key {
+        Some(key) => out.string(key.name()),
+        None => out.null(),
+    }
+    out.key(b"unit");
+    out.string(match bound.unit {
+        jig_client::contract::LimitUnit::Bytes => b"bytes",
+        jig_client::contract::LimitUnit::Items => b"items",
+        jig_client::contract::LimitUnit::Milliseconds => b"milliseconds",
+    });
+    out.object_end();
 }

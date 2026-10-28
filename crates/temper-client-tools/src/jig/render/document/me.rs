@@ -72,6 +72,10 @@ pub(super) fn encode_me(
     out.unsigned(u64::from(value.needs_total));
     out.key(b"updates");
     super::encode_count(value.updates, out, budget);
+    out.key(b"words_bytes");
+    out.unsigned(u64::from(value.words_bytes));
+    out.key(b"amendment_bytes");
+    out.unsigned(u64::from(value.amendment_bytes));
     out.key(b"results_seen");
     out.unsigned(value.results_seen);
     let mut window = super::offers::me_window(limits);

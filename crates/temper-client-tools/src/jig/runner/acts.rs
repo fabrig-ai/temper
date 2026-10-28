@@ -450,7 +450,7 @@ pub(crate) enum Request {
 pub(crate) fn prepared(
     runner: &mut Runner,
     client: &Client,
-    _env: &Env<Limits>,
+    env: &Env<Limits>,
     called: Called,
     request: Prepared,
     out: &mut Queue<Out>,
@@ -468,7 +468,146 @@ pub(crate) fn prepared(
             return;
         }
     };
+    if let Some(me) = me(runner, client) {
+        let ask = match &request {
+            Request::Ask(ask)
+            | Request::Act { ask, .. }
+            | Request::Amend { ask, .. }
+            | Request::Account { ask, .. } => Some(ask),
+            Request::MoveOut { .. }
+            | Request::Written { .. }
+            | Request::MoveIn
+            | Request::AddKey { .. }
+            | Request::ReplaceKey { .. }
+            | Request::DeclareProgram { .. }
+            | Request::CheckProgram { .. } => None,
+        };
+        if let Some(ask) = ask
+            && past_words(ask, me.words_bytes)
+        {
+            let wrapped = jig_client::Ask::Jig(Box::new(word_ask(request)));
+            let operation = Operation::for_call(&wrapped, render::outcome::act_tool(called.call.tool));
+            let outcome = jig_client::Outcome::Answered(jig_client::Answered::Jig(c::Answer::Refused {
+                refusal: c::Refusal::Limit {
+                    which: c::Limit::Admission {
+                        which: c::AdmissionLimit::Words,
+                        bound: Some(c::LimitBound::configured(
+                            u64::from(me.words_bytes),
+                            c::LimitKey::PeopleWords,
+                            c::LimitUnit::Bytes,
+                        )),
+                    },
+                },
+                at: None,
+            }));
+            let printed =
+                render::outcome::print(&operation, &outcome, called.json, Some(me), &env.limits, b"temper ctl");
+            finish(called, printed, out);
+            return;
+        }
+    }
     send(runner, client, called, request, to, out);
+}
+// The refusal owns the request already prepared; moving it avoids a second payload copy.
+fn word_ask(request: Request) -> c::Ask {
+    match request {
+        Request::Ask(ask) | Request::Act { ask, .. } | Request::Amend { ask, .. } | Request::Account { ask, .. } => ask,
+        Request::MoveOut { .. }
+        | Request::Written { .. }
+        | Request::MoveIn
+        | Request::AddKey { .. }
+        | Request::ReplaceKey { .. }
+        | Request::DeclareProgram { .. }
+        | Request::CheckProgram { .. } => {
+            unreachable!("word guard borrows only typed asks")
+        }
+    }
+}
+// Check typed party words, using the same fields as people admission.
+fn past_words(ask: &c::Ask, bound: u32) -> bool {
+    match ask {
+        c::Ask::Message { words, .. } => !words.fits(bound),
+        c::Ask::Cancel { reason, .. } | c::Ask::Move { reason, .. } | c::Ask::Amend { reason, .. } => {
+            !reason.fits(bound)
+        }
+        c::Ask::Create { tasks, .. } => past_batch(tasks, bound),
+        c::Ask::Propose { reason, action, .. } => {
+            !reason.fits(bound)
+                || match action {
+                    c::ProposeAction::Batch { tasks } => past_batch(tasks, bound),
+                    c::ProposeAction::Amendment { .. } | c::ProposeAction::Settings(_) => false,
+                }
+        }
+        c::Ask::Compound { operations, .. } => {
+            for operation in operations {
+                let words = match operation {
+                    c::Operation::Message { words, .. } => Some(words),
+                    c::Operation::Cancel { reason, .. }
+                    | c::Operation::Move { reason, .. }
+                    | c::Operation::Amend { reason, .. } => Some(reason),
+                    c::Operation::Stop { .. } | c::Operation::Release { .. } => None,
+                };
+                if let Some(words) = words
+                    && !words.fits(bound)
+                {
+                    return true;
+                }
+            }
+            false
+        }
+        c::Ask::Answer { on, .. } => match on {
+            c::AnswerOn::Question { words, .. } => !words.fits(bound),
+            c::AnswerOn::Person { answer, .. } => match answer {
+                c::PersonAnswer::Choice { reason, .. }
+                | c::PersonAnswer::Cannot { reason }
+                | c::PersonAnswer::Words(reason) => !reason.fits(bound),
+                c::PersonAnswer::Approved { state, words } => {
+                    let mut size = state.len();
+                    if let Some(words) = words {
+                        size = size.saturating_add(words.bytes().len());
+                    }
+                    size > usize::try_from(bound).expect("word ceiling fits usize")
+                }
+            },
+        },
+        c::Ask::Decide { on, .. } => {
+            let decision = match on {
+                c::DecideOn::Proposal { decision, .. } | c::DecideOn::Escalation { decision, .. } => decision,
+            };
+            match decision {
+                c::Decision::Rejected { reason } | c::Decision::LeftHeld { reason } => !reason.fits(bound),
+                c::Decision::Accepted | c::Decision::PassedUp | c::Decision::Released { .. } => false,
+            }
+        }
+        c::Ask::MakeService { name, .. } => !name.fits(bound),
+        c::Ask::ChangeSettings(_)
+        | c::Ask::MoveToNewest(_)
+        | c::Ask::Withdraw { .. }
+        | c::Ask::Take { .. }
+        | c::Ask::HandBack { .. }
+        | c::Ask::Release { .. }
+        | c::Ask::Lift { .. }
+        | c::Ask::Stop { .. }
+        | c::Ask::Seen { .. }
+        | c::Ask::EditNote { .. }
+        | c::Ask::DeleteNote { .. }
+        | c::Ask::ChangePolicy { .. }
+        | c::Ask::SetRoles { .. }
+        | c::Ask::Rename { .. }
+        | c::Ask::MakeProject { .. }
+        | c::Ask::SetPool { .. }
+        | c::Ask::SignIn { .. }
+        | c::Ask::AccountChange { .. }
+        | c::Ask::SignOut { .. } => false,
+    }
+}
+fn past_batch(tasks: &List<c::NewTask>, bound: u32) -> bool {
+    for task in tasks {
+        if !task.spec.words.fits(bound) {
+            return true;
+        }
+    }
+    false
 }
 fn context(request: Request) -> (Request, Option<render::outcome::Account>, Option<c::Phase>) {
     match request {
