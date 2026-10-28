@@ -1454,7 +1454,7 @@ fn independent_alpha_and_beta_start_while_a_large_change_is_pending() {
 }
 
 #[test]
-fn beta_at_the_stock_task_limit_is_due_after_a_live_capacity_refusal() {
+fn beta_at_the_stock_task_limit_waits_for_room_then_lands() {
     let cap = temper_engine_domain_world::forge_routes::box_limits().tasks.tasks;
     assert_eq!(cap, 8, "the reproduction uses the shipped box's task limit");
     let (mut world, large, alpha, beta) = pending_large_with_alpha_and_beta(cap);
@@ -1470,30 +1470,40 @@ fn beta_at_the_stock_task_limit_is_due_after_a_live_capacity_refusal() {
         .expect("beta's refused producer admission reaches the root");
     assert_eq!(problem.why, tasks::Refusal::Live);
     let row = live_task(&world, beta);
-    assert_eq!(row.phase, tasks::Phase::Active(tasks::Active::Due));
+    assert_eq!(row.phase, tasks::Phase::Active(tasks::Active::Idle));
+    assert_eq!(row.room_wait.expect("beta waits for live room").room, tasks::LiveRoom::Deployment);
     assert!(row.delegates.is_empty());
+    assert!(read_change_task(&mut world, beta).hold.is_none(), "live capacity needs no release");
+    let row = live_task(&world, beta);
     assert_eq!(row.numbers.spent + row.numbers.spent_below + row.numbers.reserved, 0);
     assert!(row.authority.budget.spend > 0, "beta has untouched spend authority");
     assert!(row.authority.delegation.tasks > 0);
     // Ending the large change's reviewer frees live capacity without starting another alpha child.
     let review = producer_for(&mut world, large);
-    finish_review(
-        &mut world,
-        &review,
-        tasks::TaskResult::Verdict { code: 1, fields: Box::new([]), words: b"approved".as_slice().into() },
-    );
-    for _ in 0..MAX_TICKS {
+    approve(&mut world, &review);
+    let producer = producer_for(&mut world, beta);
+    assert_eq!(requester(&world, producer.task), beta);
+    assert!(live_task(&world, beta).room_wait.is_none());
+    let branch = change_row(&world, beta).branch.clone();
+    let mut next = world.assigned.len();
+    produce(&mut world, &producer, &branch);
+    for _ in 0..3 * MAX_TICKS {
         world.tick();
+        // Large's landing moves the base: an exact gate also reviews beta's clean update.
+        if let Some(review) = world.assigned.get(next).cloned() {
+            if live_task(&world, review.task).requester == tasks::Party::Task(beta) {
+                assert_ne!(review.task, producer.task);
+                assert!(matches!(live_task(&world, review.task).contract, tasks::Contract::Verdict { .. }));
+                approve(&mut world, &review);
+            }
+            next += 1;
+        }
+        if matches!(change_row(&world, beta).change.state, temper_engine_domain_forge_change::State::Landed { .. }) {
+            assert_eq!(world.merges, 2, "large and beta both land while alpha remains pending");
+            return;
+        }
     }
-    let live = world
-        .store
-        .rows
-        .values()
-        .filter(|record| matches!(record, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(_)))))
-        .count();
-    assert!(live < cap as usize, "capacity is available: {live}/{cap}");
-    assert_eq!(live_task(&world, beta).phase, tasks::Phase::Active(tasks::Active::Due));
-    assert!(live_task(&world, beta).delegates.is_empty());
+    panic!("beta did not land after room freed: {:?}", change_row(&world, beta));
 }
 
 #[test]
