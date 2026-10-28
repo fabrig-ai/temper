@@ -135,26 +135,39 @@ fn landing_words(
     repository: Option<&forge::Repository>,
     pull: u64,
     configured: Option<&forge::Configured>,
+    verification: Option<&forge::Verification>,
 ) -> Box<[u8]> {
-    let digits = commit_text(merge);
-    let bound = usize::try_from(bound).expect("u32 fits usize");
-    let length = digits.len().min(bound);
-    let id = digits.get(..length).expect("landing words fit merge id");
-    let line = match repository {
-        Some(repository) if length == digits.len() => match bound.checked_sub(length.saturating_add(1)) {
-            Some(room) => landing_pull(repository, pull, configured, room),
-            None => None,
-        },
-        Some(_) | None => None,
-    };
-    let Some(line) = line else {
-        return Box::from(id);
-    };
-    let bytes = length.checked_add(1).expect("id separator").checked_add(line.len()).expect("bounded line");
-    let mut out = List::with_capacity(u32::try_from(bytes).expect("within contract bound"));
-    append(&mut out, id);
-    append(&mut out, b"\n");
-    append(&mut out, &line);
+    let mut out = List::with_capacity(bound);
+    append(&mut out, &commit_text(merge));
+    if let Some(verification) = verification {
+        for tier in &verification.tiers {
+            if let Some(repair) = tier.repaired {
+                let digits = commit_text(&repair);
+                let parts: [&[u8]; 4] = [
+                    b"\ncleared after red in ",
+                    &tier.tier,
+                    b", repaired by ",
+                    digits.get(..12).expect("12 commit digits"),
+                ];
+                let mut length = 0_usize;
+                for part in parts {
+                    length = length.checked_add(part.len()).expect("bounded result line");
+                }
+                if length <= usize::try_from(out.room()).expect("message room fits usize") {
+                    for part in parts {
+                        append(&mut out, part);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(repository) = repository
+        && let Some(room) = usize::try_from(out.room()).expect("room fits usize").checked_sub(1)
+        && let Some(line) = landing_pull(repository, pull, configured, room)
+    {
+        append(&mut out, b"\n");
+        append(&mut out, &line);
+    }
     out.into_boxed()
 }
 
@@ -209,6 +222,49 @@ fn landing_pull(
 fn news_words(news: &forge::News, limit: u32) -> Box<[u8]> {
     let mut out = List::with_capacity(limit);
     match news {
+        forge::News::Red { tier, landing, failing, run, log } => {
+            append(&mut out, b"forge red ");
+            append(&mut out, tier);
+            append(&mut out, b": landing ");
+            let digits = commit_text(landing);
+            append(&mut out, digits.get(..12).expect("12 commit digits"));
+            append(&mut out, b" fails ");
+            match failing {
+                temper_engine_domain_forge_tiers::Failures::Many => append(&mut out, b"many tests"),
+                temper_engine_domain_forge_tiers::Failures::Tests(tests) => {
+                    append(
+                        &mut out,
+                        skein_lib::Decimal::of(u64::try_from(tests.len()).expect("bounded test count")).as_bytes(),
+                    );
+                    append(&mut out, b" tests:");
+                    // Reserve the run line and half the remaining message for the
+                    // log's end. Test ids are included whole, oldest first.
+                    let run_bytes = run.url.len().saturating_add(b"\nrun ".len());
+                    let log_bytes = log
+                        .len()
+                        .min(usize::try_from(out.room()).expect("room fits usize").saturating_sub(run_bytes) / 2);
+                    let reserved = run_bytes.saturating_add(log_bytes);
+                    let mut separator = b" ".as_slice();
+                    for test in tests {
+                        if separator.len().saturating_add(test.len()).saturating_add(reserved)
+                            > usize::try_from(out.room()).expect("room fits usize")
+                        {
+                            break;
+                        }
+                        append(&mut out, separator);
+                        append(&mut out, test);
+                        separator = b", ";
+                    }
+                }
+            }
+            append(&mut out, b"\nrun ");
+            append(&mut out, &run.url);
+            if !log.is_empty() && out.room() > 0 {
+                append(&mut out, b"\n");
+                let start = log.len().saturating_sub(usize::try_from(out.room()).expect("room fits usize"));
+                append(&mut out, log.get(start..).expect("log end"));
+            }
+        }
         forge::News::Landing { before, after, .. } => {
             append(&mut out, b"forge landing ");
             append(&mut out, &commit_text(before));
@@ -1683,6 +1739,28 @@ fn watch_change_pull(domain: &mut Domain, env: &Env<Limits>, row: &forge::Change
     }
 }
 
+// jig's spec byte parameters are UTF-8, so the repair claim travels in the
+// same hexadecimal spelling as the base/head pins in change delegates.
+fn repair_commit(value: &[u8]) -> Option<skein_forge::api::Commit> {
+    if value.len() != 40 && value.len() != 64 {
+        return None;
+    }
+    let mut commit = [0_u8; 32];
+    for (pair, cell) in value.chunks_exact(2).zip(&mut commit) {
+        let mut byte = 0_u8;
+        for digit in pair {
+            let digit = match digit {
+                b'0'..=b'9' => digit.checked_sub(b'0')?,
+                b'a'..=b'f' => digit.checked_sub(b'a')?.checked_add(10)?,
+                _ => return None,
+            };
+            byte = byte.checked_mul(16)?.checked_add(digit)?;
+        }
+        *cell = byte;
+    }
+    Some(commit)
+}
+
 /// Register the connector's procedure beside the task's first due step.
 /// Parameter 1 names a project-unique repository tag, 2 the base,
 /// 3 an optional already-pushed branch, 4 the pull body, and 5 priority.
@@ -1695,6 +1773,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
     let mut body = None;
     let mut priority = 0_i32;
     let mut base_repair = false;
+    let mut repairing = None;
     for parameter in &context.spec.parameters {
         match parameter {
             tasks::Parameter::Resource { name: 1, connector, resource } => {
@@ -1712,6 +1791,10 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 priority = number;
             }
             tasks::Parameter::Number { name: 9, value: 1 } => base_repair = true,
+            tasks::Parameter::Bytes { name: 12, value } => {
+                let Some(commit) = repair_commit(value) else { return false };
+                repairing = Some(commit);
+            }
             tasks::Parameter::Bytes { name: 6, .. } => {}
             tasks::Parameter::Number { .. } | tasks::Parameter::Bytes { .. } | tasks::Parameter::Resource { .. } => {
                 return false;
@@ -1752,6 +1835,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
     if domain.forge.change(task).is_none() {
         domain.work.push(Work::Forge(forge::Event::Change {
             row: forge::ChangeRow {
+                repairing,
                 task,
                 repository: provider,
                 branch: branch.clone(),
@@ -2035,6 +2119,7 @@ pub(crate) fn chat_change(
     context: &tasks::DelegationContext,
     words: Box<[u8]>,
     named: Option<&[u8]>,
+    repairs: Option<skein_forge::api::Commit>,
 ) -> Result<super::Delegate, tasks::Refusal> {
     let repositories = domain.forge.writable_repositories(context.project);
     let mut chosen = None;
@@ -2099,11 +2184,22 @@ pub(crate) fn chat_change(
         executor: tasks::Executor::Procedure { connector: domain.config.forge_connector, code: CHANGE_CODE },
         spec: tasks::Spec {
             words,
-            parameters: Box::new(change_parameters(
-                domain.config.forge_connector,
-                repository.provider,
-                repository.settings.default_branch.clone(),
-            )),
+            parameters: {
+                let mut parameters = List::with_capacity(3);
+                for parameter in change_parameters(
+                    domain.config.forge_connector,
+                    repository.provider,
+                    repository.settings.default_branch.clone(),
+                ) {
+                    parameters.push(parameter).expect("repository and base");
+                }
+                if let Some(commit) = repairs {
+                    parameters
+                        .push(tasks::Parameter::Bytes { name: 12, value: commit_text(&commit) })
+                        .expect("repair claim");
+                }
+                parameters.into_boxed()
+            },
             inputs: Box::new([]),
         },
         // Leave room for the pull's words and address as well as the merge id.
@@ -2662,7 +2758,7 @@ fn change_landing_words(
     let row = domain.forge.change(task).expect("landed change");
     let repository = domain.forge.repository(row.repository);
     let configured = domain.forge.configured(row.repository.forge);
-    landing_words(merge, bound, repository, pull, configured)
+    landing_words(merge, bound, repository, pull, configured, domain.forge.landing_verification(row.repository, *merge))
 }
 
 /// Explain a failed review in the same decision that holds its change.

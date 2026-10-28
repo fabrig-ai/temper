@@ -1068,3 +1068,71 @@ fn a_restart_while_reading_a_failed_report_reads_it_again() {
     report(&mut d, TWO_FAILURES, false);
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().part, policy::Part::Rerun { failed: tests() });
 }
+
+#[test]
+fn the_news_carries_the_end_of_each_failed_jobs_log() {
+    // Each job gets 32 bytes from the 64-byte two-job message budget.
+    const SHARE: usize = 32;
+    const MESSAGE: u32 = 64; // Two 32-byte job shares.
+    let mut news = skein_lib::List::with_capacity(MESSAGE);
+    for (name, log) in [
+        (b"first".as_slice(), b"discarded prefix\nfirst end\n".as_slice()),
+        (b"second".as_slice(), b"discarded prefix\nsecond end\n".as_slice()),
+    ] {
+        for byte in crate::tiers::red_job(name, Some(log), SHARE).as_ref() {
+            news.push(*byte).expect("two job shares");
+        }
+    }
+    assert_eq!(news.as_slice(), b"end of job first's log:\nrst end\nend of job second's log:\nnd end\n");
+}
+#[test]
+fn a_failed_job_without_a_readable_log_is_still_named() {
+    const SHARE: usize = 32;
+    assert_eq!(crate::tiers::red_job(b"first", None, SHARE).as_ref(), b"end of job first's log:\n");
+}
+
+#[test]
+fn a_receipts_unreadable_run_does_not_hold_its_red_news() {
+    const GOAL: u64 = 94;
+    let mut d = red_range(&[MERGE]);
+    red(&mut d);
+    let key = (REPO, BROWSER.into());
+    let row = d.tier_rows.get_mut(&key).unwrap();
+    row.flight = None;
+    row.branch = TierBranch::Absent;
+    row.record.run.as_mut().unwrap().part = policy::Part::Whole;
+    let result = row.result.as_mut().unwrap();
+    result.received = true;
+    result.status = TierBranch::Made;
+    let topic = Topic::Landings { repository: REPO, branch: b"main".as_slice().into() };
+    d.subscriptions
+        .insert(
+            (GOAL, topic.clone()),
+            Subscriber {
+                task: GOAL,
+                number: GOAL,
+                topic,
+                own_change: None,
+                goal_tasks: Some(Box::new([CHANGE])),
+                paths: Box::new([]),
+            },
+        )
+        .unwrap();
+    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let mut read = None;
+    for (owner, candidate) in &d.tier_reads {
+        if *candidate == key {
+            read = Some(*owner);
+        }
+    }
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::answered(&mut d, &env(), read.expect("receipt log read"), Err(api::Error::Busy), &mut out);
+    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let mut told = None;
+    for request in &out {
+        if let Request::News { task, news: News::Red { .. }, .. } = request {
+            told = Some(*task);
+        }
+    }
+    assert_eq!(told, Some(GOAL));
+}

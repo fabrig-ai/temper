@@ -553,6 +553,14 @@ pub enum Class {
 /// News delivered through a topic to task inboxes.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum News {
+    /// A landing a tier's verdict blames (domain/after-landing.md, 7).
+    Red {
+        tier: Box<[u8]>,
+        landing: skein_forge::api::Commit,
+        failing: temper_engine_domain_forge_tiers::Failures,
+        run: ReceiptRun,
+        log: Box<[u8]>,
+    },
     /// A branch moved; overlap is decided from bounded file facts.
     Landing { before: skein_forge::api::Commit, after: skein_forge::api::Commit, files: Option<Box<[Box<[u8]>]>> },
     /// The combined CI state changed at its head.
@@ -611,6 +619,8 @@ pub struct IssueRow {
 /// A change task's forge parameters and top-owned procedure state.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ChangeRow {
+    /// Claimed red landing repaired by this change (domain/after-landing.md, 7).
+    pub repairing: Option<skein_forge::api::Commit>,
     pub task: u64,
     pub repository: skein_forge::api::Repository,
     pub branch: Box<[u8]>,
@@ -873,6 +883,8 @@ pub struct RepositoryTiers {
 /// Store family 26: one landing temper made and its verification (domain/after-landing.md, 10).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Verification {
+    /// The red landing named by this landing's change.
+    pub repairs: Option<skein_forge::api::Commit>,
     pub repository: skein_forge::api::Repository,
     pub commit: skein_forge::api::Commit,
     /// The change tasks this commit landed, oldest first: one by queue.
@@ -883,6 +895,8 @@ pub struct Verification {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TierVerification {
+    /// Goals already told of this tier's red, persisted with their news.
+    pub told: Box<[u64]>,
     /// The tier's name, at most `CHECK_NAME_BYTES`.
     pub tier: Box<[u8]>,
     /// None while verifying; otherwise the run and its verdict on this landing.

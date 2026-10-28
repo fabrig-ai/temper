@@ -35,6 +35,7 @@ pub const LIMITS: forge::Limits = forge::Limits {
     test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
+    message_bytes: 512,
     client: skein_forge_client::Limits {
         pending: 4,
         calls: 2,

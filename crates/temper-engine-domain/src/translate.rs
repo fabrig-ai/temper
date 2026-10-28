@@ -127,7 +127,11 @@ pub struct AfterLanding {
 }
 
 pub(crate) fn environment_forge(env: &Env<Limits>) -> Env<forge::Limits> {
-    Env { now: env.now, wall: env.wall, limits: env.limits.forge }
+    Env {
+        now: env.now,
+        wall: env.wall,
+        limits: forge::Limits { message_bytes: env.limits.tasks.message_bytes, ..env.limits.forge },
+    }
 }
 
 pub(crate) fn checked_call(mut body: Call, limits: &Limits) -> Call {

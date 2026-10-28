@@ -65,6 +65,7 @@ pub const LIMITS: top::Limits = top::Limits {
     test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
+    message_bytes: 512,
     client: CLIENT,
     issue_policy: temper_engine_domain_forge_issues::Limits {
         plan_items: 8,
@@ -150,7 +151,7 @@ impl World {
             None,
         )
     }
-    /// Main, three member branches, the whole run, and its one probe coexist.
+    /// Main and five member branches coexist with the whole run or its probe.
     #[must_use]
     pub fn tiered_reports(flaky: Box<[Box<[u8]>]>) -> World {
         Self::configured(
@@ -160,7 +161,7 @@ impl World {
             Some(skein_forge_client::Writer { forge: REPO.forge, author: 1 }),
             None,
             false,
-            6,
+            7,
             false,
             true,
             Some(flaky),

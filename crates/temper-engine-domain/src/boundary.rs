@@ -143,7 +143,7 @@ pub enum Tool {
     /// Expand a goal in the run's words into one ordinary named delegation.
     Goal { words: Box<[u8]>, advisor: bool },
     /// Expand a project repository change into one ordinary named delegation.
-    Change { words: Box<[u8]>, repository: Option<Box<[u8]>> },
+    Change { words: Box<[u8]>, repository: Option<Box<[u8]>>, repairs: Option<skein_forge::api::Commit> },
     /// Create one authorized batch of direct task delegates.
     Delegate { batch: Box<[Delegate]> },
     /// Amend one live delegate after authority fitting and finite source checks.

@@ -42,6 +42,10 @@ pub(super) fn encode(row: &d::Verification) -> w::Verification {
     }
     let mut tiers = List::with_capacity(u32::try_from(row.tiers.len()).expect(FITS));
     for tier in &row.tiers {
+        let mut told = List::with_capacity(u32::try_from(tier.told.len()).expect(FITS));
+        for goal in &tier.told {
+            told.push(*goal).expect(FITS);
+        }
         let verdict = match &tier.verdict {
             Some(verdict) => Some(
                 w::TierVerdict::new(
@@ -56,7 +60,7 @@ pub(super) fn encode(row: &d::Verification) -> w::Verification {
             .push(
                 w::TierVerification::new(
                     &w::CEILINGS,
-                    w::TierVerificationParts { tier: tier.tier.clone(), verdict, repaired: tier.repaired },
+                    w::TierVerificationParts { told, tier: tier.tier.clone(), verdict, repaired: tier.repaired },
                 )
                 .expect(FITS),
             )
@@ -65,6 +69,7 @@ pub(super) fn encode(row: &d::Verification) -> w::Verification {
     w::Verification::new(
         &w::CEILINGS,
         w::VerificationParts {
+            repairs: row.repairs,
             repository: names::encode_repository(row.repository),
             commit: row.commit,
             changes,
@@ -102,10 +107,10 @@ pub(super) fn decode_blame(value: w::Blame) -> Result<Blame, Undecodable> {
 }
 
 pub(super) fn decode(row: w::Verification) -> Result<d::Verification, Undecodable> {
-    let w::VerificationParts { repository, commit, changes, tiers } = row.into_parts();
+    let w::VerificationParts { repairs, repository, commit, changes, tiers } = row.into_parts();
     let mut decoded = List::with_capacity(tiers.len());
     for tier in tiers.into_boxed() {
-        let w::TierVerificationParts { tier, verdict, repaired } = tier.into_parts();
+        let w::TierVerificationParts { told, tier, verdict, repaired } = tier.into_parts();
         if tier.is_empty() {
             return Err(Undecodable);
         }
@@ -127,9 +132,10 @@ pub(super) fn decode(row: w::Verification) -> Result<d::Verification, Undecodabl
             }
             None => None,
         };
-        decoded.push(d::TierVerification { tier, verdict, repaired }).expect(FITS);
+        decoded.push(d::TierVerification { told: told.into_boxed(), tier, verdict, repaired }).expect(FITS);
     }
     Ok(d::Verification {
+        repairs,
         repository: names::decode_repository(repository),
         commit,
         changes: changes.into_boxed(),

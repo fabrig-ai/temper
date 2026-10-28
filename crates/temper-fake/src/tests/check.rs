@@ -79,6 +79,7 @@ pub const LIMITS: d::Limits = d::Limits {
     test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
+    message_bytes: 512,
     client: CLIENT,
     issue_policy: temper_engine_domain_forge_issues::Limits {
         plan_items: 8,
@@ -151,6 +152,7 @@ fn entry(repository: Repository, number: u64, head: [u8; 32], parked: bool) -> d
 }
 fn changed(task: u64, repository: Repository, pull: Option<u64>, head: Option<[u8; 32]>) -> d::Stored {
     d::Stored::Change(d::ChangeRow {
+        repairing: None,
         task,
         repository,
         branch: b"temper/change".as_slice().into(),

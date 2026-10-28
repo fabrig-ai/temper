@@ -152,6 +152,7 @@ pub struct Domain {
     pub(crate) tier_rows: Map<(skein_forge::api::Repository, Box<[u8]>), crate::TierRow>,
     pub(crate) tier_walks: Map<(skein_forge::api::Repository, Box<[u8]>), crate::tiers::Walk>,
     pub(crate) tier_follows: Map<(skein_forge::api::Repository, Box<[u8]>), crate::runs::Follow>,
+    pub(crate) tier_logs: Map<(skein_forge::api::Repository, Box<[u8]>), crate::tiers::RedLogs>,
     pub(crate) tier_reads: Map<Token, (skein_forge::api::Repository, Box<[u8]>)>,
     pub(crate) tier_config_limits: Limits,
     pub(crate) tier_limits: (u32, u32),
@@ -581,6 +582,7 @@ impl Domain {
             tier_rows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier rows bound")),
             tier_walks: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier walks bound")),
             tier_follows: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("tier follows bound")),
+            tier_logs: Map::with_capacity(l.repositories.checked_mul(l.tiers).expect("one red log gather per tier")),
             tier_reads: Map::with_capacity(
                 l.repositories
                     .checked_mul(l.tiers)
@@ -4713,7 +4715,7 @@ pub(crate) fn classify(d: &Domain, subscription: &Subscriber, news: &News) -> Cl
                 Some(_) => Class::Kept,
             }
         }
-        News::Ci { .. } | News::Changed { .. } => Class::Wakes,
+        News::Red { .. } | News::Ci { .. } | News::Changed { .. } => Class::Wakes,
     }
 }
 

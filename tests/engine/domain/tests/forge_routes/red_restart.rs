@@ -17,6 +17,10 @@ enum Cut {
     RunRelease,
     Red,
     Repaired,
+    Untold,
+    Told,
+    Repairing,
+    RepairLanding,
 }
 fn tier(world: &World) -> Option<&forge_top::TierRow> {
     world.store.rows.values().find_map(|record| match record {
@@ -59,6 +63,10 @@ fn reached(world: &World, cut: Cut) -> bool {
         },
         Cut::Red => !row.record.flakes.is_empty() && verifications(world).any(|verification| verification.tiers.iter().any(|tier| matches!(tier.verdict, Some(forge_top::TierVerdict { blame: Blame::Owns(_) | Blame::Suspect(_), .. })))) && world.store.rows.values().any(|record| matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Change(row) if matches!(row.change.state, temper_engine_domain_forge_change::State::Red { .. })))),
         Cut::Repaired => verifications(world).any(|verification| verification.tiers.iter().any(|tier| tier.repaired.is_some())),
+        Cut::Untold => verifications(world).any(|verification| verification.tiers.iter().any(|tier| tier.told.is_empty() && matches!(tier.verdict, Some(forge_top::TierVerdict { blame: Blame::Owns(_) | Blame::Suspect(_), .. })))),
+        Cut::Told => verifications(world).any(|verification| verification.tiers.iter().any(|tier| !tier.told.is_empty())),
+        Cut::Repairing => world.store.rows.values().any(|record| matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Change(row) if row.repairing.is_some()))),
+        Cut::RepairLanding => verifications(world).any(|verification| verification.repairs.is_some()),
     }
 }
 fn cold_at(world: &mut World, cut: Cut) {
@@ -67,7 +75,15 @@ fn cold_at(world: &mut World, cut: Cut) {
         Cut::ProbeBranch => Some(HoldWrite::All),
         Cut::ProbeRelease => Some(HoldWrite::DeleteBranch(b"temper/tier/browser.2.0")),
         Cut::RunRelease => Some(HoldWrite::DeleteBranch(b"temper/tier/browser.2")),
-        Cut::Report | Cut::Rerun | Cut::Probe | Cut::Red | Cut::Repaired => None,
+        Cut::Report
+        | Cut::Rerun
+        | Cut::Probe
+        | Cut::Red
+        | Cut::Repaired
+        | Cut::Untold
+        | Cut::Told
+        | Cut::Repairing
+        | Cut::RepairLanding => None,
     };
     for _ in 0..RED_TICKS {
         if reached(world, cut) && world.pending.is_empty() && world.store.pending.is_empty() {
@@ -161,4 +177,128 @@ fn a_cold_restart_reads_back_every_red_record() {
         assert_eq!(tier(&world).expect("repaired tier").record.failing, policy::Failures::Tests(Box::new([])));
         assert!(world.store.rows.values().all(|record| !matches!(record, Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Change(row) if matches!(row.change.state, temper_engine_domain_forge_change::State::Red { .. })))));
     }
+}
+
+#[test]
+fn a_cold_restart_reads_back_every_told_and_repairing_record() {
+    let mut world = produced_named_red();
+    cold_at(&mut world, Cut::Untold);
+    cold_at(&mut world, Cut::Told);
+    let red =
+        verifications(&world).find(|row| row.tiers.iter().any(|tier| !tier.told.is_empty())).expect("told red").clone();
+    let goal = red.tiers[0].told[0];
+    for _ in 0..TIER_TICKS {
+        world.tick();
+        if world
+            .assigned
+            .iter()
+            .any(|run| run.task == goal && run.messages.iter().any(|message| message.words.starts_with(b"forge red ")))
+        {
+            break;
+        }
+    }
+    let owner = world.assigned.iter().rev().find(|run| run.task == goal).expect("red wakes its owner").clone();
+    let answer = change_tool::repair(&mut world, &owner, 196, None, b"Repair the red landing", Some(red.commit));
+    let engine::CallAnswer::Delegated(made) = answer else { panic!("repair delegated: {answer:?}") };
+    let repair = made[0].task;
+    temper_engine_domain_world::tier_runs::park_owner(&mut world, &owner);
+    for _ in 0..TIER_TICKS {
+        world.tick();
+        if world.assigned.iter().any(|run| task_row_requester(&world, run.task) == Some(repair)) {
+            break;
+        }
+    }
+    let producer = world
+        .assigned
+        .iter()
+        .rev()
+        .find(|run| task_row_requester(&world, run.task) == Some(repair))
+        .expect("repair's producer")
+        .clone();
+    cold_at(&mut world, Cut::Repairing);
+    // Readiness precedes the fake worker's adoption hello by one tick.
+    for _ in 0..20 {
+        world.tick();
+    }
+    let branch = producer.workspace.repositories[0].push.as_ref().expect("repair branch").clone();
+    produce_path_content(&mut world, &producer, &branch, b"failures", b"");
+    cold_at(&mut world, Cut::RepairLanding);
+    let repair_commit =
+        verifications(&world).find(|row| row.repairs == Some(red.commit)).expect("landing retains repair claim").commit;
+    cold_at(&mut world, Cut::Repaired);
+    for _ in 0..TIER_TICKS {
+        world.tick();
+        if matches!(
+            world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(red.changes[0])))),
+            Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(_))))
+        ) {
+            break;
+        }
+    }
+    let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row)))) =
+        world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(red.changes[0]))))
+    else {
+        panic!("repaired change gives its result")
+    };
+    let tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Change { words, .. })) = &row.phase else {
+        panic!("successful change result")
+    };
+    let mut repair_id = String::new();
+    for byte in &repair_commit[..6] {
+        write!(&mut repair_id, "{byte:02x}").expect("repair commit hex");
+    }
+    let phrase = format!("cleared after red in browser, repaired by {repair_id}");
+    assert!(std::str::from_utf8(words).expect("result words").contains(&phrase));
+    assert!(world.root.ready());
+}
+fn task_row_requester(world: &World, task: u64) -> Option<u64> {
+    match world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(task)))) {
+        Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) => match row.requester {
+            tasks::Party::Task(parent) => Some(parent),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn produced_named_red() -> World {
+    let mut world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { tier: true, tier_reports: true, ..StoryLimits::default() },
+    );
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 3, Box::new([])));
+    // The existing tracked story's 200-unit goal funds both changes; avoiding
+    // its extra 100-unit nested goal leaves room for the named repair.
+    let ask = walking::goal_from(
+        world.chat(1, b"Repair my red landing"),
+        people::TaskExecutor::Agent { charter: 1 },
+        jig_core_world::fixtures::Goal { budget: 200, priority: 3, deadline: None },
+    );
+    let owner = assigned_chat(&mut world, 92, ask);
+    let engine::CallAnswer::Delegated(made) = change_tool::change(&mut world, &owner, 93, None, b"First change") else {
+        panic!("first change delegated")
+    };
+    let change = made[0].task;
+    for _ in 0..TIER_TICKS {
+        world.tick();
+        if world.assigned.iter().any(|run| task_row_requester(&world, run.task) == Some(change)) {
+            break;
+        }
+    }
+    let producer = world
+        .assigned
+        .iter()
+        .find(|run| task_row_requester(&world, run.task) == Some(change))
+        .expect("first producer")
+        .clone();
+    let branch = producer.workspace.repositories[0].push.as_ref().expect("first branch").clone();
+    temper_engine_domain_world::tier_runs::park_owner(&mut world, &owner);
+    produce_path_content(&mut world, &producer, &branch, b"failures", FAILED);
+    world
 }

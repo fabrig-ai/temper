@@ -756,7 +756,21 @@ impl World {
                     reruns: 0,
                     cue: None,
                 },
-                protection: None,
+                // A tier verdict is independent of the required build check.
+                protection: if tier_reports {
+                    Some(raw::Protection {
+                        linear: false,
+                        code_owners: false,
+                        bypassing_users: Box::new([]),
+                        queue: false,
+                        branch: b"main".as_slice().into(),
+                        contexts: Box::new([b"build".as_slice().into()]),
+                        approvals: 0,
+                        dismiss_stale: false,
+                    })
+                } else {
+                    None
+                },
                 hooked: false,
             },
         );

@@ -243,7 +243,7 @@ fn finish(d: &mut Domain, pending: Pending, paths: Option<Box<[Box<[u8]>]>>) {
 pub(crate) fn classify(d: &Domain, subscriber: &Subscriber, news: &News) -> Class {
     let (after, files) = match news {
         News::Landing { after, files, .. } => (after, files),
-        News::Ci { .. } | News::Changed { .. } => return Class::Wakes,
+        News::Red { .. } | News::Ci { .. } | News::Changed { .. } => return Class::Wakes,
     };
     let Some(tasks) = &subscriber.goal_tasks else { return domain::classify(d, subscriber, news) };
     if let Some(owner) = d.landed.get(after)

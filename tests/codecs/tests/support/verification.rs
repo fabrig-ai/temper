@@ -7,13 +7,21 @@ pub const TEST_ID_BYTES: usize = 256;
 pub const REPOSITORY: skein_forge::api::Repository = skein_forge::api::Repository { forge: 1, repository: 2 };
 pub const COMMIT: [u8; 32] = [3; 32];
 pub const TASK: u64 = 51;
+// The forge fixture has eight goal subscriptions.
+pub const GOALS: u64 = 8;
 
 pub fn smallest() -> Stored {
     Stored::Verification(Verification {
+        repairs: None,
         repository: REPOSITORY,
         commit: COMMIT,
         changes: Box::new([TASK]),
-        tiers: Box::new([TierVerification { tier: b"browser".as_slice().into(), verdict: None, repaired: None }]),
+        tiers: Box::new([TierVerification {
+            told: Box::new([]),
+            tier: b"browser".as_slice().into(),
+            verdict: None,
+            repaired: None,
+        }]),
     })
 }
 
@@ -24,16 +32,19 @@ pub fn fullest() -> Stored {
     }
     let failures = Failures::Tests(tests.into_boxed_slice());
     Stored::Verification(Verification {
+        repairs: Some(COMMIT),
         repository: REPOSITORY,
         commit: COMMIT,
         changes: Box::new([TASK]),
         tiers: Box::new([
             TierVerification {
+                told: (TASK..TASK + GOALS).collect(),
                 tier: Box::new([b'a'; 32]),
                 verdict: Some(TierVerdict { run: 1, blame: Blame::Owns(failures.clone()) }),
                 repaired: Some([4; 32]),
             },
             TierVerification {
+                told: (TASK..TASK + GOALS).collect(),
                 tier: Box::new([b'b'; 32]),
                 verdict: Some(TierVerdict { run: 2, blame: Blame::Suspect(failures) }),
                 repaired: None,
@@ -45,6 +56,7 @@ pub fn fullest() -> Stored {
 pub fn change_row(state: temper_engine_domain_forge_change::State) -> temper_engine_domain_forge::ChangeRow {
     use temper_engine_domain_forge_change as change;
     temper_engine_domain_forge::ChangeRow {
+        repairing: Some(COMMIT),
         task: TASK,
         repository: REPOSITORY,
         branch: b"temper/51".as_slice().into(),

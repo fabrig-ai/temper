@@ -214,7 +214,7 @@ pub(crate) fn write(value: &Value) -> Result<api::Write, Problem> {
     }
 }
 
-fn commit(value: &Value, member: &'static [u8]) -> Result<api::Commit, Problem> {
+pub(crate) fn commit(value: &Value, member: &'static [u8]) -> Result<api::Commit, Problem> {
     let text = value.text(member)?;
     if text.len() != 40 && text.len() != 64 {
         return Err(Problem::Range(member));
@@ -232,6 +232,7 @@ fn high_hex(value: u8, member: &'static [u8]) -> Result<u8, Problem> {
     match value {
         b'0'..=b'9' => Ok(value.saturating_sub(b'0')),
         b'a'..=b'f' => Ok(value.saturating_sub(b'a').saturating_add(10)),
+        b'A'..=b'F' => Ok(value.saturating_sub(b'A').saturating_add(10)),
         _ => Err(Problem::Range(member)),
     }
 }

@@ -63,6 +63,8 @@ pub struct Limits {
     pub brief_sections: u32,
     /// Maximum bytes retained for one gathered brief section.
     pub brief_bytes: u32,
+    /// The root's `tasks.message_bytes`, also bounding red news and job reads.
+    pub message_bytes: u32,
     pub issue_policy: temper_engine_domain_forge_issues::Limits,
     pub change_policy: temper_engine_domain_forge_change::Limits,
     pub queue_window: skein_lib::Duration,

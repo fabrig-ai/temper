@@ -480,6 +480,7 @@ const FORGE_LIMITS: forge::Limits = forge::Limits {
     test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
+    message_bytes: 512,
     client: CLIENT,
     issue_policy: temper_engine_domain_forge_issues::Limits {
         plan_items: 8,
