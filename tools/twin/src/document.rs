@@ -47,7 +47,7 @@ pub(crate) fn script(
                 if *message.role() != Role::Assistant {
                     continue;
                 }
-                if lines == temper_fake::ENTRIES {
+                if lines == temper_fake::LIST_ENTRIES {
                     return Err(Refusal::Bounds { what: "lines" });
                 }
                 if lines != 0 {

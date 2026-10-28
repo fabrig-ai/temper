@@ -21,12 +21,16 @@ pub use steps::steps;
 
 /// The whole JSON input bound, checked before decoding or creating any output.
 pub const DOCUMENT_BYTES: u32 = 1 << 20;
-/// Joint script payload and arrays, including sixteen scripts each way and fallback.
+/// Joint script payload and arrays, including eleven scripts each way and fallback.
 pub const SCRIPT_BYTES: u32 = 1 << 18;
 /// One answer's owned parts and bytes, before the provider encodes it.
 pub const ANSWER_BYTES: u32 = 1 << 16;
-/// Each bounded document list: models, scripts, turns, lines and repositories.
-pub const ENTRIES: u32 = 16;
+/// Scripts per cue list, sized for rung A's first passing walk's eleven agents.
+pub const ENTRIES: u32 = 11;
+/// Turns per script, matching the stock coding agent and reviewer runs.
+pub const SCRIPT_TURNS: u32 = 16;
+/// Other document lists: models, lines and repositories.
+pub const LIST_ENTRIES: u32 = 8;
 
 #[cfg(test)]
 mod tests;

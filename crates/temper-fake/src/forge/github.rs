@@ -92,7 +92,7 @@ pub(super) fn decode(d: &Json, at: u32, p: &Path) -> Result<Github, Refusal> {
             }
         }
         if let Some(installation) = &account.installation {
-            installed = installed.checked_add(1).expect("sixteen accounts");
+            installed = installed.checked_add(1).expect("eight accounts");
             if installation.id != installed {
                 return Err(read::why(
                     &p.member(b"installation").member(b"id"),
@@ -100,7 +100,7 @@ pub(super) fn decode(d: &Json, at: u32, p: &Path) -> Result<Github, Refusal> {
                 ));
             }
         }
-        accounts.push(account).expect("sixteen accounts");
+        accounts.push(account).expect("eight accounts");
     }
     Ok(Github { id: app_id, slug, bot, key, setup_url, accounts: accounts.into_boxed(), token_life })
 }
@@ -143,7 +143,7 @@ fn account(d: &Json, at: u32, p: &Path) -> Result<Account, Refusal> {
                     if names.as_slice().contains(&name) {
                         return Err(read::why(&p, b"must be unique"));
                     }
-                    names.push(name).expect("sixteen repository names");
+                    names.push(name).expect("eight repository names");
                 }
                 Some(names.into_boxed())
             }
@@ -193,7 +193,7 @@ impl Github {
         None
     }
     fn config(&self, document: &Document) -> layer::Config {
-        let mut accounts = List::with_capacity(crate::ENTRIES);
+        let mut accounts = List::with_capacity(crate::LIST_ENTRIES);
         for account in &self.accounts {
             accounts
                 .push(layer::service::Account {
@@ -201,21 +201,21 @@ impl Github {
                     id: account.id,
                     organization: account.kind == Kind::Organization,
                 })
-                .expect("sixteen accounts");
+                .expect("eight accounts");
         }
-        let mut repositories = List::with_capacity(crate::ENTRIES);
+        let mut repositories = List::with_capacity(crate::LIST_ENTRIES);
         for (i, repository) in document.repositories.iter().enumerate() {
             let account = self.account(&repository.owner).expect("checked owner");
             repositories
                 .push(layer::service::Row {
-                    id: u32::try_from(i).expect("sixteen repositories").checked_add(1).expect("repository id"),
+                    id: u32::try_from(i).expect("eight repositories").checked_add(1).expect("repository id"),
                     owner: account.login.clone(),
                     owner_id: account.id,
                     organization: account.kind == Kind::Organization,
                     name: repository.name.clone(),
                     private: true,
                 })
-                .expect("sixteen repositories");
+                .expect("eight repositories");
         }
         let first = self.accounts.first().expect("nonempty accounts");
         let mut permissions = List::with_capacity(16);
@@ -284,13 +284,13 @@ impl Github {
             let reach = match &installation.repositories {
                 None => Reach::All,
                 Some(names) => {
-                    let mut ids = List::with_capacity(crate::ENTRIES);
+                    let mut ids = List::with_capacity(crate::LIST_ENTRIES);
                     for (i, repository) in document.repositories.iter().enumerate() {
                         if repository.owner == account.login && names.contains(&repository.name) {
                             ids.push(
-                                u32::try_from(i).expect("sixteen repositories").checked_add(1).expect("repository id"),
+                                u32::try_from(i).expect("eight repositories").checked_add(1).expect("repository id"),
                             )
-                            .expect("sixteen ids");
+                            .expect("eight ids");
                         }
                     }
                     Reach::Listed(ids)
@@ -323,11 +323,11 @@ pub fn limits() -> layer::Limits {
             target_bytes: wire.documents.target_bytes,
         },
         installations: layer::installations::Limits {
-            installations: crate::ENTRIES,
+            installations: crate::LIST_ENTRIES,
             tokens: 32,
-            listed: crate::ENTRIES,
+            listed: crate::LIST_ENTRIES,
         },
-        pages: layer::pages::Limits { states: crate::ENTRIES, manifest_bytes: 8192 },
+        pages: layer::pages::Limits { states: crate::LIST_ENTRIES, manifest_bytes: 8192 },
         page: 32,
         body: crate::limits::FORGE_BODY,
         response: crate::limits::FORGE_BODY,

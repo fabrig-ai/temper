@@ -475,7 +475,7 @@ fn start(arguments: &Arguments, created: &mut Created) -> Result<(Host, skein_sh
         observations,
         writer,
         git_calls: forge::observations::GitCalls::new(),
-        installations: forge::observations::Installations::new(temper_fake::ENTRIES, 128),
+        installations: forge::observations::Installations::new(temper_fake::LIST_ENTRIES, 128),
         llm_cursor: 0,
         buffer,
         stopped: false,
@@ -887,7 +887,7 @@ impl skein_shell::Host for Host {
         self.peer.host().worst_case()
             + self.control.as_ref().map_or(0, |_| control::Control::worst_case())
             + List::<u8>::worst_case(self.buffer.capacity()).expect("bounded observation buffer")
-            + List::<u64>::worst_case(temper_fake::ENTRIES).expect("bounded installation snapshot")
+            + List::<u64>::worst_case(temper_fake::LIST_ENTRIES).expect("bounded installation snapshot")
             + if self.writer.is_some() { u64::from(limits::OBSERVATION_STATE_BYTES) } else { 0 }
             + self.ready.as_ref().map_or(0, |prefix| u64::try_from(prefix.len()).expect("ready bytes"))
             + self
