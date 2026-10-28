@@ -67,7 +67,7 @@ pub use admission::{admits, is_new_work};
 pub use boundary::{Encodable, Encoded, Event, Invalid, Request};
 pub use domain::{Domain, fire, resume, step};
 pub use facts::Fact;
-pub use limits::{Limits, SEPARATOR, Unfit, WATERMARK, max_out, unfit, worst_case};
+pub use limits::{Limits, SEPARATOR, Unfit, WATERMARK, unfit, worst_case};
 // The payloads are the children's: a parent may use its children's types.
 pub use jig_domain_host as host;
 pub use smith_host_domain as agent;

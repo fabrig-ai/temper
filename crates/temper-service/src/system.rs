@@ -314,6 +314,11 @@ impl Service {
             links: Queue::with_capacity(queue),
         })
     }
+    // The stock small profile's Prepared::room on main 8cd49c3d47:
+    // twice its worker root output bound of 5,099. These kernel-facing
+    // process queues retain that capacity independently of the watermark.
+    const WORKER_ALONE_QUEUE: u32 = 10_198;
+
     /// Build the worker and shared IO without allocating any engine children.
     pub(crate) fn worker_alone(
         settings: &settings::Worker,
@@ -325,8 +330,8 @@ impl Service {
         jig_memory: u64,
     ) -> Result<Self, Problems> {
         let io_limits = settings.jig.limits.io;
-        let prepared = crate::worker_settings::prepare(settings, agent, limits)?;
-        let queue = prepared.room;
+        crate::worker_settings::prepare(settings, agent, limits)?;
+        let queue = Self::WORKER_ALONE_QUEUE;
         let worker_operations = crate::worker_settings::operations(&limits.git_component)
             .ok_or(crate::worker_settings::problem(b"limits", What::Bound))?;
         let operations = worker_alone_operations(&io_limits, worker_operations)
@@ -836,7 +841,7 @@ pub fn iterate(service: &mut Service, now: Time, wall: Wall) {
         {
             worker.abort();
         }
-        if runs && worker.room() {
+        if runs {
             worker.iterate(now, wall);
         }
         if let Some(engine) = &mut service.engine {
@@ -1266,7 +1271,8 @@ pub(crate) fn worker_process_memory_terms(
     agent: &settings::Agent,
     limits: &limits::Limits,
 ) -> Option<[crate::startup::MemoryTerm; 2]> {
-    let queue = crate::worker_settings::prepare(worker, agent, limits).ok()?.room;
+    crate::worker_settings::prepare(worker, agent, limits).ok()?;
+    let queue = Service::WORKER_ALONE_QUEUE;
     let operations =
         worker_alone_operations(&worker.jig.limits.io, crate::worker_settings::operations(&limits.git_component)?)?;
     let system = u64::try_from(size_of::<Service>())
