@@ -132,6 +132,11 @@ impl ChangeResult {
             }
             change::Repair::Gate(_) => self.repairs.add(b"review asked for changes", bound),
             change::Repair::Semantic => self.repairs.add(b"the base broke it", bound),
+            change::Repair::Landing { gate } => {
+                self.repairs.add(b"landing gate ", bound);
+                self.repairs.add(Decimal::of(u64::from(gate)).as_bytes(), bound);
+                self.repairs.add(b" failed", bound);
+            }
         }
     }
     pub(crate) fn reviewed(&mut self, head: &Commit, verdict: &[u8], bound: u32) {
