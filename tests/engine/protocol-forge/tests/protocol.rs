@@ -404,6 +404,7 @@ fn honest_costs_equal_the_requests_the_fake_served() {
     world.push(b"work", b"one");
     world.open_pull(b"work", b"main");
     world.run_for(60);
+    world.finish();
     let tally = world.tally();
     let starts = tally.routes.get(&Route::User).copied().unwrap_or(0)
         + tally.routes.get(&Route::ApiSettings).copied().unwrap_or(0);

@@ -228,7 +228,8 @@ fn demo_restart_asks_the_group_makes_no_act_and_forgets_the_start_answer() {
     d.send(engine::Event::Restart { pending: false });
     d.settle();
     assert!(d.immediate.iter().any(|request| matches!(request, engine::Request::SetUpGroup { forge: 1, .. })));
-    assert_eq!((keeps(&d), d.forge.as_ref().expect("fake forge").calls), (old_keeps, old_calls));
+    // Restart reads the adopted main's listing and tip, without making an act.
+    assert_eq!((keeps(&d), d.forge.as_ref().expect("fake forge").calls), (old_keeps, old_calls + 2));
     d.sign_in();
     d.settle();
     let sign_in = d.session();

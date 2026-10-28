@@ -435,6 +435,7 @@ fn named_pull_verdict(number: u64) -> Box<[Request]> {
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
+    outputs(&mut d, Event::SettleOutbox);
     fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pull = Some(1);
