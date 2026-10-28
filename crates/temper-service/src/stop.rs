@@ -134,13 +134,9 @@ pub(crate) fn root(engine: &mut Engine) {
     }
     let problems = match engine.domain.restore_failure() {
         Some(RestartRequest::Settings { failure, changed }) => settings_problem(failure, changed),
-        Some(RestartRequest::Unresolved { child, records }) => {
-            engine.end = Some(End::Stopped(Stop::Unresolved { child, records }));
-            return;
-        }
+        Some(RestartRequest::AccountsPastLimit { which }) => accounts_limit_problem(which),
         Some(RestartRequest::ProjectPolicy { project }) => project_policy_problem(project),
         Some(RestartRequest::HeldPastLimit { which, held, limit }) => held_limit_problem(which, held, limit),
-        Some(RestartRequest::UnheldRevision { task, revision }) => unheld_revision_problem(task, revision),
         Some(RestartRequest::Refused { step }) => {
             engine.end = Some(End::Stopped(Stop::RestoreStep { step }));
             return;
@@ -173,15 +169,15 @@ fn held_limit_problem(which: jig_domain_core::HeldLimit, held: u32, limit: u32) 
     problems.push(path, What::Bound);
     problems
 }
-fn unheld_revision_problem(task: u64, revision: u32) -> Problems {
-    let path = Path::root()
-        .member(b"tasks")
-        .member(skein_lib::Decimal::of(task).as_bytes())
-        .member(b"settings")
-        .member(b"revision")
-        .child(jig_protocol_config::Segment::Index(revision));
+fn accounts_limit_problem(which: jig_domain_accounts::RestoreLimit) -> Problems {
+    let name: &[u8] = match which {
+        jig_domain_accounts::RestoreLimit::Accounts => b"accounts",
+        jig_domain_accounts::RestoreLimit::Sources => b"sources",
+        jig_domain_accounts::RestoreLimit::SourcePlaces => b"source places",
+        jig_domain_accounts::RestoreLimit::ProgramNames => b"program names",
+    };
     let mut problems = Problems::empty();
-    problems.push(path, What::Refers);
+    problems.push(Path::root().member(b"accounts").member(name), What::Bound);
     problems
 }
 fn project_policy_problem(project: u32) -> Problems {
@@ -239,15 +235,6 @@ mod tests {
             let problems = crate::startup::Problems::jig(held_limit_problem(which, 3, 2), &Path::root());
             assert_eq!(crate::startup::lines(&problems).as_ref(), expected);
         }
-    }
-
-    #[test]
-    fn an_unheld_settings_revision_names_the_task_and_revision() {
-        let problems = crate::startup::Problems::jig(unheld_revision_problem(4_294_967_297, 7), &Path::root());
-        assert_eq!(
-            crate::startup::lines(&problems).as_ref(),
-            b"tasks.4294967297.settings.revision[7]: unknown reference\n"
-        );
     }
 
     #[test]

@@ -282,13 +282,6 @@ pub(crate) fn startup_page(
         return;
     }
     domain.startup_range = None;
-    if range != Range::Forge {
-        domain.work.push(Work::Core(jig_domain_core::Event::SettingsCommit {
-            // Leave the rest of the root route's room for restart callbacks.
-            room: jig_domain_core::settings::writes_worst_case(&core_limits(&env.limits))
-                .expect("validated settings write room"),
-        }));
-    }
     let request = if range == Range::Forge {
         // The connector confirms that its restored rows have been reconciled.
         domain.work.push(Work::ForgeRestored);
@@ -317,10 +310,9 @@ pub(crate) fn restart_request(
     match request {
         jig_domain_core::RestartRequest::Idle => {}
         jig_domain_core::RestartRequest::Settings { .. }
-        | jig_domain_core::RestartRequest::Unresolved { .. }
         | jig_domain_core::RestartRequest::ProjectPolicy { .. }
         | jig_domain_core::RestartRequest::HeldPastLimit { .. }
-        | jig_domain_core::RestartRequest::UnheldRevision { .. }
+        | jig_domain_core::RestartRequest::AccountsPastLimit { .. }
         | jig_domain_core::RestartRequest::Refused { .. } => {
             domain.stop_pending = true;
         }
@@ -338,11 +330,6 @@ pub(crate) fn restart_request(
                 );
             }
             jig_domain_core::RestartStep::LoadInbox => {
-                // The accounts' records came with the core's ranges: want each
-                // configured account once they are restored (jig's
-                // `examples/ops/domain/src/restart.rs`).
-                let routed = jig_domain_core::want_accounts(&mut domain.core, &environment_core(env));
-                route_core_requests(domain, env, decision, routed);
                 let census = domain.core.census(&core_limits(&env.limits));
                 let range = Range::Census(census);
                 domain.startup_range = Some(range.clone());

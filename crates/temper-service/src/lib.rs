@@ -71,11 +71,6 @@ pub enum Stop {
     RestoreStep {
         step: jig_domain_core::RestartStep,
     },
-    /// A child refused restored records before the store switch.
-    Unresolved {
-        child: jig_domain_core::RestoreChild,
-        records: u32,
-    },
     /// The forge refused restored records before the store switch.
     ForgeUnresolved {
         records: u32,
