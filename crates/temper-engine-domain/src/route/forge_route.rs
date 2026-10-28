@@ -345,6 +345,8 @@ fn read_name(repository: &forge::Repository, read: &skein_forge::api::Read, limi
         | skein_forge::api::Read::Runs { .. }
         | skein_forge::api::Read::Run { .. }
         | skein_forge::api::Read::Tree { .. }
+        | skein_forge::api::Read::Artifact { .. }
+        | skein_forge::api::Read::Commits { .. }
         | skein_forge::api::Read::Permission { .. } => None,
     };
     if let Some((kind, part)) = what {
