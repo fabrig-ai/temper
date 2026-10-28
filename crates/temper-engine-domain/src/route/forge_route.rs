@@ -2810,18 +2810,23 @@ fn drop_procedure_step(domain: &mut Domain, task: u64) {
     }
 }
 
-fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
+fn due_change_step(domain: &mut Domain, task: u64) -> Option<(u16, u32, u64)> {
     let due = domain.core.tasks.procedure_due(task);
     let offered = domain.forge.procedure_step(task);
     let Some((connector, code, step)) = due else {
         drop_procedure_step(domain, task);
-        return;
+        return None;
     };
     if connector != domain.config.forge_connector || code != CHANGE_CODE || (offered.is_some() && offered != Some(step))
     {
         drop_procedure_step(domain, task);
-        return;
+        return None;
     }
+    Some((connector, code, step))
+}
+
+fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
+    let Some((connector, code, step)) = due_change_step(domain, task) else { return };
     domain.forge.offered_change(task);
     let mut again = false;
     let decision = match choice {
