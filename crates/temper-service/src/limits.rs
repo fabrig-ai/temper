@@ -367,7 +367,6 @@ pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engi
 }
 
 /// The same effective projection, before sizing can refuse it anonymously.
-#[expect(clippy::manual_unwrap_or_default, reason = "the step subset uses explicit matches")]
 pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limits) -> engine::Limits {
     let mut root = engine::Limits {
         restore_bytes: 0,
@@ -390,7 +389,12 @@ pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limit
     };
     root.restore_bytes = match restore_bytes(&root, &jig.store) {
         Some(bytes) => bytes,
-        None => 0, // The normal startup admission names the invalid store layout.
+        None => {
+            // Keep the candidate priceable so normal store admission can name
+            // the invalid layout precisely. This candidate never starts.
+            root.restore_bytes = u64::from(root.loads.reply_bytes);
+            return root;
+        }
     };
     root
 }
