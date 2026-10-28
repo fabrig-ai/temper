@@ -1,7 +1,7 @@
 //! The ladder's real-model walks and their process proof (domain/testing.md, 2.7).
 //!
 //! Like `forge_land`'s oracle, this driver uses bounded child commands. Its box
-//! outlives the test on interruption so proof-live's final return hook can still
+//! outlives the test on interruption so proof-live's own return command can still
 //! export the held account before terminating the box. Credentials go to ctl
 //! and curl by path alone. No bot credential or store is read by the driver.
 use serde_json::{Value, json};
@@ -257,8 +257,13 @@ impl Driver {
             locked
                 .arg("-x")
                 .arg(self.store.join("login.lock"))
-                .args(["sh", "-c", "test ! -e \"$1\" || exit 1; shift; exec \"$@\"", "rung-import"])
-                .arg(self.store.join("returning"))
+                .args(["sh", "-ec", r#"test ! -e "$1" || exit 1
+number=$2; binary=$3; client=$4; shift 4
+"$@"
+"$binary" ctl "$client" account list --json | jq -er '.accounts.party | map(select(.provider == 1 and .plan == true)) | if length == 1 then .[0].number else error("expected one imported plan") end' > "$number"
+"#, "rung-import"])
+                .arg(return_number(&self.store).with_extension("returning"))
+                .arg(return_number(&self.store)).arg(&self.binary).arg(&self.client)
                 .arg(&self.binary);
             locked
         } else {
@@ -453,36 +458,55 @@ fn quote(path: &Path) -> String {
     format!("'{}'", path.to_str().expect("UTF-8 path").replace('\'', "'\"'\"'"))
 }
 
-/// Installed before import; used both normally and by the launcher's EXIT trap.
-/// An interrupted import is covered even if its reply never reached the driver.
+const RETURN_BODY: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../scripts/proof-live-return.sh"));
+
+fn return_number(store: &Path) -> PathBuf {
+    std::env::var_os("TEMPER_LIVE_RETURN_NUMBER").map_or_else(|| store.join("account-number"), PathBuf::from)
+}
+
+/// Both rungs install this in the final store before import. The launcher and
+/// driver retain their own return code even if the hook disappears afterwards.
 pub fn return_hook(binary: &Path, store: &Path, client: &Path, account: &Path) {
     let hook = store.join("give-back");
     let body = format!(
-        r#"#!/bin/sh
-set -eu
-exec 9>{lock}
-flock -x 9
-: > {returning}
-if [ ! -e {account} ]; then
-  rung_account=$({binary} ctl {client} account list --json | jq -er '.accounts.party | map(select(.provider == 1 and .plan == true)) | if length == 1 then .[0].number else error("expected one held ChatGPT plan") end')
-  {binary} ctl {client} account export "$rung_account" {account}
-fi
-[ "$(LC_ALL=C stat -c %F -- {account})" = 'regular file' ]
-[ "$(stat -c %a -- {account})" = 600 ]
-[ "$(stat -c %s -- {account})" -gt 0 ]
-stat -c 'LOGIN BACK: %F mode=%a bytes=%s owner=%u' -- {account}
-"#,
-        account = quote(account),
-        binary = quote(binary),
-        client = quote(client),
-        lock = quote(&store.join("login.lock")),
-        returning = quote(&store.join("returning"))
+        "#!/bin/sh\n{RETURN_BODY}\nrung_return {} {} {} {} {}\n",
+        quote(binary),
+        quote(store),
+        quote(client),
+        quote(account),
+        quote(&return_number(store))
     );
     super::super::write_private(&hook, body.as_bytes());
-    fs::set_permissions(hook, fs::Permissions::from_mode(0o700)).expect("executable return hook");
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o700)).expect("executable return hook");
+    assert!(fs::symlink_metadata(hook).expect("installed return hook").is_file());
 }
 
-fn stop_box(boxed: &mut Child) -> Result<(), String> {
+fn return_command(driver: &Driver, account: &Path) -> Command {
+    let mut command = Command::new("sh");
+    command
+        .args(["-c", &format!("{RETURN_BODY}\nrung_return \"$@\""), "rung-return"])
+        .arg(&driver.binary)
+        .arg(&driver.store)
+        .arg(&driver.client)
+        .arg(account)
+        .arg(return_number(&driver.store));
+    command
+}
+
+enum Boxed {
+    Process(Child),
+    Unit(String),
+}
+
+fn stop_box(boxed: &mut Boxed) -> Result<(), String> {
+    let boxed = match boxed {
+        Boxed::Process(child) => child,
+        Boxed::Unit(unit) => {
+            let status =
+                Command::new("systemctl").args(["--user", "stop", unit]).status().map_err(|e| e.to_string())?;
+            return require(status.success(), "box unit drained after login return");
+        }
+    };
     let status = Command::new("kill").args(["-TERM", &boxed.id().to_string()]).status().map_err(|e| e.to_string())?;
     require(status.success(), "signal box to stop")?;
     let until = now().saturating_add(Duration::from_secs(15));
@@ -515,20 +539,51 @@ fn live_walk(rung: Rung) {
     run_walk(&store, &paths, &account, rung);
 }
 
-fn start_box(store: &Path, paths: &[PathBuf; 3]) -> Child {
-    Command::new("setsid")
-        .arg(skein_scratch::paths::binary("temper"))
-        .arg("box")
-        .args(super::deployment_flags(paths))
-        .args(["--echo", "steps"])
-        .env_clear()
-        .env("PATH", "/usr/bin:/bin")
-        .current_dir(store)
-        .stdin(Stdio::null())
-        .stdout(fs::File::create(store.join("box.out")).expect("box output"))
-        .stderr(fs::File::create(store.join("box.err")).expect("box errors"))
-        .spawn()
-        .expect("rung box")
+fn start_box(store: &Path, paths: &[PathBuf; 3]) -> Boxed {
+    if let Ok(unit) = std::env::var("TEMPER_LIVE_BOX_UNIT") {
+        let status = Command::new("flock")
+            .arg("-x")
+            .arg(store.join("login.lock"))
+            .args(["sh", "-ec", "test ! -e \"$1\" || exit 1; shift; exec \"$@\"", "rung-box"])
+            .arg(return_number(store).with_extension("returning"))
+            .arg("systemd-run")
+            .args([
+                "--user",
+                "--collect",
+                "--unit",
+                &unit,
+                "--property=Type=exec",
+                "--property=UMask=0077",
+                "--property=TimeoutStopSec=15s",
+            ])
+            .arg(format!("--property=WorkingDirectory={}", store.display()))
+            .arg(format!("--property=StandardOutput=append:{}/box.out", store.display()))
+            .arg(format!("--property=StandardError=append:{}/box.err", store.display()))
+            .args(["/usr/bin/env", "-i", "PATH=/usr/bin:/bin"])
+            .arg(skein_scratch::paths::binary("temper"))
+            .arg("box")
+            .args(super::deployment_flags(paths))
+            .args(["--echo", "steps"])
+            .status()
+            .expect("start independent live box unit");
+        assert!(status.success(), "start independent live box unit");
+        return Boxed::Unit(unit);
+    }
+    Boxed::Process(
+        Command::new("setsid")
+            .arg(skein_scratch::paths::binary("temper"))
+            .arg("box")
+            .args(super::deployment_flags(paths))
+            .args(["--echo", "steps"])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .current_dir(store)
+            .stdin(Stdio::null())
+            .stdout(fs::File::create(store.join("box.out")).expect("box output"))
+            .stderr(fs::File::create(store.join("box.err")).expect("box errors"))
+            .spawn()
+            .expect("rung box"),
+    )
 }
 
 /// Both faces import, walk, return the account, then stop through these acts.
@@ -545,7 +600,7 @@ fn run_walk(store: &Path, paths: &[PathBuf; 3], account: &Path, rung: Rung) {
     // this act covers a signal to the test process itself.
     driver.phase = "return held login";
     driver.until = now().saturating_add(Duration::from_secs(60));
-    let returned = driver.execute(Command::new(store.join("give-back")), None, true);
+    let returned = driver.execute(return_command(&driver, account), None, true);
     if let Err(message) = returned {
         super::super::live::notice(&format!("LOGIN NOT BACK: {message}; box retained for recovery"));
         panic!("LOGIN NOT BACK: {message}; box retained for recovery");
@@ -744,6 +799,15 @@ fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Va
     setup_tools(driver)?;
     let output = fs::read_to_string(driver.store.join("box.err")).map_err(|e| e.to_string())?;
     let baseline = setup_observer(driver, paths, &output)?;
+    require(
+        fs::symlink_metadata(driver.store.join("give-back"))
+            .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o777 == 0o700),
+        "return hook installed in the final store before import",
+    )?;
+    super::super::live::notice(&format!(
+        "SETUP return hook {} before import",
+        driver.store.join("give-back").display()
+    ));
     driver.ctl(&["account", "import", account.to_str().ok_or("held path")?, "--key", "connect-plan"], None)?;
     let accounts = driver.wait(&["account", "list"], "usable")?;
     require(
@@ -752,6 +816,15 @@ fn setup(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<Va
             .is_some_and(|rows| rows.len() == 1 && rows[0]["provider"] == 1 && rows[0]["plan"] == true),
         "fresh box holds one ChatGPT plan for the return hook",
     )?;
+    let number = accounts["accounts"]["party"][0]["number"].as_u64().ok_or("imported account number")?;
+    require(
+        fs::read_to_string(return_number(&driver.store)).map_err(|e| e.to_string())? == format!("{number}\n"),
+        "setup recorded the actual imported account number before releasing its lock",
+    )?;
+    super::super::live::notice(&format!(
+        "SETUP return hook {}; account {number} recorded",
+        driver.store.join("give-back").display()
+    ));
     Ok(baseline)
 }
 

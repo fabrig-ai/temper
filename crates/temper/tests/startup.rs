@@ -1,5 +1,7 @@
 #[path = "support/listeners.rs"]
 pub mod listeners;
+#[path = "support/rung_return.rs"]
+mod rung_return;
 pub mod support;
 use std::{
     fmt::Write,

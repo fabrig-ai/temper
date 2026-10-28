@@ -3,6 +3,8 @@
 set -eu
 umask 077
 cd "$(dirname "$0")/.."
+rung_return_body=$(cat scripts/proof-live-return.sh)
+eval "$rung_return_body"
 # The machine's build queue where it has one, plain cargo where it hasn't
 # (agents' docs/design/build-infrastructure.md 12).
 heavy=$(command -v heavy || true)
@@ -160,6 +162,9 @@ notice=$scratch/notice
 : > "$notice"
 chmod 600 "$notice"
 export TEMPER_LIVE_NOTICE="$notice"
+export TEMPER_LIVE_RETURN_NUMBER="$scratch/account-number"
+export TEMPER_LIVE_BOX_UNIT="temper-rung-$(date -u +%Y%m%dT%H%M%S)-$$"
+temper_binary=${CARGO_TARGET_DIR:-$PWD/target}/debug/temper
 launched=false
 runner=
 follower=
@@ -171,10 +176,10 @@ finish() {
     # The rung installs this before account import. Return while its box is
     # still alive, including when nextest or this script received a signal.
     # A failed return leaves the deployment alive for the owner's recovery.
-    if [ "$rung" = true ] && [ -x "$store/give-back" ]; then
-        if ! timeout 60 "$store/give-back" >> "$notice" 2>&1; then
+    if [ "$rung" = true ]; then
+        if ! rung_finish_account "$temper_binary" "$store" "$store/client" "$TEMPER_LIVE_ACCOUNT" \
+            "$TEMPER_LIVE_RETURN_NUMBER" >> "$notice" 2>&1; then
             printf '%s\n' 'LOGIN NOT BACK: export/stat failed; box retained for recovery' >&2
-            printf 'return hook %s/give-back\n' "$store" >&2
             exit 1
         fi
     fi
@@ -197,6 +202,11 @@ finish() {
         wait "$follower" 2>/dev/null
     fi
     stopped=true
+    if [ "$rung" = true ] && [ "$launched" = true ]; then
+        # The box lives outside heavy's test unit: nextest exiting cannot
+        # stop it with the held account still inside.
+        systemctl --user stop "$TEMPER_LIVE_BOX_UNIT" 2>/dev/null || true
+    fi
     stop_owned || { stopped=false; status=1; }
     if [ -n "$claude_identity" ]; then
         returned=$(LC_ALL=C stat -c '%d:%i:%a:%u:%F' -- "$TEMPER_LIVE_CLAUDE" 2>/dev/null)
@@ -240,7 +250,7 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
-# A build failure or a signal also returns through finish, after stopping the box.
+# A build failure or signal returns through finish: account out, then box stop.
 # shellcheck disable=SC2086
 $heavy cargo nextest run -p temper --profile live --no-run
 if [ "$rerun" = false ] && [ -z "${TEMPER_LIVE_ACCOUNT-}" ] && [ -z "$claude_identity" ]; then
