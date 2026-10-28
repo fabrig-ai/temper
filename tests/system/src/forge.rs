@@ -77,6 +77,9 @@ impl World {
                 // The CI section holds its head, three check lines, failed step and 76-byte
                 // log end (352 bytes), as forge_routes.rs's change stories size it.
                 // Walking's CI budget 128 and read bound 256 lose the log's end.
+                // A repair gathers its pull and CI sequentially through the fake's
+                // 100 ms ticks; allow the same five seconds as the domain story.
+                limits.brief.gather = Duration::from_secs(5);
                 limits.brief.read_bytes = 512;
                 limits.brief.budgets.ci = 384;
                 limits.brief.brief_bytes = 768;

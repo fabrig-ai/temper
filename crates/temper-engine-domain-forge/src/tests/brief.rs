@@ -236,3 +236,101 @@ fn large_check_heads_take_room_from_logs_before_a_check_is_omitted() {
 fn text(bytes: &[u8]) -> &str {
     core::str::from_utf8(bytes).expect("UTF-8 CI")
 }
+
+#[test]
+fn a_repairs_pull_section_names_its_pull_request_before_its_contents() {
+    let mut config = configured()[0].clone();
+    config.git = b"https://forge.example".as_slice().into();
+    let mut d = setup_domain(&[config], false);
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    let mut row = fixtures::opening_row();
+    row.pull = Some(1);
+    row.change.last_head = Some(HEAD);
+    row.change.state = temper_engine_domain_forge_change::State::Repairing {
+        requested: true,
+        why: temper_engine_domain_forge_change::Repair::Ci,
+    };
+    outputs(&mut d, Event::Change { row });
+    let source =
+        BriefSource::Pull { item: BriefItem { repository: REPO.repository, number: 1 }, head: BriefCommit(HEAD) };
+    outputs(&mut d, Event::PlanBrief { section: SECTION, source });
+    let started = outputs(&mut d, Event::GatherPlanned { section: SECTION, parts: 2, bytes: 4096, ci_budget: 4096 });
+    let [Request::BriefClient { event: skein_forge_client::Event::Read { owner, .. } }] = started.as_ref() else {
+        panic!("pull read: {started:?}")
+    };
+    let owner = *owner;
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    let item = skein_forge::api::Summary {
+        labels: Box::new([]),
+        kind: skein_forge::api::Kind::Pull,
+        author: 7,
+        key: None,
+        updated: env().now,
+        number: 1,
+        title: b"Small fix".as_slice().into(),
+        body: b"Whole body".as_slice().into(),
+        state: skein_forge::api::State::Open,
+    };
+    assert!(brief::brief_answer(
+        &mut d,
+        owner,
+        Ok(Answer::Item { item, comments: Box::new([]), more: false }),
+        &mut out
+    ));
+    let mut pull = fixtures::open_pull();
+    pull.commit = HEAD;
+    pull.base_commit = None;
+    assert!(brief::brief_answer(&mut d, owner, Ok(Answer::Pull(pull)), &mut out));
+    assert!(brief::brief_answer(
+        &mut d,
+        owner,
+        Ok(Answer::PullFiles { head: HEAD, files: Box::new([]), more: false }),
+        &mut out
+    ));
+    let bytes = take(&mut d);
+    let words = text(&bytes);
+    let expected = "Pull request: #1\nBranch: temper/51\nBase: main\nHead: c1fb3599fa12c9766f9cc162844416e87a929182\nAddress: https://forge.example/org/repo/pulls/1\n";
+    assert!(words.starts_with(expected), "{words}");
+    assert!(words.contains("Whole body"), "{words}");
+}
+
+fn remarks_section(remarks: &[u8], budget: u32) -> Box<[u8]> {
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    let mut row = fixtures::opening_row();
+    row.pull = Some(1);
+    row.change.last_head = Some(HEAD);
+    row.gate_remarks = Box::new([GateRemark { number: 1, head: HEAD, words: remarks.into() }]);
+    outputs(&mut d, Event::Change { row });
+    let source =
+        BriefSource::Reviews { item: BriefItem { repository: REPO.repository, number: 1 }, head: BriefCommit(HEAD) };
+    outputs(&mut d, Event::PlanBrief { section: SECTION, source });
+    let started = outputs(&mut d, Event::GatherPlanned { section: SECTION, parts: 2, bytes: budget, ci_budget: 4096 });
+    let [Request::BriefClient { event: skein_forge_client::Event::Read { owner, .. } }] = started.as_ref() else {
+        panic!("review read: {started:?}")
+    };
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    assert!(brief::brief_answer(&mut d, *owner, Ok(Answer::Reviews { reviews: Box::new([]), more: false }), &mut out));
+    take(&mut d)
+}
+
+#[test]
+fn remarks_within_the_budget_reach_the_repair_whole() {
+    assert_eq!(
+        remarks_section(b"Please cite this pull request's number and address.", 128).as_ref(),
+        b"Gate remarks: Please cite this pull request's number and address.\n"
+    );
+}
+
+#[test]
+fn remarks_over_the_budget_keep_their_prefix_and_mark_every_cut_byte() {
+    let remarks = "Please cite this pull request's number and address. ".repeat(10);
+    let whole_len = b"Gate remarks: ".len() + remarks.len() + 1;
+    let bytes = remarks_section(remarks.as_bytes(), 128);
+    let words = text(&bytes);
+    let (kept, marker) = words.rsplit_once("\n[").expect("marked cut");
+    assert!(remarks.starts_with(kept.strip_prefix("Gate remarks: ").expect("remarks heading")));
+    let count = skein_lib::Decimal::of(u64::try_from(whole_len - kept.len()).unwrap());
+    assert_eq!(marker.strip_suffix(" bytes cut]\n").expect("cut marker").as_bytes(), count.as_bytes());
+    assert!(words.len() <= 128);
+}

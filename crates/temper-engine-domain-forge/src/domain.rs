@@ -2394,14 +2394,12 @@ fn delegate_result(
                     remarks.push(old.clone()).expect("bounded prior gate remarks");
                 }
             }
-            let kept = words.len().min(usize::try_from(env.limits.client.answer_bytes).expect("u32 fits usize"));
-            remarks
-                .push(crate::GateRemark {
-                    number,
-                    head,
-                    words: Box::from(words.get(..kept).expect("kept is in bounds")),
-                })
-                .expect("gate room checked");
+            let text = crate::ResultText { bytes: Box::from(words), cut: 0 };
+            let Some(words) = text.fitted(env.limits.client.answer_bytes) else {
+                emit(out, Request::Refused { task });
+                return;
+            };
+            remarks.push(crate::GateRemark { number, head, words }).expect("gate room checked");
             row.gate_remarks = remarks.into_boxed();
         }
         change::Delegate::Produce | change::Delegate::Repair(_) | change::Delegate::Resolve { .. } => {}

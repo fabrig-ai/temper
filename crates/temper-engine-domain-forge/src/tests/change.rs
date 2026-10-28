@@ -557,3 +557,39 @@ fn change_words_within_operation_bound_open_unchanged_with_first_line_title() {
     assert_eq!(title.as_ref(), b"Small fix");
     assert_eq!(body.as_ref(), words);
 }
+
+#[test]
+fn oversized_gate_remarks_are_marked_before_they_are_saved() {
+    use temper_engine_domain_forge_change as change;
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    let mut row = fixtures::opening_row();
+    row.change.last_head = Some(fixtures::HEAD);
+    row.delegate = Some((52, change::Delegate::Gate { number: 1, head: fixtures::HEAD }));
+    outputs(&mut d, Event::Change { row });
+    let words = "Please include the pull request's number and address. ".repeat(100);
+    outputs(
+        &mut d,
+        Event::DelegateResult {
+            task: fixtures::CHANGE,
+            child: 52,
+            status: change::Status::Failed,
+            failed: false,
+            cancelled: false,
+            words: words.as_bytes().into(),
+        },
+    );
+    let saved = &d.change(fixtures::CHANGE).unwrap().gate_remarks[0].words;
+    let mut kept = None;
+    for (at, pair) in saved.windows(2).enumerate() {
+        if pair == b"\n[" {
+            kept = Some(at);
+        }
+    }
+    let kept = kept.expect("marked stored cut");
+    assert!(words.as_bytes().starts_with(&saved[..kept]));
+    let count = skein_lib::Decimal::of(u64::try_from(words.len() - kept).unwrap());
+    assert_eq!(&saved[kept + 2..saved.len() - b" bytes cut]\n".len()], count.as_bytes());
+    assert!(saved.ends_with(b" bytes cut]\n"));
+    assert!(saved.len() <= usize::try_from(LIMITS.client.answer_bytes).unwrap());
+}
