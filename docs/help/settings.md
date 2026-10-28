@@ -22,7 +22,9 @@ in the store, never in the configuration document.
 
 A setting's value is whole: one JSON object, as `settings show` prints
 it in JSON. Its members, with their types and bounds, are in
-`temper help settings-fields`.
+`temper help settings-fields`, which marks each required or optional:
+an optional member left out takes its default there, and a required one
+left out is refused, naming its path in the file (`llm.main`).
 
 ## How it changes
 

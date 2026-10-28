@@ -85,9 +85,9 @@ If not:
   again on what you read.
 - `settings apply: settings unchanged` (exit 2): the file sets what is
   there already.
-- `settings apply: out of shape; item 0; charter 1: budget` (exit 2):
+- `settings apply: out of shape; item 1; charter 1: budget` (exit 2):
   a value breaks a bound or a reference; the line names the item,
-  counted from 0, its setting and its fault. Mend `FILE`, then a new
+  counted from 1, its setting and its fault. Mend `FILE`, then a new
   key.
 - `temper ctl: settings file item 1: item: exactly one of set or edit
   required` (exit 1): the file is out of form; the line names the item,

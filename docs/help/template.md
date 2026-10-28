@@ -29,7 +29,9 @@ A template holds:
   once ended, how long it is kept, and what ends it;
 - its label, a number that groups ended tasks in lists;
 - the grace a chat's close gives its runs;
-- the models the task asks for, or none for its charter's default.
+- the models the task asks for, or none for its charter's default:
+  `{"main": {"model": NAME, "effort": EFFORT}}` alone, its account and
+  sub-agents left to their defaults.
 
 Each member, with its type and bound, is in
 `temper help settings-fields`.
