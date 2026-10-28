@@ -1,0 +1,5 @@
+{
+  "requests": "sequential",
+  "close_after": "final_answer",
+  "model_latency_ms": 100
+}

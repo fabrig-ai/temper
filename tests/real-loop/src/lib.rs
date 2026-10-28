@@ -15,6 +15,7 @@ pub mod issuer;
 pub mod landing;
 pub mod llm;
 pub mod repair;
+pub mod rung_a;
 pub mod scripts;
 pub mod template_bounds;
 pub mod terminal;

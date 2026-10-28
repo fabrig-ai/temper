@@ -39,7 +39,7 @@ fn llm_document_checks() {
         ("/tls", json!({"root":"/tmp/root","extra":1}), "tls.extra: unknown member\n"),
         ("/tls", json!({}), "tls.root: missing\n"),
         ("/models", json!([]), "models: must be non-empty\n"),
-        ("/models", Value::Array((0..17).map(|_| models[0].clone()).collect()), "models: past its bound\n"),
+        ("/models", Value::Array((0..9).map(|_| models[0].clone()).collect()), "models: past its bound\n"),
         ("/models/0/name", json!(""), "models[0].name: must be non-empty\n"),
         ("/models/0/name", json!("x".repeat(4097)), "models[0].name: past its bound\n"),
         ("/models/0/window", json!(0), "models[0].window: must be at least 1\n"),
@@ -48,8 +48,8 @@ fn llm_document_checks() {
         ("/models/0/output", json!(4097), "models[0].output: must not exceed window\n"),
         ("/models/0", json!({"name":"qa","window":1,"output":1,"extra":0}), "models[0].extra: unknown member\n"),
         ("/models", Value::Array((0..2).map(|_| models[0].clone()).collect()), "models[1].name: must be unique\n"),
-        ("/cued", Value::Array((0..17).map(|_| scripts[0].clone()).collect()), "cued: past its bound\n"),
-        ("/asked", Value::Array((0..17).map(|_| scripts[0].clone()).collect()), "asked: past its bound\n"),
+        ("/cued", Value::Array((0..12).map(|_| scripts[0].clone()).collect()), "cued: past its bound\n"),
+        ("/asked", Value::Array((0..12).map(|_| scripts[0].clone()).collect()), "asked: past its bound\n"),
         ("/asked", json!([{"cue":"","turns":["x"]}]), "asked[0].cue: must be non-empty\n"),
         ("/cued", json!([{"cue":"x".repeat(257),"turns":["x"]}]), "cued[0].cue: past its bound\n"),
         ("/asked", Value::Array((0..2).map(|_| scripts[0].clone()).collect()), "asked[1].cue: must be unique\n"),
@@ -115,7 +115,7 @@ fn llm_document_checks() {
         ("/asked", json!([{"cue":"x","turns":vec!["x";17]}]), "asked[0].turns: past its bound\n"),
         (
             "/otherwise",
-            json!([{"lines":(0..17).map(|_|json!({"text":"x"})).collect::<Vec<_>>(),"finish":"stop","tokens":1}]),
+            json!([{"lines":(0..9).map(|_|json!({"text":"x"})).collect::<Vec<_>>(),"finish":"stop","tokens":1}]),
             "otherwise[0].lines: past its bound\n",
         ),
         (
@@ -559,9 +559,9 @@ fn ci_cue() {
 
 #[test]
 fn constants_fit() {
-    let models = (0..16).map(|i| json!({"name":format!("qa-{i}"),"window":4096,"output":1024})).collect::<Vec<_>>();
+    let models = (0..8).map(|i| json!({"name":format!("qa-{i}"),"window":4096,"output":1024})).collect::<Vec<_>>();
     let scripts =
-        |prefix: &str| (0..16).map(|i| json!({"cue":format!("{prefix}-{i}"),"turns":vec!["x";16]})).collect::<Vec<_>>();
+        |prefix: &str| (0..11).map(|i| json!({"cue":format!("{prefix}-{i}"),"turns":vec!["x";16]})).collect::<Vec<_>>();
     let bytes = serde_json::to_vec(&json!({"listen":{"socket":"127.0.0.1:0"},"key":"/tmp/key","tls":null,
             "models":models,"cued":scripts("system"),"asked":scripts("request"),"otherwise":vec!["x";16]}))
     .expect("valid fixture");
@@ -574,7 +574,7 @@ fn constants_fit() {
     let document = llm::Document::decode(&serde_json::to_vec(&tls).expect("valid fixture")).expect("valid fixture");
     crate::wire::llm(llm::configuration(&document, &key[..], 0), false).expect("valid fixture");
     let document=forge::Document::decode(&serde_json::to_vec(&json!({"listen":{"socket":"127.0.0.1:0"},"admin_token":"/tmp/admin_token","owner":"fake",
-            "repositories":(0..16).map(|i|json!({"name":format!("repo-{i}"),"landing":"main","ci":null})).collect::<Vec<_>>()})).expect("valid fixture")).expect("valid fixture");
+            "repositories":(0..8).map(|i|json!({"name":format!("repo-{i}"),"landing":"main","ci":null})).collect::<Vec<_>>()})).expect("valid fixture")).expect("valid fixture");
     let token = credential(0, credential::ADMIN_TOKEN);
     let (mut peer, _shared) = forge::peer(&document, &token, 0).expect("valid fixture");
     let setup = peer.setup_mut();
@@ -658,7 +658,7 @@ fn pieces_refuse_each_bound() {
     for (pieces, expected) in [
         (json!([]), "otherwise[0].lines[0].pieces: must be non-empty\n"),
         (
-            json!((0..17).map(|_| json!({"text":"x","hold":null})).collect::<Vec<_>>()),
+            json!((0..9).map(|_| json!({"text":"x","hold":null})).collect::<Vec<_>>()),
             "otherwise[0].lines[0].pieces: past its bound\n",
         ),
         (json!([{"text":"","hold":null}]), "otherwise[0].lines[0].pieces[0].text: must be non-empty\n"),
@@ -1000,4 +1000,31 @@ fn sixteen_script_turns_decode_and_run_and_a_seventeenth_is_refused() {
         llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).unwrap_err().line().as_ref(),
         b"cued[0].turns: past its bound\n"
     );
+}
+
+#[test]
+fn eleven_scripts_fit_each_cue_list() {
+    let mut doc = llm_document();
+    for name in ["cued", "asked"] {
+        doc[name] = json!((0..11).map(|i| json!({"cue":format!("cue {i}"),"turns":["answer"]})).collect::<Vec<_>>());
+    }
+    llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).expect("eleven scripts in each cue list");
+}
+
+#[test]
+fn sixteen_turns_fit_each_script_and_seventeen_are_refused() {
+    for group in ["cued", "asked", "otherwise"] {
+        for count in [16, 17] {
+            let mut doc = llm_document();
+            let turns = json!(vec!["answer"; count]);
+            doc[group] = if group == "otherwise" { turns } else { json!([{"cue":"bounded", "turns":turns}]) };
+            let result = llm::Document::decode(&serde_json::to_vec(&doc).unwrap());
+            if count == 16 {
+                result.expect("sixteen turns fit");
+            } else {
+                let path = if group == "otherwise" { group.into() } else { format!("{group}[0].turns") };
+                assert_eq!(result.unwrap_err().line().as_ref(), format!("{path}: past its bound\n").as_bytes());
+            }
+        }
+    }
 }

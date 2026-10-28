@@ -1,0 +1,19 @@
+{
+  "listen": {
+    "socket": "127.0.0.1:0"
+  },
+  "key": "/twin/llm.key",
+  "tls": null,
+  "models": [
+    {
+      "name": "fake",
+      "window": 65536,
+      "output": 16384
+    }
+  ],
+  "cued": [],
+  "asked": [],
+  "otherwise": [
+    "off script"
+  ]
+}

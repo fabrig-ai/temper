@@ -1,4 +1,6 @@
 //! Independent LLM peer configuration (skein's fake-llm.md, 6).
+mod reply_gate;
+pub use reply_gate::ReplyGate;
 use skein_fake_llm_domain::{self as domain, api};
 use skein_fake_llm_protocol::{documents, provider};
 use skein_fake_peers::{Limits, Transport, llm::Peer};
