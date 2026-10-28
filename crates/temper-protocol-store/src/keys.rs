@@ -223,7 +223,7 @@ pub fn decode(bytes: &[u8], limits: &forge::Limits) -> Option<forge::Key> {
             let repository = read_repository(&mut reader)?;
             let tag = reader.tag()?;
             let name = reader.bytes()?;
-            if name.is_empty() || name.len() > 32 {
+            if name.len() > 32 {
                 return None;
             }
             let check = match tag {
