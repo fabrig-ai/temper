@@ -82,8 +82,8 @@ makes the change ready again, and the landing prepares again.
   each gate's key with its receipt or run, and the turn. `landing list`
   lists a project's landings, the turn's holder first, a page at a
   time. With `--newer-than TIME`, UTC to the minute, it lists instead
-  every landing its repositories' landing branches took after TIME,
-  by queue, by turn or from outside temper, newest first, each with
+  every landing temper saw on its repositories' landing branches after
+  TIME, by queue, by turn or from outside temper, newest first, each with
   the time temper saw it, its changes and each tier's verdict
   (temper help tier).
 - `change show` reads the change's own way: its pull request and gates.
