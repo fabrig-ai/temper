@@ -148,7 +148,7 @@ fn a_forge_answer_is_taken_once_under_backlog_pressure() {
     )
     .expect("an admitted operation starts a real client read");
     let mut call = None;
-    for _ in 0..64 {
+    for _ in 0_u32..64 {
         if let Some(event) = engine.events.pop() {
             engine.step(event);
         }
@@ -187,7 +187,7 @@ fn a_forge_answer_is_taken_once_under_backlog_pressure() {
     engine.forge.above.push(skein_forge_connection::Event::Answered(answer));
     crate::engine::forge_pass(engine);
     assert!(engine.forge.above.is_empty(), "the completion is consumed under pressure");
-    for _ in 0..4 {
+    for _ in 0_u32..4 {
         engine.forge.down(skein_forge_connection::Request::Offer);
         assert!(engine.forge.above.is_empty(), "no refused answer is offered again");
     }
