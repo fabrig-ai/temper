@@ -359,14 +359,17 @@ pub fn program_story(repository: u64, readme: &[u8]) -> smith_fake_claude::Story
                             tool: "Edit".into(),
                             input: json!({"file_path":"README.md","old_string":original,"new_string":changed}),
                         },
-                        call("finish", change_result()),
+                        Step::Outcome { input: json!({"outcome":change_result()}) },
                     ],
                     ..Turn::default()
                 }],
             },
             Script {
                 cue: REVIEW_WORDS.into(),
-                turns: vec![Turn { steps: vec![call("finish", verdict())], ..Turn::default() }],
+                turns: vec![Turn {
+                    steps: vec![Step::Outcome { input: json!({"outcome":verdict()}) }],
+                    ..Turn::default()
+                }],
             },
         ],
         ..Story::default()
