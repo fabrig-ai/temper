@@ -281,23 +281,8 @@ fn page(
         stop(routes, into);
         return;
     }
-    if decoded.is_empty()
-        && !cutting
-        && let Some(next) = &cursor
-    {
-        let resumed = match &flight.cursor {
-            Some(cursor) => Some(cursor.clone()),
-            None => match &flight.after {
-                Some(key) => ranges::cursor(&flight.range, key),
-                None => None,
-            },
-        };
-        assert!(
-            resumed.as_ref() != Some(next),
-            "restore range {:?}: empty page resumed cursor {:?}",
-            flight.range,
-            next
-        );
+    if decoded.is_empty() && !cutting {
+        assert_progress(&flight, cursor.as_ref());
     }
     if let engine::Range::Census(_) = &flight.range {
         if cutting {
@@ -342,6 +327,24 @@ fn page(
         root(into, engine::StoreInput::Loaded { texts, owner: root_owner, rows: decoded.into_boxed(), next });
     } else {
         root(into, engine::StoreInput::Loaded { texts, owner: flight.root, rows: decoded.into_boxed(), next });
+    }
+}
+
+fn assert_progress(flight: &Flight, cursor: Option<&store::Cursor>) {
+    if let Some(next) = cursor {
+        let resumed = match &flight.cursor {
+            Some(cursor) => Some(cursor.clone()),
+            None => match &flight.after {
+                Some(key) => ranges::cursor(&flight.range, key),
+                None => None,
+            },
+        };
+        assert!(
+            resumed.as_ref() != Some(next),
+            "restore range {:?}: empty page resumed cursor {:?}",
+            flight.range,
+            next
+        );
     }
 }
 
