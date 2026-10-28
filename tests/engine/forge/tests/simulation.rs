@@ -2348,6 +2348,10 @@ fn land_file_for_tier(world: &mut World, task: u64, branch: &[u8], path: &[u8]) 
 fn tier_world(ignored: &[&[u8]]) -> World {
     let mut world = World::tiered();
     world.adopt();
+    tier_history_world(world, ignored)
+}
+
+fn tier_history_world(mut world: World, ignored: &[&[u8]]) -> World {
     assert!(world.project_tiers(
         5,
         top::TierSettings {
@@ -2482,4 +2486,52 @@ fn a_documentation_landing_every_tier_ignores_clears_at_once() {
     assert!(statuses.iter().any(|status| status.context.as_ref() == b"temper/verdict/browser"
         && status.state == skein_fake_forge_domain::api::Check::Passed));
     assert!(!world.has_branch(b"temper/tier/browser.2"));
+}
+
+fn logged(world: &World, since: Wall) -> top::LandingsView {
+    let top::Document::Landings(view) = world.logged(5, since).unwrap() else { panic!("landing history") };
+    view
+}
+#[test]
+fn a_coordinator_reads_the_landings_since_a_time() {
+    use temper_engine_forge_world::landings;
+    let mut world = tier_history_world(World::coordinator(), &[]);
+    world.adopt_kit();
+    land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
+    // TIME is minute-aligned. Cross its next boundary before the outside push.
+    const MINUTE: u64 = 60_000_000_000;
+    let since = Wall::from_nanos(world.wall().as_nanos().div_ceil(MINUTE) * MINUTE);
+    world.run_to(Wall::from_nanos(since.as_nanos() + 1_000_000_000));
+    world.push_kit();
+    world.run_for(35); // shipped polling interval reaches both repositories.
+    world.project_landing(5, change::Way::Turn, Box::new([]));
+    world.produce(b"temper/52");
+    landings::ready_change(&mut world, SECOND_CHANGE, b"temper/52");
+    let mut row = landings::landing_row(world.change(SECOND_CHANGE));
+    row.landing.members[0].gates = Box::new([]);
+    world.event(top::Event::Landing { row });
+    landings::drive_landing(&mut world, landings::LANDING);
+    world.run_for(35); // observe the new main before finishing the baseline range.
+    let before = logged(&world, since);
+    assert_eq!(before.logged.len(), 2);
+    assert_eq!(before.logged[0].changes.as_ref(), &[SECOND_CHANGE]);
+    assert_eq!(before.logged[0].repository.as_ref(), b"org/repo");
+    assert_eq!(before.logged[0].verdicts[0].verdict, top::Verdict::Verifying);
+    assert_eq!(before.logged[1].repository.as_ref(), b"org/kit");
+    assert!(before.logged[1].changes.is_empty() && before.logged[1].verdicts.is_empty());
+    for at in 0..TIER_STEPS {
+        if tier_step(&mut world, TIER_BASELINE, 1100 + at) {
+            break;
+        }
+    }
+    release_tier(&mut world, TIER_BASELINE, 1300);
+    tier_hold(&mut world, TIER_RANGE, 2);
+    for at in 0..TIER_STEPS {
+        if tier_step(&mut world, TIER_RANGE, 1400 + at) {
+            break;
+        }
+    }
+    let after = logged(&world, since);
+    assert_eq!(after.logged[0].verdicts[0].verdict, top::Verdict::Cleared, "{:?}", browser_row(&world));
+    assert_eq!(after.logged[0].commit, before.logged[0].commit);
 }

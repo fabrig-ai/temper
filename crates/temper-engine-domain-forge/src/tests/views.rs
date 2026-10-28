@@ -2,7 +2,7 @@ use super::*;
 use jig_domain_people::ApplicationScope;
 use temper_engine_domain_forge_landing as policy;
 
-fn row(task: u64, phase: policy::Phase) -> LandingRow {
+pub(super) fn row(task: u64, phase: policy::Phase) -> LandingRow {
     LandingRow {
         landing: policy::Landing {
             task,
@@ -31,7 +31,10 @@ fn row(task: u64, phase: policy::Phase) -> LandingRow {
     }
 }
 fn setup() -> Domain {
-    let mut d = domain();
+    setup_with_limits(&LIMITS)
+}
+fn setup_with_limits(limits: &Limits) -> Domain {
+    let mut d = domain_with_limits(limits);
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
     let mut change = fixtures::opening_row();
     change.pull = Some(1);
@@ -164,4 +167,38 @@ fn saving_a_landing_marks_its_subject_and_its_projects_lists() {
         }
     }
     assert!(landing_marked && member_marked);
+}
+#[test]
+fn both_landing_lists_page_at_thirty_two_lines() {
+    // One past the panel bound, with fixture room for exactly that many entries.
+    const LINES: u32 = 33;
+    let limits = Limits { landings: LINES, landings_kept: LINES, ..LIMITS };
+    let mut d = setup_with_limits(&limits);
+    for task in 1..=LINES {
+        d.landing.rows.insert(u64::from(task), row(u64::from(task), policy::Phase::Waiting)).unwrap();
+    }
+    let scope = ApplicationScope::Project(5);
+    let Document::Landings(first) =
+        d.document_page(landings_subject(5, false), scope, env().wall, &LIMITS, (0, None)).unwrap()
+    else {
+        panic!("first")
+    };
+    let Document::Landings(second) =
+        d.document_page(landings_subject(5, false), scope, env().wall, &LIMITS, (0, first.after)).unwrap()
+    else {
+        panic!("second")
+    };
+    assert_eq!((first.landings.len(), first.after, second.landings.len(), second.after), (32, Some(32), 1, None));
+    assert_eq!((first.landings[0].task, second.landings[0].task), (33, 1));
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    for number in 1..=LINES {
+        log::moved(&mut d, REPO, [u8::try_from(number).unwrap(); 32], Wall::from_nanos(u64::from(number)), &mut out);
+        while out.pop().is_some() {}
+    }
+    let Document::Landings(first) = d.logged_page(5, Wall::EPOCH, (0, None)).unwrap() else { panic!("first history") };
+    let Document::Landings(second) = d.logged_page(5, Wall::EPOCH, (0, first.after)).unwrap() else {
+        panic!("second history")
+    };
+    assert_eq!((first.logged.len(), first.after, second.logged.len(), second.after), (32, Some(32), 1, None));
+    assert_eq!((first.logged[0].commit, second.logged[0].commit), ([33; 32], [1; 32]));
 }
