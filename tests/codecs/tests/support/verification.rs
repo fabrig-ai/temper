@@ -70,6 +70,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> temper_eng
             released: None,
         },
         ci: None,
+        result: temper_engine_domain_forge::ChangeResult::empty(),
         producing_charter: 1,
         review_charter: 2,
         pull: Some(1),

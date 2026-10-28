@@ -543,7 +543,7 @@ fn tree_call(d: &mut Domain, out: &Queue<Request>) -> (Token, api::Read) {
     let (call, api::Op::Read(read)) = fixtures::next_call(d) else { panic!("tree read") };
     (call, read)
 }
-fn tree_reply(d: &mut Domain, out: &Queue<Request>, entries: Box<[api::Entry]>, more: bool) -> Queue<Request> {
+fn tree_reply(d: &mut Domain, out: &Queue<Request>, entries: Box<[api::TreeEntry]>, more: bool) -> Queue<Request> {
     let (call, _) = tree_call(d, out);
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     for request in fixtures::answer(d, call, Ok(api::Answer::Tree { entries, more })) {
@@ -551,10 +551,10 @@ fn tree_reply(d: &mut Domain, out: &Queue<Request>, entries: Box<[api::Entry]>, 
     }
     out
 }
-fn tree_entry(name: &[u8], object: [u8; 32]) -> api::Entry {
-    api::Entry { name: name.into(), mode: 0o040_000, kind: api::EntryKind::Tree, object }
+fn tree_entry(name: &[u8], object: [u8; 32]) -> api::TreeEntry {
+    api::TreeEntry { name: name.into(), mode: 0o040_000, kind: api::TreeEntryKind::Tree, object }
 }
-fn root(docs: [u8; 32], source: [u8; 32]) -> Box<[api::Entry]> {
+fn root(docs: [u8; 32], source: [u8; 32]) -> Box<[api::TreeEntry]> {
     Box::new([tree_entry(b"docs", docs), tree_entry(b"src", source)])
 }
 fn baseline_key(ignored: &[&[u8]], docs: [u8; 32], source: [u8; 32]) -> [u8; 32] {
