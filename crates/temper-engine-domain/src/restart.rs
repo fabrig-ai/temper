@@ -344,9 +344,17 @@ pub(crate) fn restart_request(
                     Delivery::Load { waiter: Token::new(u64::MAX), range: Range::Forge, after: None },
                 );
             }
-            jig_domain_core::RestartStep::Switch => {
+            jig_domain_core::RestartStep::Sweep => {
                 domain.work.push(Work::Tasks(tasks::Event::Check));
                 domain.work.push(Work::SwitchChecked);
+            }
+            jig_domain_core::RestartStep::Switch => {
+                domain.work.push(Work::Core(jig_domain_core::Event::SettingsCommit {
+                    room: jig_domain_core::settings::writes_worst_case(&core_limits(&env.limits))
+                        .expect("validated settings write room"),
+                }));
+                domain.work.push(Work::Core(jig_domain_core::Event::Account(jig_domain_accounts::Event::Want)));
+                emit(decision, &env.limits, Delivery::Restart(step));
             }
             jig_domain_core::RestartStep::AdoptRuns => {
                 domain.work.push(Work::Tasks(tasks::Event::Restored));
@@ -415,6 +423,7 @@ pub(crate) fn connector_restarting(domain: &Domain) -> bool {
         ) => true,
         Some(
             jig_domain_core::RestartStep::LoadCore
+            | jig_domain_core::RestartStep::Sweep
             | jig_domain_core::RestartStep::Switch
             | jig_domain_core::RestartStep::LoadInbox
             | jig_domain_core::RestartStep::AdoptRuns
