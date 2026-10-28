@@ -299,7 +299,7 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
                     let requests = domain.core.restart_sweep(&Env {
                         now: env.now,
                         wall: env.wall,
-                        limits: crate::limits::core_limits(&env.limits),
+                        limits: core_limits(&env.limits),
                     });
                     route_core_requests(domain, env, decision, requests);
                 } else {

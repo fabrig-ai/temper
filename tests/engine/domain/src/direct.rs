@@ -141,11 +141,11 @@ impl Driver {
                     self.transactions.push(writes.to_vec());
                     self.store.pending.push_back((number, writes));
                 }
-                engine::Request::Store(engine::StoreRequest::Load { owner, range, after, most, bytes }) => {
+                engine::Request::Store(engine::StoreRequest::Load { owner, range, after, most, bytes, .. }) => {
                     self.loads.push((owner, range.clone()));
                     let (rows, next) = self.store.page(&range, after.as_ref(), most);
                     assert!(rows.len() <= usize::try_from(most).expect("small count"));
-                    assert!(bytes >= self.env.limits.loads.bytes);
+                    assert!(bytes >= u64::from(self.env.limits.loads.bytes));
                     if self.fail_archive_once
                         && matches!(
                             range,

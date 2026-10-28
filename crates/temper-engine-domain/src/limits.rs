@@ -34,6 +34,9 @@ pub struct Limits {
     pub journal: JournalLimits,
     /// Paged store reads; every startup page must fit whole.
     pub loads: loads::Limits,
+    /// Computed cold-page workspace from the store's row and decoder capacities;
+    /// independent of authenticated on-demand reads (jig's protocol/store.md, 7.1).
+    pub restore_bytes: u64,
     /// Authentic task/funding room, also bounding root current-claim proof slots; transport
     /// evidence belongs to root.
     pub tasks: tasks::Limits,
@@ -285,7 +288,10 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         )?;
     let permission_bytes = Map::<u32, Box<[people::PermissionRole]>>::worst_case(limits.authority.projects)?
         .checked_add(u64::from(limits.authority.projects).checked_mul(u64::from(limits.journal.transcript_bytes))?)?;
-    let load_bytes = loads::worst_case(&limits.loads)?;
+    let load_bytes = loads::worst_case(&limits.loads)?.checked_add(limits.restore_bytes)?;
+    if limits.restore_bytes < u64::from(limits.loads.reply_bytes) {
+        return None;
+    }
     let routes = route_bound(limits)?;
     let tool_bytes = u64::from(limits.tasks.batch).checked_mul(row_bound(limits)?)?;
     if limits.forge.named_calls < limits.call_records
@@ -396,7 +402,8 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(Slab::<Option<Read>>::worst_case(limits.loads.loads)?)?
         .checked_add(
             u64::from(limits.loads.loads).checked_mul(
-                u64::from(limits.loads.reply_bytes)
+                limits
+                    .restore_bytes
                     .checked_add(u64::from(limits.people.words))?
                     // A transcript load carries one optional rendering per row beside its raw bytes.
                     .checked_add(List::<Option<Box<[u8]>>>::worst_case(limits.loads.rows)?)?

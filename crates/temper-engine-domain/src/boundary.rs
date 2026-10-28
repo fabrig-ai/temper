@@ -633,7 +633,9 @@ pub enum StoreRequest {
         /// Positive page demand, at most the configured load row bound.
         most: u32,
         /// Hard decoded-page byte limit, enforced before and after protocol decoding.
-        bytes: u32,
+        bytes: u64,
+        /// Cold restore uses the whole store-derived workspace without read cuts.
+        restoring: bool,
     },
     /// One core read load after every preceding commit, answered by `ReadLoaded`.
     Read {

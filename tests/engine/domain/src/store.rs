@@ -297,7 +297,8 @@ impl Store {
             range: range.clone(),
             after: after.cloned(),
             most,
-            bytes: self.limits.loads.reply_bytes,
+            bytes: self.limits.restore_bytes,
+            restoring: true,
         });
         loop {
             if let Some(reply) = self.replies.pop() {

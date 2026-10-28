@@ -8,7 +8,7 @@ use temper_engine_domain as engine;
 use temper_engine_domain_forge as forge;
 
 fn load(range: engine::Range, after: Option<engine::Key>, most: u32, bytes: u32) -> engine::StoreRequest {
-    engine::StoreRequest::Load { owner: fixtures::OWNER, range, after, most, bytes }
+    engine::StoreRequest::Load { owner: fixtures::OWNER, range, after, most, bytes: u64::from(bytes), restoring: false }
 }
 
 #[test]
@@ -619,4 +619,21 @@ fn patch_sites_return_the_machine_with_the_missing_site_and_progress_is_not_a_ro
         );
         assert!(out.is_empty());
     }
+}
+
+#[test]
+#[should_panic(expected = "restore range Forge: empty page resumed cursor Cursor")]
+fn an_empty_page_cannot_resume_the_same_restore_cursor() {
+    let mut routes = fixtures::routes();
+    let after = engine::Key::Forge(forge::Key::Landed([9; 32]));
+    let Some(store::Request::Restore { owner, after: Some(cursor), .. }) =
+        route::down(&mut routes, load(engine::Range::Forge, Some(after), 4, 4096))
+    else {
+        panic!("issued continuation")
+    };
+    route::up(
+        &mut routes,
+        store::Event::Restored { owner, rows: Box::new([]), next: Some(cursor) },
+        &mut Queue::with_capacity(2),
+    );
 }
