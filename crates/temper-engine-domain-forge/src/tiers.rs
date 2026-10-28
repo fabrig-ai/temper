@@ -198,6 +198,13 @@ pub(crate) fn restart(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request
     for repository in &repositories {
         start_due(d, env, *repository, out);
     }
+    // A lost workflow read has no durable next poll. Re-step its owner after
+    // restoring the follower, as for a result awaiting its status or release.
+    for (_, row) in &d.tier_rows {
+        if let Some(task) = row.task {
+            out.push(Request::WakeProcedure { task });
+        }
+    }
 }
 
 pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repository, out: &mut Queue<Request>) {
