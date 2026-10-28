@@ -79,6 +79,7 @@ pub(crate) struct ProcedureStep {
     step: u64,
     prior: Option<StepPrior>,
     accepted_head: Option<skein_forge::api::Commit>,
+    decision: Option<change::Decision>,
 }
 #[derive(Debug)]
 struct StepPrior {
@@ -473,7 +474,7 @@ impl Domain {
             assert!(pending.prior.is_none(), "previous procedure decision resolved");
         }
         self.procedure_steps
-            .insert(task, ProcedureStep { step, prior: None, accepted_head: None })
+            .insert(task, ProcedureStep { step, prior: None, accepted_head: None, decision: None })
             .expect("one admission fence per change");
     }
 
@@ -2986,7 +2987,7 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
             | change::Decision::Finish { .. }
             | change::Decision::Cancel
             | change::Decision::Hold(_)) => {
-                crate::landing::change_advanced(d, &row, &prior, decision, out);
+                change_advanced(d, &row, &prior, decision, out);
                 d.changes.insert(row.task, row.clone()).expect("replaces change");
                 if !deciding(d, row.task) && in_queue(&prior.state) && !in_queue(&row.change.state) {
                     wake_queue(d, &row);
@@ -3010,6 +3011,23 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
         }
     }
     emit(out, Request::Refused { task: row.task });
+}
+
+// Landing notifications belong to the same admitted transition as the change.
+fn change_advanced(
+    d: &mut Domain,
+    row: &ChangeRow,
+    prior: &change::Change,
+    decision: change::Decision,
+    out: &mut Queue<Request>,
+) {
+    if let Some(fence) = d.procedure_steps.get_mut(&row.task)
+        && fence.prior.is_some()
+    {
+        fence.decision = Some(decision);
+    } else {
+        crate::landing::change_advanced(d, row, prior, decision, out);
+    }
 }
 
 fn deciding(d: &Domain, task: u64) -> bool {
@@ -3046,6 +3064,9 @@ fn procedure_resolved(d: &mut Domain, env: &Env<Limits>, task: u64, step: u64, m
         return;
     }
     let mut saved = row.clone();
+    if let Some(decision) = fence.decision {
+        crate::landing::change_advanced(d, &saved, &previous.change, decision, out);
+    }
     if let Some(head) = fence.accepted_head {
         accept_released_branch(d, env, &mut saved, head, out);
     }
@@ -3227,7 +3248,7 @@ fn emit_change_effect(
         failures: 0,
         queued: false,
     };
-    crate::landing::change_advanced(d, row, &prior, change::Decision::Effect(effect), out);
+    change_advanced(d, row, &prior, change::Decision::Effect(effect), out);
     row.pending = Some(pending.entry);
     row.effect = change::EffectResult::Pending;
     row.effect_account = None;
