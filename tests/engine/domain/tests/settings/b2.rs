@@ -460,7 +460,7 @@ pub(super) fn reviewer() {
     let engine::CallAnswer::Delegated(made) = answer else { panic!("review admitted: {answer:?}") };
     let review = assigned(&driver, made[0].task).expect("stock charter 4 offered and assigned");
     assert_eq!(review.charter, 4);
-    no_settings_tools(&review);
+    no_settings_or_message_tools(&review);
     assert_eq!(review.run.policy.tools, core::ToolFamilies::JIG.read);
     assert_eq!(review.run.policy.model, box_model());
     assert_eq!(review.run.authority.tools, tasks::Tools(jig_domain_core::ToolFamilies::JIG.read.0));
