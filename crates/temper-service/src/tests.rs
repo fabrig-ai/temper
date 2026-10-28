@@ -21,6 +21,7 @@ mod clients;
 mod clients_unwatch;
 mod worker;
 mod worker_git;
+mod worker_orders;
 
 mod checks;
 mod family;

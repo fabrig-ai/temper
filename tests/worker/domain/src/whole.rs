@@ -18,6 +18,8 @@ use temper_worker_domain::{
 
 use crate::protocol;
 
+pub mod orders;
+
 const RUN: Token = Token::new(81);
 const ATTEMPT: Token = Token::new(13);
 const WORKSTREAM: u64 = 81;
@@ -74,11 +76,15 @@ struct World {
 
 impl World {
     fn new(seed: u64) -> Self {
+        Self::with_slots(seed, 1)
+    }
+
+    fn with_slots(seed: u64, slots: u32) -> Self {
         let mut limits = crate::limits();
-        limits.host.slots = 1;
-        limits.checkout.workspaces = 1;
+        limits.host.slots = slots;
+        limits.checkout.workspaces = slots;
         limits.checkout.repositories = 1;
-        limits.agent.agents = 1;
+        limits.agent.agents = slots;
         limits.agent.no_progress = Duration::from_secs(120);
         assert!(worst_case(&limits).is_some());
         let mut forge = Forge::new(seed);
@@ -319,37 +325,7 @@ impl World {
 
     /// The engine assigns the run, its one repository starting at `start`.
     fn assign(&mut self, start: wire::Start) {
-        let repository = wire::Repository {
-            git: None,
-            tag: 1,
-            name: Box::from(&b"app"[..]),
-            remote: Box::from(REMOTE),
-            identity: 0,
-            account: None,
-            start,
-            access: wire::Access::Writable {
-                push: Box::from(&b"topic"[..]),
-                expected: Some(translate::commit(self.first).raw()),
-                landing: None,
-            },
-        };
-        let assignment = host::Assignment {
-            messages: Box::new([]),
-            turns: Box::new([]),
-            answered: Box::new([]),
-            assignment: host::RunAssignment {
-                identity: [9; 16],
-                live: host::LiveAsk::NONE,
-                run: RUN,
-                attempt: ATTEMPT,
-                workspace: Some(host::Workspace { workstream: WORKSTREAM, items: Token::new(0) }),
-                save: true,
-                charter: protocol::charter(),
-                grants: Box::new([]),
-            },
-        };
-        let items = wire::Workspace { repositories: Box::new([repository]) };
-        self.event(Event::Assign { assignment, items: Ok(items), save: Some(Box::from(&b"saved"[..])) });
+        self.event(assignment(self.first, RUN, WORKSTREAM, start));
     }
 
     fn deliver(&mut self) {
@@ -595,4 +571,38 @@ fn host_reply(reply: agent::Reply) -> Option<smith_channel::Reply> {
     let decoded = smith_channel::HostAnswer::decode(&limits, &mut reader).expect("agent decodes");
     assert!(reader.is_empty());
     Some(decoded.reply().clone())
+}
+
+fn assignment(first: u64, run: Token, workstream: u64, start: wire::Start) -> Event {
+    let repository = wire::Repository {
+        git: None,
+        tag: 1,
+        name: Box::from(&b"app"[..]),
+        remote: Box::from(REMOTE),
+        identity: 0,
+        account: None,
+        start,
+        access: wire::Access::Writable {
+            push: Box::from(&b"topic"[..]),
+            expected: Some(translate::commit(first).raw()),
+            landing: None,
+        },
+    };
+    let assignment = host::Assignment {
+        messages: Box::new([]),
+        turns: Box::new([]),
+        answered: Box::new([]),
+        assignment: host::RunAssignment {
+            identity: [9; 16],
+            live: host::LiveAsk::NONE,
+            run,
+            attempt: ATTEMPT,
+            workspace: Some(host::Workspace { workstream, items: Token::new(0) }),
+            save: true,
+            charter: protocol::charter(),
+            grants: Box::new([]),
+        },
+    };
+    let items = wire::Workspace { repositories: Box::new([repository]) };
+    Event::Assign { assignment, items: Ok(items), save: Some(Box::from(&b"saved"[..])) }
 }

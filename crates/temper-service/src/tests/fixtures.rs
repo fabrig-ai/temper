@@ -919,6 +919,7 @@ pub fn claimed_chat() -> (crate::Service, temper_engine_domain::Assignment) {
 
 mod worker;
 mod worker_git;
+pub(crate) mod worker_peers;
 pub use worker::{
     AGENT_JSON, NOW, TEMPER, application_value, assignment as worker_assignment, chat_assignment, identity,
     one_repository, repository_assignment, spawn, worker, worker_agent, worker_files, worker_limits, worker_settings,
