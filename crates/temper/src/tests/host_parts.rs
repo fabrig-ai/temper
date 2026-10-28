@@ -224,9 +224,64 @@ fn stock_charters_meet_smith_with_empty_full_and_35_write_briefs() {
         measure(number, settings, "empty brief", &[], &limits);
     }
     let largest = largest_brief();
+    measure(1, false, "maximum aggregate brief", &largest, &limits);
     measure(4, false, "maximum aggregate brief", &largest, &limits);
     measure(2, false, "maximum aggregate brief", &largest, &limits);
     measure(4, false, "synthetic 35-write review brief", &review_of_35_writes(), &limits);
+}
+
+#[test]
+fn stock_chat_host_bytes_are_measured_by_family() {
+    let families = jig_domain_core::ToolFamilies::JIG;
+    let full = temper_engine_smith::charter(&assignment(1, false));
+    let mut total = 0;
+    for (name, bit) in [
+        ("delegation", families.delegate.0),
+        ("messages", families.message.0),
+        ("control", families.control.0),
+        ("decide", families.decide.0),
+        ("propose", families.propose.0),
+        ("subscribe", families.subscribe.0),
+        ("effects", families.effect.0),
+        ("notes", families.note.0),
+        ("recall", families.recall.0),
+        ("reads", families.read.0),
+        ("settings", families.settings),
+    ] {
+        let mut member = assignment(1, false);
+        member.run.policy.tools.0 &= bit;
+        let charter = temper_engine_smith::charter(&member);
+        let mut names = 0;
+        let mut descriptions = 0;
+        let mut schemas = 0;
+        for tool in &charter.grants.host_tools {
+            names += tool.name.len();
+            descriptions += tool.description.len();
+            schemas += tool.schema.len();
+        }
+        let bytes = names + descriptions + schemas;
+        total += bytes;
+        eprintln!(
+            "stock chat family {name}: {} tools, {names} name bytes, {descriptions} description bytes, {schemas} schema bytes, {bytes} total",
+            charter.grants.host_tools.len()
+        );
+    }
+    assert_eq!(
+        total,
+        full.grants
+            .host_tools
+            .iter()
+            .map(|tool| tool.name.len() + tool.description.len() + tool.schema.len())
+            .sum::<usize>()
+    );
+    let sections = largest_brief();
+    let body: usize = sections.iter().map(|section| section.text.len()).sum();
+    let rendered: usize = sections.iter().map(|section| 3 + section.title.len() + 2 + section.text.len() + 2).sum();
+    eprintln!(
+        "stock chat components: {total} host-tool declaration bytes, {} instruction body bytes; {} brief sections, {body} body bytes, {rendered} rendered brief bytes",
+        full.instructions.len(),
+        sections.len()
+    );
 }
 
 #[test]
