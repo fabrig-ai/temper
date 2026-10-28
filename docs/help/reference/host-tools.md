@@ -336,13 +336,13 @@ A read.
 
 ## read_file
 
-Read a file at one head, cut at a byte limit.
+Read a file at one head, cut at a byte limit; a directory's path, the root as ".", lists its entries.
 
 A read.
 
 - `repository`: text; optional. The repository, as owner/name; leave it out, or empty, when the project has one.
 - `head`: text; required. The commit's id: 40 or 64 lowercase hexadecimal digits.
-- `path`: text; required. The file's path in the repository.
+- `path`: text; required. A file's or a directory's path; "." or empty for the root.
 - `max_bytes`: an integer from 1 to 4294967295; optional. At most this many bytes; the read's limit when absent.
 
 ## read_job
