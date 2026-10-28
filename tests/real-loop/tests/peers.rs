@@ -23,8 +23,10 @@ fn an_open_script_answers_the_brief_and_a_finite_script_keeps_its_system_cue() {
             tokens: 1,
         }]),
     };
-    let mut recipe =
-        llm::scripted(Box::new([script(b"person's request", b"Open reply"), script(b"finite task", b"Finite reply")]));
+    let mut recipe = llm::scripted_open(
+        Box::new([script(b"person's request", b"Open reply"), script(b"finite task", b"Finite reply")]),
+        16_384,
+    );
     for (system, brief, expected) in [
         (b"Reply to the person".as_slice(), b"## Task\n\nperson's request".as_slice(), b"Open reply".as_slice()),
         (b"## Task\n\nfinite task".as_slice(), b"person's request".as_slice(), b"Finite reply".as_slice()),
