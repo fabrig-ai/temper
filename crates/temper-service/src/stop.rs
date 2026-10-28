@@ -53,9 +53,9 @@ pub(crate) fn advance(engine: &mut Engine) {
         return;
     };
     if !drain.requested {
-        // Finish public restore and the mark before closing the core's children.
-        // In particular, Switch must still see the accounts in Wanted.
-        if engine.domain.ready() && engine.events.room() > 0 {
+        // The core owns stopping at every restart boundary. Deferred children
+        // close without constructing their mark-gated drivers.
+        if engine.events.room() > 0 {
             drain.requested = true;
             engine.events.push(root::Event::Stop);
         }

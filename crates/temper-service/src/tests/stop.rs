@@ -333,3 +333,40 @@ fn unresolved_forge_records_keep_the_named_start_failure() {
     assert!(!engine.store.component.mark_durable(), "no start mark on refusal");
     assert!(!engine.domain.connectors_restored(), "no adoption on refusal");
 }
+
+#[test]
+fn a_stop_during_public_restore_drains_without_starting_mark_gated_components() {
+    // The startup stories' existing bounded horizon, covering all restart families.
+    const PASSES: u32 = 256;
+    let mut service = fixtures::started();
+    let mut linked = false;
+    for _ in 0..PASSES {
+        fixtures::turn(&mut service);
+        let engine = service.engine.as_ref().expect("engine");
+        if engine.domain.restart_step().is_some() && !engine.store.component.mark_durable() {
+            linked = true;
+            break;
+        }
+    }
+    assert!(linked, "the fixture reaches public restore before its mark");
+    let engine = service.engine.as_ref().expect("linked engine");
+    assert!(!engine.store.component.mark_durable());
+    assert!(!engine.forge.startup_begun());
+    assert_eq!(engine.store.secret_requests, 0);
+    service.shutdown();
+    for _ in 0..PASSES {
+        fixtures::turn(&mut service);
+        if service.end().is_some() {
+            break;
+        }
+    }
+    assert_eq!(service.end(), Some(&End::Drained));
+    let engine = service.engine.as_ref().expect("drained engine");
+    assert!(engine.accounts.as_ref().expect("accounts").is_empty());
+    assert!(engine.setup.closed && engine.setup.io.is_empty());
+    assert!(engine.forge.closed && engine.forge.io.is_empty());
+    assert!(engine.forge.starts.is_empty());
+    assert_eq!(engine.store.secret_requests, 0);
+    assert!(!engine.store.component.mark_durable());
+    assert!(engine.store.closed());
+}
