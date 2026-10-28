@@ -275,7 +275,7 @@ pub const RELEASE: Tool = Tool {
     forms: &[&[
         positional(b"task", b"TASK", Kind::Number, Required, b"The task's number"),
         flag(b"hold", b"REV", Kind::Number, Required, b"The hold's revision, as the task prints it"),
-        switch(b"again", b"Run the task again"),
+        switch(b"again", b"Repeat an uncertain effect: only once you have checked it did not happen"),
     ]],
     keyed: Keyed::Optional,
     area: 1,
