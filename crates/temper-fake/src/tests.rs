@@ -39,7 +39,7 @@ fn llm_document_checks() {
         ("/tls", json!({"root":"/tmp/root","extra":1}), "tls.extra: unknown member\n"),
         ("/tls", json!({}), "tls.root: missing\n"),
         ("/models", json!([]), "models: must be non-empty\n"),
-        ("/models", Value::Array((0..9).map(|_| models[0].clone()).collect()), "models: past its bound\n"),
+        ("/models", Value::Array((0..17).map(|_| models[0].clone()).collect()), "models: past its bound\n"),
         ("/models/0/name", json!(""), "models[0].name: must be non-empty\n"),
         ("/models/0/name", json!("x".repeat(4097)), "models[0].name: past its bound\n"),
         ("/models/0/window", json!(0), "models[0].window: must be at least 1\n"),
@@ -48,15 +48,15 @@ fn llm_document_checks() {
         ("/models/0/output", json!(4097), "models[0].output: must not exceed window\n"),
         ("/models/0", json!({"name":"qa","window":1,"output":1,"extra":0}), "models[0].extra: unknown member\n"),
         ("/models", Value::Array((0..2).map(|_| models[0].clone()).collect()), "models[1].name: must be unique\n"),
-        ("/cued", Value::Array((0..9).map(|_| scripts[0].clone()).collect()), "cued: past its bound\n"),
-        ("/asked", Value::Array((0..9).map(|_| scripts[0].clone()).collect()), "asked: past its bound\n"),
+        ("/cued", Value::Array((0..17).map(|_| scripts[0].clone()).collect()), "cued: past its bound\n"),
+        ("/asked", Value::Array((0..17).map(|_| scripts[0].clone()).collect()), "asked: past its bound\n"),
         ("/asked", json!([{"cue":"","turns":["x"]}]), "asked[0].cue: must be non-empty\n"),
         ("/cued", json!([{"cue":"x".repeat(257),"turns":["x"]}]), "cued[0].cue: past its bound\n"),
         ("/asked", Value::Array((0..2).map(|_| scripts[0].clone()).collect()), "asked[1].cue: must be unique\n"),
         ("/cued", json!([{"cue":"x","turns":["x"],"extra":1}]), "cued[0].extra: unknown member\n"),
         ("/asked", json!([{"cue":"x","turns":[]}]), "asked[0].turns: must be non-empty\n"),
         ("/otherwise", json!([]), "otherwise: must be non-empty\n"),
-        ("/otherwise", json!(["x", "x", "x", "x", "x", "x", "x", "x", "x"]), "otherwise: past its bound\n"),
+        ("/otherwise", json!(vec!["x"; 17]), "otherwise: past its bound\n"),
         ("/otherwise", json!([{"lines":[],"finish":"stop","tokens":1}]), "otherwise[0].lines: must be non-empty\n"),
         (
             "/otherwise",
@@ -112,14 +112,10 @@ fn llm_document_checks() {
         ("/cued", json!([{"cue":"","turns":["x"]}]), "cued[0].cue: must be non-empty\n"),
         ("/cued", Value::Array((0..2).map(|_| scripts[0].clone()).collect()), "cued[1].cue: must be unique\n"),
         ("/cued", json!([{"cue":"x","turns":[]}]), "cued[0].turns: must be non-empty\n"),
-        (
-            "/asked",
-            json!([{"cue":"x","turns":["a","b","c","d","e","f","g","h","i"]}]),
-            "asked[0].turns: past its bound\n",
-        ),
+        ("/asked", json!([{"cue":"x","turns":vec!["x";17]}]), "asked[0].turns: past its bound\n"),
         (
             "/otherwise",
-            json!([{"lines":(0..9).map(|_|json!({"text":"x"})).collect::<Vec<_>>(),"finish":"stop","tokens":1}]),
+            json!([{"lines":(0..17).map(|_|json!({"text":"x"})).collect::<Vec<_>>(),"finish":"stop","tokens":1}]),
             "otherwise[0].lines: past its bound\n",
         ),
         (
@@ -291,7 +287,7 @@ fn forge_document_checks() {
     }
     let repository = json!({"name":"widget","landing":"main","ci":null});
     for (count, expected) in
-        [(2_usize, b"repositories[1].name: must be unique\n".as_slice()), (9, b"repositories: past its bound\n")]
+        [(2_usize, b"repositories[1].name: must be unique\n".as_slice()), (17, b"repositories: past its bound\n")]
     {
         let mut doc = forge_document();
         doc["repositories"] = Value::Array((0..count).map(|_| repository.clone()).collect());
@@ -563,14 +559,12 @@ fn ci_cue() {
 
 #[test]
 fn constants_fit() {
-    let models = (0..8).map(|i| json!({"name":format!("qa-{i}"),"window":4096,"output":1024})).collect::<Vec<_>>();
-    let scripts = |prefix: &str| {
-        (0..8)
-            .map(|i| json!({"cue":format!("{prefix}-{i}"),"turns":["a","b","c","d","e","f","g","h"]}))
-            .collect::<Vec<_>>()
-    };
-    let bytes=serde_json::to_vec(&json!({"listen":{"socket":"127.0.0.1:0"},"key":"/tmp/key","tls":null,
-            "models":models,"cued":scripts("system"),"asked":scripts("request"),"otherwise":["a","b","c","d","e","f","g","h"]})).expect("valid fixture");
+    let models = (0..16).map(|i| json!({"name":format!("qa-{i}"),"window":4096,"output":1024})).collect::<Vec<_>>();
+    let scripts =
+        |prefix: &str| (0..16).map(|i| json!({"cue":format!("{prefix}-{i}"),"turns":vec!["x";16]})).collect::<Vec<_>>();
+    let bytes = serde_json::to_vec(&json!({"listen":{"socket":"127.0.0.1:0"},"key":"/tmp/key","tls":null,
+            "models":models,"cued":scripts("system"),"asked":scripts("request"),"otherwise":vec!["x";16]}))
+    .expect("valid fixture");
     let document = llm::Document::decode(&bytes).expect("valid fixture");
     let key = credential(0, credential::KEY);
     let plain = crate::wire::llm(llm::configuration(&document, &key[..], 0), false).expect("valid fixture");
@@ -580,7 +574,7 @@ fn constants_fit() {
     let document = llm::Document::decode(&serde_json::to_vec(&tls).expect("valid fixture")).expect("valid fixture");
     crate::wire::llm(llm::configuration(&document, &key[..], 0), false).expect("valid fixture");
     let document=forge::Document::decode(&serde_json::to_vec(&json!({"listen":{"socket":"127.0.0.1:0"},"admin_token":"/tmp/admin_token","owner":"fake",
-            "repositories":(0..8).map(|i|json!({"name":format!("repo-{i}"),"landing":"main","ci":null})).collect::<Vec<_>>()})).expect("valid fixture")).expect("valid fixture");
+            "repositories":(0..16).map(|i|json!({"name":format!("repo-{i}"),"landing":"main","ci":null})).collect::<Vec<_>>()})).expect("valid fixture")).expect("valid fixture");
     let token = credential(0, credential::ADMIN_TOKEN);
     let (mut peer, _shared) = forge::peer(&document, &token, 0).expect("valid fixture");
     let setup = peer.setup_mut();
@@ -664,7 +658,7 @@ fn pieces_refuse_each_bound() {
     for (pieces, expected) in [
         (json!([]), "otherwise[0].lines[0].pieces: must be non-empty\n"),
         (
-            json!((0..9).map(|_| json!({"text":"x","hold":null})).collect::<Vec<_>>()),
+            json!((0..17).map(|_| json!({"text":"x","hold":null})).collect::<Vec<_>>()),
             "otherwise[0].lines[0].pieces: past its bound\n",
         ),
         (json!([{"text":"","hold":null}]), "otherwise[0].lines[0].pieces[0].text: must be non-empty\n"),
@@ -978,5 +972,32 @@ fn deployment_refuses_failing_lines() {
     assert_eq!(
         demo::read(&doc).unwrap_err().line().as_ref(),
         b"application.demo.llm.otherwise[0].lines[0].fail: unknown member\n"
+    );
+}
+
+#[test]
+fn sixteen_script_turns_decode_and_run_and_a_seventeenth_is_refused() {
+    let mut doc = llm_document();
+    doc["cued"] = json!([{"cue":"sixteen", "turns":(0..16).map(|i| format!("turn {i}")).collect::<Vec<_>>()}]);
+    let checked = llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).unwrap();
+    let mut history = query(b"sixteen", b"begin").messages.into_vec();
+    for i in 0..16 {
+        let mut q = query(b"sixteen", b"begin");
+        q.messages = history.clone().into_boxed_slice();
+        let reply = answer(&checked, 23, q);
+        assert_eq!(
+            reply.parts.as_ref(),
+            &[api::Part::Text { text: format!("turn {i}").into_bytes().into_boxed_slice() }]
+        );
+        history.push(api::Message { role: api::Role::Assistant, parts: reply.parts });
+        history.push(api::Message {
+            role: api::Role::User,
+            parts: Box::new([api::Part::Text { text: b"next".as_slice().into() }]),
+        });
+    }
+    doc["cued"][0]["turns"].as_array_mut().unwrap().push(json!("turn 16"));
+    assert_eq!(
+        llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).unwrap_err().line().as_ref(),
+        b"cued[0].turns: past its bound\n"
     );
 }

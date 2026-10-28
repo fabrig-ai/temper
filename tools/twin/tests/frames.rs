@@ -301,11 +301,11 @@ fn a_document_past_the_fakes_bounds_is_refused() {
         takes.push(Take { task: CHAT, cue: format!("cue {i}").into_bytes().into_boxed_slice() });
     }
     input.takes = takes.into_boxed_slice();
-    assert_eq!(twin(&input).expect_err("nine scripts"), Refusal::Bounds { what: "scripts" });
+    assert_eq!(twin(&input).expect_err("seventeen scripts"), Refusal::Bounds { what: "scripts" });
 }
 
 #[test]
-fn eight_scripts_fit_the_fakes_bound() {
+fn sixteen_scripts_fit_the_fakes_bound() {
     let (_scratch, mut input) = fixture(&[REVIEWER]);
     let mut takes = Vec::new();
     for i in 0..AT_BOUND {
@@ -355,4 +355,16 @@ fn a_recorded_cut_off_result_refuses_even_valid_placeholder_arguments() {
         twin(&input).expect_err("cut off result"),
         Refusal::Turn { task: CHAT, turn: FIRST, why: Unheld::CutShort }
     );
+}
+
+#[test]
+fn sixteen_recorded_turns_fit_and_a_seventeenth_is_refused() {
+    let (_scratch, input) = fixture(&[REVIEWER]);
+    let record = records(&input, REVIEWER).remove(0);
+    let mut turns = vec![record; 16];
+    save(&input, REVIEWER, &turns);
+    assert_eq!(&*twin(&input).expect("sixteen turns").report.turns, &[(REVIEWER, 16)]);
+    turns.push(turns[0].clone());
+    save(&input, REVIEWER, &turns);
+    assert_eq!(twin(&input).expect_err("seventeen turns"), Refusal::Bounds { what: "turns" });
 }

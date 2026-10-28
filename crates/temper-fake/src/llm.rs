@@ -193,7 +193,7 @@ fn models(d: &Json, at: u32, p: &Path) -> Result<Box<[Model]>, Refusal> {
             window: u32::try_from(window).expect("u32 bound"),
             output: u32::try_from(output).expect("u32 bound"),
         })
-        .expect("eight models");
+        .expect("sixteen models");
     }
     check_models(out.as_slice(), p, true)?;
     Ok(out.into_boxed())
@@ -201,7 +201,7 @@ fn models(d: &Json, at: u32, p: &Path) -> Result<Box<[Model]>, Refusal> {
 /// The same model bounds for the document and a deployment's derivation.
 /// The latter reports every model problem at its provider member.
 pub(crate) fn check_models(models: &[Model], p: &Path, indexed: bool) -> Result<(), Refusal> {
-    if models.len() > usize::try_from(crate::ENTRIES).expect("eight models") {
+    if models.len() > usize::try_from(crate::ENTRIES).expect("sixteen models") {
         return Err(read::why(p, b"past its bound"));
     }
     if models.is_empty() {
@@ -234,9 +234,9 @@ pub(crate) fn check_models(models: &[Model], p: &Path, indexed: bool) -> Result<
     Ok(())
 }
 fn counted_rules(scripts: &[api::Script]) -> InputRules {
-    let mut rules = List::with_capacity(u32::try_from(scripts.len()).expect("eight scripts"));
+    let mut rules = List::with_capacity(u32::try_from(scripts.len()).expect("sixteen scripts"));
     for _ in scripts {
-        rules.push(Box::<[api::Rule]>::default()).expect("eight scripts");
+        rules.push(Box::<[api::Rule]>::default()).expect("sixteen scripts");
     }
     rules.into_boxed()
 }
@@ -285,8 +285,8 @@ fn scripts_with_inputs(
             Some(at) => inputs(d, at, turns.len(), &p.member(b"inputs"))?,
             None => Box::new([]),
         };
-        rules.push(inputs).expect("eight scripts");
-        out.push(api::Script { cue, turns }).expect("eight scripts");
+        rules.push(inputs).expect("sixteen scripts");
+        out.push(api::Script { cue, turns }).expect("sixteen scripts");
     }
     Ok((out.into_boxed(), rules.into_boxed()))
 }
@@ -312,10 +312,10 @@ fn inputs(d: &Json, at: u32, turns: usize, p: &Path) -> Result<Box<[api::Rule]>,
             return Err(read::why(&p.member(b"cue"), b"only the last rule must have an empty cue"));
         }
         let turn = read::integer(d, turn_at, u64::from(u32::MAX), &p.member(b"turn"))?;
-        if turn >= u64::try_from(turns).expect("eight turns") {
+        if turn >= u64::try_from(turns).expect("sixteen turns") {
             return Err(read::why(&p.member(b"turn"), b"must index this script's turns"));
         }
-        rules.push(api::Rule { cue, turn: u32::try_from(turn).expect("eight turns") }).expect("sixteen rules");
+        rules.push(api::Rule { cue, turn: u32::try_from(turn).expect("sixteen turns") }).expect("sixteen rules");
     }
     Ok(rules.into_boxed())
 }
@@ -327,7 +327,7 @@ fn standalone_turns(d: &Json, at: u32, p: &Path, credentials: Option<u32>) -> Re
     let mut out = List::with_capacity(items.len());
     for (i, at) in items.iter().enumerate() {
         let turn = turn::Turn::read_standalone(d, *at, &read::index(p, i), credentials)?;
-        out.push(turn::into_skein(turn)).expect("eight turns");
+        out.push(turn::into_skein(turn)).expect("sixteen turns");
     }
     Ok(out.into_boxed())
 }
@@ -353,7 +353,7 @@ fn turns_hold(turns: &[api::Turn]) -> bool {
     }
     false
 }
-/// Live-domain limits: joint script bytes include all 17 scripts' wrappers.
+/// Live-domain limits: joint script bytes include all 33 scripts' wrappers.
 pub const LIMITS: domain::Config = domain::Config {
     calls: 8,
     query_bytes: 1 << 20,
@@ -370,7 +370,7 @@ pub const LIMITS: domain::Config = domain::Config {
     refused: 0,
     no_calls: 0,
     answer_tokens: 16_384,
-    calls_per_answer: 8,
+    calls_per_answer: crate::ENTRIES,
     malformed: 0,
     outside_choice: 0,
     tool_rounds: 0,
