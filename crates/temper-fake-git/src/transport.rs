@@ -107,25 +107,40 @@ impl Typed {
             },
             pending,
         );
-        assert!(pending.room() >= domain::MAX_OUT, "reserve external domain output");
-        domain::fire(domain, &env, pending);
-        forge.domain.reclaim();
-        let mut terminal = None;
-        for _ in 0..forge.pending.len() {
-            let request = forge.pending.pop().expect("pending pass length");
-            match request {
-                domain::Request::Reply { to, result } => {
-                    let replied = to.into_token();
-                    if replied == token {
-                        terminal = Some(result.map_err(fault));
-                    } else {
-                        forge.pending.push(domain::Request::Reply { to: ReplyTo::new(replied), result });
+        loop {
+            let mut terminal = None;
+            for _ in 0..forge.pending.len() {
+                let request = forge.pending.pop().expect("pending pass length");
+                match request {
+                    domain::Request::Reply { to, result } => {
+                        let replied = to.into_token();
+                        if replied == token {
+                            terminal = Some(result.map_err(fault));
+                        } else {
+                            forge.pending.push(domain::Request::Reply { to: ReplyTo::new(replied), result });
+                        }
                     }
+                    request @ domain::Request::Hook { .. } => forge.pending.push(request),
                 }
-                request @ domain::Request::Hook { .. } => forge.pending.push(request),
             }
+            forge.domain.reclaim();
+            if let Some(result) = terminal {
+                return result;
+            }
+            match forge.domain.next_deadline() {
+                Some(deadline) if deadline <= env.now => {}
+                deadline => panic!(
+                    "the world's git transport uses an immediate forge domain: reply {token:?} pending at {:?}, next timer {deadline:?}, {} unrelated outputs",
+                    env.now,
+                    forge.pending.len(),
+                ),
+            }
+            assert!(forge.pending.room() >= domain::MAX_OUT, "reserve external domain output");
+            // The shared domain fires only its earliest due alarm. Older calls,
+            // CI and hooks can therefore precede this call even at zero latency.
+            let Forge { domain, pending, .. } = &mut *forge;
+            domain::fire(domain, &env, pending);
         }
-        terminal.expect("the world's git transport uses an immediate forge domain")
     }
     #[must_use]
     pub fn branch(&self, remote: &[u8], branch: &[u8]) -> Option<u64> {
