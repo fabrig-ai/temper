@@ -18,7 +18,7 @@ pub fn documents(directory: &Path, llm: SocketAddr, forge: SocketAddr) -> (serde
     let agent = serde_json::json!({
         "profile":{"name":"standard","declared":{"memory":2_147_483_648_u64,"tool_payload":2048,"read_window":256,
             "conversations":1,"calls_per_response":1},
-            "policy":{"max_turns":8,"check_timeout":60000,"group_stop":10,"inbox":8,"unacknowledged":8}},
+            "policy":{"max_turns":16,"check_timeout":60000,"group_stop":10,"inbox":8,"unacknowledged":8}},
         "endpoints":[{"name":"fake","number":0,"dialect":3,"provider":"openai",
             "address":llm.to_string(),"transport":"plaintext",
             "identity":"plain","connect":1000,"handshake":1000,
