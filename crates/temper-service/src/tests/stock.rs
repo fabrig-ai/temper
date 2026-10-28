@@ -259,11 +259,11 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
         "the goal asks its requester with message and waits for the answer"
     );
     assert!(
-        words.contains("When they want to agree a plan before anything is changed, never call change yourself: call goal with their words"),
+        words.contains("When they want the work agreed before anything is changed (a plan to hear first, a go-ahead to give), call goal with their words whole at once, even where they ask for an advisor first, since the goal asks one itself: the goal tells its plan and asks them. Never write that plan yourself, never ask for their go-ahead in your own reply, never set advisor, and never call change yourself. Tell them a question will wait in their inbox."),
         "the chat sends work agreed first to goal with the person's words"
     );
     assert!(
-        words.contains("tell them a question will wait in their inbox"),
+        words.contains("Tell them a question will wait in their inbox"),
         "the chat names the waiting inbox question"
     );
     assert!(
