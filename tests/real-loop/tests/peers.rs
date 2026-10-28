@@ -56,7 +56,7 @@ fn an_open_script_answers_the_brief_and_a_finite_script_keeps_its_system_cue() {
         }
         let fake::Request::Reply { result, .. } = out.pop().expect("reply") else { panic!("unheld reply") };
         let answer = result.expect("accepted query");
-        let api::Line::Text { text } = &answer.lines[0] else { panic!("scripted text") };
+        let api::Part::Text { text } = &answer.parts[0] else { panic!("scripted text") };
         assert_eq!(text.as_ref(), expected);
     }
 }
