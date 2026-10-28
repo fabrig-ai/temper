@@ -34,6 +34,9 @@ pub struct Limits {
     /// dynamic-memory.md, 4.4): new external work waits while the root's
     /// backlog is at or past it. A limit on pacing, not on memory.
     pub watermark: u32,
+    /// The byte budget for transcripts and turns (domain/root.md, 4.1).
+    /// Past it, a due task’s activation waits: pacing, as the watermark is in entries.
+    pub memory_bytes: u64,
     /// Per-commit store edges and journal memory estimates.
     pub journal: JournalLimits,
     /// Paged store reads; every startup page must fit whole.

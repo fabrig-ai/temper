@@ -28,6 +28,7 @@ use temper_engine_domain_forge_change as forge_change;
 #[derive(Debug)]
 pub struct Domain {
     revision: u64,
+    held_bytes: u64,
     /// Retired M1 reset marker; readiness never reads it. Keeping the marker
     /// needs no clock pair beside the retained restore failure.
     pub(crate) settled: Option<()>,
@@ -90,6 +91,16 @@ pub struct Domain {
 }
 
 impl Domain {
+    /// The transcript and turn bytes the root and its core hold now
+    /// (domain/root.md, 4.1): the root's running total and the core's
+    /// `transcript_bytes`. A person's read pages waiting in `store_answers`
+    /// are not counted: they are not transcripts, and a preparation's
+    /// transcript pages (`StoreInput::Loaded`) never wait there.
+    #[must_use]
+    pub fn held_bytes(&self) -> u64 {
+        self.held_bytes.checked_add(self.core.transcript_bytes()).expect("held transcript and turn bytes fit u64")
+    }
+
     /// Deployment models in the order settings authority and model choices use.
     #[must_use]
     pub fn models(&self) -> &[jig_domain_core::Model] {
@@ -343,6 +354,7 @@ impl Domain {
         }
         Ok(Domain {
             revision: 0,
+            held_bytes: 0,
             calendar: calendar::Calendar::new(
                 &calendar::Limits { projects: limits.authority.projects },
                 config.period_span,

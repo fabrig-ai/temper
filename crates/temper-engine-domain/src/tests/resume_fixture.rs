@@ -155,6 +155,7 @@ pub fn limits() -> engine::Limits {
             versions: jig_domain_core::documents::Versions { minimum: 1, maximum: 1 },
         },
         authority: authority_limits(),
+        memory_bytes: u64::MAX,
         watermark: engine::default_watermark(&journal),
         journal,
         loads: loads::Limits {
