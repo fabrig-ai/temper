@@ -984,6 +984,7 @@ fn repeated_unknown_losses_under_commit_pressure_consume_no_callback_room() {
     assert!(driver.period_sent);
     driver.fill_to_watermark();
     let (returned, pending) = (driver.returned, driver.store.pending.len());
+    let commits = driver.root.deployment().commits;
     let events = driver.events.len();
     let deliveries = driver.delivered.len();
     for channel in 1000..5000 {
@@ -993,13 +994,14 @@ fn repeated_unknown_losses_under_commit_pressure_consume_no_callback_room() {
         assert_eq!(driver.delivered.len(), deliveries, "an unknown loss delivers nothing");
     }
     assert_eq!(driver.store.pending.len(), pending);
-    let transactions = driver.transactions.len();
+    assert_eq!(driver.root.deployment().commits, commits, "unknown losses decide no commit");
     for _ in 0..4100 {
         driver.advance(true);
     }
     assert!(driver.events.is_empty() && driver.store.pending.is_empty());
     assert!(driver.root.quiescent());
-    assert_eq!(driver.transactions.len(), transactions, "unknown losses commit nothing");
+    assert_eq!(driver.root.deployment().commits, commits, "unknown losses commit nothing");
+    assert_eq!(driver.store.applied, commits, "only decisions already held under pressure reach the store");
     assert!(driver.delivered.iter().all(|delivery| matches!(delivery, Delivery::WebReply { .. })));
 }
 

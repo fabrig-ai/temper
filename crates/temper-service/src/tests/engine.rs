@@ -126,8 +126,8 @@ fn a_completion_passes_new_work_held_at_the_watermark() {
     use skein_lib::{Token, Wall};
     let (mut service, run) = fixtures::claimed_chat();
     let engine = service.engine.as_mut().expect("engine");
-    engine.env.limits.journal.commits = 3;
-    for number in 2..=5 {
+    assert_eq!(engine.env.limits.journal.commits, 3);
+    for number in 2..=u64::from(engine.env.limits.watermark) + 2 {
         if root::try_step(&mut engine.domain, &engine.env, fixtures::period(number)).is_err() {
             break;
         }
