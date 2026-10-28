@@ -2375,6 +2375,7 @@ fn kept_project(client: &std::path::Path, me: &serde_json::Value, pulls: &[serde
 }
 
 /// S14 carries an Open run's whole brief in its first user message.
+#[must_use]
 pub fn first_request_has(query: &skein_fake_llm_domain::api::Query, cue: &[u8]) -> bool {
     use skein_fake_llm_domain::api::{Part, Role};
     query.messages.iter().find(|message| message.role == Role::User).is_some_and(|message| {
