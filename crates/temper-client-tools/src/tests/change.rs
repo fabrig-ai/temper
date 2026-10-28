@@ -655,14 +655,15 @@ fn ready_and_preparing_text_names_the_way_and_landing() {
         parts.way = w::Way::Turn;
         parts.in_landing = Some(61);
         let panel = w::ChangePanel::new(&w::CEILINGS, parts).unwrap();
-        let answer = change::print(Some(&panel), false, None, b"", &f::limits_root(), None);
+        let answer = change::print(Some(&panel), false, None, b"", &f::limits_root(), &change::Holds::new());
         assert_eq!(answer.status, 0);
         f::check_golden(name, &answer.stdout);
     }
 }
 #[test]
 fn a_queue_change_prints_no_way_line() {
-    let answer = change::print(Some(&panel(w::Step::Checking)), false, None, b"", &f::limits_root(), None);
+    let answer =
+        change::print(Some(&panel(w::Step::Checking)), false, None, b"", &f::limits_root(), &change::Holds::new());
     assert_eq!(answer.status, 0);
     assert!(skein_lib::bytes::find(&answer.stdout, b"way:").is_none());
 }
@@ -673,7 +674,7 @@ fn a_turn_change_waiting_for_room_prints_its_way_alone() {
             .into_parts();
     parts.way = w::Way::Turn;
     let panel = w::ChangePanel::new(&w::CEILINGS, parts).unwrap();
-    let answer = change::print(Some(&panel), false, None, b"", &f::limits_root(), None);
+    let answer = change::print(Some(&panel), false, None, b"", &f::limits_root(), &change::Holds::new());
     contains(&answer.stdout, b"step: ready\nway: turn\nhead ");
 }
 #[test]
