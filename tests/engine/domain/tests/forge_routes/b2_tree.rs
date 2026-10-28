@@ -45,6 +45,7 @@ fn started_world(mut world: World, defaults: &jig_domain_core::settings::Default
     const SLOTS: u32 = 2;
     world.adopt();
     let mut bounds = protocol::bounds();
+    bounds.turns = 16;
     bounds.models = Box::new([host::ModelBound { name: model().name, window: model().window, output: model().output }]);
     bounds.spend = defaults.rules.maximum_run_spend;
     bounds.time = defaults.charters[0].policy.time;

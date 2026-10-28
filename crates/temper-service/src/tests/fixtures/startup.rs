@@ -387,7 +387,7 @@ pub fn owned_worker_agent() -> settings::Agent {
                 window: 1_048_576,
                 output: 8192,
             }]),
-            turns: 8,
+            turns: 16,
             spend: 1_000_000_000,
             time: skein_lib::Duration::from_secs(86_400),
             waiting: skein_lib::Duration::from_secs(86_400),
