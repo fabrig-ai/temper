@@ -613,6 +613,14 @@ fn logged_text(panel: &w::LandingsPanel, call: Option<&jig::call::Call>, out: &m
             }
         }
         out.put(b"\n");
+        for trailer in entry.trailers() {
+            out.put(b"  ");
+            out.put(trailer);
+            out.put(b"\n");
+        }
+        if entry.cut() {
+            out.put(b"  trailers cut\n");
+        }
     }
 }
 fn optional_number(value: Option<&u64>, out: &mut Encoder) {
@@ -802,6 +810,14 @@ fn encode_list(panel: &w::LandingsPanel, out: &mut Encoder) {
             out.unsigned(*change);
         }
         out.array_end();
+        out.key(b"trailers");
+        out.array_start();
+        for trailer in entry.trailers() {
+            out.string(trailer);
+        }
+        out.array_end();
+        out.key(b"cut");
+        out.boolean(entry.cut());
         out.key(b"verdicts");
         out.object_start();
         for mark in entry.verdicts() {

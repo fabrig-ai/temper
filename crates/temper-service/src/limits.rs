@@ -195,6 +195,8 @@ const FORGE: forge::Limits = forge::Limits {
     // Tiers per repository (domain/after-landing.md, 2).
     tiers: 2,
     landings_kept: 16,
+    trailers: 8,
+    trailer_bytes: 200,
 
     // Failing tests named by one tier run (domain/after-landing.md, 4).
     failing_tests: 16,

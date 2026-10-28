@@ -1404,6 +1404,7 @@ fn a_ci_subscription_reads_its_head_and_restarts_without_repeating_old_news() {
     let topic = top::Topic::Ci { repository: REPO, head };
     world.event(top::Event::Subscribe {
         subscription: top::Subscriber {
+            markers: 0,
             task: 51,
             number: 1,
             topic,
@@ -1853,6 +1854,7 @@ fn a_landing_wakes_overlapping_work_and_keeps_unrelated_news() {
     world.event(top::Event::Names { task: 1, resources: Box::new([name]) });
     world.event(top::Event::Subscribe {
         subscription: top::Subscriber {
+            markers: 0,
             task: 1,
             number: 1,
             topic: topic.clone(),
@@ -1863,6 +1865,7 @@ fn a_landing_wakes_overlapping_work_and_keeps_unrelated_news() {
     });
     world.event(top::Event::Subscribe {
         subscription: top::Subscriber {
+            markers: 0,
             task: 2,
             number: 2,
             topic,
@@ -1991,6 +1994,7 @@ fn goals_classify_landings_from_their_subtree_heads_and_planned_paths_after_rest
     {
         world.event(top::Event::Subscribe {
             subscription: top::Subscriber {
+                markers: 0,
                 task,
                 number: task,
                 topic: topic.clone(),
@@ -2730,6 +2734,7 @@ const TIER_REPAIRED: u64 = 104;
 fn subscribe_red_goal(world: &mut World) {
     world.event(top::Event::Subscribe {
         subscription: top::Subscriber {
+            markers: 0,
             task: RED_GOAL,
             number: RED_GOAL,
             topic: top::Topic::Landings { repository: REPO, branch: b"main".as_slice().into() },
@@ -2836,4 +2841,165 @@ fn fuzzy_case2_5_1() {
         change_step_task(&mut world, FIRST_CHANGE, 4000, change::Status::Passed, Box::new([]), false, false),
         change::Decision::Finish { merge: a1 }
     );
+}
+
+const DESIGNER: u64 = 301;
+fn designer_world() -> World {
+    let mut world = World::new(53);
+    world.adopt();
+    world.event(top::Event::Names {
+        task: DESIGNER,
+        resources: Box::new([top::Name {
+            forge: REPO.forge,
+            repository: REPO.repository,
+            what: top::What::Branch(Box::new([b"main".as_slice().into()])),
+        }]),
+    });
+    world.event(top::Event::Subscribe {
+        subscription: top::Subscriber {
+            task: DESIGNER,
+            number: DESIGNER,
+            markers: 1,
+            topic: top::Topic::Landings { repository: REPO, branch: b"main".as_slice().into() },
+            own_change: None,
+            goal_tasks: Some(Box::new([])),
+            paths: Box::new([b"designer".as_slice().into()]),
+        },
+    });
+    world.run_for(1);
+    world.take_seen();
+    world
+}
+#[test]
+fn a_designers_goal_wakes_on_taught_alone() {
+    let mut world = designer_world();
+    world.push_message(b"main", b"outside change");
+    world.event(top::Event::Hint {
+        hint: skein_forge::api::Hint {
+            repository: REPO,
+            change: skein_forge::api::Change::Branch(b"main".as_slice().into()),
+            key: None,
+        },
+    });
+    world.run_for(5);
+    let kept: Vec<_> = world
+        .take_seen()
+        .into_iter()
+        .filter_map(|request| match request {
+            top::Request::News { task: DESIGNER, news: top::News::Landing { .. }, class, .. } => Some(class),
+            _ => None,
+        })
+        .collect();
+    world.restart();
+    world.run_for(1);
+    world.take_seen();
+    world.push_message(b"main", b"a lesson\n\nTaught: a durable lesson");
+    world.event(top::Event::Hint {
+        hint: skein_forge::api::Hint {
+            repository: REPO,
+            change: skein_forge::api::Change::Branch(b"main".as_slice().into()),
+            key: None,
+        },
+    });
+    world.run_for(5);
+    let waking: Vec<_> = world
+        .take_seen()
+        .into_iter()
+        .filter_map(|request| match request {
+            top::Request::News { task: DESIGNER, news: top::News::Landing { trailers, .. }, class, .. } => {
+                Some((class, trailers))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kept, vec![top::Class::Kept]);
+    assert_eq!(
+        waking,
+        vec![(top::Class::Wakes, vec![Box::from(b"Taught: a durable lesson".as_slice())].into_boxed_slice())]
+    );
+}
+
+#[test]
+fn a_cold_restart_mid_trailer_pages_keeps_the_range_and_read_trailers() {
+    const COMMITS: usize = 9; // One beyond the world's eight rows per page/trailer bound.
+    let mut world = designer_world();
+    for index in 0..COMMITS {
+        world.push_message(b"main", format!("change {index}\n\nTaught: {index}").as_bytes());
+    }
+    world.event(top::Event::Hint {
+        hint: skein_forge::api::Hint {
+            repository: REPO,
+            change: skein_forge::api::Change::Branch(b"main".as_slice().into()),
+            key: None,
+        },
+    });
+    world.run_until_trailer_page(2);
+    world.restart();
+    world.take_seen();
+    world.run_for(5);
+    let news: Vec<_> = world
+        .take_seen()
+        .into_iter()
+        .filter_map(|request| match request {
+            top::Request::News { task: DESIGNER, news: top::News::Landing { trailers, cut, .. }, class, .. } => {
+                Some((trailers, cut, class))
+            }
+            _ => None,
+        })
+        .collect();
+    let expected: Box<[Box<[u8]>]> = [
+        b"Taught: 0",
+        b"Taught: 1",
+        b"Taught: 2",
+        b"Taught: 3",
+        b"Taught: 4",
+        b"Taught: 5",
+        b"Taught: 6",
+        b"Taught: 7",
+    ]
+    .map(|line| Box::from(line.as_slice()))
+    .into();
+    assert_eq!(news, vec![(expected, true, top::Class::Wakes)]);
+}
+
+#[test]
+fn a_tier_comment_made_before_a_cold_restart_is_found_and_not_posted_again() {
+    let mut world = start_report_baseline();
+    land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
+    next_report_range(&mut world);
+    world.take_calls();
+    let mut pending = None;
+    for index in 0..RED_STEPS {
+        let entry = 2000 + index;
+        world.take_seen();
+        world.event(top::Event::StepTier { released: false, task: TIER_RANGE, entry });
+        let requests = world.take_seen();
+        for request in requests {
+            if let top::Request::TierEffect { entry: effect, .. } = request {
+                let comment = matches!(effect.effect.write, skein_forge::api::Write::Post { .. });
+                world.event(top::Event::Committed { entry: effect.number });
+                if comment {
+                    pending = Some(entry);
+                }
+            }
+        }
+        if pending.is_some() {
+            break;
+        }
+        world.run_for(1);
+    }
+    pending.expect("the range's verdict posts its member comment");
+    world.run_until_posted();
+    let before = world.take_calls();
+    world.restart();
+    world.run_for(5);
+    finish_tier(&mut world, TIER_RANGE, 3000);
+    let after = world.take_calls();
+    let count = |calls: &[skein_forge::api::Op]| {
+        calls
+            .iter()
+            .filter(|call| matches!(call, skein_forge::api::Op::Write(skein_forge::api::Write::Post { .. })))
+            .count()
+    };
+    assert_eq!((count(&before), count(&after)), (1, 0));
 }

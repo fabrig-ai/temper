@@ -18,6 +18,7 @@ mod reconcile;
 mod runs;
 mod stopping;
 mod tiers;
+mod trailers;
 mod verification;
 mod views;
 use alloc::boxed::Box;
@@ -82,6 +83,8 @@ const LIMITS: Limits = Limits {
     judge_criteria: 8,
     tiers: 2,
     landings_kept: 16,
+    trailers: 8,
+    trailer_bytes: 200,
 
     failing_tests: 16,
     test_id_bytes: 256,
@@ -536,6 +539,7 @@ fn restored_ci_subscriptions_are_read_in_the_fresh_step_and_delay_its_completion
         &mut d,
         Event::Restore {
             record: Stored::Subscription(Subscriber {
+                markers: 0,
                 task: 7,
                 number: 1,
                 topic: Topic::Ci { repository: REPO, head: [4; 32] },

@@ -14,13 +14,8 @@ use crate::{adoption, brief, held, topics};
 
 mod hints;
 
-/// One comparison in flight for a branch's observed tip move.
-#[derive(Debug)]
-pub(crate) struct PendingLanding {
-    topic: Topic,
-    before: skein_forge::api::Commit,
-    after: skein_forge::api::Commit,
-}
+/// Pending landing payloads are mirrored in family 27 through every page.
+pub(crate) type PendingLanding = crate::LandingNews;
 #[derive(Debug)]
 pub(crate) struct PendingLost {
     task: u64,
@@ -167,7 +162,7 @@ pub struct Domain {
     pub(crate) panel_ci: Map<u64, change::Ci>,
     pub(crate) issues: Map<u64, IssueRow>,
     releases: Map<u64, ReleaseRow>,
-    namespace: Box<[u8]>,
+    pub(crate) namespace: Box<[u8]>,
     pub(crate) adoptions: Map<Token, adoption::PendingAdoption>,
     pub(crate) application: adoption::State,
     pub(crate) writers: Map<u16, u64>,
@@ -4548,7 +4543,7 @@ fn from_client(resource: &skein_forge_client::Resource, l: &Limits) -> Option<Na
 }
 
 #[expect(clippy::manual_map, reason = "step code has no closures")]
-fn branch_changed(
+pub(crate) fn branch_changed(
     d: &mut Domain,
     env: &Env<Limits>,
     resource: skein_forge_client::Resource,
@@ -4601,19 +4596,30 @@ fn branch_changed(
         if crate::tiers::is_main(d, resource.repository, &branch) {
             crate::tiers::moved(d, env, resource.repository, before, commit, None, out);
         }
-        publish(d, topic, News::Landing { before, after: commit, files: None }, out);
+        finish_landing(
+            d,
+            PendingLanding { topic, before, after: commit, files: None, trailers: Box::new([]), page: 0, cut: true },
+            out,
+        );
         return;
     }
     let Some(sequence) = d.sequence.checked_add(1) else {
         if crate::tiers::is_main(d, resource.repository, &branch) {
             crate::tiers::moved(d, env, resource.repository, before, commit, None, out);
         }
-        publish(d, topic, News::Landing { before, after: commit, files: None }, out);
+        finish_landing(
+            d,
+            PendingLanding { topic, before, after: commit, files: None, trailers: Box::new([]), page: 0, cut: true },
+            out,
+        );
         return;
     };
     d.sequence = sequence;
     let owner = Token::new(sequence | (1_u64 << 63));
-    d.landings.insert(owner, PendingLanding { topic, before, after: commit }).expect("landing capacity preflighted");
+    let pending =
+        PendingLanding { topic, before, after: commit, files: None, trailers: Box::new([]), page: 0, cut: false };
+    crate::log::pending(d, &pending, out);
+    d.landings.insert(owner, pending).expect("landing capacity preflighted");
     child(
         d,
         env,
@@ -4633,31 +4639,82 @@ fn landing_read(
     result: Result<skein_forge::api::Answer, skein_forge::api::Error>,
     out: &mut Queue<Request>,
 ) {
-    let Some(pending) = d.landings.remove(&owner) else { return };
-    let files = match result {
-        Ok(skein_forge::api::Answer::Compare { before, after, files, commits, contains_before: _ })
-            if before == pending.before && after == pending.after =>
-        {
-            if let Topic::Landings { repository, branch } = &pending.topic
-                && crate::tiers::is_main(d, *repository, branch)
-            {
-                crate::tiers::moved(d, env, *repository, pending.before, pending.after, Some(&commits), out);
-            }
-            let mut names = List::with_capacity(u32::try_from(files.len()).unwrap_or(u32::MAX));
-            for file in files {
-                names.push(file.path).expect("sized from bounded comparison");
-            }
-            Some(names.into_boxed())
-        }
-        Ok(_) | Err(_) => None,
+    let Some(mut pending) = d.landings.remove(&owner) else { return };
+    let (repository, branch) = match &pending.topic {
+        Topic::Landings { repository, branch } => (repository, branch),
+        Topic::Ci { .. } | Topic::Pull { .. } | Topic::Participation { .. } => unreachable!("landing read"),
     };
-    if files.is_none()
-        && let Topic::Landings { repository, branch } = &pending.topic
-        && crate::tiers::is_main(d, *repository, branch)
-    {
-        crate::tiers::moved(d, env, *repository, pending.before, pending.after, None, out);
+    let repository = *repository;
+    if pending.page == 0 {
+        let mut known = false;
+        match result {
+            Ok(skein_forge::api::Answer::Compare { before, after, files, commits, .. })
+                if before == pending.before && after == pending.after =>
+            {
+                if crate::tiers::is_main(d, repository, branch) {
+                    crate::tiers::moved(d, env, repository, before, after, Some(&commits), out);
+                }
+                let mut names = List::with_capacity(u32::try_from(files.len()).expect("bounded files"));
+                for file in files {
+                    names.push(file.path).expect("comparison count");
+                }
+                pending.files = Some(names.into_boxed());
+                known = true;
+            }
+            Ok(_) | Err(_) => {}
+        }
+        if !known {
+            pending.cut = true;
+            if crate::tiers::is_main(d, repository, branch) {
+                crate::tiers::moved(d, env, repository, pending.before, pending.after, None, out);
+            }
+        }
+        pending.page = 1;
+    } else {
+        match result {
+            Ok(skein_forge::api::Answer::Commits { commits, more }) => {
+                for commit in commits {
+                    pending.trailers =
+                        crate::trailers::collect(&pending.trailers, &commit.message, &env.limits, &mut pending.cut);
+                }
+                if !more {
+                    finish_landing(d, pending, out);
+                    return;
+                }
+                if pending.page >= env.limits.trailers {
+                    pending.cut = true;
+                    finish_landing(d, pending, out);
+                    return;
+                }
+                pending.page = pending.page.checked_add(1).expect("bounded pages");
+            }
+            Ok(_) | Err(_) => {
+                pending.cut = true;
+                finish_landing(d, pending, out);
+                return;
+            }
+        }
     }
-    publish(d, pending.topic, News::Landing { before: pending.before, after: pending.after, files }, out);
+    let read = skein_forge::api::Read::Commits { before: pending.before, after: pending.after, page: pending.page };
+    crate::log::pending(d, &pending, out);
+    d.landings.insert(owner, pending).expect("removed landing slot");
+    child(d, env, skein_forge_client::Event::Read { owner, repository, read }, out);
+}
+
+fn finish_landing(d: &mut Domain, pending: PendingLanding, out: &mut Queue<Request>) {
+    crate::log::trailers(d, &pending.topic, pending.after, &pending.trailers, pending.cut, out);
+    publish(
+        d,
+        pending.topic,
+        News::Landing {
+            before: pending.before,
+            after: pending.after,
+            files: pending.files,
+            trailers: pending.trailers,
+            cut: pending.cut,
+        },
+        out,
+    );
 }
 
 fn pull_changed(
@@ -5096,6 +5153,7 @@ fn read_afresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
         ci_refresh(d, env, *repository, *head, out);
     }
     crate::landing::refresh(d, env, out);
+    restart_landings(d, env, out);
     child(d, env, skein_forge_client::Event::ReadAfresh, out);
 }
 
@@ -5157,6 +5215,7 @@ fn retire_ended(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
 
 fn read_afresh_complete(d: &mut Domain, out: &mut Queue<Request>) {
     if d.restart_fresh == Some(true)
+        && d.landings.is_empty()
         && d.landing.pending.is_empty()
         && d.pending_ci.is_empty()
         && d.goal_file_reads.is_empty()
@@ -5335,5 +5394,30 @@ fn failed_at(held: &crate::Connection, failed: Option<crate::FailedStep>) -> Opt
         | crate::Connection::SettingUp { step: None }
         | crate::Connection::Connected { .. }
         | crate::Connection::Stopped { .. } => None,
+    }
+}
+
+/// Resume saved ranges without relying on a repeated client observation.
+fn restart_landings(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
+    let mut pending = List::with_capacity(env.limits.landings.max(env.limits.client.resources));
+    for (_, log) in &d.landing_logs {
+        for read in &log.pending {
+            pending.push(read.clone()).expect("global pending landing bound");
+        }
+    }
+    for read in pending.into_boxed() {
+        let repository = match &read.topic {
+            Topic::Landings { repository, .. } => *repository,
+            Topic::Ci { .. } | Topic::Pull { .. } | Topic::Participation { .. } => unreachable!("saved landing topic"),
+        };
+        let op = if read.page == 0 {
+            skein_forge::api::Read::Compare { before: read.before, after: read.after }
+        } else {
+            skein_forge::api::Read::Commits { before: read.before, after: read.after, page: read.page }
+        };
+        d.sequence = d.sequence.checked_add(1).expect("restored read sequence");
+        let owner = Token::new(d.sequence | (1_u64 << 63));
+        d.landings.insert(owner, read).expect("restored landing bound");
+        child(d, env, skein_forge_client::Event::Read { owner, repository, read: op }, out);
     }
 }

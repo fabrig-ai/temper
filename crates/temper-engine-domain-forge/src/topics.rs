@@ -242,7 +242,17 @@ fn finish(d: &mut Domain, pending: Pending, paths: Option<Box<[Box<[u8]>]>>) {
 
 pub(crate) fn classify(d: &Domain, subscriber: &Subscriber, news: &News) -> Class {
     let (after, files) = match news {
-        News::Landing { after, files, .. } => (after, files),
+        News::Landing { after, files, trailers, .. } => {
+            if subscriber.markers != 0 {
+                for line in trailers {
+                    if crate::trailers::marker(line) & subscriber.markers != 0 {
+                        return Class::Wakes;
+                    }
+                }
+                return Class::Kept;
+            }
+            (after, files)
+        }
         News::Cleared { .. } => return Class::Kept,
         News::Red { .. } | News::Ci { .. } | News::Changed { .. } => return Class::Wakes,
     };

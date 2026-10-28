@@ -7,6 +7,7 @@ const TESTS: usize = 16; // small's failing_tests.
 const TEST_BYTES: usize = 256; // small's test_id_bytes.
 pub fn smallest() -> Stored {
     Stored::Tier(TierRow {
+        dropped_reds: 0,
         held: None,
         reds: Box::new([]),
         repository: REPOSITORY,
@@ -39,6 +40,7 @@ pub fn fullest() -> Stored {
         .collect();
     let failures = p::Failures::Tests(tests.clone());
     Stored::Tier(TierRow {
+        dropped_reds: 1,
         held: Some(temper_engine_domain_forge::TierHeld {
             fault: temper_engine_domain_forge_landing::Fault::Completion,
             run: Some(temper_engine_domain_forge::ReceiptRun { id: 71, number: 2, url: Box::new([b'u'; 2048]) }),
@@ -47,6 +49,7 @@ pub fn fullest() -> Stored {
         reds: landings
             .iter()
             .map(|landing| temper_engine_domain_forge::TierRed {
+                repaired: false,
                 landing: landing.commit,
                 blame: p::Blame::Owns(failures.clone()),
                 run: temper_engine_domain_forge::ReceiptRun { id: 71, number: 2, url: Box::new([b'u'; 2048]) },
@@ -102,6 +105,13 @@ pub fn fullest() -> Stored {
             pending: Box::new([skein_forge::api::JobAttempt { head: TIP, run: 71, job: 81, attempt: 2 }]),
         }),
         result: Some(temper_engine_domain_forge::TierResult {
+            comments: Box::new([temper_engine_domain_forge::TierComment {
+                pull: 1,
+                operation: 8,
+                part: 0,
+                body: b"temper: tier browser run 2: red, failing suite.test".as_slice().into(),
+                state: TierBranch::Pending { entry: 15 },
+            }]),
             told: landings
                 .iter()
                 .map(|landing| temper_engine_domain_forge::LateTold { landing: landing.commit, goal: 101 })

@@ -137,6 +137,7 @@ pub fn held(act: ActKind) -> ReadValue {
             spec: spec(),
             instructions: None,
             wake: OwnerWakePolicy {
+                markers: 0,
                 words: WakeRule::Never,
                 notices: WakeRule::Never,
                 news: WakeRule::Never,

@@ -19,6 +19,8 @@ fn a_queue_merge_is_logged_with_its_change() {
     assert_eq!(
         history(&d),
         &[Logged {
+            trailers: Box::new([]),
+            cut: false,
             commit: MERGE,
             seen: env().wall,
             changes: Box::new([(CHANGE, fixtures::PULL)]),
@@ -102,8 +104,9 @@ fn a_turn_landing_is_logged_with_its_members_change() {
 #[test]
 fn the_log_prices_retained_rings_and_one_replacement() {
     // Small and owned keep two repository rings; init keeps three. Both
-    // charge a further ring while a move replaces one of the retained rows.
-    assert_eq!(log::worst_case(&LIMITS), Some(15_440));
+    // charge a further ring while a move replaces one of the retained rows,
+    // plus trailer payloads and the bounded durable read snapshots.
+    assert_eq!(log::worst_case(&LIMITS), Some(299_136));
     let init = Limits { repositories: 3, ..LIMITS };
-    assert_eq!(log::worst_case(&init), Some(20_432));
+    assert_eq!(log::worst_case(&init), Some(382_016));
 }

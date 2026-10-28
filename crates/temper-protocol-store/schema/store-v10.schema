@@ -38,7 +38,7 @@ record LandingsTopic { repository: Repository branch: bytes 4096 }
 record CiTopic { repository: Repository head: fixed 32 }
 record NumberTopic { repository: Repository number: u64 }
 enum Topic { landings: LandingsTopic, ci: CiTopic, pull: NumberTopic, participation: NumberTopic }
-record Subscriber { task: u64 number: u64 topic: Topic own_change: option u64 goal_tasks: option list 65536 u64 paths: list 1024 bytes 4096 }
+record Subscriber { markers: u32 task: u64 number: u64 topic: Topic own_change: option u64 goal_tasks: option list 65536 u64 paths: list 1024 bytes 4096 }
 # 04.2: families 6 to 9.
 record BranchHead { name: Name commit: fixed 32 owned: bool }
 record PullState { name: Name head: fixed 32 ci: Ci state: ItemState }
@@ -224,10 +224,11 @@ record LoggedRed { tests: option u32 }
 enum LoggedVerdict { verifying, cleared, red: LoggedRed }
 record Mark { tier: bytes 32 verdict: LoggedVerdict }
 record LoggedChange { task: u64 pull: u64 }
-# Greatest member ceiling whose full 4096-entry log still fits u32 framing:
-# floor((floor((u32::MAX - 10) / 4096) - 1392) / 16) = 65448.
-record Logged { commit: fixed 32 seen: u64 changes: list 65448 LoggedChange verdicts: list 32 Mark }
-record LandingLog { repository: Repository landings: list 4096 Logged }
+# Keep the full 4096-entry log and 64 pending reads within u32 framing,
+# including each entry's trailer allowance. Runtime member limits are smaller.
+record Logged { trailers: list 64 bytes 4096 cut: bool commit: fixed 32 seen: u64 changes: list 48000 LoggedChange verdicts: list 32 Mark }
+record PendingLanding { topic: Topic before: fixed 32 after: fixed 32 files: option bytes 65536 trailers: list 64 bytes 4096 page: u32 cut: bool }
+record LandingLog { pending: list 64 PendingLanding repository: Repository landings: list 4096 Logged }
 # Family 25: one tier and its run in flight (domain/after-landing.md, 10).
 record TierJudged { tip: fixed 32 key: fixed 32 }
 record TierFlake { test: bytes 4096 count: u32 }
@@ -244,13 +245,14 @@ record ReceiptRun { id: u64 number: u64 url: bytes 2048 }
 record TierFlight { next: option u64 entry: u64 start: option u64 since: option u64 waiting: bool fault: bool report: option ReceiptRun pending: list 65536 JobAttempt }
 record TierJudgement { number: u64 tip: fixed 32 key: fixed 32 finding: TierFinding }
 record LateTold { landing: fixed 32 goal: u64 }
-record TierResult { told: list 65536 LateTold verdict: TierJudgement run: ReceiptRun received: bool status: TierBranch applied: bool }
+record TierComment { pull: u64 operation: u8 part: u16 body: bytes 65536 state: TierBranch }
+record TierResult { comments: list 4096 TierComment told: list 65536 LateTold verdict: TierJudgement run: ReceiptRun received: bool status: TierBranch applied: bool }
 record TierPending { commit: fixed 32 key: option Commit }
 record TierProbeBranch { landing: u32 branch: TierBranch }
 enum TierFault { set_up, completion, no_step, cancelled, other_commit, lost }
 record TierHeld { fault: TierFault run: option ReceiptRun status: TierBranch }
-record TierRed { landing: fixed 32 blame: Blame run: ReceiptRun }
-record TierRow { held: option TierHeld reds: list 257 TierRed repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierPending baseline: option TierPending task: option u64 branch: TierBranch probe: option TierProbeBranch flight: option TierFlight result: option TierResult }
+record TierRed { repaired: bool landing: fixed 32 blame: Blame run: ReceiptRun }
+record TierRow { dropped_reds: u64 held: option TierHeld reds: list 257 TierRed repository: Repository tier: bytes 32 record: TierRecord pending: list 257 TierPending baseline: option TierPending task: option u64 branch: TierBranch probe: option TierProbeBranch flight: option TierFlight result: option TierResult }
 # Families 23 and 24: landing state and receipts (domain/landing.md, 12).
 record LandingAt { at: u64 }
 enum LandingPlace { waiting, preparing, proving, proved: LandingAt, turn: LandingAt, landed, cancelled }

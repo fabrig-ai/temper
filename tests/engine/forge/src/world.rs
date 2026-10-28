@@ -61,6 +61,8 @@ pub const LIMITS: top::Limits = top::Limits {
     judge_criteria: 8,
     tiers: 2,
     landings_kept: 16,
+    trailers: 8,
+    trailer_bytes: 200,
 
     failing_tests: 16,
     test_id_bytes: 256,
@@ -120,6 +122,7 @@ pub struct World {
     signatures: bool,
     pull_snapshot: Option<skein_forge::api::Pull>,
     landing_config: Option<(u32, temper_engine_domain_forge_change::Way, Box<[top::RepositoryGates]>)>,
+    tier_config: Option<(u32, top::TierSettings, Box<[top::RepositoryTiers]>)>,
 }
 
 impl World {
@@ -457,6 +460,7 @@ impl World {
             signatures,
             pull_snapshot: None,
             landing_config: None,
+            tier_config: None,
         };
         world.event(top::Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
         world
@@ -480,7 +484,11 @@ impl World {
         settings: top::TierSettings,
         repositories: Box<[top::RepositoryTiers]>,
     ) -> bool {
-        self.top.project_tiers(project, settings, repositories)
+        let accepted = self.top.project_tiers(project, settings, repositories.clone());
+        if accepted {
+            self.tier_config = Some((project, settings, repositories));
+        }
+        accepted
     }
 
     #[must_use]
@@ -636,6 +644,20 @@ impl World {
         panic!("post did not settle at the forge");
     }
 
+    pub fn run_until_trailer_page(&mut self, page: u32) {
+        let end = self.env.now.saturating_add(Duration::from_secs(5));
+        for _ in 0..20_000 {
+            for (_, row) in &self.stored {
+                if let top::Stored::LandingLog(log) = row
+                    && log.pending.iter().any(|read| read.page == page)
+                {
+                    return;
+                }
+            }
+            assert!(self.iterate(end), "trailer page must be saved before the horizon");
+        }
+        panic!("trailer page was not saved");
+    }
     pub fn observations(&mut self) -> Vec<forge::Observation> {
         let mut records = Vec::new();
         while let Some(record) = self.forge.pop_observation() {
@@ -661,6 +683,9 @@ impl World {
         .expect("same configured connector");
         if let Some((project, way, gates)) = &self.landing_config {
             assert!(self.top.project_landing(*project, *way, gates.clone()));
+        }
+        if let Some((project, settings, repositories)) = &self.tier_config {
+            assert!(self.top.project_tiers(*project, *settings, repositories.clone()));
         }
         let mut rows = List::with_capacity(self.stored.len());
         for (_, record) in &self.stored {
@@ -715,6 +740,19 @@ impl World {
     pub fn push_as(&mut self, branch: &[u8], path: &[u8], content: &[u8], actor: u64) {
         let env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: self.forge_env.limits };
         forge::advance(&mut self.forge, &env, b"org/repo", branch, path, content, actor).expect("scripted push");
+    }
+    pub fn push_message(&mut self, branch: &[u8], message: &[u8]) {
+        let parent = self.branch(branch);
+        let commit = forge::commit_tree(
+            &mut self.forge,
+            &self.forge_env.limits,
+            parent,
+            None,
+            Box::new([raw::File { path: b"other".as_slice().into(), content: b"content".as_slice().into() }]),
+            message,
+        )
+        .expect("scripted commit message");
+        self.external(raw::Op::Git(raw::Git::Push { branch: branch.into(), commit, expected: Some(parent) }), 1);
     }
     pub fn status(&mut self, branch: &[u8], check: raw::Check) {
         self.external(

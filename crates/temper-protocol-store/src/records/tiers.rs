@@ -247,6 +247,7 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
             w::TierResult::new(
                 &w::CEILINGS,
                 w::TierResultParts {
+                    comments: encode_comments(&r.comments),
                     told: encode_told(&r.told),
                     verdict: w::TierJudgement::new(
                         &w::CEILINGS,
@@ -279,6 +280,7 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     w::TierRow::new(
         &w::CEILINGS,
         w::TierRowParts {
+            dropped_reds: row.dropped_reds,
             held: encode_held(row.held.as_ref()),
             reds: encode_reds(&row.reds),
             repository: names::encode_repository(row.repository),
@@ -314,6 +316,7 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
 )]
 pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
     let w::TierRowParts {
+        dropped_reds,
         held,
         reds,
         repository,
@@ -397,11 +400,12 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
     };
     let result = match result {
         Some(r) => {
-            let w::TierResultParts { told, verdict, run, received, status, applied } = r.into_parts();
+            let w::TierResultParts { comments, told, verdict, run, received, status, applied } = r.into_parts();
             let w::TierJudgementParts { number, tip, key, finding } = verdict.into_parts();
             let finding = decode_finding(finding)?;
             let w::ReceiptRunParts { id, number: run_number, url } = run.into_parts();
             Some(d::TierResult {
+                comments: decode_comments(comments)?,
                 told: decode_told(told),
                 verdict: p::Verdict {
                     number,
@@ -450,6 +454,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         }
     }
     Ok(d::TierRow {
+        dropped_reds,
         held: decode_held(held),
         reds: decode_reds(reds)?,
         repository: names::decode_repository(repository),
@@ -567,6 +572,7 @@ fn encode_reds(reds: &[d::TierRed]) -> List<w::TierRed> {
                 w::TierRed::new(
                     &w::CEILINGS,
                     w::TierRedParts {
+                        repaired: red.repaired,
                         landing: red.landing,
                         blame: verification::encode_blame(&red.blame),
                         run: encode_receipt_run(&red.run),
@@ -581,12 +587,45 @@ fn encode_reds(reds: &[d::TierRed]) -> List<w::TierRed> {
 fn decode_reds(reds: List<w::TierRed>) -> Result<Box<[d::TierRed]>, Undecodable> {
     let mut values = List::with_capacity(reds.len());
     for red in reds.into_boxed() {
-        let w::TierRedParts { landing, blame, run } = red.into_parts();
+        let w::TierRedParts { repaired, landing, blame, run } = red.into_parts();
         let blame = verification::decode_blame(blame)?;
         if blame == p::Blame::Cleared {
             return Err(Undecodable);
         }
-        values.push(d::TierRed { landing, blame, run: decode_receipt_run(run) }).expect(FITS);
+        values.push(d::TierRed { repaired, landing, blame, run: decode_receipt_run(run) }).expect(FITS);
+    }
+    Ok(values.into_boxed())
+}
+
+fn encode_comments(comments: &[d::TierComment]) -> List<w::TierComment> {
+    let mut values = List::with_capacity(u32::try_from(comments.len()).expect(FITS));
+    for comment in comments {
+        values
+            .push(
+                w::TierComment::new(
+                    &w::CEILINGS,
+                    w::TierCommentParts {
+                        pull: comment.pull,
+                        operation: comment.operation,
+                        part: comment.part,
+                        body: comment.body.clone(),
+                        state: encode_branch(comment.state),
+                    },
+                )
+                .expect(FITS),
+            )
+            .expect(FITS);
+    }
+    values
+}
+fn decode_comments(comments: List<w::TierComment>) -> Result<Box<[d::TierComment]>, Undecodable> {
+    let mut values = List::with_capacity(comments.len());
+    for comment in comments.into_boxed() {
+        let w::TierCommentParts { pull, operation, part, body, state } = comment.into_parts();
+        if pull == 0 || (operation != 8 && operation != 9) || u32::from(part) != values.len() || body.is_empty() {
+            return Err(Undecodable);
+        }
+        values.push(d::TierComment { pull, operation, part, body, state: decode_branch(state) }).expect(FITS);
     }
     Ok(values.into_boxed())
 }

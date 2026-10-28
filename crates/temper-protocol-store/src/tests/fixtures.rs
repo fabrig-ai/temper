@@ -59,6 +59,8 @@ pub const LIMITS: top::Limits = top::Limits {
     judge_criteria: 8,
     tiers: 2,
     landings_kept: 16,
+    trailers: 8,
+    trailer_bytes: 200,
 
     failing_tests: 16,
     test_id_bytes: 256,
@@ -340,6 +342,7 @@ fn add_subscriptions(_name: &top::Name, rows: &mut List<(&'static str, top::Stor
         rows.push((
             label,
             top::Stored::Subscription(top::Subscriber {
+                markers: 1,
                 task: 1,
                 number: 2,
                 topic,

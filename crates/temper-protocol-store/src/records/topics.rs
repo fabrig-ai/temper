@@ -5,7 +5,7 @@ use skein_forge::api;
 use skein_lib::List;
 use temper_engine_domain_forge as d;
 
-fn encode_topic(value: &d::Topic) -> w::Topic {
+pub(super) fn encode_topic(value: &d::Topic) -> w::Topic {
     match value {
         d::Topic::Landings { repository, branch } => w::Topic::Landings(
             w::LandingsTopic::new(
@@ -34,7 +34,7 @@ fn encode_topic(value: &d::Topic) -> w::Topic {
         ),
     }
 }
-fn decode_topic(value: w::Topic) -> d::Topic {
+pub(super) fn decode_topic(value: w::Topic) -> d::Topic {
     match value {
         w::Topic::Landings(value) => {
             let w::LandingsTopicParts { repository, branch } = value.into_parts();
@@ -152,10 +152,11 @@ pub(super) fn decode_ci_state(value: w::CiState) -> d::CiState {
 
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
 pub(super) fn encode_subscriber(value: &d::Subscriber) -> w::Subscriber {
-    let d::Subscriber { task, number, topic, own_change, goal_tasks, paths } = value;
+    let d::Subscriber { markers, task, number, topic, own_change, goal_tasks, paths } = value;
     w::Subscriber::new(
         &w::CEILINGS,
         w::SubscriberParts {
+            markers: *markers,
             task: *task,
             number: *number,
             topic: encode_topic(topic),
@@ -171,8 +172,9 @@ pub(super) fn encode_subscriber(value: &d::Subscriber) -> w::Subscriber {
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
 pub(super) fn decode_subscriber(value: w::Subscriber) -> d::Subscriber {
-    let w::SubscriberParts { task, number, topic, own_change, goal_tasks, paths } = value.into_parts();
+    let w::SubscriberParts { markers, task, number, topic, own_change, goal_tasks, paths } = value.into_parts();
     d::Subscriber {
+        markers,
         task,
         number,
         topic: decode_topic(topic),

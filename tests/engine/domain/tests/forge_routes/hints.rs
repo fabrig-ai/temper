@@ -190,6 +190,7 @@ fn subscribed_ci_and_unknown_change_facts_keep_their_wakes() {
     let head = translate::commit(world.branch(b"temper/b"));
     world.event(forge::Event::Subscribe {
         subscription: forge::Subscriber {
+            markers: 0,
             task: 51,
             number: 1,
             topic: forge::Topic::Ci { repository: REPO, head },

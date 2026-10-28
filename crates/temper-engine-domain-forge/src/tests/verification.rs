@@ -168,6 +168,7 @@ fn red_goals() -> Domain {
             .insert(
                 (task, topic.clone()),
                 Subscriber {
+                    markers: 0,
                     task,
                     number: task,
                     topic,

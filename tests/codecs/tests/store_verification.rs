@@ -126,3 +126,33 @@ fn a_tiers_baseline_key_walk_survives_the_store() {
     let bounds = temper_protocol_store::bounds(&fixture::LIMITS, fixture::LIMITS.client.op_bytes).expect("bounds");
     assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
 }
+
+#[test]
+fn a_landing_read_mid_pages_has_a_v10_golden_and_round_trips() {
+    use skein_lib::Wall;
+    use temper_engine_domain_forge::{LandingLog, LandingNews, Logged, Topic};
+    const REPOSITORY: skein_forge::api::Repository = skein_forge::api::Repository { forge: 1, repository: 2 };
+    golden(
+        "landing-pages.bin",
+        Stored::LandingLog(LandingLog {
+            repository: REPOSITORY,
+            pending: Box::new([LandingNews {
+                topic: Topic::Landings { repository: REPOSITORY, branch: b"main".as_slice().into() },
+                before: [1; 32],
+                after: [2; 32],
+                files: Some(Box::new([b"src/file.rs".as_slice().into()])),
+                trailers: Box::new([b"Taught: first page".as_slice().into()]),
+                page: 2,
+                cut: false,
+            }]),
+            landings: Box::new([Logged {
+                commit: [2; 32],
+                seen: Wall::EPOCH,
+                changes: Box::new([]),
+                verdicts: Box::new([]),
+                trailers: Box::new([]),
+                cut: false,
+            }]),
+        }),
+    );
+}

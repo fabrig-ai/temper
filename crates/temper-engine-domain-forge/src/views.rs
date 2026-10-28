@@ -81,6 +81,8 @@ pub struct LandingLine {
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LoggedLine {
+    pub trailers: Box<[Box<[u8]>]>,
+    pub cut: bool,
     pub commit: [u8; 32],
     pub repository: Box<[u8]>,
     pub seen: skein_lib::Wall,
@@ -355,6 +357,8 @@ impl Domain {
             }
             logged
                 .push(LoggedLine {
+                    trailers: entry.trailers.clone(),
+                    cut: entry.cut,
                     commit: entry.commit,
                     repository: name.into_boxed(),
                     seen: entry.seen,
@@ -453,6 +457,10 @@ impl Document {
                         .saturating_add(entry.repository.len())
                         .saturating_add(size_of_val(entry.changes.as_ref()))
                         .saturating_add(size_of_val(entry.verdicts.as_ref()));
+                    size = size.saturating_add(size_of_val(entry.trailers.as_ref()));
+                    for trailer in &entry.trailers {
+                        size = size.saturating_add(trailer.len());
+                    }
                     for mark in &entry.verdicts {
                         size = size.saturating_add(mark.tier.len());
                     }

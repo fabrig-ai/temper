@@ -7,7 +7,7 @@ fn the_application_sizes_are_the_largest_key_and_row() {
     // Tier's full finding, pending range, flight and staged judgement are the largest row.
     assert_eq!(
         application(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes),
-        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 292_096 })
+        Some(jig_protocol_store::sizes::Application { version: 10, key: 403, value: 429_341 })
     );
 }
 #[test]
@@ -76,12 +76,13 @@ fn plan_text_uses_the_body_bound_without_changing_the_format() {
     // The schema's fixed framing plus the measured view; TierRow dominates Row.
     // T7 adds the optional report (2069), optional probe (14), and applied flag (1).
     // T9 adds held fault/status/link, range-bounded reds and late told recipients.
+    // T10 adds 137,220 comment bytes, an eight-byte dropped-red count, and 17 repair flags.
     assert_eq!(old_view, 5238);
     assert_eq!(new_view, 7286);
     assert_eq!(crate::v10::IssueRow::worst_case_bytes(&before), Some(5657));
     assert_eq!(crate::v10::IssueRow::worst_case_bytes(&after), Some(7705));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&before), Some(5888));
     assert_eq!(crate::v10::IssueRow::worst_case_heap(&after), Some(7936));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(292_096));
-    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(292_096));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&before), Some(429_341));
+    assert_eq!(crate::v10::Row::worst_case_bytes(&after), Some(429_341));
 }

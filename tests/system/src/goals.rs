@@ -423,6 +423,7 @@ fn a_smith_coordinator_is_woken_once_by_a_burst() {
                 instructions: None,
                 spec: None,
                 wake: Some(people::WakePolicy {
+                    markers: 0,
                     words: people::WakeRule::Batch { count: 3, age: Duration::from_secs(100) },
                     notices: people::WakeRule::Immediate,
                     news: people::WakeRule::Immediate,

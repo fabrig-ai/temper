@@ -113,6 +113,7 @@ fn restart_observations(restored_ended: bool, live: bool) -> Domain {
             &mut d,
             Event::Restore {
                 record: Stored::Subscription(Subscriber {
+                    markers: 0,
                     task: 8,
                     number: 1,
                     topic,

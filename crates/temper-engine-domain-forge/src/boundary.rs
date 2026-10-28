@@ -564,7 +564,13 @@ pub enum News {
         log: Box<[u8]>,
     },
     /// A branch moved; overlap is decided from bounded file facts.
-    Landing { before: skein_forge::api::Commit, after: skein_forge::api::Commit, files: Option<Box<[Box<[u8]>]>> },
+    Landing {
+        before: skein_forge::api::Commit,
+        after: skein_forge::api::Commit,
+        files: Option<Box<[Box<[u8]>]>>,
+        trailers: Box<[Box<[u8]>]>,
+        cut: bool,
+    },
     /// The combined CI state changed at its head.
     Ci { head: skein_forge::api::Commit, status: skein_forge::api::Ci },
     /// A pull or participating object's state changed.
@@ -573,6 +579,8 @@ pub enum News {
 /// A live subscription and its known paths for landing overlap.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Subscriber {
+    /// Connector marker mask from the goal policy (jig's domain/tasks.md, 8.3).
+    pub markers: u32,
     pub task: u64,
     /// Root-issued task subscription, retained across restarts for news delivery.
     pub number: u64,
@@ -813,6 +821,7 @@ pub struct TierSettings {
 /// Store family 25: one repository's tier (domain/after-landing.md, 10).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TierRow {
+    pub dropped_reds: u64,
     pub repository: skein_forge::api::Repository,
     pub tier: Box<[u8]>,
     pub record: temper_engine_domain_forge_tiers::Record,
@@ -859,6 +868,8 @@ pub struct TierHeld {
 /// A red with no live goal, retained until findings consume it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TierRed {
+    /// Its repair comment was planned with an applied repairing verdict.
+    pub repaired: bool,
     pub landing: skein_forge::api::Commit,
     pub blame: temper_engine_domain_forge_tiers::Blame,
     pub run: ReceiptRun,
@@ -871,7 +882,16 @@ pub struct LateTold {
 }
 /// A terminal observation, committed before the verdict's status is admitted.
 #[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierComment {
+    pub pull: u64,
+    pub operation: u8,
+    pub part: u16,
+    pub body: Box<[u8]>,
+    pub state: TierBranch,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TierResult {
+    pub comments: Box<[TierComment]>,
     pub told: Box<[LateTold]>,
     pub verdict: temper_engine_domain_forge_tiers::Verdict,
     pub run: ReceiptRun,
@@ -940,13 +960,27 @@ pub struct TierVerdict {
 
 /// Family 27: the retained landing history of one adopted repository.
 #[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LandingNews {
+    pub topic: Topic,
+    pub before: skein_forge::api::Commit,
+    pub after: skein_forge::api::Commit,
+    pub files: Option<Box<[Box<[u8]>]>>,
+    pub trailers: Box<[Box<[u8]>]>,
+    /// Zero while the comparison is pending; otherwise the next commit page.
+    pub page: u32,
+    pub cut: bool,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LandingLog {
+    pub pending: Box<[LandingNews]>,
     pub repository: skein_forge::api::Repository,
     /// Oldest first; bounded by `landings_kept`.
     pub landings: Box<[Logged]>,
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Logged {
+    pub trailers: Box<[Box<[u8]>]>,
+    pub cut: bool,
     pub commit: skein_forge::api::Commit,
     pub seen: skein_lib::Wall,
     /// Change task and pull number, retained after verification closes.
@@ -967,6 +1001,7 @@ pub enum Verdict {
 
 /// The connector's durable records, wrapped by the root store.
 #[derive(Clone, PartialEq, Eq, Debug)]
+#[expect(clippy::large_enum_variant, reason = "durable tier snapshots move whole in the priced store queues")]
 pub enum Stored {
     /// The connector part of a live named call.
     Call {
@@ -1161,6 +1196,7 @@ pub struct Installation {
 }
 /// A parent or child input to the connector top.
 #[derive(PartialEq, Eq, Debug)]
+#[expect(clippy::large_enum_variant, reason = "restored snapshots stay inline in the priced input queue")]
 pub enum Event {
     Landing {
         row: LandingRow,

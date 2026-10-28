@@ -502,6 +502,12 @@ fn logged_page(count: u32, after: Option<Box<[u8]>>) -> w::LandingsPanel {
                 w::LoggedLine::new(
                     &w::CEILINGS,
                     w::LoggedLineParts {
+                        trailers: {
+                            let mut lines = List::with_capacity(1);
+                            lines.push(b"Taught: a lesson".as_slice().into()).unwrap();
+                            lines
+                        },
+                        cut: false,
                         commit: [u8::try_from(number).unwrap(); 32],
                         repository: b"o/app".as_slice().into(),
                         seen: jig::argv::deadline(CUTOFF.as_bytes())

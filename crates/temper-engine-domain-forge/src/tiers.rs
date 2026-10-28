@@ -363,6 +363,7 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
 }
 fn new_row(repository: Repository, tier: Box<[u8]>) -> TierRow {
     TierRow {
+        dropped_reds: 0,
         held: None,
         reds: Box::new([]),
         repository,
@@ -460,6 +461,7 @@ fn start_due_for(
                 policy::Next::Dispatch(next) | policy::Next::Held(next) => row.record.run = Some(next),
                 policy::Next::Judged(verdict) => {
                     row.result = Some(crate::TierResult {
+                        comments: Box::new([]),
                         told: Box::new([]),
                         verdict,
                         run: receipt.expect("an immediate judgement uses a receipt").run,
@@ -752,7 +754,7 @@ fn receipt_key(d: &Domain, row: &TierRow, key: Commit) -> crate::ReceiptKey {
         key,
     }
 }
-fn purpose(d: &Domain, row: &TierRow, operation: u8, part: u16) -> crate::purpose::EffectPurpose {
+pub(crate) fn purpose(d: &Domain, row: &TierRow, operation: u8, part: u16) -> crate::purpose::EffectPurpose {
     let mut repository = [0; 16];
     for (slot, byte) in repository.iter_mut().zip(
         u64::from(row.repository.forge)
@@ -984,6 +986,7 @@ fn advance(d: &Domain, row: &mut TierRow, follow: &mut crate::runs::Follow, outc
                 }
             };
             row.result = Some(crate::TierResult {
+                comments: Box::new([]),
                 told: Box::new([]),
                 verdict,
                 run,
@@ -1013,7 +1016,15 @@ fn report_read(d: &Domain, row: &TierRow, env: &Env<Limits>) -> Option<skein_for
 fn wait(task: u64, out: &mut Queue<Request>) {
     out.push(Request::TierDecision { task, decision: TierDecision::Wait });
 }
-fn effect(d: &mut Domain, row: &TierRow, entry: u64, write: Write, operation: u8, part: u16, out: &mut Queue<Request>) {
+pub(crate) fn effect(
+    d: &mut Domain,
+    row: &TierRow,
+    entry: u64,
+    write: Write,
+    operation: u8,
+    part: u16,
+    out: &mut Queue<Request>,
+) {
     let task = row.task.expect("effect task");
     let entry = tier_entry(row, entry, write);
     save(row, out);
@@ -1260,6 +1271,9 @@ fn step_row(
     if !red_news(d, env, key, row, out) {
         return;
     }
+    if crate::comments::step(d, row, env, entry, out) {
+        return;
+    }
     if cleanup(d, env, key, row, entry, out) {
         return;
     }
@@ -1338,7 +1352,7 @@ fn reading(d: &Domain, key: &(Repository, Box<[u8]>)) -> bool {
     }
     false
 }
-fn joined(parts: &[&[u8]]) -> Box<[u8]> {
+pub(crate) fn joined(parts: &[&[u8]]) -> Box<[u8]> {
     let mut length = 0_u32;
     for part in parts {
         length = length.checked_add(u32::try_from(part.len()).expect("bounded words")).expect("word length");
@@ -1375,11 +1389,18 @@ fn status(tier: &[u8], result: &crate::TierResult) -> Write {
     }
 }
 fn apply(d: &mut Domain, env: &Env<Limits>, row: &mut TierRow, out: &mut Queue<Request>) {
+    let comments = crate::comments::plan(d, row, env);
+    row.result.as_mut().expect("status posted").comments = comments;
     let result = row.result.as_ref().expect("status posted");
     let run = row.record.run.as_ref().expect("judged range");
     let mut landings = List::with_capacity(u32::try_from(run.landings.len()).expect("bounded range"));
     for (landing, blame) in run.landings.iter().zip(&result.verdict.landings) {
         landings.push((landing.commit, blame.clone())).expect("one blame per landing");
+    }
+    for red in &mut row.reds {
+        if policy::repaired(&red.blame, &result.verdict.failing) {
+            red.repaired = true;
+        }
     }
     crate::verification::judged(d, row.repository, &row.tier, &result.verdict, landings.as_slice(), out);
     crate::log::judged(d, row.repository, &row.tier, landings.as_slice(), out);
@@ -1614,6 +1635,13 @@ pub(crate) fn veto(d: &mut Domain, task: u64, entry: u64, out: &mut Queue<Reques
         {
             probe.branch = TierBranch::Made;
         }
+        if let Some(result) = &mut row.result {
+            for comment in &mut result.comments {
+                if comment.state == (TierBranch::Pending { entry }) {
+                    comment.state = TierBranch::Absent;
+                }
+            }
+        }
         if let Some(result) = &mut row.result
             && result.status == (TierBranch::Pending { entry })
         {
@@ -1644,7 +1672,8 @@ pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
     use skein_forge_client::{Made, Outcome};
     let mut found = None;
     for (key, row) in &d.tier_rows {
-        if row.branch == (TierBranch::Pending { entry })
+        if crate::comments::pending(row, entry)
+            || row.branch == (TierBranch::Pending { entry })
             || match &row.probe {
                 Some(probe) => probe.branch == (TierBranch::Pending { entry }),
                 None => false,
@@ -1716,6 +1745,13 @@ pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
             // Both a successful post and a permanent failure end the attempt.
             held.status = TierBranch::Made;
         }
+        if let Some(result) = &mut row.result {
+            for comment in &mut result.comments {
+                if comment.state == pending && made {
+                    comment.state = TierBranch::Made;
+                }
+            }
+        }
         if status_entry && made {
             row.result.as_mut().expect("status result").status = TierBranch::Made;
         }
@@ -1762,6 +1798,12 @@ pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
         && let Some(run) = &held.run
     {
         bytes = bytes.checked_add(u64::try_from(run.url.len()).ok()?)?;
+    }
+    if let Some(result) = &row.result {
+        bytes = bytes.checked_add(array_bytes(result.comments.len(), size_of::<crate::TierComment>())?)?;
+        for comment in &result.comments {
+            bytes = bytes.checked_add(u64::try_from(comment.body.len()).ok()?)?;
+        }
     }
     bytes = bytes.checked_add(array_bytes(row.reds.len(), size_of::<crate::TierRed>())?)?;
     for red in &row.reds {
@@ -1844,6 +1886,9 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let retained = landings
         .checked_mul(u64::try_from(size_of::<crate::TierRed>()).ok()?.checked_add(tests)?.checked_add(2048)?)?
         .checked_mul(2)?;
+    let comments = u64::from(crate::comments::capacity(l)?)
+        .checked_mul(u64::try_from(size_of::<crate::TierComment>()).ok()?.checked_add(u64::from(l.client.op_bytes))?)?
+        .checked_mul(2)?;
     let recipients = landings
         .checked_mul(u64::from(l.subscriptions))?
         .checked_mul(u64::try_from(size_of::<crate::LateTold>()).ok()?)?
@@ -1856,6 +1901,7 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(tests.checked_mul(5)?)?
         .checked_add(retained)?
         .checked_add(recipients)?
+        .checked_add(comments)?
         .checked_add(u64::try_from(size_of::<crate::LateTold>()).ok()?)?
         .checked_add(2048)?
         .checked_add(u64::from(l.failing_tests).checked_mul(u64::try_from(size_of::<policy::Flake>()).ok()?)?)?
@@ -1992,6 +2038,7 @@ impl Domain {
             {
                 Some((6, What::Repository))
             }
+            Write::Post { .. } => crate::comments::kind(self, row, entry),
             Write::CreateBranch { .. }
             | Write::DeleteBranch { .. }
             | Write::Dispatch { .. }
@@ -1999,7 +2046,6 @@ impl Domain {
             | Write::Status { .. }
             | Write::CreateIssue { .. }
             | Write::OpenPull { .. }
-            | Write::Post { .. }
             | Write::Review { .. }
             | Write::Edit { .. }
             | Write::SetReviewers { .. }

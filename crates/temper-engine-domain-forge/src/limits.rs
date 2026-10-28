@@ -52,6 +52,10 @@ pub struct Limits {
     pub tiers: u32,
     /// Landing log entries per adopted repository (domain/after-landing.md, 10).
     pub landings_kept: u32,
+    /// Trailer lines per landing, also bounding commit pages.
+    pub trailers: u32,
+    /// Bytes retained from each recognized terminal trailer line.
+    pub trailer_bytes: u32,
 
     /// Failing tests named by one run (domain/after-landing.md, 4).
     pub failing_tests: u32,
@@ -78,7 +82,7 @@ pub struct Limits {
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "one checked sum of the connector owners and retained payloads")]
 pub fn worst_case(l: &Limits) -> Option<u64> {
-    if l.landings_kept == 0
+    if l.trailers == 0 || l.trailer_bytes == 0 || l.landings_kept == 0
         || l.gates == 0
         || l.ignored_paths == 0
         || l.repositories == 0
@@ -207,6 +211,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLanding>::worst_case(
             l.landings.max(l.client.resources),
         )?)?
+        .checked_add(u64::from(l.landings.max(l.client.resources)).checked_mul(pending_landing_payload(l)?)?)?
         .checked_add(crate::verification::worst_case(l)?)?
         .checked_add(crate::log::worst_case(l)?)?
         .checked_add(crate::tiers::worst_case(l)?)?
@@ -262,6 +267,14 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
 }
 
 use alloc::boxed::Box;
+
+/// Compare paths retain their slice headers beside their shared answer-byte allowance.
+pub(crate) fn pending_landing_payload(l: &Limits) -> Option<u64> {
+    u64::from(l.client.answer_bytes)
+        .checked_add(u64::from(l.client.rows).checked_mul(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?)?
+        .checked_add(u64::from(l.name_bytes))?
+        .checked_add(u64::from(l.trailers).checked_mul(u64::from(l.trailer_bytes).checked_add(16)?)?)
+}
 
 fn file_payload(l: &Limits) -> Option<u64> {
     u64::from(l.changes)

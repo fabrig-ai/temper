@@ -1148,6 +1148,7 @@ fn a_receipts_unreadable_run_does_not_hold_its_red_news() {
         .insert(
             (GOAL, topic.clone()),
             Subscriber {
+                markers: 0,
                 task: GOAL,
                 number: GOAL,
                 topic,
@@ -1244,6 +1245,7 @@ fn late_result(blame: policy::Blame, goal: bool) -> Domain {
             .insert(
                 (LATE_GOAL, topic.clone()),
                 Subscriber {
+                    markers: 0,
                     task: LATE_GOAL,
                     number: LATE_GOAL,
                     topic,
@@ -1258,6 +1260,7 @@ fn late_result(blame: policy::Blame, goal: bool) -> Domain {
     row.branch = TierBranch::Absent;
     let run = row.record.run.as_ref().unwrap();
     row.result = Some(TierResult {
+        comments: Box::new([]),
         told: Box::new([]),
         run: ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() },
         received: false,
@@ -1332,6 +1335,7 @@ fn a_late_red_with_no_live_goal_stays_on_the_tiers_record() {
     assert_eq!(
         fixtures::browser(&d).reds.as_ref(),
         &[TierRed {
+            repaired: false,
             landing: MERGE,
             blame: policy::Blame::Owns(failures()),
             run: ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() },
@@ -1344,6 +1348,7 @@ fn retained_reds(count: u32) -> Domain {
     let mut reds = skein_lib::List::with_capacity(count);
     for index in 0..count {
         reds.push(TierRed {
+            repaired: false,
             landing: [u8::try_from(index.checked_add(100).unwrap()).unwrap(); 32],
             blame: policy::Blame::Owns(failures()),
             run: ReceiptRun { id: RUN_ID, number: 1, url: Box::new([]) },
@@ -1354,13 +1359,15 @@ fn retained_reds(count: u32) -> Domain {
     d
 }
 #[test]
-fn a_full_red_record_preserves_the_current_verdict_and_holds() {
+fn a_red_of_no_goal_past_the_bound_drops_the_oldest_and_counts_it() {
     let capacity = LIMITS.changes * 2 + 1; // The existing tier range.
     let mut d = retained_reds(capacity);
     let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
-    assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
+    assert!(matches!(tier_decision(&out), Some(TierDecision::Done { .. })));
     assert_eq!(fixtures::browser(&d).reds.len(), usize::try_from(capacity).unwrap());
-    assert!(fixtures::browser(&d).result.is_some());
+    assert_eq!(fixtures::browser(&d).dropped_reds, 1);
+    assert_eq!(fixtures::browser(&d).reds[0].landing, [101; 32]);
+    assert_eq!(fixtures::browser(&d).reds.last().unwrap().landing, MERGE);
 }
 
 #[test]
@@ -1373,4 +1380,99 @@ fn a_red_record_at_its_range_bound_keeps_the_last_red() {
     };
     assert_eq!(fixtures::browser(&d).reds.len(), usize::try_from(capacity).unwrap());
     assert_eq!(fixtures::browser(&d).reds.last().unwrap().landing, MERGE);
+}
+
+fn with_comments(blame: policy::Blame) -> Domain {
+    let mut d = late_result(blame, false);
+    let key = (REPO, BROWSER.into());
+    let mut row = d.tier_rows.remove(&key).unwrap();
+    row.result.as_mut().unwrap().comments = comments::plan(&d, &row, &env());
+    d.tier_rows.insert(key, row).unwrap();
+    d
+}
+fn settle_comment(d: &mut Domain, entry: u64) {
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::outcome(
+        d,
+        entry,
+        skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Commented(1), found: false },
+        &mut out,
+    );
+}
+#[test]
+fn each_member_hears_its_tiers_verdict_once() {
+    const OTHER_CHANGE: u64 = 52;
+    const OTHER_PULL: u64 = 2;
+    let mut d = late_result(policy::Blame::Cleared, false);
+    let mut ignored = Queue::with_capacity(max_out(&LIMITS));
+    log::landed(&mut d, REPO, MERGE, (OTHER_CHANGE, OTHER_PULL), env().wall, &mut ignored);
+    let key = (REPO, BROWSER.into());
+    let mut row = d.tier_rows.remove(&key).unwrap();
+    row.result.as_mut().unwrap().comments = comments::plan(&d, &row, &env());
+    d.tier_rows.insert(key, row).unwrap();
+    for (entry, pull) in [(STATUS, fixtures::PULL), (RETRY, OTHER_PULL)] {
+        let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry });
+        let api::Write::Post { number, body, key } = effect_write(&out) else { panic!("member comment") };
+        assert_eq!(*number, pull);
+        assert_eq!(body.as_ref(), b"temper: tier browser run 1 cleared this landing");
+        assert!(!key.is_empty());
+        assert_eq!(d.tier_effect_kind(&d.entries.get(&entry).unwrap().entry), Some((7, What::Pull(pull))));
+        settle_comment(&mut d, entry);
+    }
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS + RETRY });
+    assert!(matches!(tier_decision(&out), Some(TierDecision::Done { .. })));
+}
+#[test]
+fn a_restart_mid_comment_posts_it_once() {
+    let mut d = with_comments(policy::Blame::Cleared);
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    let row = fixtures::browser(&d).clone();
+    let entry = d.entries.get(&STATUS).unwrap().entry.clone();
+    let mut restarted = fixtures::tiered();
+    outputs(&mut restarted, Event::Restore { record: Stored::Tier(row) });
+    outputs(&mut restarted, Event::Restore { record: Stored::Entry { entry, held: false } });
+    let waiting = outputs(&mut restarted, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
+    assert_eq!(tier_decision(&waiting), Some(&TierDecision::Wait));
+    settle_comment(&mut restarted, STATUS);
+    let out = outputs(&mut restarted, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
+    assert!(matches!(tier_decision(&out), Some(TierDecision::Done { .. })));
+}
+#[test]
+fn a_comment_that_fails_for_good_holds_the_task_and_keeps_the_verdict() {
+    let mut d = with_comments(policy::Blame::Owns(failures()));
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::outcome(&mut d, STATUS, skein_forge_client::Outcome::Failed(api::Error::Forbidden), &mut out);
+    let mut held = false;
+    while let Some(request) = out.pop() {
+        if matches!(request, Request::TierDecision { decision: TierDecision::Held, .. }) {
+            held = true;
+        }
+    }
+    assert!(held, "comment failure holds the task");
+    assert!(fixtures::browser(&d).result.as_ref().unwrap().applied);
+}
+
+#[test]
+fn a_red_then_repaired_landing_says_repaired_by() {
+    const RED_LANDING: [u8; 32] = [9; 32];
+    const RED_PULL: u64 = 2;
+    let mut d = late_result(policy::Blame::Cleared, false);
+    let mut ignored = Queue::with_capacity(max_out(&LIMITS));
+    log::landed(&mut d, REPO, RED_LANDING, (CHANGE, RED_PULL), env().wall, &mut ignored);
+    let key = (REPO, BROWSER.into());
+    let mut row = d.tier_rows.remove(&key).unwrap();
+    row.reds = Box::new([TierRed {
+        repaired: false,
+        landing: RED_LANDING,
+        blame: policy::Blame::Owns(failures()),
+        run: ReceiptRun { id: RUN_ID, number: 0, url: Box::new([]) },
+    }]);
+    row.result.as_mut().unwrap().comments = comments::plan(&d, &row, &env());
+    d.tier_rows.insert(key, row).unwrap();
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    settle_comment(&mut d, STATUS);
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
+    let api::Write::Post { number, body, .. } = effect_write(&out) else { panic!("repaired comment") };
+    assert_eq!((*number, body.as_ref()), (RED_PULL, b"temper: repaired by #1".as_slice()));
 }

@@ -1111,9 +1111,12 @@ fn receipts_preserve_the_check_key_run_and_verdict() {
 fn landing_logs_round_trip_changes_times_and_every_verdict() {
     use temper_engine_domain_forge as d;
     let row = d::Stored::LandingLog(d::LandingLog {
+        pending: Box::new([]),
         repository: skein_forge::api::Repository { forge: 1, repository: 2 },
         landings: Box::new([
             d::Logged {
+                trailers: Box::new([]),
+                cut: false,
                 commit: [1; 32],
                 seen: skein_lib::Wall::from_nanos(123),
                 changes: Box::new([(51, 7)]),
@@ -1123,6 +1126,8 @@ fn landing_logs_round_trip_changes_times_and_every_verdict() {
                 ]),
             },
             d::Logged {
+                trailers: Box::new([]),
+                cut: false,
                 commit: [2; 32],
                 seen: skein_lib::Wall::from_nanos(456),
                 changes: Box::new([]),

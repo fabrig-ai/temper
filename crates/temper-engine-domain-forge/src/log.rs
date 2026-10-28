@@ -34,9 +34,20 @@ pub(crate) fn moved(d: &mut Domain, repository: Repository, after: Commit, seen:
         }
     }
     landings
-        .push(Logged { commit: after, seen, changes: Box::new([]), verdicts: marks.into_boxed() })
+        .push(Logged {
+            trailers: Box::new([]),
+            cut: false,
+            commit: after,
+            seen,
+            changes: Box::new([]),
+            verdicts: marks.into_boxed(),
+        })
         .expect("one new ring entry");
-    let row = LandingLog { repository, landings: landings.into_boxed() };
+    let pending = match d.landing_logs.get(&repository) {
+        Some(row) => row.pending.clone(),
+        None => Box::new([]),
+    };
+    let row = LandingLog { pending, repository, landings: landings.into_boxed() };
     d.landing_logs.insert(repository, row.clone()).expect("one log per adopted repository");
     save(row, out);
 }
@@ -142,9 +153,16 @@ pub(crate) fn stored_bytes(row: &LandingLog) -> Option<u64> {
         bytes = bytes
             .checked_add(u64::try_from(size_of_val(entry.changes.as_ref())).ok()?)?
             .checked_add(u64::try_from(size_of_val(entry.verdicts.as_ref())).ok()?)?;
+        for trailer in &entry.trailers {
+            bytes = bytes.checked_add(u64::try_from(trailer.len()).ok()?)?;
+        }
+        bytes = bytes.checked_add(u64::try_from(size_of_val(entry.trailers.as_ref())).ok()?)?;
         for mark in &entry.verdicts {
             bytes = bytes.checked_add(u64::try_from(mark.tier.len()).ok()?)?;
         }
+    }
+    for read in &row.pending {
+        bytes = bytes.checked_add(pending_bytes(read)?)?;
     }
     Some(bytes)
 }
@@ -156,12 +174,20 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let entry = u64::try_from(size_of::<Logged>())
         .ok()?
         .checked_add(u64::from(l.changes).checked_mul(16)?)?
-        .checked_add(marks)?;
+        .checked_add(marks)?
+        .checked_add(u64::from(l.trailers).checked_mul(u64::from(l.trailer_bytes).checked_add(16)?)?)?;
     // A replacement ring is built beside the retained row before insertion;
     // emitted Save copies are charged by the root's output envelope.
     let rings =
         u64::from(l.repositories).checked_add(1)?.checked_mul(u64::from(l.landings_kept))?.checked_mul(entry)?;
-    Map::<Repository, LandingLog>::worst_case(l.repositories)?.checked_add(rings)
+    let pending = u64::from(l.landings.max(l.client.resources))
+        .checked_mul(
+            u64::try_from(size_of::<crate::LandingNews>())
+                .ok()?
+                .checked_add(crate::limits::pending_landing_payload(l)?)?,
+        )?
+        .checked_mul(u64::from(l.repositories).checked_add(2)?)?;
+    Map::<Repository, LandingLog>::worst_case(l.repositories)?.checked_add(rings)?.checked_add(pending)
 }
 
 pub(crate) fn seen(d: &Domain, repository: Repository, commit: Commit) -> Option<Wall> {
@@ -171,4 +197,89 @@ pub(crate) fn seen(d: &Domain, repository: Repository, commit: Commit) -> Option
         }
     }
     None
+}
+
+/// Save trailer facts on the retained entry without replacing its member/verdict facts.
+pub(crate) fn trailers(
+    d: &mut Domain,
+    topic: &crate::Topic,
+    commit: Commit,
+    trailers: &[Box<[u8]>],
+    cut: bool,
+    out: &mut Queue<Request>,
+) {
+    let (repository, branch) = match topic {
+        crate::Topic::Landings { repository, branch } => (repository, branch),
+        crate::Topic::Ci { .. } | crate::Topic::Pull { .. } | crate::Topic::Participation { .. } => {
+            unreachable!("landing topic")
+        }
+    };
+    let repository = *repository;
+    let is_main = match d.repositories.get(&repository) {
+        Some(row) => row.settings.default_branch == *branch,
+        None => false,
+    };
+    let Some(row) = d.landing_logs.get_mut(&repository) else { return };
+    let mut pending = List::with_capacity(u32::try_from(row.pending.len()).expect("pending count"));
+    for read in &row.pending {
+        if read.after != commit || read.topic != *topic {
+            pending.push(read.clone()).expect("removes finished range");
+        }
+    }
+    row.pending = pending.into_boxed();
+    for entry in &mut row.landings {
+        if is_main && entry.commit == commit {
+            entry.trailers = Box::from(trailers);
+            entry.cut = cut;
+            save(row.clone(), out);
+            return;
+        }
+    }
+    save(row.clone(), out);
+}
+
+/// Record the read phase with each next request; its reply may be lost at a stop.
+pub(crate) fn pending(d: &mut Domain, read: &crate::LandingNews, out: &mut Queue<Request>) {
+    let repository = match &read.topic {
+        crate::Topic::Landings { repository, .. } => repository,
+        crate::Topic::Ci { .. } | crate::Topic::Pull { .. } | crate::Topic::Participation { .. } => {
+            unreachable!("landing topic")
+        }
+    };
+    let repository = *repository;
+    if !d.landing_logs.contains_key(&repository) {
+        d.landing_logs
+            .insert(repository, LandingLog { repository, pending: Box::new([]), landings: Box::new([]) })
+            .expect("one log per repository");
+    }
+    let row = d.landing_logs.get_mut(&repository).expect("landing log");
+    let mut pending = List::with_capacity(d.tier_config_limits.landings.max(d.tier_config_limits.client.resources));
+    for previous in &row.pending {
+        if previous.topic != read.topic || previous.after != read.after {
+            pending.push(previous.clone()).expect("pending bound");
+        }
+    }
+    pending.push(read.clone()).expect("pending slot admitted by the top");
+    row.pending = pending.into_boxed();
+    save(row.clone(), out);
+}
+fn pending_bytes(row: &crate::LandingNews) -> Option<u64> {
+    let mut bytes = u64::try_from(size_of::<crate::LandingNews>()).ok()?;
+    match &row.topic {
+        crate::Topic::Landings { branch, .. } => bytes = bytes.checked_add(u64::try_from(branch.len()).ok()?)?,
+        crate::Topic::Ci { .. } | crate::Topic::Pull { .. } | crate::Topic::Participation { .. } => {
+            unreachable!("landing topic")
+        }
+    }
+    if let Some(files) = &row.files {
+        bytes = bytes.checked_add(u64::try_from(size_of_val(files.as_ref())).ok()?)?;
+        for file in files {
+            bytes = bytes.checked_add(u64::try_from(file.len()).ok()?)?;
+        }
+    }
+    bytes = bytes.checked_add(u64::try_from(size_of_val(row.trailers.as_ref())).ok()?)?;
+    for trailer in &row.trailers {
+        bytes = bytes.checked_add(u64::try_from(trailer.len()).ok()?)?;
+    }
+    Some(bytes)
 }

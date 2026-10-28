@@ -535,8 +535,7 @@ fn live_goal(d: &Domain, repository: Repository, landing: Commit) -> bool {
     }
     false
 }
-/// The existing range bounds stored reds; a full record preserves the current
-/// applied verdict and holds its task until findings can consume records.
+/// Reds of no goal share the range bound; a new one drops the oldest at capacity.
 pub(crate) fn retain_reds(d: &Domain, row: &mut crate::TierRow, out: &mut Queue<Request>) -> bool {
     let result = row.result.as_ref().expect("judged range");
     let run = row.record.run.as_ref().expect("retained range");
@@ -558,12 +557,24 @@ pub(crate) fn retain_reds(d: &Domain, row: &mut crate::TierRow, out: &mut Queue<
         if duplicate {
             continue;
         }
-        if retained
-            .push(crate::TierRed { landing: landing.commit, blame: blame.clone(), run: result.run.clone() })
-            .is_err()
-        {
-            return false;
+        if retained.len() == capacity {
+            let mut next = List::with_capacity(capacity);
+            for (index, red) in retained.as_slice().iter().enumerate() {
+                if index != 0 {
+                    next.push(red.clone()).expect("drops oldest");
+                }
+            }
+            retained = next;
+            row.dropped_reds = row.dropped_reds.saturating_add(1);
         }
+        retained
+            .push(crate::TierRed {
+                repaired: false,
+                landing: landing.commit,
+                blame: blame.clone(),
+                run: result.run.clone(),
+            })
+            .expect("red ring room");
     }
     if row.reds.as_ref() != retained.as_slice() {
         row.reds = retained.into_boxed();

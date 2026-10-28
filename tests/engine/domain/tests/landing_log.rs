@@ -18,13 +18,15 @@ fn wrapped_log() -> forge::LandingLog {
     for number in 2..=KEPT + 1 {
         let verdict = if number % 2 == 0 { forge::Verdict::Verifying } else { forge::Verdict::Cleared };
         landings.push(forge::Logged {
+            trailers: Box::new([Box::from(b"Taught: durable".as_slice())]),
+            cut: true,
             commit: [number; 32],
             seen: Wall::from_nanos(u64::from(number)),
             changes: if number % 3 == 0 { Box::new([]) } else { Box::new([(u64::from(number), u64::from(number))]) },
             verdicts: Box::new([forge::Mark { tier: b"browser".as_slice().into(), verdict }]),
         });
     }
-    forge::LandingLog { repository: REPOSITORY, landings: landings.into_boxed_slice() }
+    forge::LandingLog { pending: Box::new([]), repository: REPOSITORY, landings: landings.into_boxed_slice() }
 }
 fn read(driver: &mut Driver, sign_in: u64) -> forge::LandingsView {
     let mut lines = Vec::new();
@@ -108,12 +110,14 @@ fn a_cold_restart_reads_back_the_landing_log() {
     for (line, entry) in before.logged.iter().rev().zip(wrapped_log().landings.iter()) {
         assert_eq!(line.repository.as_ref(), b"org/repo");
         assert_eq!(
-            (line.commit, line.seen, &line.changes, &line.verdicts),
+            (line.commit, line.seen, &line.changes, &line.verdicts, &line.trailers, line.cut),
             (
                 entry.commit,
                 entry.seen,
                 &entry.changes.iter().map(|(task, _)| *task).collect::<Vec<_>>().into_boxed_slice(),
-                &entry.verdicts
+                &entry.verdicts,
+                &entry.trailers,
+                entry.cut
             )
         );
     }

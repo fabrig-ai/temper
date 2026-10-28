@@ -84,6 +84,7 @@ fn release() -> Stored {
 }
 fn subscription() -> Stored {
     Stored::Subscription(Subscriber {
+        markers: 0,
         task: TASK,
         number: 1,
         topic: Topic::Ci { repository: REPO, head: [3; 32] },

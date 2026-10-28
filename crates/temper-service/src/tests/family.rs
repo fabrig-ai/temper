@@ -1880,6 +1880,8 @@ fn a_logged_page_keeps_its_marks_time_and_document_cursor() {
         landings: Box::new([]),
         newer_than: Some(skein_lib::Wall::from_nanos(123)),
         logged: Box::new([forge::LoggedLine {
+            trailers: Box::new([b"Taught: a lesson".as_slice().into()]),
+            cut: true,
             commit: [5; 32],
             repository: b"acme/shop".as_slice().into(),
             seen: skein_lib::Wall::from_nanos(456),
@@ -1898,6 +1900,8 @@ fn a_logged_page_keeps_its_marks_time_and_document_cursor() {
     let line = panel.logged().get(0).unwrap();
     assert_eq!((line.commit(), line.repository(), line.seen()), (&[5; 32], b"acme/shop".as_slice(), 456));
     assert_eq!(line.changes().as_slice(), &[51]);
+    assert_eq!(line.trailers().as_slice(), &[Box::from(b"Taught: a lesson".as_slice())]);
+    assert!(line.cut());
     let mark = line.verdicts().get(0).unwrap();
     assert_eq!(mark.tier(), b"browser");
     let w::LoggedVerdict::Red(red) = mark.verdict() else { panic!("red many") };

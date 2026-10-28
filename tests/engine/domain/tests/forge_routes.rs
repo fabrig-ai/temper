@@ -3347,3 +3347,66 @@ fn a_tier_run_is_made_while_the_period_is_reserved_whole() {
 
 #[path = "forge_routes/bound.rs"]
 mod bound;
+
+#[test]
+fn an_amended_policys_markers_reach_the_subscriber() {
+    let (mut world, goal, _, _) =
+        change_world_in(World::configured(true, true), Change { no_ci: true, owner_gate: false, tracked: true });
+    let key = Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(goal.task)));
+    let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) = world.store.rows.get(&key)
+    else {
+        panic!("tracked goal")
+    };
+    let revision = row.revisions.spec;
+    let wake = people::WakePolicy {
+        markers: 1,
+        words: people::WakeRule::Immediate,
+        notices: people::WakeRule::Immediate,
+        news: people::WakeRule::Immediate,
+        results: people::ResultsWake::LastOrFailure,
+        questions: true,
+        answers: true,
+        timers: true,
+    };
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(970)),
+        sign_in: world.signed_in.unwrap(),
+        key: [97; 16],
+        ask: people::Ask::Amend {
+            project: 1,
+            task: goal.task,
+            revision,
+            release: None,
+            amendment: people::Amendment {
+                tracked: None,
+                addressed: None,
+                instructions: None,
+                spec: None,
+                wake: Some(wake),
+                dependencies: None,
+                authority: None,
+                llm: None,
+                reason: b"wake on a lesson".as_slice().into(),
+            },
+        },
+    }));
+    for _ in 0..200 {
+        world.tick();
+    }
+    world.restart(true, true);
+    world.until(Until::Ready);
+    let markers: Vec<_> = world
+        .store
+        .rows
+        .values()
+        .filter_map(|row| match row {
+            Record::Forge { row } => match &**row {
+                forge_top::Stored::Subscription(s) if s.task == goal.task => Some(s.markers),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(markers, vec![1]);
+}

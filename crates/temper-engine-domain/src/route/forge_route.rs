@@ -271,11 +271,18 @@ fn news_words(news: &forge::News, limit: u32) -> Box<[u8]> {
                 append(&mut out, log.get(start..).expect("log end"));
             }
         }
-        forge::News::Landing { before, after, .. } => {
+        forge::News::Landing { before, after, trailers, cut, .. } => {
             append(&mut out, b"forge landing ");
             append(&mut out, &commit_text(before));
             append(&mut out, b" -> ");
             append(&mut out, &commit_text(after));
+            for trailer in trailers {
+                append(&mut out, b"\n");
+                append(&mut out, trailer);
+            }
+            if *cut {
+                append(&mut out, b"\ntrailers cut");
+            }
         }
         forge::News::Ci { head, status } => {
             append(&mut out, b"forge ci ");
@@ -682,7 +689,8 @@ pub(crate) fn subscribe_call(
         );
         return;
     };
-    let subscriber = forge::Subscriber { task: key.task, number, topic, own_change, goal_tasks: None, paths };
+    let subscriber =
+        forge::Subscriber { markers: 0, task: key.task, number, topic, own_change, goal_tasks: None, paths };
     if !domain.forge.can_subscribe(&env.limits.forge, &subscriber)
         || watch_names(domain, &env.limits, &subscriber).is_none()
     {
@@ -1163,6 +1171,7 @@ pub(crate) fn subscribe_goal(domain: &mut Domain, env: &Env<Limits>, goal: u64, 
         },
     };
     let subscriber = forge::Subscriber {
+        markers: domain.core.tasks.task(goal).expect("goal exists").wake.markers,
         task: goal,
         number,
         topic,
@@ -1289,8 +1298,9 @@ fn goal_members(
     Some(GoalMembers { tasks: goal_tasks.into_boxed(), paths: paths.into_boxed() })
 }
 
-pub(crate) fn goal_subscribed(domain: &mut Domain, env: &Env<Limits>, subscriber: forge::Subscriber) {
+pub(crate) fn goal_subscribed(domain: &mut Domain, env: &Env<Limits>, mut subscriber: forge::Subscriber) {
     let Some(task) = domain.core.tasks.task(subscriber.task) else { return };
+    subscriber.markers = task.wake.markers;
     let mut present = false;
     for subscription in &task.subscriptions {
         if subscription.number == subscriber.number {
@@ -3880,6 +3890,30 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                 jig_domain_core::connector::Event::Verdict { owner, judge, verdict, at: env.wall, guarded, state },
             )));
         }
+        jig_domain_core::connector::Ask::Subscribe { task, topic, markers } => {
+            if number != domain.config.forge_connector {
+                return;
+            }
+            let mut subscriber = None;
+            if let Some(subject) = domain.forge.subscription(task, topic) {
+                subscriber = domain.forge.topic_subscriber(task, &subject).cloned();
+            }
+            let mut pending_key = None;
+            for (key, pending) in &domain.forge_subscribing {
+                if pending.task == task && pending.number == topic {
+                    pending_key = Some(*key);
+                    break;
+                }
+            }
+            if let Some(key) = pending_key {
+                domain.forge_subscribing.get_mut(&key).expect("pending subscription").markers = markers;
+            }
+            if let Some(mut subscriber) = subscriber {
+                subscriber.markers = markers;
+                domain.work.push(Work::Forge(forge::Event::Subscribe { subscription: subscriber }));
+            }
+        }
+        jig_domain_core::connector::Ask::Unsubscribe { .. } => {}
         jig_domain_core::connector::Ask::Names { .. }
         | jig_domain_core::connector::Ask::Unname { .. }
         | jig_domain_core::connector::Ask::Hold { .. }
@@ -3892,8 +3926,6 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
         | jig_domain_core::connector::Ask::ProcedureClose { .. }
         | jig_domain_core::connector::Ask::Project { .. }
         | jig_domain_core::connector::Ask::Release { .. }
-        | jig_domain_core::connector::Ask::Subscribe { .. }
-        | jig_domain_core::connector::Ask::Unsubscribe { .. }
         | jig_domain_core::connector::Ask::Read { .. }
         | jig_domain_core::connector::Ask::Gather { .. }
         | jig_domain_core::connector::Ask::CutTo { .. }

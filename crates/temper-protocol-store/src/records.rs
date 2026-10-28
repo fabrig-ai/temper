@@ -111,7 +111,7 @@ pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
             }
             d::Stored::Binding { address, subject }
         }
-        w::Value::LandingLog(row) => d::Stored::LandingLog(log::decode(row)?),
+        w::Value::LandingLog(row) => d::Stored::LandingLog(log::decode(row, bounds)?),
         w::Value::Tier(row) => d::Stored::Tier(tiers::decode(*row)?),
         w::Value::Verification(row) => d::Stored::Verification(verification::decode(row)?),
         w::Value::Flight(row) => {
@@ -201,6 +201,14 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         tier_flake_test: forge.test_id_bytes,
         tier_tests_tests: forge.failing_tests,
         landing_log_landings: forge.landings_kept,
+        landing_log_pending: forge.landings.max(forge.client.resources),
+        pending_landing_files_some: forge.client.answer_bytes,
+        pending_landing_trailers: forge.trailers,
+        pending_landing_trailers_item: forge.trailer_bytes,
+        logged_trailers: forge.trailers,
+        logged_trailers_item: forge.trailer_bytes,
+        tier_result_comments: forge.landings_kept.checked_mul(forge.changes)?.checked_mul(2)?,
+        tier_comment_body: forge.client.op_bytes,
         logged_changes: forge.changes,
         logged_verdicts: forge.tiers,
         mark_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,

@@ -1076,9 +1076,15 @@ fn logged_line(entry: forge::LoggedLine, limits: &w::Limits) -> Option<w::Logged
         };
         verdicts.push(w::LoggedMark::new(limits, w::LoggedMarkParts { tier: mark.tier, verdict }).ok()?).ok()?;
     }
+    let mut trailers = List::with_capacity(u32::try_from(entry.trailers.len()).ok()?);
+    for line in entry.trailers {
+        trailers.push(line).ok()?;
+    }
     w::LoggedLine::new(
         limits,
         w::LoggedLineParts {
+            trailers,
+            cut: entry.cut,
             commit: entry.commit,
             repository: entry.repository,
             seen: entry.seen.as_nanos(),

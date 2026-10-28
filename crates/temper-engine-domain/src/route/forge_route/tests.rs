@@ -29,7 +29,7 @@ fn forge_news_prints_commit_ids_at_the_identifier_width_within_its_bound() {
                 b"".as_slice(),
             ),
             (
-                News::Landing { before: *commit, after: SHA1, files: None },
+                News::Landing { trailers: Box::new([]), cut: false, before: *commit, after: SHA1, files: None },
                 b"forge landing ".as_slice(),
                 b" -> abcdef0123456789abcdef0123456789abcdef01".as_slice(),
             ),
@@ -689,4 +689,19 @@ fn an_uncleared_result_names_every_tier_still_waiting() {
         })),
     };
     assert_eq!(super::uncleared_words(&SHA1, u32::try_from(WORDS.len()).unwrap(), Some(&row), false).as_ref(), WORDS);
+}
+
+#[test]
+fn landing_news_words_include_trailers_and_the_cut_notice_within_the_message_bound() {
+    let news = super::forge::News::Landing {
+        before: [0; 32],
+        after: [0; 32],
+        files: None,
+        trailers: Box::new([b"Taught: lesson".as_slice().into()]),
+        cut: true,
+    };
+    let expected = b"forge landing 0000000000000000000000000000000000000000 -> 0000000000000000000000000000000000000000\nTaught: lesson\ntrailers cut";
+    assert_eq!(news_words(&news, 512).as_ref(), expected);
+    let bound = u32::try_from(expected.len()).unwrap();
+    assert_eq!(news_words(&news, bound - 1).as_ref(), &expected[..expected.len() - 1]);
 }
