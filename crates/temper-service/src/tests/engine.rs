@@ -95,7 +95,7 @@ fn a_store_answer_is_taken_at_the_backlog_watermark() {
     let mut service = fixtures::ready();
     let engine = service.engine.as_mut().expect("engine");
     let mut number = 2;
-    for _ in 0_u32..engine.env.limits.journal.commits.checked_add(1).unwrap() {
+    for _ in 0_u32..engine.env.limits.watermark.checked_add(1).unwrap() {
         if root::try_step(&mut engine.domain, &engine.env, fixtures::period(number)).is_err() {
             break;
         }

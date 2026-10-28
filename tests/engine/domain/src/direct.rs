@@ -432,7 +432,7 @@ impl Driver {
     /// Release may append callbacks after the probe; those stay in arrival order.
     pub fn fill_to_watermark(&mut self) {
         let returned = self.returned;
-        for _ in 0..=self.env.limits.journal.commits {
+        for _ in 0..=self.env.limits.watermark {
             let probe_at = self.events.len();
             self.sign_in();
             if self.returned > returned {
@@ -440,7 +440,7 @@ impl Driver {
                 return;
             }
         }
-        panic!("the backlog reaches the watermark within its commit count");
+        panic!("the backlog reaches the watermark within its configured watermark");
     }
 
     // Withhold the story's commit while external admission reaches the watermark.

@@ -302,3 +302,12 @@ fn unaccountable_policy_bytes_use_the_existing_bound_formatter() {
     );
     assert_eq!(lines(&found).as_ref(), b"engine.projects[0].policy.bytes: past its bound\n");
 }
+
+#[test]
+fn the_small_engine_watermark_counts_commits_and_door_outputs() {
+    let jig = jig_protocol_config::profile(jig_protocol_config::Profile::Small);
+    let own = crate::limits::profile(crate::limits::Profile::Small);
+    let root = crate::limits::engine(&jig, &own).unwrap();
+    assert_eq!(root.watermark, own.root.journal.commits + own.root.journal.deliveries);
+    assert_eq!(root.watermark, 515);
+}

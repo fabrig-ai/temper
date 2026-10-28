@@ -2,9 +2,7 @@
 use crate::boundary::{
     Assignment, BriefConnector, BriefSection, Event, Fact, Payload, PreparedWorkspace, Read, Released, Request, Work,
 };
-use crate::limits::{
-    Limits, backlog, core_limits, environment_core, payload_slots, run_policy_bound, watermark, worst_case,
-};
+use crate::limits::{Limits, backlog, core_limits, environment_core, payload_slots, run_policy_bound, worst_case};
 use crate::restart::{connector_restarting, request_load};
 use crate::route::{
     LandingRule, forge_route, host_route, landing, policy_translate, route_core_requests, route_into, step_routed,
@@ -582,7 +580,7 @@ pub fn step(domain: &mut Domain, env: &Env<Limits>, event: Event) {
 }
 
 pub(crate) fn admits(domain: &Domain, limits: &Limits) -> bool {
-    backlog(domain) < watermark(limits)
+    backlog(domain) < u64::from(limits.watermark)
         && domain.core.counters.deployment().messages
             <= u64::MAX.checked_sub(u64::from(limits.tasks.tasks)).expect("task count fits u64")
         && domain.work.is_empty()
@@ -788,7 +786,7 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
         close(domain, env, decision, out);
         return;
     }
-    if backlog(domain) >= watermark(&env.limits) {
+    if backlog(domain) >= u64::from(env.limits.watermark) {
         return;
     }
     // From the stop on, nothing that would make a commit is taken: connector
