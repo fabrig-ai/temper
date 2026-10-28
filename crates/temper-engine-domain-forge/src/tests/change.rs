@@ -636,3 +636,67 @@ fn change_words_within_operation_bound_open_unchanged_with_first_line_title() {
     assert_eq!(title.as_ref(), b"Small fix");
     assert_eq!(body.as_ref(), words);
 }
+
+#[test]
+fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
+    use temper_engine_domain_forge_change as change;
+    for made in [false, true] {
+        let mut d = domain();
+        outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+        outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+        outputs(&mut d, Event::ReadAfresh);
+        outputs(&mut d, Event::SettleOutbox);
+        let mut prior = fixtures::opening_row();
+        prior.pending = None;
+        prior.effect = change::EffectResult::None;
+        prior.change.state = change::State::Opening { requested: false };
+        prior.change.repairs = 2;
+        prior.change.resolutions = 1;
+        prior.change.updates = 1;
+        outputs(&mut d, Event::Change { row: prior.clone() });
+        d.start_procedure_step(prior.task, 7);
+        start_opening(&mut d, prior.task, FIRST_ENTRY);
+        fixtures::missing_pull_reads(&mut d);
+        let decided = fixtures::finish_missing(&mut d);
+        assert!(built_entry(&decided, FIRST_ENTRY), "the opening was decided");
+        let mut saved_early = false;
+        for request in &decided {
+            if let Request::Save { record: Stored::Change(_) | Stored::Entry { .. }, .. } = request {
+                saved_early = true;
+            }
+        }
+        assert!(!saved_early, "neither speculative record reaches the store");
+        let staged = d.change(prior.task).expect("change retained").clone();
+        assert_eq!(staged.pending, Some(FIRST_ENTRY));
+        assert_ne!(staged.change, prior.change, "the requested flag advanced");
+        assert!(outputs(&mut d, Event::ProcedureResolved { task: prior.task, step: 6, made: false }).is_empty());
+        assert_eq!(d.change(prior.task), Some(&staged), "an old outcome cannot resolve this offer");
+        let resolved = outputs(&mut d, Event::ProcedureResolved { task: prior.task, step: 7, made });
+        assert_eq!(d.procedure_step(prior.task), None);
+        assert_eq!(d.entries.contains_key(&FIRST_ENTRY), made);
+        if made {
+            let mut saved_change = false;
+            let mut saved_entry = false;
+            for request in &resolved {
+                if let Request::Save { record: Stored::Change(row), .. } = request {
+                    saved_change |= row.change == staged.change;
+                }
+                if let Request::Save { record: Stored::Entry { entry, .. }, .. } = request {
+                    saved_entry |= entry.number == FIRST_ENTRY;
+                }
+            }
+            assert!(saved_change, "admission saves the decided procedure state");
+            assert!(saved_entry, "admission saves the matching outbox");
+        } else {
+            let restored = d.change(prior.task).expect("change retained");
+            assert_eq!(restored.change, prior.change, "all policy fields are restored");
+            assert_eq!(restored.pending, prior.pending);
+            assert_eq!(restored.effect, prior.effect);
+            assert_eq!(restored.pull, prior.pull);
+            assert_eq!(restored.drift, prior.drift);
+            assert_eq!(restored.queue_repair, prior.queue_repair);
+            assert_eq!(restored.queue_repairs, prior.queue_repairs);
+            assert!(resolved.is_empty(), "a rejection publishes no speculative record");
+        }
+    }
+}

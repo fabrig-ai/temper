@@ -1872,7 +1872,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
             delegate: forge_change::Status::Unknown,
             effect: forge_change::EffectResult::None,
             // A held procedure can only run again once jig has lifted its hold.
-            // The forge consumes this before starting any asynchronous reads.
+            // The forge consumes this in the owner release before starting fresh reads.
             released: match (domain.forge.change(task), domain.core.tasks.task(task)) {
                 (Some(change), Some(task)) => {
                     let held = match &change.change.state {
@@ -2792,13 +2792,21 @@ fn wait_change_decision(
 }
 
 /// Procedure outcomes and local drops share one admission hook.
-pub(crate) fn resolve_procedure_step(domain: &mut Domain, task: u64, step: u64, made: bool) {
-    domain.work.push(Work::Forge(forge::Event::ProcedureResolved { task, step, made }));
+pub(crate) fn resolve_procedure_step(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    decision: &mut Decision,
+    task: u64,
+    step: u64,
+    made: bool,
+) {
+    // Resolve before a queued activation can offer the next step.
+    super::forge_event(domain, env, decision, forge::Event::ProcedureResolved { task, step, made });
 }
 
 fn drop_procedure_step(domain: &mut Domain, task: u64) {
     if let Some(step) = domain.forge.procedure_step(task) {
-        resolve_procedure_step(domain, task, step, false);
+        domain.work.push(Work::Forge(forge::Event::ProcedureResolved { task, step, made: false }));
     }
 }
 
