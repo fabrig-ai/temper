@@ -155,18 +155,18 @@ pub fn defaults(llm: &jig_protocol_config::Llm) -> Defaults {
 pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     llm.models.first()?;
     let mut charters = Box::new([
-        charter(1, include_bytes!("stock/chat.txt"), llm),
-        charter(2, include_bytes!("stock/coding.txt"), llm),
+        charter(1, 8, include_bytes!("stock/chat.txt"), llm),
+        charter(2, 16, include_bytes!("stock/coding.txt"), llm),
         reviewer(llm),
     ]);
     // jig prices the costliest completion; one reserve turn plus one is 2C.
     // Its existing admission helper keeps the stock on that same rounding rule.
     let minimum_run = jig_domain_core::reserve_floor(&charters.first()?.policy)?;
     let mut run = minimum_run.checked_mul(2)?; // K starts at 4C.
-    // Coarse prices still leave four units per turn (protocol/configuration.md, 13.4).
-    for charter in charters.iter() {
-        run = run.max(u64::from(charter.policy.turns).checked_mul(4)?);
-    }
+    // Keep K's coarse-price floor at the chat's eight turns, four units each.
+    // A 16-turn coder is bounded by that spend; at init prices (C = 1057,
+    // K = 4228) its 16 turns fit (protocol/configuration.md, 13.4).
+    run = run.max(u64::from(charters.first()?.policy.turns).checked_mul(4)?);
     let chat_spend = run.checked_mul(24)?;
     let ceiling_spend = run.checked_mul(48)?;
     for charter in charters.iter_mut() {
@@ -214,7 +214,7 @@ pub(crate) fn checked(llm: &jig_protocol_config::Llm) -> Option<Defaults> {
     })
 }
 
-fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> Charter {
+fn charter(number: u32, turns: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> Charter {
     let model = llm.models.first().expect("parsed llm offers at least one model").clone();
     let mut alternatives = List::with_capacity(u32::try_from(llm.models.len().saturating_sub(1)).expect("model count"));
     for alternative in llm.models.iter().skip(1) {
@@ -230,7 +230,7 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
             alternatives: alternatives.into_boxed(),
             waiting: Duration::from_millis(10_000),
             resume: true,
-            turns: 8,
+            turns,
             time: Duration::from_millis(120_000),
             reserve_turns: 1,
             reserve_time: Duration::from_millis(60_000),
@@ -243,7 +243,7 @@ fn charter(number: u32, instructions: &[u8], llm: &jig_protocol_config::Llm) -> 
     }
 }
 fn reviewer(llm: &jig_protocol_config::Llm) -> Charter {
-    let mut value = charter(4, include_bytes!("stock/review.txt"), llm);
+    let mut value = charter(4, 16, include_bytes!("stock/review.txt"), llm);
     value.policy.modify = false;
     value.policy.agents = false;
     value
