@@ -217,6 +217,23 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         )?)?
         .checked_add(u64::from(l.changes).checked_mul(u64::from(l.client.answer_bytes).checked_mul(4)?)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingStep>::worst_case(l.changes)?)?
+        .checked_add(Map::<u64, crate::domain::ProcedureStep>::worst_case(l.changes)?)?
+        // Prior procedure state retains its own bounded gate, asked, clean and held payloads.
+        .checked_add(
+            u64::from(l.changes).checked_mul(
+                u64::from(l.change_policy.gates)
+                    .checked_mul(
+                        u64::try_from(size_of::<temper_engine_domain_forge_change::Gate>()).ok()?.checked_add(8)?,
+                    )?
+                    .checked_add(u64::from(l.change_policy.clean_heads).checked_mul(32)?)?
+                    .checked_add(u64::try_from(size_of::<temper_engine_domain_forge_change::State>()).ok()?)?,
+            )?,
+        )?
+        .checked_add(
+            u64::from(l.changes)
+                .checked_mul(u64::from(l.change_policy.gates))?
+                .checked_mul(u64::try_from(size_of::<temper_engine_domain_forge_change::GateFailure>()).ok()?)?,
+        )?
         .checked_add(Map::<u64, crate::IssueRow>::worst_case(l.issues)?)?
         .checked_add(Map::<u64, skein_lib::Wall>::worst_case(l.issues)?)?
         .checked_add(Map::<u64, skein_lib::Wall>::worst_case(l.changes)?)?

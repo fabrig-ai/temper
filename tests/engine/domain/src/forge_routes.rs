@@ -66,6 +66,7 @@ pub struct World {
     pub review_files_delay: Option<Duration>,
     gate: paths::Gate,
     pub held_reads: Option<Vec<engine::Request>>,
+    pub hold_checking_reads: bool,
     pub merges: u32,
     pub writes: Vec<skein_forge::api::Write>,
     /// Hold decoded write answers after the independent forge has made the effect.
@@ -731,6 +732,7 @@ impl World {
             review_files_delay: None,
             gate,
             held_reads: None,
+            hold_checking_reads: false,
             hold_write_answers: None,
             held_write_answers: Vec::new(),
             lose_writes: 0,
@@ -880,7 +882,8 @@ impl World {
                         && matches!(op, skein_forge::api::Op::Read(_))
                         && self.store.rows.values().any(|row| matches!(row,
                             Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(row)
-                                if matches!(row.change.state, temper_engine_domain_forge_change::State::Queued { .. } | temper_engine_domain_forge_change::State::First { .. }))))
+                                if matches!(row.change.state, temper_engine_domain_forge_change::State::Queued { .. } | temper_engine_domain_forge_change::State::First { .. })
+                                    || (self.hold_checking_reads && matches!(row.change.state, temper_engine_domain_forge_change::State::Checking { .. })))))
                     {
                         reads.push(engine::Request::Forge { call, repository, op });
                         continue;
