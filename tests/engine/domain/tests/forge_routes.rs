@@ -3299,7 +3299,12 @@ fn a_tier_run_is_made_while_the_period_is_reserved_whole() {
     const PROJECT: u32 = 1;
     const PERIOD: u64 = 1;
     let mut world = World::configured_limits(
-        true, true, false, 1000, Gate::default(), None,
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
         StoryLimits { tier: true, reserve_whole_period: true, ..StoryLimits::default() },
     );
     world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
@@ -3310,14 +3315,25 @@ fn a_tier_run_is_made_while_the_period_is_reserved_whole() {
     for _ in 0..TIER_TICKS {
         world.tick();
     }
-    let period = world.root.tasks().funding(tasks::Funder::Period { project: PROJECT, period: PERIOD })
+    let period = world
+        .root
+        .tasks()
+        .funding(tasks::Funder::Period { project: PROJECT, period: PERIOD })
         .expect("opened project period");
     assert_eq!(period.numbers.reserved, period.numbers.budget, "the people's pool reserves the whole period");
-    let tiers: Vec<_> = world.store.rows.values().filter_map(|record| match record {
-        Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row)))
-            if matches!(row.executor, tasks::Executor::Procedure { code: 4, .. }) => Some(row),
-        _ => None,
-    }).collect();
+    let tiers: Vec<_> = world
+        .store
+        .rows
+        .values()
+        .filter_map(|record| match record {
+            Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(row)))
+                if matches!(row.executor, tasks::Executor::Procedure { code: 4, .. }) =>
+            {
+                Some(row)
+            }
+            _ => None,
+        })
+        .collect();
     assert_eq!(tiers.len(), 1, "one baseline task finishes");
     assert_eq!(tiers[0].numbers.budget, 0);
     assert!(matches!(tiers[0].phase, tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { .. }))));

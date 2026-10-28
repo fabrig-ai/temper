@@ -1,6 +1,7 @@
 //! A chat's change runs through the root's deployment-funded landing task.
 use super::*;
 use skein_forge::api;
+use temper_engine_domain_forge_change::State;
 
 fn task_row(world: &World, task: u64) -> Option<&tasks::TaskRecord> {
     world.store.rows.values().find_map(|record| match record {
@@ -174,7 +175,6 @@ fn a_ready_change_waits_when_landing_room_is_full() {
 /// The real root gives the change's result only after its turn's tier verdict.
 #[test]
 fn a_change_landed_by_turn_verifies_until_its_tier_clears_it() {
-    use temper_engine_domain_forge_change::State;
     // The existing tier story allows three 600-tick settling windows for a 90 s workflow.
     const TIER_TICKS: u32 = 1800;
     const LANDING_TICKS: u32 = 600;
@@ -253,4 +253,233 @@ fn a_change_landed_by_turn_verifies_until_its_tier_clears_it() {
         task_row(&world, change).expect("change result").phase,
         tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Change { .. }))
     ));
+}
+
+const COLD_TICKS: u32 = 2400; // Four 600-tick windows cover a 90 s baseline and its next run.
+const COLD_SEED: u64 = 71; // The root forge world's deployment/store seed.
+const TIER_CUTS: [&str; 14] = [
+    "baseline keyless",
+    "baseline keyed",
+    "directory walk",
+    "pending keyless",
+    "pending keyed",
+    "branch being made",
+    "dispatched",
+    "followed",
+    "status being posted",
+    "verification verifying",
+    "verification cleared",
+    "change landed",
+    "change cleared",
+    "tier receipt",
+];
+
+fn restart_tier_world() -> World {
+    let mut world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits { turn: true, tier: true, tier_tree: true, ..StoryLimits::default() },
+    );
+    for (path, body) in [(b"docs/guide.md".as_slice(), b"guide".as_slice()), (b"src/lib.rs", b"source")] {
+        fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"main", path, body, 1).expect("baseline tree");
+    }
+    world
+}
+
+fn cold_tier(world: &mut World, at: &[&str]) {
+    world.store.crash(COLD_SEED);
+    world.restart(true, true);
+    for _ in 0..COLD_TICKS {
+        world.tick();
+        if world.root.ready() {
+            return;
+        }
+        assert!(
+            world.root.restart_failure().is_none(),
+            "cold cut {at:?}: {:?}; forge {:?}",
+            world.root.restart_failure(),
+            world.root.forge_restore_failure()
+        );
+    }
+    panic!("cold admission at {at:?}: {:?}", world.root.restart_step());
+}
+
+fn tier_row(world: &World) -> Option<&forge_top::TierRow> {
+    world.store.rows.values().find_map(|record| match record {
+        Record::Forge { row } => match row.as_ref() {
+            forge_top::Stored::Tier(row) => Some(row),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+fn tier_cuts(world: &World) -> Vec<&'static str> {
+    let mut found = Vec::new();
+    if let Some(row) = tier_row(world) {
+        if let Some(baseline) = row.baseline {
+            found.push(if baseline.key.is_some() { "baseline keyed" } else { "baseline keyless" });
+        }
+        for landing in &row.pending {
+            found.push(if landing.key.is_some() { "pending keyed" } else { "pending keyless" });
+        }
+        if let forge_top::TierBranch::Pending { .. } = row.branch {
+            found.push("branch being made");
+        }
+        if let Some(flight) = &row.flight {
+            if flight.start.is_some() {
+                found.push("dispatched");
+            }
+            if flight.next.is_some() {
+                found.push("followed");
+            }
+        }
+        if let Some(result) = &row.result
+            && let forge_top::TierBranch::Pending { .. } = result.status
+        {
+            found.push("status being posted");
+        }
+        if let Some(baseline) = row.baseline
+            && world.pending.values().any(|op| {
+                matches!(op,
+                api::Op::Read(api::Read::Tree { object, .. }) if *object != baseline.commit)
+            })
+        {
+            found.push("directory walk");
+        }
+    }
+    for record in world.store.rows.values() {
+        if let Record::Forge { row } = record {
+            match row.as_ref() {
+                forge_top::Stored::Verification(row) => {
+                    found.push(if row.tiers.iter().all(|tier| tier.verdict.is_some()) {
+                        "verification cleared"
+                    } else {
+                        "verification verifying"
+                    })
+                }
+                forge_top::Stored::Change(row) => match row.change.state {
+                    State::Landed { .. } => found.push("change landed"),
+                    State::Cleared { .. } => found.push("change cleared"),
+                    _ => {}
+                },
+                forge_top::Stored::Receipt { key, .. } if matches!(key.check, forge_top::Check::Tier(_)) => {
+                    found.push("tier receipt");
+                }
+                _ => {}
+            }
+        }
+    }
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+fn cut_new_tier_records(world: &mut World, seen: &mut std::collections::BTreeSet<&'static str>) {
+    let fresh: Vec<_> = tier_cuts(world).into_iter().filter(|at| !seen.contains(at)).collect();
+    if fresh.is_empty() {
+        return;
+    }
+    if fresh.contains(&"baseline keyless") && !fresh.contains(&"directory walk") {
+        return;
+    }
+    seen.extend(fresh.iter().copied());
+    cold_tier(world, &fresh);
+}
+
+fn green_baseline(world: &World) -> bool {
+    tier_row(world).is_some_and(|row| row.record.judged.is_some() && row.record.run.is_none())
+}
+
+#[test]
+fn a_cold_restart_reads_back_every_tier_record() {
+    let mut world = restart_tier_world();
+    world.adopt();
+    let mut seen = std::collections::BTreeSet::new();
+    // The keyed baseline is an intermediate writer output in the same atomic
+    // decision as starting its run. Exercise that valid stored shape separately,
+    // using the writer's documented commit fallback, before a tier task exists.
+    for _ in 0..COLD_TICKS {
+        world.tick();
+        if let Some(row) = tier_row(&world)
+            && row.baseline.is_some()
+        {
+            let mut keyed = row.clone();
+            let baseline = keyed.baseline.as_mut().expect("baseline entry");
+            baseline.key = Some(baseline.commit);
+            let mut probe = restart_tier_world();
+            probe.store = world.store.fork();
+            probe.store.pending.clear();
+            probe.store.seed(Box::new([Record::Forge { row: Box::new(forge_top::Stored::Tier(keyed)) }]), Box::new([]));
+            cold_tier(&mut probe, &["baseline keyed"]);
+            for _ in 0..COLD_TICKS {
+                probe.tick();
+                if green_baseline(&probe) {
+                    break;
+                }
+            }
+            assert!(green_baseline(&probe), "keyed baseline goes on to green");
+            seen.insert("baseline keyed");
+            break;
+        }
+    }
+    for _ in 0..COLD_TICKS {
+        cut_new_tier_records(&mut world, &mut seen);
+        if seen.contains("followed") {
+            break;
+        }
+        world.tick();
+    }
+    world.signed_in = None;
+    world.sign_in();
+    let (mut world, change) = produced_turn_change_in(world, false);
+    for _ in 0..COLD_TICKS {
+        cut_new_tier_records(&mut world, &mut seen);
+        world.tick();
+        if task_row(&world, change).is_some_and(|row| matches!(row.phase, tasks::Phase::Ended(_)))
+            && seen.len() == TIER_CUTS.len()
+        {
+            break;
+        }
+    }
+    assert_eq!(seen, TIER_CUTS.into_iter().collect(), "every requested durable cut was exercised");
+    let restarted = cleared_tier_end(&world, change);
+    let mut control = restart_tier_world();
+    control.adopt();
+    for _ in 0..COLD_TICKS {
+        control.tick();
+        if tier_row(&control).is_some_and(|row| row.flight.as_ref().is_some_and(|flight| flight.next.is_some())) {
+            break;
+        }
+    }
+    let (mut control, control_change) = produced_turn_change_in(control, false);
+    for _ in 0..COLD_TICKS {
+        control.tick();
+        if task_row(&control, control_change).is_some_and(|row| matches!(row.phase, tasks::Phase::Ended(_))) {
+            break;
+        }
+    }
+    assert_eq!(restarted, cleared_tier_end(&control, control_change), "cold cuts reach the uninterrupted end");
+}
+
+fn cleared_tier_end(world: &World, change: u64) -> (State, api::Commit) {
+    assert!(world.root.ready());
+    assert_eq!(world.merges, 1);
+    let Record::Forge { row } =
+        world.store.rows.get(&Key::Forge(forge_top::Key::Change(change))).expect("change survives cold admission")
+    else {
+        panic!("change row")
+    };
+    let forge_top::Stored::Change(row) = row.as_ref() else { panic!("change row") };
+    assert!(matches!(row.change.state, State::Cleared { .. }));
+    assert!(matches!(
+        task_row(world, change).expect("change result").phase,
+        tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Change { .. }))
+    ));
+    assert!(green_baseline(world), "baseline and the landing's run both clear");
+    (row.change.state.clone(), tier_row(world).expect("repository tier").record.judged.expect("judged tip").tip)
 }
