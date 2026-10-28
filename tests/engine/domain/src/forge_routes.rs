@@ -84,6 +84,10 @@ pub struct World {
     timing: StoryLimits,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent fixture switches select turn, tier, pool, and tree stories"
+)]
 #[derive(Clone, Copy, Default)]
 pub struct StoryLimits {
     pub turn: bool,
