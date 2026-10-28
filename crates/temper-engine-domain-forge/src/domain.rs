@@ -73,6 +73,22 @@ pub(crate) struct PendingStep {
     reviews_complete: bool,
     woken: bool,
 }
+/// Admission fence and the complete procedure-owned fields before deciding.
+#[derive(Debug)]
+pub(crate) struct ProcedureStep {
+    step: u64,
+    prior: Option<StepPrior>,
+}
+#[derive(Debug)]
+struct StepPrior {
+    change: change::Change,
+    pull: Option<u64>,
+    pending: Option<u64>,
+    effect: change::EffectResult,
+    drift: Option<change::Hold>,
+    queue_repair: Option<u64>,
+    queue_repairs: u32,
+}
 struct StepInput {
     task: u64,
     entry: u64,
@@ -153,6 +169,7 @@ pub struct Domain {
     pub(crate) sequence: u64,
     pub(crate) changes: Map<u64, ChangeRow>,
     steps: Map<Token, PendingStep>,
+    procedure_steps: Map<u64, ProcedureStep>,
     pub(crate) panel_ci: Map<u64, change::Ci>,
     pub(crate) issues: Map<u64, IssueRow>,
     releases: Map<u64, ReleaseRow>,
@@ -448,6 +465,23 @@ impl Domain {
         }
     }
 
+    /// Fence the fresh reads by the task step that started them. A newer wake
+    /// restarts those reads; it cannot replace a decision awaiting admission.
+    pub fn start_procedure_step(&mut self, task: u64, step: u64) {
+        if let Some(pending) = self.procedure_steps.get(&task) {
+            assert!(pending.prior.is_none(), "previous procedure decision resolved");
+        }
+        self.procedure_steps.insert(task, ProcedureStep { step, prior: None }).expect("one admission fence per change");
+    }
+
+    #[must_use]
+    pub fn procedure_step(&self, task: u64) -> Option<u64> {
+        match self.procedure_steps.get(&task) {
+            Some(pending) => Some(pending.step),
+            None => None,
+        }
+    }
+
     /// Keep the connector's retry deadline; the root carries no timer policy.
     pub fn wait_change(&mut self, env: &Env<Limits>, task: u64, until: Option<skein_lib::Wall>) {
         let until = match until {
@@ -570,6 +604,7 @@ impl Domain {
             sequence: 0,
             changes: Map::with_capacity(l.changes),
             steps: Map::with_capacity(l.changes),
+            procedure_steps: Map::with_capacity(l.changes),
             panel_ci: Map::with_capacity(l.changes),
             issues: Map::with_capacity(l.issues),
             releases: Map::with_capacity(l.tasks),
@@ -1360,6 +1395,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                 save_change(d, out, saved);
             }
         }
+        Event::ProcedureResolved { task, step, made } => procedure_resolved(d, env, task, step, made, out),
         Event::Delegated { task, child, kind } => delegated(d, env, task, child, kind, out),
         Event::DelegateRefused { task, child } => delegate_refused(d, env, task, child, out),
         Event::DelegateAdmissionRefused { task, kind } => delegate_admission_refused(d, env, task, kind, out),
@@ -2504,11 +2540,7 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
     if d.stopping {
         return;
     }
-    let StepInput { task, entry, mut heard, gates, queue_repair_active, kept } = input;
-    if heard.released {
-        release_change(d, env, task, out);
-        heard.released = false;
-    }
+    let StepInput { task, entry, heard, gates, queue_repair_active, kept } = input;
     let Some(row) = d.changes.get(&task) else {
         emit(out, Request::Refused { task });
         return;
@@ -2530,6 +2562,7 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         pending.entry = entry;
         pending.heard.lacking = heard.lacking;
         pending.heard.spend = heard.spend;
+        pending.heard.released |= heard.released;
         pending.kept = kept;
         pending.queue_repair_active = queue_repair_active;
         pending.gates = gates;
@@ -2856,6 +2889,23 @@ fn finish_step(d: &mut Domain, env: &Env<Limits>, pending: PendingStep, out: &mu
 }
 
 fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &mut Queue<Request>) {
+    if let Some(fence) = d.procedure_steps.get_mut(&pending.task)
+        && let Some(row) = d.changes.get(&pending.task)
+    {
+        assert!(fence.prior.is_none(), "one decision per admitted step");
+        fence.prior = Some(StepPrior {
+            change: row.change.clone(),
+            pull: row.pull,
+            pending: row.pending,
+            effect: row.effect,
+            drift: row.drift,
+            queue_repair: row.queue_repair,
+            queue_repairs: row.queue_repairs,
+        });
+    }
+    if pending.heard.released {
+        release_change(d, env, pending.task, out);
+    }
     let Some(mut row) = d.changes.get(&pending.task).cloned() else { return };
     let before = crate::panel::ready(&row);
     let prior = row.change.clone();
@@ -2900,6 +2950,7 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
     }
     let facts = change_facts(d, env, &row, pending, base_tip);
     let heard = change::Heard {
+        released: false,
         effect: if row.pending.is_some() { change::EffectResult::Pending } else { row.effect },
         ..pending.heard
     };
@@ -2925,12 +2976,14 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
             | change::Decision::Hold(_)) => {
                 crate::landing::change_advanced(d, &row, &prior, decision, out);
                 d.changes.insert(row.task, row.clone()).expect("replaces change");
-                if in_queue(&prior.state) && !in_queue(&row.change.state) {
+                if !deciding(d, row.task) && in_queue(&prior.state) && !in_queue(&row.change.state) {
                     wake_queue(d, &row);
                 }
                 save_queue_change(d, env, before, row.clone(), out);
-                topics::head_changed(d, row.task, out);
-                topics::refresh(d, env, row.task, out);
+                if !deciding(d, row.task) {
+                    topics::head_changed(d, row.task, out);
+                    topics::refresh(d, env, row.task, out);
+                }
                 emit(
                     out,
                     Request::ChangeDecision {
@@ -2945,6 +2998,49 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
         }
     }
     emit(out, Request::Refused { task: row.task });
+}
+
+fn deciding(d: &Domain, task: u64) -> bool {
+    match d.procedure_steps.get(&task) {
+        Some(pending) => pending.prior.is_some(),
+        None => false,
+    }
+}
+
+/// This runs in the root decision containing jig's admission outcome. No
+/// speculative procedure state is ever written to the journal.
+fn procedure_resolved(d: &mut Domain, env: &Env<Limits>, task: u64, step: u64, made: bool, out: &mut Queue<Request>) {
+    if d.procedure_step(task) != Some(step) || !deciding(d, task) {
+        return;
+    }
+    let fence = d.procedure_steps.remove(&task).expect("matched admission fence");
+    let Some(prior) = fence.prior else { return };
+    let Some(row) = d.changes.get_mut(&task) else { return };
+    let mut previous = row.clone();
+    previous.change = prior.change;
+    previous.pull = prior.pull;
+    previous.pending = prior.pending;
+    previous.effect = prior.effect;
+    previous.drift = prior.drift;
+    previous.queue_repair = prior.queue_repair;
+    previous.queue_repairs = prior.queue_repairs;
+    if !made {
+        let entry = if row.pending != previous.pending { row.pending } else { None };
+        *row = previous;
+        d.wait_change(env, task, None);
+        if let Some(entry) = entry {
+            d.entries.remove(&entry);
+            emit(out, Request::Erase { key: Key::Entry(entry) });
+        }
+        return;
+    }
+    let saved = row.clone();
+    if in_queue(&previous.change.state) && !in_queue(&saved.change.state) {
+        wake_queue(d, &saved);
+    }
+    save_queue_change(d, env, crate::panel::ready(&previous), saved, out);
+    topics::head_changed(d, task, out);
+    topics::refresh(d, env, task, out);
 }
 
 fn in_queue(state: &change::State) -> bool {
@@ -5074,6 +5170,9 @@ fn retain_terminal_ci(d: &mut Domain, row: &mut ChangeRow) {
 
 /// Every saved record invalidates its own panel (domain/forge.md, 8.8).
 pub(crate) fn save_change(d: &mut Domain, out: &mut Queue<Request>, mut row: ChangeRow) {
+    if deciding(d, row.task) {
+        return;
+    }
     retain_terminal_ci(d, &mut row);
     let task = row.task;
     let tasks = match row.change.landing {
@@ -5092,6 +5191,9 @@ fn save_queue_change(
     mut row: ChangeRow,
     out: &mut Queue<Request>,
 ) {
+    if deciding(d, row.task) {
+        return;
+    }
     let after = crate::panel::ready(&row);
     if before == after {
         save_change(d, out, row);

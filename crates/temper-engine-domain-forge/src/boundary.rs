@@ -1237,6 +1237,13 @@ pub enum Event {
         owner: u64,
         repair: u64,
     },
+    /// The root routes every admitted, refused or dropped procedure step here
+    /// in the same journal decision as jig's task changes.
+    ProcedureResolved {
+        task: u64,
+        step: u64,
+        made: bool,
+    },
     /// Remember a committed procedure child and its role in this change.
     Delegated {
         task: u64,

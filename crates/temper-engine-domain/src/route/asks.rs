@@ -16,10 +16,16 @@ use jig_domain_tasks as tasks;
 pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decision, connector: u16, ask: core::Ask) {
     let request = match ask {
         core::Ask::StepMade { task, step, first, .. } => {
+            if connector == domain.config.forge_connector {
+                forge_route::resolve_procedure_step(domain, task, step, true);
+            }
             step_made(domain, task, step, first);
             None
         }
         core::Ask::StepRefused { task, step, why } => {
+            if connector == domain.config.forge_connector {
+                forge_route::resolve_procedure_step(domain, task, step, false);
+            }
             let delegation = domain.forge_delegating.remove(&(task, step));
             if let core::StepRefusal::Denied { findings, .. } = &why {
                 if connector == domain.config.forge_connector
@@ -29,6 +35,7 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                 }
                 forge_route::refused_step(domain, env, task, step, findings);
             }
+            step_made(domain, task, step, None);
             if let core::StepRefusal::Refused(problem) = why {
                 // Jig's domain/connectors.md, 6.2: step again on refusal. A kept change waits
                 // without a deadline; its dependency's Met wakes it (jig's domain/tasks.md, 5.7).
