@@ -463,6 +463,12 @@ fn stock_budgets_follow_the_default_models_completion_and_run_turn_floor() {
         let stock = crate::stock::defaults(&engine.llm);
         assert_eq!(stock.rules.minimum_run_spend, 2 * c, "{row}");
         assert_eq!(stock.rules.maximum_run_spend, k, "{row}");
+        for (charter, turns) in stock.charters.iter().zip([8, 16, 16]) {
+            assert_eq!(charter.policy.turns, turns, "{row}: charter {}", charter.number);
+            assert_eq!(charter.policy.time, skein_lib::Duration::from_secs(120), "{row}");
+            assert_eq!(charter.policy.reserve_turns, 1, "{row}");
+            assert_eq!(charter.policy.reserve_time, skein_lib::Duration::from_secs(60), "{row}");
+        }
         for charter in &stock.charters {
             assert_eq!(charter.spend, k, "{row}");
         }
