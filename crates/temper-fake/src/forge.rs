@@ -170,7 +170,7 @@ impl Document {
             };
             repositories
                 .push(Repository { id, tree, owner: repository_owner, name, landing, ci })
-                .expect("sixteen repositories");
+                .expect("eight repositories");
         }
         if let Some(github) = &github {
             github.check(repositories.as_slice())?;
@@ -199,11 +199,11 @@ impl Document {
     #[must_use]
     pub fn seed(&self, seed: u64) -> (Forge, forgejo::Config) {
         let mut domain = domain::Domain::new(&LIMITS, seed);
-        let mut repositories = List::with_capacity(crate::ENTRIES);
+        let mut repositories = List::with_capacity(crate::LIST_ENTRIES);
         for (i, repository) in self.repositories.iter().enumerate() {
             let id = repository
                 .id
-                .unwrap_or(u32::try_from(i).expect("sixteen repositories").checked_add(1).expect("numbered from one"));
+                .unwrap_or(u32::try_from(i).expect("eight repositories").checked_add(1).expect("numbered from one"));
             let full = read::joined(&[&repository.owner, b"/", &repository.name]);
             let tree = match &repository.tree {
                 Some(tree) => tree.clone(),
@@ -234,7 +234,7 @@ impl Document {
             if let Some(github) = &self.github {
                 domain::grant(&mut domain, &full, github.bot(), api::Permission::Admin);
             }
-            repositories.push(forgejo::Repository { id, full, protected: None }).expect("sixteen repositories");
+            repositories.push(forgejo::Repository { id, full, protected: None }).expect("eight repositories");
         }
         for _ in 0..LIMITS.limits.observations {
             if domain.pop_observation().is_none() {
@@ -302,14 +302,14 @@ pub fn checks(ci: Option<&Ci>) -> api::Checks {
         },
     }
 }
-/// Bounded store for sixteen repositories, with small mutable QA histories.
+/// Bounded store for eight repositories, with small mutable QA histories.
 pub const LIMITS: domain::Config = domain::Config {
     setup_faults: 0,
     lost: 0,
     limits: domain::Limits {
         workflows: 0,
         workflow_runs: 0,
-        repositories: crate::ENTRIES,
+        repositories: crate::LIST_ENTRIES,
         users: 32,
         bypassing_users: 8,
         labels: 8,

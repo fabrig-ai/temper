@@ -57,7 +57,7 @@ pub(crate) fn read(data: &Path, task: u64) -> Result<Vec<smith::Turn>, Refusal> 
             });
         }
         let turn = decode(&bytes, &limits, task, at)?;
-        if turns.len() == temper_fake::ENTRIES as usize {
+        if turns.len() == temper_fake::SCRIPT_TURNS as usize {
             return Err(Refusal::Bounds { what: "turns" });
         }
         turns.push(turn);
