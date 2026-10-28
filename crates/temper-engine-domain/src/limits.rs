@@ -263,8 +263,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(u64::from(limits.authority.projects).checked_mul(u64::from(limits.journal.transcript_bytes))?)?;
     let load_bytes = loads::worst_case(&limits.loads)?;
     let tool_bytes = u64::from(limits.tasks.batch).checked_mul(row_bound(limits)?)?;
-    if limits.forge.named_calls < limits.call_records
-        || limits.call_records == 0
+    if limits.call_records == 0
         || limits.loads.loads < 2
         || limits.loads.rows < 2
         || limits.journal.result_bytes < limits.brief.brief_bytes
