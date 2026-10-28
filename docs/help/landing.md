@@ -110,6 +110,8 @@ makes the change ready again, and the landing prepares again.
   room.
 - temper keeps each repository's last 16 landings in the small
   profile: `--newer-than` lists no older one.
+- A push from outside temper is seen on a landing branch temper
+  watches: one a tier runs on, or one a goal or a change follows.
 - A runner's faults are retried twice per key, then the landing is
   held.
 - A gate keeps its newest receipts, and always the receipt of its
