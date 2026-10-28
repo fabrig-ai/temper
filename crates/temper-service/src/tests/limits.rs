@@ -178,6 +178,7 @@ fn the_root_limits_take_jigs_children_and_temper_own() {
         settings.jig.limits.core.authority.segments.checked_add(1).expect("fixture segment limit can increase");
     let root = limits::engine(&settings.jig.limits, &settings.limits).expect("coherent root limits");
     let jig = settings.jig.limits.core;
+    eprintln!("small application row: {:?}", temper_protocol_store::application(&limits::profile(limits::Profile::Small).forge, jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.spec_bytes));
     assert_eq!(root.journal, settings.limits.root.journal);
     assert_eq!(root.loads, settings.limits.root.loads);
     assert_eq!(root.brief, settings.limits.root.brief);

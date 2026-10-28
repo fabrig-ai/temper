@@ -11,7 +11,7 @@ pub use host_route::{HostDelivery, HostRequest};
 mod goal;
 pub(crate) mod landing;
 mod now;
-mod panels;
+pub(crate) mod panels;
 pub(crate) mod policy_translate;
 pub(crate) mod proposals;
 mod tools;
@@ -164,6 +164,9 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
         }
         Event::Party(crate::PartyInput::Watch { watcher, sign_in, subject, window }) => {
             domain.work.push(Work::Core(core::Event::Watch { watcher, sign_in, subject, window }));
+        }
+        Event::Party(crate::PartyInput::LoggedLandings { watcher, sign_in, scope, project, newer_than, window }) => {
+            panels::watch(domain, watcher, sign_in, scope, project, newer_than, window);
         }
         Event::Party(crate::PartyInput::WatchRun { watcher, sign_in, task, turn, offset }) => {
             domain.work.push(Work::Core(core::Event::WatchRun { watcher, sign_in, task, turn, offset }));

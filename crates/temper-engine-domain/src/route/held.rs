@@ -170,6 +170,7 @@ pub(crate) fn held(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisi
             emit(decision, &env.limits, Delivery::Document { watcher, document });
         }
         core::Held::WatchEnded { watcher, why } | core::Held::ApplicationWatchEnded { watcher, why, .. } => {
+            domain.landing_watches.remove(&watcher);
             emit(decision, &env.limits, Delivery::WatchEnded { watcher, why });
         }
         core::Held::Drained => emit(decision, &env.limits, Delivery::Drained),

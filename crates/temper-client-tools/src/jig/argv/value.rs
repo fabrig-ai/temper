@@ -64,6 +64,10 @@ pub(super) fn valid(
             };
             !bytes.is_empty()
         }
+        Kind::Time => {
+            let Value::Text(bytes) = value else { return Err(Usage::Kind { argument }) };
+            super::deadline(bytes).is_some()
+        }
         Kind::Duration => return valid_duration(spec, value, argument, limits),
         Kind::Proposal => {
             let Value::Proposal(_) = value else {
@@ -147,6 +151,10 @@ pub(crate) fn decode(table: &[&Tool], kind: Kind, bounds: Bound, word: &[u8]) ->
             b"priority" => QueryOrder::Priority,
             _ => return None,
         }),
+        Kind::Time => {
+            super::deadline(word)?;
+            Value::Text(Box::from(word))
+        }
         Kind::Duration => Value::Duration(duration(word)?),
         Kind::Proposal => {
             let (tag, rest) = word.split_first()?;
@@ -308,7 +316,7 @@ fn written(result: Result<(), Overflow>) -> Result<(), Unwritten> {
     }
 }
 
-fn hexadecimal(bytes: &[u8]) -> Result<Box<[u8]>, Unwritten> {
+pub(crate) fn hexadecimal(bytes: &[u8]) -> Result<Box<[u8]>, Unwritten> {
     let size = bytes.len().checked_mul(2).ok_or(Unwritten::Overflow(Overflow))?;
     let mut hex = Writer::new(size);
     for byte in bytes {

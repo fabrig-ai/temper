@@ -58,6 +58,7 @@ pub const LIMITS: top::Limits = top::Limits {
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
+    landings_kept: 16,
 
     failing_tests: 16,
     test_id_bytes: 256,
@@ -152,7 +153,7 @@ fn client_key(random: &mut Rng) -> skein_forge_client::Key {
 #[expect(clippy::disallowed_macros, reason = "property inputs number canonical member addresses")]
 pub fn key(random: &mut Rng) -> top::Key {
     let number = random.next_u64();
-    match random.below(24) {
+    match random.below(25) {
         0 => top::Key::Call(top::NamedCall {
             task: number,
             attempt: random.next_u64(),
@@ -190,7 +191,8 @@ pub fn key(random: &mut Rng) -> top::Key {
             },
             key: commit(random),
         }),
-        _ => top::Key::Verification { repository: repository(random), commit: commit(random) },
+        23 => top::Key::Verification { repository: repository(random), commit: commit(random) },
+        _ => top::Key::LandingLog(repository(random)),
     }
 }
 pub fn core_keys() -> [jig_domain_core::Key; 4] {

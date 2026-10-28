@@ -472,7 +472,7 @@ pub const AMEND: Tool = Tool {
         flag(b"rev", b"REV", Kind::Number, Optional, b"The spec revision the task prints; not needed for its priority alone"),
         flag(b"priority", b"PRIORITY", Kind::Number, Optional, b"Track it at this priority"),
         switch(b"untracked", b"Stop tracking it"),
-        flag(b"deadline", b"TIME", Kind::Literal, Optional, b"Its new deadline, as 2026-10-24T17:00Z"),
+        flag(b"deadline", b"TIME", Kind::Time, Optional, b"Its new deadline, as 2026-10-24T17:00Z"),
         switch(b"no-deadline", b"Remove its deadline"),
         flag(b"instructions", b"FILE", Kind::File, Optional, b"A file of its whole instructions, or -; an empty file removes them"),
         flag(b"spec", b"FILE", Kind::File, Optional, b"A file of its spec's words, or -"),
