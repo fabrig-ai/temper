@@ -647,7 +647,6 @@ pub(crate) fn advance(engine: &mut crate::engine::Engine) {
     }
     for _ in 0..engine.setup.above.len() {
         if !engine.setup.room()
-            || !engine.store.room()
             || !engine.forge.room(2)
             || engine.events.room()
                 < engine.forge_records.bounds.installations.checked_add(4).expect("setup event room")

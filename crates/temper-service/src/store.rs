@@ -199,7 +199,7 @@ impl Store {
         models: &[jig_domain_core::Model],
         installation: [u8; 16],
     ) -> Self {
-        let room = root::max_out(application).max(protocol::MAX_OUT_DOWN).checked_mul(2).expect("store route room");
+        let room = root::max_out(application).checked_mul(2).expect("store route room");
         let routes = route::Routes::new(
             application.loads.loads,
             application,
@@ -234,14 +234,14 @@ impl Store {
             component,
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: *limits },
             routes,
-            above: Queue::with_capacity(room),
-            routed: Queue::with_capacity(room),
-            secrets: Queue::with_capacity(room),
-            sources: Queue::with_capacity(room),
+            above: Queue::uncapped(),
+            routed: Queue::uncapped(),
+            secrets: Queue::uncapped(),
+            sources: Queue::uncapped(),
             below: protocol::Below {
-                store: Queue::with_capacity(room),
-                secrets: Queue::with_capacity(room),
-                transcripts: Queue::with_capacity(room),
+                store: Queue::uncapped(),
+                secrets: Queue::uncapped(),
+                transcripts: Queue::uncapped(),
             },
             drivers,
             submitted: Queue::with_capacity(room),
@@ -373,16 +373,6 @@ impl Store {
             }
         }
         answer
-    }
-    #[must_use]
-    pub fn room(&self) -> bool {
-        self.secrets.room() >= protocol::MAX_OUT_DOWN
-            && self.sources.room() >= protocol::MAX_OUT_DOWN
-            && self.above.room() >= protocol::MAX_OUT_DOWN
-            && self.routed.room() >= protocol::MAX_OUT_DOWN
-            && self.below.store.room() >= protocol::MAX_OUT_DOWN
-            && self.below.secrets.room() >= protocol::MAX_OUT_DOWN
-            && self.below.transcripts.room() >= protocol::MAX_OUT_DOWN
     }
     #[must_use]
     pub fn next_deadline(&self) -> Option<Time> {
@@ -531,7 +521,7 @@ impl Store {
         None
     }
     pub fn iterate(&mut self) {
-        if self.adopted && !self.closing && self.room() {
+        if self.adopted && !self.closing {
             protocol::fire(&mut self.component, &self.env, &mut self.above, &mut self.below);
         }
         for index in 0..3 {
@@ -542,9 +532,6 @@ impl Store {
                 &mut submitted,
             );
             for _ in 0..self.drivers.get(index).expect("driver index").above.len() {
-                if !self.room() {
-                    break;
-                }
                 let event = self.drivers.get_mut(index).expect("driver index").above.pop().expect("file terminal");
                 if event.owner() == CLOSE {
                     continue;
@@ -652,7 +639,7 @@ fn idle_drivers(drivers: &[Driver; 3]) -> bool {
 }
 
 pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) -> Option<u64> {
-    let room = root::max_out(application).max(protocol::MAX_OUT_DOWN).checked_mul(2)?;
+    let room = root::max_out(application).checked_mul(2)?;
     // Queues and load flights price the same immutable payload envelope.
     let payload = root::payload_worst_case(application)?;
     protocol::worst_case(limits)?

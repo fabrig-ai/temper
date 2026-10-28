@@ -108,7 +108,6 @@ impl Engine {
     pub(crate) fn room(&self) -> bool {
         self.setup.batch_room(self.max_out)
             && self.forge.room(self.max_out)
-            && self.store.room()
             && self.workers.batch_room(self.max_out)
             && self.clients.room(self.max_out)
             && self.clients.commit_room()
@@ -163,7 +162,6 @@ impl Engine {
             || effects
                 && self.setup.lifecycle_ready(self)
                 && self.setup.room()
-                && self.store.room()
                 && self.forge.room(2)
                 && self.events.room() >= 4
             || self.store.work_pending(now)
@@ -417,10 +415,7 @@ pub(crate) fn answer(engine: &mut Engine) {
         return;
     }
     for _ in 0..engine.store.above.len() {
-        if !engine.setup.room()
-            || engine.store.routed.room() < jig_protocol_store::MAX_OUT_DOWN
-            || engine.notes.room() == 0
-        {
+        if !engine.setup.room() || engine.notes.room() == 0 {
             break;
         }
         let event = engine.store.above.pop().expect("store terminals");

@@ -280,8 +280,8 @@ fn every_service_start_keeps_the_shells_wires() {
     let (root, _, profile) = fixtures::store_limits();
     let limits = store::limits(&root, &root.forge, &profile).expect("fixture limits");
     let mut maps = service.engine.expect("started engine").store.component.into_stores();
-    let mut above = Queue::with_capacity(skein_kv::MAX_OUT.above);
-    let mut below = Queue::with_capacity(skein_kv::MAX_OUT.below);
+    let mut above = Queue::uncapped();
+    let mut below = Queue::uncapped();
     skein_kv::down(
         &mut maps.store,
         &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: limits.store },

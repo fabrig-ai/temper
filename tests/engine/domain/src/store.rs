@@ -346,8 +346,8 @@ impl Store {
     #[must_use]
     pub fn into_wires(mut self) -> protocol::component_v3::Wires {
         let mut stores = self.component.take().expect("live component").into_stores();
-        let mut above = Queue::with_capacity(skein_kv::MAX_OUT.above);
-        let mut below = Queue::with_capacity(skein_kv::MAX_OUT.below);
+        let mut above = Queue::uncapped();
+        let mut below = Queue::uncapped();
         skein_kv::down(
             &mut stores.store,
             &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: self.component_limits.store },
@@ -374,13 +374,13 @@ impl Store {
             return;
         }
         let request = route::down(&mut self.routes, request).expect("root store request admitted");
-        self.drive(VecDeque::from([request]), Queue::with_capacity(protocol::MAX_OUT_DOWN));
+        self.drive(VecDeque::from([request]), Queue::uncapped());
     }
     fn open(&mut self) {
         let root = self.files.root();
         self.drive(
             VecDeque::from([Request::Open { owner: Token::new(0), root, installation: INSTALLATION }]),
-            Queue::with_capacity(protocol::MAX_OUT_DOWN),
+            Queue::uncapped(),
         );
         assert!(!self.failed, "durable stores reopen");
     }
@@ -388,11 +388,7 @@ impl Store {
         Env { now: Time::ZERO, wall: Wall::EPOCH, limits: self.component_limits }
     }
     fn drive(&mut self, mut requests: VecDeque<Request>, mut above: Queue<Event>) {
-        let mut below = Below {
-            store: Queue::with_capacity(skein_kv::MAX_OUT.below),
-            secrets: Queue::with_capacity(skein_kv::MAX_OUT.below),
-            transcripts: Queue::with_capacity(skein_kv::MAX_OUT.below),
-        };
+        let mut below = Below { store: Queue::uncapped(), secrets: Queue::uncapped(), transcripts: Queue::uncapped() };
         loop {
             if let Some(event) = above.pop() {
                 self.event(event, &mut requests);
@@ -522,7 +518,7 @@ impl Store {
                 self.delayed.push_back(delayed);
             }
         }
-        self.drive(requests, Queue::with_capacity(protocol::MAX_OUT_DOWN));
+        self.drive(requests, Queue::uncapped());
     }
 }
 fn routes(limits: &engine::Limits) -> route::Routes {
