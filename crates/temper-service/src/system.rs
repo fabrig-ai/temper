@@ -64,8 +64,6 @@ enum BoxOutput {
     Waiting,
     Room,
 }
-// Existing reservation for setup/forge handoffs beside a root routing pass.
-const SETUP_ROUTING_HEADROOM: u32 = 2;
 impl Service {
     /// Payload-free closure and queue state at the shell's wait boundary.
     #[must_use]
@@ -247,17 +245,10 @@ impl Service {
         if let Some(sign_in) = &settings.sign_in {
             clients.configure_google(sign_in, settings.limits.sign_in, seeds, &settings.jig);
         }
-        let setup_room = max.checked_add(SETUP_ROUTING_HEADROOM).expect("setup routing headroom");
-        let setup =
-            crate::setup::prepare(&settings, &mut forge_settings, &seeds.crypto, setup_room, box_line_bytes.is_some())?;
-        let forge = crate::forge::Layer::new(
-            forge_settings,
-            settings.limits.forge_component,
-            &shared,
-            max.checked_add(2).expect("forge routing headroom"),
-            &settings.forges,
-        )
-        .expect("checked forge limits");
+        let setup = crate::setup::prepare(&settings, &mut forge_settings, &seeds.crypto, box_line_bytes.is_some())?;
+        let forge =
+            crate::forge::Layer::new(forge_settings, settings.limits.forge_component, &shared, &settings.forges)
+                .expect("checked forge limits");
         forget_handover(&mut settings);
         let notes = Queue::with_capacity(note_bound(&settings, &limits).expect("validated diagnostic room"));
         let configured = crate::startup::application::configured(&settings);
@@ -1185,7 +1176,6 @@ fn memory(
         )?;
     }
     let forges = skein_forge_connection::limits::Forges::of(forge.2)?;
-    let batch = temper_engine_domain::max_out(root).checked_add(SETUP_ROUTING_HEADROOM)?;
     let forge_connections = skein_forge_connection::limits::worst_case(
         &settings.limits.forge_component,
         &crate::forge::shared(&settings.limits, &settings.jig.limits.io),
@@ -1237,7 +1227,7 @@ fn memory(
         ("forge.records", crate::forge::records::worst_case(settings)?),
         ("setup.checked", checked_setup_bytes(settings)?),
         ("forge.settings", forge.0),
-        ("setup", crate::setup::worst_case(settings, forge.2, batch)?),
+        ("setup", crate::setup::worst_case(settings, forge.2)?),
     ])
 }
 

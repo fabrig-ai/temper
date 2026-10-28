@@ -222,7 +222,6 @@ impl Layer {
         settings: skein_forge_connection::settings::Settings,
         limits: skein_forge_connection::Limits,
         shared: &skein_forge_connection::Shared,
-        _batch: u32,
         configured: &[settings::Forge],
     ) -> Result<Self, skein_forge_connection::Unusable> {
         let mut held_hosts = Map::with_capacity(limits.forges);

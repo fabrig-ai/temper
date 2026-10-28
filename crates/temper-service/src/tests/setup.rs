@@ -490,7 +490,7 @@ fn tls_forges() -> (crate::settings::Engine, List<crate::ForgeRuntime>) {
 fn each_github_tls_entry_keeps_its_prepared_name_trust_and_address() {
     let (config, runtime) = tls_forges();
     let (mut endpoints, _) = crate::forge::prepare(&config, runtime).unwrap();
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
+    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
     assert_eq!(setup.served.len(), 2);
     let (settings, _) = setup.pending.unwrap();
     assert_eq!(settings.forges.len(), 2);
@@ -523,7 +523,7 @@ fn tls_selects_a_larger_host_price_than_plaintext() {
         runtime.get_mut(index).unwrap().address.set_ip([127, 0, 0, 1].into());
     }
     let (mut endpoints, _) = crate::forge::prepare(&config, runtime).unwrap();
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
+    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
     let (mut settings, _) = setup.pending.unwrap();
     let tls = host::worst_case(&setup.env.limits, &settings).unwrap();
     for index in 0..settings.forges.len() {
@@ -596,10 +596,10 @@ fn setup_memory_includes_the_whole_host_and_its_owner() {
     config.identities[0].author.email = Box::new([]);
     config.forges[0].api_token = None;
     let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
+    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
     let (settings, _) = setup.pending.unwrap();
     assert_eq!(settings.user_agent.as_ref(), crate::forge::USER_AGENT.as_bytes());
-    let whole = worst_case(&config, &endpoints, 2).unwrap();
+    let whole = worst_case(&config, &endpoints).unwrap();
     assert!(whole <= SETUP_HEAP_CEILING);
     assert!(whole > host::worst_case(&setup.env.limits, &settings).unwrap());
     assert!(accounted(8, 8, false) > accounted(1, 1, false), "runs/states change the admitted shell price");
@@ -668,7 +668,7 @@ fn invalid_host_limits_stop_after_load_and_setup_overrides_are_checked() {
     config.limits.picker.page = 1;
     let (mut endpoints, _) = crate::forge::prepare(&fixtures::engine(), fixtures::forge_runtime()).unwrap();
     service.engine.as_mut().expect("engine").setup =
-        prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
+        prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
     advance(service.engine.as_mut().expect("engine"));
     assert!(service.end().is_some());
     let mut own = crate::limits::profile(crate::limits::Profile::Small);
@@ -1108,7 +1108,7 @@ fn local_given_uses_the_repository_capacity_no_orgs_and_configured_listener() {
     assert!(given.orgs.is_empty());
     assert_eq!(given.org_owner.as_deref(), Some(b"owner".as_slice()));
     assert_eq!(given.listener, Some(([127, 0, 0, 1], 7101).into()));
-    assert_eq!(prepare(&config, &mut { endpoints }, &fixtures::seeds().crypto, 2, false).unwrap().served.len(), 1);
+    assert_eq!(prepare(&config, &mut { endpoints }, &fixtures::seeds().crypto, false).unwrap().served.len(), 1);
 }
 #[test]
 fn an_old_form_owned_start_makes_no_reconcile() {
@@ -1897,15 +1897,12 @@ fn github_app_urls_use_the_clients_public_origin() {
 fn setup_reconciliation_waits_for_the_mark() {
     // The shared service restart fixture's existing iteration horizon.
     const PASSES: u32 = 256;
-    // The normal service reserves two setup handoff slots beside a root pass.
-    const SETUP_HEADROOM: u32 = 2;
     let mut previous = fixtures::ready().engine.unwrap();
     kept_record(&mut previous.store, 1, Item::AdminToken, b"test-admin");
     let mut service = fixtures::restarting_from(previous);
     let config = local_config(true, false);
     let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
-    let batch = root::max_out(&service.engine.as_ref().unwrap().env.limits).checked_add(SETUP_HEADROOM).unwrap();
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, batch, false).unwrap();
+    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
     service.engine.as_mut().unwrap().setup = setup;
     service.engine.as_mut().unwrap().store.hold_mark = true;
     for _ in 0..PASSES {

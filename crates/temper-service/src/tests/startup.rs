@@ -1731,7 +1731,7 @@ fn startup_maps_refused_setup_and_total_overflow_to_memory_bound() {
     for (runs, roots) in [(0, 0), (u32::MAX, 0), (8, u64::MAX)] {
         engine.limits.setup.runs = runs;
         assert_eq!(runs.checked_add(engine.limits.forge_component.forges).is_none(), runs == u32::MAX);
-        assert_eq!(crate::setup::worst_case(&engine, &endpoints, 2).is_none(), runs != 8);
+        assert_eq!(crate::setup::worst_case(&engine, &endpoints).is_none(), runs != 8);
         let found = crate::system::startup_worst_case(&engine, &root, &store, None, 0, &io, (roots, 0, &endpoints))
             .unwrap_err();
         assert_eq!(lines(&Problems::jig(found, &Path::root())).as_ref(), b"engine.memory_bytes: past its bound\n");
