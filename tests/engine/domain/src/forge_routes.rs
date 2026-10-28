@@ -24,6 +24,12 @@ pub enum HoldWrite {
     Merge,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct CallError {
+    pub call: Box<[u8]>,
+    pub text: Box<[u8]>,
+}
+
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
     pub root: engine::Domain,
@@ -42,6 +48,8 @@ pub struct World {
     /// Inbox messages delivered after an assignment, as a real worker receives them.
     pub delivered_messages: BTreeMap<(u64, u64), Vec<u64>>,
     pub answers: Vec<temper_engine_domain::CallAnswer>,
+    /// Error text received by the scripted worker, paired with its call name.
+    pub call_errors: Vec<CallError>,
     pub reads: Vec<(ReplyTo, jig_domain_core::reads::Answer)>,
     pub panels: Vec<(Token, forge_top::Panel)>,
     pub protocol: Protocol,
@@ -601,6 +609,7 @@ impl World {
             assigned: Vec::new(),
             delivered_messages: BTreeMap::new(),
             answers: Vec::new(),
+            call_errors: Vec::new(),
             reads: Vec::new(),
             panels: Vec::new(),
             protocol: Protocol::default(),
@@ -676,6 +685,7 @@ impl World {
         self.drained = None;
         self.unsettled.clear();
         self.answers.clear();
+        self.call_errors.clear();
         self.adopted.clear();
         self.period = None;
         self.events.push_back(engine::Event::Restart { pending: self.store.pending_generation });
@@ -880,6 +890,10 @@ impl World {
                         self.delivered_messages.entry((run.raw(), attempt.raw())).or_default().push(name.raw());
                     }
                     Delivery::Panel { watcher, panel } => self.panels.push((watcher, *panel)),
+                    Delivery::Link {
+                        down: host::LinkDown::Relayed { call, answer: host::Relayed::Answer { error: true, text }, .. },
+                        ..
+                    } => self.call_errors.push(CallError { call, text }),
                     // The run has its answer once the hub relays it down; the
                     // world renders an answer as its first call's name, and a
                     // replayed call carries that same text.

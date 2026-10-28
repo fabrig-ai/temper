@@ -109,6 +109,16 @@ pub(crate) fn relay_payload(
                 }
                 Tool::ReadNamed { .. } => unreachable!("named reads resolved before deciding"),
                 tool @ (Tool::Change { .. } | Tool::Goal { .. }) => {
+                    if let Tool::Goal { advisor, .. } = &tool
+                        && let Some(words) = super::goal::refusal(domain, key.task, *advisor)
+                    {
+                        super::host_route::rendered(
+                            domain,
+                            reply_to,
+                            core::SettledAnswer::Host { error: true, body: words.into() },
+                        );
+                        return;
+                    }
                     let expanded = match domain.core.tasks.delegation(key.task) {
                         Some(context) => {
                             if let Tool::Change { words, repository } = tool {
