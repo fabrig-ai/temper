@@ -131,6 +131,15 @@ pub fn limits() -> engine::Limits {
         history: 2,
     };
     let deliveries = 20_u32.max(fleet::max_out(&fleet).checked_add(1).expect("fleet burst plus continuation"));
+    let journal = JournalLimits {
+        commits: 3,
+        held: deliveries * 3 + 16,
+        writes: 0,
+        deliveries,
+        transcript_bytes: 8192,
+        result_bytes: 384,
+        run_bytes: 4096,
+    };
     let mut limits = engine::Limits {
         policy_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.policy_bytes,
         call_answer_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.call_answer_bytes,
@@ -156,15 +165,8 @@ pub fn limits() -> engine::Limits {
             versions: jig_domain_core::documents::Versions { minimum: 1, maximum: 1 },
         },
         authority: authority_limits(),
-        journal: JournalLimits {
-            commits: 3,
-            held: deliveries * 3 + 16,
-            writes: 0,
-            deliveries,
-            transcript_bytes: 8192,
-            result_bytes: 384,
-            run_bytes: 4096,
-        },
+        watermark: engine::default_watermark(&journal),
+        journal,
         loads: loads::Limits {
             read_bytes: 65_536,
             loads: 2,

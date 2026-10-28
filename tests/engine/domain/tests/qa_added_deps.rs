@@ -39,6 +39,7 @@ fn limits() -> engine::Limits {
     bounds.journal.writes = walking::writes(&bounds).max(8192);
     bounds.journal.held = 300;
     bounds.journal.deliveries = 100;
+    bounds.watermark = engine::default_watermark(&bounds.journal);
     bounds
 }
 

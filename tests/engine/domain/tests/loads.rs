@@ -206,16 +206,15 @@ fn byte_cut_keeps_the_whole_prefix_and_reports_exact_omissions_and_resume_cursor
 
 #[test]
 fn store_terminals_are_taken_while_the_commit_barrier_has_no_admission_room() {
-    // The root's three-commit fixture watermark; held outputs also count.
-    const WATERMARK: u64 = 3;
+    let watermark = temper_engine_domain_world::walking::limits().watermark;
     let mut journal = skein_lib::Journal::<u32, u32>::uncapped(1, 0);
-    for turn in 1..=u32::try_from(WATERMARK).expect("small watermark") {
+    for turn in 1..=watermark {
         let mut decision = journal.decide();
         decision.write(turn).expect("one bounded write");
         decision.hold(turn).expect("one bounded output");
         journal.accept(decision);
     }
-    assert!(journal.backlog() >= WATERMARK);
+    assert!(journal.backlog() >= u64::from(watermark));
     let mut loads = Loads::new(&LIMITS);
     let mut out = Queue::with_capacity(1);
     let owner = begin(&mut loads, None, 1, &mut out);

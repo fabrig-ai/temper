@@ -82,6 +82,7 @@ fn engine_limits() -> engine::Limits {
     let tools = temper_client_tools::limits::client().client.domain;
     // Frame project allocations must also fit the smaller tools project bound.
     limits.documents.lines = limits.documents.lines.min(tools.projects);
+    limits.watermark = engine::default_watermark(&limits.journal);
     limits
 }
 /// The first-run stories need the seeded project and one made at runtime.

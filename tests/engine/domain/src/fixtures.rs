@@ -12,6 +12,7 @@ pub fn forge_limits() -> engine::Limits {
     limits.people.holdings = 4;
     limits.journal.writes +=
         (jig_domain_people::max_out(&limits.people) - jig_domain_people::max_out(&crate::walking::limits().people)) * 4;
+    limits.watermark = engine::default_watermark(&limits.journal);
     limits
 }
 
