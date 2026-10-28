@@ -45,7 +45,7 @@ fn an_open_script_answers_the_brief_and_a_finite_script_keeps_its_system_cue() {
             max_tokens: 32,
         };
         let mut env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: recipe.domain_limits };
-        let mut out = Queue::with_capacity(fake::MAX_OUT);
+        let mut out = Queue::uncapped();
         fake::step(
             &mut recipe.domain,
             &env,
