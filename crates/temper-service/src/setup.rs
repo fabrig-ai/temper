@@ -609,8 +609,7 @@ pub(crate) fn advance(engine: &mut crate::engine::Engine) {
         host.fire(&engine.setup.env, &mut engine.setup.above, &mut engine.setup.io);
     }
     for _ in 0..engine.setup.above.len() {
-        if !engine.store.room()
-            || engine.events.room()
+        if engine.events.room()
                 < engine.forge_records.bounds.installations.checked_add(4).expect("setup event room")
             || engine.notes.room() == 0
         {

@@ -453,7 +453,7 @@ fn manifest_visit(engine: &mut Engine, call: Token, forge: u16, route: Route, by
     super::request(engine, run);
 }
 fn room(engine: &Engine) -> bool {
-    engine.events.room() >= 4 && engine.store.room() && engine.notes.room() > 0
+    engine.events.room() >= 4 && engine.notes.room() > 0
 }
 pub(super) fn advance(engine: &mut Engine) {
     for _ in 0..engine.setup.waiting.len() {

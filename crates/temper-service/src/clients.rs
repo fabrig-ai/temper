@@ -816,10 +816,7 @@ impl Clients {
             self.secrets.push(request);
         }
         for _ in 0..self.secrets.len() {
-            if self.out.room() < kit::MAX_OUT_DOWN
-                || !store.room()
-                || self.secret_owners.len() == self.secret_owners.capacity()
-            {
+            if self.out.room() < kit::MAX_OUT_DOWN || self.secret_owners.len() == self.secret_owners.capacity() {
                 break;
             }
             let request = self.secrets.pop().expect("client secrets requests");
