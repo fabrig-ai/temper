@@ -665,6 +665,22 @@ fn check_gate_repair(no_ci: bool) {
         "review remarks in repair brief: {:?}",
         repair.sections
     );
+    let pull = repair
+        .sections
+        .iter()
+        .position(|section| section.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Pull))
+        .expect("repair pull section");
+    let remarks = repair
+        .sections
+        .iter()
+        .position(|section| section.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Reviews))
+        .expect("repair remarks section");
+    assert!(pull < remarks, "pull identity precedes why");
+    let engine::BriefBody::Text(words) = &repair.sections[pull].body else { panic!("pull text") };
+    let words = String::from_utf8_lossy(words);
+    for expected in ["Pull request: #1", "Branch: temper/", "Base: main", "Head: 975835de1c97"] {
+        assert!(words.contains(expected), "{words}");
+    }
     fake::advance(&mut world.fake, &world.fake_env, b"org/repo", &branch, b"file", b"safe revision", 1)
         .expect("repair pushed second head");
     let event = world.protocol.answer(

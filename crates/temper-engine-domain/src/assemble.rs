@@ -175,6 +175,49 @@ fn plan_home_access(
     true
 }
 
+/// Required forge context displaces optional core context, preserving section order.
+fn plan_forge_section(
+    domain: &mut Domain,
+    task: u64,
+    source: forge::BriefSource,
+    priority: u16,
+    wanted: &mut List<brief::Planned>,
+) -> bool {
+    let mut optional = None;
+    if wanted.room() == 0 {
+        for (index, section) in wanted.iter().enumerate() {
+            if !section.required() {
+                optional = u32::try_from(index).ok();
+            }
+        }
+        let Some(index) = optional else { return false };
+        for at in index..wanted.len().saturating_sub(1) {
+            let next = wanted.get(at.checked_add(1).expect("bounded section index")).expect("next section").clone();
+            *wanted.get_mut(at).expect("section") = next;
+        }
+        wanted.truncate(wanted.len().saturating_sub(1));
+    }
+    let kind = forge_brief_kind(source);
+    let token = domain
+        .brief_connectors
+        .insert(BriefConnector { task, kind, cutting: false })
+        .expect("reserved connector section room")
+        .token();
+    domain.work.push(Work::Forge(forge::Event::PlanBrief { section: token, source }));
+    wanted
+        .push(brief::Planned::Connector {
+            connector: 0,
+            kind: forge_kind_number(kind),
+            token,
+            size: 0,
+            limit: forge_brief_budget(kind, &domain.limits.brief.budgets),
+            priority,
+            required: true,
+        })
+        .expect("required connector section room");
+    true
+}
+
 pub(crate) fn finish_brief_plan(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -192,74 +235,39 @@ pub(crate) fn finish_brief_plan(
         && child == task
         && let Some(number) = row.pull
         && let Some(head) = row.change.last_head
-        && wanted.room() > 0
     {
         let item = forge::BriefItem { repository: row.repository.repository, number };
-        let source = match row.delegate.expect("matched delegate").1 {
-            forge_change::Delegate::Repair(forge_change::Repair::Gate(_)) => {
-                forge::BriefSource::Reviews { item, head: forge::BriefCommit(head) }
+        let source = forge::BriefSource::Pull { item, head: forge::BriefCommit(head) };
+        let why = match row.delegate {
+            Some((_, forge_change::Delegate::Repair(forge_change::Repair::Gate(_)))) => {
+                Some(forge::BriefSource::Reviews { item, head: forge::BriefCommit(head) })
             }
-            forge_change::Delegate::Repair(
-                forge_change::Repair::Ci | forge_change::Repair::Semantic | forge_change::Repair::Landing { .. },
-            ) => forge::BriefSource::Ci { item, head: forge::BriefCommit(head) },
-            forge_change::Delegate::Resolve { .. } => forge::BriefSource::Pull { item, head: forge::BriefCommit(head) },
-            forge_change::Delegate::Produce | forge_change::Delegate::Gate { .. } => {
-                forge::BriefSource::Pull { item, head: forge::BriefCommit(head) }
-            }
-        };
-        let kind = forge_brief_kind(source);
-        let token = domain
-            .brief_connectors
-            .insert(BriefConnector { task, kind, cutting: false })
-            .expect("reserved connector section room")
-            .token();
-        domain.work.push(Work::Forge(forge::Event::PlanBrief { section: token, source }));
-        wanted
-            .push(brief::Planned::Connector {
-                connector: 0,
-                kind: forge_kind_number(kind),
-                token,
-                size: 0,
-                limit: forge_brief_budget(kind, &domain.limits.brief.budgets),
-                priority: 5,
-                required: true,
-            })
-            .expect("connector section room");
-        let semantic = match row.delegate {
-            Some((_, forge_change::Delegate::Repair(forge_change::Repair::Semantic))) => true,
             Some((
                 _,
                 forge_change::Delegate::Repair(
-                    forge_change::Repair::Ci | forge_change::Repair::Gate(_) | forge_change::Repair::Landing { .. },
-                )
-                | forge_change::Delegate::Resolve { .. }
+                    forge_change::Repair::Ci | forge_change::Repair::Semantic | forge_change::Repair::Landing { .. },
+                ),
+            )) => Some(forge::BriefSource::Ci { item, head: forge::BriefCommit(head) }),
+            Some((
+                _,
+                forge_change::Delegate::Produce
                 | forge_change::Delegate::Gate { .. }
-                | forge_change::Delegate::Produce,
+                | forge_change::Delegate::Resolve { .. },
             ))
-            | None => false,
+            | None => None,
         };
-        if semantic && wanted.room() > 0 {
-            let source = forge::BriefSource::Pull { item, head: forge::BriefCommit(head) };
-            let kind = forge_brief_kind(source);
-            let token = domain
-                .brief_connectors
-                .insert(BriefConnector { task, kind, cutting: false })
-                .expect("reserved connector section room")
-                .token();
-            domain.work.push(Work::Forge(forge::Event::PlanBrief { section: token, source }));
-            wanted
-                .push(brief::Planned::Connector {
-                    connector: 0,
-                    kind: forge_kind_number(kind),
-                    token,
-                    size: 0,
-                    limit: forge_brief_budget(kind, &domain.limits.brief.budgets),
-                    priority: 6,
-                    required: true,
-                })
-                .expect("semantic update section room");
+        if !plan_forge_section(domain, task, source, 5, &mut wanted) {
+            domain.work.push(Work::Core(jig_domain_core::Event::BriefAssembled { task, ready: false }));
+            return;
+        }
+        if let Some(source) = why
+            && !plan_forge_section(domain, task, source, 6, &mut wanted)
+        {
+            domain.work.push(Work::Core(jig_domain_core::Event::BriefAssembled { task, ready: false }));
+            return;
         }
     }
+
     domain.work.push(Work::Brief(brief::GatherEvent::Plan {
         brief: Token::new(task),
         budget: domain.limits.brief.brief_bytes,
