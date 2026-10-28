@@ -84,5 +84,6 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> temper_eng
         base_repair: false,
         queue_repair: None,
         queue_repairs: 0,
+        effect_account: None,
     }
 }
