@@ -136,10 +136,10 @@ fn each_floor_refuses_one_below_the_stocks_need() {
     }
     let current = settings::Current::new(defaults, &engine.limits.core);
     let rows: &[(&[u8], u64, Setting, &str)] = &[
-        (b"core.policy_bytes", 2390, Setting::Policy(1), "the stock's policy 1 needs 2390 bytes"),
+        (b"core.policy_bytes", 3250, Setting::Policy(1), "the stock's policy 1 needs 3250 bytes"),
         (b"core.run_bytes", run.0, run.1, ""),
-        (b"authority.grants", 10, Setting::Rules, "the stock's rules need 10 grants"),
-        (b"authority.executors", 4, Setting::Rules, "the stock's rules need 4 executors"),
+        (b"authority.grants", 14, Setting::Rules, "the stock's rules need 14 grants"),
+        (b"authority.executors", 6, Setting::Rules, "the stock's rules need 6 executors"),
         (b"authority.segments", 1, Setting::Rules, "the stock's rules need 1 segment"),
         (b"authority.segment_bytes", 5, Setting::Rules, "the stock's rules need 5 bytes"),
         (b"authority.roles", 1, Setting::Policy(1), "the stock's policy 1 needs 1 role"),
@@ -247,7 +247,7 @@ fn a_stock_policy_past_its_limit_is_refused_while_naming_files() {
     let found = crate::startup::named(&document, &config::Directories::working()).unwrap_err();
     assert_eq!(
         crate::startup::lines(&found).as_ref(),
-        b"engine.limits.overrides.core.policy_bytes: core.policy_bytes is 100; the stock's policy 1 needs 2390 bytes; raise it in engine.limits.overrides\n"
+        b"engine.limits.overrides.core.policy_bytes: core.policy_bytes is 100; the stock's policy 1 needs 3250 bytes; raise it in engine.limits.overrides\n"
     );
 }
 #[test]
