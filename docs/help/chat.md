@@ -18,9 +18,11 @@ A chat is a conversation between a party and an agent in a project: an untracked
   delegate, writes it, opens its pull request and lands it, and the
   chat hears its result (temper help task).
 - **Work agreed first.** Asked to agree a plan before anything is
-  changed, the chat's run never calls `change`: it starts a goal with
-  `goal` and the party's words (temper help goal), and says a question
-  will wait in the party's inbox. The goal asks its plan with
+  changed, the chat's run never calls `change`, never writes the plan
+  or asks for the go-ahead in its own reply, and never sets `advisor`:
+  it starts a goal at once with `goal` and the party's words whole,
+  even where they ask for an advisor first (temper help goal), and
+  says a question will wait in the party's inbox. The goal asks its plan with
   `message`; the question waits in the party's inbox; the party
   answers it there (`task answer`), the chat relays the answer to the goal,
   and only then does the goal call `change`. In the chat's
@@ -29,7 +31,7 @@ A chat is a conversation between a party and an agent in a project: an untracked
   it to the goal by that number. The chat says what landed as the
   result says it, never a check or test it doesn't name.
 - **An advisor, and changes in order.** Asked for an advisor first, the
-  goal starts one with `goal` and `advisor` set: temper opens its brief
+  goal, never the chat, starts one with `goal` and `advisor` set: temper opens its brief
   with a line saying it is an advisor, which reads the forge and
   reports, and it can change nothing. The goal names what it found in
   its plan. Agreed changes are made one at a time: one that builds on
