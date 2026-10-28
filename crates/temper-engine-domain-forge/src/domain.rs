@@ -2340,6 +2340,7 @@ fn delegated(
         row.result.repaired(why, row.change.last_head, env.limits.client.answer_bytes);
     }
     row.delegate = Some((child, kind));
+    row.producer_failure = None;
     row.effect_account = None;
     row.delegate_status = change::Status::Unknown;
     let saved = row.clone();
@@ -2492,7 +2493,18 @@ fn delegate_result(
                 .expect("gate room checked");
             row.gate_remarks = remarks.into_boxed();
         }
-        change::Delegate::Produce | change::Delegate::Repair(_) | change::Delegate::Resolve { .. } => {}
+        change::Delegate::Produce => {
+            row.producer_failure = if failed && !words.is_empty() {
+                Some(crate::text::fit(
+                    words,
+                    usize::try_from(jig_domain_tasks::HOLD_ACCOUNT_BYTES).expect("bounded hold account"),
+                    b"...",
+                ))
+            } else {
+                None
+            };
+        }
+        change::Delegate::Repair(_) | change::Delegate::Resolve { .. } => {}
     }
     let saved = row.clone();
     save_change(d, out, saved);

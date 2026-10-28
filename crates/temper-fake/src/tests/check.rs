@@ -187,6 +187,7 @@ fn changed(task: u64, repository: Repository, pull: Option<u64>, head: Option<[u
         producing_charter: 2,
         review_charter: 4,
         effect_account: None,
+        producer_failure: None,
     })
 }
 fn landed(commit: u64) -> d::Stored {

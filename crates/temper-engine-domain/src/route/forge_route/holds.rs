@@ -10,10 +10,18 @@ pub(super) fn source(domain: &Domain, entry: Option<u64>, words: Box<[u8]>) -> t
 }
 
 pub(super) fn decision(domain: &Domain, env: &Env<Limits>, task: u64, words: Box<[u8]>) -> ProcedureStep {
-    let mut decision = ProcedureStep::new(StepEnd::HoldFrom {
-        why: tasks::Hold::Procedure,
-        source: Box::new(source(domain, None, words.clone())),
-    });
+    decision_as(domain, env, task, tasks::Hold::Procedure, words)
+}
+
+pub(super) fn decision_as(
+    domain: &Domain,
+    env: &Env<Limits>,
+    task: u64,
+    why: tasks::Hold,
+    words: Box<[u8]>,
+) -> ProcedureStep {
+    let mut decision =
+        ProcedureStep::new(StepEnd::HoldFrom { why, source: Box::new(source(domain, None, words.clone())) });
     if let Some(row) = domain.core.tasks.task(task)
         && let tasks::Party::Task(target) = row.requester
     {
