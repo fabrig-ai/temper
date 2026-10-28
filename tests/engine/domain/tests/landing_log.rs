@@ -53,10 +53,7 @@ fn read(driver: &mut Driver, sign_in: u64) -> forge::LandingsView {
         }
         let view = found.expect("a page of the durable landing log");
         lines.extend(view.logged.iter().cloned());
-        after = match view.after {
-            Some(number) => Some(jig_domain_core::documents::Cursor::Number { number }),
-            None => None,
-        };
+        after = view.after.map(|number| jig_domain_core::documents::Cursor::Number { number });
         last = Some(view);
         if after.is_none() {
             break;

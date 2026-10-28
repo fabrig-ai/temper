@@ -168,6 +168,13 @@ fn newer_than(call: &jig::call::Call) -> Option<skein_lib::Wall> {
         _ => None,
     }
 }
+#[expect(clippy::manual_map, reason = "the foundation uses explicit matches without closures")]
+fn wall_nanos(wall: Option<skein_lib::Wall>) -> Option<u64> {
+    match wall {
+        Some(wall) => Some(wall.as_nanos()),
+        None => None,
+    }
+}
 fn subject_page(
     task: Option<u64>,
     project: u32,
@@ -176,10 +183,7 @@ fn subject_page(
     after: Option<c::Cursor>,
     limits: &Limits,
 ) -> Watchable {
-    let newer_than = match newer_than {
-        Some(wall) => Some(wall.as_nanos()),
-        None => None,
-    };
+    let newer_than = wall_nanos(newer_than);
     let limits = forge::wire_limits(&limits.domain.forge).expect("checked limits");
     let watch = match task {
         Some(task) => {
@@ -223,7 +227,7 @@ fn gone(watch: &Watching, limits: &Limits) -> jig::Printed {
             &w::LandingsPanel::new(
                 &w::CEILINGS,
                 w::LandingsPanelParts {
-                    newer_than: None,
+                    newer_than: wall_nanos(newer_than(&watch.called.call)),
                     logged: skein_lib::List::with_capacity(0),
                     after: None,
                     project: watch.project.expect("resolved project"),
