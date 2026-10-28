@@ -26,6 +26,8 @@ const REVIEW_CUE: &str = "Review this change at the named head";
 const CHAT_DELEGATED: &str = "The change is under way.";
 // Fits the chat template's 32-byte report contract.
 const CHAT_REPORT: &str = "The CSV export landed.";
+// Merge, pull address, checks, repairs and reviews.
+const LANDING_RESULT_LINES: usize = 5;
 const SOURCE: &str = r#"fn main() {
     println!("Name | Value");
     for (name, value) in [("alpha", 1), ("beta", 2)] {
@@ -404,7 +406,7 @@ fn check_landing(ran: &Ran, commit: u64) {
         .expect("merged head");
     let head = hex(&object_bytes(head));
     let lines: Vec<_> = words.lines().collect();
-    assert_eq!(lines.len(), 5, "{words}");
+    assert_eq!(lines.len(), LANDING_RESULT_LINES, "{words}");
     assert_eq!(lines[2], format!("checks at {head}: check passed"));
     assert_eq!(lines[3], "repairs: 1: CI failed: check");
     assert_eq!(lines[4], format!("reviews: approved at {head}"));
