@@ -32,6 +32,26 @@ fn reads_for(world: &World, task: u64) -> Vec<Op> {
     ]
 }
 
+fn background(op: &Op) -> bool {
+    matches!(op, Op::Read(Read::Items { .. }))
+        || matches!(op, Op::Read(Read::Branch { branch }) if branch.as_ref() == b"main")
+}
+fn assert_reads(actual: Vec<Op>, expected: Vec<Op>) {
+    let mut remaining = actual.into_iter();
+    for expected in expected {
+        loop {
+            let actual = remaining.next().expect("every fresh procedure read");
+            if actual == expected {
+                break;
+            }
+            assert!(background(&actual), "unexpected procedure read: {actual:?}; expected {expected:?}");
+        }
+    }
+    for actual in remaining {
+        assert!(background(&actual), "unexpected read after the procedure: {actual:?}");
+    }
+}
+
 #[test]
 fn a_repository_hint_wakes_only_the_changes_it_concerns() {
     let mut world = hint_world();
@@ -54,11 +74,14 @@ fn a_repository_hint_wakes_only_the_changes_it_concerns() {
     ] {
         let wakes = hint(&mut world, change.clone());
         assert_eq!(wakes, expected, "{change:?}");
-        assert!(world.take_calls().is_empty(), "no resources held by this scripted parent");
+        assert!(
+            world.take_calls().iter().all(background),
+            "only the standing main watch reads without a parent resource"
+        );
         for task in wakes {
             let expected = reads_for(&world, task);
             hint_step(&mut world, task, 100 + task);
-            assert_eq!(world.take_calls(), expected, "fresh reads for {task}, {change:?}");
+            assert_reads(world.take_calls(), expected);
         }
     }
 }
@@ -92,7 +115,7 @@ fn only_a_relevant_hint_restarts_an_unfinished_fresh_read_chain() {
             world.event(step(151));
         }
         world.run_for(3);
-        assert_eq!(world.take_calls(), expected, "hint on {}", String::from_utf8_lossy(branch));
+        assert_reads(world.take_calls(), expected);
     }
 }
 

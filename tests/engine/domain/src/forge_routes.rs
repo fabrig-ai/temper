@@ -42,6 +42,7 @@ pub struct World {
     pub fake_env: Env<fake::Config>,
     fake_out: Queue<fake::Request>,
     pub pending: BTreeMap<Token, skein_forge::api::Op>,
+    api_generation: u64,
     pub forge_calls: u32,
     pub adopted: Vec<forge_top::ApplicationOutcome>,
     pub signed_in: Option<u64>,
@@ -793,6 +794,7 @@ impl World {
             fake_env,
             fake_out: Queue::with_capacity(fake::MAX_OUT),
             pending: BTreeMap::new(),
+            api_generation: 0,
             forge_calls: 0,
             adopted: Vec::new(),
             signed_in: None,
@@ -859,7 +861,10 @@ impl World {
     /// Restart with a different deployment charter while retaining the change rows.
     pub fn restart_with_charter(&mut self, with_read: bool, with_change: bool, forge_charter: Option<u32>) {
         assert!(self.store.pending.is_empty(), "the chosen cut resolves store uncertainty first");
-        assert!(self.pending.is_empty(), "old API terminals are drained at this cut");
+        // A standing main poll may be in flight at the chosen cut. Its old
+        // transport terminal belongs to the lost process, like an outbox call.
+        self.pending.clear();
+        self.api_generation += 1;
         let mut fresh = Self::configured_limits(
             with_read,
             with_change,
@@ -1066,7 +1071,7 @@ impl World {
                         &mut self.fake,
                         &fake_env,
                         fake::Event::Call {
-                            reply_to: ReplyTo::new(call),
+                            reply_to: ReplyTo::new(Token::new((self.api_generation << 48) | call.raw())),
                             user: 1,
                             repository: Box::from(name),
                             op: raw,
@@ -1246,7 +1251,11 @@ impl World {
         for _ in 0..self.fake_out.len() {
             match self.fake_out.pop().expect("counted fake output") {
                 fake::Request::Reply { to, result } => {
-                    let call = to.into_token();
+                    let transport = to.into_token().raw();
+                    if transport >> 48 != self.api_generation {
+                        continue; // The terminal belonged to the process lost at the cut.
+                    }
+                    let call = Token::new(transport & ((1_u64 << 48) - 1));
                     let op = self.pending.remove(&call).expect("one pending forge call");
                     let result = match result {
                         Ok(answer) => Ok(translate::answer(&op, answer, &self.env.limits.forge.client)),
