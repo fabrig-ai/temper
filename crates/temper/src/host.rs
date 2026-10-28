@@ -158,6 +158,7 @@ pub fn ending(
                     RestartStep::LoadCore => "core restore".into(),
                     RestartStep::LoadInbox => "inbox census".into(),
                     RestartStep::RestoreConnector { connector } => format!("connector {connector} restore"),
+                    RestartStep::Sweep => "linked expiry sweep".into(),
                     RestartStep::Switch => "store switch".into(),
                     RestartStep::AdoptRuns => "run adoption".into(),
                     RestartStep::ReadAfresh { connector } => format!("connector {connector} refresh"),
