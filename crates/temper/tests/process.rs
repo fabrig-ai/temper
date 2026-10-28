@@ -5056,3 +5056,11 @@ fn temper_ctl_the_owner_lifts_a_stop_with_its_tasks() {
     support::placed_holds::lift(scratch.path(), &paths[0], flags);
     scratch.remove();
 }
+
+#[test]
+fn temper_ctl_a_project_stop_holds_new_work_and_one_task_released_ends_under_it() {
+    let scratch = support::Scratch::new("ctl_project_stop");
+    let (paths, flags) = first_run_directories(&scratch);
+    support::placed_holds::project_stop(scratch.path(), &paths[0], flags);
+    scratch.remove();
+}

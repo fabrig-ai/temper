@@ -123,6 +123,14 @@ pub enum Step {
         name: &'static str,
         number: u32,
     },
+    /// A person's goal through the public client; ctl has no goal-creation row yet.
+    Goal {
+        scratch: PathBuf,
+        client: PathBuf,
+        project: u32,
+        words: &'static str,
+        number: u64,
+    },
     Open {
         directory: &'static str,
         until: Option<&'static [u8]>,
@@ -844,6 +852,10 @@ impl Calls {
                     Some(member::Member::maintainer(root, &scratch, &scratch.join("client"), directory, project));
             }
             Some(Step::Project { scratch, client, name, number }) => self.make_project(&scratch, &client, name, number),
+            Some(Step::Goal { scratch, client, project, words, number }) => {
+                let root = skein_shell::open_root(&scratch).expect("goal fixture root");
+                self.member = Some(member::Member::goal(root, &scratch, &client, project, words, number));
+            }
             Some(Step::Open { directory, until }) => {
                 self.action = Some(Action::Run);
                 let args = super::terminal::open_arguments(Path::new(directory), self.link());

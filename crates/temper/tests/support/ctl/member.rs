@@ -12,6 +12,7 @@ const ME: client::Handle = client::Handle { asker: client::Asker::JIG, number: 0
 const MEMBER_SEED: u64 = 713;
 const PROJECT_SEED: u64 = 714;
 const MAINTAINER_SEED: u64 = 715;
+const GOAL_SEED: u64 = 716;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
@@ -31,6 +32,7 @@ pub struct Member {
     role: c::HeldRole,
     service_project: u32,
     project: Option<(&'static str, u32)>,
+    goal: Option<(&'static str, u64)>,
     key: client::Key,
     phase: Phase,
     closing: bool,
@@ -64,6 +66,7 @@ impl Member {
             owner: Some(token),
             made: None,
             project: None,
+            goal: None,
             role: c::HeldRole::Member,
             service_project: PROJECT,
             key: KEY,
@@ -89,6 +92,12 @@ impl Member {
         host.key = client::Key { asker: client::Asker::JIG, number: 2 };
         host
     }
+    pub fn goal(root: Fd, base: &Path, owner: &Path, project: u32, words: &'static str, number: u64) -> Self {
+        let mut host = Self::with_seed(root, base, owner, "case-goal", GOAL_SEED);
+        host.goal = Some((words, number));
+        host.service_project = project;
+        host
+    }
     fn event(&mut self, now: Time, wall: Wall, event: client::Event) {
         self.client.step(now, wall, event, &mut self.out);
         self.drain();
@@ -98,6 +107,13 @@ impl Member {
             match request {
                 client::Request::ServiceCredential { party, credential } => self.made = Some((party, credential)),
                 client::Request::Told { told: client::Told::Answered { key, outcome } } if key == self.key => {
+                    if let Some((_, number)) = self.goal {
+                        assert!(matches!(outcome, client::Outcome::Answered(client::Answered::Jig(c::Answer::Done(
+                            c::Outcome::Owner(c::OwnerOutcome::Created { first, last, .. })
+                        ))) if first == number && last == number), "goal creation answered: {outcome:?}");
+                        self.close();
+                        continue;
+                    }
                     if let Some((_, number)) = self.project {
                         assert!(
                             matches!(outcome, client::Outcome::Answered(client::Answered::Jig(c::Answer::Done(
@@ -157,7 +173,23 @@ impl Member {
             })
         {
             self.phase = Phase::Creating;
-            let request = match self.project {
+            let request = if let Some((words, _)) = self.goal {
+                let Some(client::Latest::Jig(c::Delivery::Me(me))) = self.client.document(ME).and_then(|doc| doc.latest) else {
+                    panic!("live owner document");
+                };
+                let draft = client::shapes::GoalDraft {
+                    words: c::Text::new(words.as_bytes().into(), 128).expect("goal words"),
+                    executor: c::OwnerExecutor::Agent { charter: 2 },
+                    budget: 8_000,
+                    deadline: None,
+                    priority: Some(1),
+                    llm: None,
+                };
+                let client::shapes::Judged::Create(ask) = client::shapes::set_goal(
+                    me, self.service_project, draft, c::Text::new(Box::new([]), 128).expect("empty reason"),
+                ) else { panic!("owner may create the fixture goal"); };
+                ask
+            } else { match self.project {
                 Some((name, _)) => c::Ask::MakeProject {
                     name: c::Text::new(name.as_bytes().into(), 64).expect("fixture project name"),
                     policy: 1,
@@ -167,7 +199,7 @@ impl Member {
                     name: c::Text::new(b"settings-member".as_slice().into(), 64).expect("fixture name"),
                     role: self.role,
                 },
-            };
+            }};
             self.event(
                 now,
                 wall,
