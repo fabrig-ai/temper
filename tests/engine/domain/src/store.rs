@@ -317,6 +317,11 @@ impl Store {
             self.tick_pages();
         }
     }
+    /// The actual component allowance used by party reads in this world.
+    #[must_use]
+    pub const fn read_joins(&self) -> u32 {
+        self.component_limits.joins
+    }
     /// Read a historical page through the real store and the service's routing.
     #[must_use]
     pub fn read(&mut self, range: Box<jig_domain_core::reads::Range>) -> jig_domain_core::reads::Loaded {

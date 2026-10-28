@@ -2,6 +2,7 @@
 use super::*;
 
 use super::stock::box_model as model;
+use jig_domain_core::{documents, reads};
 use temper_engine_domain_world::forge_routes::box_limits;
 
 const TOKENS_PER_TURN: u64 = 30_000;
@@ -22,6 +23,7 @@ const WORK_WORDS: &[u8] = b"Survey, then land two changes in order";
 const ADVISOR_REPORT: &[u8] = b"Survey complete";
 const WORK_REPORT: &[u8] = b"Both changes landed";
 const CHAT_REPORT: &[u8] = b"Done: both landed";
+const LOOKUP_JOINS: u32 = 1;
 
 fn defaults() -> jig_domain_core::settings::Defaults {
     // This world scripts the worker; it never connects to an endpoint or real account.
@@ -284,7 +286,7 @@ fn landed(world: &World, task: u64) -> bool {
     })
 }
 
-fn land_change(world: &mut World, work: &engine::Assignment) -> u64 {
+fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) {
     let change =
         delegated(world, work, engine::Tool::Change { words: b"Small fix".as_slice().into(), repository: None });
     answer(world, work, WORK_TURNS, tasks::End::Parked);
@@ -336,7 +338,7 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> u64 {
         },
     );
     assert!(landed(world, change), "change {change} lands after CI repair and agent approval");
-    change
+    (change, [producer_task, repair_task, review_task])
 }
 
 #[test]
@@ -368,6 +370,8 @@ struct Tree {
     advisor: u64,
     first: u64,
     second: u64,
+    first_workers: [u64; 3],
+    second_workers: [u64; 3],
 }
 
 fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
@@ -384,9 +388,9 @@ fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
     report(world, &advisor, ADVISOR_TURNS, ADVISOR_REPORT);
     assert!(has_report(world, work_task, advisor_task, ADVISOR_REPORT), "advisor report reaches work");
     let work = admitted(world, work_task);
-    let first = land_change(world, &work);
+    let (first, first_workers) = land_change(world, &work);
     let work = admitted(world, work_task);
-    let second = land_change(world, &work);
+    let (second, second_workers) = land_change(world, &work);
     assert!(second > first, "C2 is created after C1's Landed was asserted");
     let work = admitted(world, work_task);
     report(world, &work, WORK_TURNS, WORK_REPORT);
@@ -397,7 +401,7 @@ fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
         tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { words })) if words.as_ref() == WORK_REPORT));
     // The stock chat is a conversation ended by its requester; its report is a reply.
     assert!(record(world, chat.task).last_reply > 0);
-    Tree { chat: chat.task, work: work_task, advisor: advisor_task, first, second }
+    Tree { chat: chat.task, work: work_task, advisor: advisor_task, first, second, first_workers, second_workers }
 }
 
 #[test]
@@ -425,4 +429,204 @@ fn an_advisors_report_at_the_deployments_result_bound_reaches_the_work() {
 fn b2s_tree_fits_the_boxs_limits() {
     let (mut world, chat) = stock_world();
     tree(&mut world, &chat);
+}
+
+struct ReadRow {
+    name: &'static str,
+    task: u64,
+    ancestors: Vec<u64>,
+    joins: u32,
+    requester: Option<u64>,
+}
+
+fn read_rows(tree: &Tree) -> Vec<ReadRow> {
+    // Each isolated row spends one lookup plus its zero to three task ancestors.
+    const CHAT_JOINS: u32 = 1;
+    const WORK_JOINS: u32 = 2;
+    const CHANGE_JOINS: u32 = 3;
+    const WORKER_JOINS: u32 = 4;
+    let mut rows = vec![
+        ReadRow { name: "chat", task: tree.chat, ancestors: vec![], joins: CHAT_JOINS, requester: None },
+        ReadRow {
+            name: "W",
+            task: tree.work,
+            ancestors: vec![tree.chat],
+            joins: WORK_JOINS,
+            requester: Some(tree.chat),
+        },
+        ReadRow {
+            name: "V",
+            task: tree.advisor,
+            ancestors: vec![tree.work, tree.chat],
+            joins: CHANGE_JOINS,
+            requester: Some(tree.work),
+        },
+        ReadRow {
+            name: "C1",
+            task: tree.first,
+            ancestors: vec![tree.work, tree.chat],
+            joins: CHANGE_JOINS,
+            requester: Some(tree.work),
+        },
+        ReadRow {
+            name: "C2",
+            task: tree.second,
+            ancestors: vec![tree.work, tree.chat],
+            joins: CHANGE_JOINS,
+            requester: Some(tree.work),
+        },
+    ];
+    for (change, workers, names) in [
+        (tree.first, tree.first_workers, ["C1 producer", "C1 repairer", "C1 reviewer"]),
+        (tree.second, tree.second_workers, ["C2 producer", "C2 repairer", "C2 reviewer"]),
+    ] {
+        for (task, name) in workers.into_iter().zip(names) {
+            rows.push(ReadRow {
+                name,
+                task,
+                ancestors: vec![change, tree.work, tree.chat],
+                joins: WORKER_JOINS,
+                requester: Some(change),
+            });
+        }
+    }
+    rows
+}
+
+fn stored_page(
+    world: &mut World,
+    person: u64,
+    scope: reads::Scope,
+    after: Option<reads::Position>,
+) -> (Box<[reads::Row]>, Option<reads::Position>) {
+    let result = world.party_load(person, scope, after);
+    let reads::Loaded::Page { rows, next } = result else { panic!("served whole: {result:?}") };
+    assert!(!rows.is_empty(), "each selected B2 task has a stored row");
+    (rows, next)
+}
+
+fn row_joins(row: &reads::Row, expected: &ReadRow) -> u32 {
+    assert_eq!(row.owner.as_ref().expect("owner").number, expected.task, "{}", expected.name);
+    assert_eq!(row.ancestors.as_ref(), expected.ancestors, "{}", expected.name);
+    assert_eq!(row.linked.iter().map(|task| task.number).collect::<Vec<_>>(), expected.ancestors, "{}", expected.name);
+    assert!(row.unjoined.is_none(), "{} has all its joins", expected.name);
+    // Task points join their terminal, and histories/indexes join their owner.
+    let joins = LOOKUP_JOINS + u32::try_from(row.linked.len()).expect("bounded row links");
+    assert_eq!(joins, expected.joins, "{}", expected.name);
+    joins
+}
+
+fn task_document(answer: reads::Answer) -> Box<documents::Task> {
+    match answer {
+        reads::Answer::Document(value) => {
+            let documents::Document::Task(task) = *value else { panic!("task document") };
+            task
+        }
+        reads::Answer::Historical(value) => {
+            let reads::Past::Task { document, .. } = value.value else { panic!("historical task") };
+            document
+        }
+        other => panic!("served task: {other:?}"),
+    }
+}
+
+fn ended_row(world: &mut World, person: u64, parent: u64, expected: &ReadRow) -> u32 {
+    let scope = reads::Scope::EndedDelegates { task: parent };
+    let mut after = None;
+    for _ in 0..world.env.limits.tasks.tree_tasks {
+        let from = after.clone().map(|after| reads::Cursor::Store { scope: scope.clone(), after: Some(after) });
+        let answer = world.party_read(reads::Read::EndedDelegates { task: parent, from });
+        let reads::Answer::Page(page) = answer else { panic!("ended delegates served: {answer:?}") };
+        let (rows, next) = stored_page(world, person, scope.clone(), after);
+        let numbers = page
+            .rows
+            .iter()
+            .map(|row| {
+                let reads::PageRow::EndedDelegate(row) = row else { panic!("ended delegate") };
+                row.chip.number
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(numbers, rows.iter().map(|row| row.owner.as_ref().expect("owner").number).collect::<Vec<_>>());
+        assert!(!page.cut);
+        for row in &rows {
+            if row.owner.as_ref().expect("owner").number == expected.task {
+                let owner = row.owner.as_ref().expect("ended owner");
+                assert!(matches!(owner.phase, tasks::Phase::Ended(_)));
+                // An ended conversation also joins its requester's read position,
+                // including a missing position; read that flag from the served owner.
+                return row_joins(row, expected) + u32::from(owner.flags.conversation);
+            }
+        }
+        after = next;
+        assert!(after.is_some(), "{} is in its requester's ended delegates", expected.name);
+    }
+    panic!("ended delegates within the tree bound");
+}
+
+#[test]
+fn every_row_of_b2s_tree_reads_whole_on_small() {
+    let (mut world, chat) = stock_world();
+    let tree = tree(&mut world, &chat);
+    let joins = temper_engine_domain_world::forge_routes::box_joins();
+    let small = jig_protocol_config::profile(jig_protocol_config::Profile::Small).store.joins;
+    assert_eq!(joins, small);
+    assert_eq!(small, 4, "Small's stock join bound");
+    assert_eq!(world.store.read_joins(), joins, "the real store uses the box allowance");
+    let tasks::Party::Person(person) = record(&world, tree.chat).requester else { panic!("the person's chat") };
+    let lines = box_limits().documents.lines;
+    assert_eq!(lines, 2, "the box's document-line bound");
+    assert_eq!(world.env.limits.documents.lines, lines);
+    let lines = usize::try_from(lines).expect("bounded document lines");
+    for expected in read_rows(&tree) {
+        // Owner membership permits the person to read all eleven tasks in this tree.
+        let document = task_document(world.party_read(reads::Read::Task { task: expected.task }));
+        assert_eq!(document.chip.number, expected.task);
+        // Documents display lineage root first; inspect nearest first to verify
+        // that their separate line bound keeps the closest ancestors.
+        let mut lineage = document.lineage.iter().map(|chip| chip.number).collect::<Vec<_>>();
+        lineage.reverse();
+        let expected_lineage = expected.ancestors.iter().take(lines).copied().collect::<Vec<_>>();
+        assert_eq!(document.cut, expected.ancestors.len() > lines, "{} document cut", expected.name);
+        assert_eq!(lineage, expected_lineage, "{} nearest document ancestors", expected.name);
+        let (rows, next) = stored_page(&mut world, person, reads::Scope::Task { task: expected.task }, None);
+        assert!(next.is_none());
+        let [row] = rows.as_ref() else { panic!("one task point") };
+        let point = row_joins(row, &expected);
+        let answer = world.party_read(reads::Read::History { task: expected.task, subtree: false, from: None });
+        let reads::Answer::Page(page) = answer else { panic!("history served: {answer:?}") };
+        assert!(!page.rows.is_empty());
+        assert!(!page.cut);
+        let (history, _) =
+            stored_page(&mut world, person, reads::Scope::History { task: expected.task, subtree: false }, None);
+        assert_eq!(
+            usize::try_from(page.rows.len()).expect("bounded history"),
+            history.len(),
+            "{} history rows",
+            expected.name
+        );
+        for row in &page.rows {
+            let task = match row {
+                reads::PageRow::History(line) => line.task,
+                reads::PageRow::Milestone(line) => line.task,
+                other => panic!("history row: {other:?}"),
+            };
+            assert_eq!(task, expected.task);
+        }
+        for row in &history {
+            row_joins(row, &expected);
+        }
+        let history_page_joins =
+            LOOKUP_JOINS + history.iter().map(|row| u32::try_from(row.linked.len()).expect("bounded row")).sum::<u32>();
+        assert!(history_page_joins <= joins);
+        let ended = expected.requester.map(|parent| ended_row(&mut world, person, parent, &expected));
+        assert!(ended.is_none_or(|count| count <= joins));
+        println!(
+            "{}#{}: point={point}, history-first-page={history_page_joins} ({} rows), ended-row={ended:?}; ancestors={:?}; document-cut={}, document-nearest={lineage:?}",
+            expected.name,
+            expected.task,
+            history.len(),
+            expected.ancestors,
+            document.cut
+        );
+    }
 }
