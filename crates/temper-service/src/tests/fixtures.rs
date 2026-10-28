@@ -883,7 +883,7 @@ pub fn signed_worker() -> crate::Service {
                         window: 8192,
                         output: 1024,
                     }]),
-                    turns: 8,
+                    turns: 16,
                     spend: 1000,
                     time: skein_lib::Duration::from_millis(131_072),
                     waiting: skein_lib::Duration::from_secs(60),

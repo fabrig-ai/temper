@@ -237,6 +237,7 @@ pub(crate) fn agent() -> temper_service::settings::Agent {
         calls: agent.host_limits.calls,
     };
     agent.limits.channel.output_bytes = smith_host_protocol::output_bytes(&agent.limits).expect("host frames");
+    agent.bounds.turns = agent_profile().policy.max_turns;
     agent.bounds.message_bytes = 1024;
     agent.bounds.checks = Duration::from_secs(5);
     temper_service::settings::Agent {
@@ -256,6 +257,7 @@ pub(crate) fn agent_profile() -> smith_agent_service::profile::Profile {
     profile.declared.read_window = 256;
     profile.declared.conversations = 1;
     profile.declared.calls_per_response = 1;
+    profile.policy.max_turns = 16;
     profile.policy.check_timeout = Duration::from_secs(5);
     let hub = jig_protocol_config::profile(jig_protocol_config::Profile::Small).hub;
     profile.policy.inbox = hub.held.max(hub.inbox);

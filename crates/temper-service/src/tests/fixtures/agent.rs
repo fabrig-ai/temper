@@ -80,7 +80,7 @@ pub fn agent() -> settings::Agent {
                 window: 8192,
                 output: 1024,
             }]),
-            turns: 8,
+            turns: 16,
             spend: 100,
             time: Duration::from_secs(300),
             waiting: Duration::from_secs(60),

@@ -181,6 +181,7 @@ fn chat_in(config: [engine::Config; 2]) -> (Driver, engine::Assignment) {
     hello.bounds.models[0].name = model.name;
     hello.bounds.models[0].window = model.window;
     hello.bounds.models[0].output = model.output;
+    hello.bounds.turns = 16;
     hello.bounds.time = Duration::from_secs(120);
     hello.bounds.spend = K;
     hello.bounds.message_bytes = limits.tasks.message_bytes;

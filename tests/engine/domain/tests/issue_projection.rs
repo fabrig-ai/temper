@@ -208,6 +208,7 @@ fn configured_world(
     world.adopt();
     world.fail_issue_writes = failing;
     let mut bounds = protocol::bounds();
+    bounds.turns = 16;
     bounds.models = Box::new([host::ModelBound { name: model().name, window: MODEL_WINDOW, output: MODEL_OUTPUT }]);
     bounds.spend = defaults.rules.maximum_run_spend;
     bounds.time = defaults.charters[0].policy.time;
