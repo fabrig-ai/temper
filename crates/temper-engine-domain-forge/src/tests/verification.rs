@@ -12,12 +12,13 @@ fn a_merge_into_a_repository_with_tiers_saves_its_verification() {
         record: Stored::Landed { commit: MERGE, task: CHANGE }
     }));
     let expected = Verification {
+        repairs: None,
         repository: REPO,
         commit: MERGE,
         changes: Box::new([CHANGE]),
         tiers: Box::new([
-            TierVerification { tier: Box::from(BROWSER), verdict: None, repaired: None },
-            TierVerification { tier: Box::from(FUZZY), verdict: None, repaired: None },
+            TierVerification { told: Box::new([]), tier: Box::from(BROWSER), verdict: None, repaired: None },
+            TierVerification { told: Box::new([]), tier: Box::from(FUZZY), verdict: None, repaired: None },
         ]),
     };
     assert!(requests.contains(&Request::Save {
@@ -151,4 +152,108 @@ fn project_tiers_refuses_a_repeated_repository() {
     let repeated = RepositoryTiers { repository: REPO, tiers: Box::new([]) };
     assert!(!d.project_tiers(PROJECT, fixtures::tier_settings(), Box::new([repeated.clone(), repeated])));
     assert!(d.tiers.is_empty());
+}
+
+const FIRST_GOAL: u64 = 71;
+const SECOND_GOAL: u64 = 72;
+const OTHER_GOAL: u64 = 73;
+const REPAIR: [u8; 32] = [8; 32];
+const NEWER_REPAIR: [u8; 32] = [9; 32];
+fn red_goals() -> Domain {
+    let mut d = fixtures::verifying();
+    fixtures::judge(&mut d, BROWSER, Blame::Owns(Failures::Many));
+    for (task, member) in [(FIRST_GOAL, CHANGE), (SECOND_GOAL, CHANGE), (OTHER_GOAL, OTHER_GOAL)] {
+        let topic = Topic::Landings { repository: REPO, branch: b"main".as_slice().into() };
+        d.subscriptions
+            .insert(
+                (task, topic.clone()),
+                Subscriber {
+                    task,
+                    number: task,
+                    topic,
+                    own_change: None,
+                    goal_tasks: Some(Box::new([member])),
+                    paths: Box::new([]),
+                },
+            )
+            .unwrap();
+    }
+    d
+}
+fn red_run() -> ReceiptRun {
+    ReceiptRun { id: 81, number: 1, url: b"https://forge/run/81".as_slice().into() }
+}
+fn tell_goals(d: &mut Domain) -> Box<[Request]> {
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    while crate::verification::untold(d, REPO, BROWSER, fixtures::OPEN) {
+        crate::verification::tell(d, REPO, BROWSER, fixtures::OPEN, &red_run(), b"log end", &mut out);
+    }
+    let mut requests = skein_lib::List::with_capacity(out.len());
+    while let Some(request) = out.pop() {
+        requests.push(request).unwrap();
+    }
+    requests.into_boxed()
+}
+fn told_tasks(requests: &[Request]) -> Box<[u64]> {
+    let mut goals = skein_lib::List::with_capacity(LIMITS.subscriptions);
+    for request in requests {
+        if let Request::News { task, class: Class::Wakes, news: News::Red { .. }, .. } = request {
+            goals.push(*task).expect("one news per goal");
+        }
+    }
+    goals.into_boxed()
+}
+
+#[test]
+fn a_red_landing_tells_each_goal_of_its_changes_once() {
+    let mut d = red_goals();
+    assert_eq!(told_tasks(&tell_goals(&mut d)).as_ref(), &[FIRST_GOAL, SECOND_GOAL]);
+    assert!(tell_goals(&mut d).is_empty());
+}
+#[test]
+fn a_restart_after_the_verdict_tells_the_goals_not_yet_told() {
+    let mut before = red_goals();
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::tell(&mut before, REPO, BROWSER, fixtures::OPEN, &red_run(), b"log end", &mut out);
+    let mut d = domain();
+    outputs(
+        &mut d,
+        Event::Restore { record: Stored::Verification(before.verifications.get(&(REPO, MERGE)).unwrap().clone()) },
+    );
+    for (_, subscription) in &before.subscriptions {
+        outputs(&mut d, Event::Restore { record: Stored::Subscription(subscription.clone()) });
+    }
+    assert_eq!(told_tasks(&tell_goals(&mut d)).as_ref(), &[SECOND_GOAL]);
+    assert!(tell_goals(&mut d).is_empty());
+}
+#[test]
+fn a_red_landing_is_repaired_by_the_landing_that_names_it() {
+    let mut d = red_goals();
+    let original = d.verifications.get(&(REPO, MERGE)).unwrap().clone();
+    for (commit, repairs) in [(REPAIR, Some(MERGE)), (NEWER_REPAIR, Some(MERGE)), (fixtures::HEAD, None)] {
+        let mut row = original.clone();
+        row.commit = commit;
+        row.repairs = repairs;
+        for tier in &mut row.tiers {
+            tier.verdict = None;
+        }
+        d.verifications.insert((REPO, commit), row).unwrap();
+    }
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::judged(
+        &mut d,
+        REPO,
+        BROWSER,
+        &temper_engine_domain_forge_tiers::Verdict {
+            number: fixtures::OPEN + 1,
+            tip: fixtures::HEAD,
+            key: fixtures::HEAD,
+            failing: Failures::Tests(Box::new([])),
+            flakes: Box::new([]),
+            landings: Box::new([]),
+        },
+        &[(REPAIR, Blame::Cleared), (NEWER_REPAIR, Blame::Cleared), (fixtures::HEAD, Blame::Cleared)],
+        &mut out,
+    );
+    assert_eq!(d.verifications.get(&(REPO, MERGE)).unwrap().tiers[0].repaired, Some(NEWER_REPAIR));
 }

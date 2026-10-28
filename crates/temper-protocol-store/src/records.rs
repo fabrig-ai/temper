@@ -204,6 +204,7 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         mark_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         verification_changes: forge.changes,
         verification_tiers: forge.tiers,
+        tier_verification_told: forge.subscriptions,
         tier_verification_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         failed_tests_tests: forge.failing_tests,
         failing_test_test_id: forge.test_id_bytes,

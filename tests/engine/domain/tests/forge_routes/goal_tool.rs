@@ -181,7 +181,7 @@ fn a_goal_calls_change_and_its_change_is_made() {
         &mut world,
         &run,
         94,
-        engine::Tool::Change { words: b"Small fix".as_slice().into(), repository: None },
+        engine::Tool::Change { repairs: None, words: b"Small fix".as_slice().into(), repository: None },
     ));
     let row = live(&world, change);
     assert_eq!(row.requester, tasks::Party::Task(run.task));

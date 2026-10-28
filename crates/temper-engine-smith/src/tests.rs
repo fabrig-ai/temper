@@ -1097,7 +1097,7 @@ fn change_decodes_words_and_an_optional_repository() {
         let call = decided(b"change", input).expect("change is declared and decoded");
         assert_eq!(call.completion, 2);
         assert_eq!(call.position, 1);
-        let engine::Tool::Change { words, repository } = call.tool else { panic!("change") };
+        let engine::Tool::Change { words, repository, repairs: None } = call.tool else { panic!("change") };
         assert_eq!(words.as_ref(), b"edit README");
         assert_eq!(repository.as_deref(), if input.contains(&b'/') { Some(b"work/hello".as_slice()) } else { None });
     }
@@ -1347,3 +1347,23 @@ fn goal_decodes_words_and_an_optional_advisor() {
 
 #[path = "tests/settings.rs"]
 mod settings;
+
+#[test]
+fn change_takes_an_optional_repairs_commit() {
+    const SHA1_DIGITS: usize = 40;
+    const SHA256_DIGITS: usize = 64;
+    for digits in [SHA1_DIGITS, SHA256_DIGITS] {
+        let input = format!(r#"{{"words":"repair red","repairs":"{}"}}"#, "aB".repeat(digits / 2));
+        let call = decided(b"change", input.as_bytes()).expect("valid repair claim");
+        let mut commit = [0_u8; 32];
+        commit[..digits / 2].fill(0xab);
+        assert_eq!(
+            call.tool,
+            engine::Tool::Change { words: b"repair red".as_slice().into(), repository: None, repairs: Some(commit) }
+        );
+    }
+    for text in ["a".repeat(SHA1_DIGITS - 1), "a".repeat(SHA1_DIGITS + 1), "g".repeat(SHA1_DIGITS)] {
+        let input = format!(r#"{{"words":"repair red","repairs":"{text}"}}"#);
+        assert_eq!(decided(b"change", input.as_bytes()), Err(Problem::Range(b"repairs")));
+    }
+}

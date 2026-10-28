@@ -57,7 +57,11 @@ fn landing_words_are_the_merge_id_cut_to_the_contract_bound() {
         (SHA1, 7, &b"abcdef0"[..]),
         (SHA1, 0, &b""[..]),
     ] {
-        assert_eq!(landing_words(&merge, bound, None, 1, None).as_ref(), expected, "merge {merge:?}, bound {bound}");
+        assert_eq!(
+            landing_words(&merge, bound, None, 1, None, None).as_ref(),
+            expected,
+            "merge {merge:?}, bound {bound}"
+        );
     }
 }
 
@@ -304,6 +308,7 @@ fn writable_repositories_exclude_an_ended_forge() {
 fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
     use super::{forge, forge_change as change};
     forge::ChangeRow {
+        repairing: None,
         task: 7,
         repository: skein_forge::api::Repository { forge: 3, repository: 1 },
         branch: Box::from(b"temper/7".as_slice()),
@@ -552,21 +557,24 @@ fn landing_words_name_the_pull_and_use_the_forges_address_when_it_fits() {
     ] {
         let configured = landing_forge(kind, git, web);
         let expected = expected_landing(line);
-        assert_eq!(landing_words(&SHA1, 512, Some(&repository), 7, Some(&configured)), expected);
+        assert_eq!(landing_words(&SHA1, 512, Some(&repository), 7, Some(&configured), None), expected);
         let bound = u32::try_from(expected.len()).unwrap();
-        assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, Some(&configured)), expected);
-        assert_eq!(landing_words(&SHA1, bound - 1, Some(&repository), 7, Some(&configured)).as_ref(), COMMITS[0].1);
+        assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, Some(&configured), None), expected);
+        assert_eq!(
+            landing_words(&SHA1, bound - 1, Some(&repository), 7, Some(&configured), None).as_ref(),
+            COMMITS[0].1
+        );
     }
     let line = b"pull request #7 of org/repo on forge.example";
     let bound = u32::try_from(COMMITS[0].1.len() + 1 + line.len()).unwrap();
     let expected = expected_landing(line);
-    assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, None), expected);
-    assert_eq!(landing_words(&SHA1, bound - 1, Some(&repository), 7, None).as_ref(), COMMITS[0].1);
-    assert_eq!(landing_words(&SHA1, 7, Some(&repository), 7, None).as_ref(), b"abcdef0");
+    assert_eq!(landing_words(&SHA1, bound, Some(&repository), 7, None, None), expected);
+    assert_eq!(landing_words(&SHA1, bound - 1, Some(&repository), 7, None, None).as_ref(), COMMITS[0].1);
+    assert_eq!(landing_words(&SHA1, 7, Some(&repository), 7, None, None).as_ref(), b"abcdef0");
     let long = [b'x'; 2048];
     for kind in [Kind::GitHub, Kind::Forgejo] {
         let configured = landing_forge(kind, &long, Some(&long));
-        assert_eq!(landing_words(&SHA1, 4096, Some(&repository), 7, Some(&configured)), expected);
+        assert_eq!(landing_words(&SHA1, 4096, Some(&repository), 7, Some(&configured), None), expected);
     }
 }
 
@@ -596,4 +604,63 @@ fn expected_landing(line: &[u8]) -> Box<[u8]> {
     writer.put(b"\n").unwrap();
     writer.put(line).unwrap();
     writer.finish()
+}
+
+fn red_news(failing: temper_engine_domain_forge_tiers::Failures, log: &[u8]) -> super::forge::News {
+    super::forge::News::Red {
+        tier: b"browser".as_slice().into(),
+        landing: SHA1,
+        failing,
+        run: super::forge::ReceiptRun { id: 81, number: 1, url: b"https://forge/run/81".as_slice().into() },
+        log: log.into(),
+    }
+}
+#[test]
+fn a_red_of_many_tests_says_many() {
+    let news = red_news(temper_engine_domain_forge_tiers::Failures::Many, b"");
+    assert_eq!(
+        news_words(&news, 512).as_ref(),
+        b"forge red browser: landing abcdef012345 fails many tests\nrun https://forge/run/81"
+    );
+}
+#[test]
+fn red_news_keeps_whole_ids_and_the_logs_end() {
+    const CUT: u32 = 100; // Mandatory header, one complete id, run and the remaining log tail.
+    use temper_engine_domain_forge_tiers::Failures;
+    let news = red_news(
+        Failures::Tests(Box::new([b"first".as_slice().into(), b"second".as_slice().into()])),
+        b"end of job test's log:\nlast line\n",
+    );
+    assert_eq!(news_words(&news, 512).as_ref(), b"forge red browser: landing abcdef012345 fails 2 tests: first, second\nrun https://forge/run/81\nend of job test's log:\nlast line\n");
+    assert_eq!(
+        news_words(&news, CUT).as_ref(),
+        b"forge red browser: landing abcdef012345 fails 2 tests: first\nrun https://forge/run/81\nog:\nlast line\n"
+    );
+}
+#[test]
+fn a_repaired_changes_result_names_the_repair_before_its_pull() {
+    const REPAIR_BOUND: u32 = 95; // Full merge (40), newline and complete repair line (55).
+    use super::forge;
+    let row = forge::Verification {
+        repairs: None,
+        repository: skein_forge::api::Repository { forge: 1, repository: 1 },
+        commit: SHA1,
+        changes: Box::new([1]),
+        tiers: Box::new([forge::TierVerification {
+            told: Box::new([1]),
+            tier: b"browser".as_slice().into(),
+            verdict: Some(forge::TierVerdict {
+                run: 1,
+                blame: temper_engine_domain_forge_tiers::Blame::Owns(temper_engine_domain_forge_tiers::Failures::Many),
+            }),
+            repaired: Some(SHA256),
+        }]),
+    };
+    let repository = adopted(1);
+    let expected = b"abcdef0123456789abcdef0123456789abcdef01\ncleared after red in browser, repaired by abababababab\npull request #7 of org/repo on forge.example";
+    assert_eq!(landing_words(&SHA1, 512, Some(&repository), 7, None, Some(&row)).as_ref(), expected);
+    assert_eq!(
+        landing_words(&SHA1, REPAIR_BOUND, Some(&repository), 7, None, Some(&row)).as_ref(),
+        b"abcdef0123456789abcdef0123456789abcdef01\ncleared after red in browser, repaired by abababababab"
+    );
 }

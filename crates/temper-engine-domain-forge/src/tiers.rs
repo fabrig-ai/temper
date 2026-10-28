@@ -54,6 +54,144 @@ pub(crate) struct Walk {
     next: Option<skein_lib::Time>,
 }
 
+/// Read afresh after a cold restart. The durable told mark is family 26's;
+/// logs need no new stored family or budget.
+#[derive(Debug)]
+pub(crate) struct RedLogs {
+    jobs: Option<Box<[skein_forge::api::RunJob]>>,
+    next: usize,
+    words: List<u8>,
+}
+
+fn red_read(row: &TierRow, logs: &RedLogs, message_bytes: u32) -> Option<skein_forge::api::Read> {
+    let result = row.result.as_ref().expect("judged red");
+    let Some(jobs) = &logs.jobs else { return Some(skein_forge::api::Read::Run { run: result.run.id }) };
+    let job = jobs.get(logs.next)?;
+    let share = message_bytes.checked_div(u32::try_from(jobs.len()).expect("bounded jobs")).expect("nonempty jobs");
+    Some(skein_forge::api::Read::Job {
+        attempt: skein_forge::api::JobAttempt {
+            head: candidate(row.record.run.as_ref().expect("judged part")).0,
+            run: result.run.id,
+            job: job.id,
+            attempt: job.attempt,
+        },
+        max_bytes: share,
+    })
+}
+
+fn red_news(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    key: &(Repository, Box<[u8]>),
+    row: &TierRow,
+    out: &mut Queue<Request>,
+) -> bool {
+    let Some(result) = &row.result else { return true };
+    if !result.applied {
+        return true;
+    }
+    if !crate::verification::untold(d, row.repository, &row.tier, result.verdict.number) {
+        // A goal may end during a log read. Keep its read owner alive until
+        // the terminal arrives before cleanup drops the tier's follower.
+        if d.tier_logs.contains_key(key) && reading(d, key) {
+            wait(row.task.expect("tier task"), out);
+            return false;
+        }
+        d.tier_logs.remove(key);
+        return true;
+    }
+    if !d.tier_logs.contains_key(key) {
+        d.tier_logs
+            .insert(key.clone(), RedLogs { jobs: None, next: 0, words: List::with_capacity(env.limits.message_bytes) })
+            .expect("one gather per tier");
+    }
+    if reading(d, key) {
+        wait(row.task.expect("tier task"), out);
+        return false;
+    }
+    let logs = d.tier_logs.get(key).expect("log gather");
+    if red_read(row, logs, env.limits.message_bytes).is_some() {
+        d.sequence = d.sequence.checked_add(1).expect("red log read sequence");
+        let owner = Token::new(d.sequence | (1_u64 << 59));
+        d.tier_reads.insert(owner, key.clone()).expect("tier read owner");
+    } else {
+        let log = Box::from(logs.words.as_slice());
+        crate::verification::tell(d, row.repository, &row.tier, result.verdict.number, &result.run, &log, out);
+        wait(row.task.expect("tier task"), out);
+        out.push(Request::WakeProcedure { task: row.task.expect("tier task") });
+        return false;
+    }
+    wait(row.task.expect("tier task"), out);
+    false
+}
+
+fn red_answer(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    key: &(Repository, Box<[u8]>),
+    answer: Result<skein_forge::api::Answer, skein_forge::api::Error>,
+    out: &mut Queue<Request>,
+) {
+    if answer == Err(skein_forge::api::Error::Busy) {
+        let row = d.tier_rows.get_mut(key).expect("red tier");
+        if let Some(flight) = &mut row.flight {
+            flight.next = Some(env.now.saturating_add(env.limits.client.poll));
+            save(row, out);
+            return;
+        }
+        // A receipt has no flight to retry. Treat this read as unavailable,
+        // retaining a known job's name and allowing its red news to go on.
+    }
+    let logs = d.tier_logs.get_mut(key).expect("red read");
+    match &logs.jobs {
+        None => {
+            let mut failed = List::with_capacity(env.limits.client.rows);
+            if let Ok(skein_forge::api::Answer::Run(run)) = answer {
+                for job in run.jobs {
+                    if job.conclusion == Some(skein_forge::api::Conclusion::Failure) {
+                        failed.push(job).expect("bounded failed jobs");
+                    }
+                }
+            }
+            logs.jobs = Some(failed.into_boxed());
+        }
+        Some(jobs) => {
+            let job = jobs.get(logs.next).expect("pending job log");
+            let share = usize::try_from(env.limits.message_bytes)
+                .expect("message fits usize")
+                .checked_div(jobs.len())
+                .expect("nonempty jobs");
+            let log = match &answer {
+                Ok(skein_forge::api::Answer::Job { log, .. }) => Some(log.as_ref()),
+                Ok(_) | Err(_) => None,
+            };
+            for byte in red_job(&job.name, log, share).as_ref() {
+                logs.words.push(*byte).expect("job shares fit message");
+            }
+            logs.next = logs.next.checked_add(1).expect("bounded job cursor");
+        }
+    }
+    if let Some(task) = d.tier_rows.get(key).expect("red tier").task {
+        out.push(Request::WakeProcedure { task });
+    }
+}
+
+/// A job keeps its name and the end of its log within its share of news.
+pub(crate) fn red_job(name: &[u8], log: Option<&[u8]>, share: usize) -> Box<[u8]> {
+    let heading = joined(&[b"end of job ", name, b"'s log:\n"]);
+    let mut words = List::with_capacity(u32::try_from(share).expect("bounded job share"));
+    for byte in heading.iter().take(share) {
+        words.push(*byte).expect("bounded heading");
+    }
+    if let Some(log) = log {
+        let start = log.len().saturating_sub(share.saturating_sub(heading.len()));
+        for byte in log.get(start..).expect("log tail") {
+            words.push(*byte).expect("bounded log tail");
+        }
+    }
+    words.into_boxed()
+}
+
 pub(crate) fn valid(tier: &Tier, l: &Limits) -> bool {
     if tier.workflow.is_empty()
         || tier.workflow.len() > crate::WORKFLOW_BYTES
@@ -899,11 +1037,20 @@ pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, out
                 break;
             }
         }
-        if let Some(owner) = owner
-            && let Some(follow) = d.tier_follows.get(&key)
-            && let Some(read) = report_read(d, d.tier_rows.get(&key).expect("saved tier"), env).or(follow.read())
-        {
-            crate::domain::child(d, env, skein_forge_client::Event::Read { owner, repository, read }, out);
+        if let Some(owner) = owner {
+            let row = d.tier_rows.get(&key).expect("saved tier");
+            let read = match d.tier_logs.get(&key) {
+                Some(logs) => red_read(row, logs, env.limits.message_bytes),
+                None => match d.tier_follows.get(&key) {
+                    Some(follow) => report_read(d, row, env).or(follow.read()),
+                    None => None,
+                },
+            };
+            // Reads may refuse synchronously, so the tier is back in its
+            // table before the client can return a terminal to its owner.
+            if let Some(read) = read {
+                crate::domain::child(d, env, skein_forge_client::Event::Read { owner, repository, read }, out);
+            }
         }
     }
     if done {
@@ -1022,6 +1169,9 @@ fn step_row(
     let run = row.record.run.as_ref().expect("checked live run");
     if run.faults > d.tier_settings.get(&project).expect("settings").verdict.retries {
         out.push(Request::TierDecision { task, decision: TierDecision::Held });
+        return;
+    }
+    if !red_news(d, env, key, row, out) {
         return;
     }
     if cleanup(d, env, key, row, entry, out) {
@@ -1234,6 +1384,10 @@ pub(crate) fn answered(
         && walk.owner == owner
     {
         tree_answer(d, env, key, answer, out);
+        return;
+    }
+    if d.tier_logs.contains_key(&key) {
+        red_answer(d, env, &key, answer, out);
         return;
     }
     let Some(mut row) = d.tier_rows.remove(&key) else { return };
@@ -1624,6 +1778,12 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(definition)?
         .checked_add(config)?;
     Map::<(Repository, Box<[u8]>), TierRow>::worst_case(rows)?
+        .checked_add(Map::<(Repository, Box<[u8]>), RedLogs>::worst_case(rows)?)?
+        .checked_add(u64::from(rows).checked_mul(
+            u64::from(l.message_bytes).checked_add(u64::from(l.client.answer_bytes))?.checked_add(
+                u64::from(l.client.rows).checked_mul(u64::try_from(size_of::<skein_forge::api::RunJob>()).ok()?)?,
+            )?,
+        )?)?
         .checked_add(Map::<(Repository, Box<[u8]>), Walk>::worst_case(rows)?)?
         .checked_add(Map::<(Repository, Box<[u8]>), crate::runs::Follow>::worst_case(rows)?)?
         .checked_add(Map::<Token, (Repository, Box<[u8]>)>::worst_case(rows.checked_mul(2)?)?)?

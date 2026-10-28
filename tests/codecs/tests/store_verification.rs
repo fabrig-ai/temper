@@ -59,6 +59,7 @@ fn verification_refuses_each_field_one_past_its_runtime_bound() {
     let bytes = records::encode(&row);
     for limits in [
         temper_engine_domain_forge::Limits { tiers: fixture::LIMITS.tiers - 1, ..fixture::LIMITS },
+        temper_engine_domain_forge::Limits { subscriptions: fixture::LIMITS.subscriptions - 1, ..fixture::LIMITS },
         temper_engine_domain_forge::Limits { failing_tests: fixture::LIMITS.failing_tests - 1, ..fixture::LIMITS },
         temper_engine_domain_forge::Limits { test_id_bytes: fixture::LIMITS.test_id_bytes - 1, ..fixture::LIMITS },
     ] {

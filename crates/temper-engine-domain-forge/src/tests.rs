@@ -87,6 +87,7 @@ const LIMITS: Limits = Limits {
     test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
+    message_bytes: 512,
     issue_policy: temper_engine_domain_forge_issues::Limits {
         plan_items: 8,
         milestones: 8,

@@ -83,9 +83,20 @@ pub(crate) fn landed(d: &mut Domain, repository: Repository, commit: Commit, tas
     }
     let mut tiers = List::with_capacity(u32::try_from(configured.len()).expect("admitted tiers"));
     for tier in configured {
-        tiers.push(TierVerification { tier: tier.name.clone(), verdict: None, repaired: None }).expect("tier bound");
+        tiers
+            .push(TierVerification { told: Box::new([]), tier: tier.name.clone(), verdict: None, repaired: None })
+            .expect("tier bound");
     }
-    let row = Verification { repository, commit, changes: Box::new([task]), tiers: tiers.into_boxed() };
+    let row = Verification {
+        repairs: match d.changes.get(&task) {
+            Some(row) => row.repairing,
+            None => None,
+        },
+        repository,
+        commit,
+        changes: Box::new([task]),
+        tiers: tiers.into_boxed(),
+    };
     d.verifications.insert((repository, commit), row.clone()).expect("one landing per live change");
     save(row, out);
 }
@@ -130,6 +141,14 @@ pub(crate) fn judged(
         }
     }
     for key in &keys {
+        let mut repair = judged.tip;
+        for (commit, _) in landings {
+            if let Some(candidate) = d.verifications.get(&(repository, *commit))
+                && candidate.repairs == Some(key.1)
+            {
+                repair = *commit;
+            }
+        }
         let row = d.verifications.get_mut(key).expect("collected verification");
         let before = fact(row);
         let mut changed = false;
@@ -140,7 +159,7 @@ pub(crate) fn judged(
                 && red(&verdict.blame)
                 && temper_engine_domain_forge_tiers::repaired(&verdict.blame, &judged.failing)
             {
-                verification.repaired = Some(judged.tip);
+                verification.repaired = Some(repair);
                 changed = true;
             }
         }
@@ -226,7 +245,9 @@ pub(crate) fn stored_bytes(row: &Verification) -> Option<u64> {
         u64::try_from(row.tiers.len()).ok()?.checked_mul(u64::try_from(size_of::<TierVerification>()).ok()?)?,
     )?;
     for tier in &row.tiers {
-        bytes = bytes.checked_add(u64::try_from(tier.tier.len()).ok()?)?;
+        bytes = bytes
+            .checked_add(u64::try_from(tier.tier.len()).ok()?)?
+            .checked_add(u64::try_from(tier.told.len()).ok()?.checked_mul(8)?)?;
         match &tier.verdict {
             Some(TierVerdict {
                 blame: Blame::Owns(Failures::Tests(tests)) | Blame::Suspect(Failures::Tests(tests)),
@@ -256,7 +277,8 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         u64::try_from(size_of::<TierVerification>())
             .ok()?
             .checked_add(u64::try_from(crate::CHECK_NAME_BYTES).ok()?)?
-            .checked_add(tests)?,
+            .checked_add(tests)?
+            .checked_add(u64::from(l.subscriptions).checked_mul(8)?)?,
     )?;
     let path = u64::from(l.name_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?;
     let tier = u64::try_from(size_of::<Tier>())
@@ -275,4 +297,123 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<u32, Box<[RepositoryTiers]>>::worst_case(l.judge_projects)?)?
         .checked_add(u64::from(l.judge_projects).checked_mul(configured)?)?
         .checked_add(Map::<u32, crate::TierSettings>::worst_case(l.judge_projects)?)
+}
+
+/// A goal subscription is eligible only for its own landing's members.
+fn hears(subscriber: &crate::Subscriber, row: &Verification) -> bool {
+    match &subscriber.topic {
+        crate::Topic::Landings { repository, .. } if *repository == row.repository => {}
+        crate::Topic::Landings { .. }
+        | crate::Topic::Ci { .. }
+        | crate::Topic::Pull { .. }
+        | crate::Topic::Participation { .. } => return false,
+    }
+    let Some(tasks) = &subscriber.goal_tasks else { return false };
+    for task in &row.changes {
+        if tasks.contains(task) {
+            return true;
+        }
+    }
+    false
+}
+
+pub(crate) fn untold(d: &Domain, repository: Repository, tier: &[u8], run: u64) -> bool {
+    for (_, row) in &d.verifications {
+        if row.repository != repository {
+            continue;
+        }
+        for verification in &row.tiers {
+            if verification.tier.as_ref() != tier {
+                continue;
+            }
+            if let Some(verdict) = &verification.verdict
+                && verdict.run == run
+                && red(&verdict.blame)
+            {
+                for (_, subscriber) in &d.subscriptions {
+                    if hears(subscriber, row) && !verification.told.contains(&subscriber.task) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// One news and its durable told mark share a root decision. Keeping one
+/// recipient per step also bounds output independently of the landing range.
+pub(crate) fn tell(
+    d: &mut Domain,
+    repository: Repository,
+    tier: &[u8],
+    number: u64,
+    run: &crate::ReceiptRun,
+    log: &[u8],
+    out: &mut Queue<Request>,
+) {
+    let mut found = None;
+    for (key, row) in &d.verifications {
+        if row.repository != repository {
+            continue;
+        }
+        for (index, verification) in row.tiers.iter().enumerate() {
+            if verification.tier.as_ref() != tier {
+                continue;
+            }
+            if let Some(verdict) = &verification.verdict
+                && verdict.run == number
+                && red(&verdict.blame)
+            {
+                for (_, subscriber) in &d.subscriptions {
+                    if hears(subscriber, row) && !verification.told.contains(&subscriber.task) {
+                        found = Some((*key, index, subscriber.clone()));
+                        break;
+                    }
+                }
+            }
+            if found.is_some() {
+                break;
+            }
+        }
+        if found.is_some() {
+            break;
+        }
+    }
+    let Some((key, index, subscriber)) = found else { return };
+    let row = d.verifications.get_mut(&key).expect("untold verification");
+    let verification = row.tiers.get_mut(index).expect("matching tier");
+    let Some(TierVerdict { blame: Blame::Owns(failing) | Blame::Suspect(failing), .. }) = &verification.verdict else {
+        unreachable!("red recipient")
+    };
+    out.push(Request::News {
+        task: subscriber.task,
+        subscription: subscriber.number,
+        topic: subscriber.topic,
+        news: crate::News::Red {
+            tier: verification.tier.clone(),
+            landing: row.commit,
+            failing: failing.clone(),
+            run: run.clone(),
+            log: Box::from(log),
+        },
+        class: crate::Class::Wakes,
+    });
+    let mut told = List::with_capacity(
+        u32::try_from(verification.told.len()).expect("bounded goals").checked_add(1).expect("one new goal"),
+    );
+    for goal in &verification.told {
+        told.push(*goal).expect("previous goals");
+    }
+    told.push(subscriber.task).expect("one new goal");
+    verification.told = told.into_boxed();
+    save(row.clone(), out);
+}
+
+impl Domain {
+    /// A landing's retained verdicts, for its change's final result.
+    #[must_use]
+    pub fn landing_verification(&self, repository: Repository, commit: Commit) -> Option<&Verification> {
+        self.verifications.get(&(repository, commit))
+    }
 }

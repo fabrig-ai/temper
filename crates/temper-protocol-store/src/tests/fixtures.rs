@@ -64,6 +64,7 @@ pub const LIMITS: top::Limits = top::Limits {
     test_id_bytes: 256,
     brief_sections: 32,
     brief_bytes: 4096,
+    message_bytes: 512,
     client: CLIENT,
     issue_policy: temper_engine_domain_forge_issues::Limits {
         plan_items: 8,
@@ -748,6 +749,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         Change, Delegate, EffectResult, Freshness, Gate, GateKind, GateReport, Hold, Status,
     };
     top::ChangeRow {
+        repairing: None,
         task: 1,
         repository: REPO,
         branch: Box::new([2]),

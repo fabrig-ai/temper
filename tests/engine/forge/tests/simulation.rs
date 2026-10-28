@@ -932,10 +932,16 @@ fn a_change_landed_where_its_repository_has_a_tier_lives_verifying() {
     let merge = merge.expect("the merge is seen");
     assert_eq!(change_step(&mut world, LAST_ENTRY, change::Status::Passed, Box::new([])), change::Decision::None);
     let expected = top::Verification {
+        repairs: None,
         repository: REPO,
         commit: merge,
         changes: Box::new([CHANGE]),
-        tiers: Box::new([top::TierVerification { tier: b"browser".as_slice().into(), verdict: None, repaired: None }]),
+        tiers: Box::new([top::TierVerification {
+            told: Box::new([]),
+            tier: b"browser".as_slice().into(),
+            verdict: None,
+            repaired: None,
+        }]),
     };
     assert_eq!(
         world.stored().get(&top::Key::Verification { repository: REPO, commit: merge }),
@@ -2293,6 +2299,9 @@ fn tier_hold(world: &mut World, task: u64, number: u64) {
     world.event(top::Event::TierTask { repository: REPO, tier: b"browser".as_slice().into(), number, task });
 }
 fn tier_step(world: &mut World, task: u64, entry: u64) -> bool {
+    tier_step_news(world, task, entry, &mut Vec::new())
+}
+fn tier_step_news(world: &mut World, task: u64, entry: u64, news: &mut Vec<(u64, top::News)>) -> bool {
     world.take_seen();
     world.event(top::Event::StepTier { task, entry });
     world.run_for(1);
@@ -2301,8 +2310,11 @@ fn tier_step(world: &mut World, task: u64, entry: u64) -> bool {
         .iter()
         .any(|request| matches!(request, top::Request::TierDecision { decision: top::TierDecision::Done { .. }, .. }));
     for request in requests {
-        if let top::Request::TierEffect { entry, .. } = request {
+        if let top::Request::TierEffect { entry, .. } = &request {
             world.event(top::Event::Committed { entry: entry.number });
+        }
+        if let top::Request::News { task, news: red @ top::News::Red { .. }, class: top::Class::Wakes, .. } = request {
+            news.push((task, red));
         }
     }
     world.run_for(1);
@@ -2328,10 +2340,21 @@ fn land_content_for_tier(
     path: &[u8],
     content: &[u8],
 ) -> skein_forge::api::Commit {
+    land_repair_for_tier(world, task, branch, path, content, None)
+}
+fn land_repair_for_tier(
+    world: &mut World,
+    task: u64,
+    branch: &[u8],
+    path: &[u8],
+    content: &[u8],
+    repairing: Option<skein_forge::api::Commit>,
+) -> skein_forge::api::Commit {
     let mut row = change_row();
     row.task = task;
     row.change.task = task;
     row.branch = branch.into();
+    row.repairing = repairing;
     world.event(top::Event::Change { row });
     change_step_task(world, task, task * 100, change::Status::Unknown, Box::new([]), false, false);
     world.produce_on_contents(branch, b"main", path, content);
@@ -2691,4 +2714,119 @@ fn a_flake_clears_the_range() {
         change::Decision::Finish { merge: landing }
     );
     assert!(!world.has_branch(b"temper/tier/browser.2"));
+}
+
+const RED_GOAL: u64 = 71;
+const LATER_CHANGE: u64 = 54;
+const REPAIR_CHANGE: u64 = 55;
+const TIER_REPAIRED: u64 = 104;
+fn subscribe_red_goal(world: &mut World) {
+    world.event(top::Event::Subscribe {
+        subscription: top::Subscriber {
+            task: RED_GOAL,
+            number: RED_GOAL,
+            topic: top::Topic::Landings { repository: REPO, branch: b"main".as_slice().into() },
+            own_change: None,
+            goal_tasks: Some(Box::new([FIRST_CHANGE])),
+            paths: Box::new([]),
+        },
+    });
+}
+fn finish_tier_with_news(world: &mut World, task: u64, entry: u64) -> Vec<(u64, top::News)> {
+    let mut news = Vec::new();
+    for at in 0..RED_STEPS {
+        if tier_step_news(world, task, entry + at, &mut news) {
+            return news;
+        }
+    }
+    panic!("tier {task} finishes while collecting news: {:?}", browser_row(world));
+}
+#[test]
+fn a_goal_hears_its_red_landing_with_tests_and_the_logs_end() {
+    let mut world = start_report_baseline();
+    subscribe_red_goal(&mut world);
+    let first = land_content_for_tier(&mut world, FIRST_CHANGE, b"temper/51", b"failures", FAILING_IDS);
+    next_report_range(&mut world);
+    let news = finish_tier_with_news(&mut world, TIER_RANGE, 2000);
+    let [(goal, top::News::Red { tier, landing, failing, run, log })] = news.as_slice() else {
+        panic!("one red for the goal: {news:?}")
+    };
+    assert_eq!(*goal, RED_GOAL);
+    assert_eq!(*landing, first);
+    assert_eq!(tier.as_ref(), b"browser");
+    assert_eq!(*failing, named_failures());
+    assert!(!run.url.is_empty());
+    assert_eq!(log.as_ref(), b"end of job browser's log:\nfailing check browser 0\nfailing check browser 1\nfailing check browser 2\nfailing check browser 3\n");
+    assert!(
+        world
+            .take_calls()
+            .iter()
+            .any(|op| matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Job { max_bytes: 512, .. })))
+    );
+}
+#[test]
+fn fuzzy_case2_5_1() {
+    use temper_engine_domain_forge_tiers::Blame;
+    let mut world = start_report_baseline();
+    subscribe_red_goal(&mut world);
+    let a1 = land_content_for_tier(&mut world, FIRST_CHANGE, b"temper/51", b"failures", FAILING_IDS);
+    let design = land_file_for_tier(&mut world, SECOND_CHANGE, b"temper/52", b"docs/guide.md");
+    let p2 = land_for_tier(&mut world, THIRD_CHANGE, b"temper/53");
+    next_report_range(&mut world);
+    world.take_calls();
+    let news = finish_tier_with_news(&mut world, TIER_RANGE, 2000);
+    let probes: Vec<_> = world
+        .take_calls()
+        .into_iter()
+        .filter_map(|op| match op {
+            skein_forge::api::Op::Write(skein_forge::api::Write::CreateBranch { branch, commit })
+                if branch.starts_with(b"temper/tier/browser.2.") =>
+            {
+                Some(commit)
+            }
+            skein_forge::api::Op::Read(_) | skein_forge::api::Op::Write(_) => None,
+        })
+        .collect();
+    assert_eq!(probes, [a1]);
+    assert_eq!(tier_blame(&world, design), &Blame::Cleared);
+    assert_eq!(tier_blame(&world, p2), &Blame::Cleared);
+    assert!(
+        matches!(news.as_slice(), [(RED_GOAL, top::News::Red { failing, log, .. })] if *failing == named_failures() && !log.is_empty())
+    );
+    release_tier(&mut world, TIER_RANGE, 2400);
+    // p3's run is already in flight when the repair lands, so the passing
+    // run's range contains that repair while p3's failures remain inherited.
+    let p3 = land_for_tier(&mut world, LATER_CHANGE, b"temper/54");
+    for _ in 0..TIER_STEPS {
+        if browser_row(&world).record.run.is_some() {
+            break;
+        }
+        world.run_for(1);
+    }
+    tier_hold(&mut world, TIER_INHERITED, 3);
+    tier_step(&mut world, TIER_INHERITED, 2500);
+    tier_step(&mut world, TIER_INHERITED, 2501);
+    let repair = land_repair_for_tier(&mut world, REPAIR_CHANGE, b"temper/55", b"failures", b"", Some(a1));
+    finish_tier(&mut world, TIER_INHERITED, 2600);
+    assert_eq!(tier_blame(&world, p3), &Blame::Cleared);
+    assert_eq!(tier_blame(&world, a1), &Blame::Owns(named_failures()));
+    release_tier(&mut world, TIER_INHERITED, 3000);
+    for _ in 0..TIER_STEPS {
+        if browser_row(&world).record.run.is_some() {
+            break;
+        }
+        world.run_for(1);
+    }
+    tier_hold(&mut world, TIER_REPAIRED, 4);
+    finish_tier(&mut world, TIER_REPAIRED, 3100);
+    let Some(top::Stored::Verification(row)) =
+        world.stored().get(&top::Key::Verification { repository: REPO, commit: a1 })
+    else {
+        panic!("a1 retained")
+    };
+    assert_eq!(row.tiers[0].repaired, Some(repair));
+    assert_eq!(
+        change_step_task(&mut world, FIRST_CHANGE, 4000, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: a1 }
+    );
 }

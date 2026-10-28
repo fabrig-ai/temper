@@ -465,6 +465,7 @@ pub(super) fn decode_change(value: w::Change) -> d::Change {
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
 pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
     let top::ChangeRow {
+        repairing,
         task,
         repository,
         branch,
@@ -491,6 +492,7 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
     w::ChangeRow::new(
         &w::CEILINGS,
         w::ChangeRowParts {
+            repairing: *repairing,
             task: *task,
             repository: names::encode_repository(*repository),
             branch: branch.clone(),
@@ -541,6 +543,7 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
 pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
     let w::ChangeRowParts {
+        repairing,
         task,
         repository,
         branch,
@@ -565,6 +568,7 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         review_charter,
     } = value.into_parts();
     top::ChangeRow {
+        repairing,
         task,
         repository: names::decode_repository(repository),
         branch,

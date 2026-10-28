@@ -204,6 +204,7 @@ const FORGE: forge::Limits = forge::Limits {
     brief_sections: 32,
     // Bytes of one gathered forge section: at least the root's brief.read_bytes.
     brief_bytes: 4608,
+    message_bytes: 512,
     // Forge client calls, retries and outbox room.
     client: CLIENT,
     issue_policy: temper_engine_domain_forge_issues::Limits {

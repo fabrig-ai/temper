@@ -111,8 +111,8 @@ pub(crate) fn relay_payload(
                 tool @ (Tool::Change { .. } | Tool::Goal { .. }) => {
                     let expanded = match domain.core.tasks.delegation(key.task) {
                         Some(context) => {
-                            if let Tool::Change { words, repository } = tool {
-                                forge_route::chat_change(domain, env, &context, words, repository.as_deref())
+                            if let Tool::Change { words, repository, repairs } = tool {
+                                forge_route::chat_change(domain, env, &context, words, repository.as_deref(), repairs)
                             } else {
                                 let Tool::Goal { words, advisor } = tool else { unreachable!("goal or change") };
                                 super::goal::goal(domain, env, key.task, &context, words, advisor)

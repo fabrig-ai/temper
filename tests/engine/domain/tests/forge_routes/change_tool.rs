@@ -21,6 +21,16 @@ pub(super) fn change(
     repository: Option<&[u8]>,
     words: &[u8],
 ) -> engine::CallAnswer {
+    repair(world, chat, name, repository, words, None)
+}
+pub(super) fn repair(
+    world: &mut World,
+    chat: &engine::Assignment,
+    name: u64,
+    repository: Option<&[u8]>,
+    words: &[u8],
+    repairs: Option<skein_forge::api::Commit>,
+) -> engine::CallAnswer {
     let before = world.answers.len();
     let event = world.protocol.call(
         Token::new(7),
@@ -30,7 +40,7 @@ pub(super) fn change(
         engine::Call {
             completion: u32::try_from(name).expect("bounded call name"),
             position: 1,
-            tool: engine::Tool::Change { words: words.into(), repository: repository.map(Box::from) },
+            tool: engine::Tool::Change { repairs, words: words.into(), repository: repository.map(Box::from) },
         },
     );
     world.send(event);
@@ -707,4 +717,25 @@ fn a_chats_two_kib_change_lands_with_its_words_whole_in_the_producers_brief() {
         world.tick();
     }
     assert_eq!(world.merges, 1, "the long change lands on the independent fake forge");
+}
+
+#[test]
+fn a_change_keeps_an_unknown_red_claim_in_its_spec_and_row() {
+    const UNKNOWN: skein_forge::api::Commit = [0xff; 32];
+    let (mut world, chat) = chat_world(true);
+    let answer = repair(&mut world, &chat, 93, None, b"Repair a red", Some(UNKNOWN));
+    let engine::CallAnswer::Delegated(made) = answer else { panic!("unknown claims still delegate: {answer:?}") };
+    let task = made[0].task;
+    let expected = tasks::Parameter::Bytes { name: 12, value: Box::new([b'f'; 64]) };
+    assert!(live(&world, task).spec.parameters.contains(&expected));
+    for _ in 0..200 {
+        world.tick();
+        if let Some(Record::Forge { row }) = world.store.rows.get(&Key::Forge(forge_top::Key::Change(task)))
+            && let forge_top::Stored::Change(row) = row.as_ref()
+        {
+            assert_eq!(row.repairing, Some(UNKNOWN));
+            return;
+        }
+    }
+    panic!("change registered its repair claim");
 }

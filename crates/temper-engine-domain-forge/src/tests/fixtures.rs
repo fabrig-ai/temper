@@ -71,6 +71,7 @@ pub fn open_pull() -> skein_forge::api::Pull {
 pub fn opening_row() -> ChangeRow {
     use temper_engine_domain_forge_change as change;
     ChangeRow {
+        repairing: None,
         task: CHANGE,
         repository: REPO,
         branch: Box::from(b"temper/51".as_slice()),

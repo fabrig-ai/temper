@@ -8,6 +8,7 @@ use temper_engine_domain_forge_issues as issues;
 use temper_engine_protocol_forge_world::{fixtures, protocol::Protocol};
 fn change_row() -> top::ChangeRow {
     top::ChangeRow {
+        repairing: None,
         task: 51,
         repository: REPO,
         branch: Box::from(&b"temper/51"[..]),
