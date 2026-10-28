@@ -51,7 +51,7 @@ pub fn configure(root: &Path, repository: u64) {
 
 /// Leave landing tasks a share of the seeded project's open period (domain/landing.md, 4.2).
 fn setup(root: &Path) -> Vec<ctl::Step> {
-    let mut steps = native_settings_setup(root);
+    let mut steps = native_settings_setup(root, false);
     steps.push(ctl::Step::Run(ctl::Call::new(&["project", "show", "1", "--json"]).in_directory("private")));
     steps.push(ctl::Step::Then(Box::new(|calls| {
         let project = ctl::json(calls.last().expect("project read"));
@@ -265,6 +265,7 @@ fn run_to(root: &Path, forge: &Throwaway, previous: Option<&Proof>, retry: bool)
     let person_root = skein_shell::open_root(root).expect("native root");
     let proof = Cell::new(None);
     let landed = Cell::new(None);
+    let mut change_chat = None;
     let mut world = real::World::new(Judge {
         chat: ChatJudge {
             phase: if first { ChatPhase::SettingUp } else { ChatPhase::Running },
@@ -273,6 +274,13 @@ fn run_to(root: &Path, forge: &Throwaway, previous: Option<&Proof>, retry: bool)
             forge: Some(forge),
             poll: clock.now().now,
             merged: false,
+            read_calls: super::NATIVE_SETUP_CALLS,
+            next_read: None,
+            read_due: false,
+            ended_inventory: false,
+            change: None,
+            change_chat: &mut change_chat,
+            change_read: Value::Null,
         },
         root,
         proof: &proof,
