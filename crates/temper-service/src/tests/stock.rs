@@ -198,6 +198,60 @@ fn each_floor_refuses_one_below_the_stocks_need() {
 }
 
 #[test]
+fn each_floor_is_named_with_inits_seed() {
+    let document = generated();
+    assert_eq!(fixtures::value(&document, b"engine.projects[0].policy").as_ref(), b"1");
+    let rows: &[(&[u8], u64, u64, &str)] = &[
+        (b"core.policy_bytes", 100, 2390, "the stock's policy 1 needs 2390 bytes"),
+        (b"authority.grants", 9, 10, "the stock's rules need 10 grants"),
+        (b"authority.executors", 3, 4, "the stock's rules need 4 executors"),
+        (b"authority.segments", 0, 1, "the stock's rules need 1 segment"),
+        (b"authority.segment_bytes", 4, 5, "the stock's rules need 5 bytes"),
+        (b"authority.roles", 0, 1, "the stock's policy 1 needs 1 role"),
+        (b"authority.projects", 0, 1, "the stock offers 1 policy"),
+    ];
+    for &(name, short, needed, words) in rows {
+        let refused = limited(&document, name, short);
+        let problems = crate::startup::named(&refused, &config::Directories::working()).unwrap_err();
+        let name = core::str::from_utf8(name).unwrap();
+        assert_eq!(
+            crate::startup::lines(&problems).as_ref(),
+            format!(
+                "engine.limits.overrides.{name}: {name} is {short}; {words}; raise it in engine.limits.overrides\n"
+            )
+            .as_bytes()
+        );
+        let parsed =
+            config::document(&refused, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 })
+                .unwrap();
+        let at = config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"engine").unwrap();
+        let direct = crate::startup::engine(&parsed, at, &config::Directories::working()).unwrap_err();
+        assert_eq!(crate::startup::lines(&direct), crate::startup::lines(&problems));
+        crate::startup::named(&limited(&document, name.as_bytes(), needed), &config::Directories::working())
+            .expect("init's seed starts at the stock's need");
+    }
+}
+
+#[test]
+fn seed_refusals_keep_their_problems_when_no_stock_floor_can_be_named() {
+    let document = generated();
+    let given = crate::stock::Given::Own(Box::new(crate::stock::defaults(&engine(&document).llm)));
+    let short = limited(&document, b"core.policy_bytes", 100);
+    let problems = crate::startup::named_with(&short, &config::Directories::working(), &given).unwrap_err();
+    assert_eq!(crate::startup::lines(&problems).as_ref(), b"engine.projects[0].policy: past its bound\n");
+
+    let unknown = fixtures::with(&document, b"engine.projects[0].policy", b"99");
+    let problems = crate::startup::named(&unknown, &config::Directories::working()).unwrap_err();
+    assert_eq!(crate::startup::lines(&problems).as_ref(), b"engine.projects[0].policy: unknown reference\n");
+
+    // Removing the seed cannot repair another engine parse error.
+    let malformed = fixtures::with(&short, b"engine.clients", b"null");
+    let problems = crate::startup::named(&malformed, &config::Directories::working()).unwrap_err();
+    let original = crate::startup::named_with(&malformed, &config::Directories::working(), &given).unwrap_err();
+    assert_eq!(problems, original);
+}
+
+#[test]
 fn each_charters_run_bytes_floor_names_that_charter() {
     use jig_domain_core::settings::Setting;
     let engine = engine(&without_projects());
@@ -377,9 +431,7 @@ fn a_worlds_own_defaults_cannot_restore_document_members() {
             config::document(&document, &config::DocumentLimits { bytes: 1_048_576, tokens: 16_384, depth: 32 })
                 .unwrap();
         let at = config::read::Object::new(&parsed, 0).unwrap().member(&parsed, b"engine").unwrap();
-        let found = crate::startup::engine_with(&parsed, at, &config::Directories::working(), &given).unwrap_err();
-        let mut problems = crate::startup::Problems::empty();
-        problems.append(found, &config::Path::root().member(b"engine"));
+        let problems = crate::startup::engine_with(&parsed, at, &config::Directories::working(), &given).unwrap_err();
         assert_eq!(problems.problems.len(), 1);
         assert_eq!(
             crate::startup::lines(&problems).as_ref(),
