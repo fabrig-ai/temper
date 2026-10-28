@@ -765,6 +765,14 @@ pub fn fixture_5_4() -> forge::Fixture {
         },
         configure: |value, agent, forge| {
             (fixture().configure)(value, agent, forge);
+            // The full stock authority makes this two-entry task row 1,741,097 bytes,
+            // past Small's 1,567,847-byte store value. Standard is the next store profile.
+            value["engine"]["limits"]["profile"] = "standard".into();
+            value["workers"][0]["limits"]["profile"] = "standard".into();
+            // Match that engine's retained calls and worker delivery route, as in 6.1.
+            value["application"]["limits"]["overrides"]["forge.named_calls"] = 128.into();
+            value["application"]["limits"]["overrides"]["root.journal.deliveries"] = 1097.into();
+            value["application"]["limits"]["overrides"]["root.journal.held"] = 3291.into();
             // Delegate/amend/cancel and their wait share one LLM completion.
             agent["profile"]["declared"]["calls_per_response"] = 2.into();
             small_two_call_window(value, agent);
@@ -795,6 +803,7 @@ pub fn fixture_5_4() -> forge::Fixture {
                 value["application"]["limits"]["overrides"][format!("forge.client.{name}")] = (story_ms + 1).into();
             }
             value["workers"][0]["limits"]["overrides"]["hub.accounts"] = 2.into();
+            landing::size_journal_writes(value);
             landing::admit(value);
         },
         ..forge::fixture()
