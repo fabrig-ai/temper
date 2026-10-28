@@ -126,7 +126,7 @@ fn the_default_is_the_owned_example_so_edited() {
                 ]),
             ),
             ("/engine/llm/models", json!([owned["engine"]["llm"]["models"][0], demo_model()])),
-            // The template declares at least its ceilings, checked by init_memory_stays_under_its_ceilings.
+            // Keep each shipped document's memory declarations.
             ("/engine/memory_bytes", actual["engine"]["memory_bytes"].clone()),
             ("/workers/0/memory_bytes", actual["workers"][0]["memory_bytes"].clone()),
             (

@@ -777,8 +777,6 @@ fn shipped_bounds_fit_the_configured_charters_and_worker() {
         .checked_sub(1)
         .expect("nonempty call");
     assert_eq!(temper_worker_domain::unfit(&short).as_slice(), &[temper_worker_domain::Unfit::CallBytes]);
-    let required = service::worker_worst_case(worker, agent, own).expect("worker memory expression");
-    assert!(required <= worker.jig.memory, "worker needs {required}, declares {}", worker.jig.memory);
     scratch.remove();
 }
 
@@ -1134,140 +1132,6 @@ fn programs_directories_are_checked_at_the_name_before_startup_effects() {
     }
 }
 
-// The worst cases at bounded strings, a quarter above 10-28's (dynamic-memory.md 7.1).
-// A shipped document declares at least its ceilings, so it starts under any figure below them.
-const OWNED_ENGINE_CEILING: u64 = 1_100_000_000_000_000;
-const OWNED_WORKER_CEILING: u64 = 4_300_000_000_000;
-const INIT_ENGINE_CEILING: u64 = 800_000_000_000_000;
-const INIT_WORKER_CEILING: u64 = 4_300_000_000_000;
-// A standalone worker's worst case, its process included.
-const WORKER_ALONE_CEILING: u64 = 4_300_000_000_000;
-
-/// The worst cases stay under the ceilings, and the shipped document declares at least them.
-fn under_ceilings(
-    document: &str,
-    required: temper_service::startup::Requirements,
-    ceilings: temper_service::startup::Requirements,
-) {
-    let declared = support::owned::declared(document);
-    for (required, declared, ceiling, path) in [
-        (required.engine_bytes, declared.engine_bytes, ceilings.engine_bytes, "engine.memory_bytes"),
-        (required.worker_bytes, declared.worker_bytes, ceilings.worker_bytes, "workers[0].memory_bytes"),
-    ] {
-        assert!(
-            required <= ceiling,
-            "{document}: {path}: worst case {required} passes ceiling {ceiling}; a ceiling moves by hand in the commit of a real change that passes it, which says why"
-        );
-        assert!(
-            declared >= ceiling,
-            "{document}: {path}: declaration {declared} must be at least ceiling {ceiling}; a ceiling moves by hand in the commit of a real change that passes it, which says why"
-        );
-    }
-}
-
-#[test]
-fn owned_memory_stays_under_its_ceilings() {
-    let scratch = support::Scratch::startup("owned-memory-ceilings");
-    let bounded = support::owned::bounded(scratch.path());
-    let required = bounded.requirements();
-    under_ceilings(
-        "../../docs/examples/owned.json",
-        required,
-        temper_service::startup::Requirements {
-            engine_bytes: OWNED_ENGINE_CEILING,
-            worker_bytes: OWNED_WORKER_CEILING,
-        },
-    );
-    eprintln!("owned requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
-    check_bounded_startup(&bounded, required);
-    scratch.remove();
-}
-
-fn check_bounded_startup(bounded: &support::owned::Bounded, required: temper_service::startup::Requirements) {
-    let mut value: serde_json::Value = serde_json::from_slice(&bounded.document).expect("bounded JSON");
-    value["engine"]["memory_bytes"] = required.engine_bytes.into();
-    value["workers"][0]["memory_bytes"] = required.worker_bytes.into();
-    let document = serde_json::to_vec(&value).expect("exact envelopes JSON");
-    let started = bounded.startup(&document);
-    assert!(
-        started.is_ok(),
-        "{}",
-        String::from_utf8_lossy(&temper_service::startup::lines(&started.err().expect("startup refusal")))
-    );
-    for (engine, path, need) in [
-        (true, "engine.memory_bytes", required.engine_bytes),
-        (false, "workers[0].memory_bytes", required.worker_bytes),
-    ] {
-        for declared in [1, need - 1] {
-            let mut short = value.clone();
-            if engine {
-                short["engine"]["memory_bytes"] = declared.into();
-            } else {
-                short["workers"][0]["memory_bytes"] = declared.into();
-            }
-            let refused = bounded
-                .startup(&serde_json::to_vec(&short).expect("short memory JSON"))
-                .err()
-                .expect("refused before construction");
-            assert_eq!(
-                String::from_utf8_lossy(&temper_service::startup::lines(&refused)),
-                format!("{path}: the worst case passes memory_bytes by {} bytes\n", need - declared)
-            );
-        }
-    }
-    value["engine"]["memory_bytes"] = 1.into();
-    value["workers"][0]["memory_bytes"] = 1.into();
-    let refused = bounded.startup(&serde_json::to_vec(&value).expect("both one-byte JSON")).err().expect("both short");
-    assert_eq!(
-        String::from_utf8_lossy(&temper_service::startup::lines(&refused)),
-        format!(
-            "engine.memory_bytes: the worst case passes memory_bytes by {} bytes\nworkers[0].memory_bytes: the worst case passes memory_bytes by {} bytes\n",
-            required.engine_bytes - 1,
-            required.worker_bytes - 1,
-        )
-    );
-}
-
-#[test]
-fn records_only_owned_memory_admits_checked_input_at_the_exact_bound() {
-    let scratch = support::Scratch::startup("records-owned-memory");
-    let bounded = support::owned::bounded_records(scratch.path());
-    let required = bounded.requirements();
-    let mut handovers = 0_u32;
-    for (path, value) in &bounded.files.entries {
-        if path.ends_with(b"/admin_token") {
-            assert_eq!(path.len(), 4096 + b"/admin_token".len());
-            assert_eq!(value.expose().len(), 4096);
-            handovers += 1;
-        }
-    }
-    assert_eq!(handovers, 1);
-    // Checked paths, secrets and handover diagnostics are admitted at both bounds.
-    let ordinary = support::owned::bounded(scratch.path());
-    assert_eq!(required.worker_bytes, ordinary.requirements().worker_bytes);
-    eprintln!(
-        "records-only handover requirements: engine {}, worker {} bytes",
-        required.engine_bytes, required.worker_bytes
-    );
-    check_bounded_startup(&bounded, required);
-    scratch.remove();
-}
-
-#[test]
-fn init_memory_stays_under_its_ceilings() {
-    let scratch = support::Scratch::startup("init-memory-ceilings");
-    let bounded = support::owned::bounded_template(scratch.path());
-    let required = bounded.requirements();
-    under_ceilings(
-        "../temper-init/template/temper.json",
-        required,
-        temper_service::startup::Requirements { engine_bytes: INIT_ENGINE_CEILING, worker_bytes: INIT_WORKER_CEILING },
-    );
-    eprintln!("init requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
-    check_bounded_startup(&bounded, required);
-    scratch.remove();
-}
-
 #[test]
 fn program_login_refuses_invalid_input_before_creation() {
     use support::program_login::{configuration, no_deployment_resources, refused};
@@ -1476,52 +1340,6 @@ fn box_initializes_only_absent_or_empty_configuration_directories() {
 }
 
 #[test]
-fn a_worker_alone_stays_under_its_ceiling() {
-    let scratch = support::Scratch::startup("worker-alone-memory-ceiling");
-    let bounded = support::owned::bounded(scratch.path());
-    let mut document: serde_json::Value = serde_json::from_slice(&bounded.document).expect("bounded document");
-    document.as_object_mut().expect("worker-alone fixture").remove("engine");
-    document["workers"][0]["engine"] = serde_json::json!({"socket":"127.0.0.1:7100"});
-    document["application"] =
-        serde_json::json!({"workers":document["application"]["workers"], "limits":document["application"]["limits"]});
-    let input = serde_json::to_vec(&document).expect("worker-alone fixture");
-    let required = temper_service::startup::memory_requirements(
-        &input,
-        &jig_protocol_config::Directories::working(),
-        &bounded.files,
-        &bounded.agent,
-        &bounded.seeds,
-        None,
-        skein_lib::List::with_capacity(0),
-        None,
-    )
-    .expect("worker-alone fixture");
-    assert_eq!(required.engine_bytes, 0);
-    assert!(
-        required.worker_bytes <= WORKER_ALONE_CEILING,
-        "standalone worker: worst case {} passes ceiling {WORKER_ALONE_CEILING}; a ceiling moves by hand in the commit of a real change that passes it, which says why",
-        required.worker_bytes
-    );
-    document["workers"][0]["memory_bytes"] = required.worker_bytes.into();
-    let part = temper_service::startup::worker_part(
-        &serde_json::to_vec(&document).expect("worker-alone fixture"),
-        &jig_protocol_config::Directories::working(),
-    )
-    .expect("worker-alone fixture");
-    let service = temper_service::startup::worker_alone(
-        part,
-        &bounded.files,
-        &bounded.agent,
-        temper_service::WorkerRuntime { root: skein_io::kernel::Fd::new(9), path: b"/worker".as_slice().into() },
-        7,
-    )
-    .expect("worker-alone fixture");
-    assert_eq!(service.worst_case(), required.worker_bytes);
-    assert!(service.setup_page(1, b"state", skein_lib::Time::ZERO).is_none());
-    scratch.remove();
-}
-
-#[test]
 fn serve_box_refuses_closed_or_non_pipe_descriptors_before_starting() {
     for inherited in [false, true] {
         for (redirections, offset) in [("{r}>&- {a}>&-", 0), ("{r}>/dev/null {a}>&-", 0), ("{r}>&1 {a}>&-", 1)] {
@@ -1557,74 +1375,6 @@ fn serve_box_refuses_closed_or_non_pipe_descriptors_before_starting() {
             );
         }
     }
-}
-
-#[test]
-fn a_boxed_binary_starts_after_raising_memory_by_its_named_deficit_once() {
-    let scratch = support::Scratch::startup("boxed-one-raise");
-    let mut value = box_document(&scratch);
-    let directories = support::configuration::directories(scratch.path());
-    value["application"]["limits"]["overrides"]["box.line_bytes"] = 4096.into();
-    value["engine"]["memory_bytes"] = 1.into();
-    let refusal = temper::envelope_in(&directories, &serde_json::to_vec(&value).expect("JSON"))
-        .expect_err("derive the whole unboxed engine need");
-    let unboxed = 1 + memory_deficit(&refusal);
-    let document = serde_json::to_vec(&value).expect("JSON");
-    support::write_private(&scratch.path().join("temper.json"), &document);
-    let output = std::process::Command::new("/bin/sh")
-        .args(["-c", "exec \"$@\" 3>&1 4<&0 0</dev/null", "boxed-memory"])
-        .arg(skein_scratch::paths::binary("temper"))
-        .args(["internal", "serve", "--box"])
-        .args(support::configuration::flags(scratch.path()))
-        .env_clear()
-        .stdin(std::process::Stdio::piped())
-        .output()
-        .expect("boxed serve");
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = String::from_utf8(output.stderr).expect("UTF-8 refusal");
-    // The agent's preflight also reports its TLS trust roots on stderr.
-    let mut refusal = String::new();
-    for line in stderr.lines().filter(|line| line.starts_with("temper serve:")) {
-        writeln!(&mut refusal, "{line}").expect("refusal line");
-    }
-    assert_eq!(
-        refusal,
-        format!(
-            "temper serve: engine.memory_bytes: the worst case passes memory_bytes by {} bytes\n",
-            unboxed + 8194 - 1
-        )
-    );
-    assert_eq!(
-        temper::boxed_envelope_in(&directories, &document).expect_err("boxed recheck refused"),
-        refusal,
-        "recheck agrees"
-    );
-    let before = 1;
-    value["engine"]["memory_bytes"] = (before + memory_deficit(&refusal)).into();
-    let document = serde_json::to_vec(&value).expect("JSON");
-    support::write_private(&scratch.path().join("temper.json"), &document);
-    let (plain, operations) = temper::envelope_in(&directories, &document).expect("unboxed recheck");
-    assert_eq!(
-        temper::boxed_envelope_in(&directories, &document).expect("boxed recheck starts"),
-        (plain + 8194, operations)
-    );
-    let ended = support::boxed::run(scratch.path(), None, support::boxed::Plan::Stop, support::boxed::BOX_DEADLINE);
-    assert!(support::printed_link(&ended.stdout).is_some(), "{}", String::from_utf8_lossy(&ended.stderr));
-    assert_eq!(ended.exit, Some(skein_io::kernel::Exit::Code(0)));
-    eprintln!(
-        "boxed one-raise: unboxed engine {unboxed}; boxed {}; declaration {before} raised by {}",
-        unboxed + 8194,
-        memory_deficit(&refusal)
-    );
-    scratch.remove();
-}
-fn memory_deficit(refusal: &str) -> u64 {
-    refusal
-        .strip_prefix("temper serve: engine.memory_bytes: the worst case passes memory_bytes by ")
-        .and_then(|line| line.strip_suffix(" bytes\n"))
-        .expect("engine memory refusal")
-        .parse()
-        .expect("byte deficit")
 }
 
 #[test]
@@ -1928,23 +1678,7 @@ fn checked_in_deployment_profiles_pass_startup_admission() {
         let turn = profile.agent.limits.bodies.turn_body;
         let record = size_of::<temper_engine_domain::Record>();
         match profile.admission() {
-            Ok(required) => {
-                let document: serde_json::Value = serde_json::from_slice(&profile.document).expect("profile JSON");
-                let engine = document
-                    .get("engine")
-                    .map_or(0, |engine| engine["memory_bytes"].as_u64().expect("engine declaration"));
-                let workers: Vec<_> = document["workers"]
-                    .as_array()
-                    .expect("workers")
-                    .iter()
-                    .map(|worker| worker["memory_bytes"].as_u64().expect("worker declaration"))
-                    .collect();
-                eprintln!(
-                    "{relative}: startup admission passed; engine required={} declared={engine}; worker required={} declared={workers:?}; T={turn}, Record={record}",
-                    required.engine_bytes, required.worker_bytes
-                );
-                declaration_shortfalls(relative, &profile.document, &required, &mut failures);
-            }
+            Ok(()) => eprintln!("{relative}: startup admission passed; T={turn}, Record={record}"),
             Err(why) => {
                 writeln!(
                     failures,
@@ -2314,41 +2048,5 @@ fn box_logs_must_hold_one_whole_record_and_tails_at_least_one_line() {
             format!("temper box: application.limits.overrides.box.{name}: past its bound\n")
         );
         scratch.remove();
-    }
-}
-
-// Admission derives a component's worst case without reading its
-// declaration; a checked-in profile must declare at least that much.
-fn declaration_shortfalls(
-    relative: &str,
-    document: &[u8],
-    required: &temper_service::startup::Requirements,
-    failures: &mut String,
-) {
-    let document: serde_json::Value = serde_json::from_slice(document).expect("profile JSON");
-    let mut components = Vec::new();
-    if let Some(engine) = document.get("engine") {
-        components.push((
-            "engine".to_owned(),
-            required.engine_bytes,
-            engine["memory_bytes"].as_u64().expect("engine declaration"),
-        ));
-    }
-    for (index, worker) in document["workers"].as_array().expect("workers").iter().enumerate() {
-        components.push((
-            format!("worker[{index}]"),
-            required.worker_bytes,
-            worker["memory_bytes"].as_u64().expect("worker declaration"),
-        ));
-    }
-    for (component, required, declared) in components {
-        if declared < required {
-            writeln!(
-                failures,
-                "{relative}: {component} required={required} declared={declared} shortfall={}",
-                required - declared
-            )
-            .expect("diagnostic");
-        }
     }
 }

@@ -2917,8 +2917,7 @@ fn the_cluster_stops_in_reverse_each_exiting_0() {
     scratch.remove();
 }
 
-// The worker retains the owned example's limits; derive its exact memory
-// envelope through this fixture's agent reader and process preparation.
+// The worker retains the owned example's limits and memory declaration.
 fn prepare_owned_worker(members: &mut support::cluster::Members) {
     let directory = members.prepare("w1");
     let configuration = directory.join("config");
@@ -2941,8 +2940,6 @@ fn prepare_owned_worker(members: &mut support::cluster::Members) {
         "program": skein_scratch::paths::binary("temper"), "configuration": agent_path,
         "arguments": ["internal", "agent", agent_path]
     });
-    // Derive through the binary's actual agent reader and process preparation.
-    worker["memory_bytes"] = 1.into();
     let arguments = [
         "--config".to_owned(),
         configuration.to_str().expect("config path").to_owned(),
@@ -2952,30 +2949,11 @@ fn prepare_owned_worker(members: &mut support::cluster::Members) {
         directory.join("cache").to_str().expect("cache path").to_owned(),
     ];
     support::write_private(&configuration.join("temper.json"), &serde_json::to_vec(&document).expect("worker JSON"));
-    let output = std::process::Command::new(skein_scratch::paths::binary("temper"))
-        .arg("serve")
-        .args(&arguments)
-        .env_clear()
-        .output()
-        .expect("worker's one-byte start");
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = String::from_utf8(output.stderr).expect("worker diagnostic");
-    let refusal: Vec<_> = stderr.lines().filter(|line| line.starts_with("temper serve:")).collect();
-    let [line] = refusal.as_slice() else { panic!("one whole worker refusal: {stderr}") };
-    let over: u64 = line
-        .strip_prefix("temper serve: workers[0].memory_bytes: the worst case passes memory_bytes by ")
-        .and_then(|line| line.strip_suffix(" bytes"))
-        .expect("worker memory refusal")
-        .parse()
-        .expect("worker byte deficit");
-    document["workers"][0]["memory_bytes"] = (1 + over).into();
     let arguments: Vec<Box<[u8]>> = arguments.iter().map(|s| s.as_bytes().into()).collect();
     let (directories, _) = temper::directories::resolve(&arguments, &[], b"/").expect("worker directories");
-    let (bytes, operations) = temper::envelope_in(&directories, &serde_json::to_vec(&document).expect("worker JSON"))
-        .expect("owned worker starts after exactly one named raise");
-    assert_eq!(bytes, 1 + over);
+    let (_, operations) = temper::envelope_in(&directories, &serde_json::to_vec(&document).expect("worker JSON"))
+        .expect("owned worker starts at its declared figures");
     assert!(operations <= 32_768, "Linux IORING_MAX_ENTRIES");
-    support::write_private(&configuration.join("temper.json"), &serde_json::to_vec(&document).expect("worker JSON"));
 }
 
 enum OwnedWorkerPhase {

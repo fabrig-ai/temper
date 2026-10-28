@@ -600,14 +600,6 @@ fn start_with_git_program(
 }
 
 #[test]
-fn the_worker_channels_count_the_retained_fake_git_program() {
-    let mut settings = fixtures::engine();
-    let before = crate::workers::worst_case(&settings, 4).unwrap();
-    let program = b"/data/demo/bin/git";
-    settings.forges[0].git_program = Some(program.as_slice().into());
-    assert_eq!(crate::workers::worst_case(&settings, 4).unwrap() - before, u64::try_from(program.len()).unwrap());
-}
-#[test]
 fn the_example_engine_keeps_jigs_chat_and_goal_templates() {
     let jig = fixtures::engine().jig;
     let labels: Box<[u32]> = jig.templates.iter().map(|template| template.label).collect();
@@ -1483,262 +1475,6 @@ fn an_unresolved_github_forge_starts_not_connected_naming_its_host() {
 }
 
 #[test]
-fn startup_admits_the_full_setup_total_and_refuses_one_byte_short() {
-    let document = github_input(core::str::from_utf8(&fixtures::document()).unwrap())
-        .replace("\"api\":null", "\"api\":{\"socket\":\"127.0.0.1:9\"}")
-        .replace("\"transport\":null", "\"transport\":\"plaintext\"");
-    let directories = config::Directories::working();
-    let files = fixtures::files();
-    let agent = fixtures::startup_agent();
-    let seeds = fixtures::seeds();
-    let required = crate::startup::memory_requirements(
-        document.as_bytes(),
-        &directories,
-        &files,
-        &agent,
-        &seeds,
-        None,
-        fixtures::forge_runtime(),
-        None,
-    )
-    .unwrap();
-    for short in [false, true] {
-        let input = document
-            .replacen("1152921504606846976", &(required.engine_bytes - u64::from(short)).to_string(), 1)
-            .replace("1152921504606846976", &required.worker_bytes.to_string());
-        let started = crate::startup(
-            input.as_bytes(),
-            &directories,
-            &files,
-            &agent,
-            &seeds,
-            None,
-            fixtures::worker_runtime(),
-            fixtures::forge_runtime(),
-        );
-        if short {
-            assert_eq!(
-                lines(&started.err().unwrap()).as_ref(),
-                b"engine.memory_bytes: the worst case passes memory_bytes by 1 bytes\n"
-            );
-        } else {
-            assert_eq!(started.unwrap().worst_case(), required.engine_bytes + required.worker_bytes);
-        }
-    }
-}
-#[test]
-fn a_boxed_start_names_the_memory_its_pipes_need() {
-    use skein_io::kernel::Fd;
-    let document = core::str::from_utf8(&fixtures::document()).unwrap().to_string();
-    let required = crate::startup::memory_requirements(
-        document.as_bytes(),
-        &config::Directories::working(),
-        &fixtures::files(),
-        &fixtures::startup_agent(),
-        &fixtures::seeds(),
-        None,
-        fixtures::forge_runtime(),
-        None,
-    )
-    .unwrap();
-    // Exercise a configured line beyond the box's small-profile default too.
-    for line_bytes in [256, 4096] {
-        let pipes = 2 * (u64::from(line_bytes) + 1);
-        let whole = required.engine_bytes + pipes;
-        for (declared, deficit) in [(required.engine_bytes, pipes), (whole - 1, 1), (whole, 0)] {
-            let input = document
-                .replacen("1152921504606846976", &declared.to_string(), 1)
-                .replace("1152921504606846976", &required.worker_bytes.to_string());
-            let started = crate::startup::with_setup(
-                input.as_bytes(),
-                &config::Directories::working(),
-                &fixtures::files(),
-                Some(&fixtures::startup_agent()),
-                &fixtures::seeds(),
-                None,
-                Some(fixtures::worker_runtime()),
-                fixtures::forge_runtime(),
-                None,
-                Some(line_bytes),
-            );
-            if deficit != 0 {
-                assert_eq!(
-                    lines(&started.err().unwrap()).as_ref(),
-                    format!("engine.memory_bytes: the worst case passes memory_bytes by {deficit} bytes\n").as_bytes(),
-                );
-            } else {
-                let mut service = started.unwrap();
-                let counted = whole + required.worker_bytes;
-                assert_eq!(service.worst_case(), counted);
-                service.adopt_box(Fd::new(3), Fd::new(4), line_bytes).unwrap();
-                assert_eq!(service.worst_case(), counted, "adoption consumes the reserved memory once");
-            }
-        }
-    }
-}
-
-#[test]
-fn one_named_raise_starts_from_memory_bytes_one() {
-    use skein_io::kernel::Fd;
-    let document = fixtures::document();
-    let directories = config::Directories::working();
-    let required = crate::startup::memory_requirements(
-        &document,
-        &directories,
-        &fixtures::files(),
-        &fixtures::startup_agent(),
-        &fixtures::seeds(),
-        None,
-        fixtures::forge_runtime(),
-        None,
-    )
-    .unwrap();
-    let parsed =
-        config::document(&document, &config::DocumentLimits { bytes: 1_048_576, tokens: 1_048_576, depth: 32 })
-            .unwrap();
-    let mut object = config::read::Object::new(&parsed, 0).unwrap();
-    let engine_at = object.member(&parsed, b"engine").unwrap();
-    let worker_at = config::read::list(&parsed, object.member(&parsed, b"workers").unwrap(), parsed.len()).unwrap();
-    for (path, at, whole) in [
-        ("engine.memory_bytes", engine_at, required.engine_bytes),
-        ("workers[0].memory_bytes", *worker_at.get(0).unwrap(), required.worker_bytes),
-    ] {
-        let low = fixtures::with(&document, path.as_bytes(), b"1");
-        let low =
-            config::document(&low, &config::DocumentLimits { bytes: 1_048_576, tokens: 1_048_576, depth: 32 }).unwrap();
-        let found = if path == "engine.memory_bytes" {
-            config::engine(&low, at, &directories, config::Defaults::Passed).unwrap_err()
-        } else {
-            config::worker(&low, at, &directories).unwrap_err()
-        };
-        let config::What::Memory { over } = found.problems.get(0).unwrap().what else {
-            panic!("jig's memory refusal: {found:?}");
-        };
-        let jig_need = 1 + over;
-        assert!(whole > jig_need, "fixture spans jig's envelope and temper's sum");
-        for boxed in [false, true] {
-            let pipes = if boxed { Some(4096) } else { None };
-            let expected = whole + if boxed && path == "engine.memory_bytes" { 8194 } else { 0 };
-            for declared in [1, jig_need + (whole - jig_need) / 2] {
-                let mut input = fixtures::with(&document, path.as_bytes(), declared.to_string().as_bytes());
-                let mut named = 0;
-                for raising in [false, true] {
-                    let started = crate::startup::with_setup(
-                        &input,
-                        &directories,
-                        &fixtures::files(),
-                        Some(&fixtures::startup_agent()),
-                        &fixtures::seeds(),
-                        None,
-                        Some(fixtures::worker_runtime()),
-                        fixtures::forge_runtime(),
-                        None,
-                        pipes,
-                    );
-                    if raising {
-                        let mut service = started.unwrap();
-                        if let Some(line_bytes) = pipes {
-                            let before = service.worst_case();
-                            service.adopt_box(Fd::new(3), Fd::new(4), line_bytes).unwrap();
-                            assert_eq!(service.worst_case(), before);
-                        }
-                    } else {
-                        let found = started.err().unwrap();
-                        assert_eq!(found.problems.len(), 1);
-                        let What::Jig(config::What::Memory { over }) = found.problems.get(0).unwrap().what else {
-                            panic!("whole memory refusal: {found:?}");
-                        };
-                        assert_eq!(declared + over, expected);
-                        assert_eq!(
-                            lines(&found).as_ref(),
-                            format!("{path}: the worst case passes memory_bytes by {over} bytes\n").as_bytes()
-                        );
-                        named = declared + over;
-                        input = fixtures::with(&input, path.as_bytes(), named.to_string().as_bytes());
-                    }
-                }
-                assert_eq!(named, expected);
-            }
-        }
-    }
-}
-
-#[test]
-fn memory_refusals_beside_other_problems_keep_their_parser_figures() {
-    let document = fixtures::document();
-    for path in [b"engine.memory_bytes".as_slice(), b"workers[0].memory_bytes"] {
-        let low = fixtures::with(&document, path, b"1");
-        let low = core::str::from_utf8(&low).unwrap();
-        let invalid = low.replacen('{', "{\"extra\":null,", 1);
-        let found = crate::named(invalid.as_bytes(), &config::Directories::working()).unwrap_err();
-        assert_eq!(found.problems.len(), 2);
-        assert_eq!(found.problems.get(0).unwrap().path, Path::root().member(b"extra"));
-        assert_eq!(found.problems.get(0).unwrap().what, What::Jig(config::What::Unknown));
-        let What::Jig(config::What::Memory { over }) = found.problems.get(1).unwrap().what else {
-            panic!("original memory refusal: {found:?}");
-        };
-        let valid = crate::startup::memory_requirements(
-            &document,
-            &config::Directories::working(),
-            &fixtures::files(),
-            &fixtures::startup_agent(),
-            &fixtures::seeds(),
-            None,
-            fixtures::forge_runtime(),
-            None,
-        )
-        .unwrap();
-        let whole = if path == b"engine.memory_bytes" { valid.engine_bytes } else { valid.worker_bytes };
-        assert!(1 + over < whole, "mixed problems do not claim a composed figure");
-    }
-}
-
-#[test]
-fn a_worker_alone_starts_after_one_named_raise_from_one_byte() {
-    let input = fixtures::with(&fixtures::worker_alone_document(), b"workers[0].memory_bytes", b"1");
-    let directories = config::Directories::working();
-    let mut input = input;
-    for raising in [false, true] {
-        let part = crate::startup::worker_part(&input, &directories).unwrap();
-        let started = crate::startup::worker_alone(
-            part,
-            &fixtures::files(),
-            &fixtures::startup_agent(),
-            fixtures::worker_runtime(),
-            7,
-        );
-        if raising {
-            started.unwrap();
-        } else {
-            let found = started.err().unwrap();
-            assert_eq!(found.problems.len(), 1);
-            let What::Jig(config::What::Memory { over }) = found.problems.get(0).unwrap().what else {
-                panic!("whole worker memory refusal: {found:?}");
-            };
-            input = fixtures::with(&input, b"workers[0].memory_bytes", (1 + over).to_string().as_bytes());
-        }
-    }
-}
-
-#[test]
-fn startup_maps_refused_setup_and_total_overflow_to_memory_bound() {
-    let mut engine = fixtures::engine();
-    let (endpoints, _) = crate::forge::prepare(&engine, fixtures::forge_runtime()).unwrap();
-    let root = crate::limits::engine(&engine.jig.limits, &engine.limits).unwrap();
-    let store = crate::store::limits(&root, &root.forge, &engine.jig.limits.store).unwrap();
-    let io = engine.jig.limits.io;
-    // u32::MAX runs overflows setup's writes = runs + forges, after the host bound fits.
-    for (runs, roots) in [(0, 0), (u32::MAX, 0), (8, u64::MAX)] {
-        engine.limits.setup.runs = runs;
-        assert_eq!(runs.checked_add(engine.limits.forge_component.forges).is_none(), runs == u32::MAX);
-        assert_eq!(crate::setup::worst_case(&engine, &endpoints, 2).is_none(), runs != 8);
-        let found = crate::system::startup_worst_case(&engine, &root, &store, None, 0, &io, (roots, 0, &endpoints))
-            .unwrap_err();
-        assert_eq!(lines(&Problems::jig(found, &Path::root())).as_ref(), b"engine.memory_bytes: past its bound\n");
-    }
-}
-
-#[test]
 fn admission_model_words_use_tokens_and_missing_names_make_no_amount_claim() {
     use jig_domain_fleet::AgentShortfall;
     for (why, expected) in [
@@ -1825,49 +1561,6 @@ fn an_engine_alone_prepares_without_a_worker_or_its_files_and_agent() {
     )
     .unwrap();
     assert!(service.worker.is_none());
-}
-
-#[test]
-fn an_engine_alone_admits_its_own_worst_case_and_names_an_insufficient_memory_declaration() {
-    let input = fixtures::engine_alone_document();
-    let requirements = crate::startup::memory_requirements(
-        &input,
-        &config::Directories::working(),
-        &fixtures::files(),
-        &fixtures::startup_agent(),
-        &fixtures::seeds(),
-        None,
-        fixtures::forge_runtime(),
-        None,
-    )
-    .unwrap();
-    assert_eq!(requirements.worker_bytes, 0);
-    assert!(requirements.engine_bytes > 0);
-    for (memory, accepted) in
-        [(requirements.engine_bytes, true), (requirements.engine_bytes.checked_sub(1).unwrap(), false)]
-    {
-        let input = fixtures::with(&input, b"engine.memory_bytes", memory.to_string().as_bytes());
-        let result = crate::startup::with_setup(
-            &input,
-            &config::Directories::working(),
-            &fixtures::files(),
-            None,
-            &fixtures::seeds(),
-            None,
-            None,
-            fixtures::forge_runtime(),
-            None,
-            None,
-        );
-        if accepted {
-            assert!(result.is_ok(), "at the calculated worst case");
-        } else {
-            let found = result.err().unwrap();
-            assert_eq!(found.problems.len(), 1);
-            assert_eq!(found.problems.get(0).unwrap().path, Path::root().member(b"engine").member(b"memory_bytes"));
-            assert_eq!(found.problems.get(0).unwrap().what, What::Jig(config::What::Memory { over: 1 }));
-        }
-    }
 }
 
 #[test]
@@ -1998,22 +1691,12 @@ fn fake_start(
 fn a_worker_alones_complete_envelope_must_fit_its_own_memory() {
     let input = fixtures::worker_alone_document();
     let directories = jig_protocol_config::Directories::working();
-    let required = crate::startup::memory_requirements(
-        &input,
-        &directories,
-        &fixtures::files(),
-        &fixtures::startup_agent(),
-        &fixtures::seeds(),
-        None,
-        List::with_capacity(0),
-        None,
-    )
-    .unwrap();
-    assert_eq!(required.engine_bytes, 0);
     let part = crate::startup::worker_part(&input, &directories).unwrap();
+    let required =
+        crate::system::worker_alone_worst_case(&part.worker, &fixtures::startup_agent(), &part.limits).unwrap();
     let worker = crate::worker_worst_case(&part.worker, &fixtures::startup_agent(), &part.limits).unwrap();
-    assert!(required.worker_bytes > worker, "includes shared IO and process routing");
-    let input = fixtures::with(&input, b"workers[0].memory_bytes", (required.worker_bytes - 1).to_string().as_bytes());
+    assert!(required > worker, "includes shared IO and process routing");
+    let input = fixtures::with(&input, b"workers[0].memory_bytes", (required - 1).to_string().as_bytes());
     let part = crate::startup::worker_part(&input, &directories).unwrap();
     let found = crate::startup::worker_alone(
         part,
@@ -2034,10 +1717,7 @@ fn a_worker_alone_with_the_owned_examples_worker_fits_one_ring() {
     let input = fixtures::owned_worker_alone_document();
     let directories = config::Directories::working();
     let agent = fixtures::owned_worker_agent();
-    let mut part = crate::startup::worker_part(&input, &directories).unwrap();
-    let required = crate::system::worker_alone_worst_case(&part.worker, &agent, &part.limits).unwrap();
-    // The separate payload-memory work owns the example's memory_bytes.
-    part.worker.jig.memory = required;
+    let part = crate::startup::worker_part(&input, &directories).unwrap();
     let operations = crate::system::worker_alone_operations(
         &part.worker.jig.limits.io,
         crate::worker_settings::operations(&part.limits.git_component).unwrap(),
@@ -2053,7 +1733,6 @@ fn a_worker_alone_with_the_owned_examples_worker_fits_one_ring() {
     let service = crate::startup::worker_alone(part, &files, &agent, fixtures::worker_runtime(), 7).unwrap();
     assert!(service.operations() <= IORING_MAX_ENTRIES);
     assert_eq!(service.operations(), operations, "the start's check and the ring agree");
-    assert_eq!(service.worst_case(), required);
 }
 
 fn owned_start_document(asked: bool) -> Box<[u8]> {

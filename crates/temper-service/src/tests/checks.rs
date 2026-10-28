@@ -163,26 +163,6 @@ fn git_component_limits_against_the_checkout_name_both() {
     }
 }
 #[test]
-fn a_worst_case_past_memory_bytes_says_by_how_much() {
-    let mut found = Problems::empty();
-    checks::memory(4097, 4096, 513, 512, &mut found);
-    assert_eq!(&*lines(&found), b"engine.memory_bytes: the worst case passes memory_bytes by 1 bytes\nworkers[0].memory_bytes: the worst case passes memory_bytes by 1 bytes\n".as_slice());
-    let document = fixtures::with(&fixtures::document(), b"engine.memory_bytes", b"1");
-    let document = fixtures::with(&document, b"workers[0].memory_bytes", b"1");
-    let found = started(&document, &fixtures::files(), &fixtures::startup_agent());
-    assert_eq!(found.problems.len(), 2, "both services checked before construction");
-    for (index, path) in [
-        (0, Path::root().member(b"engine").member(b"memory_bytes")),
-        (1, Path::root().member(b"workers").child(config::Segment::Index(0)).member(b"memory_bytes")),
-    ] {
-        assert_eq!(found.problems.get(index).unwrap().path, path, "row {index}");
-        let What::Jig(config::What::Memory { over }) = found.problems.get(index).unwrap().what else {
-            panic!("memory refusal row {index}");
-        };
-        assert!(over > 0, "row {index}");
-    }
-}
-#[test]
 fn a_channel_limit_past_a_ceiling_names_the_limit() {
     let mut own = crate::limits::profile(crate::limits::Profile::Small);
     own.checkout.name_bytes = 600;

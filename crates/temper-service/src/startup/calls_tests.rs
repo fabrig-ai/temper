@@ -80,7 +80,7 @@ fn omitted_call_answers_reach_the_core_store_and_both_wire_sides() {
         let opening = store_limits(&input, &directories, Some(&agent)).unwrap();
         assert_eq!(opening.store, engine.store.opening_limits());
         assert_eq!(opening.store.core.call_answer_bytes, expected_engine);
-        let required = memory_requirements(
+        check(
             &input,
             &directories,
             &fixtures::files(),
@@ -91,7 +91,6 @@ fn omitted_call_answers_reach_the_core_store_and_both_wire_sides() {
             None,
         )
         .unwrap();
-        assert_eq!(required, checked.requirements);
     }
 }
 
@@ -113,7 +112,7 @@ fn store_readers_require_local_agent_metadata_but_leave_remote_engines_configure
 }
 
 #[test]
-fn worker_only_runtime_and_memory_use_the_same_composed_limits() {
+fn worker_only_runtime_and_checks_use_the_same_composed_limits() {
     let directories = config::Directories::working();
     for (bound, expected) in [(None, 40_960), (Some(40_960), 40_960)] {
         let input = worker_document(bound);
@@ -121,38 +120,19 @@ fn worker_only_runtime_and_memory_use_the_same_composed_limits() {
         agent.tool_payload = 40_960;
         let part = worker_part(&input, &directories).unwrap();
         let service = worker_alone(part, &fixtures::files(), &agent, fixtures::worker_runtime(), 7).unwrap();
-        let required = memory_requirements(
-            &input,
-            &directories,
-            &fixtures::files(),
-            &agent,
-            &fixtures::seeds(),
-            None,
-            List::with_capacity(0),
-            None,
-        )
-        .unwrap();
-        assert_eq!(required.engine_bytes, 0);
-        let mut expected_part = worker_part(&input, &directories).unwrap();
-        expected_part.worker.jig.limits.core.call_answer_bytes = expected;
-        assert_eq!(
-            required.worker_bytes,
-            crate::system::worker_alone_worst_case(&expected_part.worker, &agent, &expected_part.limits).unwrap()
-        );
+        check(&input, &directories, &fixtures::files(), &agent, &fixtures::seeds(), None, List::with_capacity(0), None)
+            .unwrap();
         assert!(service.engine.is_none());
-        // A one-byte-short memory declaration refuses the same runtime envelope.
-        let short =
-            fixtures::with(&input, b"workers[0].memory_bytes", (required.worker_bytes - 1).to_string().as_bytes());
-        let found = worker_alone(
-            worker_part(&short, &directories).unwrap(),
-            &fixtures::files(),
-            &agent,
-            fixtures::worker_runtime(),
-            7,
-        )
-        .err()
-        .unwrap();
-        assert_eq!(found.problems.get(0).unwrap().what, What::Jig(config::What::Memory { over: 1 }));
+        let mut part = worker_part(&input, &directories).unwrap();
+        check_worker_part(&mut part, &fixtures::files(), &agent).unwrap();
+        assert_eq!(part.worker.jig.limits.core.call_answer_bytes, expected);
+        let payload = crate::worker_settings::payload_limits(&part.limits).unwrap();
+        let wire = crate::worker_settings::link_limits(&part.worker.jig, &payload).unwrap();
+        assert_eq!((wire.sizes.call_input, wire.sizes.answer), (expected, expected));
+        assert_eq!(
+            service.worker.as_ref().unwrap().env.limits,
+            crate::worker_settings::root_limits(&part.worker, &agent, &part.limits)
+        );
     }
 }
 
@@ -182,7 +162,7 @@ fn standalone_refusals(input: &[u8], agent: &settings::Agent) -> [Problems; 3] {
         .err()
         .unwrap(),
         store_limits(input, &directories, Some(agent)).unwrap_err(),
-        memory_requirements(
+        check(
             input,
             &directories,
             &fixtures::files(),
@@ -208,17 +188,8 @@ fn worker_refusals(input: &[u8], agent: &settings::Agent) -> [Problems; 2] {
         )
         .err()
         .unwrap(),
-        memory_requirements(
-            input,
-            &directories,
-            &fixtures::files(),
-            agent,
-            &fixtures::seeds(),
-            None,
-            List::with_capacity(0),
-            None,
-        )
-        .unwrap_err(),
+        check(input, &directories, &fixtures::files(), agent, &fixtures::seeds(), None, List::with_capacity(0), None)
+            .unwrap_err(),
     ]
 }
 
@@ -360,7 +331,7 @@ fn explicit_short_call_inputs_refuse_every_standalone_entrance() {
             .err()
             .unwrap(),
             store_limits(&input, &directories, Some(&agent)).unwrap_err(),
-            memory_requirements(
+            check(
                 &input,
                 &directories,
                 &fixtures::files(),
@@ -407,7 +378,7 @@ fn explicit_short_call_inputs_refuse_every_worker_only_entrance() {
             )
             .err()
             .unwrap(),
-            memory_requirements(
+            check(
                 &input,
                 &directories,
                 &fixtures::files(),

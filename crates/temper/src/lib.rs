@@ -570,7 +570,6 @@ fn listeners_refusal(why: skein_shell::ListenersRefusal) -> String {
 fn box_refusal(why: service::system::BoxRefusal) -> String {
     use service::system::BoxRefusal;
     let words = match why {
-        BoxRefusal::Memory { over } => format!("the box's pipes need {over} more bytes of engine.memory_bytes"),
         BoxRefusal::Sockets { limit } => {
             format!("the box's pipes need two free socket slots; the service socket limit is {limit}")
         }

@@ -977,18 +977,6 @@ pub(crate) fn process_io(engine: &skein_io::Limits, worker: Option<&skein_io::Li
     io.sockets = limits::SOCKETS;
     Some(io)
 }
-/// Each service's sum is checked against its own memory admission.
-pub fn memory(engine: u64, engine_memory: u64, worker: u64, worker_memory: u64, problems: &mut Problems) {
-    for (path, bytes, bound) in [
-        (Path::root().member(b"engine"), engine, engine_memory),
-        (at(0, Path::root().member(b"workers")), worker, worker_memory),
-    ] {
-        if let Err(what) = config::fits(bound, &[config::Share { name: b"service", bytes }]) {
-            problems.push(path.member(b"memory_bytes"), What::Jig(what));
-        }
-    }
-}
-
 /// Compare port numbers, also across IPv4/IPv6. Absent or ephemeral listeners reserve none.
 pub fn redirect_ports(
     redirects: &[super::RedirectPort],

@@ -536,11 +536,8 @@ fn tls_selects_a_larger_host_price_than_plaintext() {
 }
 #[test]
 fn admitted_tls_starts_after_rows_and_serves_a_local_manifest() {
-    let required = accounted(8, 8, true);
-    let (mut config, runtime) = configured(8, 8, true);
-    config.jig.memory = required;
+    let (config, runtime) = configured(8, 8, true);
     let mut service = crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap();
-    assert_eq!(service.worst_case(), required);
     assert!(service.engine.as_ref().expect("engine").setup.component.is_none(), "no host before the rows load");
     let (settings, _) = service.engine.as_ref().expect("engine").setup.pending.as_ref().unwrap();
     assert_eq!(settings.forges.len(), 2);
@@ -713,24 +710,9 @@ fn configured(runs: u32, states: u32, tls: bool) -> (crate::settings::Engine, Li
     fixtures::fill_files(&mut config);
     (config, runtime)
 }
-#[expect(clippy::arithmetic_side_effects, reason = "the measured nonzero bound permits one byte less")]
 fn accounted(runs: u32, states: u32, tls: bool) -> u64 {
     let (config, runtime) = configured(runs, states, tls);
-    let required = crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap().worst_case();
-    for short in [false, true] {
-        let (mut config, runtime) = configured(runs, states, tls);
-        config.jig.memory = required - u64::from(short);
-        let started = crate::Service::engine(config, &fixtures::seeds(), None, runtime);
-        if short {
-            assert_eq!(
-                started.err().unwrap().problems.get(0).unwrap().what,
-                jig_protocol_config::What::Memory { over: 1 }
-            );
-        } else {
-            assert_eq!(started.unwrap().worst_case(), required);
-        }
-    }
-    required
+    crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap().worst_case()
 }
 
 #[path = "setup_reachable.rs"]

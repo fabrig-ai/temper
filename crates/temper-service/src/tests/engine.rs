@@ -155,16 +155,6 @@ fn a_frame_refusal_stops_with_its_details_and_releases_no_later_output() {
 }
 
 #[test]
-fn an_engine_that_cannot_fit_its_memory_is_refused_before_start() {
-    let mut settings = fixtures::engine();
-    settings.jig.memory = 1;
-    let Err(problems) = crate::Service::engine(settings, &fixtures::seeds(), None, fixtures::forge_runtime()) else {
-        panic!("memory refused")
-    };
-    let problem = problems.problems.get(0).unwrap();
-    assert_eq!(problem.path, jig_protocol_config::Path::root().member(b"engine").member(b"memory_bytes"));
-}
-#[test]
 fn kernel_operations_are_routed_back_to_their_owner() {
     use skein_io::kernel::{Complete, Done, Error, Fd, Op, Submit};
     use skein_lib::{Queue, Token};

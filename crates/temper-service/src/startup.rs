@@ -3,7 +3,6 @@ pub(crate) mod application;
 #[cfg(test)]
 mod calls_tests;
 pub(crate) mod checks;
-mod memory;
 mod problems;
 #[cfg(test)]
 #[path = "tests/welcome_policy.rs"]
@@ -306,7 +305,6 @@ struct Parsed {
     application: application::Members,
     engine_call_answer: CallAnswer,
     worker_call_answers: Box<[CallAnswer]>,
-    jig_memory: Requirements,
 }
 impl Parsed {
     fn compose(&mut self, agent: &settings::Agent) -> Result<(), Problems> {
@@ -373,7 +371,7 @@ fn indexed(index: usize) -> Path {
 /// settings members (protocol/configuration.md, 13.5 and 13.6).
 /// # Errors
 /// The document's problems at its paths under `engine`.
-fn engine_checked(
+pub fn engine_with(
     document: &skein_json::Document,
     at: u32,
     directories: &config::Directories,
@@ -394,23 +392,6 @@ fn engine_checked(
         return Err(problems);
     };
     config::pass(&mut engine, defaults)?;
-    Ok(engine)
-}
-/// Parse the engine past a sole memory refusal; startup checks the whole envelope.
-pub fn engine_with(
-    document: &skein_json::Document,
-    at: u32,
-    directories: &config::Directories,
-    given: &crate::stock::Given,
-) -> Result<config::Engine, config::Problems> {
-    let found = match engine_checked(document, at, directories, given) {
-        Ok(engine) => return Ok(engine),
-        Err(found) => found,
-    };
-    let Some(envelope) = memory::envelope(document, at, &found) else { return Err(found) };
-    let copy = memory::raised(document, member(document, at, b"memory_bytes").expect("checked memory"), envelope.need);
-    let Ok(mut engine) = engine_checked(&copy, at, directories, given) else { return Err(found) };
-    engine.memory = envelope.declared;
     Ok(engine)
 }
 pub fn engine(
@@ -447,23 +428,7 @@ fn load_with(
             Ok(document) => document,
             Err(found) => return Err(problem(found.path, What::Jig(found.what))),
         };
-    let found = match load_document(&document, directories, check_start, given) {
-        Ok(parsed) => return Ok(parsed),
-        Err(found) => found,
-    };
-    let Some(retry) = memory::Retry::new(&document, &found) else { return Err(found) };
-    let Ok((shape, mut parsed)) = load_document(retry.document(), directories, check_start, given) else {
-        return Err(found);
-    };
-    if let Some(parsed) = &mut parsed {
-        parsed.jig_memory.engine_bytes =
-            retry.restore(&Path::root().member(b"engine").member(b"memory_bytes"), &mut parsed.engine.memory);
-        for (index, worker) in parsed.workers.iter_mut().enumerate() {
-            let need = retry.restore(&indexed(index).member(b"memory_bytes"), &mut worker.memory);
-            parsed.jig_memory.worker_bytes = parsed.jig_memory.worker_bytes.max(need);
-        }
-    }
-    Ok((shape, parsed))
+    load_document(&document, directories, check_start, given)
 }
 // Temper seeds name settings; jig also serves callers that accept inline policies.
 fn inline_seed_policies(document: &skein_json::Document, engine: u32, problems: &mut Problems) {
@@ -521,7 +486,7 @@ fn load_document(
         }
     }
     let engine = match engine_at {
-        Some(at) => match engine_checked(document, at, directories, given) {
+        Some(at) => match engine_with(document, at, directories, given) {
             Ok(mut engine) => {
                 engine.limits.clients.watches_per_stream = temper_engine_domain::WATCHES_PER_STREAM;
                 Some(engine)
@@ -603,7 +568,6 @@ fn load_document(
                 application,
                 engine_call_answer,
                 worker_call_answers,
-                jig_memory: Requirements { engine_bytes: 0, worker_bytes: 0 },
             }),
         ));
     }
@@ -663,7 +627,6 @@ fn load_document(
             application,
             engine_call_answer,
             worker_call_answers,
-            jig_memory: Requirements { engine_bytes: 0, worker_bytes: 0 },
         }),
     ))
 }
@@ -767,14 +730,8 @@ fn check_files(parsed: &Parsed, files: &settings::Files) -> Result<(), Problems>
     }
     if problems.is_empty() { Ok(()) } else { Err(problems) }
 }
-/// Checked envelopes from the same calculations startup uses, without starting services.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Requirements {
-    pub engine_bytes: u64,
-    pub worker_bytes: u64,
-}
-/// A module's contribution to a service's checked memory envelope.
-pub type MemoryTerm = (&'static str, u64);
+// The worker's and system's sums still use these helpers; c1 and the worker's owner remove them.
+pub(crate) type MemoryTerm = (&'static str, u64);
 pub(crate) fn memory_sum(terms: &[MemoryTerm]) -> Option<u64> {
     let mut bytes = 0_u64;
     for (_, term) in terms {
@@ -786,14 +743,14 @@ struct CheckedStart {
     not_set_up: List<u16>,
     engine: settings::Engine,
     worker: Option<settings::Worker>,
-    requirements: Requirements,
     io: skein_io::Limits,
     forges: (skein_forge_connection::Settings, u64, u64),
 }
-/// Derive the two envelopes without enforcing the document's memory declarations.
-/// File, agent, root, channel and runtime checks are identical to startup's.
+/// Every check startup makes, without constructing a service.
+/// # Errors
+/// The problems startup would refuse with, in its order.
 #[expect(clippy::too_many_arguments, reason = "the same inputs as startup, including its checked setup")]
-pub fn memory_requirements(
+pub fn check(
     document: &[u8],
     directories: &config::Directories,
     files: &settings::Files,
@@ -802,18 +759,14 @@ pub fn memory_requirements(
     accounts: Option<&AccountsRuntime>,
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
-) -> Result<Requirements, Problems> {
+) -> Result<(), Problems> {
     if shape(document, directories)? == Shape::WorkerAlone {
         let mut part = worker_part(document, directories)?;
         check_worker_part(&mut part, files, agent)?;
-        return Ok(Requirements {
-            engine_bytes: 0,
-            worker_bytes: crate::system::worker_alone_worst_case(&part.worker, agent, &part.limits)
-                .ok_or(problem(indexed(0).member(b"memory_bytes"), What::Jig(config::What::Bound)))?
-                .max(part.jig_memory),
-        });
+        return Ok(());
     }
-    Ok(checked_start(document, directories, files, Some(agent), seeds, accounts, forges, setup)?.requirements)
+    checked_start(document, directories, files, Some(agent), seeds, accounts, forges, setup)?;
+    Ok(())
 }
 #[expect(
     clippy::too_many_arguments,
@@ -826,11 +779,9 @@ fn checked_start_with(
     files: &settings::Files,
     agent: Option<&settings::Agent>,
     seeds: &settings::Seeds,
-    accounts: Option<&AccountsRuntime>,
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
     given: &crate::stock::Given,
-    box_line_bytes: Option<u32>,
 ) -> Result<CheckedStart, Problems> {
     let mut parsed = parse_with(document, directories, given)?;
     let agent = match parsed.workers.first() {
@@ -930,7 +881,7 @@ fn checked_start_with(
             not_set_up.push(*number).expect("asked forges");
         }
     }
-    let (worker, bytes, worker_operations) = if let Some(agent) = agent {
+    let worker = if let Some(agent) = agent {
         let worker = parsed.workers.into_iter().next().expect("one worker checked");
         let own = parsed.application.workers.into_iter().next().expect("one application worker checked");
         let worker = settings::Worker { jig: worker, root: own.root, git: own.git };
@@ -942,13 +893,9 @@ fn checked_start_with(
         if let Err(found) = crate::worker_settings::prepare(&worker, agent, &parsed.application.limits) {
             return Err(Problems::jig(found, &Path::root()));
         }
-        let bytes = crate::worker_worst_case(&worker, agent, &parsed.application.limits)
-            .ok_or(problem(indexed(0).member(b"memory_bytes"), What::Jig(config::What::Bound)))?;
-        let worker_operations = crate::worker_settings::operations(&parsed.application.limits.git_component)
-            .ok_or(problem(indexed(0).member(b"limits"), What::Jig(config::What::Bound)))?;
-        (Some(worker), bytes, worker_operations)
+        Some(worker)
     } else {
-        (None, 0, 0)
+        None
     };
     let mut engine = settings::Engine {
         jig: parsed.engine,
@@ -978,40 +925,14 @@ fn checked_start_with(
     if let Some(agent) = agent {
         turn = Some(agent.limits.bodies.turn_body);
     }
-    let store = checked_store(&root, &engine.jig.limits.store, turn)?;
+    checked_store(&root, &engine.jig.limits.store, turn)?;
     let io = match &worker {
         Some(worker) => checks::process_io(&engine.jig.limits.io, Some(&worker.jig.limits.io)),
         None => checks::process_io(&engine.jig.limits.io, None),
     }
     .ok_or(problem(Path::root().member(b"engine").member(b"limits").member(b"io"), What::Jig(config::What::Bound)))?;
     let prepared_forges = prepare_forges(&engine, forges)?;
-    let engine_bytes = match crate::system::startup_worst_case(
-        &engine,
-        &root,
-        &store,
-        accounts,
-        worker_operations,
-        &io,
-        (prepared_forges.1, prepared_forges.2, &prepared_forges.0),
-    ) {
-        Ok(bytes) => bytes,
-        Err(found) => return Err(Problems::jig(found, &Path::root())),
-    };
-    let engine_bytes = match crate::system::with_box_memory(engine_bytes, box_line_bytes) {
-        Ok(bytes) => bytes,
-        Err(found) => return Err(Problems::jig(found, &Path::root())),
-    };
-    Ok(CheckedStart {
-        not_set_up,
-        engine,
-        worker,
-        requirements: Requirements {
-            engine_bytes: engine_bytes.max(parsed.jig_memory.engine_bytes),
-            worker_bytes: bytes.max(parsed.jig_memory.worker_bytes),
-        },
-        io,
-        forges: prepared_forges,
-    })
+    Ok(CheckedStart { not_set_up, engine, worker, io, forges: prepared_forges })
 }
 #[expect(clippy::too_many_arguments, reason = "the Stock entry retains the existing startup inputs")]
 fn checked_start(
@@ -1020,22 +941,11 @@ fn checked_start(
     files: &settings::Files,
     agent: Option<&settings::Agent>,
     seeds: &settings::Seeds,
-    accounts: Option<&AccountsRuntime>,
+    _accounts: Option<&AccountsRuntime>,
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<CheckedStart, Problems> {
-    checked_start_with(
-        document,
-        directories,
-        files,
-        agent,
-        seeds,
-        accounts,
-        forges,
-        setup,
-        &crate::stock::Given::Stock,
-        None,
-    )
+    checked_start_with(document, directories, files, agent, seeds, forges, setup, &crate::stock::Given::Stock)
 }
 /// Build the engine and worker together from the parsed document and read files.
 #[expect(clippy::too_many_arguments, reason = "startup receives the same directories as named plus the runtime facts")]
@@ -1092,30 +1002,13 @@ pub fn with_setup_given(
     box_line_bytes: Option<u32>,
     given: &crate::stock::Given,
 ) -> Result<Service, Problems> {
-    let CheckedStart { engine, worker, requirements, io, forges, not_set_up } = checked_start_with(
-        document,
-        directories,
-        files,
-        agent,
-        seeds,
-        accounts.as_ref(),
-        forges,
-        setup,
-        given,
-        box_line_bytes,
-    )?;
-    let mut problems = Problems::empty();
-    let worker_memory = if let Some(worker) = &worker { worker.jig.memory } else { 0 };
-    checks::memory(
-        requirements.engine_bytes,
-        engine.jig.memory,
-        requirements.worker_bytes,
-        worker_memory,
-        &mut problems,
-    );
-    if !problems.is_empty() {
-        return Err(problems);
-    }
+    let CheckedStart { engine, worker, io, forges, not_set_up } =
+        checked_start_with(document, directories, files, agent, seeds, forges, setup, given)?;
+    let worker_bytes = match &worker {
+        Some(worker) => crate::worker_worst_case(worker, agent.expect("checked local agent"), &engine.limits)
+            .ok_or(problem(indexed(0).member(b"memory_bytes"), What::Jig(config::What::Bound)))?,
+        None => 0,
+    };
     let worker = match worker {
         Some(worker) => match Worker::new(
             &worker,
@@ -1130,7 +1023,7 @@ pub fn with_setup_given(
         },
         None => None,
     };
-    match Service::prepared(engine, seeds, accounts, forges, worker, requirements.worker_bytes, io, box_line_bytes) {
+    match Service::prepared(engine, seeds, accounts, forges, worker, worker_bytes, io, box_line_bytes) {
         Ok(mut service) => {
             for number in &not_set_up {
                 crate::setup::lifecycle::state(
@@ -1192,7 +1085,6 @@ fn prepare_forges(
     reason = "the shell reads the worker handover; raw override provenance stays service-private"
 )]
 pub struct WorkerPart {
-    jig_memory: u64,
     call_answer: CallAnswer,
     pub worker: settings::Worker,
     pub limits: crate::limits::Limits,
@@ -1215,8 +1107,7 @@ pub fn worker_part(input: &[u8], directories: &config::Directories) -> Result<Wo
     .expect("checked shape document");
     let at = member(&document, 0, b"workers").expect("checked workers");
     let ats = read::list(&document, at, document.len()).expect("checked worker list");
-    let (jig, jig_memory) =
-        memory::worker(&document, *ats.get(0).expect("one worker"), directories).expect("checked worker");
+    let jig = config::worker(&document, *ats.get(0).expect("one worker"), directories).expect("checked worker");
     let mut problems = Problems::empty();
     let (own, limits) = application::worker_alone(
         &document,
@@ -1234,7 +1125,6 @@ pub fn worker_part(input: &[u8], directories: &config::Directories) -> Result<Wo
         file.at = path;
     }
     Ok(WorkerPart {
-        jig_memory,
         call_answer: CallAnswer::read(&document, *ats.get(0).expect("one worker")),
         named: NamedWorker { root: own.root.clone(), agent: jig.agent.configuration.clone() },
         worker: settings::Worker { jig, root: own.root, git: own.git },
@@ -1242,7 +1132,7 @@ pub fn worker_part(input: &[u8], directories: &config::Directories) -> Result<Wo
         files,
     })
 }
-/// Construct a worker-only service; its complete envelope belongs to the worker.
+/// Construct a worker-only service.
 pub fn worker_alone(
     mut part: WorkerPart,
     files: &settings::Files,
@@ -1251,7 +1141,8 @@ pub fn worker_alone(
     seed: u64,
 ) -> Result<Service, Problems> {
     check_worker_part(&mut part, files, agent)?;
-    match Service::worker_alone(&part.worker, &part.limits, agent, files, runtime, seed, part.jig_memory) {
+    // a1: the worker's fit goes after o/dm-temper-worker's swap
+    match Service::worker_alone(&part.worker, &part.limits, agent, files, runtime, seed, 0) {
         Ok(service) => Ok(service),
         Err(found) => Err(Problems::jig(found, &Path::root())),
     }

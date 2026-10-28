@@ -32,13 +32,11 @@ pub struct Service {
     held_listeners: List<Token>,
     listeners_closing: u32,
     bytes: u64,
-    memory_limit: u64,
     links: Queue<Box<[u8]>>,
 }
 /// A refused adoption leaves both pipe descriptors with the caller.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BoxRefusal {
-    Memory { over: u64 },
     Sockets { limit: u32 },
     Adopted,
     NoEngine,
@@ -212,11 +210,6 @@ impl Service {
         )?;
         let bytes = with_box_memory(bytes, box_line_bytes)?;
 
-        if let Err(what) =
-            jig_protocol_config::fits(settings.jig.memory, &[jig_protocol_config::Share { name: b"service", bytes }])
-        {
-            return Err(start_problem(b"memory_bytes", what));
-        }
         let room = max.checked_mul(6).expect("account routing room");
         let accounts = accounts_driver(&settings, seeds, accounts, room, &store_limits.secrets)?;
         let mut values =
@@ -281,8 +274,6 @@ impl Service {
         let store = store::Store::new(&limits, &store_limits, &config.core.settings.models, seeds.installation);
         let demo = settings.demo;
         let own = settings.limits;
-        let memory_limit =
-            settings.jig.memory.checked_add(worker_bytes).ok_or(start_problem(b"memory_bytes", What::Bound))?;
         let mut engine = engine::Engine::new(
             config,
             &limits,
@@ -295,7 +286,6 @@ impl Service {
             engine.box_link = box_link::Link::new(line_bytes, false);
         }
         Ok(Self {
-            memory_limit,
             worker,
             engine: Some(engine),
             io: Io::new(&io_limits),
@@ -340,7 +330,6 @@ impl Service {
             return Err(crate::worker_settings::problem(b"memory_bytes", what));
         }
         Ok(Self {
-            memory_limit: settings.jig.memory,
             engine: None,
             worker: Some(Worker::new(settings, agent, limits, files, runtime, seed)?),
             io: Io::new(&io_limits),
@@ -557,13 +546,7 @@ impl Service {
             bytes => box_bytes(bytes),
         };
         let extra = box_bytes(line_bytes).saturating_sub(reserved);
-        // Compare the remaining room before adding, keeping even an overflow's deficit exact.
-        let room = self.memory_limit.saturating_sub(self.bytes);
-        if extra > room {
-            return Err(BoxRefusal::Memory { over: extra.checked_sub(room).expect("pipe memory exceeds room") });
-        }
-        let bytes = self.bytes.checked_add(extra).expect("box memory fits its ceiling");
-        self.bytes = bytes;
+        self.bytes = self.bytes.checked_add(extra).expect("box memory sum");
         self.engine.as_mut().expect("box engine").box_link = box_link::Link::new(line_bytes, true);
         let requests = self.io.adopt_write_pipe(requests, None).expect("two reserved pipe slots");
         let answers = self.io.adopt_read_pipe(answers).expect("second reserved pipe slot");
@@ -1430,9 +1413,6 @@ impl Service {
     ) -> Result<(), clients::fetch::TooLarge> {
         let extra = runtime.worst_case().ok_or(clients::fetch::TooLarge)?;
         let bytes = self.bytes.checked_add(extra).ok_or(clients::fetch::TooLarge)?;
-        if bytes > self.memory_limit {
-            return Err(clients::fetch::TooLarge);
-        }
         if let Some(engine) = &mut self.engine {
             engine.clients.google_endpoints(runtime.endpoints);
             self.bytes = bytes;
@@ -1454,17 +1434,12 @@ mod box_tests {
 
     #[test]
     fn box_adoption_names_each_refusal_and_keeps_both_descriptors() {
-        for expected in [
-            BoxRefusal::Memory { over: 1 },
-            BoxRefusal::Sockets { limit: 1 },
-            BoxRefusal::Adopted,
-            BoxRefusal::NoEngine,
-            BoxRefusal::ZeroLine,
-        ] {
+        for expected in
+            [BoxRefusal::Sockets { limit: 1 }, BoxRefusal::Adopted, BoxRefusal::NoEngine, BoxRefusal::ZeroLine]
+        {
             let mut service = fixtures::started();
             let mut line_bytes = 256;
             match expected {
-                BoxRefusal::Memory { .. } => service.memory_limit = service.bytes + box_bytes(line_bytes) - 1,
                 BoxRefusal::Sockets { limit } => service.io_env.limits.sockets = limit,
                 BoxRefusal::Adopted => service.adopt_box(Fd::new(3), Fd::new(4), line_bytes).unwrap(),
                 BoxRefusal::NoEngine => service.engine = None,
@@ -1478,7 +1453,7 @@ mod box_tests {
     }
 
     #[test]
-    fn a_boxed_memory_sum_refuses_overflow_without_changing_an_unboxed_sum() {
+    fn box_accounting_refuses_overflow_without_changing_an_unboxed_sum() {
         assert_eq!(super::with_box_memory(u64::MAX, None).unwrap(), u64::MAX);
         let refused = super::with_box_memory(u64::MAX, Some(u32::MAX)).unwrap_err();
         assert_eq!(refused.problems.get(0).unwrap().what, jig_protocol_config::What::Bound);

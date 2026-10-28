@@ -167,22 +167,10 @@ pub fn deployment(paths: &[PathBuf; 3]) {
     assert_eq!(worker["endpoints"][0]["models"][0]["reasoning_item"], 32_768);
     write_json(&config, &value);
     write_json(&agent, &worker);
-    // Startup names the full deficit, including the box's pipes. Memory is a
-    // declaration derived from this revision's limits, not a timing allowance.
     let mut directories = super::super::configuration::directories(paths[0].parent().expect("deployment root"));
     directories.config = paths[0].as_os_str().as_bytes().into();
     directories.data = paths[1].as_os_str().as_bytes().into();
     directories.cache = paths[2].as_os_str().as_bytes().into();
-    if let Err(message) = temper::boxed_envelope_in(&directories, &fs::read(&config).expect("configuration")) {
-        let deficit = message
-            .split_once("engine.memory_bytes: the worst case passes memory_bytes by ")
-            .and_then(|(_, suffix)| suffix.strip_suffix(" bytes\n"))
-            .and_then(|number| number.parse::<u64>().ok())
-            .unwrap_or_else(|| panic!("B0 setup refused: {message}"));
-        let before = value["engine"]["memory_bytes"].as_u64().expect("engine declaration");
-        value["engine"]["memory_bytes"] = before.checked_add(deficit).expect("memory declaration fits").into();
-        write_json(&config, &value);
-    }
     temper::boxed_envelope_in(&directories, &fs::read(&config).expect("configuration"))
         .unwrap_or_else(|message| panic!("B0 setup refused: {message}"));
 }

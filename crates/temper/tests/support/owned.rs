@@ -703,25 +703,11 @@ impl Bounded {
         }
         runtime
     }
-    #[must_use]
-    pub fn requirements(&self) -> temper_service::startup::Requirements {
-        temper_service::startup::memory_requirements(
-            &self.document,
-            &jig_protocol_config::Directories::working(),
-            &self.files,
-            &self.agent,
-            &self.seeds,
-            Some(&self.accounts()),
-            self.forges(),
-            Some(&self.setup),
-        )
-        .unwrap_or_else(|why| panic!("{}", String::from_utf8_lossy(&temper_service::startup::lines(&why))))
-    }
     /// Admission without constructing a service, for both split and standalone profiles.
-    pub fn admission(&self) -> Result<temper_service::startup::Requirements, temper_service::startup::Problems> {
+    pub fn admission(&self) -> Result<(), temper_service::startup::Problems> {
         let value: serde_json::Value = serde_json::from_slice(&self.document).expect("profile JSON");
         let accounts = value.get("engine").map(|_| self.accounts());
-        temper_service::startup::memory_requirements(
+        temper_service::startup::check(
             &self.document,
             &jig_protocol_config::Directories::working(),
             &self.files,
@@ -1089,17 +1075,6 @@ fn checked_setup(bytes: &[u8], named: &temper_service::Named) -> temper_forge_se
     .expect("bounded setup check")
 }
 
-/// The memory declarations of a document beside the package, by path relative to it.
-#[must_use]
-pub fn declared(relative: &str) -> temper_service::startup::Requirements {
-    let path = skein_scratch::paths::package().join(relative);
-    let text = fs::read_to_string(&path).expect("memory declarations document");
-    let value: serde_json::Value = serde_json::from_str(&text).expect("document JSON");
-    temper_service::startup::Requirements {
-        engine_bytes: value["engine"]["memory_bytes"].as_u64().expect("engine memory_bytes"),
-        worker_bytes: value["workers"][0]["memory_bytes"].as_u64().expect("worker memory_bytes"),
-    }
-}
 /// temper-01a's Adopt stand-in (forge-setup.md, 4.5 and 4.8); temper-15 removes it.
 /// Uses the kept webhook secret, drawing one only when absent.
 /// Uses the person's token because preparation's admin token carries no write:repository; temper-14 settles Adopt's scopes.

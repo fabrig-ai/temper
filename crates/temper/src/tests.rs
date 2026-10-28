@@ -466,7 +466,6 @@ fn box_echo_resolves_its_default_variable_and_flag_without_consuming_other_argum
 fn each_box_adoption_refusal_renders_one_line_naming_what_it_lacks() {
     use temper_service::system::BoxRefusal;
     for (why, expected) in [
-        (BoxRefusal::Memory { over: 1234 }, "the box's pipes need 1234 more bytes of engine.memory_bytes"),
         (BoxRefusal::Sockets { limit: 1 }, "the box's pipes need two free socket slots; the service socket limit is 1"),
         (BoxRefusal::Adopted, "the box's pipes were already adopted"),
         (BoxRefusal::NoEngine, "the box's pipes need an engine"),
