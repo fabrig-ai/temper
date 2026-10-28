@@ -255,8 +255,8 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
     let words = include_str!("../stock/chat.txt");
     assert!(words.contains("When a task, not a person, requested you"), "a goal is told apart by its requester");
     assert!(
-        words.contains("before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, and wait for the answer."),
-        "the goal asks its requester with message and waits for the answer"
+        words.contains("before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, then call wait until it is answered: never call finish before that answer, nor before every agreed change has landed."),
+        "the goal calls wait after asking and finishes only after the answer and all landings"
     );
     assert!(
         words.contains("When they want the work agreed before anything is changed (a plan to hear first, a go-ahead to give), call goal with their words whole at once, even where they ask for an advisor first, since the goal asks one itself: the goal tells its plan and asks them. Never write that plan yourself, never ask for their go-ahead in your own reply, never set advisor, and never call change yourself. Tell them a question will wait in their inbox."),
