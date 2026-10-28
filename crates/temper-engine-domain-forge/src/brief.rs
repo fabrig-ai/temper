@@ -476,6 +476,16 @@ pub(crate) fn gather(
             Some(_) | None => BriefRead::Failed,
         }),
         BriefSource::Ci { item, head } => brief_ci(domain, owner, item, head, parts, bytes, max_job_bytes, out),
+        BriefSource::BranchCi { task, head } => {
+            let repository = match domain.change(task) {
+                Some(row) if row.base_repair => row.repository,
+                Some(_) | None => {
+                    crate::held::ready(domain, owner, BriefRead::Failed, out);
+                    return;
+                }
+            };
+            start_ci(domain, owner, repository, head, parts, bytes, max_job_bytes, out)
+        }
         BriefSource::Reviews { item, head } => brief_reviews(domain, owner, item, head, parts, bytes, out),
         BriefSource::Pull { item, head } => brief_pull(domain, owner, item, head, parts, bytes, out),
     };
@@ -643,7 +653,25 @@ pub(super) fn brief_ci(
     {
         return Some(BriefRead::Failed);
     }
-    let repository = row.repository;
+    start_ci(domain, owner, row.repository, head, parts, bytes, max_job_bytes, out)
+}
+
+/// Pull-head and landing-tip repairs read the same pinned checks and log tails.
+#[expect(clippy::too_many_arguments, reason = "the pinned CI gather carries its owner and read bounds")]
+fn start_ci(
+    domain: &mut Domain,
+    owner: Token,
+    repository: skein_forge::api::Repository,
+    head: BriefCommit,
+    parts: u32,
+    bytes: u32,
+    max_job_bytes: u32,
+    out: &mut Queue<Request>,
+) -> Option<BriefRead> {
+    if parts == 0 || domain.brief_fetches.len() == domain.brief_fetches.capacity() {
+        return Some(BriefRead::Failed);
+    }
+    let item = BriefItem { repository: repository.repository, number: 0 };
     let words = BriefWords::with_capacity(bytes, false);
     let call = Token::new(owner.raw() | (1_u64 << 61_u32) | (1_u64 << 59_u32));
     let fetch = BriefFetch {

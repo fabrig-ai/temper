@@ -1701,6 +1701,16 @@ fn a_worker_frozen_past_its_grace_resumes_with_a_push_in_hand_and_lands_nothing_
 #[expect(clippy::too_many_lines, reason = "the base repair story drives two consecutive change landings")]
 fn a_broken_landing_branch_gets_one_deployment_repair_before_waiting_changes_land() {
     let (mut world, _chat, producer, branch) = change_world(false, 1000, None);
+    let raw::Answer::Commit(tip) =
+        world.external(1, raw::Op::Read(raw::Read::Branch { branch: b"main".as_slice().into() }))
+    else {
+        panic!("landing tip")
+    };
+    let tip = translate::commit(tip);
+    let mut tip_hex = String::new();
+    for byte in &tip[..6] {
+        write!(tip_hex, "{byte:02x}").expect("tip digits");
+    }
     assert!(matches!(
         world.external(
             1,
@@ -1753,6 +1763,23 @@ fn a_broken_landing_branch_gets_one_deployment_repair_before_waiting_changes_lan
             )
         })
         .clone();
+    let producer = live_task(&world, repair.task);
+    let tasks::Party::Task(change) = producer.requester else { panic!("repair change requester") };
+    let opening = format!("Repair main CI at {tip_hex}: build\n");
+    for task in [change, repair.task] {
+        let words = &live_task(&world, task).spec.words;
+        let read = &words[..words.len().min(128)];
+        assert!(read.starts_with(opening.as_bytes()), "task {task}: {}", String::from_utf8_lossy(read));
+    }
+    let ci = repair
+        .sections
+        .iter()
+        .find(|section| section.kind == engine::BriefKind::Forge(engine::ForgeBriefKind::Ci))
+        .expect("landing tip failure brief");
+    let engine::BriefBody::Text(ci) = &ci.body else { panic!("CI text") };
+    let ci = String::from_utf8_lossy(ci);
+    assert!(ci.contains("Failed check: build"), "{ci}");
+    assert!(ci.contains(&tip_hex), "failed tip: {ci}");
     let repair_branch = repair.workspace.repositories[0].push.as_ref().expect("repair branch").clone();
     assert_ne!(repair_branch, branch);
     assert!(world.store.rows.values().any(|stored| matches!(stored,

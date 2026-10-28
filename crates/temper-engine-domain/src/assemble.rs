@@ -218,6 +218,53 @@ fn plan_forge_section(
     true
 }
 
+/// Task parameters are text; preserve the forge's complete SHA-1 or SHA-256.
+fn commit_parameter(value: &[u8]) -> Option<[u8; 32]> {
+    if value.len() != 40 && value.len() != 64 {
+        return None;
+    }
+    let mut head = [0; 32];
+    for (index, pair) in value.chunks_exact(2).enumerate() {
+        let mut byte = 0_u8;
+        for digit in pair {
+            let nibble = match digit {
+                b'0'..=b'9' => digit.checked_sub(b'0')?,
+                b'a'..=b'f' => digit.checked_sub(b'a')?.checked_add(10)?,
+                _ => return None,
+            };
+            byte = byte.checked_mul(16)?.checked_add(nibble)?;
+        }
+        *head.get_mut(index)? = byte;
+    }
+    Some(head)
+}
+
+fn queue_repair_source(domain: &Domain, parent: u64, task: u64) -> Option<forge::BriefSource> {
+    let row = domain.forge.change(parent)?;
+    let producing = match row.delegate {
+        Some((child, forge_change::Delegate::Produce)) => child == task,
+        Some((
+            _,
+            forge_change::Delegate::Repair(_)
+            | forge_change::Delegate::Gate { .. }
+            | forge_change::Delegate::Resolve { .. },
+        ))
+        | None => false,
+    };
+    if !row.base_repair || !producing {
+        return None;
+    }
+    for parameter in &domain.core.tasks.task(parent)?.spec.parameters {
+        if let jig_domain_tasks::Parameter::Bytes { name: 10, value } = parameter {
+            return Some(forge::BriefSource::BranchCi {
+                task: parent,
+                head: forge::BriefCommit(commit_parameter(value)?),
+            });
+        }
+    }
+    None
+}
+
 pub(crate) fn finish_brief_plan(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -226,6 +273,13 @@ pub(crate) fn finish_brief_plan(
     mut wanted: List<brief::Planned>,
 ) {
     if !plan_home_access(domain, env, task, parent, &mut wanted) {
+        domain.work.push(Work::Core(jig_domain_core::Event::BriefAssembled { task, ready: false }));
+        return;
+    }
+    if let Some(parent) = parent
+        && let Some(source) = queue_repair_source(domain, parent, task)
+        && !plan_forge_section(domain, task, source, 5, &mut wanted)
+    {
         domain.work.push(Work::Core(jig_domain_core::Event::BriefAssembled { task, ready: false }));
         return;
     }
@@ -276,7 +330,7 @@ pub(crate) fn finish_brief_plan(
 pub(crate) fn forge_brief_kind(source: forge::BriefSource) -> ForgeBriefKind {
     match source {
         forge::BriefSource::Home { .. } => ForgeBriefKind::Home,
-        forge::BriefSource::Ci { .. } => ForgeBriefKind::Ci,
+        forge::BriefSource::Ci { .. } | forge::BriefSource::BranchCi { .. } => ForgeBriefKind::Ci,
         forge::BriefSource::Reviews { .. } => ForgeBriefKind::Reviews,
         forge::BriefSource::Pull { .. } => ForgeBriefKind::Pull,
     }
