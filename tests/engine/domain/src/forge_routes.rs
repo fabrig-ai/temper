@@ -59,6 +59,7 @@ pub struct World {
     pub held_reads: Option<Vec<engine::Request>>,
     pub merges: u32,
     pub writes: Vec<skein_forge::api::Write>,
+    pub repository_writes: Vec<(skein_forge::api::Repository, skein_forge::api::Write)>,
     /// Hold decoded write answers after the independent forge has made the effect.
     pub hold_write_answers: Option<HoldWrite>,
     pub held_write_answers: Vec<engine::Event>,
@@ -75,6 +76,7 @@ pub struct World {
 #[derive(Clone, Copy, Default)]
 pub struct StoryLimits {
     pub turn: bool,
+    pub across: bool,
     pub landing_members: Option<u32>,
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
@@ -213,7 +215,8 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members } = timing;
+        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, turn, landing_members, across } =
+            timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -424,6 +427,11 @@ impl World {
                 if documents.is_some() {
                     paths::add_reader(&mut policy);
                 }
+                if across {
+                    limits.fleet.slots = 3;
+                    limits.fleet.attempts = 3;
+                    limits.fleet.workstreams = 3;
+                }
                 if turn {
                     limits.authority.grants = 14;
                     limits.tasks.authority_grants = 14;
@@ -466,8 +474,15 @@ impl World {
                         gates: Box::new([]),
                         approvals: Box::new([]),
                     };
-                    config.landing.deployment = Box::new([rule.clone()]);
-                    config.landing.projects.insert(1, Box::new([rule])).expect("turn landing requirements");
+                    if across {
+                        let mut lib = rule.clone();
+                        lib.pattern.segments[3] = b"lib".as_slice().into();
+                        config.landing.deployment = Box::new([rule.clone(), lib.clone()]);
+                        config.landing.projects.insert(1, Box::new([rule.clone(), lib])).expect("two repository rules");
+                    } else {
+                        config.landing.deployment = Box::new([rule.clone()]);
+                        config.landing.projects.insert(1, Box::new([rule])).expect("turn landing requirements");
+                    }
                     config
                         .landing
                         .landings
@@ -487,6 +502,12 @@ impl World {
                             },
                         )
                         .expect("one turn project");
+                    if across {
+                        let landing = config.landing.landings.get_mut(&1).expect("turn project");
+                        let mut lib = landing.repositories[0].clone();
+                        lib.repository = skein_forge::api::Repository { forge: 1, repository: 4 };
+                        landing.repositories = Box::new([landing.repositories[0].clone(), lib]);
+                    }
                 }
                 let mut domain = authority::Domain::new(rules, limits.authority).expect("read authority rules");
                 let mut facts = Queue::with_capacity(authority::POLICY_MAX_OUT);
@@ -599,41 +620,48 @@ impl World {
             fake_config.limits.workflow_runs = 8;
         }
         let mut fake = fake::Domain::new(&fake_config, 71);
-        fake::repository(
-            &mut fake,
-            &fake_config,
-            raw::Setup {
-                workflows: if turn {
-                    Box::new([raw::Workflow {
-                        file: b"gate.yml".as_slice().into(),
-                        jobs: Box::new([b"test".as_slice().into()]),
-                        latency_min: Duration::from_secs(1),
-                        latency_max: Duration::from_secs(1),
-                        silent: 0,
-                        passes: 1000,
-                        cue: None,
-                    }])
-                } else {
-                    Box::new([])
-                },
-                id: 2,
-                name: Box::from(&b"org/repo"[..]),
-                default: Box::from(&b"main"[..]),
-                tree: Box::new([]),
-                labels: Box::new([]),
-                checks: raw::Checks {
-                    contexts: if turn { Box::new([]) } else { Box::new([Box::from(&b"build"[..])]) },
-                    latency_min: Duration::ZERO,
-                    latency_max: Duration::ZERO,
-                    silent: if silent_ci { 1000 } else { 0 },
-                    passes,
-                    reruns: 0,
+        let setup = raw::Setup {
+            workflows: if turn {
+                Box::new([raw::Workflow {
+                    file: b"gate.yml".as_slice().into(),
+                    jobs: Box::new([b"test".as_slice().into()]),
+                    latency_min: Duration::from_secs(1),
+                    latency_max: Duration::from_secs(1),
+                    silent: 0,
+                    passes: 1000,
                     cue: None,
-                },
-                protection: None,
-                hooked: false,
+                }])
+            } else {
+                Box::new([])
             },
-        );
+            id: 2,
+            name: Box::from(&b"org/repo"[..]),
+            default: Box::from(&b"main"[..]),
+            tree: Box::new([]),
+            labels: Box::new([]),
+            checks: raw::Checks {
+                contexts: if turn { Box::new([]) } else { Box::new([Box::from(&b"build"[..])]) },
+                latency_min: Duration::ZERO,
+                latency_max: Duration::ZERO,
+                silent: if silent_ci { 1000 } else { 0 },
+                passes,
+                reruns: 0,
+                cue: None,
+            },
+            protection: None,
+            hooked: false,
+        };
+        fake::repository(&mut fake, &fake_config, setup.clone());
+        if across {
+            fake::repository(
+                &mut fake,
+                &fake_config,
+                raw::Setup { id: 4, name: b"org/lib".as_slice().into(), ..setup },
+            );
+            fake::grant(&mut fake, b"org/lib", 1, raw::Permission::Admin);
+            fake::grant(&mut fake, b"org/lib", 2, raw::Permission::Write);
+            fake::grant(&mut fake, b"org/lib", 7, raw::Permission::Read);
+        }
         fake::grant(&mut fake, b"org/repo", 1, raw::Permission::Admin);
         fake::grant(&mut fake, b"org/repo", 2, raw::Permission::Write);
         fake::grant(&mut fake, b"org/repo", 7, raw::Permission::Read);
@@ -714,6 +742,7 @@ impl World {
             busy_calls: 0,
             merges: 0,
             writes: Vec::new(),
+            repository_writes: Vec::new(),
         }
     }
 
@@ -786,6 +815,10 @@ impl World {
     }
 
     pub fn external(&mut self, user: u64, op: raw::Op) -> raw::Answer {
+        self.external_at(b"org/repo", user, op)
+    }
+
+    pub fn external_at(&mut self, repository: &[u8], user: u64, op: raw::Op) -> raw::Answer {
         let mut config = self.fake_env.limits;
         config.latency_min = Duration::ZERO;
         config.latency_max = Duration::ZERO;
@@ -796,7 +829,7 @@ impl World {
             fake::Event::Call {
                 reply_to: ReplyTo::new(Token::new(10_000)),
                 user,
-                repository: Box::from(&b"org/repo"[..]),
+                repository: Box::from(repository),
                 op,
             },
             &mut self.fake_out,
@@ -861,6 +894,7 @@ impl World {
                     }
                     if let skein_forge::api::Op::Write(write) = &op {
                         self.writes.push(write.clone());
+                        self.repository_writes.push((repository, write.clone()));
                     }
                     self.forge_calls += 1;
                     let issue_write = match &op {
@@ -924,6 +958,8 @@ impl World {
                         name
                     } else if repository == forge_world::REPO {
                         b"org/repo"
+                    } else if repository == (skein_forge::api::Repository { forge: 1, repository: 4 }) {
+                        b"org/lib"
                     } else if repository == (skein_forge::api::Repository { forge: 1, repository: 3 }) {
                         b"org/extra"
                     } else {
