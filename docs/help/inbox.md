@@ -8,7 +8,9 @@ A party's inbox is what waits on it, questions, proposals, escalations and perso
 
 - **Needs** wait for your party to act, a line each:
   - a question a task asked you, `TASK · question N`, its task and the
-    question's number;
+    question's number, then its words (cut and marked past what the
+    line holds) and two `next:` lines: the read of its words whole
+    (`task activity`) and its answer (`task answer`);
   - a proposal waiting for your decision, `PROPOSAL · proposal`, such
     as `t41/3 · proposal` (temper help proposal);
   - an escalation, a held task waiting for you to decide its hold,

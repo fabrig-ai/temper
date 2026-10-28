@@ -111,7 +111,8 @@ both do. `--until changed` returns at the subject's next change.
   cancelled); `waiting-on-me`, over the task's tree; `held`;
   `replied`, once a chat waits on someone, holds, closes or ends;
   `phase:PHASE`, a live phase;
-- `task tree TASK`, `task run TASK`: `ended`;
+- `task tree TASK`, `task run TASK`: `ended`; for `task run`, met at
+  once when the task has no live run;
 - `task list`, without `--after` or `--ended`: none;
 - `account list`: `usable`, an account your work may use; `settled`,
   no sign-in or check you asked still in progress;
