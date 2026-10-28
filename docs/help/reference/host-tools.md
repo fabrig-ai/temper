@@ -20,6 +20,7 @@ Have one change written on a branch of a repository of this project, opened as a
 A write.
 
 - `words`: text; required. What to change: the files, and the exact text where it matters. It is all the change's coder reads.
+- `repairs`: text; optional. The red landing this change repairs: 40 or 64 hexadecimal digits.
 - `repository`: text; optional. The repository, as owner/name; leave it out when the project has one you may write.
 
 ## delegate
