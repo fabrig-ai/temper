@@ -97,3 +97,22 @@ fn only_the_serve_steps_stdout_is_plain() {
         assert_eq!(route(b"serve", step, fd), expected);
     }
 }
+
+#[test]
+fn diagnostic_pieces_keep_every_byte_at_and_past_the_bound() {
+    use crate::logs::Piece;
+    for (ending, expected) in
+        [(b"\n".as_slice(), b"serve: \n".as_slice()), (b"x\n", b"serve: x\n"), (b"x", b"serve: x\n")]
+    {
+        let mut lines = Lines::new(false);
+        lines.push(cap(), READ);
+        let Some(Output::Piece { bytes, wall }) = lines.take(b"serve") else { panic!("full piece") };
+        assert_eq!(Piece { step: 0, bytes, wall }.echo(b"serve"), crate::lines::joined(&[b"serve: ", &cap(), b"\n"]));
+        lines.push(bytes::copy_of(ending), READ);
+        lines.end(EOF);
+        let Some(Output::Piece { bytes, wall }) = lines.take(b"serve") else { panic!("remaining piece") };
+        assert_eq!(Piece { step: 0, bytes, wall }.echo(b"serve").as_ref(), expected);
+        assert_eq!(lines.take(b"serve"), None);
+        assert!(lines.is_empty());
+    }
+}
