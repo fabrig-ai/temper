@@ -42,18 +42,21 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
         project["policy"] = 1.into();
         project.as_object_mut().expect("seed").remove("roles");
     }
-    // Admit stock policy 1 and its ten grants.
+    // Admit stock policy 1's fourteen grants and six executor kinds.
     for (name, count) in [
         ("core.policy_bytes", 4096),
         ("authority.grants", 16),
+        ("authority.executors", 6),
         ("tasks.authority_grants", 16),
+        ("tasks.executor_kinds", 6),
+        ("tasks.authority_bytes", 128),
         ("notes.scopes", 32),
         ("tasks.charters", 4),
     ] {
         value["engine"]["limits"]["overrides"][name] = count.into();
     }
-    // A Create member owns stock's ten grants and four executors, plus its words.
-    value["engine"]["limits"]["overrides"]["people.amendment_bytes"] = 1024.into();
+    // A Create member owns stock's grants and executors, plus its words.
+    value["engine"]["limits"]["overrides"]["people.amendment_bytes"] = 2048.into();
     let worker: serde_json::Value =
         serde_json::from_slice(jig_channel_world::fixtures::WORKER_DOCUMENT).expect("worker JSON");
     value["workers"] = worker["workers"].clone();
@@ -69,7 +72,8 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
     value["engine"]["llm"]["endpoints"][0]["address"] = serde_json::json!({"socket":UNREACHED});
     value["engine"]["limits"]["overrides"]["core.load_slots"] = 8.into();
     value["engine"]["limits"]["overrides"]["documents.rows"] = 2.into();
-    value["engine"]["limits"]["overrides"]["documents.lines"] = 2.into();
+    // The creation offer includes all three stock procedures.
+    value["engine"]["limits"]["overrides"]["documents.lines"] = 3.into();
     value["engine"]["limits"]["overrides"]["documents.text_bytes"] = 128.into();
     value["engine"]["limits"]["overrides"]["people.sign_ins"] = 2.into();
     value["engine"]["limits"]["overrides"]["views.watchers"] = 16.into();
