@@ -180,6 +180,10 @@ pub trait Parts: core::fmt::Debug {
     fn diagnostic_prefix(&self) -> &'static [u8];
     fn command_prefix(&self) -> &'static [u8];
     fn phrasebook(&self, text: u32) -> skein_ui::phrases::Phrasebook;
+    /// An application procedure may refuse a repeat choice before the act is submitted.
+    fn release_again_refusal(&self, _task: &contract::Task) -> Option<&'static [u8]> {
+        None
+    }
     fn task_next(&self, task: &contract::Task, out: &mut Text);
     fn owner_part(&self, part: &contract::OwnerPart, out: &mut Text);
     fn part(&self, part: &contract::Part, out: &mut Text);

@@ -158,6 +158,85 @@ fn a_change_is_produced_opened_checked_queued_and_landed() {
     assert_eq!(nine.change.state, State::Landed { merge: MERGE });
     assert_eq!(nine.decision, Decision::Finish { merge: MERGE });
 }
+fn failed_producer() -> (Change, Facts, Heard) {
+    let mut f = facts();
+    f.branch = None;
+    f.pull = Pull::Missing;
+    let mut c = change(State::Producing { requested: false });
+    c.last_head = None;
+    let first = decide(&c, &f, &heard());
+    assert_eq!(first.decision, Decision::Delegate(Delegate::Produce));
+    let mut h = heard();
+    h.delegate = Status::Failed;
+    let failed = decide(&first.change, &f, &h);
+    assert_eq!(failed.decision, Decision::Hold(Hold::Failed));
+    (failed.change, f, h)
+}
+
+#[test]
+fn a_released_change_makes_a_fresh_producer_after_its_first_failed_for_good() {
+    let (c, mut f, h) = failed_producer();
+    let lifted = released(&c, at(1));
+    let reset = decide(&lifted, &f, &h);
+    assert_eq!(reset.change.state, State::Producing { requested: false });
+    let fresh = decide(&reset.change, &f, &h);
+    assert_eq!(fresh.decision, Decision::Delegate(Delegate::Produce));
+    assert_eq!(fresh.change.state, State::Producing { requested: true });
+    assert_eq!(decide(&fresh.change, &f, &heard()).decision, Decision::Wait { until: Some(at(31)) });
+    f.branch = Some(NEW);
+    let opened = decide(&fresh.change, &f, &Heard { delegate: Status::Passed, ..heard() });
+    assert_eq!(opened.change.state, State::Opening { requested: false });
+    assert_eq!(decide(&opened.change, &f, &heard()).decision, Decision::Effect(Effect::Open));
+}
+
+#[test]
+fn a_released_failed_producers_replacement_needs_authority_and_a_bare_release_holds_again() {
+    use crate::{AuthorityHold, AuthorityLack, AuthorityRecovery};
+    for lack in [AuthorityLack::Tasks, AuthorityLack::Depth, AuthorityLack::Spend] {
+        let (c, f, mut h) = failed_producer();
+        let cause = AuthorityHold {
+            recovery: AuthorityRecovery { task: c.task, spec: 0, hold: 2, tasks: 2 },
+            lack,
+            had: 1,
+            released: false,
+        };
+        if lack == AuthorityLack::Spend {
+            h.spend = Some(crate::DelegateSpend {
+                recovery: cause.recovery,
+                left: cause.had,
+                coding: cause.had + 1,
+                review: 0,
+            });
+        } else {
+            h.lacking = Some(cause);
+        }
+        let reset = decide(&released(&c, at(1)), &f, &h);
+        let blocked = decide(&reset.change, &f, &h);
+        assert_eq!(blocked.decision, Decision::Hold(Hold::Authority(cause)));
+        let again = decide(&released(&blocked.change, at(1)), &f, &h);
+        assert_eq!(again.decision, Decision::Hold(Hold::Authority(AuthorityHold { released: true, ..cause })));
+        let words = crate::authority_words(cause);
+        assert!(words.ends_with(b"release it: task release 7 --hold 2 (it holds again unless it has more); or cancel it: task cancel 7 REASON"));
+    }
+}
+
+#[test]
+fn a_release_keeps_other_producing_holds_and_a_pushed_head_goes_on_without_a_new_producer() {
+    let (c, mut f, h) = failed_producer();
+    let stalled = change(State::Held { was: Box::new(State::Producing { requested: true }), why: Hold::Stalled });
+    let reset = decide(&released(&stalled, at(1)), &f, &h);
+    assert_eq!(reset.change.state, State::Producing { requested: true });
+    let mut previously_pushed = c.clone();
+    previously_pushed.last_head = Some(HEAD);
+    let kept = decide(&released(&previously_pushed, at(1)), &f, &h);
+    assert_eq!(kept.change.state, State::Producing { requested: true });
+    f.branch = Some(NEW);
+    let reset = decide(&released(&c, at(1)), &f, &h);
+    let next = decide(&reset.change, &f, &h);
+    assert_eq!(next.change.state, State::Opening { requested: false });
+    assert_eq!(next.change.last_head, Some(NEW));
+}
+
 #[test]
 fn a_clean_update_preserves_the_turn_and_carries_a_review() {
     let gate = Gate { number: 9, kind: GateKind::Agent, blocking: true, freshness: Freshness::Clean, eager: false };

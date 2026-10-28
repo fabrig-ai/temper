@@ -112,6 +112,7 @@ pub(super) fn start(runner: &mut Runner, client: &Client, env: &Env<Limits>, cal
     runner.acts.insert(called.call_number, Reading { called, document: None });
 }
 pub(crate) enum Failed {
+    Refused(&'static [u8]),
     Fixed(&'static [u8]),
     Unknown { what: &'static [u8], name: Box<[u8]> },
     EffortRequired { name: Box<[u8]> },
@@ -200,7 +201,14 @@ pub(super) fn page(
             Readout::Jig(c::ReadResult::Value(value)) => match render::read_task(value) {
                 Some((task, _)) if subject::routes_through(&called.call, &document, task.chip.task) => {
                     let Some(me) = me(runner, client) else { return };
-                    build(&called.call, &document, me, &env.limits, Some(task.project))
+                    build(
+                        &called.call,
+                        &document,
+                        me,
+                        &env.limits,
+                        Some(task.project),
+                        runner.parts.expect("host vocabulary"),
+                    )
                 }
                 Some(_) | None => Err(Failed::Fixed(b"task project unavailable")),
             },
@@ -234,7 +242,9 @@ pub(super) fn page(
         return;
     }
     let ask = match &page {
-        Readout::Jig(c::ReadResult::Value(document)) => build(&called.call, document, me, &env.limits, None),
+        Readout::Jig(c::ReadResult::Value(document)) => {
+            build(&called.call, document, me, &env.limits, None, runner.parts.expect("host vocabulary"))
+        }
         Readout::Limit | Readout::NotServed { .. } | Readout::Jig(_) | Readout::Family { .. } => {
             let printed = render::read(
                 &page,
@@ -283,7 +293,14 @@ fn settings_action(action: &c::OwnerProposalAction) -> bool {
     }
 }
 
-fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, project: Option<u32>) -> Prepared {
+fn build(
+    call: &Call,
+    document: &c::ReadValue,
+    me: &c::Me,
+    limits: &Limits,
+    project: Option<u32>,
+    vocabulary: &dyn render::Parts,
+) -> Prepared {
     if call.tool == rows::AMEND_AT {
         return Err(Failed::Fixed(b"unexpected amendment document"));
     }
@@ -297,6 +314,13 @@ fn build(call: &Call, document: &c::ReadValue, me: &c::Me, limits: &Limits, proj
         subject::Scope::Project(project) => project,
         subject::Scope::Task(_) => project.ok_or(Failed::Fixed(b"project unavailable"))?,
     };
+    if call.tool == rows::RELEASE_AT
+        && value(call, 2).is_some()
+        && let Some((task, _)) = render::read_task(document)
+        && let Some(why) = vocabulary.release_again_refusal(task)
+    {
+        return Err(Failed::Refused(why));
+    }
     let offers = subject::offers(document);
     let act = kind(call);
     let mut admission = None;
@@ -459,6 +483,7 @@ pub(crate) fn prepared(
         Ok(request) => request,
         Err(why) => {
             let printed = match why {
+                Failed::Refused(why) => render::failure(why, called.json, 2),
                 Failed::Fixed(why) => render::failure(why, called.json, 1),
                 Failed::Detail(why) => render::failure(&why, called.json, 1),
                 Failed::Unknown { what, name } => choice::named(b"unknown ", what, &name, called.json),

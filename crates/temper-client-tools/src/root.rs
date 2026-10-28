@@ -474,6 +474,15 @@ impl jig::render::Parts for Parts {
     fn phrasebook(&self, text: u32) -> skein_ui::phrases::Phrasebook {
         temper_client_domain::words::phrasebook(text)
     }
+    fn release_again_refusal(&self, task: &jig_client::contract::Task) -> Option<&'static [u8]> {
+        if task.chip.executor
+            == (jig_client::contract::Executor::Procedure { connector: temper_client_protocol_wire::FORGE, kind: 2 })
+        {
+            Some(b"task release: a change has no run of its own to repeat: release its hold, and it decides afresh")
+        } else {
+            None
+        }
+    }
     fn task_next(&self, task: &jig_client::contract::Task, out: &mut jig::render::Text) {
         if let jig_client::contract::TaskContractDocument::Change { connector, kind: 1, .. } = task.result_contract
             && connector == temper_client_protocol_wire::FORGE

@@ -556,6 +556,85 @@ fn release(world: &mut World, task: u64) {
     );
 }
 
+fn held_producer() -> (World, u64, engine::Assignment, Box<[u8]>) {
+    use temper_engine_domain_forge_change::{Hold, State};
+    let (mut world, _, producer, branch) = change_world(false, 1000, None);
+    let task = requester(&world, producer.task);
+    finish_review(
+        &mut world,
+        &producer,
+        tasks::TaskResult::Failure { reason: b"cannot finish the files".as_slice().into() },
+    );
+    wait_held(&mut world, task);
+    assert_eq!(
+        change_row(&world, task).change.state,
+        State::Held { was: Box::new(State::Producing { requested: true }), why: Hold::Failed }
+    );
+    assert_eq!(change_row(&world, task).change.last_head, None);
+    assert_eq!(live_task(&world, task).made, 2, "change itself and first producer");
+    (world, task, producer, branch)
+}
+
+#[test]
+fn a_released_change_makes_a_fresh_producer_and_its_requester_hears_it_land() {
+    let (mut world, task, first, branch) = held_producer();
+    let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Ended(ended)))) =
+        world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Ended(first.task))))
+    else {
+        panic!("failed producer ended")
+    };
+    let spec = ended.spec.clone();
+    let parent = requester(&world, task);
+    release(&mut world, task);
+    let fresh = next_assignment(&mut world, 2);
+    assert_ne!(fresh.task, first.task);
+    assert_eq!(requester(&world, fresh.task), task);
+    assert_eq!(fresh.charter, first.charter);
+    assert_eq!(live_task(&world, fresh.task).spec, spec, "same producing brief");
+    assert_eq!(live_task(&world, task).made, 3, "fresh producer is one more task");
+    assert_eq!(world.assigned.len(), 3, "one fresh producer");
+    produce(&mut world, &fresh, &branch);
+    assert_lands(&mut world, task);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if live_task(&world, parent).inbox.iter().any(|word| {
+            word.from == tasks::Party::Task(task)
+                && matches!(word.kind, tasks::MessageKind::Result(tasks::ResultKind::Change { .. }))
+        }) {
+            return;
+        }
+    }
+    panic!("requester did not hear its released change land");
+}
+
+#[test]
+fn a_released_failed_producer_needs_another_task_and_a_second_release_holds_again() {
+    let (mut world, task, _, _) = held_producer();
+    change_authority(&mut world, task, Some(1), None, None);
+    release(&mut world, task);
+    wait_held(&mut world, task);
+    assert_authority_hold(
+        &world,
+        task,
+        temper_engine_domain_forge_change::AuthorityLack::Tasks,
+        b"its 1 tasks are made",
+        false,
+    );
+    assert_eq!(live_task(&world, task).made, 2);
+    assert_eq!(world.assigned.len(), 2, "no replacement attempted");
+    release(&mut world, task);
+    wait_held(&mut world, task);
+    assert_authority_hold(
+        &world,
+        task,
+        temper_engine_domain_forge_change::AuthorityLack::Tasks,
+        b"its 1 tasks are made; released without more tasks",
+        true,
+    );
+    assert_eq!(live_task(&world, task).made, 2);
+    assert_eq!(world.assigned.len(), 2);
+}
+
 fn approve(world: &mut World, reviewer: &engine::Assignment) {
     finish_review(
         world,

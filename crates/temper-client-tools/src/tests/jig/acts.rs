@@ -654,3 +654,35 @@ fn an_owner_refused_release_reaches_the_engine_and_gives_no_propose_advice() {
         b"task release: Held by hold 12, placed by person 3: only they, or a role above theirs, may release it\n"
     );
 }
+
+#[test]
+fn a_change_cannot_repeat_a_run_of_its_own() {
+    let mut root = fixtures::signed_in(fixtures::PARTY);
+    let call = root.submit(&["task", "release", "41", "--hold", "1", "--again"]);
+    let mut task = fixtures::offered(&[c::ActKind::Release]);
+    task.chip.executor = c::Executor::Procedure { connector: temper_client_protocol_wire::FORGE, kind: 2 };
+    root.serve(call, fixtures::task_result(task));
+    assert!(!root.sends.contains_key(&call), "no repeat is submitted for authority admission");
+    let answer = root.answer(call).unwrap();
+    assert_eq!(answer.status, 2);
+    assert_eq!(
+        answer.stderr.as_ref(),
+        b"task release: a change has no run of its own to repeat: release its hold, and it decides afresh\n"
+    );
+}
+
+#[test]
+fn a_plain_change_release_and_an_agents_repeat_still_reach_the_engine() {
+    for (executor, again) in [
+        (c::Executor::Procedure { connector: temper_client_protocol_wire::FORGE, kind: 2 }, false),
+        (c::Executor::Agent { charter: 1 }, true),
+    ] {
+        let mut root = fixtures::signed_in(fixtures::PARTY);
+        let words = ["task", "release", "41", "--hold", "1", "--again"];
+        let call = root.submit(if again { &words } else { &words[..5] });
+        let mut task = fixtures::offered(&[c::ActKind::Release]);
+        task.chip.executor = executor;
+        root.serve(call, fixtures::task_result(task));
+        assert!(root.sends.contains_key(&call));
+    }
+}

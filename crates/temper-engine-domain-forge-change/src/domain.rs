@@ -240,6 +240,11 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts) -> Stepped
                 State::Held { .. } | State::Landed { .. } | State::Ended => {
                     unreachable!("held state retains a live predecessor")
                 }
+                State::Producing { requested: true }
+                    if why == Hold::Failed && facts.branch.is_none() && change.last_head.is_none() =>
+                {
+                    State::Producing { requested: false }
+                }
                 State::Producing { .. }
                 | State::Opening { .. }
                 | State::Recreating { .. }
