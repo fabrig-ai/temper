@@ -11,8 +11,10 @@ A hold keeps a task from running until someone with the right to lift it says so
   held and gives the hold's revision, which a release names.
 - **Two kinds of hold.** temper holds a task by itself when something
   needs a decision: its tries ran out, its budget or deadline did, an
-  effect failed, its executor stalled. Such a hold waits for a decision
-  from the task above it or a person, and a release lifts it. A party
+  effect failed, its executor stalled. Its document names what: an
+  effect's hold the effect and its outcome, a procedure's the step
+  refused and why. Such a hold waits for a decision from the task above
+  it or a person, and a release lifts it. A party
   holds a task by placing a hold: today, by stopping it.
 - **A placed hold** is a record of its own, numbered in the deployment.
   It has an owner (the party who placed it), a mode (stop), a scope (a
