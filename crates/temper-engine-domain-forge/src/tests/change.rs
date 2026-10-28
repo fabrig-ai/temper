@@ -649,6 +649,7 @@ fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
         let mut prior = fixtures::opening_row();
         prior.pending = None;
         prior.effect = change::EffectResult::None;
+        prior.effect_account = Some(EffectAccount { entry: 91, words: b"previous effect".as_slice().into() });
         prior.change.state = change::State::Opening { requested: false };
         prior.change.repairs = 2;
         prior.change.resolutions = 1;
@@ -688,6 +689,7 @@ fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
         assert!(!decided.contains(&Request::WakeProcedure { task: 61 }), "the landing waits for admission");
         let staged = d.change(prior.task).expect("change retained").clone();
         assert_eq!(staged.pending, Some(FIRST_ENTRY));
+        assert_eq!(staged.effect_account, None, "only the admitted effect retires its predecessor's account");
         assert_ne!(staged.change, prior.change, "the requested flag advanced");
         assert!(outputs(&mut d, Event::ProcedureResolved { task: prior.task, step: 6, made: false }).is_empty());
         assert_eq!(d.change(prior.task), Some(&staged), "an old outcome cannot resolve this offer");
@@ -713,6 +715,7 @@ fn an_effects_change_and_outbox_are_saved_only_when_its_step_is_made() {
             assert_eq!(restored.change, prior.change, "all policy fields are restored");
             assert_eq!(restored.pending, prior.pending);
             assert_eq!(restored.effect, prior.effect);
+            assert_eq!(restored.effect_account, prior.effect_account);
             assert_eq!(restored.pull, prior.pull);
             assert_eq!(restored.drift, prior.drift);
             assert_eq!(restored.queue_repair, prior.queue_repair);
