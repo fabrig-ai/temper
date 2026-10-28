@@ -30,6 +30,13 @@ pub struct CallError {
     pub text: Box<[u8]>,
 }
 
+/// The fresh-read phase the story pauses.
+#[derive(Clone, Copy)]
+pub enum ReadPhase {
+    Queued,
+    Checking,
+}
+
 #[expect(clippy::struct_excessive_bools, reason = "independent outside fault and observation switches remain explicit")]
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
@@ -66,7 +73,7 @@ pub struct World {
     pub review_files_delay: Option<Duration>,
     gate: paths::Gate,
     pub held_reads: Option<Vec<engine::Request>>,
-    pub hold_checking_reads: bool,
+    pub held_read_phase: ReadPhase,
     pub merges: u32,
     pub writes: Vec<skein_forge::api::Write>,
     /// Hold decoded write answers after the independent forge has made the effect.
@@ -732,7 +739,7 @@ impl World {
             review_files_delay: None,
             gate,
             held_reads: None,
-            hold_checking_reads: false,
+            held_read_phase: ReadPhase::Queued,
             hold_write_answers: None,
             held_write_answers: Vec::new(),
             lose_writes: 0,
@@ -882,8 +889,10 @@ impl World {
                         && matches!(op, skein_forge::api::Op::Read(_))
                         && self.store.rows.values().any(|row| matches!(row,
                             Record::Forge { row, .. } if matches!(row.as_ref(), forge_top::Stored::Change(row)
-                                if matches!(row.change.state, temper_engine_domain_forge_change::State::Queued { .. } | temper_engine_domain_forge_change::State::First { .. })
-                                    || (self.hold_checking_reads && matches!(row.change.state, temper_engine_domain_forge_change::State::Checking { .. })))))
+                                if match self.held_read_phase {
+                                    ReadPhase::Queued => matches!(row.change.state, temper_engine_domain_forge_change::State::Queued { .. } | temper_engine_domain_forge_change::State::First { .. }),
+                                    ReadPhase::Checking => matches!(row.change.state, temper_engine_domain_forge_change::State::Checking { .. }),
+                                })))
                     {
                         reads.push(engine::Request::Forge { call, repository, op });
                         continue;
