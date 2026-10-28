@@ -912,7 +912,7 @@ fn a_release_waits_for_its_lost_writers_reread_even_after_restart() {
                 &mut d,
                 Event::Release { task: 7, root: 7, ending: ReleaseEnding::Done, reason: None, entry: 20 },
             );
-            assert!(!closing.contains(&Request::ReleaseFailed { task: 7 }), "wait for the reread");
+            assert!(!release_failed(&closing, 7), "wait for the reread");
             if restart {
                 let hold = d.hold(&name).unwrap().clone();
                 d = domain();
@@ -930,10 +930,10 @@ fn a_release_waits_for_its_lost_writers_reread_even_after_restart() {
             let error = if refused { skein_forge::api::Error::Refused } else { skein_forge::api::Error::Missing };
             let answered = fixtures::answer(&mut d, call, Err(error));
             if refused {
-                assert!(answered.contains(&Request::ReleaseFailed { task: 7 }));
+                assert!(release_failed(&answered, 7));
                 assert!(!answered.contains(&Request::ContinueRelease { task: 7 }));
             } else {
-                assert!(!answered.contains(&Request::ReleaseFailed { task: 7 }));
+                assert!(!release_failed(&answered, 7));
                 assert!(answered.contains(&Request::ContinueRelease { task: 7 }));
                 assert_eq!(d.hold(&name).unwrap().writer, None);
                 let continued = outputs(&mut d, Event::ContinueRelease { task: 7, entry: 21 });
@@ -1012,7 +1012,7 @@ fn a_release_waits_for_its_lost_writers_read_until_its_forge_connects() {
     fixtures::answer_next(&mut d, Err(skein_forge::api::Error::NotConnected));
     let closing =
         outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Cancelled, reason: None, entry: 20 });
-    assert!(!closing.contains(&Request::ReleaseFailed { task: 7 }));
+    assert!(!release_failed(&closing, 7));
     assert!(!closing.contains(&Request::Released { task: 7 }));
     assert!(outputs(&mut d, Event::ContinueRelease { task: 7, entry: 20 }).is_empty());
     assert!(!d.is_ready());
@@ -1022,7 +1022,7 @@ fn a_release_waits_for_its_lost_writers_read_until_its_forge_connects() {
     );
     assert!(ready(&mut d).is_empty(), "resume first admits the waiting read");
     let answered = fixtures::answer_next(&mut d, Err(skein_forge::api::Error::Missing));
-    assert!(!answered.contains(&Request::ReleaseFailed { task: 7 }));
+    assert!(!release_failed(&answered, 7));
     assert!(answered.contains(&Request::ContinueRelease { task: 7 }));
     let deleting = outputs(&mut d, Event::ContinueRelease { task: 7, entry: 20 });
     let mut enqueued = false;
@@ -1092,7 +1092,7 @@ fn a_release_waits_while_its_lost_writer_is_waiting_for_read_room() {
     branch_at(&mut d, 1, 4);
     let closing =
         outputs(&mut d, Event::Release { task: 10, root: 10, ending: ReleaseEnding::Done, reason: None, entry: 20 });
-    assert!(!closing.contains(&Request::ReleaseFailed { task: 10 }));
+    assert!(!release_failed(&closing, 10));
     ready(&mut d);
     ready(&mut d);
     branch_at(&mut d, 2, 2);
@@ -1126,7 +1126,7 @@ fn a_release_still_fails_for_a_running_writer_or_a_lost_writer_without_a_read() 
         );
         let closing =
             outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Done, reason: None, entry: 20 });
-        assert!(closing.contains(&Request::ReleaseFailed { task: 7 }));
+        assert!(release_failed(&closing, 7));
     }
 }
 
@@ -2225,4 +2225,15 @@ fn another_landing_owns_the_key_while_a_faulted_owner_waits() {
     other.task = 62;
     d.landing.flights.insert(key.clone(), other).expect("flight room");
     assert_eq!(landing::flight_fact(&d.landing, &key, (61, 0, 0)), Flight::Other);
+}
+
+fn release_failed(requests: &[Request], task: u64) -> bool {
+    for request in requests {
+        if let Request::ReleaseFailed { task: owner, .. } = request
+            && *owner == task
+        {
+            return true;
+        }
+    }
+    false
 }

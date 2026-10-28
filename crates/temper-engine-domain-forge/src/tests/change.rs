@@ -270,11 +270,19 @@ fn a_lower_chain_waiting_without_an_entry_releases_the_later_entry() {
 fn a_committed_entry_waiting_for_a_lower_chain_can_be_withdrawn() {
     let (mut d, _) = reversed_openings(false);
     let withdrawn = outputs(&mut d, Event::Withdraw { entry: LATER_ENTRY });
-    assert!(withdrawn.contains(&Request::Outcome {
-        entry: LATER_ENTRY,
-        task: LATER_CHANGE,
-        outcome: skein_forge_client::Outcome::Withdrawn,
-    }));
+    let mut found = false;
+    for request in withdrawn {
+        if let Request::Outcome {
+            entry: LATER_ENTRY,
+            task: LATER_CHANGE,
+            outcome: skein_forge_client::Outcome::Withdrawn,
+            ..
+        } = request
+        {
+            found = true;
+        }
+    }
+    assert!(found, "withdrawal reports the committed entry's outcome");
     assert!(ready(&mut d).is_empty(), "withdrawal releases no forge call");
 }
 

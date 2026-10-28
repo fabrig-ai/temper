@@ -180,6 +180,7 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         landing_row_entries: forge.entries,
         receipt_name_name: 32,
         receipt_run_url: 2048,
+        effect_account_words: temper_engine_domain_forge::EFFECT_ACCOUNT_BYTES,
         answer_name_name: forge.client.answer_bytes,
         binding_address: 254,
         binding_subject: 255,

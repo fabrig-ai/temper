@@ -786,6 +786,7 @@ pub fn change_row(state: temper_engine_domain_forge_change::State) -> top::Chang
         queue_repairs: 27,
         producing_charter: 2,
         review_charter: 4,
+        effect_account: None,
     }
 }
 pub fn change_states() -> List<temper_engine_domain_forge_change::State> {

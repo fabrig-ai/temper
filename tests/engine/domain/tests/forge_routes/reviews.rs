@@ -1299,30 +1299,247 @@ fn a_review_without_spend_holds_for_budget_before_delegating() {
     assert_eq!(world.assigned.len(), 2, "no unfunded reviewer is made");
     let task = read_change_task(&mut world, change);
     assert_eq!(task.hold.as_ref().map(|hold| hold.reason), Some(tasks::Hold::Budget));
+    let words = task.hold.as_ref().expect("budget hold").words.as_ref().expect("spend account").bytes.as_ref();
+    for expected in [b"spend".as_slice(), b"task release"] {
+        assert!(words.windows(expected.len()).any(|part| part == expected));
+    }
     assert_eq!(world.merges, 0);
 }
 
 #[test]
-fn a_review_without_charter_authority_is_refused_as_a_batch_without_an_effects_hold() {
+fn a_review_without_charter_authority_holds_naming_the_missing_executor() {
     let (mut world, change) = before_review();
     let mut authority = live_task(&world, change).authority.clone();
     authority.delegation.kinds = Box::new([tasks::AuthorityExecutor::Charter(2)]);
     amend_change_authority(&mut world, change, authority);
-    let mut refused = false;
-    for _ in 0..MAX_TICKS {
-        world.tick();
-        while let Some(fact) = world.root.pop_fact() {
-            if matches!(fact, engine::Fact::StepRefused { task, problem, .. }
-                if task == change && problem.why == tasks::Refusal::Batch)
-            {
-                refused = true;
-            }
-        }
-    }
-    assert!(refused, "the real core refuses the review batch");
+    wait_held(&mut world, change);
     assert!(change_row(&world, change).pull.is_some());
     assert_eq!(world.assigned.len(), 2, "no reviewer without charter authority");
     let task = read_change_task(&mut world, change);
-    assert!(task.hold.is_none(), "batch refusal does not become a dropped forge effect: {:?}", task.hold);
+    let hold = task.hold.expect("refused batch holds the procedure");
+    assert_eq!(hold.reason, tasks::Hold::Procedure);
+    assert!(
+        hold.words
+            .expect("hold carries its connector account")
+            .bytes
+            .windows(b"executor outside its delegation authority".len())
+            .any(|w| w == b"executor outside its delegation authority")
+    );
     assert_eq!(world.merges, 0);
+}
+
+fn concurrent_change(world: &mut World, key: u8, words: &[u8]) -> u64 {
+    let ask = adoption_chat(world);
+    let before = world.assigned.len();
+    let earlier: Vec<_> = world.assigned.iter().map(|run| run.task).collect();
+    let _first = assigned_chat(world, key, ask);
+    let chat = (0..MAX_TICKS)
+        .find_map(|_| {
+            let chat = world
+                .assigned
+                .iter()
+                .skip(before)
+                .find(|run| {
+                    matches!(live_task(world, run.task).requester, tasks::Party::Person(_))
+                        && !earlier.contains(&run.task)
+                })
+                .cloned();
+            if chat.is_none() {
+                world.tick();
+            }
+            chat
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "chat {key}: earlier {earlier:?}, assigned {:?}, live {:?}",
+                world.assigned.iter().map(|run| run.task).collect::<Vec<_>>(),
+                world
+                    .store
+                    .rows
+                    .values()
+                    .filter_map(|record| match record {
+                        Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))) =>
+                            Some((row.number, row.requester, row.executor, row.flags, &row.phase)),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            )
+        });
+    let answer = super::change_tool::change(world, &chat, u64::from(key) + 100, None, words);
+    let engine::CallAnswer::Delegated(made) = answer else { panic!("chat {key} change delegated: {answer:?}") };
+    let task = made[0].task;
+    let end = world.protocol.answer(CHANNEL, chat.task, chat.attempt, 5, tasks::End::Parked, engine::Parts::none());
+    world.send(end);
+    task
+}
+
+fn producer_for(world: &mut World, change: u64) -> engine::Assignment {
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        for run in &world.assigned {
+            if let Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) =
+                world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(run.task))))
+                && row.requester == tasks::Party::Task(change)
+            {
+                return run.clone();
+            }
+        }
+    }
+    panic!("change {change} has no producer: {:?}; answers {:?}", live_task(world, change), world.answers);
+}
+
+fn pending_large_with_alpha_and_beta(tasks: u32) -> (World, u64, u64, u64) {
+    let mut documents = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.documents;
+    documents.grants = 32;
+    documents.text_bytes = 512;
+    let mut world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate { agent: true, ..Gate::default() },
+        Some(documents),
+        StoryLimits { slots: Some(8), tasks: Some(tasks), forge_charter: Some(2), ..StoryLimits::default() },
+    );
+    world.adopt();
+    world.send(protocol::hello_slots(CHANNEL, 8, Box::new([])));
+    let large = concurrent_change(&mut world, 101, b"Large change remains pending");
+    let large_producer = producer_for(&mut world, large);
+    let large_branch = change_row(&world, large).branch.clone();
+    produce(&mut world, &large_producer, &large_branch);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if change_row(&world, large)
+            .delegate
+            .is_some_and(|(_, kind)| matches!(kind, temper_engine_domain_forge_change::Delegate::Gate { .. }))
+        {
+            break;
+        }
+    }
+    assert!(change_row(&world, large).pull.is_some(), "large change is pending review on its pull");
+    let alpha = concurrent_change(&mut world, 102, b"Add independent alpha note");
+    let beta = concurrent_change(&mut world, 103, b"Add independent beta note");
+    (world, large, alpha, beta)
+}
+
+#[test]
+fn independent_alpha_and_beta_start_while_a_large_change_is_pending() {
+    let (mut world, _, alpha, beta) = pending_large_with_alpha_and_beta(12);
+    let alpha_producer = producer_for(&mut world, alpha);
+    let beta_producer = producer_for(&mut world, beta);
+    assert_ne!(alpha_producer.task, beta_producer.task);
+    let branch = change_row(&world, alpha).branch.clone();
+    produce(&mut world, &alpha_producer, &branch);
+    for _ in 0..MAX_TICKS {
+        world.tick();
+        if change_row(&world, alpha)
+            .delegate
+            .is_some_and(|(_, kind)| matches!(kind, temper_engine_domain_forge_change::Delegate::Gate { .. }))
+        {
+            break;
+        }
+        if matches!(live_task(&world, alpha).phase, tasks::Phase::Held { .. }) {
+            break;
+        }
+    }
+    let task = read_change_task(&mut world, alpha);
+    assert!(task.hold.is_none(), "alpha hold: {:?}", task.hold);
+    assert!(
+        change_row(&world, alpha)
+            .delegate
+            .is_some_and(|(_, kind)| matches!(kind, temper_engine_domain_forge_change::Delegate::Gate { .. })),
+        "alpha reaches review while large and beta remain pending: {:?}",
+        change_row(&world, alpha)
+    );
+}
+
+#[test]
+fn beta_at_the_stock_task_limit_is_due_after_a_live_capacity_refusal() {
+    let cap = temper_engine_domain_world::forge_routes::box_limits().tasks.tasks;
+    assert_eq!(cap, 8, "the reproduction uses the shipped box's task limit");
+    let (mut world, large, alpha, beta) = pending_large_with_alpha_and_beta(cap);
+    let _producer = producer_for(&mut world, alpha);
+    for _ in 0..80 {
+        world.tick();
+    }
+    let problem = std::iter::from_fn(|| world.root.pop_fact())
+        .find_map(|fact| match fact {
+            engine::Fact::StepRefused { task, problem, .. } if task == beta => Some(problem),
+            _ => None,
+        })
+        .expect("beta's refused producer admission reaches the root");
+    assert_eq!(problem.why, tasks::Refusal::Live);
+    let row = live_task(&world, beta);
+    assert_eq!(row.phase, tasks::Phase::Active(tasks::Active::Due));
+    assert!(row.delegates.is_empty());
+    assert_eq!(row.numbers.spent + row.numbers.spent_below + row.numbers.reserved, 0);
+    assert!(row.authority.budget.spend > 0, "beta has untouched spend authority");
+    assert!(row.authority.delegation.tasks > 0);
+    // Ending the large change's reviewer frees live capacity without starting another alpha child.
+    let review = producer_for(&mut world, large);
+    finish_review(
+        &mut world,
+        &review,
+        tasks::TaskResult::Verdict { code: 1, fields: Box::new([]), words: b"approved".as_slice().into() },
+    );
+    for _ in 0..MAX_TICKS {
+        world.tick();
+    }
+    let live = world
+        .store
+        .rows
+        .values()
+        .filter(|record| matches!(record, Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(_)))))
+        .count();
+    assert!(live < cap as usize, "capacity is available: {live}/{cap}");
+    assert_eq!(live_task(&world, beta).phase, tasks::Phase::Active(tasks::Active::Due));
+    assert!(live_task(&world, beta).delegates.is_empty());
+}
+
+#[test]
+fn a_vetoed_open_holds_as_its_procedure_naming_the_effect_and_decision() {
+    let mut documents = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.documents;
+    documents.grants = 16;
+    documents.text_bytes = 512;
+    let world =
+        World::configured_policy(true, true, false, 1000, Gate { agent: true, ..Gate::default() }, Some(documents));
+    let (mut world, _, producer, branch) = change_world_in(world, Change::default());
+    let change = requester(&world, producer.task);
+    let mut authority = live_task(&world, change).authority.clone();
+    authority.grants = authority.grants.into_iter().filter(|grant| grant.kind != 3).collect();
+    amend_change_authority(&mut world, change, authority);
+    produce(&mut world, &producer, &branch);
+    wait_held(&mut world, change);
+    let task = read_change_task(&mut world, change);
+    let hold = task.hold.expect("veto holds");
+    assert_eq!(hold.reason, tasks::Hold::Procedure);
+    let words = hold.words.expect("hold carries its connector account").bytes;
+    for expected in [b"open pull request".as_slice(), b"grant", b"task release"] {
+        assert!(words.windows(expected.len()).any(|word| word == expected), "account: {words:?}");
+    }
+    assert_eq!(world.merges, 0);
+}
+
+#[test]
+fn a_failed_open_keeps_its_effect_and_forge_refusal_after_outbox_retirement() {
+    let mut documents = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.documents;
+    documents.grants = 16;
+    documents.text_bytes = 512;
+    let world =
+        World::configured_policy(true, true, false, 1000, Gate { agent: true, ..Gate::default() }, Some(documents));
+    let (mut world, _, producer, branch) = change_world_in(world, Change::default());
+    let change = requester(&world, producer.task);
+    world.fail_open_writes = true;
+    produce(&mut world, &producer, &branch);
+    wait_held(&mut world, change);
+    let task = read_change_task(&mut world, change);
+    let hold = task.hold.expect("permanent write failure holds");
+    assert_eq!(hold.reason, tasks::Hold::EffectFailed, "hold {hold:?}; change {:?}", change_row(&world, change));
+    let words = hold.words.expect("retained effect account").bytes;
+    for expected in [b"open pull request".as_slice(), b"forge refused permission", b"org/repo"] {
+        assert!(words.windows(expected.len()).any(|part| part == expected), "{words:?}");
+    }
+    assert!(change_row(&world, change).effect_account.is_some());
+    assert!(!world.store.rows.values().any(|record| matches!(record,
+        Record::Forge {row, ..} if matches!(row.as_ref(), forge_top::Stored::Entry {entry, ..} if entry.task == change))));
 }

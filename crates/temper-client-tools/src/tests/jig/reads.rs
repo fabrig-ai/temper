@@ -584,7 +584,13 @@ fn a_budget_held_task_explains_how_to_run_or_cancel_it() {
     root.serve(call, fixtures::task_result(task));
     let answer = root.answer(call).expect("held task answered");
     assert_eq!(answer.status, 0);
-    assert!(skein_lib::bytes::find(&answer.stdout, b"\nway out: task release 41 --hold 2\n").is_some());
+    assert!(
+        skein_lib::bytes::find(
+            &answer.stdout,
+            b"\nway out: task release 41 --hold 2; or cancel it: task cancel 41 REASON\n"
+        )
+        .is_some()
+    );
     assert!(skein_lib::bytes::find(&answer.stdout, b"raise the task's budget, then").is_none());
     assert!(skein_lib::bytes::find(&answer.stdout,
         b"Insufficient activation budget. A release alone holds it again: give task 41 more budget by deciding its budget proposal, then release it; or cancel it.").is_some(), "{:?}", answer.stdout);
@@ -600,6 +606,7 @@ fn budget_held_owner_tasks_and_inbox_rows_share_the_recovery_words() {
     *phase = c::OwnerChipPhase::Held { reason: c::HoldCategory::Budget, revision: fixtures::HOLD };
     task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
         placed: None,
+        words: None,
         circle: None,
         account: None,
         source: None,
@@ -718,6 +725,7 @@ fn check_placed_hold(
         if !document {
             task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
                 placed: Some(placed.clone()),
+                words: None,
                 circle: None,
                 account: None,
                 source: None,
@@ -816,6 +824,44 @@ fn a_too_linked_read_names_its_join_bound() {
             assert_eq!(answer.status, 1);
             assert_eq!(answer.stderr.as_ref(), expected);
             assert!(answer.stdout.is_empty());
+        }
+    }
+}
+
+#[test]
+fn connector_hold_words_reach_ctl_text_and_json_with_an_explicit_uncertainty_decision() {
+    use jig_client::contract as c;
+    for (reason, words, uncertain) in [
+        (c::HoldCategory::EffectFailed, b"open pull request acme/app: forge refused permission".as_slice(), false),
+        (c::HoldCategory::Uncertain { entry: 11 }, b"open pull request acme/app: outcome uncertain", true),
+        (c::HoldCategory::Procedure, b"review delegate lacks executor authority", false),
+    ] {
+        for json in [false, true] {
+            let (_, _, mut task) = fixtures::task_read();
+            task.chip.phase = c::Phase::Held;
+            task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
+                placed: None,
+                words: Some(c::DocumentText::complete(c::Text::new(Box::from(words), 64).expect("account fits"))),
+                circle: None,
+                account: None,
+                source: None,
+                reason,
+                revision: fixtures::HOLD,
+                before: c::OwnerPriorPhase::Active(c::RunStage::Idle),
+                escalation: None,
+                tries: c::OwnerFailureTries { transient: 0, permanent: 0, run: 0, agent: 0, lost: 0, invalid: 0 },
+                hold_wait_since: None,
+            })));
+            let argv = fixtures::extended(fixtures::TASK_CALL, if json { &["--json"] } else { &[] });
+            let printed = fixtures::read_answer(argv.as_slice(), fixtures::task_result(task));
+            assert_eq!(printed.status, 0);
+            assert!(skein_lib::bytes::find(&printed.stdout, words).is_some(), "{:?}", printed.stdout);
+            if json {
+                assert!(skein_lib::bytes::find(&printed.stdout, br#""words":"#).is_some());
+            } else {
+                assert!(skein_lib::bytes::find(&printed.stdout, b"task cancel 41 REASON").is_some());
+                assert_eq!(skein_lib::bytes::find(&printed.stdout, b"--again").is_some(), uncertain);
+            }
         }
     }
 }

@@ -19,6 +19,9 @@ use jig_domain_core::connector::{EffectDescription, EffectForm, Recovery};
 mod landing_route;
 pub(crate) use landing_route::start_landing_step;
 use landing_route::{describe_landing_effect, landing_decision, start_landing};
+mod holds;
+pub(crate) use holds::{hold as hold_reason, refused_step, start_refused};
+
 #[cfg(test)]
 mod tests;
 
@@ -1789,6 +1792,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 queue_repairs: 0,
                 producing_charter: domain.config.forge_charter,
                 review_charter: 4,
+                effect_account: None,
             },
         }));
         let branch_name =
@@ -2674,6 +2678,8 @@ fn authority_hold_message(
 }
 
 fn hold_change_decision(domain: &Domain, env: &Env<Limits>, task: u64, why: forge_change::Hold) -> ProcedureStep {
+    let account =
+        if let forge_change::Hold::Authority(cause) = why { Some(forge_change::authority_words(cause)) } else { None };
     let message = if let forge_change::Hold::Authority(cause) = why {
         authority_hold_message(domain, env, task, cause)
     } else if why == forge_change::Hold::Failed {
@@ -2696,7 +2702,20 @@ fn hold_change_decision(domain: &Domain, env: &Env<Limits>, task: u64, why: forg
         }
         forge_change::Hold::Failed | forge_change::Hold::Rejected => tasks::Hold::EffectFailed,
     };
-    let mut decision = ProcedureStep::new(StepEnd::Hold(why));
+    let end = if let Some(words) = account {
+        StepEnd::HoldFrom { why, source: Box::new(holds::source(domain, None, words)) }
+    } else if why == tasks::Hold::EffectFailed
+        && let Some(row) = domain.forge.change(task)
+        && row.effect == forge_change::EffectResult::Failed
+        && let Some(account) = &row.effect_account
+    {
+        StepEnd::HoldFrom { why, source: Box::new(holds::source(domain, Some(account.entry), account.words.clone())) }
+    } else if let Some(message) = &message {
+        StepEnd::HoldFrom { why, source: Box::new(holds::source(domain, None, message.words.clone())) }
+    } else {
+        StepEnd::Hold(why)
+    };
+    let mut decision = ProcedureStep::new(end);
     if let Some(message) = message {
         decision.messages = Box::new([message]);
     }
@@ -2783,17 +2802,18 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 None => None,
             };
             let Some(pull) = pull else {
+                let held = holds::decision(
+                    domain,
+                    env,
+                    task,
+                    Box::from(&b"landed change has no retained pull request identity"[..]),
+                );
                 domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep {
                     task,
                     step,
                     connector,
                     code,
-                    decision: append_change_replies(
-                        domain,
-                        env,
-                        task,
-                        ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)),
-                    ),
+                    decision: append_change_replies(domain, env, task, held),
                 }));
                 return;
             };
@@ -2816,7 +2836,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
                 domain.forge.wait_change(&super::environment_forge(env), task, None);
                 ProcedureStep::new(StepEnd::Wait)
             } else {
-                ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects))
+                holds::decision(domain, env, task, Box::from(&b"landing branch repair cannot be admitted"[..]))
             }
         }
         forge_change::Decision::Wait { until } => wait_change_decision(domain, env, task, until),
@@ -2825,17 +2845,18 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
         }
         forge_change::Decision::Delegate(kind) => {
             let Some(delegate) = change_delegate(domain, env, task, kind) else {
+                let held = holds::decision(
+                    domain,
+                    env,
+                    task,
+                    Box::from(&b"change delegate cannot be described within its authority"[..]),
+                );
                 domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep {
                     task,
                     step,
                     connector,
                     code,
-                    decision: append_change_replies(
-                        domain,
-                        env,
-                        task,
-                        ProcedureStep::new(StepEnd::Hold(tasks::Hold::Effects)),
-                    ),
+                    decision: append_change_replies(domain, env, task, held),
                 }));
                 return;
             };
@@ -3120,7 +3141,7 @@ pub(crate) fn outputs(
                         },
                     )));
                 }
-                domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                holds::hold(domain, task, b"forge resource admission needs a decision");
             }
             forge::Request::NotMade { entry, task } => {
                 domain.work.push(Work::Core(jig_domain_core::Event::EffectConnector(
@@ -3141,7 +3162,29 @@ pub(crate) fn outputs(
                     },
                 )));
             }
-            forge::Request::Outcome { entry, task, outcome } => {
+            forge::Request::Outcome { entry, task, outcome, account } => {
+                if let Some(words) = account {
+                    let procedure = match domain.core.tasks.task(task) {
+                        Some(row) => match row.executor {
+                            tasks::Executor::Procedure { .. } => true,
+                            tasks::Executor::Agent { .. } | tasks::Executor::Person(_) => false,
+                        },
+                        None => false,
+                    };
+                    if let Some(tasks::Event::HoldFrom { why, .. }) = domain.core.connector_outbox(
+                        task,
+                        domain.config.forge_connector,
+                        entry,
+                        outbox_outcome(entry, outcome),
+                        procedure,
+                    ) {
+                        domain.work.push(Work::Tasks(tasks::Event::HoldFrom {
+                            task,
+                            why,
+                            source: Box::new(holds::source(domain, Some(entry), words)),
+                        }));
+                    }
+                }
                 if let Some(named) = domain.forge.named_effect(entry) {
                     save_connector_answer(domain, &env.limits, decision, core_call(named));
                 }
@@ -3159,7 +3202,7 @@ pub(crate) fn outputs(
                 if let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) {
                     domain.work.push(Work::Forge(forge::Event::ContinueRelease { task, entry }));
                 } else {
-                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                    holds::hold(domain, task, b"connector entry numbers exhausted while releasing resources");
                 }
             }
             forge::Request::Released { task } => {
@@ -3169,7 +3212,11 @@ pub(crate) fn outputs(
                 if let Some(holding) = write_holding(domain.config.forge_connector, &resource, &env.limits.tasks) {
                     domain.work.push(Work::Tasks(tasks::Event::Retained { task, root, holding }));
                 } else {
-                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                    holds::hold(
+                        domain,
+                        task,
+                        b"retained forge resource cannot be represented within its configured bounds",
+                    );
                 }
             }
             forge::Request::EffectsSettled { task } => {
@@ -3177,8 +3224,21 @@ pub(crate) fn outputs(
                     jig_domain_core::connector::Event::Closed { task, connector: domain.config.forge_connector },
                 )));
             }
-            forge::Request::ReleaseFailed { task } => {
-                domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::EffectFailed }));
+            forge::Request::ReleaseFailed { task, account } => {
+                if let Some(account) = account {
+                    domain.work.push(Work::Tasks(tasks::Event::HoldFrom {
+                        task,
+                        why: tasks::Hold::EffectFailed,
+                        source: Box::new(holds::source(domain, Some(account.entry), account.words)),
+                    }));
+                } else {
+                    holds::hold_as(
+                        domain,
+                        task,
+                        tasks::Hold::EffectFailed,
+                        b"forge could not release this task's resources",
+                    );
+                }
             }
             forge::Request::ProjectionEffect { row, entry, description } => {
                 let Some(adopted) = domain.forge.repository(entry.repository) else { continue };
@@ -3612,38 +3672,72 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
                 None => {}
             }
         }
-        jig_domain_core::connector::Ask::Drop { owner, answer } => match domain.forge_effects.remove(&owner) {
-            Some(EffectFlight::Procedure { entry, task, evidence, .. }) => {
-                domain.work.push(Work::Forge(forge::Event::VetoChange { task, entry, prior: evidence.prior }));
-                if answer == authority::Answer::Wait {
-                    domain.forge.wait_change(&super::environment_forge(env), task, None);
-                } else if answer != authority::Answer::Refuse
-                    || domain.core.tasks.waiting_effect_problem(task).is_none()
-                {
-                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+        jig_domain_core::connector::Ask::Drop { owner, answer, findings, why } => {
+            match domain.forge_effects.remove(&owner) {
+                Some(EffectFlight::Procedure { entry, task, evidence, description }) => {
+                    domain.work.push(Work::Forge(forge::Event::VetoChange { task, entry, prior: evidence.prior }));
+                    if answer == authority::Answer::Wait {
+                        domain.forge.wait_change(&super::environment_forge(env), task, None);
+                    } else if answer != authority::Answer::Refuse
+                        || domain.core.tasks.waiting_effect_problem(task).is_none()
+                    {
+                        let mut words = List::with_capacity(tasks::HOLD_ACCOUNT_BYTES);
+                        holds::effect(&mut words, &description);
+                        append(
+                            &mut words,
+                            match why {
+                                jig_domain_core::connector::EffectRefusal::Authority => b" was vetoed by authority",
+                                jig_domain_core::connector::EffectRefusal::Obsolete => {
+                                    b" was refused: its procedure step or entry is no longer valid"
+                                }
+                                jig_domain_core::connector::EffectRefusal::Description => {
+                                    b" was refused: its connector description is invalid"
+                                }
+                                jig_domain_core::connector::EffectRefusal::Capacity => {
+                                    b" was refused: effect admission has no room"
+                                }
+                                jig_domain_core::connector::EffectRefusal::Dependencies => {
+                                    b" was refused: its dependency is still pending"
+                                }
+                                jig_domain_core::connector::EffectRefusal::Proposal => {
+                                    b" was refused: its proposal could not be admitted or addressed"
+                                }
+                                jig_domain_core::connector::EffectRefusal::Unavailable => {
+                                    b" was refused: effect admission is unavailable"
+                                }
+                            },
+                        );
+                        holds::findings(&mut words, &findings);
+                        holds::recovery(domain, task, &mut words);
+                        domain.work.push(Work::Tasks(tasks::Event::HoldFrom {
+                            task,
+                            why: tasks::Hold::Procedure,
+                            source: Box::new(holds::source(domain, Some(entry), words.into_boxed())),
+                        }));
+                    }
                 }
-            }
-            Some(EffectFlight::Projection { row, .. }) => {
-                let closing = match &row.desired {
-                    Some(view) => view.finished.is_some(),
-                    None => false,
-                };
-                domain.work.push(Work::Forge(forge::Event::FailProjection {
-                    goal: row.goal,
-                    repository: row.repository,
-                    closing,
-                }));
-            }
-            Some(EffectFlight::Landing { entry, task, .. }) => {
-                domain.work.push(Work::Forge(forge::Event::VetoLanding { task, entry }));
-                if answer == authority::Answer::Wait {
-                    domain.forge.wait_landing(&super::environment_forge(env), task, None);
-                } else {
-                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                Some(EffectFlight::Projection { row, .. }) => {
+                    let closing = match &row.desired {
+                        Some(view) => view.finished.is_some(),
+                        None => false,
+                    };
+                    domain.work.push(Work::Forge(forge::Event::FailProjection {
+                        goal: row.goal,
+                        repository: row.repository,
+                        closing,
+                    }));
                 }
+                Some(EffectFlight::Landing { entry, task, .. }) => {
+                    domain.work.push(Work::Forge(forge::Event::VetoLanding { task, entry }));
+                    if answer == authority::Answer::Wait {
+                        domain.forge.wait_landing(&super::environment_forge(env), task, None);
+                    } else {
+                        domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                    }
+                }
+                Some(EffectFlight::Call { .. }) | None => {}
             }
-            Some(EffectFlight::Call { .. }) | None => {}
-        },
+        }
         jig_domain_core::connector::Ask::Judge { owner, judge, state, resources: _ } => {
             let (verdict, guarded) = judge_effect(domain, env, owner, number, judge, state);
             domain.work.push(Work::Core(jig_domain_core::Event::EffectConnector(
