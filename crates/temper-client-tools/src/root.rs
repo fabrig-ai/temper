@@ -7,35 +7,15 @@ use temper_client_domain::owner::Owner;
 pub(crate) const DIAGNOSTIC_PREFIX: &[u8] = b"temper ctl";
 pub const RUNNER: Owner = Owner::Runner;
 #[derive(Debug)]
-#[expect(
-    clippy::partial_pub_fields,
-    reason = "callers may replace preset inputs; the constructor retains inputs for the legacy output-count helper"
-)]
 pub struct Limits {
     pub domain: temper_client_domain::Limits,
     pub tools: jig::Limits,
-    bounds: Bounds,
 }
 impl Limits {
     #[must_use]
     pub fn new(domain: temper_client_domain::Limits, tools: jig::Limits) -> Self {
-        Self { bounds: Bounds::new(domain.client, tools.rows), domain, tools }
+        Self { domain, tools }
     }
-    fn bounds(&self) -> Bounds {
-        if self.bounds.client == self.domain.client && self.bounds.rows == self.tools.rows {
-            self.bounds
-        } else {
-            Bounds::new(self.domain.client, self.tools.rows)
-        }
-    }
-}
-/// Maximum routed outputs for one root input, checked with the preset.
-#[must_use]
-pub fn max_out(limits: &Limits) -> u32 {
-    let bounds = limits.bounds();
-    jig_client::max_out(&bounds.client)
-        .checked_mul(bounds.rows.checked_add(1).expect("rows fit"))
-        .expect("routing bound fits")
 }
 #[derive(Debug)]
 pub struct Root {
@@ -49,17 +29,6 @@ pub struct Root {
     recovery: crate::recovery::Recovery,
     deadline: Option<Time>,
     patience: BTreeMap<u32, (u32, Time)>,
-}
-/// Preset inputs for the legacy output-count helper, never a call's changing state.
-#[derive(Clone, Copy, Debug)]
-struct Bounds {
-    client: jig_client::Limits,
-    rows: u32,
-}
-impl Bounds {
-    fn new(client: jig_client::Limits, rows: u32) -> Self {
-        Self { client, rows }
-    }
 }
 #[derive(Debug)]
 pub enum Event {

@@ -71,10 +71,9 @@ pub fn valid(limits: &Limits) -> bool {
     let Some(record) = limits.connections.body_bytes.checked_add(512) else { return false };
     // skein's valid() replaces this at the set's repin
     skein_http::client::worst_case(&limits.connections.http).is_some()
-        // jig's valid() replaces this at the set's repin
-        && jig_client_protocol_http::worst_case(&jig_client_protocol_http::Limits {
+        && jig_client_protocol_http::valid(&jig_client_protocol_http::Limits {
             record, chunk: limits.connections.http.read,
-        }).is_some()
+        })
         && heard.checked_add(8).is_some()
         && limits.io.is_usable()
         // skein's valid() replaces this at the set's repin

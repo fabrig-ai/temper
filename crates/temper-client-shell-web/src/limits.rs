@@ -92,6 +92,5 @@ pub fn stream() -> Option<jig_client_protocol_http::Limits> {
 #[must_use]
 pub fn valid(client: &client::Limits) -> bool {
     let Some(stream) = stream() else { return false };
-    // jig's valid() replaces this at the set's repin
-    client::valid(client) && view(client).is_some() && jig_client_protocol_http::worst_case(&stream).is_some()
+    client::valid(client) && view(client).is_some() && jig_client_protocol_http::valid(&stream)
 }

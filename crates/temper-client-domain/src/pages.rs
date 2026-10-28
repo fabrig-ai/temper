@@ -857,12 +857,6 @@ fn redirect_chat(pages: &Pages, client: &Client, out: &mut Queue<Request>) {
     }
 }
 
-/// Navigation can also close/reopen the two account watches.
-#[must_use]
-pub fn max_out(limits: &Limits) -> u32 {
-    inbox::max_out(limits).checked_add(6).expect("pages output fits")
-}
-
 fn me_changed(pages: &mut Pages, client: &Client, out: &mut Queue<Request>) {
     if let Some(me) = accounts::current_me(client) {
         let parked = if let Some(pending) = &pages.accounts.request.pending

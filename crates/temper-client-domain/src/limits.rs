@@ -15,20 +15,10 @@ pub struct AccountLimits {
     pub uses: u32,
     pub sign_ins: u32,
 }
-#[must_use]
-pub fn max_out(limits: &Limits) -> u32 {
-    jig_client::max_out(&limits.client)
-        .checked_mul(4)
-        .expect("root output bound fits")
-        .checked_add(1)
-        .expect("welcome output bound fits")
-}
-
 /// Refuses unusable client limits, unrepresentable page counts and forge wire bounds.
 #[must_use]
 pub fn valid(limits: &Limits) -> bool {
-    // jig's valid() replaces this at the set's repin
-    if jig_client::worst_case(&limits.client).is_none() || limits.forge.field_bytes < 7 {
+    if !jig_client::valid(&limits.client) || limits.forge.field_bytes < 7 {
         return false;
     }
     let Some(wire) = forge::wire_limits(&limits.forge) else { return false };
