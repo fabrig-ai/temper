@@ -6,7 +6,7 @@ use skein_lib::{Decimal, List, Writer};
 use crate::{BriefCommit, held};
 
 const START: &[u8] = b"Repair the failed check at change head ";
-const AFTER_HEAD: &[u8] = b". Push a new head and wait for checks there.\n";
+const AFTER_HEAD: &[u8] = b". Finish with the change: it becomes the pull request's new head.\n";
 const END: &[u8] = b"Repair the failed check.\n";
 
 #[derive(Debug)]
