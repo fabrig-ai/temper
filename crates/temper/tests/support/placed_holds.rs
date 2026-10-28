@@ -88,7 +88,7 @@ fn llm(config: &Path, expected_exits: Vec<(usize, u8)>) -> boxed::CtlLlm {
                 ("Ask to resume the stopped goal", 2),
                 ("Refused: task 2 is held by hold", 3),
                 ("Proposed as ", 4),
-                ("Begin the work your brief describes.", 0),
+                ("@hold-chat", 0),
                 ("", 1),
             ]),
             rules(&[("Begin the work your brief describes.", 0), ("", 1)]),
@@ -236,7 +236,13 @@ fn placed(calls: &[Ended]) -> Value {
     task["hold"]["placed"].clone()
 }
 fn queries<'a>(seen: &'a super::forge_land::Seen, cue: &[u8]) -> Vec<&'a Query> {
-    seen.requests.iter().filter(|query| query.system.windows(cue.len()).any(|bytes| bytes == cue)).collect()
+    seen.requests
+        .iter()
+        .filter(|query| {
+            query.system.windows(cue.len()).any(|bytes| bytes == cue)
+                || super::forge_land::first_request_has(query, cue)
+        })
+        .collect()
 }
 fn transcript(seen: &super::forge_land::Seen, cue: &[u8]) {
     let requests = queries(seen, cue);

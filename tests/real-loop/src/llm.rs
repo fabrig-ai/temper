@@ -114,11 +114,15 @@ pub fn played_by_input(scripts: Box<[api::Script]>, rules: Box<[Box<[api::Rule]>
     recipe
 }
 
-/// Fresh-input rules paired with an Open chat followed by Finite delegates.
+/// Fresh-input rules paired with one Open chat followed by Finite delegates.
+/// Its rules choose the reply even when the person's next message has a new cue.
 #[must_use]
 pub fn played_by_input_open(scripts: Box<[api::Script]>, rules: Box<[Box<[api::Rule]>]>) -> Recipe {
     assert_eq!(scripts.len(), rules.len(), "index-parallel script rules");
-    let scripts = open_scripts(scripts);
+    let mut scripts = open_scripts(scripts);
+    if let Some(chat) = scripts.asked.first_mut() {
+        chat.cue = Box::new([]);
+    }
     let mut rules = rules.into_vec();
     let asked = if rules.is_empty() { Box::new([]) } else { vec![rules.remove(0)].into_boxed_slice() };
     let mut recipe = scripted(Box::new([]));
