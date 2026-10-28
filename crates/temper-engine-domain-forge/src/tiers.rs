@@ -119,6 +119,7 @@ pub(crate) fn watched(d: &Domain) -> List<Name> {
     let mut names = List::with_capacity(d.tier_limits.0);
     for (repository, _) in &d.repositories {
         if !d.forge_ended(repository.forge)
+            && !crate::verification::tiers(d, *repository).is_empty()
             && let Some(name) = main_name(d, *repository)
         {
             names.push(name).expect("one main per adopted repository");
@@ -129,14 +130,6 @@ pub(crate) fn watched(d: &Domain) -> List<Name> {
 
 /// Keep the global client watch set under the tiers' reserved owner token.
 pub(crate) fn watch(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    keep_watches(d, env, false, out);
-}
-/// Fresh startup reads retain task and tier dependencies. Pure history watches
-/// start after this barrier, so a local forge can reconcile and connect first.
-pub(crate) fn restore_watches(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    keep_watches(d, env, true, out);
-}
-fn keep_watches(d: &mut Domain, env: &Env<Limits>, tiered_only: bool, out: &mut Queue<Request>) {
     if d.repositories.is_empty() {
         return;
     }
@@ -153,17 +146,7 @@ fn keep_watches(d: &mut Domain, env: &Env<Limits>, tiered_only: bool, out: &mut 
             }
         }
     }
-    for name in &watched(d) {
-        let repository = Repository { forge: name.forge, repository: name.repository };
-        if tiered_only && crate::verification::tiers(d, repository).is_empty() {
-            continue;
-        }
-        if let Some(resource) = crate::domain::to_client(name, &env.limits) {
-            watches
-                .insert(resource.clone(), skein_forge_client::Watch { resource, participating: false })
-                .expect("adopted mains fit client resources");
-        }
-    }
+    add_watches(d, env, &mut watches);
     let mut list = List::with_capacity(env.limits.client.resources);
     for (_, watch) in &watches {
         list.push(watch.clone()).expect("watch bound");
