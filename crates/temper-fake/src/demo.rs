@@ -113,7 +113,7 @@ pub fn read(document: &Json, at: u32, facts: &Facts<'_>) -> Result<Option<Demo>,
         None => Box::new([]),
     };
     let count = asked.len().checked_add(cued.len()).expect("two bounded script lists");
-    if count > 8 {
+    if count > usize::try_from(crate::ENTRIES).expect("sixteen scripts") {
         return Err(read::why(&cp, b"past its bound"));
     }
     for (index, script) in cued.iter().enumerate() {
@@ -123,9 +123,9 @@ pub fn read(document: &Json, at: u32, facts: &Facts<'_>) -> Result<Option<Demo>,
             }
         }
     }
-    let mut combined = List::with_capacity(u32::try_from(count).expect("eight scripts"));
+    let mut combined = List::with_capacity(u32::try_from(count).expect("sixteen scripts"));
     for script in asked.into_iter().chain(cued) {
-        combined.push(script).expect("eight scripts across asked and cued");
+        combined.push(script).expect("sixteen scripts across asked and cued");
     }
     let scripts = api::Scripts {
         cued: combined.into_boxed(),

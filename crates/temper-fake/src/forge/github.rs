@@ -92,7 +92,7 @@ pub(super) fn decode(d: &Json, at: u32, p: &Path) -> Result<Github, Refusal> {
             }
         }
         if let Some(installation) = &account.installation {
-            installed = installed.checked_add(1).expect("eight accounts");
+            installed = installed.checked_add(1).expect("sixteen accounts");
             if installation.id != installed {
                 return Err(read::why(
                     &p.member(b"installation").member(b"id"),
@@ -100,7 +100,7 @@ pub(super) fn decode(d: &Json, at: u32, p: &Path) -> Result<Github, Refusal> {
                 ));
             }
         }
-        accounts.push(account).expect("eight accounts");
+        accounts.push(account).expect("sixteen accounts");
     }
     Ok(Github { id: app_id, slug, bot, key, setup_url, accounts: accounts.into_boxed(), token_life })
 }
@@ -143,7 +143,7 @@ fn account(d: &Json, at: u32, p: &Path) -> Result<Account, Refusal> {
                     if names.as_slice().contains(&name) {
                         return Err(read::why(&p, b"must be unique"));
                     }
-                    names.push(name).expect("eight repository names");
+                    names.push(name).expect("sixteen repository names");
                 }
                 Some(names.into_boxed())
             }
@@ -201,21 +201,21 @@ impl Github {
                     id: account.id,
                     organization: account.kind == Kind::Organization,
                 })
-                .expect("eight accounts");
+                .expect("sixteen accounts");
         }
         let mut repositories = List::with_capacity(crate::ENTRIES);
         for (i, repository) in document.repositories.iter().enumerate() {
             let account = self.account(&repository.owner).expect("checked owner");
             repositories
                 .push(layer::service::Row {
-                    id: u32::try_from(i).expect("eight repositories").checked_add(1).expect("repository id"),
+                    id: u32::try_from(i).expect("sixteen repositories").checked_add(1).expect("repository id"),
                     owner: account.login.clone(),
                     owner_id: account.id,
                     organization: account.kind == Kind::Organization,
                     name: repository.name.clone(),
                     private: true,
                 })
-                .expect("eight repositories");
+                .expect("sixteen repositories");
         }
         let first = self.accounts.first().expect("nonempty accounts");
         let mut permissions = List::with_capacity(16);
@@ -288,9 +288,9 @@ impl Github {
                     for (i, repository) in document.repositories.iter().enumerate() {
                         if repository.owner == account.login && names.contains(&repository.name) {
                             ids.push(
-                                u32::try_from(i).expect("eight repositories").checked_add(1).expect("repository id"),
+                                u32::try_from(i).expect("sixteen repositories").checked_add(1).expect("repository id"),
                             )
-                            .expect("eight ids");
+                            .expect("sixteen ids");
                         }
                     }
                     Reach::Listed(ids)

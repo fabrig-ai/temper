@@ -135,7 +135,7 @@ fn pieces(d: &Document, at: u32, p: &Path) -> Result<Line, Refusal> {
             read::nonempty(&hold, &p.member(b"hold"))?;
             Some(hold)
         };
-        pieces.push(Piece { text, hold }).expect("eight pieces");
+        pieces.push(Piece { text, hold }).expect("sixteen pieces");
     }
     Ok(Line::Pieces { pieces: pieces.into_boxed() })
 }
@@ -173,7 +173,7 @@ fn render(d: &Document, at: u32, end: u32, out: &mut Encoder) {
     }
 }
 fn check_answer(turn: &api::Turn, p: &Path) -> Result<(), Refusal> {
-    let wrappers = turn.lines.len().checked_mul(size_of::<api::Part>()).expect("eight lines");
+    let wrappers = turn.lines.len().checked_mul(size_of::<api::Part>()).expect("sixteen lines");
     let mut size = u64::try_from(wrappers).expect("bounded wrappers");
     for line in &turn.lines {
         let bytes = match line {
@@ -184,14 +184,14 @@ fn check_answer(turn: &api::Turn, p: &Path) -> Result<(), Refusal> {
             Line::Pieces { pieces } => {
                 let mut bytes = 0_usize;
                 for piece in pieces {
-                    bytes = bytes.checked_add(piece.text.len()).expect("eight bounded pieces");
+                    bytes = bytes.checked_add(piece.text.len()).expect("sixteen bounded pieces");
                 }
                 bytes
             }
             Line::Fail { credentials, .. } => credentials.len().checked_mul(size_of::<u32>()).expect("sixteen indices"),
             Line::Opaque { .. } => unreachable!("no opaque document lines"),
         };
-        size = size.checked_add(u64::try_from(bytes).expect("bounded line")).expect("eight bounded lines");
+        size = size.checked_add(u64::try_from(bytes).expect("bounded line")).expect("sixteen bounded lines");
     }
     if size > u64::from(crate::ANSWER_BYTES) {
         return Err(read::why(p, b"answer past its byte bound"));

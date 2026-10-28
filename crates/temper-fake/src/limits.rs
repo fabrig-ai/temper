@@ -29,7 +29,7 @@ pub const FORGE_INNER: u32 = 64;
 /// One complete drain, including worst-case JSON escaping and a checkpoint.
 /// 128 observations each fit 6 times their content/name bounds plus framing.
 pub const OBSERVATION_BYTES: u32 = 16 << 20;
-/// Eight repository names and their 32-entry deletion queues, with 256-byte
+/// Sixteen repository names and their 32-entry deletion queues, with 256-byte
 /// names, plus the writer's inline state and one pending observation.
 pub const OBSERVATION_STATE_BYTES: u32 = 1 << 20;
 

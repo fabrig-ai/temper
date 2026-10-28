@@ -171,7 +171,7 @@ fn demo_refusals() {
             "application.demo.llm.key: past its bound\n",
         ),
         (
-            vec![("/application/demo/llm/asked", Some(json!((0..9).map(|_| scripts[0].clone()).collect::<Vec<_>>())))],
+            vec![("/application/demo/llm/asked", Some(json!((0..17).map(|_| scripts[0].clone()).collect::<Vec<_>>())))],
             "application.demo.llm.asked: past its bound\n",
         ),
         (
@@ -215,14 +215,14 @@ fn demo_refusals() {
         "application.demo.llm.key: must be an absolute path without NUL\n",
     ));
     let mut models = vec![owned["engine"]["llm"]["models"][0].clone()];
-    models.extend((0..9).map(|i| {
+    models.extend((0..17).map(|i| {
         json!({"name":format!("demo-{i}"), "endpoint":"demo", "window":4096,"output":1024,
         "prices":{"input":1,"cached":1,"output":1,"unit":1}})
     }));
     rows.push((
         vec![
             ("/engine/llm/models", Some(json!(models))),
-            ("/engine/llm/providers/1/models", Some(json!((0..9).map(|i| format!("demo-{i}")).collect::<Vec<_>>()))),
+            ("/engine/llm/providers/1/models", Some(json!((0..17).map(|i| format!("demo-{i}")).collect::<Vec<_>>()))),
         ],
         "application.demo.llm.provider: past its bound\n",
     ));
@@ -305,14 +305,14 @@ fn cued_scripts_follow_asked_and_play_from_the_brief() {
 
 #[test]
 fn cued_refusals_and_shared_bounds() {
-    let scripts: Vec<_> = (0..8).map(|i| json!({"cue":i.to_string(),"turns":["x"]})).collect();
+    let scripts: Vec<_> = (0..16).map(|i| json!({"cue":i.to_string(),"turns":["x"]})).collect();
     for (cued, expected) in [
         (json!(null), "application.demo.llm.cued: wrong value kind\n"),
         (json!({}), "application.demo.llm.cued: wrong value kind\n"),
         (json!([{"cue":"","turns":["x"]}]), "application.demo.llm.cued[0].cue: must be non-empty\n"),
         (json!([{"cue":"x".repeat(257),"turns":["x"]}]), "application.demo.llm.cued[0].cue: past its bound\n"),
         (json!([{"cue":"x","turns":[]}]), "application.demo.llm.cued[0].turns: must be non-empty\n"),
-        (json!([{"cue":"x","turns":vec!["x";9]}]), "application.demo.llm.cued[0].turns: past its bound\n"),
+        (json!([{"cue":"x","turns":vec!["x";17]}]), "application.demo.llm.cued[0].turns: past its bound\n"),
         (
             json!([{"cue":"Add CSV export to widget","turns":["x"]}]),
             "application.demo.llm.cued[0].cue: must be unique\n",
@@ -323,13 +323,13 @@ fn cued_refusals_and_shared_bounds() {
             "application.demo.llm.otherwise: scripts past their joint byte bound\n",
         ),
         (json!(scripts), "application.demo.llm.cued: past its bound\n"),
-        (json!(vec![scripts[0].clone(); 9]), "application.demo.llm.cued: past its bound\n"),
+        (json!(vec![scripts[0].clone(); 17]), "application.demo.llm.cued: past its bound\n"),
     ] {
         let mut value = fixture();
         value["application"]["demo"]["llm"]["cued"] = cued;
         assert_eq!(read(&value).unwrap_err().line().as_ref(), expected.as_bytes());
     }
-    for cued in [json!([]), json!(&scripts[..7]), json!([{"cue":"x".repeat(256),"turns":vec!["x";8]}])] {
+    for cued in [json!([]), json!(&scripts[..15]), json!([{"cue":"x".repeat(256),"turns":vec!["x";8]}])] {
         let mut value = fixture();
         value["application"]["demo"]["llm"]["cued"] = cued;
         assert!(read(&value).unwrap().is_some());

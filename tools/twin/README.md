@@ -36,7 +36,7 @@ produces invalid object JSON is refused. Reports list turns per task and
 occurrences per replacement and opaque blocks dropped per task. A refusal
 prints one line and exits 2; no output is opened on a conversion refusal.
 
-The bounds are the fake's: eight scripts, eight turns per script, eight lines
+The bounds are the fake's: sixteen scripts, sixteen turns per script, sixteen lines
 per turn, 256-byte nonempty cues, 64 KiB answers, 256 KiB total scripts and
 a 1 MiB document. The fake's decoder checks its detailed JSON and byte bounds.
 Opaque blocks are dropped, keeping text and calls in order. Cut calls and
