@@ -97,18 +97,28 @@ pub enum Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bound {
     None,
-    Numbers { least: u64, most: u64 },
-    Bytes { most: u64 },
-    Seconds { most: u64 },
+    Numbers {
+        least: u64,
+        most: u64,
+    },
+    Bytes {
+        most: u64,
+    },
+    /// The deployment supplies the bound; init's figure is only an example.
+    DeploymentWords,
+    Seconds {
+        most: u64,
+    },
 }
-/// One source for the parser's checks and the help.
+/// Published bounds. Deployment words retain the parser's private ask-byte ceiling.
 #[must_use]
 pub fn bound(argument: &Argument, limits: &Limits) -> Bound {
     match argument.kind {
         Kind::NumberRange { min, max } | Kind::NamedNumber { min, max, .. } => Bound::Numbers { least: min, most: max },
         Kind::Count => Bound::Numbers { least: 1, most: u64::from(limits.rows) },
         Kind::Number if argument.name == b"forge" => Bound::Numbers { least: 0, most: 65_535 },
-        Kind::Text | Kind::Literal => Bound::Bytes { most: limits.ask_bytes },
+        Kind::Text => Bound::DeploymentWords,
+        Kind::Literal => Bound::Bytes { most: limits.ask_bytes },
         Kind::File if argument.name == b"items" || argument.name == b"instructions" || argument.name == b"spec" => {
             Bound::Bytes { most: limits.ask_bytes }
         }

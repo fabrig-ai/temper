@@ -9,9 +9,9 @@ task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME
   --spec FILE: a file, at most 1048576 bytes; optional. A file of its spec's words, or -
   --dependency TASK: a number; repeated, at most 32. A task it waits on; repeated, the whole list
   --no-dependencies: a switch. Remove every dependency
-  --model MODEL: text, at most 1048576 bytes, or - to read stdin; optional. A model the task may use, as models lists it
-  --effort EFFORT: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why
+  --model MODEL: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. A model the task may use, as models lists it
+  --effort EFFORT: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. An effort that model offers
+  REASON (reason): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. Why
 Amend a task: each control you name is replaced, the rest kept
 Prints: `done: task N, amend`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree
 --json: the record amend.

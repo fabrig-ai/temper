@@ -21,6 +21,8 @@ use temper_engine_domain_world::{direct::Driver, store::Store, walking};
 pub struct Joint {
     pub engine: Driver,
     pub sign_ins: u32,
+    /// Unsaved refusals observed at the engine's entrance, before the wire callback.
+    pub entrance_refusals: Vec<jig_domain_people::Refusal>,
     pub leaves: Vec<Box<[u8]>>,
     pub refuse_return: bool,
     set_ups: Vec<(u16, Token)>,
@@ -107,6 +109,34 @@ pub fn first_run_projects(config: &mut engine::Config, limits: &mut engine::Limi
     config.core.defaults.policies.insert(1, policy).expect("first-run policy");
 }
 impl Joint {
+    /// Init's request limits and stock, with this world's sign-in identity.
+    #[must_use]
+    pub fn on_init(seed: u64, settings: &jig_protocol_config::Engine, own: &temper_service::limits::Limits) -> Self {
+        let limits = crate::agent::limits().domain;
+        let bounds = temper_service::limits::engine(&settings.limits, own).expect("init root limits");
+        let configs = std::array::from_fn(|_| {
+            let mut config = walking::config(seed);
+            let owners = config.core.owners;
+            config.core = jig_protocol_config::core(settings, [31; 16], seed);
+            config.core.owners = owners;
+            config.period_span = temper_service::stock::PERIOD_SPAN;
+            config
+        });
+        // Admission of a person's request needs no running worker. Keep the
+        // world's small worker out of init's full-size fleet requirements.
+        let mut joint =
+            Self::with_engine_with_refused_hello(seed, &limits, Store::with_limits(&bounds), configs, &bounds, 1, true);
+        // The direct world's ordinary period is 1000 units. Init funds the
+        // stock's run allowance from the configured project's own period.
+        joint.engine.send(engine::Event::Party(engine::PartyInput::Period {
+            project: 1,
+            period: 2,
+            budget: settings.projects[0].policy.period_spend,
+            next: None,
+        }));
+        joint.engine.settle();
+        joint
+    }
     /// Hold the next demo read's encoded answer, including its original client and read token.
     /// Arming again lets a story hold a newer answer behind the older one.
     pub fn hold_next_demo_read(&mut self) {
@@ -712,6 +742,7 @@ impl Joint {
         Joint {
             engine,
             sign_ins: 0,
+            entrance_refusals: Vec::new(),
             leaves: Vec::new(),
             refuse_return: false,
             set_ups: Vec::new(),
@@ -1272,6 +1303,9 @@ impl Joint {
         }
         let deliveries = std::mem::take(&mut self.engine.delivered);
         for delivery in deliveries {
+            if let engine::Delivery::WebReply { reply: jig_domain_people::Reply::Refused(why), .. } = &delivery {
+                self.entrance_refusals.push(why.clone());
+            }
             if let engine::Delivery::Link { channel, down: jig_domain_host::LinkDown::Cancel { run, attempt } } =
                 &delivery
             {

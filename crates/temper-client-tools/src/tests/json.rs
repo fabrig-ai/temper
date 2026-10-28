@@ -262,7 +262,7 @@ fn unencodable_argument_bytes_refuse_without_a_partial_record() {
 #[test]
 fn the_tool_record_json_carries_prints_notes_and_bounds() {
     let mut limits = crate::limits::tools();
-    // These differ from the host preset: every rendered bound must use the caller's limits.
+    // Host bounds use the caller's limits; deployment text is identified separately.
     limits.rows = 7;
     limits.ask_bytes = 11;
     limits.wait_most = skein_lib::Duration::from_secs(13);
@@ -272,7 +272,7 @@ fn the_tool_record_json_carries_prints_notes_and_bounds() {
         br#""prints":"task N""#.as_slice(),
         br#""notes":"First note.\nSecond note.\n""#,
         br#""bound":{"least":1,"most":7}"#,
-        br#""bound":{"bytes":11}"#,
+        br#""bound":{"source":"people.words","init_bytes":4096}"#,
         br#""bound":{"seconds":13}"#,
         br#""bound":{"least":1,"most":65535}"#,
         br#""bound":null"#,

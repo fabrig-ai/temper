@@ -103,7 +103,7 @@ With `--until ended`, it returns when the run ends.
 ```
 task message TASK TEXT --key KEY
   TASK (task): a number; required. The task's number
-  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. The words
+  TEXT (text): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. The words
 Send words to a task
 Prints: `done: task N, message`
 --json: the record message.
@@ -116,7 +116,7 @@ Key: --key KEY, required.
 task answer TASK QUESTION TEXT [--key KEY]
   TASK (task): a number; required. The task's number
   QUESTION (question): a number; required. The question's number, as the inbox prints it
-  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. The answer
+  TEXT (text): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. The answer
 Answer a task's question
 Prints: `done: task N, answer`
 --json: the record answer.
@@ -159,7 +159,7 @@ hold lift lifts it, or task cancel ends them.
 task cancel TASK [--grace DURATION] REASON [--key KEY]
   TASK (task): a number; required. The task's number
   --grace DURATION: a duration: seconds, or a number with s, m or h; optional. How long its run may finish first; the engine's default when absent
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why
+  REASON (reason): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. Why
 Cancel a task and its tree
 Prints: `done: task N, cancel`
 --json: the record cancel.
@@ -199,9 +199,9 @@ task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME
   --spec FILE: a file, at most 1048576 bytes; optional. A file of its spec's words, or -
   --dependency TASK: a number; repeated, at most 32. A task it waits on; repeated, the whole list
   --no-dependencies: a switch. Remove every dependency
-  --model MODEL: text, at most 1048576 bytes, or - to read stdin; optional. A model the task may use, as models lists it
-  --effort EFFORT: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; required. Why
+  --model MODEL: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. A model the task may use, as models lists it
+  --effort EFFORT: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. An effort that model offers
+  REASON (reason): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. Why
 Amend a task: each control you name is replaced, the rest kept
 Prints: `done: task N, amend`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree
 --json: the record amend.
@@ -220,7 +220,7 @@ task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]
   TASK (task): a number; required. The held task's number
   --hold REV: a number; required. The hold's revision, as the task prints it
   release|leave|pass-up (outcome): one of release, leave or pass-up; required. The decision
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Why; sent with leave alone
+  REASON (reason): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. Why; sent with leave alone
 Decide the escalation of a held task
 Prints: `done: decide`, or `decided first:`, by whom, how and when, if it was decided already
 --json: the record decide.

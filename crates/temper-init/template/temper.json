@@ -15,6 +15,7 @@
         "hub.turn_bytes": 1039543,
         "hub.turn_queue_bytes": 8316344,
         "notes.scopes": 17,
+        "people.words": 4096,
         "tasks.authority_bytes": 512,
         "tasks.authority_grants": 14,
         "tasks.authority_segments": 8,

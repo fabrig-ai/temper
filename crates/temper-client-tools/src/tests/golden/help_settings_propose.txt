@@ -1,6 +1,6 @@
 settings propose FILE [REASON] --against REVISION --key KEY
   FILE (items): a file, at most 1048576 bytes; required. The settings file, JSON, or -
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Why; empty when absent
+  REASON (reason): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. Why; empty when absent
   --against REVISION: a number from 0 to 4294967295; required. The newest revision you read
 Propose a change of the settings to the deployment's owners
 Prints: `proposed: PROPOSAL, to RECIPIENT`

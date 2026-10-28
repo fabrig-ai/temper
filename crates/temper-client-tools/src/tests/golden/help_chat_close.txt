@@ -1,7 +1,7 @@
 chat close TASK [--move TASK]... [--reason TEXT] --key KEY
   TASK (task): a number; required. The chat's task number
   --move TASK: a number; repeated, at most 8. A live delegate to move to your party
-  --reason TEXT: text, at most 1048576 bytes, or - to read stdin; optional. Why; empty when absent
+  --reason TEXT: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. Why; empty when absent
 Close a chat: move the delegates you name to your party, cancel the rest
 Prints: `done: task N, close`
 --json: the record close.

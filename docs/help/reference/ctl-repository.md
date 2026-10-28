@@ -10,11 +10,11 @@ Repositories: adopt one into a project.
 repository adopt --project PROJECT [--forge FORGE] --owner OWNER --name REPOSITORY --landing BRANCH [--role owned|fork|context] [--prefix PREFIX] [--no-home] [--no-ci] [--check GATE]... --key KEY
   --project PROJECT: a project's name or number; required. The project
   --forge FORGE: a number from 0 to 65535; optional. The forge's number; 1 when absent
-  --owner OWNER: text, at most 1048576 bytes, or - to read stdin; required. The repository's owner on the forge
-  --name REPOSITORY: text, at most 1048576 bytes, or - to read stdin; required. The repository's name
-  --landing BRANCH: text, at most 1048576 bytes, or - to read stdin; required. The branch its changes land on
+  --owner OWNER: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. The repository's owner on the forge
+  --name REPOSITORY: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. The repository's name
+  --landing BRANCH: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. The branch its changes land on
   --role owned|fork|context: one of owned, fork or context; optional. owned, fork or context; owned when absent
-  --prefix PREFIX: text, at most 1048576 bytes, or - to read stdin; optional. The prefix of temper's branches; temper/ when absent
+  --prefix PREFIX: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. The prefix of temper's branches; temper/ when absent
   --no-home: a switch. Do not make it the project's home
   --no-ci: a switch. Do not use the forge's CI
   --check GATE: a number; repeated, at most 8. A gate, by its number, each once

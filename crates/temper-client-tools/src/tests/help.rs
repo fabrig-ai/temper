@@ -31,6 +31,42 @@ const GOLDENS: &[(Option<u8>, &str)] = &[
     (Some(jig::rows::PROJECT_FUND_AT), "help_project_fund"),
 ];
 #[test]
+fn every_text_argument_names_the_deployments_bound() {
+    let phrase = b"up to the deployment's people.words, 4,096 bytes on temper init's box";
+    let record = br#""bound":{"source":"people.words","init_bytes":4096}"#;
+    for tool in table::TOOLS {
+        let mut texts = 0_usize;
+        for form in tool.forms {
+            for argument in *form {
+                if argument.kind == jig::table::Kind::Text {
+                    texts += 1;
+                }
+            }
+        }
+        let mut measured = skein_lib::Writer::new(usize::try_from(crate::limits::TEXT).expect("text fits usize"));
+        jig::help::tool(tool, &crate::limits::tools(), &mut measured).expect("tool help fits");
+        let mut out = skein_lib::Writer::new(measured.written());
+        jig::help::tool(tool, &crate::limits::tools(), &mut out).expect("tool help");
+        let text = out.finish();
+        let json = jig::json::write_tool(tool, &crate::limits::tools()).expect("tool JSON");
+        let mut phrases = 0_usize;
+        for window in text.windows(phrase.len()) {
+            if window == phrase {
+                phrases += 1;
+            }
+        }
+        let mut records = 0_usize;
+        for window in json.windows(record.len()) {
+            if window == record {
+                records += 1;
+            }
+        }
+        assert_eq!(phrases, texts, "{:?}", tool.name);
+        assert_eq!(records, texts, "{:?}", tool.name);
+    }
+}
+
+#[test]
 fn the_help_is_the_page_ctl_then_the_tools() {
     let help = fixtures::help(None);
     let page = temper_docs::find(b"ctl").expect("ctl page").text.as_bytes();
@@ -240,7 +276,7 @@ pub(super) const RECORD: jig::table::Tool = jig::table::Tool {
     area: 1,
     notes: b"First note.\nSecond note.\n",
 };
-const RECORD_FORMS: &[u8] = b"fixture N [--activity K] [--tree] [--word a|b|c]... [--key KEY]\n  N (task): a number; required. Task number\n  --activity K: a count from 1 to 32; optional. Latest activity lines\n  --tree: a switch. Include the live tree\n  --word a|b|c: one of a, b or c; repeated, at most 2. Words\nfixture TEXT [--until K] [--timeout D] [--key KEY]\n  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. Words to send\n  --until K: one of settled, connected:N or made:N with N from 1 to 65535; optional. Condition\n  --timeout D: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. Timeout\n";
+const RECORD_FORMS: &[u8] = b"fixture N [--activity K] [--tree] [--word a|b|c]... [--key KEY]\n  N (task): a number; required. Task number\n  --activity K: a count from 1 to 32; optional. Latest activity lines\n  --tree: a switch. Include the live tree\n  --word a|b|c: one of a, b or c; repeated, at most 2. Words\nfixture TEXT [--until K] [--timeout D] [--key KEY]\n  TEXT (text): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. Words to send\n  --until K: one of settled, connected:N or made:N with N from 1 to 65535; optional. Condition\n  --timeout D: a duration: seconds, or a number with s, m or h, at most 3600 seconds; optional. Timeout\n";
 #[test]
 fn a_tools_record_reads_as_written() {
     let expected = expected_record(b"Read a task\nPrints: task N\n--json: the record task.\nKey: --key KEY, optional.\nFirst note.\nSecond note.\n");

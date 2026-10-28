@@ -169,6 +169,11 @@ fn choices(words: &[&[u8]], prefixes: &[&[u8]], out: &mut Writer) -> Result<(), 
 fn argument_bound(argument: &Argument, limits: &Limits, out: &mut Writer) -> Result<(), Overflow> {
     match bound(argument, limits) {
         Bound::None => {}
+        Bound::DeploymentWords => {
+            out.put(b", up to the deployment's people.words, 4,096 bytes on ")?;
+            out.put(limits.application)?;
+            out.put(b" init's box")?;
+        }
         Bound::Numbers { least, most } => {
             if let Kind::NamedNumber { .. } = argument.kind {
                 out.put(b" with N from ")?;

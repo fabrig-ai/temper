@@ -384,7 +384,7 @@ const BOUNDED: Tool = Tool {
 };
 type BoundEdge = (&'static [u8], &'static [u8], &'static [u8], crate::jig::table::Bound, Usage);
 #[test]
-fn bound_is_what_the_parser_accepts() {
+fn the_parser_keeps_its_internal_bounds() {
     use crate::jig::table::{Bound, bound};
     let mut limits = crate::limits::tools();
     limits.rows = 2;
@@ -395,7 +395,7 @@ fn bound_is_what_the_parser_accepts() {
         (b"--range", b"4", b"5", Bound::Numbers { least: 2, most: 4 }, Usage::Kind { argument: 0 }),
         (b"--count", b"2", b"3", Bound::Numbers { least: 1, most: 2 }, Usage::Rows { argument: 1 }),
         (b"--forge", b"65535", b"65536", Bound::Numbers { least: 0, most: 65535 }, Usage::Kind { argument: 2 }),
-        (b"--text", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 3 }),
+        (b"--text", b"abc", b"abcd", Bound::DeploymentWords, Usage::Long { argument: 3 }),
         (b"--timeout", b"4", b"5", Bound::Seconds { most: 4 }, Usage::Rows { argument: 4 }),
         (b"--named", b"made:4", b"made:5", Bound::Numbers { least: 2, most: 4 }, Usage::Kind { argument: 5 }),
         (b"--literal", b"abc", b"abcd", Bound::Bytes { most: 3 }, Usage::Long { argument: 6 }),

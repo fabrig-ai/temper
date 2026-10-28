@@ -590,6 +590,22 @@ fn a_refused_wait_exits_2() {
     assert_eq!(f.exit(), Some(Exit::Code(2)));
 }
 #[test]
+fn chat_start_help_names_the_deployments_text_bound_without_a_directory() {
+    let mut text = fixtures::Frame::read(&["help", "chat", "start"]);
+    text.drain();
+    assert_eq!(text.exit(), Some(Exit::Code(0)));
+    assert!(text.no_directory());
+    let words = std::str::from_utf8(text.stdout()).expect("help text");
+    assert!(words.contains("TEXT (text): text, up to the deployment's people.words, 4,096 bytes on temper init's box"));
+    let mut json = fixtures::Frame::read(&["help", "chat", "start", "--json"]);
+    json.drain();
+    assert_eq!(json.exit(), Some(Exit::Code(0)));
+    assert!(json.no_directory());
+    let records: serde_json::Value = serde_json::from_slice(json.stdout()).expect("help JSON");
+    assert_eq!(records[0]["forms"][0][1]["bound"], serde_json::json!({"source":"people.words", "init_bytes":4096}));
+}
+
+#[test]
 fn help_opens_nothing() {
     for words in [&[b"help".as_slice()][..], &[b"help".as_slice(), b"me"], &[b"help".as_slice(), b"me", b"--json"]] {
         let mut f = fixtures::Frame::act(words);

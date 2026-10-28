@@ -285,6 +285,57 @@ fn account_document_limits(
     }
     whole
 }
+fn me_packet(
+    transport: &mut Transport,
+    watcher: skein_lib::Token,
+    frame: &core::documents::Frame,
+    limits: &jig_client::DomainLimits,
+) -> Option<packets::Incoming> {
+    let route = transport.watch(watcher)?;
+    let Watched::Jig(jig_client::contract::Subject::Me) = &route.subject else { panic!("me route") };
+    assert_eq!(frame.party, transport.party(route.client));
+    let client = route.client;
+    let watch = route.native;
+    let link = jig_client_protocol_link::Limits::new(*limits, 1).expect("client link bounds");
+    let models: Vec<_> = transport
+        .models
+        .iter()
+        .map(|model| jig_protocol_engine_clients::Model {
+            name: model.name.clone(),
+            provider: transport.providers.serving(&model.name).map(|provider| provider.number),
+            window: model.window,
+            output: model.output,
+            efforts: model.efforts.clone(),
+            prices: jig_protocol_engine_clients::Prices {
+                input: model.input_price,
+                cached: model.cached_price,
+                cache_write: model.cache_write_price,
+                output: model.output_price,
+                unit: model.price_unit,
+            },
+            description: None,
+        })
+        .collect();
+    // The world's generic owner shim has an eight-grant fixture bound;
+    // stock me uses the production encoder and decoder for its whole authority.
+    let record =
+        jig_protocol_engine_clients::translate::owner::frame(frame, &models, &link.wire).expect("whole me encodes");
+    let me = jig_client_protocol_link::translate::documents::frame(record, &link).expect("whole me decodes");
+    assert!(transport.delivered(watcher, jig_client_world::joint::transport::Pace::Document));
+    Some(packets::Incoming::Callback {
+        client,
+        event: jig_client_test_domain::Event::Client {
+            event: jig_client::Event::Up {
+                up: jig_client::Up::Watched {
+                    watch,
+                    event: jig_client::contract::WatchEvent::Delivered(jig_client::contract::Delivery::Me(Box::new(
+                        me,
+                    ))),
+                },
+            },
+        },
+    })
+}
 fn delivery_packet(
     transport: &mut Transport,
     delivery: Delivery,
@@ -292,6 +343,12 @@ fn delivery_packet(
     codec: &jig_protocol_transcript::Limits,
 ) -> Option<packets::Incoming> {
     match delivery {
+        Delivery::Document { watcher, document }
+            if matches!(document.as_ref(), core::documents::Document::Frame(_)) =>
+        {
+            let core::documents::Document::Frame(frame) = document.as_ref() else { unreachable!("me document") };
+            me_packet(transport, watcher, frame, &account_document_limits(&document, limits))
+        }
         Delivery::WebReply { to, reply } => {
             let to = to.into_token();
             transport

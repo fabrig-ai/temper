@@ -425,6 +425,14 @@ fn prefixes_json(prefixes: &[&[u8]], out: &mut Encoder) {
 fn encode_bound(bound: Bound, out: &mut Encoder) {
     match bound {
         Bound::None => out.null(),
+        Bound::DeploymentWords => {
+            out.object_start();
+            out.key(b"source");
+            out.string(b"people.words");
+            out.key(b"init_bytes");
+            out.unsigned(4096);
+            out.object_end();
+        }
         Bound::Numbers { least, most } => {
             out.object_start();
             out.key(b"least");

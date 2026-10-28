@@ -23,9 +23,9 @@ adds its words so far.
 ```
 chat start --project PROJECT TEXT [--model MODEL] [--effort EFFORT] --key KEY
   --project PROJECT: a project's name or number; required. The project
-  TEXT (text): text, at most 1048576 bytes, or - to read stdin; required. The opening words
-  --model MODEL: text, at most 1048576 bytes, or - to read stdin; optional. A model the chat may use, as models lists it
-  --effort EFFORT: text, at most 1048576 bytes, or - to read stdin; optional. An effort that model offers
+  TEXT (text): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; required. The opening words
+  --model MODEL: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. A model the chat may use, as models lists it
+  --effort EFFORT: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. An effort that model offers
 Start a chat in a project
 Prints: `done: task N, chat`, or `proposed: PROPOSAL, to RECIPIENT` when another party must agree
 --json: the record chat_create.
@@ -44,7 +44,7 @@ Then task show TASK --until replied.
 chat close TASK [--move TASK]... [--reason TEXT] --key KEY
   TASK (task): a number; required. The chat's task number
   --move TASK: a number; repeated, at most 8. A live delegate to move to your party
-  --reason TEXT: text, at most 1048576 bytes, or - to read stdin; optional. Why; empty when absent
+  --reason TEXT: text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. Why; empty when absent
 Close a chat: move the delegates you name to your party, cancel the rest
 Prints: `done: task N, close`
 --json: the record close.

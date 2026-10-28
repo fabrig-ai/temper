@@ -2,7 +2,7 @@ task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]
   TASK (task): a number; required. The held task's number
   --hold REV: a number; required. The hold's revision, as the task prints it
   release|leave|pass-up (outcome): one of release, leave or pass-up; required. The decision
-  REASON (reason): text, at most 1048576 bytes, or - to read stdin; optional. Why; sent with leave alone
+  REASON (reason): text, up to the deployment's people.words, 4,096 bytes on temper init's box, or - to read stdin; optional. Why; sent with leave alone
 Decide the escalation of a held task
 Prints: `done: decide`, or `decided first:`, by whom, how and when, if it was decided already
 --json: the record decide.

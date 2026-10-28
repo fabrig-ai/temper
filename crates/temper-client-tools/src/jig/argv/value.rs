@@ -327,9 +327,12 @@ fn valid_text(spec: &Argument, value: &Value, argument: u8, limits: &Limits) -> 
     let Value::Text(text) = value else {
         return Err(Usage::Kind { argument });
     };
-    if let Bound::Bytes { most } = bound(spec, limits)
-        && u64::try_from(text.len()).unwrap_or(u64::MAX) > most
-    {
+    let most = match bound(spec, limits) {
+        Bound::DeploymentWords => limits.ask_bytes,
+        Bound::Bytes { most } => most,
+        Bound::None | Bound::Numbers { .. } | Bound::Seconds { .. } => return Ok(()),
+    };
+    if u64::try_from(text.len()).unwrap_or(u64::MAX) > most {
         return Err(Usage::Long { argument });
     }
     Ok(())
