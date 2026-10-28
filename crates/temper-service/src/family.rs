@@ -960,6 +960,7 @@ fn admin_stop(stop: forge::AdminStop, limits: &w::Limits) -> Option<w::AdminStop
 
 /// Encode a whole landing document, with deployment addresses at this boundary.
 #[must_use]
+#[expect(clippy::manual_map, reason = "the foundation uses explicit matches without closures")]
 pub fn document(value: forge::Document, forges: &[crate::settings::Forge], limits: &w::Limits) -> Option<Box<[u8]>> {
     match value {
         forge::Document::Change(value) => panel(value, forges, limits),
@@ -1031,38 +1032,7 @@ pub fn document(value: forge::Document, forges: &[crate::settings::Forge], limit
             }
             let mut logged = List::with_capacity(u32::try_from(value.logged.len()).ok()?);
             for entry in value.logged {
-                let mut changes = List::with_capacity(u32::try_from(entry.changes.len()).ok()?);
-                for change in entry.changes {
-                    changes.push(change).ok()?;
-                }
-                let mut verdicts = List::with_capacity(u32::try_from(entry.verdicts.len()).ok()?);
-                for mark in entry.verdicts {
-                    let verdict = match mark.verdict {
-                        forge::Verdict::Verifying => w::LoggedVerdict::Verifying,
-                        forge::Verdict::Cleared => w::LoggedVerdict::Cleared,
-                        forge::Verdict::Red { tests } => {
-                            w::LoggedVerdict::Red(w::LoggedRed::new(limits, w::LoggedRedParts { tests }).ok()?)
-                        }
-                    };
-                    verdicts
-                        .push(w::LoggedMark::new(limits, w::LoggedMarkParts { tier: mark.tier, verdict }).ok()?)
-                        .ok()?;
-                }
-                logged
-                    .push(
-                        w::LoggedLine::new(
-                            limits,
-                            w::LoggedLineParts {
-                                commit: entry.commit,
-                                repository: entry.repository,
-                                seen: entry.seen.as_nanos(),
-                                changes,
-                                verdicts,
-                            },
-                        )
-                        .ok()?,
-                    )
-                    .ok()?;
+                logged.push(logged_line(entry, limits)?).ok()?;
             }
             let newer_than = match value.newer_than {
                 Some(wall) => Some(wall.as_nanos()),
@@ -1072,9 +1042,12 @@ pub fn document(value: forge::Document, forges: &[crate::settings::Forge], limit
             // the little-endian offset (jig's protocol/client.md, 6).
             let after = match value.after {
                 Some(number) => {
-                    let mut bytes = [0; 9];
-                    bytes.get_mut(1..)?.copy_from_slice(&number.to_le_bytes());
-                    Some(Box::from(bytes.as_slice()))
+                    let mut bytes = List::with_capacity(9);
+                    bytes.push(0).ok()?;
+                    for byte in number.to_le_bytes() {
+                        bytes.push(byte).ok()?;
+                    }
+                    Some(bytes.into_boxed())
                 }
                 None => None,
             };
@@ -1087,6 +1060,35 @@ pub fn document(value: forge::Document, forges: &[crate::settings::Forge], limit
         }
     }
 }
+fn logged_line(entry: forge::LoggedLine, limits: &w::Limits) -> Option<w::LoggedLine> {
+    let mut changes = List::with_capacity(u32::try_from(entry.changes.len()).ok()?);
+    for change in entry.changes {
+        changes.push(change).ok()?;
+    }
+    let mut verdicts = List::with_capacity(u32::try_from(entry.verdicts.len()).ok()?);
+    for mark in entry.verdicts {
+        let verdict = match mark.verdict {
+            forge::Verdict::Verifying => w::LoggedVerdict::Verifying,
+            forge::Verdict::Cleared => w::LoggedVerdict::Cleared,
+            forge::Verdict::Red { tests } => {
+                w::LoggedVerdict::Red(w::LoggedRed::new(limits, w::LoggedRedParts { tests }).ok()?)
+            }
+        };
+        verdicts.push(w::LoggedMark::new(limits, w::LoggedMarkParts { tier: mark.tier, verdict }).ok()?).ok()?;
+    }
+    w::LoggedLine::new(
+        limits,
+        w::LoggedLineParts {
+            commit: entry.commit,
+            repository: entry.repository,
+            seen: entry.seen.as_nanos(),
+            changes,
+            verdicts,
+        },
+    )
+    .ok()
+}
+
 fn landing_member(
     member: forge::LandingMember,
     forges: &[crate::settings::Forge],

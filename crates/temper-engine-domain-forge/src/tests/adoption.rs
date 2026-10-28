@@ -11,6 +11,7 @@ fn context_beside_a_writer_preserves_its_home_and_readoption() {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    fixtures::prime_main(&mut d);
     let mut context = fixtures::adoption();
     context.project += 1;
     context.role = Role::Context;
@@ -365,6 +366,7 @@ fn each_admission_conflict_keeps_its_own_reason() {
             outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
             outputs(&mut d, Event::ReadAfresh);
             outputs(&mut d, Event::SettleOutbox);
+            fixtures::prime_main(&mut d);
         }
         let request = Token::new(4);
         let mut requests = fixtures::begin_adoption(&mut d, request, fixtures::adoption());

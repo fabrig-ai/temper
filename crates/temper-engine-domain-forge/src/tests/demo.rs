@@ -482,7 +482,9 @@ fn a_lost_writers_read_waiting_on_the_ended_demo_forge_is_never_asked_again() {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::answer_next(&mut d, Err(skein_forge::api::Error::NotConnected));
+    let (call, _) = fixtures::next_call(&mut d);
+    fixtures::prime_main(&mut d);
+    fixtures::answer(&mut d, call, Err(skein_forge::api::Error::NotConnected));
     assert!(!d.is_ready(), "the read waits for the demo forge's connection");
     connected(&mut d, 2);
     assert!(d.forge_ended(1));
