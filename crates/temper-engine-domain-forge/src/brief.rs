@@ -133,6 +133,44 @@ pub(crate) fn brief_part(words: &BriefWords, parts: u32, bytes: u32) -> BriefRea
     }
 }
 
+/// The same pull identity starts reviews and repairs (domain/forge.md, 8.3–8.4).
+fn pull_identity(domain: &Domain, row: &crate::ChangeRow, head: BriefCommit, bytes: u32) -> Option<BriefWords> {
+    let number = row.pull?;
+    let mut words = BriefWords::with_capacity(bytes, false);
+    for part in [
+        b"Pull request: #".as_slice(),
+        decimal(number).as_ref(),
+        b"\nBranch: ",
+        &row.branch,
+        b"\nBase: ",
+        &row.base,
+        b"\nHead: ",
+        &crate::commit_text(&head.0),
+        b"\n",
+    ] {
+        append(&mut words, part);
+    }
+    if let Some(configured) = domain.configured(row.repository.forge)
+        && let Some(repository) = domain.repository(row.repository)
+        && let Some(address) = crate::pull_address(
+            configured.kind,
+            &configured.git,
+            configured.web.as_deref(),
+            &repository.owner,
+            &repository.name,
+            number,
+        )
+    {
+        append(&mut words, b"Address: ");
+        append(&mut words, &address);
+        append(&mut words, b"\n");
+    }
+    if words.left > 0 {
+        return None;
+    }
+    Some(words)
+}
+
 pub(super) fn brief_pull(
     domain: &mut Domain,
     owner: Token,
@@ -175,7 +213,7 @@ pub(super) fn brief_pull(
         | change::State::Landed { .. }
         | change::State::Held { .. } => PullMode::Other,
     };
-    let words = BriefWords::with_capacity(bytes, false);
+    let Some(words) = pull_identity(domain, row, head, bytes) else { return Some(BriefRead::Failed) };
     let call = Token::new(owner.raw() | (1_u64 << 61_u32) | (1_u64 << 59_u32));
     let fetch = BriefFetch {
         owner,
