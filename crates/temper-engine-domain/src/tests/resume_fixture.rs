@@ -225,9 +225,12 @@ pub fn limits() -> engine::Limits {
     let application = temper_protocol_store::v10::Row::worst_case_heap(bounds.limits()).unwrap();
     limits.restore_bytes = jig_protocol_store::sizes::restore_bytes(&store.store)
         .max(
-            jig_protocol_store::decoded_worst_case(&store).unwrap()
-                + 2 * application
-                + 2 * u64::try_from(size_of::<engine::Record>()).unwrap(),
+            jig_protocol_store::decoded_worst_case(&store)
+                .unwrap()
+                .checked_add(application.checked_mul(2).unwrap())
+                .unwrap()
+                .checked_add(u64::try_from(size_of::<engine::Record>()).unwrap().checked_mul(2).unwrap())
+                .unwrap(),
         )
         .max(u64::from(limits.loads.reply_bytes));
     limits

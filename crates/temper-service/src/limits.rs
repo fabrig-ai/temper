@@ -367,6 +367,7 @@ pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engi
 }
 
 /// The same effective projection, before sizing can refuse it anonymously.
+#[expect(clippy::manual_unwrap_or_default, reason = "the step subset uses explicit matches")]
 pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limits) -> engine::Limits {
     let mut root = engine::Limits {
         restore_bytes: 0,

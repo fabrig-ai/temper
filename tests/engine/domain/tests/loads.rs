@@ -515,13 +515,16 @@ fn a_malformed_restore_page_retains_its_kind_and_range_failure() {
 fn cold_rows_use_the_derived_workspace_while_reads_keep_their_cuts() {
     // One transcript byte beyond the ordinary hard reply allowance; the two-row
     // cold workspace includes its record slots and complete owned payload.
-    let payload = usize::try_from(LIMITS.reply_bytes).unwrap() + 1;
+    let payload = usize::try_from(LIMITS.reply_bytes).expect("small fixture reply allowance") + 1;
     let record = row(1, payload);
-    let workspace = 2 * (u64::try_from(size_of::<Record>()).unwrap() + root::record_bytes(&record).unwrap());
+    let workspace = 2
+        * (u64::try_from(size_of::<Record>()).expect("record slot fits u64")
+            + root::record_bytes(&record).expect("bounded stored turn"));
     let range = Range::Core(root::CoreRange::Turns { task: 1, attempt: 1 });
     let mut loads = Loads::with_restore(&LIMITS, workspace);
     let mut out = Queue::with_capacity(1);
-    let owner = loads::begin_restore(&mut loads, Token::new(51), range.clone(), None, 1, &mut out).unwrap();
+    let owner =
+        loads::begin_restore(&mut loads, Token::new(51), range.clone(), None, 1, &mut out).expect("cold load admitted");
     assert!(matches!(out.pop(), Some(Request::Load { bytes, restoring: true, .. }) if bytes == workspace));
     loads::loaded(&mut loads, owner, Box::new([record.clone()]), None, &mut out);
     assert_eq!(
@@ -529,7 +532,7 @@ fn cold_rows_use_the_derived_workspace_while_reads_keep_their_cuts() {
         Some(Request::Loaded { waiter: Token::new(51), rows: Box::new([record.clone()]), next: None, cut: None })
     );
     loads::reclaim(&mut loads);
-    let owner = loads::begin(&mut loads, Token::new(51), range, None, 1, &mut out).unwrap();
+    let owner = loads::begin(&mut loads, Token::new(51), range, None, 1, &mut out).expect("ordinary load admitted");
     assert!(
         matches!(out.pop(), Some(Request::Load { bytes, restoring: false, .. }) if bytes == u64::from(LIMITS.reply_bytes))
     );
