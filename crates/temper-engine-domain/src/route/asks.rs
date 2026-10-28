@@ -17,14 +17,14 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
     let request = match ask {
         core::Ask::StepMade { task, step, first, .. } => {
             if connector == domain.config.forge_connector {
-                forge_route::resolve_procedure_step(domain, task, step, true);
+                forge_route::resolve_procedure_step(domain, env, decision, task, step, true);
             }
             step_made(domain, task, step, first);
             None
         }
         core::Ask::StepRefused { task, step, why } => {
             if connector == domain.config.forge_connector {
-                forge_route::resolve_procedure_step(domain, task, step, false);
+                forge_route::resolve_procedure_step(domain, env, decision, task, step, false);
             }
             let delegation = domain.forge_delegating.remove(&(task, step));
             if let core::StepRefusal::Denied { findings, .. } = &why {

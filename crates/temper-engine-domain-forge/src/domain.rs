@@ -78,7 +78,6 @@ pub(crate) struct PendingStep {
 pub(crate) struct ProcedureStep {
     step: u64,
     prior: Option<StepPrior>,
-    released: bool,
     accepted_head: Option<skein_forge::api::Commit>,
 }
 #[derive(Debug)]
@@ -474,16 +473,14 @@ impl Domain {
             assert!(pending.prior.is_none(), "previous procedure decision resolved");
         }
         self.procedure_steps
-            .insert(task, ProcedureStep { step, prior: None, released: false, accepted_head: None })
+            .insert(task, ProcedureStep { step, prior: None, accepted_head: None })
             .expect("one admission fence per change");
     }
 
     #[must_use]
     pub fn procedure_step(&self, task: u64) -> Option<u64> {
-        match self.procedure_steps.get(&task) {
-            Some(pending) => Some(pending.step),
-            None => None,
-        }
+        let pending = self.procedure_steps.get(&task)?;
+        Some(pending.step)
     }
 
     /// Keep the connector's retry deadline; the root carries no timer policy.
@@ -2542,7 +2539,13 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
     if d.stopping {
         return;
     }
-    let StepInput { task, entry, heard, gates, queue_repair_active, kept } = input;
+    let StepInput { task, entry, mut heard, gates, queue_repair_active, kept } = input;
+    if heard.released {
+        // This belongs to jig's already-admitted owner release, before the
+        // procedure begins fresh reads and decides its next offer.
+        release_change(d, env, task, out);
+        heard.released = false;
+    }
     let Some(row) = d.changes.get(&task) else {
         emit(out, Request::Refused { task });
         return;
@@ -2564,7 +2567,6 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         pending.entry = entry;
         pending.heard.lacking = heard.lacking;
         pending.heard.spend = heard.spend;
-        pending.heard.released |= heard.released;
         pending.kept = kept;
         pending.queue_repair_active = queue_repair_active;
         pending.gates = gates;
@@ -2895,7 +2897,6 @@ fn remember_step(d: &mut Domain, pending: &PendingStep) {
         && let Some(row) = d.changes.get(&pending.task)
     {
         assert!(fence.prior.is_none(), "one decision per admitted step");
-        fence.released = pending.heard.released;
         fence.prior = Some(StepPrior {
             change: row.change.clone(),
             pull: row.pull,
@@ -2910,14 +2911,7 @@ fn remember_step(d: &mut Domain, pending: &PendingStep) {
 
 fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &mut Queue<Request>) {
     remember_step(d, pending);
-    if pending.heard.released && !deciding(d, pending.task) {
-        release_change(d, env, pending.task, out);
-    }
     let Some(mut row) = d.changes.get(&pending.task).cloned() else { return };
-    if pending.heard.released && deciding(d, pending.task) {
-        row.change = change::released(&row.change, env.wall);
-        row.drift = None;
-    }
     let before = crate::panel::ready(&row);
     let prior = row.change.clone();
     let Some(base_tip) = pending.base_tip else {
@@ -3041,7 +3035,7 @@ fn procedure_resolved(d: &mut Domain, env: &Env<Limits>, task: u64, step: u64, m
     previous.queue_repair = prior.queue_repair;
     previous.queue_repairs = prior.queue_repairs;
     if !made {
-        let entry = if row.pending != previous.pending { row.pending } else { None };
+        let entry = if row.pending == previous.pending { None } else { row.pending };
         *row = previous;
         d.wait_change(env, task, None);
         if let Some(entry) = entry {
@@ -3050,9 +3044,6 @@ fn procedure_resolved(d: &mut Domain, env: &Env<Limits>, task: u64, step: u64, m
         return;
     }
     let mut saved = row.clone();
-    if fence.released {
-        let _observed = release_holds(d, task, out);
-    }
     if let Some(head) = fence.accepted_head {
         accept_released_branch(d, env, &mut saved, head, out);
     }
@@ -3364,6 +3355,11 @@ fn change_outcome(
         skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => return,
     };
     row.effect_account = account;
+    if let skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Created(number), .. } = outcome {
+        // The completed open is an observed fact, independent of whether a
+        // later procedure step's review batch is admitted.
+        row.pull = Some(number);
+    }
     row.pending = None;
     if pull_closed {
         row.drift = Some(change::Hold::PullClosed);
@@ -3454,35 +3450,30 @@ fn release_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<
     row.drift = None;
     let mut saved = row.clone();
     save_queue_change(d, env, before, saved.clone(), out);
-    let observed = release_holds(d, task, out);
+    let mut affected = List::with_capacity(d.holds.len());
+    let mut observed = None;
+    for (name, hold) in &d.holds {
+        if hold.task == task && hold.drift.is_some() {
+            affected.push(name.clone()).expect("at most all held resources");
+            if let Some(drift) = &hold.drift {
+                match &drift.change {
+                    crate::DriftChange::Branch { observed: head, .. } => observed = *head,
+                    crate::DriftChange::PullClosed { .. } | crate::DriftChange::Retargeted { .. } => {}
+                }
+            }
+        }
+    }
+    for name in &affected {
+        let hold = d.holds.get_mut(name).expect("collected held resource");
+        hold.drift = None;
+        save_hold(out, hold.clone());
+    }
     if saved.change.released == Some(change::Hold::BranchMoved)
         && let Some(head) = observed
     {
         // A poll may finish before the procedure's fresh snapshot does.
         accept_released_branch(d, env, &mut saved, head, out);
     }
-}
-
-/// Resource baselines move only once the procedure step is admitted.
-fn release_holds(d: &mut Domain, task: u64, out: &mut Queue<Request>) -> Option<skein_forge::api::Commit> {
-    let mut affected = List::with_capacity(d.holds.len());
-    for (name, hold) in &d.holds {
-        if hold.task == task && hold.drift.is_some() {
-            affected.push(name.clone()).expect("at most all held resources");
-        }
-    }
-    let mut observed = None;
-    for name in &affected {
-        let hold = d.holds.get_mut(name).expect("collected held resource");
-        if let Some(drift) = hold.drift.take() {
-            match drift.change {
-                crate::DriftChange::Branch { observed: head, .. } => observed = head,
-                crate::DriftChange::PullClosed { .. } | crate::DriftChange::Retargeted { .. } => {}
-            }
-            save_hold(out, hold.clone());
-        }
-    }
-    observed
 }
 
 fn settle_effects(
