@@ -25,6 +25,7 @@ mod commit;
 mod connect;
 mod demo;
 mod domain;
+mod effect_words;
 mod gates;
 mod held;
 pub mod items;
@@ -434,6 +435,10 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
                     .checked_mul(u64::try_from(size_of::<GateRemark>()).ok()?)?,
             )?
             .checked_add(remark_bytes(&row.gate_remarks)?)?
+            .checked_add(match &row.effect_account {
+                Some(account) => bytes(&account.words)?,
+                None => 0,
+            })?
             .checked_add(state(&row.change.state, 0)?),
         Stored::Issue(row) => {
             let before = match &row.before {

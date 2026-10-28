@@ -169,6 +169,7 @@ pub fn row(key: &[u8], value: &[u8], bounds: &Bounds) -> Result<d::Stored, Undec
 
 pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
     Some(w::Limits {
+        effect_account_words: temper_engine_domain_forge::EFFECT_ACCOUNT_BYTES,
         answer_name_name: forge.client.answer_bytes,
         binding_address: 254,
         binding_subject: 255,

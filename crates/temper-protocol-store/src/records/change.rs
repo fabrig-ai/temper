@@ -449,6 +449,7 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
         queue_repairs,
         producing_charter,
         review_charter,
+        effect_account,
     } = value;
     w::ChangeRow::new(
         &w::CEILINGS,
@@ -496,6 +497,16 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
             queue_repairs: *queue_repairs,
             producing_charter: *producing_charter,
             review_charter: *review_charter,
+            effect_account: match effect_account {
+                Some(account) => Some(
+                    w::EffectAccount::new(
+                        &w::CEILINGS,
+                        w::EffectAccountParts { entry: account.entry, words: account.words.clone() },
+                    )
+                    .expect(FITS),
+                ),
+                None => None,
+            },
         },
     )
     .expect(FITS)
@@ -525,6 +536,7 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         queue_repairs,
         producing_charter,
         review_charter,
+        effect_account,
     } = value.into_parts();
     top::ChangeRow {
         task,
@@ -564,6 +576,13 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         queue_repairs,
         producing_charter,
         review_charter,
+        effect_account: match effect_account {
+            Some(account) => {
+                let w::EffectAccountParts { entry, words } = account.into_parts();
+                Some(top::EffectAccount { entry, words })
+            }
+            None => None,
+        },
     }
 }
 fn encode_numbers(values: &[u64]) -> List<u64> {
