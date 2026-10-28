@@ -402,7 +402,7 @@ struct AgentPeer {
     output_closes: u32,
 }
 impl AgentPeer {
-    fn start(worker: &mut crate::Worker) -> Self {
+    fn new() -> Self {
         let agent = fixtures::worker_agent();
         let host = agent.limits;
         // The host's output bound prices initiator frames. The new responder
@@ -431,7 +431,7 @@ impl AgentPeer {
             fact_reserve_bytes: 128,
             grants: agent.host_limits.accounts,
         };
-        let mut peer = Self {
+        Self {
             component: smith_protocol_channel::Component::new(
                 &limits,
                 skein_channel::StreamMode::Two,
@@ -452,7 +452,11 @@ impl AgentPeer {
             ends: 0,
             input_finishes: 0,
             output_closes: 0,
-        };
+        }
+    }
+    fn start(worker: &mut crate::Worker) -> Self {
+        let agent = fixtures::worker_agent();
+        let mut peer = Self::new();
         worker.route(root::Request::Process(Box::new(smith_host_domain::process::Request::Spawn {
             owner: AGENT_OWNER,
             workspace: None,
@@ -1414,3 +1418,6 @@ fn refusal_note(reason: crate::Refusal) -> crate::Note {
         reason,
     }
 }
+
+#[path = "worker_admission.rs"]
+mod worker_admission;
