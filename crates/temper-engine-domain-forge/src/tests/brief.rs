@@ -163,7 +163,7 @@ fn checks_past_the_budget_are_left_out_whole_and_counted() {
             })
             .expect("eight checks");
     }
-    let expected = b"Repair the failed check at change head c1fb3599fa12c976. Push a new head and wait for checks there.\nFailed check: check-0\nDescription: failed\nLink: /job\n[no pinned job log for this head]\nFailed check: check-1\nDescription: failed\nLink: /job\n[no pinned job log for this head]\n[6 failed checks omitted]\nRepair the failed check.\n";
+    let expected = b"Repair the failed check at change head c1fb3599fa12c976. Finish with the change: it becomes the pull request's new head.\nFailed check: check-0\nDescription: failed\nLink: /job\n[no pinned job log for this head]\nFailed check: check-1\nDescription: failed\nLink: /job\n[no pinned job log for this head]\n[6 failed checks omitted]\nRepair the failed check.\n";
     let budget = u32::try_from(expected.len()).expect("small budget");
     let checks = checks.into_boxed();
     let mut d = gather(checks.clone(), b"", SHIPPED_CI);
