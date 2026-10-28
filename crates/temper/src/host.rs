@@ -166,15 +166,6 @@ pub fn ending(
                 };
                 format!("temper serve: restart refused during {during}\n")
             }
-            Stop::Unresolved { child, records } => {
-                let name = match child {
-                    jig_domain_core::RestoreChild::People => "people",
-                    jig_domain_core::RestoreChild::Tasks => "tasks",
-                    jig_domain_core::RestoreChild::Accounts => "accounts",
-                    jig_domain_core::RestoreChild::Core => "core",
-                };
-                format!("temper serve: {name}: unresolved records: {records}\n")
-            }
             Stop::ForgeUnresolved { records } => {
                 format!("temper serve: the forge: unresolved records: {records}\n")
             }
@@ -467,12 +458,6 @@ fn other_endings_keep_their_exit_behavior() {
             1,
         ),
         (Some(End::Stopped(Stop::Start(problems))), false, "temper serve: deployment: unknown reference\n", 1),
-        (
-            Some(End::Stopped(Stop::Unresolved { child: jig_domain_core::RestoreChild::Tasks, records: 3 })),
-            false,
-            "temper serve: tasks: unresolved records: 3\n",
-            1,
-        ),
         (
             Some(End::Stopped(Stop::ForgeUnresolved { records: 3 })),
             false,
