@@ -2858,8 +2858,12 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
     };
     let decision = append_change_replies(domain, env, task, decision);
     domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep { task, step, connector, code, decision }));
+    // A merge's wake can be coalesced while this change's preceding read is
+    // still due. Retry its landed progress after the cached read can expire.
     if again {
         domain.work.push(Work::Tasks(tasks::Event::WakeProcedure { task }));
+    } else if landing_route::landed_step_due(domain, task) {
+        domain.forge.wait_change(&super::environment_forge(env), task, None);
     }
 }
 

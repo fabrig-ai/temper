@@ -39,6 +39,21 @@ pub(super) fn kept(domain: &Domain, env: &Env<Limits>, task: u64) -> bool {
     false
 }
 
+pub(super) fn landed_step_due(domain: &Domain, task: u64) -> bool {
+    let Some(change) = domain.forge.change(task) else { return false };
+    if let forge_change::State::Ready { .. } = change.change.state
+        && let Some(task) = change.change.landing
+        && let Some(row) = domain.forge.landing(task)
+    {
+        for member in &row.landing.members {
+            if member.change == change.task {
+                return member.landed.is_some();
+            }
+        }
+    }
+    false
+}
+
 fn member(domain: &Domain, env: &Env<Limits>, task: u64) -> Option<landing::Member> {
     let row = domain.forge.change(task)?;
     let project = domain.forge.repository(row.repository)?.project;
