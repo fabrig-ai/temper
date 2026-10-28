@@ -391,7 +391,7 @@ fn tier_row(world: &World) -> Option<&forge_top::TierRow> {
             forge_top::Stored::Tier(row) => Some(row),
             _ => None,
         },
-        _ => None,
+        Record::Core(_) => None,
     })
 }
 
@@ -437,7 +437,7 @@ fn tier_cuts(world: &World) -> Vec<&'static str> {
                         "verification cleared"
                     } else {
                         "verification verifying"
-                    })
+                    });
                 }
                 forge_top::Stored::Change(row) => match row.change.state {
                     State::Landed { .. } => found.push("change landed"),
