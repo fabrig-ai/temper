@@ -1,5 +1,9 @@
 //! Admission under pressure, through the real worker and its concrete peers.
-use super::{AgentPeer, LinkPeer, PEER_STEPS, demanded_bytes, fixtures, socket_stand};
+use super::fixtures;
+use super::fixtures::worker_peers::{
+    AGENT_CHILD, AGENT_ERROR, AGENT_INPUT, AGENT_OUTPUT, AGENT_OWNER, AgentPeer, LinkPeer, PEER_STEPS, demanded_bytes,
+    socket_stand,
+};
 use jig_domain_host as hub;
 use jig_protocol_worker_link as link;
 use skein_channel::{Lower, LowerEvent};
@@ -34,7 +38,7 @@ fn load(worker: &mut crate::Worker, entries: u32) {
 impl AgentPeer {
     /// Attach the same concrete agent peer to a spawn requested by the real
     /// root, letting the root drive its start and reads.
-    fn assigned(worker: &mut crate::Worker) -> Self {
+    fn assigned_for_admission(worker: &mut crate::Worker) -> Self {
         let link::Request::Down { down: hub::LinkDown::Assign { mut assignment }, parts } = fixtures::chat_assignment()
         else {
             panic!("chat assignment")
@@ -45,20 +49,16 @@ impl AgentPeer {
         let io::Request::Spawn { owner, .. } = worker.io().pop().expect("assigned agent spawn") else {
             panic!("assignment spawns its agent");
         };
-        let mut peer = Self::new();
+        let mut peer = Self::new(&fixtures::worker_agent(), AGENT_OWNER);
         peer.events = skein_lib::Queue::with_capacity(OPENING_EVENTS);
         worker.up(
             fixtures::NOW,
-            io::Event::Spawned {
-                owner,
-                child: super::AGENT_CHILD,
-                pipes: Box::new([super::AGENT_INPUT, super::AGENT_OUTPUT, super::AGENT_ERROR]),
-            },
+            io::Event::Spawned { owner, child: AGENT_CHILD, pipes: Box::new([AGENT_INPUT, AGENT_OUTPUT, AGENT_ERROR]) },
         );
         peer.settle(worker);
         // The peer has received Opened and the root's real Start.
         while peer.events.pop().is_some() {}
-        peer.component.send_admitted(super::AGENT_OWNER, &mut peer.events, &mut peer.out).unwrap();
+        peer.component.send_admitted(AGENT_OWNER, &mut peer.events, &mut peer.out).unwrap();
         peer.settle(worker);
         peer
     }
@@ -75,7 +75,7 @@ impl AgentPeer {
                     offset: 0,
                     bytes: b"progress",
                 },
-                super::AGENT_OWNER,
+                AGENT_OWNER,
                 &mut self.events,
                 &mut self.out,
             )
@@ -96,8 +96,7 @@ impl AgentPeer {
         }
         for _ in 0..PEER_STEPS {
             if let Some(bytes) = demanded_bytes(&mut self.worker_read, &mut self.worker_bytes) {
-                worker
-                    .up(fixtures::NOW, io::Event::Stream { owner: super::AGENT_OUTPUT, up: stream::Up::Bytes(bytes) });
+                worker.up(fixtures::NOW, io::Event::Stream { owner: AGENT_OUTPUT, up: stream::Up::Bytes(bytes) });
                 if self.worker_bytes.is_empty() {
                     return;
                 }
@@ -115,7 +114,7 @@ impl AgentPeer {
 
 fn progress_at(entries: u32) -> (fixtures::WorkerStand, Time) {
     let mut stand = fixtures::started_worker();
-    let mut agent = AgentPeer::assigned(&mut stand.worker);
+    let mut agent = AgentPeer::assigned_for_admission(&mut stand.worker);
     agent.queue_progress(&mut stand.worker);
     load(&mut stand.worker, entries);
     stand.worker.link(fixtures::NOW, assignment());
@@ -211,7 +210,7 @@ fn the_link_is_not_read_without_room_for_one_link_step() {
     }
     let without_credit = stand.worker.room();
     // Use the actual service's IO event routing gate with a socket terminal.
-    let mut service = super::alone_service();
+    let mut service = super::worker::alone_service();
     service.worker = Some(stand.worker);
     let owner = engine.owner;
     service.told.push(io::Event::Closed { owner });

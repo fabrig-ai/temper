@@ -753,7 +753,7 @@ fn refusals_are_notes_and_leave_later_dials_intact() {
     assert!(stand.worker.notes().is_empty());
 }
 
-fn alone_service() -> crate::Service {
+pub(super) fn alone_service() -> crate::Service {
     let part =
         crate::startup::worker_part(&fixtures::worker_alone_document(), &jig_protocol_config::Directories::working())
             .unwrap();
@@ -903,6 +903,3 @@ fn refusal_note(reason: crate::Refusal) -> crate::Note {
         reason,
     }
 }
-
-#[path = "worker_admission.rs"]
-mod worker_admission;

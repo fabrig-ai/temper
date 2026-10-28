@@ -1,4 +1,4 @@
-//! Concrete worker peers shared by `worker.rs` and `worker_orders.rs`.
+//! Concrete worker peers shared by worker, order and admission tests.
 use super::super::fixtures;
 use crate::worker_settings;
 use jig_domain_host as hub;
@@ -222,7 +222,7 @@ impl AgentPeer {
         let owner = assigned_agent(worker, agent);
         Self::launch(worker, agent, owner, true)
     }
-    fn launch(worker: &mut crate::Worker, agent: &crate::settings::Agent, owner: Token, rooted: bool) -> Self {
+    pub(crate) fn new(agent: &crate::settings::Agent, owner: Token) -> Self {
         let host = agent.limits;
         // The host's output bound prices initiator frames. The new responder
         // needs its own directional frame bound; Worker keeps its existing one.
@@ -250,7 +250,7 @@ impl AgentPeer {
             fact_reserve_bytes: 128,
             grants: agent.host_limits.accounts,
         };
-        let mut peer = Self {
+        Self {
             owner,
             now: fixtures::NOW,
             component: smith_protocol_channel::Component::new(
@@ -273,7 +273,10 @@ impl AgentPeer {
             ends: 0,
             input_finishes: 0,
             output_closes: 0,
-        };
+        }
+    }
+    fn launch(worker: &mut crate::Worker, agent: &crate::settings::Agent, owner: Token, rooted: bool) -> Self {
+        let mut peer = Self::new(agent, owner);
         if !rooted {
             worker.route(root::Request::Process(Box::new(smith_host_domain::process::Request::Spawn {
                 owner,
