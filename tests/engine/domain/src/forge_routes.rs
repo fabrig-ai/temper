@@ -24,6 +24,7 @@ pub enum HoldWrite {
     Merge,
 }
 
+#[expect(clippy::struct_excessive_bools, reason = "independent outside fault and observation switches remain explicit")]
 pub struct World {
     creating: jig_core_world::fixtures::Creating,
     pub root: engine::Domain,
@@ -64,6 +65,7 @@ pub struct World {
     /// Timeouts before dispatch: the caller cannot know the write was never made.
     pub lose_writes: u32,
     pub fail_issue_writes: bool,
+    pub fail_open_writes: bool,
     pub issue_write_times: Vec<Wall>,
     /// The durable commit number observed when the root drained.
     pub drained: Option<u64>,
@@ -73,6 +75,8 @@ pub struct World {
 
 #[derive(Clone, Copy, Default)]
 pub struct StoryLimits {
+    pub slots: Option<u32>,
+    pub tasks: Option<u32>,
     pub brief: Option<engine::BriefLimits>,
     pub stall: Option<Duration>,
     pub spec_bytes: Option<u32>,
@@ -210,7 +214,7 @@ impl World {
         timing: StoryLimits,
         stock: Option<(&jig_domain_core::settings::Defaults, &engine::Model, Option<&engine::Limits>)>,
     ) -> Self {
-        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter } = timing;
+        let StoryLimits { brief, stall, spec_bytes, result_bytes, forge_charter, slots, tasks } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
             let mut limits = walking::limits();
@@ -250,8 +254,16 @@ impl World {
                 limits.brief.budgets.pull = 384;
                 limits.brief.budgets.ci = 384;
                 limits.brief.brief_bytes = 768;
-                limits.tasks.tasks = 12;
+                limits.tasks.tasks = tasks.unwrap_or(12);
                 limits.forge.tasks = limits.tasks.tasks;
+                if tasks.is_some() {
+                    // Concurrent chats and changes keep all of their workspace watches.
+                    limits.forge.client.resources = limits.tasks.tasks * limits.forge.resources_per_task;
+                    limits.forge.output = skein_forge_client::max_out(&limits.forge.client)
+                        + limits.forge.subscriptions * 3
+                        + limits.forge.holds * 3
+                        + 9;
+                }
                 limits.tasks.project_tasks = 12;
                 limits.tasks.delegates = 4;
                 limits.tasks.tree_tasks = 12;
@@ -288,8 +300,12 @@ impl World {
                 limits.journal.held = 1024;
                 limits.journal.result_bytes = 4096;
                 limits.journal.transcript_bytes = 32_768;
-                limits.fleet.slots = 2;
-                limits.fleet.workstreams = 2;
+                limits.brief.briefs = slots.unwrap_or(2);
+                limits.forge.brief_sections =
+                    limits.forge.brief_sections.max(limits.brief.briefs * limits.brief.sections * 2);
+                limits.fleet.attempts = slots.unwrap_or(2);
+                limits.fleet.slots = slots.unwrap_or(2);
+                limits.fleet.workstreams = slots.unwrap_or(2);
                 // The core's inbox census and waiting entries cover every live task.
                 limits.people.inbox_tasks = 24;
                 limits.people.inbox_recipients = 32;
@@ -617,6 +633,7 @@ impl World {
             held_write_answers: Vec::new(),
             lose_writes: 0,
             fail_issue_writes: false,
+            fail_open_writes: false,
             issue_write_times: Vec::new(),
             drained: None,
             unsettled: Vec::new(),
@@ -784,14 +801,20 @@ impl World {
                     if issue_write {
                         self.issue_write_times.push(self.env.wall);
                     }
-                    if self.fail_issue_writes && issue_write {
+                    let fail_open = self.fail_open_writes
+                        && matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::OpenPull { .. }));
+                    if (self.fail_issue_writes && issue_write) || fail_open {
                         self.events.push_back(engine::Event::Forge(Box::new(forge_top::Event::Client(
                             skein_forge_client::Event::Answered {
                                 free: 0,
                                 rate: None,
                                 call,
                                 cost: 1,
-                                result: Err(skein_forge::api::Error::Refused),
+                                result: Err(if fail_open {
+                                    skein_forge::api::Error::Forbidden
+                                } else {
+                                    skein_forge::api::Error::Refused
+                                }),
                             },
                         ))));
                         continue;

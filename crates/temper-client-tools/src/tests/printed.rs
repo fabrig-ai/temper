@@ -141,7 +141,7 @@ fn substitute(call: &str) -> Vec<String> {
 }
 
 #[test]
-fn every_other_holds_offered_release_parses() {
+fn every_other_holds_offered_commands_parse() {
     for reason in [
         c::HoldCategory::Exceeded(c::Exceeded { bound: c::Bound::Items, value: 4 }),
         c::HoldCategory::Failures { class: c::HoldFailure::Run },
@@ -168,11 +168,15 @@ fn every_other_holds_offered_release_parses() {
         let text = core::str::from_utf8(&printed.stdout).expect("held task text");
         let way = text.lines().find_map(|line| line.strip_prefix("way out: ")).expect("hold's way out");
         let start = way.find("task release ").expect("offered release");
-        let command = way[start..].split(" (").next().expect("command before explanation");
-        let words: Vec<&str> = command.split_ascii_whitespace().collect();
-        match f::parse(&words) {
-            Ok(Parsed::Call { .. }) => {}
-            parsed @ (Ok(Parsed::File { .. }) | Err(_)) => panic!("{reason:?}: {command}: {parsed:?}"),
+        let (release, cancel) = way[start..].split_once("; or cancel it: ").expect("both offered commands");
+        let release = release.split(" (").next().expect("command before explanation");
+        for command in [release, cancel] {
+            let words = substitute(command);
+            let argv: Vec<&str> = words.iter().map(String::as_str).collect();
+            match f::parse(&argv) {
+                Ok(Parsed::Call { .. }) => {}
+                parsed @ (Ok(Parsed::File { .. }) | Err(_)) => panic!("{reason:?}: {command}: {parsed:?}"),
+            }
         }
         // The budget hold's reason must not suggest the unavailable amendment.
         let held = text.lines().find(|line| line.starts_with("held: ")).expect("hold reason");

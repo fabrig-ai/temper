@@ -108,6 +108,7 @@ pub fn opening_row() -> ChangeRow {
         queue_repairs: 0,
         producing_charter: 2,
         review_charter: 4,
+        effect_account: None,
     }
 }
 

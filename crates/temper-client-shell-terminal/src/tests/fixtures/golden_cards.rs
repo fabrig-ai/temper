@@ -21,6 +21,7 @@ pub fn held(builder: &mut Builder) {
     let mut task = jig_client_world::stories::task();
     task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
         placed: None,
+        words: None,
         circle: None,
         account: None,
         source: None,

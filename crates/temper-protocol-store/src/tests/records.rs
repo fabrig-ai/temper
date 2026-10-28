@@ -984,3 +984,18 @@ fn a_changes_result_evidence_survives_restart_with_its_cut_counts() {
     let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
 }
+
+#[test]
+fn a_changes_failed_effect_account_survives_the_store() {
+    use temper_engine_domain_forge_change::{EffectResult, Hold, State};
+    let mut row =
+        fixtures::change_row(State::Held { was: Box::new(State::Opening { requested: true }), why: Hold::Failed });
+    row.effect = EffectResult::Failed;
+    row.effect_account = Some(forge::EffectAccount {
+        entry: 28,
+        words: b"open pull request on org/repo: forge refused permission".as_slice().into(),
+    });
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
+    let row = forge::Stored::Change(row);
+    assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+}

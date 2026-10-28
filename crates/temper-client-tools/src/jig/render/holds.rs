@@ -5,7 +5,11 @@ use jig_client::{contract as c, words::Word};
 use skein_ui::phrases::Hole;
 
 pub(crate) fn summary(task: &c::Task, vocabulary: &dyn Parts) -> Box<[u8]> {
-    if budget(task.hold.as_ref()) {
+    let supplied = match task.hold.as_ref() {
+        Some(c::TaskHold::Owner(hold)) => hold.words.is_some(),
+        Some(c::TaskHold::Document(_)) | None => false,
+    };
+    if budget(task.hold.as_ref()) && !supplied {
         return skein_lib::bytes::copy_of(b"Insufficient activation budget");
     }
     let mut measure = Text::measure();
@@ -40,6 +44,9 @@ pub(crate) fn way_out(task: &c::Task, out: &mut Text) {
     if uncertain {
         out.put(b" --again (only to repeat the effect)");
     }
+    out.put(b"; or cancel it: task cancel ");
+    out.number(task.chip.task);
+    out.put(b" REASON");
 }
 
 fn recovery(hold: &c::TaskHold) -> &'static [u8] {
@@ -107,7 +114,12 @@ fn reason(task: &c::Task, vocabulary: &dyn Parts, out: &mut Text) {
     match task.hold.as_ref() {
         None => out.put(b"reason unavailable"),
         Some(c::TaskHold::Owner(hold)) => {
-            if budget(task.hold.as_ref()) {
+            if let Some(words) = &hold.words {
+                out.put(words.bytes());
+                if words.cut {
+                    out.put(b"...");
+                }
+            } else if budget(task.hold.as_ref()) {
                 budget_reason(task, vocabulary, out);
             } else {
                 owner(&hold.reason, out);
