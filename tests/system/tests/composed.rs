@@ -139,7 +139,7 @@ fn an_open_chats_reply_reaches_its_run_watch_in_pieces_before_its_turn_commits()
     let mut world = World::open_chat_in_pieces(
         918,
         Script {
-            cue: Box::from(&b"@system"[..]),
+            cue: Box::from(&b"Complete the task within its authority."[..]),
             turns: Box::new([Turn {
                 lines: Box::new([Line::Text { text: reply.as_slice().into() }]),
                 finish: Finish::Stop,
@@ -256,7 +256,7 @@ fn a_parked_smith_run_resumes_from_the_prefix_restored_through_both_roots() {
     let mut world = World::chat(
         915,
         Script {
-            cue: Box::from(&b"@system"[..]),
+            cue: Box::from(&b"Complete the task within its authority."[..]),
             turns: Box::new([
                 Turn {
                     lines: Box::new([Line::Call { name: Box::from(&b"wait"[..]), arguments: Box::from(&b"{}"[..]) }]),

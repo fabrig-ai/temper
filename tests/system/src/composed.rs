@@ -116,7 +116,8 @@ pub struct World {
 #[must_use]
 pub fn text_script(reply: &[u8]) -> Script {
     Script {
-        cue: Box::from(&b"@system"[..]),
+        // The host instructions stay in system text when an Open brief moves to user.
+        cue: Box::from(&b"Complete the task within its authority."[..]),
         turns: Box::new([Turn {
             lines: Box::new([Line::Text { text: reply.into() }]),
             finish: Finish::Stop,
