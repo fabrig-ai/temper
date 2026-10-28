@@ -339,7 +339,9 @@ impl World {
         tier: bool,
         reports: Option<Box<[Box<[u8]>]>>,
     ) -> World {
-        Self::configured_repositories(seed, facts, hooked, writer, protection, signatures, branches, turn, tier, reports, 1)
+        Self::configured_repositories(
+            seed, facts, hooked, writer, protection, signatures, branches, turn, tier, reports, 1,
+        )
     }
     #[expect(
         clippy::too_many_arguments,
@@ -1198,7 +1200,15 @@ fn workflows(turn: bool, tier: bool, reports: Option<Box<[Box<[u8]>]>>) -> Box<[
         Box::new([raw::Workflow {
             fails: Box::new([]),
             flaky: reports.unwrap_or_default(),
-            report: if reporting { Some(raw::Report { artifact: b"report".as_slice().into(), format: raw::ReportFormat::Lines, deflate: false }) } else { None },
+            report: if reporting {
+                Some(raw::Report {
+                    artifact: b"report".as_slice().into(),
+                    format: raw::ReportFormat::Lines,
+                    deflate: false,
+                })
+            } else {
+                None
+            },
             select: if reporting { Some(b"temper_tests".as_slice().into()) } else { None },
             file: b"browser.yml".as_slice().into(),
             jobs: Box::new([b"browser".as_slice().into()]),
