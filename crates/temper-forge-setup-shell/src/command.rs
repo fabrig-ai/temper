@@ -68,9 +68,7 @@ pub fn run_one(limits: &Limits, spec: &Spec) -> Result<Ran, Error> {
         failure: None,
         complete: Queue::with_capacity(operations),
         subs: Queue::with_capacity(operations),
-        events: Queue::with_capacity(
-            skein_io::MAX_OUT_UP.events.max(skein_io::MAX_OUT_RESUME.events).max(skein_io::MAX_OUT_FIRE.events),
-        ),
+        events: Queue::uncapped(),
     };
     skein_shell::drive(&mut kernel, &Clock::new(), &mut host);
     skein_shell::close_keeper_fd(root);

@@ -156,7 +156,7 @@ fn answer_fetch(service: &mut crate::Service, issuer: &mut fake::Issuer) {
         oauth::Method::Get => fake::Event::Get { id: request.id, endpoint: request.endpoint, now: NOW, wall: WALL },
         oauth::Method::Post => fake::Event::Post { request, now: NOW, wall: WALL },
     };
-    let mut out = Queue::with_capacity(fake::MAX_OUT);
+    let mut out = Queue::uncapped();
     issuer.step(event, &mut out);
     let Some(fake::Request::Http(answer)) = out.pop() else { panic!("issuer's HTTP answer") };
     clients.google_http_answer(exchange, answer);
@@ -190,7 +190,7 @@ pub(crate) fn start(service: &mut crate::Service, issuer: &mut fake::Issuer, tar
     (header(&peer, "location").into(), cookie.split(|byte| *byte == b';').next().unwrap().into())
 }
 fn redirect(issuer: &mut fake::Issuer, url: Box<[u8]>) -> Box<[u8]> {
-    let mut out = Queue::with_capacity(fake::MAX_OUT);
+    let mut out = Queue::uncapped();
     issuer.step(fake::Event::Authorize { url, now: NOW }, &mut out);
     let Some(fake::Request::Redirect { state, code, .. }) = out.pop() else { panic!("issuer redirect") };
     format!(

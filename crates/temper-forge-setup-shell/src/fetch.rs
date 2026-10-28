@@ -220,9 +220,7 @@ impl Connection {
             cipher: Queue::with_capacity(8),
             http_up: Queue::with_capacity(8),
             plain: Queue::with_capacity(8),
-            events: Queue::with_capacity(
-                skein_io::MAX_OUT_UP.events.max(skein_io::MAX_OUT_RESUME.events).max(skein_io::MAX_OUT_FIRE.events),
-            ),
+            events: Queue::uncapped(),
             complete: Queue::with_capacity(operations),
             subs: Queue::with_capacity(operations),
             call: Some(http::Call {

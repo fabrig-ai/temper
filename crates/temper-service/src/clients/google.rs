@@ -468,7 +468,7 @@ impl Clients {
                     call: Some(call),
                     redirect,
                     client: Some(oauth::Client::new(limits::client(google.limits)).expect("validated OAuth limits")),
-                    out: Queue::with_capacity(oauth::MAX_OUT),
+                    out: Queue::uncapped(),
                     phase: Phase::Starting,
                 };
                 let state = random(&mut google.rng);
@@ -985,7 +985,6 @@ pub(crate) fn worst_case(limits: crate::limits::SignIn, connections: u32) -> Opt
     let client = oauth::client_worst_case(&limits::client(limits))?;
     let pending = client
         .checked_add(u64::try_from(size_of::<Pending>()).ok()?)?
-        .checked_add(Queue::<oauth::Request>::worst_case(oauth::MAX_OUT)?)?
         .checked_add(u64::from(limits.url_bytes).checked_mul(3)?)?
         .checked_add(8192)?;
     Map::<Token, Pending>::worst_case(limits.pending)?
