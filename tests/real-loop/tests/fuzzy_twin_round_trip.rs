@@ -27,7 +27,8 @@ fn twin_recipe(_address: SocketAddr, source: &Path) -> llm::Recipe {
         replaces: Box::new([]),
     };
     let twin = temper_twin::twin(&input).expect("the stopped green light has a twin");
-    assert_eq!(&*twin.report.turns, &[(1, 6), (2, 8), (4, 8), (5, 8), (6, 8)]);
+    // The person's direct answer removes the chat's relay turn.
+    assert_eq!(&*twin.report.turns, &[(1, 5), (2, 8), (4, 8), (5, 8), (6, 8)]);
     assert!(twin.report.dropped.iter().all(|(_, count)| *count == 0), "the fake emits no opaque reasoning");
     for (task, count) in &twin.report.turns {
         println!("task {task}: {count} turns");

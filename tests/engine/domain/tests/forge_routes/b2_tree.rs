@@ -16,7 +16,6 @@ const REVIEW_TURNS: u64 = 3;
 const STEPS: u32 = 200; // The root world's existing bound for a durable round trip.
 const CHANNEL: Token = Token::new(7);
 const PROJECT: u32 = 1;
-const PERSON: u64 = 1;
 const FORGE: u16 = 1;
 const CHAT_KEY: u8 = 92;
 const FIRST_CALL: u64 = 93; // Global fixture call names must be unique across actors.
@@ -415,30 +414,12 @@ fn agree_plan(world: &mut World, chat: u64, work: &engine::Assignment) {
     advance(world);
     let chat = admitted(world, chat.task);
     assert!(
-        record(world, chat.task).inbox.iter().any(|word| {
-            word.from == tasks::Party::Person(PERSON)
-                && word.kind == tasks::MessageKind::Answer { question }
-                && word.words.as_ref() == GO_AHEAD
-        }),
-        "the person's go-ahead reaches the chat"
+        record(world, chat.task)
+            .inbox
+            .iter()
+            .any(|word| { word.kind == tasks::MessageKind::QuestionAnswered { question } }),
+        "the chat hears which question its person answered"
     );
-    assert_eq!(
-        record(world, work.task).phase,
-        tasks::Phase::Active(tasks::Active::Idle),
-        "the goal waits until the chat relays the answer"
-    );
-    assert!(matches!(
-        call(
-            world,
-            &chat,
-            engine::Tool::Message {
-                target: work.task,
-                form: engine::MessageForm::Answer { question },
-                words: GO_AHEAD.into(),
-            }
-        ),
-        engine::CallAnswer::Sent { .. }
-    ));
     answer(world, &chat, CHAT_TURNS, tasks::End::Parked);
     assert!(
         record(world, work.task).inbox.iter().any(|word| {
@@ -715,3 +696,107 @@ fn every_row_of_b2s_tree_reads_whole_on_small() {
 }
 #[path = "directory.rs"]
 mod directory;
+
+fn questioning_goal() -> (World, engine::Assignment, engine::Assignment, u64) {
+    let (mut world, chat) = stock_world();
+    let task = goal(&mut world, &chat, false);
+    advance(&mut world);
+    let work = admitted(&world, task);
+    let engine::CallAnswer::Sent { message: question } = call(
+        &mut world,
+        &work,
+        engine::Tool::Message { target: chat.task, form: engine::MessageForm::Question, words: PLAN.into() },
+    ) else {
+        panic!("question sent")
+    };
+    (world, chat, work, question)
+}
+
+fn person_answers(world: &mut World, chat: u64, question: u64) {
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(u64::from(ANSWER_KEY))),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [ANSWER_KEY; 16],
+        ask: people::Ask::AnswerQuestion { project: PROJECT, task: chat, question, words: GO_AHEAD.into() },
+    }));
+    advance(world);
+}
+
+#[test]
+fn a_chats_forged_answer_is_refused_by_name() {
+    let (mut world, chat, work, question) = questioning_goal();
+    // The goal was position one in this completion. The forged answer is a
+    // distinct second call, so the committed-call replay rail cannot mask it.
+    let before = world.answers.len();
+    let event = world.protocol.call(
+        CHANNEL,
+        chat.task,
+        chat.attempt,
+        FIRST_CALL + u64::try_from(before).expect("bounded calls"),
+        engine::Call {
+            completion: 1,
+            position: 2,
+            tool: engine::Tool::Message {
+                target: work.task,
+                form: engine::MessageForm::Answer { question },
+                words: GO_AHEAD.into(),
+            },
+        },
+    );
+    world.send(event);
+    advance(&mut world);
+    let answer = world.answers.get(before).expect("committed refusal");
+    assert!(
+        matches!(&answer, engine::CallAnswer::MessageRefused(problem)
+        if problem.why == tasks::Refusal::PersonAnswers { question }),
+        "{answer:?}"
+    );
+    let rendered = temper_engine_smith::answer(answer);
+    assert!(rendered.error());
+    assert_eq!(rendered.text(), format!("Refused: your person answers question {question} in their inbox").as_bytes());
+    assert_eq!(record(&world, work.task).questions.len(), 1);
+    assert!(!record(&world, work.task).inbox.iter().any(|word| matches!(word.kind, tasks::MessageKind::Answer { .. })));
+}
+
+#[test]
+fn the_persons_inbox_answer_reaches_the_goal_with_no_chat_call() {
+    let (mut world, chat, work, question) = questioning_goal();
+    let calls = world.answers.len();
+    person_answers(&mut world, chat.task, question);
+    assert_eq!(world.answers.len(), calls, "no model host call relays approval");
+    assert!(record(&world, work.task).inbox.iter().any(|word| word.from == tasks::Party::Task(chat.task)
+        && word.kind == tasks::MessageKind::Answer { question }
+        && word.words.as_ref() == GO_AHEAD));
+    assert!(record(&world, work.task).questions.is_empty());
+    assert!(
+        record(&world, chat.task)
+            .inbox
+            .iter()
+            .any(|word| word.kind == tasks::MessageKind::QuestionAnswered { question })
+    );
+}
+
+#[test]
+fn a_goals_early_finish_parks_until_the_answer_then_lands() {
+    let (mut world, chat, work, question) = questioning_goal();
+    answer(&mut world, &chat, CHAT_TURNS, tasks::End::Parked);
+    report(&mut world, &work, WORK_TURNS, b"Too early");
+    assert_eq!(record(&world, work.task).phase, tasks::Phase::Active(tasks::Active::Idle));
+    assert_eq!(record(&world, work.task).questions[0].number, question);
+    assert_eq!(world.merges, 0);
+    let assignments = world.assigned.len();
+    advance(&mut world);
+    assert_eq!(world.assigned.len(), assignments, "no run before the answer");
+    person_answers(&mut world, chat.task, question);
+    let chat_notice = admitted(&world, chat.task);
+    answer(&mut world, &chat_notice, CHAT_TURNS, tasks::End::Parked);
+    let resumed = admitted(&world, work.task);
+    assert!(resumed.attempt > work.attempt);
+    assert!(resumed.run.policy.resume, "the stock charter resumes its transcript");
+    let (change, _) = land_change(&mut world, &resumed);
+    assert!(landed(&world, change));
+    let resumed = admitted(&world, work.task);
+    report(&mut world, &resumed, WORK_TURNS, WORK_REPORT);
+    assert!(matches!(record(&world, work.task).phase, tasks::Phase::Ended(tasks::Ending::Done(_))));
+}

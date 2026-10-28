@@ -101,7 +101,31 @@ fn owner(row: &c::OwnerActivityLine, out: &mut Text) {
     out.put(b" \xc2\xb7 ");
     match &row.line {
         c::OwnerActivity::Words { words, .. } => out.words(words.bytes()),
-        c::OwnerActivity::Heard(word) | c::OwnerActivity::Notified { word, .. } => out.words(word.words.bytes()),
+        c::OwnerActivity::Heard(word) | c::OwnerActivity::Notified { word, .. } => match word.kind {
+            c::OwnerMessageKind::QuestionAnswered { question } => {
+                out.put(b"person answered question in inbox ");
+                out.number(question);
+            }
+            c::OwnerMessageKind::QuestionEnded { question } => {
+                out.put(b"question ended unanswered ");
+                out.number(question);
+            }
+            c::OwnerMessageKind::SettingsDecision { .. }
+            | c::OwnerMessageKind::Escalation { .. }
+            | c::OwnerMessageKind::Proposal { .. }
+            | c::OwnerMessageKind::PersonStalled { .. }
+            | c::OwnerMessageKind::ProposalDecision { .. }
+            | c::OwnerMessageKind::Words
+            | c::OwnerMessageKind::EffectNotMade { .. }
+            | c::OwnerMessageKind::Amendment { .. }
+            | c::OwnerMessageKind::Met { .. }
+            | c::OwnerMessageKind::Question
+            | c::OwnerMessageKind::Answer { .. }
+            | c::OwnerMessageKind::Notice { .. }
+            | c::OwnerMessageKind::Timer { .. }
+            | c::OwnerMessageKind::News { .. }
+            | c::OwnerMessageKind::Result(_) => out.words(word.words.bytes()),
+        },
         c::OwnerActivity::RunBegan { attempt, .. } => {
             out.put(b"run ");
             out.number(*attempt);
@@ -121,7 +145,14 @@ fn owner(row: &c::OwnerActivityLine, out: &mut Text) {
             out.put(b"decision ");
             out.number(*revision);
         }
-        c::OwnerActivity::Kept { .. } => out.put(b"parked"),
+        c::OwnerActivity::Kept { question, .. } => {
+            out.put(b"parked");
+            if let Some(question) = question {
+                out.put(b" until question ");
+                out.number(*question);
+                out.put(b" is answered");
+            }
+        }
         c::OwnerActivity::Milestone { .. } => out.put(b"phase changed"),
     }
     out.put(b"\n");

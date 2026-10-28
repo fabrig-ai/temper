@@ -399,7 +399,7 @@ fn unanswered_question() -> (Driver, engine::Assignment, u64, engine::Assignment
 fn a_person_answers_a_question_its_task_has_already_read() {
     use jig_domain_core::{documents, reads};
 
-    let (mut driver, parent, question, _) = unanswered_question();
+    let (mut driver, parent, question, asker) = unanswered_question();
     driver.send(protocol::turn(Token::new(7), parent.task, parent.attempt, 1, 1, Some(question), b"read question"));
     driver.settle();
     assert!(!live(&driver, parent.task).inbox.iter().any(|word| word.number == question));
@@ -446,8 +446,11 @@ fn a_person_answers_a_question_its_task_has_already_read() {
         live(&driver, parent.task)
             .inbox
             .iter()
-            .any(|word| word.kind == (tasks::MessageKind::Answer { question }) && word.from == tasks::Party::Person(1))
+            .any(|word| word.kind == (tasks::MessageKind::QuestionAnswered { question }))
     );
+    assert!(live(&driver, asker.task).inbox.iter().any(|word| word.kind == tasks::MessageKind::Answer { question }
+        && word.from == tasks::Party::Task(parent.task)
+        && word.words.as_ref() == b"yes"));
 }
 
 #[test]

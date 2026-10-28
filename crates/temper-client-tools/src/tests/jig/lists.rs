@@ -124,9 +124,11 @@ fn task_labels_use_jigs_label_numbers() {
 
 #[test]
 fn a_kept_activity_is_parked_in_text_and_preserved_in_json() {
-    for (argv, expected) in [
-        (&["task", "activity", "41"][..], b"parked".as_slice()),
-        (&["task", "activity", "41", "--json"][..], br#""kept":{"attempt":7,"pending":[]}"#),
+    for (question, argv, expected) in [
+        (None, &["task", "activity", "41"][..], b"parked".as_slice()),
+        (None, &["task", "activity", "41", "--json"][..], br#""kept":{"attempt":7,"pending":[],"question":null}"#),
+        (Some(11), &["task", "activity", "41"][..], b"parked until question 11 is answered".as_slice()),
+        (Some(11), &["task", "activity", "41", "--json"][..], br#""kept":{"attempt":7,"pending":[],"question":11}"#),
     ] {
         let c::ReadResult::Value(c::ReadValue::Activity(mut page)) = fixtures::activity_words() else {
             panic!("activity")
@@ -136,7 +138,7 @@ fn a_kept_activity_is_parked_in_text_and_preserved_in_json() {
                 task: fixtures::TASK,
                 position: 1,
                 at: skein_lib::Wall::EPOCH,
-                line: c::OwnerActivity::Kept { attempt: 7, pending: skein_lib::List::with_capacity(0) },
+                line: c::OwnerActivity::Kept { attempt: 7, pending: skein_lib::List::with_capacity(0), question },
             }),
             decoded: None,
         };

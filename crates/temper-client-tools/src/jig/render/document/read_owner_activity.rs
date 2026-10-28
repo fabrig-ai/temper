@@ -94,7 +94,7 @@ pub(super) fn encode_owner_activity(
             out.object_end();
             out.object_end();
         }
-        jig_client::contract::OwnerActivity::Kept { attempt, pending } => {
+        jig_client::contract::OwnerActivity::Kept { attempt, pending, question } => {
             out.object_start();
             out.key(b"kept");
             out.object_start();
@@ -106,6 +106,11 @@ pub(super) fn encode_owner_activity(
                 out.unsigned(*task);
             }
             out.array_end();
+            out.key(b"question");
+            match question {
+                Some(number) => out.unsigned(*number),
+                None => out.null(),
+            }
             out.object_end();
             out.object_end();
         }

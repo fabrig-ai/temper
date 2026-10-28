@@ -317,6 +317,9 @@ pub enum Word {
 
     WaitRefused,
     DependencyParked,
+    QuestionParked,
+    QuestionAnswered,
+    QuestionEnded,
     WaitInvalid,
     ChoiceDraft,
     ChoiceDraftDefault,
@@ -663,9 +666,10 @@ pub enum Word {
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
 // The welcome's Forgejo card adds four literal phrases and segments.
-const PHRASES: u32 = 1174;
-const SEGMENTS: u32 = 2067;
-const ALL: [Word; 597] = [
+// Three question-rail activity phrases add three phrases and nine segments.
+const PHRASES: u32 = 1177;
+const SEGMENTS: u32 = 2076;
+const ALL: [Word; 600] = [
     Word::WelcomeForgejo,
     Word::WelcomeForgejoDescription,
     Word::WelcomeForgejoRun,
@@ -963,6 +967,9 @@ const ALL: [Word; 597] = [
     Word::ModelEffort,
     Word::WaitRefused,
     Word::DependencyParked,
+    Word::QuestionParked,
+    Word::QuestionAnswered,
+    Word::QuestionEnded,
     Word::WaitInvalid,
     Word::ChoiceDraft,
     Word::ChoiceDraftDefault,
@@ -1594,6 +1601,9 @@ impl Word {
             Self::ModelEffort => 1074,
             Self::WaitRefused => 1029,
             Self::DependencyParked => 1030,
+            Self::QuestionParked => 2140,
+            Self::QuestionAnswered => 2141,
+            Self::QuestionEnded => 2142,
             Self::WaitInvalid => 1028,
             Self::ChoiceDraft => 1024,
             Self::ChoiceDraftDefault => 1025,
@@ -2394,6 +2404,9 @@ fn english(word: Word, shell: Shell) -> (&'static [&'static [u8]], &'static [Hol
         Word::ModelEffort | Word::UpdateTime => (&[b"", b" \xc2\xb7 ", b""], &[Name, Name]),
         Word::WaitRefused => (&[b"Next run refused \xc2\xb7 ", b""], &[Name]),
         Word::DependencyParked => (&[b"parked"], &[]),
+        Word::QuestionParked => (&[b"Kept by question: ", b""], &[Number]),
+        Word::QuestionAnswered => (&[b"Person answered question in inbox: ", b""], &[Number]),
+        Word::QuestionEnded => (&[b"Question ended unanswered: ", b""], &[Number]),
         Word::WaitInvalid => (&[b"The requested account cannot serve this work"], &[]),
         Word::ChoiceDraft => (&[b"Next run if applied: ", b""], &[Name]),
         Word::ChoiceDraftDefault => (&[b"Next run if applied: engine default"], &[]),

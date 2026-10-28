@@ -2,7 +2,7 @@
 use super::{
     A, A_REPORT, A_SPEC_PREFIX, A_SPEC_SUFFIX, ANSWERED, ASKED, Agent, DESIGN_DELEGATED, DESIGN_DOC, DESIGN_LINE,
     DESIGN_REPORT, DESIGN_SPEC, DESIGN_TITLE, DESIGN_WORDS, DIRECTOR, DIRECTOR_REPORT, GREEN_LIGHT,
-    OWNER_EFFORT_NUMBER, OWNER_MODEL_NUMBER, QUESTION, REVIEWED, SCHEDULED, draft_commit,
+    OWNER_EFFORT_NUMBER, OWNER_MODEL_NUMBER, REVIEWED, SCHEDULED, draft_commit,
 };
 use serde_json::{Value, json};
 use skein_fake_llm_domain::api::{Finish, Line, Rule, Script, Turn};
@@ -23,10 +23,10 @@ const DELIVERY: &str = ": ";
 #[must_use]
 pub fn step_4_1_rules() -> Box<[Box<[Rule]>]> {
     let director = [
-        (A_REPORT, 4),
-        (CROSSED, 4),
+        (A_REPORT, 3),
+        (CROSSED, 3),
         (DESIGN_REPORT, 2),
-        (MESSAGE, 3),
+        (MESSAGE, 2),
         (&format!("{DELEGATED}{A}"), 1),
         (DELIVERY, 1),
         (BEGIN, 0),
@@ -55,10 +55,25 @@ pub fn step_4_1_4_3_rules() -> Box<[Box<[Rule]>]> {
     rules.into_boxed_slice()
 }
 
-/// Both restart scripts count turns, since opening and retry share their input.
+/// The chat follows fresh input across retry; A retains its counted conversation.
 #[must_use]
 pub fn step_4_6_rules() -> Box<[Box<[Rule]>]> {
-    Box::new([Box::new([]), Box::new([])])
+    // The direct answer wakes A independently. Its result may already be in
+    // the chat's next input, so a counted acknowledgement wait could wait
+    // forever for a result it just read. Keep all turns, selecting that finish
+    // from the result and the acknowledgement wait from the notice alone.
+    let chat = [
+        (super::PHASE_REPORT, 5),
+        (CROSSED, 5),
+        ("Your person answered question in their inbox", 4),
+        (super::PHASE_QUESTION, 2),
+        (DELEGATED, 1),
+        (DELIVERY, 1),
+        (BEGIN, 0),
+        ("", 3),
+    ]
+    .map(|(cue, turn)| Rule { cue: cue.as_bytes().into(), turn });
+    Box::new([Box::new(chat), Box::new([])])
 }
 
 fn call(name: &[u8], value: &Value) -> Turn {
@@ -124,13 +139,7 @@ pub fn step_4_1(forge: SocketAddr) -> Box<[Script]> {
     Box::new([
         Script {
             cue: Agent::Director.cue().into(),
-            turns: Box::new([
-                call(b"delegate", &owner),
-                wait(SCHEDULED),
-                call(b"message", &json!({"target":A,"form":"answer","question":QUESTION,"words":GREEN_LIGHT})),
-                wait(ANSWERED),
-                report(DIRECTOR_REPORT),
-            ]),
+            turns: Box::new([call(b"delegate", &owner), wait(SCHEDULED), wait(ANSWERED), report(DIRECTOR_REPORT)]),
         },
         Script {
             cue: Agent::A.cue().into(),
@@ -356,10 +365,7 @@ pub fn step_4_1_4_3(forge: SocketAddr) -> Box<[Script]> {
 /// Commit the question read before waiting through a worker's ending.
 #[must_use]
 pub fn step_4_6(_forge: SocketAddr) -> Box<[Script]> {
-    use super::{
-        HANG, HANG_PERSON, HANG_READ, HANG_REPORT, PHASE, PHASE_ANSWER, PHASE_QUESTION, PHASE_QUESTION_NUMBER,
-        PHASE_REPORT, PHASE_SPEC,
-    };
+    use super::{HANG, HANG_PERSON, HANG_READ, HANG_REPORT, PHASE_QUESTION, PHASE_REPORT, PHASE_SPEC};
     Box::new([
         Script {
             cue: HANG_PERSON.as_bytes().into(),
@@ -379,10 +385,6 @@ pub fn step_4_6(_forge: SocketAddr) -> Box<[Script]> {
                     consulted
                 },
                 wait("The committed question waits for its answer."),
-                call(
-                    b"message",
-                    &json!({"target":PHASE,"form":"answer","question":PHASE_QUESTION_NUMBER,"words":PHASE_ANSWER}),
-                ),
                 wait("The next phase has its answer."),
                 report(HANG_REPORT),
             ]),
@@ -402,8 +404,8 @@ pub fn step_4_6(_forge: SocketAddr) -> Box<[Script]> {
 #[must_use]
 pub fn step_5_1(_forge: SocketAddr) -> Box<[Script]> {
     use super::{
-        RULES, RULES_ANSWERED, RULES_DELEGATED, RULES_REPORT, SCOPE, SCOPE_ANSWER, SCOPE_ASKED, SCOPE_QUESTION,
-        SCOPE_QUESTION_HOLD, SCOPE_QUESTION_NUMBER, SCOPE_REPORT, SCOPE_SPEC,
+        RULES, RULES_ANSWERED, RULES_DELEGATED, RULES_REPORT, SCOPE, SCOPE_ASKED, SCOPE_QUESTION, SCOPE_QUESTION_HOLD,
+        SCOPE_REPORT, SCOPE_SPEC,
     };
     use skein_fake_llm_domain::api::Piece;
     let mut question = call(b"message", &json!({"target":RULES,"form":"question","words":SCOPE_QUESTION}));
@@ -415,16 +417,8 @@ pub fn step_5_1(_forge: SocketAddr) -> Box<[Script]> {
     }];
     lines.extend(question.lines);
     question.lines = lines.into();
-    let director: Box<[Turn]> = Box::new([
-        owner(SCOPE_SPEC, false),
-        wait(RULES_DELEGATED),
-        call(
-            b"message",
-            &json!({"target":SCOPE,"form":"answer","question":SCOPE_QUESTION_NUMBER,"words":SCOPE_ANSWER}),
-        ),
-        wait(RULES_ANSWERED),
-        report(RULES_REPORT),
-    ]);
+    let director: Box<[Turn]> =
+        Box::new([owner(SCOPE_SPEC, false), wait(RULES_DELEGATED), wait(RULES_ANSWERED), report(RULES_REPORT)]);
     Box::new([
         // The committed delegation in the fresh brief selects the resumed
         // script before the ordinary director cue. Its Begin waits, instead
@@ -444,10 +438,10 @@ pub fn step_5_1_rules() -> Box<[Box<[Rule]>]> {
     // conversation resets its assistant count. Select only the director by
     // fresh input; A retains its counted conversation across its parked wait.
     let director = [
-        (super::SCOPE_REPORT, 4),
-        (CROSSED, 4),
+        (super::SCOPE_REPORT, 3),
+        (CROSSED, 3),
         (super::SCOPE_QUESTION, 2),
-        (MESSAGE, 3),
+        (MESSAGE, 2),
         (DELEGATED, 1),
         (DELIVERY, 1),
         (BEGIN, 0),
@@ -630,9 +624,8 @@ pub fn step_5_2(forge: SocketAddr) -> Box<[Script]> {
 #[must_use]
 pub fn step_5_5(_forge: SocketAddr) -> Box<[Script]> {
     use super::{
-        A_DEADLINE, A1_DEADLINE, PLAN_ANSWER, PLAN_ANSWER_HOLD, PLAN_ANSWER_PENDING, PLAN_DIRECTOR, PLAN_NOTE,
-        PLAN_NOTE_NUMBER, PLAN_QUESTION_NUMBER, PLAN_REPORT, PLAN_WORDS, PLANNER, PLANNER_REPORT, PLANNER_SPEC,
-        PROJECT, SUBOWNER_REPORT, SUBOWNER_SPEC,
+        A_DEADLINE, A1_DEADLINE, PLAN_ANSWER_HOLD, PLAN_ANSWER_PENDING, PLAN_DIRECTOR, PLAN_NOTE, PLAN_NOTE_NUMBER,
+        PLAN_REPORT, PLAN_WORDS, PLANNER_REPORT, PLANNER_SPEC, PROJECT, SUBOWNER_REPORT, SUBOWNER_SPEC,
     };
     use skein_fake_llm_domain::api::Piece;
     let member = |spec: &str, spend, tools, notes, tasks, depth, deadline| {
@@ -646,19 +639,19 @@ pub fn step_5_5(_forge: SocketAddr) -> Box<[Script]> {
     };
     let mut mission = member(PLANNER_SPEC, 20, 0x0183, 2, 2, 2, A_DEADLINE);
     mission["tracked"] = json!({"priority":1});
-    let mut answer = call(
-        b"message",
-        &json!({"target":PLANNER,"form":"answer",
-        "question":PLAN_QUESTION_NUMBER,"words":PLAN_ANSWER}),
-    );
-    let mut lines = vec![Line::Pieces {
-        pieces: Box::new([
-            Piece { text: PLAN_ANSWER_PENDING.as_bytes().into(), hold: None },
-            Piece { text: b"The answer is released.".as_slice().into(), hold: Some(PLAN_ANSWER_HOLD.into()) },
+    let answer = Turn {
+        lines: Box::new([
+            Line::Pieces {
+                pieces: Box::new([
+                    Piece { text: PLAN_ANSWER_PENDING.as_bytes().into(), hold: None },
+                    Piece { text: b"The answer is released.".as_slice().into(), hold: Some(PLAN_ANSWER_HOLD.into()) },
+                ]),
+            },
+            Line::Call { name: b"wait".as_slice().into(), arguments: b"{}".as_slice().into() },
         ]),
-    }];
-    lines.extend(answer.lines);
-    answer.lines = lines.into();
+        finish: Finish::ToolCalls,
+        tokens: 20,
+    };
     Box::new([
         Script {
             cue: Agent::Plan.cue().into(),
@@ -1123,7 +1116,7 @@ pub fn step_6_2(forge: SocketAddr) -> Box<[Script]> {
         Agent, BLOCKER_A3, BLOCKER_A3_REPORT, BLOCKER_ANSWER, BLOCKER_DIRECTOR, BLOCKER_DIRECTOR_REPORT, BLOCKER_E1,
         BLOCKER_FINDING, BLOCKER_KEPT_REPORT, BLOCKER_OWNER, BLOCKER_OWNER_REPORT, BLOCKER_QUESTION,
         BLOCKER_QUESTION_NUMBER, BLOCKER_REASON, BLOCKER_REVIEW_HOLD, BLOCKER_REVISION, BLOCKER_SUBOWNER,
-        BLOCKER_SUBOWNER_REPORT, BLOCKER_UP_ANSWER, BLOCKER_UP_QUESTION, BLOCKER_UP_QUESTION_NUMBER, REVIEWED,
+        BLOCKER_SUBOWNER_REPORT, BLOCKER_UP_QUESTION, REVIEWED,
     };
     let [owner, subowner, a3, e1] = blocker_members(forge);
     Box::new([
@@ -1131,14 +1124,7 @@ pub fn step_6_2(forge: SocketAddr) -> Box<[Script]> {
             cue: Agent::BlockerDirector.cue().into(),
             turns: Box::new([
                 then_wait(call(b"delegate", &json!({"batch":[owner]})), "A owns the blocker."),
-                then_wait(
-                    call(
-                        b"message",
-                        &json!({"target":BLOCKER_OWNER,"form":"answer",
-                "question":BLOCKER_UP_QUESTION_NUMBER,"words":BLOCKER_UP_ANSWER}),
-                    ),
-                    "A has the director's answer.",
-                ),
+                wait("A has the person's answer."),
                 report(BLOCKER_DIRECTOR_REPORT),
                 wait("A is still working."),
             ]),
@@ -1290,10 +1276,9 @@ pub fn step_6_5(_forge: SocketAddr) -> Box<[Script]> {
     use super::{
         A_DEADLINE, A1_DEADLINE, BUDGET_A5, BUDGET_A5_REPORT, BUDGET_ADVISOR_REPORT, BUDGET_ADVISOR_SPEC,
         BUDGET_AMEND_HOLD, BUDGET_ANSWER, BUDGET_DIRECTOR, BUDGET_DIRECTOR_REPORT, BUDGET_FINDING, BUDGET_HIGH_HOLD,
-        BUDGET_HIGH_NUMBER, BUDGET_MEDIUM_NUMBER, BUDGET_OWNER, BUDGET_OWNER_REPORT, BUDGET_PERSON_ANSWER,
-        BUDGET_QUESTION, BUDGET_QUESTION_NUMBER, BUDGET_REASON, BUDGET_REVISION, BUDGET_SUBOWNER,
-        BUDGET_SUBOWNER_REPORT, BUDGET_UP_QUESTION, BUDGET_UP_QUESTION_NUMBER, DEFAULT_MODEL_NUMBER,
-        OWNER_EFFORT_NUMBER, OWNER_MODEL_NUMBER,
+        BUDGET_HIGH_NUMBER, BUDGET_MEDIUM_NUMBER, BUDGET_OWNER, BUDGET_OWNER_REPORT, BUDGET_QUESTION,
+        BUDGET_QUESTION_NUMBER, BUDGET_REASON, BUDGET_REVISION, BUDGET_SUBOWNER, BUDGET_SUBOWNER_REPORT,
+        BUDGET_UP_QUESTION, DEFAULT_MODEL_NUMBER, OWNER_EFFORT_NUMBER, OWNER_MODEL_NUMBER,
     };
     let mut owner = batch_member(Agent::BudgetOwner, 35, 3, 2, A_DEADLINE);
     owner["authority"]["tools"] = 7.into();
@@ -1313,13 +1298,7 @@ pub fn step_6_5(_forge: SocketAddr) -> Box<[Script]> {
                 then_wait(call(b"delegate", &json!({"batch":[owner]})), "A owns the budget question."),
                 report(BUDGET_DIRECTOR_REPORT),
                 wait("The person's inbox holds A's question; A is still working."),
-                then_wait(
-                    call(
-                        b"message",
-                        &json!({"target":BUDGET_OWNER,"form":"answer","question":BUDGET_UP_QUESTION_NUMBER,"words":BUDGET_PERSON_ANSWER}),
-                    ),
-                    "A has the person's answer.",
-                ),
+                wait("A has the person's answer."),
             ]),
         },
         Script {
@@ -1395,7 +1374,7 @@ pub fn step_6_5_rules() -> Box<[Box<[Rule]>]> {
         table(&[
             (BUDGET_OWNER_REPORT, 1),
             (CROSSED, 1),
-            (BUDGET_PERSON_ANSWER, 3),
+            ("answered question in their inbox", 3),
             (BUDGET_UP_QUESTION, 2),
             (MESSAGE, 2),
             (DELEGATED, 2),

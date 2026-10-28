@@ -267,8 +267,8 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
         "the chat names the waiting inbox question"
     );
     assert!(
-        words.contains("send their answer to the goal with message, as the answer to that question's number"),
-        "the chat relays the answer with message to the question's number"
+        words.contains("Never answer the work's question yourself: your person answers it in their inbox."),
+        "the person answers the work directly in their inbox"
     );
 }
 
