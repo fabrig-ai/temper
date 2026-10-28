@@ -580,6 +580,7 @@ fn finish_close(
     finishing_only: bool,
 ) -> bool {
     if domain.core.restart_failure().is_some() {
+        ::std::eprintln!("U7 diag: Stop at domain.rs:583");
         out.push(Request::Stop);
         return false;
     }
@@ -611,6 +612,7 @@ fn finish_close(
         domain.journal = Journal::from_durable(&root_journal_limits(&env.limits), commits);
     }
     if domain.journal.stopped() {
+        ::std::eprintln!("U7 diag: Stop at domain.rs:614");
         out.push(Request::Stop);
         return false;
     }
@@ -658,7 +660,7 @@ pub(crate) fn journal_outputs(journal_out: &mut Queue<Output>, out: &mut Queue<R
             Output::Commit { number, writes } => {
                 out.push(Request::Store(crate::StoreRequest::Commit { number, writes }));
             }
-            Output::Stop => out.push(Request::Stop),
+            Output::Stop => { ::std::eprintln!("U7 diag: core Output::Stop at domain.rs:661"); out.push(Request::Stop) }
             Output::Deliver(delivery) => out.push(crate::boundary::delivery_output(delivery)),
         }
     }
@@ -719,6 +721,7 @@ pub fn release(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>)
         domain.stop_pending = false;
         domain.door_pass = false;
         domain.door_count = 0;
+        ::std::eprintln!("U7 diag: Stop at domain.rs:722");
         out.push(Request::Stop);
         return;
     }

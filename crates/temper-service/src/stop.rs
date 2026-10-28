@@ -138,6 +138,7 @@ pub(crate) fn root(engine: &mut Engine) {
         Some(RestartRequest::HeldPastLimit { which, held, limit }) => held_limit_problem(which, held, limit),
         Some(RestartRequest::UnheldRevision { task, revision }) => unheld_revision_problem(task, revision),
         Some(RestartRequest::Step(_) | RestartRequest::Idle | RestartRequest::Refused { .. }) | None => {
+            ::std::eprintln!("U7 diag: restore_failure={:?}; restart_step={:?}", engine.domain.restore_failure(), engine.domain.restart_step());
             unavailable(engine, b"deployment");
             return;
         }

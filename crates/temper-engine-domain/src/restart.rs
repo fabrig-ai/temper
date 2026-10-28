@@ -148,7 +148,9 @@ pub(crate) fn load_outputs(
             loads::Request::Loaded { waiter, rows, next, cut } => {
                 if waiter == Token::new(u64::MAX) {
                     if cut.is_some() {
+                        ::std::eprintln!("U7 diag: startup page cut={:?}", cut);
                         let _refused = domain.core.restart_refuse();
+                        ::std::eprintln!("U7 diag: restart Stop at restart.rs:152; startup_range={:?}", domain.startup_range);
                         out.push(Request::Stop);
                     } else {
                         startup_page(domain, env, rows, next, decision.take().expect("admitted restore page"), out);
@@ -179,9 +181,11 @@ pub(crate) fn load_outputs(
                     None => {}
                 }
             }
-            loads::Request::Unloaded { waiter, .. } => {
+            loads::Request::Unloaded { waiter, failure } => {
                 if waiter == Token::new(u64::MAX) {
                     let _refused = domain.core.restart_refuse();
+                    ::std::eprintln!("U7 diag: startup Unloaded failure={:?}", failure);
+                    ::std::eprintln!("U7 diag: restart Stop at restart.rs:185; startup_range={:?}", domain.startup_range);
                     out.push(Request::Stop);
                     return;
                 }
@@ -219,6 +223,7 @@ pub(crate) fn startup_page(
     }
     route_into(domain, env, &mut decision);
     if domain.core.restart_failure().is_some() {
+        ::std::eprintln!("U7 diag: restart Stop at restart.rs:222; startup_range={:?}", domain.startup_range);
         out.push(Request::Stop);
         return;
     }
@@ -239,6 +244,7 @@ pub(crate) fn startup_page(
         return;
     }
     if range == Range::Core(crate::CoreRange::Settings) && !domain.core.settings_restored(&environment_core(env)) {
+        ::std::eprintln!("U7 diag: restart Stop at restart.rs:242; startup_range={:?}", domain.startup_range);
         out.push(Request::Stop);
         return;
     }
@@ -269,6 +275,7 @@ pub(crate) fn startup_page(
         domain.work.push(Work::People(people::Event::Restored));
         route_into(domain, env, &mut decision);
         if domain.core.restart_failure().is_some() {
+            ::std::eprintln!("U7 diag: restart Stop at restart.rs:272; startup_range={:?}", domain.startup_range);
             out.push(Request::Stop);
             return;
         }
@@ -554,6 +561,7 @@ fn census_page(
         };
         if !restored {
             let _refused = domain.core.restart_refuse();
+            ::std::eprintln!("U7 diag: restart Stop at restart.rs:557; startup_range={:?}", domain.startup_range);
             out.push(Request::Stop);
             return;
         }

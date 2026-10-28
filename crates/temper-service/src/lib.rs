@@ -2,6 +2,7 @@
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 extern crate alloc;
+extern crate std;
 use alloc::boxed::Box;
 pub mod diagnostics;
 pub mod forge;
