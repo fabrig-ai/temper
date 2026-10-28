@@ -114,17 +114,18 @@ fn reconciliation_can_start_once_the_connectors_restore_and_stays_open() {
             RestartRequest::Step(step) => {
                 match step {
                     RestartStep::RestoreConnector { .. } => restoring = true,
-                    RestartStep::Switch => super::resume_fixture::check_switch(
+                    RestartStep::Sweep => super::resume_fixture::check_switch(
                         &mut domain,
                         &Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
                     ),
-                    RestartStep::LoadInbox => {
+                    RestartStep::Switch => {
                         let _requests = jig_domain_core::want_accounts(
                             &mut domain.core,
                             &Env { now: Time::ZERO, wall: Wall::EPOCH, limits: crate::core_limits(&limits) },
                         );
                     }
                     RestartStep::LoadCore
+                    | RestartStep::LoadInbox
                     | RestartStep::AdoptRuns
                     | RestartStep::ReadAfresh { .. }
                     | RestartStep::SettleOutbox { .. }
@@ -594,4 +595,14 @@ fn startup_requires_room_for_the_cancellation_reason() {
     assert!(crate::worst_case(&limits).is_some(), "the exact reason bound fits");
     limits.forge.client.op_bytes -= 1;
     assert!(crate::worst_case(&limits).is_none(), "a reason past the forge byte bound is refused");
+}
+
+#[test]
+fn a_late_switch_answer_during_stop_cannot_make_a_commit() {
+    let (mut domain, env) = root();
+    crate::try_step(&mut domain, &env, Event::Stop).unwrap();
+    assert!(domain.core.stopping());
+    let before = domain.deployment().commits;
+    crate::try_step(&mut domain, &env, Event::Store(StoreInput::Switched)).unwrap();
+    assert_eq!(domain.deployment().commits, before, "a stopped start never writes its mark");
 }

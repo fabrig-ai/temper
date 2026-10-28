@@ -205,6 +205,11 @@ pub(crate) fn step_routed(domain: &mut Domain, env: &Env<Limits>, event: Event, 
             return;
         }
         Event::Store(crate::StoreInput::Switched) => {
+            // The core may have drained while this public-restore answer was
+            // in flight. It then owes neither the start mark nor adoption.
+            if domain.core.stopping() {
+                return;
+            }
             let mut decision = crate::limits::route_decision(domain, &env.limits).expect("mark route room");
             save(&mut decision, &env.limits, Write::Wires);
             emit(&mut decision, &env.limits, Delivery::Restart(core::RestartStep::AdoptRuns));
