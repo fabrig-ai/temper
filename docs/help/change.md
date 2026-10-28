@@ -70,7 +70,9 @@ updates are spent`, `its branch was moved on the forge`, `its branch is
 missing on the forge`, `its pull request was closed on the forge`, `its
 pull request was retargeted on the forge`, `a delegate or a write
 failed for good`, or `a person rejected a gate`. A release resets its
-counts and goes on from where it was held. Its panel also names a held
+counts and goes on from where it was held; held at `producing` because
+its coder failed for good before pushing, it makes a fresh coder, one
+more of its tasks, or holds again if its authority can't cover one. Its panel also names a held
 task, the change's own or its writer's or reviewer's, `held: task N
 (REASON)`, with that task's way out.
 

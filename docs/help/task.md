@@ -24,6 +24,8 @@ A task is one numbered piece of work in a project, done by an agent, a procedure
   made, its depth used, too little left to spend) holds, saying what it
   lacks; released with nothing more, it holds again, and its way out is
   to cancel it, or ask for the change afresh.
+  A change runs nothing of its own, so `task release --again` on it is
+  refused: release its hold, and it decides afresh.
 - **Its parts,** each read on its own: its tree (its live
   delegates), its activity (what happened, a line each, newest last),
   its turns (each step of a run: the model's words, its calls and
