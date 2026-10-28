@@ -2,6 +2,16 @@ use super::*;
 
 const HEAD: Commit = [3; 32];
 const BOUND: u32 = 512;
+
+#[test]
+fn a_landing_repair_names_its_gate_without_borrowing_head_ci() {
+    let mut result = ChangeResult::empty();
+    result.checked(HEAD, &[check(b"old check", Check::Failed)], BOUND);
+    result.repaired(change::Repair::Landing { gate: 3 }, Some(HEAD), BOUND);
+    assert_eq!(result.repair_count, 1);
+    assert_eq!(result.repairs.bytes.as_ref(), b"landing gate 3 failed");
+}
+
 fn check(context: &[u8], check: Check) -> Status {
     Status {
         at: skein_lib::Time::from_nanos(0),
