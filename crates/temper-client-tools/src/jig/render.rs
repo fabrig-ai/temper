@@ -188,6 +188,19 @@ pub trait Parts: core::fmt::Debug {
 }
 /// A bounded text result; only free text is cut, never identities or authority.
 pub use settings_form::{Text, text_end};
+pub(crate) fn watch_failure(why: jig_client::Why, json: bool) -> Printed {
+    use jig_client::Why;
+    let (reason, status): (&[u8], u8) = match why {
+        Why::TooLinked { joins } => return failure(&join_limit(joins), json, 1),
+        Why::Unknown => (b"unknown", 2),
+        Why::SubjectEnded => (b"gone", 2),
+        Why::NotAllowed => (b"not_allowed", 2),
+        Why::SignedOut => (b"signed out", 1),
+        Why::NotServed => (b"version not served", 1),
+        Why::Limit => (b"watch table limit", 1),
+    };
+    failure(reason, json, status)
+}
 fn join_limit(joins: u32) -> Box<[u8]> {
     const PREFIX: &[u8] = b"join limit: more than ";
     const SUFFIX: &[u8] = b" per read";

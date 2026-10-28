@@ -319,10 +319,15 @@ pub(super) fn ended(
     }
     let status = match why {
         Why::Unknown | Why::NotAllowed | Why::SubjectEnded => 2,
-        Why::NotServed | Why::SignedOut | Why::Limit => 1,
+        Why::NotServed | Why::SignedOut | Why::Limit | Why::TooLinked { .. } => 1,
     };
     close(runner, &reading, out);
-    let printed = render::failure(b"watch ended", reading.called.json, status);
+    let printed = match why {
+        Why::TooLinked { .. } => render::watch_failure(why, reading.called.json),
+        Why::NotServed | Why::Unknown | Why::NotAllowed | Why::SubjectEnded | Why::SignedOut | Why::Limit => {
+            render::failure(b"watch ended", reading.called.json, status)
+        }
+    };
     finish(reading.called, printed, out);
 }
 fn close(runner: &Runner, reading: &Reading, out: &mut Queue<Out>) {

@@ -467,15 +467,11 @@ pub(crate) fn told(state: &mut Forges, client: &Client, env: &Env<Limits>, told:
         Told::Changed { handle } if state.watches.contains_key(handle) => changed(state, client, env, *handle, out),
         Told::Ended { handle, why } if state.watches.contains_key(handle) => {
             let watch = state.watches.remove(handle).expect("active watch");
-            let (why, status): (&[u8], u8) = match why {
-                Why::Unknown => (b"unknown", 2),
-                Why::NotAllowed => (b"not_allowed", 2),
-                Why::SignedOut => (b"signed out", 1),
-                Why::NotServed => (b"version not served", 1),
-                Why::Limit => (b"watch table limit", 1),
-                Why::SubjectEnded => (b"ended", 3),
+            let printed = if *why == Why::SubjectEnded {
+                render::failure(b"ended", watch.called.json, 3)
+            } else {
+                render::watch_failure(*why, watch.called.json)
             };
-            let printed = render::failure(why, watch.called.json, status);
             finish(watch.called, printed, out);
         }
         Told::Link { .. }

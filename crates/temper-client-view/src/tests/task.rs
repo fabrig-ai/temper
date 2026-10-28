@@ -3232,3 +3232,41 @@ fn a_too_linked_task_page_says_so() {
         );
     }
 }
+
+#[test]
+fn a_too_linked_tree_watch_says_so() {
+    for (executor, priority) in [
+        (c::Executor::Agent { charter: CHARTER }, None),
+        (c::Executor::Agent { charter: CHARTER }, Some(PRIORITY)),
+        (c::Executor::Procedure { connector: 1, kind: PROCEDURE }, Some(PRIORITY)),
+    ] {
+        let (mut root, _, document, tree) = fixtures::root_at_with_tree(
+            temper_client_domain::Address::Task { task: TASK, filter: PlanFilter::All },
+            &fixtures::domain_limits(),
+        );
+        let mut task = f::document();
+        task.chip.task = TASK;
+        task.chip.executor = executor;
+        task.priority = priority;
+        for up in [
+            jig_client::Up::Watched {
+                watch: document.expect("task watch"),
+                event: c::WatchEvent::Delivered(c::Delivery::Task(Box::new(task))),
+            },
+            jig_client::Up::WatchEnded {
+                watch: tree.expect("tree watch"),
+                end: c::WatchEnd::TooLinked { joins: READ_JOINS },
+            },
+        ] {
+            fixtures::root_event(&mut root, Event::Client { event: jig_client::Event::Up { up } });
+        }
+        for words in [fixtures::words(), fixtures::browser_words()] {
+            let mut view = fixtures::view_of(words);
+            let tree = fixtures::build(&mut view, &root);
+            assert!(
+                fixtures::find(tree, Role::Status, b"Too linked to show: it needs more than 4 joins in one read.")
+                    .is_some()
+            );
+        }
+    }
+}

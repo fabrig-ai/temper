@@ -375,19 +375,15 @@ fn a_run_or_tree_ending_meets_ended() {
         (f::WAIT_RUN, f::run_watch(), f::no_provisional()),
         (f::WAIT_TREE, f::tree_watch(), c::Delivery::Tree(Box::new(f::composite_tree()))),
     ] {
-        for initial in [None, Some(delivery)] {
-            let call = root.wait_since(argv, f::UNTIL_ENDED, &f::task_digest(&f::parked()).hex());
-            if let Some(delivery) = initial {
-                root.deliver_subject(&watch, delivery);
-            }
-            assert!(root.answer(call).is_none());
-            root.end(call, &watch, c::WatchEnd::SubjectEnded);
-            let answer = root.answer(call).expect("ended meets despite since");
-            assert_eq!(answer.status, 0, "{argv:?}");
-            assert!(answer.stdout.ends_with(b",\"met\":true}"));
-            assert!(root.reads.is_empty());
-            assert_eq!(root.watches.len(), f::SHARED_WATCHES);
-        }
+        let call = root.wait_since(argv, f::UNTIL_ENDED, &f::task_digest(&f::parked()).hex());
+        root.deliver_subject(&watch, delivery);
+        assert!(root.answer(call).is_none());
+        root.end(call, &watch, c::WatchEnd::SubjectEnded);
+        let answer = root.answer(call).expect("ended meets despite since");
+        assert_eq!(answer.status, 0, "{argv:?}");
+        assert!(answer.stdout.ends_with(b",\"met\":true}"));
+        assert!(root.reads.is_empty());
+        assert_eq!(root.watches.len(), f::SHARED_WATCHES);
     }
 }
 #[test]
@@ -517,12 +513,15 @@ fn an_answered_wait_ignores_late_terminals() {
 }
 
 #[test]
-fn an_end_without_delivery_names_the_text_subject() {
+fn an_end_without_delivery_names_its_gone_reason() {
     let mut root = f::signed_in(f::PARTY);
     let argv = f::extended(f::WAIT_RUN, f::UNTIL_ENDED);
     let call = root.submit(argv.as_slice());
     root.end(call, &f::run_watch(), c::WatchEnd::SubjectEnded);
-    assert_eq!(root.answer(call).expect("ended run text").stdout.as_ref(), b"run ended\nmet\n");
+    let answer = root.answer(call).expect("gone run");
+    assert_eq!(answer.status, 2);
+    assert_eq!(answer.stderr.as_ref(), b"gone\n");
+    assert!(answer.stdout.is_empty());
 }
 #[test]
 fn an_unchanged_ended_delivery_still_waits_for_the_terminal() {
@@ -770,4 +769,28 @@ fn an_inbox_wait_since_its_reads_digest_answers_at_a_new_update() {
     assert_ne!(f::last_digest(&answer.stdout), digest);
     assert_eq!(root.watches.len(), f::SHARED_WATCHES);
     assert_eq!(crate::root::next_deadline(&root.root), None);
+}
+
+#[test]
+fn a_tree_wait_never_answers_met_without_a_tree() {
+    for (end, status, reason) in [
+        (c::WatchEnd::TooLinked { joins: 4 }, 1, b"join limit: more than 4 per read".as_slice()),
+        (c::WatchEnd::SubjectEnded, 2, b"gone"),
+        (c::WatchEnd::Unknown, 2, b"unknown"),
+    ] {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let argv = f::extended(f::WAIT_TREE, f::UNTIL_ENDED);
+            let argv = f::extended(argv.as_slice(), if json { &["--json"] } else { &[] });
+            let call = root.submit(argv.as_slice());
+            root.end(call, &f::tree_watch(), end);
+            let answer = root.answer(call).expect("ending is terminal");
+            assert_eq!(answer.status, status);
+            assert!(answer.stdout.is_empty());
+            assert!(skein_lib::bytes::find(&answer.stderr, reason).is_some());
+            assert!(root.reads.is_empty());
+            assert_eq!(root.watches.len(), f::SHARED_WATCHES);
+            assert_eq!(crate::root::next_deadline(&root.root), None);
+        }
+    }
 }

@@ -542,14 +542,7 @@ fn run_handle(watch: &Watching) -> Option<Handle> {
     Some(handle)
 }
 fn watch_failure(why: Why, json: bool) -> jig::Printed {
-    let (reason, status): (&[u8], u8) = match why {
-        Why::NotAllowed => (b"not_allowed", 2),
-        Why::SignedOut => (b"signed out", 1),
-        Why::NotServed => (b"version not served", 1),
-        Why::Limit => (b"watch table limit", 1),
-        Why::Unknown | Why::SubjectEnded => unreachable!("handled"),
-    };
-    render::failure(reason, json, status)
+    render::watch_failure(why, json)
 }
 pub(crate) fn told(state: &mut Changes, client: &Client, env: &Env<Limits>, told: &Told, out: &mut Queue<Out>) {
     let handle = match told {

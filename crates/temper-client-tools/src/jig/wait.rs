@@ -283,6 +283,12 @@ fn finishing(runner: &mut Runner, number: u32, out: &mut Queue<Out>) {
     out.push(Out::Client { event: Event::Unwatch { handle: wait.handle } });
     out.push(Out::Client { event: Event::Read { handle: read, read: Readable::Jig(c::Read::Task { task }) } });
 }
+fn has_document(client: &Client, handle: Handle) -> bool {
+    match client.document(handle) {
+        Some(document) => document.latest.is_some(),
+        None => false,
+    }
+}
 fn ended(
     runner: &mut Runner,
     client: &Client,
@@ -320,7 +326,9 @@ fn ended(
             && (why == Why::Unknown || why == Why::SubjectEnded)
         {
             finishing(runner, number, out);
-        } else if why == Why::SubjectEnded {
+        } else if why == Why::SubjectEnded
+            && (wait.until != Some(Condition::Ended) || has_document(client, wait.handle))
+        {
             if wait.until == Some(Condition::Ended) {
                 // The renderer digests the last document, including current run text.
                 complete(runner, client, env, number, Ok(None), out);
@@ -328,18 +336,10 @@ fn ended(
                 complete(runner, client, env, number, Err(b"ended"), out);
             }
         } else {
-            let (reason, status): (&[u8], u8) = match why {
-                Why::NotAllowed => (b"not_allowed", 2),
-                Why::Unknown => (b"unknown", 2),
-                Why::SignedOut => (b"signed out", 1),
-                Why::NotServed => (b"version not served", 1),
-                Why::Limit => (b"watch table limit", 1),
-                Why::SubjectEnded => unreachable!("handled above"),
-            };
             let wait = runner.waits.remove(&number).expect("active wait");
             runner.wait_timers.as_mut().expect("wait timers").cancel(number);
             close(&wait, runner.me(), out);
-            let printed = render::failure(reason, wait.called.json, status);
+            let printed = render::watch_failure(why, wait.called.json);
             runner::finish(wait.called, printed, out);
         }
     }

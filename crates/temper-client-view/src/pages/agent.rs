@@ -33,6 +33,7 @@ pub(crate) fn main(
     if let Some(page) = root.pages().task()
         && let Some(task) = page.document(root.client())
     {
+        super::task::tree_status(b, page, words);
         let me = root.pages().me(root.client());
         lineage(b, task, words, bindings);
         b.open(Role::Slot);

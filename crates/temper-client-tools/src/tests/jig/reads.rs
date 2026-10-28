@@ -819,3 +819,30 @@ fn a_too_linked_read_names_its_join_bound() {
         }
     }
 }
+
+#[test]
+fn a_tree_too_linked_names_its_join_bound() {
+    use jig_client::contract as c;
+    // Small's per-read bound, carried by the ending rather than guessed by ctl.
+    const JOINS: u32 = 4;
+    for (command, document) in [
+        (fixtures::extended(fixtures::TASK_CALL, &["--tree"]), Some(fixtures::task_result(fixtures::parked_task()))),
+        (fixtures::extended(fixtures::WAIT_TREE, &[]), None),
+    ] {
+        for (flags, expected) in [
+            (&[][..], b"join limit: more than 4 per read\n".as_slice()),
+            (&["--json"][..], br#"{"error":"join limit: more than 4 per read"}"#.as_slice()),
+        ] {
+            let argv = fixtures::extended(command.as_slice(), flags);
+            let (mut root, call) = fixtures::read_call(argv.as_slice());
+            if let Some(document) = &document {
+                root.serve(call, document.clone());
+            }
+            root.end(call, &fixtures::tree_watch(), c::WatchEnd::TooLinked { joins: JOINS });
+            let answer = root.answer(call).expect("tree refusal");
+            assert_eq!(answer.status, 1);
+            assert_eq!(answer.stderr.as_ref(), expected);
+            assert!(answer.stdout.is_empty());
+        }
+    }
+}

@@ -1227,6 +1227,18 @@ fn example_memory_writer_raises_declarations_below_band_with_rounded_headroom() 
     scratch.remove();
 }
 
+// Both owned and init configurations admit 16 watchers. Jig's retained-watch
+// join ending grows each Watcher by 8 aligned bytes across 2 * 16 slab slots:
+// 2 * 16 * 8 = 256 bytes in each engine/engine.txt term.
+// Owned: 220,231,207,994 -> 220,231,208,250; init: 163,265,514,229 -> 163,265,514,485.
+// Root's payload envelope includes that retained bound. System prices 1,408
+// events twice plus the in-hand payload: (2 * 1,408 + 1) * 256 = 721,152.
+// Store prices 256 routed payloads plus two load flights: (256 + 2) * 256 = 66,048.
+// Clients prices its protocol component twice during first-clock initialization.
+// Each has 2 streams with 16 watches: 4 B-tree nodes * 11 slots * 8 bytes
+// of Watch's larger optional ending, so 2 * 2 * 4 * 11 * 8 = 1,408.
+// Each engine total grows 256 + 721,152 + 66,048 + 1,408 = 788,864 bytes;
+// worker figures and configured memory declarations stay fixed.
 #[test]
 fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
     let scratch = support::Scratch::startup("owned-memory-figures");

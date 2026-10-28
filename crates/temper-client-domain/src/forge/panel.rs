@@ -148,7 +148,9 @@ pub(super) fn watched(side: &mut Side, handle: Handle, watched: Watched, out: &m
             match why {
                 Why::SubjectEnded => (State::Unknown, true),
                 Why::Unknown => (State::Unknown, false),
-                Why::NotServed | Why::NotAllowed | Why::SignedOut | Why::Limit => (State::Ended(why), false),
+                Why::NotServed | Why::NotAllowed | Why::SignedOut | Why::Limit | Why::TooLinked { .. } => {
+                    (State::Ended(why), false)
+                }
             }
         }
     };

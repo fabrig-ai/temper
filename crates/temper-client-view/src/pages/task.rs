@@ -61,6 +61,7 @@ pub(crate) fn main(
         }
         text(b, Role::Paragraph, &words.say(Word::Task, &[Hole::Number(task.chip.task)]));
         b.close();
+        tree_status(b, page, words);
         let panel = temper_client_domain::forge::change::for_task(root.forge().panel(), task.chip.task);
         let change = super::change::shown(panel);
         header(b, task, root.pages().me(root.client()), root.forge().demo(), words, bindings, panel);
@@ -120,6 +121,11 @@ pub(crate) fn main(
     }
     crate::confirm::main(b, root, words, bindings, rows);
     b.close();
+}
+pub(crate) fn tree_status(b: &mut Builder, page: &task::Task, words: &Words) {
+    if let Some(joins) = page.tree_joins {
+        text(b, Role::Status, &words.say(Word::TaskTooLinked, &[Hole::Number(u64::from(joins))]));
+    }
 }
 pub(crate) fn reading(b: &mut Builder, page: &task::Task, words: &Words) {
     use task::{DocumentRead, ReadEnd};

@@ -329,6 +329,8 @@ pub struct Task {
     /// The document that already permitted an ending-triggered panel reopen (client/forge.md, 9.2).
     pub(crate) panel_reopened_at: Option<u64>,
     pub tree: Handle,
+    /// The join bound when this tree watch ended without a document.
+    pub tree_joins: Option<u32>,
     pub activity: Handle,
     pub run: Option<Handle>,
     pub ended: Option<Ended>,
@@ -366,6 +368,7 @@ impl Task {
             read_wait: READ_FIRST,
             panel_reopened_at: None,
             tree,
+            tree_joins: None,
             activity,
             run: None,
             ended: None,
@@ -742,6 +745,7 @@ impl Task {
                 self.activity_page(client, page, out);
             }
             Told::Changed { handle } if handle == self.tree => {
+                self.tree_joins = None;
                 self.read_ended(out);
                 match latest(client, handle) {
                     Some(Latest::Jig(c::Delivery::OwnerTree(tree))) => {
@@ -765,6 +769,9 @@ impl Task {
                 {
                     self.thread.run(run, client.text(handle).or(run.writing.as_ref()));
                 }
+            }
+            Told::Ended { handle, why: jig_client::Why::TooLinked { joins } } if handle == self.tree => {
+                self.tree_joins = Some(joins);
             }
             Told::Ended { handle, .. } if handle == self.tree || Some(handle) == self.run => {}
             Told::Link { .. }
@@ -793,6 +800,7 @@ impl Task {
             jig_client::Why::SignedOut => signed_out(client),
             jig_client::Why::NotServed => ReadEnd::NotServed,
             jig_client::Why::Limit => ReadEnd::Limit,
+            jig_client::Why::TooLinked { joins } => ReadEnd::TooLinked { joins },
         };
         self.read_ended_at(now, why);
     }
