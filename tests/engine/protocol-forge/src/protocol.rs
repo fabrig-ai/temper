@@ -241,6 +241,9 @@ impl Protocol {
                 2,
             );
         }
+        // Forge timestamps have whole-second precision. The history predates
+        // the first standing watch, rather than sharing its inclusive watermark.
+        self.run_for(1);
     }
     pub fn push(&mut self, branch: &[u8], content: &[u8]) {
         if self.joint.domain.branch(self.fixture.path, branch).is_none() {
