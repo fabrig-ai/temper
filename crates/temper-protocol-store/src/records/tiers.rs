@@ -230,6 +230,10 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
                         },
                         waiting: f.waiting,
                         fault: f.fault,
+                        report: match &f.report {
+                            Some(run) => Some(encode_receipt_run(run)),
+                            None => None,
+                        },
                         pending,
                     },
                 )
@@ -264,6 +268,7 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
                     .expect(FITS),
                     received: r.received,
                     status: encode_branch(r.status),
+                    applied: r.applied,
                 },
             )
             .expect(FITS),
@@ -283,6 +288,16 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
             },
             task: row.task,
             branch,
+            probe: match &row.probe {
+                Some(probe) => Some(
+                    w::TierProbeBranch::new(
+                        &w::CEILINGS,
+                        w::TierProbeBranchParts { landing: probe.landing, branch: encode_branch(probe.branch) },
+                    )
+                    .expect(FITS),
+                ),
+                None => None,
+            },
             flight,
             result,
         },
@@ -295,7 +310,7 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     reason = "one durable row translation validates the related operation states without callbacks"
 )]
 pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
-    let w::TierRowParts { repository, tier, record, pending, baseline, task, branch, flight, result } =
+    let w::TierRowParts { repository, tier, record, pending, baseline, task, branch, probe, flight, result } =
         row.into_parts();
     if tier.is_empty() {
         return Err(Undecodable);
@@ -335,7 +350,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
     };
     let flight = match flight {
         Some(f) => {
-            let w::TierFlightParts { next, entry, start, since, waiting, fault, pending } = f.into_parts();
+            let w::TierFlightParts { next, entry, start, since, waiting, fault, report, pending } = f.into_parts();
             let mut jobs = List::with_capacity(pending.len());
             for attempt in pending.into_boxed() {
                 jobs.push(super::answers::decode_job_attempt(attempt)).expect(FITS);
@@ -356,7 +371,10 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
                 },
                 waiting,
                 fault,
-                report: None,
+                report: match report {
+                    Some(run) => Some(decode_receipt_run(run)),
+                    None => None,
+                },
                 pending: jobs.into_boxed(),
             })
         }
@@ -364,7 +382,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
     };
     let result = match result {
         Some(r) => {
-            let w::TierResultParts { verdict, run, received, status } = r.into_parts();
+            let w::TierResultParts { verdict, run, received, status, applied } = r.into_parts();
             let w::TierJudgementParts { number, tip, key, finding } = verdict.into_parts();
             let finding = decode_finding(finding)?;
             let w::ReceiptRunParts { id, number: run_number, url } = run.into_parts();
@@ -380,8 +398,19 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
                 run: d::ReceiptRun { id, number: run_number, url },
                 received,
                 status: decode_branch(status),
-                applied: false,
+                applied,
             })
+        }
+        None => None,
+    };
+    let probe = match probe {
+        Some(probe) => {
+            let w::TierProbeBranchParts { landing, branch } = probe.into_parts();
+            let run = run.as_ref().ok_or(Undecodable)?;
+            if usize::try_from(landing).or(Err(Undecodable))? >= run.landings.len() {
+                return Err(Undecodable);
+            }
+            Some(d::TierProbeBranch { landing, branch: decode_branch(branch) })
         }
         None => None,
     };
@@ -418,7 +447,7 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         },
         task,
         branch,
-        probe: None,
+        probe,
         flight,
         result,
     })
@@ -439,4 +468,13 @@ fn decode_branch(branch: w::TierBranch) -> d::TierBranch {
         w::TierBranch::Made => d::TierBranch::Made,
         w::TierBranch::Pending(entry) => d::TierBranch::Pending { entry: entry.into_parts().number },
     }
+}
+
+fn encode_receipt_run(run: &d::ReceiptRun) -> w::ReceiptRun {
+    w::ReceiptRun::new(&w::CEILINGS, w::ReceiptRunParts { id: run.id, number: run.number, url: run.url.clone() })
+        .expect(FITS)
+}
+fn decode_receipt_run(run: w::ReceiptRun) -> d::ReceiptRun {
+    let w::ReceiptRunParts { id, number, url } = run.into_parts();
+    d::ReceiptRun { id, number, url }
 }

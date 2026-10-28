@@ -72,6 +72,11 @@ pub struct World {
     pub busy_calls: u32,
     pub tier: bool,
     timing: StoryLimits,
+    restart_hello: Option<engine::Event>,
+    /// Reports supplied by restart stories at the same sans-io boundary as forge replies.
+    pub artifact_answers: VecDeque<Box<[u8]>>,
+    pub hold_artifacts: bool,
+    pub held_artifacts: Vec<engine::Request>,
 }
 
 #[expect(
@@ -92,6 +97,8 @@ pub struct StoryLimits {
     pub reserve_whole_period: bool,
     /// Ignore one nested file so the key walker must read a directory.
     pub tier_tree: bool,
+    pub tier_reports: bool,
+    pub tier_suspects: Option<temper_engine_domain_forge_tiers::Suspects>,
 }
 
 fn tier_checks(nested: bool) -> Box<[engine::TierCheck]> {
@@ -254,6 +261,8 @@ impl World {
             tier,
             reserve_whole_period,
             tier_tree,
+            tier_reports,
+            tier_suspects,
         } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
@@ -282,7 +291,13 @@ impl World {
                                 gates: Box::new([]),
                                 tiers: tier_checks(tier_tree),
                             }]),
-                            after: after_landing(),
+                            after: {
+                                let mut after = after_landing();
+                                if let Some(suspects) = tier_suspects {
+                                    after.verdict.suspects = suspects;
+                                }
+                                after
+                            },
                         },
                     )
                     .expect("one configured project");
@@ -330,7 +345,7 @@ impl World {
                 reviewer.policy.agents = false;
                 config.core.defaults.charters = Box::new([walking::charter(), producer, reviewer]);
                 config.forge_charter = forge_charter.unwrap_or(1);
-                limits.tasks.authority_grants = if tier { 14 } else { 11 };
+                limits.tasks.authority_grants = if tier { 15 } else { 11 };
                 limits.journal.run_bytes = 8192;
                 limits.tasks.authority_segments = 9;
                 limits.tasks.authority_bytes = 512;
@@ -339,7 +354,7 @@ impl World {
                 limits.tasks.inbox_bytes = 1024;
                 limits.authority.executors = 5;
                 limits.authority.batch = 2;
-                limits.authority.grants = if tier { 14 } else { 11 };
+                limits.authority.grants = if tier { 15 } else { 11 };
                 limits.authority.segments = 8;
                 limits.authority.segment_bytes = 64;
                 limits.authority.writes = 2;
@@ -422,7 +437,7 @@ impl World {
                     for item in grants {
                         expanded.push(item).expect("task grant bound");
                     }
-                    for kind in [6, 16, 17] {
+                    for kind in [6, 15, 16, 17] {
                         expanded.push(authority::Grant { kind, ..grant.clone() }).expect("tier grant bound");
                     }
                     grants = expanded.into_boxed();
@@ -501,8 +516,8 @@ impl World {
                     paths::add_reader(&mut policy);
                 }
                 if turn {
-                    limits.authority.grants = 14;
-                    limits.tasks.authority_grants = 14;
+                    limits.authority.grants = if tier { 15 } else { 14 };
+                    limits.tasks.authority_grants = if tier { 15 } else { 14 };
                     limits.authority.executors = 6;
                     limits.tasks.executor_kinds = 6;
                     limits.tasks.result_bytes = 256;
@@ -510,7 +525,7 @@ impl World {
                     if let Some(slots) = landing_members {
                         limits.forge.landing_members = slots;
                     }
-                    let mut grants = List::with_capacity(14);
+                    let mut grants = List::with_capacity(limits.authority.grants);
                     for grant in &rules.ceiling.grants {
                         grants.push(grant.clone()).expect("ceiling grants");
                     }
@@ -698,9 +713,9 @@ impl World {
                     let mut workflows = Vec::new();
                     if turn {
                         workflows.push(raw::Workflow {
-                        fails: Box::new([]),
-                        report: None,
-                        select: None,
+                            fails: Box::new([]),
+                            report: None,
+                            select: None,
                             file: b"gate.yml".as_slice().into(),
                             jobs: Box::new([b"test".as_slice().into()]),
                             latency_min: Duration::from_secs(1),
@@ -712,16 +727,28 @@ impl World {
                     }
                     if tier {
                         workflows.push(raw::Workflow {
-                        fails: Box::new([]),
-                        report: None,
-                        select: None,
+                            fails: Box::new([]),
+                            report: if tier_reports {
+                                Some(raw::Report {
+                                    artifact: b"report".as_slice().into(),
+                                    format: raw::ReportFormat::Lines,
+                                    deflate: false,
+                                })
+                            } else {
+                                None
+                            },
+                            select: if tier_reports { Some(b"temper_tests".as_slice().into()) } else { None },
                             file: b"browser.yml".as_slice().into(),
                             jobs: Box::new([b"browser".as_slice().into()]),
                             latency_min: Duration::from_secs(90),
                             latency_max: Duration::from_secs(90),
                             silent: 0,
                             passes: 1000,
-                            cue: None,
+                            cue: if tier_reports {
+                                Some(raw::Cue::Tests { path: b"failures".as_slice().into() })
+                            } else {
+                                None
+                            },
                         });
                     }
                     workflows.into_boxed_slice()
@@ -835,6 +862,10 @@ impl World {
             busy_calls: 0,
             tier,
             timing,
+            restart_hello: None,
+            artifact_answers: VecDeque::new(),
+            hold_artifacts: false,
+            held_artifacts: Vec::new(),
             merges: 0,
             writes: Vec::new(),
         }
@@ -898,11 +929,14 @@ impl World {
         self.period = None;
         self.events.push_back(engine::Event::Restart { pending: self.store.pending_generation });
         if !self.assigned.is_empty() {
-            self.events.push_back(protocol::hello_slots(
+            self.restart_hello = Some(protocol::hello_slots(
                 Token::new(7),
-                if with_change { 2 } else { 1 },
+                self.env.limits.fleet.slots,
                 self.assigned
                     .iter()
+                    .filter(|assignment| matches!(self.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(assignment.task)))),
+                        Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) if matches!(row.phase,
+                            tasks::Phase::Active(tasks::Active::Claimed { attempt } | tasks::Active::Running { attempt }) if attempt == assignment.attempt)))
                     .map(|assignment| {
                         protocol::hosting(assignment.task, assignment.attempt, jig_domain_host::Phase::Active)
                     })
@@ -973,6 +1007,12 @@ impl World {
                     }));
                 }
                 engine::Request::Forge { call, repository, op } => {
+                    if self.hold_artifacts
+                        && matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Artifact { .. }))
+                    {
+                        self.held_artifacts.push(engine::Request::Forge { call, repository, op });
+                        continue;
+                    }
                     if let Some(reads) = &mut self.held_reads
                         && matches!(op, skein_forge::api::Op::Read(_))
                         && self.store.rows.values().any(|row| matches!(row,
@@ -1214,6 +1254,14 @@ impl World {
 
     fn tick_with_reply_cut(&mut self, target: Option<u64>) -> bool {
         let mut lost = false;
+        // The deployment header must exist before the hello can journal; hosted
+        // attempts must be known before adoption admits the restored claims
+        // (jig's domain/engine.md, 6).
+        if self.root.restart_step() == Some(jig_domain_core::RestartStep::LoadInbox)
+            && let Some(hello) = self.restart_hello.take()
+        {
+            self.events.push_front(hello);
+        }
         self.env.now = self.env.now.saturating_add(Duration::from_millis(100));
         self.env.wall = Wall::from_nanos(self.env.now.as_nanos());
         self.fake_env.now = self.env.now;
@@ -1260,6 +1308,23 @@ impl World {
                             Err(translate::error(error, fake::time(&self.fake_env.limits, self.fake_env.now)))
                         }
                     };
+                    let mut result = result;
+                    if let Ok(skein_forge::api::Answer::Run(run)) = &mut result {
+                        let raw::Answer::Jobs(jobs) = self
+                            .fake
+                            .inspect(&self.fake_env.limits, b"org/repo", &raw::Read::Jobs { run: run.id })
+                            .expect("run jobs")
+                        else {
+                            panic!("jobs answer")
+                        };
+                        run.jobs = translate::run_jobs(jobs);
+                    }
+                    if matches!(op, skein_forge::api::Op::Read(skein_forge::api::Read::Artifact { .. }))
+                        && let Ok(skein_forge::api::Answer::File { bytes, .. }) = &mut result
+                        && let Some(scripted) = self.artifact_answers.pop_front()
+                    {
+                        *bytes = scripted;
+                    }
                     let event = engine::Event::Forge(Box::new(temper_engine_domain_forge::Event::Client(
                         skein_forge_client::Event::Answered { free: 0, rate: None, call, cost: 1, result },
                     )));
@@ -1908,15 +1973,23 @@ pub fn produce(world: &mut World, producer: &engine::Assignment, branch: &[u8]) 
     produce_content(world, producer, branch, b"review this diff")
 }
 pub fn produce_content(world: &mut World, producer: &engine::Assignment, branch: &[u8], content: &[u8]) -> [u8; 32] {
+    produce_path_content(world, producer, branch, b"file", content)
+}
+pub fn produce_path_content(
+    world: &mut World,
+    producer: &engine::Assignment,
+    branch: &[u8],
+    path: &[u8],
+    content: &[u8],
+) -> [u8; 32] {
     const CHANNEL: Token = Token::new(7);
-    const FILE: &[u8] = b"file";
     let raw::Answer::Commit(base) =
         world.external(2, raw::Op::Read(raw::Read::Branch { branch: b"main".as_slice().into() }))
     else {
         panic!("producer starts at current main")
     };
     world.external(2, raw::Op::Git(raw::Git::Create { branch: branch.into(), commit: base }));
-    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", branch, FILE, content, 1)
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", branch, path, content, 1)
         .expect("producer pushed review head");
     let event = world.protocol.answer(
         CHANNEL,

@@ -33,7 +33,7 @@ fn tier(world: &World) -> &forge::TierRow {
     let forge::Stored::Tier(row) = row.as_ref() else { panic!("tier row") };
     row
 }
-fn park_owner(world: &mut World, run: &engine::Assignment) {
+pub fn park_owner(world: &mut World, run: &engine::Assignment) {
     let read = run.messages.iter().map(|word| word.number).max();
     if read.is_some() {
         world.send(protocol::turn(

@@ -125,16 +125,19 @@ pub(crate) fn judged(
     // fails any of their blamed tests repairs them, whether in this range or before it.
     let mut keys = List::with_capacity(d.verifications.len());
     for (key, _) in &d.verifications {
-        if key.0 == repository { keys.push(*key).expect("verification count"); }
+        if key.0 == repository {
+            keys.push(*key).expect("verification count");
+        }
     }
     for key in &keys {
         let row = d.verifications.get_mut(key).expect("collected verification");
         let before = fact(row);
         let mut changed = false;
         for verification in &mut row.tiers {
-            if verification.tier.as_ref() == tier && verification.repaired.is_none()
+            if verification.tier.as_ref() == tier
+                && verification.repaired.is_none()
                 && let Some(verdict) = &verification.verdict
-                && let Blame::Owns(_) | Blame::Suspect(_) = &verdict.blame
+                && red(&verdict.blame)
                 && temper_engine_domain_forge_tiers::repaired(&verdict.blame, &judged.failing)
             {
                 verification.repaired = Some(judged.tip);
@@ -156,7 +159,11 @@ pub(crate) fn judged(
         let mut changed = false;
         for verification in &mut row.tiers {
             if verification.tier.as_ref() == tier {
-                if let Some(TierVerdict { blame: Blame::Owns(_) | Blame::Suspect(_), .. }) = &verification.verdict {
+                let was_red = match &verification.verdict {
+                    Some(verdict) => red(&verdict.blame),
+                    None => false,
+                };
+                if was_red {
                     continue;
                 }
                 let verdict = TierVerdict { run: judged.number, blame: blame.clone() };
@@ -175,6 +182,13 @@ pub(crate) fn judged(
             }
             save(row.clone(), out);
         }
+    }
+}
+
+fn red(blame: &Blame) -> bool {
+    match blame {
+        Blame::Cleared => false,
+        Blame::Owns(_) | Blame::Suspect(_) => true,
     }
 }
 
@@ -253,7 +267,10 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let configured = u64::from(l.repositories).checked_mul(
         u64::try_from(size_of::<RepositoryTiers>()).ok()?.checked_add(u64::from(l.tiers).checked_mul(tier)?)?,
     )?;
+    // Repair scans retain one key per live verification while updating rows.
+    let repair_keys = u64::from(l.changes).checked_mul(u64::try_from(size_of::<(Repository, Commit)>()).ok()?)?;
     Map::<(Repository, Commit), Verification>::worst_case(l.changes)?
+        .checked_add(repair_keys)?
         .checked_add(u64::from(l.changes).checked_mul(tiers.checked_add(8)?)?)?
         .checked_add(Map::<u32, Box<[RepositoryTiers]>>::worst_case(l.judge_projects)?)?
         .checked_add(u64::from(l.judge_projects).checked_mul(configured)?)?
