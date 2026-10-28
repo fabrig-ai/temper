@@ -693,6 +693,9 @@ mod memory_figures;
 #[path = "../../../../testing/memory_literal.rs"]
 mod memory_literal;
 // Tree storage, page scratch, forge/frame/account bindings, choices and words.
+// UI storage includes the patch queue's growth peak above Skein's 1 MiB threshold:
+// 80_668 patches * 32 bytes plus the previous 65_536-patch buffer * 32 bytes
+// = 4_678_528 bytes, with the previous buffer live while growing to the same cap.
 
 #[test]
 #[cfg(target_pointer_width = "64")]
