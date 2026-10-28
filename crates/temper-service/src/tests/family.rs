@@ -1871,3 +1871,35 @@ fn landing_history_keeps_the_wires_full_wall_precision() {
     };
     assert_eq!((project, newer_than.as_nanos()), (7, SINCE));
 }
+
+#[test]
+fn a_logged_page_keeps_its_marks_time_and_document_cursor() {
+    let view = forge::LandingsView {
+        project: 7,
+        turn: None,
+        landings: Box::new([]),
+        newer_than: Some(skein_lib::Wall::from_nanos(123)),
+        logged: Box::new([forge::LoggedLine {
+            commit: [5; 32],
+            repository: b"acme/shop".as_slice().into(),
+            seen: skein_lib::Wall::from_nanos(456),
+            changes: Box::new([51]),
+            verdicts: Box::new([forge::Mark {
+                tier: b"browser".as_slice().into(),
+                verdict: forge::Verdict::Red { tests: None },
+            }]),
+        }]),
+        after: Some(32),
+    };
+    let bytes = family::document(forge::Document::Landings(view), &[], &w::CEILINGS).unwrap();
+    let panel = wire::decode_landings_panel(&bytes, &w::CEILINGS).unwrap();
+    assert_eq!(panel.newer_than(), &Some(123));
+    assert_eq!(panel.after().as_deref(), Some([0, 32, 0, 0, 0, 0, 0, 0, 0].as_slice()));
+    let line = panel.logged().get(0).unwrap();
+    assert_eq!((line.commit(), line.repository(), line.seen()), (&[5; 32], b"acme/shop".as_slice(), 456));
+    assert_eq!(line.changes().as_slice(), &[51]);
+    let mark = line.verdicts().get(0).unwrap();
+    assert_eq!(mark.tier(), b"browser");
+    let w::LoggedVerdict::Red(red) = mark.verdict() else { panic!("red many") };
+    assert_eq!(red.tests(), &None);
+}
