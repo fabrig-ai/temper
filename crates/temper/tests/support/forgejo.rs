@@ -283,6 +283,10 @@ pub fn configuration(directory: &Path, forge: &Forge<'_>, value: &mut Value) {
     }
     super::configuration::use_stock(value);
     value["engine"]["limits"]["overrides"]["tasks.charters"] = 4.into();
+    // The stock offers three procedures in its creation bounds.
+    value["engine"]["limits"]["overrides"]["documents.lines"] = 3.into();
+    // A stock chat copies its fourteen forge grants into the task authority.
+    value["engine"]["limits"]["overrides"]["tasks.authority_grants"] = 14.into();
     super::configuration::turn_bounds::apply(value, super::configuration::turn_bounds::turn_body(&agent));
     write_private(&path, &serde_json::to_vec(&agent).expect("agent JSON"));
 }

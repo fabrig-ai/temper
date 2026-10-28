@@ -33,6 +33,45 @@ fn the_process_and_qa_configurations_documents_fit_their_clients() {
     let front = temper_client_world::front::Joint::with_change_landing(temper_client_world::fixtures::SEED, &qa);
     assert_documents_fit(&temper_engine_domain::core_limits(&front.engine.env.limits), qa.client.domain);
 }
+
+#[test]
+fn the_elsewhere_configuration_fits_the_stock_creation_authority() {
+    let scratch = support::Scratch::startup("elsewhere-stock-authority");
+    support::configuration(
+        scratch.path(),
+        &support::Forge::Throwaway {
+            forgejo: std::path::Path::new("/fixture/forgejo"),
+            api: "127.0.0.1:9".parse().expect("fixture address"),
+            git: "http://127.0.0.1:9".into(),
+        },
+    );
+    let value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(scratch.path().join("temper.json")).expect("elsewhere configuration"),
+    )
+    .expect("configuration JSON");
+    let bytes = serde_json::to_vec(&value["engine"]).expect("engine JSON");
+    let document = jig_protocol_config::document(&bytes, &DOCUMENT).expect("engine document");
+    let engine = temper_service::startup::engine(&document, 0, &jig_protocol_config::Directories::working())
+        .expect("engine configuration");
+    let defaults = temper_service::stock::defaults(&engine.llm);
+    for (_, policy) in &defaults.policies {
+        for role in &policy.policy.roles {
+            let procedures = role
+                .authority
+                .delegation
+                .kinds
+                .iter()
+                .filter(|kind| matches!(kind, jig_domain_authority::Executor::Procedure(_)))
+                .count();
+            assert!(procedures <= usize::try_from(engine.limits.core.documents.lines).expect("document lines"));
+            assert!(
+                role.authority.grants.len()
+                    <= usize::try_from(engine.limits.core.tasks.authority_grants).expect("task grants")
+            );
+        }
+    }
+    scratch.remove();
+}
 fn assert_documents_fit(engine: &jig_domain_core::Limits, native: jig_client::DomainLimits) {
     assert!(engine.documents.rows <= native.rows, "the client can receive every document row");
     assert!(engine.documents.lines <= native.rows, "the client can receive every document's short list");
