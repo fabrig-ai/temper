@@ -16,11 +16,15 @@ const REVIEW_TURNS: u64 = 3;
 const STEPS: u32 = 200; // The root world's existing bound for a durable round trip.
 const CHANNEL: Token = Token::new(7);
 const PROJECT: u32 = 1;
+const PERSON: u64 = 1;
 const FORGE: u16 = 1;
 const CHAT_KEY: u8 = 92;
 const FIRST_CALL: u64 = 93; // Global fixture call names must be unique across actors.
 const WORK_WORDS: &[u8] = b"Add CSV and JSON export to widget. First have an advisor read widget and report how the two exports should share the table's rows, without changing anything. Then tell me the plan and wait for my go-ahead. Make CSV first, and JSON only after CSV has landed, reusing what CSV adds.";
 const ADVISOR_REPORT: &[u8] = b"Survey complete";
+const PLAN: &[u8] = b"Survey complete: CSV first, then JSON reusing CSV's rows after it lands. Should I go ahead?";
+const GO_AHEAD: &[u8] = b"Go ahead";
+const ANSWER_KEY: u8 = 94; // The person's answer is a distinct durable request.
 const WORK_REPORT: &[u8] = b"Both changes landed";
 const CHAT_REPORT: &[u8] = b"Done: both landed";
 const LOOKUP_JOINS: u32 = 1;
@@ -290,6 +294,11 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) 
     let change =
         delegated(world, work, engine::Tool::Change { words: b"Small fix".as_slice().into(), repository: None });
     answer(world, work, WORK_TURNS, tasks::End::Parked);
+    assert_eq!(
+        record(world, work.task).phase,
+        tasks::Phase::Active(tasks::Active::Idle),
+        "the goal waits while its change runs"
+    );
     let producer_task = next_child(world, change, change);
     let producer = admitted(world, producer_task);
     let branch = producer.workspace.repositories[0].push.clone().expect("producer branch");
@@ -374,6 +383,73 @@ struct Tree {
     second_workers: [u64; 3],
 }
 
+fn agree_plan(world: &mut World, chat: u64, work: &engine::Assignment) {
+    let engine::CallAnswer::Sent { message: question } = call(
+        world,
+        work,
+        engine::Tool::Message { target: chat, form: engine::MessageForm::Question, words: PLAN.into() },
+    ) else {
+        panic!("plan question sent")
+    };
+    // At the domain's worker face, wait parks the run; Active::Idle is Waiting for news.
+    answer(world, work, WORK_TURNS, tasks::End::Parked);
+    assert_eq!(
+        record(world, work.task).phase,
+        tasks::Phase::Active(tasks::Active::Idle),
+        "the goal waits for the plan's answer"
+    );
+    let chat = admitted(world, chat);
+    answer(world, &chat, CHAT_TURNS, tasks::End::Parked);
+    assert_eq!(
+        record(world, work.task).phase,
+        tasks::Phase::Active(tasks::Active::Idle),
+        "reading the question does not end the goal"
+    );
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(u64::from(ANSWER_KEY))),
+        sign_in: world.signed_in.expect("owner session"),
+        key: [ANSWER_KEY; 16],
+        ask: people::Ask::AnswerQuestion { project: PROJECT, task: chat.task, question, words: GO_AHEAD.into() },
+    }));
+    advance(world);
+    let chat = admitted(world, chat.task);
+    assert!(
+        record(world, chat.task).inbox.iter().any(|word| {
+            word.from == tasks::Party::Person(PERSON)
+                && word.kind == tasks::MessageKind::Answer { question }
+                && word.words.as_ref() == GO_AHEAD
+        }),
+        "the person's go-ahead reaches the chat"
+    );
+    assert_eq!(
+        record(world, work.task).phase,
+        tasks::Phase::Active(tasks::Active::Idle),
+        "the goal waits until the chat relays the answer"
+    );
+    assert!(matches!(
+        call(
+            world,
+            &chat,
+            engine::Tool::Message {
+                target: work.task,
+                form: engine::MessageForm::Answer { question },
+                words: GO_AHEAD.into(),
+            }
+        ),
+        engine::CallAnswer::Sent { .. }
+    ));
+    answer(world, &chat, CHAT_TURNS, tasks::End::Parked);
+    assert!(
+        record(world, work.task).inbox.iter().any(|word| {
+            word.from == tasks::Party::Task(chat.task)
+                && word.kind == tasks::MessageKind::Answer { question }
+                && word.words.as_ref() == GO_AHEAD
+        }),
+        "the live goal receives the answer to its question"
+    );
+}
+
 fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
     let chat = admitted(world, chat.task);
     let work_task = goal(world, &chat, false);
@@ -387,6 +463,8 @@ fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
     }), engine::CallAnswer::ForgeRead(result) if result.is_ok()));
     report(world, &advisor, ADVISOR_TURNS, ADVISOR_REPORT);
     assert!(has_report(world, work_task, advisor_task, ADVISOR_REPORT), "advisor report reaches work");
+    let work = admitted(world, work_task);
+    agree_plan(world, chat.task, &work);
     let work = admitted(world, work_task);
     let (first, first_workers) = land_change(world, &work);
     let work = admitted(world, work_task);
