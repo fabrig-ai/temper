@@ -296,6 +296,11 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
         match work {
             Work::SwitchChecked => {
                 if domain.core.restart_checked() && domain.forge.reconciliation().is_ok() {
+                    domain.work.push(Work::Core(core::Event::SettingsCommit {
+                        room: core::settings::writes_worst_case(&crate::limits::core_limits(&env.limits))
+                            .expect("validated settings write room"),
+                    }));
+                    domain.work.push(Work::Core(core::Event::Account(jig_domain_accounts::Event::Want)));
                     emit(decision, &env.limits, Delivery::Restart(core::RestartStep::Switch));
                 } else {
                     domain.stop_pending = true;

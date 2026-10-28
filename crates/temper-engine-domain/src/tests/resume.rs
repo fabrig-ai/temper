@@ -142,13 +142,10 @@ fn reconciliation_can_start_once_the_connectors_restore_and_stays_open() {
             RestartRequest::Settings { failure, changed } => {
                 panic!("empty settings restore: {failure:?}, changed {changed}")
             }
-            RestartRequest::Unresolved { child, records } => panic!("empty restore {child:?}: {records}"),
             RestartRequest::ProjectPolicy { project } => panic!("empty project policy restore: {project}"),
+            RestartRequest::AccountsPastLimit { which } => panic!("fixture accounts limit: {which:?}"),
             RestartRequest::HeldPastLimit { which, held, limit } => {
                 panic!("fixture held settings: {which:?} held {held}, allowed {limit}")
-            }
-            RestartRequest::UnheldRevision { task, revision } => {
-                panic!("fixture task {task} has unheld settings revision {revision}")
             }
             RestartRequest::Refused { step } => panic!("empty restore: {step:?}"),
         }
