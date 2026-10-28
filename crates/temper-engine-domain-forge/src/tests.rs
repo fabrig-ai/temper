@@ -124,7 +124,7 @@ fn outputs(d: &mut Domain, event: Event) -> Box<[Request]> {
     outputs_with_env(d, event, &env())
 }
 fn outputs_with_env(d: &mut Domain, event: Event, env: &Env<Limits>) -> Box<[Request]> {
-    let mut out = Queue::with_capacity(max_out(&env.limits));
+    let mut out = Queue::uncapped();
     step(d, env, event, &mut out);
     let mut values = skein_lib::List::with_capacity(out.len());
     for _ in 0..out.len() {
