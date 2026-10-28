@@ -539,3 +539,50 @@ fn token_rows_include_schema_framing_in_startup_admission() {
         assert_eq!(crate::startup::lines(&problems).as_ref(), expected.as_bytes());
     }
 }
+
+#[test]
+fn a_maximal_task_pull_and_remarks_brief_fits_the_shipped_whole() {
+    use jig_domain_brief::{Core, Planned};
+    let root = limits::profile(limits::Profile::Small).root;
+    let brief = root.brief;
+    assert_eq!(brief.budgets.reviews, 4608);
+    assert_eq!(brief.brief_bytes, 14_592);
+    assert_eq!(root.journal.result_bytes, 14_592);
+    let sections = [
+        Planned::Core {
+            kind: Core::Task,
+            text: Box::new([b't'; 4608]),
+            limit: brief.budgets.task,
+            priority: 0,
+            required: true,
+        },
+        Planned::Connector {
+            connector: 0,
+            kind: 3,
+            token: Token::new(1),
+            size: 4608,
+            limit: brief.budgets.pull,
+            priority: 5,
+            required: true,
+        },
+        Planned::Connector {
+            connector: 0,
+            kind: 2,
+            token: Token::new(2),
+            size: 4608,
+            limit: brief.budgets.reviews,
+            priority: 6,
+            required: true,
+        },
+    ];
+    assert!(usize::try_from(brief.sections).unwrap() >= sections.len());
+    let plan = jig_domain_brief::plan(&sections, brief.brief_bytes).expect("maximal repair brief fits");
+    assert!(plan.connectors.is_empty(), "no section needs cutting or dropping");
+    assert_eq!(plan.order.len(), 3);
+    for section in &plan.order {
+        assert_eq!(section.size, 4608);
+    }
+    assert_eq!(brief.brief_bytes - plan.size, 768, "other-context allowance survives");
+    assert!(root.journal.result_bytes >= plan.size);
+    assert!(brief.read_bytes >= 4608);
+}

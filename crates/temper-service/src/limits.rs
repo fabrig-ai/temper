@@ -257,7 +257,7 @@ const ROOT: Root = Root {
         // At least row_bound, including forge.client.answer_bytes: the root's worst case.
         transcript_bytes: 65_536,
         // At least brief.brief_bytes and jig small people.words: the root's worst case.
-        result_bytes: 9984,
+        result_bytes: 14_592,
         // Run charter carrier in the root's worst case; jig small core.run_bytes.
         run_bytes: 16_384,
     },
@@ -292,8 +292,8 @@ const ROOT: Root = Root {
             dependencies: 128,
             // CI section: a failed job's last lines, with five failed checks sharing.
             ci: 4096,
-            // Reviews section's bytes, from the root world.
-            reviews: 128,
+            // Whole gate remarks beside their heading, within the section read bound.
+            reviews: 4608,
             // A review receives a pull's title, body, files and diff, within the
             // same read bound as the task section (domain/forge.md, 8.3).
             pull: 4608,
@@ -304,8 +304,8 @@ const ROOT: Root = Root {
             // Notes section's bytes, from the root world.
             notes: 64,
         },
-        // Whole task and pull sections, with the existing 768 bytes for other context.
-        brief_bytes: 9984,
+        // Whole task, pull and remarks sections, plus 768 bytes for other context.
+        brief_bytes: 14_592,
         // Outlast sequential forge reads and a retry; bound a stuck connector (domain/root.md, 10).
         gather: Duration::from_secs(30),
     },
