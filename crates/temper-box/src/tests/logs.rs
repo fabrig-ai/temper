@@ -301,6 +301,67 @@ fn restart_tails_are_bounded_include_the_eof_piece_and_reset_before_spawn() {
     stop(&mut h);
 }
 
+// Serve's older-layout diagnostic, with a fixture deployment path.
+const OLDER_REFUSAL: &[u8] = b"temper serve: /data/deployment holds a store from an older build, whose tasks family's layout differs from this build's, and this start has changed nothing in it. Before the first release a store is not translated, so every start refuses this one until it is moved. To start afresh, stop the service, move `active`, `generations/` and `transcripts/` out of /data/deployment together, and start again: nothing is deleted, and the next start makes a new, empty store. The new store has no tasks, sign-ins, accounts or keys, and every client signs in again.\n";
+
+fn refusal_retries(diagnostic: &[u8], tail: &[u8]) {
+    use skein_lib::Duration;
+    // protocol/setup.md, 7.2: five restarts, then the sixth exit gives up.
+    const RETRIES: [(u64, &[u8]); 5] = [
+        (500, b"serve exited 1; restarting in 0.5 s\n"),
+        (1000, b"serve exited 1; restarting in 1 s\n"),
+        (2000, b"serve exited 1; restarting in 2 s\n"),
+        (4000, b"serve exited 1; restarting in 4 s\n"),
+        (8000, b"serve exited 1; restarting in 8 s\n"),
+    ];
+    const ATTEMPTS: usize = 6;
+    const TRUST: &[u8] = b"smith: trust roots: 148 taken, 0 skipped, 0 malformed blocks, 0 other blocks\n";
+    let mut h = harness(Echo::None, &[], false, &limits::small());
+    h.run_until_idle();
+    for attempt in 0..ATTEMPTS {
+        let child = h.serve_index();
+        h.write_child(child, 2, TRUST);
+        h.write_child(child, 2, TRUST);
+        h.write_child(child, 2, diagnostic);
+        let pid = h.hosted.get(child).unwrap().pid;
+        h.sim.finish_service(pid, Exit::Code(1));
+        h.run_until_idle();
+        let output = h.stderr();
+        let notice = match RETRIES.get(attempt) {
+            Some((_, words)) => *words,
+            None => b"serve exited 1; giving up\n",
+        };
+        let block = crate::lines::joined(&[notice, tail, b"    Log: /data/box/logs/serve.log\n"]);
+        assert!(Harness::contains(&output, &block), "attempt {attempt} lost the refusal: {output:?}");
+        if let Some((delay, _)) = RETRIES.get(attempt) {
+            h.sim.advance_to(h.sim.now().saturating_add(Duration::from_millis(*delay)));
+            h.run_until_idle();
+        }
+    }
+    assert_eq!(h.run_to_end(), Exit::Code(1));
+    assert_eq!(h.spawn_times(b"serve").len(), ATTEMPTS);
+    h.sim.assert_quiescent(h.pid);
+    h.sim.assert_no_open_fds(h.pid);
+    assert_eq!(h.machine.open_handles(), 0);
+}
+
+#[test]
+fn an_older_store_refusal_is_printed_on_every_retry() {
+    let tail = crate::lines::joined(&[b"    serve: ", OLDER_REFUSAL]);
+    // The two trust-root lines precede this third line in the failure block.
+    let trust = b"    serve: smith: trust roots: 148 taken, 0 skipped, 0 malformed blocks, 0 other blocks\n";
+    refusal_retries(OLDER_REFUSAL, &crate::lines::joined(&[trust, trust, &tail]));
+}
+
+#[test]
+fn a_refusal_spanning_pieces_is_printed_on_every_retry() {
+    let prefix = line_cap();
+    let diagnostic = crate::lines::joined(&[&prefix, OLDER_REFUSAL]);
+    let trust = b"    serve: smith: trust roots: 148 taken, 0 skipped, 0 malformed blocks, 0 other blocks\n";
+    let tail = crate::lines::joined(&[trust, trust, b"    serve: ", &prefix, b"\n    serve: ", OLDER_REFUSAL]);
+    refusal_retries(&diagnostic, &tail);
+}
+
 #[test]
 fn a_waiting_give_up_drains_its_log_without_holding_teardown_orders_or_spinning() {
     use skein_shell::Host;
