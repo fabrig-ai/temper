@@ -504,8 +504,11 @@ fn logged_page(count: u32, after: Option<Box<[u8]>>) -> w::LandingsPanel {
                     w::LoggedLineParts {
                         commit: [u8::try_from(number).unwrap(); 32],
                         repository: b"o/app".as_slice().into(),
-                        seen: jig::argv::deadline(CUTOFF.as_bytes()).unwrap().as_nanos()
-                            + u64::from(number) * 60_000_000_000,
+                        seen: jig::argv::deadline(CUTOFF.as_bytes())
+                            .unwrap()
+                            .as_nanos()
+                            .checked_add(u64::from(number).checked_mul(60_000_000_000).unwrap())
+                            .unwrap(),
                         changes,
                         verdicts,
                     },
@@ -529,17 +532,26 @@ fn logged_page(count: u32, after: Option<Box<[u8]>>) -> w::LandingsPanel {
 }
 fn read_logged(panel: &w::LandingsPanel, json: bool, after: Option<&str>) -> jig::Printed {
     let mut root = f::signed_in(f::PARTY);
-    let mut argv = vec!["landing", "list", "--project", "1", "--newer-than", CUTOFF];
+    let mut argv = List::with_capacity(9);
+    for word in ["landing", "list", "--project", "1", "--newer-than", CUTOFF] {
+        argv.push(word).unwrap();
+    }
     if json {
-        argv.push("--json");
+        argv.push("--json").unwrap();
     }
     if let Some(after) = after {
-        argv.extend(["--after", after]);
+        argv.push("--after").unwrap();
+        argv.push(after).unwrap();
     }
-    let call = root.submit(&argv);
-    let subject =
-        root.watches.values().find(|subject| matches!(subject, client::Watchable::Family { .. })).unwrap().clone();
-    deliver(&mut root, subject, wire::landings_panel(panel));
+    let call = root.submit(argv.as_slice());
+    let mut subject = None;
+    for named in root.watches.values() {
+        if let client::Watchable::Family { .. } = named {
+            subject = Some(named.clone());
+            break;
+        }
+    }
+    deliver(&mut root, subject.unwrap(), wire::landings_panel(panel));
     root.answer(call).unwrap()
 }
 #[test]
@@ -555,9 +567,15 @@ fn newer_than_takes_a_utc_minute() {
 }
 #[test]
 fn deadline_takes_the_same_kind() {
-    let deadline = jig::rows::AMEND.forms[0].iter().find(|argument| argument.name == b"deadline").unwrap();
-    let newer = landing::LIST.forms[0].iter().find(|argument| argument.name == b"newer-than").unwrap();
-    assert_eq!((deadline.kind, newer.kind), (jig::table::Kind::Time, jig::table::Kind::Time));
+    for (tool, name) in [(jig::rows::AMEND, b"deadline".as_slice()), (landing::LIST, b"newer-than")] {
+        let mut kind = None;
+        for argument in tool.forms[0] {
+            if argument.name == name {
+                kind = Some(argument.kind);
+            }
+        }
+        assert_eq!(kind, Some(jig::table::Kind::Time));
+    }
     f::call(&["task", "amend", "41", "--rev", "7", "--deadline", CUTOFF, "because"]);
 }
 #[test]
@@ -572,14 +590,11 @@ fn logged_pages_json_names_each_tiers_mark() {
 fn a_page_past_32_lines_ends_with_its_cursor_and_the_next_reads_on() {
     // Jig's Number document cursor: tag 0 and offset 32, little endian.
     const CURSOR: &str = "002000000000000000";
-    let mut cursor = vec![0];
-    cursor.extend(32_u64.to_le_bytes());
-    let first = read_logged(&logged_page(32, Some(cursor.into_boxed_slice())), false, None);
-    assert!(
-        std::str::from_utf8(&first.stdout)
-            .unwrap()
-            .ends_with(&format!("read on with: landing list --project 1 --newer-than {CUTOFF} --after {CURSOR}\n"))
-    );
+    let cursor = [0, 32, 0, 0, 0, 0, 0, 0, 0];
+    let first = read_logged(&logged_page(32, Some(Box::new(cursor))), false, None);
+    assert!(first.stdout.ends_with(
+        b"read on with: landing list --project 1 --newer-than 2026-10-27T21:00Z --after 002000000000000000\n"
+    ));
     let second = read_logged(&logged_page(1, None), false, Some(CURSOR));
     assert!(second.stdout.ends_with(b"no more\n"));
     assert_eq!(second.status, 0);

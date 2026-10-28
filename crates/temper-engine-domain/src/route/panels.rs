@@ -45,6 +45,10 @@ pub(crate) fn drop_subject(domain: &mut Domain, subject: Token) {
         domain.landing_watches.remove(&watcher);
     }
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the core supplies the admitted scope, subject and window with its watcher"
+)]
 pub(crate) fn document(
     domain: &mut Domain,
     env: &Env<Limits>,

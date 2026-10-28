@@ -47,9 +47,9 @@ fn the_seen_time_is_the_engines_when_the_move_was_seen() {
 }
 #[test]
 fn the_ring_keeps_the_newest_landings_kept() {
-    let mut d = fixtures::tiered();
     // The small fixture's ring has sixteen entries; seventeen wraps it once.
     const LAST: u8 = 17;
+    let mut d = fixtures::tiered();
     for byte in 1..=LAST {
         push(&mut d, [byte; 32], env().wall);
     }
@@ -97,4 +97,13 @@ fn a_turn_landing_is_logged_with_its_members_change() {
     row.entries = Box::new([LandingEntry { entry: fixtures::OPEN, member: 0, gate: 0, operation: Operation::Merge }]);
     let (d, _) = fixtures::merged_with_landing(true, Some(row));
     assert_eq!(history(&d)[0].changes.as_ref(), &[CHANGE]);
+}
+
+#[test]
+fn the_log_prices_retained_rings_and_one_replacement() {
+    // Small and owned keep two repository rings; init keeps three. Both
+    // charge a further ring while a move replaces one of the retained rows.
+    assert_eq!(log::worst_case(&LIMITS), Some(12_368));
+    let init = Limits { repositories: 3, ..LIMITS };
+    assert_eq!(log::worst_case(&init), Some(16_336));
 }

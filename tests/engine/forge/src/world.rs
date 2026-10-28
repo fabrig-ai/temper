@@ -352,29 +352,7 @@ impl World {
             &mut fake,
             &config,
             raw::Setup {
-                workflows: if turn {
-                    Box::new([raw::Workflow {
-                        file: b"gate.yml".as_slice().into(),
-                        jobs: Box::new([b"test".as_slice().into()]),
-                        latency_min: Duration::from_secs(2),
-                        latency_max: Duration::from_secs(2),
-                        silent: 0,
-                        passes: 1000,
-                        cue: None,
-                    }])
-                } else if tier {
-                    Box::new([raw::Workflow {
-                        file: b"browser.yml".as_slice().into(),
-                        jobs: Box::new([b"browser".as_slice().into()]),
-                        latency_min: Duration::from_secs(90),
-                        latency_max: Duration::from_secs(90),
-                        silent: 0,
-                        passes: 1000,
-                        cue: None,
-                    }])
-                } else {
-                    Box::new([])
-                },
+                workflows: workflows(turn, tier),
                 id: 2,
                 name: Box::from(&b"org/repo"[..]),
                 default: Box::from(&b"main"[..]),
@@ -394,30 +372,7 @@ impl World {
             },
         );
         if repositories == 2 {
-            forge::repository(
-                &mut fake,
-                &config,
-                raw::Setup {
-                    workflows: Box::new([]),
-                    id: 3,
-                    name: b"org/kit".as_slice().into(),
-                    default: b"main".as_slice().into(),
-                    tree: Box::new([]),
-                    labels: Box::new([]),
-                    checks: raw::Checks {
-                        contexts: Box::new([]),
-                        latency_min: Duration::ZERO,
-                        latency_max: Duration::ZERO,
-                        silent: 0,
-                        passes: 1000,
-                        reruns: 0,
-                        cue: None,
-                    },
-                    protection: None,
-                    hooked: false,
-                },
-            );
-            forge::grant(&mut fake, b"org/kit", 1, raw::Permission::Admin);
+            add_kit(&mut fake, &config);
         }
         forge::grant(&mut fake, b"org/repo", 1, raw::Permission::Admin);
         forge::grant(&mut fake, b"org/repo", 2, raw::Permission::Write);
@@ -1138,5 +1093,58 @@ pub fn fake_config() -> forge::Config {
         skew: forge::Skew::Ahead(Duration::from_secs(20)),
         status_updates: false,
         edit_updates: false,
+    }
+}
+
+fn add_kit(fake: &mut forge::Domain, config: &forge::Config) {
+    forge::repository(
+        fake,
+        config,
+        raw::Setup {
+            workflows: Box::new([]),
+            id: 3,
+            name: b"org/kit".as_slice().into(),
+            default: b"main".as_slice().into(),
+            tree: Box::new([]),
+            labels: Box::new([]),
+            checks: raw::Checks {
+                contexts: Box::new([]),
+                latency_min: Duration::ZERO,
+                latency_max: Duration::ZERO,
+                silent: 0,
+                passes: 1000,
+                reruns: 0,
+                cue: None,
+            },
+            protection: None,
+            hooked: false,
+        },
+    );
+    forge::grant(fake, b"org/kit", 1, raw::Permission::Admin);
+}
+
+fn workflows(turn: bool, tier: bool) -> Box<[raw::Workflow]> {
+    if turn {
+        Box::new([raw::Workflow {
+            file: b"gate.yml".as_slice().into(),
+            jobs: Box::new([b"test".as_slice().into()]),
+            latency_min: Duration::from_secs(2),
+            latency_max: Duration::from_secs(2),
+            silent: 0,
+            passes: 1000,
+            cue: None,
+        }])
+    } else if tier {
+        Box::new([raw::Workflow {
+            file: b"browser.yml".as_slice().into(),
+            jobs: Box::new([b"browser".as_slice().into()]),
+            latency_min: Duration::from_secs(90),
+            latency_max: Duration::from_secs(90),
+            silent: 0,
+            passes: 1000,
+            cue: None,
+        }])
+    } else {
+        Box::new([])
     }
 }
