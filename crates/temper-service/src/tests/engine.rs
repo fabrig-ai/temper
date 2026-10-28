@@ -121,6 +121,77 @@ fn a_store_answer_is_taken_at_the_backlog_watermark() {
     assert!(root::try_step(&mut engine.domain, &engine.env, refused).is_ok(), "answer lowered the backlog");
 }
 #[test]
+fn a_completion_passes_new_work_held_at_the_watermark() {
+    use jig_domain_host as host;
+    use skein_lib::{Token, Wall};
+    let (mut service, run) = fixtures::claimed_chat();
+    let engine = service.engine.as_mut().expect("engine");
+    engine.env.limits.journal.commits = 3;
+    for number in 2..=5 {
+        if root::try_step(&mut engine.domain, &engine.env, fixtures::period(number)).is_err() {
+            break;
+        }
+    }
+    engine.step(root::Event::Worker(root::WorkerInput::Link {
+        channel: Token::new(7),
+        link: root::Link::Up {
+            up: host::LinkUp::Call {
+                run: Token::new(run.task),
+                attempt: Token::new(run.attempt),
+                call: b"held-call".as_slice().into(),
+                tool: b"unknown".as_slice().into(),
+                writes: false,
+                input: Box::new([]),
+                deadline: Duration::from_secs(10),
+            },
+            parts: root::Parts::none(),
+        },
+    }));
+    assert!(engine.blocked && engine.pending.is_some(), "the worker call waits");
+    engine.events.push(root::Event::Worker(root::WorkerInput::Link {
+        channel: Token::new(7),
+        link: root::Link::Up {
+            up: host::LinkUp::Turn {
+                run: Token::new(run.task),
+                attempt: Token::new(run.attempt),
+                turn: host::Turn {
+                    opens_window: true,
+                    refused: Box::new([]),
+                    turn: 1,
+                    spent: 0,
+                    read: None,
+                    body: b"turn".as_slice().into(),
+                },
+            },
+            parts: root::Parts::none(),
+        },
+    }));
+    crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
+    // No store answer has yet relieved the initial pressure. The completion
+    // must already have passed the held call, rather than waiting for it.
+    assert!(engine.events.is_empty(), "the later completion passes the held call");
+    assert!(
+        matches!(
+            engine.pending.as_deref(),
+            Some(root::Event::Worker(root::WorkerInput::Link {
+                link: root::Link::Up { up: host::LinkUp::Call { .. }, .. },
+                ..
+            }))
+        ),
+        "the new call still waits"
+    );
+    for _ in 0..STARTUP_PASSES {
+        crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
+        if engine.pending.is_none() && engine.events.is_empty() && engine.domain.quiescent() {
+            break;
+        }
+    }
+    assert!(engine.pending.is_none(), "the call is taken after the backlog drains");
+    assert!(engine.domain.quiescent(), "both inputs settle");
+    assert!(engine.end.is_none());
+}
+
+#[test]
 fn a_failed_commit_releases_nothing_after_it() {
     let mut service = fixtures::ready();
     let engine = service.engine.as_mut().expect("engine");
