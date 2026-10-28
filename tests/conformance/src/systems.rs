@@ -193,7 +193,7 @@ impl FakeForge {
             Pending { root_call: call, generation: if late { u64::MAX } else { self.generation }, op, effect },
         );
         let env = Env { now: Time::from_nanos(clock.now), wall: Wall::from_nanos(clock.now), limits: self.config };
-        let mut queue = Queue::with_capacity(fake::MAX_OUT);
+        let mut queue = Queue::uncapped();
         fake::step(
             &mut self.domain,
             &env,
@@ -217,7 +217,7 @@ impl FakeForge {
     pub fn poll(&mut self, clock: Clock) -> Vec<engine::Event> {
         let env = Env { now: Time::from_nanos(clock.now), wall: Wall::from_nanos(clock.now), limits: self.config };
         if self.domain.is_due(env.now) {
-            let mut queue = Queue::with_capacity(fake::MAX_OUT);
+            let mut queue = Queue::uncapped();
             fake::fire(&mut self.domain, &env, &mut queue);
             while let Some(request) = queue.pop() {
                 self.out.push_back(request);
@@ -399,7 +399,7 @@ impl FakeForge {
         let token = Token::new(self.serial);
         self.serial += 1;
         let env = Env { now: Time::from_nanos(clock.now), wall: Wall::from_nanos(clock.now), limits: self.config };
-        let mut queue = Queue::with_capacity(fake::MAX_OUT);
+        let mut queue = Queue::uncapped();
         fake::fire(&mut self.domain, &env, &mut queue);
         while let Some(request) = queue.pop() {
             self.out.push_back(request);

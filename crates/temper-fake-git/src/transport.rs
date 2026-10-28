@@ -92,7 +92,6 @@ impl Typed {
         let user = self.user.ok_or(Fault::Refused)?;
         let remote = repository(remote);
         let mut forge = self.forge.borrow_mut();
-        assert!(forge.pending.room() >= domain::MAX_OUT, "reserve external domain output");
         let token = forge.next_reply();
         let env = Env { now: forge.now, wall: Wall::EPOCH, limits: forge.config };
         let Forge { domain, pending, .. } = &mut *forge;
@@ -107,7 +106,6 @@ impl Typed {
             },
             pending,
         );
-        assert!(pending.room() >= domain::MAX_OUT, "reserve external domain output");
         domain::fire(domain, &env, pending);
         forge.domain.reclaim();
         let mut terminal = None;

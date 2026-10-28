@@ -185,7 +185,7 @@ impl Forge {
             while let Some(event) = self.events.pop() {
                 match event {
                     fake::Event::Domain(event) => {
-                        let mut replies = Queue::with_capacity(git::MAX_OUT);
+                        let mut replies = Queue::uncapped();
                         let env = Env { now: self.env.now, wall: Wall::EPOCH, limits: self.config };
                         git::step(&mut self.git, &env, event, &mut replies);
                         git::fire(&mut self.git, &env, &mut replies);

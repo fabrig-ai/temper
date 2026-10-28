@@ -20,9 +20,7 @@ impl Engine {
             setup: effects && self.setup.work_pending(now),
             setup_lifecycle: effects
                 && self.setup.lifecycle_ready(self)
-                && self.setup.room()
                 && self.store.room()
-                && self.forge.room(2)
                 && self.events.room() >= 4,
             store: self.store.work_pending(now),
             forge: effects && self.forge.work_pending(now),

@@ -430,7 +430,7 @@ fn managed_admin_name_accepts_the_actual_fake_seeded_admin_and_token() {
     let user =
         User { id: admin.id, login: admin.login.clone(), is_admin: admin.admin, full_name: admin.full_name.clone() };
     let mut machine = Reachable::new(&given, None, 1).expect("managed Given admitted");
-    let mut out = Queue::with_capacity(reachable::MAX_OUT);
+    let mut out = Queue::uncapped();
     reachable::step(&mut machine, Event::Begin, &mut out);
     let Some(Need::Read(Item::AdminToken)) = out.pop() else { panic!("read the admin token") };
     reachable::step(&mut machine, Event::Read(Some(Secret::new(token.as_slice().into()))), &mut out);
