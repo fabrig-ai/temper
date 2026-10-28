@@ -1,12 +1,15 @@
 //! The root keeps these orders whatever admits work (skein's draft
 //! `dynamic-memory.md`, 4.3): pending callbacks before ordinary entrances,
-//! store answers in arrival order, and older releases before later ones.
+//! store answers in arrival order, older releases before later ones, each
+//! worker channel's records in order, deferred calls fenced by their attempt,
+//! and completion outputs after their commits.
 
+use jig_domain_core as core;
 use jig_domain_core::reads;
 use jig_domain_host as host;
 use jig_domain_people as people;
 use jig_domain_tasks as tasks;
-use skein_lib::{ReplyTo, Token};
+use skein_lib::{Duration, ReplyTo, Token};
 use temper_engine_domain::{self as engine, Delivery, Record, Write};
 use temper_engine_domain_world::{direct::Driver, protocol, roles, walking::config};
 
@@ -283,6 +286,147 @@ fn turn_kept_precedes_terminal_acknowledgement_under_callback_pressure() {
     assert!(driver.root.quiescent() && !driver.stopped, "the root settles without stopping its journal");
 }
 
+/// O4: a worker channel's records apply in send order under load, including
+/// its turns, terminal and subsequent channel loss.
+#[test]
+fn one_channels_records_apply_in_order_under_load() {
+    let (mut driver, assignment) = Driver::chat();
+    assert!(assignment.workspace.repositories.is_empty(), "this chat holds no forge writer");
+    driver.fill_to_watermark();
+    let answer = finished_answer(&mut driver, &assignment, 6);
+    // The service holds one refused head; later channel records wait behind
+    // it. settle_retaining offers each through send_retaining, in this order.
+    driver.events.extend([
+        protocol::turn(WORKER, assignment.task, assignment.attempt, 1, 3, None, TURN_TEXT),
+        protocol::turn(WORKER, assignment.task, assignment.attempt, 2, 6, None, b"second turn"),
+        answer,
+        protocol::lost(WORKER),
+    ]);
+    settle_retaining(&mut driver);
+    let records: Vec<_> = attempt_records(&driver, &assignment)
+        .into_iter()
+        .filter(|(_, key)| !matches!(key, core::CoreKey::RunProof(_)))
+        .collect();
+    assert_eq!(
+        records.iter().map(|(_, key)| *key).collect::<Vec<_>>(),
+        [
+            core::CoreKey::Turn { task: assignment.task, attempt: assignment.attempt, turn: 1 },
+            core::CoreKey::Turn { task: assignment.task, attempt: assignment.attempt, turn: 2 },
+            core::CoreKey::Terminal { task: assignment.task, attempt: assignment.attempt },
+        ],
+        "each turn and the terminal commits exactly once, in channel order"
+    );
+    assert!(records.windows(2).all(|pair| pair[0].0 < pair[1].0), "the three records have ordered commits");
+    assert_worker_notices(&driver, &assignment, &[1, 2]);
+    assert_eq!(result_count(&driver, &assignment), 1, "the result leaves exactly once");
+    assert!(driver.root.quiescent() && !driver.stopped, "the channel loss settles without stopping the root");
+}
+
+/// O5: a deferred new call cannot act for its attempt after that attempt's
+/// terminal commits, whether the call or the terminal passes admission first.
+#[test]
+fn a_call_held_at_the_watermark_does_not_act_for_an_attempt_that_ended_behind_it() {
+    const CALL: u64 = 970;
+    let (mut driver, assignment) = Driver::chat();
+    driver.fill_to_watermark();
+    let returned = driver.returned;
+    let call = driver.protocol.call(
+        WORKER,
+        assignment.task,
+        assignment.attempt,
+        CALL,
+        engine::Call {
+            completion: 1,
+            position: 0,
+            tool: engine::Tool::Delegate {
+                batch: Box::new([temper_engine_domain_world::fixtures::report_delegate(b"investigate", Box::new([]))]),
+            },
+        },
+    );
+    driver.send(call);
+    assert_eq!(driver.returned, returned + 1, "new work is handed back at the watermark");
+    let answer = finished_answer(&mut driver, &assignment, 0);
+    driver.send(answer);
+    driver.settle();
+
+    let relayed: Vec<_> = driver
+        .delivered
+        .iter()
+        .filter_map(|delivery| {
+            if let Delivery::Link { channel, down: host::LinkDown::Relayed { run, attempt, call, answer } } = delivery
+                && *channel == WORKER
+                && run.raw() == assignment.task
+                && attempt.raw() == assignment.attempt
+                && call.as_ref() == CALL.to_be_bytes()
+            {
+                Some(answer)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(relayed.len(), 1, "the held call gets exactly one answer at its host");
+    assert!(
+        matches!(relayed[0], host::Relayed::Answer { .. } | host::Relayed::Busy),
+        "the call settles or is refused/busy"
+    );
+    let records = attempt_records(&driver, &assignment);
+    let terminals: Vec<_> = records.iter().filter(|(_, key)| matches!(key, core::CoreKey::Terminal { .. })).collect();
+    assert_eq!(terminals.len(), 1, "one terminal commits for the run");
+    let terminal_commit = terminals[0].0;
+    assert!(
+        records.iter().all(|(commit, _)| *commit <= terminal_commit),
+        "no call or turn record follows its attempt's terminal"
+    );
+    for writes in driver.transactions.iter().skip(terminal_commit + 1) {
+        assert!(
+            !writes.iter().any(|write| matches!(write,
+                Write::Save(Record::Core(core::Record::Tasks(tasks::Stored::Live(task))))
+                    if task.requester == tasks::Party::Task(assignment.task)
+            )),
+            "no delegate is made for the ended attempt"
+        );
+        assert!(
+            !writes.iter().any(|write| matches!(write, Write::Save(Record::Forge { .. }))),
+            "no forge effect is made for the ended attempt"
+        );
+    }
+    assert_worker_notices(&driver, &assignment, &[]);
+    assert!(driver.root.quiescent() && !driver.stopped, "the held call and terminal settle without stopping");
+}
+
+/// O6: completions offered at the watermark release their worker notices
+/// and result only after the commits that make them durable.
+#[test]
+fn completions_taken_at_the_watermark_release_nothing_before_their_commit() {
+    let (mut driver, assignment) = Driver::chat();
+    driver.sign_in();
+    driver.pressure();
+    let applied = driver.store.applied;
+    driver.send(protocol::turn(WORKER, assignment.task, assignment.attempt, 1, 3, None, TURN_TEXT));
+    let answer = finished_answer(&mut driver, &assignment, 3);
+    driver.send(answer);
+    for _ in 0..STEPS {
+        driver.advance(false);
+    }
+    assert_eq!(driver.store.applied, applied, "the story withholds every commit answer");
+    assert!(worker_notices(&driver).is_empty(), "no kept turn or terminal acknowledgement bypasses durability");
+    assert_eq!(result_count(&driver, &assignment), 0, "no result bypasses durability");
+    for _ in 0..STEPS {
+        if !driver.store.pending.is_empty() {
+            commit_one(&mut driver);
+        }
+        driver.advance(false);
+        assert_releases_durable(&driver, &assignment);
+        if driver.root.quiescent() && driver.events.is_empty() && driver.store.pending.is_empty() {
+            break;
+        }
+    }
+    assert_worker_notices(&driver, &assignment, &[1]);
+    assert_eq!(result_count(&driver, &assignment), 1, "the committed result leaves once");
+    assert!(driver.root.quiescent() && !driver.stopped, "completion callbacks settle within the budget");
+}
+
 fn until_commits(driver: &mut Driver, count: usize) {
     for _ in 0..STEPS {
         if driver.store.pending.len() == count {
@@ -330,6 +474,12 @@ fn settle_retaining(driver: &mut Driver) {
         driver.root.reclaim();
         if driver.root.quiescent() && driver.events.is_empty() && driver.store.pending.is_empty() {
             return;
+        }
+        if driver.events.is_empty()
+            && driver.store.pending.is_empty()
+            && let Some(deadline) = driver.root.next_deadline(&driver.env)
+        {
+            driver.fire_at(Duration::from_nanos(deadline.as_nanos()));
         }
     }
     panic!("retained-head root inputs did not settle: {:?}", driver.root);
@@ -397,4 +547,96 @@ fn the_root_sends_no_more_commits_than_the_store_takes_in_flight() {
         admitted.iter().collect::<Vec<_>>(),
         "each admitted decision releases its answer once, in order"
     );
+}
+fn finished_answer(driver: &mut Driver, assignment: &engine::Assignment, spent: u64) -> engine::Event {
+    driver.answer_event(
+        WORKER,
+        assignment.task,
+        assignment.attempt,
+        spent,
+        tasks::End::Finished { result: tasks::TaskResult::Report { words: REPORT.into() }, cancel_delegates: false },
+        engine::Parts::none(),
+    )
+}
+
+fn attempt_records(driver: &Driver, assignment: &engine::Assignment) -> Vec<(usize, core::CoreKey)> {
+    driver
+        .transactions
+        .iter()
+        .enumerate()
+        .flat_map(|(commit, writes)| {
+            writes.iter().filter_map(move |write| {
+                let Write::Save(Record::Core(core::Record::Core(row))) = write else { return None };
+                let (task, attempt) = match row {
+                    core::CoreRecord::Call(call) => (call.key.task, call.key.attempt),
+                    core::CoreRecord::Turn(turn) => (turn.task, turn.attempt),
+                    core::CoreRecord::Terminal(terminal) => (terminal.task, terminal.attempt),
+                    core::CoreRecord::RunProof(proof) => (proof.task, proof.attempt),
+                    core::CoreRecord::Deployment(_)
+                    | core::CoreRecord::Settings(_)
+                    | core::CoreRecord::Projection(_)
+                    | core::CoreRecord::ProposalDecision(_)
+                    | core::CoreRecord::EscalationDecision(_) => return None,
+                };
+                (task == assignment.task && attempt == assignment.attempt).then_some((commit, row.key()))
+            })
+        })
+        .collect()
+}
+
+fn assert_worker_notices(driver: &Driver, assignment: &engine::Assignment, turns: &[u32]) {
+    let mut expected: Vec<_> = turns
+        .iter()
+        .map(|turn| host::LinkDown::TurnKept {
+            run: Token::new(assignment.task),
+            attempt: Token::new(assignment.attempt),
+            turn: *turn,
+        })
+        .collect();
+    expected.push(host::LinkDown::Acknowledge {
+        run: Token::new(assignment.task),
+        attempt: Token::new(assignment.attempt),
+    });
+    assert_eq!(
+        worker_notices(driver),
+        expected.iter().collect::<Vec<_>>(),
+        "kept turns precede the acknowledgement, each once"
+    );
+}
+
+fn result_count(driver: &Driver, assignment: &engine::Assignment) -> usize {
+    driver
+        .delivered
+        .iter()
+        .filter(|delivery| {
+            matches!(delivery,
+                Delivery::Result { task, words, .. } if *task == assignment.task && words.as_ref() == REPORT
+            )
+        })
+        .count()
+}
+
+fn assert_releases_durable(driver: &Driver, assignment: &engine::Assignment) {
+    for notice in worker_notices(driver) {
+        let key = match notice {
+            host::LinkDown::TurnKept { turn, .. } => {
+                core::CoreKey::Turn { task: assignment.task, attempt: assignment.attempt, turn: *turn }
+            }
+            host::LinkDown::Acknowledge { .. } => {
+                core::CoreKey::Terminal { task: assignment.task, attempt: assignment.attempt }
+            }
+            other => panic!("worker_notices returned an unrelated notice: {other:?}"),
+        };
+        assert!(
+            driver.store.rows.contains_key(&engine::Key::Core(core::Key::Core(key))),
+            "the notice's record is durable"
+        );
+    }
+    if result_count(driver, assignment) != 0 {
+        let key = core::CoreKey::Terminal { task: assignment.task, attempt: assignment.attempt };
+        assert!(
+            driver.store.rows.contains_key(&engine::Key::Core(core::Key::Core(key))),
+            "the result's terminal is durable"
+        );
+    }
 }

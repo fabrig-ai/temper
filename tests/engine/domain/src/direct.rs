@@ -295,8 +295,23 @@ impl Driver {
         end: tasks::End,
         parts: engine::Parts,
     ) {
-        let event = self.protocol.answer(channel, task, attempt, cumulative, end, parts);
+        let event = self.answer_event(channel, task, attempt, cumulative, end, parts);
         self.send(event);
+    }
+
+    /// Prepare an answer without offering it, so a story can retain it behind
+    /// earlier channel records or choose its admission discipline.
+    #[must_use]
+    pub fn answer_event(
+        &mut self,
+        channel: Token,
+        task: u64,
+        attempt: u64,
+        cumulative: u64,
+        end: tasks::End,
+        parts: engine::Parts,
+    ) -> engine::Event {
+        self.protocol.answer(channel, task, attempt, cumulative, end, parts)
     }
 
     /// The typed answer the root decided for the call named `call`, once rendered.
