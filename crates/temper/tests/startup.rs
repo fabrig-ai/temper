@@ -1314,9 +1314,9 @@ fn owned_memory_figures_for_init_match_its_own_document() {
     let scratch = support::Scratch::startup("init-memory-figures");
     let bounded = support::owned::bounded_template(scratch.path());
     let required = bounded.requirements();
+    eprintln!("init requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
     memory_figure("init", &bounded.memory_terms(), required);
     support::owned::check_memory("../temper-init/template/temper.json", required);
-    eprintln!("init requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
     check_bounded_startup(&bounded, required);
     scratch.remove();
 }

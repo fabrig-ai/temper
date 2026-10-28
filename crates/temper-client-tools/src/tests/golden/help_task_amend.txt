@@ -3,7 +3,7 @@ task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME
   --rev REV: a number; optional. The spec revision the task prints; not needed for its priority alone
   --priority PRIORITY: a number; optional. Track it at this priority
   --untracked: a switch. Stop tracking it
-  --deadline TIME: text, at most 1048576 bytes; optional. Its new deadline, as 2026-10-24T17:00Z
+  --deadline TIME: a UTC time to the minute, as 2026-10-27T21:00Z; optional. Its new deadline, as 2026-10-24T17:00Z
   --no-deadline: a switch. Remove its deadline
   --instructions FILE: a file, at most 1048576 bytes; optional. A file of its whole instructions, or -; an empty file removes them
   --spec FILE: a file, at most 1048576 bytes; optional. A file of its spec's words, or -

@@ -1201,5 +1201,5 @@ fn landing_logs_round_trip_changes_times_and_every_verdict() {
     let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     let key = crate::keys::encode(&d::stored_key(&row), u32::MAX).unwrap();
     assert_eq!(key.as_ref(), &[27, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2]);
-    assert_eq!(crate::records::row(&key, &crate::records::encode(&row), &bounds), Ok(row));
+    assert_eq!(records::row(&key, &records::encode(&row), &bounds), Ok(row));
 }

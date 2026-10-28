@@ -7,6 +7,7 @@ fn sent() -> (Domain, Token) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    fixtures::prime_main(&mut d);
     outputs(&mut d, Event::Enqueue { entry: status(1, 7) });
     outputs(&mut d, Event::Committed { entry: 1 });
     let (call, _) = next_call(&mut d);
@@ -50,7 +51,8 @@ fn settle_names_a_write_without_its_outcome_at_its_bound() {
     outputs(&mut d, Event::Settle);
     let mut env = env();
     let until = env.now.saturating_add(CLIENT.lifetime.saturating_add(CLIENT.clock_margin).saturating_mul(2));
-    assert_eq!(d.next_deadline(), Some(until));
+    let next = d.next_deadline().expect("the client or settle deadline");
+    assert!(next <= until, "main polling can precede the settle deadline");
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     env.now = Time::from_nanos(until.as_nanos().checked_sub(1).unwrap());
     fire(&mut d, &env, &mut out);
