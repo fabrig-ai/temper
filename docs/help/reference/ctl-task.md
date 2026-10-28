@@ -129,7 +129,7 @@ Key: --key KEY, optional.
 task release TASK --hold REV [--again] [--key KEY]
   TASK (task): a number; required. The task's number
   --hold REV: a number; required. The hold's revision, as the task prints it
-  --again: a switch. Run the task again
+  --again: a switch. Repeat an uncertain effect: only once you have checked it did not happen
 Lift a task's hold
 Prints: `done: task N, release`
 --json: the record release.
