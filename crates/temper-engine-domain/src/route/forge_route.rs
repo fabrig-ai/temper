@@ -1839,6 +1839,8 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
         }
     }
     let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return false };
+    let Some((_, _, step)) = domain.core.tasks.procedure_due(task) else { return false };
+    domain.forge.start_procedure_step(task, step);
     domain.work.push(Work::Forge(forge::Event::StepChange {
         task,
         entry,
@@ -2721,9 +2723,26 @@ fn change_result_bound(domain: &Domain, task: u64) -> u32 {
     }
 }
 
+/// Procedure outcomes and local drops share one admission hook.
+pub(crate) fn resolve_procedure_step(domain: &mut Domain, task: u64, step: u64, made: bool) {
+    domain.work.push(Work::Forge(forge::Event::ProcedureResolved { task, step, made }));
+}
+
+fn drop_procedure_step(domain: &mut Domain, task: u64) {
+    if let Some(step) = domain.forge.procedure_step(task) {
+        resolve_procedure_step(domain, task, step, false);
+    }
+}
+
 fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
-    let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
-    if connector != domain.config.forge_connector || code != 2 {
+    let due = domain.core.tasks.procedure_due(task);
+    let offered = domain.forge.procedure_step(task);
+    let Some((connector, code, step)) = due else {
+        drop_procedure_step(domain, task);
+        return;
+    };
+    if connector != domain.config.forge_connector || code != 2 || (offered.is_some() && offered != Some(step)) {
+        drop_procedure_step(domain, task);
         return;
     }
     domain.forge.offered_change(task);
@@ -2780,6 +2799,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
         }
         forge_change::Decision::Delegate(kind) => {
             let Some(delegate) = change_delegate(domain, env, task, kind) else {
+                drop_procedure_step(domain, task);
                 domain.work.push(Work::Core(jig_domain_core::Event::ProcedureStep {
                     task,
                     step,
@@ -3049,6 +3069,7 @@ pub(crate) fn outputs(
                 }
             }
             forge::Request::Taken { task, .. } | forge::Request::Refused { task } => {
+                drop_procedure_step(domain, task);
                 if domain.core.claiming.contains_key(&task) {
                     domain.work.push(Work::Core(jig_domain_core::Event::ClaimRefused { task }));
                     continue;
@@ -3207,7 +3228,18 @@ pub(crate) fn outputs(
                     {
                         match describe_change_effect(domain, env, task, effect, &evidence) {
                             Some(description) => {
-                                let Some((_, _, step)) = domain.core.tasks.procedure_due(task) else { continue };
+                                let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else {
+                                    drop_procedure_step(domain, task);
+                                    continue;
+                                };
+                                if connector != domain.config.forge_connector
+                                    || code != 2
+                                    || (domain.forge.procedure_step(task).is_some()
+                                        && domain.forge.procedure_step(task) != Some(step))
+                                {
+                                    drop_procedure_step(domain, task);
+                                    continue;
+                                }
                                 let owner = effect_owner(domain);
                                 assert!(
                                     domain
@@ -3525,6 +3557,7 @@ pub(crate) fn effect_ask(domain: &mut Domain, env: &Env<Limits>, number: u16, as
         }
         jig_domain_core::connector::Ask::Drop { owner, answer } => match domain.forge_effects.remove(&owner) {
             Some(EffectFlight::Procedure { entry, task, evidence, .. }) => {
+                drop_procedure_step(domain, task);
                 domain.work.push(Work::Forge(forge::Event::VetoChange { task, entry, prior: evidence.prior }));
                 if answer == authority::Answer::Wait {
                     domain.forge.wait_change(&super::environment_forge(env), task, None);
