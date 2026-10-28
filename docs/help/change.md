@@ -21,14 +21,14 @@ A change is a task that writes one repository's branch and lands it: its pull re
   conclusion, `repairs: N:` why each repair was asked, and `reviews:`
   each verdict at the head it judged, cut from the end and marked when
   long. It names no check or test the change didn't see. Or it fails,
-  or is cancelled, as any task.
+  or is cancelled, as any task. A coder that fails for good, or finds nothing to change, doesn't fail it: it holds (below).
 
 ## How it changes
 
 Its steps, as `step:` prints them:
 
 - `producing`: the coder writes the change in its files, and temper
-  pushes its work as the change's branch once it finishes;
+  pushes its work as the change's branch once it finishes; a coder that fails, or finds nothing to change, holds it here, with its words;
 - `opening`: temper opens its pull request;
 - `checking`: the forge's CI runs at its head;
 - `gating`: its blocking gates give their verdicts (temper help
@@ -72,7 +72,7 @@ pull request was retargeted on the forge`, `a delegate or a write
 failed for good`, or `a person rejected a gate`. A release resets its
 counts and goes on from where it was held; held at `producing` because
 its coder failed for good before pushing, it makes a fresh coder, one
-more of its tasks, or holds again if its authority can't cover one. Its panel also names a held
+more of its tasks, or holds again if its authority can't cover one. Held at `producing`, its panel gives the coder's own words, why it made no change, whole within the hold's 512 bytes, and its chat hears them: cancel it if they hold, or release it if the coder was wrong. Its panel also names a held
 task, the change's own or its writer's or reviewer's, `held: task N
 (REASON)`, with that task's way out: an effect vetoed or a step
 refused, and why (what it lacks, or the forge's answer).

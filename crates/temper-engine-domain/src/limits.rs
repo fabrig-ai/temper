@@ -662,7 +662,8 @@ pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
                 u64::from(tasks.spec_bytes)
                     .checked_mul(2)?
                     .checked_add(u64::try_from(size_of::<forge::ChangeRow>()).ok()?)?
-                    .checked_add(u64::from(forge::EFFECT_ACCOUNT_BYTES))?,
+                    .checked_add(u64::from(forge::EFFECT_ACCOUNT_BYTES))?
+                    .checked_add(u64::from(tasks::HOLD_ACCOUNT_BYTES))?,
             )
             .max(u64::from(limits.forge.client.answer_bytes))
             .max(u64::from(people.holdings).checked_mul(u64::try_from(size_of::<people::Holding>()).ok()?)?),

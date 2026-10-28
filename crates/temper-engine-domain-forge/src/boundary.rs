@@ -654,6 +654,8 @@ pub struct ChangeRow {
     pub producing_charter: u32,
     pub review_charter: u32,
     pub effect_account: Option<EffectAccount>,
+    /// Producer failure words, retained through fresh reads and restart within the hold account bound.
+    pub producer_failure: Option<Box<[u8]>>,
 }
 impl ChangeRow {
     pub(crate) fn terminal(&self) -> bool {
