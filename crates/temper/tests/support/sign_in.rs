@@ -540,7 +540,22 @@ fn answer_peer(allowance: u64, exceeded: bool) -> super::llm::Listening {
             Turn { lines: Box::new([Line::Text { text: CLOSING_ANSWER.into() }]), finish: Finish::Stop, tokens: 1 },
         ]
     };
-    plan_peer(Box::new([skein_fake_llm_domain::api::Script { cue: Box::default(), turns: turns.into_boxed_slice() }]))
+    let scripts = temper_real_loop_world::llm::open_scripts(Box::new([skein_fake_llm_domain::api::Script {
+        cue: Box::default(),
+        turns: turns.into_boxed_slice(),
+    }]));
+    // A fresh person's message resets request-counted turns. Select the retained
+    // replies from that input, including the requester's final grace turn.
+    let asked = if exceeded {
+        Box::new([]) as Box<[Box<[skein_fake_llm_domain::api::Rule]>]>
+    } else {
+        Box::new([Box::new([
+            skein_fake_llm_domain::api::Rule { cue: b"Hello".as_slice().into(), turn: 0 },
+            skein_fake_llm_domain::api::Rule { cue: b"More".as_slice().into(), turn: 1 },
+            skein_fake_llm_domain::api::Rule { cue: Box::new([]), turn: 2 },
+        ]) as Box<[skein_fake_llm_domain::api::Rule]>])
+    };
+    plan_peer_with_rules(scripts, skein_fake_llm_domain::api::Rules { cued: Box::new([]), asked })
 }
 
 /// The existing TLS peer, with the plan bearer and room for the largest scripted item.
