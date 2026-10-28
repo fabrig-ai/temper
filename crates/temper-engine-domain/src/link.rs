@@ -457,6 +457,11 @@ pub fn inbox_words(word: &tasks::Word) -> Box<[u8]> {
         tasks::MessageKind::ProposalDecision { proposal, accepted } => {
             (if accepted { b"Proposal accepted ".as_slice() } else { b"Proposal rejected ".as_slice() }, proposal)
         }
+        tasks::MessageKind::QuestionOwed => {
+            return b"You owe your requester a question: ask your plan with message, as a question, and wait."
+                .as_slice()
+                .into();
+        }
         tasks::MessageKind::QuestionAnswered { question } => {
             (b"Your person answered question in their inbox ".as_slice(), question)
         }
@@ -520,6 +525,7 @@ pub fn inbox_sender(word: &tasks::Word) -> Box<[u8]> {
         | tasks::MessageKind::Result(_)
         | tasks::MessageKind::ProposalDecision { .. }
         | tasks::MessageKind::SettingsDecision { .. }
+        | tasks::MessageKind::QuestionOwed
         | tasks::MessageKind::QuestionAnswered { .. }
         | tasks::MessageKind::QuestionEnded { .. }
         | tasks::MessageKind::PersonStalled { .. }

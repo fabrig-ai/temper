@@ -59,11 +59,12 @@ pub(super) fn request(owner: skein_lib::Token, flight: &Flight) -> Option<store:
                     })),
                 });
             }
+            CoreRange::RequesterWord { task, position } => {
+                let key = core::Key::Tasks(jig_domain_tasks::Key::Activity { task: *task, position: *position });
+                return Some(jig_get(owner, key));
+            }
             CoreRange::TaskResult { task } => {
-                return Some(store::Request::Get {
-                    owner,
-                    key: store::Get::Jig(core::Key::Tasks(jig_domain_tasks::Key::Ended(*task))),
-                });
+                return Some(jig_get(owner, core::Key::Tasks(jig_domain_tasks::Key::Ended(*task))));
             }
             CoreRange::TaskProposal { task, .. } => {
                 return Some(store::Request::Get {
@@ -122,6 +123,10 @@ pub(super) fn request(owner: skein_lib::Token, flight: &Flight) -> Option<store:
         },
     };
     Some(store::Request::Restore { owner, range, after, rows, bytes })
+}
+
+fn jig_get(owner: skein_lib::Token, key: core::Key) -> store::Request {
+    store::Request::Get { owner, key: store::Get::Jig(key) }
 }
 
 /// Window rows carry agent-readable text across the protocol/domain boundary.

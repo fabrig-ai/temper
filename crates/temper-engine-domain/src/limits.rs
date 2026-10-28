@@ -368,6 +368,17 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
             u64::from(limits.fleet.calls).checked_mul(u64::from(limits.journal.transcript_bytes).checked_mul(4)?)?,
         )?;
     let slots = payload_slots(limits)?;
+    // A transcript load carries one optional rendering per row beside its raw bytes.
+    let archive_payload = u64::from(limits.people.words)
+        .checked_add(List::<Option<Box<[u8]>>>::worst_case(limits.loads.rows)?)?
+        .checked_add(u64::from(limits.loads.rows).checked_mul(u64::from(TRANSCRIPT_TAIL_BYTES))?)?;
+    // An agreed-goal read retains its boxed context, the caller's whole spec,
+    // and either the initial chat spec or its newest person message. These
+    // share the existing archive slots with transcripts and input checks.
+    let goal_words = u64::try_from(size_of::<crate::boundary::GoalWords>())
+        .ok()?
+        .checked_add(u64::from(limits.tasks.spec_bytes))?
+        .checked_add(u64::from(limits.people.words.max(limits.tasks.spec_bytes).max(limits.tasks.message_bytes)))?;
     bytes = bytes
         .checked_add(Slab::<Option<Payload>>::worst_case(slots)?)?
         .checked_add(
@@ -379,13 +390,8 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         )?
         .checked_add(Slab::<Option<Read>>::worst_case(limits.loads.loads)?)?
         .checked_add(
-            u64::from(limits.loads.loads).checked_mul(
-                u64::from(limits.loads.reply_bytes)
-                    .checked_add(u64::from(limits.people.words))?
-                    // A transcript load carries one optional rendering per row beside its raw bytes.
-                    .checked_add(List::<Option<Box<[u8]>>>::worst_case(limits.loads.rows)?)?
-                    .checked_add(u64::from(limits.loads.rows).checked_mul(u64::from(TRANSCRIPT_TAIL_BYTES))?)?,
-            )?,
+            u64::from(limits.loads.loads)
+                .checked_mul(u64::from(limits.loads.reply_bytes).checked_add(archive_payload.max(goal_words))?)?,
         )?
         // Read answers that waited for journal room.
         .checked_add(Queue::<Event>::worst_case(limits.loads.loads)?)?
@@ -402,7 +408,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         // in this route. Child callbacks do not enqueue more client asks. Restored answers
         // are already covered by row_bound below; core/people price their retained contexts.
         .checked_add(people::model_names_worst_case()?)?
-        .checked_add(u64::from(routes).checked_mul(row_bound(limits)?)?)?;
+        .checked_add(u64::from(routes).checked_mul(row_bound(limits)?.max(goal_words))?)?;
     let pushed =
         u64::from(limits.forge.resources_per_task).checked_mul(u64::try_from(size_of::<forge::Pushed>()).ok()?)?;
     bytes = bytes

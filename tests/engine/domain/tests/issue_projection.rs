@@ -139,7 +139,7 @@ fn delegate(world: &mut World, run: &engine::Assignment, words: &[u8], tracked: 
         flags: tasks::Flags::PLAIN,
         budget: people::Budget::Named,
         executor: tasks::Executor::Agent { charter: 1 },
-        spec: tasks::Spec { words: words.into(), parameters: Box::new([]), inputs: Box::new([]) },
+        spec: tasks::Spec { asks: false, words: words.into(), parameters: Box::new([]), inputs: Box::new([]) },
         contract: tasks::Contract::Report { words: 32 },
         authority,
         llm: None,

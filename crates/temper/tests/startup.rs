@@ -1165,6 +1165,13 @@ mod memory_figures;
 // Service's inline core headers add 64 bytes and its store loses eight: +56,
 // including worker-alone. System retains 2 * 1,408 + 1 root payloads, so its
 // delta is 2,817 * 16,336 + 56 = 46,018,568 bytes at both engine fixtures.
+// F6's engine terms include Jig's widened Spec/TaskRecord carriers and the
+// asked-requester latch; the root prices agreed-goal archive contexts in its
+// existing load slots. Store terms include the two appended task bytes and
+// their generated/decoded carrier copies, with every profile limit unchanged.
+// Engine grows 3,202,880 bytes at init and 3,202,624 at owned. The same
+// 2,817 retained engine payloads give System increases of 9,022,512,960
+// and 9,021,791,808 respectively; no System carrier or capacity changed.
 fn memory_figure(
     name: &str,
     terms: &temper_service::startup::MemoryTerms,

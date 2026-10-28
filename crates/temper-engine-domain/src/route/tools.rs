@@ -109,8 +109,8 @@ pub(crate) fn relay_payload(
                 }
                 Tool::ReadNamed { .. } => unreachable!("named reads resolved before deciding"),
                 tool @ (Tool::Change { .. } | Tool::Goal { .. }) => {
-                    if let Tool::Goal { advisor, .. } = &tool
-                        && let Some(words) = super::goal::refusal(domain, key.task, *advisor)
+                    if let Tool::Goal { advisor, agree, .. } = &tool
+                        && let Some(words) = super::goal::refusal(domain, key.task, *advisor, *agree)
                     {
                         super::host_route::rendered(
                             domain,
@@ -119,13 +119,27 @@ pub(crate) fn relay_payload(
                         );
                         return;
                     }
+                    if let Tool::Change { .. } = &tool
+                        && let Some(words) = super::goal::change_refusal(domain, key.task)
+                    {
+                        super::host_route::rendered(
+                            domain,
+                            reply_to,
+                            core::SettledAnswer::Host { error: true, body: words },
+                        );
+                        return;
+                    }
                     let expanded = match domain.core.tasks.delegation(key.task) {
                         Some(context) => {
                             if let Tool::Change { words, repository } = tool {
                                 forge_route::chat_change(domain, env, &context, words, repository.as_deref())
                             } else {
-                                let Tool::Goal { words, advisor } = tool else { unreachable!("goal or change") };
-                                super::goal::goal(domain, env, key.task, &context, words, advisor)
+                                let Tool::Goal { words, advisor, agree } = tool else { unreachable!("goal or change") };
+                                if agree {
+                                    super::goal::request_words(domain, env, decision, reply_to, key, words);
+                                    return;
+                                }
+                                super::goal::goal(domain, env, key.task, &context, words, advisor, None)
                             }
                         }
                         None => Err(tasks::Refusal::Unknown),

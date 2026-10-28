@@ -276,6 +276,8 @@ mod memory_figures;
 // Domain state, view tree/bindings/words, HTTP decoding and exchange bodies.
 // The question/answer captions' three phrases and nine segments add 612 resident
 // bytes to the view's Words table. All web/domain/UI capacities stay fixed.
+// F6 widens two retained native specification carriers by eight bytes each
+// in the domain price; its additional literal caption is priced in Words.
 
 #[test]
 #[cfg(target_pointer_width = "64")]

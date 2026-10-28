@@ -1,7 +1,7 @@
 //! Store adapters for the core-selected restart script (jig's domain/root.md, 8).
 use crate::archive::{
-    Waiting, input_failed, input_loaded, note_failed, note_loaded, transcript_failed, transcript_loaded,
-    transcript_unread, waiting,
+    Waiting, goal_failed, goal_loaded, input_failed, input_loaded, note_failed, note_loaded, transcript_failed,
+    transcript_loaded, transcript_unread, waiting,
 };
 use crate::boundary::{Request, Work};
 use crate::domain::{Domain, close, emit};
@@ -47,6 +47,7 @@ pub(crate) fn request_load(
     let most = match &range {
         Range::Core(
             crate::CoreRange::Deployment
+            | crate::CoreRange::RequesterWord { .. }
             | crate::CoreRange::TaskResult { .. }
             | crate::CoreRange::EndedRead { .. }
             | crate::CoreRange::EscalationDecision { .. }
@@ -87,6 +88,7 @@ pub(crate) fn request_load(
                 | crate::CoreRange::Settings
                 | crate::CoreRange::Accounts
                 | crate::CoreRange::People
+                | crate::CoreRange::RequesterWord { .. }
                 | crate::CoreRange::TaskResult { .. }
                 | crate::CoreRange::EndedRead { .. }
                 | crate::CoreRange::Turns { .. },
@@ -117,6 +119,7 @@ pub(crate) fn request_load(
                 | crate::CoreRange::RunProofs
                 | crate::CoreRange::Turns { .. }
                 | crate::CoreRange::TaskTranscript { .. }
+                | crate::CoreRange::RequesterWord { .. }
                 | crate::CoreRange::TaskResult { .. }
                 | crate::CoreRange::EndedRead { .. },
             )
@@ -158,6 +161,10 @@ pub(crate) fn load_outputs(
                 }
                 match waiting(domain, waiter) {
                     Some(Waiting::Notes) => note_loaded(domain, waiter, rows, next, cut),
+                    Some(Waiting::GoalWords) if cut.is_none() && next.is_none() => {
+                        goal_loaded(domain, waiter, rows, out);
+                    }
+                    Some(Waiting::GoalWords) => goal_failed(domain, waiter),
                     Some(Waiting::Input) if cut.is_none() => input_loaded(domain, waiter, rows, next, out),
                     Some(Waiting::Input) => input_failed(domain, waiter),
                     Some(Waiting::Transcript) => transcript_loaded(domain, waiter, rows, texts.take(), next, cut, out),
@@ -190,6 +197,7 @@ pub(crate) fn load_outputs(
                 match waiting(domain, waiter) {
                     Some(Waiting::Notes) => note_failed(domain, waiter),
                     Some(Waiting::Input) => input_failed(domain, waiter),
+                    Some(Waiting::GoalWords) => goal_failed(domain, waiter),
                     Some(Waiting::Transcript) => transcript_unread(domain, waiter),
                     Some(Waiting::Ended) => domain.work.push(Work::EndedFailed { waiter }),
                     Some(Waiting::Proposal) => domain.work.push(Work::ProposalFailed { waiter }),
@@ -258,6 +266,7 @@ pub(crate) fn startup_page(
             | crate::CoreRange::TaskProposal { .. }
             | crate::CoreRange::Turns { .. }
             | crate::CoreRange::TaskTranscript { .. }
+            | crate::CoreRange::RequesterWord { .. }
             | crate::CoreRange::TaskResult { .. }
             | crate::CoreRange::EndedRead { .. },
         ) => {

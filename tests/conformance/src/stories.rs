@@ -353,6 +353,7 @@ fn goal_issue(world: &mut World) -> Result<(), Violation> {
     let milestone = engine::Delegate {
         executor: tasks::Executor::Agent { charter: 1 },
         spec: tasks::Spec {
+            asks: false,
             words: b"First milestone".as_slice().into(),
             parameters: Box::new([]),
             inputs: Box::new([]),

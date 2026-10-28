@@ -131,8 +131,8 @@ pub(crate) fn relay_call(
 
 pub(crate) fn call_needs_input(tool: &Tool) -> bool {
     match tool {
-        Tool::Goal { .. }
-        | Tool::Settings { .. }
+        Tool::Goal { agree, .. } => *agree,
+        Tool::Settings { .. }
         | Tool::ProposeSettings { .. }
         | Tool::Change { .. }
         | Tool::Unavailable

@@ -33,7 +33,7 @@ pub fn scripts(plan: &Plan<'_>) -> Box<[Script]> {
     let Line::Call { arguments, .. } = &scripts[0].turns[0].lines[0] else { panic!("change call") };
     let change: serde_json::Value = serde_json::from_slice(arguments).expect("change arguments");
     scripts[0].turns = Box::new([
-        call(b"goal", &json!({"words":"@long-plan-goal Agree the README plan, then call change."})),
+        call(b"goal", &json!({"words":"@long-plan-goal Agree the README plan, then call change.","agree":true})),
         wait(),
         wait(),
         call(b"message", &json!({"target":2,"form":"answer","question":1,"words":"Go ahead."})),

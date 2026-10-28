@@ -24,7 +24,7 @@ fn call(world: &mut World, name: u64, completion: u32, tool: engine::Tool) {
     crate::link::call(world, assignment.task, assignment.attempt, name, engine::Call { completion, position: 0, tool });
 }
 fn spec(words: &[u8]) -> tasks::Spec {
-    tasks::Spec { words: words.into(), parameters: Box::new([]), inputs: Box::new([]) }
+    tasks::Spec { asks: false, words: words.into(), parameters: Box::new([]), inputs: Box::new([]) }
 }
 pub(super) fn party_amend(world: &mut World) -> Result<(), Violation> {
     let mut authority = authority(world);
@@ -60,6 +60,7 @@ pub(super) fn party_amend(world: &mut World) -> Result<(), Violation> {
                 addressed: None,
                 instructions: None,
                 spec: Some(people::Spec {
+                    asks: false,
                     words: b"party choice".as_slice().into(),
                     parameters: Box::new([]),
                     inputs: Box::new([]),

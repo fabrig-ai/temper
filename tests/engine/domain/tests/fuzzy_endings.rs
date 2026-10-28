@@ -76,7 +76,12 @@ fn chat(seed: u64, child: bool) -> (Driver, engine::Assignment) {
 fn delegate_child(driver: &mut Driver, assignment: &engine::Assignment) {
     let child = engine::Delegate {
         executor: tasks::Executor::Agent { charter: 1 },
-        spec: tasks::Spec { words: b"child".as_slice().into(), parameters: Box::new([]), inputs: Box::new([]) },
+        spec: tasks::Spec {
+            asks: false,
+            words: b"child".as_slice().into(),
+            parameters: Box::new([]),
+            inputs: Box::new([]),
+        },
         contract: tasks::Contract::Report { words: 128 },
         authority: tasks::Authority {
             tools: tasks::Tools(0),

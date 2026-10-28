@@ -937,6 +937,7 @@ fn an_amendment_while_gathering_discards_the_old_brief_without_claiming() {
                 addressed: None,
                 instructions: None,
                 spec: Some(people::Spec {
+                    asks: false,
                     words: b"revised repair".as_slice().into(),
                     parameters: Box::new([]),
                     inputs: Box::new([]),

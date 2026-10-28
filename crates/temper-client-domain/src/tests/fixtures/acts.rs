@@ -62,6 +62,7 @@ pub fn chip() -> Chip {
 }
 pub fn spec() -> SpecificationDocument {
     SpecificationDocument::complete(Specification {
+        asks: false,
         words: text(b"Task"),
         parameters: List::with_capacity(EMPTY_LIST),
         inputs: List::with_capacity(EMPTY_LIST),

@@ -309,6 +309,8 @@ pub enum Key {
 /// request on their own and promise no cross-page snapshot (domain/root.md, 8).
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CoreRange {
+    /// One chat activity record while locating its person's newest whole words.
+    RequesterWord { task: u64, position: u64 },
     /// One immutable decision for a later authenticated proposal caller.
     ProposalDecision { proposer: jig_domain_people::Proposer, proposal: u64 },
     /// One task owner and the retained history position of its proposal.
@@ -406,6 +408,11 @@ impl CoreRange {
     pub fn contains(&self, key: &jig_domain_core::Key) -> bool {
         use jig_domain_core::{CoreKey, Key as Core};
         match self {
+            CoreRange::RequesterWord { task, position } => {
+                *task != 0
+                    && *position != 0
+                    && key == &Core::Tasks(jig_domain_tasks::Key::Activity { task: *task, position: *position })
+            }
             CoreRange::TaskProposal { task, proposal } => {
                 let Core::Tasks(
                     jig_domain_tasks::Key::Live(found) | jig_domain_tasks::Key::History { task: found, .. },

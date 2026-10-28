@@ -172,7 +172,7 @@ fn spec(value: &Value) -> Result<tasks::Spec, Problem> {
         Some(items) => numbers(items, b"inputs")?,
         None => Box::new([]),
     };
-    Ok(tasks::Spec { words, parameters, inputs })
+    Ok(tasks::Spec { asks: false, words, parameters, inputs })
 }
 
 fn contract(value: &Value) -> Result<tasks::Contract, Problem> {

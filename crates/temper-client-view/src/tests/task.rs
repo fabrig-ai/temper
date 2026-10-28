@@ -923,6 +923,7 @@ fn a_kept_activity_is_parked() {
 #[test]
 fn question_notices_name_the_question_without_answer_words() {
     for (kind, expected) in [
+        (c::OwnerMessageKind::QuestionOwed, b"Owes a question: ask your requester".as_slice()),
         (c::OwnerMessageKind::QuestionAnswered { question: 11 }, b"Person answered question in inbox: 11".as_slice()),
         (c::OwnerMessageKind::QuestionEnded { question: 11 }, b"Question ended unanswered: 11".as_slice()),
     ] {

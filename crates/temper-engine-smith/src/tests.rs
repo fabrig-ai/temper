@@ -1440,18 +1440,22 @@ fn job_and_attempt_zero_decode_but_run_and_explicit_byte_limit_remain_positive()
 }
 
 #[test]
-fn goal_decodes_words_and_an_optional_advisor() {
-    for (input, expected) in [
-        (br#"{"words":"plan"}"#.as_slice(), false),
-        (br#"{"words":"plan","advisor":true}"#, true),
-        (br#"{"words":"plan","advisor":false}"#, false),
+fn goal_decodes_words_and_optional_advisor_and_agree() {
+    for (input, advisor, agree) in [
+        (br#"{"words":"plan"}"#.as_slice(), false, false),
+        (br#"{"words":"plan","advisor":true}"#, true, false),
+        (br#"{"words":"plan","advisor":false}"#, false, false),
+        (br#"{"words":"plan","agree":true}"#, false, true),
+        (br#"{"words":"plan","agree":false}"#, false, false),
+        (br#"{"words":"plan","advisor":true,"agree":true}"#, true, true),
     ] {
         let call = decided(b"goal", input).expect("goal declared and decoded");
-        assert_eq!(call.tool, engine::Tool::Goal { words: Box::from(b"plan".as_slice()), advisor: expected });
+        assert_eq!(call.tool, engine::Tool::Goal { words: Box::from(b"plan".as_slice()), advisor, agree });
     }
     assert_eq!(decided(b"goal", b"{}"), Err(Problem::Missing(b"words")));
     assert_eq!(decided(b"goal", br#"{"words":""}"#), Err(Problem::Range(b"words")));
     assert_eq!(decided(b"goal", br#"{"words":"plan","advisor":1}"#), Err(Problem::Type(b"advisor")));
+    assert_eq!(decided(b"goal", br#"{"words":"plan","agree":1}"#), Err(Problem::Type(b"agree")));
 }
 
 #[path = "tests/settings.rs"]

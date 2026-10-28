@@ -102,6 +102,7 @@ fn owner(row: &c::OwnerActivityLine, out: &mut Text) {
     match &row.line {
         c::OwnerActivity::Words { words, .. } => out.words(words.bytes()),
         c::OwnerActivity::Heard(word) | c::OwnerActivity::Notified { word, .. } => match word.kind {
+            c::OwnerMessageKind::QuestionOwed => out.put(b"Owes a question: ask your requester"),
             c::OwnerMessageKind::QuestionAnswered { question } => {
                 out.put(b"person answered question in inbox ");
                 out.number(question);

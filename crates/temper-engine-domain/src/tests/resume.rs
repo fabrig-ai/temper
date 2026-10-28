@@ -433,6 +433,7 @@ fn stopping_continues_projection_deferred_finishing_without_new_commits() {
                 executor: tasks::Executor::Agent { charter: 1 },
                 llm: None,
                 spec: tasks::Spec {
+                    asks: false,
                     words: b"queued goal before Stop".as_slice().into(),
                     parameters: Box::new([]),
                     inputs: Box::new([]),

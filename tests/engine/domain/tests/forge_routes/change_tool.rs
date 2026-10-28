@@ -64,6 +64,7 @@ fn change_expands_the_only_repository_field_by_field() {
     assert_eq!(
         row.spec,
         tasks::Spec {
+            asks: false,
             words: Box::from(&b"Small fix"[..]),
             parameters: Box::new([
                 tasks::Parameter::Resource {

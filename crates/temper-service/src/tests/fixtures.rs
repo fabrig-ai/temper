@@ -150,6 +150,7 @@ pub fn task_record(number: u64) -> jig_domain_tasks::TaskRecord {
     use jig_domain_tasks as tasks;
     use skein_lib::Wall;
     tasks::TaskRecord {
+        asked_requester: false,
         settings: tasks::SettingsRevision { task: 1, run: None },
         added: Box::new([]),
         hold_bound_since: None,
@@ -198,7 +199,7 @@ pub fn task_record(number: u64) -> jig_domain_tasks::TaskRecord {
         result_followups: Box::new([]),
         tracked: None,
         recurring: None,
-        spec: tasks::Spec { words: Box::new([]), parameters: Box::new([]), inputs: Box::new([]) },
+        spec: tasks::Spec { asks: false, words: Box::new([]), parameters: Box::new([]), inputs: Box::new([]) },
         contract: tasks::Contract::Report { words: 32 },
         authority: tasks::Authority {
             tools: tasks::Tools(0),

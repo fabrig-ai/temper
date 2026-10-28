@@ -2190,6 +2190,15 @@ fn base_frame(person: &str, project: &str) -> c::Me {
         redirect_bytes: 4096,
     }
 }
+fn empty_specification() -> c::SpecificationDocument {
+    c::SpecificationDocument::complete(c::Specification {
+        asks: false,
+        words: text(""),
+        parameters: List::with_capacity(0),
+        inputs: List::with_capacity(0),
+    })
+}
+
 fn base_task(number: u64, title: &str) -> c::Task {
     let wake = c::OwnerWakePolicy {
         words: c::WakeRule::Immediate,
@@ -2251,11 +2260,7 @@ fn base_task(number: u64, title: &str) -> c::Task {
         project: PROJECT,
         requester: c::OwnerRequester::Person(73),
         lineage: List::with_capacity(0),
-        spec: c::SpecificationDocument::complete(c::Specification {
-            words: text(""),
-            parameters: List::with_capacity(0),
-            inputs: List::with_capacity(0),
-        }),
+        spec: empty_specification(),
         spec_revision: c::Revision { value: 1 },
         person_revision: None,
         taken_by: None,

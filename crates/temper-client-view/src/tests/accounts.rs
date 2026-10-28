@@ -698,6 +698,8 @@ mod memory_literal;
 // = 4_678_528 bytes, with the previous buffer live while growing to the same cap.
 // Question/answer captions add three phrases and nine segments to Words (+612
 // resident bytes); text and UI capacities retain their existing declarations.
+// F6's owed-question caption adds one literal phrase and segment (+172 Words
+// bytes); native specification carriers add sixteen domain bytes.
 
 #[test]
 #[cfg(target_pointer_width = "64")]

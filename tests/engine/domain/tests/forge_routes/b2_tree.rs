@@ -43,7 +43,15 @@ fn world_with(defaults: &jig_domain_core::settings::Defaults) -> (World, engine:
     started_world(World::configured_stock_limits(defaults, &model(), &box_limits()), defaults)
 }
 
-fn started_world(mut world: World, defaults: &jig_domain_core::settings::Defaults) -> (World, engine::Assignment) {
+fn started_world(world: World, defaults: &jig_domain_core::settings::Defaults) -> (World, engine::Assignment) {
+    started_world_with_words(world, defaults, WORK_WORDS)
+}
+
+fn started_world_with_words(
+    mut world: World,
+    defaults: &jig_domain_core::settings::Defaults,
+    words: &[u8],
+) -> (World, engine::Assignment) {
     // Two slots let a caller delegate before it parks; no actor needs a third.
     const SLOTS: u32 = 2;
     world.adopt();
@@ -68,7 +76,7 @@ fn started_world(mut world: World, defaults: &jig_domain_core::settings::Default
     }));
     // jig's Creating fixture supplies authority but hard-codes its own chat contract
     // and ending. Apply the stock template's fields instead of inheriting those.
-    let people::Ask::Create { project, mut batch } = world.chat(PROJECT, WORK_WORDS) else { panic!("chat batch") };
+    let people::Ask::Create { project, mut batch } = world.chat(PROJECT, words) else { panic!("chat batch") };
     let template = &defaults.templates[0];
     let jig_domain_people::TemplateExecutor::Charter(charter) = template.executor else { panic!("stock charter") };
     let tasks::Contract::Report { words } = template.contract else { panic!("stock report") };
@@ -157,7 +165,11 @@ fn call(world: &mut World, run: &engine::Assignment, tool: engine::Tool) -> engi
         run.task,
         run.attempt,
         FIRST_CALL + u64::try_from(before).expect("bounded calls"),
-        engine::Call { completion: 1, position: 1, tool },
+        engine::Call {
+            completion: u32::try_from(before).expect("bounded calls").checked_add(1).expect("bounded call identity"),
+            position: 1,
+            tool,
+        },
     );
     world.send(event);
     for _ in 0..STEPS {
@@ -179,7 +191,7 @@ fn delegated(world: &mut World, run: &engine::Assignment, tool: engine::Tool) ->
 }
 
 fn goal(world: &mut World, run: &engine::Assignment, advisor: bool) -> u64 {
-    delegated(world, run, engine::Tool::Goal { words: WORK_WORDS.into(), advisor })
+    delegated(world, run, engine::Tool::Goal { agree: !advisor, words: WORK_WORDS.into(), advisor })
 }
 
 fn answer(world: &mut World, run: &engine::Assignment, turns: u64, end: tasks::End) {
@@ -290,8 +302,11 @@ fn landed(world: &World, task: u64) -> bool {
 }
 
 fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) {
-    let change =
-        delegated(world, work, engine::Tool::Change { words: b"Small fix".as_slice().into(), repository: None });
+    land_change_with_words(world, work, b"Small fix")
+}
+
+fn land_change_with_words(world: &mut World, work: &engine::Assignment, words: &[u8]) -> (u64, [u64; 3]) {
+    let change = delegated(world, work, engine::Tool::Change { words: words.into(), repository: None });
     answer(world, work, WORK_TURNS, tasks::End::Parked);
     assert_eq!(
         record(world, work.task).phase,
@@ -713,12 +728,16 @@ fn questioning_goal() -> (World, engine::Assignment, engine::Assignment, u64) {
 }
 
 fn person_answers(world: &mut World, chat: u64, question: u64) {
+    person_answers_with(world, chat, question, GO_AHEAD);
+}
+
+fn person_answers_with(world: &mut World, chat: u64, question: u64, words: &[u8]) {
     world.send(engine::Event::Party(engine::PartyInput::Ask {
         models: Box::new([]),
         reply_to: ReplyTo::new(Token::new(u64::from(ANSWER_KEY))),
         sign_in: world.signed_in.expect("owner session"),
         key: [ANSWER_KEY; 16],
-        ask: people::Ask::AnswerQuestion { project: PROJECT, task: chat, question, words: GO_AHEAD.into() },
+        ask: people::Ask::AnswerQuestion { project: PROJECT, task: chat, question, words: words.into() },
     }));
     advance(world);
 }
@@ -778,7 +797,7 @@ fn the_persons_inbox_answer_reaches_the_goal_with_no_chat_call() {
 }
 
 #[test]
-fn a_goals_early_finish_parks_until_the_answer_then_lands() {
+fn a_goal_that_asked_is_kept_by_r1() {
     let (mut world, chat, work, question) = questioning_goal();
     answer(&mut world, &chat, CHAT_TURNS, tasks::End::Parked);
     report(&mut world, &work, WORK_TURNS, b"Too early");
@@ -799,4 +818,101 @@ fn a_goals_early_finish_parks_until_the_answer_then_lands() {
     let resumed = admitted(&world, work.task);
     report(&mut world, &resumed, WORK_TURNS, WORK_REPORT);
     assert!(matches!(record(&world, work.task).phase, tasks::Phase::Ended(tasks::Ending::Done(_))));
+}
+
+#[test]
+fn an_agreed_goal_finishing_before_asking_is_parked_then_woken_and_asks() {
+    let (mut world, chat) = stock_world();
+    let task = goal(&mut world, &chat, false);
+    advance(&mut world);
+    let work = admitted(&world, task);
+    answer(&mut world, &chat, CHAT_TURNS, tasks::End::Parked);
+    // A prepared worker creates its run branch even though the plan changes no files.
+    // Report its unchanged head so the immediate next run can take the writer.
+    let repository = &work.workspace.repositories[0];
+    let branch = repository.push.clone().expect("goal's prepared branch");
+    let tag = repository.tag;
+    let raw::Answer::Commit(head) =
+        world.external(1, raw::Op::Read(raw::Read::Branch { branch: b"main".as_slice().into() }))
+    else {
+        panic!("base head")
+    };
+    assert_eq!(
+        world.external(2, raw::Op::Git(raw::Git::Create { branch, commit: head })),
+        raw::Answer::Branch(raw::Created::Created)
+    );
+    answer_parts(
+        &mut world,
+        &work,
+        WORK_TURNS,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: b"Here is my plan, before asking".as_slice().into() },
+            cancel_delegates: false,
+        },
+        engine::Parts {
+            saved: None,
+            pushed: Box::new([forge_top::Pushed { tag, commit: translate::commit(head) }]),
+            preparation: None,
+        },
+    );
+    let resumed = admitted(&world, task);
+    assert!(resumed.attempt > work.attempt);
+    assert!(resumed.run.policy.resume);
+    let notice =
+        resumed.messages.iter().find(|word| word.kind == tasks::MessageKind::QuestionOwed).expect("owing notice");
+    assert_eq!(
+        engine::inbox_words(notice).as_ref(),
+        b"You owe your requester a question: ask your plan with message, as a question, and wait."
+    );
+    assert!(matches!(
+        call(
+            &mut world,
+            &resumed,
+            engine::Tool::Message { target: chat.task, form: engine::MessageForm::Question, words: PLAN.into() }
+        ),
+        engine::CallAnswer::Sent { .. }
+    ));
+    assert!(record(&world, task).asked_requester);
+    assert_eq!(world.merges, 0);
+}
+
+#[test]
+fn an_agreed_goal_changes_once_answered() {
+    let (mut world, chat, work, question) = questioning_goal();
+    answer(&mut world, &chat, CHAT_TURNS, tasks::End::Parked);
+    person_answers(&mut world, chat.task, question);
+    let (change, _) = land_change(&mut world, &work);
+    assert!(landed(&world, change));
+}
+
+#[test]
+fn a_declined_agreed_goal_reports_and_changes_nothing() {
+    let (mut world, chat, work, question) = questioning_goal();
+    person_answers_with(&mut world, chat.task, question, b"No; leave it alone");
+    let words = b"Declined; no changes";
+    report(&mut world, &work, WORK_TURNS, words);
+    assert!(
+        matches!(&record(&world, work.task).phase, tasks::Phase::Ended(tasks::Ending::Done(tasks::TaskResult::Report { words: result })) if result.as_ref() == words)
+    );
+    assert!(!world.store.rows.values().any(|row| matches!(row,
+        Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row) | tasks::Stored::Ended(row)))
+        if row.executor == (tasks::Executor::Procedure { connector: 0, code: 2 }))));
+    assert_eq!(world.merges, 0);
+}
+
+#[test]
+fn a_chats_plain_change_request_calls_change() {
+    const REQUEST: &[u8] = b"Add CSV export to widget";
+    let defaults = defaults();
+    let world = World::configured_stock_limits(&defaults, &model(), &box_limits());
+    let (mut world, chat) = started_world_with_words(world, &defaults, REQUEST);
+    assert!(!record(&world, chat.task).spec.asks);
+    assert_eq!(record(&world, chat.task).spec.words.as_ref(), REQUEST);
+    let (change, _) = land_change_with_words(&mut world, &chat, REQUEST);
+    assert_eq!(record(&world, change).requester, tasks::Party::Task(chat.task));
+    assert!(landed(&world, change));
+    assert_eq!(world.merges, 1);
+    let chat = admitted(&world, chat.task);
+    report(&mut world, &chat, CHAT_TURNS, b"CSV export landed");
+    assert!(record(&world, chat.task).last_reply > 0);
 }

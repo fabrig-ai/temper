@@ -1247,7 +1247,9 @@ pub(crate) fn owner_activity(b: &mut Builder, event: &c::OwnerActivity, words: &
     match event {
         c::OwnerActivity::Words { words, .. } => text_node(b, words.bytes()),
         c::OwnerActivity::Heard(word) | c::OwnerActivity::Notified { word, .. } => {
-            if let c::OwnerMessageKind::QuestionAnswered { question } = word.kind {
+            if word.kind == c::OwnerMessageKind::QuestionOwed {
+                words.text(b, Word::QuestionOwed, &[]);
+            } else if let c::OwnerMessageKind::QuestionAnswered { question } = word.kind {
                 words.text(b, Word::QuestionAnswered, &[Hole::Number(question)]);
             } else if let c::OwnerMessageKind::QuestionEnded { question } = word.kind {
                 words.text(b, Word::QuestionEnded, &[Hole::Number(question)]);

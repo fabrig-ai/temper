@@ -77,6 +77,7 @@ pub enum Kind {
     Calls,
     EndedRead,
     TaskResult,
+    RequesterWord,
     Turns,
     TaskTranscript,
     Notes,
@@ -106,6 +107,7 @@ pub(crate) fn kind(range: &Range) -> Kind {
         Range::Core(CoreRange::Calls) => Kind::Calls,
         Range::Core(CoreRange::EndedRead { .. }) => Kind::EndedRead,
         Range::Core(CoreRange::TaskResult { .. }) => Kind::TaskResult,
+        Range::Core(CoreRange::RequesterWord { .. }) => Kind::RequesterWord,
         Range::Core(CoreRange::Turns { .. }) => Kind::Turns,
         Range::Core(CoreRange::TaskTranscript { .. }) => Kind::TaskTranscript,
         Range::Core(CoreRange::Notes(_)) => Kind::Notes,
@@ -372,6 +374,7 @@ fn check(entry: &Entry, limits: &Limits, rows: &[Record], next: Option<Key>) -> 
         match &entry.range {
             Range::Core(
                 crate::CoreRange::Deployment
+                | crate::CoreRange::RequesterWord { .. }
                 | crate::CoreRange::TaskResult { .. }
                 | crate::CoreRange::EndedRead { .. }
                 | crate::CoreRange::EscalationDecision { .. }
@@ -426,6 +429,7 @@ fn census_position(census: &jig_domain_core::Census, key: &Key) -> Option<(u32, 
 
 fn valid_range(range: &Range) -> bool {
     match range {
+        Range::Core(crate::CoreRange::RequesterWord { task, position }) => *task != 0 && *position != 0,
         Range::Core(
             crate::CoreRange::Deployment
             | crate::CoreRange::Settings

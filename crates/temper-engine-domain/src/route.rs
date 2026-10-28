@@ -349,6 +349,7 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
             Work::Forge(event) => forge_event(domain, env, decision, event),
             Work::ProjectGoal(goal) => forge_route::project_goal(domain, env, &goal),
             Work::GoalSubscribe(subscriber) => forge_route::goal_subscribed(domain, env, subscriber),
+            Work::AgreedGoal(read) => goal::ready(domain, env, decision, *read),
             Work::Activate(context) => {
                 if domain.settling.active() || domain.core.stopping() {
                     continue;

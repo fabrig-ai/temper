@@ -1105,7 +1105,12 @@ fn retained_party_batch() -> c::ReadValue {
                     number: 41,
                     project: 0,
                     executor: c::OwnerExecutor::Agent { charter: 3 },
-                    spec: c::Specification { words: words("goal"), parameters: list([]), inputs: list([]) },
+                    spec: c::Specification {
+                        asks: false,
+                        words: words("goal"),
+                        parameters: list([]),
+                        inputs: list([]),
+                    },
                     contract: c::TaskContractDocument::Report { words: 1024 },
                     authority: authority(),
                     numbers: c::OwnerNumbers { budget: 1, spent: 0, spent_below: 0, reserved: 0 },

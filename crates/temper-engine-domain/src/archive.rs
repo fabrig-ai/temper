@@ -20,6 +20,7 @@ pub(crate) enum Waiting {
     Ended,
     Transcript,
     Input,
+    GoalWords,
     Notes,
 }
 
@@ -31,6 +32,7 @@ pub(crate) fn waiting(domain: &Domain, waiter: Token) -> Option<Waiting> {
         Some(Read::Ended(_)) => Some(Waiting::Ended),
         Some(Read::Transcript { .. }) => Some(Waiting::Transcript),
         Some(Read::InputCheck(_)) => Some(Waiting::Input),
+        Some(Read::GoalWords(_)) => Some(Waiting::GoalWords),
         Some(Read::Notes { .. }) => Some(Waiting::Notes),
         None => None,
     }
@@ -122,7 +124,8 @@ pub(crate) fn take_note_owner(domain: &mut Domain, waiter: Token) -> Option<Toke
             | Read::Proposal(_)
             | Read::TaskProposal { .. }
             | Read::Transcript { .. }
-            | Read::InputCheck(_),
+            | Read::InputCheck(_)
+            | Read::GoalWords(_),
         )
         | None => None,
     }
@@ -359,6 +362,55 @@ pub(crate) fn transcript_loaded(
 pub(crate) fn take_read(domain: &mut Domain, waiter: Token) -> Option<Read> {
     let entry = domain.archive_reads.get_mut(Id::from_token(waiter))?;
     entry.take()
+}
+
+pub(crate) fn goal_failed(domain: &mut Domain, waiter: Token) {
+    let Some(Read::GoalWords(read)) = take_read(domain, waiter) else { return };
+    domain.archive_reads.retire(Id::from_token(waiter));
+    domain.work.push(Work::Core(jig_domain_core::Event::NamedAnswer {
+        to: ReplyTo::new(read.to),
+        key: read.key,
+        part: jig_domain_core::CallPart::DelegationRefused(tasks::Problem::new(None, tasks::Refusal::Read)),
+    }));
+}
+
+pub(crate) fn goal_loaded(domain: &mut Domain, waiter: Token, rows: Box<[Record]>, out: &mut Queue<Request>) {
+    let Some(Some(Read::GoalWords(read))) = domain.archive_reads.get_mut(Id::from_token(waiter)) else { return };
+    if rows.len() != 1 {
+        goal_failed(domain, waiter);
+        return;
+    }
+    let row = rows.into_iter().next().expect("one requested activity line");
+    let Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Activity(line))) = row else {
+        goal_failed(domain, waiter);
+        return;
+    };
+    let mut found = false;
+    match line.line {
+        tasks::Line::Words { by, words, .. } => {
+            if by == tasks::Party::Person(read.person) {
+                read.person_words = words;
+                found = true;
+            }
+        }
+        tasks::Line::Heard(_)
+        | tasks::Line::Notified { .. }
+        | tasks::Line::RunBegan { .. }
+        | tasks::Line::RunEnded { .. }
+        | tasks::Line::Turn { .. }
+        | tasks::Line::Decided { .. }
+        | tasks::Line::Milestone { .. }
+        | tasks::Line::Kept { .. } => {}
+    }
+    read.position = read.position.checked_sub(1).expect("positive requested activity position");
+    if found || read.position == 0 {
+        let Some(Read::GoalWords(read)) = take_read(domain, waiter) else { unreachable!("completed goal words") };
+        domain.archive_reads.retire(Id::from_token(waiter));
+        domain.work.push(Work::AgreedGoal(read));
+    } else {
+        let range = Range::Core(crate::CoreRange::RequesterWord { task: read.key.task, position: read.position });
+        request_load(domain, waiter, range, None, out);
+    }
 }
 
 #[cfg(test)]

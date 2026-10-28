@@ -107,7 +107,12 @@ fn person_amendment(words: Option<&[u8]>, authority: Option<people::Authority>, 
         tracked: None,
         addressed: None,
         instructions: None,
-        spec: words.map(|words| people::Spec { words: words.into(), parameters: Box::new([]), inputs: Box::new([]) }),
+        spec: words.map(|words| people::Spec {
+            asks: false,
+            words: words.into(),
+            parameters: Box::new([]),
+            inputs: Box::new([]),
+        }),
         wake: None,
         dependencies: None,
         authority,
@@ -1862,7 +1867,7 @@ fn a_recurring_procedure_uses_the_root_period_route() {
         number: 1,
         project: 1,
         executor: tasks::Executor::Agent { charter: 1 },
-        spec: tasks::Spec { words: b"period work".as_slice().into(), parameters: Box::new([]), inputs: Box::new([]) },
+        spec: report_delegate(b"period work", Box::new([])).spec,
         contract: tasks::Contract::Report { words: 16 },
         llm: None,
         authority: report_delegate(b"template", Box::new([])).authority,
@@ -2441,7 +2446,7 @@ fn finish_task(driver: &mut Driver, assignment: &engine::Assignment, result: tas
 fn plain_delegate(words: &[u8]) -> engine::Delegate {
     engine::Delegate {
         executor: tasks::Executor::Agent { charter: 1 },
-        spec: tasks::Spec { words: words.into(), parameters: Box::new([]), inputs: Box::new([]) },
+        spec: tasks::Spec { asks: false, words: words.into(), parameters: Box::new([]), inputs: Box::new([]) },
         contract: tasks::Contract::Report { words: 128 },
         authority: tasks::Authority {
             tools: tasks::Tools(0),

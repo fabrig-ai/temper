@@ -132,6 +132,7 @@ fn a_chat_whose_spec_is_empty_draws_no_opening_turn() {
     let thread = owner_words_thread();
     let spec = |words: &[u8]| {
         c::SpecificationDocument::complete(c::Specification {
+            asks: false,
             words: c::Text::new(Box::from(words), TEXT).expect("spec words"),
             parameters: List::with_capacity(0),
             inputs: List::with_capacity(0),
@@ -1551,6 +1552,7 @@ fn the_request_uses_the_first_timed_line_and_shares_its_day() {
     };
     let thread = timed_thread(&[(TURN_NOON - 60, began), (TURN_NOON, timed_words())]);
     let request = c::SpecificationDocument::complete(c::Specification {
+        asks: false,
         words: fixtures::first_run::text(b"The request"),
         parameters: List::with_capacity(0),
         inputs: List::with_capacity(0),

@@ -48,7 +48,7 @@ fn spec() -> c::Specification {
     parameters.push(c::Parameter::Bytes { name: 1, value: text(b"debug") }).unwrap();
     let mut inputs = List::with_capacity(ONE);
     inputs.push(INPUT).unwrap();
-    c::Specification { words: text(b"Build the project"), parameters, inputs }
+    c::Specification { asks: false, words: text(b"Build the project"), parameters, inputs }
 }
 fn dependencies() -> List<u64> {
     let mut numbers = List::with_capacity(DEPENDENCIES);

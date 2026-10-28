@@ -181,7 +181,10 @@ impl Domain {
                     Some(bytes) => bytes <= u64::from(limits.journal.run_bytes),
                     None => false,
                 },
-                "each charter's run policy fits the assignment bound"
+                "each charter's run policy fits the assignment bound: charter {} needs {:?}, bound {}",
+                charter.number,
+                run_policy_bound(&charter.policy, limits),
+                limits.journal.run_bytes
             );
         }
         let mut forge_charter = false;
@@ -992,6 +995,7 @@ fn released_into(
                 Read::Escalation(query) => (query.task, query.revision),
                 Read::Ended(_)
                 | Read::Transcript { .. }
+                | Read::GoalWords(_)
                 | Read::InputCheck(_)
                 | Read::Notes { .. }
                 | Read::Proposal(_)

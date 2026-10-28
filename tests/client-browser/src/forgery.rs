@@ -16,6 +16,7 @@ fn task() -> c::NewTask {
         deadline: c::NewDeadline::Named,
         executor: c::OwnerExecutor::Agent { charter: CHAT_CHARTER },
         spec: c::Specification {
+            asks: false,
             words: c::Text::new(b"Forged".as_slice().into(), SPEC_WORDS).expect("bounded specification"),
             parameters: List::with_capacity(0),
             inputs: List::with_capacity(0),
