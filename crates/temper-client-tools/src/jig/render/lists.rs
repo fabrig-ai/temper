@@ -348,17 +348,19 @@ pub(super) fn object(key: c::ObjectKey, out: &mut Text) {
 
 fn question(reading: &Reading, key: (u64, u64), out: &mut Text) {
     let Some(Some(question)) = reading.questions.get(&key) else { return };
+    let cut = question.words.cut || question.words.bytes().len() > out.room();
     out.words(question.words.bytes());
-    if question.words.cut {
+    if cut {
         out.put(b" (cut)");
     }
     out.put(b"\n");
-    if question.words.cut {
-        out.put(b"read whole: ");
-        out.put(reading.command_prefix);
-        out.put(b"task activity ");
-        let task = super::document::question::asking_task(question);
-        out.number(task);
-        out.put(b"\n");
-    }
+    out.put(b"next: ");
+    super::document::question::whole(reading.command_prefix, super::document::question::asking_task(question), out);
+    out.put(b"\nnext: ");
+    out.put(reading.command_prefix);
+    out.put(b"task answer ");
+    out.number(question.task.task);
+    out.put(b" ");
+    out.number(question.message);
+    out.put(b" TEXT --key KEY\n");
 }

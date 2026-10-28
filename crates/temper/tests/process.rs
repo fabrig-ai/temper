@@ -4623,7 +4623,7 @@ fn a_green_light_answers_the_goals_207_byte_question_from_the_inbox_and_lands_it
     let stderr = String::from_utf8_lossy(&outcome.stderr);
     assert_plan_box("long-question", true, &outcome, &stderr);
     let inbox = String::from_utf8_lossy(&outcome.calls[inbox_at].stdout);
-    assert!(inbox.contains("(cut)\nread whole: temper ctl DIR task activity 2\n"), "{inbox}");
+    assert!(inbox.contains("(cut)\nnext: temper ctl DIR task activity 2\n"), "{inbox}");
     // Activity is paged at init's two-line bound; the first page need not
     // contain the older question. The printed command succeeds and reads on.
     assert_eq!(outcome.calls[inbox_at + 1].exit, Some(Exit::Code(0)));

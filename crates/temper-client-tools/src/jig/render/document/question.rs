@@ -45,7 +45,7 @@ pub(crate) fn asking_task(question: &c::Question) -> u64 {
         _ => question.task.task,
     }
 }
-fn whole(prefix: &[u8], task: u64, out: &mut super::Text) {
+pub(crate) fn whole(prefix: &[u8], task: u64, out: &mut super::Text) {
     out.put(prefix);
     out.put(b"task activity ");
     out.number(task);

@@ -305,42 +305,60 @@ fn an_activity_page_cut_before_its_first_row_reads_on() {
 }
 
 #[test]
-fn a_cut_question_prints_its_marker_and_the_asking_tasks_activity() {
+fn inbox_questions_print_words_and_calls_within_and_past_the_text_bound() {
     use jig_client::contract as c;
-    for json in [false, true] {
-        let argv: &[&str] =
-            if json { &["inbox", "--kind", "questions", "--json"] } else { &["inbox", "--kind", "questions"] };
-        let (mut root, call) = fixtures::read_call(argv);
-        root.serve(call, fixtures::inbox_rows(c::InboxReadGroup::Needs, 1, false));
-        let task = fixtures::goal(fixtures::TASK, c::WaitsOn::Nothing);
-        let mut words = fixtures::document_text(b"The plan continues");
-        words.cut = true;
-        root.serve(
-            call,
-            c::ReadResult::Value(c::ReadValue::Question(Box::new(c::Question {
-                task: task.chip,
-                message: 2,
-                from: Some(c::OwnerRequester::Task(42)),
-                words,
-                since: skein_lib::Wall::EPOCH,
-                acts: skein_lib::List::with_capacity(0),
-                ending: None,
-            }))),
-        );
-        let answer = root.answer(call).expect("question printed");
-        assert_eq!(answer.status, 0);
-        let printed = answer.stdout;
-        if json {
-            assert!(skein_lib::bytes::find(&printed, b"\"cut\":true").is_some());
-            assert!(skein_lib::bytes::find(&printed, b"temper ctl DIR task activity 42").is_some());
-        } else {
-            assert!(
-                skein_lib::bytes::find(
-                    &printed,
-                    b"The plan continues (cut)\nread whole: temper ctl DIR task activity 42\n"
-                )
-                .is_some()
+    for (words, engine_cut, cut) in [
+        (Box::<[u8]>::from(b"The plan continues".as_slice()), false, false),
+        (Box::<[u8]>::from(b"The plan continues".as_slice()), true, true),
+        (
+            "é".repeat(usize::try_from(crate::limits::TEXT).expect("text bound")).into_bytes().into_boxed_slice(),
+            false,
+            true,
+        ),
+    ] {
+        for json in [false, true] {
+            let argv: &[&str] =
+                if json { &["inbox", "--kind", "questions", "--json"] } else { &["inbox", "--kind", "questions"] };
+            let (mut root, call) = fixtures::read_call(argv);
+            root.serve(call, fixtures::inbox_rows(c::InboxReadGroup::Needs, 1, false));
+            let task = fixtures::goal(fixtures::TASK, c::WaitsOn::Nothing);
+            let mut text = c::DocumentText::complete(c::Text::new(words.clone(), u32::MAX).expect("words"));
+            text.cut = engine_cut;
+            root.serve(
+                call,
+                c::ReadResult::Value(c::ReadValue::Question(Box::new(c::Question {
+                    task: task.chip,
+                    message: 2,
+                    from: Some(c::OwnerRequester::Task(42)),
+                    words: text,
+                    since: skein_lib::Wall::EPOCH,
+                    acts: skein_lib::List::with_capacity(0),
+                    ending: None,
+                }))),
             );
+            let answer = root.answer(call).expect("question printed");
+            assert_eq!(answer.status, 0);
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "this test validates the renderer cuts output at a UTF-8 boundary"
+            )]
+            let printed = core::str::from_utf8(&answer.stdout).expect("cut at a character");
+            if json {
+                assert_eq!(printed.contains("\"cut\":true"), engine_cut);
+                assert_eq!(printed.contains("temper ctl DIR task activity 42"), engine_cut);
+            } else {
+                assert_eq!(printed.contains(" (cut)\n"), cut, "{printed}");
+                assert!(printed.contains("next: temper ctl DIR task activity 42\n"), "{printed}");
+                assert!(printed.contains("next: temper ctl DIR task answer 41 2 TEXT --key KEY\n"), "{printed}");
+                if !cut {
+                    assert!(printed.contains("The plan continues\n"), "{printed}");
+                } else if !engine_cut {
+                    let shown = printed.lines().nth(1).expect("question words").strip_suffix(" (cut)").expect("cut");
+                    assert!(words.starts_with(shown.as_bytes()));
+                    assert!(!shown.is_empty());
+                    assert!(shown.len() < words.len());
+                }
+            }
         }
     }
 }

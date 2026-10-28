@@ -197,28 +197,49 @@ fn a_cut_question_is_answered_through_the_tools_and_reaches_the_chat() {
         (question.number, asking)
     };
     let agent = fixtures::agent(&mut world);
-    let inbox = call(&mut world, agent, &[b"inbox", b"--kind", b"questions"]);
+    let inbox = call(&mut world, agent, &[b"inbox"]);
     assert_eq!(inbox.status, 0, "{inbox:?}");
     let shown = std::str::from_utf8(&inbox.stdout).expect("UTF-8");
     assert!(shown.contains(&format!("{} (cut)\n", "q".repeat(usize::try_from(TEXT_BOUND).expect("bound")))), "{shown}");
-    assert!(shown.contains(&format!("read whole: temper ctl DIR task activity {asking}")), "{shown}");
-    let answer = call(
-        &mut world,
-        agent,
-        &[
-            b"task",
-            b"answer",
-            chat.to_string().as_bytes(),
-            question.to_string().as_bytes(),
-            b"Go ahead.",
-            b"--key",
-            b"long-question-answer",
-        ],
-    );
+    assert!(shown.contains(&format!("next: temper ctl DIR task activity {asking}")), "{shown}");
+    assert!(shown.contains(&format!("next: temper ctl DIR task answer {chat} {question} TEXT --key KEY")), "{shown}");
+    let line =
+        shown.lines().find_map(|line| line.strip_prefix("next: temper ctl DIR task answer ")).expect("answer act");
+    let mut words: Vec<&[u8]> = vec![b"task", b"answer"];
+    for word in line.split_ascii_whitespace() {
+        words.push(match word {
+            "TEXT" => b"Go ahead.",
+            "KEY" => b"long-question-answer",
+            _ => word.as_bytes(),
+        });
+    }
+    let answer = call(&mut world, agent, &words);
     assert_eq!(answer.status, 0, "{answer:?}");
     assert!(world.front().engine.task(chat).expect("answered chat").inbox.iter().any(|word| {
         word.from == Party::Person(fixtures::PARTY)
             && word.kind == MessageKind::Answer { question }
             && word.words.as_ref() == b"Go ahead."
     }));
+}
+
+#[test]
+fn a_waiting_question_fits_in_the_plain_inbox_with_its_read_and_answer_calls() {
+    const QUESTION: &[u8] = b"May I make this change?";
+    let mut world = fixtures::world(fixtures::SEED);
+    let chat = fixtures::question(world.front(), QUESTION);
+    let (question, asking) = {
+        let task = world.front().engine.task(chat).expect("asked chat");
+        let question =
+            task.inbox.iter().find(|word| word.kind == jig_domain_tasks::MessageKind::Question).expect("question");
+        let jig_domain_tasks::Party::Task(asking) = question.from else { panic!("asking delegate") };
+        (question.number, asking)
+    };
+    let agent = fixtures::agent(&mut world);
+    let inbox = call(&mut world, agent, &[b"inbox"]);
+    assert_eq!(inbox.status, 0, "{inbox:?}");
+    let shown = std::str::from_utf8(&inbox.stdout).expect("UTF-8");
+    assert!(shown.contains("May I make this change?\n"), "{shown}");
+    assert!(!shown.contains("(cut)"), "{shown}");
+    assert!(shown.contains(&format!("next: temper ctl DIR task activity {asking}\n")), "{shown}");
+    assert!(shown.contains(&format!("next: temper ctl DIR task answer {chat} {question} TEXT --key KEY\n")), "{shown}");
 }
