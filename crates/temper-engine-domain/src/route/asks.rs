@@ -35,7 +35,6 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                 }
                 forge_route::refused_step(domain, env, task, step, findings);
             }
-            step_made(domain, task, step, None);
             if let core::StepRefusal::Refused(problem) = why {
                 // Jig's domain/connectors.md, 6.2: a refused batch stays Due.
                 // After rollback, settle the offer as an empty wait so the
