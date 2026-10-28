@@ -530,46 +530,26 @@ pub fn limits(settings: &crate::settings::Engine) -> Option<kit::Limits> {
         silence: link.silence,
         stall: link.stall,
     };
-    kit::worst_case(&limits)?;
+    if !valid(&limits) {
+        return None;
+    }
     Some(limits)
 }
 
-/// Component, routing tables, endpoint names and transient application records.
+/// Check the channel's limits independently of the service's containers.
 #[must_use]
-pub fn worst_case(settings: &crate::settings::Engine, room: u32) -> Option<u64> {
-    let limits = limits(settings)?;
-    let endpoints = u32::try_from(settings.jig.llm.endpoints.len()).ok()?;
-    let mut bytes = kit::worst_case(&limits)?
-        .checked_add(Queue::<io::Request>::worst_case(room)?)?
-        .checked_add(Map::<Token, Token>::worst_case(limits.workers.checked_add(limits.opening)?)?)?
-        .checked_add(List::<(Token, Option<Token>)>::worst_case(
-            u32::try_from(settings.jig.hosts.listener.len()).ok()?,
-        )?)?
-        .checked_add(List::<smith_protocol_channel::Endpoint>::worst_case(endpoints)?)?
-        .checked_add(List::<Forge>::worst_case(u32::try_from(settings.forges.len()).ok()?)?)?
-        .checked_add(wire::worst_case_heap(&crate::translate::limits(&settings.limits)?)?)?;
-    for endpoint in &settings.jig.llm.endpoints {
-        bytes = bytes.checked_add(u64::try_from(endpoint.name.len()).ok()?)?;
-    }
-    for forge in &settings.forges {
-        if let Some(program) = &forge.git_program {
-            bytes = bytes.checked_add(u64::try_from(program.len()).ok()?)?;
-        }
-        if let Some(web) = &forge.web {
-            bytes = bytes.checked_add(u64::try_from(web.len()).ok()?)?;
-        }
-        bytes = bytes.checked_add(u64::try_from(forge.git.len()).ok()?)?.checked_add(
-            u64::try_from(match &forge.api_token {
-                Some(token) => token.expose().len(),
-                None => 0,
-            })
-            .ok()?,
-        )?;
-        if let config::Address::Host { name, .. } = &forge.api {
-            bytes = bytes.checked_add(u64::try_from(name.len()).ok()?)?;
-        }
-    }
-    Some(bytes)
+pub fn valid(limits: &kit::Limits) -> bool {
+    // jig's valid() replaces this at the set's repin
+    kit::worst_case(limits).is_some()
+}
+
+#[cfg(test)]
+#[test]
+fn channel_limits_accept_stock_and_refuse_zero_handshake() {
+    let mut limits = limits(&crate::tests::fixtures::engine()).unwrap();
+    assert!(valid(&limits));
+    limits.handshake = skein_lib::Duration::ZERO;
+    assert!(!valid(&limits));
 }
 
 impl Workers {

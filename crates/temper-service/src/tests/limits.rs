@@ -140,7 +140,7 @@ fn the_wire_admits_a_moved_file_and_temper_values_stay_at_their_bound() {
         let mut handover = skein_lib::bytes::zeroed(usize::try_from(bytes).unwrap());
         handover.fill(b'x');
         settings.setup[0].handover = Some(skein_lib::Secret::new(handover));
-        let (mut forges, _) = crate::forge::prepare(&settings, fixtures::forge_runtime()).unwrap();
+        let mut forges = crate::forge::prepare(&settings, fixtures::forge_runtime()).unwrap();
         let result = crate::setup::prepare(&settings, &mut forges, &fixtures::seeds().crypto, 2, false);
         if bytes == value {
             assert!(result.is_ok());

@@ -44,13 +44,6 @@ impl Rows {
             None => None,
         }
     }
-    pub(crate) fn worst_case(forges: u32, value_bytes: u32) -> Option<u64> {
-        // The codec map allocates as it fills; push bounds it to configured forges.
-        Map::<u16, records::ForgeRows>::worst_case(forges)?
-            .checked_add(u64::from(forges).checked_mul(10)?.checked_mul(u64::from(value_bytes))?)?
-            .checked_add(List::<u16>::worst_case(forges)?)?
-            .checked_add(Map::<u16, ()>::worst_case(FORGES)?)
-    }
 }
 
 #[derive(Debug)]
@@ -216,25 +209,6 @@ pub(crate) fn advance(engine: &mut crate::engine::Engine) {
     }
 }
 
-/// Configured forge values, unconfigured numbers, diagnostics and one access/origin handoff.
-pub(crate) fn worst_case(settings: &crate::settings::Engine) -> Option<u64> {
-    let own = &settings.limits;
-    let value = u64::from(own.records.value_bytes);
-    let mut address = 64_u64; // Rust's longest socket Display, including an IPv6 scope.
-    for forge in &settings.forges {
-        if let jig_protocol_config::Address::Host { name, .. } = &forge.api {
-            address = address.max(u64::try_from(name.len()).ok()?.checked_add(6)?);
-        }
-    }
-    Rows::worst_case(u32::try_from(settings.forges.len()).ok()?, own.records.value_bytes)?
-        .checked_add(u64::try_from(settings.forges.len()).ok()?.checked_mul(value)?)?
-        .checked_add(address.checked_mul(2)?)?
-        .checked_add(value)?
-        .checked_add(u64::from(own.forge_component.key_bytes))?
-        .checked_add(u64::from(own.forge.name_bytes))?
-        .checked_add(u64::from(own.forges.installations).checked_mul(8)?)
-}
-
 #[cfg(test)]
 #[test]
 fn unconfigured_numbers_resume_at_the_cursor_without_retaining_values() {
@@ -259,14 +233,4 @@ fn unconfigured_numbers_resume_at_the_cursor_without_retaining_values() {
     rows.push(records::number(1, records::Item::User), Secret::new(Box::from([1, 9])), 4096);
     assert!(rows.forge(1).is_some());
     assert_eq!(rows.unconfigured.len(), 4);
-}
-
-#[cfg(test)]
-#[test]
-fn retained_values_are_priced_only_at_the_configured_forge_count() {
-    for forges in [0, 1, 9, FORGES] {
-        let small = Rows::worst_case(forges, 4096).unwrap();
-        let large = Rows::worst_case(forges, 4097).unwrap();
-        assert_eq!(large.checked_sub(small), u64::from(forges).checked_mul(10));
-    }
 }

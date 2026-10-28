@@ -5,9 +5,6 @@ use skein_lib::{Duration, bytes};
 
 #[test]
 fn a_revoked_record_waits_for_erased_and_coalesces_a_sign_out() {
-    // Two pending account erasures' map storage, a quarter above 10-28's 176 bytes.
-    const ERASING_MAP_HEAP_CEILING: u64 = 220;
-    assert!(Map::<u32, Erasing>::worst_case(2).unwrap() <= ERASING_MAP_HEAP_CEILING);
     for (notifications, expected_signed_out, removing) in
         [(&[][..], None, false), (&[true, true][..], Some(true), true), (&[false, false][..], Some(false), true)]
     {
@@ -313,7 +310,7 @@ fn registered() -> (config::Engine, AccountsRuntime) {
     origins.push(driver::Origin { uri: b"http://127.0.0.1:7102".as_slice().into(), endpoint: endpoint() }).unwrap();
     let mut providers = List::with_capacity(1);
     providers.push((3, endpoint(), origins)).unwrap();
-    (config, AccountsRuntime { providers, trust_roots: 0, trust_root_bytes: 0 })
+    (config, AccountsRuntime { providers })
 }
 fn host(config: &config::Engine, runtime: AccountsRuntime) -> Accounts {
     Accounts::new(
@@ -401,22 +398,6 @@ fn missing_registration_runtime_is_refused_before_start() {
         )
         .is_err()
     );
-}
-#[test]
-fn overflowing_account_bounds_are_refused_before_start() {
-    const LAST_ACCOUNT_COUNT: u32 = 390_439_394;
-    let (config, _) = registered();
-    let mut overflow = config.limits.driver;
-    overflow.accounts = u32::MAX;
-    overflow.client.document.record_bytes = u32::MAX;
-    // The temporary old-form bound with 64 queue slots gives this measured final count.
-    // Driver records, moves, finishes, tree nodes and queued payloads still fit in u64.
-    overflow.accounts = LAST_ACCOUNT_COUNT;
-    assert!(worst_case(&overflow, 64, config.limits.store.secrets.page.rows).is_some());
-    overflow.accounts = LAST_ACCOUNT_COUNT + 1;
-    assert_eq!(worst_case(&overflow, 64, config.limits.store.secrets.page.rows), None);
-    overflow.accounts = u32::MAX;
-    assert_eq!(worst_case(&overflow, u32::MAX, u32::MAX), None);
 }
 
 #[test]

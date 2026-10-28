@@ -52,7 +52,6 @@ fn omitted_call_answers_reach_the_core_store_and_both_wire_sides() {
             &fixtures::files(),
             Some(&agent),
             &fixtures::seeds(),
-            None,
             fixtures::forge_runtime(),
             None,
         )
@@ -410,7 +409,6 @@ fn an_engine_without_a_local_agent_keeps_its_explicit_call_bound() {
             &fixtures::files(),
             Some(&agent),
             &fixtures::seeds(),
-            None,
             fixtures::forge_runtime(),
             None,
         )

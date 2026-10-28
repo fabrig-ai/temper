@@ -37,9 +37,6 @@ pub struct ForgeRuntime {
     pub number: u16,
     pub address: core::net::SocketAddr,
     pub transport: skein_forge_connection::settings::Transport,
-    /// The prepared trust configuration, priced once for this forge.
-    pub trust_roots: u32,
-    pub trust_root_bytes: u32,
 }
 /// Pair the configuration and shell endpoints by forge number.
 pub fn settings(
@@ -449,15 +446,8 @@ pub(crate) fn indexed(
 pub(crate) fn prepare(
     config: &settings::Engine,
     runtime: List<ForgeRuntime>,
-) -> Result<(skein_forge_connection::settings::Settings, u64), Problems> {
+) -> Result<skein_forge_connection::settings::Settings, Problems> {
     let mut found = Problems::empty();
-    let bytes = match roots(config, &runtime) {
-        Ok(bytes) => bytes,
-        Err(problems) => {
-            found = problems;
-            0
-        }
-    };
     let prepared = settings(&config.forges, runtime, config.webhooks.clone(), &mut found).ok_or(found)?;
     if let Err(why) = skein_forge_connection::limits::check(
         &config.limits.forge_component,
@@ -468,36 +458,7 @@ pub(crate) fn prepare(
         problems(indexed(why, &config.forges), &mut found);
         return Err(found);
     }
-    Ok((prepared, bytes))
-}
-pub(crate) fn roots(config: &settings::Engine, runtime: &List<ForgeRuntime>) -> Result<u64, Problems> {
-    let mut bytes = 0_u64;
-    let mut found = Problems::empty();
-    for endpoint in runtime {
-        if let skein_forge_connection::settings::Transport::Tls { .. } = endpoint.transport {
-            let mut index = 0_u32;
-            for (at, forge) in config.forges.iter().enumerate() {
-                if forge.number == endpoint.number {
-                    index = u32::try_from(at).expect("forge index");
-                    break;
-                }
-            }
-            let path = forge_path(index).member(b"transport").member(b"tls").member(b"trust");
-            if endpoint.trust_roots == 0 || endpoint.trust_root_bytes == 0 {
-                found.push(path, What::Bound);
-                continue;
-            }
-            let Some(roots) = skein_tls::roots_worst_case(endpoint.trust_roots, endpoint.trust_root_bytes) else {
-                found.push(path, What::Bound);
-                continue;
-            };
-            match bytes.checked_add(roots) {
-                Some(total) => bytes = total,
-                None => found.push(path, What::Bound),
-            }
-        }
-    }
-    if found.is_empty() { Ok(bytes) } else { Err(found) }
+    Ok(prepared)
 }
 
 pub(crate) fn config(
@@ -562,14 +523,4 @@ pub(crate) fn unreachable_text(host: &[u8]) -> Box<[u8]> {
     out.put(b"unreachable: ").expect("prefix");
     out.put(host).expect("host");
     out.finish()
-}
-/// Retained holds are priced beside the connection, independently of whether any host failed today.
-pub(crate) fn held_worst_case(config: &settings::Engine) -> Option<u64> {
-    let mut bytes = Map::<u16, Box<[u8]>>::worst_case(config.limits.forge_component.forges)?;
-    for forge in &config.forges {
-        if let jig_protocol_config::Address::Host { name, .. } = &forge.api {
-            bytes = bytes.checked_add(u64::try_from(name.len()).ok()?)?;
-        }
-    }
-    Some(bytes)
 }

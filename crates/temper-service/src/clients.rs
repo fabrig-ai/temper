@@ -146,6 +146,9 @@ impl Clients {
         sign_in: Option<&crate::settings::SignIn>,
         files: &[(Box<[u8]>, skein_lib::Secret)],
     ) -> Result<Self, Problems> {
+        if !crate::server::valid(&crate::limits::server(&config.limits)) {
+            return Err(invalid(What::Bound));
+        }
         let config::Address::Addr(listener) = &clients.listener else {
             return Err(invalid(What::Form));
         };
@@ -642,59 +645,6 @@ pub fn untag(mut event: io::Event) -> io::Event {
         io::Event::Resized | io::Event::Shutdown { .. } => {}
     }
     event
-}
-
-#[must_use]
-pub fn worst_case(
-    limits: &kit::Limits,
-    transport: &crate::server::Limits,
-    mapping: &http::Limits,
-    room: u32,
-    journal: &root::JournalLimits,
-) -> Option<u64> {
-    kit::worst_case(limits)?
-        .checked_add(Map::<Token, root::Event>::worst_case(DEMO_STARTS)?)?
-        .checked_add(Queue::<root::Event>::worst_case(DEMO_STARTS)?)?
-        .checked_add(Queue::<crate::HandoverRead>::worst_case(DEMO_STARTS)?)?
-        .checked_add(Queue::<kit::SecretsRequest>::worst_case(DEMO_STARTS)?)?
-        .checked_add(u64::from(DEMO_STARTS).checked_mul(4097)?)?
-        .checked_add(u64::try_from(bundle::NO_BUNDLE_PAGE.len()).ok()?)?
-        // First-clock initialization briefly owns both validated component instances.
-        .checked_add(kit::worst_case(limits)?)?
-        .checked_add(http::worst_case(mapping)?)?
-        .checked_add(Map::<Token, bundle::Reply>::worst_case(transport.connections)?)?
-        // Current query decoding and measured page construction, before ownership moves.
-        .checked_add(u64::from(transport.http.head).checked_add(4096)?)?
-        .checked_add(provider::worst_case(limits, transport)?)?
-        .checked_add(Map::<Token, github::Reply>::worst_case(transport.connections)?)?
-        .checked_add(Queue::<(Token, skein_http::server::Call)>::worst_case(transport.connections)?)?
-        .checked_add(
-            u64::from(transport.connections).checked_mul(
-                u64::from(transport.http.head).checked_add(4096)?.checked_add(
-                    u64::from(transport.http.headers)
-                        .checked_mul(u64::try_from(::core::mem::size_of::<skein_http::Header>()).ok()?)?,
-                )?,
-            )?,
-        )?
-        .checked_add(u64::from(transport.connections).checked_mul(u64::from(transport.http.head))?)?
-        .checked_add(crate::server::worst_case(transport)?)?
-        .checked_add(Queue::<crate::server::Routed>::worst_case(room)?)?
-        .checked_add(Queue::<http::Request>::worst_case(room)?)?
-        .checked_add(List::<Box<[u8]>>::worst_case(1)?.checked_add(64)?)?
-        .checked_add(Queue::<kit::Request>::worst_case(room)?)?
-        .checked_add(Queue::<io::Request>::worst_case(room)?)?
-        .checked_add(Queue::<root::Event>::worst_case(room)?)?
-        .checked_add(u64::from(limits.message_bytes).checked_mul(64)?.checked_mul(u64::from(room).checked_mul(2)?)?)?
-        .checked_add(u64::from(transport.http.send).checked_mul(u64::from(room))?)?
-        .checked_add(Queue::<Box<[u8]>>::worst_case(room)?)?
-        .checked_add(u64::from(room).checked_mul(512)?)?
-        .checked_add(Queue::<kit::SecretsRequest>::worst_case(room)?)?
-        .checked_add(Map::<Token, Asked>::worst_case(room)?)?
-        .checked_add(u64::from(room).checked_mul(40)?)?
-        // A carried value waits here on its way to the store.
-        .checked_add(u64::from(room).checked_mul(u64::from(limits.wire.keyed_value_some))?)?
-        .checked_add(Map::<u64, Endings>::worst_case(journal.commits)?)?
-        .checked_add(List::<u64>::worst_case(journal.writes)?.checked_mul(u64::from(journal.commits))?)
 }
 
 impl Clients {

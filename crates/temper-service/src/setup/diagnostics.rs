@@ -1,6 +1,6 @@
 //! The wanted names alone reach the operator's log (protocol/setup.md, 17.5; call 7).
 use alloc::boxed::Box;
-use skein_forge::github::{document::Access, setup};
+use skein_forge::github::document::Access;
 use skein_forge_setup::github::Lacking;
 use skein_lib::Writer;
 
@@ -33,18 +33,4 @@ pub(super) fn names(lacking: &[Lacking]) -> Box<[u8]> {
         out.put(suffix).expect("measured access");
     }
     out.finish()
-}
-/// Caller-owned diagnostic text, separate from the setup Host's unpriced heap.
-pub(crate) fn worst_case() -> Option<u64> {
-    let mut bytes = 0_u64;
-    for (name, access) in setup::PERMISSIONS {
-        bytes = bytes
-            .checked_add(11)?
-            .checked_add(u64::try_from(name.len()).ok()?)?
-            .checked_add(u64::try_from(access_text(access).len()).ok()?)?;
-    }
-    for name in setup::EVENTS {
-        bytes = bytes.checked_add(6)?.checked_add(u64::try_from(name.len()).ok()?)?.checked_add(2)?;
-    }
-    Some(bytes)
 }

@@ -32,9 +32,6 @@ const KEY_EXCHANGE: u64 = PREFIX | (1_u64 << 33);
 pub struct AccountsRuntime {
     /// LLM account sign-in endpoints and origins, keyed by provider number.
     pub providers: List<(u32, driver::Endpoint, List<driver::Origin>)>,
-    /// Bounds of all prepared trust roots, supplied by their shell owner.
-    pub trust_roots: u32,
-    pub trust_root_bytes: u32,
 }
 /// The driver starts after the store supplies its durable installation identity (llm.md, 5.4).
 enum Phase {
@@ -169,9 +166,6 @@ fn provider_templates(
             }
             let registration = registration
                 .ok_or(problem(Path::root().member(b"engine").member(b"llm").member(b"providers"), What::Refers))?;
-            if (runtime.trust_roots == 0 || runtime.trust_root_bytes == 0) && has_tls(&endpoint, &origins) {
-                return Err(problem(Path::root().member(b"engine").member(b"llm").member(b"providers"), What::Bound));
-            }
             let account = party::party_account(
                 &registration_input(registration, &endpoint.transport),
                 endpoint,
@@ -1295,32 +1289,6 @@ pub(crate) fn untag(mut event: io::Event) -> io::Event {
     }
     event
 }
-/// Bounded source records, required scopes, key flights and queues beside the driver.
-pub(crate) fn worst_case(limits: &driver::Limits, room: u32, page_rows: u32) -> Option<u64> {
-    let record = u64::from(limits.client.document.record_bytes);
-    driver::worst_case(limits)?
-        .checked_add(u64::try_from(size_of::<Accounts>()).ok()?)?
-        .checked_add(Queue::<io::Request>::worst_case(room)?)?
-        .checked_add(Queue::<driver::Event>::worst_case(room)?)?
-        .checked_add(Queue::<driver::FileLower>::worst_case(room)?)?
-        .checked_add(Queue::<domain::Request>::worst_case(room)?)?
-        .checked_add(records::worst_case(limits.accounts, &limits.client.document)?)?
-        .checked_add(moves::worst_case(limits.accounts, &limits.client.document)?)?
-        .checked_add(Map::<u32, u32>::worst_case(limits.accounts)?)?
-        .checked_add(Queue::<moves::Next>::worst_case(room)?)?
-        .checked_add(finishes::worst_case(limits.accounts)?)?
-        .checked_add(Queue::<finishes::Next>::worst_case(room)?)?
-        .checked_add(u64::from(room).checked_mul(u64::from(limits.client.uri_bytes))?)?
-        .checked_add(keys::worst_case(limits.accounts, limits.client.document.token_bytes)?)?
-        .checked_add(restart::worst_case(limits.accounts, page_rows)?)?
-        .checked_add(Queue::<keys::Next>::worst_case(room)?)?
-        .checked_add(Queue::<domain::FromComponent>::worst_case(room)?)?
-        .checked_add(Queue::<u32>::worst_case(room)?)?
-        .checked_add(Map::<u32, Box<[u8]>>::worst_case(limits.accounts)?)?
-        .checked_add(Map::<u32, Erasing>::worst_case(limits.accounts)?)?
-        .checked_add(u64::from(limits.accounts).checked_mul(u64::from(limits.client.scope_bytes))?)?
-        .checked_add(u64::from(room).checked_mul(record.checked_add(4096)?)?)
-}
 
 fn copy_endpoint(endpoint: &driver::Endpoint) -> driver::Endpoint {
     driver::Endpoint {
@@ -1341,19 +1309,6 @@ fn copy_origins(origins: &List<driver::Origin>) -> List<driver::Origin> {
     }
     copy
 }
-fn has_tls(endpoint: &driver::Endpoint, origins: &List<driver::Origin>) -> bool {
-    match endpoint.transport {
-        driver::Transport::Tls { .. } => return true,
-        driver::Transport::Plaintext => (),
-    }
-    for origin in origins {
-        match origin.endpoint.transport {
-            driver::Transport::Tls { .. } => return true,
-            driver::Transport::Plaintext => (),
-        }
-    }
-    false
-}
 fn event_account(event: &driver::Event) -> Option<u32> {
     match event {
         driver::Event::Granted { account, .. }
@@ -1370,15 +1325,6 @@ fn event_account(event: &driver::Event) -> Option<u32> {
         | driver::Event::Unlock { account } => Some(*account),
         driver::Event::Closed => None,
     }
-}
-
-/// The public account sign-in templates retained beside the driver. Two
-/// one-account driver bounds include their origins and the temporary startup copy.
-pub(crate) fn configured_bytes(config: &config::Engine) -> Option<u64> {
-    let count = u32::try_from(config.llm.providers.len()).ok()?;
-    let limits = driver::Limits { accounts: 1, exchanges: 1, listeners: 1, ..config.limits.driver };
-    Map::<u32, driver::Account>::worst_case(count)?
-        .checked_add(driver::worst_case(&limits)?.checked_mul(u64::from(count))?.checked_mul(2)?)
 }
 
 #[cfg(test)]

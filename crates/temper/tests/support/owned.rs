@@ -646,13 +646,7 @@ impl Bounded {
                 }
             };
             forges
-                .push(temper_service::ForgeRuntime {
-                    number: forge.number,
-                    address: forge.address,
-                    transport,
-                    trust_roots: forge.trust_roots,
-                    trust_root_bytes: forge.trust_root_bytes,
-                })
+                .push(temper_service::ForgeRuntime { number: forge.number, address: forge.address, transport })
                 .expect("configured forge count");
         }
         forges
@@ -661,14 +655,10 @@ impl Bounded {
     pub fn accounts(&self) -> temper_service::AccountsRuntime {
         use skein_oauth_accounts::{Endpoint, Origin, Transport};
         let value: serde_json::Value = serde_json::from_slice(&self.document).expect("bounded document");
-        let mut runtime = temper_service::AccountsRuntime {
-            providers: skein_lib::List::with_capacity(2),
-            trust_roots: 0,
-            trust_root_bytes: 0,
-        };
+        let mut runtime = temper_service::AccountsRuntime { providers: skein_lib::List::with_capacity(2) };
         for provider in value["engine"]["llm"]["providers"].as_array().expect("providers") {
             let Some(sign_in) = provider["sources"].get("sign_in") else { continue };
-            // Synthetic transports check registration and memory without resolving or opening endpoints.
+            // Synthetic transports check registration without resolving or opening endpoints.
             let endpoint = || {
                 let (trust, _) =
                     skein_tls::Config::from_der(&[skein_tls_world::pki::ROOT.into()], &[]).expect("fixture trust");
@@ -696,10 +686,6 @@ impl Bounded {
                     origins,
                 ))
                 .expect("bounded providers");
-            // The shell prepares trust twice: the token endpoint and the shared issuer origin.
-            // Each trust() accepts at most 1024 roots, each at most 65536 bytes.
-            runtime.trust_roots += 2 * 1024;
-            runtime.trust_root_bytes = 65_536;
         }
         runtime
     }
@@ -750,8 +736,6 @@ pub fn bounded(directory: &Path) -> Bounded {
             number: 1,
             address: owned.forgejo,
             transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-            trust_roots: 0,
-            trust_root_bytes: 0,
         },
     )
 }
@@ -774,8 +758,6 @@ pub fn bounded_records(directory: &Path) -> Bounded {
             number: 1,
             address: owned.forgejo,
             transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-            trust_roots: 0,
-            trust_root_bytes: 0,
         },
     )
 }
@@ -828,10 +810,6 @@ pub fn bounded_template(directory: &Path) -> Bounded {
                 server_name: skein_tls::Name::new("api.github.com").expect("GitHub name"),
                 trust,
             },
-            // The binary's trust() admits at most 1024 roots of 65536 bytes each.
-            // Price those bounds, independent of this machine's root bundle.
-            trust_roots: 1024,
-            trust_root_bytes: 65_536,
         },
     )
 }
@@ -890,8 +868,6 @@ pub fn deployment_profile(directory: &Path, relative: &str) -> Bounded {
                     number: forge.number,
                     address: "127.0.0.1:3000".parse().expect("fake forge"),
                     transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-                    trust_roots: 0,
-                    trust_root_bytes: 0,
                 })
                 .expect("forge count");
         }
@@ -957,8 +933,6 @@ fn bounded_document(directory: &Path, mut value: serde_json::Value, forge: tempe
                     number: local.number,
                     address: address.socket().expect("local forge socket"),
                     transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-                    trust_roots: 0,
-                    trust_root_bytes: 0,
                 })
                 .expect("configured forge count");
         }

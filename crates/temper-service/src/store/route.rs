@@ -347,12 +347,6 @@ fn page_bytes(record: &engine::Record, kept: u64) -> Option<(u64, u64)> {
     Some((payload, kept.checked_add(slot)?))
 }
 
-pub(crate) fn worst_case(limits: &engine::Limits, key: u32, payload: u64) -> Option<u64> {
-    Map::<Token, Flight>::worst_case(limits.loads.loads)?
-        .checked_add(Map::<Token, Token>::worst_case(limits.loads.loads)?)?
-        .checked_add(payload.checked_add(u64::from(key))?.checked_mul(u64::from(limits.loads.loads))?)
-}
-
 /// No owner has registered a written patch site in this build. Hand the
 /// machine back with the named refusal, so the active generation is preserved.
 fn dispatch(

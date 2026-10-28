@@ -11,9 +11,6 @@ pub(super) struct Hooks {
     connections: BTreeMap<Fd, Vec<u8>>,
 }
 impl Hooks {
-    pub(super) fn memory() -> u64 {
-        (SOCKETS * (LINE + 512)) as u64 + 1024 * 2
-    }
     pub(super) fn complete(&mut self, complete: &Complete, hooks: Option<SocketAddr>, responses: &mut Vec<u16>) {
         match (&complete.kind, &complete.result) {
             (Op::Bind { fd, addr }, Ok(Done::Bound(bound))) if addr.port() == 0 => {

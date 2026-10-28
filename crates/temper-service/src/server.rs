@@ -364,17 +364,24 @@ fn end(connection: &mut Connection, drain: bool, out: &mut Queue<Routed>) {
         }));
     }
 }
+/// Listener and HTTP edge limits required by the connection lifecycle.
 #[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    if limits.connections == 0 || limits.stall == Duration::ZERO {
-        return None;
-    }
-    Map::<Token, Connection>::worst_case(limits.connections)?.checked_add(
-        skein_http::server::worst_case(&limits.http)?
-            .checked_add(Queue::<http::Event>::worst_case(8)?)?
-            .checked_add(Queue::<http::Request>::worst_case(8)?)?
-            .checked_add(Queue::<Down>::worst_case(8)?)?
-            .checked_add(u64::from(limits.http.read))?
-            .checked_mul(u64::from(limits.connections))?,
-    )
+pub fn valid(limits: &Limits) -> bool {
+    // skein's valid() replaces this at the set's repin
+    limits.connections != 0 && limits.stall != Duration::ZERO && http::worst_case(&limits.http).is_some()
+}
+
+#[cfg(test)]
+#[test]
+fn listener_limits_accept_stock_and_refuse_zero_connections_or_stall() {
+    let mut limits = crate::limits::server(&crate::tests::fixtures::engine().jig.limits);
+    assert!(valid(&limits));
+    limits.connections = 0;
+    assert!(!valid(&limits));
+    limits = crate::limits::server(&crate::tests::fixtures::engine().jig.limits);
+    limits.stall = Duration::ZERO;
+    assert!(!valid(&limits));
+    limits = crate::limits::server(&crate::tests::fixtures::engine().jig.limits);
+    limits.http.read = 0;
+    assert!(!valid(&limits));
 }

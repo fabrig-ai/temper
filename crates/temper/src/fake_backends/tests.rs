@@ -731,10 +731,10 @@ fn four_forges_pass_ordinary_admission_with_a_directoryless_managed_entry() {
     assert!(entry.directory.is_empty());
     assert_eq!(temper_forge_setup::given::values(entry, None, &checked.checked.limits).admin_name.as_ref(), b"admin");
     validate(&first.directories, &first.bytes, &scratch.0.join("fake-claude")).expect("sandbox validation");
-    let (memory, operations) =
+    let (_, operations) =
         crate::envelope_in(&first.directories, &first.bytes).expect("ordinary computed startup sizing");
-    assert!(memory > 0 && operations > 0);
-    eprintln!("four-forge ordinary sizing: {memory} bytes, {operations} operations");
+    assert!(operations > 0);
+    eprintln!("four-forge ordinary sizing: {operations} operations");
 }
 
 #[test]

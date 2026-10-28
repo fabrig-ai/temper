@@ -540,8 +540,6 @@ fn records_service() -> (crate::Service, skein_lib::Secret) {
                 number,
                 address: ([127, 0, 0, 1], 2999_u16.checked_add(number).unwrap()).into(),
                 transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-                trust_roots: 0,
-                trust_root_bytes: 0,
             })
             .unwrap();
     }

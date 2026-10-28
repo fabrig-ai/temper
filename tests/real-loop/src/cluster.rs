@@ -175,7 +175,6 @@ pub(crate) struct Runs {
     pub(crate) assigned_at: Option<skein_lib::Time>,
 }
 impl Runs {
-    pub(crate) const MEMORY: u64 = (WIRE_BYTES * 4) as u64;
     pub(crate) fn assigned(&self) -> bool {
         self.pending.is_some() || !self.tasks.is_empty()
     }

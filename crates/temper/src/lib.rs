@@ -311,7 +311,7 @@ fn address(configured: &config::Address) -> Result<std::net::SocketAddr, String>
             .ok_or_else(|| "endpoint has no address".into()),
     }
 }
-fn trust(file: Option<&[u8]>) -> Result<(skein_tls::Config, u32, u32), String> {
+fn trust(file: Option<&[u8]>) -> Result<skein_tls::Config, String> {
     let source = file
         .map_or(skein_shell::Trust::Machine { ssl_cert_file: None }, |file| skein_shell::Trust::Der(path(file).into()));
     let roots = skein_shell::read_trust_roots(
@@ -324,15 +324,12 @@ fn trust(file: Option<&[u8]>) -> Result<(skein_tls::Config, u32, u32), String> {
         skein_shell::RootsRefusal::TooMany { bound } => format!("past {bound} trust roots"),
         skein_shell::RootsRefusal::TooLong { index, bound } => format!("trust root {index}: past {bound} bytes"),
     })?;
-    let count = u32::try_from(roots.certificates.len()).expect("bounded roots");
-    let each =
-        roots.certificates.iter().map(|root| u32::try_from(root.len()).expect("bounded root")).max().unwrap_or(0);
     let (trust, _) = skein_tls::Config::from_der(&roots.certificates, &[]).map_err(|why| match why {
         skein_tls::Refusal::Roots => "no supported trust roots",
         skein_tls::Refusal::Alpn => "protocol names refused",
         skein_tls::Refusal::Provider => "TLS provider refused",
     })?;
-    Ok((trust, count, each))
+    Ok(trust)
 }
 fn server_name(bytes: &[u8]) -> Result<skein_tls::Name, String> {
     skein_tls::Name::new(std::str::from_utf8(bytes).map_err(|why| why.to_string())?)
@@ -355,17 +352,14 @@ fn forges(
             Err(_) if matches!(forge.api, config::Address::Host { .. }) => service::forge::HELD_ADDRESS,
             Err(why) => return Err(format!("{prefix}.api: {why}")),
         };
-        let (transport, trust_roots, trust_root_bytes) = match &forge.transport {
-            service::startup::Transport::Plaintext => (Transport::Plaintext { name: None }, 0, 0),
+        let transport = match &forge.transport {
+            service::startup::Transport::Plaintext => Transport::Plaintext { name: None },
             service::startup::Transport::Tls { server_name: name, trust: file } => {
-                let (trust, count, each) =
-                    trust(file.as_deref()).map_err(|why| format!("{prefix}.transport.tls.trust: {why}"))?;
-                (Transport::Tls { server_name: server_name(name)?, trust }, count, each)
+                let trust = trust(file.as_deref()).map_err(|why| format!("{prefix}.transport.tls.trust: {why}"))?;
+                Transport::Tls { server_name: server_name(name)?, trust }
             }
         };
-        runtime
-            .push(service::ForgeRuntime { number: forge.number, address, transport, trust_roots, trust_root_bytes })
-            .expect("forge count");
+        runtime.push(service::ForgeRuntime { number: forge.number, address, transport }).expect("forge count");
     }
     Ok(runtime)
 }
@@ -476,9 +470,7 @@ fn prepare_with_limits(
         given,
     )
     .map_err(|why| String::from_utf8_lossy(&service::startup::lines(&why)).into_owned())?;
-    service
-        .configure_google_endpoints(google)
-        .map_err(|_| "application.sign_in: TLS roots exceed engine.memory_bytes")?;
+    service.configure_google_endpoints(google);
     if let Some(agent) = &agent
         && let Some(program) = agent.programs.first()
     {
@@ -518,7 +510,7 @@ fn envelope_in_mode(directories: &Directories, config: &[u8], boxed: bool) -> Re
     directories.open(skein_shell::effective_user())?;
     let mut owned = Vec::new();
     let result = prepare_with_limits(directories, config, &mut owned, boxed, &service::stock::Given::Stock)
-        .map(|(service, _, _)| (service.worst_case(), service.operations()));
+        .map(|(service, _, _)| (0, service.operations()));
     close(owned);
     result.map_err(|why| prefixed("temper serve", &why))
 }
@@ -550,7 +542,7 @@ pub fn envelope_in_with(
     directories.open(skein_shell::effective_user())?;
     let mut owned = Vec::new();
     let result = prepare_with_limits(directories, config, &mut owned, false, given)
-        .map(|(service, _, _)| (service.worst_case(), service.operations()));
+        .map(|(service, _, _)| (0, service.operations()));
     close(owned);
     result.map_err(|why| prefixed("temper serve", &why))
 }

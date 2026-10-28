@@ -80,8 +80,7 @@ fn default_engine_and_worker_grants_fit_the_channel_and_link() {
         assert_eq!(payload::largest(&limits).unwrap().grant, 7057);
         assert_eq!(jig_protocol_worker_wire::CEILINGS.application_value_secret, 8192);
         let worker = fixtures::worker_settings();
-        let link = crate::worker_settings::link_limits(&worker.jig, &limits).unwrap();
-        assert!(jig_protocol_worker_link::worst_case(&link).is_some());
+        crate::worker_settings::link_limits(&worker.jig, &limits).unwrap();
     }
     assert!(started(&fixtures::document(), &fixtures::files(), &fixtures::startup_agent()).is_empty());
     let worker =

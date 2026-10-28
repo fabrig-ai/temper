@@ -302,8 +302,6 @@ pub(crate) fn forges() -> List<temper_service::ForgeRuntime> {
             number: 1,
             address: FORGE,
             transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-            trust_roots: 0,
-            trust_root_bytes: 0,
         })
         .expect("one loopback forge");
     forges

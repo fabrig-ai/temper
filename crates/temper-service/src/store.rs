@@ -651,27 +651,9 @@ fn idle_drivers(drivers: &[Driver; 3]) -> bool {
     true
 }
 
-pub(crate) fn worst_case(application: &root::Limits, limits: &protocol::Limits) -> Option<u64> {
-    let room = root::max_out(application).max(protocol::MAX_OUT_DOWN).checked_mul(2)?;
-    // Queues and load flights price the same immutable payload envelope.
-    let payload = root::payload_worst_case(application)?;
-    protocol::worst_case(limits)?
-        .checked_add(u64::try_from(size_of::<Store>()).ok()?)?
-        .checked_add(FileIo::worst_case(handles(limits), max_read(limits), 32, max_whole(limits))?.checked_mul(3)?)?
-        .checked_add(Queue::<file::Request>::worst_case(room)?.checked_mul(3)?)?
-        .checked_add(Queue::<file::Event>::worst_case(room)?.checked_mul(3)?)?
-        .checked_add(Queue::<protocol::Event>::worst_case(room)?.checked_mul(3)?)?
-        .checked_add(Queue::<Up>::worst_case(room)?)?
-        .checked_add(Queue::<Submit>::worst_case(room)?)?
-        .checked_add(Map::<Token, ()>::worst_case(handles(limits))?.checked_mul(3)?)?
-        .checked_add(route::worst_case(application, limits.store.key, payload)?)?
-        .checked_add(u64::from(max_read(limits)).checked_mul(u64::from(room))?.checked_mul(6)?)?
-        .checked_add(payload.checked_mul(u64::from(room))?)
-}
-
 #[cfg(test)]
 mod sizing_tests {
-    use super::{FileIo, check_read_page, handles, max_read, max_whole, page_bytes, protocol};
+    use super::{check_read_page, max_read, max_whole, page_bytes, protocol};
 
     #[test]
     fn drivers_read_a_whole_page_in_every_admitted_store() {
@@ -732,9 +714,6 @@ mod sizing_tests {
         let limits = super::limits(&application, &application.forge, &profile).unwrap();
         assert!(max_read(&limits) >= protocol::sizes::MANIFEST_BYTES);
         assert_eq!(max_whole(&limits), max_read(&limits));
-        let old_driver = FileIo::worst_case(handles(&limits), max_read(&limits), 32, max_read(&limits)).unwrap();
-        let whole_driver = FileIo::worst_case(handles(&limits), max_read(&limits), 32, max_whole(&limits)).unwrap();
-        assert_eq!(whole_driver, old_driver);
     }
 
     #[test]

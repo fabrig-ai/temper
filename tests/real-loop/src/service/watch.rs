@@ -17,9 +17,6 @@ pub(super) struct Watch {
     connections: BTreeMap<i32, Connection>,
 }
 impl Watch {
-    pub(super) fn memory() -> u64 {
-        (CONNECTIONS * (BYTES * 8 + 1024)) as u64
-    }
     pub(super) fn complete(&mut self, complete: &Complete) {
         if !self.armed || self.delivered {
             return;
