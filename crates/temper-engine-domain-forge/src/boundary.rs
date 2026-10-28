@@ -25,6 +25,8 @@ pub struct BriefCommit(pub [u8; 32]);
 pub enum BriefSource {
     /// Failed checks and their logs on a pinned head.
     Ci { item: BriefItem, head: BriefCommit },
+    /// Failed CI on the tip pinned by a deployment repair.
+    BranchCi { task: u64, head: BriefCommit },
     /// Reviews and remarks on a pinned head.
     Reviews { item: BriefItem, head: BriefCommit },
     /// A pull request against its base at a pinned head.
@@ -771,6 +773,12 @@ pub struct ChangeEvidence {
 pub struct LandingEvidence {
     pub change: u64,
     pub facts: ChangeEvidence,
+}
+/// The landing tip and failed contexts observed in one fresh change step.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct BranchFailure {
+    pub head: skein_forge::api::Commit,
+    pub failed: crate::ResultText,
 }
 /// Identity supplied by the named-call owner, interpreted only for lookup.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -1555,6 +1563,7 @@ pub enum Request {
         decision: change::Decision,
         entry: Option<u64>,
         evidence: Option<ChangeEvidence>,
+        failure: Option<BranchFailure>,
     },
     /// Task-specific news with a connector classification.
     News {

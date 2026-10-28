@@ -36,6 +36,10 @@ fn red_checks() -> Box<[Status]> {
 }
 
 fn gather(checks: Box<[Status]>, log: &[u8], budget: u32) -> Domain {
+    gather_for(checks, log, budget, false)
+}
+
+fn gather_for(checks: Box<[Status]>, log: &[u8], budget: u32, landing: bool) -> Domain {
     let job_bound = (budget / 5)
         .min(
             budget
@@ -53,14 +57,21 @@ fn gather(checks: Box<[Status]>, log: &[u8], budget: u32) -> Domain {
         requested: true,
         why: temper_engine_domain_forge_change::Repair::Ci,
     };
+    row.base_repair = landing;
+    if landing {
+        row.pull = None;
+        row.change.last_head = None;
+        row.change.state = temper_engine_domain_forge_change::State::Producing { requested: true };
+    }
     outputs(&mut d, Event::Change { row });
     outputs(
         &mut d,
         Event::PlanBrief {
             section: SECTION,
-            source: BriefSource::Ci {
-                item: BriefItem { repository: REPO.repository, number: 1 },
-                head: BriefCommit(HEAD),
+            source: if landing {
+                BriefSource::BranchCi { task: fixtures::CHANGE, head: BriefCommit(HEAD) }
+            } else {
+                BriefSource::Ci { item: BriefItem { repository: REPO.repository, number: 1 }, head: BriefCommit(HEAD) }
             },
         },
     );
@@ -333,4 +344,14 @@ fn remarks_over_the_budget_keep_their_prefix_and_mark_every_cut_byte() {
     let count = skein_lib::Decimal::of(u64::try_from(whole_len - kept.len()).unwrap());
     assert_eq!(marker.strip_suffix(" bytes cut]\n").expect("cut marker").as_bytes(), count.as_bytes());
     assert!(words.len() <= 128);
+}
+
+#[test]
+fn a_landing_tip_repair_reads_the_same_failed_step_and_logs_end() {
+    let bytes = take(&mut gather_for(red_checks(), RUNNER_LOG, SHIPPED_CI, true));
+    let words = text(&bytes);
+    assert!(words.contains("Failed check: / changes (pull_request)"), "{words}");
+    assert!(words.contains("Failed step: 2 Each pull request adds changes/<its number>.md"), "{words}");
+    assert!(words.contains("Missing changes/1.md"), "{words}");
+    assert!(words.contains("c1fb3599fa12c976"), "failed tip: {words}");
 }
