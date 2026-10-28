@@ -413,6 +413,7 @@ pub fn tiered() -> Domain {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    prime_main(&mut d);
     d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
     tier_tip(&mut d, BASE);
     d
@@ -500,9 +501,15 @@ pub fn prime_main(d: &mut Domain) -> Box<[Request]> {
     assert_eq!(op, Op::Read(Read::Branch { branch: b"main".as_slice().into() }));
     let answered = answer(d, call, Ok(Answer::Commit(BASE)));
     let mut out = Queue::with_capacity(max_out(&LIMITS));
-    for request in answered { out.push(request); }
+    for request in answered {
+        out.push(request);
+    }
     finish_tier_keys(d, &mut out);
-    out.drain().collect()
+    let mut values = skein_lib::List::with_capacity(out.len());
+    while let Some(request) = out.pop() {
+        values.push(request).expect("sized from queue");
+    }
+    values.into_boxed()
 }
 
 fn tier_bytes(byte: u8, length: usize) -> Box<[u8]> {
