@@ -1,6 +1,6 @@
 //! Every entrance's admission class, with a small pacing bound.
 use super::fixtures::{self, ATTEMPT, RUN};
-use crate::{Encoded, Event, Invalid, admits, agent, checkout, host, is_new_work};
+use crate::{Encoded, Event, Invalid, admits, agent, checkout, host, is_new_work, passes};
 use alloc::boxed::Box;
 use skein_lib::Token;
 
@@ -9,10 +9,9 @@ const MESSAGE: Token = Token::new(24);
 // One in-flight hand-out can reach this scenario's pacing bound.
 const WATERMARK: u32 = 1;
 
-#[test]
-fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
+fn admission_classes() -> Box<[(Event, bool, bool)]> {
     let source = host::SourceName::new(b"alice").unwrap();
-    let rows = [
+    Box::new([
         (
             Event::Assign {
                 assignment: fixtures::assignment(false, Box::new([])),
@@ -20,8 +19,9 @@ fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
                 save: None,
             },
             true,
+            false,
         ),
-        (Event::Link(host::LinkDown::Assign { assignment: fixtures::assignment(false, Box::new([])) }), true),
+        (Event::Link(host::LinkDown::Assign { assignment: fixtures::assignment(false, Box::new([])) }), true, false),
         (
             Event::Link(host::LinkDown::Message {
                 run: RUN,
@@ -32,10 +32,11 @@ fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
                 finish_requested: false,
             }),
             true,
+            false,
         ),
-        (Event::Link(host::LinkDown::Check { name: source }), true),
-        (Event::Link(host::LinkDown::SignOut { name: source }), true),
-        (Event::Link(host::LinkDown::Sources { sources: Box::new([source]) }), false),
+        (Event::Link(host::LinkDown::Check { name: source }), true, false),
+        (Event::Link(host::LinkDown::SignOut { name: source }), true, false),
+        (Event::Link(host::LinkDown::Sources { sources: Box::new([source]) }), false, false),
         (
             Event::Link(host::LinkDown::Relayed {
                 run: RUN,
@@ -44,16 +45,18 @@ fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
                 answer: host::Relayed::Busy,
             }),
             false,
+            true,
         ),
-        (Event::Link(host::LinkDown::TurnKept { run: RUN, attempt: ATTEMPT, turn: 1 }), false),
-        (Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: ATTEMPT }), false),
-        (Event::Link(host::LinkDown::Cancel { run: RUN, attempt: ATTEMPT }), false),
+        (Event::Link(host::LinkDown::TurnKept { run: RUN, attempt: ATTEMPT, turn: 1 }), false, true),
+        (Event::Link(host::LinkDown::Acknowledge { run: RUN, attempt: ATTEMPT }), false, true),
+        (Event::Link(host::LinkDown::Cancel { run: RUN, attempt: ATTEMPT }), false, false),
         (
             Event::Link(host::LinkDown::Grant {
                 run: RUN,
                 attempt: ATTEMPT,
                 grant: fixtures::grant(host::GrantTable::Accounts, fixtures::ACCOUNT),
             }),
+            false,
             false,
         ),
         (
@@ -62,13 +65,14 @@ fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
                 answer: host::sources::Answer::SignedOut(host::SignOutResult::SignedOut),
             },
             false,
+            false,
         ),
-        (Event::Ready, false),
-        (Event::Lost, false),
-        (Event::GracePassed, false),
-        (Event::Resend { run: RUN, attempt: ATTEMPT, turn: 1 }, false),
-        (Event::RelayCancelled { run: RUN, attempt: ATTEMPT, call: b"call".as_slice().into() }, false),
-        (Event::Process(Box::new(agent::process::Event::Hangup { owner: OWNER })), false),
+        (Event::Ready, false, false),
+        (Event::Lost, false, false),
+        (Event::GracePassed, false, false),
+        (Event::Resend { run: RUN, attempt: ATTEMPT, turn: 1 }, false, true),
+        (Event::RelayCancelled { run: RUN, attempt: ATTEMPT, call: b"call".as_slice().into() }, false, true),
+        (Event::Process(Box::new(agent::process::Event::Hangup { owner: OWNER })), false, false),
         (
             Event::Live {
                 agent: OWNER,
@@ -81,15 +85,27 @@ fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
                 },
             },
             false,
+            false,
         ),
-        (Event::Decoded { agent: OWNER, start: Err(Invalid::Charter) }, false),
-        (Event::Encoded { owner: OWNER, encoded: Encoded::Undecodable }, false),
-        (Event::Activity { owner: OWNER, activity: None }, false),
-        (Event::Done { owner: OWNER, done: checkout::git::Done::Succeeded }, false),
-        (Event::Shutdown, false),
-    ];
-    for (event, new_work) in rows {
-        assert_eq!(is_new_work(&event), new_work, "{event:?}");
+        (Event::Decoded { agent: OWNER, start: Err(Invalid::Charter) }, false, false),
+        (Event::Encoded { owner: OWNER, encoded: Encoded::Undecodable }, false, false),
+        (Event::Activity { owner: OWNER, activity: None }, false, false),
+        (Event::Done { owner: OWNER, done: checkout::git::Done::Succeeded }, false, false),
+        (Event::Shutdown, false, false),
+    ])
+}
+
+#[test]
+fn new_work_is_an_assignment_a_message_a_check_or_a_sign_out() {
+    for (event, new_work, _) in &*admission_classes() {
+        assert_eq!(is_new_work(event), *new_work, "{event:?}");
+    }
+}
+
+#[test]
+fn only_answers_about_admitted_turns_and_calls_pass_waiting_work() {
+    for (event, _, pass) in &*admission_classes() {
+        assert_eq!(passes(event), *pass, "{event:?}");
     }
 }
 

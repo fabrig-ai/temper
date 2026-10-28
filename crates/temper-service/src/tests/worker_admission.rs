@@ -1,8 +1,8 @@
 //! Admission under pressure, through the real worker and its concrete peers.
 use super::fixtures;
 use super::fixtures::worker_peers::{
-    AGENT_CHILD, AGENT_ERROR, AGENT_INPUT, AGENT_OUTPUT, AGENT_OWNER, AgentPeer, LinkPeer, PEER_STEPS, demanded_bytes,
-    socket_stand,
+    AGENT_CHILD, AGENT_ERROR, AGENT_INPUT, AGENT_OUTPUT, AGENT_OWNER, AgentPeer, LinkPeer, PEER_STEPS,
+    cancellation_turn, demanded_bytes, socket_stand,
 };
 use jig_domain_host as hub;
 use jig_protocol_worker_link as link;
@@ -18,6 +18,9 @@ const NEXT_RUN: Token = Token::new(902);
 const PROGRESS_AFTER: Duration = Duration::from_secs(1);
 // The automatic start can report Opened and Start before the peer takes them.
 const OPENING_EVENTS: u32 = 2;
+// The pass-by scenario sends one turn and then holds one new assignment.
+const SENT_TURNS: u32 = 1;
+const HELD_ASSIGNMENTS: u32 = 1;
 
 fn assignment() -> link::Request {
     let link::Request::Down { down: hub::LinkDown::Assign { mut assignment }, parts } = fixtures::chat_assignment()
@@ -33,6 +36,15 @@ fn load(worker: &mut crate::Worker, entries: u32) {
     for _ in 0..entries {
         worker.io().push(io::Request::Close { entity: BACKLOG_ENTITY });
     }
+}
+
+fn waiting_assignment() -> (fixtures::WorkerStand, LinkPeer) {
+    let mut stand = fixtures::started_worker();
+    let mut engine = LinkPeer::new();
+    engine.open(&mut stand.worker);
+    load(&mut stand.worker, WATERMARK);
+    stand.worker.link(fixtures::NOW, assignment());
+    (stand, engine)
 }
 
 impl AgentPeer {
@@ -126,7 +138,8 @@ fn progress_at(entries: u32) -> (fixtures::WorkerStand, Time) {
 #[test]
 fn new_work_waits_at_the_watermark_while_admitted_work_is_taken() {
     let (mut stand, before) = progress_at(WATERMARK);
-    assert_eq!(stand.worker.engine.len(), 1, "the new assignment waits");
+    assert_eq!(stand.worker.held.len(), HELD_ASSIGNMENTS, "the new assignment waits");
+    assert!(stand.worker.engine.is_empty());
     assert_eq!(
         stand.worker.root.next_deadline(),
         Some(before.saturating_add(PROGRESS_AFTER)),
@@ -143,17 +156,14 @@ fn new_work_waits_at_the_watermark_while_admitted_work_is_taken() {
 fn new_work_is_taken_one_entry_below_the_watermark() {
     let (stand, before) = progress_at(WATERMARK - 1);
     assert!(stand.worker.engine.is_empty(), "the assignment was stepped");
+    assert!(stand.worker.held.is_empty());
     assert_eq!(stand.worker.root.host().hosted(), 1, "the occupied worker keeps its admitted run");
     assert_eq!(stand.worker.root.next_deadline(), Some(before.saturating_add(PROGRESS_AFTER)));
 }
 
 #[test]
 fn the_engines_later_records_wait_behind_its_waiting_new_work() {
-    let mut stand = fixtures::started_worker();
-    let mut engine = LinkPeer::new();
-    engine.open(&mut stand.worker);
-    load(&mut stand.worker, WATERMARK);
-    stand.worker.link(fixtures::NOW, assignment());
+    let (mut stand, mut engine) = waiting_assignment();
     stand.worker.link(
         fixtures::NOW,
         link::Request::Down {
@@ -162,7 +172,7 @@ fn the_engines_later_records_wait_behind_its_waiting_new_work() {
         },
     );
     stand.worker.iterate(fixtures::NOW, Wall::EPOCH);
-    let waiting = stand.worker.engine.len();
+    let waiting = stand.worker.held.len();
     let hosted_while_waiting = stand.worker.root.host().hosted();
     // Release the IO backlog; both records can now cross, in their order.
     while stand.worker.io().pop().is_some() {}
@@ -195,6 +205,63 @@ fn the_engines_later_records_wait_behind_its_waiting_new_work() {
         }
     );
     assert_eq!(stand.worker.root.kept_answers(), 1);
+    assert!(stand.worker.engine.is_empty());
+    assert!(stand.worker.held.is_empty());
+}
+
+#[test]
+fn an_answer_about_admitted_turns_passes_a_held_assignment() {
+    let mut stand = fixtures::started_worker();
+    let settings = fixtures::worker_agent();
+    let mut agent = AgentPeer::assigned(&mut stand.worker, &settings);
+    let body = cancellation_turn(&settings);
+    let turn = smith_protocol_channel::decode_turn(&body, SENT_TURNS, &settings.limits.transcript, &settings.endpoints)
+        .unwrap();
+    agent
+        .component
+        .send_turn(
+            SENT_TURNS,
+            None,
+            smith_domain_run::Spend::ZERO,
+            true,
+            &turn,
+            AGENT_OWNER,
+            &mut agent.events,
+            &mut agent.out,
+        )
+        .unwrap();
+    agent.settle(&mut stand.worker);
+    let retained = stand.worker.root.retained_turns();
+    let hosting = stand.worker.root.hosting();
+    let admitted = hosting.get(0).expect("the admitted run");
+    load(&mut stand.worker, WATERMARK);
+    stand.worker.link(fixtures::NOW, assignment());
+    stand.worker.link(
+        fixtures::NOW,
+        link::Request::Down {
+            down: hub::LinkDown::TurnKept { run: admitted.run, attempt: admitted.attempt, turn: SENT_TURNS },
+            parts: Box::new([]),
+        },
+    );
+    stand.worker.iterate(fixtures::NOW, Wall::EPOCH);
+    assert_eq!(retained, SENT_TURNS, "the admitted turn waited for the engine to keep it");
+    assert_eq!(stand.worker.root.retained_turns(), 0, "the kept turn passes and is released");
+    assert_eq!(stand.worker.held.len(), HELD_ASSIGNMENTS, "the assignment still waits at the watermark");
+    assert!(stand.worker.engine.is_empty(), "the answer was taken from behind the assignment");
+}
+
+#[test]
+fn the_links_loss_waits_behind_a_held_assignment() {
+    let (mut stand, _engine) = waiting_assignment();
+    stand.worker.link(fixtures::NOW, link::Request::Lost);
+    stand.worker.iterate(fixtures::NOW, Wall::EPOCH);
+    let mut held = stand.worker.held.iter();
+    let Some(root::Event::Link(hub::LinkDown::Assign { .. })) = held.next() else {
+        panic!("the assignment is held first");
+    };
+    assert_eq!(held.next(), Some(&root::Event::Lost), "loss waits after the assignment (W5)");
+    assert!(held.next().is_none());
+    assert_eq!(stand.worker.root.host().hosted(), 0, "the assignment was held");
     assert!(stand.worker.engine.is_empty());
 }
 
