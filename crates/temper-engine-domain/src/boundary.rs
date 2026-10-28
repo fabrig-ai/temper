@@ -678,6 +678,10 @@ pub enum PartyRequest {
 }
 
 #[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "work items move whole through the bounded routing queue priced at startup"
+)]
 pub(crate) enum Work {
     SwitchChecked,
     AdoptRestored,
