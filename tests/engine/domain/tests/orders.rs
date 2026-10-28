@@ -371,7 +371,7 @@ fn a_call_held_at_the_watermark_does_not_act_for_an_attempt_that_ended_behind_it
     assert_eq!(driver.returned, returned + 1, "new work is handed back at the watermark");
     let answer = finished_answer(&mut driver, &assignment, 0);
     driver.send(answer);
-    settle_worker_records(&mut driver);
+    settle_worker_records(&mut driver, &assignment);
 
     let mut relayed = Vec::new();
     for delivery in &driver.delivered {
@@ -384,11 +384,13 @@ fn a_call_held_at_the_watermark_does_not_act_for_an_attempt_that_ended_behind_it
             relayed.push(answer);
         }
     }
-    assert_eq!(relayed.len(), 1, "the held call gets exactly one answer at its host");
-    assert!(
-        matches!(relayed[0], host::Relayed::Answer { .. } | host::Relayed::Busy),
-        "the call settles or is refused/busy"
-    );
+    assert!(relayed.len() <= 1, "the held call gets at most one answer at its host");
+    for answer in relayed {
+        assert!(
+            matches!(answer, host::Relayed::Answer { .. } | host::Relayed::Busy),
+            "the call settles or is refused/busy"
+        );
+    }
     let records = attempt_records(&driver, &assignment);
     let mut terminals = Vec::new();
     for record in &records {
@@ -643,7 +645,7 @@ fn result_count(driver: &Driver, assignment: &engine::Assignment) -> usize {
 // Complete one returned worker record's continuations before replaying the
 // next. On main both records return, so the call finishes first; after the
 // completion split the answer may already be taken and only the call remains.
-fn settle_worker_records(driver: &mut Driver) {
+fn settle_worker_records(driver: &mut Driver, assignment: &engine::Assignment) {
     let mut deferred = VecDeque::new();
     for _ in 0..driver.events.len() {
         let event = driver.events.pop_front().expect("counted inputs");
@@ -661,8 +663,21 @@ fn settle_worker_records(driver: &mut Driver) {
     }
     driver.settle();
     for event in deferred {
+        let terminal = driver.store.rows.contains_key(&engine::Key::Core(core::Key::Core(core::CoreKey::Terminal {
+            task: assignment.task,
+            attempt: assignment.attempt,
+        })));
+        let delivered = driver.delivered.len();
         driver.send(event);
         driver.settle();
+        if terminal {
+            for delivery in &driver.delivered[delivered..] {
+                assert!(
+                    !matches!(delivery, Delivery::Link { down: host::LinkDown::Relayed { run, attempt, .. }, .. } if run.raw() == assignment.task && attempt.raw() == assignment.attempt),
+                    "no host reply after the attempt terminal commits"
+                );
+            }
+        }
     }
 }
 
