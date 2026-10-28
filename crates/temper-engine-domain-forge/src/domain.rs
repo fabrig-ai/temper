@@ -1551,8 +1551,8 @@ pub(crate) fn child(d: &mut Domain, env: &Env<Limits>, event: skein_forge_client
     reason = "one client-output cohort updates connector state before routing its outcomes"
 )]
 fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    for _ in 0..d.client_out.len() {
-        let request = d.client_out.pop().expect("counted child output");
+    // A watch's Changed can reenter child and drain the remaining cohort.
+    while let Some(request) = d.client_out.pop() {
         match request {
             skein_forge_client::Request::Settled { left } => {
                 let mut unfinished = List::with_capacity(env.limits.entries);
@@ -5005,7 +5005,7 @@ fn restored(d: &mut Domain, env: &Env<Limits>, clock: skein_forge_client::Recove
     d.restore_phase = RestorePhase::Restoring;
     child(d, env, skein_forge_client::Event::Restored { clock }, out);
     retire_ended(d, env, out);
-    crate::tiers::watch(d, env, out);
+    crate::tiers::restore_watches(d, env, out);
     // The client's transient watcher flags are rebuilt from the connector's
     // durable writers before any fresh background read can classify a push.
     {
@@ -5042,6 +5042,7 @@ fn settle_outbox(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
         child(d, env, skein_forge_client::Event::Make { entry: entry.clone() }, out);
     }
     child(d, env, skein_forge_client::Event::SettleOutbox, out);
+    crate::tiers::watch(d, env, out);
 }
 
 fn read_afresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
