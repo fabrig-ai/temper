@@ -317,8 +317,22 @@ fn one_channels_records_apply_in_order_under_load() {
         "each turn and the terminal commits exactly once, in channel order"
     );
     assert!(records.windows(2).all(|pair| pair[0].0 < pair[1].0), "the three records have ordered commits");
-    assert_worker_notices(&driver, &assignment, &[1, 2]);
+    let terminal = driver.store.rows.get(&engine::Key::Core(core::Key::Core(core::CoreKey::Terminal {
+        task: assignment.task,
+        attempt: assignment.attempt,
+    })));
+    assert!(matches!(terminal,
+        Some(Record::Core(core::Record::Core(core::CoreRecord::Terminal(terminal))))
+            if terminal.end == tasks::End::Finished {
+                result: tasks::TaskResult::Report { words: REPORT.into() }, cancel_delegates: false,
+            }
+    ), "the answer finishes the attempt before the channel loss can end it lost");
+    // Loss precedes the durability callbacks: the fleet sends neither kept
+    // turns nor the final acknowledgement to an absent channel (jig's
+    // turn.rs:116 and attempt.rs:511). O3 covers their order on a live channel.
+    assert!(worker_notices(&driver).is_empty(), "the lost channel receives no worker acknowledgements");
     assert_eq!(result_count(&driver, &assignment), 1, "the result leaves exactly once");
+    assert!(driver.env.now.as_nanos() >= driver.env.limits.fleet.grace.as_nanos(), "the lost channel's grace expires");
     assert!(driver.root.quiescent() && !driver.stopped, "the channel loss settles without stopping the root");
 }
 
