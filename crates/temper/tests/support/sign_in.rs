@@ -546,10 +546,26 @@ fn answer_peer(allowance: u64, exceeded: bool) -> super::llm::Listening {
 /// The existing TLS peer, with the plan bearer and room for the largest scripted item.
 #[must_use]
 pub(super) fn plan_peer(scripts: Box<[skein_fake_llm_domain::api::Script]>) -> super::llm::Listening {
+    plan_peer_scripts(temper_real_loop_world::llm::open_scripts(scripts))
+}
+
+#[must_use]
+pub(super) fn plan_peer_scripts(scripts: skein_fake_llm_domain::api::Scripts) -> super::llm::Listening {
+    plan_peer_with_rules(scripts, skein_fake_llm_domain::api::Rules { cued: Box::new([]), asked: Box::new([]) })
+}
+
+#[must_use]
+pub(super) fn plan_peer_with_rules(
+    scripts: skein_fake_llm_domain::api::Scripts,
+    rules: skein_fake_llm_domain::api::Rules,
+) -> super::llm::Listening {
     use skein_fake_llm_domain::api::Line;
     let largest = scripts
+        .cued
         .iter()
+        .chain(scripts.asked.iter())
         .flat_map(|script| &script.turns)
+        .chain(scripts.otherwise.iter())
         .flat_map(|turn| &turn.lines)
         .map(|line| match line {
             Line::Opaque { bytes } => bytes.len(),
@@ -562,7 +578,7 @@ pub(super) fn plan_peer(scripts: Box<[skein_fake_llm_domain::api::Script]>) -> s
         .unwrap_or(0);
     // Retain the ordinary peer's room for script slots and wire framing.
     let strings = 16_384_u32.checked_add(u32::try_from(largest).expect("scripted item length")).expect("peer strings");
-    plan_recipe(temper_real_loop_world::llm::scripted_open(scripts, strings))
+    plan_recipe(temper_real_loop_world::llm::played(scripts, rules, strings))
 }
 
 /// Serve a recorded document through the same TLS plan-account transport.

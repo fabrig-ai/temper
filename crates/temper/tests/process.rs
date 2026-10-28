@@ -2036,7 +2036,7 @@ fn a_persons_plan_change_lands_on_the_owned_forge_and_is_found_after_a_restart()
         } else {
             // A fresh fake has no request cursor from the old process. Its
             // first turn answers Close's finish request with text, which parks
-            // the Open run. Its system cue remains the original task's words.
+            // the Open run. The shared restart face selects by fresh input.
             forge_land::restart_script(words.as_bytes())
         };
         let issuer = issuer.take().unwrap_or_else(|| support::sign_in::restart_issuer(&paths[0]));
@@ -4825,7 +4825,7 @@ enum ReviewHold {
 const REVIEW_TURNS: usize = 20;
 const REVIEW_TOKENS: u64 = 20; // landing::change_scripts uses the same reported usage.
 
-fn held_review_restart_scripts() -> Box<[skein_fake_llm_domain::api::Script]> {
+fn held_review_restart_scripts() -> skein_fake_llm_domain::api::Scripts {
     let mut scripts = [
         (
             b"Restart review held.\n".as_slice(),
@@ -4868,7 +4868,22 @@ fn held_review_restart_scripts() -> Box<[skein_fake_llm_domain::api::Script]> {
             .into_boxed_slice();
         }
     }
-    scripts
+    let mut asked = Vec::new();
+    let mut cued = Vec::new();
+    for (index, script) in scripts.into_vec().into_iter().enumerate() {
+        // Each landing exchange starts with its Open chat, then its coder
+        // and reviewer. Preserve both chats when the exchanges share a peer.
+        if index == 0 || index == 3 {
+            asked.push(script);
+        } else {
+            cued.push(script);
+        }
+    }
+    skein_fake_llm_domain::api::Scripts {
+        cued: cued.into_boxed_slice(),
+        asked: asked.into_boxed_slice(),
+        otherwise: Box::new([]),
+    }
 }
 
 fn assert_held_reviewers(calls: &[support::Ended], hold: ReviewHold) {
@@ -4966,7 +4981,7 @@ fn imported_restart_account(scratch: &std::path::Path, paths: &[std::path::PathB
         steps,
         BOX_DEADLINE,
         || (),
-        support::forge_land::fake_face(issuer, held_review_restart_scripts()),
+        support::forge_land::fake_face_scripts(issuer, held_review_restart_scripts()),
     );
     ctl_assert_success(&donor.calls);
     assert!(donor.checked.is_some(), "donor exported its fixture account: {}", String::from_utf8_lossy(&donor.stderr));
@@ -5133,7 +5148,7 @@ fn held_review_restart(case: &str, probe: RestartProbe) {
         steps,
         BOX_DEADLINE,
         stop,
-        support::forge_land::fake_face(issuer, scripts.clone()),
+        support::forge_land::fake_face_scripts(issuer, scripts.clone()),
     );
     assert_eq!(first.exit, Some(Exit::Code(0)), "first: {}", String::from_utf8_lossy(&first.stderr));
     if matches!(probe.hold, ReviewHold::AcrossRestart) {
@@ -5157,7 +5172,7 @@ fn held_review_restart(case: &str, probe: RestartProbe) {
         assert!(!scratch.path().join("incoming-account.move").exists(), "the deployed account came through import");
     }
     let mut scripts = scripts;
-    for script in &mut scripts {
+    for script in scripts.cued.iter_mut().chain(scripts.asked.iter_mut()) {
         if matches!(script.cue.as_ref(), b"@first-repository" | b"@second-chat") {
             script.turns = Box::new([script.turns[2].clone()]);
         }
@@ -5195,7 +5210,10 @@ fn held_review_restart(case: &str, probe: RestartProbe) {
             BOX_DEADLINE,
             || (),
             support::boxed::AccountProbe {
-                face: support::forge_land::fake_face(support::sign_in::restart_issued_issuer(&paths[0]), scripts),
+                face: support::forge_land::fake_face_scripts(
+                    support::sign_in::restart_issued_issuer(&paths[0]),
+                    scripts,
+                ),
                 cut_after_listening: cut.clone(),
             },
         )
@@ -5213,7 +5231,7 @@ fn held_review_restart(case: &str, probe: RestartProbe) {
             forgejo_setup_steps("first"),
             BOX_DEADLINE,
             restart,
-            support::forge_land::fake_face(issuer, held_review_restart_scripts()),
+            support::forge_land::fake_face_scripts(issuer, held_review_restart_scripts()),
         );
         ctl_assert_success(&other.calls);
         assert_eq!(other.exit, Some(Exit::Code(0)), "second deployment: {}", String::from_utf8_lossy(&other.stderr));

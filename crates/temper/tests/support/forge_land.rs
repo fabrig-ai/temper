@@ -180,6 +180,12 @@ pub fn fake_face(issuer: oauth::Peer, scripts: Box<[Script]>) -> Face {
     Face::Fake { issuer, peer: sign_in::plan_peer(scripts) }
 }
 
+/// Explicit chat groups for peers with more than one Open chat.
+#[must_use]
+pub fn fake_face_scripts(issuer: oauth::Peer, scripts: api::Scripts) -> Face {
+    Face::Fake { issuer, peer: sign_in::plan_peer_scripts(scripts) }
+}
+
 /// Indexes of the face's processes, following the story's box and ctl.
 pub struct FaceProcs {
     pub issuer: usize,
@@ -239,7 +245,24 @@ pub struct CtlFace {
 /// The plan story's face: the first box waits for the landing, the second for the restarted answer.
 #[must_use]
 pub fn plan_face(issuer: oauth::Peer, scripts: Box<[Script]>, first: bool) -> CtlFace {
-    CtlFace { face: fake_face(issuer, scripts), first, reply: if first { LANDED } else { RESTARTED } }
+    let face = if first {
+        fake_face(issuer, scripts)
+    } else {
+        let mut scripts = temper_real_loop_world::llm::open_scripts(scripts);
+        scripts.asked[0].cue = Box::new([]);
+        // The saved three assistant turns remain in the script. Continue is
+        // fresh user text, so request-counted turns restart at zero: choose
+        // the retained restart and closing replies explicitly instead.
+        let rules = api::Rules {
+            cued: Box::new([]),
+            asked: Box::new([Box::new([
+                api::Rule { cue: b"Continue the saved conversation.".as_slice().into(), turn: 3 },
+                api::Rule { cue: Box::new([]), turn: 4 },
+            ])]),
+        };
+        Face::Fake { issuer, peer: sign_in::plan_peer_with_rules(scripts, rules) }
+    };
+    CtlFace { face, first, reply: if first { LANDED } else { RESTARTED } }
 }
 
 /// Follow the committed reply, paging the conversation and waiting from a read's digest.
@@ -337,7 +360,7 @@ fn delegate_page(parent: u64, after: Option<&str>) -> super::ctl::Call {
 
 #[must_use]
 pub fn restart_script(chat_cue: &[u8]) -> Box<[Script]> {
-    // A system cue's turns count every assistant message (fake-llm.md 2.4):
+    // The first box's three assistant turns occupy the first script slots:
     // the first box's delegate, wait and reply are turns 0 to 2, played there.
     // The restart runs the chat's lost attempt again, which answers (turn 3);
     // Close then asks the parked run to finish, and its text ends it (turn 4,

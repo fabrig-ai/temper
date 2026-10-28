@@ -24,22 +24,30 @@ pub fn scripted(scripts: Box<[api::Script]>) -> Recipe {
 /// The same peer with room for a story's larger scripted item and its framing.
 #[must_use]
 pub fn scripted_sized(scripts: Box<[api::Script]>, strings: u32) -> Recipe {
-    played_sized(api::Scripts { cued: scripts, asked: Box::new([]), otherwise: Box::new([]) }, strings)
+    played(
+        api::Scripts { cued: scripts, asked: Box::new([]), otherwise: Box::new([]) },
+        api::Rules { cued: Box::new([]), asked: Box::new([]) },
+        strings,
+    )
 }
 
 /// The first script belongs to the Open chat; its delegates remain system cued.
 #[must_use]
 pub fn scripted_open(scripts: Box<[api::Script]>, strings: u32) -> Recipe {
-    played_sized(open_scripts(scripts), strings)
+    played(open_scripts(scripts), api::Rules { cued: Box::new([]), asked: Box::new([]) }, strings)
 }
 
-fn open_scripts(scripts: Box<[api::Script]>) -> api::Scripts {
+/// Partition the first Open chat from its system-cued delegates.
+#[must_use]
+pub fn open_scripts(scripts: Box<[api::Script]>) -> api::Scripts {
     let mut scripts = scripts.into_vec();
     let asked = if scripts.is_empty() { Box::new([]) } else { vec![scripts.remove(0)].into_boxed_slice() };
     api::Scripts { cued: scripts.into_boxed_slice(), asked, otherwise: Box::new([]) }
 }
 
-fn played_sized(scripts: api::Scripts, strings: u32) -> Recipe {
+/// Play explicitly classified scripts and index-parallel fresh-input rules.
+#[must_use]
+pub fn played(scripts: api::Scripts, rules: api::Rules, strings: u32) -> Recipe {
     // Smith's configured peer bounds, for an agent's prompt and finish call.
     // REQUEST is this fake's admission, not production's bound (50,331,648 B
     // from the template's window, crates/temper-init/template/agent.json).
@@ -88,11 +96,12 @@ fn played_sized(scripts: api::Scripts, strings: u32) -> Recipe {
             account_id: Box::new([]),
         },
         protocol_limits: protocol,
-        domain: domain::Domain::played(
+        domain: domain::Domain::played_by_input(
             &config,
             17,
             scripts,
             api::Menu { arguments: Box::new([]), invalid: Box::new([]) },
+            rules,
         )
         .expect("bounded real-loop scripts"),
         domain_limits: config,
@@ -102,16 +111,11 @@ fn played_sized(scripts: api::Scripts, strings: u32) -> Recipe {
 /// The scripted peer with opt-in fresh-input turn selection (skein's fake-llm.md, 2.4).
 #[must_use]
 pub fn played_by_input(scripts: Box<[api::Script]>, rules: Box<[Box<[api::Rule]>]>) -> Recipe {
-    let mut recipe = scripted(Box::new([]));
-    recipe.domain = domain::Domain::played_by_input(
-        &recipe.domain_limits,
-        17,
+    played(
         api::Scripts { cued: scripts, asked: Box::new([]), otherwise: Box::new([]) },
-        api::Menu { arguments: Box::new([]), invalid: Box::new([]) },
         api::Rules { cued: rules, asked: Box::new([]) },
+        16_384,
     )
-    .expect("bounded real-loop scripts and rules");
-    recipe
 }
 
 /// Fresh-input rules paired with one Open chat followed by Finite delegates.
@@ -125,16 +129,7 @@ pub fn played_by_input_open(scripts: Box<[api::Script]>, rules: Box<[Box<[api::R
     }
     let mut rules = rules.into_vec();
     let asked = if rules.is_empty() { Box::new([]) } else { vec![rules.remove(0)].into_boxed_slice() };
-    let mut recipe = scripted(Box::new([]));
-    recipe.domain = domain::Domain::played_by_input(
-        &recipe.domain_limits,
-        17,
-        scripts,
-        api::Menu { arguments: Box::new([]), invalid: Box::new([]) },
-        api::Rules { cued: rules.into_boxed_slice(), asked },
-    )
-    .expect("bounded Open scripts and rules");
-    recipe
+    played(scripts, api::Rules { cued: rules.into_boxed_slice(), asked }, 16_384)
 }
 
 pub fn peer(recipe: Recipe) -> Result<Peer, skein_fake_peers::Error> {
