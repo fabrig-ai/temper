@@ -233,6 +233,12 @@ impl State {
         config.limits.comments = 8;
         // A waiting pull's head, a red pushed tip and its repair's head hold CI statuses at once (6.4).
         config.limits.statuses = 3;
+        // A story may keep several checks on each head, as B1's starter
+        // check and required changelog check do. Size the fake from its setup.
+        for setup in &setups {
+            config.limits.contexts =
+                config.limits.contexts.max(u32::try_from(setup.checks.contexts.len()).expect("story check contexts"));
+        }
         // Forgejo timestamps are wall times; this peer runs on the real monotonic clock.
         let now = skein_shell::Clock::new().now();
         config.skew = domain::Skew::Ahead(Duration::from_nanos(
