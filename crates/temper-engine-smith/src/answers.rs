@@ -863,6 +863,19 @@ fn status_text(text: &mut Text, status: &api::Status) -> Result<(), Problem> {
     text.add(&status.description)?;
     text.add(b" ")?;
     text.add(&status.url)?;
+    match status.job {
+        Some(attempt) => {
+            text.add(b"\nread_job head ")?;
+            text.commit(&attempt.head)?;
+            text.add(b" run ")?;
+            text.number(attempt.run)?;
+            text.add(b" job ")?;
+            text.number(attempt.job)?;
+            text.add(b" attempt ")?;
+            text.number(u64::from(attempt.attempt))?;
+        }
+        None => text.add(b"\nNo job attempt resolved from this check's link.")?,
+    }
     text.add(b"\n")
 }
 

@@ -200,6 +200,55 @@ impl Throwaway {
             self.main_readme().ends_with(super::EDIT)
         )
     }
+    /// Run the fixture's real workflow once on a fresh branch, returning only its head.
+    #[must_use]
+    pub fn checked_head(&self) -> String {
+        let person = self.person.as_ref().expect("fixture person");
+        request(
+            &self.instance,
+            person,
+            "POST",
+            "/api/v1/repos/acme/widget/branches",
+            &json!({"new_branch_name":"temper/log", "old_branch_name":"main"}),
+            201,
+        );
+        request(
+            &self.instance,
+            person,
+            "POST",
+            "/api/v1/repos/acme/widget/contents/log-proof.txt",
+            &json!({"branch":"temper/log", "message":"Run the log proof", "content":"bG9nCg=="}),
+            201,
+        );
+        let response = self.get("branches/temper%2Flog");
+        assert_eq!(response.status, 200, "proof branch");
+        let branch: Value = serde_json::from_slice(&response.body).expect("branch JSON");
+        let head = branch["commit"]["id"].as_str().expect("branch head").to_owned();
+        let clock = skein_shell::Clock::new();
+        let deadline = clock.now().now.saturating_add(super::WITHIN);
+        loop {
+            let response = self.get(&format!("commits/{head}/status"));
+            assert_eq!(response.status, 200, "proof CI");
+            let status: Value = serde_json::from_slice(&response.body).expect("status JSON");
+            if status["state"] == "success" {
+                // Adoption claims an unused temper/ prefix; the completed run
+                // and its status remain readable after this fixture branch goes.
+                let response = self
+                    .instance
+                    .exchange(&Outgoing::json(
+                        "DELETE",
+                        "/api/v1/repos/acme/widget/branches/temper%2Flog",
+                        Some(person),
+                        b"{}",
+                    ))
+                    .expect("remove fixture branch");
+                assert_eq!(response.status, 204, "fixture branch removed before adoption");
+                return head;
+            }
+            assert!(clock.now().now < deadline, "proof CI did not pass: {status}");
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+    }
     pub fn stop(self) {
         self.runner.stop();
         self.instance.stop().expect("owned Forgejo stopped");

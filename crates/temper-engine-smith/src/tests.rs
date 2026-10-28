@@ -1493,3 +1493,49 @@ fn a_refused_release_names_its_owner_and_the_exact_proposal() {
         assert_eq!(rendered.text(), format!("Refused: task 41 is held by hold 12 (revision 1), placed by {words}. Propose it: {{\"action\": \"release\", \"task\": 41, \"hold\": 12, \"revision\": 1, \"reason\": \"...\"}}").as_bytes());
     }
 }
+
+#[test]
+fn check_answers_name_the_resolved_job_as_read_job_takes_it() {
+    use skein_forge::api;
+    let status = api::Status {
+        at: skein_lib::Time::ZERO,
+        context: b"build".as_slice().into(),
+        check: api::Check::Passed,
+        description: b"CI passed".as_slice().into(),
+        url: b"/actions/runs/1/jobs/0".as_slice().into(),
+        job: Some(api::JobAttempt { head: SHA1_HEAD, run: 1, job: 1, attempt: 0 }),
+    };
+    for read in [
+        api::Answer::Checks(Box::new([status.clone()])),
+        api::Answer::Statuses { ci: api::Ci::Passed, statuses: Box::new([status.clone()]), more: true },
+    ] {
+        let rendered = answer(&engine::CallAnswer::ForgeRead(Box::new(Ok(read))));
+        assert!(!rendered.error());
+        let expected = b"build: passed CI passed /actions/runs/1/jobs/0\nread_job head abcdef0123456789abcdef0123456789abcdef01 run 1 job 1 attempt 0\n";
+        let body = rendered.text().strip_prefix(b"CI passed\n").unwrap_or(rendered.text());
+        assert_eq!(body.strip_suffix(b"More statuses available.\n").unwrap_or(body), expected);
+    }
+}
+
+#[test]
+fn check_answers_say_when_the_link_has_no_resolved_job() {
+    use skein_forge::api;
+    let status = api::Status {
+        at: skein_lib::Time::ZERO,
+        context: b"build".as_slice().into(),
+        check: api::Check::Passed,
+        description: b"CI passed".as_slice().into(),
+        url: b"/actions/runs/1/jobs/0".as_slice().into(),
+        job: None,
+    };
+    for read in [
+        api::Answer::Checks(Box::new([status.clone()])),
+        api::Answer::Statuses { ci: api::Ci::Passed, statuses: Box::new([status.clone()]), more: false },
+    ] {
+        let rendered = answer(&engine::CallAnswer::ForgeRead(Box::new(Ok(read))));
+        assert!(!rendered.error());
+        let expected =
+            b"build: passed CI passed /actions/runs/1/jobs/0\nNo job attempt resolved from this check's link.\n";
+        assert_eq!(rendered.text().strip_prefix(b"CI passed\n").unwrap_or(rendered.text()), expected);
+    }
+}

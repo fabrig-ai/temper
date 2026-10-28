@@ -286,7 +286,12 @@ fn a_merge_with_its_answer_lost_is_found_after_restart_without_merging_twice() {
 
 #[test]
 fn a_failed_ci_head_is_repaired_then_checked_again() {
-    let mut world = Protocol::new(13);
+    // Each Actions status resolves its run and job. This repair's fresh
+    // reads fit in one request window; budget exhaustion has its own stories.
+    const REPAIR_REQUESTS: u32 = 128;
+    let mut limits = temper_engine_forge_world::LIMITS;
+    limits.client.rate = REPAIR_REQUESTS;
+    let mut world = Protocol::forgejo_with_limits(13, &limits);
     world.adopt();
     world.event(top::Event::Change { row: change_row() });
     assert_eq!(

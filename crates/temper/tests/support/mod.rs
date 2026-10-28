@@ -24,6 +24,7 @@ pub mod forge_sign_in;
 pub mod forgejo;
 pub mod forgejo_elsewhere;
 pub mod forgejo_sign_in;
+pub mod job_read;
 pub mod live;
 pub mod live_github;
 pub mod llm;
@@ -643,12 +644,21 @@ impl Referee<Process> for ChatJudge<'_> {
 }
 #[must_use]
 pub fn run(directory: &Path, script: person::Script, peer: Option<llm::Listening>, deadline: Duration) -> Seen {
-    run_story(directory, script, peer, deadline, None, Ending::Stop)
+    run_story(directory, script, peer, deadline, None, Ending::Stop).0
+}
+/// Keep the model's observations so a following sitting can use a returned tool name.
+#[must_use]
+pub fn run_observed(
+    directory: &Path,
+    script: person::Script,
+    peer: llm::Listening,
+) -> (Seen, Option<forge_land::Seen>) {
+    run_story(directory, script, Some(peer), WITHIN, None, Ending::Stop)
 }
 /// Run the native person's script on the initialized box, including its demo setup.
 #[must_use]
 pub fn run_box(directory: &Path, script: person::Script, deadline: Duration) -> Seen {
-    run_story(directory, script, None, deadline, None, Ending::Box)
+    run_story(directory, script, None, deadline, None, Ending::Box).0
 }
 /// domain/testing.md 2.6 bounds each landing story at 360 seconds.
 pub const LANDING: Duration = Duration::from_secs(360);
@@ -678,7 +688,7 @@ pub fn run_until_landed(
     peer: llm::Listening,
     forge: &forgejo::Throwaway,
 ) -> Seen {
-    run_story(directory, script, Some(peer), LANDING, Some(forge), Ending::Crash)
+    run_story(directory, script, Some(peer), LANDING, Some(forge), Ending::Crash).0
 }
 // Sign-in, inventory, whole template read, then one owner settings change.
 const NATIVE_SETUP_CALLS: usize = 4;
@@ -692,6 +702,9 @@ fn native_settings_setup(directory: &Path) -> Vec<ctl::Step> {
         Step::Then(Box::new(move |calls| {
             // These scripts deliver their answer through finish; preserve the
             // inherited result ending before the native client makes its chat.
+            if ctl::json(&calls[2])["value"]["flags"]["ended_by"] == "result" {
+                return Call::new(&["me", "--json"]).in_directory("private");
+            }
             ctl::setting_change_file(&file, &calls[2], |value| value["flags"]["ended_by"] = "result".into());
             ctl::settings_change(&calls[1], &file, "native-chat-settings").in_directory("private")
         })),
@@ -704,7 +717,7 @@ fn run_story(
     deadline: Duration,
     forge: Option<&forgejo::Throwaway>,
     ending: Ending,
-) -> Seen {
+) -> (Seen, Option<forge_land::Seen>) {
     let clock = Clock::new();
     if let Some(peer) = &peer {
         peer.configure(directory);
@@ -748,9 +761,7 @@ fn run_story(
         fds.push(root);
         world.spawn_with_fds(fds, || Process::Person(Box::new(person::Person::new(root, input, output, script))));
     }
-    if let Some(peer) = peer {
-        peer.spawn(&mut world);
-    }
+    let peer_at = peer.map(|peer| peer.spawn(&mut world));
     let outcome = world.run(&clock, deadline);
     assert!(outcome.procs.iter().all(Host::is_empty), "all real io settles");
     let Process::Binary(binary) = &outcome.procs[0] else {
@@ -762,13 +773,14 @@ fn run_story(
     let Process::Person(person) = &outcome.procs[1] else {
         panic!("native person");
     };
-    Seen {
+    let seen = Seen {
         // With settings setup, ctl signed in once and the native client loaded
         // that same session. Count the actual sign-in on either path.
         signed_in: person.client.as_ref().expect("native client").seen().signed_in + u32::from(setting_up),
         finished: person.finished,
         stderr: binary.stderr().to_vec(),
-    }
+    };
+    (seen, peer_at.map(|index| forge_land::peer_seen(&outcome.procs, index)))
 }
 
 #[must_use]

@@ -705,3 +705,35 @@ fn a_chats_two_kib_change_lands_with_its_words_whole_in_the_producers_brief() {
     }
     assert_eq!(world.merges, 1, "the long change lands on the independent fake forge");
 }
+
+#[test]
+fn a_chat_reads_the_log_of_the_job_its_checks_name() {
+    let mut world = World::configured_checks(true, true, false, 0);
+    world.adopt();
+    world.send(protocol::hello_slots(Token::new(7), 2, Box::new([])));
+    let ask = adoption_chat(&world);
+    let chat = assigned_chat(&mut world, 92, ask);
+    let head = fake::advance(&mut world.fake, &world.fake_env, b"org/repo", b"main", b"file", b"broken", 1)
+        .expect("push starts CI");
+    let mut digits = String::new();
+    for byte in fake::object_bytes(head) {
+        write!(&mut digits, "{byte:02x}").expect("commit hex");
+    }
+    let input = format!(r#"{{"commit":"{digits}"}}"#);
+    let checks = named_read(&mut world, &chat, 93, b"read_checks", input.as_bytes());
+    let rendered = temper_engine_smith::answer(&checks);
+    assert!(!rendered.error(), "{checks:?}");
+    let text = std::str::from_utf8(rendered.text()).expect("check text");
+    assert!(text.contains("/jobs/0"), "the UI link names index zero: {text}");
+    let name = text.lines().find_map(|line| line.strip_prefix("read_job head ")).expect("resolved job name");
+    let parts: Vec<_> = name.split_whitespace().collect();
+    let [head, "run", run, "job", job, "attempt", attempt] = parts.as_slice() else { panic!("job name: {name}") };
+    assert_eq!(*head, digits);
+    assert_eq!(*job, "1", "the forge's id differs from index zero");
+    let input = format!(r#"{{"head":"{head}","run":{run},"job":{job},"attempt":{attempt},"max_bytes":256}}"#);
+    let log = named_read(&mut world, &chat, 94, b"read_job", input.as_bytes());
+    let rendered = temper_engine_smith::answer(&log);
+    assert!(!rendered.error(), "{log:?}");
+    let text = std::str::from_utf8(rendered.text()).expect("job log");
+    assert!(text.contains("failing check build"), "the named job's log is read: {text}");
+}

@@ -457,9 +457,12 @@ impl Person {
             adopting: false,
             begin: script.begin,
             directory: b"private".as_slice().into(),
-            // Fresh demo clients must not reuse the same request names when
+            // Fresh clients must not reuse the same request names when
             // signing the same owner in again on the same deployment.
-            seed: if matches!(script.begin, Begin::Link | Begin::Playground) {
+            seed: if matches!(
+                script.begin,
+                Begin::Link | Begin::Playground | Begin::LinkWithKey | Begin::LinkWithOpenAiKey
+            ) {
                 let seed = skein_shell::crypto_seed().expect("demo client's fresh seed");
                 u64::from_le_bytes(seed.expose()[..8].try_into().expect("eight seed bytes"))
             } else {
@@ -759,8 +762,7 @@ impl Host for Person {
     }
 }
 
-#[must_use]
-pub fn adopt_and_change(_forgejo: &super::forgejo::Throwaway) -> Script {
+fn adoption_steps() -> Vec<Step<Address>> {
     use skein_ui::Role;
     let mut steps = answered_chat(b"Hello", super::ANSWER).steps.into_vec();
     steps.extend([
@@ -790,6 +792,20 @@ pub fn adopt_and_change(_forgejo: &super::forgejo::Throwaway) -> Script {
         Step::Press { find: Find::named(Role::Button, b"Adopt") },
         Step::See { find: Find::text(b"Adopted acme/widget on forge 1 as owned."), within: super::WITHIN },
     ]);
+    steps
+}
+
+#[must_use]
+pub fn adopt_and_chat(words: &[u8], answer: &[u8]) -> Script {
+    let mut steps = adoption_steps();
+    steps.extend(answered_chat(words, answer).steps.into_vec());
+    Script { steps: steps.into_boxed_slice(), begin: Begin::LinkWithKey }
+}
+
+#[must_use]
+pub fn adopt_and_change(_forgejo: &super::forgejo::Throwaway) -> Script {
+    use skein_ui::Role;
+    let mut steps = adoption_steps();
     steps.extend([
         Step::Go { address: Address::Chats { filter: ChatsFilter::All, start: false } },
         Step::See { find: Find::named(Role::TextArea, b"Start a chat"), within: super::WITHIN },

@@ -5083,3 +5083,8 @@ fn temper_ctl_the_owner_lifts_a_stop_with_its_tasks() {
     support::placed_holds::lift(scratch.path(), &paths[0], flags);
     scratch.remove();
 }
+
+#[test]
+fn a_check_names_the_owned_forgejos_readable_job() {
+    support::job_read::prove();
+}
