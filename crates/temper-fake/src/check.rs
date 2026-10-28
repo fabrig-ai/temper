@@ -159,6 +159,7 @@ pub fn evidence(forge: u16, rows: &[(Box<[u8]>, Box<[u8]>)], limits: &d::Limits)
             | d::Stored::Binding { .. }
             | d::Stored::Landing(_)
             | d::Stored::Receipt { .. }
+            | d::Stored::LandingLog(_)
             | d::Stored::Tier(_) => {}
         }
     }
