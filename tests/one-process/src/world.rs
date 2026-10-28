@@ -27,6 +27,7 @@ pub enum Story {
     Adopt,
     Merge,
     HeldChange,
+    StreamCapacity(crate::ctl::capacity::Case),
 }
 #[derive(Debug)]
 pub struct Outcome {
@@ -271,6 +272,8 @@ pub(crate) struct Person {
     pub(crate) finished: bool,
     project_selected: bool,
     setup: Option<crate::ctl::Caller>,
+    capacity: Option<crate::ctl::capacity::Caller>,
+    scenario: Story,
     printed_link: Box<[u8]>,
     completions: Queue<Complete>,
     submissions: Queue<Submit>,
@@ -297,7 +300,7 @@ impl Person {
             Story::Adoption => stories::adoption_person(),
             Story::Adopt | Story::Merge => stories::person(),
             Story::HeldChange if stories::first_start() => stories::person(),
-            Story::HeldChange => Vec::new(),
+            Story::HeldChange | Story::StreamCapacity(_) => Vec::new(),
         };
         let mut offset = PROGRESS.with(|progress| progress.borrow().at);
         if matches!(scenario, Story::Adoption) && offset < fixtures::ADOPTION_REPLY_STEP {
@@ -327,6 +330,8 @@ impl Person {
             finished: false,
             project_selected: false,
             setup: None,
+            capacity: None,
+            scenario,
             printed_link: Box::new([]),
             completions: Queue::with_capacity(512),
             submissions: Queue::with_capacity(512),
@@ -338,6 +343,11 @@ impl Person {
     pub(crate) fn sign_in(&mut self, link: &[u8]) {
         assert!(self.client.is_none(), "one printed link");
         self.printed_link = link.into();
+        if let Story::StreamCapacity(case) = self.scenario {
+            self.capacity =
+                Some(crate::ctl::capacity::Caller::new(self.root.take().expect("client parent"), link, case));
+            return;
+        }
         if stories::needs_settings() || stories::held_change() {
             self.setup = Some(crate::ctl::Caller::new(self.root.expect("client parent"), link));
             return;
@@ -409,6 +419,10 @@ fn prepare_account(
 impl Person {
     fn prepare_client(&mut self, now: Time, wall: Wall) {
         while let Some(complete) = self.completions.pop() {
+            if crate::ctl::capacity::Caller::owns(complete.op) {
+                self.capacity.as_mut().expect("capacity caller").completions().push(complete);
+                continue;
+            }
             if crate::ctl::Caller::owns(complete.op) {
                 self.setup.as_mut().expect("ctl setup").completions().push(complete);
                 continue;
@@ -425,6 +439,21 @@ impl Person {
                 }
             }
             client.completions().push(complete);
+        }
+        if let Some(capacity) = &mut self.capacity {
+            capacity.iterate(now, wall);
+            while let Some(submit) = capacity.submissions().pop() {
+                self.submissions.push(submit);
+            }
+            if self.signed_in == 0
+                && let Some(party) = PROGRESS.with(|p| p.borrow().setup_party)
+            {
+                self.wire.received.push(referee::client::Received::SignedIn(party));
+                self.signed_in = 1;
+            }
+            if capacity.is_empty() {
+                self.finished = true;
+            }
         }
         if let Some(setup) = &mut self.setup {
             setup.iterate(now, wall);
@@ -561,6 +590,7 @@ impl Host for Person {
             || self.wake.is_some_and(|at| at <= now)
             || self.client.as_ref().is_some_and(|client| client.work_pending(now))
             || self.setup.as_ref().is_some_and(|setup| setup.work_pending(now))
+            || self.capacity.as_ref().is_some_and(|capacity| capacity.work_pending(now))
     }
     fn next_deadline(&self) -> Option<Time> {
         [self.client.as_ref().and_then(Host::next_deadline), self.wake].into_iter().flatten().min()
@@ -569,7 +599,9 @@ impl Host for Person {
         [self.client.as_ref().and_then(Host::next_policy_deadline), self.wake].into_iter().flatten().min()
     }
     fn is_empty(&self) -> bool {
-        self.finished && self.client.as_ref().is_some_and(Host::is_empty)
+        self.finished
+            && (self.client.as_ref().is_some_and(Host::is_empty)
+                || self.capacity.as_ref().is_some_and(|capacity| capacity.is_empty()))
     }
     fn worst_case(&self) -> u64 {
         self.client.as_ref().map_or(64 * 1024 * 1024, Host::worst_case)
@@ -621,6 +653,29 @@ fn service(inherited: &Inherited) -> Proc {
     let worker = inherited.roots.iter().find(|(name, _)| name.as_ref() == b"worker").expect("worker root").1;
     let setup = stories::held_change().then(|| crate::restart_control::checked_setup(&fixtures::document()));
     let mut document: serde_json::Value = serde_json::from_slice(&fixtures::document()).expect("deployment JSON");
+    if let Some(case) = stories::capacity() {
+        if case.init {
+            // Start from init's document; use only simulated paths, identities and peers.
+            let mut init: serde_json::Value =
+                serde_json::from_slice(include_bytes!("../../../crates/temper-init/template/temper.json"))
+                    .expect("init document");
+            for member in ["llm", "hosts", "deployment", "owners", "providers"] {
+                init["engine"][member] = document["engine"][member].clone();
+            }
+            let worker_limits = init["workers"][0]["limits"].clone();
+            init["workers"] = document["workers"].clone();
+            init["workers"][0]["limits"] = worker_limits;
+            let own_limits = init["application"]["limits"].clone();
+            init["application"] = document["application"].clone();
+            init["application"]["limits"] = own_limits;
+            document = init;
+        } else {
+            document["engine"]["limits"]["overrides"]["clients.streams"] = case.streams.into();
+            document["engine"]["limits"]["overrides"]["clients_http.streams"] = case.streams.into();
+            document["engine"]["limits"]["overrides"]["clients_http.calls"] = (case.streams + 4).into();
+            document["application"]["limits"]["overrides"]["server.connections"] = (case.streams + 4).into();
+        }
+    }
     if REFUSE_START.with(std::cell::Cell::get) {
         document["engine"]["projects"] = serde_json::json!([]);
         document["application"]["webhooks"]["listener"] =
@@ -856,7 +911,7 @@ fn host_programs(world: &mut skein_world::World<Proc, referee::Referee, Machine>
         skein_world::HostedProgram {
             program: crate::ctl::PROGRAM.into(),
             make: |spawn, inherited| Proc::Ctl(Box::new(crate::ctl::host(spawn, inherited))),
-            instances: 1,
+            instances: 12,
             operations: skein_io::operations(&limits.io).expect("ctl operations") * 2 + 5,
         },
         crate::ctl::roots,

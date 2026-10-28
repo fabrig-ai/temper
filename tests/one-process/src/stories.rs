@@ -16,6 +16,9 @@ const RUN_ALLOWANCE: u64 = 8;
 
 thread_local! { static STORY: std::cell::Cell<Story> = const { std::cell::Cell::new(Story::Chat { words: b"Hello" }) }; }
 pub(crate) fn set(story: Story) {
+    if matches!(story, Story::StreamCapacity(_)) {
+        crate::ctl::capacity::reset();
+    }
     STORY.with(|slot| slot.set(story));
 }
 
@@ -87,7 +90,7 @@ pub(crate) fn provider(story: Story) -> skein_fake_peers::llm::Peer {
     if matches!(story, Story::ChatReadThenWait { .. }) {
         return fixtures::read_then_wait_provider();
     }
-    if matches!(story, Story::Chat { .. }) {
+    if matches!(story, Story::Chat { .. } | Story::StreamCapacity(_)) {
         return fixtures::provider();
     }
     let grant = |kind| serde_json::json!({"connector":fixtures::FORGE_CONNECTOR,"kind":kind,"segments":["forge","127.0.0.1:3000"],"terminal":"open","last":"acme"});
@@ -480,7 +483,9 @@ impl skein_shell::Host for Shell {
 
 /// Chat-only seeds fit the stock ceiling; repository seeds use wider own defaults.
 pub(crate) fn uses_stock() -> bool {
-    STORY.with(|slot| matches!(slot.get(), Story::Chat { .. } | Story::ChatReadThenWait { .. }))
+    STORY.with(|slot| {
+        matches!(slot.get(), Story::Chat { .. } | Story::ChatReadThenWait { .. } | Story::StreamCapacity(_))
+    })
 }
 
 thread_local! { static FIRST_START: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
@@ -568,4 +573,16 @@ pub(crate) fn given(document: &serde_json::Value) -> temper_service::stock::Give
         defaults.templates[0].budget = jig_domain_people::TemplateBudget::AsAllowed { cap: Some(50) };
     }
     temper_service::stock::Given::Own(Box::new(defaults))
+}
+
+pub(crate) fn capacity() -> Option<crate::ctl::capacity::Case> {
+    STORY.with(|slot| match slot.get() {
+        Story::StreamCapacity(case) => Some(case),
+        Story::Chat { .. }
+        | Story::ChatReadThenWait { .. }
+        | Story::Adoption
+        | Story::Adopt
+        | Story::Merge
+        | Story::HeldChange => None,
+    })
 }

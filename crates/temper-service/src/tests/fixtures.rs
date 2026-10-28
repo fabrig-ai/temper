@@ -928,8 +928,7 @@ pub use worker_git::{
 };
 pub fn clients() -> crate::clients::Clients {
     let engine = engine();
-    crate::clients::Clients::new(&engine.jig, &engine.clients, &seeds(), 64, &engine.limits.root.journal, None, &[])
-        .unwrap()
+    crate::clients::Clients::new(&engine.jig, &engine.clients, &seeds(), 64, &engine.limits, None, &[]).unwrap()
 }
 mod startup;
 pub use startup::{

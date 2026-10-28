@@ -57,3 +57,41 @@ fn an_adopted_repository_gets_its_change_pushed_through_git() {
     assert_eq!(outcome.pushed.len(), 1);
     assert_eq!(outcome.deliveries, [Delivery::NoAddress, Delivery::Written]);
 }
+
+#[test]
+fn two_ctl_watches_refuse_a_third_call_full_and_releasing_one_restores_reads() {
+    for (json, export) in [(false, false), (true, false), (false, true)] {
+        let outcome = world::run(
+            fixtures::calm(fixtures::SEED),
+            world::Story::StreamCapacity(temper_one_process_world::StreamCapacity {
+                streams: 2,
+                init: false,
+                json,
+                export,
+            }),
+        );
+        assert_eq!(outcome.verdict, Verdict::Passed);
+        assert!(outcome.drained);
+    }
+}
+
+#[test]
+fn init_limits_admit_their_ctl_streams_and_an_exchange_then_name_the_full_bound() {
+    let init: serde_json::Value =
+        serde_json::from_slice(include_bytes!("../../../crates/temper-init/template/temper.json"))
+            .expect("init document");
+    let streams =
+        u32::try_from(init["engine"]["limits"]["overrides"]["clients.streams"].as_u64().expect("init streams"))
+            .expect("stream count");
+    let outcome = world::run(
+        fixtures::calm(fixtures::SEED),
+        world::Story::StreamCapacity(temper_one_process_world::StreamCapacity {
+            streams,
+            init: true,
+            json: false,
+            export: false,
+        }),
+    );
+    assert_eq!(outcome.verdict, Verdict::Passed);
+    assert!(outcome.drained);
+}

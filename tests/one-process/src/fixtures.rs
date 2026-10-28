@@ -238,6 +238,10 @@ pub(crate) fn agent() -> temper_service::settings::Agent {
     };
     agent.limits.channel.output_bytes = smith_host_protocol::output_bytes(&agent.limits).expect("host frames");
     agent.bounds.message_bytes = 1024;
+    if crate::stories::capacity().is_some_and(|case| case.init) {
+        agent.bounds.message_bytes = 4096;
+        agent.host_limits.message_bytes = 4098;
+    }
     agent.bounds.checks = Duration::from_secs(5);
     temper_service::settings::Agent {
         tool_payload: agent_profile().declared.tool_payload,

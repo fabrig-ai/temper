@@ -240,7 +240,7 @@ impl Service {
             &settings.clients,
             seeds,
             client_room,
-            &limits.journal,
+            &settings.limits,
             settings.sign_in.as_ref(),
             settings.files.entries.as_slice(),
         )?;
@@ -1151,7 +1151,7 @@ fn memory(
     )?;
     let clients = clients::worst_case(
         &settings.jig.limits.clients,
-        &limits::server(&settings.jig.limits),
+        &limits::server(&settings.jig.limits, &settings.limits),
         &settings.jig.limits.clients_http,
         temper_engine_domain::max_out(root).checked_add(1)?.checked_mul(jig_protocol_engine_clients::MAX_OUT_DOWN)?,
         &root.journal,
@@ -1167,8 +1167,10 @@ fn memory(
     let bundle = clients::bundle::worst_case(&settings.limits.clients)?;
     let mut google = 0;
     if settings.sign_in.is_some() {
-        google =
-            clients::google::worst_case(settings.limits.sign_in, limits::server(&settings.jig.limits).connections)?;
+        google = clients::google::worst_case(
+            settings.limits.sign_in,
+            limits::server(&settings.jig.limits, &settings.limits).connections,
+        )?;
     }
     let mut demo_bytes = 0_u64;
     if let Some(demo) = &settings.demo {

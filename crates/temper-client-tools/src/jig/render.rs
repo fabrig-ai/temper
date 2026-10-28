@@ -208,6 +208,26 @@ fn join_limit(joins: u32) -> Box<[u8]> {
     reason.put(SUFFIX).expect("measured reason");
     reason.finish()
 }
+/// The last stream admission refusal, held through connection retries.
+#[must_use]
+pub fn stream_full(full: jig_client::StreamFull, json: bool) -> Printed {
+    fn reason(full: jig_client::StreamFull, out: &mut Text) {
+        out.put(b"the engine's ");
+        out.number(u64::from(full.size));
+        out.put(b" event streams are in use (");
+        out.put(match full.bound {
+            jig_client::StreamBound::Component => b"clients.streams",
+            jig_client::StreamBound::Transport => b"clients_http.streams",
+        });
+        out.put(b"): end a waiting ctl call, or wait");
+    }
+    let mut measured = Text::measure();
+    reason(full, &mut measured);
+    let mut write = Text::writing_exact(measured);
+    reason(full, &mut write);
+    failure(&write.finish(), json, 2)
+}
+
 #[must_use]
 pub fn failure(reason: &[u8], json: bool, status: u8) -> Printed {
     let stderr = if json {

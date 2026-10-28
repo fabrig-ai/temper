@@ -100,7 +100,12 @@ fn a_file_longer_than_one_send_arrives_whole() {
     assert_eq!(fixtures::header(&headers, b"content-type"), Some(b"application/wasm".as_slice()));
     assert!(
         fixtures::bundle::WASM_BYTES
-            > crate::limits::server(&jig_protocol_config::profile(jig_protocol_config::Profile::Small)).http.send
+            > crate::limits::server(
+                &jig_protocol_config::profile(jig_protocol_config::Profile::Small),
+                &crate::limits::profile(crate::limits::Profile::Small)
+            )
+            .http
+            .send
     );
     assert_eq!(fixtures::bundle::body(&peer), &*fixtures::bundle::wasm());
 }

@@ -3,7 +3,10 @@ use crate::{Service, server::Server};
 use skein_lib::{Time, Wall};
 pub fn server() -> Server {
     let jig = jig_protocol_config::profile(jig_protocol_config::Profile::Small);
-    Server::new(super::http::address(), &crate::limits::server(&jig))
+    Server::new(
+        super::http::address(),
+        &crate::limits::server(&jig, &crate::limits::profile(crate::limits::Profile::Small)),
+    )
 }
 pub fn server_head(server: &mut Server, out: &mut skein_lib::Queue<crate::server::Routed>) -> skein_http::server::Call {
     server_call(server, out).1
