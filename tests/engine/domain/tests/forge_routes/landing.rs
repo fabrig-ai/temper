@@ -337,7 +337,7 @@ struct Pair {
     producer_b: engine::Assignment,
 }
 
-fn pair_producers(same_repository: bool) -> Pair {
+fn turn_chat() -> (World, engine::Assignment) {
     let mut world = World::configured_limits(
         true,
         true,
@@ -353,6 +353,11 @@ fn pair_producers(same_repository: bool) -> Pair {
     let people::Ask::Create { project, mut batch } = adoption_chat(&world) else { unreachable!() };
     batch[0].budget = people::Budget::AsAllowed { cap: Some(250) };
     let chat = assigned_chat(&mut world, 92, people::Ask::Create { project, batch });
+    (world, chat)
+}
+
+fn pair_producers(same_repository: bool) -> Pair {
+    let (mut world, chat) = turn_chat();
     let upstream_name = if same_repository { b"org/repo".as_slice() } else { b"org/lib".as_slice() };
     let (a, producer_a) = make_change(&mut world, &chat, 95, upstream_name);
     let (b, producer_b) = make_change(&mut world, &chat, 96, b"org/repo");
@@ -412,7 +417,7 @@ fn landing_rows(world: &World) -> Vec<&forge_top::LandingRow> {
                 forge_top::Stored::Landing(row) => Some(row),
                 _ => None,
             },
-            _ => None,
+            Record::Core(_) => None,
         })
         .collect()
 }
@@ -465,7 +470,7 @@ fn land_pair(world: &mut World, a: u64, b: u64, stale_downstream: bool) {
                 }
                 _ => None,
             },
-            _ => None,
+            Record::Core(_) => None,
         })
         .collect();
     assert_eq!(moved, stale_downstream, "changes={changes:?}");
@@ -591,4 +596,65 @@ fn a_dependency_amendment_joins_a_landing_already_proving() {
     finish_producer(&mut world, &producer_b, forge_world::REPO);
     land_pair(&mut world, a, b, false);
     assert_pair_result(&mut world, a, b, 1);
+}
+
+#[test]
+#[ignore = "T9 needs jig admission of joined changes with creation-time dependencies"]
+fn a_change_created_with_a_dependency_joins_before_production() {
+    let (mut world, chat) = turn_chat();
+    let (a, producer_a) = make_change(&mut world, &chat, 95, b"org/lib");
+    push_change(&mut world, &producer_a, b"org/lib");
+    finish_producer(&mut world, &producer_a, LIB);
+    for _ in 0..PAIR_TICKS {
+        world.tick();
+        if !landing_rows(&world).is_empty() {
+            break;
+        }
+    }
+    let mut change = temper_engine_domain_world::fixtures::report_delegate(
+        b"Small fix",
+        Box::new([engine::Dependency::Existing(a)]),
+    );
+    change.executor = tasks::Executor::Procedure { connector: 0, code: 2 };
+    change.spec.parameters = Box::new([
+        tasks::Parameter::Resource {
+            name: 1,
+            connector: 0,
+            resource: forge_top::tag(forge_world::REPO.forge, forge_world::REPO.repository),
+        },
+        tasks::Parameter::Bytes { name: 2, value: b"main".as_slice().into() },
+    ]);
+    change.contract = tasks::Contract::Change { connector: 0, kind: 1, words: world.env.limits.tasks.result_bytes };
+    change.authority = live_task(&world, chat.task).authority.clone();
+    change.authority.delegation.depth = change.authority.delegation.depth.saturating_sub(1);
+    change.authority.delegation.tasks = 6;
+    change.authority.budget.spend = 50;
+    let before = world.answers.len();
+    let event = world.protocol.call(
+        Token::new(7),
+        chat.task,
+        chat.attempt,
+        96,
+        engine::Call { completion: 96, position: 1, tool: engine::Tool::Delegate { batch: Box::new([change]) } },
+    );
+    world.send(event);
+    for _ in 0..PAIR_TICKS {
+        world.tick();
+        if world.answers.len() > before {
+            break;
+        }
+    }
+    let engine::CallAnswer::Delegated(made) = &world.answers[before] else {
+        panic!("change created with dependency: {:?}", world.answers[before]);
+    };
+    let b = made[0].task;
+    for _ in 0..PAIR_TICKS {
+        world.tick();
+        if landing_rows(&world)[0].landing.members.len() == 2 {
+            break;
+        }
+    }
+    assert_eq!(landing_rows(&world).len(), 1);
+    assert_eq!(landing_rows(&world)[0].landing.members.iter().map(|member| member.change).collect::<Vec<_>>(), [a, b]);
+    assert!(!ended(&world, b), "joined while production is outstanding");
 }
