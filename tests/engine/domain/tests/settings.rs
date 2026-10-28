@@ -843,6 +843,8 @@ fn a_seeded_project_is_widened_after_the_rules_are() {
     // A whole stock ceiling carries its ten grants in the owner's keyed edit.
     limits.people.amendment_bytes = 1024;
     let mut driver = Driver::cold(Store::with_limits(&limits), config, &limits);
+    // This story supplies the stock period below instead of the direct fixture's fixed period.
+    driver.period_sent = true;
     driver.settle();
     driver.sign_in();
     driver.settle();
