@@ -15,8 +15,10 @@ A change is a task that writes one repository's branch and lands it: its pull re
   its address, `step:` and the step, `way: turn · landing task N`
   where its project lands by turn, the CI at its head, its gates, and
   how many repairs, resolutions and updates it has used of its limits.
-- **Its result** is the change landed, with its merge commit; or it
-  fails, or is cancelled, as any task.
+- **Its result** is the change landed and cleared, with its merge
+  commit: as it lands in a repository with no tier, and once every
+  tier of its repository has cleared its landing otherwise (temper
+  help tier); or it fails, or is cancelled, as any task.
 
 ## How it changes
 
@@ -51,6 +53,10 @@ its head and it waits in no queue: `gating` follows `opening`, then:
   output, and its new head makes it ready again;
 - `landed`: main was fast-forwarded to its candidate.
 
+In a repository with tiers, a landed change then verifies, its step
+still `landed`: its task lives on, its branch kept, until its tiers
+clear its landing.
+
 After a release, `reopening` reopens its closed pull request and
 `recreating` pushes its missing branch again.
 
@@ -75,7 +81,7 @@ counts and goes on from where it was held.
   is held.
 - **Bounded work:** past its limit of repairs, resolutions or updates,
   the change holds rather than trying again.
-- **The parent hears its result,** landed or not.
+- **The parent hears its result,** cleared or not.
 
 ## Acting on it
 
