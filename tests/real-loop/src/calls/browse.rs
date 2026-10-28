@@ -35,7 +35,6 @@ pub(super) struct Browser {
     pub(super) done: bool,
 }
 impl Browser {
-    pub(super) const MEMORY: u64 = (RESPONSE * 4) as u64;
     pub(super) fn new(call: usize, stdout: &[u8]) -> Self {
         let output = std::str::from_utf8(stdout).expect("browser stdout");
         let mut lines = output.lines();

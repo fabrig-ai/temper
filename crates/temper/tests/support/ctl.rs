@@ -1003,9 +1003,6 @@ impl Host for Calls {
     fn is_empty(&self) -> bool {
         self.done() && self.root.is_none() && self.output.is_none() && self.closing == 0
     }
-    fn worst_case(&self) -> u64 {
-        2_097_152 + self.member.as_ref().map_or(0, member::Member::worst_case)
-    }
     fn operations(&self) -> u32 {
         // The provisioning client uses the same shipped native transport as ctl.
         let bounds = temper_client_shell_cli::limits::native();

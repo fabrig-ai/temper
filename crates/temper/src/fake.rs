@@ -883,20 +883,6 @@ impl skein_shell::Host for Host {
             && self.submissions.is_empty()
             && self.completions.is_empty()
     }
-    fn worst_case(&self) -> u64 {
-        self.peer.host().worst_case()
-            + self.control.as_ref().map_or(0, |_| control::Control::worst_case())
-            + List::<u8>::worst_case(self.buffer.capacity()).expect("bounded observation buffer")
-            + List::<u64>::worst_case(temper_fake::ENTRIES).expect("bounded installation snapshot")
-            + if self.writer.is_some() { u64::from(limits::OBSERVATION_STATE_BYTES) } else { 0 }
-            + self.ready.as_ref().map_or(0, |prefix| u64::try_from(prefix.len()).expect("ready bytes"))
-            + self
-                .observation_path
-                .as_ref()
-                .map_or(0, |path| u64::try_from(path.as_os_str().len()).expect("path bytes"))
-            + Queue::<Complete>::worst_case(self.completions.capacity()).expect("queue bound")
-            + Queue::<Submit>::worst_case(self.submissions.capacity()).expect("queue bound")
-    }
     fn operations(&self) -> u32 {
         host_operations(&self.peer, self.control.as_ref())
     }

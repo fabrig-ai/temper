@@ -236,9 +236,6 @@ impl Host for Caller {
     fn operations(&self) -> u32 {
         32
     }
-    fn worst_case(&self) -> u64 {
-        262_144
-    }
 }
 
 /// Observe actual sign-in bytes before starting the native person on its saved token.

@@ -430,7 +430,6 @@ pub(crate) struct Caller {
     completions: Queue<Complete>,
     submissions: Queue<Submit>,
     serial: u64,
-    memory: u64,
     command: Option<Spawn>,
     fixture_calls: usize,
     settings_files: fixtures::SettingsFiles,
@@ -661,17 +660,6 @@ impl Caller {
         let browsers = steps.iter().filter(|step| matches!(step, Step::Browse { .. })).count();
         let visits = steps.iter().filter(|step| matches!(step, Step::Authorize | Step::Return)).count();
         let settings_files = fixtures::take_settings();
-        let settings_memory =
-            settings_files.iter().map(|(_, bytes)| u64::try_from(bytes.len()).expect("settings bytes")).sum::<u64>()
-                + skein_lib::Map::<&str, Box<[u8]>>::worst_case(settings_files.capacity())
-                    .expect("settings FILE table");
-        let memory = settings_memory
-            + u64::try_from((steps.len() + 1) * (OUTPUT * 4 + 4096)).expect("caller memory")
-            + Browser::MEMORY * u64::try_from(browsers).expect("browser count")
-            + crate::issuer::Visit::MEMORY * u64::try_from(visits).expect("sign-in visits")
-            + crate::terminal::Typist::worst_case()
-            + Queue::<Complete>::worst_case(ROOM).expect("completions")
-            + Queue::<Submit>::worst_case(ROOM).expect("submissions");
         let count = steps.len();
         Self {
             recording: Recording::Story,
@@ -706,7 +694,6 @@ impl Caller {
             completions: Queue::with_capacity(ROOM),
             submissions: Queue::with_capacity(ROOM),
             serial: 0,
-            memory,
             command: None,
             fixture_calls: 0,
             settings_files,
@@ -1322,9 +1309,6 @@ impl Host for Caller {
             && self.browser.is_none()
             && self.visit.is_none()
             && self.terminal.is_empty()
-    }
-    fn worst_case(&self) -> u64 {
-        self.memory
     }
     fn operations(&self) -> u32 {
         ROOM

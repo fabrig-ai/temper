@@ -90,10 +90,10 @@ fn open_without_two_arguments_prints_its_usage() {
 pub(crate) mod configuration;
 
 #[test]
-fn the_standalone_envelope_retains_no_descriptors() {
+fn the_standalone_operations_check_retains_no_descriptors() {
     use std::{fs, os::unix::fs::PermissionsExt};
-    let directory = std::env::temp_dir().join(format!("temper-envelope-{}", std::process::id()));
-    fs::create_dir(&directory).expect("envelope scratch");
+    let directory = std::env::temp_dir().join(format!("temper-operations-{}", std::process::id()));
+    fs::create_dir(&directory).expect("operations scratch");
     fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).expect("private scratch");
     for name in ["accounts", "secrets", "state"] {
         fs::create_dir_all(directory.join(name)).expect("fixture parents");
@@ -121,16 +121,17 @@ fn the_standalone_envelope_retains_no_descriptors() {
     let (agent, document) = configuration::documents(&directory, "/fixture/temper");
     write("agent.json", &agent);
     assert_eq!(configuration::flags(&directory).len(), 6);
-    let envelope = super::envelope_in(&configuration::directories(&directory), &document).expect("standalone envelope");
+    let operations =
+        super::operations_in(&configuration::directories(&directory), &document).expect("standalone operations");
     assert_no_descriptors_in(&directory);
     let mut owned = Vec::new();
     let service = super::prepare(&configuration::directories(&directory), &document, &mut owned)
         .expect("same standalone preparation");
-    assert_eq!(envelope, (0, service.operations()));
+    assert_eq!(operations, service.operations());
     drop(service);
     super::close(owned);
     assert_no_descriptors_in(&directory);
-    fs::remove_dir_all(directory).expect("remove envelope scratch");
+    fs::remove_dir_all(directory).expect("remove operations scratch");
 }
 fn assert_no_descriptors_in(directory: &std::path::Path) {
     for entry in std::fs::read_dir("/proc/self/fd").expect("open descriptor list") {

@@ -379,9 +379,6 @@ impl Host for Root {
     fn is_empty(&self) -> bool {
         self.host().is_none_or(Host::is_empty)
     }
-    fn worst_case(&self) -> u64 {
-        self.host().map_or(2_097_152, Host::worst_case)
-    }
     fn operations(&self) -> u32 {
         self.host().map_or(32, Host::operations)
     }
@@ -470,9 +467,6 @@ impl Host for Member {
         !self.starting
             && self.binary.as_ref().is_none_or(Host::is_empty)
             && self.stdout.as_ref().is_none_or(Host::is_empty)
-    }
-    fn worst_case(&self) -> u64 {
-        1_048_576
     }
     fn operations(&self) -> u32 {
         16

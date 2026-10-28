@@ -1,4 +1,4 @@
-//! Deferred standalone preparation with its original admission envelope.
+//! Deferred standalone preparation with its original operation count.
 mod cue;
 mod hooks;
 mod watch;
@@ -73,7 +73,7 @@ pub struct ServiceHost {
     signals: Fd,
     signals_adopted: bool,
     forge: Option<TcpListener>,
-    envelope: (u64, u32),
+    operations: u32,
     completions: Queue<Complete>,
     submissions: Queue<Submit>,
 }
@@ -133,25 +133,10 @@ impl ServiceHost {
         }
         let roots = Self::directories(&path, cluster.is_some());
         let config = std::fs::read(roots.document()).expect("standalone document");
-        let mut envelope =
-            temper::envelope_in_with(&roots, &config, &fixtures::given(&path)).expect("standalone admission envelope");
-        // The deferred document names port 0 in its LLM, API and git addresses.
-        // Each kernel-assigned port can add four decimal digits at preparation.
-        if github.is_some() {
-            // Besides API/git/web, GitHub setup retains web in each run
-            // and its child plan (skein's forge-setup host admission).
-            let runs = temper_service::limits::profile(temper_service::limits::Profile::Small).setup.runs;
-            envelope.0 += (3 + 2 * u64::from(runs)) * 4;
-            // Each of the clients' 8 HTTP connections (limits::server) may hold a
-            // manifest page's policy, priced with web twice (temper-service setup.rs).
-            envelope.0 += 2 * 8 * 4;
-        } else if fixture.is_some() {
-            envelope.0 += 3 * 4;
-        } else if cluster.is_some() {
-            envelope.0 += 4;
-        }
+        let operations =
+            temper::operations_in_with(&roots, &config, &fixtures::given(&path)).expect("standalone operation count");
         let restartable = matches!(cluster, Some(crate::cluster::Shape::Worker { .. }));
-        let queued = if restartable { envelope.1 } else { 1 };
+        let queued = if restartable { operations } else { 1 };
         Self {
             pending_streak: crate::patience::PendingStreak::default(),
             restartable,
@@ -189,7 +174,7 @@ impl ServiceHost {
             signals,
             signals_adopted: false,
             forge,
-            envelope,
+            operations,
             completions: Queue::with_capacity(queued),
             submissions: Queue::with_capacity(queued),
         }
@@ -429,11 +414,9 @@ impl Host for ServiceHost {
             }
             let mut service = self.prepare_service();
             if self.cluster.is_some() {
-                assert!(service.operations() <= self.envelope.1, "cluster operations fit admission");
-            } else if self.fixture.is_some() || self.github.is_some() {
-                assert_eq!(service.operations(), self.envelope.1, "preparation preserves operations");
+                assert!(service.operations() <= self.operations, "cluster operations fit admission");
             } else {
-                assert_eq!((0, service.operations()), self.envelope, "preparation preserves admission");
+                assert_eq!(service.operations(), self.operations, "preparation preserves operations");
             }
             if self.github_seeded {
                 service.adopt_signals(self.signals).expect("service signal pipe");
@@ -556,7 +539,7 @@ impl Host for ServiceHost {
         }
     }
     fn operations(&self) -> u32 {
-        self.envelope.1
+        self.operations
     }
 }
 

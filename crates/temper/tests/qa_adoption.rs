@@ -32,7 +32,7 @@ fn init_names_a_fixed_listener_and_a_records_only_demo() {
     for member in ["api_token", "user", "webhook_secret"] {
         assert!(demo.get(member).is_none(), "no file member {member}");
     }
-    temper::envelope_in(&support::configuration::directories(scratch.path()), &bytes)
+    temper::operations_in(&support::configuration::directories(scratch.path()), &bytes)
         .unwrap_or_else(|why| panic!("serve must accept init's wiring: {why}"));
     scratch.remove();
 }

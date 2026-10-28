@@ -503,9 +503,6 @@ impl Host for MovingProcess {
     fn is_empty(&self) -> bool {
         self.host().is_empty()
     }
-    fn worst_case(&self) -> u64 {
-        self.host().worst_case()
-    }
     fn operations(&self) -> u32 {
         self.host().operations()
     }
@@ -559,9 +556,6 @@ impl Host for Viewer {
     }
     fn is_empty(&self) -> bool {
         self.client.as_ref().is_some_and(|client| client.is_empty())
-    }
-    fn worst_case(&self) -> u64 {
-        self.client.as_ref().map_or(1, |client| client.worst_case())
     }
     fn operations(&self) -> u32 {
         self.client.as_ref().map_or(512, |client| client.operations())

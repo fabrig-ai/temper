@@ -216,12 +216,6 @@ impl Typist {
     pub(crate) fn owns(token: Token) -> bool {
         token.raw() & TAG != 0
     }
-    pub(crate) fn worst_case() -> u64 {
-        // Transcript payload, per-line/page ownership and allocator capacity growth,
-        // the partial page/line, retained link and at most one read/write in flight.
-        u64::try_from(TRANSCRIPT_BYTES * (2 + std::mem::size_of::<Page>()) + PAGE_BYTES * 8)
-            .expect("typist transcript memory")
-    }
     fn submit(&mut self, kind: Op, out: &mut Queue<Submit>) {
         self.serial += 1;
         self.pending += 1;

@@ -107,7 +107,7 @@ fn rung_b0s_live_configuration_is_admitted_without_an_account_or_backend() {
     directories.data = paths[1].as_os_str().as_bytes().into();
     directories.cache = paths[2].as_os_str().as_bytes().into();
     let result =
-        temper::boxed_envelope_in(&directories, &fs::read(paths[0].join("temper.json")).expect("configuration"));
+        temper::boxed_operations_in(&directories, &fs::read(paths[0].join("temper.json")).expect("configuration"));
     assert!(result.is_ok(), "B0's real configuration admits before any live account: {:?}", result.err());
     scratch.remove();
 }
@@ -423,7 +423,7 @@ fn a_fake_entrys_handover_is_read_privately_and_checked_before_serve_starts() {
             }
         }
         support::write_private(&scratch.path().join("temper.json"), &serde_json::to_vec(&value).expect("JSON"));
-        let result = temper::envelope_in(
+        let result = temper::operations_in(
             &support::configuration::directories(scratch.path()),
             &serde_json::to_vec(&value).expect("JSON"),
         );
@@ -1650,9 +1650,9 @@ fn the_live_github_configuration_passes_startup_admission_for_both_owners() {
             .collect();
             let (directories, _) = temper::directories::resolve(&args, &[], b"/").expect("member directories");
             let bytes = fs::read(config.join("temper.json")).expect("rendered configuration");
-            let (memory, operations) =
-                temper::envelope_in(&directories, &bytes).unwrap_or_else(|why| panic!("{owner}/{member}: {why}"));
-            eprintln!("{owner}/{member}: startup admission passed; memory={memory}, operations={operations}");
+            let operations =
+                temper::operations_in(&directories, &bytes).unwrap_or_else(|why| panic!("{owner}/{member}: {why}"));
+            eprintln!("{owner}/{member}: startup admission passed; operations={operations}");
         }
         scratch.remove();
     }

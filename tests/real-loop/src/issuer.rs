@@ -124,7 +124,6 @@ pub(crate) struct Visit {
 impl Visit {
     const RESPONSE: usize = 65_536;
     pub(crate) const URI: usize = 1024;
-    pub(crate) const MEMORY: u64 = (Self::RESPONSE * 4 + Self::URI * 8) as u64;
 
     pub(crate) fn new(url: &[u8], authorize: bool) -> Self {
         assert!(url.len() <= Self::URI, "bounded sign-in address: {} bytes", url.len());

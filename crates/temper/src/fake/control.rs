@@ -228,13 +228,4 @@ impl Control {
     pub fn operations() -> u32 {
         io::operations(&LIMITS).expect("fixed control limits")
     }
-    pub fn worst_case() -> u64 {
-        io::worst_case(&LIMITS).expect("fixed control limits")
-            + Exchange::worst_case()
-            + Queue::<io::Event>::worst_case(QUEUE).expect("bounded queue")
-            + Queue::<io::Request>::worst_case(QUEUE).expect("bounded queue")
-            + Queue::<Complete>::worst_case(QUEUE).expect("bounded queue")
-            + Queue::<Submit>::worst_case(QUEUE).expect("bounded queue")
-            + u64::from(QUEUE) * 1024
-    }
 }

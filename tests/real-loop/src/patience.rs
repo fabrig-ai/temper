@@ -216,9 +216,6 @@ mod tests {
         fn exit(&self) -> Option<Exit> {
             None
         }
-        fn worst_case(&self) -> u64 {
-            self.service.worst_case()
-        }
         fn operations(&self) -> u32 {
             1
         }

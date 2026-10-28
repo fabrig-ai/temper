@@ -498,19 +498,20 @@ fn close(owned: Vec<Fd>) {
         skein_shell::close_keeper_fd(fd);
     }
 }
-/// Derive the standalone admission envelope without retaining its descriptors.
-pub fn envelope_in(directories: &Directories, config: &[u8]) -> Result<(u64, u32), String> {
-    envelope_in_mode(directories, config, false)
+/// The kernel operations a standalone start keeps in flight at most (its ring's size),
+/// derived without retaining its descriptors.
+pub fn operations_in(directories: &Directories, config: &[u8]) -> Result<u32, String> {
+    operations_in_mode(directories, config, false)
 }
-/// Recheck a boxed start, including its configured pipe buffers in the engine's envelope.
-pub fn boxed_envelope_in(directories: &Directories, config: &[u8]) -> Result<(u64, u32), String> {
-    envelope_in_mode(directories, config, true)
+/// The same for a boxed start.
+pub fn boxed_operations_in(directories: &Directories, config: &[u8]) -> Result<u32, String> {
+    operations_in_mode(directories, config, true)
 }
-fn envelope_in_mode(directories: &Directories, config: &[u8], boxed: bool) -> Result<(u64, u32), String> {
+fn operations_in_mode(directories: &Directories, config: &[u8], boxed: bool) -> Result<u32, String> {
     directories.open(skein_shell::effective_user())?;
     let mut owned = Vec::new();
     let result = prepare_with_limits(directories, config, &mut owned, boxed, &service::stock::Given::Stock)
-        .map(|(service, _, _)| (0, service.operations()));
+        .map(|(service, _, _)| service.operations());
     close(owned);
     result.map_err(|why| prefixed("temper serve", &why))
 }
@@ -533,16 +534,16 @@ pub fn prepare_in_with(directories: &Directories, given: &service::stock::Given)
     }
     result.map_err(|why| prefixed("temper serve", &why))
 }
-/// Derive that same world's admission envelope without retaining its descriptors.
-pub fn envelope_in_with(
+/// The same for an in-process world's service, with the supplied defaults.
+pub fn operations_in_with(
     directories: &Directories,
     config: &[u8],
     given: &service::stock::Given,
-) -> Result<(u64, u32), String> {
+) -> Result<u32, String> {
     directories.open(skein_shell::effective_user())?;
     let mut owned = Vec::new();
-    let result = prepare_with_limits(directories, config, &mut owned, false, given)
-        .map(|(service, _, _)| (0, service.operations()));
+    let result =
+        prepare_with_limits(directories, config, &mut owned, false, given).map(|(service, _, _)| service.operations());
     close(owned);
     result.map_err(|why| prefixed("temper serve", &why))
 }

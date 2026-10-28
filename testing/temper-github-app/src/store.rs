@@ -324,9 +324,6 @@ impl skein_shell::Host for StoreHost {
             && self.submissions.is_empty()
             && self.completions.is_empty()
     }
-    fn worst_case(&self) -> u64 {
-        protocol::worst_case(&self.limits).expect("fixture store bound")
-    }
     fn operations(&self) -> u32 {
         OPERATIONS
     }

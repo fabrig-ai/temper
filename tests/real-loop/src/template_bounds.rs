@@ -110,9 +110,6 @@ impl Host for Proc {
     fn exit(&self) -> Option<crate::Exit> {
         self.host().exit()
     }
-    fn worst_case(&self) -> u64 {
-        self.host().worst_case()
-    }
     fn operations(&self) -> u32 {
         self.host().operations()
     }
@@ -160,7 +157,7 @@ fn fixture() -> crate::forge::Fixture {
             value["world_settings"]["policies"][0]["policy"]["roles"][0]["authority"]["delegation"]["kinds"] = kinds;
             fixtures::turn_bounds::apply(value, fixtures::turn_bounds::turn_body(agent));
             // ServiceHost::configured admits the final document with its checked agent
-            // through envelope_in after both fixture documents have been written.
+            // through operations_in after both fixture documents have been written.
         },
         ..crate::forge::fixture()
     }

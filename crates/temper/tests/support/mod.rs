@@ -323,9 +323,6 @@ impl Host for StdoutReader {
     fn is_empty(&self) -> bool {
         self.input.is_none() && self.output.is_none() && self.closing == 0
     }
-    fn worst_case(&self) -> u64 {
-        131_072
-    }
     fn operations(&self) -> u32 {
         3
     }
@@ -387,9 +384,6 @@ impl Host for Process {
     }
     fn is_empty(&self) -> bool {
         self.host().is_empty()
-    }
-    fn worst_case(&self) -> u64 {
-        self.host().worst_case()
     }
     fn operations(&self) -> u32 {
         self.host().operations()

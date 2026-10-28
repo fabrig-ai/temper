@@ -256,9 +256,4 @@ impl Member {
             self.client.pending(self.key)
         )
     }
-    pub fn worst_case(&self) -> u64 {
-        self.shell.worst_case()
-            + client::worst_case(&temper_client_shell_cli::limits::native().root.domain.client)
-                .expect("native client memory")
-    }
 }

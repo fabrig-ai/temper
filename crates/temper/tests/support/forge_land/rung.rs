@@ -171,7 +171,7 @@ pub fn deployment(paths: &[PathBuf; 3]) {
     directories.config = paths[0].as_os_str().as_bytes().into();
     directories.data = paths[1].as_os_str().as_bytes().into();
     directories.cache = paths[2].as_os_str().as_bytes().into();
-    temper::boxed_envelope_in(&directories, &fs::read(&config).expect("configuration"))
+    temper::boxed_operations_in(&directories, &fs::read(&config).expect("configuration"))
         .unwrap_or_else(|message| panic!("B0 setup refused: {message}"));
 }
 

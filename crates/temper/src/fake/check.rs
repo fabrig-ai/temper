@@ -349,22 +349,6 @@ impl skein_shell::Host for StoreHost {
             && self.completions.is_empty()
             && self.submissions.is_empty()
     }
-    fn worst_case(&self) -> u64 {
-        // The KV charges 128 bytes per entry plus payload; twice that budget
-        // covers the collected boxes and Vec's spare row cells too.
-        u64::try_from(size_of::<Self>())
-            .expect("host size fits u64")
-            .saturating_add(skein_kv::worst_case(&self.limits).expect("usable store limits"))
-            .saturating_add(self.limits.budget.saturating_mul(2))
-            .saturating_add(
-                FileIo::worst_case(FILES, self.limits.chunk, ENTRIES, self.limits.chunk).expect("file limits"),
-            )
-            .saturating_add(Queue::<Event>::worst_case(ROOM).expect("queue limits"))
-            .saturating_add(Queue::<file::Request>::worst_case(ROOM).expect("queue limits"))
-            .saturating_add(Queue::<file::Event>::worst_case(ROOM).expect("queue limits"))
-            .saturating_add(Queue::<Complete>::worst_case(OPERATIONS).expect("queue limits"))
-            .saturating_add(Queue::<Submit>::worst_case(OPERATIONS).expect("queue limits"))
-    }
     fn operations(&self) -> u32 {
         OPERATIONS
     }

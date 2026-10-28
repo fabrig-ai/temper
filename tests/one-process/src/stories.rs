@@ -470,9 +470,6 @@ impl skein_shell::Host for Shell {
     fn exit(&self) -> Option<skein_io::kernel::Exit> {
         self.finished.then_some(skein_io::kernel::Exit::Code(self.code))
     }
-    fn worst_case(&self) -> u64 {
-        8192
-    }
     fn operations(&self) -> u32 {
         1
     }
