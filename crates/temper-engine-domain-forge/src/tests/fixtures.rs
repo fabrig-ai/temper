@@ -118,6 +118,7 @@ pub fn opening() -> (Domain, Token) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    prime_main(&mut d);
     let row = opening_row();
     let entry = skein_forge_client::Entry {
         number: OPEN,
@@ -478,9 +479,15 @@ pub fn configured_tier(workflow: usize, paths: usize, path_bytes: usize, artifac
 }
 
 /// Finish the standing main watch's initial read before scripting a change's calls.
-pub fn prime_main(d: &mut Domain) {
-    answer_next(d, Ok(skein_forge::api::Answer::Commit(BASE)));
-    ready(d);
+pub fn prime_main(d: &mut Domain) -> Box<[Request]> {
+    use skein_forge::api::{Answer, Op, Read};
+    let (mut call, mut op) = next_call(d);
+    if let Op::Read(Read::Items { .. }) = op {
+        answer(d, call, Ok(Answer::Items { items: Box::new([]), more: false, now: env().now }));
+        (call, op) = next_call(d);
+    }
+    assert_eq!(op, Op::Read(Read::Branch { branch: b"main".as_slice().into() }));
+    answer(d, call, Ok(Answer::Commit(BASE)))
 }
 
 fn tier_bytes(byte: u8, length: usize) -> Box<[u8]> {

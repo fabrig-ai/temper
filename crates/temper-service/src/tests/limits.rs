@@ -178,7 +178,6 @@ fn the_root_limits_take_jigs_children_and_temper_own() {
         settings.jig.limits.core.authority.segments.checked_add(1).expect("fixture segment limit can increase");
     let root = limits::engine(&settings.jig.limits, &settings.limits).expect("coherent root limits");
     let jig = settings.jig.limits.core;
-    eprintln!("small application row: {:?}", temper_protocol_store::application(&limits::profile(limits::Profile::Small).forge, jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.spec_bytes));
     assert_eq!(root.journal, settings.limits.root.journal);
     assert_eq!(root.loads, settings.limits.root.loads);
     assert_eq!(root.brief, settings.limits.root.brief);
@@ -539,4 +538,16 @@ fn token_rows_include_schema_framing_in_startup_admission() {
         checks::records(&settings.jig, &own, &[], &mut problems);
         assert_eq!(crate::startup::lines(&problems).as_ref(), expected.as_bytes());
     }
+}
+
+#[test]
+fn the_log_fits_the_small_profiles_existing_application_row() {
+    let forge = limits::profile(limits::Profile::Small).forge;
+    let words = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.spec_bytes;
+    let application = temper_protocol_store::application(&forge, words).expect("small application sizes");
+    assert_eq!((application.key, application.value), (257, 534_537));
+    let bounds = temper_protocol_store::bounds(&forge, words).expect("small store bounds");
+    let log = temper_protocol_store::v10::LandingLog::worst_case_bytes(bounds.limits()).expect("bounded log");
+    assert!(log + 3 <= u64::from(application.value), "version and Value tag frame the log");
+    assert_eq!(log, 3146);
 }

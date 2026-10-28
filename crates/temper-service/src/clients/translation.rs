@@ -175,7 +175,9 @@ pub fn not_ready(input: root::PartyInput) -> Option<kit::Event> {
         root::PartyInput::Read { reply_to, .. } => {
             Some(kit::Event::Read { reply: reply_to, answer: core::reads::Answer::None(core::reads::Why::Busy) })
         }
-        root::PartyInput::Watch { watcher, .. } | root::PartyInput::WatchRun { watcher, .. } => {
+        root::PartyInput::Watch { watcher, .. }
+        | root::PartyInput::WatchRun { watcher, .. }
+        | root::PartyInput::LoggedLandings { watcher, .. } => {
             Some(kit::Event::WatchRefused { watcher, why: core::WatchRefusal::Busy })
         }
         root::PartyInput::Unwatch { .. }

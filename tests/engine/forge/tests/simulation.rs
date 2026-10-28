@@ -2419,17 +2419,19 @@ fn a_green_tier_run_clears_the_two_landings_in_its_range_and_each_change_gives_i
 }
 
 fn logged(world: &World, since: Wall) -> top::LandingsView {
-    let top::Document::Landings(view) = world.logged(5, since).unwrap() else { panic!("landing history") };
+    let top::Document::Landings(view) = world.logged(5, since).expect("landing history document") else {
+        panic!("landing history")
+    };
     view
 }
 #[test]
 fn a_coordinator_reads_the_landings_since_a_time() {
     use temper_engine_forge_world::landings;
+    const MINUTE: u64 = 60_000_000_000;
     let mut world = tier_history_world(World::coordinator());
     world.adopt_kit();
     land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
     // TIME is minute-aligned. Cross its next boundary before the outside push.
-    const MINUTE: u64 = 60_000_000_000;
     let since = Wall::from_nanos(world.wall().as_nanos().div_ceil(MINUTE) * MINUTE);
     world.run_to(Wall::from_nanos(since.as_nanos() + 1_000_000_000));
     world.push_kit();
