@@ -27,11 +27,14 @@ A budget is what a task may spend, in units its models' prices make of their usa
   a reserve to finish in. The stock sizes its spends at each start
   from C, one costliest completion of the first configured model at
   its prices: its rules' floor is 2C and their run cap K, 4C or four
-  units for each of a charter's run turns (32 for 8), whichever is
+  units for each of the chat's run turns (32 for its 8), whichever is
   more; a person's chat may spend 24K, and the ceilings and a
   project's period 48K. On `temper init`'s box C is 1,057 units, so a
-  run draws 2,114 to 4,228. The stock charters give 8 turns and 120 seconds, with a
-  reserve of 1 turn and 60 seconds; `settings show` reads the current ones.
+  run draws 2,114 to 4,228. The stock chat runs 8 turns, the coding
+  agent and its reviewers 16, each 120 seconds with a reserve of 1
+  turn and 60 seconds; at a cheap model's prices K holds a 16-turn
+  run before its turns are spent. `settings show` reads the current
+  ones.
 
 ## How it changes
 
