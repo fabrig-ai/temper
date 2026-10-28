@@ -56,7 +56,7 @@ fn llm_document_checks() {
         ("/cued", json!([{"cue":"x","turns":["x"],"extra":1}]), "cued[0].extra: unknown member\n"),
         ("/asked", json!([{"cue":"x","turns":[]}]), "asked[0].turns: must be non-empty\n"),
         ("/otherwise", json!([]), "otherwise: must be non-empty\n"),
-        ("/otherwise", json!(["x", "x", "x", "x", "x", "x", "x", "x", "x"]), "otherwise: past its bound\n"),
+        ("/otherwise", json!(vec!["x"; 17]), "otherwise: past its bound\n"),
         ("/otherwise", json!([{"lines":[],"finish":"stop","tokens":1}]), "otherwise[0].lines: must be non-empty\n"),
         (
             "/otherwise",
@@ -112,11 +112,7 @@ fn llm_document_checks() {
         ("/cued", json!([{"cue":"","turns":["x"]}]), "cued[0].cue: must be non-empty\n"),
         ("/cued", Value::Array((0..2).map(|_| scripts[0].clone()).collect()), "cued[1].cue: must be unique\n"),
         ("/cued", json!([{"cue":"x","turns":[]}]), "cued[0].turns: must be non-empty\n"),
-        (
-            "/asked",
-            json!([{"cue":"x","turns":["a","b","c","d","e","f","g","h","i"]}]),
-            "asked[0].turns: past its bound\n",
-        ),
+        ("/asked", json!([{"cue":"x","turns":vec!["x";17]}]), "asked[0].turns: past its bound\n"),
         (
             "/otherwise",
             json!([{"lines":(0..9).map(|_|json!({"text":"x"})).collect::<Vec<_>>(),"finish":"stop","tokens":1}]),
@@ -988,4 +984,22 @@ fn eleven_scripts_fit_each_cue_list() {
         doc[name] = json!((0..11).map(|i| json!({"cue":format!("cue {i}"),"turns":["answer"]})).collect::<Vec<_>>());
     }
     llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).expect("eleven scripts in each cue list");
+}
+
+#[test]
+fn sixteen_turns_fit_each_script_and_seventeen_are_refused() {
+    for group in ["cued", "asked", "otherwise"] {
+        for count in [16, 17] {
+            let mut doc = llm_document();
+            let turns = json!(vec!["answer"; count]);
+            doc[group] = if group == "otherwise" { turns } else { json!([{"cue":"bounded", "turns":turns}]) };
+            let result = llm::Document::decode(&serde_json::to_vec(&doc).unwrap());
+            if count == 16 {
+                result.expect("sixteen turns fit");
+            } else {
+                let path = if group == "otherwise" { group.into() } else { format!("{group}[0].turns") };
+                assert_eq!(result.unwrap_err().line().as_ref(), format!("{path}: past its bound\n").as_bytes());
+            }
+        }
+    }
 }

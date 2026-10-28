@@ -1,5 +1,5 @@
 {
-  "cue": "Change: Add a dark theme to widget",
-  "assistant_before": 7,
-  "release_after_green_merge": true
+  "requests": "sequential",
+  "close_after": "final_answer",
+  "model_latency_ms": 100
 }

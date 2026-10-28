@@ -312,7 +312,7 @@ fn cued_refusals_and_shared_bounds() {
         (json!([{"cue":"","turns":["x"]}]), "application.demo.llm.cued[0].cue: must be non-empty\n"),
         (json!([{"cue":"x".repeat(257),"turns":["x"]}]), "application.demo.llm.cued[0].cue: past its bound\n"),
         (json!([{"cue":"x","turns":[]}]), "application.demo.llm.cued[0].turns: must be non-empty\n"),
-        (json!([{"cue":"x","turns":vec!["x";9]}]), "application.demo.llm.cued[0].turns: past its bound\n"),
+        (json!([{"cue":"x","turns":vec!["x";17]}]), "application.demo.llm.cued[0].turns: past its bound\n"),
         (
             json!([{"cue":"Add CSV export to widget","turns":["x"]}]),
             "application.demo.llm.cued[0].cue: must be unique\n",
@@ -329,7 +329,7 @@ fn cued_refusals_and_shared_bounds() {
         value["application"]["demo"]["llm"]["cued"] = cued;
         assert_eq!(read(&value).unwrap_err().line().as_ref(), expected.as_bytes());
     }
-    for cued in [json!([]), json!(&scripts[..10]), json!([{"cue":"x".repeat(256),"turns":vec!["x";8]}])] {
+    for cued in [json!([]), json!(&scripts[..10]), json!([{"cue":"x".repeat(256),"turns":vec!["x";16]}])] {
         let mut value = fixture();
         value["application"]["demo"]["llm"]["cued"] = cued;
         assert!(read(&value).unwrap().is_some());
@@ -578,4 +578,26 @@ fn the_csv_review_uses_its_verdict_script_with_the_changes_words_quoted() {
     let verdict = call(&answers[0], b"finish");
     assert_eq!(verdict["form"], "verdict");
     assert_eq!(verdict["label"], "1");
+}
+
+#[test]
+fn sixteen_turns_fit_demo_scripts_and_seventeen_are_refused() {
+    for group in ["cued", "asked", "otherwise"] {
+        for count in [16, 17] {
+            let mut value = fixture();
+            let turns = json!(vec!["answer"; count]);
+            value["application"]["demo"]["llm"][group] =
+                if group == "otherwise" { turns } else { json!([{"cue":"bounded", "turns":turns}]) };
+            let result = read(&value);
+            if count == 16 {
+                assert!(result.unwrap().is_some());
+            } else {
+                let path = if group == "otherwise" { group.into() } else { format!("{group}[0].turns") };
+                assert_eq!(
+                    result.unwrap_err().line().as_ref(),
+                    format!("application.demo.llm.{path}: past its bound\n").as_bytes()
+                );
+            }
+        }
+    }
 }

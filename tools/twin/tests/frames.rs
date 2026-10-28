@@ -356,3 +356,26 @@ fn a_recorded_cut_off_result_refuses_even_valid_placeholder_arguments() {
         Refusal::Turn { task: CHAT, turn: FIRST, why: Unheld::CutShort }
     );
 }
+
+#[test]
+fn sixteen_transcript_turns_fit_and_seventeen_are_refused() {
+    let (_scratch, input) = fixture(&[REVIEWER]);
+    let original = records(&input, REVIEWER);
+    assert_eq!(original.len(), 1);
+    for count in [16, 17] {
+        let records: Vec<_> = (0..count)
+            .map(|i| {
+                let mut record = original[0].clone();
+                record.turn = i + 1;
+                record
+            })
+            .collect();
+        save(&input, REVIEWER, &records);
+        let result = twin(&input);
+        if count == 16 {
+            assert_eq!(&*result.expect("sixteen turns fit").report.turns, &[(REVIEWER, 16)]);
+        } else {
+            assert_eq!(result.expect_err("seventeen turns refused"), Refusal::Bounds { what: "turns" });
+        }
+    }
+}

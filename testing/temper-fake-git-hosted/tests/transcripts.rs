@@ -438,6 +438,7 @@ fn another_due_reply_does_not_hide_the_typed_git_reply() {
         &mut domain,
         &config,
         api::Setup {
+            workflows: Box::new([]),
             id: 2,
             name: b"acme/app".as_slice().into(),
             default: b"main".as_slice().into(),

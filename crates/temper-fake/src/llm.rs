@@ -312,10 +312,10 @@ fn inputs(d: &Json, at: u32, turns: usize, p: &Path) -> Result<Box<[api::Rule]>,
             return Err(read::why(&p.member(b"cue"), b"only the last rule must have an empty cue"));
         }
         let turn = read::integer(d, turn_at, u64::from(u32::MAX), &p.member(b"turn"))?;
-        if turn >= u64::try_from(turns).expect("eight turns") {
+        if turn >= u64::try_from(turns).expect("sixteen turns") {
             return Err(read::why(&p.member(b"turn"), b"must index this script's turns"));
         }
-        rules.push(api::Rule { cue, turn: u32::try_from(turn).expect("eight turns") }).expect("sixteen rules");
+        rules.push(api::Rule { cue, turn: u32::try_from(turn).expect("sixteen turns") }).expect("sixteen rules");
     }
     Ok(rules.into_boxed())
 }
@@ -323,11 +323,11 @@ pub(crate) fn turns(d: &Json, at: u32, p: &Path) -> Result<Box<[api::Turn]>, Ref
     standalone_turns(d, at, p, None)
 }
 fn standalone_turns(d: &Json, at: u32, p: &Path, credentials: Option<u32>) -> Result<Box<[api::Turn]>, Refusal> {
-    let items = read::list(d, at, 1, p)?;
+    let items = read::bounded_list(d, at, 1, crate::SCRIPT_TURNS, p)?;
     let mut out = List::with_capacity(items.len());
     for (i, at) in items.iter().enumerate() {
         let turn = turn::Turn::read_standalone(d, *at, &read::index(p, i), credentials)?;
-        out.push(turn::into_skein(turn)).expect("eight turns");
+        out.push(turn::into_skein(turn)).expect("sixteen turns");
     }
     Ok(out.into_boxed())
 }

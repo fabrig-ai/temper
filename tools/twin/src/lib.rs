@@ -81,7 +81,7 @@ pub fn twin(input: &Input) -> Result<Twin, Refusal> {
     let mut dropped = Vec::new();
     for take in &input.takes {
         let completions = frames::read(&input.data, take.task)?;
-        let count = u32::try_from(completions.len()).expect("eight turns");
+        let count = u32::try_from(completions.len()).expect("sixteen turns");
         let mut blocks = 0;
         scripts.push(document::script(take, &completions, &input.replaces, &mut replaced, &mut blocks)?);
         dropped.push((take.task, blocks));

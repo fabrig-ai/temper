@@ -1,4 +1,4 @@
-//! Rung A's passing walk 5, replayed from its recorded completions on fake peers.
+//! Rung A's CSV landing path from walk 8, replayed on fake peers.
 use crate::{
     Exit, ForgeRecipe, Ran, argv,
     calls::{self, D1, Step},
@@ -15,26 +15,13 @@ const PERSON: &str = include_str!("../tests/fixtures/rung-a/person.json");
 const MODEL: &[u8] = include_bytes!("../tests/fixtures/rung-a/llm.json");
 const FORGE: &[u8] = include_bytes!("../tests/fixtures/rung-a/forge.json");
 
-fn pacing() -> (&'static str, usize) {
-    use std::sync::LazyLock;
-    static PACE: LazyLock<Value> = LazyLock::new(|| {
-        serde_json::from_str(include_str!("../tests/fixtures/rung-a/pace.json")).expect("pacing JSON")
-    });
-    assert_eq!(PACE["release_after_green_merge"], true);
-    (
-        PACE["cue"].as_str().expect("gate cue"),
-        usize::try_from(PACE["assistant_before"].as_u64().expect("gate turn")).expect("bounded turn"),
-    )
-}
-
 fn fixture() -> forge::Fixture {
     forge::Fixture {
-        // Eleven model tasks take about twice B0's turns; keep a bounded per-story guard.
+        // Keep the three recorded model tasks under a bounded per-story guard.
         patience: skein_lib::Duration::from_secs(40),
-        reply_gate: Some(pacing()),
         configure_domain: |config| {
-            // Retain all three pulls; this calm twin uses current API reads.
-            config.limits.items = 3;
+            // This calm twin uses current API reads.
+            config.limits.items = 1;
             config.settle_min = skein_lib::Duration::ZERO;
             config.settle_max = skein_lib::Duration::ZERO;
         },
@@ -50,8 +37,13 @@ fn fixture() -> forge::Fixture {
             (green_light::fixture().configure)(value, agent, address);
             // Use the ordinary template and this story's policy period, rather than B0's case defaults.
             value["world_settings"].as_object_mut().expect("world settings").remove("case");
-            // Three requests and their production, review and resolution attempts coexist.
-            for (name, limit) in [("fleet.attempts", 4), ("brief.briefs", 4), ("core.call_answer_bytes", 8192)] {
+            // Retain the recorded change result and review beside the chat.
+            for (name, limit) in [
+                ("fleet.attempts", 4),
+                ("brief.briefs", 4),
+                ("core.call_answer_bytes", 8192),
+                ("tasks.result_bytes", 512),
+            ] {
                 value["engine"]["limits"]["overrides"][name] = limit.into();
             }
             value["workers"][0]["limits"]["overrides"]["core.call_answer_bytes"] = 8192.into();
@@ -63,21 +55,26 @@ fn fixture() -> forge::Fixture {
                 project["policy"]["roles"][0]["period_spend"] = 4000.into();
             }
             agent["profile"]["declared"]["read_window"] = 4098.into();
+            agent["profile"]["policy"]["max_turns"] = 16.into();
         },
         ..green_light::fixture()
     }
 }
 
 fn recipe(_: SocketAddr, _: &Path) -> llm::Recipe {
-    let document = temper_fake::llm::Document::decode(MODEL).expect("walk 5 twin document");
+    let document = temper_fake::llm::Document::decode(MODEL).expect("walk 8 twin document");
     let mut recipe = llm::scripted(Box::new([]));
-    // Seventy-four recorded completions also retain their HTTP and query-history records.
+    // Twenty recorded completions also retain their HTTP and query-history records.
     recipe.limits.observations = 1024;
     recipe.limits.observation_bytes = 16 * 1024 * 1024;
     recipe.domain = document.domain(17);
     recipe.domain_limits = temper_fake::llm::LIMITS;
     // Scale the walk's interleaving down while leaving each recorded completion intact.
-    recipe.domain_limits.latency_min = skein_lib::Duration::from_millis(100);
+    let pace: Value = serde_json::from_str(include_str!("../tests/fixtures/rung-a/pace.json")).expect("pacing JSON");
+    assert_eq!(pace["requests"], "sequential");
+    assert_eq!(pace["close_after"], "final_answer");
+    recipe.domain_limits.latency_min =
+        skein_lib::Duration::from_millis(pace["model_latency_ms"].as_u64().expect("latency"));
     recipe.domain_limits.latency_max = recipe.domain_limits.latency_min;
     recipe
 }
@@ -86,6 +83,38 @@ fn person(index: usize) -> &'static str {
     use std::sync::LazyLock;
     static WORDS: LazyLock<Value> = LazyLock::new(|| serde_json::from_str(PERSON).expect("person's requests"));
     WORDS["requests"][index].as_str().expect("request words")
+}
+
+fn csv_answer() -> &'static str {
+    "CSV export is complete."
+}
+fn expected_csv(scripts: &Value) -> String {
+    let forge: Value = serde_json::from_slice(FORGE).expect("forge JSON");
+    let mut source = forge["repositories"][0]["tree"]
+        .as_array()
+        .expect("seed files")
+        .iter()
+        .find(|file| file["path"] == "src/main.rs")
+        .expect("seed source")["content"]
+        .as_str()
+        .expect("seed text")
+        .to_owned();
+    for line in scripts["cued"][0]["turns"]
+        .as_array()
+        .expect("writer turns")
+        .iter()
+        .flat_map(|turn| turn["lines"].as_array().expect("writer lines"))
+    {
+        if line["call"] == "edit" {
+            assert_eq!(line["arguments"]["path"], "src/main.rs");
+            for edit in line["arguments"]["edits"].as_array().expect("edits") {
+                let old = edit["old"].as_str().expect("old text");
+                assert_eq!(source.matches(old).count(), 1, "each recorded edit has one target");
+                source = source.replacen(old, edit["new"].as_str().expect("new text"), 1);
+            }
+        }
+    }
+    source
 }
 
 fn acts() -> Vec<Step> {
@@ -110,27 +139,13 @@ fn acts() -> Vec<Step> {
             ],
         ),
         call(D1, argv!["chat", "start", "--project", "1", person(0), "--key", "csv"]),
-        // In the live walk chat 2 starts after CSV's initial inspection, before its delegation.
-        until(D1, argv!["task", "show", "1", "--activity", "32", "--json"], b"window", b"Authority refused"),
-        call(D1, argv!["chat", "start", "--project", "1", person(1), "--key", "dark"]),
-        until(D1, argv!["task", "show", "1", "--tree", "--json"], b"\"task\":3", b"Authority refused"),
-        until(D1, argv!["task", "show", "3", "--tree", "--json"], b"\"task\":7", b"Authority refused"),
-        call(D1, argv!["chat", "start", "--project", "1", person(2), "--key", "empty"]),
-        until(D1, argv!["task", "show", "2", "--tree", "--json"], b"\"task\":5", b"Authority refused"),
-        call(D1, argv!["chat", "close", "1", "--move", "3", "--key", "close-csv"]),
-        call(D1, argv!["chat", "close", "2", "--move", "5", "--key", "close-dark"]),
-        until(D1, argv!["task", "show", "8", "--tree", "--json"], b"\"task\":10", b"Authority refused"),
-        call(D1, argv!["chat", "close", "8", "--move", "10", "--key", "close-empty"]),
-        call(D1, argv!["change", "show", "3", "--until", "landed", "--json"]),
-        call(D1, argv!["change", "show", "5", "--until", "held", "--json"]),
-        call(D1, argv!["change", "show", "10", "--until", "held", "--json"]),
-        call(D1, argv!["task", "show", "7", "--until", "ended", "--json"]),
-        // Walk 5 stopped with these changes held and pulls open. Cancel them here to drain
-        // cleanly; this cleanup also closes their pulls, after the scenario checks.
-        call(D1, argv!["task", "cancel", "5", "Twin complete", "--key", "stop-dark"]),
-        call(D1, argv!["task", "cancel", "10", "Twin complete", "--key", "stop-empty"]),
-        call(D1, argv!["task", "show", "5", "--until", "ended"]),
-        call(D1, argv!["task", "show", "10", "--until", "ended"]),
+        until(D1, argv!["task", "show", "1", "--tree", "--json"], b"\"task\":2", b"Authority refused"),
+        // Walk 8 waits for CSV's final answer and closes each chat before the next request.
+        call(D1, argv!["change", "show", "2", "--until", "landed", "--json"]),
+        until(D1, argv!["chat", "show", "1"], csv_answer().as_bytes(), b"Authority refused"),
+        call(D1, argv!["chat", "close", "1", "--key", "close-csv"]),
+        // Dark theme and empty search return with the next walk's whole twin:
+        // walk 8's bare advisor requests are now refused on main.
     ]
 }
 
@@ -144,8 +159,8 @@ fn check(ran: &Ran) {
             String::from_utf8_lossy(&call.stderr)
         );
     }
-    assert_eq!(ran.calls().len(), 21);
-    let panel: Value = serde_json::from_slice(&ran.calls()[13].stdout).expect("change panel");
+    assert_eq!(ran.calls().len(), 7);
+    let panel: Value = serde_json::from_slice(&ran.calls()[4].stdout).expect("change panel");
     let panel = &panel["change"];
     assert_eq!(panel["ci"], "passed");
     assert_eq!(panel["step"], "landed");
@@ -160,7 +175,7 @@ fn check(ran: &Ran) {
     );
     assert!(ran.forge().merged_green(), "forge API agrees CI passed at the merged head");
     let scripts: Value = serde_json::from_slice(MODEL).expect("recorded model document");
-    let expected = scripts["cued"][0]["turns"][3]["lines"][0]["arguments"]["content"].as_str().expect("CSV write");
+    let expected = expected_csv(&scripts);
     assert_eq!(ran.forge().main_file(b"src/main.rs"), expected.as_bytes(), "the recorded CSV program landed");
     let merges: Vec<_> = ran
         .forge()
@@ -185,28 +200,9 @@ fn check(ran: &Ran) {
     };
     assert_eq!(panel["head"], hex(merges[0].0));
     assert_eq!(panel["merge"], hex(merges[0].1));
-    let last = ran
-        .forge()
-        .snapshots()
-        .iter()
-        .rfind(|snapshot| snapshot.at <= ran.calls()[15].ended)
-        .expect("outside API snapshot before cleanup");
+    let last = ran.forge().snapshots().last().expect("outside API snapshot");
     assert_eq!(last.branches.iter().find(|(branch, _)| branch.as_ref() == b"main").expect("main").1, merges[0].1);
-    assert_eq!(
-        last.pulls.as_ref(),
-        &[2, 3],
-        "the two held pulls remain open; panels: {} / {}",
-        String::from_utf8_lossy(&ran.calls()[14].stdout),
-        String::from_utf8_lossy(&ran.calls()[15].stdout)
-    );
-    for position in [14, 15] {
-        let value: Value = serde_json::from_slice(&ran.calls()[position].stdout).expect("held panel");
-        assert!(value["change"]["task_hold"].is_object(), "the walk's other change held: {value}");
-        assert_eq!(value["change"]["ci"], "passed");
-        assert_eq!(value["change"]["step"], if position == 14 { "resolving" } else { "gating" });
-        assert!(value["change"]["merge"].is_null());
-    }
-    assert!(String::from_utf8_lossy(&ran.calls()[16].stdout).contains("Approve."));
+    assert!(last.pulls.is_empty(), "no open pulls after CSV lands");
     check_cues(ran, &scripts);
 }
 
@@ -223,10 +219,7 @@ fn check_cues(ran: &Ran, scripts: &Value) {
             .filter_map(|(index, script)| system.find(script["cue"].as_str().expect("cue")).map(|at| (at, index)))
             .min()
             .unwrap_or_else(|| panic!("off-script system: {system}"));
-        let expected_parent = [
-            "task 3", "task 5", "task 10", "person 1", "person 1", "person 1", "task 3", "task 5", "task 10",
-            "task 10", "task 5",
-        ][index];
+        let expected_parent = ["task 2", "person 1", "task 2"][index];
         let own_parent =
             system.split_once("[Requested by ").expect("own requester").1.split_once(']').expect("requester end").0;
         assert_eq!(own_parent, expected_parent, "earliest cue selected another task's script: {system}");
@@ -243,7 +236,7 @@ fn check_cues(ran: &Ran, scripts: &Value) {
     }
 }
 
-/// Replay walk 5 with the same acts and terminal outcomes on fresh fake peers.
+/// Replay walk 8's CSV request and landing on fresh fake peers.
 pub fn run() {
     let ran = run_forge_with(fixture(), ForgeRecipe { source: PathBuf::new(), build: recipe }, acts);
     check(&ran);
@@ -258,7 +251,6 @@ mod tests {
 
     #[test]
     fn story_documents_fit_and_every_cue_plays_its_recorded_first_turn() {
-        let (cue, replies) = super::pacing();
         let forge = temper_fake::forge::Document::decode(FORGE).expect("forge document");
         let tree = forge.repositories()[0].tree.as_ref().expect("seeded tree");
         let source = tree.iter().find(|file| file.path.as_ref() == b"src/main.rs").expect("widget program");
@@ -269,9 +261,7 @@ mod tests {
         let value: Value = serde_json::from_slice(MODEL).expect("model JSON");
         let person: Value = serde_json::from_str(PERSON).expect("person JSON");
         let scripts = value["cued"].as_array().expect("script list");
-        assert_eq!(scripts.len(), 11);
-        let paced = scripts.iter().find(|script| script["cue"] == cue).expect("paced script exists");
-        assert_eq!(paced["turns"].as_array().expect("paced turns").len(), replies + 1);
+        assert_eq!(scripts.len(), 3);
         for request in person["requests"].as_array().expect("requests") {
             assert!(scripts.iter().any(|script| script["cue"] == *request), "person's request has a script");
         }

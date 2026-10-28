@@ -27,7 +27,9 @@ pub const SCRIPT_BYTES: u32 = 1 << 18;
 pub const ANSWER_BYTES: u32 = 1 << 16;
 /// Scripts per cue list, sized for rung A's first passing walk's eleven agents.
 pub const ENTRIES: u32 = 11;
-/// Other document lists: models, turns, lines and repositories.
+/// Turns per script, matching the stock coding agent and reviewer runs.
+pub const SCRIPT_TURNS: u32 = 16;
+/// Other document lists: models, lines and repositories.
 pub const LIST_ENTRIES: u32 = 8;
 
 #[cfg(test)]
