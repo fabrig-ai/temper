@@ -244,17 +244,12 @@ impl Service {
             root: Root::Open,
             completions: Queue::with_capacity(capacity),
             submissions: Queue::with_capacity(capacity),
-            events: Queue::with_capacity(capacity),
-            told: Queue::with_capacity(capacity),
+            events: Queue::uncapped(),
+            told: Queue::uncapped(),
             requests: Queue::with_capacity(capacity),
             orders: Queue::with_capacity(capacity),
             order_walls: Queue::with_capacity(capacity),
         })
-    }
-    fn room(&self, bound: io::MaxOut) -> bool {
-        self.events.room() >= bound.events
-            && self.told.room() >= self.events.len().checked_add(bound.events).expect("retained event admission")
-            && self.submissions.room() >= bound.submissions
     }
     fn progress_event(&self, event: &Event) -> bool {
         match event {
@@ -1165,14 +1160,14 @@ impl skein_shell::Host for Service {
         self.env.now = now;
         self.env.wall = wall;
         for _ in 0..self.env.limits.sockets.saturating_add(self.env.limits.refusals) {
-            if !self.io.is_ready() || !self.room(io::MAX_OUT_RESUME) {
+            if !self.io.is_ready() || self.submissions.room() < io::MAX_OUT_RESUME.submissions {
                 break;
             }
             io::resume(&mut self.io, &self.env, &mut self.events, &mut self.submissions);
         }
         if !self.io.is_ready() {
             for _ in 0..self.completions.len() {
-                if !self.room(io::MAX_OUT_UP) {
+                if self.submissions.room() < io::MAX_OUT_UP.submissions {
                     break;
                 }
                 let complete = self.completions.pop().expect("counted completion");
@@ -1189,7 +1184,7 @@ impl skein_shell::Host for Service {
             }
             if self.completions.is_empty() {
                 for _ in 0..self.env.limits.sockets.saturating_mul(2) {
-                    if !self.io.is_due(now) || !self.room(io::MAX_OUT_FIRE) {
+                    if !self.io.is_due(now) || self.submissions.room() < io::MAX_OUT_FIRE.submissions {
                         break;
                     }
                     io::fire(&mut self.io, &self.env, &mut self.events, &mut self.submissions);
@@ -1271,14 +1266,14 @@ impl skein_shell::Host for Service {
     }
     fn work_pending(&self, now: Time) -> bool {
         if self.phase == Phase::New && self.logs.ready() && self.records.ready()
-            || !self.completions.is_empty() && self.room(io::MAX_OUT_UP)
+            || !self.completions.is_empty() && self.submissions.room() >= io::MAX_OUT_UP.submissions
             || !self.events.is_empty()
             || self.events_runnable()
             || !self.requests.is_empty() && self.io.takes() && self.submissions.room() >= io::MAX_OUT_DOWN.submissions
             || !self.orders.is_empty() && self.orders_runnable() && self.requests.room() >= 6
             || self.terminate_pending && self.orders.room() >= self.machine.max_out()
-            || self.io.is_ready() && self.room(io::MAX_OUT_RESUME)
-            || self.io.is_due(now) && self.room(io::MAX_OUT_FIRE)
+            || self.io.is_ready() && self.submissions.room() >= io::MAX_OUT_RESUME.submissions
+            || self.io.is_due(now) && self.submissions.room() >= io::MAX_OUT_FIRE.submissions
         {
             return true;
         }
@@ -1366,7 +1361,8 @@ impl skein_shell::Host for Service {
     }
     fn next_deadline(&self) -> Option<Time> {
         let deadline = self.next_policy_deadline();
-        let io_deadline = if self.room(io::MAX_OUT_FIRE) { self.io.next_deadline() } else { None };
+        let io_deadline =
+            if self.submissions.room() >= io::MAX_OUT_FIRE.submissions { self.io.next_deadline() } else { None };
         match (io_deadline, deadline) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, None) | (None, a) => a,

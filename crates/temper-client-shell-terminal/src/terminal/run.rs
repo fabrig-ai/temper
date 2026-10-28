@@ -57,7 +57,7 @@ impl Terminal {
             complete: Queue::with_capacity(room),
             submit: Queue::with_capacity(room),
             raw: Queue::with_capacity(ROOM),
-            told: Queue::with_capacity(ROOM),
+            told: Queue::uncapped(),
             operations,
         })
     }
@@ -147,25 +147,16 @@ impl Host for Terminal {
     fn iterate(&mut self, now: Time, wall: Wall) {
         self.env.now = now;
         self.env.wall = wall;
-        while self.io.is_ready()
-            && self.raw.room() >= io::MAX_OUT_RESUME.submissions
-            && self.told.room() >= io::MAX_OUT_RESUME.events
-        {
+        while self.io.is_ready() && self.raw.room() >= io::MAX_OUT_RESUME.submissions {
             io::resume(&mut self.io, &self.env, &mut self.told, &mut self.raw);
         }
-        while !self.io.is_ready()
-            && self.raw.room() >= io::MAX_OUT_UP.submissions
-            && self.told.room() >= io::MAX_OUT_UP.events
-        {
+        while !self.io.is_ready() && self.raw.room() >= io::MAX_OUT_UP.submissions {
             let Some(complete) = self.complete.pop() else {
                 break;
             };
             self.complete(complete);
         }
-        while self.io.is_due(now)
-            && self.raw.room() >= io::MAX_OUT_FIRE.submissions
-            && self.told.room() >= io::MAX_OUT_FIRE.events
-        {
+        while self.io.is_due(now) && self.raw.room() >= io::MAX_OUT_FIRE.submissions {
             io::fire(&mut self.io, &self.env, &mut self.told, &mut self.raw);
         }
         self.client.iterate(now, wall);
