@@ -1170,3 +1170,18 @@ fn a_changes_failed_effect_account_survives_the_store() {
     let row = forge::Stored::Change(row);
     assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
 }
+
+#[test]
+fn a_changes_producer_failure_survives_the_store_at_the_hold_account_bound() {
+    use temper_engine_domain_forge_change::{Hold, State};
+    let mut row =
+        fixtures::change_row(State::Held { was: Box::new(State::Producing { requested: true }), why: Hold::Failed });
+    let mut words = skein_lib::List::with_capacity(jig_domain_tasks::HOLD_ACCOUNT_BYTES);
+    for _ in 0..jig_domain_tasks::HOLD_ACCOUNT_BYTES {
+        words.push(b'x').expect("hold account bound");
+    }
+    row.producer_failure = Some(words.into_boxed());
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
+    let row = forge::Stored::Change(row);
+    assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
+}

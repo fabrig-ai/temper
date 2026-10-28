@@ -2205,3 +2205,34 @@ fn a_repository_with_222_branches_and_two_recorded_prefix_branches_is_adopted() 
     );
     assert!(!world.seen().iter().any(|request| matches!(request, top::Request::Adopted { result: Err(_), .. })));
 }
+
+#[test]
+fn a_failed_producer_keeps_its_words_through_restart_and_holds_at_producing() {
+    const PRODUCER: u64 = 52;
+    const REASON: &[u8] = b"the repository has no search UI: it is a CSV command-line program";
+    let mut world = World::new(195);
+    world.adopt();
+    let mut row = change_row();
+    row.change.state = change::State::Producing { requested: true };
+    row.delegate = Some((PRODUCER, change::Delegate::Produce));
+    world.event(top::Event::Change { row });
+    world.event(top::Event::DelegateResult {
+        task: 51,
+        child: PRODUCER,
+        status: change::Status::Failed,
+        failed: true,
+        cancelled: false,
+        words: REASON.into(),
+    });
+    world.run_for(1);
+    world.restart();
+    assert_eq!(
+        change_step(&mut world, 100, change::Status::Unknown, Box::new([])),
+        change::Decision::Hold(change::Hold::Failed)
+    );
+    let Some(top::Stored::Change(saved)) = world.stored().get(&top::Key::Change(51)) else { panic!("retained change") };
+    assert_eq!(saved.producer_failure.as_deref(), Some(REASON));
+    assert!(matches!(&saved.change.state, change::State::Held { was, why: change::Hold::Failed }
+        if matches!(was.as_ref(), change::State::Producing { .. })));
+    assert_eq!(world.writes(), 0, "no pull request or other write for an inapplicable change");
+}

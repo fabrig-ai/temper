@@ -1793,6 +1793,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                 producing_charter: domain.config.forge_charter,
                 review_charter: 4,
                 effect_account: None,
+                producer_failure: None,
             },
         }));
         let branch_name =
@@ -2679,6 +2680,16 @@ fn authority_hold_message(
 }
 
 fn hold_change_decision(domain: &Domain, env: &Env<Limits>, task: u64, why: forge_change::Hold) -> ProcedureStep {
+    // A producer's failure is already fitted to the independent hold account bound.
+    // Keep that account whole even when its notice must fit a smaller inbox message.
+    if why == forge_change::Hold::Failed
+        && let Some(row) = domain.forge.change(task)
+        && let forge_change::State::Held { was, .. } = &row.change.state
+        && let forge_change::State::Producing { .. } = was.as_ref()
+        && let Some(words) = &row.producer_failure
+    {
+        return holds::decision_as(domain, env, task, tasks::Hold::EffectFailed, words.clone());
+    }
     let account =
         if let forge_change::Hold::Authority(cause) = why { Some(forge_change::authority_words(cause)) } else { None };
     let message = if let forge_change::Hold::Authority(cause) = why {

@@ -344,6 +344,7 @@ fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
         producing_charter: 2,
         review_charter: 4,
         effect_account: None,
+        producer_failure: None,
     }
 }
 
