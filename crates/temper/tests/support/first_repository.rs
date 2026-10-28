@@ -8,6 +8,9 @@ use serde_json::{Value, json};
 use skein_fake_llm_domain::api::{Finish, Line, Script, Turn};
 use std::{fs, num::NonZeroU16, os::unix::ffi::OsStrExt, path::Path};
 
+// An Open chat keeps its replying instructions in system text; its brief is user text.
+const CHAT_CUE: &[u8] = b"## Replying";
+
 #[must_use]
 pub fn llm(config: &Path) -> CtlLlm {
     model(config, scripts())
@@ -44,7 +47,7 @@ pub fn forge_read_llm(config: &Path) -> CtlLlm {
     model(
         config,
         Box::new([Script {
-            cue: b"@first-forge-read".as_slice().into(),
+            cue: CHAT_CUE.into(),
             turns: Box::new([
                 call(b"read_branch", &json!({"repository":"playground/widget","branch":"main"})),
                 Turn {
@@ -126,7 +129,7 @@ fn scripts() -> Box<[Script]> {
     let grant = |kind| json!({"connector":1,"kind":kind,"segments":["forge"],"terminal":"open","last":""});
     Box::new([
         Script {
-            cue: b"@first-repository".as_slice().into(),
+            cue: CHAT_CUE.into(),
             turns: Box::new([
                 call(
                     b"delegate",
@@ -184,7 +187,6 @@ pub fn csv_llm(config: &Path) -> CtlLlm {
 
 pub(super) fn csv_scripts() -> Box<[Script]> {
     let mut scripts = scripts();
-    scripts[0].cue = b"Add CSV export to widget".as_slice().into();
     let Line::Call { arguments, .. } = &mut scripts[0].turns[0].lines[0] else { panic!("delegate call") };
     let mut delegate: Value = serde_json::from_slice(arguments).expect("delegate JSON");
     delegate["batch"][0]["spec"]["words"] = "@hello-readme Add CSV export to widget in work/hello".into();
