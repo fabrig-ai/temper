@@ -5083,3 +5083,11 @@ fn temper_ctl_the_owner_lifts_a_stop_with_its_tasks() {
     support::placed_holds::lift(scratch.path(), &paths[0], flags);
     scratch.remove();
 }
+
+/// Replays B1 with its recorded review replaced at load by one head-free approval.
+#[test]
+fn rung_b1s_walk_passes_offline_on_its_twin() {
+    let scratch = support::Scratch::new("rung-b1-offline-walk");
+    support::forge_land::rung::offline_repair(scratch.path());
+    scratch.remove();
+}

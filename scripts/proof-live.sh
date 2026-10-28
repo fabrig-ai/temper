@@ -9,11 +9,12 @@ heavy=$(command -v heavy || true)
 case ${1-} in
     '') test_name=a_real_model_answers_a_chat_and_pushes_a_small_change ;;
     forge-land) test_name=a_person_asks_chatgpt_to_land_a_change_on_the_owned_forge ;;
+    rung-b1) test_name=rung_b1_a_change_repairs_ci_and_lands_after_the_person_agrees ;;
     rung-b0) test_name=rung_b0_a_person_agrees_a_plan_before_the_change_lands ;;
     forge-land-claude) test_name=a_person_asks_claude_code_to_land_a_change_on_the_owned_forge ;;
-    *) printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude|rung-b0]' >&2; exit 2 ;;
+    *) printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude|rung-b0|rung-b1]' >&2; exit 2 ;;
 esac
-[ "$#" -le 1 ] || { printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude|rung-b0]' >&2; exit 2; }
+[ "$#" -le 1 ] || { printf '%s\n' 'usage: scripts/proof-live.sh [forge-land|forge-land-claude|rung-b0|rung-b1]' >&2; exit 2; }
 # The held directory is opened without following a link and listed once.
 # Only its metadata and entry names are inspected; no entry is opened.
 claude_identity=
@@ -70,11 +71,11 @@ fi
 store=
 rung=false
 rerun=false
-if [ "${1-}" = forge-land ] || [ "${1-}" = forge-land-claude ] || [ "${1-}" = rung-b0 ]; then
-    if [ "${1-}" = rung-b0 ]; then
+if [ "${1-}" = forge-land ] || [ "${1-}" = forge-land-claude ] || [ "${1-}" = rung-b0 ] || [ "${1-}" = rung-b1 ]; then
+    if [ "${1-}" = rung-b0 ] || [ "${1-}" = rung-b1 ]; then
         rung=true
-        [ -n "${TEMPER_LIVE_ACCOUNT-}" ] || { printf '%s\n' 'TEMPER_LIVE_ACCOUNT is required for rung-b0' >&2; exit 2; }
-        store=${TEMPER_LIVE_STORE:-$PWD/../rung-b0-$(date -u +%Y%m%dT%H%M%SZ)-$$}
+        [ -n "${TEMPER_LIVE_ACCOUNT-}" ] || { printf '%s\n' 'TEMPER_LIVE_ACCOUNT is required for a rung' >&2; exit 2; }
+        store=${TEMPER_LIVE_STORE:-$PWD/../$1-$(date -u +%Y%m%dT%H%M%SZ)-$$}
         # Rung boxes and their retained evidence belong to this task directory.
         export TMPDIR=${TMPDIR:-$PWD/..}
         export TEMPER_LIVE_KEEP=${TEMPER_LIVE_KEEP:-$PWD/../live-evidence}
@@ -105,7 +106,7 @@ if [ "${1-}" = forge-land ] || [ "${1-}" = forge-land-claude ] || [ "${1-}" = ru
         printf '%s\n' 'moving the held ChatGPT account in; needs no person'
     fi
 elif [ -n "${TEMPER_LIVE_ACCOUNT-}" ]; then
-    printf '%s\n' 'TEMPER_LIVE_ACCOUNT is for forge-land or rung-b0' >&2
+    printf '%s\n' 'TEMPER_LIVE_ACCOUNT is for forge-land or a rung' >&2
     exit 2
 fi
 export NEXTEST_DOUBLE_SPAWN=0

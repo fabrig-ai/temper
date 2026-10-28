@@ -159,3 +159,10 @@ fn owned_forge_landing(model: support::forge_land::LiveModel<'_>) {
     assert!(clock.now().now <= deadline, "40 minute total story budget");
     scratch.remove();
 }
+
+/// domain/testing.md, 2.7: B1's failed head repaired by its change.
+#[test]
+#[ignore = "live: owner-run only, through scripts/proof-live.sh rung-b1"]
+fn rung_b1_a_change_repairs_ci_and_lands_after_the_person_agrees() {
+    support::forge_land::rung::repair();
+}

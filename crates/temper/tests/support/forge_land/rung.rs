@@ -18,7 +18,29 @@ use std::{
 const REQUEST: &str =
     "Add CSV export to widget. Before anything is changed, have the work tell me its plan and wait for my go-ahead.";
 const ANSWER: &str = "Go ahead. The CSV's first line must be the header fruit,count.";
-const WHOLE: u64 = 374_930;
+/// B0 keeps walk 1's sol bounds; B1 uses walk 5's luna bounds, in
+/// milliseconds from the request. The answer reached B1's goal before the
+/// recorded change at 242 s; main CI has the whole walk's bound.
+#[derive(Clone, Copy)]
+enum Rung {
+    B0,
+    B1,
+}
+
+impl Rung {
+    fn bound(self, b0: u64, b1: u64) -> u64 {
+        match self {
+            Self::B0 => b0,
+            Self::B1 => b1,
+        }
+    }
+    fn repair(self) -> bool {
+        matches!(self, Self::B1)
+    }
+    fn whole(self) -> u64 {
+        self.bound(374_930, 363_400)
+    }
+}
 
 fn now() -> Time {
     skein_shell::Clock::new().now().now
@@ -117,54 +139,20 @@ pub fn task_digest(value: &Value) -> Result<&str, String> {
 }
 
 /// The guide's init and the existing owned-forge fixture, with QA's model/room
-/// recipe (qa.md, 3; configuration.md, 13.8), before the first start.
+/// recipe (qa.md, 3), before the first start.
 pub fn deployment(paths: &[PathBuf; 3]) {
     let _ = super::live_deployment(paths, super::LiveModel::ChatGpt { account: None });
     let config = paths[0].join("temper.json");
     let agent = paths[0].join("agent.json");
     let mut value = read_json(&config);
-    let mut worker = read_json(&agent);
-    let old = value["engine"]["llm"]["models"][0]["name"].as_str().expect("first model").to_owned();
-    for provider in value["engine"]["llm"]["providers"].as_array_mut().expect("providers") {
-        for model in provider["models"].as_array_mut().expect("provider models") {
-            if *model == old {
-                *model = "gpt-6.1-sol".into();
-            }
-        }
-    }
-    value["engine"]["llm"]["models"][0]["name"] = "gpt-6.1-sol".into();
-    value["engine"]["llm"]["models"][0]["output"] = 32_000.into();
-    value["engine"]["llm"]["models"][0]["efforts"] = json!(["high", "medium", "low"]);
-    worker["endpoints"][0]["models"][0]["name"] = "gpt-6.1-sol".into();
-    worker["endpoints"][0]["models"][0]["output"] = 32_000.into();
-    worker["endpoints"][0]["models"][0]["reasoning_item"] = 32_768.into();
-    value["engine"]["limits"]["overrides"]["hub.turn_bytes"] = 1_479_864.into();
-    value["engine"]["limits"]["overrides"]["hub.transcript_bytes"] = 5_919_472.into();
-    value["workers"][0]["limits"]["overrides"]["hub.turn_bytes"] = 1_479_864.into();
-    value["workers"][0]["limits"]["overrides"]["hub.transcript_bytes"] = 5_919_472.into();
-    value["workers"][0]["limits"]["overrides"]["hub.turn_queue_bytes"] = 11_838_912.into();
-    value["engine"]["limits"]["overrides"]["core.resume_bytes"] = 1_479_868.into();
+    let worker = read_json(&agent);
+    value["engine"]["llm"]["models"][0]["efforts"] = json!(["medium", "high", "low"]);
     value["engine"]["limits"]["overrides"]["people.requests"] = 256.into();
-    for (name, count) in [
-        ("root.loads.loads", 32),
-        ("root.journal.transcript_bytes", 1_479_868),
-        ("root.loads.transcript_bytes", 1_479_864),
-        ("root.loads.bytes", 1_480_112),
-        ("root.loads.reply_bytes", 1_480_112),
-    ] {
-        value["application"]["limits"]["overrides"][name] = count.into();
-    }
-    // Walk 1's admitted declarations, not a phase-bound increase.
-    value["engine"]["memory_bytes"] = 817_372_775_016_049_u64.into();
-    value["workers"][0]["memory_bytes"] = 3_700_000_000_000_u64.into();
-    assert_eq!(value["engine"]["llm"]["models"][0]["efforts"][0], "high");
-    assert_eq!(value["engine"]["llm"]["models"][0]["output"], 32_000);
-    assert_eq!(value["engine"]["limits"]["overrides"]["people.requests"], 256);
-    assert_eq!(value["engine"]["limits"]["overrides"]["hub.turn_bytes"], 1_479_864);
-    assert_eq!(value["application"]["limits"]["overrides"]["root.loads.loads"], 32);
-    assert_eq!(worker["endpoints"][0]["models"][0]["name"], "gpt-6.1-sol");
-    assert_eq!(worker["endpoints"][0]["models"][0]["output"], 32_000);
-    assert_eq!(worker["endpoints"][0]["models"][0]["reasoning_item"], 32_768);
+    value["application"]["limits"]["overrides"]["root.loads.loads"] = 32.into();
+    assert_eq!(value["engine"]["llm"]["models"][0]["name"], "gpt-6-luna");
+    assert_eq!(value["engine"]["llm"]["models"][0]["output"], 8192);
+    assert_eq!(worker["endpoints"][0]["models"][0]["name"], "gpt-6-luna");
+    assert_eq!(worker["endpoints"][0]["models"][0]["output"], 8192);
     write_json(&config, &value);
     write_json(&agent, &worker);
     // Startup names the full deficit, including the box's pipes. Memory is a
@@ -178,13 +166,13 @@ pub fn deployment(paths: &[PathBuf; 3]) {
             .split_once("engine.memory_bytes: the worst case passes memory_bytes by ")
             .and_then(|(_, suffix)| suffix.strip_suffix(" bytes\n"))
             .and_then(|number| number.parse::<u64>().ok())
-            .unwrap_or_else(|| panic!("B0 setup refused: {message}"));
+            .unwrap_or_else(|| panic!("rung setup refused: {message}"));
         let before = value["engine"]["memory_bytes"].as_u64().expect("engine declaration");
         value["engine"]["memory_bytes"] = before.checked_add(deficit).expect("memory declaration fits").into();
         write_json(&config, &value);
     }
     temper::boxed_envelope_in(&directories, &fs::read(&config).expect("configuration"))
-        .unwrap_or_else(|message| panic!("B0 setup refused: {message}"));
+        .unwrap_or_else(|message| panic!("rung setup refused: {message}"));
 }
 
 /// A private command transcript, with a hard wall bound and no pipe backpressure.
@@ -199,10 +187,12 @@ struct Driver {
     api: String,
     header: PathBuf,
     project: String,
+    write_header: PathBuf,
+    rung: Rung,
 }
 
 impl Driver {
-    fn new(store: &Path, client: &Path) -> Self {
+    fn new(store: &Path, client: &Path, rung: Rung) -> Self {
         Self {
             binary: skein_scratch::paths::binary("temper"),
             store: store.into(),
@@ -214,6 +204,8 @@ impl Driver {
             api: String::new(),
             header: PathBuf::new(),
             project: String::new(),
+            write_header: PathBuf::new(),
+            rung,
         }
     }
 
@@ -295,13 +287,15 @@ impl Driver {
             self.requested.expect("request clock").saturating_add(Duration::from_nanos(milliseconds * 1_000_000));
     }
 
-    fn met(&self, bound: u64) {
+    fn met(&self, bound: u64) -> Result<(), String> {
+        require(now() <= self.until, &format!("phase {} exceeded its bound", self.phase))?;
         super::super::live::notice(&format!(
             "PHASE {} {}ms <= {}ms from request",
             self.phase,
             now().saturating_since(self.requested.expect("request clock")).as_nanos() / 1_000_000,
             bound
         ));
+        Ok(())
     }
 
     fn wait(&mut self, args: &[&str], condition: &str) -> Result<Value, String> {
@@ -377,7 +371,20 @@ impl Driver {
         require(rows.len() == 1, "only the planning work, no change before the answer")?;
         require(rows[0]["chip"]["executor"].get("agent").is_some(), "planning delegate is an agent")?;
         let goal = rows[0]["chip"]["task"].as_u64().ok_or("planning task number missing")?;
-        require(self.children(&goal.to_string())?.is_empty(), "planning work has made no change, ended or live")?;
+        for child in self.children(&goal.to_string())? {
+            require(
+                self.rung.repair()
+                    && child["chip"]["executor"].get("agent").is_some()
+                    && child["chip"]["phase"] == "ended",
+                "no change or live delegate before approval",
+            )?;
+            let task = child["chip"]["task"].as_u64().ok_or("advisor task")?;
+            let tools = super::successful_tools(&json!({"rows": self.activity(task)?}));
+            require(
+                !tools.iter().any(|tool| ["change", "write", "edit"].contains(&tool.as_str())),
+                "pre-approval advisor changed nothing",
+            )?;
+        }
         require(self.forge_json("branches")? == *baseline, "no pushed branch or changed main before the answer")?;
         require(self.forge_json("pulls?state=all")? == json!([]), "no pull request before the answer")?;
         let activity = json!({"rows": self.activity(goal)?});
@@ -490,13 +497,22 @@ fn stop_box(boxed: &mut Child) -> Result<(), String> {
 
 /// Run only by proof-live with a held record and a fresh private deployment.
 pub fn green_light() {
-    let account = super::live_account().expect("rung-b0 requires TEMPER_LIVE_ACCOUNT");
+    live_walk(Rung::B0);
+}
+
+/// B1: the person installs the gate before asking for the change.
+pub fn repair() {
+    live_walk(Rung::B1);
+}
+
+fn live_walk(rung: Rung) {
+    let account = super::live_account().expect("a rung requires TEMPER_LIVE_ACCOUNT");
     let (store, kept) = super::live_store(true);
     assert!(!kept, "a rung starts with a fresh box");
     let paths = ["config", "data", "cache"].map(|name| store.join(name));
     deployment(&paths);
-    super::super::live::notice(&format!("TAG rung-b0-{}", super::live_tag()));
-    run_walk(&store, &paths, &account);
+    super::super::live::notice(&format!("TAG rung-{}-{}", if rung.repair() { "b1" } else { "b0" }, super::live_tag()));
+    run_walk(&store, &paths, &account, rung);
 }
 
 fn start_box(store: &Path, paths: &[PathBuf; 3]) -> Child {
@@ -516,12 +532,12 @@ fn start_box(store: &Path, paths: &[PathBuf; 3]) -> Child {
 }
 
 /// Both faces import, walk, return the account, then stop through these acts.
-fn run_walk(store: &Path, paths: &[PathBuf; 3], account: &Path) {
+fn run_walk(store: &Path, paths: &[PathBuf; 3], account: &Path, rung: Rung) {
     let _ = super::cache_forgejo_binaries(&paths[2]);
     let client = store.join("client");
     fs::create_dir(&client).expect("fresh client");
     fs::set_permissions(&client, fs::Permissions::from_mode(0o700)).expect("private client");
-    let mut driver = Driver::new(store, &client);
+    let mut driver = Driver::new(store, &client, rung);
     return_hook(&driver.binary, store, &driver.client, account);
     let mut boxed = start_box(store, paths);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| walk(&mut driver, paths, account)));
@@ -544,22 +560,27 @@ fn run_walk(store: &Path, paths: &[PathBuf; 3], account: &Path) {
     stopped.expect("box stopped after login return");
 }
 
-fn twin_peer() -> super::super::llm::Listening {
-    let mut document: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../tests/real-loop/tests/fixtures/b0/llm.json"
-    )))
-    .expect("checked-in B0 twin");
+fn twin_peer(rung: Rung) -> super::super::llm::Listening {
+    let bytes: &[u8] = match rung {
+        Rung::B0 => {
+            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/real-loop/tests/fixtures/b0/llm.json"))
+        }
+        Rung::B1 => {
+            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/real-loop/tests/fixtures/b1/llm.json"))
+        }
+    };
+    let mut document: Value = serde_json::from_slice(bytes).expect("checked-in twin");
     let scripts = document["cued"].as_array_mut().expect("twin scripts");
-    assert_eq!(scripts.len(), 5, "chat, goal, coder, failed review and retry");
-    assert_eq!(scripts[3]["cue"], "Review this change at the named head");
-    assert_eq!(scripts[4]["cue"], "This review is asked again at the same head");
-    scripts.pop();
-    scripts[3]["turns"] = json!([{
+    let review = if rung.repair() { 5 } else { 3 };
+    assert_eq!(scripts[review]["cue"], "Review this change at the named head");
+    if !rung.repair() {
+        assert_eq!(scripts[4]["cue"], "This review is asked again at the same head");
+        scripts.pop();
+    }
+    scripts[review]["turns"] = json!([{
         "lines":[{"call":"finish","arguments":{
             "form":"verdict","label":"1","text":"Approved for the driver replay.","fields":{},"items":[]
-        }}],
-        "finish":"tool_calls","tokens":20
+        }}], "finish":"tool_calls","tokens":20
     }]);
     // All other call arguments stay recorded. Identity-bearing prose in
     // words/text/content is deliberately untouched and is not an oracle.
@@ -570,6 +591,7 @@ fn twin_peer() -> super::super::llm::Listening {
                     let args = line["arguments"].as_object().expect("call arguments");
                     let identity = args.contains_key("head")
                         || args.contains_key("merge")
+                        || args.contains_key("commit")
                         || (call.starts_with("read_pull") && args.contains_key("number"));
                     assert!(!identity, "unbound recorded identity: task {task}, turn {turn}, call {call}");
                 }
@@ -646,7 +668,7 @@ impl skein_world::Referee<super::super::Process> for TwinPeers {
         Some(self.deadline.min(self.wake))
     }
     fn overdue(&self, at: Time) -> Option<String> {
-        (at >= self.deadline).then(|| "B0 twin peers did not settle".into())
+        (at >= self.deadline).then(|| "rung twin peers did not settle".into())
     }
     fn passed(&self) -> bool {
         self.ended
@@ -655,6 +677,15 @@ impl skein_world::Referee<super::super::Process> for TwinPeers {
 
 /// Real Forgejo, runner, ctl and clock, with only the account/model replaced.
 pub fn offline_walk(root: &Path) {
+    offline_rung(root, Rung::B0);
+}
+
+/// B1 uses the same driver, gate and runner as its live face.
+pub fn offline_repair(root: &Path) {
+    offline_rung(root, Rung::B1);
+}
+
+fn offline_rung(root: &Path, rung: Rung) {
     use super::super::{Process, sign_in};
     use skein_shell::{Clock, Host};
     let paths = ["config", "data", "cache"].map(|name| root.join(name));
@@ -663,7 +694,7 @@ pub fn offline_walk(root: &Path) {
     let account = root.join("fake-account.move");
     fake_account(root, &paths, &account);
     let issuer = sign_in::restart_issued_issuer(&paths[0]);
-    let peer = twin_peer();
+    let peer = twin_peer(rung);
     peer.configure(&paths[0]);
     // As in account_move: one independent world must serve the fake while
     // the synchronous bounded ctl/curl driver waits for its child commands.
@@ -694,7 +725,7 @@ pub fn offline_walk(root: &Path) {
             );
         });
         listening.recv().expect("twin peers constructed");
-        run_walk(root, &paths, &account);
+        run_walk(root, &paths, &account, rung);
         drop(stop);
         peers.join().expect("independent twin world");
     });
@@ -751,7 +782,7 @@ fn setup_tools(driver: &mut Driver) -> Result<(), String> {
     driver.ctl(&["project", "fund", &project, "449696", "--key", "rung-project-funds"], None)?;
     driver.ctl(&["project", "fund", &project, "415104", "--role", "0", "--key", "rung-role-funds"], None)?;
     let charter = driver.ctl(&["settings", "show", "charter", "1"], None)?;
-    require(charter["value"]["model"]["name"] == "gpt-6.1-sol", "QA charter uses sol")?;
+    require(charter["value"]["model"]["name"] == "gpt-6-luna", "QA charter uses luna")?;
     Ok(())
 }
 
@@ -776,8 +807,9 @@ fn setup_observer(driver: &mut Driver, paths: &[PathBuf; 3], output: &str) -> Re
         "person's read header from the box",
     )?;
     driver.header = printed_header.into();
+    driver.write_header = paths[1].join("forge-3/person_write.header");
     super::super::live::notice(
-        "SETUP sol high output=32000; engine memory=derived-before-start worker memory=3700000000000; rules/policy ceiling=207552 period=449696 role period=415104",
+        "SETUP luna medium output=8192; init limits; memory=derived-before-start; rules/policy ceiling=207552 period=449696 role period=415104",
     );
     let memory = read_json(&paths[0].join("temper.json"))["engine"]["memory_bytes"].clone();
     super::super::live::notice(&format!("SETUP engine memory={memory}"));
@@ -803,7 +835,7 @@ pub fn offline_setup(root: &Path) {
     let peer = super::super::sign_in::plan_peer(Box::new([]));
     peer.configure(&paths[0]);
     let _ = super::cache_forgejo_binaries(&paths[2]);
-    let driver = Rc::new(RefCell::new(Driver::new(root, &root.join("client"))));
+    let driver = Rc::new(RefCell::new(Driver::new(root, &root.join("client"), Rung::B0)));
     let tools = driver.clone();
     let prepared = Rc::new(RefCell::new(Ok(())));
     let tool_result = prepared.clone();
@@ -863,10 +895,14 @@ pub fn offline_setup(root: &Path) {
 }
 
 fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(), String> {
-    let baseline = setup(driver, paths, account)?;
+    let mut baseline = setup(driver, paths, account)?;
+    if driver.rung.repair() {
+        install_gate(driver)?;
+        baseline = driver.forge_json("branches")?;
+    }
     let project = driver.project.clone();
     driver.requested = Some(now());
-    driver.phase("inbox question", 40_480);
+    driver.phase("inbox question", driver.rung.bound(40_480, 75_000));
     let created = driver.ctl(
         &[
             "chat",
@@ -874,9 +910,9 @@ fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(),
             "--project",
             &project,
             "--model",
-            "gpt-6.1-sol",
+            "gpt-6-luna",
             "--effort",
-            "high",
+            "medium",
             "--key",
             "rung-b0",
             REQUEST,
@@ -885,8 +921,8 @@ fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(),
     )?;
     let chat = created_chat(&created)?.to_string();
     driver.wait(&["inbox"], "waiting")?;
-    driver.met(40_480);
-    driver.phase("person's answer sent", 186_660);
+    driver.met(driver.rung.bound(40_480, 75_000))?;
+    driver.phase("person's answer sent", driver.rung.bound(186_660, 210_000));
     let inbox = driver.ctl(&["inbox", "--kind", "questions"], None)?;
     let rows = inbox["needs"]["rows"].as_array().ok_or("inbox questions missing")?;
     require(rows.len() == 1, "one question in the person's inbox")?;
@@ -895,7 +931,7 @@ fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(),
         "question is on the person's chat",
     )?;
     let question = rows[0]["object"]["question"]["message"].as_u64().ok_or("inbox question number")?.to_string();
-    driver.phase("person's answer sent", 186_660);
+    driver.phase("person's answer sent", driver.rung.bound(186_660, 210_000));
     let goal = driver.unchanged(&chat, &baseline)?;
     let question_rows = driver.activity(chat.parse().map_err(|_| "chat number")?)?;
     let asked = plan_question(&question_rows, goal, question.parse().map_err(|_| "question number")?)?;
@@ -909,13 +945,13 @@ fn walk(driver: &mut Driver, paths: &[PathBuf; 3], account: &Path) -> Result<(),
     require(driver.unchanged(&chat, &baseline)? == goal, "same waiting work after two minutes")?;
     super::super::live::notice("MUST after the two-minute hold: no change, no branch, no pull, main unchanged");
     driver.ctl(&["task", "answer", &chat, &question, ANSWER, "--key", "rung-answer"], None)?;
-    driver.met(186_660);
+    driver.met(driver.rung.bound(186_660, 210_000))?;
     follow(driver, &chat, goal)
 }
 
 fn follow(driver: &mut Driver, chat: &str, goal: u64) -> Result<(), String> {
     let goal_text = goal.to_string();
-    driver.phase("answer reached goal", 190_910);
+    driver.phase("answer reached goal", driver.rung.bound(190_910, 242_000));
     let answer_at = loop {
         let read = driver.ctl(&["task", "show", &goal_text], None)?;
         let rows = driver.activity(goal)?;
@@ -926,8 +962,8 @@ fn follow(driver: &mut Driver, chat: &str, goal: u64) -> Result<(), String> {
         let digest = task_digest(&read)?;
         driver.wait(&["task", "show", &goal_text, "--since", digest], "changed")?;
     };
-    driver.met(190_910);
-    driver.phase("change delegated", 214_930);
+    driver.met(driver.rung.bound(190_910, 242_000))?;
+    driver.phase("change delegated", driver.rung.bound(214_930, 242_000));
     let change = loop {
         let read = driver.ctl(&["task", "show", &goal_text, "--tree"], None)?;
         let children = driver.children(&goal_text)?;
@@ -937,7 +973,7 @@ fn follow(driver: &mut Driver, chat: &str, goal: u64) -> Result<(), String> {
         let digest = task_digest(&read)?;
         driver.wait(&["task", "show", &goal_text, "--since", digest], "changed")?;
     };
-    driver.met(214_930);
+    driver.met(driver.rung.bound(214_930, 242_000))?;
     let activity = driver.activity(goal)?;
     let tools = super::successful_tools(&json!({"rows":activity}));
     require(
@@ -952,7 +988,9 @@ fn follow(driver: &mut Driver, chat: &str, goal: u64) -> Result<(), String> {
         .ok_or("work's committed change call missing")?;
     require(answer_at <= delegated_at, "work received the answer before calling change")?;
     super::super::live::notice("MUST exact answer reached the planning work before change delegation");
-    first_edit(driver, &change, answer_at)?;
+    if !driver.rung.repair() {
+        first_edit(driver, &change, answer_at)?;
+    }
     landing(driver, chat, &goal_text, &change)
 }
 
@@ -969,7 +1007,7 @@ fn first_edit(driver: &mut Driver, change: &str, answer_at: u64) -> Result<(), S
                         event["at"].as_u64().is_some_and(|at| answer_at <= at),
                         "answer before the first code write",
                     )?;
-                    driver.met(257_930);
+                    driver.met(257_930)?;
                     return Ok(());
                 }
             }
@@ -980,15 +1018,23 @@ fn first_edit(driver: &mut Driver, change: &str, answer_at: u64) -> Result<(), S
 }
 
 fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Result<(), String> {
-    driver.phase("pull request and head CI", 286_410);
+    driver.phase("pull request", driver.rung.bound(286_410, 293_000));
     driver.wait(&["change", "show", change], "pull")?;
+    let failed = if driver.rung.repair() { Some(repair_cycle(driver, change)?) } else { None };
+    driver.phase("pull request and head CI", driver.rung.bound(286_410, 321_000));
     let panel = driver.wait(&["change", "show", change], "ci:passed")?;
     let number = panel["pull"]["number"].as_u64().ok_or("pull number")?;
     let pull = driver.forge_json(&format!("pulls/{number}"))?;
     require(panel["head"] == pull["head"]["sha"], "ctl and forge agree on PR head")?;
     let head = pull["head"]["sha"].as_str().ok_or("forge pull head")?;
+    if let Some((number_before, head_before)) = failed {
+        require(number == number_before && head != head_before, "same pull, repaired head")?;
+    }
     let status = driver.forge_json(&format!("commits/{head}/status"))?;
     require(status["state"] == "success", "forge CI green at the exact PR head")?;
+    if driver.rung.repair() {
+        contexts(&status, "pull_request", "success")?;
+    }
     let runs = driver.forge_json(&format!("actions/runs?head_sha={head}"))?;
     let run = runs["workflow_runs"]
         .as_array()
@@ -1007,8 +1053,8 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         .ok_or("no successful runner job at pull head")?;
     let log = driver.forge(&format!("actions/jobs/{job}/logs"))?;
     require(String::from_utf8_lossy(&log).contains("Job succeeded"), "the box runner's job log agrees with green CI")?;
-    driver.met(286_410);
-    driver.phase("agent review approved", 363_470);
+    driver.met(driver.rung.bound(286_410, 321_000))?;
+    driver.phase("agent review approved", driver.rung.bound(363_470, 345_700));
     let mut panel = panel;
     while !panel["gates"]
         .as_array()
@@ -1017,8 +1063,8 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         let digest = panel["digest"].as_str().ok_or("change digest")?;
         panel = driver.wait(&["change", "show", change, "--since", digest], "changed")?;
     }
-    driver.met(363_470);
-    driver.phase("landed", 364_410);
+    driver.met(driver.rung.bound(363_470, 345_700))?;
+    driver.phase("landed", driver.rung.bound(364_410, 347_000));
     let panel = driver.wait(&["change", "show", change], "landed")?;
     let pull = driver.forge_json(&format!("pulls/{number}"))?;
     let main = driver.forge_json("branches/main")?;
@@ -1031,8 +1077,8 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         "ctl landing, forge merge and main agree",
     )?;
     driver.forge_json(&format!("pulls/{number}/reviews"))?;
-    driver.met(364_410);
-    driver.phase("main CI passed", 367_410);
+    driver.met(driver.rung.bound(364_410, 347_000))?;
+    driver.phase("main CI passed", driver.rung.bound(367_410, 363_400));
     let merge = pull["merge_commit_sha"].as_str().ok_or("merge hash")?;
     loop {
         if driver.forge_json(&format!("commits/{merge}/status"))?["state"] == "success" {
@@ -1040,8 +1086,11 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    driver.met(367_410);
-    driver.phase("chat's last word and whole", WHOLE);
+    driver.met(driver.rung.bound(367_410, 363_400))?;
+    driver.phase("chat's last word and whole", driver.rung.whole());
+    if driver.rung.repair() {
+        driver.forge(&format!("raw/changes/{number}.md?ref={merge}"))?;
+    }
     let source = driver.forge(&format!("raw/src/main.rs?ref={merge}"))?;
     require(
         source.windows(b"fruit,count".len()).any(|s| s == b"fruit,count"),
@@ -1050,6 +1099,10 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
     super::super::live::notice(
         "MUST landed at forge main; CI green at PR head and main; agent review approved; src/main.rs holds fruit,count",
     );
+    last_word(driver, chat, goal_text, change, merge)
+}
+
+fn last_word(driver: &mut Driver, chat: &str, goal_text: &str, change: &str, merge: &str) -> Result<(), String> {
     let work = driver.wait(&["task", "show", goal_text], "ended")?;
     let ended_at =
         work["task"]["chip"]["details"]["owner"]["details"]["ended_at"].as_u64().ok_or("work's report timestamp")?;
@@ -1059,7 +1112,23 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         let replies = super::replies_after(&json!({"rows": rows}), ended_at)?;
         if !replies.is_empty() {
             let words = driver.conversation(chat)?.to_lowercase();
-            let own_words = json!(replies).to_string().to_lowercase();
+            let own_words = reply_words(&replies).to_lowercase();
+            if driver.rung.repair() {
+                require(own_words.contains("landed"), "B1 chat's own last word says landed")?;
+                let result = driver.wait(&["task", "show", change], "ended")?;
+                let result = result.get("task").unwrap_or(&result);
+                let result = result
+                    .pointer("/result/value/change/words")
+                    .or_else(|| result.pointer("/result/document/value/change/words"))
+                    .ok_or("landed result words missing")?;
+                let result = result["bytes"].as_str().ok_or("landed result text")?;
+                require(result.starts_with(merge), "landed result and forge agree on merge")?;
+                // ctl's bounded result can end before the check suffix. In
+                // that case no named check is admitted: a generic report of
+                // the CI already observed above is all the chat may claim.
+                supported_check_claims(&own_words, result)?;
+                super::super::live::notice("MUST chat's check/test names are supported by the landed result");
+            }
             require(
                 own_words.contains("landed") || own_words.contains("pr #"),
                 "chat's own final reply reports the landing or pull",
@@ -1070,10 +1139,255 @@ fn landing(driver: &mut Driver, chat: &str, goal_text: &str, change: &str) -> Re
         let digest = task_digest(&snapshot)?;
         driver.wait(&["task", "show", chat, "--since", digest], "changed")?;
     }
-    driver.met(WHOLE);
+    driver.met(driver.rung.whole())?;
     super::super::live::notice("MUST chat says the change landed");
     driver.phase = "close chat";
     driver.until = now().saturating_add(Duration::from_secs(30));
     driver.ctl(&["chat", "close", chat, "--key", "rung-close"], None)?;
+    Ok(())
+}
+
+const WORKFLOW: &str = include_str!("rung-b1-ci.yml");
+const CONTRIBUTING: &str = include_str!("rung-b1-CONTRIBUTING.md");
+const FAILED_CONTEXT: &str = "/ changes (pull_request)";
+
+fn encode(text: &str) -> String {
+    let mut writer = skein_lib::Writer::new(text.len().div_ceil(3) * 4);
+    skein_lib::base64::encode(skein_lib::base64::Alphabet::Standard, text.as_bytes(), &mut writer).expect("base64");
+    String::from_utf8(writer.finish().into_vec()).expect("base64 text")
+}
+
+fn install_gate(driver: &mut Driver) -> Result<(), String> {
+    let workflow = driver.forge_json("contents/.forgejo/workflows/ci.yml?ref=main")?;
+    let previous = driver.forge_json("branches/main")?["commit"]["id"].clone();
+    let body = json!({
+        "branch":"main", "message":"CI: each pull request adds changes/<its number>.md",
+        "files":[
+            {"operation":"update", "path":".forgejo/workflows/ci.yml", "sha":workflow["sha"], "content":encode(WORKFLOW)},
+            {"operation":"create", "path":"CONTRIBUTING.md", "content":encode(CONTRIBUTING)}
+        ]
+    });
+    let mut command = Command::new("curl");
+    command
+        .args(["-fsS", "--max-time", "10", "-X", "POST", "-H"])
+        .arg(format!("@{}", driver.write_header.display()))
+        .args(["-H", "Content-Type: application/json", "--data-binary", "@-"])
+        .arg(format!("{}/repos/playground/widget/contents", driver.api));
+    let bytes = driver.execute(command, Some(&body.to_string()), true)?;
+    let committed: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let head = committed["commit"]["sha"].as_str().ok_or("gate commit")?;
+    let commit = driver.forge_json(&format!("git/commits/{head}"))?;
+    require(
+        commit["parents"].as_array().is_some_and(|rows| rows.len() == 1) && commit["parents"][0]["sha"] == previous,
+        "gate is one person commit",
+    )?;
+    for (path, expected) in [(".forgejo/workflows/ci.yml", WORKFLOW), ("CONTRIBUTING.md", CONTRIBUTING)] {
+        require(driver.forge(&format!("raw/{path}?ref={head}"))? == expected.as_bytes(), "gate bytes match appendix")?;
+    }
+    loop {
+        let status = driver.forge_json(&format!("commits/{head}/status"))?;
+        if status["state"] == "success" && contexts(&status, "push", "skipped").is_ok() {
+            break;
+        }
+        require(now() < driver.until, "setup: gate's main CI timeout")?;
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    super::super::live::notice(
+        "MUST person's exact gate and CONTRIBUTING committed once before request; main CI passed",
+    );
+    Ok(())
+}
+
+fn contexts(status: &Value, event: &str, changes: &str) -> Result<(), String> {
+    let rows = status["statuses"].as_array().ok_or("status contexts missing")?;
+    require(rows.len() == 2, "exactly two gate contexts")?;
+    for (job, state) in [("check", "success"), ("changes", changes)] {
+        let context = format!("/ {job} ({event})");
+        require(
+            rows.iter().any(|row| row["context"] == context && row["status"] == state),
+            &format!("expected {context}: {state}"),
+        )?;
+    }
+    Ok(())
+}
+
+fn repair_cycle(driver: &mut Driver, change: &str) -> Result<(u64, String), String> {
+    driver.phase("first head CI failed", 293_000);
+    let panel = driver.wait(&["change", "show", change], "ci:failed")?;
+    let number = panel["pull"]["number"].as_u64().ok_or("failed pull number")?;
+    let head = panel["head"].as_str().ok_or("failed head")?.to_owned();
+    let pull = driver.forge_json(&format!("pulls/{number}"))?;
+    require(pull["head"]["sha"] == head, "ctl and forge agree on first failed head")?;
+    let commits = driver.forge_json(&format!("pulls/{number}/commits"))?;
+    require(
+        commits.as_array().is_some_and(|rows| rows.len() == 1 && rows[0]["sha"] == head),
+        "first head has one producer commit",
+    )?;
+    let status = driver.forge_json(&format!("commits/{head}/status"))?;
+    require(status["state"] == "failure", "first head is red")?;
+    contexts(&status, "pull_request", "failure")?;
+    let runs = driver.forge_json(&format!("actions/runs?head_sha={head}"))?;
+    let run = runs["workflow_runs"]
+        .as_array()
+        .ok_or("failed workflow runs")?
+        .iter()
+        .find(|run| run["commit_sha"] == head && run["status"] == "failure")
+        .and_then(|run| run["id"].as_u64())
+        .ok_or("failed run at first head")?;
+    let jobs = driver.forge_json(&format!("actions/runs/{run}/jobs"))?;
+    let failed = jobs
+        .as_array()
+        .ok_or("failed jobs")?
+        .iter()
+        .find(|job| job["status"] == "failure" && job["name"] == "changes")
+        .and_then(|job| job["id"].as_u64())
+        .ok_or("changes job failed")?;
+    let log = driver.forge(&format!("actions/jobs/{failed}/logs"))?;
+    let log = String::from_utf8_lossy(&log);
+    let missing = format!("Missing changes/{number}.md");
+    require(
+        log.lines().rev().take(8).any(|line| line.contains(&missing)),
+        "failed log ends with missing numbered note",
+    )?;
+    driver.met(293_000)?;
+    driver.phase("repair pushed", 316_000);
+    let mut panel = panel;
+    let repair = loop {
+        if panel["step"] == "repairing" {
+            break panel["runs"].as_u64().ok_or("change's repair task")?.to_string();
+        }
+        let digest = panel["digest"].as_str().ok_or("repairing digest")?;
+        panel = driver.wait(&["change", "show", change, "--since", digest], "changed")?;
+    };
+    let task = driver.ctl(&["task", "show", &repair], None)?;
+    let words = task["spec"]["specification"]["words"]["bytes"].as_str().ok_or("repair words")?;
+    require(
+        words.starts_with(&format!("Repair CI at {}: {FAILED_CONTEXT}\n", &head[..12])),
+        "repair opening names actual failed head and context",
+    )?;
+    require(
+        driver
+            .children(change)?
+            .iter()
+            .any(|row| row["chip"]["task"].as_u64().map(|n| n.to_string()).as_deref() == Some(&repair)),
+        "repair belongs to the change",
+    )?;
+    loop {
+        let pull = driver.forge_json(&format!("pulls/{number}"))?;
+        if pull["head"]["sha"] != head {
+            let panel = driver.ctl(&["change", "show", change], None)?;
+            if panel["head"] == pull["head"]["sha"] {
+                break;
+            }
+        }
+        require(now() < driver.until, "phase repair pushed exceeded its bound")?;
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    driver.met(316_000)?;
+    super::super::live::notice(
+        "MUST first head red only on changes; log names missing note; change's repair names that head/context and pushes a new head",
+    );
+    Ok((number, head))
+}
+
+fn reply_words(replies: &std::collections::BTreeMap<u64, Value>) -> String {
+    let mut words = String::new();
+    for turn in replies.values() {
+        for message in turn["messages"].as_array().into_iter().flatten() {
+            if message["speaker"] != "assistant" {
+                continue;
+            }
+            for block in message["blocks"].as_array().into_iter().flatten() {
+                if let Some(text) = block.pointer("/text/text").and_then(Value::as_str) {
+                    words.push_str(text);
+                    words.push('\n');
+                }
+            }
+        }
+    }
+    words
+}
+
+/// A conservative vocabulary for the gate's final check claims: a check-bearing
+/// clause may use the landed result's names and ordinary status words, never
+/// introduce a new test/check name. Unrecognized prose fails for inspection.
+pub fn supported_check_claims(words: &str, result: &str) -> Result<(), String> {
+    let result = result.to_lowercase();
+    let checks = result.lines().find(|line| line.starts_with("checks at ")).unwrap_or("");
+    let known: Vec<_> =
+        checks.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|word| !word.is_empty()).collect();
+    let words = words.to_lowercase();
+    for clause in words.split(['.', ';', '\n']).flat_map(|line| line.split(" and ")) {
+        let tokens: Vec<_> =
+            clause.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|word| !word.is_empty()).collect();
+        if !tokens.iter().any(|word| {
+            [
+                "ci",
+                "check",
+                "checks",
+                "test",
+                "tests",
+                "tested",
+                "testing",
+                "clippy",
+                "lint",
+                "lints",
+                "fmt",
+                "build",
+                "cargo",
+                "pytest",
+                "suite",
+                "suites",
+                "passed",
+                "pass",
+                "green",
+                "succeeded",
+                "successful",
+            ]
+            .contains(word)
+        }) {
+            continue;
+        }
+        for word in tokens {
+            require(
+                known.contains(&word)
+                    || [
+                        "the",
+                        "pr",
+                        "pull",
+                        "request",
+                        "s",
+                        "its",
+                        "ci",
+                        "checks",
+                        "passed",
+                        "pass",
+                        "green",
+                        "successful",
+                        "success",
+                        "succeeded",
+                        "after",
+                        "one",
+                        "repair",
+                        "both",
+                        "all",
+                        "required",
+                        "at",
+                        "head",
+                        "and",
+                        "are",
+                        "were",
+                        "is",
+                        "now",
+                        "have",
+                        "has",
+                        "been",
+                    ]
+                    .contains(&word)
+                    || word.chars().all(|c| c.is_ascii_digit()),
+                &format!("chat names a check/test absent from landed result: {word}"),
+            )?;
+        }
+    }
     Ok(())
 }

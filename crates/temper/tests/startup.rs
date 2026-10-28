@@ -2361,3 +2361,27 @@ fn declaration_shortfalls(
         }
     }
 }
+
+#[test]
+fn a_rungs_final_check_claims_use_only_the_landed_results_checks() {
+    use support::forge_land::rung::supported_check_claims;
+    let result = "checks at abc: / check (pull_request) passed; / changes (pull_request) passed\nrepairs: 1: CI failed: / changes (pull_request)";
+    assert!(
+        supported_check_claims(
+            "CSV export landed. PR #2’s checks passed after one repair, and its CSV header is `fruit,count`.",
+            result
+        )
+        .is_ok()
+    );
+    assert!(supported_check_claims("The / changes (pull_request) check passed.", result).is_ok());
+    let cut_result = "abc\npull request #2 of playground/widget";
+    assert!(supported_check_claims("PR checks passed after one repair.", cut_result).is_ok());
+    assert!(supported_check_claims("/ changes (pull_request) passed.", cut_result).is_err());
+    assert!(supported_check_claims("Widget checks passed.", cut_result).is_err());
+    assert!(supported_check_claims("Security suite green.", result).is_err());
+    for claim in
+        ["Unit tests passed.", "cargo test passed.", "Security checks passed.", "Clippy passed.", "Build passed."]
+    {
+        assert!(supported_check_claims(claim, result).is_err(), "{claim}");
+    }
+}
