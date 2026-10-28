@@ -570,11 +570,11 @@ pub fn root_with_config_and_limits(
     for _ in 0..RESTORE_PASSES {
         match request {
             jig_domain_core::RestartRequest::Step(step) => {
-                if step == jig_domain_core::RestartStep::LoadInbox {
+                if step == jig_domain_core::RestartStep::Switch {
                     let _requests =
                         jig_domain_core::want_accounts(&mut root.core, &crate::limits::environment_core(&env));
                 }
-                if step == jig_domain_core::RestartStep::Switch {
+                if step == jig_domain_core::RestartStep::Sweep {
                     check_switch(&mut root, &env);
                 }
                 request = root.core.restart_done(step);

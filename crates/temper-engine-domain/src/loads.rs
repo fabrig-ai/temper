@@ -9,7 +9,8 @@
 //! freeing issued IO; [`reclaim`] frees retired slots at iteration end. Every
 //! emitting entry point requires one reserved output slot. Whole-page row,
 //! range, ordering, cursor and deep-byte checks precede any kept prefix.
-//! Byte cuts carry exact omitted rows/bytes and a potentially nonprogressing
+//! Cold pages use the separately priced store workspace instead of read cuts.
+//! Read byte cuts carry exact omitted rows/bytes and a potentially nonprogressing
 //! continuation; the walking root stops rather than restoring a cut page.
 use crate::{Key, Range, Record};
 use alloc::boxed::Box;
@@ -196,7 +197,7 @@ impl Loads {
     #[must_use]
     pub fn with_restore(limits: &Limits, bytes: u64) -> Loads {
         assert!(bytes >= u64::from(limits.reply_bytes), "cold workspace holds a read page");
-        let mut loads = Self::new(limits);
+        let mut loads = Loads::new(limits);
         loads.restore_bytes = bytes;
         loads
     }
@@ -235,6 +236,7 @@ pub fn begin_restore(
     most: u32,
     out: &mut Queue<Request>,
 ) -> Option<Token> {
+    assert!(domain.restore_bytes > 0, "configure cold row workspace before restoring");
     admit(domain, Entry { waiter, range, after, most, phase: Phase::Waiting, restoring: true }, out)
 }
 

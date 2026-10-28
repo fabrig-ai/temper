@@ -355,6 +355,7 @@ fn a_stop_during_public_restore_drains_without_starting_mark_gated_components() 
     assert_eq!(engine.store.secret_requests, 0);
     service.shutdown();
     for _ in 0..PASSES {
+        assert!(service.work_pending(skein_lib::Time::from_nanos(1)), "a pending close remains runnable");
         fixtures::turn(&mut service);
         if service.end().is_some() {
             break;
