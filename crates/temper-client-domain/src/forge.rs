@@ -330,12 +330,6 @@ pub const fn reclaim(_side: &mut Side) {}
 pub const fn shown(side: &Side) -> u64 {
     side.shown
 }
-#[must_use]
-pub const fn max_out(_limits: &Limits) -> u32 {
-    // One completed project per retained picker, plus the shown page's read.
-    forges::ROWS.checked_add(4).expect("forge output fits")
-}
-
 fn served(side: &mut Side, served: Served) {
     side.served = served;
     if served == Served::OutOfDate

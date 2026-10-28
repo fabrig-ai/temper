@@ -128,46 +128,14 @@ pub fn valid(limits: &Limits) -> bool {
     let Some(heard) = limits.connections.http.read.checked_mul(3) else { return false };
     let Some(record) = limits.connections.body_bytes.checked_add(512) else { return false };
     client::valid(&limits.client) && view(limits).is_some()
-        // jig's valid() replaces this at the set's repin
-        && jig_client_protocol_http::worst_case(&jig_client_protocol_http::Limits {
+        && jig_client_protocol_http::valid(&jig_client_protocol_http::Limits {
             record, chunk: limits.connections.http.read,
-        }).is_some()
+        })
         && heard.checked_add(8).is_some()
         && limits.io.sockets.checked_mul(64).is_some()
         && limits.io.is_usable()
         // skein's valid() replaces this at the set's repin
         && skein_io::worst_case(&limits.io).is_some()
-}
-/// Compatibility export for temper/tests/support/case/project.rs until its caller goes.
-/// The published `Shell::worst_case` formula, with every operation checked.
-#[must_use]
-pub fn shell(limits: &Limits) -> Option<u64> {
-    if limits.connections.exchanges != EXCHANGES {
-        return None;
-    }
-    if limits.io.intake < limits.connections.http.head.max(limits.connections.http.read) {
-        return None;
-    }
-    if limits.io.output < limits.connections.http.request.max(limits.connections.http.send) {
-        return None;
-    }
-    let bytes = u64::from(limits.io.intake)
-        .checked_add(u64::from(limits.io.output))?
-        .checked_add(u64::from(limits.connections.body_bytes))?
-        .checked_add(1024)?;
-    // Shell shares Transport across every admitted io socket, including close overlap.
-    let connections = u64::from(limits.io.sockets);
-    let stream = jig_client_protocol_http::worst_case(&jig_client_protocol_http::Limits {
-        record: limits.connections.body_bytes.checked_add(512)?,
-        chunk: limits.connections.http.read,
-    })?;
-    let heard = limits.connections.http.read.checked_mul(3)?.checked_add(8)?;
-    skein_io::worst_case(&limits.io)?
-        .checked_add(stream)?
-        .checked_add(skein_lib::Queue::<jig_client_protocol_http::Heard>::worst_case(heard)?)?
-        .checked_add(connections.checked_mul(256)?.checked_mul(bytes)?)?
-        .checked_add(connections.checked_mul(u64::from(limits.io.intake))?)?
-        .checked_add(skein_lib::Queue::<skein_io::Request>::worst_case(limits.io.sockets.checked_mul(64)?)?)
 }
 /// The terminal's own fixed bounds, independent of configuration.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

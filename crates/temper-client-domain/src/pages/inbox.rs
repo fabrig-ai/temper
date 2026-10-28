@@ -277,11 +277,6 @@ pub const fn kind(kind: Kind) -> InboxGroup {
         Kind::PersonTask => InboxGroup::PersonTasks,
     }
 }
-#[must_use]
-pub fn max_out(limits: &Limits) -> u32 {
-    limits.client.domain.reads.checked_mul(2).expect("pages output fits").checked_add(8).expect("pages output fits")
-}
-
 fn handle(number: u64) -> Handle {
     Handle { asker: Owner::Pages.asker(), number }
 }

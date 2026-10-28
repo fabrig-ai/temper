@@ -232,9 +232,6 @@ impl App for Temper {
         };
         Some(domain::Event::Client { event }.into())
     }
-    fn max_out(limits: &Self::Limits) -> u32 {
-        domain::max_out(limits) + 2 * temper_client_tools::limits::tools().rows
-    }
     fn patch_limit(view: &Self::View) -> u32 {
         Self::view_limits(view).patches
     }
