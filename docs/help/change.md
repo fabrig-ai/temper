@@ -38,8 +38,8 @@ Its steps, as `step:` prints them:
 - `first`: at the front, temper checks CI and the blocking gates again;
 - `updating`: a branch behind its landing branch is updated by the
   forge, which merges the base in;
-- `resolving`: an agent resolves a conflict with the base and pushes
-  the merge commit;
+- `resolving`: an agent resolves a conflict with the base in its
+  files and finishes, and temper pushes the merge commit;
 - `repairing`: an agent repairs it, after CI failed at its head (a
   review still running there is cancelled first), a gate asked for
   changes, or the base broke it, its brief holding the failed check
