@@ -447,3 +447,26 @@ fn a_chat_keeps_its_activity_read_through_local_exchange_pressure() {
     assert!(chat.thread.reading.is_none(), "the actual activity answer completed the demand");
     assert!(fixtures::activity_reads(&mut host).is_empty(), "the demand was sent only once");
 }
+
+#[test]
+fn a_snapshot_retains_the_latest_activity_refusal_without_its_payload() {
+    use jig_client_protocol_wire as w;
+    let mut host = fixtures::loaded_chat();
+    let (exchange, _) = fixtures::activity_read(&mut host);
+    let answer = w::ReadAnswer::None(
+        w::ReadAnswerNone::new(&w::CEILINGS, w::ReadAnswerNoneParts { value: w::ReadNone::Busy })
+            .expect("read refusal"),
+    );
+    let mut bytes = skein_lib::Writer::new(usize::try_from(answer.measure()).expect("refusal length"));
+    answer.encode(&mut bytes).expect("refusal fits");
+    host.transport(jig_client::Event::Reply { exchange, message: bytes.finish() });
+    let snapshot = host.pending();
+    let chat = snapshot.chat.as_ref().expect("chat snapshot");
+    assert_eq!(chat.last_read_none, Some(jig_client::contract::ReadNone::Busy));
+    assert!(chat.reading.is_none(), "diagnostic metadata does not retry the read");
+    assert!(chat.retained.is_empty());
+    let rendered = format!("{snapshot:?}");
+    assert!(!rendered.contains(std::str::from_utf8(fixtures::credential().expose()).expect("fixture credential")));
+    assert!(!rendered.contains("Token("));
+    assert_eq!(rendered, format!("{:?}", host.pending()), "snapshot is observational");
+}

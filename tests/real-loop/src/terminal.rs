@@ -96,7 +96,14 @@ pub(crate) fn host(spawn: &Spawn, inherited: &skein_world::Inherited) -> crate::
         inherited.signal,
     )))
 }
-fn compose(directory: &Path, target: temper::open::Target, parent: Fd, stdin: Fd, stdout: Fd, signals: Fd) -> Terminal {
+pub(crate) fn compose(
+    directory: &Path,
+    target: temper::open::Target,
+    parent: Fd,
+    stdin: Fd,
+    stdout: Fd,
+    signals: Fd,
+) -> Terminal {
     let (engine, link, start) = match target {
         temper::open::Target::Link { engine, link } => {
             let start = Start::Link(link.expose().into());
@@ -142,6 +149,24 @@ pub(crate) fn operations() -> u32 {
     .operations()
 }
 
+/// Only the last eight printed pages are described, without their text.
+#[derive(Debug)]
+pub struct Pending {
+    pub commands: u32,
+    pub pages: usize,
+    pub cursor: usize,
+    pub writing: bool,
+    pub partial_bytes: usize,
+    pub page_bytes: usize,
+    pub recent: Vec<Printed>,
+}
+#[derive(Debug)]
+pub struct Printed {
+    pub commands: u32,
+    pub bytes: usize,
+    pub reply: bool,
+    pub provisional: bool,
+}
 #[derive(Default)]
 #[expect(clippy::struct_excessive_bools, reason = "independent pipe, command and terminal lifecycles")]
 pub(crate) struct Typist {
@@ -164,6 +189,30 @@ pub(crate) struct Typist {
     unclosed: bool,
 }
 impl Typist {
+    pub(crate) fn pending(&self) -> Pending {
+        let recent = self
+            .read
+            .pages
+            .iter()
+            .rev()
+            .take(8)
+            .map(|page| Printed {
+                commands: page.commands,
+                bytes: page.bytes.len(),
+                reply: contains(&page.bytes, crate::scripts::REPLY),
+                provisional: contains(&page.bytes, b"Writing..."),
+            })
+            .collect();
+        Pending {
+            commands: self.commands,
+            pages: self.read.pages.len(),
+            cursor: self.cursor,
+            writing: self.writing,
+            partial_bytes: self.partial.len(),
+            page_bytes: self.page.len(),
+            recent,
+        }
+    }
     pub(crate) fn owns(token: Token) -> bool {
         token.raw() & TAG != 0
     }
@@ -456,6 +505,28 @@ fn control<'a>(page: &'a [u8], label: &[u8]) -> Option<&'a [u8]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_typist_snapshot_caps_history_and_reports_presence_without_page_text() {
+        let mut typist = Typist::default();
+        for _ in 0..20 {
+            typist.printed(b"== Secret heading == Live\nprivate-page-text\nWriting...\n");
+        }
+        let mut committed = b"== Chat == Live\n".to_vec();
+        committed.extend_from_slice(crate::scripts::REPLY);
+        committed.push(b'\n');
+        typist.printed(&committed);
+        let pending = typist.pending();
+        assert_eq!(pending.pages, 21);
+        assert_eq!(pending.recent.len(), 8, "only a bounded tail is copied");
+        assert!(pending.recent[0].reply);
+        assert!(!pending.recent[0].provisional);
+        assert!(pending.recent[1].provisional);
+        let rendered = format!("{pending:?}");
+        assert!(!rendered.contains("Secret heading"));
+        assert!(!rendered.contains("private-page-text"));
+        assert!(!rendered.contains(std::str::from_utf8(crate::scripts::REPLY).expect("fixture reply")));
+    }
 
     #[test]
     fn type_kept_inputs_a_secret_field_without_echoing_its_value() {

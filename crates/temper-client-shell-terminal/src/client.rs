@@ -159,6 +159,46 @@ impl NativeClient {
     pub fn tree(&self) -> &skein_ui::Tree {
         self.view.tree()
     }
+    /// Read-only metadata: no credentials, request tokens or page bodies.
+    #[must_use]
+    pub fn pending(&self) -> crate::diagnostics::Pending {
+        use crate::diagnostics::{Chat, Pending, Row};
+        use jig_client::thread::Reading;
+        let chat = self.root.pages().chat().map(|chat| {
+            let mut retained = List::with_capacity(chat.thread.lines.rows.capacity());
+            for row in &chat.thread.lines.rows {
+                retained
+                    .push(Row { position: row.position, committed_turn: row.event.committed_turn() })
+                    .expect("one diagnostic per retained row");
+            }
+            let reading = match &chat.thread.reading {
+                Some(Reading::Latest { known }) => Some(Reading::Latest { known: *known }),
+                Some(Reading::Older) => Some(Reading::Older),
+                Some(Reading::Newer) => Some(Reading::Newer),
+                None => None,
+            };
+            Chat {
+                document_state: self.root.client().document(chat.document).map(|document| document.state),
+                activity: chat.task(self.root.client()).map(|task| task.activity),
+                committed: chat.thread.committed,
+                loaded: chat.thread.loaded,
+                reading,
+                last_read_none: chat.last_read_none,
+                retained,
+                staged: chat.thread.fresh.rows.len(),
+            }
+        });
+        Pending {
+            loaded: self.loaded,
+            dirty: self.dirty,
+            shell: self.shell.pending(),
+            admission: self.root.client().admission(),
+            chat,
+            view_revision: self.view.revision(),
+            builds: self.seen.builds,
+            patches: self.seen.patches,
+        }
+    }
     /// Apply an offered act; false means no binding or an already closing client.
     pub fn act(&mut self, node: skein_ui::NodeId, act: skein_ui::Act) -> bool {
         if matches!(self.phase, Phase::Closing { .. }) {

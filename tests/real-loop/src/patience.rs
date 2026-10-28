@@ -89,6 +89,30 @@ fn service_pending(service: &temper_service::Service, now: Time, out: &mut Strin
     writeln!(out, "service {:#?}", service.pending(now)).expect("string writer");
 }
 
+/// Constructed only at overdue, including the caller's bounded terminal transcript metadata.
+pub(crate) fn processes(procs: &mut [Proc], now: Time, out: &mut String) {
+    let typist = procs.iter().find_map(|proc| match proc {
+        Proc::Caller(caller) => Some(caller.terminal_pending()),
+        Proc::Llm(_)
+        | Proc::Forge(_)
+        | Proc::Issuer(_)
+        | Proc::Service(_)
+        | Proc::Ctl(_)
+        | Proc::Terminal(_)
+        | Proc::Agent(_)
+        | Proc::Git(_)
+        | Proc::GitRoute(_)
+        | Proc::Claude(_)
+        | Proc::Relay(_) => None,
+    });
+    for (id, proc) in procs.iter_mut().enumerate() {
+        describe(id, proc, now, out);
+        if matches!(proc, Proc::Terminal(_)) {
+            writeln!(out, "terminal typist {typist:#?}").expect("string writer");
+        }
+    }
+}
+
 pub(crate) fn describe(id: usize, proc: &mut Proc, now: Time, out: &mut String) {
     match proc {
         Proc::Llm(peer) => {
@@ -125,7 +149,10 @@ pub(crate) fn describe(id: usize, proc: &mut Proc, now: Time, out: &mut String) 
         Proc::Git(host) => header(id, "hosted git", host.as_ref(), 0, now, out),
         Proc::GitRoute(host) => header(id, "git route", host.as_ref(), 0, now, out),
         Proc::Issuer(host) => header(id, "issuer", host.as_ref(), 0, now, out),
-        Proc::Terminal(host) => header(id, "terminal", host.as_ref(), 0, now, out),
+        Proc::Terminal(host) => {
+            header(id, "terminal", host.as_ref(), 0, now, out);
+            writeln!(out, "terminal {:#?}", host.pending()).expect("string writer");
+        }
     }
 }
 
@@ -253,6 +280,50 @@ mod tests {
         assert!(first.contains("step=0 call=Some(0)"), "{first}");
         assert!(first.contains("argv=[\"wait\", \"task\", \"3\", \"--until\", \"ended\"]"), "{first}");
         assert!(first.contains("waits_for=ctl response and exit: wait task 3 --until ended"), "{first}");
+    }
+
+    #[test]
+    fn a_held_terminal_snapshot_is_bounded_nonsecret_and_does_not_load_a_machine() {
+        use crate::world::Proc;
+        let printed = b"http://127.0.0.1:7100/jig/v1/sign-in/link?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let host = crate::terminal::compose(
+            std::path::Path::new("/private-directory-must-not-appear"),
+            temper::open::target(printed).expect("synthetic link"),
+            Fd::new(3),
+            Fd::new(0),
+            Fd::new(1),
+            Fd::new(2),
+        );
+        let caller = crate::calls::Caller::new(Vec::new(), std::path::PathBuf::new(), Fd::new(4));
+        let mut procs = [Proc::Caller(Box::new(caller)), Proc::Terminal(Box::new(host))];
+        let mut first = String::new();
+        super::processes(&mut procs, Time::ZERO, &mut first);
+        let mut second = String::new();
+        super::processes(&mut procs, Time::ZERO, &mut second);
+        assert_eq!(first, second, "snapshot observation changes no client or typist state");
+        for expected in [
+            "proc slot=1 terminal:",
+            "loaded: false",
+            "held: 0",
+            "active: 0",
+            "queued: 0",
+            "attempts: 0",
+            "deferred_reads: 0",
+            "chat: None",
+            "view_revision: None",
+            "builds: 0",
+            "terminal typist Some",
+            "commands: 0",
+            "pages: 0",
+            "recent: []",
+        ] {
+            assert!(first.contains(expected), "missing {expected}: {first}");
+        }
+        for secret in ["private-directory-must-not-appear", "127.0.0.1", "AAAAAAAA", "Token("] {
+            assert!(!first.contains(secret), "diagnostic leaked {secret}: {first}");
+        }
+        assert!(first.len() < 4096, "an unloaded snapshot has a fixed small envelope");
+        assert!(procs[1].submissions().is_empty(), "no descriptor was driven or loaded");
     }
 
     #[test]

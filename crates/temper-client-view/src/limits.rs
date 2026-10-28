@@ -228,7 +228,7 @@ pub fn memory_terms(
     let fold = skein_lib::List::<Box<[u8]>>::worst_case(domain.client.domain.rows)?
         .checked_add(u64::from(limits.tree.text_per_node).checked_mul(2)?)?;
     Some([
-        ("ui", skein_ui::worst_case(&limits.tree)?),
+        ("ui", skein_ui::worst_case(&limits.tree)?.checked_add(u64::try_from(size_of::<Option<u64>>()).ok()?)?),
         ("pages", pages),
         ("forge.bindings", crate::forge::bindings::worst_case(limits.tree.bindings)?),
         (

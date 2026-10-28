@@ -19,6 +19,8 @@ pub struct Chat {
     pub task: u64,
     pub document: Handle,
     pub activity: Handle,
+    /// The latest activity read refusal, retained only for diagnostics.
+    pub last_read_none: Option<c::ReadNone>,
     pub run: Option<Handle>,
     current_run: Option<Box<c::RunState>>,
     pub next: u64,
@@ -52,6 +54,7 @@ impl Chat {
             task,
             document,
             activity,
+            last_read_none: None,
             run: None,
             current_run: None,
             next: first.checked_add(2).expect("chat handles fit"),
@@ -120,6 +123,9 @@ impl Chat {
                 self.run_changed(client, handle);
             }
             Told::Page { handle, page } if handle == self.activity => {
+                if let Readout::Jig(c::ReadResult::None(why)) = &page {
+                    self.last_read_none = Some(*why);
+                }
                 if let Readout::Jig(c::ReadResult::Value(c::ReadValue::Activity(page))) = page {
                     read(self.activity, self.thread.page(*page), out);
                     self.fill(out);
@@ -714,6 +720,7 @@ pub fn thread_limits(limits: &Limits) -> jig_client::thread::Limits {
 #[must_use]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
     jig_client::thread::worst_case(&thread_limits(limits))?
+        .checked_add(u64::try_from(size_of::<Option<c::ReadNone>>()).ok()?)?
         // The latest run state, boxed off the root's pages, keeps no writing; its call owns three bounded texts.
         .checked_add(u64::try_from(size_of::<c::RunState>()).ok()?)?
         .checked_add(u64::from(limits.client.domain.text).checked_mul(3)?)?

@@ -19,6 +19,7 @@ pub struct View {
     text: u32,
     next_change: Option<Wall>,
     clock_revision: u64,
+    revision: Option<u64>,
 }
 fn adoption_progress(root: &Domain, form: &temper_client_domain::forge::Form) -> Option<jig_client::Progress> {
     let (request, _) = form.pending?;
@@ -60,7 +61,13 @@ impl View {
             text: domain.client.domain.text,
             next_change: None,
             clock_revision: 0,
+            revision: None,
         }
+    }
+    /// Revision of the last completed view build; absent before its first build.
+    #[must_use]
+    pub const fn revision(&self) -> Option<u64> {
+        self.revision
     }
     /// Supply the page's forge facts before its first build.
     pub fn forge_sign_in(&mut self, forges: crate::forge_sign_in::Forges) {
@@ -251,6 +258,7 @@ pub fn build(view: &mut View, root: &Domain, wall: Wall, out: &mut Queue<Patch>)
     builder.close();
     view.next_change = times.next;
     view.render.finish(builder, shown, out);
+    view.revision = Some(shown);
 }
 #[must_use]
 pub fn act(view: &mut View, node: NodeId, act: Act) -> Option<Action> {

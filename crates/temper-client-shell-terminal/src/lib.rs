@@ -3,6 +3,7 @@
 #[cfg(test)]
 extern crate self as temper_client_shell_terminal;
 pub mod client;
+pub mod diagnostics;
 pub mod limits;
 pub mod route;
 pub mod terminal;

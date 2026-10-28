@@ -74,6 +74,11 @@ impl Terminal {
             operations,
         })
     }
+    /// Explicitly requested metadata; never progresses the native client.
+    #[must_use]
+    pub fn pending(&self) -> crate::diagnostics::Pending {
+        self.client.pending()
+    }
     /// The binary prints this stderr line after all resources have drained.
     #[must_use]
     pub fn exit_line(&self) -> Option<Box<[u8]>> {

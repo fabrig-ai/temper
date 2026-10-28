@@ -631,9 +631,7 @@ impl Judge {
             writeln!(report, "judge early_failure settled={} message={}", failure.settled, failure.message)
                 .expect("string writer");
         }
-        for (id, proc) in procs.iter_mut().enumerate() {
-            crate::patience::describe(id, proc, now, &mut report);
-        }
+        crate::patience::processes(procs, now, &mut report);
         if let Some(state) = &self.forge {
             let borrowed = state.borrow();
             if let Some(state) = borrowed.as_ref() {
