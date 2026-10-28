@@ -974,8 +974,7 @@ fn an_ungranted_account_retains_the_chat_until_its_grant() {
     assert_eq!(driver.delivered.iter().filter(|delivery| matches!(delivery, Delivery::Assigned { .. })).count(), 1);
 }
 
-// The backlog watermark hands each loss back to the world, which offers it
-// again after progress (D6; jig's `domain/root.md`, 3).
+// Unknown losses complete admitted work at any backlog and keep nothing.
 #[test]
 fn repeated_unknown_losses_under_commit_pressure_consume_no_callback_room() {
     let mut driver = Driver::new(Store::new());
@@ -985,16 +984,14 @@ fn repeated_unknown_losses_under_commit_pressure_consume_no_callback_room() {
     assert!(driver.period_sent);
     driver.fill_to_watermark();
     let (returned, pending) = (driver.returned, driver.store.pending.len());
+    let events = driver.events.len();
+    let deliveries = driver.delivered.len();
     for channel in 1000..5000 {
         driver.send(protocol::lost(Token::new(channel)));
-        assert!(
-            matches!(driver.events.back(), Some(engine::Event::Worker(engine::WorkerInput::Link {
-            channel: found, link: engine::Link::Lost,
-        })) if *found == Token::new(channel)),
-            "the original loss is handed back"
-        );
+        assert_eq!(driver.returned, returned, "an unknown loss is taken immediately");
+        assert_eq!(driver.events.len(), events, "no loss or callback is retained");
+        assert_eq!(driver.delivered.len(), deliveries, "an unknown loss delivers nothing");
     }
-    assert_eq!(driver.returned, returned + 4000);
     assert_eq!(driver.store.pending.len(), pending);
     let transactions = driver.transactions.len();
     for _ in 0..4100 {

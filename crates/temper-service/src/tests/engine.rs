@@ -148,22 +148,11 @@ fn a_completion_passes_new_work_held_at_the_watermark() {
         },
     }));
     assert!(engine.blocked && engine.pending.is_some(), "the worker call waits");
-    engine.events.push(root::Event::Worker(root::WorkerInput::Link {
-        channel: Token::new(7),
-        link: root::Link::Up {
-            up: host::LinkUp::Turn {
-                run: Token::new(run.task),
-                attempt: Token::new(run.attempt),
-                turn: host::Turn {
-                    opens_window: true,
-                    refused: Box::new([]),
-                    turn: 1,
-                    spent: 0,
-                    read: None,
-                    body: b"turn".as_slice().into(),
-                },
-            },
-            parts: root::Parts::none(),
+    engine.events.push(root::Event::Worker(root::WorkerInput::ResultRead {
+        payload: Token::new(9999),
+        end: jig_domain_tasks::End::Finished {
+            result: jig_domain_tasks::TaskResult::Report { words: b"done".as_slice().into() },
+            cancel_delegates: false,
         },
     }));
     crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
@@ -182,13 +171,26 @@ fn a_completion_passes_new_work_held_at_the_watermark() {
     );
     for _ in 0..STARTUP_PASSES {
         crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
-        if engine.pending.is_none() && engine.events.is_empty() && engine.domain.quiescent() {
+        if engine.pending.is_none() {
             break;
         }
     }
     assert!(engine.pending.is_none(), "the call is taken after the backlog drains");
-    assert!(engine.domain.quiescent(), "both inputs settle");
-    assert!(engine.end.is_none());
+    // The chat fixture plays the host directly, so capture its reply before
+    // the service tries sending it to an unconnected transport channel.
+    let mut delivered = skein_lib::Queue::with_capacity(32);
+    fixtures::settle_root(&mut service, &mut delivered);
+    fixtures::settle_root(&mut service, &mut delivered);
+    let mut replies = 0;
+    for delivery in &delivered {
+        if matches!(delivery, root::Delivery::Link { down: host::LinkDown::Relayed { call, .. }, .. } if call.as_ref() == b"held-call")
+        {
+            replies += 1;
+        }
+    }
+    assert_eq!(replies, 1, "the held call is consumed and answered once");
+    assert!(service.engine.as_ref().expect("engine").domain.quiescent());
+    assert_eq!(service.end(), None);
 }
 
 #[test]
@@ -320,6 +322,48 @@ fn an_unwatch_refused_behind_owner_work_is_admitted() {
         crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
     }
     assert_eq!((refused, engine.pending.is_none(), engine.blocked), (true, true, false));
+}
+
+#[test]
+fn a_refused_completion_precedes_later_inputs_and_new_work_keeps_its_order() {
+    use skein_lib::Wall;
+    let mut service = a_notes_page_waiting_for_its_owner();
+    let engine = service.engine.as_mut().expect("engine");
+    engine.step(fixtures::period(90));
+    assert!(engine.pending.is_some(), "new work waits for the earlier owner hand-offs");
+    engine.events.push(root::Event::Party(root::PartyInput::Unwatch { watcher: WATCHER }));
+    engine.events.push(fixtures::period(91));
+    engine.events.push(root::Event::Party(root::PartyInput::Delivered { watcher: WATCHER }));
+    crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
+    assert!(
+        matches!(engine.events.iter().next(), Some(root::Event::Party(root::PartyInput::Period { period: 91, .. }))),
+        "the passing completion was offered before the next new input"
+    );
+    crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
+    assert!(
+        matches!(engine.events.iter().next(), Some(root::Event::Party(root::PartyInput::Period { period: 91, .. }))),
+        "the refused completion is retried before later inputs"
+    );
+    for _ in 0..OWNER_PASSES {
+        if engine.pending.is_none() {
+            break;
+        }
+        assert!(
+            matches!(engine.pending.as_deref(), Some(root::Event::Party(root::PartyInput::Period { period: 90, .. }))),
+            "the earlier new input keeps its place"
+        );
+        crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
+    }
+    assert!(engine.pending.is_none(), "the earlier new input is eventually taken");
+    assert!(
+        matches!(engine.events.iter().next(), Some(root::Event::Party(root::PartyInput::Period { period: 91, .. }))),
+        "the pass stopped at the next new input"
+    );
+    for _ in 0..OWNER_PASSES {
+        crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
+    }
+    assert!(engine.pending.is_none() && engine.events.is_empty());
+    assert!(engine.end.is_none());
 }
 
 // The service's existing restart fixture drains within 256 iterations.

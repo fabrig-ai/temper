@@ -81,7 +81,7 @@ pub(crate) fn receive(domain: &mut Domain, channel: Token, link: Link) -> Option
     }))
 }
 
-/// Whether the root can keep one more worker record's bytes.
+/// Whether the root can retain one more payload from a worker or the protocol.
 pub(crate) fn room(domain: &Domain) -> bool {
     domain.payloads.len() < domain.payloads.capacity()
 }

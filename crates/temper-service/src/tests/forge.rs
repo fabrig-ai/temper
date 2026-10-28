@@ -133,28 +133,66 @@ fn fill_to_watermark(service: &mut crate::Service) {
     panic!("the root reaches its configured backlog watermark");
 }
 #[test]
-fn an_answer_the_root_cannot_take_is_offered_again_next_pass() {
+fn a_forge_answer_is_taken_once_under_backlog_pressure() {
     let mut service = fixtures::ready();
+    fixtures::settle_root(&mut service, &mut skein_lib::Queue::with_capacity(32));
+    let engine = service.engine.as_mut().expect("engine");
+    root::try_step(
+        &mut engine.domain,
+        &engine.env,
+        root::Event::Forge(Box::new(temper_engine_domain_forge::Event::Client(skein_forge_client::Event::Read {
+            owner: Token::new(987),
+            repository: skein_forge::api::Repository { forge: 1, repository: 2 },
+            read: skein_forge::api::Read::Settings,
+        }))),
+    )
+    .expect("an admitted operation starts a real client read");
+    let mut call = None;
+    for _ in 0..64 {
+        if let Some(event) = engine.events.pop() {
+            engine.step(event);
+        }
+        root::release(&mut engine.domain, &engine.env, &mut engine.requests);
+        if engine.requests.is_empty() {
+            root::release(&mut engine.domain, &engine.env, &mut engine.requests);
+        }
+        if engine.requests.is_empty() {
+            root::try_step(&mut engine.domain, &engine.env, root::Event::Resume).unwrap();
+            root::release(&mut engine.domain, &engine.env, &mut engine.requests);
+        }
+        while let Some(request) = engine.requests.pop() {
+            if let root::Request::Forge { call: token, .. } = request {
+                call = Some(token);
+            } else {
+                crate::route::request(engine, request);
+            }
+        }
+        if call.is_some() {
+            break;
+        }
+        engine.store.iterate();
+        crate::engine::answer(engine);
+    }
+    let call = call.expect("the original read owns an outstanding call");
     fill_to_watermark(&mut service);
+    let engine = service.engine.as_mut().expect("engine");
+    assert!(root::try_step(&mut engine.domain, &engine.env, fixtures::period(99)).is_err());
     let answer = skein_forge_connection::Answered {
         free: 0,
         rate: None,
-        call: Token::new(7),
+        call,
         cost: 0,
         result: Err(skein_forge::api::Error::Unavailable),
     };
-    let engine = service.engine.as_mut().expect("engine");
-    assert!(root::try_step(&mut engine.domain, &engine.env, forge::event(answer.clone())).is_err());
-    service.engine.as_mut().expect("engine").forge.above.push(skein_forge_connection::Event::Answered(answer.clone()));
-    crate::engine::forge_pass(service.engine.as_mut().expect("engine"));
-    assert_eq!(service.engine.as_ref().expect("engine").forge.above.len(), 0);
-    service.engine.as_mut().expect("engine").forge.down(skein_forge_connection::Request::Offer);
-    let Some(skein_forge_connection::Event::Answered(offered)) =
-        service.engine.as_mut().expect("engine").forge.above.pop()
-    else {
-        panic!("offered answer")
-    };
-    assert_eq!(offered, answer);
+    engine.forge.above.push(skein_forge_connection::Event::Answered(answer));
+    crate::engine::forge_pass(engine);
+    assert!(engine.forge.above.is_empty(), "the completion is consumed under pressure");
+    for _ in 0..4 {
+        engine.forge.down(skein_forge_connection::Request::Offer);
+        assert!(engine.forge.above.is_empty(), "no refused answer is offered again");
+    }
+    fixtures::settle_root(&mut service, &mut skein_lib::Queue::with_capacity(32));
+    assert_eq!(service.end(), None);
 }
 #[test]
 fn an_answer_returned_in_the_drain_is_never_offered_again() {
