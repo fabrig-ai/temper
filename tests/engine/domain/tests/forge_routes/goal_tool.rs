@@ -6,6 +6,8 @@ const ADVISOR_PREFIX: &[u8] = b"You are an advisor: you read what your brief ask
 const GOAL_CALL: u64 = 93; // The fixture's first call name, after chat key 92.
 const AT_BOUND: usize = 0;
 const ONE_PAST_BOUND: usize = 1; // One additional byte crosses the spec's bound.
+const NESTED_GOAL_CALL: u64 = GOAL_CALL + 1;
+const CONTINUED_CALL: u64 = NESTED_GOAL_CALL + 1;
 
 fn chat_world(cap: u64, tasks: u32, depth: u32) -> (World, engine::Assignment) {
     let mut world = World::configured(true, true);
@@ -23,6 +25,17 @@ fn chat_world(cap: u64, tasks: u32, depth: u32) -> (World, engine::Assignment) {
 
 fn call(world: &mut World, run: &engine::Assignment, name: u64, tool: engine::Tool) -> engine::CallAnswer {
     let before = world.answers.len();
+    send_call(world, run, name, tool);
+    for _ in 0..200 {
+        world.tick();
+        if world.answers.len() > before {
+            return world.answers[before].clone();
+        }
+    }
+    panic!("call was not answered");
+}
+
+fn send_call(world: &mut World, run: &engine::Assignment, name: u64, tool: engine::Tool) {
     let event = world.protocol.call(
         Token::new(7),
         run.task,
@@ -31,13 +44,6 @@ fn call(world: &mut World, run: &engine::Assignment, name: u64, tool: engine::To
         engine::Call { completion: u32::try_from(name).expect("bounded call name"), position: 1, tool },
     );
     world.send(event);
-    for _ in 0..200 {
-        world.tick();
-        if world.answers.len() > before {
-            return world.answers[before].clone();
-        }
-    }
-    panic!("call was not answered");
 }
 
 fn goal(world: &mut World, run: &engine::Assignment, name: u64, advisor: bool) -> engine::CallAnswer {
@@ -60,7 +66,7 @@ fn delegated(answer: engine::CallAnswer) -> u64 {
 }
 
 #[test]
-fn goal_delegates_one_tracked_report_under_the_runs_charter() {
+fn a_chats_goal_is_unchanged() {
     let (mut world, chat) = chat_world(100, 11, 3);
     let task = delegated(goal(&mut world, &chat, 93, false));
     let row = live(&world, task);
@@ -203,7 +209,7 @@ fn a_goal_calls_change_and_its_change_is_made() {
 }
 
 #[test]
-fn a_goals_run_takes_goal_too() {
+fn a_goals_advisor_is_admitted() {
     let (mut world, _, run) = running_goal();
     let advisor = delegated(goal(&mut world, &run, 94, true));
     assert_eq!(live(&world, advisor).requester, tasks::Party::Task(run.task));
@@ -251,11 +257,31 @@ fn a_goal_asks_its_requester_and_the_person_sees_the_question() {
 }
 
 #[test]
-fn a_tracked_runs_goal_keeps_its_priority() {
+fn a_goals_goal_without_advisor_is_refused_by_name() {
     let (mut world, _, run) = running_goal();
-    let priority = live(&world, run.task).tracked.expect("tracked parent");
-    let task = delegated(goal(&mut world, &run, 94, false));
-    assert_eq!(live(&world, task).tracked, Some(priority));
+    world.until(Until::Ready);
+    let (applied, rows) = (world.store.applied, world.store.rows.clone());
+    send_call(&mut world, &run, NESTED_GOAL_CALL, engine::Tool::Goal { words: WORDS.into(), advisor: false });
+    world.until(Until::Ready);
+    assert_eq!(
+        world.call_errors,
+        [temper_engine_domain_world::forge_routes::CallError {
+            call: NESTED_GOAL_CALL.to_be_bytes().into(),
+            text: Box::from(&b"a goal starts an advisor alone: set advisor, or make the change with change"[..])
+        }]
+    );
+    assert_eq!(world.store.applied, applied, "the refusal commits nothing");
+    assert_eq!(world.store.rows, rows, "the refusal makes no task or call record");
+    assert!(
+        matches!(
+            call(&mut world, &run, CONTINUED_CALL, engine::Tool::ReadForge {
+                repository: forge_world::REPO,
+                read: skein_forge::api::Read::Branch { branch: b"main".as_slice().into() },
+            }),
+            engine::CallAnswer::ForgeRead(answer) if answer.is_ok()
+        ),
+        "the same run's next call is served"
+    );
 }
 
 #[test]

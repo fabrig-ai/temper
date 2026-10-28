@@ -9,6 +9,17 @@ use temper_engine_domain_forge as forge;
 const ADVISOR_SCOPE: &[u8] =
     b"You are an advisor: you read what your brief asks and report what you found; you change nothing and ask no one.";
 
+/// Work goals carry a tracked priority; advisors and chats are untracked.
+/// The caller owns its plan regardless of who requested it (domain/agent.md, 4.3.2).
+pub(crate) fn refusal(domain: &Domain, task: u64, advisor: bool) -> Option<&'static [u8]> {
+    let row = domain.core.tasks.task(task)?;
+    if !advisor && row.tracked.is_some() {
+        Some(b"a goal starts an advisor alone: set advisor, or make the change with change")
+    } else {
+        None
+    }
+}
+
 pub(crate) fn goal(
     domain: &Domain,
     env: &Env<Limits>,
