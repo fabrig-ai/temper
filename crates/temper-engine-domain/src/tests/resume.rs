@@ -607,7 +607,7 @@ fn a_late_switch_answer_during_stop_cannot_make_a_commit() {
     assert_eq!(domain.deployment().commits, before, "a stopped start never writes its mark");
 }
 
-fn root_prices(limits: &crate::Limits) -> (u64, u64) {
+fn root_prices(limits: &Limits) -> (u64, u64) {
     (
         crate::worst_case(limits).expect("valid root price"),
         crate::payload_worst_case(limits).expect("valid serving payload"),
