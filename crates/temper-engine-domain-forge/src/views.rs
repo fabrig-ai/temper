@@ -11,6 +11,8 @@ use temper_engine_domain_forge_landing as policy;
 pub fn landings_subject(project: u32, ended: bool) -> u64 {
     (1 << 62) | (u64::from(ended) << 32) | u64::from(project)
 }
+/// At most thirty-two lines cross the panel boundary (client/tools.md, 5.2).
+pub const LANDING_PAGE: u32 = 32;
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[expect(
     clippy::large_enum_variant,
@@ -69,6 +71,9 @@ pub struct LandingsView {
     pub project: u32,
     pub turn: Option<u64>,
     pub landings: Box<[LandingLine]>,
+    pub newer_than: Option<skein_lib::Wall>,
+    pub logged: Box<[LoggedLine]>,
+    pub after: Option<u64>,
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LandingLine {
@@ -77,6 +82,14 @@ pub struct LandingLine {
     pub changes: Box<[u64]>,
     pub repositories: Box<[Box<[u8]>]>,
     pub landed: Box<[[u8; 32]]>,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LoggedLine {
+    pub commit: [u8; 32],
+    pub repository: Box<[u8]>,
+    pub seen: skein_lib::Wall,
+    pub changes: Box<[u64]>,
+    pub verdicts: Box<[crate::Mark]>,
 }
 impl Domain {
     #[must_use]
@@ -87,10 +100,23 @@ impl Domain {
         now: skein_lib::Wall,
         limits: &crate::Limits,
     ) -> Option<Document> {
+        self.document_page(subject, scope, now, limits, (0, None))
+    }
+    /// A bounded page using the watch's exclusive continuation offset.
+    #[must_use]
+    pub fn document_page(
+        &self,
+        subject: u64,
+        scope: ApplicationScope,
+        now: skein_lib::Wall,
+        limits: &crate::Limits,
+        window: (u32, Option<u64>),
+    ) -> Option<Document> {
         let ApplicationScope::Project(project) = scope else { return None };
+        let rows = if window.0 == 0 { LANDING_PAGE } else { window.0.min(LANDING_PAGE) };
         for ended in [false, true] {
             if subject == landings_subject(project, ended) {
-                return Some(Document::Landings(self.landings_view(project, ended)?));
+                return Some(Document::Landings(self.landings_view(project, ended, rows, window.1)?));
             }
         }
         if let Some(row) = self.landing.rows.get(&subject) {
@@ -100,6 +126,12 @@ impl Domain {
             return Some(Document::Landing(self.landing_view(subject)?));
         }
         Some(Document::Change(self.panel(subject, scope, now, limits)?))
+    }
+    /// History at the original wall precision, independent of task subjects.
+    #[must_use]
+    pub fn logged_page(&self, project: u32, since: skein_lib::Wall, window: (u32, Option<u64>)) -> Option<Document> {
+        let rows = if window.0 == 0 { LANDING_PAGE } else { window.0.min(LANDING_PAGE) };
+        Some(Document::Landings(self.logged_view(project, since, rows, window.1)?))
     }
     fn turn_holder(&self, project: u32) -> Option<u64> {
         for (task, row) in &self.landing.rows {
@@ -198,9 +230,11 @@ impl Domain {
             turn: self.turn_holder(row.project),
         })
     }
-    fn landings_view(&self, project: u32, ended: bool) -> Option<LandingsView> {
+    fn landings_view(&self, project: u32, ended: bool, rows: u32, after: Option<u64>) -> Option<LandingsView> {
         let turn = self.turn_holder(project);
-        let mut landings = List::with_capacity(self.landing.limits.landings);
+        let mut landings = List::with_capacity(rows);
+        let mut position = 0_u64;
+        let mut more = None;
         let mut before = None;
         loop {
             let mut next = None;
@@ -221,6 +255,15 @@ impl Domain {
                 }
             }
             let Some(task) = next else { break };
+            before = Some(task);
+            position = position.checked_add(1)?;
+            if position <= after.unwrap_or(0) {
+                continue;
+            }
+            if landings.len() == rows {
+                more = Some(position.checked_sub(1)?);
+                break;
+            }
             let row = &self.landing.rows.get(&task)?.landing;
             let mut changes = List::with_capacity(self.landing.limits.landing_members);
             let mut repositories = List::with_capacity(self.landing.limits.landing_members);
@@ -255,7 +298,83 @@ impl Domain {
                 .ok()?;
             before = Some(task);
         }
-        Some(LandingsView { project, turn, landings: landings.into_boxed() })
+        Some(LandingsView {
+            project,
+            turn,
+            landings: landings.into_boxed(),
+            newer_than: None,
+            logged: Box::new([]),
+            after: more,
+        })
+    }
+    fn logged_view(&self, project: u32, since: skein_lib::Wall, rows: u32, after: Option<u64>) -> Option<LandingsView> {
+        let mut logged = List::with_capacity(rows);
+        let mut previous = None;
+        let mut position = 0_u64;
+        let mut more = None;
+        loop {
+            let mut next = None;
+            for (repository, log) in &self.landing_logs {
+                let Some(adopted) = self.repositories.get(repository) else { continue };
+                if adopted.project != project {
+                    continue;
+                }
+                for entry in &log.landings {
+                    let key = (core::cmp::Reverse(entry.seen), *repository, entry.commit);
+                    if entry.seen <= since {
+                        continue;
+                    }
+                    if let Some(previous) = previous
+                        && key <= previous
+                    {
+                        continue;
+                    }
+                    if let Some((current, _, _)) = next
+                        && key >= current
+                    {
+                        continue;
+                    }
+                    next = Some((key, adopted, entry));
+                }
+            }
+            let Some((key, adopted, entry)) = next else { break };
+            previous = Some(key);
+            position = position.checked_add(1)?;
+            if position <= after.unwrap_or(0) {
+                continue;
+            }
+            if logged.len() == rows {
+                more = Some(position.checked_sub(1)?);
+                break;
+            }
+            let mut name = List::with_capacity(
+                u32::try_from(adopted.owner.len().checked_add(adopted.name.len())?.checked_add(1)?).ok()?,
+            );
+            for byte in &adopted.owner {
+                name.push(*byte).ok()?;
+            }
+            name.push(b'/').ok()?;
+            for byte in &adopted.name {
+                name.push(*byte).ok()?;
+            }
+            logged
+                .push(LoggedLine {
+                    commit: entry.commit,
+                    repository: name.into_boxed(),
+                    seen: entry.seen,
+                    changes: entry.changes.clone(),
+                    verdicts: entry.verdicts.clone(),
+                })
+                .ok()?;
+        }
+        Some(LandingsView {
+            project,
+            turn: None,
+            landings: Box::new([]),
+            newer_than: Some(since),
+            logged: logged.into_boxed(),
+            after: more,
+        })
     }
 }
 pub(crate) fn matches_turn(phase: &policy::Phase) -> bool {
@@ -326,6 +445,16 @@ impl Document {
                 }
             }
             Self::Landings(view) => {
+                size = size.saturating_add(size_of_val(view.logged.as_ref()));
+                for entry in &view.logged {
+                    size = size
+                        .saturating_add(entry.repository.len())
+                        .saturating_add(size_of_val(entry.changes.as_ref()))
+                        .saturating_add(size_of_val(entry.verdicts.as_ref()));
+                    for mark in &entry.verdicts {
+                        size = size.saturating_add(mark.tier.len());
+                    }
+                }
                 size = size.saturating_add(size_of_val(view.landings.as_ref()));
                 for row in &view.landings {
                     size = size
