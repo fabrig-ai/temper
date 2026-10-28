@@ -34,7 +34,6 @@ fn reads_for(world: &World, task: u64) -> Vec<Op> {
 
 fn background(op: &Op) -> bool {
     matches!(op, Op::Read(Read::Items { .. }))
-        || matches!(op, Op::Read(Read::Branch { branch }) if branch.as_ref() == b"main")
 }
 fn assert_reads(actual: Vec<Op>, expected: Vec<Op>) {
     let mut remaining = actual.into_iter();
@@ -74,10 +73,7 @@ fn a_repository_hint_wakes_only_the_changes_it_concerns() {
     ] {
         let wakes = hint(&mut world, change.clone());
         assert_eq!(wakes, expected, "{change:?}");
-        assert!(
-            world.take_calls().iter().all(background),
-            "only the standing main watch reads without a parent resource"
-        );
+        assert!(world.take_calls().iter().all(background), "only repository listing reads without a parent resource");
         for task in wakes {
             let expected = reads_for(&world, task);
             hint_step(&mut world, task, 100 + task);

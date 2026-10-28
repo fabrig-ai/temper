@@ -62,20 +62,9 @@ fn write(d: &mut Domain, environment: &Env<Limits>) -> (Token, Write) {
     let (clock, op) = call(d, environment);
     let Op::Read(Read::Items { .. }) = op else { panic!("entry clock: {op:?}") };
     answer(d, environment, clock, Answer::Items { items: Box::new([]), more: false, now: environment.now });
-    for _ in 0_u8..3 {
-        let (token, op) = call(d, environment);
-        match op {
-            Op::Write(write) => return (token, write),
-            Op::Read(Read::Items { .. }) => {
-                answer(d, environment, token, Answer::Items { items: Box::new([]), more: false, now: environment.now });
-            }
-            Op::Read(Read::Branch { branch }) if branch.as_ref() == b"main" => {
-                answer(d, environment, token, Answer::Commit(fixtures::BASE));
-            }
-            Op::Read(_) => panic!("projection write: {op:?}"),
-        }
-    }
-    panic!("projection write after its clock and the initial main watch")
+    let (token, op) = call(d, environment);
+    let Op::Write(write) = op else { panic!("projection write: {op:?}") };
+    (token, write)
 }
 
 fn missing_comment() -> Answer {
@@ -133,7 +122,6 @@ fn started(view: issues::GoalView, state: issues::Projected, number: Option<u64>
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     d
 }
 
