@@ -1854,11 +1854,12 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
             }
         }
     }
+    landing_route::join_landing(domain, env, task);
     let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return false };
     domain.work.push(Work::Forge(forge::Event::StepChange {
         task,
         entry,
-        kept: domain.core.tasks.waiting_effect_problem(task).is_some(),
+        kept: landing_route::kept(domain, env, task),
         heard: forge_change::Heard {
             lacking: change_authority_lack(domain, task),
             spend: change_spend(domain, task),

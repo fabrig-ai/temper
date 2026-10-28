@@ -4,32 +4,48 @@ use super::{
     StepEnd, Work, append, authority, effect_access, forge, forge_change, landing, resource_name, tasks,
 };
 
-pub(super) fn start_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
-    let Some(change) = domain.forge.change(task) else { return };
-    if change.change.way != forge_change::Way::Turn {
-        return;
-    }
-    let Some(repository) = domain.forge.repository(change.repository) else { return };
-    let project = repository.project;
-    if domain.forge.landing_admits(project, &[task]).is_err() {
-        return;
-    }
-    let pull = change.pull.expect("preflighted pull");
-    let provider = change.repository;
-    let mut words = List::with_capacity(env.limits.tasks.spec_bytes.saturating_sub(32));
-    append(&mut words, b"Land ");
-    for byte in &change.title {
-        if *byte == b'\n' {
-            break;
-        }
-        if words.push(*byte).is_err() {
-            break;
+fn changes(domain: &Domain, env: &Env<Limits>, task: u64) -> Box<[u64]> {
+    let Some(change) = domain.forge.change(task) else { return Box::new([task]) };
+    let Some(repository) = domain.forge.repository(change.repository) else { return Box::new([task]) };
+    let mut graph = List::with_capacity(env.limits.forge.changes);
+    for repository in domain.forge.writable_repositories(repository.project) {
+        for change in domain.forge.changes_for(repository.provider, env.limits.forge.changes) {
+            if let Some(row) = domain.core.tasks.task(change) {
+                graph
+                    .push(forge::ChangeDependencies { change, pending: row.waiting_on.clone() })
+                    .expect("bounded changes");
+            }
         }
     }
+    domain.forge.joined_changes(repository.project, task, graph.as_slice())
+}
+
+/// Only dependencies inside the admitted closure cease keeping readiness.
+/// Jig still orders the change tasks' successful results (domain/landing.md, 4.1).
+pub(super) fn kept(domain: &Domain, env: &Env<Limits>, task: u64) -> bool {
+    let Some(row) = domain.core.tasks.task(task) else { return false };
+    if row.waiting_on.is_empty() {
+        return false;
+    }
+    let joined = changes(domain, env, task);
+    if joined.len() > usize::try_from(env.limits.forge.landing_members).expect("member bound") {
+        return true;
+    }
+    for dependency in &row.waiting_on {
+        if !joined.contains(dependency) {
+            return true;
+        }
+    }
+    false
+}
+
+fn member(domain: &Domain, env: &Env<Limits>, task: u64) -> Option<landing::Member> {
+    let row = domain.forge.change(task)?;
+    let project = domain.forge.repository(row.repository)?.project;
     let mut gates = List::with_capacity(env.limits.forge.gates);
     if let Some(config) = domain.config.landings.get(&project) {
         for repository in &config.repositories {
-            if repository.repository == provider {
+            if repository.repository == row.repository {
                 for _ in &repository.gates {
                     gates
                         .push(landing::GateProof {
@@ -42,6 +58,91 @@ pub(super) fn start_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
             }
         }
     }
+    Some(landing::Member {
+        change: task,
+        repository: landing::Repository { forge: row.repository.forge, repository: row.repository.repository },
+        // A producing member has no pull yet; the top fills it before reading.
+        pull: row.pull.unwrap_or(0),
+        head: None,
+        base: None,
+        candidate: None,
+        gates: gates.into_boxed(),
+        asked: None,
+        landed: None,
+    })
+}
+
+/// A creation or amendment joins its closure before its next change step.
+pub(super) fn join_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
+    let joined = changes(domain, env, task);
+    let mut target = None;
+    for change in &joined {
+        if let Some(row) = domain.forge.change(*change)
+            && let Some(landing) = row.change.landing
+        {
+            target = Some(landing);
+            break;
+        }
+    }
+    let Some(target) = target else { return };
+    let mut after = List::with_capacity(env.limits.forge.landing_members);
+    for change in &joined {
+        let unjoined = match domain.forge.change(*change) {
+            Some(row) => row.change.landing.is_none(),
+            None => false,
+        };
+        if unjoined && let Some(member) = member(domain, env, *change) {
+            domain.work.push(Work::Forge(forge::Event::JoinLanding {
+                task: target,
+                member,
+                after: Box::from(after.as_slice()),
+            }));
+        }
+        if after.push(*change).is_err() {
+            return;
+        }
+    }
+    domain.work.push(Work::Forge(forge::Event::OrderLanding { task: target, changes: joined }));
+}
+
+pub(super) fn start_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
+    let Some(change) = domain.forge.change(task) else { return };
+    if change.change.way != forge_change::Way::Turn || kept(domain, env, task) {
+        return;
+    }
+    let Some(repository) = domain.forge.repository(change.repository) else { return };
+    let project = repository.project;
+    let joined = changes(domain, env, task);
+    for task in &joined {
+        let joined = match domain.forge.change(*task) {
+            Some(row) => row.change.landing.is_some(),
+            None => false,
+        };
+        if joined {
+            join_landing(domain, env, *task);
+            return;
+        }
+    }
+    if domain.forge.landing_admits(project, &joined).is_err() {
+        return;
+    }
+    let mut words = List::with_capacity(env.limits.tasks.spec_bytes.saturating_sub(32));
+    append(&mut words, b"Land ");
+    for byte in &change.title {
+        if *byte == b'\n' {
+            break;
+        }
+        if words.push(*byte).is_err() {
+            break;
+        }
+    }
+    let mut members = List::with_capacity(env.limits.forge.landing_members);
+    let mut asks = List::with_capacity(env.limits.forge.landing_members);
+    for task in &joined {
+        let Some(member) = member(domain, env, *task) else { return };
+        members.push(member).expect("admitted closure");
+        asks.push(None).expect("admitted closure");
+    }
     let Some(seed) = domain.core.repair_seed(project) else { return };
     let number = seed.number();
     domain.work.push(Work::Forge(forge::Event::Landing {
@@ -52,19 +153,9 @@ pub(super) fn start_landing(domain: &mut Domain, env: &Env<Limits>, task: u64) {
                 phase: landing::Phase::Waiting,
                 preparation: 0,
                 stale_proofs: 0,
-                members: Box::new([landing::Member {
-                    change: task,
-                    repository: landing::Repository { forge: provider.forge, repository: provider.repository },
-                    pull,
-                    head: None,
-                    base: None,
-                    candidate: None,
-                    gates: gates.into_boxed(),
-                    asked: None,
-                    landed: None,
-                }]),
+                members: members.into_boxed(),
             },
-            asks: Box::new([None]),
+            asks: asks.into_boxed(),
             entries: Box::new([]),
         },
     }));
