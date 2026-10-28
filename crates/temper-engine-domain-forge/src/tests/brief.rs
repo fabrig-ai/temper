@@ -306,17 +306,33 @@ fn a_repairs_pull_section_names_its_pull_request_before_its_contents() {
 }
 
 fn remarks_section(remarks: &[u8], budget: u32) -> Box<[u8]> {
-    let mut d = domain();
-    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    // The shipped Reviews read is 4,608 bytes; keep the same room in this
+    // child's tiny fixture, with upstream remarks admitted up to 8 KiB.
+    let limits = Limits {
+        brief_bytes: 4608,
+        client: skein_forge_client::Limits { answer_bytes: 8192, ..LIMITS.client },
+        ..LIMITS
+    };
+    let env = Env { limits, ..env() };
+    let mut d = domain_with_limits(&limits);
+    outputs_with_env(&mut d, Event::Restore { record: Stored::Repository(adopted()) }, &env);
     let mut row = fixtures::opening_row();
     row.pull = Some(1);
     row.change.last_head = Some(HEAD);
+    row.change.state = temper_engine_domain_forge_change::State::Repairing {
+        requested: true,
+        why: temper_engine_domain_forge_change::Repair::Gate(1),
+    };
     row.gate_remarks = Box::new([GateRemark { number: 1, head: HEAD, words: remarks.into() }]);
-    outputs(&mut d, Event::Change { row });
+    outputs_with_env(&mut d, Event::Change { row }, &env);
     let source =
         BriefSource::Reviews { item: BriefItem { repository: REPO.repository, number: 1 }, head: BriefCommit(HEAD) };
-    outputs(&mut d, Event::PlanBrief { section: SECTION, source });
-    let started = outputs(&mut d, Event::GatherPlanned { section: SECTION, parts: 2, bytes: budget, ci_budget: 4096 });
+    outputs_with_env(&mut d, Event::PlanBrief { section: SECTION, source }, &env);
+    let started = outputs_with_env(
+        &mut d,
+        Event::GatherPlanned { section: SECTION, parts: 2, bytes: budget, ci_budget: 4096 },
+        &env,
+    );
     let [Request::BriefClient { event: skein_forge_client::Event::Read { owner, .. } }] = started.as_ref() else {
         panic!("review read: {started:?}")
     };
@@ -354,4 +370,28 @@ fn a_landing_tip_repair_reads_the_same_failed_step_and_logs_end() {
     assert!(words.contains("Failed step: 2 Each pull request adds changes/<its number>.md"), "{words}");
     assert!(words.contains("Missing changes/1.md"), "{words}");
     assert!(words.contains("c1fb3599fa12c976"), "failed tip: {words}");
+}
+
+#[test]
+fn four_thousand_bytes_of_remarks_reach_the_repair_whole() {
+    let remarks = [b'r'; 4000];
+    let bytes = remarks_section(&remarks, 4608);
+    assert_eq!(&bytes[..b"Gate remarks: ".len()], b"Gate remarks: ");
+    assert_eq!(&bytes[b"Gate remarks: ".len()..bytes.len() - 1], &remarks);
+    assert_eq!(bytes.last(), Some(&b'\n'));
+}
+
+#[test]
+fn five_thousand_bytes_of_remarks_are_cut_from_the_end_and_marked() {
+    let remarks = [b'r'; 5000];
+    let bytes = remarks_section(&remarks, 4608);
+    let words = text(&bytes);
+    let (kept, marker) = words.rsplit_once("\n[").expect("marked end cut");
+    let kept_remarks = kept.strip_prefix("Gate remarks: ").expect("remarks heading");
+    assert!(remarks.starts_with(kept_remarks.as_bytes()));
+    let whole_len = b"Gate remarks: ".len() + remarks.len() + 1;
+    let cut = skein_lib::Decimal::of(u64::try_from(whole_len - kept.len()).unwrap());
+    assert_eq!(marker.strip_suffix(" bytes cut]\n").expect("cut suffix").as_bytes(), cut.as_bytes());
+    assert!(bytes.len() <= 4608);
+    assert!(kept_remarks.len() > 4000, "the new working room is used");
 }
