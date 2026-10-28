@@ -24,10 +24,20 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
   is a goal's alone, and the run goes on after either refusal: a goal's
   own `goal` without `advisor` is refused, `a goal starts an advisor
   alone: set advisor, or make the change with change`; any other run's
-  `goal` with `advisor` set, a chat's among them, is refused, `a chat's
-  goal is the work: call goal without advisor, and its goal asks for
-  one`. A person who wants a survey alone gets a goal that asks its
-  advisor and reports, changing nothing.
+  `goal` with `advisor` set, a chat's among them, is refused, `to
+  change a repository, call change; a goal is for work they want to
+  agree first or a survey, and its goal asks for an advisor`. A person
+  who wants a survey alone gets a goal that asks its advisor and
+  reports, changing nothing.
+- **Agreed first:** a chat sets `agree` when its person wants to hear a
+  plan or give a go-ahead before anything changes. The goal's brief
+  then opens with the root's lines that it is a goal and that its work
+  is to be agreed, and carries the person's last words whole. It owes
+  its requester a question: a finish before it has asked parks it, and
+  a notice wakes it at once (`Owes a question: ask your requester`);
+  its `change` before the answer is refused, `wait for the answer to
+  question N`. `agree` with `advisor` is refused, `an advisor agrees
+  nothing: set agree or advisor, not both`.
 - **Reprioritised:** an amendment of its priority alone needs no
   spec revision; tracking an untracked task, or untracking a goal,
   names the spec revision the amender saw.

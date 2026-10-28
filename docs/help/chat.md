@@ -14,14 +14,17 @@ A chat is a conversation between a party and an agent in a project: an untracked
 - **A reply is not a result.** The agent's words answer the party,
   and the chat goes on: it ends only when its party closes it.
 - **A change is another task's.** Asked for a change, the chat's run
-  asks for it with the host tool `change`: a change task, its
-  delegate, writes it, opens its pull request and lands it, and the
-  chat hears its result (temper help task).
+  asks for it with the host tool `change`, even where the code must be
+  read first: a change task, its delegate, reads and writes it, opens
+  its pull request and lands it, and the chat hears its result (temper
+  help task). It calls `goal` only for work its party wants agreed
+  first, or for a survey that changes nothing.
 - **Work agreed first.** Asked to agree a plan before anything is
   changed, the chat's run never calls `change`, never writes the plan
   or asks for the go-ahead in its own reply, and never sets `advisor`:
-  it starts a goal at once with `goal` and the party's words whole,
-  even where they ask for an advisor first (temper help goal), and
+  it starts a goal at once with `goal`, `agree` set and the party's
+  words whole, even where they ask for an advisor first (temper help
+  goal), and
   says a question will wait in the party's inbox. The goal asks its plan with
   `message` and stays until it is answered: a finish meanwhile parks
   it (its activity reads `Kept by question: Q`), and it finishes only

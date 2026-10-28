@@ -12,6 +12,7 @@ A write.
 
 - `words`: text; required.
 - `advisor`: true or false; optional. Set by a goal alone, for a survey that changes nothing.
+- `agree`: true or false; optional. Set by the person's chat when they want the work agreed first: the goal asks its plan before any change.
 
 ## change
 
