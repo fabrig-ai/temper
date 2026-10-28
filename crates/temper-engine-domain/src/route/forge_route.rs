@@ -2441,7 +2441,7 @@ fn gate_executor(row: &forge::ChangeRow, kind: forge_change::GateKind) -> tasks:
     }
 }
 
-/// Deployment-owned tier runs use the project's connector-repair seed.
+/// Deployment-owned tier runs reserve no spend from the project's period.
 fn start_tier_run(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -2451,7 +2451,7 @@ fn start_tier_run(
 ) -> bool {
     let Some(adopted) = domain.forge.repository(repository) else { return false };
     let project = adopted.project;
-    let Some(seed) = domain.core.repair_seed(project) else { return false };
+    let Some(seed) = domain.core.procedure_seed(project) else { return false };
     let task = seed.number();
     let branch = forge::tier_branch(&tier, number);
     let mut words = List::with_capacity(env.limits.tasks.spec_bytes);
