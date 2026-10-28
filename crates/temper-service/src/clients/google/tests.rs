@@ -189,16 +189,9 @@ fn the_recovery_link_uses_the_first_google_owner_without_a_link_owner() {
     let mut config = fixtures::engine();
     let sign_in = world::configured();
     config.jig.owners[0].identity = people::IdentityKey { provider: 3, subject: b"sam@example.com".as_slice().into() };
-    let clients = Clients::new(
-        &config.jig,
-        &config.clients,
-        &fixtures::seeds(),
-        64,
-        &config.limits.root.journal,
-        Some(&sign_in),
-        &[],
-    )
-    .unwrap();
+    let clients =
+        Clients::new(&config.jig, &config.clients, &fixtures::seeds(), 64, &config.limits, Some(&sign_in), &[])
+            .unwrap();
     let identity = clients.initial.as_ref().unwrap().link.as_ref().unwrap();
     assert_eq!(identity.key.provider, 3);
     assert_eq!(identity.key.subject.as_ref(), b"sam@example.com");

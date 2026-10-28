@@ -17,6 +17,7 @@ pub(super) fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), 
         };
     }
     match name {
+        b"server.connections" => limits.server.connections = u32::try_from(value).or(Err(Refused::Range))?,
         b"sign_in.members" => limits.sign_in.members = u32::try_from(value).or(Err(Refused::Range))?,
         b"sign_in.pending" => limits.sign_in.pending = u32::try_from(value).or(Err(Refused::Range))?,
         b"sign_in.deadline_ms" => limits.sign_in.deadline = duration(value)?,

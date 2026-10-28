@@ -292,6 +292,9 @@ pub fn limits(limits: &limits::Limits, git: &temper_worker_protocol_git::Limits,
             }
         }
     }
+    if limits.server.connections == 0 {
+        against(problems, b"server.connections", b"a nonzero connection bound");
+    }
     let sign_in = limits.sign_in;
     for (name, value) in [
         (b"sign_in.members".as_slice(), sign_in.members),
@@ -942,7 +945,8 @@ fn socket_count(
     git: &temper_worker_protocol_git::Limits,
     members: &super::application::Members,
 ) -> Option<u64> {
-    let mut required = u64::from(limits::server(&engine.limits).connections).checked_add(1)?.checked_add(2)?;
+    let mut required =
+        u64::from(limits::server(&engine.limits, &members.limits).connections).checked_add(1)?.checked_add(2)?;
     if members.webhooks.is_some() {
         required = required.checked_add(1)?.checked_add(u64::from(members.limits.forge_component.hooks))?;
     }

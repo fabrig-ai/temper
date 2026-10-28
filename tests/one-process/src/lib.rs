@@ -10,3 +10,5 @@ pub mod world;
 mod ctl;
 #[path = "../../real-loop/src/settings.rs"]
 mod settings;
+
+pub use ctl::capacity::Case as StreamCapacity;

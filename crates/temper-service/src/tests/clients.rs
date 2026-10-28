@@ -158,14 +158,14 @@ fn a_sign_in_digest_and_expiry_are_kept_in_secrets() {
 #[test]
 fn a_sign_in_ending_waits_for_its_erase_to_commit() {
     let config = super::fixtures::engine().jig;
-    let mut journal = super::fixtures::engine().limits.root.journal;
-    journal.commits = 1;
+    let mut own = super::fixtures::engine().limits;
+    own.root.journal.commits = 1;
     let mut clients = crate::clients::Clients::new(
         &config,
         &super::fixtures::engine().clients,
         &super::fixtures::seeds(),
         64,
-        &journal,
+        &own,
         None,
         &[],
     )
@@ -362,7 +362,7 @@ fn clients_public_admits_the_public_and_listener_hosts_and_refuses_an_unknown_ho
             &config.clients,
             &super::fixtures::seeds(),
             64,
-            &config.limits.root.journal,
+            &config.limits,
             None,
             &[],
         )

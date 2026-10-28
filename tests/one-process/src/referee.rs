@@ -250,6 +250,7 @@ impl Referee {
                     && crate::stories::adopted(&self.store.borrow().rows) > 0
             }
             crate::world::Phase::Story => match self.story {
+                crate::world::Story::StreamCapacity(_) => crate::ctl::capacity::finished(),
                 crate::world::Story::Chat { .. } => terminals(&self.store.borrow()) > 0,
                 crate::world::Story::ChatReadThenWait { .. } => chat_waited(&self.store.borrow()),
                 crate::world::Story::Adoption => crate::stories::adopted(&self.store.borrow().rows) > 0,
@@ -492,6 +493,7 @@ impl skein_world::Referee<Proc> for Referee {
                                 | crate::world::Story::Adopt
                                 | crate::world::Story::Merge
                                 | crate::world::Story::HeldChange
+                                | crate::world::Story::StreamCapacity(_)
                         )))
     }
 }

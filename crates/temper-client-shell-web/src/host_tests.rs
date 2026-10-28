@@ -506,3 +506,17 @@ fn the_github_rows_external_web_link_has_its_address_and_noopener() {
         }
     }
 }
+
+#[test]
+fn a_bodyless_stream_refusal_retries_by_backoff_without_waiting_for_silence() {
+    let mut host = Host::new(11, Time::ZERO, Wall::EPOCH, temper_client_view::sign_in::Ways::NONE);
+    host.start(b"/inbox", Vec::new(), None);
+    host.requests();
+    host.heard(Heard::StreamRefused { status: 409 });
+    host.requests();
+    let due = host.deadline().expect("dropped stream's backoff");
+    assert!(due < Time::ZERO.saturating_add(skein_lib::Duration::from_secs(2)));
+    host.clocks(due, Wall::EPOCH);
+    host.due();
+    assert!(host.requests().iter().any(|request| matches!(request, Asked::OpenStream { .. })));
+}

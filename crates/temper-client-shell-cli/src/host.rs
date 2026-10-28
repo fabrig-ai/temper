@@ -52,6 +52,7 @@ enum Waiting {
 pub struct OneShot {
     directory: Directory,
     call: Option<Parsed>,
+    json: bool,
     class: Class,
     waiting: Waiting,
     pub(crate) root: root::Root,
@@ -100,7 +101,17 @@ impl OneShot {
         startup: Startup,
         files: Vec<(u8, Fd)>,
     ) -> Result<Self, jig_client::Unusable> {
-        let limits = limits::native();
+        Self::with_limits(call, startup, files, limits::native())
+    }
+    /// Construct with explicit bounds, including the caller's link deadline.
+    /// # Errors
+    /// Returns unusable client limits.
+    pub fn with_limits(
+        call: Invocation,
+        startup: Startup,
+        files: Vec<(u8, Fd)>,
+        limits: limits::Limits,
+    ) -> Result<Self, jig_client::Unusable> {
         let class = match &call.parsed {
             Parsed::Call { call, .. } => arguments::class(call),
             Parsed::File { .. } => Class::Help,
@@ -157,6 +168,7 @@ impl OneShot {
                 files,
                 u32::try_from(limits.root.tools.ask_bytes).expect("call bound"),
             ),
+            json: matches!(call.parsed, Parsed::Call { json: true, .. }),
             call: Some(call.parsed),
             class,
             waiting: if class == Class::Wait { Waiting::Condition } else { Waiting::Answer },
@@ -285,7 +297,7 @@ impl OneShot {
             } else if let Some(token) = token {
                 self.root_event(jig_client::Event::Start { kept: skein_lib::List::with_capacity(0) });
                 self.root_event(jig_client::Event::SignIn { with: jig_client::With::Held(token) });
-                self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+                self.until = Some(self.env.now.saturating_add(self.connections.deadline));
             } else {
                 self.fail(b"DIRECTORY is not signed in");
             }
@@ -366,7 +378,7 @@ impl OneShot {
             #[cfg(test)]
             let connections = self.test_connections.unwrap_or(connections);
             self.transport = Some(Memory::new(self.directory.engine.expect("loaded engine"), &connections));
-            self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+            self.until = Some(self.env.now.saturating_add(self.connections.deadline));
             self.root_event(jig_client::Event::Start { kept: skein_lib::List::with_capacity(0) });
             self.root_event(jig_client::Event::SignIn { with: jig_client::With::Held(skein_lib::Secret::new(token)) });
         }
@@ -414,7 +426,7 @@ impl OneShot {
                     .is_some_and(|shell| !shell.work_pending(self.env.now))
                 && let Some(Parsed::Call { call, json }) = self.call.take()
             {
-                self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+                self.until = Some(self.env.now.saturating_add(self.connections.deadline));
                 root::step(
                     &mut self.root,
                     &self.root_env,
@@ -440,7 +452,7 @@ impl OneShot {
         let reading = self.root.change_read_pending();
         if self.waiting == Waiting::Condition && self.call.is_none() {
             if reading && self.until.is_none() {
-                self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+                self.until = Some(self.env.now.saturating_add(self.connections.deadline));
             } else if !reading && link == jig_client::Link::Live {
                 self.until = None;
             }
@@ -449,7 +461,7 @@ impl OneShot {
             if self.waiting == Waiting::Condition && self.call.is_none() && link == jig_client::Link::Live && !reading {
                 self.until = None;
             } else if self.link == jig_client::Link::Live && self.until.is_none() {
-                self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+                self.until = Some(self.env.now.saturating_add(self.connections.deadline));
             }
             self.link = link;
         }
@@ -497,7 +509,8 @@ impl OneShot {
                         continue;
                     }
                     if let Some(Parsed::Call { call, json }) = self.call.take() {
-                        self.until = (self.class == Class::Read).then(|| self.env.now.saturating_add(limits::DEADLINE));
+                        self.until =
+                            (self.class == Class::Read).then(|| self.env.now.saturating_add(self.connections.deadline));
                         root::step(
                             &mut self.root,
                             &self.root_env,
@@ -553,7 +566,7 @@ impl OneShot {
                 self.connections,
                 self.env.limits,
             ));
-            self.until = Some(self.env.now.saturating_add(limits::DEADLINE));
+            self.until = Some(self.env.now.saturating_add(self.connections.deadline));
             return;
         }
         let signing = self.signing.as_mut().expect("act shell");
@@ -594,6 +607,10 @@ impl OneShot {
             self.directory.close();
         }
         if self.status.is_none() && self.until.is_some_and(|at| now >= at) {
+            if let Some(full) = self.root.client().link().stream_full {
+                self.print(temper_client_tools::jig::render::stream_full(full, self.json));
+                return;
+            }
             if self.signing.as_ref().is_some_and(|signing| signing.last == Some(jig_client::NotSignedIn::Busy)) {
                 self.fail(b"temper is busy; this link stays usable until it expires");
                 return;

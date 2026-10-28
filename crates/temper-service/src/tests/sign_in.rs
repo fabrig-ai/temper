@@ -76,8 +76,7 @@ pub(crate) fn world_settings(
         .checked_mul(jig_protocol_engine_clients::MAX_OUT_DOWN)
         .unwrap();
     let mut clients =
-        Clients::new(&config.jig, &config.clients, &fixtures::seeds(), room, &config.limits.root.journal, None, files)
-            .unwrap();
+        Clients::new(&config.jig, &config.clients, &fixtures::seeds(), room, &config.limits, None, files).unwrap();
     let mut limits = config.limits.sign_in;
     limits.pending = pending;
     limits.deadline = lifetime;

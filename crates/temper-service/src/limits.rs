@@ -24,6 +24,11 @@ pub struct Clients {
     /// The bundle's files' bytes in all, held in memory while `temper serve` runs.
     pub bundle_bytes: u32,
 }
+/// Connections admitted by the application's client listener.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Server {
+    pub connections: u32,
+}
 /// People's sign-ins (protocol/sign-in.md, 6).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SignIn {
@@ -53,6 +58,7 @@ pub struct Limits {
     pub checkout: checkout::Limits,
     pub git_component: temper_worker_protocol_git::Limits,
     pub clients: Clients,
+    pub server: Server,
     pub sign_in: SignIn,
     pub picker: Picker,
 }
@@ -342,6 +348,7 @@ pub fn profile(profile: Profile) -> Limits {
             checkout: CHECKOUT,
             git_component: GIT,
             clients: CLIENTS,
+            server: Server { connections: 8 },
             sign_in: SignIn {
                 members: 64,
                 pending: 64,
@@ -424,11 +431,11 @@ pub fn host_setup(name: &[u8]) -> bool {
     .contains(&name)
 }
 
-/// Server bounds follow jig's shipped small profile, with its HTTP intake bounds.
+/// Server admission follows the application override, with jig's HTTP intake bounds.
 #[must_use]
-pub fn server(jig: &jig_protocol_config::Limits) -> crate::server::Limits {
+pub fn server(jig: &jig_protocol_config::Limits, own: &Limits) -> crate::server::Limits {
     crate::server::Limits {
-        connections: 8,
+        connections: own.server.connections,
         http: skein_http::server::Limits {
             head: 4096,
             headers: 32,

@@ -7,6 +7,7 @@ use temper_client_shell_cli::{
     arguments,
     host::{Invocation, OneShot, Startup},
 };
+pub(crate) mod capacity;
 pub const PROGRAM: &[u8] = b"/world/temper-ctl";
 const OUTPUT: usize = 65_536;
 const TAG: u64 = 0xfffe_0000_0000_0000;
@@ -36,7 +37,16 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
             })
         })
         .collect();
-    let host = OneShot::with_text_files(
+    let slot = spawn.env.iter().find_map(|entry| {
+        entry
+            .strip_prefix(b"capacity-slot=")
+            .map(|value| std::str::from_utf8(value).expect("slot").parse::<usize>().expect("slot"))
+    });
+    let mut limits = temper_client_shell_cli::limits::native();
+    if slot.is_some_and(|slot| slot > 0) {
+        limits.connections.deadline = capacity::DEADLINE;
+    }
+    let host = OneShot::with_limits(
         Invocation { directory: Some(b"private".as_slice().into()), parsed },
         Startup {
             parent: Some(inherited.roots[0].1),
@@ -49,12 +59,14 @@ pub fn host(spawn: &Spawn, inherited: &Inherited) -> Recorded {
             seed: crate::fixtures::SEED,
         },
         files,
+        limits,
     )
     .expect("shipped ctl limits");
     Recorded {
         host,
         wire: crate::referee::client::Wire::default(),
         seen: 0,
+        slot,
         sign_in: spawn.args.get(1).is_some_and(|word| word.as_ref() == b"sign-in"),
     }
 }
@@ -247,17 +259,29 @@ pub(crate) struct Recorded {
     wire: crate::referee::client::Wire,
     seen: usize,
     sign_in: bool,
+    slot: Option<usize>,
 }
 impl Host for Recorded {
     fn iterate(&mut self, now: Time, wall: Wall) {
         for complete in self.host.completions().iter() {
-            if self.sign_in {
+            if self.sign_in
+                || self.slot.is_some_and(|slot| {
+                    crate::stories::capacity().is_some_and(|case| slot > 0 && slot <= case.streams as usize)
+                })
+            {
                 self.wire.complete(complete);
             }
         }
         for event in &self.wire.received[self.seen..] {
             if let crate::referee::client::Received::SignedIn(party) = event {
                 crate::world::setup_signed(*party);
+            }
+            if let crate::referee::client::Received::Delivery(
+                jig_client::contract::Delivery::Inbox(_) | jig_client::contract::Delivery::OwnerInbox(_),
+            ) = event
+                && let Some(slot) = self.slot
+            {
+                capacity::ready(slot);
             }
         }
         self.seen = self.wire.received.len();

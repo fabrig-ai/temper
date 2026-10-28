@@ -6,6 +6,9 @@
         "authority.executors": 6,
         "authority.grants": 14,
         "authority.segments": 8,
+        "clients.streams": 8,
+        "clients_http.calls": 12,
+        "clients_http.streams": 8,
         "core.resume_bytes": 1590049,
         "documents.lines": 3,
         "documents.rows": 2,
@@ -284,7 +287,8 @@
         "root.loads.read_bytes": 3180090,
         "root.loads.reply_bytes": 1590293,
         "root.loads.transcript_bytes": 1590045,
-        "routes.query_bytes": 2048
+        "routes.query_bytes": 2048,
+        "server.connections": 12
       }
     },
     "workers": [

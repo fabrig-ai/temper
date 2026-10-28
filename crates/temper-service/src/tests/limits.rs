@@ -539,3 +539,24 @@ fn token_rows_include_schema_framing_in_startup_admission() {
         assert_eq!(crate::startup::lines(&problems).as_ref(), expected.as_bytes());
     }
 }
+
+#[test]
+fn server_connections_override_reaches_runtime_and_startup() {
+    let mut settings = fixtures::engine();
+    assert_eq!(settings.limits.server.connections, 8);
+    for count in [0_u64, 1, 12, u64::from(u32::MAX)] {
+        let mut own = settings.limits;
+        limits::apply(&mut own, b"server.connections", count).unwrap();
+        assert_eq!(u64::from(limits::server(&settings.jig.limits, &own).connections), count);
+        let mut found = crate::startup::Problems::empty();
+        crate::startup::checks::limits(&own, &own.git_component, &mut found);
+        let lines = crate::startup::lines(&found);
+        assert_eq!(skein_lib::bytes::find(&lines, b"server.connections").is_some(), count == 0);
+    }
+    let before = settings.limits;
+    assert_eq!(
+        limits::apply(&mut settings.limits, b"server.connections", u64::from(u32::MAX) + 1),
+        Err(limits::Refused::Range)
+    );
+    assert_eq!(settings.limits, before);
+}

@@ -165,7 +165,7 @@ pub(crate) fn worst_case(
     let responses = if listener_bytes == 0 {
         0
     } else {
-        u64::from(crate::limits::server(&config.jig.limits).connections)
+        u64::from(crate::limits::server(&config.jig.limits, &config.limits).connections)
             .checked_mul(u64::from(l.body_bytes).checked_add(web_bytes.checked_add(256)?.checked_mul(2)?)?)?
     };
     host.checked_add(responses)?

@@ -2419,3 +2419,56 @@ fn declaration_shortfalls(
         }
     }
 }
+
+#[test]
+fn ctl_capacity_fits_owned_alongside_t19_and_init_without_raising_declarations() {
+    const T19: u64 = 167_463_976_960;
+    const ROOM: u64 = 902_708_623_665;
+    for init in [false, true] {
+        let scratch = support::Scratch::startup(if init { "init-ctl-capacity" } else { "owned-ctl-capacity" });
+        let mut bounded = if init {
+            support::owned::bounded_template(scratch.path())
+        } else {
+            support::owned::bounded(scratch.path())
+        };
+        let original: serde_json::Value = serde_json::from_slice(&bounded.document).expect("bounded JSON");
+        let mut baseline = original.clone();
+        for name in ["clients.streams", "clients_http.calls", "clients_http.streams"] {
+            baseline["engine"]["limits"]["overrides"].as_object_mut().expect("overrides").remove(name);
+        }
+        baseline["application"]["limits"]["overrides"].as_object_mut().expect("overrides").remove("server.connections");
+        bounded.document = serde_json::to_vec(&baseline).expect("baseline JSON");
+        let before: u64 = bounded.memory_terms().engine.iter().map(|(_, bytes)| *bytes).sum();
+        let mut largest = None;
+        for n in 1..=8_u64 {
+            let mut candidate = baseline.clone();
+            candidate["engine"]["limits"]["overrides"]["clients.streams"] = n.into();
+            candidate["engine"]["limits"]["overrides"]["clients_http.streams"] = n.into();
+            candidate["engine"]["limits"]["overrides"]["clients_http.calls"] = (n + 4).into();
+            candidate["application"]["limits"]["overrides"]["server.connections"] = (n + 4).into();
+            bounded.document = serde_json::to_vec(&candidate).expect("candidate JSON");
+            let after: u64 = bounded.memory_terms().engine.iter().map(|(_, bytes)| *bytes).sum();
+            eprintln!(
+                "ctl capacity: init={init}, N={n}, before={before}, after={after}, with T19={}, rise={}",
+                after + T19,
+                i128::from(after) - i128::from(before)
+            );
+            let fits = if init {
+                after <= 700_000_000_000_000
+            } else {
+                after <= before + ROOM && after + T19 <= 850_000_000_000_000
+            };
+            if fits {
+                largest = Some(n);
+            }
+        }
+        let n = original["engine"]["limits"]["overrides"]["clients.streams"].as_u64().expect("stock streams");
+        assert_eq!(Some(n), largest, "largest admitted capacity");
+        assert_eq!(original["engine"]["limits"]["overrides"]["clients_http.streams"], n);
+        assert_eq!(original["engine"]["limits"]["overrides"]["clients_http.calls"], n + 4);
+        assert_eq!(original["application"]["limits"]["overrides"]["server.connections"], n + 4);
+        bounded.document = serde_json::to_vec(&original).expect("stock JSON");
+        let _ = bounded.requirements();
+        scratch.remove();
+    }
+}
