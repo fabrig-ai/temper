@@ -188,17 +188,19 @@ pub fn try_step(domain: &mut Domain, env: &Env<Limits>, event: Event) -> Result<
         | Event::Stop) => {
             let ordered = domain.work.is_empty() && domain.store_answers.is_empty();
             let admitted = if completes(&event) { ordered } else { admits(domain, &env.limits) };
-            let keeps_payload = matches!(
-                &event,
-                Event::Worker(
-                    WorkerInput::DecodedHostCall { .. }
-                        | WorkerInput::RenderedHostCall { .. }
-                        | WorkerInput::Link {
-                            link: Link::Up { up: LinkUp::Turn { .. } | LinkUp::Answer { .. }, .. },
-                            ..
-                        }
-                )
-            );
+            let keeps_payload = match &event {
+                Event::Worker(input) => crate::link::keeps_payload(input),
+                Event::Party(_)
+                | Event::Account(_)
+                | Event::Credential { .. }
+                | Event::Forge(_)
+                | Event::Setup { .. }
+                | Event::Restart { .. }
+                | Event::Stop
+                | Event::Store(_)
+                | Event::Released(_)
+                | Event::Resume => false,
+            };
             if !admitted || keeps_payload && !crate::link::room(domain) {
                 return Err(event);
             }

@@ -3,7 +3,7 @@
 //! Payloads stay owned here until the fleet asks for or drops them. The
 //! protocol layer alone reads an ended answer's outcome and encodes typed
 //! assignments.
-use crate::boundary::{Link, Parts, Payload, Request, Work, WorkerRequest};
+use crate::boundary::{Link, Parts, Payload, Request, Work, WorkerInput, WorkerRequest};
 use crate::domain::Domain;
 use alloc::boxed::Box;
 use jig_domain_core as core;
@@ -79,6 +79,36 @@ pub(crate) fn receive(domain: &mut Domain, channel: Token, link: Link) -> Option
         Link::Up { up, parts } => self::up(domain, channel, up, parts)?,
         Link::Lost => fleet::Event::Lost { channel },
     }))
+}
+
+/// Only these protocol answers and worker records can retain a new payload.
+pub(crate) fn keeps_payload(input: &WorkerInput) -> bool {
+    match input {
+        WorkerInput::DecodedHostCall { .. }
+        | WorkerInput::RenderedHostCall { .. }
+        | WorkerInput::Link {
+            link: Link::Up { up: host::LinkUp::Turn { .. } | host::LinkUp::Answer { .. }, .. },
+            ..
+        } => true,
+        WorkerInput::ResultRead { .. }
+        | WorkerInput::Link { link: Link::Hello { .. } | Link::Lost, .. }
+        | WorkerInput::Link {
+            link:
+                Link::Up {
+                    up:
+                        host::LinkUp::Piece { .. }
+                        | host::LinkUp::Logins { .. }
+                        | host::LinkUp::SignedOut { .. }
+                        | host::LinkUp::Activity { .. }
+                        | host::LinkUp::Unauthorized { .. }
+                        | host::LinkUp::Limited { .. }
+                        | host::LinkUp::AccountRefused { .. }
+                        | host::LinkUp::Call { .. },
+                    ..
+                },
+            ..
+        } => false,
+    }
 }
 
 /// Whether the root can retain one more payload from a worker or the protocol.

@@ -324,6 +324,14 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
     if engine.store.component.mark_durable() && !engine.forge_records.done() && !stop::requested(engine) {
         return;
     }
+    input_pass(engine, now);
+    release(engine);
+    if engine.forge.room(1) {
+        engine.forge.down(skein_forge_connection::Request::Offer);
+    }
+    clients_pass(engine);
+}
+fn input_pass(engine: &mut Engine, now: Time) {
     if engine.begin {
         if engine.credentials.is_empty() {
             engine.begin = false;
@@ -362,12 +370,9 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
         root::fire(&mut engine.domain, &engine.env);
         engine.drain_facts();
     }
-    release(engine);
-    if engine.forge.room(1) {
-        engine.forge.down(skein_forge_connection::Request::Offer);
-    }
-    clients_pass(engine);
 }
+
+#[expect(clippy::manual_map, reason = "step code uses explicit matches (programming-model.md, 10)")]
 fn completes_pending(engine: &Engine) -> Option<bool> {
     match engine.pending.as_deref() {
         Some(event) => Some(root::completes(event)),

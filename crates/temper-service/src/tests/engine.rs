@@ -159,16 +159,13 @@ fn a_completion_passes_new_work_held_at_the_watermark() {
     // No store answer has yet relieved the initial pressure. The completion
     // must already have passed the held call, rather than waiting for it.
     assert!(engine.events.is_empty(), "the later completion passes the held call");
-    assert!(
-        matches!(
-            engine.pending.as_deref(),
-            Some(root::Event::Worker(root::WorkerInput::Link {
-                link: root::Link::Up { up: host::LinkUp::Call { .. }, .. },
-                ..
-            }))
-        ),
-        "the new call still waits"
-    );
+    let Some(root::Event::Worker(root::WorkerInput::Link {
+        link: root::Link::Up { up: host::LinkUp::Call { .. }, .. },
+        ..
+    })) = engine.pending.as_deref()
+    else {
+        panic!("the new call still waits");
+    };
     for _ in 0..STARTUP_PASSES {
         crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
         if engine.pending.is_none() {
@@ -181,9 +178,10 @@ fn a_completion_passes_new_work_held_at_the_watermark() {
     let mut delivered = skein_lib::Queue::with_capacity(32);
     fixtures::settle_root(&mut service, &mut delivered);
     fixtures::settle_root(&mut service, &mut delivered);
-    let mut replies = 0;
+    let mut replies = 0_u32;
     for delivery in &delivered {
-        if matches!(delivery, root::Delivery::Link { down: host::LinkDown::Relayed { call, .. }, .. } if call.as_ref() == b"held-call")
+        if let root::Delivery::Link { down: host::LinkDown::Relayed { call, .. }, .. } = delivery
+            && call.as_ref() == b"held-call"
         {
             replies += 1;
         }
@@ -335,35 +333,30 @@ fn a_refused_completion_precedes_later_inputs_and_new_work_keeps_its_order() {
     engine.events.push(fixtures::period(91));
     engine.events.push(root::Event::Party(root::PartyInput::Delivered { watcher: WATCHER }));
     crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
-    assert!(
-        matches!(engine.events.iter().next(), Some(root::Event::Party(root::PartyInput::Period { period: 91, .. }))),
-        "the passing completion was offered before the next new input"
-    );
+    assert_held_period(engine.events.iter().next(), 91);
     crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
-    assert!(
-        matches!(engine.events.iter().next(), Some(root::Event::Party(root::PartyInput::Period { period: 91, .. }))),
-        "the refused completion is retried before later inputs"
-    );
+    assert_held_period(engine.events.iter().next(), 91);
     for _ in 0..OWNER_PASSES {
         if engine.pending.is_none() {
             break;
         }
-        assert!(
-            matches!(engine.pending.as_deref(), Some(root::Event::Party(root::PartyInput::Period { period: 90, .. }))),
-            "the earlier new input keeps its place"
-        );
+        assert_held_period(engine.pending.as_deref(), 90);
         crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
     }
     assert!(engine.pending.is_none(), "the earlier new input is eventually taken");
-    assert!(
-        matches!(engine.events.iter().next(), Some(root::Event::Party(root::PartyInput::Period { period: 91, .. }))),
-        "the pass stopped at the next new input"
-    );
+    assert_held_period(engine.events.iter().next(), 91);
     for _ in 0..OWNER_PASSES {
         crate::engine::iterate(engine, Time::from_nanos(1), Wall::from_nanos(1));
     }
     assert!(engine.pending.is_none() && engine.events.is_empty());
     assert!(engine.end.is_none());
+}
+
+fn assert_held_period(event: Option<&root::Event>, expected: u64) {
+    let Some(root::Event::Party(root::PartyInput::Period { period, .. })) = event else {
+        panic!("the next new input retains its period");
+    };
+    assert_eq!(*period, expected, "new inputs keep their arrival order");
 }
 
 // The service's existing restart fixture drains within 256 iterations.
