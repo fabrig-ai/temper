@@ -135,7 +135,7 @@ fn held_listener_stops_serve(listener: &str, expected: &str) {
 fn the_box_finishes_its_restart_policy_after_a_refused_restore() {
     use support::ctl::{Call, Step, Story};
     // The stored changed policy is larger than stock; five retries mean six attempts.
-    const STOCK_POLICY_BYTES: u32 = 2390;
+    const STOCK_POLICY_BYTES: u32 = 3250;
     const ATTEMPTS: usize = 6;
     let scratch = support::Scratch::new("refused_restore_box");
     support::configuration(scratch.path(), &support::Forge::Unreached);
