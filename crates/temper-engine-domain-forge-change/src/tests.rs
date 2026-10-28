@@ -729,3 +729,22 @@ fn a_live_advisory_gate_does_not_hold_a_green_head() {
     f.ci.status = Status::Failed;
     assert_eq!(decide(&c, &f, &heard()).decision, Decision::CancelGates { head: HEAD });
 }
+
+#[test]
+fn an_active_queue_repair_waits_until_ci_is_known_green_on_the_observed_tip() {
+    let c = change(State::First { head: HEAD, ready_since: at(0) });
+    let mut f = facts();
+    f.contains_base = Status::Failed;
+    f.queue_repair_active = true;
+    for status in [Status::Unknown, Status::Pending, Status::Failed] {
+        f.base_ci.status = status;
+        let next = decide(&c, &f, &heard());
+        assert_eq!(next.change, c);
+        assert_eq!(next.decision, Decision::Wait { until: None });
+    }
+    f.base_ci.status = Status::Passed;
+    f.base_ci.head = NEW;
+    assert_eq!(decide(&c, &f, &heard()).decision, Decision::Wait { until: None });
+    f.base_ci.head = f.base_tip;
+    assert_eq!(decide(&c, &f, &heard()).decision, Decision::Effect(Effect::Update { head: HEAD, base: BASE }));
+}
