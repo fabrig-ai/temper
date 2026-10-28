@@ -606,3 +606,21 @@ fn a_late_switch_answer_during_stop_cannot_make_a_commit() {
     crate::try_step(&mut domain, &env, Event::Store(StoreInput::Switched)).unwrap();
     assert_eq!(domain.deployment().commits, before, "a stopped start never writes its mark");
 }
+
+#[test]
+fn cold_workspace_overlaps_serving_and_never_becomes_a_payload() {
+    let (_, env) = root();
+    let mut limits = env.limits;
+    limits.restore_bytes = u64::from(limits.loads.reply_bytes);
+    let serving = crate::worst_case(&limits).expect("valid serving price");
+    let payload = crate::payload_worst_case(&limits).expect("valid serving payload");
+    limits.restore_bytes = limits.restore_bytes.checked_add(1).expect("one byte fits");
+    assert_eq!(crate::worst_case(&limits), Some(serving), "serving workspace already covers this cold byte");
+    assert_eq!(crate::payload_worst_case(&limits), Some(payload));
+    // Larger than the entire serving bound, so the cold phase must dominate.
+    limits.restore_bytes = serving.checked_add(1).expect("one cold workspace fits");
+    let cold = crate::worst_case(&limits).expect("valid cold price");
+    limits.restore_bytes = limits.restore_bytes.checked_add(4096).expect("one page increment fits");
+    assert_eq!(crate::worst_case(&limits), cold.checked_add(4096), "one workspace grows once");
+    assert_eq!(crate::payload_worst_case(&limits), Some(payload), "queues carry no cold workspace");
+}

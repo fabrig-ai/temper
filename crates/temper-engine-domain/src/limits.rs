@@ -242,9 +242,16 @@ pub(crate) fn route_decision(domain: &mut Domain, limits: &Limits) -> Option<Dec
 /// allocator overhead. Child declared output bounds must already be representable; checked root
 /// arithmetic or refused child/cross-route bounds return `None`. It allocates no state and emits no
 /// request or terminal.
+/// Resident containers and the larger of the serial restart and serving
+/// workspaces (domain/root.md, 10). No cold page is a message payload.
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "one checked sum of the root's bounded participating state")]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
+    let (common, serving) = phase_peak(limits)?;
+    common.checked_add(limits.restore_bytes.max(serving))
+}
+
+#[expect(clippy::too_many_lines, reason = "one checked sum of the root's bounded participating state")]
+fn phase_peak(limits: &Limits) -> Option<(u64, u64)> {
     if limits.forge.tasks < limits.tasks.tasks
         || limits.brief.parts == 0
         || limits.brief.gather == skein_lib::Duration::ZERO
@@ -288,7 +295,7 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         )?;
     let permission_bytes = Map::<u32, Box<[people::PermissionRole]>>::worst_case(limits.authority.projects)?
         .checked_add(u64::from(limits.authority.projects).checked_mul(u64::from(limits.journal.transcript_bytes))?)?;
-    let load_bytes = loads::worst_case(&limits.loads)?.checked_add(limits.restore_bytes)?;
+    let load_bytes = loads::resident_worst_case(&limits.loads)?;
     if limits.restore_bytes < u64::from(limits.loads.reply_bytes) {
         return None;
     }
@@ -400,22 +407,8 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
             )?,
         )?
         .checked_add(Slab::<Option<Read>>::worst_case(limits.loads.loads)?)?
-        .checked_add(
-            u64::from(limits.loads.loads).checked_mul(
-                limits
-                    .restore_bytes
-                    .checked_add(u64::from(limits.people.words))?
-                    // A transcript load carries one optional rendering per row beside its raw bytes.
-                    .checked_add(List::<Option<Box<[u8]>>>::worst_case(limits.loads.rows)?)?
-                    .checked_add(u64::from(limits.loads.rows).checked_mul(u64::from(TRANSCRIPT_TAIL_BYTES))?)?,
-            )?,
-        )?
-        // Read answers that waited for journal room.
+        // The read owner slab and this queue are allocated before restore.
         .checked_add(Queue::<Event>::worst_case(limits.loads.loads)?)?
-        .checked_add(
-            u64::from(limits.loads.loads)
-                .checked_mul(jig_domain_core::reads::answer_worst_case(&core_limits(limits))?)?,
-        )?
         // A forge input the drain hands back waits boxed in the journal's door.
         .checked_add(u64::from(limits.journal.deliveries).checked_mul(
             u64::try_from(size_of::<forge::Event>()).ok()?.checked_add(u64::from(limits.forge.client.answer_bytes))?,
@@ -467,10 +460,25 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(u64::try_from(size_of::<forge::Event>()).ok()?)?
         .checked_add(Queue::<Output>::worst_case(1)?)?
         .checked_add(Queue::<loads::Request>::worst_case(1)?)?;
-    Some(bytes)
+    // Startup answers move straight into startup_page. They never occupy
+    // these ordinary read-answer slots or the deferred read-answer queue.
+    let serving = loads::workspace_worst_case(&limits.loads)?
+        .checked_add(
+            u64::from(limits.loads.loads).checked_mul(
+                u64::from(limits.loads.reply_bytes)
+                    .checked_add(u64::from(limits.people.words))?
+                    .checked_add(List::<Option<Box<[u8]>>>::worst_case(limits.loads.rows)?)?
+                    .checked_add(u64::from(limits.loads.rows).checked_mul(u64::from(TRANSCRIPT_TAIL_BYTES))?)?,
+            )?,
+        )?
+        .checked_add(
+            u64::from(limits.loads.loads)
+                .checked_mul(jig_domain_core::reads::answer_worst_case(&core_limits(limits))?)?,
+        )?;
+    Some((bytes, serving))
 }
-/// Conservative heap envelope for one input, output or restored page. The root's
-/// complete state is an upper bound, but its independently retained model-name
+/// Conservative serving heap envelope for one input or output. The serving
+/// state is an upper bound, but its independently retained model-name
 /// contexts cannot also be owned by that message. People holds one per completed
 /// ask and two per pending ask; core prices two synchronous transit contexts
 /// (jig's people limits.rs and core memory.rs). Keep the root's one incoming
@@ -480,7 +488,8 @@ pub fn payload_worst_case(limits: &Limits) -> Option<u64> {
     let retained = u64::from(limits.people.requests)
         .checked_add(u64::from(limits.people.pending).checked_mul(2)?)?
         .checked_add(2)?;
-    worst_case(limits)?.checked_sub(retained.checked_mul(people::model_names_worst_case()?)?)
+    let (common, serving) = phase_peak(limits)?;
+    common.checked_add(serving)?.checked_sub(retained.checked_mul(people::model_names_worst_case()?)?)
 }
 
 pub(crate) fn role_scratch_bytes(limits: &Limits) -> Option<u64> {

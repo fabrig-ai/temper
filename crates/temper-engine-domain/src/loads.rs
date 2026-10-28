@@ -505,11 +505,15 @@ fn valid_range(range: &Range) -> bool {
     }
 }
 
-/// Startup heap bound, including decoded IO and temporary prefix slots. Pure checked calculation,
-/// excluding allocator overhead; invalid limits or arithmetic return `None`, with no allocation,
-/// request or terminal.
+/// Heap bound for the allocated owner slots and the serving page workspace.
+/// Invalid limits or arithmetic return `None` without allocating.
 #[must_use]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
+    resident_worst_case(limits)?.checked_add(workspace_worst_case(limits)?)
+}
+
+/// Owner slots are allocated before startup and remain resident in either phase.
+pub(crate) fn resident_worst_case(limits: &Limits) -> Option<u64> {
     if limits.read_bytes == 0
         || limits.loads == 0
         || limits.rows == 0
@@ -518,7 +522,10 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     {
         return None;
     }
-    Slab::<Entry>::worst_case(limits.loads)?
-        .checked_add(List::<Record>::worst_case(limits.rows)?)?
-        .checked_add(u64::from(limits.reply_bytes))
+    Slab::<Entry>::worst_case(limits.loads)
+}
+
+/// One serving answer and its temporary prefix slots, before moving its rows.
+pub(crate) fn workspace_worst_case(limits: &Limits) -> Option<u64> {
+    List::<Record>::worst_case(limits.rows)?.checked_add(u64::from(limits.reply_bytes))
 }
