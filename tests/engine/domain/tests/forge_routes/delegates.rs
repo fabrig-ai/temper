@@ -27,6 +27,10 @@ fn a_resolution_delegate_carries_its_base_as_hexadecimal_text() {
     );
     answer_producer(&mut world, &producer);
     let resolver = next_delegate(&mut world);
+    assert_eq!(
+        live_task(&world, resolver.task).spec.words.as_ref(),
+        b"Resolve the merge conflict in its files, then finish: temper pushes the merge commit."
+    );
     assert_commit(&world, resolver.task, RESOLVE_COMMIT, BASE_DIGITS);
 }
 
