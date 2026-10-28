@@ -69,7 +69,7 @@ fn completed_sections_are_counted_until_a_failed_preparation_drops_them() {
 
 #[test]
 fn dropped_and_released_assignments_release_their_turns_and_sections_once() {
-    for path in 0..3 {
+    for path in 0_u8..3 {
         let (mut domain, env) = resume_fixture::root();
         let mut assignment = held_assignment();
         assignment.transcript = Box::new([b"history".as_slice().into()]);
@@ -97,10 +97,9 @@ fn dropped_and_released_assignments_release_their_turns_and_sections_once() {
                 .unwrap();
                 crate::release(&mut domain, &env, &mut out);
                 assert_eq!(domain.held_bytes(), 0);
-                assert!(matches!(
-                    out.pop(),
-                    Some(Request::Worker(crate::WorkerRequest::Deliver(Delivery::Assigned { .. })))
-                ));
+                let Some(Request::Worker(crate::WorkerRequest::Deliver(Delivery::Assigned { .. }))) = out.pop() else {
+                    panic!("released assignment")
+                };
                 crate::release(&mut domain, &env, &mut out);
                 assert!(out.is_empty());
             }
@@ -268,7 +267,7 @@ fn stray_and_stopping_worker_turns_release_their_bodies() {
             }),
         )
         .unwrap();
-        for _ in 0..4 {
+        for _ in 0_u32..4 {
             crate::step(&mut domain, &env, Event::Resume);
         }
         assert_eq!(domain.held_bytes(), 0, "fleet drops stray bodies, including while stopping");

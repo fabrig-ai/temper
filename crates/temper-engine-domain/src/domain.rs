@@ -588,10 +588,7 @@ pub(crate) fn emit(decision: &mut Decision, limits: &Limits, delivery: Delivery)
 /// Return replaced turn bytes to their root owner. A refused write means an
 /// overrun stops the root, which never activates again; its total is then moot.
 pub(crate) fn save(decision: &mut Decision, limits: &Limits, write: Write) -> u64 {
-    match decision.carry_write(&limits.journal, write) {
-        Ok(replaced) => replaced,
-        Err(_) => 0,
-    }
+    decision.carry_write(&limits.journal, write).unwrap_or_default()
 }
 
 /// Route one admitted input and all synchronous child callbacks in one decision; store terminals

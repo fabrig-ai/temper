@@ -18,9 +18,8 @@ const STEPS: usize = 200;
 // The fixture's configured resume and text-tail allowances, per preparation.
 const ALLOWANCE: u64 = 256 + 128;
 
-fn bounds(budget: u64) -> engine::Limits {
+fn bounds() -> engine::Limits {
     let mut bounds = limits();
-    bounds.memory_bytes = budget;
     bounds.tasks.tasks = 4;
     bounds.forge.tasks = 4;
     bounds.tasks.project_tasks = 4;
@@ -40,7 +39,7 @@ fn bounds(budget: u64) -> engine::Limits {
 
 // Three real parked conversations with committed history, ready to wake again.
 fn parked() -> (Store, Vec<engine::Assignment>) {
-    let mut driver = Driver::configured(Store::new(), [config(91), config(91)], &bounds(u64::MAX));
+    let mut driver = Driver::configured(Store::new(), [config(91), config(91)], &bounds());
     driver.send(protocol::hello_slots(WORKER, 3, Box::new([])));
     driver.settle();
     driver.sign_in();
@@ -110,7 +109,7 @@ fn assigned(driver: &Driver) -> usize {
 #[test]
 fn due_tasks_activate_within_the_byte_budget_as_earlier_runs_drain() {
     let (store, runs) = parked();
-    let mut driver = Driver::cold(store, config(91), &bounds(2 * ALLOWANCE));
+    let mut driver = Driver::with_budget(store, config(91), &bounds(), 2 * ALLOWANCE);
     driver.settle();
     driver.send(protocol::hello_slots(WORKER, 3, Box::new([])));
     driver.settle();
@@ -160,7 +159,7 @@ fn a_restart_with_three_due_tasks_activates_them_within_the_budget() {
         saves.push(Record::Core(core::Record::Tasks(tasks::Stored::Live(row))));
     }
     store.seed(saves.into_boxed_slice(), Box::new([]));
-    let mut driver = Driver::cold(store, config(91), &bounds(2 * ALLOWANCE));
+    let mut driver = Driver::with_budget(store, config(91), &bounds(), 2 * ALLOWANCE);
     driver.send(protocol::hello_slots(WORKER, 3, Box::new([])));
     // Drive restart inputs without poll/Resume so Open's own behaviour is visible.
     for _ in 0..STEPS {
@@ -220,7 +219,7 @@ fn read_history(driver: &mut Driver, run: &engine::Assignment) {
 #[test]
 fn a_persons_read_is_answered_while_the_budget_binds() {
     let (store, runs) = parked();
-    let mut driver = Driver::cold(store, config(91), &bounds(0));
+    let mut driver = Driver::with_budget(store, config(91), &bounds(), 0);
     driver.settle();
     driver.send(protocol::hello_slots(WORKER, 3, Box::new([])));
     driver.settle();
@@ -233,7 +232,7 @@ fn a_persons_read_is_answered_while_the_budget_binds() {
 #[test]
 fn with_no_worker_the_budget_stops_preparations_and_nothing_else() {
     let (store, runs) = parked();
-    let mut driver = Driver::cold(store, config(91), &bounds(2 * ALLOWANCE));
+    let mut driver = Driver::with_budget(store, config(91), &bounds(), 2 * ALLOWANCE);
     driver.settle();
     wake(&mut driver, &runs);
     read_history(&mut driver, &runs[0]);
