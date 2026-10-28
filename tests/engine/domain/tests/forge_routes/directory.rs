@@ -83,7 +83,7 @@ impl Model {
             messages: self.messages.clone().into_boxed_slice(),
             max_tokens: 1024,
         };
-        let mut out = Queue::with_capacity(llm::MAX_OUT);
+        let mut out = Queue::uncapped();
         llm::step(
             &mut self.domain,
             &self.env,

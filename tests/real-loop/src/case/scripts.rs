@@ -1874,7 +1874,7 @@ mod tests {
             max_tokens: 4096,
         };
         let mut env = Env { now: Time::ZERO, wall: Wall::EPOCH, limits: recipe.domain_limits };
-        let mut out = Queue::with_capacity(fake::MAX_OUT);
+        let mut out = Queue::uncapped();
         fake::step(
             &mut recipe.domain,
             &env,
