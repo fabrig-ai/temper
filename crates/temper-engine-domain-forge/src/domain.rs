@@ -4957,7 +4957,7 @@ fn restored(d: &mut Domain, env: &Env<Limits>, clock: skein_forge_client::Recove
     d.restore_phase = RestorePhase::Restoring;
     child(d, env, skein_forge_client::Event::Restored { clock }, out);
     retire_ended(d, env, out);
-    crate::tiers::restore_watches(d, env, out);
+    crate::tiers::watch(d, env, out);
     // The client's transient watcher flags are rebuilt from the connector's
     // durable writers before any fresh background read can classify a push.
     {
@@ -4994,7 +4994,6 @@ fn settle_outbox(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
         child(d, env, skein_forge_client::Event::Make { entry: entry.clone() }, out);
     }
     child(d, env, skein_forge_client::Event::SettleOutbox, out);
-    crate::tiers::watch(d, env, out);
 }
 
 fn read_afresh(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {

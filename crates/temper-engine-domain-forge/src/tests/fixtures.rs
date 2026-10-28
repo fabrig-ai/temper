@@ -118,7 +118,6 @@ pub fn opening() -> (Domain, Token) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    prime_main(&mut d);
     let row = opening_row();
     let entry = skein_forge_client::Entry {
         number: OPEN,
@@ -345,7 +344,9 @@ pub fn merged_with_landing(tiers: bool, landing: Option<LandingRow>) -> (Domain,
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    prime_main(&mut d);
+    if tiers {
+        prime_main(&mut d);
+    }
     let task = match landing {
         Some(row) => {
             let task = row.landing.task;
@@ -410,7 +411,6 @@ pub fn tiered() -> Domain {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    prime_main(&mut d);
     d.project_tiers(PROJECT, tier_settings(), repository_tiers(&[BROWSER, FUZZY]));
     tier_tip(&mut d, BASE);
     d
@@ -487,7 +487,7 @@ pub fn configured_tier(workflow: usize, paths: usize, path_bytes: usize, artifac
     repositories
 }
 
-/// Finish the standing main watch's initial read before scripting a change's calls.
+/// Finish the tier main watch's initial read before scripting a change's calls.
 pub fn prime_main(d: &mut Domain) -> Box<[Request]> {
     use skein_forge::api::{Answer, Op, Read};
     let (mut call, mut op) = next_call(d);

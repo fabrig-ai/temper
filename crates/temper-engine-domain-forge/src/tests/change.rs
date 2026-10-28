@@ -20,8 +20,8 @@ fn a_pending_prepare_rebase_is_not_branch_drift() {
         outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
         outputs(&mut d, Event::ReadAfresh);
         outputs(&mut d, Event::SettleOutbox);
-        fixtures::prime_main(&mut d);
         outputs(&mut d, Event::Names { task: fixtures::CHANGE, resources: Box::new([name.clone()]) });
+        fixtures::answer_next(&mut d, Ok(Answer::Items { items: Box::new([]), more: false, now: env().now }));
         fixtures::answer_next(&mut d, Ok(Answer::Commit(fixtures::HEAD)));
         outputs(
             &mut d,
@@ -113,7 +113,6 @@ fn reversed_openings(lower_requested: bool) -> (Domain, Token) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pending = None;
     row.pull = None;
@@ -218,7 +217,6 @@ fn a_wake_that_unkeeps_an_inflight_chain_is_not_lost() {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pending = None;
     row.effect = change::EffectResult::None;
@@ -349,7 +347,6 @@ fn first_change(protection: Protection, pull_ci: skein_forge::api::Ci, mergeable
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pending = None;
     row.effect = change::EffectResult::None;
@@ -433,10 +430,6 @@ fn named_pull_verdict(number: u64) -> Box<[Request]> {
     use skein_forge::api::{Answer, Ci, Kind, Op, Read, State, Summary};
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
-    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
-    outputs(&mut d, Event::ReadAfresh);
-    outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pull = Some(1);
     outputs(&mut d, Event::Change { row: row.clone() });
@@ -446,7 +439,8 @@ fn named_pull_verdict(number: u64) -> Box<[Request]> {
     row.pull = Some(2);
     row.branch = Box::from(LATER_BRANCH);
     outputs(&mut d, Event::Change { row });
-
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
     outputs(
         &mut d,
         Event::Names {
@@ -583,7 +577,6 @@ fn projected_words(words: &[u8]) -> skein_forge::api::Write {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     let mut row = fixtures::opening_row();
     row.pending = None;
     row.effect = temper_engine_domain_forge_change::EffectResult::None;
