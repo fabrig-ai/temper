@@ -10,6 +10,7 @@ use jig_domain_host as host;
 use jig_domain_people as people;
 use jig_domain_tasks as tasks;
 use skein_lib::{Duration, ReplyTo, Token};
+use std::collections::VecDeque;
 use temper_engine_domain::{self as engine, Delivery, Record, Write};
 use temper_engine_domain_world::{direct::Driver, protocol, roles, walking::config};
 
@@ -303,12 +304,16 @@ fn one_channels_records_apply_in_order_under_load() {
         protocol::lost(WORKER),
     ]);
     settle_retaining(&mut driver);
-    let records: Vec<_> = attempt_records(&driver, &assignment)
-        .into_iter()
-        .filter(|(_, key)| !matches!(key, core::CoreKey::RunProof(_)))
-        .collect();
+    let mut records = Vec::new();
+    let mut keys = Vec::new();
+    for (commit, key) in attempt_records(&driver, &assignment) {
+        if !matches!(key, core::CoreKey::RunProof(_)) {
+            records.push((commit, key));
+            keys.push(key);
+        }
+    }
     assert_eq!(
-        records.iter().map(|(_, key)| *key).collect::<Vec<_>>(),
+        keys,
         [
             core::CoreKey::Turn { task: assignment.task, attempt: assignment.attempt, turn: 1 },
             core::CoreKey::Turn { task: assignment.task, attempt: assignment.attempt, turn: 2 },
@@ -316,17 +321,22 @@ fn one_channels_records_apply_in_order_under_load() {
         ],
         "each turn and the terminal commits exactly once, in channel order"
     );
-    assert!(records.windows(2).all(|pair| pair[0].0 < pair[1].0), "the three records have ordered commits");
+    for pair in records.windows(2) {
+        assert!(pair[0].0 < pair[1].0, "the three records have ordered commits");
+    }
     let terminal = driver.store.rows.get(&engine::Key::Core(core::Key::Core(core::CoreKey::Terminal {
         task: assignment.task,
         attempt: assignment.attempt,
     })));
-    assert!(matches!(terminal,
-        Some(Record::Core(core::Record::Core(core::CoreRecord::Terminal(terminal))))
-            if terminal.end == tasks::End::Finished {
-                result: tasks::TaskResult::Report { words: REPORT.into() }, cancel_delegates: false,
-            }
-    ), "the answer finishes the attempt before the channel loss can end it lost");
+    assert!(
+        matches!(terminal,
+            Some(Record::Core(core::Record::Core(core::CoreRecord::Terminal(terminal))))
+                if terminal.end == tasks::End::Finished {
+                    result: tasks::TaskResult::Report { words: REPORT.into() }, cancel_delegates: false,
+                }
+        ),
+        "the answer finishes the attempt before the channel loss can end it lost"
+    );
     // Loss precedes the durability callbacks: the fleet sends neither kept
     // turns nor the final acknowledgement to an absent channel (jig's
     // turn.rs:116 and attempt.rs:511). O3 covers their order on a live channel.
@@ -361,49 +371,50 @@ fn a_call_held_at_the_watermark_does_not_act_for_an_attempt_that_ended_behind_it
     assert_eq!(driver.returned, returned + 1, "new work is handed back at the watermark");
     let answer = finished_answer(&mut driver, &assignment, 0);
     driver.send(answer);
-    driver.settle();
+    settle_worker_records(&mut driver);
 
-    let relayed: Vec<_> = driver
-        .delivered
-        .iter()
-        .filter_map(|delivery| {
-            if let Delivery::Link { channel, down: host::LinkDown::Relayed { run, attempt, call, answer } } = delivery
-                && *channel == WORKER
-                && run.raw() == assignment.task
-                && attempt.raw() == assignment.attempt
-                && call.as_ref() == CALL.to_be_bytes()
-            {
-                Some(answer)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let mut relayed = Vec::new();
+    for delivery in &driver.delivered {
+        if let Delivery::Link { channel, down: host::LinkDown::Relayed { run, attempt, call, answer } } = delivery
+            && *channel == WORKER
+            && run.raw() == assignment.task
+            && attempt.raw() == assignment.attempt
+            && call.as_ref() == CALL.to_be_bytes()
+        {
+            relayed.push(answer);
+        }
+    }
     assert_eq!(relayed.len(), 1, "the held call gets exactly one answer at its host");
     assert!(
         matches!(relayed[0], host::Relayed::Answer { .. } | host::Relayed::Busy),
         "the call settles or is refused/busy"
     );
     let records = attempt_records(&driver, &assignment);
-    let terminals: Vec<_> = records.iter().filter(|(_, key)| matches!(key, core::CoreKey::Terminal { .. })).collect();
+    let mut terminals = Vec::new();
+    for record in &records {
+        if matches!(record.1, core::CoreKey::Terminal { .. }) {
+            terminals.push(record);
+        }
+    }
     assert_eq!(terminals.len(), 1, "one terminal commits for the run");
     let terminal_commit = terminals[0].0;
-    assert!(
-        records.iter().all(|(commit, _)| *commit <= terminal_commit),
-        "no call or turn record follows its attempt's terminal"
-    );
+    for (commit, _) in records {
+        assert!(commit <= terminal_commit, "no record follows its attempt's terminal");
+    }
     for writes in driver.transactions.iter().skip(terminal_commit + 1) {
-        assert!(
-            !writes.iter().any(|write| matches!(write,
-                Write::Save(Record::Core(core::Record::Tasks(tasks::Stored::Live(task))))
-                    if task.requester == tasks::Party::Task(assignment.task)
-            )),
-            "no delegate is made for the ended attempt"
-        );
-        assert!(
-            !writes.iter().any(|write| matches!(write, Write::Save(Record::Forge { .. }))),
-            "no forge effect is made for the ended attempt"
-        );
+        for write in writes {
+            assert!(
+                !matches!(write,
+                    Write::Save(Record::Core(core::Record::Tasks(tasks::Stored::Live(task))))
+                        if task.requester == tasks::Party::Task(assignment.task)
+                ),
+                "no delegate is made for the ended attempt"
+            );
+            assert!(
+                !matches!(write, Write::Save(Record::Forge { .. })),
+                "no forge effect is made for the ended attempt"
+            );
+        }
     }
     assert_worker_notices(&driver, &assignment, &[]);
     assert!(driver.root.quiescent() && !driver.stopped, "the held call and terminal settle without stopping");
@@ -574,60 +585,85 @@ fn finished_answer(driver: &mut Driver, assignment: &engine::Assignment, spent: 
 }
 
 fn attempt_records(driver: &Driver, assignment: &engine::Assignment) -> Vec<(usize, core::CoreKey)> {
-    driver
-        .transactions
-        .iter()
-        .enumerate()
-        .flat_map(|(commit, writes)| {
-            writes.iter().filter_map(move |write| {
-                let Write::Save(Record::Core(core::Record::Core(row))) = write else { return None };
-                let (task, attempt) = match row {
-                    core::CoreRecord::Call(call) => (call.key.task, call.key.attempt),
-                    core::CoreRecord::Turn(turn) => (turn.task, turn.attempt),
-                    core::CoreRecord::Terminal(terminal) => (terminal.task, terminal.attempt),
-                    core::CoreRecord::RunProof(proof) => (proof.task, proof.attempt),
-                    core::CoreRecord::Deployment(_)
-                    | core::CoreRecord::Settings(_)
-                    | core::CoreRecord::Projection(_)
-                    | core::CoreRecord::ProposalDecision(_)
-                    | core::CoreRecord::EscalationDecision(_) => return None,
-                };
-                (task == assignment.task && attempt == assignment.attempt).then_some((commit, row.key()))
-            })
-        })
-        .collect()
+    let mut records = Vec::new();
+    for (commit, writes) in driver.transactions.iter().enumerate() {
+        for write in writes {
+            let Write::Save(Record::Core(core::Record::Core(row))) = write else { continue };
+            let (task, attempt) = match row {
+                core::CoreRecord::Call(call) => (call.key.task, call.key.attempt),
+                core::CoreRecord::Turn(turn) => (turn.task, turn.attempt),
+                core::CoreRecord::Terminal(terminal) => (terminal.task, terminal.attempt),
+                core::CoreRecord::RunProof(proof) => (proof.task, proof.attempt),
+                core::CoreRecord::Deployment(_)
+                | core::CoreRecord::Settings(_)
+                | core::CoreRecord::Projection(_)
+                | core::CoreRecord::ProposalDecision(_)
+                | core::CoreRecord::EscalationDecision(_) => continue,
+            };
+            if task == assignment.task && attempt == assignment.attempt {
+                records.push((commit, row.key()));
+            }
+        }
+    }
+    records
 }
 
 fn assert_worker_notices(driver: &Driver, assignment: &engine::Assignment, turns: &[u32]) {
-    let mut expected: Vec<_> = turns
-        .iter()
-        .map(|turn| host::LinkDown::TurnKept {
+    let mut expected = Vec::new();
+    for &turn in turns {
+        expected.push(host::LinkDown::TurnKept {
             run: Token::new(assignment.task),
             attempt: Token::new(assignment.attempt),
-            turn: *turn,
-        })
-        .collect();
+            turn,
+        });
+    }
     expected.push(host::LinkDown::Acknowledge {
         run: Token::new(assignment.task),
         attempt: Token::new(assignment.attempt),
     });
-    assert_eq!(
-        worker_notices(driver),
-        expected.iter().collect::<Vec<_>>(),
-        "kept turns precede the acknowledgement, each once"
-    );
+    let notices = worker_notices(driver);
+    assert_eq!(notices.len(), expected.len(), "each worker notice leaves once");
+    for (notice, expected) in notices.into_iter().zip(&expected) {
+        assert_eq!(notice, expected, "kept turns precede the acknowledgement");
+    }
 }
 
 fn result_count(driver: &Driver, assignment: &engine::Assignment) -> usize {
-    driver
-        .delivered
-        .iter()
-        .filter(|delivery| {
-            matches!(delivery,
+    let mut count = 0;
+    for delivery in &driver.delivered {
+        if matches!(delivery,
                 Delivery::Result { task, words, .. } if *task == assignment.task && words.as_ref() == REPORT
-            )
-        })
-        .count()
+        ) {
+            count += 1;
+        }
+    }
+    count
+}
+
+// Complete one returned worker record's continuations before replaying the
+// next. On main both records return, so the call finishes first; after the
+// completion split the answer may already be taken and only the call remains.
+fn settle_worker_records(driver: &mut Driver) {
+    let mut deferred = VecDeque::new();
+    for _ in 0..driver.events.len() {
+        let event = driver.events.pop_front().expect("counted inputs");
+        if matches!(
+            event,
+            engine::Event::Worker(engine::WorkerInput::Link {
+                link: engine::Link::Up { up: host::LinkUp::Call { .. } | host::LinkUp::Answer { .. }, .. },
+                ..
+            })
+        ) {
+            deferred.push_back(event);
+        } else {
+            driver.events.push_back(event);
+        }
+    }
+    driver.settle();
+    for event in deferred {
+        driver.send(event);
+        driver.settle();
+    }
 }
 
 fn assert_releases_durable(driver: &Driver, assignment: &engine::Assignment) {
@@ -639,7 +675,14 @@ fn assert_releases_durable(driver: &Driver, assignment: &engine::Assignment) {
             host::LinkDown::Acknowledge { .. } => {
                 core::CoreKey::Terminal { task: assignment.task, attempt: assignment.attempt }
             }
-            other => panic!("worker_notices returned an unrelated notice: {other:?}"),
+            other @ (host::LinkDown::Sources { .. }
+            | host::LinkDown::Check { .. }
+            | host::LinkDown::SignOut { .. }
+            | host::LinkDown::Assign { .. }
+            | host::LinkDown::Message { .. }
+            | host::LinkDown::Relayed { .. }
+            | host::LinkDown::Cancel { .. }
+            | host::LinkDown::Grant { .. }) => panic!("worker_notices returned an unrelated notice: {other:?}"),
         };
         assert!(
             driver.store.rows.contains_key(&engine::Key::Core(core::Key::Core(key))),
