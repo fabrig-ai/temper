@@ -217,6 +217,7 @@ fn rejected_review_panel_names_the_gate_repair_reason() {
     };
     assert_eq!(reason.gate(), gate);
     assert_eq!(value.repairs().used(), 1);
+    assert!(value.runs().is_some(), "the named repair has an admitted delegate: {value:?}");
     assert_eq!(value.gates().as_slice()[0].verdict(), &wire::Verdict::Changes);
 }
 
@@ -331,4 +332,5 @@ fn ci_failure_is_read_into_the_panel_and_names_its_repair() {
     };
     assert_eq!(repair.reason(), &wire::Reason::Ci, "design client/forge.md 9.2: a CI repair must retain its CI reason");
     assert_eq!(value.repairs().used(), 1);
+    assert!(value.runs().is_some(), "the named repair has an admitted delegate: {value:?}");
 }

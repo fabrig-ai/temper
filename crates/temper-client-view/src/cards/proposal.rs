@@ -291,6 +291,12 @@ fn task_hold(b: &mut Builder, task: &c::Task, words: &Words, rows: u32) {
 }
 fn held(b: &mut Builder, task: u64, hold: &c::OwnerChipHold, words: &Words, _rows: u32) {
     super::hold(b, task, &hold.reason, words);
+    if let Some(account) = &hold.words {
+        text(b, Role::Paragraph, account.bytes());
+        if account.cut {
+            phrase(b, words, P::Cut, &[]);
+        }
+    }
     phrase(b, words, P::HoldRevision, &[Hole::Number(hold.revision)]);
 }
 fn proposed(b: &mut Builder, tasks: &skein_lib::List<c::ProposedTask>, words: &Words, rows: u32, own: bool) {

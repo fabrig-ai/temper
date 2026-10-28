@@ -2406,6 +2406,7 @@ fn shown_task(w: World, task: u64, then: Then) -> c::Task {
         t.flags.listed = true;
         let hold = c::OwnerChipHold {
             placed: None,
+            words: None,
             circle: None,
             account: None,
             source: None,
