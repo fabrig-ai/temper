@@ -268,6 +268,7 @@ fn run_to(root: &Path, forge: &Throwaway, previous: Option<&Proof>, retry: bool)
     let person_root = skein_shell::open_root(root).expect("native root");
     let proof = Cell::new(None);
     let landed = Cell::new(None);
+    let mut change_chat = None;
     let mut world = real::World::new(Judge {
         chat: ChatJudge {
             phase: if first { ChatPhase::SettingUp } else { ChatPhase::Running },
@@ -276,6 +277,13 @@ fn run_to(root: &Path, forge: &Throwaway, previous: Option<&Proof>, retry: bool)
             forge: Some(forge),
             poll: clock.now().now,
             merged: false,
+            read_calls: super::NATIVE_SETUP_CALLS,
+            next_read: None,
+            read_due: false,
+            ended_inventory: false,
+            change: None,
+            change_chat: &mut change_chat,
+            change_read: Value::Null,
         },
         root,
         proof: &proof,
@@ -294,7 +302,12 @@ fn run_to(root: &Path, forge: &Throwaway, previous: Option<&Proof>, retry: bool)
         let ctl_root = skein_shell::open_root(root).expect("ctl root");
         fds.push(ctl_root);
         world.spawn_with_fds(fds, || {
-            Process::Calls(Box::new(ctl::Calls::new(ctl_root, native_settings_setup(root), Some(&streams), None)))
+            Process::Calls(Box::new(ctl::Calls::new(
+                ctl_root,
+                native_settings_setup(root, false),
+                Some(&streams),
+                None,
+            )))
         });
     } else {
         fds.push(person_root);

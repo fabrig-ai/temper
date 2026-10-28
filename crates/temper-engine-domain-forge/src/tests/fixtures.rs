@@ -552,10 +552,10 @@ pub fn finish_tier_keys(d: &mut Domain, out: &mut Queue<Request>) {
 
 pub fn tier_tree(object: [u8; 32]) -> skein_forge::api::Answer {
     skein_forge::api::Answer::Tree {
-        entries: Box::new([skein_forge::api::Entry {
+        entries: Box::new([skein_forge::api::TreeEntry {
             name: b"src".as_slice().into(),
             mode: 0o040_000,
-            kind: skein_forge::api::EntryKind::Tree,
+            kind: skein_forge::api::TreeEntryKind::Tree,
             object,
         }]),
         more: false,
