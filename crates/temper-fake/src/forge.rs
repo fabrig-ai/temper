@@ -199,7 +199,7 @@ impl Document {
     #[must_use]
     pub fn seed(&self, seed: u64) -> (Forge, forgejo::Config) {
         let mut domain = domain::Domain::new(&LIMITS, seed);
-        let mut repositories = List::with_capacity(crate::ENTRIES);
+        let mut repositories = List::with_capacity(crate::LIST_ENTRIES);
         for (i, repository) in self.repositories.iter().enumerate() {
             let id = repository
                 .id

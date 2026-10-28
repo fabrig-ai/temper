@@ -48,8 +48,8 @@ fn llm_document_checks() {
         ("/models/0/output", json!(4097), "models[0].output: must not exceed window\n"),
         ("/models/0", json!({"name":"qa","window":1,"output":1,"extra":0}), "models[0].extra: unknown member\n"),
         ("/models", Value::Array((0..2).map(|_| models[0].clone()).collect()), "models[1].name: must be unique\n"),
-        ("/cued", Value::Array((0..9).map(|_| scripts[0].clone()).collect()), "cued: past its bound\n"),
-        ("/asked", Value::Array((0..9).map(|_| scripts[0].clone()).collect()), "asked: past its bound\n"),
+        ("/cued", Value::Array((0..12).map(|_| scripts[0].clone()).collect()), "cued: past its bound\n"),
+        ("/asked", Value::Array((0..12).map(|_| scripts[0].clone()).collect()), "asked: past its bound\n"),
         ("/asked", json!([{"cue":"","turns":["x"]}]), "asked[0].cue: must be non-empty\n"),
         ("/cued", json!([{"cue":"x".repeat(257),"turns":["x"]}]), "cued[0].cue: past its bound\n"),
         ("/asked", Value::Array((0..2).map(|_| scripts[0].clone()).collect()), "asked[1].cue: must be unique\n"),
@@ -979,4 +979,13 @@ fn deployment_refuses_failing_lines() {
         demo::read(&doc).unwrap_err().line().as_ref(),
         b"application.demo.llm.otherwise[0].lines[0].fail: unknown member\n"
     );
+}
+
+#[test]
+fn eleven_scripts_fit_each_cue_list() {
+    let mut doc = llm_document();
+    for name in ["cued", "asked"] {
+        doc[name] = json!((0..11).map(|i| json!({"cue":format!("cue {i}"),"turns":["answer"]})).collect::<Vec<_>>());
+    }
+    llm::Document::decode(&serde_json::to_vec(&doc).unwrap()).expect("eleven scripts in each cue list");
 }

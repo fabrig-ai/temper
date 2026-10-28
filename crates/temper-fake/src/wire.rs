@@ -42,7 +42,7 @@ pub(crate) fn llm_limits() -> provider::Limits {
         strings: l::LLM_REQUEST_BYTES,
         depth: l::JSON_DEPTH,
         tokens: l::LLM_TOKENS,
-        output_items: crate::ENTRIES,
+        output_items: crate::LIST_ENTRIES,
         tools: l::LLM_TOOLS,
         history_items: l::LLM_HISTORY,
         metadata: l::LLM_METADATA_BYTES,

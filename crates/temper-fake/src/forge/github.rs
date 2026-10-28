@@ -193,7 +193,7 @@ impl Github {
         None
     }
     fn config(&self, document: &Document) -> layer::Config {
-        let mut accounts = List::with_capacity(crate::ENTRIES);
+        let mut accounts = List::with_capacity(crate::LIST_ENTRIES);
         for account in &self.accounts {
             accounts
                 .push(layer::service::Account {
@@ -203,7 +203,7 @@ impl Github {
                 })
                 .expect("eight accounts");
         }
-        let mut repositories = List::with_capacity(crate::ENTRIES);
+        let mut repositories = List::with_capacity(crate::LIST_ENTRIES);
         for (i, repository) in document.repositories.iter().enumerate() {
             let account = self.account(&repository.owner).expect("checked owner");
             repositories
@@ -284,7 +284,7 @@ impl Github {
             let reach = match &installation.repositories {
                 None => Reach::All,
                 Some(names) => {
-                    let mut ids = List::with_capacity(crate::ENTRIES);
+                    let mut ids = List::with_capacity(crate::LIST_ENTRIES);
                     for (i, repository) in document.repositories.iter().enumerate() {
                         if repository.owner == account.login && names.contains(&repository.name) {
                             ids.push(
@@ -323,11 +323,11 @@ pub fn limits() -> layer::Limits {
             target_bytes: wire.documents.target_bytes,
         },
         installations: layer::installations::Limits {
-            installations: crate::ENTRIES,
+            installations: crate::LIST_ENTRIES,
             tokens: 32,
-            listed: crate::ENTRIES,
+            listed: crate::LIST_ENTRIES,
         },
-        pages: layer::pages::Limits { states: crate::ENTRIES, manifest_bytes: 8192 },
+        pages: layer::pages::Limits { states: crate::LIST_ENTRIES, manifest_bytes: 8192 },
         page: 32,
         body: crate::limits::FORGE_BODY,
         response: crate::limits::FORGE_BODY,

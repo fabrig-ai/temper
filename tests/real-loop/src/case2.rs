@@ -173,7 +173,7 @@ pub(crate) fn defaults(defaults: &mut jig_domain_core::settings::Defaults, flags
 // between fixture construction, peer creation and service configuration.
 #[must_use]
 pub fn fixture_hour_0() -> forge::Fixture {
-    forge::Fixture { setup: setup_hour_0, extra_setups: extra_hour_0, configure: configure_hour_0 }
+    forge::Fixture { setup: setup_hour_0, extra_setups: extra_hour_0, configure: configure_hour_0, ..forge::fixture() }
 }
 fn setup_hour_0() -> api::Setup {
     fixture(&CAST).setups().into_vec().remove(0)

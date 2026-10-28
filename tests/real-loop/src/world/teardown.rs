@@ -59,6 +59,8 @@ fn startup(
             cue: false,
             release: None,
             released: None,
+            gate: None,
+            held_submissions: skein_lib::Queue::with_capacity(0),
         }))
     });
     world.spawn_signals(|signals| {

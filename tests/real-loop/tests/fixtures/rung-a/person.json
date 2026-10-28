@@ -1,0 +1,7 @@
+{
+  "requests": [
+    "Add CSV export to widget",
+    "Add a dark theme to widget",
+    "Fix widget's empty search state"
+  ]
+}
