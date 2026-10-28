@@ -1745,22 +1745,9 @@ fn outcome_facts(
         skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Merged(commit), .. } => {
             let task = crate::landing::merged_owner(d, task, entry);
             if let Some(kept) = d.entries.get(&entry) {
-                let change = match d.landing.rows.get(&task) {
-                    Some(row) => {
-                        let mut saved = None;
-                        for candidate in &row.entries {
-                            if candidate.entry == entry {
-                                saved = Some(*candidate);
-                            }
-                        }
-                        let saved = saved.expect("landing merge retains its member entry");
-                        row.landing.members.get(usize::from(saved.member)).expect("saved landing member").change
-                    }
-                    None => task,
-                };
                 let repository = kept.entry.repository;
-                crate::verification::landed(d, repository, commit, change, out);
-                crate::log::landed(d, repository, commit, change, env.wall, out);
+                crate::verification::landed(d, repository, commit, task, out);
+                crate::log::landed(d, repository, commit, task, env.wall, out);
             }
             if d.landed.len() < env.limits.landings.max(env.limits.changes) || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");
@@ -2597,6 +2584,7 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         | change::State::Reopening { .. }
         | change::State::Checking { .. }
         | change::State::Gating { .. }
+        | change::State::CancellingGates { .. }
         | change::State::Queued { .. }
         | change::State::First { .. }
         | change::State::Ready { .. }
@@ -2694,6 +2682,7 @@ fn step_verified(
         contains_base: change::Status::Unknown,
         mergeable: change::Status::Unknown,
         gates: row.verdicts.clone(),
+        live_gate: None,
         writer_taken: false,
         drift: row.drift,
         first: false,

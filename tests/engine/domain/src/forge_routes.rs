@@ -1999,6 +1999,7 @@ pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_
         | State::Reopening { .. }
         | State::Checking { .. }
         | State::Gating { .. }
+        | State::CancellingGates { .. }
         | State::Queued { .. }
         | State::First { .. }
         | State::Ready { .. }
