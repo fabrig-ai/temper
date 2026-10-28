@@ -86,10 +86,12 @@ impl AgentPeer {
                     self.lower(LowerEvent::Write(stream::OutputUp::Settled {
                         right,
                         outcome: stream::OutputOutcome::Granted,
-                    }))
+                    }));
                 }
                 Lower::Write(stream::OutputDown::Send { bytes, .. }) => self.worker_bytes.append(&bytes).unwrap(),
-                other => panic!("live frame output: {other:?}"),
+                other @ (Lower::Read(_) | Lower::Write(_) | Lower::FinishWrite) => {
+                    panic!("live frame output: {other:?}");
+                }
             }
         }
         for _ in 0..PEER_STEPS {
@@ -111,13 +113,13 @@ impl AgentPeer {
     }
 }
 
-fn progress_at(entries: u32) -> (fixtures::WorkerStand, Option<Time>) {
+fn progress_at(entries: u32) -> (fixtures::WorkerStand, Time) {
     let mut stand = fixtures::started_worker();
     let mut agent = AgentPeer::assigned(&mut stand.worker);
     agent.queue_progress(&mut stand.worker);
     load(&mut stand.worker, entries);
     stand.worker.link(fixtures::NOW, assignment());
-    let before = stand.worker.root.next_deadline();
+    let before = stand.worker.root.next_deadline().expect("the admitted agent has a watchdog");
     stand.worker.iterate(fixtures::NOW.saturating_add(PROGRESS_AFTER), Wall::EPOCH);
     (stand, before)
 }
@@ -128,13 +130,14 @@ fn new_work_waits_at_the_watermark_while_admitted_work_is_taken() {
     assert_eq!(stand.worker.engine.len(), 1, "the new assignment waits");
     assert_eq!(
         stand.worker.root.next_deadline(),
-        before.map(|at| at.saturating_add(PROGRESS_AFTER)),
+        Some(before.saturating_add(PROGRESS_AFTER)),
         "agent progress feeds its watchdog"
     );
-    assert!(
-        !stand.worker.io().iter().any(|request| matches!(request, io::Request::Spawn { .. })),
-        "no new prepare or agent spawn"
-    );
+    for request in stand.worker.io().iter() {
+        if let io::Request::Spawn { .. } = request {
+            panic!("waiting work prepares no checkout and spawns no agent");
+        }
+    }
 }
 
 #[test]
@@ -142,7 +145,7 @@ fn new_work_is_taken_one_entry_below_the_watermark() {
     let (stand, before) = progress_at(WATERMARK - 1);
     assert!(stand.worker.engine.is_empty(), "the assignment was stepped");
     assert_eq!(stand.worker.root.host().hosted(), 1, "the occupied worker keeps its admitted run");
-    assert_eq!(stand.worker.root.next_deadline(), before.map(|at| at.saturating_add(PROGRESS_AFTER)));
+    assert_eq!(stand.worker.root.next_deadline(), Some(before.saturating_add(PROGRESS_AFTER)));
 }
 
 #[test]
@@ -168,9 +171,10 @@ fn the_engines_later_records_wait_behind_its_waiting_new_work() {
     let mut spawned = None;
     let mut link_output = skein_lib::Queue::uncapped();
     while let Some(request) = stand.worker.io().pop() {
-        match request {
-            io::Request::Spawn { owner, .. } => spawned = Some(owner),
-            request => link_output.push(request),
+        if let io::Request::Spawn { owner, .. } = request {
+            spawned = Some(owner);
+        } else {
+            link_output.push(request);
         }
     }
     while let Some(request) = link_output.pop() {
@@ -181,19 +185,15 @@ fn the_engines_later_records_wait_behind_its_waiting_new_work() {
     stand.worker.up(fixtures::NOW, io::Event::Closed { owner });
     let (up, _) = engine.answer(&mut stand.worker);
     assert_eq!((waiting, hosted_while_waiting), (2, 0));
-    assert!(
-        matches!(
-            up,
-            hub::LinkUp::Answer {
-                run: NEXT_RUN,
-                answer: hub::Answer {
-                    ending: hub::Ending::Failed { failure: hub::Failure::Cancelled(hub::Reason::Engine), .. },
-                    ..
-                },
-                ..
-            }
-        ),
-        "one cancellation answer: {up:?}"
+    let hub::LinkUp::Answer { run, attempt, answer } = up else { panic!("the engine gets the cancellation answer") };
+    assert_eq!((run, attempt), (NEXT_RUN, Token::new(2)));
+    assert_eq!(
+        answer.ending,
+        hub::Ending::Failed {
+            failure: hub::Failure::Cancelled(hub::Reason::Engine),
+            detail: Box::new([]),
+            work: hub::Work { left: None, saved: None },
+        }
     );
     assert_eq!(stand.worker.root.kept_answers(), 1);
     assert!(stand.worker.engine.is_empty());
