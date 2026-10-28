@@ -75,9 +75,3 @@ impl IdentityTable {
         if now < entry.expires { entry.value.as_ref() } else { None }
     }
 }
-/// Fixed slots and at most two decoded values within each grant's byte bound.
-#[must_use]
-pub fn identities_worst_case(identities: u32, value_bytes: u32) -> Option<u64> {
-    List::<Generations>::worst_case(identities)?
-        .checked_add(u64::from(identities).checked_mul(2)?.checked_mul(u64::from(value_bytes))?)
-}

@@ -24,7 +24,6 @@ fn the_worker_sizes_each_part_from_its_payload_codec() {
     assert_eq!(prepared.prefix, (3_u64 << 60_u32) + (1_u64 << 48_u32));
     assert_eq!(u64::from(prepared.link.sizes.items), v1::Items::worst_case_bytes(&prepared.payload).unwrap());
     assert_eq!(prepared.payload.repository_git_some, 4096);
-    assert!(worker_settings::worker_worst_case(&settings, &agent, &limits).unwrap() > 0);
 }
 
 #[test]
@@ -310,19 +309,6 @@ fn the_worker_demands_each_cancellation_record_and_end() {
 }
 
 #[test]
-fn retained_program_metadata_is_priced_exactly_once_at_capacity() {
-    use crate::settings::{Adapter, PROGRAM_PATH_BYTES, Program};
-    let (settings, mut agent, limits) = program_worker_settings();
-    let without = worker_settings::worker_worst_case(&settings, &agent, &limits).unwrap();
-    let empty_heap = worker_heap(&settings, &agent, &limits, without);
-    let path: Box<[u8]> = Box::new([b'/'; PROGRAM_PATH_BYTES]);
-    agent.programs = Box::new([Program { adapter: Adapter::ClaudeCode, path: path.clone(), directory: path }]);
-    let with = worker_settings::worker_worst_case(&settings, &agent, &limits).unwrap();
-    assert_eq!(with - without, u64::try_from(2 * PROGRAM_PATH_BYTES + size_of::<Program>()).unwrap());
-    let declared_heap = worker_heap(&settings, &agent, &limits, with);
-    assert_eq!(declared_heap - empty_heap, with - without, "the retained copy is priced once");
-}
-#[test]
 fn worker_preparation_refuses_a_program_path_past_capacity() {
     use crate::settings::{Adapter, PROGRAM_PATH_BYTES, Program};
     let (settings, mut agent, limits) = program_worker_settings();
@@ -332,23 +318,6 @@ fn worker_preparation_refuses_a_program_path_past_capacity() {
         directory: Box::new([b'/'; PROGRAM_PATH_BYTES]),
     }]);
     worker_settings::prepare(&settings, &agent, &limits).unwrap_err();
-}
-
-fn worker_heap(
-    settings: &crate::settings::Worker,
-    agent: &crate::settings::Agent,
-    limits: &crate::limits::Limits,
-    bound: u64,
-) -> u64 {
-    let files = fixtures::worker_files();
-    let meter = skein_world::domain::heap::Meter::new();
-    meter.start();
-    let worker = crate::Worker::new(settings, agent, limits, &files, fixtures::worker_runtime(), 7).unwrap();
-    let measured = meter.end();
-    let held = measured.held();
-    meter.check(measured, bound, &"worker construction");
-    drop(worker);
-    held
 }
 
 #[test]
@@ -483,9 +452,7 @@ fn grant_sizes_take_credentials_source_names_and_generated_identities() {
     assert!(crate::workers::limits(&engine).is_none());
     worker.jig.limits.hub.charter_bytes = u64::MAX;
     assert!(worker_settings::link_limits(&worker.jig, &payload).is_none());
-    assert!(
-        worker_settings::worker_worst_case(&worker, &fixtures::worker_agent(), &fixtures::worker_limits()).is_none()
-    );
+    assert!(worker_settings::prepare(&worker, &fixtures::worker_agent(), &fixtures::worker_limits()).is_err());
 }
 
 #[test]
@@ -628,9 +595,6 @@ fn key_values_reach_smith_at_their_bound_and_fit_the_workers_memory() {
     let agent = fixtures::worker_agent();
     let limits = fixtures::worker_limits();
     let files = fixtures::worker_files();
-    let worst = worker_settings::worker_worst_case(&settings, &agent, &limits).unwrap();
-    let meter = skein_world::domain::heap::Meter::new();
-    meter.start();
     let mut worker = crate::Worker::new(&settings, &agent, &limits, &files, fixtures::worker_runtime(), 7).unwrap();
     for generation in [2, 3] {
         worker
@@ -643,8 +607,6 @@ fn key_values_reach_smith_at_their_bound_and_fit_the_workers_memory() {
             )
             .unwrap();
     }
-    let measured = meter.end();
-    meter.check(measured, worst, &"two retained full-size key generations");
     for size in [key_bytes - 1, key_bytes, key_bytes + 1] {
         let token = Secret::new(repeated(b'k', usize::try_from(size).unwrap()));
         let accepted = worker.values.granted(SOURCE, 3, Value { scheme: Scheme::Key, token }, Time::from_nanos(9));

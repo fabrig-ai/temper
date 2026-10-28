@@ -8,7 +8,7 @@ use std::fmt::{self, Write};
 use skein_lib::{Duration, Env, Queue, Rng, Time, Token, Wall};
 use skein_world::domain::heap::Meter;
 use temper_worker_domain::checkout::git::{Commit, Done, Op, Want};
-use temper_worker_domain::{Domain, Event, Limits, Request, agent, host, resume, step, wire, worst_case};
+use temper_worker_domain::{Domain, Event, Limits, Request, agent, host, resume, step, valid, wire};
 
 use crate::protocol;
 
@@ -158,7 +158,9 @@ impl World {
     fn with_facts(settings: Settings, keep: bool) -> Self {
         assert!(settings.turns > 0 && settings.byte_slots > 0);
         let limits = limits(settings, keep);
-        let bound = worst_case(&limits).expect("world limits fit");
+        assert!(valid(&limits));
+        // c3 paused before measuring this scenario's ceiling.
+        let bound = u64::MAX;
         World {
             settings,
             out: Queue::uncapped(),

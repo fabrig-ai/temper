@@ -1181,11 +1181,11 @@ fn maximum_cold_hello_batch_and_duplicate_losses_fit_one_startup_decision() {
 fn overflowing_child_limits_refuse_root_startup_without_panicking() {
     let mut configured = limits();
     configured.tasks.tasks = u32::MAX;
-    assert!(engine::worst_case(&configured).is_none());
+    assert!(!engine::valid(&configured));
     configured = limits();
     configured.fleet.workers = u32::MAX;
     configured.fleet.slots = u32::MAX;
-    assert!(engine::worst_case(&configured).is_none());
+    assert!(!engine::valid(&configured));
 }
 
 fn running_fixture() -> (Driver, engine::Assignment) {
@@ -3723,7 +3723,7 @@ fn multiple_waiting_recipients_preflight_together_and_a_full_journal_hands_the_a
 fn read_only_role_stages_have_one_not_ready_terminal_and_empty_projects_need_no_financial_ledger() {
     let mut oversized = temper_engine_domain_world::roles::limits();
     oversized.people.holdings = oversized.journal.transcript_bytes;
-    assert!(engine::worst_case(&oversized).is_none(), "one roster-bearing durable row must fit before any clone");
+    assert!(!engine::valid(&oversized), "one roster-bearing durable row must fit before any clone");
     let configured = limits();
     let mut child = tasks::Domain::new(
         &configured.tasks,

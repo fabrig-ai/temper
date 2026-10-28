@@ -417,7 +417,7 @@ pub fn fill_files(settings: &mut settings::Engine) {
     }
 }
 pub fn started_with_two_forges() -> crate::Service {
-    start_with_worker(&[(1, 100)], None, None, 0, true, false)
+    start_with_worker(&[(1, 100)], None, None, true, false)
 }
 pub fn started() -> crate::Service {
     started_with_projects(&[(1, 100)])
@@ -426,13 +426,12 @@ pub fn started_with_projects(projects: &[(u32, u64)]) -> crate::Service {
     start_with_store(projects, None)
 }
 pub fn start_with_store(projects: &[(u32, u64)], stored: Option<crate::store::Store>) -> crate::Service {
-    start_with_worker(projects, stored, None, 0, false, false)
+    start_with_worker(projects, stored, None, false, false)
 }
 fn start_with_worker(
     projects: &[(u32, u64)],
     stored: Option<crate::store::Store>,
     worker: Option<crate::Worker>,
-    _worker_bytes: u64,
     two_forges: bool,
     under_box: bool,
 ) -> crate::Service {

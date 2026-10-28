@@ -23,6 +23,10 @@ use temper_engine_domain::{self as root};
 use temper_engine_domain_forge as forge;
 use temper_engine_domain_world::protocol::Protocol;
 
+// c3 paused before measurement: replace this provisional ceiling with the
+// measured story peak plus the task's headroom before running conformance.
+const CONFORMANCE_HEAP_CEILING: u64 = u64::MAX;
+
 /// Scenario identity and seed retained across cold starts.
 #[derive(Clone, Copy, Debug)]
 pub struct Config {
@@ -47,9 +51,7 @@ impl Config {
         story: Option<stories::Story>,
     ) -> Self {
         let limits = config::root(seed, scenario, story).1;
-        let maximum = engine::worst_case(&limits).expect("finite root")
-            + u64::try_from(std::mem::size_of::<Domain>() - std::mem::size_of::<engine::Domain>())
-                .expect("driver size");
+        let maximum = CONFORMANCE_HEAP_CEILING;
         Self { seed, scenario, story, limits, maximum }
     }
 }

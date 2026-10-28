@@ -571,23 +571,23 @@ fn refused_people_timer_stays_due_without_child_mutation_until_room_returns() {
 }
 
 #[test]
-fn authenticated_read_bytes_are_configured_and_counted() {
+fn authenticated_read_bytes_are_configured_and_validated() {
     let (_, env) = root();
     let mut limits = env.limits;
     limits.loads.read_bytes = 65_536;
-    let before = crate::worst_case(&limits).expect("valid read bound");
+    assert!(crate::valid(&limits));
     limits.loads.read_bytes += 65_536;
     assert_eq!(crate::limits::core_limits(&limits).load_bytes, 131_072);
-    assert!(crate::worst_case(&limits).expect("larger read bound") > before);
+    assert!(crate::valid(&limits));
     limits.loads.read_bytes = 0;
-    assert!(crate::worst_case(&limits).is_none());
+    assert!(!crate::valid(&limits));
 }
 
 #[test]
 fn startup_requires_room_for_the_cancellation_reason() {
     let mut limits = super::resume_fixture::limits();
     limits.forge.client.op_bytes = limits.tasks.result_bytes;
-    assert!(crate::worst_case(&limits).is_some(), "the exact reason bound fits");
+    assert!(crate::valid(&limits), "the exact reason bound fits");
     limits.forge.client.op_bytes -= 1;
-    assert!(crate::worst_case(&limits).is_none(), "a reason past the forge byte bound is refused");
+    assert!(!crate::valid(&limits), "a reason past the forge byte bound is refused");
 }

@@ -1,18 +1,11 @@
-//! The worker's limits and its worst case (programming-model.md, section 6).
+//! The worker's limits and their validity (programming-model.md, section 6).
 
-use alloc::boxed::Box;
-use core::mem::size_of;
-
-use crate::wire;
 use jig_domain_host as host;
-use skein_lib::{Duration, Id, List, Map, Queue, Slab, Token};
+use skein_lib::{Duration, List};
 use smith_host_domain as agent;
 use temper_worker_domain_checkout as checkout;
 
-use crate::agents::{Bound, Call};
-use crate::facts::Fact;
 use crate::translate::SAVED;
-use crate::workspace::{Items, Root, Workspace};
 
 /// The worker domain's limits (section 7), handed to every step read-only: its
 /// child domains', each handed down to the one it bounds, and what the hub's
@@ -54,7 +47,7 @@ pub const SEPARATOR: u64 = 2;
 /// The bytes of a workstream key: the holding task's number, big-endian.
 const KEY: u32 = 8;
 
-/// A rule of [`worst_case`] that `limits` break, so that a start names the
+/// A rule of [`valid`] that `limits` break, so that a start names the
 /// limits on both its sides.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Unfit {
@@ -100,8 +93,8 @@ pub enum Unfit {
     Unacknowledged,
 }
 
-/// Each rule [`worst_case`] holds `limits` to beyond the memory it counts
-/// that they break, in its order; empty, they fit.
+/// Each rule [`valid`] holds `limits` to that they break, in its order;
+/// empty, the cross-child limits agree.
 #[must_use]
 pub fn unfit(limits: &Limits) -> List<Unfit> {
     let Limits { host: host_limits, checkout: checkout_limits, agent: agent_limits, .. } = limits;
@@ -148,88 +141,6 @@ pub fn unfit(limits: &Limits) -> List<Unfit> {
 }
 const UNFIT: u32 = 20;
 
-/// The domain estimate under `limits`, in bytes (6.3), or `None`
-/// if it does not fit a `u64` or the limits cannot be honoured: the child
-/// domains' own, or limits under which one child domain would refuse what
-/// another passes it within its own, or a hello that promises what the hub
-/// refuses. The checkout's repositories, names and conflicts must fit
-/// smith's directories, and a workstream's key its names;
-/// the host's runs must each find a workspace and an agent (no more slots
-/// than workspaces or agent processes); what goes down to a run must be what
-/// an agent takes (an inbound event, rendered, no larger than its messages,
-/// and no more held for a run until it is live, nor carried in its start,
-/// than may wait for it in its agent), and smith's turns unacknowledged, each
-/// no larger encoded than the host takes a turn, must fit the host's reserve
-/// for a stopping run, its turns and its bytes; a run's calls must fit the
-/// host's; a run's push message, as smith bounds a call, and the save's
-/// must fit a commit message; and the hello's bounds must be within the
-/// hub's inbox and events and smith's turn window.
-///
-/// It counts the hub and checkout, plus what the root keeps: the agents it bound
-/// and their calls in flight with their names and what they ask, the
-/// ends waiting behind hand-outs, a record of each
-/// workspace and the map that finds those being prepared, each run's
-/// workspace items until the engine has its answer, and the bounded facts.
-/// The uncapped inter-child queues and smith's host domain and its processes
-/// are outside this estimate: smith's memory is smith's to bound. What the
-/// queued requests own is counted where they end up.
-#[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    let Limits { host: host_limits, checkout: checkout_limits, agent: agent_limits, .. } = limits;
-    if !unfit(limits).is_empty() {
-        return None;
-    }
-    let children = host::worst_case(host_limits)?.checked_add(checkout::worst_case(checkout_limits)?)?;
-    let calls = agent_limits.agents.checked_mul(agent_limits.calls)?;
-    let call = host_limits
-        .event_bytes
-        .checked_add(agent_limits.call_bytes)?
-        .checked_add(u64::from(agent_limits.name_bytes))?;
-    let bindings = Map::<Token, Bound>::worst_case(agent_limits.agents)?
-        .checked_add(Map::<(Token, Token), Call>::worst_case(calls)?)?
-        .checked_add(u64::from(calls).checked_mul(call)?)?
-        .checked_add(Map::<Token, Box<[u8]>>::worst_case(agent_limits.agents)?)?
-        .checked_add(u64::from(agent_limits.agents).checked_mul(u64::from(agent_limits.detail_bytes))?)?;
-    let facts = Queue::<Fact>::worst_case(facts(limits)?)?;
-    children.checked_add(bindings)?.checked_add(workspace_memory(limits)?)?.checked_add(facts)
-}
-
-/// The root's records of workspaces, and each run's workspace items until
-/// the engine has its answer: a slot's, and one more for an assignment the
-/// hub refuses in the step it comes in.
-fn workspace_memory(limits: &Limits) -> Option<u64> {
-    let host_limits = &limits.host;
-    let checkout_limits = &limits.checkout;
-    let slots = host_limits.slots;
-    let name = u64::from(checkout_limits.name_bytes);
-    let conflicts = u64::from(checkout_limits.conflicts)
-        .checked_mul(u64::try_from(size_of::<Box<[u8]>>()).ok()?.checked_add(u64::from(checkout_limits.path_bytes))?)?;
-    let root = u64::try_from(size_of::<Root>())
-        .ok()?
-        .checked_add(name)?
-        .checked_add(u64::try_from(size_of::<checkout::Conflicts>()).ok()?)?
-        .checked_add(conflicts)?;
-    let workspaces = Slab::<Workspace>::worst_case(slots)?
-        .checked_add(Map::<Token, Id<Workspace>>::worst_case(slots)?)?
-        .checked_add(u64::from(slots).checked_mul(u64::from(checkout_limits.repositories).checked_mul(root)?)?)?;
-    let staged = slots.checked_add(1)?;
-    let item = u64::try_from(size_of::<wire::Repository>())
-        .ok()?
-        .checked_add(name.checked_mul(5)?)?
-        .checked_add(u64::from(checkout::PROGRAM_BYTES))?;
-    let feedback = u64::try_from(size_of::<wire::SavedRepository>()).ok()?.checked_add(conflicts)?;
-    // Each retained item has a u64 tag and one from-saved flag beside its feedback.
-    let per = u64::from(checkout_limits.repositories)
-        .checked_mul(item.checked_add(feedback)?.checked_add(9)?)?
-        .checked_add(Map::<u64, [u8; 32]>::worst_case(checkout_limits.repositories)?)?
-        .checked_add(name)?
-        .checked_add(agent::Delivered::worst_case())?;
-    let items = Map::<Token, Items>::worst_case(staged)?
-        .checked_add(Map::<(Token, Token), Token>::worst_case(staged)?)?
-        .checked_add(u64::from(staged).checked_mul(per)?)?;
-    workspaces.checked_add(items)
-}
-
 fn len(bytes: &[u8]) -> u64 {
     u64::try_from(bytes.len()).expect("a length fits in a u64")
 }
@@ -237,4 +148,15 @@ fn len(bytes: &[u8]) -> u64 {
 /// Facts kept until the loop drains them: as many as the child domains keep.
 pub(crate) fn facts(limits: &Limits) -> Option<u32> {
     limits.host.facts.checked_add(limits.checkout.facts)?.checked_add(limits.agent.facts)
+}
+
+/// Whether the children's limits agree and the root's container counts fit.
+#[must_use]
+pub fn valid(limits: &Limits) -> bool {
+    unfit(limits).is_empty()
+        && host::valid(&limits.host)
+        && checkout::worst_case(&limits.checkout).is_some()
+        && limits.agent.agents.checked_mul(limits.agent.calls).is_some()
+        && limits.host.slots.checked_add(1).is_some()
+        && facts(limits).is_some()
 }

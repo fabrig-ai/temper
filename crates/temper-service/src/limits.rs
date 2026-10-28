@@ -362,7 +362,9 @@ pub fn apply(limits: &mut Limits, name: &[u8], value: u64) -> Result<(), Refused
 #[must_use]
 pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engine::Limits> {
     let root = engine_candidate(jig, limits);
-    engine::worst_case(&root)?;
+    if !engine::valid(&root) {
+        return None;
+    }
     Some(root)
 }
 

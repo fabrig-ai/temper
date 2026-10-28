@@ -210,13 +210,3 @@ fn failed(
     };
     temper_worker_domain::Event::SourceAnswered { owner, answer }
 }
-#[must_use]
-pub fn worst_case(detail: u32) -> Option<u64> {
-    // One serialized command, its resource bundle and one terminal. The
-    // worker prices its I/O/output queues separately at their step peaks.
-    smith_host_protocol::program_source_worst_case(detail)?
-        .checked_add(skein_lib::List::<Box<[u8]>>::worst_case(ENVIRONMENT_ENTRIES)?)?
-        .checked_add(ENVIRONMENT_BYTES)?
-        .checked_add(u64::try_from(PATH_BYTES).ok()?.checked_mul(2)?)?
-        .checked_add(u64::from(detail))
-}

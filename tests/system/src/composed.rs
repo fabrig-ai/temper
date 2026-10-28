@@ -378,8 +378,8 @@ impl World {
         let worker_limits = worker_limits();
         // The engine waits for a lost worker longer than it may take to stop.
         limits.fleet.grace = worker_limits.stop_bound.saturating_add(Duration::from_secs(1));
-        assert!(engine::worst_case(&limits).is_some());
-        assert!(worker::worst_case(&worker_limits).is_some());
+        assert!(engine::valid(&limits));
+        assert!(worker::valid(&worker_limits));
         let store = temper_engine_domain_world::fixtures::restored_store(bootstrap, &limits);
         Self {
             seed,

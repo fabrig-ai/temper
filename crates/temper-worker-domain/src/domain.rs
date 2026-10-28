@@ -143,7 +143,7 @@ impl Domain {
         runs
     }
 
-    /// A domain with room for `limits`, which [`crate::worst_case`] accepts.
+    /// A domain with room for `limits`, which [`crate::valid`] accepts.
     #[must_use]
     pub fn new(limits: &Limits) -> Domain {
         let slots = limits.host.slots;
@@ -153,7 +153,7 @@ impl Domain {
             checkout: checkout::Domain::new(&limits.checkout),
             agent: agent::Domain::new(&limits.agent),
             agents: Map::with_capacity(agents),
-            calls: Map::with_capacity(agents.checked_mul(limits.agent.calls).expect("worst_case accepted the calls")),
+            calls: Map::with_capacity(agents.checked_mul(limits.agent.calls).expect("valid accepted the calls")),
             pending: Queue::uncapped(),
             gone: Map::with_capacity(agents),
             workspaces: Slab::with_capacity(slots),
@@ -169,7 +169,7 @@ impl Domain {
             facts_out: 0,
             activity_dropped: 0,
             answers_abandoned: 0,
-            facts: Queue::with_capacity(limits::facts(limits).expect("worst_case accepted the limits")),
+            facts: Queue::with_capacity(limits::facts(limits).expect("valid accepted the limits")),
             lost: 0,
         }
     }

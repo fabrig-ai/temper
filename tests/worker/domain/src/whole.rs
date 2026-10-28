@@ -13,7 +13,7 @@ use temper_fake_checkout::{
 };
 use temper_worker_checkout_world::{forge::Forge, translate};
 use temper_worker_domain::{
-    Domain, Event, Limits, Request, agent, checkout::git::Op, fire, host, resume, step, wire, worst_case,
+    Domain, Event, Limits, Request, agent, checkout::git::Op, fire, host, resume, step, valid, wire,
 };
 
 use crate::protocol;
@@ -86,7 +86,7 @@ impl World {
         limits.checkout.repositories = 1;
         limits.agent.agents = slots;
         limits.agent.no_progress = Duration::from_secs(120);
-        assert!(worst_case(&limits).is_some());
+        assert!(valid(&limits));
         let mut forge = Forge::new(seed);
         let first = forge.repository(REMOTE, b"main", [(PATH.to_vec(), b"original\n".to_vec())].into());
         forge.create_branch(REMOTE, b"topic", first).expect("topic");

@@ -24,7 +24,6 @@ pub fn one_process_under_box(under_box: bool) -> SystemStand {
     settings.jig.limits.core.tasks.run_inbox = 2;
     let agent = super::worker_agent();
     let limits = super::worker_limits();
-    let bytes = crate::worker_worst_case(&settings, &agent, &limits).unwrap();
     let worker = Worker::new(
         &settings,
         &agent,
@@ -35,7 +34,7 @@ pub fn one_process_under_box(under_box: bool) -> SystemStand {
     )
     .unwrap();
     SystemStand {
-        service: super::start_with_worker(&[(1, 100)], None, Some(worker), bytes, under_box, under_box),
+        service: super::start_with_worker(&[(1, 100)], None, Some(worker), under_box, under_box),
         kernel: Kernel::new(),
     }
 }

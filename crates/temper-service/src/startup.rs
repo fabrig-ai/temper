@@ -294,8 +294,9 @@ fn engine_limits(
     if !problems.is_empty() {
         return Err(problems);
     }
-    temper_engine_domain::worst_case(&root)
-        .ok_or(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)))?;
+    if !temper_engine_domain::valid(&root) {
+        return Err(problem(Path::root().member(b"engine").member(b"limits"), What::Jig(config::What::Bound)));
+    }
     Ok(root)
 }
 #[derive(Debug)]
@@ -729,15 +730,6 @@ fn check_files(parsed: &Parsed, files: &settings::Files) -> Result<(), Problems>
         }
     }
     if problems.is_empty() { Ok(()) } else { Err(problems) }
-}
-// The worker's sums still use these helpers; its owner removes them.
-pub(crate) type MemoryTerm = (&'static str, u64);
-pub(crate) fn memory_sum(terms: &[MemoryTerm]) -> Option<u64> {
-    let mut bytes = 0_u64;
-    for (_, term) in terms {
-        bytes = bytes.checked_add(*term)?;
-    }
-    Some(bytes)
 }
 struct CheckedStart {
     not_set_up: List<u16>,

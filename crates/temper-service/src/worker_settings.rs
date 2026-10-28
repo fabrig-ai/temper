@@ -3,7 +3,7 @@ use crate::{limits, settings};
 use jig_protocol_config::{self as config, Path, Problems, What};
 use jig_protocol_worker_link as link;
 use skein_io as io;
-use skein_lib::{List, Map, Queue, Token};
+use skein_lib::Token;
 use smith_host_protocol as host;
 use temper_protocol_worker_wire::{self as payload, v1};
 use temper_worker_domain as root;
@@ -31,19 +31,26 @@ pub(crate) fn problem(member: &[u8], what: What) -> Problems {
 
 /// Check the root, host adapter and link before any state is allocated.
 pub fn prepare(worker: &settings::Worker, agent: &settings::Agent, own: &limits::Limits) -> Result<Prepared, Problems> {
+    // skein's valid() replaces this at the set's repin
     io::worst_case(&worker.jig.limits.io).ok_or(problem(b"limits", What::Bound))?;
     let address = match worker.jig.engine {
         config::Address::Addr(address) => address,
         config::Address::Host { .. } => return Err(problem(b"engine", What::Form)),
     };
-    programs_worst_case(&agent.programs).ok_or(problem(b"agent", What::Bound))?;
+    if !programs_valid(&agent.programs) {
+        return Err(problem(b"agent", What::Bound));
+    }
     let domain_limits = root_limits(worker, agent, own);
-    root::worst_case(&domain_limits).ok_or(problem(b"limits", What::Bound))?;
+    if !root::valid(&domain_limits) {
+        return Err(problem(b"limits", What::Bound));
+    }
     host::Process::new(Token::new(0), &agent.limits, agent.host_limits.detail_bytes, agent.endpoints.clone())
         .or(Err(problem(b"agent", What::Bound)))?;
     let payload = payload_limits(own).ok_or(problem(b"limits", What::Bound))?;
     let link = link_limits(&worker.jig, &payload).ok_or(problem(b"limits", What::Bound))?;
-    link::worst_case(&link).ok_or(problem(b"limits", What::Bound))?;
+    if !link::valid(&link) {
+        return Err(problem(b"limits", What::Bound));
+    }
     let prefix = crate::tokens::worker(0).ok_or(problem(b"slots", What::Bound))?;
     worker.jig.slots.checked_mul(4).ok_or(problem(b"slots", What::Bound))?;
     worker.jig.limits.core.accounts.accounts.checked_add(1).ok_or(problem(b"limits", What::Bound))?;
@@ -159,81 +166,18 @@ pub(crate) fn credential_bytes(token: u32) -> u32 {
 }
 
 /// One retained declaration per recognized adapter, with each path at smith's bound.
-fn programs_worst_case(programs: &[settings::Program]) -> Option<u64> {
+fn programs_valid(programs: &[settings::Program]) -> bool {
     if programs.len() > 1 {
-        return None;
+        return false;
     }
-    let mut bytes =
-        u64::try_from(programs.len()).ok()?.checked_mul(u64::try_from(size_of::<settings::Program>()).ok()?)?;
     for program in programs {
         for path in [&program.path, &program.directory] {
             if path.len() > settings::PROGRAM_PATH_BYTES || !path.starts_with(b"/") || path.contains(&0) {
-                return None;
+                return false;
             }
-            bytes = bytes.checked_add(u64::try_from(path.len()).ok()?)?;
         }
     }
-    Some(bytes)
-}
-
-/// The layer's owned queues, values, root and io, excluding smith's host
-/// domain and its processes, which are smith's to bound.
-#[must_use]
-pub fn worker_worst_case(worker: &settings::Worker, agent: &settings::Agent, own: &limits::Limits) -> Option<u64> {
-    crate::startup::memory_sum(&memory_terms(worker, agent, own)?)
-}
-/// Root, protocol machines, retained values and the worker's routing storage.
-/// Excludes smith's host domain and its processes, which are smith's to bound.
-pub(crate) fn memory_terms(
-    worker: &settings::Worker,
-    agent: &settings::Agent,
-    own: &limits::Limits,
-) -> Option<[crate::startup::MemoryTerm; 10]> {
-    let prepared = prepare(worker, agent, own).ok()?;
-    let jig = &worker.jig;
-    let mut command =
-        u64::try_from(worker.root.len()).ok()?.checked_add(u64::try_from(jig.agent.program.len()).ok()?)?;
-    for argument in &jig.agent.arguments {
-        command = command.checked_add(u64::try_from(argument.len()).ok()?)?;
-    }
-    let remote = match prepared.address {
-        io::Addr::InProcess(_) => 0,
-        io::Addr::Ip(_) => crate::worker::remote_worst_case(u32::try_from(jig.name.len()).ok()?, crate::worker::NOTES)?,
-    };
-    // The engine entrance and its held records have the same edge cap.
-    let routing = Queue::<root::Event>::worst_case(crate::worker::ENGINE_EVENTS)?
-        .checked_mul(2)?
-        .checked_add(Queue::<link::Request>::worst_case(link::MAX_OUT_DOWN)?)?
-        .checked_add(Map::<Token, host::Process>::worst_case(jig.slots)?)?
-        .checked_add(Map::<Token, Token>::worst_case(jig.slots.checked_mul(5)?)?)?
-        .checked_add(List::<Token>::worst_case(jig.slots)?.checked_mul(6)?)?
-        .checked_add(Queue::<io::kernel::Submit>::worst_case(1)?)?
-        .checked_add(command.checked_mul(u64::from(jig.slots).checked_add(1)?)?)?
-        .checked_add(u64::try_from(crate::worker::WORKER_PATH_BYTES).ok()?)?;
-    Some([
-        ("worker", root::worst_case(&prepared.root)?),
-        ("worker.remote", remote),
-        ("worker_settings.programs", programs_worst_case(&agent.programs)?),
-        ("program_sources", crate::program_sources::worst_case(jig.limits.hub.detail_bytes)?),
-        ("worker.link", link::worst_case(&prepared.link)?),
-        (
-            "values",
-            jig_protocol_accounts::table::worst_case(
-                jig.limits.core.accounts.accounts.checked_add(1)?,
-                credential_bytes(jig.limits.token),
-            )?,
-        ),
-        (
-            "identities",
-            crate::identities::identities_worst_case(
-                jig.limits.core.accounts.credentials,
-                payload::largest(&prepared.payload)?.grant,
-            )?,
-        ),
-        ("worker_settings", routing),
-        ("io", skein_io::worst_case(&jig.limits.io)?),
-        ("worker_git", crate::worker_git::worst_case(own)?),
-    ])
+    true
 }
 
 /// The application's payload version is part of every worker's opening.

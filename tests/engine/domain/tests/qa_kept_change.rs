@@ -34,7 +34,7 @@ fn limits() -> engine::Limits {
     bounds.journal.writes = walking::writes(&bounds).max(8192);
     bounds.journal.held = 300;
     bounds.journal.deliveries = 100;
-    assert!(engine::worst_case(&bounds).is_some(), "QA bounds must admit the engine root");
+    assert!(engine::valid(&bounds), "QA bounds must admit the engine root");
     bounds
 }
 

@@ -108,7 +108,7 @@ impl World {
         // Frame project allocations fit the tools preset, as the shared front requires.
         limits.documents.lines = tools::limits::client().client.domain.projects;
         limits.journal.writes = walking::writes(&limits);
-        assert!(engine::worst_case(&limits).is_some(), "the story profile covers the larger cohort");
+        assert!(engine::valid(&limits), "the story profile covers the larger cohort");
         let store = temper_engine_domain_world::fixtures::restored_over(Store::new(), config(under_box), &limits);
         let configuration = config(under_box);
         let mut transport = Transport::new(c::VersionRange {

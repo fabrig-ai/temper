@@ -540,7 +540,7 @@ pub fn limits(settings: &crate::settings::Engine) -> Option<kit::Limits> {
 #[must_use]
 pub fn valid(limits: &kit::Limits) -> bool {
     // jig's valid() replaces this at the set's repin
-    kit::worst_case(limits).is_some()
+    kit::valid(limits)
 }
 
 #[cfg(test)]

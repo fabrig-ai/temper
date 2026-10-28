@@ -3,7 +3,7 @@ use crate::boundary::{
     Assignment, BriefConnector, BriefSection, Event, Fact, Payload, PreparedWorkspace, Read, Released, Request, Work,
 };
 use crate::limits::{
-    Limits, backlog, core_limits, environment_core, payload_slots, run_policy_bound, watermark, worst_case,
+    Limits, backlog, core_limits, environment_core, payload_slots, run_policy_bound, valid, watermark,
 };
 use crate::restart::{connector_restarting, request_load};
 use crate::route::{
@@ -37,7 +37,7 @@ pub struct Domain {
     #[cfg(test)]
     pub(crate) empty_resumes: u32,
     pub(crate) limits: Limits,
-    /// Step/fire scratch, priced by `worst_case` and empty between calls.
+    /// Step/fire scratch, empty between calls.
     scratch: Queue<Request>,
     pub(crate) config: RootConfig,
     pub(crate) core: Core,
@@ -165,7 +165,7 @@ impl Domain {
     /// A configured worker count or name exceeds its priced membership bound.
     #[expect(clippy::too_many_lines, reason = "the root allocates every child and bounded handoff table together")]
     pub fn new(mut config: Config, limits: &Limits) -> Result<Domain, fleet::WorkerProblem> {
-        assert!(worst_case(limits).is_some(), "root limits are valid");
+        assert!(valid(limits), "root limits are valid");
         assert!(
             config.core.settings.deployment_provider != 0,
             "deployment service provider differs from forge sign-in provider 0"

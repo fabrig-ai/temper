@@ -112,7 +112,7 @@ fn the_small_profile_passes_each_domains_worst_case() {
     assert_eq!(temper_worker_protocol_git::check(&settings.limits.git_component, &settings.limits.checkout), Ok(()));
     let jig = jig_protocol_config::profile(jig_protocol_config::Profile::Small);
     let root = limits::engine(&jig, &settings.limits).expect("coherent root profile");
-    assert!(temper_engine_domain::worst_case(&root).is_some());
+    assert!(temper_engine_domain::valid(&root));
 }
 
 #[test]

@@ -2,7 +2,7 @@
 use crate::{limits, settings};
 use alloc::boxed::Box;
 use jig_protocol_config::{Path, Problems, Segment, What};
-use skein_io::{self as io, kernel};
+use skein_io::kernel;
 use skein_lib::{Queue, Writer};
 use temper_worker_domain_checkout::git;
 use temper_worker_protocol_git as component;
@@ -135,19 +135,6 @@ pub(crate) fn pick(
         diagnostic: git::PushDiagnostic::new(&output.finish(), 0),
     })
 }
-#[must_use]
-pub(crate) fn worst_case(own: &limits::Limits) -> Option<u64> {
-    component::check(&own.git_component, &own.checkout).ok()?;
-    let slots = own.git_component.operations.checked_add(1)?;
-    let bytes = component::worst_case(&own.git_component, &own.checkout)?;
-    bytes
-        .checked_add(Queue::<component::Event>::worst_case(slots)?)?
-        .checked_add(Queue::<io::Request>::worst_case(slots.checked_mul(component::MAX_OUT.io)?)?)?
-        .checked_add(Queue::<kernel::Submit>::worst_case(component::MAX_OUT.kernel)?)?
-        .checked_add(Queue::<kernel::Submit>::worst_case(slots.checked_add(2)?)?)?
-        .checked_add(bytes.checked_mul(u64::from(slots))?)
-}
-
 impl crate::Worker {
     pub(crate) fn git_drain(&mut self) {
         for _ in 0..self.git.out.events.len() {

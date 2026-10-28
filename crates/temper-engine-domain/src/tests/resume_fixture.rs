@@ -263,9 +263,7 @@ pub fn config_with_project_room(seed: u64, projects: u32) -> engine::Config {
     policy_limits.projects = projects;
     // Check the same fixture bounds without allocating a discarded live policy table.
     assert!(
-        authority::max_out(&policy_limits).is_some()
-            && authority::worst_case(&policy_limits).is_some()
-            && authority::valid_rules(&rules, &policy_limits),
+        authority::max_out(&policy_limits).is_some() && authority::valid_rules(&rules, &policy_limits),
         "valid authority configuration"
     );
     let policy = authority::Policy {

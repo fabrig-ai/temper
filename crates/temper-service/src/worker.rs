@@ -922,15 +922,3 @@ fn owner_of(event: &mut io::Event, new: Token) {
         | io::Event::Shutdown { .. } => {}
     }
 }
-
-/// Additional retained data for a socket worker; in-process envelopes stay fixed.
-pub(crate) fn remote_worst_case(name: u32, room: u32) -> Option<u64> {
-    u64::try_from(size_of::<Remote>())
-        .ok()?
-        .checked_add(u64::from(name))?
-        .checked_add(Queue::<crate::Note>::worst_case(room)?)?
-        .checked_add(
-            u64::from(room)
-                .checked_mul(u64::from(name).checked_add(u64::try_from(size_of::<core::net::SocketAddr>()).ok()?)?)?,
-        )
-}

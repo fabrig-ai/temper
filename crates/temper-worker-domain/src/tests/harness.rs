@@ -5,7 +5,7 @@
 
 use super::fixtures::{self, RUN};
 use crate::checkout::git::{Done, Fault};
-use crate::{Domain, Encodable, Encoded, Event, Limits, Request, agent, host, step, worst_case};
+use crate::{Domain, Encodable, Encoded, Event, Limits, Request, agent, host, step, valid};
 use alloc::boxed::Box;
 use skein_lib::{Env, List, Queue, Time, Token, Wall};
 
@@ -31,7 +31,7 @@ pub struct Harness {
 impl Harness {
     pub fn new() -> Harness {
         let limits = fixtures::limits();
-        assert!(worst_case(&limits).is_some());
+        assert!(valid(&limits));
         Harness {
             domain: Domain::new(&limits),
             out: Queue::uncapped(),

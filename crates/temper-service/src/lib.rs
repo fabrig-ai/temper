@@ -33,7 +33,6 @@ mod worker_git;
 pub mod worker_route;
 pub mod worker_settings;
 pub use worker::{Worker, WorkerRuntime};
-pub use worker_settings::worker_worst_case;
 pub mod workers;
 pub use accounts::AccountsRuntime;
 mod engine;

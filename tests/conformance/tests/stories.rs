@@ -1,3 +1,6 @@
+#[global_allocator]
+static HEAP: skein_world::domain::heap::Counting = skein_world::domain::heap::Counting;
+
 use jig_conformance::{Application, Cut};
 use temper_conformance_world::stories::{self, Story};
 use temper_conformance_world::{Config, Temper};
