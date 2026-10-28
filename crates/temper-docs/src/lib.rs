@@ -79,7 +79,7 @@ pub struct Page {
 
 /// `index`, then the concepts, walks, recipes, reference pages and guides, each by name.
 #[expect(clippy::disallowed_macros, reason = "pages compile their single Markdown source as static data")]
-pub static PAGES: [Page; 53] = [
+pub static PAGES: [Page; 54] = [
     Page {
         name: "index",
         kind: Kind::Index,
@@ -247,6 +247,13 @@ pub static PAGES: [Page; 53] = [
         title: "Template",
         summary: "How a new task of one shape is filled: who runs it, the result it gives, what it may spend, by when it ends, and how it is kept.",
         text: include_str!("../../../docs/help/template.md"),
+    },
+    Page {
+        name: "tier",
+        kind: Kind::Concept,
+        title: "tier",
+        summary: "A tier is a slow check a repository runs on its main after landing, one run at a time at the newest tip; a change lives until every tier of its repository has cleared its landing.",
+        text: include_str!("../../../docs/help/tier.md"),
     },
     Page {
         name: "box",
