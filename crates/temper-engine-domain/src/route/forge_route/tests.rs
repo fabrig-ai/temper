@@ -664,3 +664,29 @@ fn a_repaired_changes_result_names_the_repair_before_its_pull() {
         b"abcdef0123456789abcdef0123456789abcdef01\ncleared after red in browser, repaired by abababababab"
     );
 }
+
+#[test]
+fn an_uncleared_result_names_cancellation_within_its_contract() {
+    const WORDS: &[u8] = b"abcdef0123456789abcdef0123456789abcdef01\nlanded, uncleared: cancelled while verifying";
+    let bound = u32::try_from(WORDS.len()).unwrap();
+    for size in [bound, bound - 1] {
+        assert_eq!(super::uncleared_words(&SHA1, size, None, true).as_ref(), &WORDS[..usize::try_from(size).unwrap()]);
+    }
+}
+#[test]
+fn an_uncleared_result_names_every_tier_still_waiting() {
+    const WORDS: &[u8] = b"abcdef0123456789abcdef0123456789abcdef01\nlanded, uncleared: no verdict from browser within the bound\nlanded, uncleared: no verdict from fuzzy within the bound";
+    let row = super::forge::Verification {
+        repository: skein_forge::api::Repository { forge: 1, repository: 2 },
+        commit: SHA1,
+        repairs: None,
+        changes: Box::new([]),
+        tiers: Box::new([b"browser".as_slice(), b"fuzzy".as_slice()].map(|tier| super::forge::TierVerification {
+            told: Box::new([]),
+            tier: tier.into(),
+            verdict: None,
+            repaired: None,
+        })),
+    };
+    assert_eq!(super::uncleared_words(&SHA1, u32::try_from(WORDS.len()).unwrap(), Some(&row), false).as_ref(), WORDS);
+}

@@ -173,6 +173,8 @@ pub enum State {
     Red { merge: Commit },
     /// Merged at this commit and cleared: the result is given.
     Cleared { merge: Commit },
+    /// Landed but ended before verification cleared (domain/after-landing.md, 6).
+    Uncleared { merge: Commit },
     /// No write is made until a release lifts this cause.
     Held { was: Box<State>, why: Hold },
 }
@@ -379,6 +381,7 @@ pub struct Limits {
     pub resolutions: u32,
     pub updates: u32,
     pub stall: Duration,
+    pub verification_bound: Duration,
     pub gates: u32,
     pub clean_heads: u32,
 }

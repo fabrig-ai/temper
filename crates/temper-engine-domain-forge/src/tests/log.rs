@@ -21,7 +21,7 @@ fn a_queue_merge_is_logged_with_its_change() {
         &[Logged {
             commit: MERGE,
             seen: env().wall,
-            changes: Box::new([CHANGE]),
+            changes: Box::new([(CHANGE, fixtures::PULL)]),
             verdicts: Box::new([
                 Mark { tier: BROWSER.into(), verdict: Verdict::Verifying },
                 Mark { tier: FUZZY.into(), verdict: Verdict::Verifying },
@@ -41,7 +41,7 @@ fn the_seen_time_is_the_engines_when_the_move_was_seen() {
     let seen = Wall::from_nanos(123);
     push(&mut d, MERGE, seen);
     let mut out = Queue::with_capacity(max_out(&LIMITS));
-    log::landed(&mut d, REPO, MERGE, CHANGE, Wall::from_nanos(456), &mut out);
+    log::landed(&mut d, REPO, MERGE, (CHANGE, fixtures::PULL), Wall::from_nanos(456), &mut out);
     assert_eq!(history(&d)[0].seen, seen);
     assert_eq!(history(&d).len(), 1);
 }
@@ -96,14 +96,14 @@ fn a_turn_landing_is_logged_with_its_members_change() {
     row.landing.members[0].gates = Box::new([]);
     row.entries = Box::new([LandingEntry { entry: fixtures::OPEN, member: 0, gate: 0, operation: Operation::Merge }]);
     let (d, _) = fixtures::merged_with_landing(true, Some(row));
-    assert_eq!(history(&d)[0].changes.as_ref(), &[CHANGE]);
+    assert_eq!(history(&d)[0].changes.as_ref(), &[(CHANGE, fixtures::PULL)]);
 }
 
 #[test]
 fn the_log_prices_retained_rings_and_one_replacement() {
     // Small and owned keep two repository rings; init keeps three. Both
     // charge a further ring while a move replaces one of the retained rows.
-    assert_eq!(log::worst_case(&LIMITS), Some(12_368));
+    assert_eq!(log::worst_case(&LIMITS), Some(15_440));
     let init = Limits { repositories: 3, ..LIMITS };
-    assert_eq!(log::worst_case(&init), Some(16_336));
+    assert_eq!(log::worst_case(&init), Some(20_432));
 }

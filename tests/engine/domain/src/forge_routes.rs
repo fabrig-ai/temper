@@ -23,6 +23,27 @@ pub enum HoldWrite {
     All,
     Merge,
     DeleteBranch(&'static [u8]),
+    TierHold,
+}
+
+fn held_write(hold: Option<HoldWrite>, op: &skein_forge::api::Op) -> bool {
+    match hold {
+        Some(HoldWrite::TierHold) => matches!(
+            op,
+            skein_forge::api::Op::Write(skein_forge::api::Write::Status {
+                check: skein_forge::api::Check::Pending,
+                ..
+            })
+        ),
+        Some(HoldWrite::All) => matches!(op, skein_forge::api::Op::Write(_)),
+        Some(HoldWrite::DeleteBranch(name)) => {
+            matches!(&op, skein_forge::api::Op::Write(skein_forge::api::Write::DeleteBranch { branch }) if branch.as_ref() == name)
+        }
+        Some(HoldWrite::Merge) => {
+            matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. }))
+        }
+        None => false,
+    }
 }
 
 #[expect(clippy::struct_excessive_bools, reason = "independent fixture switches select the forge stories")]
@@ -100,6 +121,8 @@ pub struct StoryLimits {
     pub tier_tree: bool,
     pub tier_reports: bool,
     pub tier_suspects: Option<temper_engine_domain_forge_tiers::Suspects>,
+    pub tier_bound: Option<Duration>,
+    pub change_words: Option<u32>,
 }
 
 fn tier_checks(nested: bool) -> Box<[engine::TierCheck]> {
@@ -264,6 +287,8 @@ impl World {
             tier_tree,
             tier_reports,
             tier_suspects,
+            tier_bound,
+            change_words: _,
         } = timing;
         let paths::Gate { approval, agent: agent_gate, owner: owner_gate } = gate;
         let [(bootstrap, mut limits), (config, _)] = std::array::from_fn(|_| {
@@ -294,6 +319,9 @@ impl World {
                             }]),
                             after: {
                                 let mut after = after_landing();
+                                if let Some(bound) = tier_bound {
+                                    after.bound = bound;
+                                }
                                 if let Some(suspects) = tier_suspects {
                                     after.verdict.suspects = suspects;
                                 }
@@ -1345,16 +1373,7 @@ impl World {
                     let event = engine::Event::Forge(Box::new(temper_engine_domain_forge::Event::Client(
                         skein_forge_client::Event::Answered { free: 0, rate: None, call, cost: 1, result },
                     )));
-                    let held = match self.hold_write_answers {
-                        Some(HoldWrite::All) => matches!(op, skein_forge::api::Op::Write(_)),
-                        Some(HoldWrite::DeleteBranch(name)) => {
-                            matches!(&op, skein_forge::api::Op::Write(skein_forge::api::Write::DeleteBranch { branch }) if branch.as_ref() == name)
-                        }
-                        Some(HoldWrite::Merge) => {
-                            matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. }))
-                        }
-                        None => false,
-                    };
+                    let held = held_write(self.hold_write_answers, &op);
                     if held {
                         self.held_write_answers.push(event);
                     } else {
@@ -1684,7 +1703,11 @@ pub fn change_world_in(
                         ]),
                         inputs: Box::new([]),
                     },
-                    contract: tasks::Contract::Change { connector: 0, kind: 1, words: 32 },
+                    contract: tasks::Contract::Change {
+                        connector: 0,
+                        kind: 1,
+                        words: world.timing.change_words.unwrap_or(32),
+                    },
                     authority: child_authority,
                     symbolic_grants: Box::new([tasks::Grant {
                         connector: 0,
@@ -1969,7 +1992,9 @@ pub fn box_limits() -> engine::Limits {
 pub fn merged(state: &temper_engine_domain_forge_change::State) -> Option<skein_forge::api::Commit> {
     use temper_engine_domain_forge_change::State;
     match state {
-        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => Some(*merge),
+        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } | State::Uncleared { merge } => {
+            Some(*merge)
+        }
         State::Producing { .. }
         | State::Opening { .. }
         | State::Recreating { .. }

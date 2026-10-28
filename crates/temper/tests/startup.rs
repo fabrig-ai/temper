@@ -1028,6 +1028,18 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
     let bounded = support::owned::bounded(scratch.path());
     let required = bounded.requirements();
     eprintln!("owned requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
+    let store = temper_service::startup::store_limits(
+        &bounded.document,
+        &jig_protocol_config::Directories::working(),
+        Some(&bounded.agent),
+    )
+    .unwrap_or_else(|_| panic!("bounded owned store admits"));
+    let application = temper_protocol_store::application(&store.forge, store.store.core.tasks.spec_bytes)
+        .expect("owned application encodings fit");
+    eprintln!(
+        "owned largest store row: {} bytes; application row: {} bytes",
+        store.store.store.value, application.value
+    );
     memory_figure("owned", &bounded.memory_terms(), required);
     support::owned::check_memory("../../docs/examples/owned.json", required);
     check_bounded_startup(&bounded, required);

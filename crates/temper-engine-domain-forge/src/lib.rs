@@ -318,7 +318,8 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             | change::State::Ended
             | change::State::Landed { .. }
             | change::State::Red { .. }
-            | change::State::Cleared { .. } => Some(0),
+            | change::State::Cleared { .. }
+            | change::State::Uncleared { .. } => Some(0),
         }
     }
     match record {

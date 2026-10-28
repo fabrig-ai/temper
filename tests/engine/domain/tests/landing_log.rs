@@ -20,7 +20,7 @@ fn wrapped_log() -> forge::LandingLog {
         landings.push(forge::Logged {
             commit: [number; 32],
             seen: Wall::from_nanos(u64::from(number)),
-            changes: if number % 3 == 0 { Box::new([]) } else { Box::new([u64::from(number)]) },
+            changes: if number % 3 == 0 { Box::new([]) } else { Box::new([(u64::from(number), u64::from(number))]) },
             verdicts: Box::new([forge::Mark { tier: b"browser".as_slice().into(), verdict }]),
         });
     }
@@ -109,7 +109,12 @@ fn a_cold_restart_reads_back_the_landing_log() {
         assert_eq!(line.repository.as_ref(), b"org/repo");
         assert_eq!(
             (line.commit, line.seen, &line.changes, &line.verdicts),
-            (entry.commit, entry.seen, &entry.changes, &entry.verdicts)
+            (
+                entry.commit,
+                entry.seen,
+                &entry.changes.iter().map(|(task, _)| *task).collect::<Vec<_>>().into_boxed_slice(),
+                &entry.verdicts
+            )
         );
     }
     assert_eq!(before, after);

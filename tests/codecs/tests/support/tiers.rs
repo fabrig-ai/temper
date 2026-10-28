@@ -7,6 +7,8 @@ const TESTS: usize = 16; // small's failing_tests.
 const TEST_BYTES: usize = 256; // small's test_id_bytes.
 pub fn smallest() -> Stored {
     Stored::Tier(TierRow {
+        held: None,
+        reds: Box::new([]),
         repository: REPOSITORY,
         tier: b"browser".as_slice().into(),
         record: p::Record {
@@ -37,6 +39,19 @@ pub fn fullest() -> Stored {
         .collect();
     let failures = p::Failures::Tests(tests.clone());
     Stored::Tier(TierRow {
+        held: Some(temper_engine_domain_forge::TierHeld {
+            fault: temper_engine_domain_forge_landing::Fault::Completion,
+            run: Some(temper_engine_domain_forge::ReceiptRun { id: 71, number: 2, url: Box::new([b'u'; 2048]) }),
+            status: TierBranch::Pending { entry: 14 },
+        }),
+        reds: landings
+            .iter()
+            .map(|landing| temper_engine_domain_forge::TierRed {
+                landing: landing.commit,
+                blame: p::Blame::Owns(failures.clone()),
+                run: temper_engine_domain_forge::ReceiptRun { id: 71, number: 2, url: Box::new([b'u'; 2048]) },
+            })
+            .collect(),
         repository: REPOSITORY,
         tier: Box::new([b'a'; 32]),
         record: p::Record {
@@ -87,6 +102,10 @@ pub fn fullest() -> Stored {
             pending: Box::new([skein_forge::api::JobAttempt { head: TIP, run: 71, job: 81, attempt: 2 }]),
         }),
         result: Some(temper_engine_domain_forge::TierResult {
+            told: landings
+                .iter()
+                .map(|landing| temper_engine_domain_forge::LateTold { landing: landing.commit, goal: 101 })
+                .collect(),
             verdict: p::Verdict {
                 number: 2,
                 tip: TIP,

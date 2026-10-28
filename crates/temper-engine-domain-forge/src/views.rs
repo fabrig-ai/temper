@@ -358,7 +358,13 @@ impl Domain {
                     commit: entry.commit,
                     repository: name.into_boxed(),
                     seen: entry.seen,
-                    changes: entry.changes.clone(),
+                    changes: {
+                        let mut tasks = List::with_capacity(u32::try_from(entry.changes.len()).ok()?);
+                        for (task, _) in &entry.changes {
+                            tasks.push(*task).ok()?;
+                        }
+                        tasks.into_boxed()
+                    },
                     verdicts: entry.verdicts.clone(),
                 })
                 .ok()?;

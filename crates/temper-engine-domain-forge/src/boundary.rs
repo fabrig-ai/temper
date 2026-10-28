@@ -553,6 +553,8 @@ pub enum Class {
 /// News delivered through a topic to task inboxes.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum News {
+    /// A late verdict on an ended change, kept for its goal.
+    Cleared { tier: Box<[u8]>, landing: skein_forge::api::Commit },
     /// A landing a tier's verdict blames (domain/after-landing.md, 7).
     Red {
         tier: Box<[u8]>,
@@ -660,6 +662,7 @@ impl ChangeRow {
             change::State::Landed { .. }
             | change::State::Red { .. }
             | change::State::Cleared { .. }
+            | change::State::Uncleared { .. }
             | change::State::Ended => true,
             change::State::Producing { .. }
             | change::State::Opening { .. }
@@ -822,6 +825,9 @@ pub struct TierRow {
     pub probe: Option<TierProbeBranch>,
     pub flight: Option<TierFlight>,
     pub result: Option<TierResult>,
+    pub held: Option<TierHeld>,
+    /// Reds awaiting findings, at most the tier range (2 * changes + 1).
+    pub reds: Box<[TierRed]>,
 }
 /// A landing waiting for its bounded filtered-tree key. A commit fallback is
 /// saved as `Some(commit)` so recovery never repeats a failed walk.
@@ -843,9 +849,30 @@ pub struct TierFlight {
     pub report: Option<ReceiptRun>,
     pub pending: Box<[skein_forge::api::JobAttempt]>,
 }
+/// An exhausted runner fault and progress of its pending status.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierHeld {
+    pub fault: temper_engine_domain_forge_landing::Fault,
+    pub run: Option<ReceiptRun>,
+    pub status: TierBranch,
+}
+/// A red with no live goal, retained until findings consume it.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TierRed {
+    pub landing: skein_forge::api::Commit,
+    pub blame: temper_engine_domain_forge_tiers::Blame,
+    pub run: ReceiptRun,
+}
+/// One late recipient already told, committed with its news.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LateTold {
+    pub landing: skein_forge::api::Commit,
+    pub goal: u64,
+}
 /// A terminal observation, committed before the verdict's status is admitted.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TierResult {
+    pub told: Box<[LateTold]>,
     pub verdict: temper_engine_domain_forge_tiers::Verdict,
     pub run: ReceiptRun,
     pub received: bool,
@@ -922,7 +949,8 @@ pub struct LandingLog {
 pub struct Logged {
     pub commit: skein_forge::api::Commit,
     pub seen: skein_lib::Wall,
-    pub changes: Box<[u64]>,
+    /// Change task and pull number, retained after verification closes.
+    pub changes: Box<[(u64, u64)]>,
     pub verdicts: Box<[Mark]>,
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1407,6 +1435,7 @@ pub enum Event {
         number: u64,
     },
     StepTier {
+        released: bool,
         task: u64,
         entry: u64,
     },
@@ -1499,6 +1528,10 @@ pub enum Event {
 }
 /// The connector's output to the root, including child API calls.
 #[derive(PartialEq, Eq, Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "typed rows stay inline in the output envelope; every queue slot is priced at its maximum"
+)]
 pub enum Request {
     LandingDecision {
         task: u64,

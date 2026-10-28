@@ -222,6 +222,12 @@ fn landing_pull(
 fn news_words(news: &forge::News, limit: u32) -> Box<[u8]> {
     let mut out = List::with_capacity(limit);
     match news {
+        forge::News::Cleared { tier, landing } => {
+            append(&mut out, b"forge cleared in ");
+            append(&mut out, tier);
+            append(&mut out, b" at ");
+            append(&mut out, &commit_text(landing));
+        }
         forge::News::Red { tier, landing, failing, run, log } => {
             append(&mut out, b"forge red ");
             append(&mut out, tier);
@@ -1970,6 +1976,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
                         | forge_change::State::Landing { .. }
                         | forge_change::State::Red { .. }
                         | forge_change::State::Cleared { .. }
+                        | forge_change::State::Uncleared { .. }
                         | forge_change::State::Landed { .. }
                         | forge_change::State::Ended => false,
                     };
@@ -2631,7 +2638,14 @@ pub(crate) fn start_tier(domain: &mut Domain, _env: &Env<Limits>, context: &task
         return false;
     }
     let Some(entry) = crate::fresh(&mut domain.core.counters, Family::ConnectorRow) else { return false };
-    domain.work.push(Work::Forge(forge::Event::StepTier { task: context.task, entry }));
+    domain.work.push(Work::Forge(forge::Event::StepTier {
+        released: match domain.core.tasks.task(context.task) {
+            Some(task) => task.due_reason == tasks::Why::Released,
+            None => false,
+        },
+        task: context.task,
+        entry,
+    }));
     true
 }
 
@@ -2748,6 +2762,11 @@ fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool
     true
 }
 
+#[expect(
+    clippy::manual_map,
+    clippy::match_like_matches_macro,
+    reason = "the root translates the task cancellation phase explicitly without callbacks"
+)]
 fn change_landing_words(
     domain: &Domain,
     task: u64,
@@ -2758,7 +2777,54 @@ fn change_landing_words(
     let row = domain.forge.change(task).expect("landed change");
     let repository = domain.forge.repository(row.repository);
     let configured = domain.forge.configured(row.repository.forge);
-    landing_words(merge, bound, repository, pull, configured, domain.forge.landing_verification(row.repository, *merge))
+    let verification = domain.forge.landing_verification(row.repository, *merge);
+    if let forge_change::State::Uncleared { .. } = row.change.state {
+        let phase = match domain.core.tasks.task(task) {
+            Some(row) => Some(&row.phase),
+            None => None,
+        };
+        let cancelled = match phase {
+            Some(
+                tasks::Phase::Closing(tasks::Closing { ending: tasks::Ending::Cancelled { .. }, .. })
+                | tasks::Phase::Held {
+                    was: tasks::Was::Closing(tasks::Closing { ending: tasks::Ending::Cancelled { .. }, .. }),
+                    ..
+                },
+            ) => true,
+            _ => false,
+        };
+        return uncleared_words(merge, bound, verification, cancelled);
+    }
+    landing_words(merge, bound, repository, pull, configured, verification)
+}
+
+/// Keep the qualification before optional pull details, within the task's contract.
+fn uncleared_words(
+    merge: &skein_forge::api::Commit,
+    bound: u32,
+    verification: Option<&forge::Verification>,
+    cancelled: bool,
+) -> Box<[u8]> {
+    let mut out = List::with_capacity(bound);
+    append(&mut out, &commit_text(merge));
+    if cancelled {
+        append(&mut out, b"\nlanded, uncleared: cancelled while verifying");
+    } else if let Some(verification) = verification {
+        for tier in &verification.tiers {
+            if tier.repaired.is_some() {
+                continue;
+            }
+            if let Some(forge::TierVerdict { blame: temper_engine_domain_forge_tiers::Blame::Cleared, .. }) =
+                tier.verdict
+            {
+                continue;
+            }
+            append(&mut out, b"\nlanded, uncleared: no verdict from ");
+            append(&mut out, &tier.tier);
+            append(&mut out, b" within the bound");
+        }
+    }
+    out.into_boxed()
 }
 
 /// Explain a failed review in the same decision that holds its change.

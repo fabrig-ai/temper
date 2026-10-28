@@ -10,8 +10,15 @@ const HEAD: [u8; 32] = [1; 32];
 const BASE: [u8; 32] = [2; 32];
 const NEW: [u8; 32] = [3; 32];
 const MERGE: [u8; 32] = [4; 32];
-const LIMITS: Limits =
-    Limits { repairs: 2, resolutions: 2, updates: 3, stall: Duration::from_secs(30), gates: 4, clean_heads: 4 };
+const LIMITS: Limits = Limits {
+    verification_bound: Duration::from_secs(60),
+    repairs: 2,
+    resolutions: 2,
+    updates: 3,
+    stall: Duration::from_secs(30),
+    gates: 4,
+    clean_heads: 4,
+};
 fn at(seconds: u64) -> Wall {
     Wall::from_nanos(seconds.saturating_mul(1_000_000_000))
 }
@@ -586,7 +593,7 @@ fn a_merged_change_waits_verifying() {
         c.way = way;
         let next = decide(&c, &f, &heard());
         assert_eq!(next.change.state, State::Landed { merge: MERGE });
-        assert_eq!(next.decision, Decision::None);
+        assert_eq!(next.decision, Decision::Wait { until: Some(at(61)) });
     }
 }
 
@@ -603,11 +610,11 @@ fn a_red_change_waits_red_until_cleared() {
     f.verification = Verification::Red;
     let red = decide(&change(State::Landed { merge: MERGE }), &f, &heard());
     assert_eq!(red.change.state, State::Red { merge: MERGE });
-    assert_eq!(red.decision, Decision::None);
+    assert_eq!(red.decision, Decision::Wait { until: Some(at(60)) });
     f.verification = Verification::Verifying;
     let waiting = decide(&red.change, &f, &heard());
     assert_eq!(waiting.change.state, State::Red { merge: MERGE });
-    assert_eq!(waiting.decision, Decision::None);
+    assert_eq!(waiting.decision, Decision::Wait { until: Some(at(60)) });
     f.verification = Verification::Cleared;
     let cleared = decide(&waiting.change, &f, &heard());
     assert_eq!(cleared.change.state, State::Cleared { merge: MERGE });
@@ -629,4 +636,46 @@ fn a_cancelled_verifying_change_finishes_with_its_landing() {
         let next = decide(&change(state), &f, &Heard { cancelled: true, ..heard() });
         assert_eq!(next.decision, Decision::Finish { merge: MERGE });
     }
+}
+
+fn verifying_at(state: State, verification: Verification, seconds: u64, cancelled: bool) -> crate::Stepped {
+    let mut f = facts();
+    f.verification = verification;
+    step(&change(state), &f, &Heard { cancelled, ..heard() }, at(seconds), &LIMITS)
+}
+#[test]
+fn a_verifying_change_waits_until_its_bound() {
+    let next = verifying_at(State::Landed { merge: MERGE }, Verification::Verifying, 59, false);
+    assert_eq!(next.decision, Decision::Wait { until: Some(at(60)) });
+}
+#[test]
+fn past_the_bound_a_verifying_change_ends_uncleared() {
+    for seconds in [60, 61] {
+        let next = verifying_at(State::Landed { merge: MERGE }, Verification::Verifying, seconds, false);
+        assert_eq!(next.change.state, State::Uncleared { merge: MERGE });
+        assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+    }
+}
+#[test]
+fn a_red_change_past_the_bound_ends_uncleared() {
+    let next = verifying_at(State::Red { merge: MERGE }, Verification::Red, 60, false);
+    assert_eq!(next.change.state, State::Uncleared { merge: MERGE });
+    assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+}
+#[test]
+fn cancelling_a_verifying_change_ends_it_uncleared_at_once() {
+    for state in [State::Landed { merge: MERGE }, State::Red { merge: MERGE }] {
+        let next = verifying_at(state, Verification::Verifying, 1, true);
+        assert_eq!(next.change.state, State::Uncleared { merge: MERGE });
+        assert_eq!(next.decision, Decision::Finish { merge: MERGE });
+    }
+}
+#[test]
+fn the_bound_counts_from_the_landing() {
+    let mut f = facts();
+    f.pull = Pull::Merged { commit: MERGE };
+    f.verification = Verification::Verifying;
+    let next = step(&change(State::Landing { head: HEAD }), &f, &heard(), at(100), &LIMITS);
+    assert_eq!(next.change.since, at(100));
+    assert_eq!(next.decision, Decision::Wait { until: Some(at(160)) });
 }

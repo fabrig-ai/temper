@@ -24,9 +24,13 @@ pub fn step(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits:
     stepped
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one coherent snapshot orders cancellation, drift and landing before phase decisions"
+)]
 fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: &Limits) -> Stepped {
     if let Some(merge) = landed_merge(&change.state) {
-        return verified(change.clone(), merge, facts.verification, standing.cancelled);
+        return verified(change.clone(), merge, facts.verification, standing.cancelled, now, limits);
     }
     let mut next = change.clone();
     if change.gates.len() > usize::try_from(limits.gates).expect("u32 fits usize")
@@ -41,7 +45,7 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         next.gate_failures = Box::new([]);
     }
     let held = match &change.state {
-        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } => {
+        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Uncleared { .. } => {
             unreachable!("verified states returned first")
         }
         State::Ended => return Stepped { change: next, decision: Decision::Cancel },
@@ -64,8 +68,9 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
     match facts.pull {
         Pull::Merged { commit } => {
             next.state = State::Landed { merge: commit };
+            next.since = now;
             next.released = None;
-            return verified(next, commit, facts.verification, standing.cancelled);
+            return verified(next, commit, facts.verification, standing.cancelled, now, limits);
         }
         Pull::Missing | Pull::Open { .. } | Pull::Closed => {}
     }
@@ -118,7 +123,12 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
         State::Resolving { requested, base } => resolving(next, *requested, *base, facts, standing, now, limits),
         State::Repairing { requested, why } => repairing(next, *requested, *why, facts, standing, now, limits),
         State::Landing { head } => landing(next, *head, standing, now, limits),
-        State::Landed { .. } | State::Red { .. } | State::Cleared { .. } | State::Ended | State::Held { .. } => {
+        State::Landed { .. }
+        | State::Red { .. }
+        | State::Cleared { .. }
+        | State::Uncleared { .. }
+        | State::Ended
+        | State::Held { .. } => {
             unreachable!("terminal states returned above")
         }
     }
@@ -126,7 +136,9 @@ fn advance(change: &Change, facts: &Facts, standing: &Heard, now: Wall, limits: 
 
 fn landed_merge(state: &State) -> Option<[u8; 32]> {
     match state {
-        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } => Some(*merge),
+        State::Landed { merge } | State::Red { merge } | State::Cleared { merge } | State::Uncleared { merge } => {
+            Some(*merge)
+        }
         State::Producing { .. }
         | State::Opening { .. }
         | State::Recreating { .. }
@@ -146,19 +158,34 @@ fn landed_merge(state: &State) -> Option<[u8; 32]> {
     }
 }
 
-fn verified(mut change: Change, merge: [u8; 32], verification: Verification, cancelled: bool) -> Stepped {
+fn verified(
+    mut change: Change,
+    merge: [u8; 32],
+    verification: Verification,
+    cancelled: bool,
+    now: Wall,
+    limits: &Limits,
+) -> Stepped {
+    if let State::Uncleared { .. } = change.state {
+        return Stepped { change, decision: Decision::Finish { merge } };
+    }
+    let until = Wall::from_nanos(change.since.as_nanos().saturating_add(limits.verification_bound.as_nanos()));
     let decision = match verification {
         Verification::Cleared => {
             change.state = State::Cleared { merge };
             Decision::Finish { merge }
         }
+        Verification::Red | Verification::Verifying if cancelled || now >= until => {
+            change.state = State::Uncleared { merge };
+            Decision::Finish { merge }
+        }
         Verification::Red => {
             change.state = State::Red { merge };
-            Decision::None
+            Decision::Wait { until: Some(until) }
         }
-        Verification::Verifying => Decision::None,
+        Verification::Verifying => Decision::Wait { until: Some(until) },
     };
-    Stepped { change, decision: if cancelled { Decision::Finish { merge } } else { decision } }
+    Stepped { change, decision }
 }
 
 fn closed_pull_holds(state: &State) -> bool {
@@ -179,6 +206,7 @@ fn closed_pull_holds(state: &State) -> bool {
         | State::Landed { .. }
         | State::Red { .. }
         | State::Cleared { .. }
+        | State::Uncleared { .. }
         | State::Ended
         | State::Held { .. } => true,
     }
@@ -217,6 +245,7 @@ pub fn released(change: &Change, now: Wall) -> Change {
         | State::Landed { .. }
         | State::Red { .. }
         | State::Cleared { .. }
+        | State::Uncleared { .. }
         | State::Ended => {}
     }
     next
@@ -285,6 +314,7 @@ fn release(mut change: Change, was: &State, why: Hold, facts: &Facts) -> Stepped
                 | State::Landed { .. }
                 | State::Red { .. }
                 | State::Cleared { .. }
+                | State::Uncleared { .. }
                 | State::Ended => {
                     unreachable!("held state retains a live predecessor")
                 }

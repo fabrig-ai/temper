@@ -1400,7 +1400,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
             crate::tiers::task(d, repository, tier, number, Some(task), out);
         }
         Event::TierRefused { repository, tier, number } => crate::tiers::task(d, repository, tier, number, None, out),
-        Event::StepTier { task, entry } => crate::tiers::step(d, env, task, entry, out),
+        Event::StepTier { task, entry, released } => crate::tiers::step(d, env, task, entry, released, out),
         Event::VetoTier { task, entry } => crate::tiers::veto(d, task, entry, out),
         Event::StepChange { task, entry, heard, gates, queue_repair_active, kept } => {
             step_change(d, env, StepInput { task, entry, heard, gates, queue_repair_active, kept }, out);
@@ -1672,6 +1672,10 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     read_afresh_complete(d, out);
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one settled outcome updates forge facts and the landing verification clock atomically"
+)]
 fn outcome_facts(
     d: &mut Domain,
     env: &Env<Limits>,
@@ -1753,8 +1757,43 @@ fn outcome_facts(
                     None => task,
                 };
                 let repository = kept.entry.repository;
+                let skein_forge::api::Write::Merge { number: pull, .. } = kept.entry.effect.write else {
+                    unreachable!("merged outcome belongs to a merge")
+                };
                 crate::verification::landed(d, repository, commit, change, out);
-                crate::log::landed(d, repository, commit, change, env.wall, out);
+                crate::log::landed(d, repository, commit, (change, pull), env.wall, out);
+                let since = crate::log::seen(d, repository, commit).unwrap_or(env.wall);
+                if let Some(row) = d.changes.get_mut(&change) {
+                    // A found-again outcome preserves an existing verification
+                    // clock; its log also remembers the first observation.
+                    match row.change.state {
+                        change::State::Landed { .. }
+                        | change::State::Red { .. }
+                        | change::State::Cleared { .. }
+                        | change::State::Uncleared { .. } => {}
+                        change::State::Producing { .. }
+                        | change::State::Opening { .. }
+                        | change::State::Recreating { .. }
+                        | change::State::Reopening { .. }
+                        | change::State::Checking { .. }
+                        | change::State::Gating { .. }
+                        | change::State::Queued { .. }
+                        | change::State::First { .. }
+                        | change::State::Ready { .. }
+                        | change::State::Preparing { .. }
+                        | change::State::Updating { .. }
+                        | change::State::Resolving { .. }
+                        | change::State::Repairing { .. }
+                        | change::State::Landing { .. }
+                        | change::State::Held { .. }
+                        | change::State::Ended => {
+                            row.change.state = change::State::Landed { merge: commit };
+                            row.change.since = since;
+                            let row = row.clone();
+                            emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(row) });
+                        }
+                    }
+                }
             }
             if d.landed.len() < env.limits.landings.max(env.limits.changes) || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");
@@ -2507,7 +2546,10 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         return;
     };
     match row.change.state {
-        change::State::Landed { merge } | change::State::Red { merge } | change::State::Cleared { merge } => {
+        change::State::Landed { merge }
+        | change::State::Red { merge }
+        | change::State::Cleared { merge }
+        | change::State::Uncleared { merge } => {
             step_verified(d, env, task, merge, heard, out);
             return;
         }
@@ -2622,7 +2664,13 @@ fn step_verified(
         kept: false,
         settling: None,
     };
-    let next = change::step(&row.change, &facts, &heard, env.wall, &env.limits.change_policy);
+    let next = change::step(
+        &row.change,
+        &facts,
+        &heard,
+        env.wall,
+        &crate::verification::change_limits(d, row.repository, env.limits.change_policy),
+    );
     row.change = next.change;
     d.changes.insert(task, row.clone()).expect("replaces change");
     emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Change(row) });
@@ -2862,6 +2910,7 @@ pub(crate) fn queue_ready(d: &Domain, row: &ChangeRow, l: &Limits) -> (List<chan
             | change::State::Landed { .. }
             | change::State::Red { .. }
             | change::State::Cleared { .. }
+            | change::State::Uncleared { .. }
             | change::State::Held { .. } => None,
         };
         if let Some(since) = since {
@@ -2950,7 +2999,13 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
         ..pending.heard
     };
     for _ in 0_u32..16 {
-        let stepped = change::step(&row.change, &facts, &heard, env.wall, &env.limits.change_policy);
+        let stepped = change::step(
+            &row.change,
+            &facts,
+            &heard,
+            env.wall,
+            &crate::verification::change_limits(d, row.repository, env.limits.change_policy),
+        );
         let advanced = stepped.change != row.change;
         row.change = stepped.change;
         let decision = stepped.decision;
@@ -3011,6 +3066,7 @@ fn in_queue(state: &change::State) -> bool {
         | change::State::Landed { .. }
         | change::State::Red { .. }
         | change::State::Cleared { .. }
+        | change::State::Uncleared { .. }
         | change::State::Held { .. } => false,
     }
 }
@@ -3659,6 +3715,7 @@ fn end_change(d: &mut Domain, env: &Env<Limits>, task: u64, out: &mut Queue<Requ
         change::State::Landed { merge } => change::State::Landed { merge: *merge },
         change::State::Red { merge } => change::State::Red { merge: *merge },
         change::State::Cleared { merge } => change::State::Cleared { merge: *merge },
+        change::State::Uncleared { merge } => change::State::Uncleared { merge: *merge },
         change::State::Producing { .. }
         | change::State::Opening { .. }
         | change::State::Recreating { .. }
@@ -4724,6 +4781,7 @@ pub(crate) fn classify(d: &Domain, subscription: &Subscriber, news: &News) -> Cl
                 Some(_) => Class::Kept,
             }
         }
+        News::Cleared { .. } => Class::Kept,
         News::Red { .. } | News::Ci { .. } | News::Changed { .. } => Class::Wakes,
     }
 }

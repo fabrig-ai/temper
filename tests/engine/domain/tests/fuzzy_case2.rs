@@ -3,3 +3,8 @@
 fn fuzzy_case2_4_4() {
     temper_engine_domain_world::tier_runs::case2_4_4();
 }
+
+#[test]
+fn fuzzy_case2_5_4() {
+    temper_engine_domain_world::tier_runs::case2_5_4();
+}

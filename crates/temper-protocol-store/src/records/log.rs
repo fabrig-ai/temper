@@ -9,7 +9,12 @@ pub(super) fn encode(row: &d::LandingLog) -> w::LandingLog {
     for entry in &row.landings {
         let mut changes = List::with_capacity(u32::try_from(entry.changes.len()).expect(FITS));
         for change in &entry.changes {
-            changes.push(*change).expect(FITS);
+            changes
+                .push(
+                    w::LoggedChange::new(&w::CEILINGS, w::LoggedChangeParts { task: change.0, pull: change.1 })
+                        .expect(FITS),
+                )
+                .expect(FITS);
         }
         let mut verdicts = List::with_capacity(u32::try_from(entry.verdicts.len()).expect(FITS));
         for mark in &entry.verdicts {
@@ -62,11 +67,16 @@ pub(super) fn decode(row: w::LandingLog) -> Result<d::LandingLog, Undecodable> {
             };
             marks.push(d::Mark { tier, verdict }).expect(FITS);
         }
+        let mut members = List::with_capacity(changes.len());
+        for member in changes.into_boxed() {
+            let w::LoggedChangeParts { task, pull } = member.into_parts();
+            members.push((task, pull)).expect(FITS);
+        }
         decoded
             .push(d::Logged {
                 commit,
                 seen: Wall::from_nanos(seen),
-                changes: changes.into_boxed(),
+                changes: members.into_boxed(),
                 verdicts: marks.into_boxed(),
             })
             .expect(FITS);

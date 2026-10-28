@@ -47,6 +47,7 @@ pub fn begin_adoption(d: &mut Domain, request: Token, adoption: Adoption) -> Box
 /// This change and its outbox entry identify the one opening in flight.
 pub const CHANGE: u64 = 51;
 pub const OPEN: u64 = 11;
+pub const PULL: u64 = 1; // The fixture's opened pull.
 /// The branch pair differs so each fresh read has an unambiguous subject.
 pub const HEAD: skein_forge::api::Commit = [3; 32];
 pub const BASE: skein_forge::api::Commit = [4; 32];

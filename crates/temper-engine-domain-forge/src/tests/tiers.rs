@@ -84,7 +84,7 @@ fn the_tier_task_first_creates_its_branch_at_the_tip() {
     let mut d = fixtures::tiered();
     fixtures::tier_baseline(&mut d);
     outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: CHANGE });
-    let out = outputs(&mut d, Event::StepTier { task: CHANGE, entry: OPEN });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: CHANGE, entry: OPEN });
     let entry = d.entries.get(&OPEN).expect("branch outbox");
     assert_eq!(
         entry.entry.effect.write,
@@ -113,7 +113,7 @@ fn a_veto_clears_the_uncommitted_branch_entry() {
     let mut d = fixtures::tiered();
     fixtures::tier_baseline(&mut d);
     outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: CHANGE });
-    outputs(&mut d, Event::StepTier { task: CHANGE, entry: OPEN });
+    outputs(&mut d, Event::StepTier { released: false, task: CHANGE, entry: OPEN });
     outputs(&mut d, Event::VetoTier { task: CHANGE, entry: OPEN });
     assert_eq!(fixtures::browser(&d).branch, TierBranch::Absent);
     assert!(!d.entries.contains_key(&OPEN));
@@ -186,7 +186,7 @@ fn a_made_branch_is_not_emitted_again_after_restore() {
     row.task = Some(CHANGE);
     row.branch = TierBranch::Made;
     outputs(&mut d, Event::Restore { record: Stored::Tier(row) });
-    let out = outputs(&mut d, Event::StepTier { task: CHANGE, entry: OPEN });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: CHANGE, entry: OPEN });
     let mut created = false;
     for request in &out {
         if let Request::TierEffect { entry, .. } = request
@@ -251,7 +251,7 @@ fn made_branch() -> Domain {
     d
 }
 fn dispatch(d: &mut Domain, entry: u64) -> Box<[Request]> {
-    let out = outputs(d, Event::StepTier { task: TIER_TASK, entry });
+    let out = outputs(d, Event::StepTier { released: false, task: TIER_TASK, entry });
     if let Some(saved) = d.entries.get_mut(&entry) {
         saved.entry.start = Some(skein_forge_client::Position { at: env().now, comment: 0, review: 0, review_page: 1 });
         let made = match &saved.entry.effect.write {
@@ -330,7 +330,7 @@ fn completed(d: &mut Domain, conclusion: api::Conclusion, step: Option<u32>) {
 }
 fn judged(d: &mut Domain) -> Box<[Request]> {
     dispatch(d, STATUS);
-    let out = outputs(d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let out = outputs(d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     if fixtures::browser(d).branch == (TierBranch::Pending { entry: RETRY }) {
         let mut ignored = Queue::with_capacity(max_out(&LIMITS));
         crate::tiers::outcome(
@@ -340,7 +340,7 @@ fn judged(d: &mut Domain) -> Box<[Request]> {
             &mut ignored,
         );
         d.entries.remove(&RETRY);
-        return outputs(d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+        return outputs(d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     }
     out
 }
@@ -372,7 +372,7 @@ fn tier_decision(out: &[Request]) -> Option<&TierDecision> {
 fn a_made_branch_dispatches_the_tiers_workflow_with_its_inputs() {
     const HEX_TIP: &[u8] = b"0404040404040404040404040404040404040404040404040404040404040404";
     let mut d = made_branch();
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: DISPATCH });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: DISPATCH });
     assert_eq!(
         effect_write(&out),
         &api::Write::Dispatch {
@@ -419,7 +419,7 @@ fn a_passed_run_judges_green_clears_its_range_and_wakes_its_changes() {
 fn a_lost_run_is_retried_by_a_new_dispatch() {
     let mut d = dispatched();
     lost(&mut d);
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     let api::Write::Dispatch { .. } = effect_write(&out) else { panic!("new dispatch after loss") };
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 1);
 }
@@ -427,7 +427,7 @@ fn a_lost_run_is_retried_by_a_new_dispatch() {
 fn a_failed_job_of_the_set_up_is_rerun() {
     let mut d = dispatched();
     completed(&mut d, api::Conclusion::Failure, Some(0));
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     assert_eq!(
         effect_write(&out),
         &api::Write::Rerun { attempt: api::JobAttempt { head: BASE, run: RUN_ID, job: 81, attempt: 1 } }
@@ -441,8 +441,26 @@ fn a_third_fault_holds_the_task() {
     lost(&mut d);
     dispatch(&mut d, DISPATCH);
     lost(&mut d);
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: STATUS });
-    assert_eq!(out.as_ref(), &[Request::TierDecision { task: TIER_TASK, decision: TierDecision::Held }]);
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    assert_eq!(
+        effect_write(&out),
+        &api::Write::Status {
+            commit: BASE,
+            context: b"temper/verdict/browser".as_slice().into(),
+            check: api::Check::Pending,
+            description: b"held after 3 runner faults, last: lost".as_slice().into(),
+            link: Box::new([]),
+        }
+    );
+    let mut ignored = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::outcome(
+        &mut d,
+        STATUS,
+        skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Set, found: false },
+        &mut ignored,
+    );
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
+    assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 3);
     assert!(d.landing.receipts.is_empty());
 }
@@ -494,7 +512,7 @@ fn a_passed_receipt_at_the_tip_judges_with_no_branch_or_dispatch() {
     let start = fixtures::tier_baseline(&mut d);
     outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: TIER_TASK });
     let posted = dispatch(&mut d, STATUS);
-    let done = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let done = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     assert_eq!(tier_runs(&start).len(), 1);
     let api::Write::Status { check, .. } = effect_write(&posted) else { panic!("receipt posts one status") };
     assert_eq!(*check, api::Check::Passed);
@@ -541,16 +559,18 @@ fn a_restart_mid_run_finds_its_run_again_and_judges_it() {
 #[test]
 fn a_third_refused_dispatch_holds_the_task() {
     let mut d = made_branch();
-    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: DISPATCH });
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: DISPATCH });
     let mut out: Box<[Request]> = Box::new([]);
     for (failed, next) in [(DISPATCH, RETRY), (RETRY, STATUS), (STATUS, DISPATCH)] {
         let mut ignored = Queue::with_capacity(max_out(&LIMITS));
         crate::tiers::outcome(&mut d, failed, skein_forge_client::Outcome::Failed(api::Error::Missing), &mut ignored);
         d.entries.remove(&failed);
-        out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: next });
+        out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: next });
     }
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 3);
-    assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
+    let api::Write::Status { check: api::Check::Pending, .. } = effect_write(&out) else {
+        panic!("held status is pending")
+    };
 }
 
 fn key_domain(ignored: &[&[u8]]) -> Domain {
@@ -645,7 +665,7 @@ fn a_run_waits_for_its_ranges_keys_then_dispatches_with_its_key() {
     assert_eq!(tier_runs(&second).as_slice(), &[(1, HEAD)]);
     outputs(&mut d, Event::TierTask { repository: REPO, tier: BROWSER.into(), number: 1, task: TIER_TASK });
     d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap().branch = TierBranch::Made;
-    let dispatched = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: DISPATCH });
+    let dispatched = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: DISPATCH });
     let api::Write::Dispatch { inputs, .. } = effect_write(&dispatched) else { panic!("keyed dispatch") };
     assert_eq!(inputs[1].name.as_ref(), b"temper_key");
     assert_eq!(inputs[1].value.as_ref(), fixtures::BROWSER_HEAD_HEX);
@@ -815,7 +835,7 @@ fn a_failed_runs_tests_are_read_from_its_junit_artifact() {
 fn a_failed_runs_tests_are_read_from_its_lines_artifact() {
     let mut d = red_range(&[MERGE]);
     failed_part(&mut d);
-    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     let (_, op) = fixtures::next_call(&mut d);
     assert_eq!(
         op,
@@ -835,7 +855,7 @@ fn a_failed_run_whose_artifact_is_missing_is_a_fault_and_retried() {
     d.tier_reads.insert(READ_OWNER, (REPO, BROWSER.into())).unwrap();
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::answered(&mut d, &env(), READ_OWNER, Err(api::Error::Missing), &mut out);
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     let api::Write::Dispatch { .. } = effect_write(&out) else { panic!("the fault is retried by dispatch") };
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 1);
     assert!(d.verifications.get(&(REPO, MERGE)).unwrap().tiers[0].verdict.is_none());
@@ -898,7 +918,7 @@ fn new_failures_of_one_landing_are_its_own() {
     assert_eq!(blame(&d, MERGE), &policy::Blame::Owns(failures()));
 }
 fn probe_step(d: &mut Domain, entry: u64) -> Box<[Request]> {
-    let out = outputs(d, Event::StepTier { task: TIER_TASK, entry });
+    let out = outputs(d, Event::StepTier { released: false, task: TIER_TASK, entry });
     if let api::Write::CreateBranch { .. } = effect_write(&out) {
         let mut ignored = Queue::with_capacity(max_out(&LIMITS));
         crate::tiers::outcome(
@@ -966,7 +986,7 @@ fn a_probes_branch_is_made_at_its_landing_and_released_after() {
     failed_part(&mut d);
     report(&mut d, TWO_FAILURES, false);
     dispatch(&mut d, STATUS); // post the verdict before deleting the last probe.
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 303 });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: 303 });
     assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1.0".as_slice().into() });
     let saved = &d.entries.get(&303).unwrap().entry;
     assert_eq!(d.tier_effect_kind(saved), None);
@@ -977,7 +997,7 @@ fn a_judged_runs_branch_is_released_before_its_task_is_done() {
     let mut d = dispatched();
     completed(&mut d, api::Conclusion::Success, None);
     dispatch(&mut d, STATUS);
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1".as_slice().into() });
     assert_eq!(tier_decision(&out), Some(&TierDecision::Wait));
     assert!(fixtures::browser(&d).result.as_ref().unwrap().applied);
@@ -1035,7 +1055,7 @@ fn a_failed_deletion_holds_the_task_without_undoing_its_verdict() {
     let mut d = red_range(&[MERGE]);
     red(&mut d);
     dispatch(&mut d, STATUS);
-    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 403 });
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: 403 });
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::outcome(&mut d, 403, skein_forge_client::Outcome::Failed(api::Error::Refused), &mut out);
     let mut held = false;
@@ -1058,7 +1078,7 @@ fn a_failed_last_probe_deletion_keeps_the_judged_verdict() {
     failed_part(&mut d);
     report(&mut d, TWO_FAILURES, false);
     dispatch(&mut d, STATUS);
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 403 });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: 403 });
     assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1.0".as_slice().into() });
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::outcome(&mut d, 403, skein_forge_client::Outcome::Failed(api::Error::Refused), &mut out);
@@ -1074,7 +1094,7 @@ fn a_restart_while_reading_a_failed_report_reads_it_again() {
     outputs(&mut d, Event::Restore { record: Stored::Tier(row) });
     d.tier_follows.remove(&(REPO, BROWSER.into()));
     crate::tiers::rebuild(&mut d);
-    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     let (_, op) = fixtures::next_call(&mut d);
     assert_eq!(
         op,
@@ -1137,7 +1157,7 @@ fn a_receipts_unreadable_run_does_not_hold_its_red_news() {
             },
         )
         .unwrap();
-    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     let mut read = None;
     for (owner, candidate) in &d.tier_reads {
         if *candidate == key {
@@ -1146,7 +1166,7 @@ fn a_receipts_unreadable_run_does_not_hold_its_red_news() {
     }
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::answered(&mut d, &env(), read.expect("receipt log read"), Err(api::Error::Busy), &mut out);
-    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
     let mut told = None;
     for request in &out {
         if let Request::News { task, news: News::Red { .. }, .. } = request {
@@ -1154,4 +1174,203 @@ fn a_receipts_unreadable_run_does_not_hold_its_red_news() {
         }
     }
     assert_eq!(told, Some(GOAL));
+}
+
+fn held_run(fault: temper_engine_domain_forge_landing::Fault) -> Domain {
+    let mut d = dispatched();
+    let row = d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap();
+    row.record.run.as_mut().unwrap().faults = 3; // One past the fixture's two retries.
+    row.held = Some(TierHeld {
+        fault,
+        status: TierBranch::Absent,
+        run: Some(ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() }),
+    });
+    d
+}
+#[test]
+fn a_held_run_posts_why_on_its_tip_and_names_its_tier_and_run() {
+    use temper_engine_domain_forge_landing::Fault;
+    for (fault, words) in [
+        (Fault::SetUp, b"held after 3 runner faults, last: set-up".as_slice()),
+        (Fault::Completion, b"held after 3 runner faults, last: completion".as_slice()),
+        (Fault::NoStep, b"held after 3 runner faults, last: no step".as_slice()),
+        (Fault::Cancelled, b"held after 3 runner faults, last: cancelled".as_slice()),
+        (Fault::OtherCommit, b"held after 3 runner faults, last: other commit".as_slice()),
+        (Fault::Lost, b"held after 3 runner faults, last: lost".as_slice()),
+    ] {
+        let mut d = held_run(fault);
+        let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+        assert_eq!(
+            effect_write(&out),
+            &api::Write::Status {
+                commit: BASE,
+                context: b"temper/verdict/browser".as_slice().into(),
+                check: api::Check::Pending,
+                description: words.into(),
+                link: b"https://forge/run/71".as_slice().into(),
+            }
+        );
+        assert_eq!(d.tier_effect_kind(&d.entries.get(&STATUS).unwrap().entry), Some((6, What::Repository)));
+    }
+}
+#[test]
+fn a_released_run_dispatches_again_with_its_faults_at_zero() {
+    let mut d = held_run(temper_engine_domain_forge_landing::Fault::SetUp);
+    let out = outputs(&mut d, Event::StepTier { released: true, task: TIER_TASK, entry: RETRY });
+    let api::Write::Dispatch { .. } = effect_write(&out) else { panic!("release dispatches again") };
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 0);
+    assert_eq!(fixtures::browser(&d).held, None);
+}
+#[test]
+fn a_permanently_failed_hold_status_still_holds_the_run() {
+    let mut d = held_run(temper_engine_domain_forge_landing::Fault::Completion);
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    let mut ignored = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::outcome(&mut d, STATUS, skein_forge_client::Outcome::Failed(api::Error::Forbidden), &mut ignored);
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
+    assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 3);
+}
+
+const LATE_GOAL: u64 = 301;
+fn late_result(blame: policy::Blame, goal: bool) -> Domain {
+    let mut d = red_range(&[MERGE]);
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    log::landed(&mut d, REPO, MERGE, (CHANGE, fixtures::PULL), env().wall, &mut out);
+    crate::verification::released(&mut d, CHANGE, &mut out);
+    if goal {
+        let topic = Topic::Landings { repository: REPO, branch: b"main".as_slice().into() };
+        d.subscriptions
+            .insert(
+                (LATE_GOAL, topic.clone()),
+                Subscriber {
+                    task: LATE_GOAL,
+                    number: LATE_GOAL,
+                    topic,
+                    own_change: None,
+                    goal_tasks: Some(Box::new([CHANGE])),
+                    paths: Box::new([]),
+                },
+            )
+            .unwrap();
+    }
+    let row = d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap();
+    row.branch = TierBranch::Absent;
+    let run = row.record.run.as_ref().unwrap();
+    row.result = Some(TierResult {
+        told: Box::new([]),
+        run: ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() },
+        received: false,
+        applied: true,
+        status: TierBranch::Made,
+        verdict: policy::Verdict {
+            number: run.number,
+            tip: run.tip,
+            key: run.key,
+            failing: match &blame {
+                policy::Blame::Cleared => policy::Failures::Tests(Box::new([])),
+                policy::Blame::Owns(failing) | policy::Blame::Suspect(failing) => failing.clone(),
+            },
+            landings: Box::new([blame]),
+            flakes: Box::new([]),
+        },
+    });
+    d
+}
+#[test]
+fn a_late_green_is_news_to_the_goal_of_its_ended_change() {
+    let mut d = late_result(policy::Blame::Cleared, true);
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    assert!(out.contains(&Request::News {
+        task: LATE_GOAL,
+        subscription: LATE_GOAL,
+        topic: Topic::Landings { repository: REPO, branch: b"main".as_slice().into() },
+        news: News::Cleared { tier: BROWSER.into(), landing: MERGE },
+        class: Class::Kept,
+    }));
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: RETRY });
+    let mut news = 0_u32;
+    for request in &out {
+        if let Request::News { .. } = request {
+            news = news.checked_add(1).unwrap();
+        }
+    }
+    assert_eq!(news, 0);
+}
+#[test]
+fn a_late_red_reaches_a_live_goal() {
+    let mut d = late_result(policy::Blame::Owns(failures()), true);
+    let mut row = d.tier_rows.remove(&(REPO, BROWSER.into())).unwrap();
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::verification::tell_late(&d, &mut row, b"last log line", &mut out);
+    let mut delivered = None;
+    for request in &out {
+        if let Request::News { task, class, news, .. } = request {
+            delivered = Some((*task, *class, news.clone()));
+        }
+    }
+    assert_eq!(
+        delivered,
+        Some((
+            LATE_GOAL,
+            Class::Wakes,
+            News::Red {
+                tier: BROWSER.into(),
+                landing: MERGE,
+                failing: failures(),
+                log: b"last log line".as_slice().into(),
+                run: ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() },
+            }
+        ))
+    );
+    assert!(crate::verification::late_recipient(&d, &row).is_none());
+}
+#[test]
+fn a_late_red_with_no_live_goal_stays_on_the_tiers_record() {
+    let mut d = late_result(policy::Blame::Owns(failures()), false);
+    outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    assert_eq!(
+        fixtures::browser(&d).reds.as_ref(),
+        &[TierRed {
+            landing: MERGE,
+            blame: policy::Blame::Owns(failures()),
+            run: ReceiptRun { id: RUN_ID, number: 1, url: b"https://forge/run/71".as_slice().into() },
+        }]
+    );
+}
+fn retained_reds(count: u32) -> Domain {
+    let mut d = late_result(policy::Blame::Owns(failures()), false);
+    let row = d.tier_rows.get_mut(&(REPO, BROWSER.into())).unwrap();
+    let mut reds = skein_lib::List::with_capacity(count);
+    for index in 0..count {
+        reds.push(TierRed {
+            landing: [u8::try_from(index.checked_add(100).unwrap()).unwrap(); 32],
+            blame: policy::Blame::Owns(failures()),
+            run: ReceiptRun { id: RUN_ID, number: 1, url: Box::new([]) },
+        })
+        .unwrap();
+    }
+    row.reds = reds.into_boxed();
+    d
+}
+#[test]
+fn a_full_red_record_preserves_the_current_verdict_and_holds() {
+    let capacity = LIMITS.changes * 2 + 1; // The existing tier range.
+    let mut d = retained_reds(capacity);
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    assert_eq!(tier_decision(&out), Some(&TierDecision::Held));
+    assert_eq!(fixtures::browser(&d).reds.len(), usize::try_from(capacity).unwrap());
+    assert!(fixtures::browser(&d).result.is_some());
+}
+
+#[test]
+fn a_red_record_at_its_range_bound_keeps_the_last_red() {
+    let capacity = LIMITS.changes * 2 + 1; // The existing tier range.
+    let mut d = retained_reds(capacity - 1);
+    let out = outputs(&mut d, Event::StepTier { released: false, task: TIER_TASK, entry: STATUS });
+    let Some(TierDecision::Done { .. }) = tier_decision(&out) else {
+        panic!("a red at the bound is retained and finishes")
+    };
+    assert_eq!(fixtures::browser(&d).reds.len(), usize::try_from(capacity).unwrap());
+    assert_eq!(fixtures::browser(&d).reds.last().unwrap().landing, MERGE);
 }

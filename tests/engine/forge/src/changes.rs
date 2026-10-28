@@ -137,9 +137,10 @@ pub fn reviewed_change(queued: bool, freshness: change::Freshness) -> (World, sk
 #[must_use]
 pub fn merged(state: &change::State) -> Option<skein_forge::api::Commit> {
     match state {
-        change::State::Landed { merge } | change::State::Red { merge } | change::State::Cleared { merge } => {
-            Some(*merge)
-        }
+        change::State::Landed { merge }
+        | change::State::Red { merge }
+        | change::State::Cleared { merge }
+        | change::State::Uncleared { merge } => Some(*merge),
         change::State::Producing { .. }
         | change::State::Opening { .. }
         | change::State::Recreating { .. }

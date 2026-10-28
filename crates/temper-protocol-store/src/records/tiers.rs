@@ -247,6 +247,7 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
             w::TierResult::new(
                 &w::CEILINGS,
                 w::TierResultParts {
+                    told: encode_told(&r.told),
                     verdict: w::TierJudgement::new(
                         &w::CEILINGS,
                         w::TierJudgementParts {
@@ -278,6 +279,8 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     w::TierRow::new(
         &w::CEILINGS,
         w::TierRowParts {
+            held: encode_held(row.held.as_ref()),
+            reds: encode_reds(&row.reds),
             repository: names::encode_repository(row.repository),
             tier: row.tier.clone(),
             record,
@@ -310,8 +313,20 @@ pub(super) fn encode(row: &d::TierRow) -> w::TierRow {
     reason = "one durable row translation validates the related operation states without callbacks"
 )]
 pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
-    let w::TierRowParts { repository, tier, record, pending, baseline, task, branch, probe, flight, result } =
-        row.into_parts();
+    let w::TierRowParts {
+        held,
+        reds,
+        repository,
+        tier,
+        record,
+        pending,
+        baseline,
+        task,
+        branch,
+        probe,
+        flight,
+        result,
+    } = row.into_parts();
     if tier.is_empty() {
         return Err(Undecodable);
     }
@@ -382,11 +397,12 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
     };
     let result = match result {
         Some(r) => {
-            let w::TierResultParts { verdict, run, received, status, applied } = r.into_parts();
+            let w::TierResultParts { told, verdict, run, received, status, applied } = r.into_parts();
             let w::TierJudgementParts { number, tip, key, finding } = verdict.into_parts();
             let finding = decode_finding(finding)?;
             let w::ReceiptRunParts { id, number: run_number, url } = run.into_parts();
             Some(d::TierResult {
+                told: decode_told(told),
                 verdict: p::Verdict {
                     number,
                     tip,
@@ -414,6 +430,9 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         }
         None => None,
     };
+    if held.is_some() && (run.is_none() || task.is_none()) {
+        return Err(Undecodable);
+    }
     if (baseline.is_some() && (judged.is_some() || run.is_some()))
         || (flight.is_some() && (run.is_none() || task.is_none()))
         || (result.is_some() && run.is_none())
@@ -431,6 +450,8 @@ pub(super) fn decode(row: w::TierRow) -> Result<d::TierRow, Undecodable> {
         }
     }
     Ok(d::TierRow {
+        held: decode_held(held),
+        reds: decode_reds(reds)?,
         repository: names::decode_repository(repository),
         tier,
         record: p::Record {
@@ -477,4 +498,95 @@ fn encode_receipt_run(run: &d::ReceiptRun) -> w::ReceiptRun {
 fn decode_receipt_run(run: w::ReceiptRun) -> d::ReceiptRun {
     let w::ReceiptRunParts { id, number, url } = run.into_parts();
     d::ReceiptRun { id, number, url }
+}
+
+fn encode_told(told: &[d::LateTold]) -> List<w::LateTold> {
+    let mut values = List::with_capacity(u32::try_from(told.len()).expect(FITS));
+    for mark in told {
+        values
+            .push(
+                w::LateTold::new(&w::CEILINGS, w::LateToldParts { landing: mark.landing, goal: mark.goal })
+                    .expect(FITS),
+            )
+            .expect(FITS);
+    }
+    values
+}
+fn decode_told(told: List<w::LateTold>) -> Box<[d::LateTold]> {
+    let mut values = List::with_capacity(told.len());
+    for mark in told.into_boxed() {
+        let w::LateToldParts { landing, goal } = mark.into_parts();
+        values.push(d::LateTold { landing, goal }).expect(FITS);
+    }
+    values.into_boxed()
+}
+#[expect(clippy::manual_map, reason = "record translations use explicit matches without callbacks")]
+fn encode_held(held: Option<&d::TierHeld>) -> Option<w::TierHeld> {
+    use temper_engine_domain_forge_landing::Fault;
+    let held = held?;
+    let fault = match held.fault {
+        Fault::SetUp => w::TierFault::SetUp,
+        Fault::Completion => w::TierFault::Completion,
+        Fault::NoStep => w::TierFault::NoStep,
+        Fault::Cancelled => w::TierFault::Cancelled,
+        Fault::OtherCommit => w::TierFault::OtherCommit,
+        Fault::Lost => w::TierFault::Lost,
+    };
+    let run = match &held.run {
+        Some(run) => Some(encode_receipt_run(run)),
+        None => None,
+    };
+    Some(
+        w::TierHeld::new(&w::CEILINGS, w::TierHeldParts { fault, run, status: encode_branch(held.status) })
+            .expect(FITS),
+    )
+}
+#[expect(clippy::manual_map, reason = "record translations use explicit matches without callbacks")]
+fn decode_held(held: Option<w::TierHeld>) -> Option<d::TierHeld> {
+    use temper_engine_domain_forge_landing::Fault;
+    let w::TierHeldParts { fault, run, status } = held?.into_parts();
+    let fault = match fault {
+        w::TierFault::SetUp => Fault::SetUp,
+        w::TierFault::Completion => Fault::Completion,
+        w::TierFault::NoStep => Fault::NoStep,
+        w::TierFault::Cancelled => Fault::Cancelled,
+        w::TierFault::OtherCommit => Fault::OtherCommit,
+        w::TierFault::Lost => Fault::Lost,
+    };
+    let run = match run {
+        Some(run) => Some(decode_receipt_run(run)),
+        None => None,
+    };
+    Some(d::TierHeld { fault, run, status: decode_branch(status) })
+}
+fn encode_reds(reds: &[d::TierRed]) -> List<w::TierRed> {
+    let mut values = List::with_capacity(u32::try_from(reds.len()).expect(FITS));
+    for red in reds {
+        values
+            .push(
+                w::TierRed::new(
+                    &w::CEILINGS,
+                    w::TierRedParts {
+                        landing: red.landing,
+                        blame: verification::encode_blame(&red.blame),
+                        run: encode_receipt_run(&red.run),
+                    },
+                )
+                .expect(FITS),
+            )
+            .expect(FITS);
+    }
+    values
+}
+fn decode_reds(reds: List<w::TierRed>) -> Result<Box<[d::TierRed]>, Undecodable> {
+    let mut values = List::with_capacity(reds.len());
+    for red in reds.into_boxed() {
+        let w::TierRedParts { landing, blame, run } = red.into_parts();
+        let blame = verification::decode_blame(blame)?;
+        if blame == p::Blame::Cleared {
+            return Err(Undecodable);
+        }
+        values.push(d::TierRed { landing, blame, run: decode_receipt_run(run) }).expect(FITS);
+    }
+    Ok(values.into_boxed())
 }

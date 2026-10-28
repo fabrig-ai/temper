@@ -83,14 +83,22 @@ fn red_news(
     d: &mut Domain,
     env: &Env<Limits>,
     key: &(Repository, Box<[u8]>),
-    row: &TierRow,
+    row: &mut TierRow,
     out: &mut Queue<Request>,
 ) -> bool {
     let Some(result) = &row.result else { return true };
     if !result.applied {
         return true;
     }
-    if !crate::verification::untold(d, row.repository, &row.tier, result.verdict.number) {
+    let late = crate::verification::late_recipient(d, row);
+    if let Some((_, _, policy::Blame::Cleared)) = &late {
+        crate::verification::tell_late(d, row, b"", out);
+        save(row, out);
+        wait(row.task.expect("tier task"), out);
+        out.push(Request::WakeProcedure { task: row.task.expect("tier task") });
+        return false;
+    }
+    if !crate::verification::untold(d, row.repository, &row.tier, result.verdict.number) && late.is_none() {
         // A goal may end during a log read. Keep its read owner alive until
         // the terminal arrives before cleanup drops the tier's follower.
         if d.tier_logs.contains_key(key) && reading(d, key) {
@@ -116,7 +124,12 @@ fn red_news(
         d.tier_reads.insert(owner, key.clone()).expect("tier read owner");
     } else {
         let log = Box::from(logs.words.as_slice());
-        crate::verification::tell(d, row.repository, &row.tier, result.verdict.number, &result.run, &log, out);
+        if crate::verification::untold(d, row.repository, &row.tier, result.verdict.number) {
+            crate::verification::tell(d, row.repository, &row.tier, result.verdict.number, &result.run, &log, out);
+        } else {
+            crate::verification::tell_late(d, row, &log, out);
+            save(row, out);
+        }
         wait(row.task.expect("tier task"), out);
         out.push(Request::WakeProcedure { task: row.task.expect("tier task") });
         return false;
@@ -350,6 +363,8 @@ pub(crate) fn start_due(d: &mut Domain, env: &Env<Limits>, repository: Repositor
 }
 fn new_row(repository: Repository, tier: Box<[u8]>) -> TierRow {
     TierRow {
+        held: None,
+        reds: Box::new([]),
         repository,
         tier,
         record: policy::Record {
@@ -445,6 +460,7 @@ fn start_due_for(
                 policy::Next::Dispatch(next) | policy::Next::Held(next) => row.record.run = Some(next),
                 policy::Next::Judged(verdict) => {
                     row.result = Some(crate::TierResult {
+                        told: Box::new([]),
                         verdict,
                         run: receipt.expect("an immediate judgement uses a receipt").run,
                         received: true,
@@ -919,6 +935,7 @@ pub(crate) fn rebuild(d: &mut Domain) {
         row.flight.as_mut().expect("saved follower").next = Some(skein_lib::Time::ZERO);
     }
 }
+#[expect(clippy::manual_map, reason = "the step translates optional run facts explicitly, without callbacks")]
 fn advance(d: &Domain, row: &mut TierRow, follow: &mut crate::runs::Follow, outcome: policy::Outcome) {
     let run = row.record.run.as_ref().expect("followed run");
     let project = d.repositories.get(&row.repository).expect("adopted tier").project;
@@ -940,6 +957,19 @@ fn advance(d: &Domain, row: &mut TierRow, follow: &mut crate::runs::Follow, outc
             remember(row, follow);
         }
         policy::Next::Held(run) => {
+            row.held = Some(crate::TierHeld {
+                fault: match follow.outcome {
+                    Some(landing::Verdict::Fault(fault)) => fault,
+                    Some(landing::Verdict::Running | landing::Verdict::Passed | landing::Verdict::Failed) | None => {
+                        landing::Fault::NoStep
+                    }
+                },
+                run: match &follow.run {
+                    Some(run) => Some(crate::ReceiptRun { id: run.id, number: run.number, url: run.url.clone() }),
+                    None => None,
+                },
+                status: TierBranch::Absent,
+            });
             row.record.run = Some(run);
             remember(row, follow);
             // The terminal fault is already counted; it must not be counted again.
@@ -953,8 +983,14 @@ fn advance(d: &Domain, row: &mut TierRow, follow: &mut crate::runs::Follow, outc
                     crate::ReceiptRun { id: run.id, number: run.number, url: run.url.clone() }
                 }
             };
-            row.result =
-                Some(crate::TierResult { verdict, run, received: false, status: TierBranch::Absent, applied: false });
+            row.result = Some(crate::TierResult {
+                told: Box::new([]),
+                verdict,
+                run,
+                received: false,
+                status: TierBranch::Absent,
+                applied: false,
+            });
         }
     }
 }
@@ -1006,7 +1042,7 @@ fn tier_entry(row: &TierRow, entry: u64, write: Write) -> skein_forge_client::En
         queued: false,
     }
 }
-pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, out: &mut Queue<Request>) {
+pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, released: bool, out: &mut Queue<Request>) {
     let mut found = None;
     for (key, row) in &d.tier_rows {
         if row.task == Some(task) {
@@ -1020,6 +1056,13 @@ pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, out
     };
     let was_reading = reading(d, &key);
     let mut row = d.tier_rows.remove(&key).expect("found tier");
+    if released && row.held.is_some() {
+        row.record.run.as_mut().expect("held run").faults = 0;
+        row.held = None;
+        row.flight = None;
+        d.tier_follows.remove(&key);
+        save(&row, out);
+    }
     step_row(d, env, &key, &mut row, task, entry, out);
     let repository = row.repository;
     let done = row.record.run.is_none();
@@ -1111,6 +1154,49 @@ fn cleanup(
     false
 }
 
+fn held_status(row: &TierRow) -> Write {
+    let held = row.held.as_ref().expect("held run");
+    let run = row.record.run.as_ref().expect("held range");
+    let kind: &[u8] = match held.fault {
+        landing::Fault::SetUp => b"set-up",
+        landing::Fault::Completion => b"completion",
+        landing::Fault::NoStep => b"no step",
+        landing::Fault::Cancelled => b"cancelled",
+        landing::Fault::OtherCommit => b"other commit",
+        landing::Fault::Lost => b"lost",
+    };
+    Write::Status {
+        commit: run.tip,
+        context: joined(&[b"temper/verdict/", &row.tier]),
+        check: skein_forge::api::Check::Pending,
+        description: joined(&[
+            b"held after ",
+            skein_lib::Decimal::of(u64::from(run.faults)).as_bytes(),
+            b" runner faults, last: ",
+            kind,
+        ]),
+        link: match &held.run {
+            Some(run) => run.url.clone(),
+            None => Box::new([]),
+        },
+    }
+}
+fn hold_run(d: &mut Domain, env: &Env<Limits>, row: &mut TierRow, entry: u64, out: &mut Queue<Request>) {
+    let task = row.task.expect("held tier task");
+    if row.held.is_none() {
+        row.held = Some(crate::TierHeld { fault: landing::Fault::Lost, run: None, status: TierBranch::Absent });
+    }
+    match row.held.as_ref().expect("held run").status {
+        TierBranch::Absent if d.entries.len() < env.limits.entries && !d.entries.contains_key(&entry) => {
+            let write = held_status(row);
+            row.held.as_mut().expect("held run").status = TierBranch::Pending { entry };
+            effect(d, row, entry, write, 8, 0, out);
+        }
+        TierBranch::Absent | TierBranch::Pending { .. } => wait(task, out),
+        TierBranch::Made => out.push(Request::TierDecision { task, decision: TierDecision::Held }),
+    }
+}
+
 fn probe_ready(d: &mut Domain, row: &mut TierRow, entry: u64, out: &mut Queue<Request>) -> bool {
     let run = row.record.run.as_ref().expect("probe's run");
     let task = row.task.expect("probe's task");
@@ -1148,7 +1234,7 @@ fn step_row(
     };
     let project = d.repositories.get(&row.repository).expect("adopted tier").project;
     if run.faults > d.tier_settings.get(&project).expect("settings").verdict.retries {
-        out.push(Request::TierDecision { task, decision: TierDecision::Held });
+        hold_run(d, env, row, entry, out);
         return;
     }
     if row.result.is_none()
@@ -1168,7 +1254,7 @@ fn step_row(
     }
     let run = row.record.run.as_ref().expect("checked live run");
     if run.faults > d.tier_settings.get(&project).expect("settings").verdict.retries {
-        out.push(Request::TierDecision { task, decision: TierDecision::Held });
+        hold_run(d, env, row, entry, out);
         return;
     }
     if !red_news(d, env, key, row, out) {
@@ -1335,6 +1421,10 @@ fn finish(
     row: &mut TierRow,
     out: &mut Queue<Request>,
 ) {
+    if !crate::verification::retain_reds(d, row, out) {
+        out.push(Request::TierDecision { task: row.task.expect("full red record"), decision: TierDecision::Held });
+        return;
+    }
     let result = row.result.take().expect("judgement applied and branches deleted");
     let run = row.record.run.as_ref().expect("judged range");
     let mut cleared = 0_u64;
@@ -1529,6 +1619,11 @@ pub(crate) fn veto(d: &mut Domain, task: u64, entry: u64, out: &mut Queue<Reques
         {
             result.status = TierBranch::Absent;
         }
+        if let Some(held) = &mut row.held
+            && held.status == (TierBranch::Pending { entry })
+        {
+            held.status = TierBranch::Made;
+        }
         if let Some(flight) = &mut row.flight
             && flight.entry == entry
         {
@@ -1541,6 +1636,10 @@ pub(crate) fn veto(d: &mut Domain, task: u64, entry: u64, out: &mut Queue<Reques
     out.push(Request::Erase { key: crate::Key::Entry(entry) });
 }
 #[expect(clippy::match_like_matches_macro, reason = "the foundation uses explicit matches")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one settled effect advances branch, workflow, verdict or held-status progress atomically"
+)]
 pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outcome, out: &mut Queue<Request>) {
     use skein_forge_client::{Made, Outcome};
     let mut found = None;
@@ -1556,6 +1655,10 @@ pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
             }
             || match &row.result {
                 Some(result) => result.status == (TierBranch::Pending { entry }),
+                None => false,
+            }
+            || match &row.held {
+                Some(held) => held.status == (TierBranch::Pending { entry }),
                 None => false,
             }
         {
@@ -1607,6 +1710,12 @@ pub(crate) fn outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::O
                 row.probe = None;
             }
         }
+        if let Some(held) = &mut row.held
+            && held.status == pending
+        {
+            // Both a successful post and a permanent failure end the attempt.
+            held.status = TierBranch::Made;
+        }
         if status_entry && made {
             row.result.as_mut().expect("status result").status = TierBranch::Made;
         }
@@ -1649,6 +1758,18 @@ pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
     let mut bytes = u64::try_from(row.tier.len())
         .ok()?
         .checked_add(array_bytes(row.pending.len(), size_of::<crate::TierLanding>())?)?;
+    if let Some(held) = &row.held
+        && let Some(run) = &held.run
+    {
+        bytes = bytes.checked_add(u64::try_from(run.url.len()).ok()?)?;
+    }
+    bytes = bytes.checked_add(array_bytes(row.reds.len(), size_of::<crate::TierRed>())?)?;
+    for red in &row.reds {
+        bytes = bytes.checked_add(u64::try_from(red.run.url.len()).ok()?)?;
+        if let policy::Blame::Owns(failing) | policy::Blame::Suspect(failing) = &red.blame {
+            bytes = bytes.checked_add(failures_bytes(failing)?)?;
+        }
+    }
     bytes = bytes.checked_add(failures_bytes(&row.record.failing)?)?;
     for flake in &row.record.flakes {
         bytes = bytes
@@ -1663,6 +1784,7 @@ pub(crate) fn stored_bytes(row: &TierRow) -> Option<u64> {
     }
     if let Some(result) = &row.result {
         bytes = bytes
+            .checked_add(array_bytes(result.told.len(), size_of::<crate::LateTold>())?)?
             .checked_add(failures_bytes(&result.verdict.failing)?)?
             .checked_add(tests_bytes(&result.verdict.flakes)?)?
             .checked_add(array_bytes(result.verdict.landings.len(), size_of::<policy::Blame>())?)?
@@ -1717,12 +1839,25 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     let landings = u64::from(l.changes.checked_mul(2)?.checked_add(1)?);
     let tests = u64::from(l.failing_tests)
         .checked_mul(u64::from(l.test_id_bytes).checked_add(u64::try_from(size_of::<Box<[u8]>>()).ok()?)?)?;
+    // A full retained red record and its admission scratch coexist. Each red
+    // retains at most failing_tests ids and a bounded forge run URL.
+    let retained = landings
+        .checked_mul(u64::try_from(size_of::<crate::TierRed>()).ok()?.checked_add(tests)?.checked_add(2048)?)?
+        .checked_mul(2)?;
+    let recipients = landings
+        .checked_mul(u64::from(l.subscriptions))?
+        .checked_mul(u64::try_from(size_of::<crate::LateTold>()).ok()?)?
+        .checked_mul(2)?;
     let payload = u64::try_from(crate::CHECK_NAME_BYTES)
         .ok()?
         .checked_add(landings.checked_mul(
             u64::try_from(size_of::<policy::Landing>().checked_add(size_of::<crate::TierLanding>())?).ok()?,
         )?)?
         .checked_add(tests.checked_mul(5)?)?
+        .checked_add(retained)?
+        .checked_add(recipients)?
+        .checked_add(u64::try_from(size_of::<crate::LateTold>()).ok()?)?
+        .checked_add(2048)?
         .checked_add(u64::from(l.failing_tests).checked_mul(u64::try_from(size_of::<policy::Flake>()).ok()?)?)?
         .checked_add(landings.checked_mul(u64::try_from(size_of::<policy::Blame>()).ok()?.checked_add(tests)?)?)?;
     // Two landing inputs and the bounded selection coexist in each dispatch.
@@ -1842,6 +1977,14 @@ impl Domain {
             }
             Write::Rerun { attempt } if attempt.head == commit && row.flight.as_ref()?.entry == entry.number => {
                 Some((17, What::Branch(path_parts(&current))))
+            }
+            Write::Status { .. }
+                if match &row.held {
+                    Some(held) => held.status == pending,
+                    None => false,
+                } && entry.effect.write == held_status(row) =>
+            {
+                Some((6, What::Repository))
             }
             Write::Status { .. }
                 if row.result.as_ref()?.status == pending

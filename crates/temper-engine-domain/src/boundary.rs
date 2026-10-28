@@ -687,6 +687,10 @@ pub enum PartyRequest {
 }
 
 #[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "the root prices and carries typed child events inline in its bounded work queue"
+)]
 pub(crate) enum Work {
     SwitchChecked,
     AdoptRestored,

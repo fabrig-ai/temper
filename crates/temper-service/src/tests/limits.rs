@@ -550,5 +550,5 @@ fn the_log_fits_the_small_profiles_existing_application_row() {
     let bounds = temper_protocol_store::bounds(&forge, words).expect("small store bounds");
     let log = temper_protocol_store::v10::LandingLog::worst_case_bytes(bounds.limits()).expect("bounded log");
     assert!(log + 3 <= u64::from(application.value), "version and Value tag frame the log");
-    assert_eq!(log, 3146);
+    assert_eq!(log, 4170);
 }

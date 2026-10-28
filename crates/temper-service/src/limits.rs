@@ -222,6 +222,7 @@ const FORGE: forge::Limits = forge::Limits {
         interval: Duration::from_secs(5),
     },
     change_policy: temper_engine_domain_forge_change::Limits {
+        verification_bound: Duration::from_secs(7200),
         // Repair attempts, from the engine forge world fixture.
         repairs: 3,
         // Resolution attempts, from the engine forge world fixture.

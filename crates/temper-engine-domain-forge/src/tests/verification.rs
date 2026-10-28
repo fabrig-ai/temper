@@ -45,7 +45,7 @@ fn a_landed_change_steps_with_no_read() {
     let requests = fixtures::verification_step(&mut d);
     assert!(requests.contains(&Request::ChangeDecision {
         task: CHANGE,
-        decision: change::Decision::None,
+        decision: change::Decision::Wait { until: Some(Wall::from_nanos(env().wall.as_nanos() + 7_200_000_000_000)) },
         entry: None,
         evidence: None
     }));

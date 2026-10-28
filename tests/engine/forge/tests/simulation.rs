@@ -930,7 +930,14 @@ fn a_change_landed_where_its_repository_has_a_tier_lives_verifying() {
         }
     }
     let merge = merge.expect("the merge is seen");
-    assert_eq!(change_step(&mut world, LAST_ENTRY, change::Status::Passed, Box::new([])), change::Decision::None);
+    let Some(top::Stored::Change(row)) = world.stored().get(&top::Key::Change(CHANGE)) else {
+        panic!("the merged change remains stored while verifying");
+    };
+    let until = Wall::from_nanos(row.change.since.as_nanos() + skein_lib::Duration::from_secs(7200).as_nanos());
+    assert_eq!(
+        change_step(&mut world, LAST_ENTRY, change::Status::Passed, Box::new([])),
+        change::Decision::Wait { until: Some(until) }
+    );
     let expected = top::Verification {
         repairs: None,
         repository: REPO,
@@ -2303,7 +2310,7 @@ fn tier_step(world: &mut World, task: u64, entry: u64) -> bool {
 }
 fn tier_step_news(world: &mut World, task: u64, entry: u64, news: &mut Vec<(u64, top::News)>) -> bool {
     world.take_seen();
-    world.event(top::Event::StepTier { task, entry });
+    world.event(top::Event::StepTier { released: false, task, entry });
     world.run_for(1);
     let requests = world.take_seen();
     let done = requests
@@ -2475,7 +2482,7 @@ fn a_documentation_landing_every_tier_ignores_clears_at_once() {
     let mut dispatched = 0;
     // Receipt judgement needs the same status admission as a completed run.
     for at in 0..TIER_STEPS {
-        world.event(top::Event::StepTier { task: TIER_RANGE, entry: 1400 + at });
+        world.event(top::Event::StepTier { released: false, task: TIER_RANGE, entry: 1400 + at });
         world.run_for(1);
         let mut done = false;
         for request in world.take_seen() {

@@ -72,6 +72,7 @@ pub const LIMITS: forge::Limits = forge::Limits {
         interval: Duration::from_secs(5),
     },
     change_policy: temper_engine_domain_forge_change::Limits {
+        verification_bound: Duration::from_secs(7200),
         repairs: 3,
         resolutions: 3,
         updates: 3,

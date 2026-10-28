@@ -3344,3 +3344,6 @@ fn a_tier_run_is_made_while_the_period_is_reserved_whole() {
         Record::Forge { row } if matches!(row.as_ref(), forge_top::Stored::Tier(row)
             if row.record.judged.is_some() && row.record.run.is_none()))));
 }
+
+#[path = "forge_routes/bound.rs"]
+mod bound;

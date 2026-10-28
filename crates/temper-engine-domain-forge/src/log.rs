@@ -46,21 +46,31 @@ pub(crate) fn landed(
     d: &mut Domain,
     repository: Repository,
     commit: Commit,
-    change: u64,
+    (change, pull): (u64, u64),
     seen: Wall,
     out: &mut Queue<Request>,
 ) {
     moved(d, repository, commit, seen, out);
     let Some(row) = d.landing_logs.get_mut(&repository) else { return };
     for entry in &mut row.landings {
-        if entry.commit != commit || entry.changes.contains(&change) {
+        if entry.commit != commit {
+            continue;
+        }
+        let mut known = false;
+        for (task, _) in &entry.changes {
+            if *task == change {
+                known = true;
+                break;
+            }
+        }
+        if known {
             continue;
         }
         let mut changes = List::with_capacity(d.tier_config_limits.changes);
         for saved in &entry.changes {
             changes.push(*saved).expect("admitted changes");
         }
-        changes.push(change).expect("changes bounded as Verification.changes");
+        changes.push((change, pull)).expect("changes bounded as Verification.changes");
         entry.changes = changes.into_boxed();
         save(row.clone(), out);
         return;
@@ -145,11 +155,20 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
     )?;
     let entry = u64::try_from(size_of::<Logged>())
         .ok()?
-        .checked_add(u64::from(l.changes).checked_mul(8)?)?
+        .checked_add(u64::from(l.changes).checked_mul(16)?)?
         .checked_add(marks)?;
     // A replacement ring is built beside the retained row before insertion;
     // emitted Save copies are charged by the root's output envelope.
     let rings =
         u64::from(l.repositories).checked_add(1)?.checked_mul(u64::from(l.landings_kept))?.checked_mul(entry)?;
     Map::<Repository, LandingLog>::worst_case(l.repositories)?.checked_add(rings)
+}
+
+pub(crate) fn seen(d: &Domain, repository: Repository, commit: Commit) -> Option<Wall> {
+    for entry in &d.landing_logs.get(&repository)?.landings {
+        if entry.commit == commit {
+            return Some(entry.seen);
+        }
+    }
+    None
 }

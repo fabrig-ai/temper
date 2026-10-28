@@ -190,6 +190,8 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         receipt_name_name: 32,
         receipt_run_url: 2048,
         tier_flight_pending: forge.client.rows,
+        tier_row_reds: forge.changes.checked_mul(2)?.checked_add(1)?,
+        tier_result_told: forge.changes.checked_mul(2)?.checked_add(1)?.checked_mul(forge.subscriptions)?,
         tier_row_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         tier_row_pending: forge.changes.checked_mul(2)?.checked_add(1)?,
         tier_run_landings: forge.changes.checked_mul(2)?.checked_add(1)?,

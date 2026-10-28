@@ -34,6 +34,9 @@ fn tier(world: &World) -> &forge::TierRow {
     row
 }
 pub fn park_owner(world: &mut World, run: &engine::Assignment) {
+    answer_owner(world, run, tasks::End::Parked);
+}
+fn answer_owner(world: &mut World, run: &engine::Assignment, end: tasks::End) {
     let read = run.messages.iter().map(|word| word.number).max();
     if read.is_some() {
         world.send(protocol::turn(
@@ -49,7 +52,7 @@ pub fn park_owner(world: &mut World, run: &engine::Assignment) {
             world.tick();
         }
     }
-    let mut event = world.protocol.answer(OWNER, run.task, run.attempt, 0, tasks::End::Parked, engine::Parts::none());
+    let mut event = world.protocol.answer(OWNER, run.task, run.attempt, 0, end, engine::Parts::none());
     let engine::Event::Worker(engine::WorkerInput::Link {
         link: engine::Link::Up { up: host::LinkUp::Answer { answer, .. }, .. },
         ..
@@ -211,4 +214,254 @@ pub fn case2_4_4() {
                 .is_err()
         );
     }
+}
+
+/// The durable cuts T9 grows: time, member pulls, held progress, release and red.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BoundCut {
+    Waiting,
+    Uncleared,
+    LogPulls,
+    HeldStatus,
+    Released,
+    Red,
+}
+const BOUND: skein_lib::Duration = skein_lib::Duration::from_secs(360);
+const RUN_TICKS: u32 = 1800; // The tier workflow's 90 s plus polling and effect admission.
+const BOUND_TICKS: u32 = 7000; // 360 s bound + two 90 s runs and polling, at 100 ms/tick.
+const BOUND_RESULT_BYTES: u32 = 100; // SHA-1 (40), newline (1), and the 59-byte uncleared reason.
+const BOUND_FAILURE: &[u8] = b"suite.runner_returned\n";
+fn change_row(world: &World, task: u64) -> &forge::ChangeRow {
+    let Some(Record::Forge { row }) = world.store.rows.get(&Key::Forge(forge::Key::Change(task))) else {
+        panic!("retained change")
+    };
+    let forge::Stored::Change(row) = row.as_ref() else { panic!("change row") };
+    row
+}
+fn live(world: &World, task: u64) -> Option<&tasks::TaskRecord> {
+    match world.store.rows.get(&Key::Core(jig_domain_core::Key::Tasks(tasks::Key::Live(task)))) {
+        Some(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row)))) => Some(row),
+        _ => None,
+    }
+}
+fn bound_cold(world: &mut World, task: u64, cut: BoundCut) {
+    let since = change_row(world, task).change.since;
+    world.store.crash(71); // The root world's fixed deployment seed.
+    world.restart(true, true);
+    for _ in 0..SETTLE_TICKS {
+        world.tick();
+        assert!(
+            world.root.restart_failure().is_none(),
+            "cold {cut:?}: {:?}, {:?}",
+            world.root.restart_failure(),
+            world.root.forge_restore_failure()
+        );
+        if world.root.ready() {
+            assert_eq!(change_row(world, task).change.since, since, "cold {cut:?} keeps the landing clock");
+            return;
+        }
+    }
+    panic!("cold {cut:?} opens: {:?}", world.root.restart_step());
+}
+/// Runner faults hold the tier; a bounded change ends and its goal hears it.
+/// The goal finishes before the runner returns, so its late red awaits findings.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one bounded story follows the runner outage, result, person's release and late red"
+)]
+pub fn bound_story(cut: Option<BoundCut>) {
+    let world = World::configured_limits(
+        true,
+        true,
+        false,
+        1000,
+        Gate::default(),
+        None,
+        StoryLimits {
+            tier: true,
+            tier_reports: true,
+            tier_bound: Some(BOUND),
+            change_words: Some(BOUND_RESULT_BYTES),
+            ..StoryLimits::default()
+        },
+    );
+    let (mut world, owner, producer, branch) =
+        change_world_in(world, Change { no_ci: false, owner_gate: false, tracked: true });
+    let task = change(&world, &producer);
+    let mut parked = BTreeSet::from([owner.attempt]);
+    park_owner(&mut world, &owner);
+    crate::forge_routes::produce_path_content(&mut world, &producer, &branch, b"failures", BOUND_FAILURE);
+    for _ in 0..SETTLE_TICKS {
+        owner_tick(&mut world, &owner, task, &mut parked);
+        if world.merges == 1
+            && matches!(change_row(&world, task).change.state, temper_engine_domain_forge_change::State::Landed { .. })
+            && world.store.pending.is_empty()
+        {
+            break;
+        }
+    }
+    assert_eq!(world.merges, 1);
+    let temper_engine_domain_forge_change::State::Landed { merge } = change_row(&world, task).change.state else {
+        panic!("verifying: {:?}", change_row(&world, task).change.state)
+    };
+    let pull = change_row(&world, task).pull.expect("landed pull");
+    let Some(Record::Forge { row }) = world.store.rows.get(&Key::Forge(forge::Key::LandingLog(REPO))) else {
+        panic!("log")
+    };
+    let forge::Stored::LandingLog(log) = row.as_ref() else { panic!("landing log") };
+    assert!(log.landings.iter().any(|entry| entry.commit == merge && entry.changes.contains(&(task, pull))));
+    if matches!(cut, Some(BoundCut::Waiting | BoundCut::LogPulls)) {
+        bound_cold(&mut world, task, cut.expect("story state exists"));
+    }
+    // Let the original baseline finish green before faulting the runner.
+    for _ in 0..RUN_TICKS {
+        owner_tick(&mut world, &owner, task, &mut parked);
+        if tier(&world).record.sequence >= 1 {
+            break;
+        }
+    }
+    assert_eq!(tier(&world).record.sequence, 1, "baseline: {:?}", tier(&world));
+    world.fake_env.limits.lost = ALL_FAULTS;
+    if cut == Some(BoundCut::HeldStatus) {
+        world.hold_write_answers = Some(crate::forge_routes::HoldWrite::TierHold);
+    }
+    let mut held_cut = false;
+    for _ in 0..BOUND_TICKS {
+        owner_tick(&mut world, &owner, task, &mut parked);
+        let row = tier(&world);
+        if cut == Some(BoundCut::HeldStatus)
+            && !held_cut
+            && matches!(row.held.as_ref().map(|held| held.status), Some(forge::TierBranch::Pending { .. }))
+            && world.store.pending.is_empty()
+        {
+            bound_cold(&mut world, task, BoundCut::HeldStatus);
+            held_cut = true;
+        }
+        let row = tier(&world);
+        if let Some(tier_task) = row.task
+            && matches!(
+                live(&world, tier_task).map(|task| &task.phase),
+                Some(tasks::Phase::Held { why: tasks::Hold::Effects, .. })
+            )
+        {
+            break;
+        }
+    }
+    assert!(cut != Some(BoundCut::HeldStatus) || held_cut);
+    let tier_task = tier(&world).task.expect("held task");
+    assert!(
+        matches!(
+            live(&world, tier_task).map(|task| &task.phase),
+            Some(tasks::Phase::Held { why: tasks::Hold::Effects, .. })
+        ),
+        "tier held: {:?}",
+        tier(&world)
+    );
+    let words = &live(&world, tier_task).expect("story state exists").spec.words;
+    assert_eq!(words.as_ref(), b"Tier browser run 2");
+    assert_eq!(tier(&world).record.run.as_ref().expect("story state exists").faults, 3);
+    for _ in 0..BOUND_TICKS {
+        owner_tick(&mut world, &owner, task, &mut parked);
+        if ended(&world, task) && world.store.pending.is_empty() {
+            break;
+        }
+    }
+    assert!(ended(&world, task));
+    assert!(matches!(
+        change_row(&world, task).change.state,
+        temper_engine_domain_forge_change::State::Uncleared { .. }
+    ));
+    if cut == Some(BoundCut::Uncleared) {
+        bound_cold(&mut world, task, BoundCut::Uncleared);
+    }
+    let mut result_run = None;
+    for _ in 0..SETTLE_TICKS {
+        owner_tick(&mut world, &owner, task, &mut parked);
+        result_run = world
+            .assigned
+            .iter()
+            .rev()
+            .find(|run| {
+                run.task == owner.task
+                    && run.messages.iter().any(|word| {
+                        word.from == tasks::Party::Task(task) && matches!(word.kind, tasks::MessageKind::Result(_))
+                    })
+            })
+            .cloned();
+        if result_run.is_some() {
+            break;
+        }
+    }
+    let result_run = result_run.expect("goal hears its change's result");
+    assert!(result_run.messages.iter().any(|word| {
+        word.words
+            .windows(b"landed, uncleared: no verdict from browser within the bound".len())
+            .any(|words| words == b"landed, uncleared: no verdict from browser within the bound")
+    }));
+    answer_owner(
+        &mut world,
+        &result_run,
+        tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: b"landed and uncleared".as_slice().into() },
+            cancel_delegates: false,
+        },
+    );
+    for _ in 0..SETTLE_TICKS {
+        world.tick();
+        if live(&world, owner.task).is_none() && world.store.pending.is_empty() {
+            break;
+        }
+    }
+    assert!(live(&world, owner.task).is_none(), "goal ends after its result");
+    world.fake_env.limits.lost = 0;
+    world.signed_in = None; // The world's sign-in lasts 60 s; the outage lasted longer.
+    world.sign_in();
+    let revision = live(&world, tier_task).expect("held tier task").revisions.hold;
+    world.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: skein_lib::ReplyTo::new(Token::new(950)),
+        sign_in: world.signed_in.expect("signed-in person"),
+        key: [95; 16],
+        ask: jig_domain_people::Ask::Release { project: 1, task: tier_task, revision, again: None },
+    }));
+    for _ in 0..SETTLE_TICKS {
+        world.tick();
+        if tier(&world).held.is_none()
+            && tier(&world).record.run.as_ref().is_some_and(|run| run.faults == 0)
+            && world.store.pending.is_empty()
+        {
+            break;
+        }
+    }
+    assert!(
+        tier(&world).held.is_none(),
+        "person releases: {:?}; core {:?}",
+        tier(&world),
+        live(&world, tier_task).map(|task| (&task.phase, task.revisions.hold, task.due_reason, &task.escalation))
+    );
+    assert_eq!(tier(&world).record.run.as_ref().expect("story state exists").faults, 0);
+    if cut == Some(BoundCut::Released) {
+        bound_cold(&mut world, task, BoundCut::Released);
+    }
+    for _ in 0..BOUND_TICKS {
+        world.tick();
+        if !tier(&world).reds.is_empty() && world.store.pending.is_empty() {
+            break;
+        }
+    }
+    assert_eq!(tier(&world).reds.len(), 1, "late red retained: {:?}", tier(&world));
+    assert_eq!(tier(&world).reds[0].landing, merge);
+    assert_eq!(
+        tier(&world).reds[0].blame,
+        temper_engine_domain_forge_tiers::Blame::Owns(temper_engine_domain_forge_tiers::Failures::Tests(Box::new([
+            b"suite.runner_returned".as_slice().into()
+        ])))
+    );
+    if cut == Some(BoundCut::Red) {
+        bound_cold(&mut world, task, BoundCut::Red);
+        assert_eq!(tier(&world).reds[0].landing, merge);
+    }
+}
+pub fn case2_5_4() {
+    bound_story(None);
 }

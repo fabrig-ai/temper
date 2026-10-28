@@ -417,3 +417,157 @@ impl Domain {
         self.verifications.get(&(repository, commit))
     }
 }
+
+/// Supply the project's verification clock with the change's other limits.
+pub(crate) fn change_limits(d: &Domain, repository: Repository, mut limits: change::Limits) -> change::Limits {
+    if let Some(adopted) = d.repositories.get(&repository)
+        && let Some(settings) = d.tier_settings.get(&adopted.project)
+    {
+        limits.verification_bound = settings.bound;
+    }
+    limits
+}
+
+/// A late verdict uses the log after the last verification member closes.
+/// One recipient at a time keeps news and its durable acknowledgement atomic.
+pub(crate) fn late_recipient(d: &Domain, row: &crate::TierRow) -> Option<(Commit, crate::Subscriber, Blame)> {
+    let result = row.result.as_ref()?;
+    let range = &row.record.run.as_ref()?.landings;
+    let history = d.landing_logs.get(&row.repository)?;
+    for (landing, blame) in range.iter().zip(&result.verdict.landings) {
+        if d.verifications.contains_key(&(row.repository, landing.commit)) {
+            continue;
+        }
+        for entry in &history.landings {
+            if entry.commit != landing.commit {
+                continue;
+            }
+            for (_, subscriber) in &d.subscriptions {
+                if !hears_members(subscriber, row.repository, &entry.changes) {
+                    continue;
+                }
+                let mut told = false;
+                for mark in &result.told {
+                    if mark.landing == landing.commit && mark.goal == subscriber.task {
+                        told = true;
+                    }
+                }
+                if !told {
+                    return Some((landing.commit, subscriber.clone(), blame.clone()));
+                }
+            }
+        }
+    }
+    None
+}
+fn hears_members(subscriber: &crate::Subscriber, repository: Repository, members: &[(u64, u64)]) -> bool {
+    if let crate::Topic::Landings { repository: subscribed, .. } = subscriber.topic {
+        if subscribed != repository {
+            return false;
+        }
+    } else {
+        return false;
+    }
+    let Some(tasks) = &subscriber.goal_tasks else {
+        return false;
+    };
+    for (task, _) in members {
+        if tasks.contains(task) {
+            return true;
+        }
+    }
+    false
+}
+pub(crate) fn tell_late(d: &Domain, row: &mut crate::TierRow, log: &[u8], out: &mut Queue<Request>) {
+    let Some((landing, subscriber, blame)) = late_recipient(d, row) else {
+        return;
+    };
+    let result = row.result.as_mut().expect("late result");
+    let (news, class) = match blame {
+        Blame::Cleared => (crate::News::Cleared { tier: row.tier.clone(), landing }, crate::Class::Kept),
+        Blame::Owns(failing) | Blame::Suspect(failing) => (
+            crate::News::Red { tier: row.tier.clone(), landing, failing, run: result.run.clone(), log: Box::from(log) },
+            crate::Class::Wakes,
+        ),
+    };
+    out.push(Request::News {
+        task: subscriber.task,
+        subscription: subscriber.number,
+        topic: subscriber.topic,
+        news,
+        class,
+    });
+    let mut told = List::with_capacity(
+        u32::try_from(result.told.len()).expect("bounded recipients").checked_add(1).expect("one recipient"),
+    );
+    for mark in &result.told {
+        let mut live = false;
+        for (_, subscriber) in &d.subscriptions {
+            if subscriber.task == mark.goal {
+                live = true;
+            }
+        }
+        if live {
+            told.push(*mark).expect("existing recipients");
+        }
+    }
+    told.push(crate::LateTold { landing, goal: subscriber.task }).expect("new recipient");
+    result.told = told.into_boxed();
+}
+fn live_goal(d: &Domain, repository: Repository, landing: Commit) -> bool {
+    if let Some(verification) = d.verifications.get(&(repository, landing)) {
+        for (_, subscriber) in &d.subscriptions {
+            if hears(subscriber, verification) {
+                return true;
+            }
+        }
+    }
+    if let Some(history) = d.landing_logs.get(&repository) {
+        for entry in &history.landings {
+            if entry.commit == landing {
+                for (_, subscriber) in &d.subscriptions {
+                    if hears_members(subscriber, repository, &entry.changes) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+/// The existing range bounds stored reds; a full record preserves the current
+/// applied verdict and holds its task until findings can consume records.
+pub(crate) fn retain_reds(d: &Domain, row: &mut crate::TierRow, out: &mut Queue<Request>) -> bool {
+    let result = row.result.as_ref().expect("judged range");
+    let run = row.record.run.as_ref().expect("retained range");
+    let capacity = d.tier_config_limits.changes.checked_mul(2).expect("range").checked_add(1).expect("range tip");
+    let mut retained = List::with_capacity(capacity);
+    for red in &row.reds {
+        retained.push(red.clone()).expect("retained reds bound");
+    }
+    for (landing, blame) in run.landings.iter().zip(&result.verdict.landings) {
+        if !red(blame) || live_goal(d, row.repository, landing.commit) {
+            continue;
+        }
+        let mut duplicate = false;
+        for red in &row.reds {
+            if red.landing == landing.commit {
+                duplicate = true;
+            }
+        }
+        if duplicate {
+            continue;
+        }
+        if retained
+            .push(crate::TierRed { landing: landing.commit, blame: blame.clone(), run: result.run.clone() })
+            .is_err()
+        {
+            return false;
+        }
+    }
+    if row.reds.as_ref() != retained.as_slice() {
+        row.reds = retained.into_boxed();
+        out.push(Request::Save { read_afresh: None, release: None, record: Stored::Tier(row.clone()) });
+    }
+    true
+}

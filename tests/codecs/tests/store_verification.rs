@@ -37,6 +37,7 @@ fn red_and_cleared_changes_have_v10_goldens_and_round_trip() {
     for (name, state) in [
         ("change-red.bin", State::Red { merge: verification::COMMIT }),
         ("change-cleared.bin", State::Cleared { merge: verification::COMMIT }),
+        ("change-uncleared.bin", State::Uncleared { merge: verification::COMMIT }),
     ] {
         golden(name, Stored::Change(verification::change_row(state)));
     }

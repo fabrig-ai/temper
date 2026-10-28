@@ -1116,7 +1116,7 @@ fn landing_logs_round_trip_changes_times_and_every_verdict() {
             d::Logged {
                 commit: [1; 32],
                 seen: skein_lib::Wall::from_nanos(123),
-                changes: Box::new([51]),
+                changes: Box::new([(51, 7)]),
                 verdicts: Box::new([
                     d::Mark { tier: b"browser".as_slice().into(), verdict: d::Verdict::Verifying },
                     d::Mark { tier: b"fuzzy".as_slice().into(), verdict: d::Verdict::Cleared },
