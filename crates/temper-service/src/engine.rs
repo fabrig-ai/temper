@@ -106,8 +106,7 @@ impl Engine {
         })
     }
     pub(crate) fn room(&self) -> bool {
-        self.store.room()
-            && self.workers.batch_room(self.max_out)
+        self.workers.batch_room(self.max_out)
             && self.clients.room(self.max_out)
             && self.clients.commit_room()
             && self.events.room() >= self.max_out.checked_mul(route_out()).expect("translated root outputs")
@@ -158,7 +157,7 @@ impl Engine {
         let effects = self.store.component.mark_durable() || self.end.is_some();
         let components = (self.store.opened || self.end.is_some()) && self.clients.work_pending(now)
             || effects && self.setup.work_pending(now)
-            || effects && self.setup.lifecycle_ready(self) && self.store.room() && self.events.room() >= 4
+            || effects && self.setup.lifecycle_ready(self) && self.events.room() >= 4
             || self.store.work_pending(now)
             || effects && self.forge.work_pending(now)
             || (self.store.opened || self.end.is_some()) && self.workers.work_pending(now)
@@ -408,7 +407,7 @@ pub(crate) fn answer(engine: &mut Engine) {
         return;
     }
     for _ in 0..engine.store.above.len() {
-        if engine.store.routed.room() < jig_protocol_store::MAX_OUT_DOWN || engine.notes.room() == 0 {
+        if engine.notes.room() == 0 {
             break;
         }
         let event = engine.store.above.pop().expect("store terminals");

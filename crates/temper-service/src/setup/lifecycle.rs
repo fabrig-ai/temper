@@ -716,7 +716,7 @@ pub(super) fn advance(engine: &mut crate::engine::Engine) {
         if crate::forge::ended(engine, *forge) {
             continue;
         }
-        if !engine.store.room() || engine.events.room() < 4 || engine.notes.room() == 0 {
+        if engine.events.room() < 4 || engine.notes.room() == 0 {
             continue;
         }
         if file_answer(engine, *forge) || start_pending(engine, *forge) {
