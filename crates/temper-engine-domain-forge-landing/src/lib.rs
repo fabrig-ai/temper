@@ -20,7 +20,7 @@ pub use boundary::{
     CHECK_NAME_BYTES, Commit, Decision, Facts, Flight, Gate, GateFacts, GateProof, Hold, Key, Landing, Limits, Member,
     MemberFacts, Phase, Posted, Posting, Project, Proof, Repository, Status, Stepped, WORKFLOW_BYTES,
 };
-pub use domain::step;
+pub use domain::{join, leave, step};
 pub use key::{Entry, EntryKind, KeyLimits, Keyed, Tree, definition, key};
 pub use turn::{Proved, first};
 pub use verdict::{Conclusion, Fault, Job, Run, RunState, Verdict, verdict};

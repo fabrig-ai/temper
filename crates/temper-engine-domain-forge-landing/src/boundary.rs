@@ -117,6 +117,7 @@ pub struct Landing {
     pub task: u64,
     pub project: u32,
     pub phase: Phase,
+    /// Upstream first: a member follows every member it depends on (domain/landing.md, 4.1, 8).
     pub members: Box<[Member]>,
     /// Candidates' preparation, counted from 1.
     pub preparation: u16,

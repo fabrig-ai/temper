@@ -1,10 +1,57 @@
 //! One level-triggered decision (domain/landing.md, 3–10).
 use crate::{
-    Decision, Facts, Flight, GateFacts, GateProof, Hold, Landing, Limits, Phase, Posted, Posting, Project, Proof,
-    Status, Stepped, Verdict,
+    Decision, Facts, Flight, GateFacts, GateProof, Hold, Landing, Limits, Member, Phase, Posted, Posting, Project,
+    Proof, Status, Stepped, Verdict,
 };
 use alloc::boxed::Box;
 use skein_lib::{List, Wall};
+
+/// Add a member after its upstreams while the landing can still grow
+/// (domain/landing.md, 4.1–4.2). Existing candidates and proofs remain valid.
+#[must_use]
+pub fn join(mut landing: Landing, member: Member, after: &[u64]) -> Option<Landing> {
+    match landing.phase {
+        Phase::Waiting | Phase::Preparing | Phase::Proving | Phase::Proved { .. } => {}
+        Phase::Turn { .. } | Phase::Landed | Phase::Cancelled | Phase::Held { .. } => return None,
+    }
+    for prior in &landing.members {
+        if prior.change == member.change || prior.repository == member.repository {
+            return None;
+        }
+    }
+    let mut position = 0;
+    for (index, prior) in landing.members.iter().enumerate() {
+        if after.contains(&prior.change) {
+            position = index + 1;
+        }
+    }
+    let mut members = List::with_capacity(u32::try_from(landing.members.len() + 1).expect("bounded members"));
+    for prior in landing.members.get(..position).expect("member position") {
+        members.push(prior.clone()).expect("member room");
+    }
+    members.push(member).expect("new member room");
+    for prior in landing.members.get(position..).expect("member position") {
+        members.push(prior.clone()).expect("member room");
+    }
+    landing.members = members.into_boxed();
+    landing.phase = Phase::Preparing;
+    Some(landing)
+}
+
+/// Remove a cancelled member, retaining the remaining members' proofs
+/// (domain/landing.md, 4.2, 5.1).
+#[must_use]
+pub fn leave(mut landing: Landing, change: u64) -> Landing {
+    let mut members = List::with_capacity(u32::try_from(landing.members.len()).expect("bounded members"));
+    for member in &landing.members {
+        if member.change != change {
+            members.push(member.clone()).expect("member room");
+        }
+    }
+    landing.members = members.into_boxed();
+    landing.phase = if landing.members.is_empty() { Phase::Cancelled } else { Phase::Preparing };
+    landing
+}
 
 /// Decide against a coherent snapshot. The top commits the state and its
 /// effect together; effect facts always describe the current preparation/try.
@@ -35,8 +82,8 @@ pub fn step(landing: &Landing, facts: &Facts, project: &Project, limits: &Limits
     }
     match landing.phase {
         Phase::Waiting | Phase::Preparing | Phase::Proving => {
-            for member in &facts.members {
-                if !member.ready {
+            for (member, fresh) in next.members.iter().zip(&facts.members) {
+                if member.landed.is_none() && !fresh.ready {
                     next.phase = Phase::Waiting;
                     if let Some(decision) = failed_post(&mut next, facts) {
                         return done(next, decision);
@@ -58,7 +105,7 @@ pub fn step(landing: &Landing, facts: &Facts, project: &Project, limits: &Limits
         Phase::Preparing => preparing(next, facts),
         Phase::Proving => {
             for (member, fresh) in next.members.iter().zip(&facts.members) {
-                if member.head != Some(fresh.head) {
+                if member.landed.is_none() && member.head != Some(fresh.head) {
                     next.phase = Phase::Preparing;
                     return done(next, Decision::None);
                 }
@@ -116,6 +163,9 @@ fn cancelled(mut landing: Landing, facts: &Facts, limits: &Limits) -> Stepped {
 fn preparing(mut landing: Landing, facts: &Facts) -> Stepped {
     let mut waiting = false;
     for (index, (member, fresh)) in landing.members.iter_mut().zip(&facts.members).enumerate() {
+        if member.landed.is_some() {
+            continue;
+        }
         if member.candidate.is_some() && member.head == Some(fresh.head) && member.base == Some(fresh.main) {
             continue;
         }
@@ -132,7 +182,6 @@ fn preparing(mut landing: Landing, facts: &Facts) -> Stepped {
                 member.base = Some(fresh.main);
                 member.candidate = Some(fresh.head);
                 member.asked = None;
-                member.landed = None;
                 for gate in &mut member.gates {
                     *gate = GateProof { proof: Proof::Unkeyed, posted: Posted::Nothing, faults: 0 };
                 }
@@ -198,6 +247,9 @@ fn proving(mut landing: Landing, facts: &Facts, project: Project, limits: &Limit
     let mut blocked = false;
     let mut poll = false;
     for (index, (member, fresh)) in landing.members.iter_mut().zip(&facts.members).enumerate() {
+        if member.landed.is_some() {
+            continue;
+        }
         let candidate = member.candidate.expect("proving has every candidate");
         for (number, (gate, fact)) in member.gates.iter_mut().zip(&fresh.gates).enumerate() {
             let decision = gate_step(gate, fact, position(index), position(number), candidate, project);
@@ -338,12 +390,10 @@ fn gate_step(
 }
 
 fn turn(mut landing: Landing, facts: &Facts) -> Stepped {
-    for (member, fresh) in landing.members.iter().zip(&facts.members) {
-        if member.landed.is_some() || fresh.merged == member.candidate {
-            continue;
-        }
-        if member.base != Some(fresh.main) || fresh.merge == Status::Failed {
-            return stale(landing, facts);
+    // Record read-back successes before any stale exit (domain/landing.md, 8).
+    for (member, fresh) in landing.members.iter_mut().zip(&facts.members) {
+        if member.candidate.is_some() && fresh.merged == member.candidate {
+            member.landed = member.candidate;
         }
     }
     for (index, (member, fresh)) in landing.members.iter_mut().zip(&facts.members).enumerate() {
@@ -354,6 +404,9 @@ fn turn(mut landing: Landing, facts: &Facts) -> Stepped {
         if fresh.merged == Some(candidate) {
             member.landed = Some(candidate);
             continue;
+        }
+        if member.base != Some(fresh.main) || fresh.merge == Status::Failed {
+            return stale(landing, facts);
         }
         return match fresh.merge {
             Status::Unknown => done(landing, Decision::Merge { member: position(index), candidate }),
@@ -369,7 +422,7 @@ fn stale(mut landing: Landing, facts: &Facts) -> Stepped {
     landing.phase = Phase::Preparing;
     landing.stale_proofs = landing.stale_proofs.checked_add(1).expect("stale proof count fits u32");
     for (member, fresh) in landing.members.iter_mut().zip(&facts.members) {
-        if member.base != Some(fresh.main) || fresh.merge == Status::Failed {
+        if member.landed.is_none() && (member.base != Some(fresh.main) || fresh.merge == Status::Failed) {
             member.candidate = None;
             member.asked = None;
             for gate in &mut member.gates {
