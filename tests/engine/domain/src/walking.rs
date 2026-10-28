@@ -925,7 +925,8 @@ impl World {
             | Delivery::Refuse { .. } => {
                 panic!("unexpected walking delivery {delivery:?}")
             }
-            Delivery::Restart(_)
+            Delivery::RestartContinue(_)
+            | Delivery::Restart(_)
             | Delivery::Fleet(_)
             | Delivery::ProjectMade { .. }
             | Delivery::ForgeCommitted { .. }

@@ -964,6 +964,9 @@ fn released_into(
         Delivery::ForgeCommitted { entry } => {
             domain.work.push(Work::Forge(forge::Event::Committed { entry }));
         }
+        Delivery::RestartContinue(step) => {
+            domain.work.push(Work::Restart(jig_domain_core::RestartRequest::Step(step)));
+        }
         Delivery::Restart(jig_domain_core::RestartStep::Switch) => {
             out.push(Request::Store(crate::StoreRequest::Switch));
         }

@@ -454,6 +454,7 @@ pub fn incoming(
         | Delivery::Assigned { .. }
         | Delivery::ReadLoad { .. }
         | Delivery::Drained
+        | Delivery::RestartContinue(_)
         | Delivery::Restart(_)
         | Delivery::Refuse { .. }
         | Delivery::TurnBusy { .. }

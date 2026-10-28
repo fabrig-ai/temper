@@ -53,6 +53,8 @@ pub struct Limits {
 pub enum Delivery {
     /// `Switch` is released behind prior writes; `AdoptRuns` completes the durable mark.
     Restart(jig_domain_core::RestartStep),
+    /// Resume the core's sweep continuation only after its erase commit is durable.
+    RestartContinue(jig_domain_core::RestartStep),
     /// Retry archive admission after the current iteration can retire its read slots.
     NotesLoad {
         owner: Token,
@@ -514,6 +516,7 @@ impl Decision {
             | Delivery::TurnBusy { .. }
             | Delivery::NotesLoad { .. }
             | Delivery::Restart(_)
+            | Delivery::RestartContinue(_)
             | Delivery::Load { .. } => true,
         };
         if !within {

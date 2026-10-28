@@ -893,6 +893,7 @@ impl World {
             | Delivery::Fleet(_)
             | Delivery::ReadLoad { .. }
             | Delivery::Drained
+            | Delivery::RestartContinue(_)
             | Delivery::Restart(_)
             | Delivery::NotesLoad { .. }
             | Delivery::Load { .. }
