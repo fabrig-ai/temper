@@ -70,11 +70,14 @@ impl Judge {
                             && let Some(forgejo) =
                                 find(pids, self.forgejo_program.as_deref().expect("Forgejo restart plan"), b"web")
                         {
-                            let killed = std::process::Command::new("/usr/bin/kill")
-                                .args(["-KILL", &forgejo.to_string()])
-                                .status()
-                                .expect("kill Forgejo");
-                            assert!(killed.success(), "Forgejo's pid accepted the kill");
+                            let Some(member) = super::parent::Member::in_test(forgejo) else { return };
+                            // Recheck the selector after opening the stable identity.
+                            if find(&[forgejo], self.forgejo_program.as_deref().expect("Forgejo"), b"web").is_none()
+                                || member.exited()
+                            {
+                                return;
+                            }
+                            assert!(member.signal("KILL"), "owned Forgejo accepted the kill");
                             self.phase = Phase::Killed { engine, forgejo };
                         }
                     }

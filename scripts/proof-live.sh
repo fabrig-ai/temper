@@ -47,52 +47,6 @@ export NEXTEST_DOUBLE_SPAWN=0
 # shellcheck disable=SC2086
 $heavy cargo nextest run -p temper --profile live --no-run
 scratch=$(readlink -f "$(mktemp -d "${TMPDIR:-/tmp}/temper-live.XXXXXX")")
-# A kept deployment may already have processes. Only this sitting's new
-# processes belong to its cleanup, even when its box refuses a busy store.
-store_before=
-if [ -n "$store" ]; then
-    for process in /proc/[0-9]*; do
-        case $(readlink "$process/cwd" 2>/dev/null || true) in
-            "$store"|"$store"/*) store_before="$store_before ${process#/proc/}" ;;
-        esac
-    done
-fi
-# Every process whose cwd is in this newly created private scratch was started
-# by this sitting. As in jig's live-sign-in.sh, stop those owned descendants
-# before keeping or erasing their stores, including after an interruption.
-stop_owned() {
-    [ -d "$scratch" ] || return 0
-    owned=
-    for process in /proc/[0-9]*; do
-        case $(readlink "$process/cwd" 2>/dev/null || true) in
-            "$scratch"/*) owned="$owned ${process#/proc/}" ;;
-            *)
-                if [ -n "$store" ]; then
-                    case $(readlink "$process/cwd" 2>/dev/null || true) in
-                        "$store"|"$store"/*)
-                            case " $store_before " in
-                                *" ${process#/proc/} "*) ;;
-                                *) owned="$owned ${process#/proc/}" ;;
-                            esac
-                            ;;
-                    esac
-                fi
-                ;;
-        esac
-    done
-    for process in $owned; do kill -KILL "$process" 2>/dev/null || true; done
-    attempt=0
-    while [ "$attempt" -lt 100 ]; do
-        left=
-        for process in $owned; do
-            if kill -0 "$process" 2>/dev/null; then left="$left $process"; fi
-        done
-        [ -n "$left" ] || break
-        owned=$left
-        attempt=$((attempt + 1))
-        sleep 0.1
-    done
-}
 notice=$scratch/notice
 : > "$notice"
 chmod 600 "$notice"
@@ -103,15 +57,10 @@ finish() {
     status=$?
     trap - EXIT INT TERM HUP
     set +e
-    if [ -n "$runner" ]; then
-        kill -TERM "$runner" 2>/dev/null
-        wait "$runner" 2>/dev/null
-    fi
-    if [ -n "$follower" ]; then
-        kill "$follower" 2>/dev/null
-        wait "$follower" 2>/dev/null
-    fi
-    stop_owned
+    : > "$scratch/stop-runner"
+    [ -z "$runner" ] || wait "$runner" 2>/dev/null
+    : > "$scratch/stop-follower"
+    [ -z "$follower" ] || wait "$follower" 2>/dev/null
     printf '%s\n' 'Last live notices:'
     tail -n 30 "$notice"
     keep=${TEMPER_LIVE_KEEP:-$HOME/src/rust/tmp/live-evidence}
@@ -150,15 +99,17 @@ if [ "$rerun" = false ] && [ -z "${TEMPER_LIVE_ACCOUNT-}" ]; then
         'For a remote browser: ssh -L 1455:127.0.0.1:1455 -L <client port>:127.0.0.1:<client port> HOST'
 fi
 # shellcheck disable=SC2086
-TMPDIR=$scratch $heavy cargo nextest run -p temper --profile live --run-ignored only --no-capture \
+TMPDIR=$scratch python3 scripts/owned-process.py --stop-file "$scratch/stop-runner" -- $heavy cargo nextest run -p temper --profile live --run-ignored only --no-capture \
     -E "test(=$test_name)" &
 runner=$!
-tail -n +1 -f --sleep-interval=0.2 --pid="$runner" "$notice" &
+python3 scripts/owned-process.py --stop-file "$scratch/stop-follower" -- \
+    tail -n +1 -f --sleep-interval=0.2 "$notice" &
 follower=$!
 status=0
 wait "$runner" || status=$?
 runner=
-# Let tail flush notices appended just before the run returned.
+# The runner has drained its tree; stop the separate notice follower by request.
+: > "$scratch/stop-follower"
 wait "$follower" || true
 follower=
 exit "$status"

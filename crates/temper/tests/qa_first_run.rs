@@ -345,7 +345,10 @@ fn parent_shutdown(signal: &str) {
             let locked = lock.try_lock().is_err();
             let stopped = match (forge_parent, child) {
                 (Some(pid), Some(child)) => {
-                    parent::signal(pid, signal);
+                    let Some(member) = parent::Member::in_test(pid) else {
+                        return (forge_parent, Some(child), healthy, locked, false);
+                    };
+                    assert!(member.signal(signal), "owned forge-run accepts the signal");
                     parent::wait(|| !parent::live(child));
                     parent::wait(|| !parent::live(pid));
                     true

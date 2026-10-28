@@ -22,25 +22,9 @@ cleanup() {
     status=$?
     # Backstop failures must not skip removal of the run's private state.
     set +e
-    # A fresh private cwd identifies only this run's processes. Never inspect environments.
-    owned=
-    for process in /proc/[0-9]*; do
-        case $(readlink "$process/cwd" 2>/dev/null || true) in
-            "$scratch"/*) owned="$owned ${process#/proc/}" ;;
-        esac
-    done
-    for process in $owned; do kill -KILL "$process" 2>/dev/null || true; done
-    attempt=0
-    while [ "$attempt" -lt 100 ]; do
-        left=
-        for process in $owned; do
-            if kill -0 "$process" 2>/dev/null; then left="$left $process"; fi
-        done
-        [ -n "$left" ] || break
-        owned=$left
-        attempt=$((attempt + 1))
-        sleep 0.1
-    done
+    # The supervisor returns only after settling its owned descendants.
+    : > "$scratch/stop-runner"
+    [ -z "$runner" ] || wait "$runner" 2>/dev/null
     # Python signs an App JWT as the managed harness does, then mints a cleanup token.
     # Bearers enter curl's configuration on stdin, never argv, a log, or a copied file.
     python3 - "$scratch" "$fixtures" "$owner" <<'PY'
@@ -178,6 +162,7 @@ PY
     fi
     exit "$status"
 }
+runner=
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -185,6 +170,10 @@ trap 'exit 129' HUP
 status=0
 # shellcheck disable=SC2086
 TEMPER_LIVE_GITHUB_OWNER=$owner TEMPER_LIVE_GITHUB_FIXTURES=$fixtures TMPDIR=$scratch \
+    python3 scripts/owned-process.py --stop-file "$scratch/stop-runner" -- \
     $heavy cargo nextest run -p temper --profile live --run-ignored only --no-capture \
-    -E 'binary(=live_github) & test(=a_chat_lands_a_change_on_github_com_through_a_restart)' || status=$?
+    -E 'binary(=live_github) & test(=a_chat_lands_a_change_on_github_com_through_a_restart)' &
+runner=$!
+wait "$runner" || status=$?
+runner=
 exit "$status"

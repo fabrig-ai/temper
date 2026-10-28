@@ -20,20 +20,8 @@ runner=
 cleanup() {
     status=$?
     trap - EXIT INT TERM HUP
-    if [ -n "$runner" ] && kill -0 "$runner" 2>/dev/null; then
-        kill -TERM "$runner" 2>/dev/null || true
-        attempt=0
-        while kill -0 "$runner" 2>/dev/null && [ "$attempt" -lt 100 ]; do
-            sleep 0.1
-            attempt=$((attempt + 1))
-        done
-    fi
-    # Fresh cwd ownership, never another process's environment or command line.
-    for process in /proc/[0-9]*; do
-        case $(readlink "$process/cwd" 2>/dev/null || true) in
-            "$scratch"|"$scratch"/*) kill -KILL "${process#/proc/}" 2>/dev/null || true ;;
-        esac
-    done
+    : > "$scratch/stop-runner"
+    [ -z "$runner" ] || wait "$runner" 2>/dev/null || true
     rm -rf -- "$scratch"
     printf '%s\n' 'scratch wiped'
     exit "$status"
@@ -90,7 +78,8 @@ if [ "$mode" = live ]; then
         --noscript 'temper needs WebAssembly and scripts.' --out "$scratch/bundle" > "$scratch/bundle.log" 2>&1
 fi
 # A background job's stdin is /dev/null when job control is off (POSIX): keep the person's on fd 3.
-python3 scripts/proof-live-github-managed.py "$mode" "$port" "$scratch" "$evidence" <&3 3<&- &
+python3 scripts/owned-process.py --stop-file "$scratch/stop-runner" -- \
+    python3 scripts/proof-live-github-managed.py "$mode" "$port" "$scratch" "$evidence" <&3 3<&- &
 runner=$!
 wait "$runner"
 runner=

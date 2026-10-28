@@ -1890,7 +1890,7 @@ fn killing_forge_run_alone_kills_its_forgejo_child() {
 
 #[cfg(target_os = "linux")]
 fn forge_parent_shutdown(kill: bool) {
-    use support::parent::{Guard, live, signal, wait};
+    use support::parent::{Guard, Member, live, wait};
     let scratch = support::Scratch::startup(&format!("forge-parent-{kill}"));
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("listener");
     let address = listener.local_addr().expect("address");
@@ -1937,19 +1937,22 @@ exit 38
     let mut guard = Guard::new(command.spawn().expect("forge run"));
     wait(|| pid_file.exists());
     let fake = fs::read_to_string(&pid_file).expect("fake pid").parse().expect("pid");
-    guard.pids.push(fake);
+    let owner = Member::child(guard.child.as_ref().expect("parent"));
+    guard.members.push(owner.descendant(fake).expect("owned fake"));
     wait(|| support::boxed::status(address, "/") == Some(200));
-    support::parent::descendants(fake, &mut guard.pids);
+    let mut descendants = Vec::new();
+    support::parent::descendants(fake, &mut descendants);
+    guard.members.extend(descendants.into_iter().filter_map(|pid| owner.descendant(pid)));
     let parent = guard.child.as_mut().expect("parent");
     assert!(parent.try_wait().expect("status").is_none(), "Forgejo's SIGTERM leaves forge run running");
-    signal(parent.id(), if kill { "KILL" } else { "TERM" });
+    assert!(owner.signal(if kill { "KILL" } else { "TERM" }));
     wait(|| guard.child.as_mut().expect("parent").try_wait().expect("exit").is_some());
     if kill {
         // Kill reaches Forgejo's own process at once; the fake's helper is the
         // script's child, which real Forgejo has none of, so the guard ends it.
         wait(|| !live(fake));
     } else {
-        wait(|| guard.pids.iter().all(|pid| !live(*pid)));
+        wait(|| guard.members.iter().all(Member::exited));
     }
     let ended = guard.child.take().expect("parent").wait_with_output().expect("reaped");
     if kill {
@@ -1959,7 +1962,7 @@ exit 38
         assert_eq!(ended.status.code(), Some(37), "{}", String::from_utf8_lossy(&ended.stderr));
         assert!(String::from_utf8_lossy(&ended.stdout).contains("fake connected"));
         assert!(String::from_utf8_lossy(&ended.stderr).contains("fake ready on fd 3"));
-        guard.pids.clear();
+        guard.members.clear();
     }
     scratch.remove();
 }

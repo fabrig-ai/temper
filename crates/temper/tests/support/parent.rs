@@ -1,18 +1,18 @@
 //! Cleanup and bounded observations for parent-death process tests.
 use std::{
-    process::{Child, Command},
+    process::Child,
     time::Duration,
 };
 
 #[derive(Debug)]
 pub struct Guard {
     pub child: Option<Child>,
-    pub pids: Vec<u32>,
+    pub members: Vec<Member>,
 }
 impl Guard {
     #[must_use]
     pub fn new(child: Child) -> Self {
-        Self { child: Some(child), pids: Vec::new() }
+        Self { child: Some(child), members: Vec::new() }
     }
 }
 impl Drop for Guard {
@@ -21,13 +21,73 @@ impl Drop for Guard {
             let _killed = child.kill();
             let _reaped = child.wait();
         }
-        for pid in &self.pids {
-            signal(*pid, "KILL");
+        for member in &self.members {
+            let _sent = member.signal("KILL");
         }
     }
 }
-pub fn signal(pid: u32, signal: &str) {
-    let _sent = Command::new("/usr/bin/kill").args([&format!("-{signal}"), &pid.to_string()]).output();
+/// A stable identity admitted only while a live ancestry chain reaches its owner.
+/// Numeric IDs remain diagnostic; delivery always uses this retained pidfd.
+#[derive(Debug)]
+pub struct Member {
+    pub pid: u32,
+    fd: skein_io::kernel::Fd,
+}
+impl Member {
+    fn open(pid: u32) -> Option<Self> {
+        if pid <= 1 || pid > i32::MAX.cast_unsigned() {
+            return None;
+        }
+        Some(Self { pid, fd: skein_shell::open_pidfd(pid).ok()? })
+    }
+    /// The caller retains this direct child without reaping during acquisition.
+    pub fn child(child: &Child) -> Self {
+        Self::open(child.id()).expect("unreaped child pidfd")
+    }
+    /// Admit a surveyed descendant of this test, never an unrelated replacement.
+    pub fn in_test(pid: u32) -> Option<Self> {
+        Self::open(std::process::id())?.descendant(pid)
+    }
+    pub fn descendant(&self, pid: u32) -> Option<Self> {
+        let member = Self::open(pid)?;
+        let mut ancestors = Vec::new();
+        let mut current = &member;
+        while current.pid != self.pid {
+            let stat = std::fs::read_to_string(format!("/proc/{}/stat", current.pid)).ok()?;
+            let parent = stat.rsplit_once(") ")?.1.split_whitespace().nth(1)?.parse().ok()?;
+            if parent == self.pid {
+                break;
+            }
+            if ancestors.iter().any(|ancestor: &Self| ancestor.pid == parent) {
+                return None;
+            }
+            ancestors.push(Self::open(parent)?);
+            current = ancestors.last()?;
+        }
+        // Open before inspecting /proc, then check every opened identity is still
+        // alive afterwards. An exited/reused PID cannot validate a different pidfd.
+        if self.exited() || member.exited() || ancestors.iter().any(Self::exited) {
+            return None;
+        }
+        Some(member)
+    }
+    pub fn exited(&self) -> bool {
+        skein_shell::pidfd_exited(self.fd).expect("poll retained pidfd")
+    }
+    pub fn signal(&self, signal: &str) -> bool {
+        use skein_io::kernel::{Signal, Target};
+        let signal = match signal {
+            "KILL" => Signal::Kill,
+            "TERM" => Signal::Terminate,
+            _ => panic!("unsupported test signal"),
+        };
+        skein_shell::signal_kept_child(self.fd, signal, Target::Child).is_ok()
+    }
+}
+impl Drop for Member {
+    fn drop(&mut self) {
+        skein_shell::close_keeper_fd(self.fd);
+    }
 }
 #[must_use]
 pub fn live(pid: u32) -> bool {
