@@ -2235,7 +2235,9 @@ fn change_delegate(
             parameters.push(tasks::Parameter::Bytes { name: 6, value: commit_text(&base) }).ok()?;
             (
                 tasks::Executor::Agent { charter: row.producing_charter },
-                Box::from(&b"Resolve the merge conflict and push the merge commit"[..]),
+                Box::from(
+                    &b"Resolve the merge conflict in its files, then finish: temper pushes the merge commit."[..],
+                ),
                 change_contract,
             )
         }
