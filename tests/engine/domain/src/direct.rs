@@ -213,6 +213,12 @@ impl Driver {
                 | engine::Request::Unsettled(_)
                 | engine::Request::Drained) => self.immediate.push(other),
             }
+            assert!(
+                self.store.pending.len() <= usize::try_from(self.env.limits.journal.commits).expect("commit edge fits"),
+                "the root never sends more commits than the store takes in flight: pending={} edge={}",
+                self.store.pending.len(),
+                self.env.limits.journal.commits,
+            );
         }
     }
 

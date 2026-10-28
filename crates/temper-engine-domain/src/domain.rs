@@ -41,6 +41,9 @@ pub struct Domain {
     pub(crate) core: Core,
     pub(crate) calendar: calendar::Calendar,
     pub(crate) journal: Journal,
+    /// Store credit: sent and cumulatively answered commit numbers.
+    pub(crate) sent_commit: u64,
+    pub(crate) durable_commit: u64,
     pub(crate) stop_pending: bool,
     pub(crate) door_pass: bool,
     pub(crate) door_count: u32,
@@ -350,6 +353,8 @@ impl Domain {
             #[cfg(test)]
             empty_resumes: 0,
             journal: Journal::uncapped(1, 0),
+            sent_commit: 0,
+            durable_commit: 0,
             stop_pending: false,
             door_pass: false,
             door_count: 0,
@@ -627,6 +632,8 @@ fn finish_close(
     if let Some(commits) = domain.restored_commits.take() {
         assert!(domain.journal.idle(), "deployment is the first cold-start row");
         domain.journal = Journal::uncapped(1, commits);
+        domain.sent_commit = commits;
+        domain.durable_commit = commits;
     }
     if domain.journal.stopped() {
         // Immediate outputs assembled alongside this failed cohort must not
@@ -761,8 +768,15 @@ pub fn release(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>)
 }
 
 pub(crate) fn send_commit(domain: &mut Domain, out: &mut Queue<Request>) {
+    // Unsent decisions stay in the journal until a store answer frees credit.
+    if domain.journal.stopped()
+        || domain.sent_commit - domain.durable_commit >= u64::from(domain.limits.journal.commits)
+    {
+        return;
+    }
     match crate::commit(&mut domain.journal, &domain.limits.journal) {
         Some(Output::Commit { number, writes }) => {
+            domain.sent_commit = number;
             out.push(Request::Store(crate::StoreRequest::Commit { number, writes }));
         }
         Some(Output::Now(_) | Output::Deliver(_) | Output::Stop) => unreachable!("journal commit has writes only"),

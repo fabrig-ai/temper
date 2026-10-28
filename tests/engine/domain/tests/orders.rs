@@ -334,3 +334,67 @@ fn settle_retaining(driver: &mut Driver) {
     }
     panic!("retained-head root inputs did not settle: {:?}", driver.root);
 }
+
+/// Edge, kept by the old watermark: the store's commits in flight
+#[test]
+fn the_root_sends_no_more_commits_than_the_store_takes_in_flight() {
+    // Three store credits and 22 door outputs give the default mark of 25.
+    let mut limits = temper_engine_domain_world::walking::limits();
+    limits.journal.deliveries = 22;
+    limits.watermark = engine::default_watermark(&limits.journal);
+    let mut driver =
+        Driver::configured(temper_engine_domain_world::store::Store::new(), [config(91), config(91)], &limits);
+    driver.settle();
+    assert_eq!(driver.env.limits.journal.commits, 3);
+    assert_eq!(driver.env.limits.watermark, 25);
+    driver.sign_in();
+    driver.settle();
+    let first = driver.store.applied + 1;
+    let transactions = driver.transactions.len();
+    let delivered = driver.delivered.len();
+    let mut admitted = Vec::new();
+    let mut refused = false;
+    for _ in 0..=driver.env.limits.watermark {
+        let returned = driver.returned;
+        let probe_at = driver.events.len();
+        driver.sign_in();
+        if driver.returned > returned {
+            driver.events.remove(probe_at).expect("new work handed back at the watermark");
+            refused = true;
+            break;
+        }
+        admitted.push(ReplyTo::new(Token::new(driver.serial)));
+        assert!(driver.store.pending.len() <= 3);
+        assert_eq!(driver.store.applied + 1, first, "the story has answered no commit");
+    }
+    assert!(refused, "the backlog's watermark hands new work back");
+    assert!(admitted.len() > 3, "the uncapped journal holds admitted decisions past the store edge");
+    assert_eq!(driver.store.pending.len(), 3, "the store's credit is fully used");
+    let mut answered = Vec::new();
+    for _ in 0..STEPS {
+        if let Some((number, _)) = driver.store.pending.front() {
+            assert_eq!(*number, first + u64::try_from(answered.len()).expect("small burst"));
+            answered.push(*number);
+            commit_one(&mut driver);
+        }
+        driver.advance(false);
+        assert!(driver.store.pending.len() <= 3);
+        if driver.root.quiescent() && driver.events.is_empty() && driver.store.pending.is_empty() {
+            break;
+        }
+    }
+    assert!(driver.root.quiescent() && !driver.stopped);
+    assert_eq!(answered.len(), admitted.len(), "each admitted decision is sent and answered once, in order");
+    assert_eq!(driver.transactions.len() - transactions, admitted.len(), "no duplicate commit is sent");
+    let mut replies = Vec::new();
+    for delivery in &driver.delivered[delivered..] {
+        if let Delivery::WebReply { to, .. } = delivery {
+            replies.push(to);
+        }
+    }
+    assert_eq!(
+        replies,
+        admitted.iter().collect::<Vec<_>>(),
+        "each admitted decision releases its answer once, in order"
+    );
+}

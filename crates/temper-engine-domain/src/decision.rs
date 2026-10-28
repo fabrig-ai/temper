@@ -22,8 +22,8 @@ use skein_lib::{Decision as SkeinDecision, Journal as SkeinJournal, JournalLimit
 /// journal calls (domain/root.md, 4 and 10). Its journal is uncapped.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Limits {
-    /// Journal commit count estimate for memory pricing; counted in the
-    /// root's default admission watermark.
+    /// The store's commits in flight: sent and unanswered, an edge enforced
+    /// by the root. Also counted in the default admission watermark and memory estimate.
     pub commits: u32,
     /// Pricing estimate of deliveries held across decisions until durability permits release;
     /// it need not cover the door's outputs.

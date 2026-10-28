@@ -550,6 +550,8 @@ pub fn root_with_config_and_limits(
     // commit count while the journal is still idle.
     if let Some(commits) = root.restored_commits.take() {
         root.journal = engine::Journal::uncapped(1, commits);
+        root.sent_commit = commits;
+        root.durable_commit = commits;
     }
     for _ in 0..RESTORE_PASSES {
         match request {
