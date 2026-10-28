@@ -1860,7 +1860,22 @@ pub(crate) fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(u64::from(l.key_path_bytes).checked_mul(3)?)?
         .checked_add(member_facts.checked_mul(2)?)?
         .checked_add(u64::from(slots).checked_mul(u64::try_from(size_of::<ReceiptKey>()).ok()?.checked_add(32)?)?)?;
+    // A join or leave rebuilds the positional maps while their prior values
+    // still live. Fault followers own their bounded write/read payloads too.
+    let remapping = Map::<Position, (api::Commit, policy::Key)>::worst_case(slots)?
+        .checked_add(Map::<Position, runs::Follow>::worst_case(slots)?)?
+        .checked_add(Map::<(u64, u16, u16, u8), policy::Status>::worst_case(result_slots(l)?)?)?
+        .checked_add(
+            u64::from(slots).checked_mul(
+                u64::from(l.client.op_bytes)
+                    .checked_mul(6)?
+                    .checked_add(u64::from(l.client.answer_bytes).checked_mul(2)?)?
+                    .checked_add(32)?,
+            )?,
+        )?
+        .checked_add(u64::from(l.changes).checked_mul(24)?)?;
     Map::<u64, LandingRow>::worst_case(l.landings)?
+        .checked_add(remapping)?
         .checked_add(Map::<u64, Wall>::worst_case(l.landings)?)?
         .checked_add(rows.checked_mul(4)?)?
         .checked_add(Map::<ReceiptKey, Receipt>::worst_case(receipt_slots(l)?)?)?
