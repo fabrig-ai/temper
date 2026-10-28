@@ -464,7 +464,9 @@ fn runtime_project_root() -> (Domain, Env<Limits>) {
     let mut limits = super::resume_fixture::limits();
     limits.authority.projects = 2;
     limits.people.projects = 3;
-    limits.journal.writes = crate::limits::work_estimate(&limits).unwrap().checked_add(limits.call_records).unwrap();
+    // A commit's unique writes in the runtime-project fixture, including its header.
+    const COMMIT_WRITES: u32 = 2120;
+    limits.journal.writes = COMMIT_WRITES;
     let (mut domain, env) = signed_in_root(
         super::resume_fixture::root_with_config_and_limits(configured, &limits),
         Some(people::Role::Owner),

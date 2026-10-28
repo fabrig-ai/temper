@@ -397,16 +397,20 @@ fn new_work_waits_at_the_watermark_and_admitted_work_is_always_taken() {
             ask: jig_domain_people::Ask::SetRoles { project: 1, holdings: Box::new([]) },
         })
     }
-    let (mut domain, env) = resume_fixture::root();
+    let mut limits = resume_fixture::limits();
+    limits.watermark = limits.journal.commits + 2;
+    assert_ne!(limits.watermark, crate::default_watermark(&limits.journal));
+    let (mut domain, env) = resume_fixture::root_with_config_and_limits(resume_fixture::config(1), &limits);
     // Header-only commits give an exact backlog without held-output entries.
-    for _ in 0..crate::limits::watermark(&env.limits) - 1 {
+    for _ in 0..u64::from(env.limits.watermark) - 1 {
         crate::fresh(&mut domain.core.counters, Family::Message).unwrap();
         crate::try_step(&mut domain, &env, Event::Resume).unwrap();
     }
-    assert_eq!(crate::limits::backlog(&domain), crate::limits::watermark(&env.limits) - 1);
-    crate::try_step(&mut domain, &env, call()).expect("below the watermark the call is taken");
+    assert_eq!(crate::limits::backlog(&domain), u64::from(env.limits.watermark) - 1);
+    assert!(crate::limits::backlog(&domain) > u64::from(env.limits.journal.commits));
+    crate::try_step(&mut domain, &env, call()).expect("past commits but below the watermark the call is taken");
     // This unauthenticated call owns one held refusal, bringing backlog to the mark.
-    assert_eq!(crate::limits::backlog(&domain), crate::limits::watermark(&env.limits));
+    assert_eq!(crate::limits::backlog(&domain), u64::from(env.limits.watermark));
     let returned = crate::try_step(&mut domain, &env, call()).expect_err("at the mark new work waits");
     let Event::Party(PartyInput::Ask { reply_to, sign_in, key, ask, models }) = &returned else {
         panic!("the original call is returned");
@@ -427,7 +431,7 @@ fn new_work_waits_at_the_watermark_and_admitted_work_is_always_taken() {
     }
     crate::try_step(&mut domain, &env, Event::Store(StoreInput::Committed { number: last, fill: 0 }))
         .expect("store completion is always taken");
-    assert!(crate::limits::backlog(&domain) < crate::limits::watermark(&env.limits));
+    assert!(crate::limits::backlog(&domain) < u64::from(env.limits.watermark));
     crate::try_step(&mut domain, &env, returned).expect("after completion the returned call is taken");
     assert!(!domain.journal.stopped());
 }
@@ -770,4 +774,13 @@ fn a_refused_settlement_uses_cores_returned_reply_address() {
             },
         }
     );
+}
+
+#[test]
+fn zero_watermark_refuses_startup_and_the_default_saturates() {
+    let mut limits = resume_fixture::limits();
+    limits.watermark = 0;
+    assert!(crate::worst_case(&limits).is_none());
+    let journal = crate::JournalLimits { commits: u32::MAX, ..limits.journal };
+    assert_eq!(crate::default_watermark(&journal), u32::MAX);
 }

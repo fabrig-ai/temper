@@ -122,15 +122,20 @@ fn a_forge_call_waiting_past_its_deadline_reaches_the_root_unavailable() {
     assert_eq!(forge::back(event).unwrap().call, call);
     assert_eq!(service.engine.as_ref().expect("engine").forge.above.len(), 0);
 }
+// Withhold durability until admission itself witnesses the configured mark.
+fn fill_to_watermark(service: &mut crate::Service) {
+    let engine = service.engine.as_mut().expect("engine");
+    for number in 2..=u64::from(engine.env.limits.watermark) + 2 {
+        if root::try_step(&mut engine.domain, &engine.env, fixtures::period(number)).is_err() {
+            return;
+        }
+    }
+    panic!("the root reaches its configured backlog watermark");
+}
 #[test]
 fn an_answer_the_root_cannot_take_is_offered_again_next_pass() {
     let mut service = fixtures::ready();
-    for number in 2..16 {
-        let engine = service.engine.as_mut().expect("engine");
-        if root::try_step(&mut engine.domain, &engine.env, fixtures::period(number)).is_err() {
-            break;
-        }
-    }
+    fill_to_watermark(&mut service);
     let answer = skein_forge_connection::Answered {
         free: 0,
         rate: None,
@@ -245,12 +250,7 @@ fn forge_component_overrides_take_dotted_names_and_ms() {
 fn a_hint_the_root_cannot_take_is_offered_again_next_pass() {
     let mut service = fixtures::ready();
     let hinted = fixtures::hook(&mut service);
-    for number in 2..16 {
-        let engine = service.engine.as_mut().expect("engine");
-        if root::try_step(&mut engine.domain, &engine.env, fixtures::period(number)).is_err() {
-            break;
-        }
-    }
+    fill_to_watermark(&mut service);
     let engine = service.engine.as_mut().expect("engine");
     assert!(root::try_step(&mut engine.domain, &engine.env, forge::hinted(hinted.clone())).is_err());
     service.engine.as_mut().expect("engine").forge.above.push(skein_forge_connection::Event::Hint(hinted.clone()));

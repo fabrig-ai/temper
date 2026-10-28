@@ -19,12 +19,11 @@ use jig_domain_people as people;
 use skein_lib::{Decision as SkeinDecision, Journal as SkeinJournal, JournalLimits, List, Queue, ReplyTo, Token};
 
 /// Store edges and memory estimates supplied by the root, immutable across
-/// journal calls (domain/root.md, 4 and 10). The root reuses `commits` as its
-/// admission watermark; its journal is uncapped.
+/// journal calls (domain/root.md, 4 and 10). Its journal is uncapped.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Limits {
-    /// Root admission watermark in backlog entries; also the journal's commit
-    /// count estimate for memory pricing.
+    /// Journal commit count estimate for memory pricing; counted in the
+    /// root's default admission watermark.
     pub commits: u32,
     /// Estimate of deliveries held across decisions until durability permits release.
     pub held: u32,
