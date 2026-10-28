@@ -1157,6 +1157,7 @@ mod memory_figures;
 // adds one 32-byte Application reference (28 * 32 = 896 root heap bytes).
 // F5 keeps terminal CI in ChangeRow: its optional head/verdict grows row-bearing
 // engine queues and store/system envelopes; the live panel_ci map is unchanged.
+// On F5's earlier upstream tuple, the question-rail derivation was:
 // Question rails grow each credit 16 -> 48 bytes and add bounded dirty-row/
 // terminal-ID batches: Small's engine child adds 16,336 heap bytes. No capacity moves.
 // Packing the generated inbox removes a List header and a codec limit; the store's
@@ -1166,6 +1167,12 @@ mod memory_figures;
 // Service's inline core headers add 64 bytes and its store loses eight: +56,
 // including worker-alone. System retains 2 * 1,408 + 1 root payloads, so its
 // delta is 2,817 * 16,336 + 56 = 46,018,568 bytes at both engine fixtures.
+// Merging main's HoldAccount.words adds a u32 codec limit. Combined with the
+// removed question-list limit and alignment, Store keeps main's inline size:
+// the earlier eight-byte inline saving is absent. The packed decoded-record
+// saving remains 64 * (page bytes + joins); Service therefore adds 64 bytes,
+// including worker-alone, and the system delta is now
+// 2,817 * 16,336 + 64 = 46,018,576 bytes. Existing sizeof terms measure this tuple.
 fn memory_figure(
     name: &str,
     terms: &temper_service::startup::MemoryTerms,
