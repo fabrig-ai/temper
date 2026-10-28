@@ -162,6 +162,7 @@ impl Forge {
             tree: files(tree),
             labels: Box::new([]),
             checks: Checks {
+                cues: Box::new([]),
                 contexts: Box::new([]),
                 latency_min: Duration::ZERO,
                 latency_max: Duration::ZERO,

@@ -123,6 +123,7 @@ pub fn named(full: &[u8], protected: Option<&[u8]>) -> Scenario {
         tree: files(tree(b"base\n")),
         labels: Box::new([]),
         checks: api::Checks {
+            cues: Box::new([]),
             contexts: Box::new([]),
             latency_min: Duration::ZERO,
             latency_max: Duration::ZERO,

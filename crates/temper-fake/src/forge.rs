@@ -288,6 +288,7 @@ pub fn setup(store: &mut forgejo::setup::Store, admin_token: &[u8; 40]) {
 #[expect(clippy::manual_map, reason = "step code uses explicit matches, never closures")]
 pub fn checks(ci: Option<&Ci>) -> api::Checks {
     api::Checks {
+        cues: Box::new([]),
         contexts: Box::new([bytes::copy_of(CONTEXT)]),
         latency_min: Duration::ZERO,
         latency_max: Duration::ZERO,

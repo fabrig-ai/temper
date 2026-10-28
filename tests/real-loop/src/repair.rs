@@ -53,7 +53,16 @@ pub fn fixture() -> forge::Fixture {
             let repository = &document.repositories()[0];
             let mut setup = (green_light::fixture().setup)();
             setup.tree = repository.tree.clone().expect("widget with the person's gate");
-            setup.checks = temper_fake::forge::checks(repository.ci.as_ref());
+            setup.checks = temper_fake::forge::checks(None);
+            setup.checks.cues = Box::new([api::ContextCue {
+                context: CHANGES.into(),
+                cue: api::Cue::PullFile {
+                    path: b"changes/{pull}.md".as_slice().into(),
+                    no_pull: api::Check::Skipped,
+                    step: b"changes".as_slice().into(),
+                    log: b"Missing changes/{pull}.md".as_slice().into(),
+                },
+            }]);
             setup.checks.contexts = Box::new([CHECK.into(), CHANGES.into()]);
             setup.protection.as_mut().expect("main protection").contexts.clone_from(&setup.checks.contexts);
             setup
@@ -85,13 +94,13 @@ const ASKED: usize = 7;
 const ACTIVITY: usize = 8;
 const ANSWERED: usize = 9;
 const WORK_ENDED: usize = 10;
-const LANDED: usize = 11;
-const ADVISOR_ENDED: usize = 12;
-const PRODUCED: usize = 13;
-const REPAIRED: usize = 14;
-const REVIEWED: usize = 15;
-const LAST_WORD: usize = 17;
-const INBOX_EMPTY: usize = 20;
+const LANDED: usize = 12;
+const ADVISOR_ENDED: usize = 13;
+const PRODUCED: usize = 14;
+const REPAIRED: usize = 15;
+const REVIEWED: usize = 16;
+const LAST_WORD: usize = 18;
+const INBOX_EMPTY: usize = 21;
 
 #[must_use]
 pub fn acts() -> Vec<calls::Step> {
@@ -125,6 +134,7 @@ pub fn acts() -> Vec<calls::Step> {
         call(D1, argv!["task", "answer", number(CHAT), number(QUESTION), person("answer"), "--key", "repair-answer"]),
         call(D1, argv!["task", "show", number(WORK), "--until", "ended", "--json"]),
         call(D1, argv!["change", "show", number(CHANGE), "--until", "landed", "--json"]),
+        call(D1, argv!["task", "show", number(CHANGE), "--json"]),
         call(D1, argv!["task", "show", number(ADVISOR), "--until", "ended", "--json"]),
         call(D1, argv!["task", "show", number(PRODUCER), "--until", "ended", "--json"]),
         call(D1, argv!["task", "show", number(REPAIR), "--until", "ended", "--json"]),
@@ -181,7 +191,7 @@ fn hex(id: u64) -> String {
 }
 
 pub fn check(ran: &Ran) {
-    assert_eq!(ran.calls().len(), 21);
+    assert_eq!(ran.calls().len(), 22);
     for (position, call) in ran.calls().iter().enumerate() {
         assert_eq!(call.exit, Some(Exit::Code(0)), "ctl call {position}: {call:?}");
         assert_eq!(call.tries, 1, "native watches, no repeated reads");
@@ -232,6 +242,10 @@ fn check_ci(ran: &Ran) -> (u64, u64, u64) {
     assert_eq!(from, None);
     assert_eq!(previous, Some(first));
     assert_ne!(first, repaired);
+    let opened = records
+        .iter()
+        .position(|record| matches!(record, Observation::Opened { number: PULL, branches: Some(_), .. }))
+        .expect("pull opened");
     for (head, context, expected) in [
         (first, CHECK, api::Check::Passed),
         (first, CHANGES, api::Check::Failed),
@@ -240,6 +254,7 @@ fn check_ci(ran: &Ran) -> (u64, u64, u64) {
     ] {
         let sequence: Vec<_> = records
             .iter()
+            .skip(opened)
             .filter_map(|record| {
                 let Observation::Reported { repository, commit, context: name, state, .. } = record else {
                     return None;
@@ -288,14 +303,27 @@ fn check_repair(ran: &Ran, first: u64) {
     let ci = system.split_once("## CI\n\n").expect("CI brief").1.split_once("\n## ").expect("next section").0;
     assert!(ci.contains(&format!("Repair the failed check at change head {}", &hex(first)[..16])));
     assert!(ci.contains("Failed check: / changes (pull_request)\nDescription: CI failed\nLink: http://"));
-    assert!(ci.contains("Failed step: 1 Run / changes (pull_request)\nEnd of its log:\n"));
-    assert!(ci.contains("Missing changes/2.md"), "the failed job names the missing note: {ci}");
+    assert!(ci.contains("Failed step: 1 changes\nEnd of its log:\n"));
+    assert!(ci.contains("/playground/widget/actions/runs/"));
+    assert!(ci.contains("/jobs/1\n"));
+    let log = ci
+        .split_once("End of its log:\n")
+        .expect("workflow log")
+        .1
+        .split_once("\n\nRepair the failed check.")
+        .expect("repair instruction follows the log")
+        .0;
+    assert!(log.trim_end().ends_with("Missing changes/2.md"), "the failed job ends with the missing note: {log}");
     assert!(!ci.contains("cut"), "whole failure log");
 }
 
 fn check_landing(ran: &Ran, repaired: u64, merge: u64) {
     let change = document(ran, LANDED);
-    let result = &change["result"]["value"]["change"]["words"];
+    assert_eq!(change["chip"]["phase"], "ended");
+    let outcome = &change["result"]["value"]["change"];
+    assert_eq!(outcome["kind"], 1, "landed result");
+    assert_eq!(outcome["part"]["key"]["number"], PULL);
+    let result = &outcome["words"];
     assert_eq!(result["cut"], false);
     let words = result["bytes"].as_str().expect("landed evidence");
     let lines: Vec<_> = words.lines().collect();
@@ -304,7 +332,7 @@ fn check_landing(ran: &Ran, repaired: u64, merge: u64) {
     assert!(lines[1].ends_with("/playground/widget/pulls/2"));
     assert_eq!(
         lines[2],
-        format!("checks at {}: / check (pull_request) passed; / changes (pull_request) passed", hex(repaired))
+        format!("checks at {}: / changes (pull_request) passed; / check (pull_request) passed", hex(repaired))
     );
     assert_eq!(lines[3], "repairs: 1: CI failed: / changes (pull_request)");
     assert_eq!(lines[4], format!("reviews: approved at {}", hex(repaired)));

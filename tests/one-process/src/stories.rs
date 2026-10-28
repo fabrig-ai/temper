@@ -151,6 +151,7 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
             }]),
             labels: Box::new([]),
             checks: skein_fake_forge_domain::api::Checks {
+                cues: Box::new([]),
                 contexts: Box::new([b"check".as_slice().into()]),
                 latency_min: Duration::ZERO,
                 latency_max: Duration::ZERO,

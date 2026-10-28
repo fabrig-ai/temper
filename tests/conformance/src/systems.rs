@@ -64,6 +64,7 @@ impl FakeForge {
                 tree: Box::new([]),
                 labels: Box::new([]),
                 checks: raw::Checks {
+                    cues: Box::new([]),
                     contexts: Box::new([b"build".as_slice().into()]),
                     latency_min: Duration::ZERO,
                     latency_max: Duration::ZERO,

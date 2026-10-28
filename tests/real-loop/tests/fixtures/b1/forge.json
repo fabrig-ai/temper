@@ -9,10 +9,7 @@
       "id": 2,
       "name": "widget",
       "landing": "main",
-      "ci": {
-        "path": "changes/2.md",
-        "green": "\n"
-      },
+      "ci": null,
       "tree": [
         {
           "path": "README.md",

@@ -60,6 +60,7 @@ impl ForgeStand {
                         tree: Box::new([]),
                         labels: Box::new([]),
                         checks: raw::Checks {
+                            cues: Box::new([]),
                             contexts: contexts.iter().map(|context| Box::from(*context)).collect(),
                             latency_min: skein_lib::Duration::ZERO,
                             latency_max: skein_lib::Duration::ZERO,

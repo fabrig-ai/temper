@@ -147,6 +147,7 @@ fn no_overwrite_referee_observes_and_rejects_a_divergent_push() {
             tree: Box::new([]),
             labels: Box::new([]),
             checks: raw::Checks {
+                cues: Box::new([]),
                 contexts: Box::new([]),
                 latency_min: Duration::ZERO,
                 latency_max: Duration::ZERO,

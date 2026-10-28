@@ -481,7 +481,7 @@ fn verdict_out(v: client::Verdict) -> forge::Verdict {
 fn check(s: forge::Check) -> client::Check {
     match s {
         forge::Check::Pending => client::Check::Pending,
-        forge::Check::Passed => client::Check::Passed,
+        forge::Check::Passed | forge::Check::Skipped => client::Check::Passed,
         forge::Check::Failed => client::Check::Failed,
     }
 }
@@ -511,7 +511,7 @@ fn combined(statuses: &[forge::Status]) -> client::Ci {
         match s.state {
             forge::Check::Failed => return client::Ci::Failed,
             forge::Check::Pending => pending = true,
-            forge::Check::Passed => {}
+            forge::Check::Passed | forge::Check::Skipped => {}
         }
     }
     if pending { client::Ci::Pending } else { client::Ci::Passed }

@@ -173,6 +173,7 @@ fn seed_repository(domain: &mut domain::Domain, config: &domain::Config) {
             tree: Box::new([]),
             labels: Box::new([]),
             checks: domain::api::Checks {
+                cues: Box::new([]),
                 contexts: Box::new([]),
                 latency_min: Duration::ZERO,
                 latency_max: Duration::ZERO,

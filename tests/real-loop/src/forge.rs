@@ -28,6 +28,7 @@ fn setup() -> api::Setup {
             .into(),
         labels: Box::new([]),
         checks: api::Checks {
+            cues: Box::new([]),
             contexts: vec![b"check".as_slice().into()].into(),
             latency_min: Duration::ZERO,
             latency_max: Duration::ZERO,

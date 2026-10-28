@@ -1982,6 +1982,7 @@ fn a_saved_repository_tag_becomes_a_concrete_checkout_in_the_next_attempt() {
             tree: Box::new([]),
             labels: Box::new([]),
             checks: raw::Checks {
+                cues: Box::new([]),
                 contexts: Box::new([]),
                 latency_min: Duration::ZERO,
                 latency_max: Duration::ZERO,
