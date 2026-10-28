@@ -678,6 +678,7 @@ pub enum PartyRequest {
 }
 
 #[derive(Debug)]
+#[expect(clippy::large_enum_variant, reason = "events stay inline in the bounded route queue priced at startup")]
 pub(crate) enum Work {
     SwitchChecked,
     AdoptRestored,
