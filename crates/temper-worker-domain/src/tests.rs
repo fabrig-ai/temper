@@ -2,6 +2,7 @@
 //! sections 4, 6, 6.5 and 6.8; `domain/worker.md`, sections 2, 4.1, 4.3 and
 //! 7).
 
+mod admission;
 mod entrance;
 pub(crate) mod fixtures;
 mod harness;

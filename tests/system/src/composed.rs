@@ -412,7 +412,7 @@ impl World {
             ),
             protocol: Protocol::default(),
             worker: worker::Domain::new(&worker_limits),
-            worker_out: Queue::with_capacity(worker::max_out(&worker_limits)),
+            worker_out: Queue::uncapped(),
             worker_env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: worker_limits },
             // The worker's link has a channel open to the engine.
             worker_events: VecDeque::from([worker::Event::Ready]),
@@ -586,7 +586,10 @@ impl World {
     #[must_use]
     pub fn notice_steps(&self) -> u32 {
         const BOUNDARIES: u32 = 4;
-        BOUNDARIES * (worker::max_out(&self.worker_env.limits) + engine::max_out(&self.env.limits))
+        // One process notice crosses its channel, the worker root and link;
+        // allow the peer driver's 1,000 settling steps at each boundary.
+        const WORKER_NOTICE_STEPS: u32 = 3 * 1_000;
+        BOUNDARIES * (WORKER_NOTICE_STEPS + engine::max_out(&self.env.limits))
     }
 
     /// Wait until the process receives the first Smith host operation.

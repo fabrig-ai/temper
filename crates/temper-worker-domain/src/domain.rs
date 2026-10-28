@@ -10,8 +10,8 @@
 //! its last call; the checkout refuses a prepare) and the host answers the
 //! engine, replies to the run or releases the workspace, which leads back to
 //! it no more. smith's payloads go out by hand-out and come back as events of
-//! their own, so no hand-off waits on them. [`crate::max_out`] follows from the
-//! child domains' along that chain (the `limits` module).
+//! their own, so no hand-off waits on them. This finite chain is exhausted
+//! before each entry point returns.
 
 use alloc::boxed::Box;
 
@@ -29,7 +29,7 @@ use crate::route;
 use crate::workspace::{Items, Workspace};
 
 /// The worker domain's state: its child domains', what it keeps of each
-/// agent, call, hand-out and workspace between them, and room for what the
+/// agent, call, hand-out and workspace between them, and queues for what the
 /// child domains emit within an entry point.
 #[derive(Debug)]
 pub struct Domain {
@@ -78,6 +78,18 @@ pub struct Domain {
 }
 
 impl Domain {
+    /// Entries between the root's children. Child outputs are empty between
+    /// entry points, since each completes its hand-offs; payload hand-outs
+    /// remain pending until their ordered returns.
+    #[must_use]
+    pub fn backlog(&self) -> u32 {
+        self.host_out
+            .len()
+            .saturating_add(self.checkout_out.len())
+            .saturating_add(self.agent_out.len())
+            .saturating_add(self.pending.len())
+    }
+
     /// Unanswered hosted attempts, read once by a world's completion referee.
     /// Answered attempts awaiting acknowledgement are parked, not live work.
     #[must_use]
@@ -134,7 +146,6 @@ impl Domain {
     /// A domain with room for `limits`, which [`crate::worst_case`] accepts.
     #[must_use]
     pub fn new(limits: &Limits) -> Domain {
-        let counts = limits::counts(limits).expect("worst_case accepted the limits");
         let slots = limits.host.slots;
         let agents = limits.agent.agents;
         Domain {
@@ -143,16 +154,16 @@ impl Domain {
             agent: agent::Domain::new(&limits.agent),
             agents: Map::with_capacity(agents),
             calls: Map::with_capacity(agents.checked_mul(limits.agent.calls).expect("worst_case accepted the calls")),
-            pending: Queue::with_capacity(limits::pending(limits).expect("worst_case accepted the hand-outs")),
+            pending: Queue::uncapped(),
             gone: Map::with_capacity(agents),
             workspaces: Slab::with_capacity(slots),
             items: Map::with_capacity(slots.saturating_add(1)),
             items_by_run: Map::with_capacity(slots.saturating_add(1)),
             next_items: 1,
             preparing: Map::with_capacity(slots),
-            host_out: Queue::with_capacity(counts.host_out),
-            checkout_out: Queue::with_capacity(counts.checkout_out),
-            agent_out: Queue::with_capacity(counts.agent_out),
+            host_out: Queue::uncapped(),
+            checkout_out: Queue::uncapped(),
+            agent_out: Queue::uncapped(),
             stopping: false,
             past: false,
             facts_out: 0,
@@ -283,34 +294,26 @@ fn keep(domain: &mut Domain, fact: Fact) {
     }
 }
 
-/// Handles one event, emitting at most [`crate::max_out`] requests.
+/// Handles one event, completing its hand-offs before returning.
 pub fn step(domain: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Request>) {
     route::event(domain, env, event, out);
     settle(domain, env, out);
 }
 
-/// Fires an agent's alarm due at `env.now`, if there is one, emitting at most
-/// [`crate::max_out`] requests. A stage fires its alarms after its input events, so
+/// Fires an agent's alarm due at `env.now`, completing its hand-offs before
+/// returning. A stage fires its alarms after its input events, so
 /// progress that arrived in the same iteration wins over a deadline that
 /// passed while the loop waited.
 pub fn fire(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
     if domain.agent.is_due(env.now) {
-        assert!(
-            domain.agent_out.room() >= agent::max_out(&env.limits.agent),
-            "an entry point steps the agents no more than its bound"
-        );
         agent::fire(&mut domain.agent, &route::agent_env(env), &mut domain.agent_out);
     }
     settle(domain, env, out);
 }
 
-/// Cancels one run the host has on its ready list, if it has one, emitting at
-/// most [`crate::max_out`] requests; or, shutting down with nothing left, stops.
+/// Cancels one run the host has on its ready list, or stops when shutdown
+/// finishes, completing its hand-offs before returning.
 pub fn resume(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
-    assert!(
-        domain.host_out.room() >= host::max_out(&env.limits.host),
-        "an entry point steps the host within its bound"
-    );
     host::resume(&mut domain.host, &route::host_env(env), &mut domain.host_out);
     settle(domain, env, out);
 }

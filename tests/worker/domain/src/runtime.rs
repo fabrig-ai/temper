@@ -8,7 +8,7 @@ use std::fmt::{self, Write};
 use skein_lib::{Duration, Env, Queue, Rng, Time, Token, Wall};
 use skein_world::domain::heap::Meter;
 use temper_worker_domain::checkout::git::{Commit, Done, Op, Want};
-use temper_worker_domain::{Domain, Event, Limits, Request, agent, host, max_out, resume, step, wire, worst_case};
+use temper_worker_domain::{Domain, Event, Limits, Request, agent, host, resume, step, wire, worst_case};
 
 use crate::protocol;
 
@@ -159,7 +159,7 @@ impl World {
         let bound = worst_case(&limits).expect("world limits fit");
         World {
             settings,
-            out: Queue::with_capacity(max_out(&limits)),
+            out: Queue::uncapped(),
             domain: Domain::new(&limits),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
             owed: VecDeque::with_capacity(CAPACITY),
@@ -221,8 +221,7 @@ impl World {
 
     fn drain(&mut self) {
         let measured = self.meter.end();
-        for _ in 0..max_out(&self.env.limits) {
-            let Some(request) = self.out.pop() else { break };
+        while let Some(request) = self.out.pop() {
             // The runs' activity is best effort, as facts are.
             if let Request::Link(host::LinkUp::Activity { .. }) = &request {
                 self.remember_fact(&request);
@@ -231,7 +230,6 @@ impl World {
                 self.take(request);
             }
         }
-        assert!(self.out.is_empty(), "max_out covers a replay burst");
         for _ in 0..1024 {
             let Some(fact) = self.domain.pop_fact() else { break };
             self.remember_fact(&fact);

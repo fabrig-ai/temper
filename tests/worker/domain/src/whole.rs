@@ -13,7 +13,7 @@ use temper_fake_checkout::{
 };
 use temper_worker_checkout_world::{forge::Forge, translate};
 use temper_worker_domain::{
-    Domain, Event, Limits, Request, agent, checkout::git::Op, fire, host, max_out, resume, step, wire, worst_case,
+    Domain, Event, Limits, Request, agent, checkout::git::Op, fire, host, resume, step, wire, worst_case,
 };
 
 use crate::protocol;
@@ -87,7 +87,7 @@ impl World {
         forge.create_branch(REMOTE, b"saved", first).expect("saved");
         Self {
             domain: Domain::new(&limits),
-            out: Queue::with_capacity(max_out(&limits)),
+            out: Queue::uncapped(),
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
             owed: VecDeque::new(),
             forge,

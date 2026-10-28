@@ -71,6 +71,7 @@ pub fn root_limits(worker: &settings::Worker, agent: &settings::Agent, own: &lim
         reply_bytes: agent.limits.bodies.host_reply_text,
         bounds: agent.bounds.clone(),
         stop_bound: worker.jig.stop_bound,
+        watermark: root::WATERMARK,
     }
 }
 

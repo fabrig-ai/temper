@@ -11,7 +11,6 @@ use temper_worker_domain_checkout as checkout;
 
 use crate::agents::{Bound, Call};
 use crate::facts::Fact;
-use crate::hand_out::Pending;
 use crate::translate::SAVED;
 use crate::workspace::{Items, Root, Workspace};
 
@@ -36,7 +35,17 @@ pub struct Limits {
     /// its configuration derives and the hello states. The engine's grace is
     /// strictly longer.
     pub stop_bound: Duration,
+    /// The backlog, in entries, at which the worker's service stops taking
+    /// new work from the engine (skein's draft `dynamic-memory.md`, 4.4):
+    /// a limit on pacing, not on memory.
+    pub watermark: u32,
 }
+
+/// The watermark's default: the stock `temper init` small profile's former
+/// `Prepared::room`, twice its root output bound of 5,099. Its hub emits at
+/// most 48 requests, smith 10, checkout 2: (8 * 48 + 2) * (10 + 2) + 8 * 48
+/// + 1 * (8 * 2 + 1) replays + 64 activity + 2 root requests = 5,099.
+pub const WATERMARK: u32 = 10_198;
 
 /// The bytes a message's sender and words take beyond themselves once smith
 /// renders them, its separator (smith's `smith-domain-run`, `rendered_bytes`).
@@ -158,18 +167,17 @@ const UNFIT: u32 = 20;
 ///
 /// It is the child domains', plus what the root keeps: the agents it bound
 /// and their calls in flight with their names and what they ask, the
-/// hand-outs waiting and the ends waiting behind them, a record of each
+/// ends waiting behind hand-outs, a record of each
 /// workspace and the map that finds those being prepared, each run's
-/// workspace items until the engine has its answer, the queues that hold what
-/// each child domain emits in an entry point until it is routed, and the
-/// facts. What the queued requests own is counted where they end up.
+/// workspace items until the engine has its answer, and the bounded facts.
+/// The uncapped inter-child queues are outside this estimate. What the
+/// queued requests own is counted where they end up.
 #[must_use]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
     let Limits { host: host_limits, checkout: checkout_limits, agent: agent_limits, .. } = limits;
     if !unfit(limits).is_empty() {
         return None;
     }
-    let counts = counts(limits)?;
     let children = host::worst_case(host_limits)?
         .checked_add(checkout::worst_case(checkout_limits)?)?
         .checked_add(agent::worst_case(agent_limits)?)?;
@@ -181,20 +189,10 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     let bindings = Map::<Token, Bound>::worst_case(agent_limits.agents)?
         .checked_add(Map::<(Token, Token), Call>::worst_case(calls)?)?
         .checked_add(u64::from(calls).checked_mul(call)?)?
-        .checked_add(Queue::<Pending>::worst_case(pending(limits)?)?)?
         .checked_add(Map::<Token, Box<[u8]>>::worst_case(agent_limits.agents)?)?
         .checked_add(u64::from(agent_limits.agents).checked_mul(u64::from(agent_limits.detail_bytes))?)?;
-    let host_out = Queue::<host::Request>::worst_case(counts.host_out)?;
-    let checkout_out = Queue::<checkout::Request>::worst_case(counts.checkout_out)?;
-    let agent_out = Queue::<agent::Output>::worst_case(counts.agent_out)?;
     let facts = Queue::<Fact>::worst_case(facts(limits)?)?;
-    children
-        .checked_add(bindings)?
-        .checked_add(workspace_memory(limits)?)?
-        .checked_add(host_out)?
-        .checked_add(checkout_out)?
-        .checked_add(agent_out)?
-        .checked_add(facts)
+    children.checked_add(bindings)?.checked_add(workspace_memory(limits)?)?.checked_add(facts)
 }
 
 /// The root's records of workspaces, and each run's workspace items until
@@ -242,68 +240,23 @@ pub(crate) fn facts(limits: &Limits) -> Option<u32> {
     limits.host.facts.checked_add(limits.checkout.facts)?.checked_add(limits.agent.facts)
 }
 
-/// Hand-outs waiting at once: for each agent, its turns not yet taken, its
-/// calls, and its last word.
-pub(crate) fn pending(limits: &Limits) -> Option<u32> {
-    limits.agent.agents.checked_mul(limits.agent.turns.checked_add(limits.agent.calls)?.checked_add(1)?)
-}
-
-/// The hub steps in one entry point that emit requests, at most. An entry
-/// point concerns one hosted run, its agent and its workspace (or, the
-/// hello, none). It steps the hub itself at most three times (an encoded call
-/// name: called, then withdrawn; an encoded last word: finished; and an end
-/// that waited behind them). The run's agent tells the hub at most three
-/// things that lead to requests, its steps together: what it took (a turn
-/// or a call goes out by hand-out first), a fault and that it has gone; the
-/// names it left unread and the messages it refused lead to none. Its
-/// workspace tells the hub at most two: a prepare, push or save ended, and
-/// one refused at once.
-const EMITTING: u32 = 8;
-
-/// What an entry point emits and routes, at most, under `limits`.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Counts {
-    /// Room for what the hub emits in an entry point: the emitting steps'
-    /// requests, and room for one more step.
-    pub(crate) host_out: u32,
-    /// Room for what smith emits: one step's, and one more taken as one of
-    /// its notices is routed (a delivery refused at once).
-    pub(crate) agent_out: u32,
-    /// Room for what the checkout emits: one step's, and the release of a
-    /// workspace whose prepare failed.
-    pub(crate) checkout_out: u32,
-    /// The child domains' requests routed in an entry point.
-    pub(crate) routed: u32,
-    /// The requests an entry point emits.
-    pub(crate) out: u32,
-}
-
-/// The counts of an entry point, or `None` if they do not fit a `u32`. Each
-/// of the hub's requests leads to at most one capability step, and so does
-/// the entry; a failed prepare's release is one more.
-pub(crate) fn counts(limits: &Limits) -> Option<Counts> {
-    let hub = host::max_out(&limits.host);
-    let smith = agent::max_out(&limits.agent);
-    let git = checkout::MAX_OUT;
-    let requests = EMITTING.checked_mul(hub)?;
-    let capabilities = requests.checked_add(2)?;
-    let routed = capabilities.checked_mul(smith.checked_add(git)?)?.checked_add(requests)?;
-    let replays = limits.host.slots.checked_mul(limits.host.turns.checked_mul(2)?.checked_add(1)?)?;
-    Some(Counts {
-        host_out: requests.checked_add(hub)?,
-        agent_out: smith.checked_mul(2)?,
-        checkout_out: git.checked_mul(2)?,
-        routed,
-        // What is routed out, the hello's replays, the activity drained, the
-        // root's own refusal and its stop.
-        out: routed.checked_add(replays)?.checked_add(limits.host.told)?.checked_add(2)?,
-    })
-}
-
-/// The most requests an entry point emits per call under `limits`, which
-/// [`worst_case`] accepts. The loop reserves this much room in `out` before
-/// calling it.
+/// Compatibility for the service's room predicate, removed in the service swap.
 #[must_use]
 pub fn max_out(limits: &Limits) -> u32 {
-    counts(limits).expect("worst_case accepted the limits").out
+    let requests = host::max_out(&limits.host).checked_mul(8).expect("root output bound");
+    let capabilities = requests.checked_add(2).expect("root output bound");
+    let routed = capabilities
+        .checked_mul(agent::max_out(&limits.agent).checked_add(checkout::MAX_OUT).expect("root output bound"))
+        .and_then(|count| count.checked_add(requests))
+        .expect("root output bound");
+    let replays = limits
+        .host
+        .slots
+        .checked_mul(limits.host.turns.checked_mul(2).and_then(|count| count.checked_add(1)).expect("replay bound"))
+        .expect("replay bound");
+    routed
+        .checked_add(replays)
+        .and_then(|count| count.checked_add(limits.host.told))
+        .and_then(|count| count.checked_add(2))
+        .expect("root output bound")
 }
