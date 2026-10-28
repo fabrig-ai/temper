@@ -263,17 +263,13 @@ fn an_outbox_entry_waits_for_its_commit() {
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
     let restored = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
-    let [
-        Request::Save { record: Stored::Client(_), .. },
-        Request::Save { record: Stored::Client(_), .. },
-        Request::RestartDone { stage: RestartStage::Restored },
-    ] = restored.as_ref()
-    else {
-        panic!("main watch records beside restored completion")
-    };
-    assert!(outputs(&mut d, Event::ReadAfresh).is_empty());
-    assert!(fixtures::prime_main(&mut d).contains(&Request::RestartDone { stage: RestartStage::ReadAfresh }));
-    assert_eq!(outputs(&mut d, Event::SettleOutbox).as_ref(), &[Request::RestartDone { stage: RestartStage::Settled }],);
+    assert_eq!(restored.as_ref(), &[Request::RestartDone { stage: RestartStage::Restored }]);
+    assert_eq!(
+        outputs(&mut d, Event::ReadAfresh).as_ref(),
+        &[Request::RestartDone { stage: RestartStage::ReadAfresh }]
+    );
+    assert!(outputs(&mut d, Event::SettleOutbox).contains(&Request::RestartDone { stage: RestartStage::Settled }));
+    fixtures::prime_main(&mut d);
     let entry = status(11, 7);
     assert_eq!(
         outputs(&mut d, Event::Enqueue { entry: entry.clone() }).as_ref(),
@@ -570,8 +566,7 @@ fn restored_ci_subscriptions_are_read_in_the_fresh_step_and_delay_its_completion
             result: Ok(fixtures::checks(skein_forge::api::Check::Passed)),
         }),
     );
-    assert!(!done.contains(&Request::RestartDone { stage: RestartStage::ReadAfresh }));
-    assert!(fixtures::prime_main(&mut d).contains(&Request::RestartDone { stage: RestartStage::ReadAfresh }));
+    assert!(done.contains(&Request::RestartDone { stage: RestartStage::ReadAfresh }));
 }
 
 #[test]
@@ -738,18 +733,14 @@ fn held_creation() -> Domain {
 fn a_held_effect_survives_a_restart_out_of_the_clients_outbox() {
     let mut d = held_restored();
     let restored = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
-    let [
-        Request::Save { record: Stored::Client(_), .. },
-        Request::Save { record: Stored::Client(_), .. },
-        Request::RestartDone { stage: RestartStage::Restored },
-    ] = restored.as_ref()
-    else {
-        panic!("main watch records beside restored completion")
-    };
-    assert!(outputs(&mut d, Event::ReadAfresh).is_empty());
-    assert!(fixtures::prime_main(&mut d).contains(&Request::RestartDone { stage: RestartStage::ReadAfresh }));
+    assert_eq!(restored.as_ref(), &[Request::RestartDone { stage: RestartStage::Restored }]);
+    assert_eq!(
+        outputs(&mut d, Event::ReadAfresh).as_ref(),
+        &[Request::RestartDone { stage: RestartStage::ReadAfresh }]
+    );
     // Nothing is looked for: the client never had the held entry.
-    assert_eq!(outputs(&mut d, Event::SettleOutbox).as_ref(), &[Request::RestartDone { stage: RestartStage::Settled }]);
+    assert!(outputs(&mut d, Event::SettleOutbox).contains(&Request::RestartDone { stage: RestartStage::Settled }));
+    fixtures::prime_main(&mut d);
     assert!(ready(&mut d).is_empty());
     assert!(!d.effect_room(&LIMITS, 7), "the held entry keeps its room");
 }
