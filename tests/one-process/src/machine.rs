@@ -130,7 +130,6 @@ pub(crate) fn fresh() -> skein_fake_machine::Machine {
             skein_fake_machine::Item::directory(b"home"),
         ],
         vec![],
-        vec![], // The separately inherited parent for ctl's output file.
     ] {
         let root = machine.lay(&items);
         machine.close(root);

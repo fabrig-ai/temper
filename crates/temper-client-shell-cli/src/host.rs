@@ -173,7 +173,7 @@ impl OneShot {
                 files,
                 u32::try_from(limits.root.tools.ask_bytes).expect("call bound"),
             ),
-            format: if matches!(call.parsed, Parsed::Call { json: true, .. }) {
+            format: if matches!(call.parsed, Parsed::Call { json: true, .. } | Parsed::File { json: true, .. }) {
                 PrintFormat::Json
             } else {
                 PrintFormat::Text

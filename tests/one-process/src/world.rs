@@ -1008,6 +1008,10 @@ fn write_settings(disk: &mut skein_fake_machine::Machine) {
     if stories::needs_settings() {
         let root = disk.lay(&[skein_fake_machine::Item::file(b"settings.json", &stories::settings_file())]);
         disk.close(root);
+    } else if stories::capacity().is_some() {
+        // Root 3 is this story's output parent, or the restart story's settings parent.
+        let root = disk.lay(&[]);
+        disk.close(root);
     }
 }
 
