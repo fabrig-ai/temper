@@ -456,6 +456,11 @@ fn tree(world: &mut World, chat: &engine::Assignment) -> Tree {
     answer(world, &chat, CHAT_TURNS, tasks::End::Parked);
     let work = admitted(world, work_task);
     let advisor_task = goal(world, &work, true);
+    assert_eq!(
+        record(world, advisor_task).tracked,
+        None,
+        "the work goal sets advisor: true, making an untracked survey rather than another work goal"
+    );
     answer(world, &work, WORK_TURNS, tasks::End::Parked);
     let advisor = admitted(world, advisor_task);
     assert!(matches!(call(world, &advisor, engine::Tool::ReadForge {

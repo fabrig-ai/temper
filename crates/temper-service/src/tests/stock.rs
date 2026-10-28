@@ -255,7 +255,7 @@ fn the_chats_words_send_work_agreed_first_to_a_goal() {
     let words = include_str!("../stock/chat.txt");
     assert!(words.contains("When a task, not a person, requested you"), "a goal is told apart by its requester");
     assert!(
-        words.contains("before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, then call wait until it is answered: never call finish before that answer, nor before every agreed change has landed."),
+        words.contains("Before anything is changed, send your requester your plan with message, as a question asking whether to go ahead, then call wait until it is answered: never call finish before that answer, nor before every agreed change has landed."),
         "the goal calls wait after asking and finishes only after the answer and all landings"
     );
     assert!(
@@ -281,6 +281,10 @@ fn the_chats_words_mark_an_advisors_read_only_report() {
 #[test]
 fn the_goals_words_survey_before_planning_and_sequence_changes() {
     let words = include_str!("../stock/chat.txt");
+    assert!(
+        words.contains("When a task, not a person, requested you, you are a goal doing work your requester agreed to plan first: the plan and the changes are yours, so never call goal without advisor set. Before anything is changed, send your requester"),
+        "the goal owns its plan and changes and delegates only advisors with goal"
+    );
     assert!(words.contains("If your words ask for an advisor, or you need the code read before you can plan, first call goal with advisor set and words saying what to read and report; wait for its report, and name what it found in your plan. Make each agreed change with change, one at a time: when one builds on another, call change for it only after the first's result says it landed, and say in its words what to reuse."), "the goal surveys first and waits for landing before dependent changes");
     assert!(
         words.contains(
