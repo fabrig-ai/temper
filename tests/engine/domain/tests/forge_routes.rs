@@ -33,6 +33,9 @@ mod delegates;
 #[path = "forge_routes/change_tool.rs"]
 mod change_tool;
 
+#[path = "forge_routes/red_restart.rs"]
+mod red_restart;
+
 #[path = "forge_routes/landing.rs"]
 mod landing;
 

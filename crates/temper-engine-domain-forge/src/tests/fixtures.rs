@@ -322,13 +322,27 @@ pub fn verification_step(d: &mut Domain) -> Box<[Request]> {
 
 pub fn judge(d: &mut Domain, tier: &[u8], blame: temper_engine_domain_forge_tiers::Blame) -> Box<[Request]> {
     let mut out = Queue::with_capacity(max_out(&LIMITS));
-    crate::verification::judged(d, REPO, tier, &temper_engine_domain_forge_tiers::Verdict {
-        number: OPEN, tip: MERGE, key: MERGE,
-        failing: match &blame {
-            temper_engine_domain_forge_tiers::Blame::Cleared => temper_engine_domain_forge_tiers::Failures::Tests(Box::new([])),
-            temper_engine_domain_forge_tiers::Blame::Owns(f) | temper_engine_domain_forge_tiers::Blame::Suspect(f) => f.clone(),
-        }, landings: Box::new([blame.clone()]), flakes: Box::new([]),
-    }, &[(MERGE, blame)], &mut out);
+    crate::verification::judged(
+        d,
+        REPO,
+        tier,
+        &temper_engine_domain_forge_tiers::Verdict {
+            number: OPEN,
+            tip: MERGE,
+            key: MERGE,
+            failing: match &blame {
+                temper_engine_domain_forge_tiers::Blame::Cleared => {
+                    temper_engine_domain_forge_tiers::Failures::Tests(Box::new([]))
+                }
+                temper_engine_domain_forge_tiers::Blame::Owns(f)
+                | temper_engine_domain_forge_tiers::Blame::Suspect(f) => f.clone(),
+            },
+            landings: Box::new([blame.clone()]),
+            flakes: Box::new([]),
+        },
+        &[(MERGE, blame)],
+        &mut out,
+    );
     let mut requests = skein_lib::List::with_capacity(out.len());
     while let Some(request) = out.pop() {
         requests.push(request).expect("sized to output");

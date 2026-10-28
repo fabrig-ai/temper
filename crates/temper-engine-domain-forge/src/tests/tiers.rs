@@ -256,15 +256,23 @@ fn dispatch(d: &mut Domain, entry: u64) -> Box<[Request]> {
         saved.entry.start = Some(skein_forge_client::Position { at: env().now, comment: 0, review: 0, review_page: 1 });
         let made = match &saved.entry.effect.write {
             api::Write::CreateBranch { commit, .. } => skein_forge_client::Made::Branch(*commit),
-            _ => skein_forge_client::Made::Set,
+            api::Write::CreateIssue { .. }
+            | api::Write::OpenPull { .. }
+            | api::Write::Post { .. }
+            | api::Write::Review { .. }
+            | api::Write::Edit { .. }
+            | api::Write::SetReviewers { .. }
+            | api::Write::Close { .. }
+            | api::Write::Reopen { .. }
+            | api::Write::Merge { .. }
+            | api::Write::Update { .. }
+            | api::Write::Status { .. }
+            | api::Write::Dispatch { .. }
+            | api::Write::Rerun { .. }
+            | api::Write::DeleteBranch { .. } => skein_forge_client::Made::Set,
         };
         let mut ignored = Queue::with_capacity(max_out(&LIMITS));
-        crate::tiers::outcome(
-            d,
-            entry,
-            skein_forge_client::Outcome::Made { made, found: false },
-            &mut ignored,
-        );
+        crate::tiers::outcome(d, entry, skein_forge_client::Outcome::Made { made, found: false }, &mut ignored);
         d.entries.remove(&entry);
     }
     out
@@ -325,9 +333,12 @@ fn judged(d: &mut Domain) -> Box<[Request]> {
     let out = outputs(d, Event::StepTier { task: TIER_TASK, entry: RETRY });
     if fixtures::browser(d).branch == (TierBranch::Pending { entry: RETRY }) {
         let mut ignored = Queue::with_capacity(max_out(&LIMITS));
-        crate::tiers::outcome(d, RETRY, skein_forge_client::Outcome::Made {
-            made: skein_forge_client::Made::Set, found: false,
-        }, &mut ignored);
+        crate::tiers::outcome(
+            d,
+            RETRY,
+            skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Set, found: false },
+            &mut ignored,
+        );
         d.entries.remove(&RETRY);
         return outputs(d, Event::StepTier { task: TIER_TASK, entry: RETRY });
     }
@@ -717,7 +728,9 @@ const TWO_FAILURES: &[u8] = b"suite.first\nsuite.second\n";
 fn tests() -> Box<[policy::TestId]> {
     Box::new([b"suite.first".as_slice().into(), b"suite.second".as_slice().into()])
 }
-fn failures() -> policy::Failures { policy::Failures::Tests(tests()) }
+fn failures() -> policy::Failures {
+    policy::Failures::Tests(tests())
+}
 fn red_range(commits: &[api::Commit]) -> Domain {
     let mut d = made_branch();
     let mut out = Queue::with_capacity(max_out(&LIMITS));
@@ -729,7 +742,11 @@ fn red_range(commits: &[api::Commit]) -> Domain {
     let run = row.record.run.as_mut().unwrap();
     run.tip = *commits.last().unwrap();
     run.key = run.tip;
-    run.landings = commits.iter().map(|commit| policy::Landing { commit: *commit, key: *commit }).collect();
+    let mut landings = skein_lib::List::with_capacity(LIMITS.changes);
+    for commit in commits {
+        landings.push(policy::Landing { commit: *commit, key: *commit }).expect("range fits changes");
+    }
+    run.landings = landings.into_boxed();
     dispatch(&mut d, DISPATCH);
     d
 }
@@ -753,9 +770,13 @@ fn blame(d: &Domain, commit: api::Commit) -> &policy::Blame {
     &d.verifications.get(&(REPO, commit)).unwrap().tiers[0].verdict.as_ref().unwrap().blame
 }
 fn finish_parts(d: &mut Domain) {
-    for entry in 201..213 { // status, at most one probe deletion and the whole branch deletion.
+    for entry in 201..213 {
+        // status, at most one probe deletion and the whole branch deletion.
         let out = dispatch(d, entry);
-        if matches!(tier_decision(&out), Some(TierDecision::Done { .. })) { return; }
+        match tier_decision(&out) {
+            Some(TierDecision::Done { .. }) => return,
+            Some(TierDecision::Wait | TierDecision::Held) | None => {}
+        }
     }
     panic!("tier task finishes after its branch effects");
 }
@@ -774,7 +795,14 @@ fn a_failed_runs_tests_are_read_from_its_lines_artifact() {
     failed_part(&mut d);
     outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
     let (_, op) = fixtures::next_call(&mut d);
-    assert_eq!(op, api::Op::Read(api::Read::Artifact { run: RUN_ID, name: b"report".as_slice().into(), max_bytes: LIMITS.client.answer_bytes }));
+    assert_eq!(
+        op,
+        api::Op::Read(api::Read::Artifact {
+            run: RUN_ID,
+            name: b"report".as_slice().into(),
+            max_bytes: LIMITS.client.answer_bytes
+        })
+    );
     report(&mut d, TWO_FAILURES, false);
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().part, policy::Part::Rerun { failed: tests() });
 }
@@ -786,7 +814,7 @@ fn a_failed_run_whose_artifact_is_missing_is_a_fault_and_retried() {
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     crate::tiers::answered(&mut d, &env(), READ_OWNER, Err(api::Error::Missing), &mut out);
     let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
-    assert!(matches!(effect_write(&out), api::Write::Dispatch { .. }));
+    let api::Write::Dispatch { .. } = effect_write(&out) else { panic!("the fault is retried by dispatch") };
     assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().faults, 1);
     assert!(d.verifications.get(&(REPO, MERGE)).unwrap().tiers[0].verdict.is_none());
 }
@@ -810,10 +838,13 @@ fn failed_tests_rerun_alone_and_passing_alone_are_a_flake() {
     completed(&mut d, api::Conclusion::Success, None);
     finish_parts(&mut d);
     assert_eq!(blame(&d, MERGE), &policy::Blame::Cleared);
-    assert_eq!(fixtures::browser(&d).record.flakes.as_ref(), &[
-        policy::Flake { test: b"suite.first".as_slice().into(), count: 1 },
-        policy::Flake { test: b"suite.second".as_slice().into(), count: 1 },
-    ]);
+    assert_eq!(
+        fixtures::browser(&d).record.flakes.as_ref(),
+        &[
+            policy::Flake { test: b"suite.first".as_slice().into(), count: 1 },
+            policy::Flake { test: b"suite.second".as_slice().into(), count: 1 },
+        ]
+    );
     assert!(d.landing.receipts.is_empty(), "a partial rerun never makes a receipt");
 }
 #[test]
@@ -832,7 +863,10 @@ fn failures_the_previous_run_had_are_inherited() {
     assert_eq!(blame(&d, MERGE), &policy::Blame::Owns(failures()));
     assert!(fixtures::browser(&d).record.failing == failures());
     assert_eq!(blame(&d, HEAD), &policy::Blame::Cleared);
-    assert_eq!(crate::verification::verification(&d, REPO, HEAD), temper_engine_domain_forge_change::Verification::Cleared);
+    assert_eq!(
+        crate::verification::verification(&d, REPO, HEAD),
+        temper_engine_domain_forge_change::Verification::Cleared
+    );
 }
 #[test]
 fn new_failures_of_one_landing_are_its_own() {
@@ -843,11 +877,14 @@ fn new_failures_of_one_landing_are_its_own() {
 }
 fn probe_step(d: &mut Domain, entry: u64) -> Box<[Request]> {
     let out = outputs(d, Event::StepTier { task: TIER_TASK, entry });
-    if matches!(effect_write(&out), api::Write::CreateBranch { .. }) {
+    if let api::Write::CreateBranch { .. } = effect_write(&out) {
         let mut ignored = Queue::with_capacity(max_out(&LIMITS));
-        crate::tiers::outcome(d, entry, skein_forge_client::Outcome::Made {
-            made: skein_forge_client::Made::Branch(MERGE), found: false,
-        }, &mut ignored);
+        crate::tiers::outcome(
+            d,
+            entry,
+            skein_forge_client::Outcome::Made { made: skein_forge_client::Made::Branch(MERGE), found: false },
+            &mut ignored,
+        );
         d.entries.remove(&entry);
     }
     out
@@ -877,9 +914,10 @@ fn a_landing_with_the_previous_key_is_never_probed() {
     probe_step(&mut d, 301);
     dispatch(&mut d, 302);
     completed(&mut d, api::Conclusion::Success, None);
-    assert_eq!(fixtures::browser(&d).result.as_ref().unwrap().verdict.landings.as_ref(), &[
-        policy::Blame::Cleared, policy::Blame::Cleared, policy::Blame::Owns(failures()),
-    ]);
+    assert_eq!(
+        fixtures::browser(&d).result.as_ref().unwrap().verdict.landings.as_ref(),
+        &[policy::Blame::Cleared, policy::Blame::Cleared, policy::Blame::Owns(failures()),]
+    );
 }
 #[test]
 fn tell_all_makes_every_landing_of_the_range_a_suspect() {
@@ -896,12 +934,16 @@ fn a_probes_branch_is_made_at_its_landing_and_deleted_after() {
     let mut d = red_range(&[MERGE, HEAD, THIRD]);
     red(&mut d);
     let made = probe_step(&mut d, 301);
-    assert_eq!(effect_write(&made), &api::Write::CreateBranch { branch: b"temper/tier/browser.1.0".as_slice().into(), commit: MERGE });
+    assert_eq!(
+        effect_write(&made),
+        &api::Write::CreateBranch { branch: b"temper/tier/browser.1.0".as_slice().into(), commit: MERGE }
+    );
     let out = dispatch(&mut d, 302);
     let api::Write::Dispatch { inputs, .. } = effect_write(&out) else { panic!("probe dispatch") };
     assert_eq!(inputs[0].value, landing::inputs(MERGE, MERGE)[0].value);
     failed_part(&mut d);
     report(&mut d, TWO_FAILURES, false);
+    dispatch(&mut d, STATUS); // post the verdict before deleting the last probe.
     let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 303 });
     assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1.0".as_slice().into() });
     let saved = &d.entries.get(&303).unwrap().entry;
@@ -945,5 +987,66 @@ fn a_red_landing_is_repaired_by_a_run_that_passes_its_tests() {
     completed(&mut d, api::Conclusion::Success, None);
     finish_parts(&mut d);
     assert_eq!(d.verifications.get(&(REPO, MERGE)).unwrap().tiers[0].repaired, Some(HEAD));
-    assert_eq!(crate::verification::verification(&d, REPO, MERGE), temper_engine_domain_forge_change::Verification::Cleared);
+    assert_eq!(
+        crate::verification::verification(&d, REPO, MERGE),
+        temper_engine_domain_forge_change::Verification::Cleared
+    );
+}
+
+#[test]
+fn a_failed_deletion_holds_the_task_without_undoing_its_verdict() {
+    let mut d = red_range(&[MERGE]);
+    red(&mut d);
+    dispatch(&mut d, STATUS);
+    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 403 });
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::outcome(&mut d, 403, skein_forge_client::Outcome::Failed(api::Error::Refused), &mut out);
+    let mut held = false;
+    for request in &out {
+        if let Request::TierDecision { decision, .. } = request {
+            assert_eq!(decision, &TierDecision::Held);
+            held = true;
+        }
+    }
+    assert!(held);
+    assert_eq!(blame(&d, MERGE), &policy::Blame::Owns(failures()));
+    assert_eq!(fixtures::browser(&d).record.failing, failures());
+}
+#[test]
+fn a_failed_last_probe_deletion_keeps_the_judged_verdict() {
+    let mut d = red_range(&[MERGE, HEAD, THIRD]);
+    red(&mut d);
+    probe_step(&mut d, 301);
+    dispatch(&mut d, 302);
+    failed_part(&mut d);
+    report(&mut d, TWO_FAILURES, false);
+    dispatch(&mut d, STATUS);
+    let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 403 });
+    assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1.0".as_slice().into() });
+    let mut out = Queue::with_capacity(max_out(&LIMITS));
+    crate::tiers::outcome(&mut d, 403, skein_forge_client::Outcome::Failed(api::Error::Refused), &mut out);
+    assert_eq!(blame(&d, MERGE), &policy::Blame::Owns(failures()));
+    assert_eq!(fixtures::browser(&d).record.failing, failures());
+    assert!(fixtures::browser(&d).result.as_ref().unwrap().applied);
+}
+#[test]
+fn a_restart_while_reading_a_failed_report_reads_it_again() {
+    let mut d = red_range(&[MERGE]);
+    failed_part(&mut d);
+    let row = fixtures::browser(&d).clone();
+    outputs(&mut d, Event::Restore { record: Stored::Tier(row) });
+    d.tier_follows.remove(&(REPO, BROWSER.into()));
+    crate::tiers::rebuild(&mut d);
+    outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
+    let (_, op) = fixtures::next_call(&mut d);
+    assert_eq!(
+        op,
+        api::Op::Read(api::Read::Artifact {
+            run: RUN_ID,
+            name: b"report".as_slice().into(),
+            max_bytes: LIMITS.client.answer_bytes
+        })
+    );
+    report(&mut d, TWO_FAILURES, false);
+    assert_eq!(fixtures::browser(&d).record.run.as_ref().unwrap().part, policy::Part::Rerun { failed: tests() });
 }

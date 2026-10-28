@@ -2329,13 +2329,22 @@ fn land_for_tier(world: &mut World, task: u64, branch: &[u8]) -> skein_forge::ap
     land_file_for_tier(world, task, branch, b"file")
 }
 fn land_file_for_tier(world: &mut World, task: u64, branch: &[u8], path: &[u8]) -> skein_forge::api::Commit {
+    land_content_for_tier(world, task, branch, path, b"change")
+}
+fn land_content_for_tier(
+    world: &mut World,
+    task: u64,
+    branch: &[u8],
+    path: &[u8],
+    content: &[u8],
+) -> skein_forge::api::Commit {
     let mut row = change_row();
     row.task = task;
     row.change.task = task;
     row.branch = branch.into();
     world.event(top::Event::Change { row });
     change_step_task(world, task, task * 100, change::Status::Unknown, Box::new([]), false, false);
-    world.produce_on_file(branch, b"main", path);
+    world.produce_on_contents(branch, b"main", path, content);
     world.status(branch, skein_fake_forge_domain::api::Check::Passed);
     for at in 1..24 {
         change_step_task(world, task, task * 100 + at, change::Status::Passed, Box::new([]), false, false);
@@ -2346,7 +2355,10 @@ fn land_file_for_tier(world: &mut World, task: u64, branch: &[u8], path: &[u8]) 
     panic!("change {task} lands before the baseline ends: {:?}", world.change(task));
 }
 fn tier_world(ignored: &[&[u8]]) -> World {
-    let mut world = World::tiered();
+    tier_world_with_reports(ignored, false)
+}
+fn tier_world_with_reports(ignored: &[&[u8]], reports: bool) -> World {
+    let mut world = if reports { World::tiered_reports() } else { World::tiered() };
     world.adopt();
     assert!(world.project_tiers(
         5,
@@ -2482,4 +2494,114 @@ fn a_documentation_landing_every_tier_ignores_clears_at_once() {
     assert!(statuses.iter().any(|status| status.context.as_ref() == b"temper/verdict/browser"
         && status.state == skein_fake_forge_domain::api::Check::Passed));
     assert!(!world.has_branch(b"temper/tier/browser.2"));
+}
+
+const THIRD_CHANGE: u64 = 53;
+const TIER_INHERITED: u64 = 103;
+const RED_STEPS: u64 = 3 * TIER_STEPS; // whole run, selected rerun and probe each take 90 simulated seconds.
+const FAILING_IDS: &[u8] = b"suite.first\nsuite.second\n";
+fn finish_tier(world: &mut World, task: u64, first_entry: u64) {
+    for at in 0..RED_STEPS {
+        if tier_step(world, task, first_entry + at) {
+            return;
+        }
+    }
+    panic!("tier {task} completes: {:?}", browser_row(world));
+}
+fn start_report_baseline() -> World {
+    let mut world = tier_world_with_reports(&[b"docs"], true);
+    tier_hold(&mut world, TIER_BASELINE, 1);
+    tier_step(&mut world, TIER_BASELINE, 1000);
+    tier_step(&mut world, TIER_BASELINE, 1001);
+    world
+}
+fn next_report_range(world: &mut World) {
+    finish_tier(world, TIER_BASELINE, 1100);
+    release_tier(world, TIER_BASELINE, 1500);
+    tier_hold(world, TIER_RANGE, 2);
+}
+fn tier_blame(world: &World, commit: skein_forge::api::Commit) -> &temper_engine_domain_forge_tiers::Blame {
+    let Some(top::Stored::Verification(row)) = world.stored().get(&top::Key::Verification { repository: REPO, commit })
+    else {
+        panic!("verification")
+    };
+    &row.tiers[0].verdict.as_ref().expect("judged verification").blame
+}
+fn named_failures() -> temper_engine_domain_forge_tiers::Failures {
+    temper_engine_domain_forge_tiers::Failures::Tests(Box::new([
+        b"suite.first".as_slice().into(),
+        b"suite.second".as_slice().into(),
+    ]))
+}
+#[test]
+fn a_red_run_bisected_over_three_landings() {
+    use temper_engine_domain_forge_tiers::Blame;
+    let mut world = start_report_baseline();
+    let first = land_content_for_tier(&mut world, FIRST_CHANGE, b"temper/51", b"failures", FAILING_IDS);
+    let second = land_file_for_tier(&mut world, SECOND_CHANGE, b"temper/52", b"docs/guide.md");
+    let third = land_for_tier(&mut world, THIRD_CHANGE, b"temper/53");
+    next_report_range(&mut world);
+    world.take_calls();
+    finish_tier(&mut world, TIER_RANGE, 2000);
+    let probes: Vec<_> = world
+        .take_calls()
+        .into_iter()
+        .filter_map(|op| match op {
+            skein_forge::api::Op::Write(skein_forge::api::Write::CreateBranch { branch, commit })
+                if branch.starts_with(b"temper/tier/browser.2.") =>
+            {
+                Some((branch, commit))
+            }
+            skein_forge::api::Op::Read(_) | skein_forge::api::Op::Write(_) => None,
+        })
+        .collect();
+    assert_eq!(probes, vec![(Box::from(b"temper/tier/browser.2.0".as_slice()), first)]);
+    assert_eq!(tier_blame(&world, first), &Blame::Owns(named_failures()));
+    assert_eq!(tier_blame(&world, second), &Blame::Cleared);
+    assert_eq!(tier_blame(&world, third), &Blame::Cleared);
+    change_step_task(&mut world, FIRST_CHANGE, 3000, change::Status::Passed, Box::new([]), false, false);
+    assert_eq!(world.change(FIRST_CHANGE).change.state, change::State::Red { merge: first });
+    assert_eq!(
+        change_step_task(&mut world, SECOND_CHANGE, 3001, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: second }
+    );
+    assert_eq!(
+        change_step_task(&mut world, THIRD_CHANGE, 3002, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: third }
+    );
+    let skein_fake_forge_domain::api::Answer::Statuses(statuses) =
+        world.inspect(&skein_fake_forge_domain::api::Read::Statuses { commit: world.branch(b"main") })
+    else {
+        panic!("tip statuses")
+    };
+    assert!(statuses.iter().any(|status| status.context.as_ref() == b"temper/verdict/browser"
+        && status.state == skein_fake_forge_domain::api::Check::Failed
+        && status.description.as_ref() == b"red: 2 failing tests"));
+    assert!(!world.has_branch(b"temper/tier/browser.2.0"));
+    assert!(!world.has_branch(b"temper/tier/browser.2"));
+}
+#[test]
+fn inherited_failures_clear_the_landing_after_the_red_one() {
+    use temper_engine_domain_forge_tiers::Blame;
+    let mut world = start_report_baseline();
+    let first = land_content_for_tier(&mut world, FIRST_CHANGE, b"temper/51", b"failures", FAILING_IDS);
+    next_report_range(&mut world);
+    finish_tier(&mut world, TIER_RANGE, 2000);
+    release_tier(&mut world, TIER_RANGE, 2400);
+    let second = land_for_tier(&mut world, SECOND_CHANGE, b"temper/52");
+    for _ in 0..TIER_STEPS {
+        if browser_row(&world).record.run.is_some() {
+            break;
+        }
+        world.run_for(1);
+    }
+    tier_hold(&mut world, TIER_INHERITED, 3);
+    finish_tier(&mut world, TIER_INHERITED, 2500);
+    assert_eq!(tier_blame(&world, first), &Blame::Owns(named_failures()));
+    assert_eq!(tier_blame(&world, second), &Blame::Cleared);
+    assert_eq!(browser_row(&world).record.failing, named_failures());
+    assert_eq!(
+        change_step_task(&mut world, SECOND_CHANGE, 3000, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: second }
+    );
 }

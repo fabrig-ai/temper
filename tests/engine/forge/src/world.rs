@@ -132,6 +132,7 @@ impl World {
             4,
             true,
             false,
+            false,
         )
     }
     #[must_use]
@@ -145,6 +146,23 @@ impl World {
             false,
             4,
             false,
+            true,
+            false,
+        )
+    }
+    /// Main, three member branches, the whole run, and its one probe coexist.
+    #[must_use]
+    pub fn tiered_reports() -> World {
+        Self::configured(
+            11,
+            LIMITS.facts,
+            false,
+            Some(skein_forge_client::Writer { forge: REPO.forge, author: 1 }),
+            None,
+            false,
+            6,
+            false,
+            true,
             true,
         )
     }
@@ -199,6 +217,7 @@ impl World {
             4,
             false,
             false,
+            false,
         )
     }
 
@@ -215,6 +234,7 @@ impl World {
             4,
             false,
             false,
+            false,
         )
     }
 
@@ -228,6 +248,7 @@ impl World {
             None,
             false,
             branches,
+            false,
             false,
             false,
         )
@@ -251,6 +272,7 @@ impl World {
 
     #[expect(
         clippy::too_many_arguments,
+        clippy::too_many_lines,
         clippy::fn_params_excessive_bools,
         reason = "one shared fake fixture with independent scenario switches"
     )]
@@ -264,6 +286,7 @@ impl World {
         branches: u32,
         turn: bool,
         tier: bool,
+        reports: bool,
     ) -> World {
         let limits = top::Limits {
             landings: if turn { 2 } else { LIMITS.landings },
@@ -271,8 +294,26 @@ impl World {
             client: skein_forge_client::Limits { facts, ..CLIENT },
             ..LIMITS
         };
+        let protection = if reports {
+            Some(raw::Protection {
+                linear: false,
+                code_owners: false,
+                bypassing_users: Box::new([]),
+                queue: false,
+                branch: b"main".as_slice().into(),
+                contexts: Box::new([b"build".as_slice().into()]),
+                approvals: 0,
+                dismiss_stale: false,
+            })
+        } else {
+            protection
+        };
         let mut config = fake_config();
         config.limits.branches = branches;
+        if reports {
+            // Initial tip, three producer heads and their three merge commits.
+            config.limits.statuses = 7;
+        }
         config.limits.workflows = u32::from(turn) + u32::from(tier);
         config.limits.workflow_runs = if turn || tier { 4 } else { 0 };
         config.limits.bypassing_users = protection
@@ -299,15 +340,23 @@ impl World {
                 } else if tier {
                     Box::new([raw::Workflow {
                         fails: Box::new([]),
-                        report: None,
-                        select: None,
+                        report: if reports {
+                            Some(raw::Report {
+                                artifact: b"report".as_slice().into(),
+                                format: raw::ReportFormat::Lines,
+                                deflate: false,
+                            })
+                        } else {
+                            None
+                        },
+                        select: if reports { Some(b"temper_tests".as_slice().into()) } else { None },
                         file: b"browser.yml".as_slice().into(),
                         jobs: Box::new([b"browser".as_slice().into()]),
                         latency_min: Duration::from_secs(90),
                         latency_max: Duration::from_secs(90),
                         silent: 0,
                         passes: 1000,
-                        cue: None,
+                        cue: if reports { Some(raw::Cue::Tests { path: b"failures".as_slice().into() }) } else { None },
                     }])
                 } else {
                     Box::new([])
@@ -374,7 +423,7 @@ impl World {
     /// Construct and restart without any configured writer.
     #[must_use]
     pub fn writerless(seed: u64) -> World {
-        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false, false)
+        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false, false, false)
     }
     pub fn give_writer(&mut self, writer: skein_forge_client::Writer) -> bool {
         let accepted = top::writer(&mut self.top, &self.env, writer, &mut self.top_out);
@@ -408,6 +457,7 @@ impl World {
             None,
             false,
             4,
+            false,
             false,
             false,
         )
@@ -592,8 +642,11 @@ impl World {
         self.produce_on_file(branch, base, b"file");
     }
     pub fn produce_on_file(&mut self, branch: &[u8], base: &[u8], path: &[u8]) {
+        self.produce_on_contents(branch, base, path, b"change");
+    }
+    pub fn produce_on_contents(&mut self, branch: &[u8], base: &[u8], path: &[u8], content: &[u8]) {
         self.external(raw::Op::Git(raw::Git::Create { branch: branch.into(), commit: self.branch(base) }), 2);
-        self.push_file(branch, path, b"change");
+        self.push_file(branch, path, content);
     }
     pub fn produce_file(&mut self, branch: &[u8], path: &[u8], content: &[u8]) {
         self.external(raw::Op::Git(raw::Git::Create { branch: Box::from(branch), commit: 1 }), 2);
@@ -702,6 +755,7 @@ impl World {
     }
 
     fn external(&mut self, op: raw::Op, user: u64) -> raw::Answer {
+        let description = format!("{op:?}");
         let mut config = self.forge_env.limits;
         config.latency_min = Duration::ZERO;
         config.latency_max = Duration::ZERO;
@@ -718,7 +772,9 @@ impl World {
         for _ in 0..8 {
             for _ in 0..self.forge_out.len() {
                 match self.forge_out.pop().expect("fake output") {
-                    forge::Request::Reply { result, .. } => answer = Some(result.expect("fixture succeeds")),
+                    forge::Request::Reply { result, .. } => {
+                        answer = Some(result.unwrap_or_else(|error| panic!("fixture {description}: {error:?}")));
+                    }
                     hook @ forge::Request::Hook { .. } => self.hear(&hook),
                 }
             }

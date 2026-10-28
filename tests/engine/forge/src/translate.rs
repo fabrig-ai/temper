@@ -87,6 +87,10 @@ fn read_op(read: &client::Read, l: &Limits) -> forge::Read {
             page: *page,
             limit: l.rows,
         },
+        client::Read::Artifact { run, name, .. } => forge::Read::Artifact { run: *run, name: name.clone() },
+        client::Read::Commits { before, after, .. } => {
+            forge::Read::Commits { before: number(*before), after: number(*after) }
+        }
         client::Read::Run { run } => forge::Read::Run { run: *run },
         client::Read::Tree { object, page } => forge::Read::GitTree {
             object: if commit(u64::from_be_bytes(object[8..16].try_into().expect("object count bytes"))) == *object {
@@ -245,6 +249,31 @@ pub fn answer_as(
     signatures: bool,
 ) -> client::Answer {
     match answer {
+        forge::Answer::Artifact { commit: head, artifact } => {
+            let client::Op::Read(client::Read::Artifact { max_bytes, .. }) = asked else { panic!("artifact request") };
+            let cap = usize::try_from(*max_bytes).expect("answer bound fits");
+            client::Answer::File {
+                head: commit(head),
+                path: artifact.path,
+                truncated: artifact.bytes.len() > cap,
+                bytes: artifact.bytes[..artifact.bytes.len().min(cap)].into(),
+            }
+        }
+        forge::Answer::Commits { commits } => {
+            let client::Op::Read(client::Read::Commits { page, .. }) = asked else { panic!("commits request") };
+            let (from, to) = page_range(commits.len(), *page, l.rows);
+            client::Answer::Commits {
+                more: to < commits.len(),
+                commits: commits[from..to]
+                    .iter()
+                    .map(|value| client::CommitMessage {
+                        id: commit(value.id),
+                        parents: value.parents.iter().map(|id| commit(*id)).collect(),
+                        message: value.message.clone(),
+                    })
+                    .collect(),
+            }
+        }
         forge::Answer::Located { id } => client::Answer::Located { repository: id },
         forge::Answer::Items { items, more, now } => {
             let mut rows = List::with_capacity(l.rows);
@@ -352,7 +381,8 @@ pub fn answer_as(
                 })
                 .collect(),
         },
-        forge::Answer::Comment { .. }
+        forge::Answer::Artifacts(_)
+        | forge::Answer::Comment { .. }
         | forge::Answer::Dependencies(_)
         | forge::Answer::Labels(_)
         | forge::Answer::Tree(_)
@@ -476,6 +506,8 @@ fn pull_answer(asked: &client::Op, pull: forge::Pull, l: &Limits) -> client::Ans
             | client::Read::Runs { .. }
             | client::Read::Run { .. }
             | client::Read::Tree { .. }
+            | client::Read::Artifact { .. }
+            | client::Read::Commits { .. }
             | client::Read::Checks { .. }
             | client::Read::Job { .. }
             | client::Read::Protection { .. }

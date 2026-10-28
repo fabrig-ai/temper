@@ -68,7 +68,10 @@ pub fn fullest() -> Stored {
             .collect(),
         task: Some(51),
         branch: TierBranch::Pending { entry: 11 },
-        probe: None,
+        probe: Some(temper_engine_domain_forge::TierProbeBranch {
+            landing: 1,
+            branch: TierBranch::Pending { entry: 13 },
+        }),
         flight: Some(temper_engine_domain_forge::TierFlight {
             next: Some(skein_lib::Time::from_nanos(7)),
             entry: 11,
@@ -76,7 +79,11 @@ pub fn fullest() -> Stored {
             since: Some(skein_lib::Time::from_nanos(4)),
             waiting: false,
             fault: false,
-            report: None,
+            report: Some(temper_engine_domain_forge::ReceiptRun {
+                id: 71,
+                number: 2,
+                url: b"https://forge/run/71".as_slice().into(),
+            }),
             pending: Box::new([skein_forge::api::JobAttempt { head: TIP, run: 71, job: 81, attempt: 2 }]),
         }),
         result: Some(temper_engine_domain_forge::TierResult {
@@ -95,7 +102,7 @@ pub fn fullest() -> Stored {
             },
             received: false,
             status: TierBranch::Pending { entry: 12 },
-            applied: false,
+            applied: true,
         }),
     })
 }
