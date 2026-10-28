@@ -216,14 +216,42 @@ impl Throwaway {
     }
     /// Commits one file to main through the person's contents API.
     pub fn push(&self, file: &str) {
+        self.add_file(file, b"hook\n");
+    }
+
+    /// Add a fixture file through the person's API, retaining its exact bytes.
+    pub fn add_file(&self, file: &str, content: &[u8]) {
         let path = format!("/api/v1/repos/acme/widget/contents/{file}");
-        let body = serde_json::to_vec(&json!({"branch":"main","message":format!("Add {file}"),"content":"aG9vawo="}))
+        let size = skein_lib::base64::encoded_len(
+            skein_lib::base64::Alphabet::Standard,
+            u32::try_from(content.len()).expect("fixture file size"),
+        )
+        .expect("base64 size");
+        let mut encoded = skein_lib::Writer::new(usize::try_from(size).expect("base64 fits"));
+        skein_lib::base64::encode(skein_lib::base64::Alphabet::Standard, content, &mut encoded).expect("base64 file");
+        let encoded = encoded.finish();
+        let content = std::str::from_utf8(&encoded).expect("base64 text");
+        let body = serde_json::to_vec(&json!({"branch":"main","message":format!("Add {file}"),"content":content}))
             .expect("contents JSON");
         let response = self
             .instance
             .exchange(&Outgoing::json("POST", &path, Some(self.person.as_ref().expect("fixture person")), &body))
             .expect("contents answer");
         assert_eq!(response.status, 201, "contents commit");
+    }
+
+    /// Cancel the runner's live job as the repository's person, outside temper.
+    pub fn cancel_run(&self, run: u64) {
+        let response = self
+            .instance
+            .exchange(&Outgoing::json(
+                "POST",
+                &format!("/api/v1/repos/acme/widget/actions/runs/{run}/cancel"),
+                Some(self.person.as_ref().expect("fixture person")),
+                b"null",
+            ))
+            .expect("cancel answer");
+        assert_eq!(response.status, 204, "cancel running gate");
     }
 }
 

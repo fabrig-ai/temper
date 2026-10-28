@@ -903,6 +903,141 @@ fn a_persons_change_lands_on_the_forge_and_is_found_after_a_restart() {
 }
 
 #[test]
+fn a_turn_landing_is_found_after_restarts_mid_proof_and_landed() {
+    turn_landing_restarts("turn-restarts", false);
+}
+
+#[test]
+fn a_turn_landing_is_found_after_a_runner_cancellation_and_restarts() {
+    turn_landing_restarts("turn-retry-restarts", true);
+}
+
+#[expect(clippy::too_many_lines, reason = "the cold runs and their forge evidence form one restart story")]
+fn turn_landing_restarts(case: &str, retry: bool) {
+    use support::{
+        ctl::{self, Call, Step, Story},
+        landing_by_turn, turn_restart,
+    };
+    let clock = skein_shell::Clock::new();
+    let began = clock.now().now;
+    let scratch = support::Scratch::new(case);
+    let forge = support::forgejo::Throwaway::start_with_job_sleep(&scratch, 20);
+    // Only the dispatched job sleeps; the producer's local check stays quick.
+    let workflow = landing_by_turn::WORKFLOW.replace("      - run: |", "      - run: sleep 20\n      - run: |");
+    forge.add_file(".forgejo/workflows/gate.yaml", workflow.as_bytes());
+    support::configuration(scratch.path(), &forge.forge());
+    turn_restart::configure(scratch.path(), forge.repository());
+    let started = clock.now().now;
+    let (proof, _) = turn_restart::run(scratch.path(), &forge, None);
+    eprintln!("turn restart first run: {}", landing_by_turn::elapsed(&clock, started));
+    let proof = proof.expect("stopped inside the gate job");
+    let panel = &proof.reads.landing;
+    eprintln!("turn restart mid-proof: {}", serde_json::to_string(&proof.reads.landing).expect("landing JSON"));
+    assert_eq!(panel["phase"], "proving");
+    let member = &panel["members"][0];
+    let candidate = member["candidate"].as_str().expect("candidate");
+    let commit = &candidate[..40];
+    assert_ne!(proof.original, commit, "the forge rebased the change");
+    assert_ne!(proof.moved, commit, "the candidate has not landed yet");
+    assert_eq!(member["base"].as_str().map(|base| &base[..40]), Some(proof.moved.as_str()));
+    assert!(member["gates"][0]["proof"].get("dispatched").is_some());
+    assert_eq!(forge.merged_pull(), None);
+    let retried = if retry {
+        forge.cancel_run(proof.run);
+        let started = clock.now().now;
+        let retried = turn_restart::retry(scratch.path(), &forge, &proof);
+        eprintln!("turn restart retry run: {}", landing_by_turn::elapsed(&clock, started));
+        assert_eq!(retried.reads.landing["members"][0]["gates"][0]["key"], member["gates"][0]["key"]);
+        assert_eq!(retried.reads.landing["members"][0]["candidate"], candidate);
+        Some(retried)
+    } else {
+        None
+    };
+    let proof = retried.as_ref().unwrap_or(&proof);
+    let started = clock.now().now;
+    let (_, landed) = turn_restart::run(scratch.path(), &forge, Some(proof));
+    eprintln!("turn restart second run: {}", landing_by_turn::elapsed(&clock, started));
+    let landed = landed.expect("landed reads before stopping");
+    assert_eq!(landed.landing["phase"], "landed");
+    assert_eq!(landed.change["step"], "landed");
+    assert_eq!(landed.change["repairs"]["used"], 0, "runner faults do not repair the change");
+    assert_eq!(landed.task["chip"]["executor"]["procedure"]["kind"], 3);
+    assert_eq!(landed.task["requester"]["deployment"]["project"], 1);
+    assert_eq!(landed.task["chip"]["phase"], "ended");
+    assert!(landed.task["chip"]["details"]["owner"]["details"]["ending"].get("done").is_some());
+    assert_eq!(landed.landing["members"][0]["candidate"], candidate);
+    let gate = &landed.landing["members"][0]["gates"][0];
+    let receipt = &gate["proof"]["passed"];
+    assert_eq!(receipt["run"], proof.run, "the restart found the dispatched run");
+    let merged = forge.merged_pull().expect("merged pull");
+    let main = forge.branch_head(b"main").expect("main tip");
+    assert_eq!(main.as_ref(), commit.as_bytes());
+    assert!(forge.main_readme().ends_with(support::EDIT), "the produced edit reached main");
+    let pull = forge.repository_observation("acme", "widget", &format!("pulls/{merged}"));
+    assert_eq!(pull["head"]["sha"], commit);
+    assert_eq!(pull["merge_commit_sha"], commit);
+    let parents = forge.repository_observation("acme", "widget", &format!("git/commits/{commit}"));
+    assert_eq!(parents["parents"].as_array().expect("parents").len(), 1);
+    assert_eq!(parents["parents"][0]["sha"], proof.moved);
+    let runs = forge.repository_observation("acme", "widget", &format!("actions/runs?head_sha={commit}&limit=100"));
+    let runs: Vec<_> = runs["workflow_runs"]
+        .as_array()
+        .expect("workflow runs")
+        .iter()
+        .filter(|run| run["workflow_id"] == "gate.yaml")
+        .collect();
+    assert_eq!(runs.len(), if retry { 2 } else { 1 }, "only the expected dispatches for the key");
+    let passed = runs.iter().find(|run| run["id"] == proof.run).expect("receipted run");
+    for run in &runs {
+        assert_eq!(run["commit_sha"], commit);
+        assert_eq!(run["trigger_event"], "workflow_dispatch");
+        assert_eq!(run["trigger_user"]["login"], "temper");
+    }
+    assert_eq!(passed["status"], "success");
+    let statuses = forge.repository_observation("acme", "widget", &format!("commits/{commit}/status"));
+    let status = statuses["statuses"]
+        .as_array()
+        .expect("statuses")
+        .iter()
+        .find(|status| status["context"] == "temper/gate/gate")
+        .expect("gate status");
+    assert_eq!(status["status"], "success");
+    let key = gate["key"].as_str().expect("receipt key");
+    assert_eq!(status["description"], format!("key {} passed", &key[..16]));
+    assert_eq!(status["target_url"], receipt["address"]);
+    eprintln!("turn restart landed reads: {landed:?}");
+    let landing = panel["task"].as_u64().expect("landing task").to_string();
+    let change = proof.reads.change["task"].as_u64().expect("change task").to_string();
+    let started = clock.now().now;
+    let third = ctl::run(Story::new(
+        scratch.path(),
+        vec![
+            Step::Run(Call::sign_in().in_directory("private")),
+            Step::Run(Call::new(&["landing", "show", &landing, "--json"]).in_directory("private")),
+            Step::Run(Call::new(&["landing", "list", "--project", "1", "--ended", "--json"]).in_directory("private")),
+            Step::Run(Call::new(&["change", "show", &change, "--json"]).in_directory("private")),
+            Step::Run(Call::new(&["task", "show", &landing, "--json"]).in_directory("private")),
+        ],
+    ));
+    eprintln!("turn restart third run: {}", landing_by_turn::elapsed(&clock, started));
+    ctl_assert_success(&third.calls);
+    for (call, expected) in third.calls[1..].iter().zip([&landed.landing, &landed.list, &landed.change, &landed.task]) {
+        assert_eq!(&ctl::json(call), expected, "the cold read is unchanged");
+    }
+    assert_eq!(forge.merged_pull(), Some(merged));
+    assert_eq!(forge.branch_head(b"main"), Some(main));
+    let after = forge.repository_observation("acme", "widget", &format!("actions/runs?head_sha={commit}&limit=100"));
+    assert_eq!(
+        after["workflow_runs"].as_array().expect("runs").iter().filter(|run| run["workflow_id"] == "gate.yaml").count(),
+        runs.len(),
+        "cold reads dispatch nothing"
+    );
+    forge.stop();
+    scratch.remove();
+    eprintln!("turn restart story wall: {}", landing_by_turn::elapsed(&clock, began));
+}
+
+#[test]
 fn a_change_lands_by_deliveries_with_every_poll_raised() {
     landing("hinted", true);
 }

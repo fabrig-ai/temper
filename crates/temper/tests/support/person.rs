@@ -803,6 +803,21 @@ pub fn adopt_and_change(_forgejo: &super::forgejo::Throwaway) -> Script {
     ]);
     Script { steps: steps.into_boxed_slice(), begin: Begin::LinkWithKey }
 }
+/// Adopt and start the landing chat, ending the sitting before its reply.
+#[must_use]
+pub fn adopt_and_start_change(forge: &super::forgejo::Throwaway) -> Script {
+    let mut script = adopt_and_change(forge);
+    // The last two steps visit the inbox and await the landing's reply.
+    let mut steps = script.steps.into_vec();
+    steps.truncate(steps.len() - 2);
+    steps.push(Step::See {
+        find: Find::text(temper_real_loop_world::landing::REQUESTED.as_bytes()),
+        within: super::WITHIN,
+    });
+    script.steps = steps.into_boxed_slice();
+    script
+}
+
 /// A person's live sitting keeps the native stories, allowing real completions their budget.
 #[must_use]
 pub fn live_adopt_and_change(forge: &super::forgejo::Throwaway) -> Script {
