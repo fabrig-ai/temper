@@ -121,6 +121,7 @@ fn due_tasks_activate_within_the_byte_budget_as_earlier_runs_drain() {
     assert_eq!(driver.root.held_bytes(), 2 * ALLOWANCE);
     driver.send(held.remove(0));
     hold_transcripts(&mut driver, &mut held);
+    assert!(driver.root.held_bytes() >= driver.env.limits.memory_bytes);
     assert!(assigned(&driver) >= 1, "fleet places a completed preparation while bytes bind");
     assert_eq!(held.len(), 2, "the third activation follows the first preparation's drain");
     for event in held {
@@ -160,6 +161,7 @@ fn a_restart_with_three_due_tasks_activates_them_within_the_budget() {
     }
     store.seed(saves.into_boxed_slice(), Box::new([]));
     let mut driver = Driver::cold(store, config(91), &bounds(2 * ALLOWANCE));
+    driver.send(protocol::hello_slots(WORKER, 3, Box::new([])));
     // Drive restart inputs without poll/Resume so Open's own behaviour is visible.
     for _ in 0..STEPS {
         if driver.root.ready() {
@@ -176,8 +178,7 @@ fn a_restart_with_three_due_tasks_activates_them_within_the_budget() {
         driver.collect();
     }
     assert!(driver.root.ready());
-    assert_eq!(driver.root.held_bytes(), 0, "Open starts no preparations");
-    driver.send(protocol::hello_slots(WORKER, 3, Box::new([])));
+    assert_eq!(driver.root.held_bytes(), 0, "Open starts no preparations even with a worker connected");
     let mut held = Vec::new();
     hold_transcripts(&mut driver, &mut held);
     assert_eq!(held.len(), 2);
@@ -200,12 +201,20 @@ fn read_history(driver: &mut Driver, run: &engine::Assignment) {
     for _ in 0..STEPS {
         driver.advance(true);
     }
-    assert!(
-        driver.delivered.iter().any(|out| matches!(out,
-            Delivery::Read { reply, answer: reads::Answer::Historical(_), .. } if *reply == ReplyTo::new(READ)
-        )),
-        "the person's committed turn is answered while activation waits"
-    );
+    let answer = driver
+        .delivered
+        .iter()
+        .find_map(|out| {
+            if let Delivery::Read { reply, answer, .. } = out {
+                (*reply == ReplyTo::new(READ)).then_some(answer)
+            } else {
+                None
+            }
+        })
+        .expect("the person's read is answered while activation waits");
+    let reads::Answer::Historical(past) = answer else { panic!("historical turn: {answer:?}") };
+    let reads::Past::Turn(turn) = &past.value else { panic!("requested turn") };
+    assert_eq!(turn.transcript.as_ref(), BODY);
 }
 
 #[test]

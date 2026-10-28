@@ -541,3 +541,14 @@ fn nothing_leaves_before_the_mark() {
     assert_eq!(engine.store.secret_requests, secrets, "bootstrap is not repeated");
     assert_eq!(engine.store.forge_loads.as_slice(), [None]);
 }
+
+#[test]
+fn a_started_engines_root_uses_the_documents_engine_memory_bytes() {
+    let mut settings = fixtures::engine();
+    // A distinct engine value: worker memory has a separate parsed document.
+    settings.jig.memory += 1;
+    let memory = settings.jig.memory;
+    fixtures::fill_files(&mut settings);
+    let service = crate::Service::engine(settings, &fixtures::seeds(), None, fixtures::forge_runtime()).unwrap();
+    assert_eq!(service.engine.as_ref().expect("started engine").env.limits.memory_bytes, memory);
+}

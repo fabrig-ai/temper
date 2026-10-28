@@ -86,6 +86,9 @@ pub(crate) fn brief_outputs(
                     domain.work.push(Work::Core(jig_domain_core::Event::BriefAssembled { task, ready: false }));
                     continue;
                 }
+                // Text still being gathered in the core or forge is not counted;
+                // completed sections enter the root's ownership here.
+                domain.hold_bytes(crate::budget::section_bytes(sections.as_slice()));
                 assert!(domain.brief_sections.insert(task, sections.into_boxed()) == Ok(None), "one brief assembly");
                 domain.work.push(Work::Core(jig_domain_core::Event::BriefAssembled { task, ready: true }));
             }

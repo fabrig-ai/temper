@@ -185,8 +185,9 @@ impl Service {
         io_limits: io::Limits,
         box_line_bytes: Option<u32>,
     ) -> Result<Self, Problems> {
-        let limits =
+        let mut limits =
             limits::engine(&settings.jig.limits, &settings.limits).ok_or(start_problem(b"limits", What::Bound))?;
+        limits.memory_bytes = settings.jig.memory;
         let (mut forge_settings, forge_roots, forge_owned) = forges;
         let shared = crate::forge::shared(&settings.limits, &settings.jig.limits.io);
         settings.jig.limits.clients.wire.keyed_value_some =

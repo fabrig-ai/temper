@@ -369,6 +369,7 @@ pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engi
 /// The same effective projection, before sizing can refuse it anonymously.
 pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limits) -> engine::Limits {
     engine::Limits {
+        // The budget is the engine's own memory_bytes, set where it starts.
         memory_bytes: u64::MAX,
         watermark: engine::default_watermark(&limits.root.journal),
         journal: limits.root.journal,

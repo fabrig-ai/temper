@@ -373,19 +373,23 @@ impl Decision {
         if !within {
             return Err(write);
         }
-        self.carry_write(limits, write)
+        match self.carry_write(limits, write) {
+            Ok(_) => Ok(()),
+            Err(write) => Err(write),
+        }
     }
 
-    /// Carry the owner's wrapped write without inspecting its value.
+    /// Carry the owner's wrapped write, returning the replaced turn body bytes.
     #[expect(clippy::result_large_err, reason = "a refused write returns ownership")]
-    pub(crate) fn carry_write(&mut self, limits: &Limits, write: Write) -> Result<(), Write> {
+    pub(crate) fn carry_write(&mut self, limits: &Limits, write: Write) -> Result<u64, Write> {
         assert!(*limits == self.limits, "decision uses configured limits");
         let key = write.key();
         for at in 0..self.writes.len() {
             let previous = self.writes.get_mut(at).expect("bounded write index");
             if previous.key() == key {
+                let bytes = crate::budget::turn_bytes(previous);
                 *previous = write;
-                return Ok(());
+                return Ok(bytes);
             }
         }
         if self.writes.len() >= self.limits.writes.checked_sub(1).expect("header slot reserved") {
@@ -396,7 +400,10 @@ impl Decision {
         if result.is_err() {
             self.overrun = true;
         }
-        result
+        match result {
+            Ok(()) => Ok(0),
+            Err(write) => Err(write),
+        }
     }
 
     /// Retain one root effect for the decision, without releasing or issuing it. Per-delivery
@@ -541,6 +548,8 @@ pub fn accept_routed(
     // batch then closes its open decision without emitting anything, including older outputs.
     let writing = (persist_header && counters.dirty()) || !decision.writes.is_empty();
     if decision.overrun || (writing && counters.deployment().commits == u64::MAX) {
+        // A stopped root activates nothing again, so drops of charged writes
+        // and assignments here (and in the stopped journal) need no byte adjustment.
         journal.stop();
         journal.accept(decision.batch);
         return Ok(());

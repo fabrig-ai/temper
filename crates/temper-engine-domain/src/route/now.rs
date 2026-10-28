@@ -52,7 +52,11 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                 Request::Party(crate::PartyRequest::RunText { watcher, turn, from, to, text, cut, call, writing });
             let _sent = super::now(domain, request);
         }
-        core::Now::DropPayload { payload } => drop(take_payload(domain, payload)),
+        core::Now::DropPayload { payload } => {
+            if let Some(payload) = take_payload(domain, payload) {
+                domain.release_bytes(crate::budget::payload_bytes(&payload), "dropped turn payload was held");
+            }
+        }
         core::Now::TurnPayload { run, attempt, turn, body } => {
             let (cumulative, read, refused) = match domain.payloads.get(skein_lib::Id::from_token(body)) {
                 Some(Some(Payload::Turn { cumulative, read, refused, .. })) => (*cumulative, *read, refused.clone()),
@@ -108,7 +112,11 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
         }
         core::Now::RefusedPayload { request, problem } => {
             let payload = match take_payload(domain, request) {
-                Some(Payload::Turn { task, attempt, turn, .. }) => {
+                Some(Payload::Turn { task, attempt, turn, transcript, .. }) => {
+                    domain.release_bytes(
+                        u64::try_from(transcript.len()).expect("turn body length fits u64"),
+                        "refused turn payload was held",
+                    );
                     Some(core::PayloadRefusal::Turn { task, attempt, turn })
                 }
                 Some(Payload::Answer { task, attempt, .. }) => {
@@ -129,7 +137,7 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             domain.work.push(Work::Core(core::Event::RefusedPayload { request, problem, payload }));
         }
         core::Now::Activate { context } => {
-            let ready = domain.ready();
+            let ready = domain.ready() && crate::domain::within_budget(domain, &env.limits);
             domain.work.push(Work::Core(core::Event::Activate { context, ready }));
         }
         core::Now::PrepareAgent { context } => {
@@ -183,7 +191,12 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
         }
         core::Now::WorkspaceRequest { task, attempt, context } => workspace(domain, env, task, attempt, &context),
         core::Now::RunPreparationFailed { task } => {
-            drop(domain.brief_sections.remove(&task));
+            if let Some(sections) = domain.brief_sections.remove(&task) {
+                domain.release_bytes(
+                    crate::budget::section_bytes(&sections),
+                    "failed preparation's completed sections were held",
+                );
+            }
             drop(domain.run_workspaces.remove(&task));
         }
         core::Now::RunPrepared {
@@ -214,7 +227,14 @@ pub(crate) fn now(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             };
             run_prepared(domain, env, prepared);
         }
-        core::Now::DropAssignment { task } => drop(domain.assignments.remove(&task)),
+        core::Now::DropAssignment { task } => {
+            if let Some(assignment) = domain.assignments.remove(&task) {
+                domain.release_bytes(
+                    crate::budget::assignment_bytes(&assignment),
+                    "dropped assignment turns and sections were held",
+                );
+            }
+        }
         core::Now::SettingsAnswer { to, key: _, answer } => super::host_route::settings(domain, to, answer),
         core::Now::EffectAnswer { to, key: _, part } => {
             let answer = CallAnswer::from_core(&part).expect("effect wait answer");
@@ -336,6 +356,9 @@ struct Prepared {
 fn run_prepared(domain: &mut Domain, env: &Env<Limits>, prepared: Prepared) {
     let Prepared { task, attempt, conversation, live, charter, run, messages, saved, transcript, answered, grants } =
         prepared;
+    for body in &transcript {
+        domain.hold_bytes(u64::try_from(body.len()).expect("resumed transcript body length fits u64"));
+    }
     let sections = domain.brief_sections.remove(&task).expect("prepared brief sections");
     let PreparedWorkspace { workspace, claim_names } =
         domain.run_workspaces.remove(&task).expect("prepared connector workspace");

@@ -394,10 +394,8 @@ pub(crate) fn restart_request(
                     }
                 }
                 domain.work.push(Work::Forge(forge::Event::SendDemoActs));
-                for _ in 0..domain.limits.tasks.tasks {
-                    let Some(context) = domain.core.take_due() else { break };
-                    domain.work.push(Work::Activate(context));
-                }
+                // Later Resumes activate restored due tasks one at a time,
+                // after checking the transcript and turn budget.
             }
         },
     }

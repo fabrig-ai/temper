@@ -101,6 +101,14 @@ impl Domain {
         self.held_bytes.checked_add(self.core.transcript_bytes()).expect("held transcript and turn bytes fit u64")
     }
 
+    pub(crate) fn hold_bytes(&mut self, bytes: u64) {
+        self.held_bytes = self.held_bytes.checked_add(bytes).expect("root transcript and turn bytes fit u64");
+    }
+
+    pub(crate) fn release_bytes(&mut self, bytes: u64, released: &str) {
+        self.held_bytes = self.held_bytes.checked_sub(bytes).expect(released);
+    }
+
     /// Deployment models in the order settings authority and model choices use.
     #[must_use]
     pub fn models(&self) -> &[jig_domain_core::Model] {
@@ -577,8 +585,13 @@ pub(crate) fn emit(decision: &mut Decision, limits: &Limits, delivery: Delivery)
     decision.carry_delivery(&limits.journal, delivery);
 }
 
-pub(crate) fn save(decision: &mut Decision, limits: &Limits, write: Write) {
-    let _refused = decision.carry_write(&limits.journal, write);
+/// Return replaced turn bytes to their root owner. A refused write means an
+/// overrun stops the root, which never activates again; its total is then moot.
+pub(crate) fn save(decision: &mut Decision, limits: &Limits, write: Write) -> u64 {
+    match decision.carry_write(&limits.journal, write) {
+        Ok(replaced) => replaced,
+        Err(_) => 0,
+    }
 }
 
 /// Route one admitted input and all synchronous child callbacks in one decision; store terminals
@@ -593,6 +606,13 @@ pub fn step(domain: &mut Domain, env: &Env<Limits>, event: Event) {
     stage_now(domain, &mut out);
     assert!(out.is_empty(), "step stages every immediate output");
     domain.scratch = out;
+}
+
+/// Whether a due task may start its preparation: the held transcript and
+/// turn bytes are under the budget (domain/root.md, 4.1). Only an
+/// activation asks; nothing else waits on bytes.
+pub(crate) fn within_budget(domain: &Domain, limits: &Limits) -> bool {
+    domain.held_bytes() < limits.memory_bytes
 }
 
 pub(crate) fn admits(domain: &Domain, limits: &Limits) -> bool {
@@ -768,15 +788,32 @@ pub fn release(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>)
         domain.door_pass = false;
         send_commit(domain, out);
         for _ in 0..domain.door_count {
-            assert_eq!(domain.journal.release(out), skein_lib::Released::Some, "one admitted immediate output");
+            assert_eq!(release_one(domain, out), skein_lib::Released::Some, "one admitted immediate output");
         }
         domain.door_count = 0;
         return;
     }
     // journal_limits fixes release to one: the caller's reserved queue can
     // receive that same single output without an intermediate allocation.
-    let _status: skein_lib::Released = domain.journal.release(out);
+    let _status: skein_lib::Released = release_one(domain, out);
     send_commit(domain, out);
+}
+
+// Moving an assignment into a held delivery changes no ownership. Only the
+// journal's released request leaves the root, on either release pass.
+fn release_one(domain: &mut Domain, out: &mut Queue<Request>) -> skein_lib::Released {
+    let before = usize::try_from(out.len()).expect("output count fits usize");
+    let status = domain.journal.release(out);
+    let mut bytes = 0_u64;
+    for request in out.iter().skip(before) {
+        if let Request::Worker(crate::WorkerRequest::Deliver(Delivery::Assigned { assignment, .. })) = request {
+            bytes = bytes
+                .checked_add(crate::budget::assignment_bytes(assignment))
+                .expect("released assignment bytes fit u64");
+        }
+    }
+    domain.release_bytes(bytes, "released assignment turns and sections were held");
+    status
 }
 
 pub(crate) fn send_commit(domain: &mut Domain, out: &mut Queue<Request>) {
@@ -789,6 +826,9 @@ pub(crate) fn send_commit(domain: &mut Domain, out: &mut Queue<Request>) {
     }
     match crate::commit(&mut domain.journal, &domain.limits.journal) {
         Some(Output::Commit { number, writes }) => {
+            for write in &writes {
+                domain.release_bytes(crate::budget::turn_bytes(write), "issued commit's turn body was held");
+            }
             domain.sent_commit = number;
             out.push(Request::Store(crate::StoreRequest::Commit { number, writes }));
         }
@@ -841,6 +881,7 @@ pub(crate) fn resume_routed(domain: &mut Domain, env: &Env<Limits>, out: &mut Qu
             return;
         }
         if !domain.settling.active()
+            && within_budget(domain, &env.limits)
             && let Some(context) = domain.core.take_due()
         {
             domain.work.push(Work::Activate(context));

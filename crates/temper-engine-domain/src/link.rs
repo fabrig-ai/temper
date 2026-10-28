@@ -201,6 +201,7 @@ fn up(domain: &mut Domain, channel: Token, up: host::LinkUp, parts: Parts) -> Op
 
         host::LinkUp::Turn { run, attempt, turn } => {
             let number = turn.turn;
+            let bytes = u64::try_from(turn.body.len()).expect("worker turn body length fits u64");
             let body = payload(
                 domain,
                 Payload::Turn {
@@ -214,6 +215,7 @@ fn up(domain: &mut Domain, channel: Token, up: host::LinkUp, parts: Parts) -> Op
                     refused: refusals(&turn.refused),
                 },
             )?;
+            domain.hold_bytes(bytes);
             fleet::Event::Turn { channel, run, attempt, turn: number, body }
         }
         host::LinkUp::Answer { run, attempt, answer } => {

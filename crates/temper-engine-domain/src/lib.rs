@@ -9,6 +9,7 @@ mod admission;
 mod archive;
 mod assemble;
 mod boundary;
+mod budget;
 mod deadline;
 mod decision;
 mod domain;

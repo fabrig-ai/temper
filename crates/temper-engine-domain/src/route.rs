@@ -266,7 +266,8 @@ pub(crate) fn route_core_requests(
                     }
                     save_connector_answer(domain, &env.limits, decision, row.key);
                 }
-                save(decision, &env.limits, Write::Save(Record::Core(record)));
+                let replaced = save(decision, &env.limits, Write::Save(Record::Core(record)));
+                domain.release_bytes(replaced, "replaced write's turn body was held");
             }
             core::Request::Write(core::Write::CopySettingsRevision(number)) => {
                 save(decision, &env.limits, Write::CopySettingsRevision(number));
@@ -277,7 +278,8 @@ pub(crate) fn route_core_requests(
                 {
                     save(decision, &env.limits, Write::Erase(Key::Forge(forge::Key::Call(named_call(call)))));
                 }
-                save(decision, &env.limits, Write::Erase(Key::Core(key)));
+                let replaced = save(decision, &env.limits, Write::Erase(Key::Core(key)));
+                domain.release_bytes(replaced, "erased write's turn body was held");
             }
             core::Request::Ask { connector, ask } => asks::ask(domain, env, decision, connector, ask),
             core::Request::Held(output) => held::held(domain, env, decision, *output),
@@ -314,6 +316,12 @@ pub(crate) fn route_into(domain: &mut Domain, env: &Env<Limits>, decision: &mut 
             Work::Restart(request) => restart_request(domain, env, decision, request),
             Work::Decoded { to, body } => host_route::decoded(domain, env, decision, to, body),
             Work::Core(event) => {
+                if let core::Event::AcceptedTurn { accepted: tasks::Accepted::Already, transcript, .. } = &event {
+                    domain.release_bytes(
+                        u64::try_from(transcript.len()).expect("turn body length fits u64"),
+                        "already accepted turn body was held",
+                    );
+                }
                 let routed = core::step(&mut domain.core, &environment_core(env), event);
                 route_core_requests(domain, env, decision, routed);
             }
