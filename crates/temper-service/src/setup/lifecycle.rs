@@ -704,7 +704,6 @@ pub(super) fn next_run(lifecycle: &mut Lifecycle) -> Token {
     lifecycle.next_run = lifecycle.next_run.checked_add(1).expect("setup run names");
     run
 }
-#[expect(clippy::too_many_lines, reason = "one ordered pass over setup continuations")]
 pub(super) fn advance(engine: &mut crate::engine::Engine) {
     if engine.setup.closing || engine.drain.is_some() || engine.end.is_some() || engine.setup.component.is_none() {
         return;
@@ -717,12 +716,7 @@ pub(super) fn advance(engine: &mut crate::engine::Engine) {
         if crate::forge::ended(engine, *forge) {
             continue;
         }
-        if !engine.setup.room()
-            || !engine.store.room()
-            || !engine.forge.room(2)
-            || engine.events.room() < 4
-            || engine.notes.room() == 0
-        {
+        if !engine.store.room() || engine.events.room() < 4 || engine.notes.room() == 0 {
             continue;
         }
         if file_answer(engine, *forge) || start_pending(engine, *forge) {

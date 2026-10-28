@@ -205,7 +205,6 @@ pub(crate) fn forge(story: Story) -> temper_fake_git_hosted::Typed {
 pub(crate) fn prepare_merge_branch(transport: &temper_fake_git_hosted::Typed) {
     let mut forge = transport.forge.borrow_mut();
     let env = skein_lib::Env { now: forge.now, wall: skein_lib::Wall::EPOCH, limits: forge.config };
-    assert!(forge.pending.room() >= skein_fake_forge_domain::MAX_OUT, "reserve external domain output");
     let token = forge.next_reply();
     let skein_fake_peers::forge::Forge { domain, pending, .. } = &mut *forge;
     skein_fake_forge_domain::step(
@@ -251,7 +250,6 @@ pub(crate) fn prepare_merge_branch(transport: &temper_fake_git_hosted::Typed) {
         if created {
             break;
         }
-        assert!(forge.pending.room() >= skein_fake_forge_domain::MAX_OUT, "reserve external domain output");
         let skein_fake_peers::forge::Forge { domain, pending, .. } = &mut *forge;
         skein_fake_forge_domain::fire(domain, &env, pending);
     }

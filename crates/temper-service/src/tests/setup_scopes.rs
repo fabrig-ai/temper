@@ -12,8 +12,8 @@ impl Face {
         let mut server = fake::Server::new(Token::new(1), &env.limits).unwrap();
         let mut wire = skein_world::stream::Wire::new(17);
         wire.write(&self.wire.received);
-        let mut above = Queue::with_capacity(fake::MAX_UP);
-        let mut below = Queue::with_capacity(fake::MAX_DOWN);
+        let mut above = Queue::uncapped();
+        let mut below = Queue::uncapped();
         fake::start(&mut server, forge, env, &mut above, &mut below);
         let mut closed = false;
         for _ in 0_u32..4096 {

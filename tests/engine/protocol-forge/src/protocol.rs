@@ -366,7 +366,7 @@ impl Protocol {
     }
     fn external_at(&mut self, op: raw::Op, user: u64, now: Time) -> raw::Answer {
         let env = self.scripted_env(now);
-        let mut output = Queue::with_capacity(forge::MAX_OUT);
+        let mut output = Queue::uncapped();
         forge::step(
             &mut self.joint.domain,
             &env,

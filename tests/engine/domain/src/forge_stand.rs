@@ -111,7 +111,7 @@ impl ForgeStand {
             forge: 1,
             domain,
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: config },
-            out: Queue::with_capacity(fake::MAX_OUT),
+            out: Queue::uncapped(),
             pending: std::collections::BTreeMap::new(),
             limits: crate::fixtures::forge_limits().forge.client,
             repositories: names,

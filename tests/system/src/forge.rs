@@ -269,7 +269,7 @@ impl World {
             store,
             fake,
             fake_env,
-            fake_out: Queue::with_capacity(fake::MAX_OUT),
+            fake_out: Queue::uncapped(),
             pending: BTreeMap::new(),
             adopted: Vec::new(),
             signed_in: None,

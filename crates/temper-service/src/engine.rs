@@ -106,9 +106,7 @@ impl Engine {
         })
     }
     pub(crate) fn room(&self) -> bool {
-        self.setup.batch_room(self.max_out)
-            && self.forge.room(self.max_out)
-            && self.store.room()
+        self.store.room()
             && self.workers.batch_room(self.max_out)
             && self.clients.room(self.max_out)
             && self.clients.commit_room()
@@ -160,12 +158,7 @@ impl Engine {
         let effects = self.store.component.mark_durable() || self.end.is_some();
         let components = (self.store.opened || self.end.is_some()) && self.clients.work_pending(now)
             || effects && self.setup.work_pending(now)
-            || effects
-                && self.setup.lifecycle_ready(self)
-                && self.setup.room()
-                && self.store.room()
-                && self.forge.room(2)
-                && self.events.room() >= 4
+            || effects && self.setup.lifecycle_ready(self) && self.store.room() && self.events.room() >= 4
             || self.store.work_pending(now)
             || effects && self.forge.work_pending(now)
             || (self.store.opened || self.end.is_some()) && self.workers.work_pending(now)
@@ -206,7 +199,7 @@ impl Engine {
             }
             self.setup.close();
         }
-        if self.end.is_some() && self.forge.room(1) {
+        if self.end.is_some() {
             self.forge.down(skein_forge_connection::Request::Close);
         }
         if let Some(End::Aborted | End::Stopped(_)) = self.end
@@ -336,9 +329,7 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
         engine.drain_facts();
     }
     release(engine);
-    if engine.forge.room(1) {
-        engine.forge.down(skein_forge_connection::Request::Offer);
-    }
+    engine.forge.down(skein_forge_connection::Request::Offer);
     clients_pass(engine);
 }
 fn clients_pass(engine: &mut Engine) {
@@ -417,10 +408,7 @@ pub(crate) fn answer(engine: &mut Engine) {
         return;
     }
     for _ in 0..engine.store.above.len() {
-        if !engine.setup.room()
-            || engine.store.routed.room() < jig_protocol_store::MAX_OUT_DOWN
-            || engine.notes.room() == 0
-        {
+        if engine.store.routed.room() < jig_protocol_store::MAX_OUT_DOWN || engine.notes.room() == 0 {
             break;
         }
         let event = engine.store.above.pop().expect("store terminals");
@@ -574,7 +562,7 @@ fn watcher(event: &root::Event) -> Option<skein_lib::Token> {
 
 pub(crate) fn forge_pass(engine: &mut Engine) {
     for _ in 0..engine.forge.above.len() {
-        if !engine.forge.room(1) || engine.end.is_none() && !engine.room() {
+        if engine.end.is_none() && !engine.room() {
             break;
         }
         #[expect(clippy::match_same_arms, reason = "separate exhaustive facts name the tasks that give them meaning")]

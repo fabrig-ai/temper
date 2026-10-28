@@ -18,7 +18,7 @@
 //! drained by the world as [`Move`]s.
 
 use skein_fake_forge_domain::api::{Answer, Checks, Error, File, Git, Op, Permission, Read, Setup, What};
-use skein_fake_forge_domain::{Config, Domain, Event, Limits, MAX_OUT, Observation, Request, Skew};
+use skein_fake_forge_domain::{Config, Domain, Event, Limits, Observation, Request, Skew};
 use skein_lib::{Duration, Env, Queue, ReplyTo, Time, Token, Wall};
 use temper_fake_checkout::git::{self, Created, Fault, Pushed, Remote, Tree, Want};
 
@@ -129,7 +129,7 @@ impl Forge {
     pub fn api(&mut self, remote: &[u8], user: u64, op: Op) -> Result<Answer, Error> {
         self.calls += 1;
         let env = Env { now: self.now, wall: Wall::EPOCH, limits: CONFIG };
-        let mut out = Queue::with_capacity(MAX_OUT);
+        let mut out = Queue::uncapped();
         let reply_to = ReplyTo::new(Token::new(self.calls));
         skein_fake_forge_domain::step(
             &mut self.domain,

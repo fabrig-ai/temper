@@ -913,8 +913,6 @@ fn route_events(service: &mut Service) {
             && (!engine.workers.room()
                 || !engine.clients.room(1)
                 || engine.events.room() < engine::route_out()
-                || !engine.setup.room()
-                || !engine.forge.room(1)
                 || match &engine.accounts {
                     Some(accounts) => !accounts.up_room(),
                     None => false,
@@ -1181,15 +1179,7 @@ fn memory(
         &crate::forge::shared(&settings.limits, &settings.jig.limits.io),
         forges,
         forge.1,
-    )?
-    .checked_add(Queue::<skein_forge_connection::Event>::worst_case(
-        batch.checked_mul(skein_forge_connection::MAX_OUT.above)?,
-    )?)?
-    .checked_add(
-        u64::from(batch.checked_mul(skein_forge_connection::MAX_OUT.above)?)
-            .checked_mul(u64::from(settings.limits.forge.client.answer_bytes))?,
-    )?
-    .checked_add(Queue::<io::Request>::worst_case(batch.checked_mul(skein_forge_connection::MAX_OUT.below)?)?)?;
+    )?;
     let identities = u32::try_from(settings.identities.len()).ok()?;
     let wire = translate::limits(&settings.limits)?;
     let identities =

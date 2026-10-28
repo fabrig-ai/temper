@@ -222,7 +222,7 @@ impl Layer {
         settings: skein_forge_connection::settings::Settings,
         limits: skein_forge_connection::Limits,
         shared: &skein_forge_connection::Shared,
-        batch: u32,
+        _batch: u32,
         configured: &[settings::Forge],
     ) -> Result<Self, skein_forge_connection::Unusable> {
         let mut held_hosts = Map::with_capacity(limits.forges);
@@ -240,10 +240,8 @@ impl Layer {
             held: held_hosts,
             component: skein_forge_connection::Component::new(settings, &limits, shared)?,
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits },
-            above: Queue::with_capacity(
-                batch.checked_mul(skein_forge_connection::MAX_OUT.above).expect("forge above room"),
-            ),
-            io: Queue::with_capacity(batch.checked_mul(skein_forge_connection::MAX_OUT.below).expect("forge io room")),
+            above: Queue::uncapped(),
+            io: Queue::uncapped(),
             closed: false,
             begun: false,
             #[cfg(test)]
@@ -253,10 +251,6 @@ impl Layer {
             #[cfg(test)]
             returned: 0,
         })
-    }
-    pub(crate) fn room(&self, batch: u32) -> bool {
-        self.above.room() >= batch.checked_mul(skein_forge_connection::MAX_OUT.above).expect("forge batch above")
-            && self.io.room() >= batch.checked_mul(skein_forge_connection::MAX_OUT.below).expect("forge batch io")
     }
     pub(crate) fn unreachable(&self, forge: u16) -> Option<Box<[u8]>> {
         self.held.get(&forge).cloned()
@@ -295,9 +289,6 @@ impl Layer {
     pub(crate) fn iterate(&mut self, now: Time, wall: Wall) {
         self.env.now = now;
         self.env.wall = wall;
-        if !self.room(1) {
-            return;
-        }
         if !self.begun {
             self.begun = true;
             self.component.begin(&self.env, &mut self.above, &mut self.io);

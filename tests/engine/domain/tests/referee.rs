@@ -173,7 +173,7 @@ fn no_overwrite_referee_observes_and_rejects_a_divergent_push() {
     .expect("new tree");
     let landed = fake::advance(&mut forge, &env, b"org/repo", b"main", b"file", b"landed", 2)
         .expect("other party advanced main");
-    let mut out = Queue::with_capacity(fake::MAX_OUT);
+    let mut out = Queue::uncapped();
     fake::step(
         &mut forge,
         &env,
@@ -202,7 +202,7 @@ fn no_overwrite_referee_observes_and_rejects_a_divergent_push() {
         }
     }
     assert!(rejected && !overwritten, "the outside observer caught the attempted overwrite and saw no move");
-    let mut read = Queue::with_capacity(fake::MAX_OUT);
+    let mut read = Queue::uncapped();
     fake::step(
         &mut forge,
         &env,
