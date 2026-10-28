@@ -770,7 +770,8 @@ pub fn release(domain: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>)
 pub(crate) fn send_commit(domain: &mut Domain, out: &mut Queue<Request>) {
     // Unsent decisions stay in the journal until a store answer frees credit.
     if domain.journal.stopped()
-        || domain.sent_commit - domain.durable_commit >= u64::from(domain.limits.journal.commits)
+        || domain.sent_commit.checked_sub(domain.durable_commit).expect("store answers only sent commits")
+            >= u64::from(domain.limits.journal.commits)
     {
         return;
     }
