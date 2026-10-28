@@ -301,3 +301,59 @@ fn cancelling_the_last_member_cancels_its_landing_without_reading_the_missing_br
         evidence: None
     }));
 }
+
+const OTHER_CHANGE: u64 = fixtures::CHANGE + 1;
+const OTHER_REPOSITORY: skein_forge::api::Repository = skein_forge::api::Repository { forge: 1, repository: 3 };
+
+fn across_fixture() -> Domain {
+    let mut d = landing_fixture();
+    let mut repository = adopted();
+    repository.provider = OTHER_REPOSITORY;
+    repository.name = b"lib".as_slice().into();
+    repository.home = false;
+    outputs(&mut d, Event::Restore { record: Stored::Repository(repository) });
+    let mut change = fixtures::opening_row();
+    change.task = OTHER_CHANGE;
+    change.change.task = OTHER_CHANGE;
+    change.change.landing = None;
+    change.repository = OTHER_REPOSITORY;
+    outputs(&mut d, Event::Restore { record: Stored::Change(change) });
+    d
+}
+
+#[test]
+fn a_dependency_closure_is_upstream_first_and_stops_at_the_turn() {
+    let mut d = across_fixture();
+    let graph = [ChangeDependencies { change: fixtures::CHANGE, pending: Box::new([OTHER_CHANGE]) }];
+    assert_eq!(d.joined_changes(5, fixtures::CHANGE, &graph).as_ref(), [OTHER_CHANGE, fixtures::CHANGE]);
+    assert_eq!(d.joined_changes(5, OTHER_CHANGE, &graph).as_ref(), [OTHER_CHANGE, fixtures::CHANGE]);
+    member_landing(&mut d);
+    d.landing.rows.get_mut(&61).expect("landing").landing.phase = policy::Phase::Turn { at: env().wall };
+    assert_eq!(d.joined_changes(5, OTHER_CHANGE, &graph).as_ref(), [OTHER_CHANGE]);
+}
+
+#[test]
+fn an_upstream_join_and_a_member_leaving_remap_the_live_effects() {
+    let mut d = across_fixture();
+    member_landing(&mut d);
+    let mut member = d.landing(61).expect("landing").landing.members[0].clone();
+    member.change = OTHER_CHANGE;
+    member.repository.repository = OTHER_REPOSITORY.repository;
+    let key = [7; 32];
+    d.landing.rows.get_mut(&61).expect("landing").entries =
+        Box::new([LandingEntry { entry: 91, member: 0, gate: 0, operation: Operation::Dispatch }]);
+    d.landing.results.insert((61, 0, 0, 1), policy::Status::Pending).expect("result room");
+    d.landing.keys.insert((61, 0, 0), (fixtures::HEAD, key)).expect("key room");
+    outputs(&mut d, Event::JoinLanding { task: 61, member, after: Box::new([]) });
+    let row = d.landing(61).expect("joined landing");
+    assert_eq!(row.landing.members[0].change, OTHER_CHANGE);
+    assert_eq!(row.entries[0].member, 1);
+    assert_eq!(d.landing.results.get(&(61, 1, 0, 1)), Some(&policy::Status::Pending));
+    assert_eq!(d.landing.keys.get(&(61, 1, 0)), Some(&(fixtures::HEAD, key)));
+    outputs(&mut d, Event::SettleEffects { task: OTHER_CHANGE, root: OTHER_CHANGE, ending: ReleaseEnding::Cancelled });
+    let row = d.landing(61).expect("remaining landing");
+    assert_eq!(row.landing.members[0].change, fixtures::CHANGE);
+    assert_eq!(row.entries[0].member, 0);
+    assert_eq!(d.landing.results.get(&(61, 0, 0, 1)), Some(&policy::Status::Pending));
+    assert_eq!(d.landing.keys.get(&(61, 0, 0)), Some(&(fixtures::HEAD, key)));
+}

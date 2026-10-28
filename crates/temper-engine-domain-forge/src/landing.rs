@@ -149,6 +149,61 @@ impl Domain {
         }
         self.landing.projects.insert(project, (way, gates)).is_ok()
     }
+    /// The connected changes of a pending cross-repository dependency, upstream
+    /// first. The root supplies jig's current graph on each decision; no graph is
+    /// stored here (domain/landing.md, 4.1–4.2).
+    #[must_use]
+    pub fn joined_changes(&self, project: u32, task: u64, graph: &[crate::ChangeDependencies]) -> Box<[u64]> {
+        let mut joined = List::with_capacity(self.landing.limits.changes);
+        joined.push(task).expect("one change admitted");
+        if self.landing.way(project) != change::Way::Turn {
+            return joined.into_boxed();
+        }
+        // Every pass adds at least one vertex or has reached the fixed point.
+        for _ in 0..self.landing.limits.changes {
+            let before = joined.len();
+            for edge in graph {
+                if !joinable(self, project, edge.change) {
+                    continue;
+                }
+                for upstream in &edge.pending {
+                    if !joinable(self, project, *upstream) {
+                        continue;
+                    }
+                    let down = self.changes.get(&edge.change).expect("joinable change");
+                    let up = self.changes.get(upstream).expect("joinable upstream");
+                    if down.repository == up.repository {
+                        continue;
+                    }
+                    if joined.as_slice().contains(&edge.change) && !joined.as_slice().contains(upstream) {
+                        joined.push(*upstream).expect("bounded changes");
+                    } else if joined.as_slice().contains(upstream) && !joined.as_slice().contains(&edge.change) {
+                        joined.push(edge.change).expect("bounded changes");
+                    }
+                }
+            }
+            // Membership remains joined when a dependency clears or is amended away.
+            for (_, row) in &self.landing.rows {
+                let mut touches = false;
+                for member in &row.landing.members {
+                    if joined.as_slice().contains(&member.change) {
+                        touches = true;
+                    }
+                }
+                if touches {
+                    for member in &row.landing.members {
+                        if !joined.as_slice().contains(&member.change) {
+                            joined.push(member.change).expect("bounded changes");
+                        }
+                    }
+                }
+            }
+            if joined.len() == before {
+                break;
+            }
+        }
+        ordered_changes(self, task, joined.as_slice(), graph)
+    }
     /// Check admission before the root allocates its deployment-funded task.
     pub fn landing_admits(&self, project: u32, changes: &[u64]) -> Result<(), crate::LandingRefusal> {
         use crate::LandingRefusal;
@@ -161,7 +216,7 @@ impl Domain {
         for (index, task) in changes.iter().enumerate() {
             let row = self.changes.get(task).ok_or(LandingRefusal::Repository)?;
             let repo = self.repositories.get(&row.repository).ok_or(LandingRefusal::Repository)?;
-            if repo.project != project || row.pull.is_none() || row.change.landing.is_some() {
+            if repo.project != project || row.change.landing.is_some() {
                 return Err(LandingRefusal::Repository);
             }
             for prior in changes.get(..index).expect("preceding members") {
@@ -200,6 +255,227 @@ impl Domain {
         self.landing.receipts.get(key)
     }
 }
+fn ordered_changes(d: &Domain, task: u64, joined: &[u64], graph: &[crate::ChangeDependencies]) -> Box<[u64]> {
+    // Stacks require the project's prepare; keep the dependent for a later
+    // landing rather than constructing an inadmissible closure (5.3).
+    for (index, member) in joined.iter().enumerate() {
+        for prior in joined.get(..index).expect("prior members") {
+            if d.changes.get(member).expect("change").repository == d.changes.get(prior).expect("change").repository {
+                return Box::new([task]);
+            }
+        }
+    }
+    // Keep an existing landing's member order when pending dependencies
+    // clear. A new edge may still reorder it before the turn.
+    let mut stable = List::with_capacity(d.landing.limits.changes);
+    for (_, row) in &d.landing.rows {
+        let mut touches = false;
+        for member in &row.landing.members {
+            if joined.contains(&member.change) {
+                touches = true;
+            }
+        }
+        if touches {
+            for member in &row.landing.members {
+                if joined.contains(&member.change) && !stable.as_slice().contains(&member.change) {
+                    stable.push(member.change).expect("bounded changes");
+                }
+            }
+        }
+    }
+    for member in joined {
+        if !stable.as_slice().contains(member) {
+            stable.push(*member).expect("bounded changes");
+        }
+    }
+    let mut ordered = List::with_capacity(d.landing.limits.changes);
+    for _ in 0..joined.len() {
+        for member in stable.as_slice() {
+            if ordered.as_slice().contains(member) {
+                continue;
+            }
+            let mut blocked = false;
+            for edge in graph {
+                if edge.change == *member {
+                    for upstream in &edge.pending {
+                        if joined.contains(upstream) && !ordered.as_slice().contains(upstream) {
+                            blocked = true;
+                        }
+                    }
+                }
+            }
+            if !blocked {
+                ordered.push(*member).expect("bounded changes");
+            }
+        }
+    }
+    ordered.into_boxed()
+}
+
+fn joinable(d: &Domain, project: u32, task: u64) -> bool {
+    let Some(row) = d.changes.get(&task) else { return false };
+    let Some(repository) = d.repositories.get(&row.repository) else { return false };
+    if repository.project != project {
+        return false;
+    }
+    if let Some(task) = row.change.landing {
+        let Some(row) = d.landing.rows.get(&task) else { return false };
+        return match row.landing.phase {
+            policy::Phase::Waiting
+            | policy::Phase::Preparing
+            | policy::Phase::Proving
+            | policy::Phase::Proved { .. } => true,
+            policy::Phase::Turn { .. }
+            | policy::Phase::Landed
+            | policy::Phase::Cancelled
+            | policy::Phase::Held { .. } => false,
+        };
+    }
+    match row.change.state {
+        change::State::Ended | change::State::Landed { .. } => false,
+        change::State::Producing { .. }
+        | change::State::Opening { .. }
+        | change::State::Recreating { .. }
+        | change::State::Reopening { .. }
+        | change::State::Checking { .. }
+        | change::State::Gating { .. }
+        | change::State::Ready { .. }
+        | change::State::Preparing { .. }
+        | change::State::CancellingGates { .. }
+        | change::State::Updating { .. }
+        | change::State::Resolving { .. }
+        | change::State::Repairing { .. }
+        | change::State::Landing { .. }
+        | change::State::Queued { .. }
+        | change::State::First { .. }
+        | change::State::Held { .. } => true,
+    }
+}
+
+/// Commit membership with the joining change's step (domain/landing.md, 4.2).
+pub(crate) fn join(d: &mut Domain, task: u64, member: policy::Member, after: &[u64], out: &mut Queue<Request>) {
+    let Some(mut row) = d.landing.rows.get(&task).cloned() else { return };
+    if row.landing.members.len() >= usize::try_from(d.landing.limits.landing_members).expect("member bound") {
+        return;
+    }
+    let Some(change) = d.changes.get(&member.change) else { return };
+    if change.change.landing.is_some()
+        || change.repository != repository(&member)
+        || member.gates.len() != d.landing.gates(row.landing.project, change.repository).len()
+    {
+        return;
+    }
+    let Some(adopted) = d.repositories.get(&change.repository) else { return };
+    if adopted.project != row.landing.project {
+        return;
+    }
+    let Some(next) = policy::join(row.landing.clone(), member.clone(), after) else { return };
+    let prior = row.clone();
+    row.landing = next;
+    remap_members(d, &mut row, &prior);
+    let change = d.changes.get_mut(&member.change).expect("joining change");
+    change.change.landing = Some(task);
+    let change = change.clone();
+    super::domain::save_change(d, out, change);
+    save(d, row, out);
+    emit(out, Request::WakeProcedure { task });
+}
+
+/// A dependency amendment can also order members already in this landing.
+pub(crate) fn order(d: &mut Domain, task: u64, changes: &[u64], out: &mut Queue<Request>) {
+    let Some(mut row) = d.landing.rows.get(&task).cloned() else { return };
+    match row.landing.phase {
+        policy::Phase::Waiting | policy::Phase::Preparing | policy::Phase::Proving | policy::Phase::Proved { .. } => {}
+        policy::Phase::Turn { .. } | policy::Phase::Landed | policy::Phase::Cancelled | policy::Phase::Held { .. } => {
+            return;
+        }
+    }
+    if changes.len() != row.landing.members.len() {
+        return;
+    }
+    let mut members: List<policy::Member> = List::with_capacity(d.landing.limits.landing_members);
+    for change in changes {
+        for member in members.as_slice() {
+            if member.change == *change {
+                return;
+            }
+        }
+        let mut found = None;
+        for member in &row.landing.members {
+            if member.change == *change {
+                found = Some(member.clone());
+            }
+        }
+        let Some(member) = found else { return };
+        members.push(member).expect("bounded members");
+    }
+    if members.as_slice() == row.landing.members.as_ref() {
+        return;
+    }
+    let prior = row.clone();
+    row.landing.members = members.into_boxed();
+    row.landing.phase = policy::Phase::Preparing;
+    remap_members(d, &mut row, &prior);
+    save(d, row, out);
+    emit(out, Request::WakeProcedure { task });
+}
+
+fn member_position(row: &LandingRow, prior: &LandingRow, old: u16) -> Option<u16> {
+    let change = prior.landing.members.get(usize::from(old))?.change;
+    for (index, member) in row.landing.members.iter().enumerate() {
+        if member.change == change {
+            return Some(u16::try_from(index).expect("member position"));
+        }
+    }
+    None
+}
+
+// All positional state follows the change when a member joins or leaves.
+fn remap_members(d: &mut Domain, row: &mut LandingRow, prior: &LandingRow) {
+    let mut asks = List::with_capacity(d.landing.limits.landing_members);
+    for member in &row.landing.members {
+        let mut ask = None;
+        for (index, old) in prior.landing.members.iter().enumerate() {
+            if old.change == member.change {
+                ask = *prior.asks.get(index).expect("member ask");
+            }
+        }
+        asks.push(ask).expect("member asks");
+    }
+    row.asks = asks.into_boxed();
+    let mut entries = List::with_capacity(d.landing.limits.entries);
+    for entry in &prior.entries {
+        if let Some(member) = member_position(row, prior, entry.member) {
+            entries.push(LandingEntry { member, ..*entry }).expect("bounded entries");
+        }
+    }
+    row.entries = entries.into_boxed();
+    let capacity = d.landing.keys.capacity();
+    let keys = core::mem::replace(&mut d.landing.keys, Map::with_capacity(capacity));
+    for ((task, member, gate), value) in &keys {
+        let position = if *task == row.landing.task { member_position(row, prior, *member) } else { Some(*member) };
+        if let Some(member) = position {
+            d.landing.keys.insert((*task, member, *gate), *value).expect("bounded keys");
+        }
+    }
+    let capacity = d.landing.results.capacity();
+    let results = core::mem::replace(&mut d.landing.results, Map::with_capacity(capacity));
+    for ((task, member, gate, operation), value) in &results {
+        let position = if *task == row.landing.task { member_position(row, prior, *member) } else { Some(*member) };
+        if let Some(member) = position {
+            d.landing.results.insert((*task, member, *gate, *operation), *value).expect("bounded results");
+        }
+    }
+    let capacity = d.landing.faults.capacity();
+    let faults = core::mem::replace(&mut d.landing.faults, Map::with_capacity(capacity));
+    for ((task, member, gate), value) in &faults {
+        let position = if *task == row.landing.task { member_position(row, prior, *member) } else { Some(*member) };
+        if let Some(member) = position {
+            d.landing.faults.insert((*task, member, *gate), value.clone()).expect("bounded faults");
+        }
+    }
+}
+
 fn repository(member: &policy::Member) -> api::Repository {
     api::Repository { forge: member.repository.forge, repository: member.repository.repository }
 }
@@ -256,7 +532,7 @@ pub(crate) fn register(d: &mut Domain, env: &Env<Limits>, row: LandingRow, out: 
         changes.push(member.change).expect("preflighted member count");
         let change = d.changes.get(&member.change).expect("preflighted member");
         assert_eq!(change.repository, repository(member), "preflighted repository");
-        assert_eq!(change.pull, Some(member.pull), "preflighted pull");
+        assert_eq!(change.pull.unwrap_or(0), member.pull, "preflighted pull");
         assert_eq!(
             member.gates.len(),
             d.landing.gates(row.landing.project, repository(member)).len(),
@@ -333,10 +609,23 @@ pub(crate) fn step(
         pending.woken = true;
         return;
     }
-    let Some(row) = d.landing.rows.get(&task) else {
+    let Some(mut row) = d.landing.rows.get(&task).cloned() else {
         emit(out, Request::Refused { task });
         return;
     };
+    for member in &mut row.landing.members {
+        let Some(change) = d.changes.get(&member.change) else { return };
+        let Some(pull) = change.pull else {
+            row.landing.phase = policy::Phase::Waiting;
+            save(d, row, out);
+            wait(task, env, out);
+            return;
+        };
+        member.pull = pull;
+    }
+    if d.landing.rows.get(&task) != Some(&row) {
+        save(d, row.clone(), out);
+    }
     let mut facts = List::with_capacity(env.limits.landing_members);
     let mut evidence = List::with_capacity(env.limits.landing_members);
     for member in &row.landing.members {
@@ -436,6 +725,16 @@ pub(crate) fn answered(
     let Some(row) = d.landing.rows.get(&p.task).cloned() else {
         return;
     };
+    if p.evidence.len() != row.landing.members.len() {
+        step(d, env, p.task, p.entry, p.heard, out);
+        return;
+    }
+    for (member, evidence) in row.landing.members.iter().zip(&p.evidence) {
+        if member.change != evidence.change {
+            step(d, env, p.task, p.entry, p.heard, out);
+            return;
+        }
+    }
     match p.stage.clone() {
         Stage::Branch(index) | Stage::Main(index) | Stage::Compare(index) | Stage::Pull(index) => {
             let member = row.landing.members.get(usize::from(index)).expect("member");
@@ -446,9 +745,26 @@ pub(crate) fn answered(
             let fact = p.facts.get_mut(usize::from(index)).expect("member fact");
             let read = match p.stage {
                 Stage::Branch(_) => {
-                    let Ok(api::Answer::Commit(head)) = answer else {
-                        wait(p.task, env, out);
-                        return;
+                    let head = match answer {
+                        Ok(api::Answer::Commit(head)) => head,
+                        Ok(_) | Err(_) => {
+                            // Its change can finish and release the branch as soon as
+                            // the merge is read back, before this landing's next read.
+                            let landed = if let change::State::Landed { merge } = change.change.state {
+                                Some(merge)
+                            } else {
+                                member.landed
+                            };
+                            let Some(head) = landed else {
+                                wait(p.task, env, out);
+                                return;
+                            };
+                            if Some(head) != member.candidate {
+                                wait(p.task, env, out);
+                                return;
+                            }
+                            head
+                        }
                     };
                     fact.head = head;
                     p.stage = Stage::Main(index);
@@ -814,18 +1130,13 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
     let prior = row.clone();
     row.landing = stepped.landing;
     let decision = stepped.decision;
-    if row.landing.members.len() != prior.landing.members.len() {
-        let mut asks = List::with_capacity(env.limits.landing_members);
-        for member in &row.landing.members {
-            let mut ask = None;
-            for (index, old) in prior.landing.members.iter().enumerate() {
-                if old.change == member.change {
-                    ask = *prior.asks.get(index).expect("member ask");
-                }
-            }
-            asks.push(ask).expect("member asks");
+    for (member, old) in row.landing.members.iter().zip(&prior.landing.members) {
+        if member.landed.is_some() && old.landed.is_none() {
+            emit(out, Request::WakeProcedure { task: member.change });
         }
-        row.asks = asks.into_boxed();
+    }
+    if row.landing.members.len() != prior.landing.members.len() {
+        remap_members(d, &mut row, &prior);
     }
     let evidence = if let policy::Decision::Merge { member, candidate } = decision {
         let fact = p.facts.get(usize::from(member)).expect("fresh member facts");
@@ -999,11 +1310,19 @@ fn decide(d: &mut Domain, env: &Env<Limits>, owner: Token, mut p: Pending, out: 
                 emit(out, Request::WakeProcedure { task: member.change });
             }
         }
-        policy::Decision::None
-        | policy::Decision::Wait { .. }
-        | policy::Decision::Stale
-        | policy::Decision::Cancel
-        | policy::Decision::Hold(_) => {}
+        policy::Decision::Wait { .. } => {
+            // A member may still have been due when its ask was published.
+            // Keep the ask level-triggered until its change consumes it.
+            for (index, member) in row.landing.members.iter().enumerate() {
+                if row.asks.get(index).copied().flatten().is_some()
+                    && let Some(change) = d.changes.get(&member.change)
+                    && let change::State::Ready { .. } = change.change.state
+                {
+                    emit(out, Request::WakeProcedure { task: member.change });
+                }
+            }
+        }
+        policy::Decision::None | policy::Decision::Stale | policy::Decision::Cancel | policy::Decision::Hold(_) => {}
     }
     if row.landing.preparation != prior.landing.preparation || decision == policy::Decision::Stale {
         reset_results(d, &row, &prior);
@@ -1581,7 +1900,13 @@ fn assign_turn(d: &mut Domain, project: u32, out: &mut Queue<Request>) {
 }
 fn reset_results(d: &mut Domain, row: &LandingRow, prior: &LandingRow) {
     for (index, member) in row.landing.members.iter().enumerate() {
-        if member.candidate == prior.landing.members.get(index).expect("member").candidate {
+        let mut unchanged = false;
+        for old in &prior.landing.members {
+            if old.change == member.change && old.candidate == member.candidate {
+                unchanged = true;
+            }
+        }
+        if member.landed.is_some() || unchanged {
             continue;
         }
         let member = u16::try_from(index).expect("member");
@@ -1910,18 +2235,9 @@ pub(crate) fn closing(d: &mut Domain, task: u64, ending: crate::ReleaseEnding, o
         if matches_terminal(&row.landing.phase) {
             return;
         }
-        let mut members = List::with_capacity(d.landing.limits.landing_members);
-        let mut asks = List::with_capacity(d.landing.limits.landing_members);
-        for (index, member) in row.landing.members.iter().enumerate() {
-            if member.change != task {
-                members.push(member.clone()).expect("bounded members");
-                asks.push(*row.asks.get(index).expect("member ask")).expect("bounded asks");
-            }
-        }
-        row.landing.members = members.into_boxed();
-        row.asks = asks.into_boxed();
-        row.landing.phase =
-            if row.landing.members.is_empty() { policy::Phase::Cancelled } else { policy::Phase::Preparing };
+        let prior = row.clone();
+        row.landing = policy::leave(row.landing, task);
+        remap_members(d, &mut row, &prior);
         let change = d.changes.get_mut(&task).expect("cancelled member");
         change.change.landing = None;
         emit(out, Request::Save { record: Stored::Change(change.clone()), release: None, read_afresh: None });

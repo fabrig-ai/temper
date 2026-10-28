@@ -966,9 +966,26 @@ pub struct Installation {
     pub stray: bool,
     pub suspended: bool,
 }
+/// Pending task dependencies supplied by the root, never retained by the connector
+/// (jig's domain/tasks.md, 5.7; domain/landing.md, 4.1).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ChangeDependencies {
+    pub change: u64,
+    pub pending: Box<[u64]>,
+}
+
 /// A parent or child input to the connector top.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Event {
+    OrderLanding {
+        task: u64,
+        changes: Box<[u64]>,
+    },
+    JoinLanding {
+        task: u64,
+        member: landing::Member,
+        after: Box<[u64]>,
+    },
     Landing {
         row: LandingRow,
     },
