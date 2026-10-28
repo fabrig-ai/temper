@@ -307,6 +307,8 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) 
     world.external(
         1,
         raw::Op::Write(raw::Write::Status {
+            description: Box::new([]),
+            link: Box::new([]),
             commit: head,
             context: b"build".as_slice().into(),
             state: raw::Check::Failed,
@@ -320,6 +322,8 @@ fn land_change(world: &mut World, work: &engine::Assignment) -> (u64, [u64; 3]) 
     world.external(
         1,
         raw::Op::Write(raw::Write::Status {
+            description: Box::new([]),
+            link: Box::new([]),
             commit: head,
             context: b"build".as_slice().into(),
             state: raw::Check::Passed,

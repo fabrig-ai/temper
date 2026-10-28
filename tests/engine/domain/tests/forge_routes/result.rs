@@ -64,6 +64,8 @@ fn the_csv_changes_requester_reads_the_failed_context_repair_and_approved_review
     world.external(
         1,
         raw::Op::Write(raw::Write::Status {
+            description: Box::new([]),
+            link: Box::new([]),
             commit: h1,
             context: b"/ changes (pull_request)".as_slice().into(),
             state: raw::Check::Failed,
