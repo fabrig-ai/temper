@@ -301,7 +301,7 @@ fn decisions_keep_the_header_and_release_exactly_the_admitted_deliveries() {
             decision.carry_write(&LIMITS, turn(number, 1)).unwrap();
         }
         for number in 1..=deliveries {
-            decision.carry_delivery(&LIMITS, ack(number)).unwrap();
+            decision.carry_delivery(&LIMITS, ack(number));
         }
         let header = Write::Save(Record::Core(jig_domain_core::Record::Core(jig_domain_core::CoreRecord::Deployment(
             DEPLOYMENT,
@@ -340,28 +340,29 @@ fn decisions_keep_the_header_and_release_exactly_the_admitted_deliveries() {
 }
 
 #[test]
-fn a_delivery_past_the_store_edge_returns_ownership_and_stops_without_partial_outputs() {
+fn a_decision_with_more_outputs_than_the_door_releases_them_all_in_order() {
     let mut journal = Journal::new(DEPLOYMENT, &LIMITS);
     let mut decision = Decision::decide(&mut journal.inner, &LIMITS);
     decision.write(&LIMITS, turn(1, 1)).unwrap();
-    for number in 1..=LIMITS.deliveries {
+    for number in 1..=LIMITS.deliveries + 2 {
         decision.deliver(&LIMITS, ack(number)).unwrap();
     }
-    let words = bytes(3);
-    let address = words.as_ptr();
-    let refused = decision.carry_delivery(&LIMITS, Delivery::Result { person: 7, task: 9, words }).unwrap_err();
-    let Delivery::Result { person, task, words } = refused else { panic!("original refused result") };
-    assert_eq!((person, task, words.as_ptr(), words.len()), (7, 9, address, 3));
     let mut out = Queue::with_capacity(1);
     accept(&mut journal, &LIMITS, decision, &mut out).unwrap();
-    assert!(journal.stopped());
+    let (number, writes) = commit(&mut out);
+    assert_eq!(number, 1);
+    assert_eq!(writes.len(), 2, "one write and the deployment header");
+    assert_eq!(writes[1], turn(1, 1));
     resume(&mut journal, &mut out);
-    assert!(out.is_empty(), "no admitted prefix escapes an overrun");
-    assert_eq!(journal.deployment().commits, 0);
-    // Decisions after failure cannot emit either.
-    let decision = Decision::decide(&mut journal.inner, &LIMITS);
-    accept(&mut journal, &LIMITS, decision, &mut out).unwrap();
+    assert!(out.is_empty(), "all outputs wait for durability");
+    committed(&mut journal, number);
+    for number in 1..=LIMITS.deliveries + 2 {
+        resume(&mut journal, &mut out);
+        assert_eq!(acknowledged(&mut out), number, "every delivery releases once, in order");
+    }
+    resume(&mut journal, &mut out);
     assert!(out.is_empty());
+    assert!(!journal.stopped());
 }
 
 #[test]
