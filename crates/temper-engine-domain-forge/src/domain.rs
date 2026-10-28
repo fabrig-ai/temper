@@ -1360,6 +1360,7 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
         }
         Event::Delegated { task, child, kind } => delegated(d, env, task, child, kind, out),
         Event::DelegateRefused { task, child } => delegate_refused(d, env, task, child, out),
+        Event::DelegateAdmissionRefused { task, kind } => delegate_admission_refused(d, env, task, kind, out),
         Event::DelegateResult { task, child, status, failed, cancelled, words } => {
             delegate_result(d, env, task, child, status, failed, cancelled, &words, out);
         }
@@ -1535,6 +1536,12 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
             skein_forge_client::Request::Erase { key } => emit(out, Request::Erase { key: Key::Client(key) }),
             skein_forge_client::Request::Progress { entry } => keep_entry(d, entry, None, out),
             skein_forge_client::Request::Outcome { entry, task, outcome } => {
+                let account = match d.entries.get(&entry) {
+                    Some(row) => {
+                        crate::effect_words::account(&row.entry, d.repositories.get(&row.entry.repository), outcome)
+                    }
+                    None => None,
+                };
                 let mut projection = false;
                 for (_, row) in &d.issues {
                     projection |= row.pending == Some(entry);
@@ -1575,7 +1582,7 @@ fn drain(d: &mut Domain, env: &Env<Limits>, out: &mut Queue<Request>) {
                 if projection {
                     emit(out, Request::ProjectionOutcome { entry, outcome });
                 } else {
-                    emit(out, Request::Outcome { entry, task, outcome });
+                    emit(out, Request::Outcome { entry, task, outcome, account });
                 }
                 if outcome != skein_forge_client::Outcome::Uncertain
                     && outcome != skein_forge_client::Outcome::Queued
@@ -2223,7 +2230,10 @@ fn lost_release(d: &Domain, name: &Name, failed: bool, out: &mut Queue<Request>)
     let task = hold.task;
     let Some(row) = d.releases.get(&task) else { return };
     if row.releasing && !row.failed && row.pending.is_none() {
-        emit(out, if failed { Request::ReleaseFailed { task } } else { Request::ContinueRelease { task } });
+        emit(
+            out,
+            if failed { Request::ReleaseFailed { task, account: None } } else { Request::ContinueRelease { task } },
+        );
     }
 }
 
@@ -2330,6 +2340,7 @@ fn delegated(
         row.result.repaired(why, row.change.last_head, env.limits.client.answer_bytes);
     }
     row.delegate = Some((child, kind));
+    row.effect_account = None;
     row.delegate_status = change::Status::Unknown;
     let saved = row.clone();
     save_change(d, out, saved);
@@ -2344,7 +2355,48 @@ fn delegate_refused(d: &mut Domain, env: &Env<Limits>, task: u64, child: u64, ou
     }
     row.delegate = None;
     row.delegate_status = change::Status::Unknown;
-    let state = match (kind, &row.change.state) {
+    let state = unasked(row, kind);
+    row.change.state = change::State::Held { was: Box::new(state), why: change::Hold::Failed };
+    let saved = row.clone();
+    save_queue_change(d, env, before, saved, out);
+}
+
+fn delegate_admission_refused(
+    d: &mut Domain,
+    env: &Env<Limits>,
+    task: u64,
+    kind: change::Delegate,
+    out: &mut Queue<Request>,
+) {
+    let Some(row) = d.changes.get_mut(&task) else { return };
+    if row.delegate.is_some() {
+        return;
+    }
+    let asked = match (kind, &row.change.state) {
+        (change::Delegate::Produce, change::State::Producing { requested }) => *requested,
+        (change::Delegate::Repair(why), change::State::Repairing { requested, why: current }) => {
+            *requested && why == *current
+        }
+        (change::Delegate::Resolve { base }, change::State::Resolving { requested, base: current }) => {
+            *requested && base == *current
+        }
+        (change::Delegate::Gate { number, head }, change::State::Gating { head: current, asked }) => {
+            head == *current && asked.contains(&number)
+        }
+        _ => false,
+    };
+    if !asked {
+        return;
+    }
+    let before = crate::panel::ready(row);
+    row.change.state = unasked(row, kind);
+    row.delegate_status = change::Status::Unknown;
+    let saved = row.clone();
+    save_queue_change(d, env, before, saved, out);
+}
+
+fn unasked(row: &mut ChangeRow, kind: change::Delegate) -> change::State {
+    match (kind, &row.change.state) {
         (change::Delegate::Produce, change::State::Producing { .. }) => change::State::Producing { requested: false },
         (change::Delegate::Repair(why), change::State::Repairing { .. }) => {
             row.change.repairs = row.change.repairs.saturating_sub(1);
@@ -2364,10 +2416,7 @@ fn delegate_refused(d: &mut Domain, env: &Env<Limits>, task: u64, child: u64, ou
             change::State::Gating { head: *head, asked: remaining.into_boxed() }
         }
         _ => row.change.state.clone(),
-    };
-    row.change.state = change::State::Held { was: Box::new(state), why: change::Hold::Failed };
-    let saved = row.clone();
-    save_queue_change(d, env, before, saved, out);
+    }
 }
 
 #[expect(clippy::too_many_arguments, reason = "one child's terminal carries its status, failure standing and words")]
@@ -3056,6 +3105,7 @@ fn emit_change_effect(
     crate::landing::change_advanced(d, row, &prior, change::Decision::Effect(effect), out);
     row.pending = Some(pending.entry);
     row.effect = change::EffectResult::Pending;
+    row.effect_account = None;
     let before = match d.changes.get(&row.task) {
         Some(row) => crate::panel::ready(row),
         None => None,
@@ -3130,6 +3180,12 @@ fn change_write(row: &ChangeRow, effect: change::Effect, limits: &Limits) -> Opt
     }
 }
 
+fn settled_account(d: &Domain, entry: u64, outcome: skein_forge_client::Outcome) -> Option<crate::EffectAccount> {
+    let row = d.entries.get(&entry)?;
+    let words = crate::effect_words::account(&row.entry, d.repositories.get(&row.entry.repository), outcome)?;
+    Some(crate::EffectAccount { entry, words })
+}
+
 fn change_outcome(
     d: &mut Domain,
     env: &Env<Limits>,
@@ -3144,6 +3200,7 @@ fn change_outcome(
         }
     }
     let Some(task) = task else { return };
+    let account = settled_account(d, entry, outcome);
     let Some(row) = d.changes.get_mut(&task) else { unreachable!("found change row") };
     let pull_closed = match outcome {
         skein_forge_client::Outcome::Raced {
@@ -3167,6 +3224,7 @@ fn change_outcome(
         | skein_forge_client::Outcome::Withdrawn => change::EffectResult::Failed,
         skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => return,
     };
+    row.effect_account = account;
     row.pending = None;
     if pull_closed {
         row.drift = Some(change::Hold::PullClosed);
@@ -3294,7 +3352,7 @@ fn settle_effects(
     crate::landing::closing(d, task, ending, out);
     if let Some(row) = d.releases.get_mut(&task) {
         if row.root != root || (row.ending != ending && ending != ReleaseEnding::Cancelled) {
-            emit(out, Request::ReleaseFailed { task });
+            emit(out, Request::ReleaseFailed { task, account: None });
             return;
         }
         if row.ending != ending {
@@ -3312,7 +3370,7 @@ fn settle_effects(
         }
     } else {
         if d.releases.len() == env.limits.tasks {
-            emit(out, Request::ReleaseFailed { task });
+            emit(out, Request::ReleaseFailed { task, account: None });
             return;
         }
         let row = ReleaseRow {
@@ -3348,10 +3406,18 @@ fn settle_effects(
             if let Some(row) = d.entries.get(&number)
                 && row.entry.start.is_none()
             {
+                let account = crate::effect_words::account(
+                    &row.entry,
+                    d.repositories.get(&row.entry.repository),
+                    skein_forge_client::Outcome::Withdrawn,
+                );
                 d.entries.remove(&number);
                 emit(out, Request::Erase { key: Key::Entry(number) });
                 d.named_outcome(number, skein_forge_client::Outcome::Withdrawn);
-                emit(out, Request::Outcome { entry: number, task, outcome: skein_forge_client::Outcome::Withdrawn });
+                emit(
+                    out,
+                    Request::Outcome { entry: number, task, outcome: skein_forge_client::Outcome::Withdrawn, account },
+                );
             }
         }
     }
@@ -3391,12 +3457,12 @@ fn release(
     if let Some(reason) = &reason
         && reason.len() > usize::try_from(env.limits.client.op_bytes).expect("u32 fits usize")
     {
-        emit(out, Request::ReleaseFailed { task });
+        emit(out, Request::ReleaseFailed { task, account: None });
         return;
     }
     if let Some(row) = d.releases.get_mut(&task) {
         if row.root != root || (row.ending != ending && ending != ReleaseEnding::Cancelled) {
-            emit(out, Request::ReleaseFailed { task });
+            emit(out, Request::ReleaseFailed { task, account: None });
             return;
         }
         if row.ending != ending {
@@ -3417,7 +3483,7 @@ fn release(
         emit(out, Request::Save { read_afresh: None, release: None, record: Stored::Release(row.clone()) });
     } else {
         if d.releases.len() == env.limits.tasks {
-            emit(out, Request::ReleaseFailed { task });
+            emit(out, Request::ReleaseFailed { task, account: None });
             return;
         }
         let mut row = ReleaseRow {
@@ -3465,7 +3531,7 @@ fn continue_release(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, ou
         }
         if let Some(number) = row.close_pull {
             let Some(change) = d.changes.get(&task) else {
-                emit(out, Request::ReleaseFailed { task });
+                emit(out, Request::ReleaseFailed { task, account: None });
                 return;
             };
             let repository = change.repository;
@@ -3494,7 +3560,7 @@ fn continue_release(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, ou
                 }
             }
             if writer.is_some() {
-                emit(out, Request::ReleaseFailed { task });
+                emit(out, Request::ReleaseFailed { task, account: None });
                 return;
             }
             if row.ending == ReleaseEnding::Failed && row.root != task {
@@ -3613,7 +3679,7 @@ fn enqueue_release(
     out: &mut Queue<Request>,
 ) {
     if d.entries.len() == env.limits.entries || d.entries.contains_key(&number) {
-        emit(out, Request::ReleaseFailed { task: row.task });
+        emit(out, Request::ReleaseFailed { task: row.task, account: None });
         return;
     }
     let entry = skein_forge_client::Entry {
@@ -3647,6 +3713,7 @@ fn release_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outc
         }
     }
     let Some(task) = owner else { return };
+    let account = settled_account(d, entry, outcome);
     let mut row = d.releases.get(&task).expect("selected release").clone();
     let (_, resource) = row.pending.take().expect("selected pending release");
     if resource.is_none() && row.comment.is_some() {
@@ -3667,7 +3734,7 @@ fn release_outcome(d: &mut Domain, entry: u64, outcome: skein_forge_client::Outc
             | skein_forge_client::Outcome::Held
             | skein_forge_client::Outcome::Withdrawn => {
                 row.failed = true;
-                emit(out, Request::ReleaseFailed { task });
+                emit(out, Request::ReleaseFailed { task, account });
             }
             skein_forge_client::Outcome::Uncertain | skein_forge_client::Outcome::Queued => {
                 unreachable!("uncertain returned above")
@@ -4152,6 +4219,7 @@ fn veto_change(
     row.change = prior;
     row.pending = None;
     row.effect = change::EffectResult::None;
+    row.effect_account = None;
     let saved = row.clone();
     save_queue_change(d, env, before, saved, out);
     d.entries.remove(&entry);

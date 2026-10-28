@@ -620,6 +620,7 @@ pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
     let mut bytes = u64::try_from(size_of::<tasks::TaskRecord>()).ok()?;
     for retained in [
         u64::from(tasks.spec_bytes),
+        u64::from(tasks::HOLD_ACCOUNT_BYTES),
         u64::from(tasks.result_bytes).checked_mul(3)?,
         u64::from(tasks.inbox_bytes),
         u64::from(tasks.inbox_messages).checked_mul(u64::try_from(size_of::<tasks::Word>()).ok()?)?,
@@ -660,7 +661,8 @@ pub(crate) fn row_bound(limits: &Limits) -> Option<u64> {
             .max(
                 u64::from(tasks.spec_bytes)
                     .checked_mul(2)?
-                    .checked_add(u64::try_from(size_of::<forge::ChangeRow>()).ok()?)?,
+                    .checked_add(u64::try_from(size_of::<forge::ChangeRow>()).ok()?)?
+                    .checked_add(u64::from(forge::EFFECT_ACCOUNT_BYTES))?,
             )
             .max(u64::from(limits.forge.client.answer_bytes))
             .max(u64::from(people.holdings).checked_mul(u64::try_from(size_of::<people::Holding>()).ok()?)?),

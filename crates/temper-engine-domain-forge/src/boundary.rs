@@ -608,6 +608,14 @@ pub struct IssueRow {
     /// Latest root-authorized goal snapshot, including an ending while a write is pending.
     pub desired: Option<issues::GoalView>,
 }
+/// Maximum retained operation, target and outcome text.
+pub const EFFECT_ACCOUNT_BYTES: u32 = 512;
+/// A settled effect's explanation, retained after its outbox entry is retired.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct EffectAccount {
+    pub entry: u64,
+    pub words: Box<[u8]>,
+}
 /// A change task's forge parameters and top-owned procedure state.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ChangeRow {
@@ -645,6 +653,7 @@ pub struct ChangeRow {
     /// Charter numbers captured when the change is made (protocol/configuration.md, 13.6).
     pub producing_charter: u32,
     pub review_charter: u32,
+    pub effect_account: Option<EffectAccount>,
 }
 impl ChangeRow {
     pub(crate) fn terminal(&self) -> bool {
@@ -1215,6 +1224,11 @@ pub enum Event {
         child: u64,
         kind: change::Delegate,
     },
+    /// The whole procedure batch was refused before a child number was admitted.
+    DelegateAdmissionRefused {
+        task: u64,
+        kind: change::Delegate,
+    },
     /// A proposed child was refused by tasks before creation; keep a releasable state.
     DelegateRefused {
         task: u64,
@@ -1479,6 +1493,8 @@ pub enum Request {
     Outcome {
         entry: u64,
         task: u64,
+        /// The connector's account survives retirement of its outbox entry.
+        account: Option<Box<[u8]>>,
         outcome: skein_forge_client::Outcome,
     },
     /// Projection recovery belongs to the connector and settles no task or call.
@@ -1512,6 +1528,7 @@ pub enum Request {
     /// A cleanup effect failed and the closing task needs a person's decision.
     ReleaseFailed {
         task: u64,
+        account: Option<EffectAccount>,
     },
     /// A connector-described projection candidate, awaiting core admission.
     ProjectionEffect {

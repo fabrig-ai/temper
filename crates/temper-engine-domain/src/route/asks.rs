@@ -20,7 +20,15 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             None
         }
         core::Ask::StepRefused { task, step, why } => {
-            step_made(domain, task, step, None);
+            let delegation = domain.forge_delegating.remove(&(task, step));
+            if let core::StepRefusal::Denied { findings, .. } = &why {
+                if connector == domain.config.forge_connector
+                    && let Some(kind) = delegation
+                {
+                    domain.work.push(Work::Forge(forge::Event::DelegateAdmissionRefused { task, kind }));
+                }
+                forge_route::refused_step(domain, env, task, step, findings);
+            }
             if let core::StepRefusal::Refused(problem) = why {
                 // Jig's domain/connectors.md, 6.2: step again on refusal. A kept change waits
                 // without a deadline; its dependency's Met wakes it (jig's domain/tasks.md, 5.7).
@@ -303,7 +311,7 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
                 && let Some(repair) = repair
                 && let Some(owner) = domain.forge.queue_repair_owner(repair)
             {
-                domain.work.push(Work::Tasks(tasks::Event::Hold { task: owner, why: tasks::Hold::Effects }));
+                forge_route::hold_reason(domain, owner, b"landing branch repair admission was refused");
             }
             None
         }
@@ -328,7 +336,7 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             };
             if connector == domain.config.forge_connector && code == forge_route::CHANGE_CODE {
                 if !forge_route::start_change(domain, env, &context) {
-                    domain.work.push(Work::Tasks(tasks::Event::Hold { task, why: tasks::Hold::Effects }));
+                    forge_route::start_refused(domain, task);
                 }
             } else if connector == domain.config.forge_connector && code == forge_route::LANDING_CODE {
                 forge_route::start_landing_step(domain, env, &context);

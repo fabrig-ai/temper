@@ -1308,7 +1308,7 @@ fn cancellation_during_release_retargets_the_durable_cleanup() {
     assert!(
         matches!(world.stored().get(&top::Key::Release(51)), Some(top::Stored::Release(row)) if row.ending == top::ReleaseEnding::Cancelled)
     );
-    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ReleaseFailed { task: 51 })));
+    assert!(!world.seen().iter().any(|request| matches!(request, top::Request::ReleaseFailed { task: 51, .. })));
 }
 
 #[test]

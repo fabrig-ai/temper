@@ -343,6 +343,7 @@ fn change_row(pull: Option<u64>) -> super::forge::ChangeRow {
         queue_repairs: 0,
         producing_charter: 2,
         review_charter: 4,
+        effect_account: None,
     }
 }
 
