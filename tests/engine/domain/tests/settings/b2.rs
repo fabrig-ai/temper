@@ -402,19 +402,27 @@ pub(super) fn story() {
         panic!("question admitted");
     };
     assert!(inbox(&driver, chat.task, first.task, &tasks::MessageKind::Question, b"Green light?"));
-    assert!(matches!(
-        call(
-            &mut driver,
-            &chat,
-            45,
-            engine::Tool::Message {
-                target: first.task,
-                form: engine::MessageForm::Answer { question },
-                words: b"Go ahead".as_slice().into(),
-            }
-        ),
-        engine::CallAnswer::Sent { .. }
-    ));
+    driver.send(engine::Event::Party(engine::PartyInput::Ask {
+        models: Box::new([]),
+        reply_to: ReplyTo::new(Token::new(45)),
+        sign_in: driver.session(),
+        key: [45; 16],
+        ask: people::Ask::AnswerQuestion {
+            project: 1,
+            task: chat.task,
+            question,
+            words: b"Go ahead".as_slice().into(),
+        },
+    }));
+    driver.settle();
+    assert!(
+        driver
+            .task(chat.task)
+            .expect("chat remains open")
+            .inbox
+            .iter()
+            .any(|word| word.kind == tasks::MessageKind::QuestionAnswered { question })
+    );
     assert!(inbox(&driver, first.task, chat.task, &tasks::MessageKind::Answer { question }, b"Go ahead"));
     repair_change(&mut driver, &first, 46);
     assert!(assigned(&driver, second).is_none(), "D2 still waits until its coordinator ends");

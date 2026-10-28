@@ -97,6 +97,12 @@ pub(super) fn encode_owner_message_kind(
             out.object_end();
         }
         jig_client::contract::OwnerMessageKind::Question => out.string(b"question"),
+        jig_client::contract::OwnerMessageKind::QuestionAnswered { question } => {
+            question_notice(out, b"question_answered", *question);
+        }
+        jig_client::contract::OwnerMessageKind::QuestionEnded { question } => {
+            question_notice(out, b"question_ended", *question);
+        }
         jig_client::contract::OwnerMessageKind::Answer { question } => {
             out.object_start();
             out.key(b"answer");
@@ -268,6 +274,16 @@ fn encode_message_notice(
     out.unsigned(target);
     out.key(b"state");
     encode_owner_notice_state(state, out, budget);
+    out.object_end();
+    out.object_end();
+}
+
+fn question_notice(out: &mut Encoder, kind: &[u8], question: u64) {
+    out.object_start();
+    out.key(kind);
+    out.object_start();
+    out.key(b"question");
+    out.unsigned(question);
     out.object_end();
     out.object_end();
 }

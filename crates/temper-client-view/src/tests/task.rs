@@ -909,13 +909,29 @@ fn asked_resources_have_a_meta_row_only_when_there_are_parts() {
 
 #[test]
 fn a_kept_activity_is_parked() {
-    let mut builder = Builder::new(&fixtures::tree_limits());
-    crate::pages::task::owner_activity(
-        &mut builder,
-        &c::OwnerActivity::Kept { attempt: 1, pending: List::with_capacity(0) },
-        &fixtures::words(),
-    );
-    assert_eq!(fixtures::text(&builder.finish()).as_ref(), b"parked");
+    for (question, expected) in [(None, b"parked".as_slice()), (Some(11), b"Kept by question: 11".as_slice())] {
+        let mut builder = Builder::new(&fixtures::tree_limits());
+        crate::pages::task::owner_activity(
+            &mut builder,
+            &c::OwnerActivity::Kept { attempt: 1, pending: List::with_capacity(0), question },
+            &fixtures::words(),
+        );
+        assert_eq!(fixtures::text(&builder.finish()).as_ref(), expected);
+    }
+}
+
+#[test]
+fn question_notices_name_the_question_without_answer_words() {
+    for (kind, expected) in [
+        (c::OwnerMessageKind::QuestionAnswered { question: 11 }, b"Person answered question in inbox: 11".as_slice()),
+        (c::OwnerMessageKind::QuestionEnded { question: 11 }, b"Question ended unanswered: 11".as_slice()),
+    ] {
+        let mut builder = Builder::new(&fixtures::tree_limits());
+        let mut word = heard_word(c::OwnerRequester::Task(TASK), kind);
+        word.words = result_words(b"");
+        crate::pages::task::owner_activity(&mut builder, &c::OwnerActivity::Heard(word), &fixtures::words());
+        assert_eq!(fixtures::text(&builder.finish()).as_ref(), expected);
+    }
 }
 
 fn goal(task: c::Task) -> crate::View {

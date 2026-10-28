@@ -183,7 +183,7 @@ fn a_held_task_the_agent_releases_from_the_printed_act_runs_again() {
 }
 
 #[test]
-fn a_cut_question_is_answered_through_the_tools_and_reaches_the_chat() {
+fn a_cut_question_is_answered_through_the_tools_and_reaches_the_asker() {
     use jig_domain_tasks::{MessageKind, Party};
     const TEXT_BOUND: u32 = 60;
     const QUESTION_BYTES: usize = 61;
@@ -216,8 +216,8 @@ fn a_cut_question_is_answered_through_the_tools_and_reaches_the_chat() {
         ],
     );
     assert_eq!(answer.status, 0, "{answer:?}");
-    assert!(world.front().engine.task(chat).expect("answered chat").inbox.iter().any(|word| {
-        word.from == Party::Person(fixtures::PARTY)
+    assert!(world.front().engine.task(asking).expect("answered asker").inbox.iter().any(|word| {
+        word.from == Party::Task(chat)
             && word.kind == MessageKind::Answer { question }
             && word.words.as_ref() == b"Go ahead."
     }));

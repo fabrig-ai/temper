@@ -244,10 +244,10 @@ pub fn check(ran: &Ran) {
     assert_eq!(tree["tree"]["more"], false);
     assert!(tree["tree"]["folded"].as_array().expect("folded tasks").is_empty(), "no hidden change before approval");
     assert!(String::from_utf8_lossy(&ran.calls()[ACTIVITY].stdout).contains(person("question")));
-    let relay = told(query_at(ran, CHAT_CUE, 3));
-    let question_at = relay.find(person("question")).expect("chat hears the plan");
-    let answer_at = relay.find(person("answer")).expect("chat hears the answer");
-    assert!(question_at < answer_at);
+    let notice = told(query_at(ran, CHAT_CUE, 3));
+    assert!(notice.contains(person("question")), "chat hears the plan");
+    assert!(notice.contains("answered question in their inbox 1"), "chat hears the numbered notice");
+    assert!(!notice.contains(person("answer")), "approval reaches the goal directly");
     assert!(heard_tool(query_at(ran, WORK_CUE, 4), "Message 1 sent"));
     assert!(told(query_at(ran, WORK_CUE, 5)).contains(person("answer")), "work hears approval before change");
     assert!(heard_tool(query_at(ran, WORK_CUE, 6), "Delegated tasks: 3"));

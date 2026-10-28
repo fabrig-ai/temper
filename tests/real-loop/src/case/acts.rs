@@ -204,7 +204,7 @@ pub enum Read {
 // ended wait starts first; its delegates' ended documents are read before
 // their requesters end, then the director's wait is joined.
 const DIRECTOR_ENDED: usize = 3;
-const A_ENDED: usize = 7;
+const A_ENDED: usize = 9;
 const DESIGN_ENDED: usize = 6;
 pub const READS_4_1: &[(Read, usize)] =
     &[(Read::DirectorEnded, DIRECTOR_ENDED), (Read::AEnded, A_ENDED), (Read::DesignEnded, DESIGN_ENDED)];
@@ -242,6 +242,19 @@ pub fn step_4_1() -> Vec<calls::Step> {
         call(D1, argv!["task", "show", number(DIRECTOR), "--until", "replied"]),
         call(D1, argv!["task", "show", number(A), "--until", "replied"]),
         call(D1, argv!["task", "show", number(DESIGN), "--until", "ended", "--json"]),
+        call(D1, argv!["inbox", "--until", "waiting"]),
+        call(
+            D1,
+            argv![
+                "task",
+                "answer",
+                number(DIRECTOR),
+                number(super::QUESTION),
+                super::GREEN_LIGHT,
+                "--key",
+                "schedule-answer"
+            ],
+        ),
         call(D1, argv!["task", "show", number(A), "--until", "ended", "--json"]),
         join(DIRECTOR_ENDED),
     ]
@@ -435,10 +448,10 @@ pub fn reads_4_1_4_3() -> Vec<(Read, usize)> {
 const HANG_ENDED: usize = 2;
 const HANG_QUESTION_READ: usize = 3;
 const HANG_WAITING: usize = 4;
-const HANG_A_ENDED: usize = 5;
-const HANG_ACTIVITY: usize = 6;
-const HANG_ACTIVITY_OLDER: usize = 7;
-const HANG_ACTIVITY_FIRST: usize = 8;
+const HANG_A_ENDED: usize = 7;
+const HANG_ACTIVITY: usize = 8;
+const HANG_ACTIVITY_OLDER: usize = 9;
+const HANG_ACTIVITY_FIRST: usize = 10;
 /// Documents within the standalone restart story, relative to its first call.
 pub const READS_4_6: &[(Read, usize)] = &[
     (Read::HangEnded, HANG_ENDED),
@@ -467,6 +480,19 @@ pub fn step_4_6(base: usize) -> Vec<calls::Step> {
         // Its withheld turn is sealed when the worker stops, as A's parked waits are.
         call(D1, argv!["task", "show", number(HANG), "--until", "replied", "--json"]),
         calls::stop_worker("ws"),
+        call(D1, argv!["inbox", "--until", "waiting"]),
+        call(
+            D1,
+            argv![
+                "task",
+                "answer",
+                number(HANG),
+                number(super::PHASE_QUESTION_NUMBER),
+                super::PHASE_ANSWER,
+                "--key",
+                "phase-answer"
+            ],
+        ),
         join(base + HANG_ENDED),
         call(D1, argv!["task", "show", number(PHASE), "--activity", "32", "--json"]),
         call(D1, argv!["task", "activity", number(HANG), "--json"]),
@@ -498,9 +524,9 @@ pub const READS_5_1: &[(Read, usize)] = &[
     (Read::ScopeHeld, 8),
     (Read::RulesQuestionWaiting, 11),
     (Read::RulesEnded, RULES_ENDED),
-    (Read::ScopeEnded, 12),
-    (Read::RulesActivity, 13),
-    (Read::ScopeActivity, 14),
+    (Read::ScopeEnded, 13),
+    (Read::RulesActivity, 14),
+    (Read::ScopeActivity, 15),
 ];
 
 #[must_use]
@@ -559,6 +585,18 @@ pub fn step_5_1() -> Vec<calls::Step> {
             SCOPE_QUESTION.as_bytes(),
             b"\"task\"",
         ),
+        call(
+            D1,
+            argv![
+                "task",
+                "answer",
+                number(RULES),
+                number(super::SCOPE_QUESTION_NUMBER),
+                super::SCOPE_ANSWER,
+                "--key",
+                "scope-answer"
+            ],
+        ),
         join(RULES_ENDED),
         call(D1, argv!["task", "show", number(SCOPE), "--json"]),
         // Every run's ending: a fresh start refused and retried would pass unseen.
@@ -569,7 +607,7 @@ pub fn step_5_1() -> Vec<calls::Step> {
 
 // Act 2, step 5.3 (domain/testing.md, 5.3)
 const SHAPE_ENDED: usize = 2;
-pub const READS_5_3: &[(Read, usize)] = &[(Read::MoverEnded, 3), (Read::ShapeEnded, SHAPE_ENDED)];
+pub const READS_5_3: &[(Read, usize)] = &[(Read::MoverEnded, 5), (Read::ShapeEnded, SHAPE_ENDED)];
 
 #[must_use]
 pub fn step_5_3() -> Vec<calls::Step> {
@@ -578,6 +616,19 @@ pub fn step_5_3() -> Vec<calls::Step> {
         sign_in(D1),
         call(D1, argv!["chat", "start", "--project", number(PROJECT), "--key", "shape", SHAPE_PERSON]),
         start(D1, argv!["task", "show", number(SHAPE), "--until", "ended", "--json"]),
+        calls::until(D1, argv!["task", "show", number(MOVER), "--json"], super::NEW_BRIEF.as_bytes(), b"\"task\""),
+        call(
+            D1,
+            argv![
+                "task",
+                "answer",
+                number(SHAPE),
+                number(super::MOVER_QUESTION_NUMBER),
+                "Continue with the changed instructions.",
+                "--key",
+                "mover-answer"
+            ],
+        ),
         call(D1, argv!["task", "show", number(MOVER), "--until", "ended", "--json"]),
         join(SHAPE_ENDED),
     ]
@@ -719,10 +770,10 @@ pub const READS_5_5: &[(Read, usize)] = &[
     (Read::PlanEnded, PLAN_ENDED),
     (Read::PlannerParked, 3),
     (Read::PlanAnswerPending, 4),
-    (Read::PlannerEnded, 5),
-    (Read::PlannerEarlier, 6),
-    (Read::PlannerFirst, 7),
-    (Read::SubownerEnded, 8),
+    (Read::PlannerEnded, 6),
+    (Read::PlannerEarlier, 7),
+    (Read::PlannerFirst, 8),
+    (Read::SubownerEnded, 9),
 ];
 
 #[must_use]
@@ -742,10 +793,22 @@ pub fn step_5_5() -> Vec<calls::Step> {
             b"\"writing\":",
         ),
         calls::release_hold(PLAN_ANSWER_HOLD),
+        call(
+            D1,
+            argv![
+                "task",
+                "answer",
+                number(PLAN_DIRECTOR),
+                number(super::PLAN_QUESTION_NUMBER),
+                super::PLAN_ANSWER,
+                "--key",
+                "plan-answer"
+            ],
+        ),
         join(PLAN_ENDED),
         call(D1, argv!["task", "show", number(PLANNER), "--activity", "32", "--json"]),
-        call(D1, argv!["task", "activity", number(PLANNER), "--before", calls::activity_before(5), "--json"]),
         call(D1, argv!["task", "activity", number(PLANNER), "--before", calls::activity_before(6), "--json"]),
+        call(D1, argv!["task", "activity", number(PLANNER), "--before", calls::activity_before(7), "--json"]),
         call(D1, argv!["task", "show", number(SUBOWNER), "--json"]),
     ]
 }
@@ -1067,16 +1130,16 @@ pub fn step_6_1() -> Vec<calls::Step> {
 
 // Act 3, step 6.2 (domain/testing.md, 5.3)
 pub const READS_6_2: &[(Read, usize)] = &[
-    (Read::BlockerKept, 7),
-    (Read::BlockerReviewWriting, 11),
-    (Read::BlockerPending, 12),
-    (Read::BlockerA3Ended, 14),
-    (Read::BlockerE1Ended, 15),
-    (Read::BlockerCoderEnded, 16),
-    (Read::BlockerReviewerEnded, 17),
-    (Read::BlockerSubownerEnded, 18),
-    (Read::BlockerOwnerEnded, 19),
-    (Read::BlockerDirectorEnded, 20),
+    (Read::BlockerKept, 9),
+    (Read::BlockerReviewWriting, 13),
+    (Read::BlockerPending, 14),
+    (Read::BlockerA3Ended, 16),
+    (Read::BlockerE1Ended, 17),
+    (Read::BlockerCoderEnded, 18),
+    (Read::BlockerReviewerEnded, 19),
+    (Read::BlockerSubownerEnded, 20),
+    (Read::BlockerOwnerEnded, 21),
+    (Read::BlockerDirectorEnded, 22),
 ];
 
 #[must_use]
@@ -1113,6 +1176,19 @@ pub fn step_6_2() -> Vec<calls::Step> {
             argv!["task", "show", number(BLOCKER_SUBOWNER), "--json"],
             Agent::BlockerImplementer.cue(),
             b"\"task\"",
+        ),
+        call(D1, argv!["inbox", "--until", "waiting"]),
+        call(
+            D1,
+            argv![
+                "task",
+                "answer",
+                number(BLOCKER_DIRECTOR),
+                number(super::BLOCKER_UP_QUESTION_NUMBER),
+                super::BLOCKER_UP_ANSWER,
+                "--key",
+                "blocker-answer"
+            ],
         ),
         // Task and activity are separate reads. First wait for the task
         // snapshot to show its dependency wait, then require both its idle

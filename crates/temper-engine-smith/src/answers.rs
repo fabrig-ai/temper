@@ -451,6 +451,16 @@ fn finding_text(text: &mut Text, finding: jig_domain_authority::Finding) -> Resu
 // These refusals name their tasks, matching jig-protocol-tools' render vocabulary.
 fn dependency_problem(text: &mut Text, problem: &jig_domain_tasks::Problem) -> Result<(), Problem> {
     use jig_domain_tasks::Refusal;
+    if let Refusal::PersonAnswers { question } = problem.why {
+        text.add(b"your person answers question ")?;
+        text.number(question)?;
+        return text.add(b" in their inbox");
+    }
+    if let Refusal::KeptQuestion { question } = problem.why {
+        text.add(b"kept until question ")?;
+        text.number(question)?;
+        return text.add(b" is answered");
+    }
     let blocked = problem.blocked_by.as_deref().unwrap_or(&[]);
     if let Refusal::Circle { cut } = problem.why {
         text.add(b"these tasks would wait for one another")?;
@@ -489,7 +499,12 @@ fn dependency_problem(text: &mut Text, problem: &jig_domain_tasks::Problem) -> R
 
 fn task_problem(text: &mut Text, problem: &jig_domain_tasks::Problem) -> Result<(), Problem> {
     use jig_domain_tasks::Refusal;
-    if let Refusal::Circle { .. } | Refusal::DependencyEnded { .. } | Refusal::Kept = problem.why {
+    if let Refusal::Circle { .. }
+    | Refusal::DependencyEnded { .. }
+    | Refusal::Kept
+    | Refusal::PersonAnswers { .. }
+    | Refusal::KeptQuestion { .. } = problem.why
+    {
         return dependency_problem(text, problem);
     }
     if let Some(task) = problem.task {
@@ -535,6 +550,7 @@ fn task_problem(text: &mut Text, problem: &jig_domain_tasks::Problem) -> Result<
         Refusal::Circle { .. } => text.add(b"circle"),
         Refusal::DependencyEnded { .. } => text.add(b"dependency"),
         Refusal::Kept => text.add(b"kept"),
+        Refusal::PersonAnswers { .. } | Refusal::KeptQuestion { .. } => unreachable!("question reason rendered above"),
         Refusal::Executor => text.add(b"executor"),
         Refusal::Spec => text.add(b"specification"),
         Refusal::Contract => text.add(b"result contract"),

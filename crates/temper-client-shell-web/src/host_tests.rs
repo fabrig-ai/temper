@@ -274,6 +274,8 @@ fn a_stale_filter_link_opens_less_filtered_at_its_printed_address() {
 #[path = "../../../testing/memory_figures.rs"]
 mod memory_figures;
 // Domain state, view tree/bindings/words, HTTP decoding and exchange bodies.
+// The question/answer captions' three phrases and nine segments add 612 resident
+// bytes to the view's Words table. All web/domain/UI capacities stay fixed.
 
 #[test]
 #[cfg(target_pointer_width = "64")]

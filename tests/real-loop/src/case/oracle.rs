@@ -1113,14 +1113,24 @@ fn pace_inbox(misses: &mut Vec<Miss>, observed: &Observed) {
         observed.told.iter().position(|told| told.agent == Agent::Director && contains(&told.words, PACE_QUESTION));
     let answered = observed.told.iter().position(|told| {
         told.agent == Agent::Director
-            && contains(&told.words, &format!("1 answers question {PACE_QUESTION_MESSAGE}: {PACE_ANSWER}"))
+            && contains(&told.words, &format!("Your person answered question in their inbox {PACE_QUESTION_MESSAGE}"))
     });
     step_check(
         misses,
         "4.4",
         matches!((asked, answered), (Some(asked), Some(answered)) if asked < answered),
         PACE_INBOX,
-        "the director must hear A's question, then the person's answer",
+        "the director must hear A's question, then its person's numbered answer notice",
+    );
+    step_check(
+        misses,
+        "4.4",
+        observed.told.iter().any(|told| {
+            told.agent == Agent::A
+                && contains(&told.words, &format!("{DIRECTOR} answers question {PACE_QUESTION_MESSAGE}: {PACE_ANSWER}"))
+        }),
+        PACE_INBOX,
+        "A must hear the person's answer directly, logically from its director",
     );
     let sent = format!("Message {PACE_QUESTION_MESSAGE} sent");
     step_check(
@@ -1286,11 +1296,18 @@ mod pace_tests {
                 told(Agent::Director, PACE_QUESTION, DEFAULT_MODEL, 0),
                 told(
                     Agent::Director,
-                    &format!("1 answers question {PACE_QUESTION_MESSAGE}: {PACE_ANSWER}\nNote 1 revision 1 written"),
+                    &format!(
+                        "Your person answered question in their inbox {PACE_QUESTION_MESSAGE}\nNote 1 revision 1 written"
+                    ),
                     DEFAULT_MODEL,
                     0,
                 ),
-                told(Agent::A, PACE_ANSWER, DEFAULT_MODEL, 0),
+                told(
+                    Agent::A,
+                    &format!("{DIRECTOR} answers question {PACE_QUESTION_MESSAGE}: {PACE_ANSWER}"),
+                    DEFAULT_MODEL,
+                    0,
+                ),
                 told(Agent::Survey, "Begin", DEFAULT_MODEL, 1),
                 told(Agent::Director, &format!("Note 1 revision 1: {PACE_NOTE}\n{PACE_ANSWER}\n"), DEFAULT_MODEL, 0),
             ],
@@ -1529,7 +1546,7 @@ pub fn step_4_6(observed: &Observed) -> Vec<Miss> {
             && text(phase, "/chip/phase") == "ended"
             && text(phase, "/result/value/report/bytes") == PHASE_REPORT,
         ONCE,
-        "the director must send one answer call, A must hear it once, and A's next phase must end with its report",
+        "the person must answer A directly once with no director relay, and A's next phase must end with its report",
     );
     misses
 }
@@ -1545,26 +1562,24 @@ fn user_words(told: &Told) -> impl Iterator<Item = &[u8]> {
 }
 
 fn restart_messages(observed: &Observed) -> (bool, bool) {
-    use super::{PHASE, PHASE_ANSWER, PHASE_QUESTION, PHASE_QUESTION_NUMBER};
+    use super::{PHASE_ANSWER, PHASE_QUESTION, PHASE_QUESTION_NUMBER};
     use skein_fake_llm_domain::api::Part;
     let mut resumed = false;
     let mut retained = true;
-    let mut answers = BTreeSet::new();
     let mut valid_answers = true;
     let mut received = 0;
     for told in &observed.told {
         if told.agent == Agent::Hang {
             let mut waits = 0;
             for part in told.history.iter().flat_map(|message| &message.parts) {
-                if let Part::ToolCall { id, name, arguments } = part {
+                if let Part::ToolCall { name, arguments, .. } = part {
                     waits += usize::from(name.as_ref() == b"wait");
                     if name.as_ref() == b"message"
                         && let Ok(args) = serde_json::from_slice::<Value>(arguments)
                         && args["form"] == "answer"
                         && args["question"] == PHASE_QUESTION_NUMBER
                     {
-                        valid_answers &= args["target"] == PHASE && args["words"] == PHASE_ANSWER;
-                        answers.insert(id.as_ref());
+                        valid_answers = false;
                     }
                 }
             }
@@ -1579,7 +1594,7 @@ fn restart_messages(observed: &Observed) -> (bool, bool) {
             received += user_words(told).map(|words| calls::occurrences(words, PHASE_ANSWER.as_bytes())).sum::<usize>();
         }
     }
-    (resumed && retained, valid_answers && answers.len() == 1 && received == 1)
+    (resumed && retained, valid_answers && received == 1)
 }
 
 #[cfg(test)]
@@ -1640,11 +1655,6 @@ mod restart_tests {
             Read::HangQuestionRead,
             json!({"rows":[{"event":{"owner":{"source":{"line":{"turn":{"read":PHASE_QUESTION_NUMBER}}}}}}]}),
         );
-        let answer = call(
-            "answer",
-            "message",
-            &json!({"target":PHASE,"form":"answer","question":PHASE_QUESTION_NUMBER,"words":PHASE_ANSWER}),
-        );
         Observed {
             observed_at: BTreeMap::new(),
             documents,
@@ -1656,12 +1666,8 @@ mod restart_tests {
                     vec![
                         Message {
                             role: Role::Assistant,
-                            parts: vec![
-                                call("wait-one", "wait", &json!({})),
-                                call("wait-two", "wait", &json!({})),
-                                answer,
-                            ]
-                            .into_boxed_slice(),
+                            parts: vec![call("wait-one", "wait", &json!({})), call("wait-two", "wait", &json!({}))]
+                                .into_boxed_slice(),
                         },
                         Message {
                             role: Role::User,
@@ -3199,7 +3205,7 @@ fn plan_authority(observed: &Observed, misses: &mut Vec<Miss>) {
 }
 
 fn plan_messages(observed: &Observed, misses: &mut Vec<Miss>) {
-    use super::{PLAN_ANSWER, PLAN_ANSWER_NUMBER, PLAN_DIRECTOR, PLAN_QUESTION_NUMBER, PLAN_WORDS, PLANNER};
+    use super::{PLAN_ANSWER, PLAN_ANSWER_NUMBER, PLAN_DIRECTOR, PLAN_QUESTION_NUMBER, PLAN_WORDS};
     let questions = plan_tool_results(observed, Agent::Planner, b"message");
     let answers = plan_tool_results(observed, Agent::Plan, b"message");
     let question_at = observed
@@ -3220,14 +3226,7 @@ fn plan_messages(observed: &Observed, misses: &mut Vec<Miss>) {
                     && args["words"] == PLAN_WORDS
                     && contains(output, &format!("Message {PLAN_QUESTION_NUMBER} sent"))
             })
-            && answers.len() == 1
-            && answers.iter().all(|(_, args, output)| {
-                args["target"] == PLANNER
-                    && args["form"] == "answer"
-                    && args["question"] == PLAN_QUESTION_NUMBER
-                    && args["words"] == PLAN_ANSWER
-                    && contains(output, &format!("Message {PLAN_ANSWER_NUMBER} sent"))
-            })
+            && answers.is_empty()
             && [Read::PlannerEnded, Read::PlannerEarlier, Read::PlannerFirst]
                 .iter()
                 .flat_map(|read| check_activity(observed, *read))
@@ -3464,14 +3463,7 @@ mod plan_tests {
             &json!({"target":PLAN_DIRECTOR,"form":"question","words":PLAN_WORDS}),
             &format!("Message {PLAN_QUESTION_NUMBER} sent"),
         ));
-        let mut director = vec![input(PLAN_WORDS)];
-        director.extend(tool(
-            "answer",
-            "message",
-            &json!({"target":PLANNER,"form":"answer","question":PLAN_QUESTION_NUMBER,
-            "words":PLAN_ANSWER}),
-            &format!("Message {PLAN_ANSWER_NUMBER} sent"),
-        ));
+        let director = vec![input(PLAN_WORDS)];
         let mut next = vec![input(PLAN_ANSWER)];
         let fresh = told(Agent::Planner, &next);
         next.extend(tool(
@@ -3640,12 +3632,18 @@ mod plan_tests {
         resumed.told[3].history = resumed.told[1].history.clone();
         resumed.told[3].history = [resumed.told[3].history.to_vec(), vec![input(PLAN_ANSWER)]].concat().into();
         let mut wrong_number = passing.clone();
-        if let Part::ToolCall { arguments, .. } = &mut wrong_number.told[2].history[1].parts[0] {
-            *arguments =
-                serde_json::to_vec(&json!({"target":PLANNER,"form":"answer","question":99,"words":PLAN_ANSWER}))
-                    .expect("args")
-                    .into();
-        }
+        wrong_number.told[2].history = [
+            wrong_number.told[2].history.to_vec(),
+            tool(
+                "forged",
+                "message",
+                &json!({"target":PLANNER,"form":"answer","question":99,"words":PLAN_ANSWER}),
+                "Refused: your person answers question 99 in their inbox",
+            )
+            .to_vec(),
+        ]
+        .concat()
+        .into();
         for observed in [duplicate, duplicate_answer, early, resumed, wrong_number] {
             assert!(!step_5_5(&observed).is_empty());
         }
@@ -6518,7 +6516,7 @@ fn blocker_messages(observed: &Observed) -> bool {
         let delivered = blocker_delivery(observed, exchange.receiver, exchange.words);
         let ordered = delivered.is_some_and(|delivery| previous.is_none_or(|before| before < delivery));
         previous = delivered;
-        tools.len() == 1
+        (if exchange.sender == Agent::BlockerDirector { tools.is_empty() } else { tools.len() == 1 })
             && tools.iter().all(|(_, args, out)| {
                 args["target"] == exchange.target
                     && args["form"] == form
@@ -6897,12 +6895,14 @@ mod blocker_tests {
                 "question"
             };
             let history = histories.entry(exchange.by).or_default();
-            history.extend(tool(
-                &format!("message{}", exchange.message),
-                "message",
-                &json!({"target":exchange.target,"form":form,"question":exchange.question,"words":exchange.words}),
-                &format!("Message {} sent", exchange.message),
-            ));
+            if exchange.sender != Agent::BlockerDirector {
+                history.extend(tool(
+                    &format!("message{}", exchange.message),
+                    "message",
+                    &json!({"target":exchange.target,"form":form,"question":exchange.question,"words":exchange.words}),
+                    &format!("Message {} sent", exchange.message),
+                ));
+            }
             queries.push(told(exchange.sender, history));
             let history = histories.entry(exchange.target).or_default();
             history.push(input(exchange.words));
@@ -7031,15 +7031,26 @@ mod blocker_tests {
         let passing = met();
         for exchange in blocker_exchanges() {
             let id = format!("message{}", exchange.message);
-            for field in [Some("target"), Some("form"), Some("words"), None] {
+            for field in [Some("target"), Some("form"), Some("words"), None]
+                .into_iter()
+                .filter(|_| exchange.sender != Agent::BlockerDirector)
+            {
                 let mut changed = passing.clone();
                 mutate_tool(&mut changed, id.as_bytes(), field);
-                rejects(&changed, BLOCKER_MESSAGES);
+                assert!(
+                    step_6_2(&changed).iter().any(|m| m.promise == BLOCKER_MESSAGES),
+                    "message {} field {field:?}",
+                    exchange.message
+                );
             }
-            if exchange.question.is_some() {
+            if exchange.question.is_some() && exchange.sender != Agent::BlockerDirector {
                 let mut changed = passing.clone();
                 mutate_tool(&mut changed, id.as_bytes(), Some("question"));
-                rejects(&changed, BLOCKER_MESSAGES);
+                assert!(
+                    step_6_2(&changed).iter().any(|m| m.promise == BLOCKER_MESSAGES),
+                    "message {} question",
+                    exchange.message
+                );
             }
             for field in ["message", "by", "kind", "words"] {
                 let mut changed = passing.clone();
@@ -7051,16 +7062,30 @@ mod blocker_tests {
                         row["event"]["owner"]["source"]["line"]["words"][field] = Value::Null;
                     }
                 }
-                rejects(&changed, BLOCKER_MESSAGES);
+                assert!(
+                    step_6_2(&changed).iter().any(|m| m.promise == BLOCKER_MESSAGES),
+                    "message {} field {field:?}",
+                    exchange.message
+                );
             }
             let mut duplicate = passing.clone();
-            duplicate.told.push(told(exchange.receiver, &[input(exchange.words)]));
-            rejects(&duplicate, BLOCKER_MESSAGES);
+            // A second identical history can be a replay. Put two deliveries in
+            // one history to distinguish an actual duplicate after relay removal.
+            duplicate.told.push(told(exchange.receiver, &[input(exchange.words), input(exchange.words)]));
+            assert!(
+                step_6_2(&duplicate).iter().any(|m| m.promise == BLOCKER_MESSAGES),
+                "message {} duplicate",
+                exchange.message
+            );
             let mut missing = passing.clone();
             missing
                 .told
                 .retain(|t| !(t.agent == exchange.receiver && user_words(t).any(|w| contains(w, exchange.words))));
-            rejects(&missing, BLOCKER_MESSAGES);
+            assert!(
+                step_6_2(&missing).iter().any(|m| m.promise == BLOCKER_MESSAGES),
+                "message {} missing",
+                exchange.message
+            );
         }
         let mut reversed = passing.clone();
         reversed.told.reverse();
@@ -7410,8 +7435,9 @@ pub fn step_6_5(observed: &Observed) -> Vec<Miss> {
 
 fn budget_messages(observed: &Observed, misses: &mut Vec<Miss>) {
     use super::{
-        BUDGET_ANSWER, BUDGET_ANSWER_NUMBER, BUDGET_DIRECTOR, BUDGET_OWNER, BUDGET_PERSON_ANSWER, BUDGET_QUESTION,
-        BUDGET_QUESTION_NUMBER, BUDGET_RELAY_NUMBER, BUDGET_SUBOWNER, BUDGET_UP_QUESTION, BUDGET_UP_QUESTION_NUMBER,
+        BUDGET_ANSWER, BUDGET_ANSWER_NUMBER, BUDGET_DIRECTOR, BUDGET_OWNER, BUDGET_PERSON_ANSWER,
+        BUDGET_PERSON_ANSWER_NUMBER, BUDGET_QUESTION, BUDGET_QUESTION_NUMBER, BUDGET_SUBOWNER, BUDGET_UP_QUESTION,
+        BUDGET_UP_QUESTION_NUMBER,
     };
     let mut previous = None;
     for (agent, receiver, by, target, message, question, words, read) in [
@@ -7440,7 +7466,7 @@ fn budget_messages(observed: &Observed, misses: &mut Vec<Miss>) {
             Agent::BudgetOwner,
             BUDGET_DIRECTOR,
             BUDGET_OWNER,
-            BUDGET_RELAY_NUMBER,
+            BUDGET_PERSON_ANSWER_NUMBER,
             Some(BUDGET_UP_QUESTION_NUMBER),
             BUDGET_PERSON_ANSWER,
             Read::BudgetOwnerEnded,
@@ -7462,7 +7488,7 @@ fn budget_messages(observed: &Observed, misses: &mut Vec<Miss>) {
         let form = if question.is_some() { "answer" } else { "question" };
         let tools = plan_tool_results(observed, agent, b"message");
         let tools: Vec<_> = tools.iter().filter(|(_, args, _)| args["words"] == words).collect();
-        let sent = tools.len() == 1
+        let sent = (if agent == Agent::BudgetDirector { tools.is_empty() } else { tools.len() == 1 })
             && tools.iter().all(|(_, args, out)| {
                 args["target"] == target
                     && args["form"] == form
@@ -7492,28 +7518,42 @@ fn budget_messages(observed: &Observed, misses: &mut Vec<Miss>) {
 }
 
 fn budget_person_answer(observed: &Observed, misses: &mut Vec<Miss>) {
-    use super::{BUDGET_PERSON_ANSWER, BUDGET_PERSON_ANSWER_NUMBER, BUDGET_UP_QUESTION, BUDGET_UP_QUESTION_NUMBER};
+    use super::{
+        BUDGET_NOTICE_NUMBER, BUDGET_PERSON_ANSWER, BUDGET_PERSON_ANSWER_NUMBER, BUDGET_UP_QUESTION,
+        BUDGET_UP_QUESTION_NUMBER,
+    };
     let question = blocker_delivery(observed, Agent::BudgetDirector, BUDGET_UP_QUESTION);
-    let person = blocker_delivery(observed, Agent::BudgetDirector, BUDGET_PERSON_ANSWER);
-    let relay = blocker_delivery(observed, Agent::BudgetOwner, BUDGET_PERSON_ANSWER);
+    let notice = format!("answered question in their inbox {BUDGET_UP_QUESTION_NUMBER}");
+    let answer = blocker_delivery(observed, Agent::BudgetOwner, BUDGET_PERSON_ANSWER);
     step_check(
         misses,
         "6.5",
-        question.zip(person).is_some_and(|(question, person)| question < person)
-            && person.zip(relay).is_some_and(|(person, relay)| person < relay)
-            && plan_deliveries(observed, Agent::BudgetDirector, BUDGET_PERSON_ANSWER) == 1
+        question.zip(answer).is_some_and(|(question, answer)| question < answer)
+            && plan_deliveries(observed, Agent::BudgetDirector, &notice) == 1
+            && plan_deliveries(observed, Agent::BudgetDirector, BUDGET_PERSON_ANSWER) == 0
+            && plan_deliveries(observed, Agent::BudgetOwner, BUDGET_PERSON_ANSWER) == 1
             && budget_rows(observed, Read::BudgetDirectorEnded)
                 .iter()
                 .filter(|r| {
+                    number(r, "/line/heard/number") == Some(BUDGET_NOTICE_NUMBER)
+                        && number(r, "/line/heard/from/task") == Some(super::BUDGET_DIRECTOR)
+                        && number(r, "/line/heard/kind/question_answered/question") == Some(BUDGET_UP_QUESTION_NUMBER)
+                        && text(r, "/line/heard/words").is_empty()
+                })
+                .count()
+                == 1
+            && budget_rows(observed, Read::BudgetOwnerEnded)
+                .iter()
+                .filter(|r| {
                     number(r, "/line/words/message") == Some(BUDGET_PERSON_ANSWER_NUMBER)
-                        && number(r, "/line/words/by/person") == Some(1)
+                        && number(r, "/line/words/by/task") == Some(super::BUDGET_DIRECTOR)
                         && number(r, "/line/words/kind/answer/question") == Some(BUDGET_UP_QUESTION_NUMBER)
                         && text(r, "/line/words/words") == BUDGET_PERSON_ANSWER
                 })
                 .count()
                 == 1,
         BUDGET_MESSAGES,
-        "the person must wake the chat once after the question and before its relay to A",
+        "the person's answer reaches A once, as its requester's answer, with no chat relay",
     );
 }
 
@@ -7840,7 +7880,7 @@ mod budget_tests {
             ),
             (
                 Read::BudgetOwnerEnded,
-                BUDGET_RELAY_NUMBER,
+                BUDGET_PERSON_ANSWER_NUMBER,
                 json!({"task":BUDGET_DIRECTOR}),
                 json!({"answer":{"question":BUDGET_UP_QUESTION_NUMBER}}),
                 BUDGET_PERSON_ANSWER,
@@ -7859,7 +7899,7 @@ mod budget_tests {
                 .1
                 .push(json!({"words":{"message":message,"by":by,"kind":kind,"words":words}}));
         }
-        lines.get_mut(&Read::BudgetDirectorEnded).expect("director").1.push(json!({"words":{"message":BUDGET_PERSON_ANSWER_NUMBER,"by":{"person":1},"kind":{"answer":{"question":BUDGET_UP_QUESTION_NUMBER}},"words":BUDGET_PERSON_ANSWER}}));
+        lines.get_mut(&Read::BudgetDirectorEnded).expect("director").1.push(json!({"heard":{"number":BUDGET_NOTICE_NUMBER,"from":{"task":BUDGET_DIRECTOR},"kind":{"question_answered":{"question":BUDGET_UP_QUESTION_NUMBER}},"words":"","eligible":true}}));
         lines.get_mut(&Read::BudgetSubownerEnded).expect("A1").1.push(json!({"words":{"message":BUDGET_FINDING_NUMBER,"by":{"task":BUDGET_A5},"kind":"words","words":BUDGET_FINDING}}));
         for (task, message, words) in [
             (BUDGET_A5, BUDGET_A5_REPORT_NUMBER, BUDGET_A5_REPORT),
@@ -7980,9 +8020,7 @@ mod budget_tests {
         let mut finding = vec![input(BUDGET_FINDING)];
         finding.extend(observed.told[8].history.iter().cloned());
         observed.told[8].history = finding.into();
-        let mut relay = vec![input(BUDGET_PERSON_ANSWER)];
-        relay.extend(tool("relay","message",&json!({"target":BUDGET_OWNER,"form":"answer","question":BUDGET_UP_QUESTION_NUMBER,"words":BUDGET_PERSON_ANSWER}),&format!("Message {BUDGET_RELAY_NUMBER} sent")));
-        observed.told.insert(4, told(Agent::BudgetDirector, &relay));
+        observed.told.insert(4, told(Agent::BudgetDirector, &[input("Person answered question in their inbox 2")]));
     }
 
     fn rejects(observed: &Observed, promise: Promise) {
@@ -8054,7 +8092,7 @@ mod budget_tests {
             duplicated.told[at].history = history.into();
             rejects(&duplicated, BUDGET_MESSAGES);
         }
-        for (left, right) in [(1, 3), (3, 4), (4, 5), (5, 7)] {
+        for (left, right) in [(1, 3), (3, 5), (5, 7)] {
             let mut observed = passing.clone();
             observed.told.swap(left, right);
             rejects(&observed, BUDGET_MESSAGES);

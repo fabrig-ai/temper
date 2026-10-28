@@ -1157,6 +1157,15 @@ mod memory_figures;
 // adds one 32-byte Application reference (28 * 32 = 896 root heap bytes).
 // F5 keeps terminal CI in ChangeRow: its optional head/verdict grows row-bearing
 // engine queues and store/system envelopes; the live panel_ci map is unchanged.
+// Question rails grow each credit 16 -> 48 bytes and add bounded dirty-row/
+// terminal-ID batches: Small's engine child adds 16,336 heap bytes. No capacity moves.
+// Packing the generated inbox removes a List header and a codec limit; the store's
+// two decoded records save 64 * (page bytes + joins), plus eight inline Store bytes.
+// System/Service carrier figures follow those codec layouts; their existing sizeof
+// terms remain in their owning modules. The stock instructions shrink by 47 bytes.
+// Service's inline core headers add 64 bytes and its store loses eight: +56,
+// including worker-alone. System retains 2 * 1,408 + 1 root payloads, so its
+// delta is 2,817 * 16,336 + 56 = 46,018,568 bytes at both engine fixtures.
 fn memory_figure(
     name: &str,
     terms: &temper_service::startup::MemoryTerms,

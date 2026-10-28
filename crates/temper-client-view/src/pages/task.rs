@@ -1246,12 +1246,23 @@ fn text_node(b: &mut Builder, value: &[u8]) {
 pub(crate) fn owner_activity(b: &mut Builder, event: &c::OwnerActivity, words: &Words) {
     match event {
         c::OwnerActivity::Words { words, .. } => text_node(b, words.bytes()),
-        c::OwnerActivity::Heard(word) | c::OwnerActivity::Notified { word, .. } => text_node(b, word.words.bytes()),
+        c::OwnerActivity::Heard(word) | c::OwnerActivity::Notified { word, .. } => {
+            if let c::OwnerMessageKind::QuestionAnswered { question } = word.kind {
+                words.text(b, Word::QuestionAnswered, &[Hole::Number(question)]);
+            } else if let c::OwnerMessageKind::QuestionEnded { question } = word.kind {
+                words.text(b, Word::QuestionEnded, &[Hole::Number(question)]);
+            } else {
+                text_node(b, word.words.bytes());
+            }
+        }
         c::OwnerActivity::RunBegan { attempt, .. } => words.text(b, Word::RunBegan, &[Hole::Number(*attempt)]),
         c::OwnerActivity::RunEnded { attempt, .. } => words.text(b, Word::RunEnded, &[Hole::Number(*attempt)]),
         c::OwnerActivity::Decided { .. } => words.text(b, Word::DecisionMade, &[]),
         c::OwnerActivity::Turn { .. } => words.text(b, Word::UnreadTurn, &[]),
-        c::OwnerActivity::Kept { .. } => words.text(b, Word::DependencyParked, &[]),
+        c::OwnerActivity::Kept { question, .. } => match question {
+            Some(question) => words.text(b, Word::QuestionParked, &[Hole::Number(*question)]),
+            None => words.text(b, Word::DependencyParked, &[]),
+        },
         c::OwnerActivity::Milestone { position } => words.text(b, Word::Milestone, &[Hole::Number(*position)]),
     }
 }

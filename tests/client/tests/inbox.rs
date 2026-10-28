@@ -8,7 +8,7 @@ const QUESTION: &[u8] = b"Export widget's table as CSV? Go ahead?";
 const ANSWER: &[u8] = b"Go ahead.";
 
 #[test]
-fn a_delegates_question_answered_in_the_inbox_reaches_its_chat() {
+fn a_delegates_question_answered_in_the_inbox_reaches_the_delegate() {
     let mut world = fixtures::world(fixtures::SEED);
     let chat = fixtures::question(world.front(), QUESTION);
     let (question, delegate) = {
@@ -39,18 +39,29 @@ fn a_delegates_question_answered_in_the_inbox_reaches_its_chat() {
     );
     let outcome = world.run(Until::Done);
     assert_eq!(outcome.verdict, Verdict::Passed, "{outcome:?}");
-    assert!(world.front().engine.task(chat).expect("answered chat").inbox.iter().any(|message| {
-        message.from == jig_domain_tasks::Party::Person(fixtures::PARTY)
+    assert!(world.front().engine.task(delegate).expect("answered delegate").inbox.iter().any(|message| {
+        message.from == jig_domain_tasks::Party::Task(chat)
             && message.kind == jig_domain_tasks::MessageKind::Answer { question }
             && message.words.as_ref() == ANSWER
     }));
 
+    let notice = format!("Person answered question in inbox: {question}");
+    assert!(
+        world
+            .front()
+            .engine
+            .task(chat)
+            .expect("chat notice")
+            .inbox
+            .iter()
+            .any(|word| word.kind == jig_domain_tasks::MessageKind::QuestionAnswered { question })
+    );
     world.go(person, fixtures::chat_page(chat));
     world.person(
         person,
         vec![
             Step::See { find: Find::text(QUESTION), within: fixtures::WITHIN },
-            Step::See { find: Find::text(ANSWER), within: fixtures::WITHIN },
+            Step::See { find: Find::text(notice.as_bytes()), within: fixtures::WITHIN },
         ],
     );
     let outcome = world.run(Until::Done);
@@ -60,7 +71,7 @@ fn a_delegates_question_answered_in_the_inbox_reaches_its_chat() {
         turn_holds(tree, format!("T{delegate}").as_bytes(), QUESTION),
         "delegate T{delegate}'s question turn missing"
     );
-    assert!(turn_holds(tree, b"You", ANSWER), "person's answer turn under You missing");
+    assert!(!turn_holds(tree, b"You", ANSWER), "the answer goes directly to its asker");
 
     world.go(person, fixtures::inbox());
     world.person(
