@@ -662,8 +662,8 @@ pub enum Word {
 // The paste of a sign-in's address adds fifteen phrases and twenty-one segments.
 // M1's Model details add eight phrases and sixteen segments.
 // The welcome's Forgejo card adds four literal phrases and segments.
-const PHRASES: u32 = 1173;
-const SEGMENTS: u32 = 2064;
+const PHRASES: u32 = 1174;
+const SEGMENTS: u32 = 2067;
 const ALL: [Word; 596] = [
     Word::WelcomeForgejo,
     Word::WelcomeForgejoDescription,
