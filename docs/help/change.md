@@ -60,7 +60,8 @@ pull request was retargeted on the forge`, `a delegate or a write
 failed for good`, or `a person rejected a gate`. A release resets its
 counts and goes on from where it was held. Its panel also names a held
 task, the change's own or its writer's or reviewer's, `held: task N
-(REASON)`, with that task's way out.
+(REASON)`, with that task's way out: an effect vetoed or a step
+refused, and why (what it lacks, or the forge's answer).
 
 ## What temper guarantees
 
